@@ -1,0 +1,10 @@
+.builder*
+.backend*
+/target
+.vscode
+/wasm
+/keys
+.idea
+
+Cargo.lock
+.env
