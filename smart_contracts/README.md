@@ -1,22 +1,24 @@
-# Build
+# LEASEFI
+
+## Build
 
 ```bash
 cargo odra build
 ```
 
-# Test
+## Test
 
 ```bash
 cargo odra test
 ```
 
-# Generate schema (ABI)
+## Generate schema (ABI)
 
 ```bash
 cargo odra schema
 ```
 
-# Deploy
+## Deploy
 
 Specify a file with environmental variables to use during deploy via `ODRA_CASPER_LIVENET_ENV` variable.
 
@@ -24,7 +26,7 @@ Specify a file with environmental variables to use during deploy via `ODRA_CASPE
 ODRA_CASPER_LIVENET_ENV=env/casper-testnet cargo run --bin leasefi_contracts_cli deploy
 ```
 
-# Use CLI
+## Use CLI
 
 Specify a file with environmental variables to use during deploy via `ODRA_CASPER_LIVENET_ENV` variable.
 
