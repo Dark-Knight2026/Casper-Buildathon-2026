@@ -18,7 +18,7 @@ impl DeployScript for LeasefiDeployScript {
             &env,
             TailorCoinInitArgs {
                 symbol: String::from("BIG"),
-                name: String::from("Tailor Coin"),
+                name: String::from("BIG"),
                 decimals: 18,
                 initial_supply: U256::from_dec_str("5000000000000000000000000000000").unwrap(),
             },

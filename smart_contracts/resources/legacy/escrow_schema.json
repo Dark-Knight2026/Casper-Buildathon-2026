@@ -1,0 +1,14 @@
+{
+  "name": "Escrow",
+  "events": [],
+  "entrypoints": [
+    {
+      "name": "init",
+      "args": [],
+      "is_mutable": true,
+      "return_ty": "Unit",
+      "ty": "Constructor",
+      "attributes": []
+    }
+  ]
+}

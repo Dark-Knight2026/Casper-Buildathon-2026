@@ -39,7 +39,7 @@ mod tests {
         let env = odra_test::env();
         let tailor_coin = deploy_tailor_coin(&env);
         let expected_symbol = String::from("BIG");
-        let expected_name = String::from("Tailor Coin");
+        let expected_name = String::from("BIG");
         let expected_decimals = 18;
         let expected_initial_supply =
             U256::from_dec_str("5000000000000000000000000000000").unwrap();
@@ -143,7 +143,7 @@ mod tests {
             env,
             TailorCoinInitArgs {
                 symbol: String::from("BIG"),
-                name: String::from("Tailor Coin"),
+                name: String::from("BIG"),
                 decimals: 18,
                 initial_supply: U256::from_dec_str("5000000000000000000000000000000").unwrap(),
             },
