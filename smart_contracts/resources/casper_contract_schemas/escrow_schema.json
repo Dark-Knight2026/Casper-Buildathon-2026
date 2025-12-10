@@ -6,10 +6,181 @@
   "homepage": null,
   "contract_name": "Escrow",
   "contract_version": "0.1.0",
-  "types": [],
-  "errors": [],
-  "entry_points": [],
-  "events": [],
+  "types": [
+    {
+      "struct": {
+        "name": "InvoiceCreated",
+        "description": null,
+        "members": [
+          {
+            "name": "invoice_id",
+            "description": null,
+            "ty": "U256"
+          },
+          {
+            "name": "buyer",
+            "description": null,
+            "ty": "Key"
+          },
+          {
+            "name": "seller",
+            "description": null,
+            "ty": "Key"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
+        "name": "MinDeadlineSet",
+        "description": null,
+        "members": [
+          {
+            "name": "old_min_deadline",
+            "description": null,
+            "ty": "U64"
+          },
+          {
+            "name": "new_min_deadline",
+            "description": null,
+            "ty": "U64"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
+        "name": "OwnershipTransferred",
+        "description": null,
+        "members": [
+          {
+            "name": "previous_owner",
+            "description": null,
+            "ty": {
+              "Option": "Key"
+            }
+          },
+          {
+            "name": "new_owner",
+            "description": null,
+            "ty": {
+              "Option": "Key"
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "errors": [
+    {
+      "name": "CallerNotALandlord",
+      "description": "",
+      "discriminant": 65000
+    },
+    {
+      "name": "CallerNotTheNewOwner",
+      "description": "The caller is not the new owner.",
+      "discriminant": 20002
+    },
+    {
+      "name": "CallerNotTheOwner",
+      "description": "The caller is not the owner.",
+      "discriminant": 20001
+    },
+    {
+      "name": "InvalidDeadline",
+      "description": "",
+      "discriminant": 65002
+    },
+    {
+      "name": "MissingRole",
+      "description": "The role is missing.",
+      "discriminant": 20003
+    },
+    {
+      "name": "OwnerNotSet",
+      "description": "The owner is not set.",
+      "discriminant": 20000
+    },
+    {
+      "name": "RoleRenounceForAnotherAddress",
+      "description": "The role cannot be renounced for another address.",
+      "discriminant": 20004
+    },
+    {
+      "name": "ZeroAmount",
+      "description": "",
+      "discriminant": 65001
+    }
+  ],
+  "entry_points": [
+    {
+      "name": "set_min_deadline",
+      "description": "",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "new_min_deadline",
+          "description": null,
+          "ty": "U64",
+          "optional": false
+        }
+      ],
+      "return_ty": "Unit",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "create_lease_invoice",
+      "description": "",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "tenant",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        },
+        {
+          "name": "currency",
+          "description": null,
+          "ty": {
+            "Option": "Key"
+          },
+          "optional": false
+        },
+        {
+          "name": "amount",
+          "description": null,
+          "ty": "U256",
+          "optional": false
+        },
+        {
+          "name": "deadline",
+          "description": null,
+          "ty": "U64",
+          "optional": false
+        }
+      ],
+      "return_ty": "U256",
+      "is_contract_context": true,
+      "access": "public"
+    }
+  ],
+  "events": [
+    {
+      "name": "InvoiceCreated",
+      "ty": "InvoiceCreated"
+    },
+    {
+      "name": "MinDeadlineSet",
+      "ty": "MinDeadlineSet"
+    },
+    {
+      "name": "OwnershipTransferred",
+      "ty": "OwnershipTransferred"
+    }
+  ],
   "call": {
     "wasm_file_name": "Escrow.wasm",
     "description": "",
@@ -36,6 +207,24 @@
         "name": "odra_cfg_is_upgrade",
         "description": "The arg name for telling the installer that the contract is being upgraded.",
         "ty": "Bool",
+        "optional": false
+      },
+      {
+        "name": "owner",
+        "description": null,
+        "ty": "Key",
+        "optional": false
+      },
+      {
+        "name": "roles",
+        "description": null,
+        "ty": "Key",
+        "optional": false
+      },
+      {
+        "name": "min_deadline",
+        "description": null,
+        "ty": "U64",
         "optional": false
       }
     ]

@@ -117,7 +117,7 @@
   "entry_points": [
     {
       "name": "get_landlord_role",
-      "description": "",
+      "description": "Returns LANDLORD_ROLE role hash",
       "is_mutable": false,
       "arguments": [],
       "return_ty": {
@@ -128,7 +128,7 @@
     },
     {
       "name": "get_agent_role",
-      "description": "",
+      "description": "Returns AGENT_ROLE role hash",
       "is_mutable": false,
       "arguments": [],
       "return_ty": {
@@ -139,7 +139,7 @@
     },
     {
       "name": "get_manager_role",
-      "description": "",
+      "description": "Returns MANAGER_ROLE role hash",
       "is_mutable": false,
       "arguments": [],
       "return_ty": {
