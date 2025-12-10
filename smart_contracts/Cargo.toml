@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 odra-modules = { version="2.4.0", features = [], default-features = false }
 odra = { version = "2.4.0", features = [], default-features = false }
+sha3 = "0.10.8"
 
 [dev-dependencies]
 odra-test = { version = "2.4.0", features = [], default-features = false }

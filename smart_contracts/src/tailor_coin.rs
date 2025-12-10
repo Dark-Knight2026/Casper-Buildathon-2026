@@ -41,7 +41,8 @@ mod tests {
         let expected_symbol = String::from("BIG");
         let expected_name = String::from("Tailor Coin");
         let expected_decimals = 18;
-        let expected_initial_supply = U256::from(5_000_000_000e18 as u64);
+        let expected_initial_supply =
+            U256::from_dec_str("5000000000000000000000000000000").unwrap();
 
         assert_eq!(tailor_coin.symbol(), expected_symbol, "Invalid coin symbol");
         assert_eq!(tailor_coin.name(), expected_name, "Invalid coin name");
@@ -67,7 +68,7 @@ mod tests {
         let env = odra_test::env();
         let mut tailor_coin = deploy_tailor_coin(&env);
         let recipient = env.get_account(1);
-        let amount = U256::from(1e18 as u64);
+        let amount = U256::from_dec_str("1000000000000000000").unwrap();
         let prev_sender_balance = tailor_coin.balance_of(&env.caller());
         let prev_recipient_balance = tailor_coin.balance_of(&recipient);
 
@@ -94,7 +95,7 @@ mod tests {
         let mut tailor_coin = deploy_tailor_coin(&env);
         let owner = env.caller();
         let spender = env.get_account(1);
-        let amount = U256::from(10e18 as u64);
+        let amount = U256::from_dec_str("10000000000000000000").unwrap();
         let prev_owner_balance = tailor_coin.balance_of(&owner);
         let prev_spender_balance = tailor_coin.balance_of(&spender);
 
@@ -123,7 +124,7 @@ mod tests {
         let mut tailor_coin = deploy_tailor_coin(&env);
         let owner = env.caller();
         let spender = env.get_account(1);
-        let amount = U256::from(5e18 as u64);
+        let amount = U256::from_dec_str("500000000000000000").unwrap();
         let prev_allowance = tailor_coin.allowance(&owner, &spender);
 
         tailor_coin.approve(&spender, &amount);
@@ -144,7 +145,7 @@ mod tests {
                 symbol: String::from("BIG"),
                 name: String::from("Tailor Coin"),
                 decimals: 18,
-                initial_supply: U256::from(5_000_000_000e18 as u64),
+                initial_supply: U256::from_dec_str("5000000000000000000000000000000").unwrap(),
             },
         )
     }

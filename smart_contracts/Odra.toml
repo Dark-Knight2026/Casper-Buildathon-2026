@@ -1,2 +1,8 @@
 [[contracts]]
 fqn = "tailor_coin::TailorCoin"
+
+[[contracts]]
+fqn = "roles::Roles"
+
+[[contracts]]
+fqn = "escrow::Escrow"
