@@ -4,7 +4,10 @@ use odra::{
 };
 use odra_cli::{deploy::DeployScript, DeployedContractsContainer, DeployerExt, OdraCli};
 
-use leasefi_contracts::tailor_coin::{TailorCoin, TailorCoinInitArgs};
+use leasefi_contracts::{
+    roles::{Roles, RolesInitArgs},
+    tailor_coin::{TailorCoin, TailorCoinInitArgs},
+};
 
 struct LeasefiDeployScript;
 
@@ -26,6 +29,15 @@ impl DeployScript for LeasefiDeployScript {
             container,
             325_000_000_000,
         )?;
+        Roles::load_or_deploy_with_cfg(
+            &env,
+            RolesInitArgs {
+                admin: env.caller(),
+            },
+            InstallConfig::upgradable::<Roles>(),
+            container,
+            310_000_000_000,
+        )?;
 
         Ok(())
     }
@@ -36,6 +48,7 @@ pub fn main() {
         .about("CLI tool for deploying of leasefi smart contracts")
         .deploy(LeasefiDeployScript)
         .contract::<TailorCoin>()
+        .contract::<Roles>()
         .build()
         .run();
 }

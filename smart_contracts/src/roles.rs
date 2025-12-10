@@ -19,23 +19,26 @@ pub struct Roles {
 
 #[odra::module]
 impl Roles {
-    pub fn init(&mut self, admin: &Address) {
+    pub fn init(&mut self, admin: Address) {
         self.access_control
-            .unchecked_grant_role(&DEFAULT_ADMIN_ROLE, admin);
+            .unchecked_grant_role(&DEFAULT_ADMIN_ROLE, &admin);
 
         self.set_landlord_admin_role();
         self.set_agent_admin_role();
         self.set_manager_admin_role();
     }
 
+    /// Returns LANDLORD_ROLE role hash
     pub fn get_landlord_role(&self) -> Role {
         Self::hash_role(ROLE_LANDLORD)
     }
 
+    /// Returns AGENT_ROLE role hash
     pub fn get_agent_role(&self) -> Role {
         Self::hash_role(ROLE_AGENT)
     }
 
+    /// Returns MANAGER_ROLE role hash
     pub fn get_manager_role(&self) -> Role {
         Self::hash_role(ROLE_MANAGER)
     }
