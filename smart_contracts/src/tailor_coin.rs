@@ -1,16 +1,16 @@
 use odra::{casper_types::U256, prelude::*};
-use odra_modules::erc20::Erc20;
+use odra_modules::cep18_token::Cep18;
 
 #[odra::module]
 pub struct TailorCoin {
-    tailor_coin: SubModule<Erc20>,
+    tailor_coin: SubModule<Cep18>,
 }
 
 #[odra::module]
 impl TailorCoin {
     pub fn init(&mut self, symbol: String, name: String, decimals: u8, initial_supply: U256) {
         self.tailor_coin
-            .init(symbol, name, decimals, Some(initial_supply));
+            .init(symbol, name, decimals, initial_supply);
     }
 
     delegate! {
@@ -18,6 +18,8 @@ impl TailorCoin {
             fn transfer(&mut self, recipient: &Address, amount: &U256);
             fn transfer_from(&mut self, owner: &Address, recipient: &Address, amount: &U256);
             fn approve(&mut self, spender: &Address, amount: &U256);
+            fn decrease_allowance(&mut self, spender: &Address, decr_by: &U256);
+            fn increase_allowance(&mut self, spender: &Address, inc_by: &U256);
             fn name(&self) -> String;
             fn symbol(&self) -> String;
             fn decimals(&self) -> u8;
@@ -134,6 +136,48 @@ mod tests {
         assert_eq!(
             curr_allowance,
             prev_allowance + amount,
+            "Invalid current spender allowance"
+        );
+    }
+
+    #[test]
+    fn test_decrease_allowance_should_decrease_allowance_properly() {
+        let env = odra_test::env();
+        let mut tailor_coin = deploy_tailor_coin(&env);
+        let owner = env.caller();
+        let spender = env.get_account(1);
+        let amount = U256::from_dec_str("500000000000000000").unwrap();
+        let prev_allowance = tailor_coin.allowance(&owner, &spender);
+
+        tailor_coin.approve(&spender, &amount);
+        tailor_coin.decrease_allowance(&spender, &(amount / 2));
+
+        let curr_allowance = tailor_coin.allowance(&owner, &spender);
+
+        assert_eq!(
+            curr_allowance,
+            prev_allowance + (amount / 2),
+            "Invalid current spender allowance"
+        );
+    }
+
+    #[test]
+    fn test_increase_allowance_should_increase_allowance_properly() {
+        let env = odra_test::env();
+        let mut tailor_coin = deploy_tailor_coin(&env);
+        let owner = env.caller();
+        let spender = env.get_account(1);
+        let amount = U256::from_dec_str("500000000000000000").unwrap();
+        let prev_allowance = tailor_coin.allowance(&owner, &spender);
+
+        tailor_coin.approve(&spender, &amount);
+        tailor_coin.increase_allowance(&spender, &(amount / 2));
+
+        let curr_allowance = tailor_coin.allowance(&owner, &spender);
+
+        assert_eq!(
+            curr_allowance,
+            prev_allowance + (amount * 3 / 2),
             "Invalid current spender allowance"
         );
     }

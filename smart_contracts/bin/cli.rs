@@ -27,7 +27,7 @@ impl DeployScript for LeasefiDeployScript {
             },
             InstallConfig::upgradable::<TailorCoin>(),
             container,
-            325_000_000_000,
+            350_000_000_000,
         )?;
         Roles::load_or_deploy_with_cfg(
             &env,

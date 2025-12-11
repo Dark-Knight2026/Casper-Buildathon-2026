@@ -31,15 +31,27 @@
           "is_required": true
         },
         {
-          "name": "buyer",
-          "ty": "Key",
+          "name": "created_at",
+          "ty": "U64",
+          "is_ref": false,
+          "is_slice": false,
+          "is_required": true
+        }
+      ]
+    },
+    {
+      "name": "InvoicePaid",
+      "args": [
+        {
+          "name": "invoice_id",
+          "ty": "U256",
           "is_ref": false,
           "is_slice": false,
           "is_required": true
         },
         {
-          "name": "seller",
-          "ty": "Key",
+          "name": "paid_at",
+          "ty": "U64",
           "is_ref": false,
           "is_slice": false,
           "is_required": true
@@ -82,7 +94,7 @@
           "is_required": true
         },
         {
-          "name": "roles",
+          "name": "lease",
           "ty": "Key",
           "is_ref": false,
           "is_slice": false,
@@ -153,6 +165,96 @@
       ],
       "is_mutable": true,
       "return_ty": "U256",
+      "ty": "Public",
+      "attributes": []
+    },
+    {
+      "name": "pay_invoice",
+      "args": [
+        {
+          "name": "invoice_id",
+          "ty": "U256",
+          "is_ref": false,
+          "is_slice": false,
+          "is_required": true
+        }
+      ],
+      "is_mutable": true,
+      "return_ty": "Unit",
+      "ty": "Public",
+      "attributes": [
+        "Payable"
+      ]
+    },
+    {
+      "name": "get_lease_contract_address",
+      "args": [],
+      "is_mutable": false,
+      "return_ty": "Key",
+      "ty": "Public",
+      "attributes": []
+    },
+    {
+      "name": "get_invoice_by_id",
+      "args": [
+        {
+          "name": "invoice_id",
+          "ty": "U256",
+          "is_ref": false,
+          "is_slice": false,
+          "is_required": true
+        }
+      ],
+      "is_mutable": false,
+      "return_ty": "Any",
+      "ty": "Public",
+      "attributes": []
+    },
+    {
+      "name": "get_invoices_count",
+      "args": [],
+      "is_mutable": false,
+      "return_ty": "U256",
+      "ty": "Public",
+      "attributes": []
+    },
+    {
+      "name": "get_min_invoice_deadline",
+      "args": [],
+      "is_mutable": false,
+      "return_ty": "U64",
+      "ty": "Public",
+      "attributes": []
+    },
+    {
+      "name": "transfer_ownership",
+      "args": [
+        {
+          "name": "new_owner",
+          "ty": "Key",
+          "is_ref": false,
+          "is_slice": false,
+          "is_required": true
+        }
+      ],
+      "is_mutable": true,
+      "return_ty": "Unit",
+      "ty": "Public",
+      "attributes": []
+    },
+    {
+      "name": "renounce_ownership",
+      "args": [],
+      "is_mutable": true,
+      "return_ty": "Unit",
+      "ty": "Public",
+      "attributes": []
+    },
+    {
+      "name": "get_owner",
+      "args": [],
+      "is_mutable": false,
+      "return_ty": "Key",
       "ty": "Public",
       "attributes": []
     }
