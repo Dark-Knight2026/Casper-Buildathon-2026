@@ -138,18 +138,6 @@
             "description": null,
             "discriminant": 0,
             "ty": "Unit"
-          },
-          {
-            "name": "BUY",
-            "description": null,
-            "discriminant": 1,
-            "ty": "Unit"
-          },
-          {
-            "name": "SELL",
-            "description": null,
-            "discriminant": 2,
-            "ty": "Unit"
           }
         ]
       }
@@ -175,6 +163,11 @@
       "name": "CallerNotTheOwner",
       "description": "The caller is not the owner.",
       "discriminant": 20001
+    },
+    {
+      "name": "EqualBuyerAndSeller",
+      "description": "",
+      "discriminant": 65009
     },
     {
       "name": "InvalidAmountAttached",
@@ -256,6 +249,12 @@
           "optional": false
         },
         {
+          "name": "landlord",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        },
+        {
           "name": "currency",
           "description": null,
           "ty": {
@@ -331,7 +330,7 @@
       "access": "public"
     },
     {
-      "name": "get_min_invoice_deadline",
+      "name": "get_min_deadline",
       "description": "",
       "is_mutable": false,
       "arguments": [],

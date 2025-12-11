@@ -140,6 +140,13 @@
           "is_required": true
         },
         {
+          "name": "landlord",
+          "ty": "Key",
+          "is_ref": false,
+          "is_slice": false,
+          "is_required": true
+        },
+        {
           "name": "currency",
           "ty": {
             "Option": "Key"
@@ -219,7 +226,7 @@
       "attributes": []
     },
     {
-      "name": "get_min_invoice_deadline",
+      "name": "get_min_deadline",
       "args": [],
       "is_mutable": false,
       "return_ty": "U64",

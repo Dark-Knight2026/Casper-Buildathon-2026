@@ -55,12 +55,20 @@ impl Escrow {
     pub fn create_lease_invoice(
         &mut self,
         tenant: Address,
+        landlord: Address,
         currency: Option<Address>,
         amount: U256,
         deadline: u64,
     ) -> U256 {
         self.assert_lease(self.env().caller());
-        self.create_invoice(InvoiceKind::LEASE, tenant, currency, amount, deadline)
+        self.create_invoice(
+            InvoiceKind::LEASE,
+            tenant,
+            landlord,
+            currency,
+            amount,
+            deadline,
+        )
     }
 
     #[odra(payable)]
@@ -127,7 +135,7 @@ impl Escrow {
         self.invoices_count.get_or_default()
     }
 
-    pub fn get_min_invoice_deadline(&self) -> u64 {
+    pub fn get_min_deadline(&self) -> u64 {
         self.min_deadline.get_or_default()
     }
 
@@ -145,19 +153,23 @@ impl Escrow {
         &mut self,
         kind: InvoiceKind,
         buyer: Address,
+        seller: Address,
         currency: Option<Address>,
         amount: U256,
         deadline: u64,
     ) -> U256 {
+        if buyer == seller {
+            self.env().revert(Error::EqualBuyerAndSeller)
+        }
+
         if amount == U256::zero() {
             self.env().revert(Error::ZeroAmount);
         }
 
-        if deadline <= self.env().get_block_time() + self.min_deadline.get_or_default() {
+        if deadline < self.env().get_block_time() + self.min_deadline.get_or_default() {
             self.env().revert(Error::InvalidDeadline);
         }
 
-        let seller = self.env().caller();
         let invoice_id = self.invoices_count.get_or_default();
         let invoice = Invoice {
             kind,
@@ -223,15 +235,18 @@ pub mod errors {
         InvoiceIsAlreadyPaid = 65_006,
         InvoiceIsExpired = 65_007,
         InvalidAmountAttached = 65_008,
+        EqualBuyerAndSeller = 65_009,
     }
 }
 
 #[cfg(test)]
 mod tests {
     use odra::host::{Deployer, HostEnv};
-    use odra_modules::access::errors::Error;
+    use odra_modules::access::errors::Error as AccessError;
 
     use super::*;
+
+    const MIN_DEADLINE: u64 = 5 * 60; // 5 minutes
 
     #[test]
     fn test_init_should_initialize_contract_properly() {
@@ -245,8 +260,8 @@ mod tests {
             "Invalid Lease contract address"
         );
         assert_eq!(
-            escrow.get_min_invoice_deadline(),
-            5 * 60,
+            escrow.get_min_deadline(),
+            MIN_DEADLINE,
             "Invalid minimal invoice deadline"
         );
         assert_eq!(
@@ -265,9 +280,159 @@ mod tests {
 
         assert_eq!(
             escrow.try_set_min_deadline(0).unwrap_err(),
-            Error::CallerNotTheOwner.into(),
-            "Should revert when is called by not owner"
+            AccessError::CallerNotTheOwner.into(),
+            "Should revert when is called by not the owner"
         );
+    }
+
+    #[test]
+    fn test_set_min_deadline_should_update_min_deadline_properly() {
+        let env = odra_test::env();
+        let mut escrow = setup(&env);
+        let new_min_deadline = 10 * 60; // 10 minutes
+
+        escrow.set_min_deadline(new_min_deadline);
+
+        assert_eq!(
+            escrow.get_min_deadline(),
+            new_min_deadline,
+            "Invalid minimal invoice deadline"
+        );
+        assert!(env.emitted_native_event(
+            &escrow,
+            MinDeadlineSet {
+                old_min_deadline: MIN_DEADLINE,
+                new_min_deadline
+            }
+        ));
+    }
+
+    #[test]
+    fn test_create_lease_invoice_should_fail_if_not_lease_contract_is_calling() {
+        let env = odra_test::env();
+        let mut escrow = setup(&env);
+
+        assert_eq!(
+            escrow
+                .try_create_lease_invoice(
+                    env.get_account(0),
+                    env.get_account(0),
+                    None,
+                    U256::zero(),
+                    0
+                )
+                .unwrap_err(),
+            Error::CallerNotLeaseContract.into(),
+            "Should revert when is called by not the Lease contract"
+        );
+    }
+
+    #[test]
+    fn test_create_lease_invoice_should_fail_if_buyer_is_equal_to_seller() {
+        let env = odra_test::env();
+        let mut escrow = setup(&env);
+
+        env.set_caller(escrow.get_lease_contract_address());
+
+        assert_eq!(
+            escrow
+                .try_create_lease_invoice(
+                    env.get_account(0),
+                    env.get_account(0),
+                    None,
+                    U256::zero(),
+                    0
+                )
+                .unwrap_err(),
+            Error::EqualBuyerAndSeller.into(),
+            "Should revert when buyer is the same as seller"
+        );
+    }
+
+    #[test]
+    fn test_create_lease_invoice_should_fail_if_amount_is_zero() {
+        let env = odra_test::env();
+        let mut escrow = setup(&env);
+
+        env.set_caller(escrow.get_lease_contract_address());
+
+        assert_eq!(
+            escrow
+                .try_create_lease_invoice(
+                    env.get_account(0),
+                    env.get_account(1),
+                    None,
+                    U256::zero(),
+                    0
+                )
+                .unwrap_err(),
+            Error::ZeroAmount.into(),
+            "Should revert when is called with zero amount"
+        );
+    }
+
+    #[test]
+    fn test_create_lease_invoice_should_fail_if_deadline_is_sooner_than_min_deadline() {
+        let env = odra_test::env();
+        let mut escrow = setup(&env);
+
+        env.set_caller(escrow.get_lease_contract_address());
+
+        assert_eq!(
+            escrow
+                .try_create_lease_invoice(
+                    env.get_account(0),
+                    env.get_account(1),
+                    None,
+                    U256::one(),
+                    env.block_time() + escrow.get_min_deadline() - 1
+                )
+                .unwrap_err(),
+            Error::InvalidDeadline.into(),
+            "Should revert when deadline is sooner than block.time + minimum deadline"
+        );
+    }
+
+    #[test]
+    fn test_create_lease_invoice_should_create_lease_invoice_properly() {
+        let env = odra_test::env();
+        let mut escrow = setup(&env);
+
+        env.set_caller(escrow.get_lease_contract_address());
+
+        let tenant = env.get_account(0);
+        let landlord = env.get_account(1);
+        let currency = None;
+        let amount = U256::from_dec_str("1000000000000000000").unwrap();
+        let deadline = env.block_time() + escrow.get_min_deadline();
+        let invoice_id = escrow.create_lease_invoice(tenant, landlord, currency, amount, deadline);
+
+        assert_eq!(invoice_id, U256::zero(), "Invalid invoice ID");
+        assert!(env.emitted_native_event(
+            &escrow,
+            InvoiceCreated {
+                invoice_id,
+                created_at: env.block_time(),
+            }
+        ));
+        assert_eq!(
+            escrow.get_invoices_count(),
+            U256::one(),
+            "Invalid invoices count number"
+        );
+        assert_eq!(
+            escrow.get_invoice_by_id(invoice_id),
+            Invoice {
+                kind: InvoiceKind::LEASE,
+                buyer: tenant,
+                seller: landlord,
+                currency,
+                amount,
+                deadline,
+                is_paid: false
+            },
+            "Invalid invoice"
+        )
     }
 
     fn setup(env: &HostEnv) -> EscrowHostRef {
@@ -276,7 +441,7 @@ mod tests {
             EscrowInitArgs {
                 owner: env.get_account(0),
                 lease: env.get_account(15),
-                min_deadline: 5 * 60,
+                min_deadline: MIN_DEADLINE,
             },
         )
     }
