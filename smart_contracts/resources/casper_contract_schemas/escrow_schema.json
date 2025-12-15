@@ -228,7 +228,7 @@
   "entry_points": [
     {
       "name": "set_min_deadline",
-      "description": "",
+      "description": "Sets the minimum possible invoice deadline by the owner",
       "is_mutable": true,
       "arguments": [
         {
@@ -244,7 +244,7 @@
     },
     {
       "name": "set_lease",
-      "description": "",
+      "description": "Sets the Lease contract address by the owner",
       "is_mutable": true,
       "arguments": [
         {
@@ -260,7 +260,7 @@
     },
     {
       "name": "set_treasury",
-      "description": "",
+      "description": "Sets the Treasury contract address by the owner",
       "is_mutable": true,
       "arguments": [
         {
@@ -276,7 +276,7 @@
     },
     {
       "name": "create_lease_invoice",
-      "description": "",
+      "description": "Allows to create a lease invoice by the Lease contract",
       "is_mutable": true,
       "arguments": [
         {
@@ -318,7 +318,7 @@
     },
     {
       "name": "pay_invoice",
-      "description": "",
+      "description": "Allows to pay any invoice created earlier",
       "is_mutable": true,
       "arguments": [
         {
@@ -334,7 +334,7 @@
     },
     {
       "name": "get_lease_contract_address",
-      "description": "",
+      "description": "Returns the Lease contract address",
       "is_mutable": false,
       "arguments": [],
       "return_ty": "Key",
@@ -343,7 +343,7 @@
     },
     {
       "name": "get_treasury_contract_address",
-      "description": "",
+      "description": "Returns the Treasury contract address",
       "is_mutable": false,
       "arguments": [],
       "return_ty": "Key",
@@ -352,7 +352,7 @@
     },
     {
       "name": "get_invoice_by_id",
-      "description": "",
+      "description": "Returns invoice by its ID",
       "is_mutable": false,
       "arguments": [
         {
@@ -368,7 +368,7 @@
     },
     {
       "name": "get_invoices_count",
-      "description": "",
+      "description": "Returns number of invoices created through this contract",
       "is_mutable": false,
       "arguments": [],
       "return_ty": "U256",
@@ -377,7 +377,7 @@
     },
     {
       "name": "get_min_deadline",
-      "description": "",
+      "description": "Returns the minimum invoice deadline",
       "is_mutable": false,
       "arguments": [],
       "return_ty": "U64",

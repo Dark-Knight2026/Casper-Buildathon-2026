@@ -21,16 +21,20 @@ impl Treasury {
         self.ownable.init(owner);
     }
 
+    /// Sets the Staking contract address by the owner
     pub fn set_staking(&mut self, staking: Address) {
         self.ownable.assert_owner(&self.env().caller());
         self.staking.set(staking);
     }
 
+    /// Sets the TailorCoin (BIG) token contract address by the owner
     pub fn set_tailor_coin(&mut self, tailor_coin: Address) {
         self.ownable.assert_owner(&self.env().caller());
         self.tailor_coin.set(tailor_coin);
     }
 
+    /// Allows to deposit any rewards amount in the TailorCoin (BIG) token by anyone, then distributes these rewards
+    /// between the Staking contract and internal reserves
     pub fn deposit_rewards(&mut self, amount: U256) {
         if amount > U256::zero() {
             let mut tailor_coin =
@@ -47,6 +51,7 @@ impl Treasury {
         }
     }
 
+    /// Allows to withdraw any available reserves amount by the owner
     pub fn withdraw_reserves(&mut self, recipient: Address, amount: U256) {
         self.ownable.assert_owner(&self.env().caller());
 
@@ -63,16 +68,19 @@ impl Treasury {
         }
     }
 
+    /// Returns the TailorCoin (BIG) token reserves stored on this contract and available to withdraw by the owner
     pub fn get_reserves(&self) -> U256 {
         Cep18ContractRef::new(self.env(), self.get_tailor_coin_contract_address())
             .balance_of(&self.env().self_address())
     }
 
+    /// Returns the Staking contract address
     pub fn get_staking_contract_address(&self) -> Address {
         self.staking
             .get_or_revert_with(Error::StakingContractIsNotSet)
     }
 
+    /// Returns the TailorCoin (BIG) token contract address
     pub fn get_tailor_coin_contract_address(&self) -> Address {
         self.tailor_coin
             .get_or_revert_with(Error::TailorCoinContractIsNotSet)

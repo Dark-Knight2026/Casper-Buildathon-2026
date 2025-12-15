@@ -39,6 +39,7 @@ impl Escrow {
         self.set_min_deadline(min_deadline);
     }
 
+    /// Sets the minimum possible invoice deadline by the owner
     pub fn set_min_deadline(&mut self, new_min_deadline: u64) {
         self.ownable.assert_owner(&self.env().caller());
 
@@ -52,16 +53,19 @@ impl Escrow {
         });
     }
 
+    /// Sets the Lease contract address by the owner
     pub fn set_lease(&mut self, lease: Address) {
         self.ownable.assert_owner(&self.env().caller());
         self.lease.set(lease);
     }
 
+    /// Sets the Treasury contract address by the owner
     pub fn set_treasury(&mut self, treasury: Address) {
         self.ownable.assert_owner(&self.env().caller());
         self.treasury.set(treasury);
     }
 
+    /// Allows to create a lease invoice by the Lease contract
     pub fn create_lease_invoice(
         &mut self,
         tenant: Address,
@@ -81,6 +85,7 @@ impl Escrow {
         )
     }
 
+    /// Allows to pay any invoice created earlier
     #[odra(payable)]
     pub fn pay_invoice(&mut self, invoice_id: U256) {
         let mut invoice = self
@@ -129,25 +134,30 @@ impl Escrow {
         });
     }
 
+    /// Returns the Lease contract address
     pub fn get_lease_contract_address(&self) -> Address {
         self.lease.get_or_revert_with(Error::LeaseContractIsNotSet)
     }
 
+    /// Returns the Treasury contract address
     pub fn get_treasury_contract_address(&self) -> Address {
         self.treasury
             .get_or_revert_with(Error::TreasuryContractIsNotSet)
     }
 
+    /// Returns invoice by its ID
     pub fn get_invoice_by_id(&self, invoice_id: U256) -> Invoice {
         self.invoices
             .get(&invoice_id)
             .unwrap_or_revert_with(&self.env(), Error::InvalidInvoiceId)
     }
 
+    /// Returns number of invoices created through this contract
     pub fn get_invoices_count(&self) -> U256 {
         self.invoices_count.get_or_default()
     }
 
+    /// Returns the minimum invoice deadline
     pub fn get_min_deadline(&self) -> u64 {
         self.min_deadline.get_or_default()
     }

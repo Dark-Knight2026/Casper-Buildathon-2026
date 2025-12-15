@@ -106,7 +106,7 @@
   "entry_points": [
     {
       "name": "set_staking",
-      "description": "",
+      "description": "Sets the Staking contract address by the owner",
       "is_mutable": true,
       "arguments": [
         {
@@ -122,7 +122,7 @@
     },
     {
       "name": "set_tailor_coin",
-      "description": "",
+      "description": "Sets the TailorCoin (BIG) token contract address by the owner",
       "is_mutable": true,
       "arguments": [
         {
@@ -138,7 +138,7 @@
     },
     {
       "name": "deposit_rewards",
-      "description": "",
+      "description": "Allows to deposit any rewards amount in the TailorCoin (BIG) token by anyone, then distributes these rewards",
       "is_mutable": true,
       "arguments": [
         {
@@ -154,7 +154,7 @@
     },
     {
       "name": "withdraw_reserves",
-      "description": "",
+      "description": "Allows to withdraw any available reserves amount by the owner",
       "is_mutable": true,
       "arguments": [
         {
@@ -176,7 +176,7 @@
     },
     {
       "name": "get_reserves",
-      "description": "",
+      "description": "Returns the TailorCoin (BIG) token reserves stored on this contract and available to withdraw by the owner",
       "is_mutable": false,
       "arguments": [],
       "return_ty": "U256",
@@ -185,7 +185,7 @@
     },
     {
       "name": "get_staking_contract_address",
-      "description": "",
+      "description": "Returns the Staking contract address",
       "is_mutable": false,
       "arguments": [],
       "return_ty": "Key",
@@ -194,7 +194,7 @@
     },
     {
       "name": "get_tailor_coin_contract_address",
-      "description": "",
+      "description": "Returns the TailorCoin (BIG) token contract address",
       "is_mutable": false,
       "arguments": [],
       "return_ty": "Key",
