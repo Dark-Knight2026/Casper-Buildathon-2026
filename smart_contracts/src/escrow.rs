@@ -512,6 +512,8 @@ mod tests {
         )
     }
 
+    // TODO finish tests
+
     fn setup(env: &HostEnv) -> EscrowHostRef {
         let mut escrow = Escrow::deploy(
             env,

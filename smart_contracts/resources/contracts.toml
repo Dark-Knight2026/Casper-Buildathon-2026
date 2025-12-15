@@ -1,4 +1,4 @@
-last_updated = "2025-12-11T18:17:02Z"
+last_updated = "2025-12-15T18:13:20Z"
 
 [[contracts]]
 name = "TailorCoin"
@@ -7,3 +7,7 @@ package_hash = "hash-0dcc6825cb168e8c498ddcddd5798013bf28c2116a360c2ec1b6019f7e3
 [[contracts]]
 name = "Roles"
 package_hash = "hash-f4e25da3d0b8fdbee2208a9c20c6ccd102886f26b773c19cbc69b55baf03cade"
+
+[[contracts]]
+name = "Treasury"
+package_hash = "hash-a5a594f2b6f887896e8873f21a2380b720a8497caa6180cd4dcd1925dfb096e6"

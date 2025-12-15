@@ -80,7 +80,7 @@
     {
       "name": "NotEnoughReserves",
       "description": "",
-      "discriminant": 64003
+      "discriminant": 64002
     },
     {
       "name": "OwnerNotSet",
@@ -95,12 +95,12 @@
     {
       "name": "StakingContractIsNotSet",
       "description": "",
-      "discriminant": 64002
+      "discriminant": 64001
     },
     {
       "name": "TailorCoinContractIsNotSet",
       "description": "",
-      "discriminant": 64001
+      "discriminant": 64000
     }
   ],
   "entry_points": [

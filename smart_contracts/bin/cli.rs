@@ -1,12 +1,14 @@
 use odra::{
     casper_types::U256,
     host::{HostEnv, InstallConfig},
+    prelude::Addressable,
 };
 use odra_cli::{deploy::DeployScript, DeployedContractsContainer, DeployerExt, OdraCli};
 
 use leasefi_contracts::{
     roles::{Roles, RolesInitArgs},
     tailor_coin::{TailorCoin, TailorCoinInitArgs},
+    treasury::{Treasury, TreasuryInitArgs},
 };
 
 struct LeasefiDeployScript;
@@ -17,7 +19,17 @@ impl DeployScript for LeasefiDeployScript {
         env: &HostEnv,
         container: &mut DeployedContractsContainer,
     ) -> Result<(), odra_cli::deploy::Error> {
-        TailorCoin::load_or_deploy_with_cfg(
+        Roles::load_or_deploy_with_cfg(
+            &env,
+            RolesInitArgs {
+                admin: env.caller(),
+            },
+            InstallConfig::upgradable::<Roles>(),
+            container,
+            310_000_000_000,
+        )?;
+
+        let tailor_coin = TailorCoin::load_or_deploy_with_cfg(
             &env,
             TailorCoinInitArgs {
                 symbol: String::from("BIG"),
@@ -29,15 +41,18 @@ impl DeployScript for LeasefiDeployScript {
             container,
             350_000_000_000,
         )?;
-        Roles::load_or_deploy_with_cfg(
+        let mut treasury = Treasury::load_or_deploy_with_cfg(
             &env,
-            RolesInitArgs {
-                admin: env.caller(),
+            TreasuryInitArgs {
+                owner: env.caller(),
             },
-            InstallConfig::upgradable::<Roles>(),
+            InstallConfig::upgradable::<Treasury>(),
             container,
-            310_000_000_000,
+            100_000_000_000,
         )?;
+
+        treasury.set_tailor_coin(tailor_coin.address());
+        // treasury.set_staking(staking.address());
 
         Ok(())
     }
@@ -49,6 +64,7 @@ pub fn main() {
         .deploy(LeasefiDeployScript)
         .contract::<TailorCoin>()
         .contract::<Roles>()
+        .contract::<Treasury>()
         .build()
         .run();
 }
