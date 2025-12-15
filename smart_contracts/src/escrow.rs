@@ -215,6 +215,7 @@ impl Escrow {
         invoice_id
     }
 
+    #[inline]
     fn assert_lease(&self, caller: Address) {
         if caller != self.get_lease_contract_address() {
             self.env().revert(Error::CallerNotLeaseContract);
