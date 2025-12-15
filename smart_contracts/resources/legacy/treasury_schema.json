@@ -1,19 +1,12 @@
 {
-  "name": "Escrow",
+  "name": "Treasury",
   "events": [
     {
-      "name": "MinDeadlineSet",
+      "name": "RewardsDeposited",
       "args": [
         {
-          "name": "old_min_deadline",
-          "ty": "U64",
-          "is_ref": false,
-          "is_slice": false,
-          "is_required": true
-        },
-        {
-          "name": "new_min_deadline",
-          "ty": "U64",
+          "name": "amount",
+          "ty": "U256",
           "is_ref": false,
           "is_slice": false,
           "is_required": true
@@ -21,37 +14,18 @@
       ]
     },
     {
-      "name": "InvoiceCreated",
+      "name": "ReservesWithdrawn",
       "args": [
         {
-          "name": "invoice_id",
-          "ty": "U256",
+          "name": "recipient",
+          "ty": "Key",
           "is_ref": false,
           "is_slice": false,
           "is_required": true
         },
         {
-          "name": "created_at",
-          "ty": "U64",
-          "is_ref": false,
-          "is_slice": false,
-          "is_required": true
-        }
-      ]
-    },
-    {
-      "name": "InvoicePaid",
-      "args": [
-        {
-          "name": "invoice_id",
+          "name": "amount",
           "ty": "U256",
-          "is_ref": false,
-          "is_slice": false,
-          "is_required": true
-        },
-        {
-          "name": "paid_at",
-          "ty": "U64",
           "is_ref": false,
           "is_slice": false,
           "is_required": true
@@ -92,13 +66,6 @@
           "is_ref": false,
           "is_slice": false,
           "is_required": true
-        },
-        {
-          "name": "min_deadline",
-          "ty": "U64",
-          "is_ref": false,
-          "is_slice": false,
-          "is_required": true
         }
       ],
       "is_mutable": true,
@@ -107,26 +74,10 @@
       "attributes": []
     },
     {
-      "name": "set_min_deadline",
+      "name": "set_staking",
       "args": [
         {
-          "name": "new_min_deadline",
-          "ty": "U64",
-          "is_ref": false,
-          "is_slice": false,
-          "is_required": true
-        }
-      ],
-      "is_mutable": true,
-      "return_ty": "Unit",
-      "ty": "Public",
-      "attributes": []
-    },
-    {
-      "name": "set_lease",
-      "args": [
-        {
-          "name": "lease",
+          "name": "staking",
           "ty": "Key",
           "is_ref": false,
           "is_slice": false,
@@ -139,10 +90,10 @@
       "attributes": []
     },
     {
-      "name": "set_treasury",
+      "name": "set_tailor_coin",
       "args": [
         {
-          "name": "treasury",
+          "name": "tailor_coin",
           "ty": "Key",
           "is_ref": false,
           "is_slice": false,
@@ -155,27 +106,27 @@
       "attributes": []
     },
     {
-      "name": "create_lease_invoice",
+      "name": "deposit_rewards",
       "args": [
         {
-          "name": "tenant",
-          "ty": "Key",
+          "name": "amount",
+          "ty": "U256",
           "is_ref": false,
           "is_slice": false,
           "is_required": true
-        },
+        }
+      ],
+      "is_mutable": true,
+      "return_ty": "Unit",
+      "ty": "Public",
+      "attributes": []
+    },
+    {
+      "name": "withdraw_reserves",
+      "args": [
         {
-          "name": "landlord",
+          "name": "recipient",
           "ty": "Key",
-          "is_ref": false,
-          "is_slice": false,
-          "is_required": true
-        },
-        {
-          "name": "currency",
-          "ty": {
-            "Option": "Key"
-          },
           "is_ref": false,
           "is_slice": false,
           "is_required": true
@@ -186,72 +137,15 @@
           "is_ref": false,
           "is_slice": false,
           "is_required": true
-        },
-        {
-          "name": "deadline",
-          "ty": "U64",
-          "is_ref": false,
-          "is_slice": false,
-          "is_required": true
-        }
-      ],
-      "is_mutable": true,
-      "return_ty": "U256",
-      "ty": "Public",
-      "attributes": []
-    },
-    {
-      "name": "pay_invoice",
-      "args": [
-        {
-          "name": "invoice_id",
-          "ty": "U256",
-          "is_ref": false,
-          "is_slice": false,
-          "is_required": true
         }
       ],
       "is_mutable": true,
       "return_ty": "Unit",
       "ty": "Public",
-      "attributes": [
-        "Payable"
-      ]
-    },
-    {
-      "name": "get_lease_contract_address",
-      "args": [],
-      "is_mutable": false,
-      "return_ty": "Key",
-      "ty": "Public",
       "attributes": []
     },
     {
-      "name": "get_treasury_contract_address",
-      "args": [],
-      "is_mutable": false,
-      "return_ty": "Key",
-      "ty": "Public",
-      "attributes": []
-    },
-    {
-      "name": "get_invoice_by_id",
-      "args": [
-        {
-          "name": "invoice_id",
-          "ty": "U256",
-          "is_ref": false,
-          "is_slice": false,
-          "is_required": true
-        }
-      ],
-      "is_mutable": false,
-      "return_ty": "Any",
-      "ty": "Public",
-      "attributes": []
-    },
-    {
-      "name": "get_invoices_count",
+      "name": "get_reserves",
       "args": [],
       "is_mutable": false,
       "return_ty": "U256",
@@ -259,10 +153,18 @@
       "attributes": []
     },
     {
-      "name": "get_min_deadline",
+      "name": "get_staking_contract_address",
       "args": [],
       "is_mutable": false,
-      "return_ty": "U64",
+      "return_ty": "Key",
+      "ty": "Public",
+      "attributes": []
+    },
+    {
+      "name": "get_tailor_coin_contract_address",
+      "args": [],
+      "is_mutable": false,
+      "return_ty": "Key",
       "ty": "Public",
       "attributes": []
     },

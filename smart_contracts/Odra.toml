@@ -6,3 +6,6 @@ fqn = "roles::Roles"
 
 [[contracts]]
 fqn = "escrow::Escrow"
+
+[[contracts]]
+fqn = "treasury::Treasury"

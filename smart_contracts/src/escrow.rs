@@ -26,6 +26,7 @@ pub struct Invoice {
 pub struct Escrow {
     ownable: SubModule<Ownable>,
     lease: Var<Address>,
+    treasury: Var<Address>,
     invoices: Mapping<U256, Invoice>,
     invoices_count: Var<U256>,
     min_deadline: Var<u64>,
@@ -33,9 +34,8 @@ pub struct Escrow {
 
 #[odra::module]
 impl Escrow {
-    pub fn init(&mut self, owner: Address, lease: Address, min_deadline: u64) {
+    pub fn init(&mut self, owner: Address, min_deadline: u64) {
         self.ownable.init(owner);
-        self.lease.set(lease);
         self.set_min_deadline(min_deadline);
     }
 
@@ -50,6 +50,16 @@ impl Escrow {
             old_min_deadline,
             new_min_deadline,
         });
+    }
+
+    pub fn set_lease(&mut self, lease: Address) {
+        self.ownable.assert_owner(&self.env().caller());
+        self.lease.set(lease);
+    }
+
+    pub fn set_treasury(&mut self, treasury: Address) {
+        self.ownable.assert_owner(&self.env().caller());
+        self.treasury.set(treasury);
     }
 
     pub fn create_lease_invoice(
@@ -120,9 +130,12 @@ impl Escrow {
     }
 
     pub fn get_lease_contract_address(&self) -> Address {
-        self.lease
-            .get()
-            .unwrap_or_revert_with(&self.env(), Error::LeaseContractIsNotSet)
+        self.lease.get_or_revert_with(Error::LeaseContractIsNotSet)
+    }
+
+    pub fn get_treasury_contract_address(&self) -> Address {
+        self.treasury
+            .get_or_revert_with(Error::TreasuryContractIsNotSet)
     }
 
     pub fn get_invoice_by_id(&self, invoice_id: U256) -> Invoice {
@@ -193,7 +206,7 @@ impl Escrow {
     }
 
     fn assert_lease(&self, caller: Address) {
-        if caller != self.lease.get_or_revert_with(Error::LeaseContractIsNotSet) {
+        if caller != self.get_lease_contract_address() {
             self.env().revert(Error::CallerNotLeaseContract);
         }
     }
@@ -228,14 +241,15 @@ pub mod errors {
     pub enum Error {
         CallerNotLeaseContract = 65_000,
         LeaseContractIsNotSet = 65_001,
-        ZeroAmount = 65_002,
-        InvalidDeadline = 65_003,
-        InvalidInvoiceId = 65_004,
-        CallerIsNotBuyer = 65_005,
-        InvoiceIsAlreadyPaid = 65_006,
-        InvoiceIsExpired = 65_007,
-        InvalidAmountAttached = 65_008,
-        EqualBuyerAndSeller = 65_009,
+        TreasuryContractIsNotSet = 65_002,
+        ZeroAmount = 65_003,
+        InvalidDeadline = 65_004,
+        InvalidInvoiceId = 65_005,
+        CallerIsNotBuyer = 65_006,
+        InvoiceIsAlreadyPaid = 65_007,
+        InvoiceIsExpired = 65_008,
+        InvalidAmountAttached = 65_009,
+        EqualBuyerAndSeller = 65_010,
     }
 }
 
@@ -260,6 +274,11 @@ mod tests {
             "Invalid Lease contract address"
         );
         assert_eq!(
+            escrow.get_treasury_contract_address(),
+            env.get_account(14),
+            "Invalid Treasury contract address"
+        );
+        assert_eq!(
             escrow.get_min_deadline(),
             MIN_DEADLINE,
             "Invalid minimal invoice deadline"
@@ -272,7 +291,7 @@ mod tests {
     }
 
     #[test]
-    fn test_set_min_deadline_should_revert_if_no_owner_is_calling() {
+    fn test_set_min_deadline_should_revert_if_not_owner_is_calling() {
         let env = odra_test::env();
         let mut escrow = setup(&env);
 
@@ -305,6 +324,64 @@ mod tests {
                 new_min_deadline
             }
         ));
+    }
+
+    #[test]
+    fn test_set_lease_should_revert_if_not_owner_is_calling() {
+        let env = odra_test::env();
+        let mut escrow = setup(&env);
+
+        env.set_caller(env.get_account(1));
+
+        assert_eq!(
+            escrow.try_set_lease(env.get_account(1)).unwrap_err(),
+            AccessError::CallerNotTheOwner.into(),
+            "Should revert when is called by not the owner"
+        );
+    }
+
+    #[test]
+    fn test_set_lease_should_set_lease_properly() {
+        let env = odra_test::env();
+        let mut escrow = setup(&env);
+        let lease = env.get_account(10);
+
+        escrow.set_lease(lease);
+
+        assert_eq!(
+            escrow.get_lease_contract_address(),
+            lease,
+            "Invalid Lease contract address"
+        );
+    }
+
+    #[test]
+    fn test_set_treasury_should_revert_if_not_owner_is_calling() {
+        let env = odra_test::env();
+        let mut escrow = setup(&env);
+
+        env.set_caller(env.get_account(1));
+
+        assert_eq!(
+            escrow.try_set_treasury(env.get_account(1)).unwrap_err(),
+            AccessError::CallerNotTheOwner.into(),
+            "Should revert when is called by not the owner"
+        );
+    }
+
+    #[test]
+    fn test_set_treasury_should_set_treasury_properly() {
+        let env = odra_test::env();
+        let mut escrow = setup(&env);
+        let treasury = env.get_account(10);
+
+        escrow.set_treasury(treasury);
+
+        assert_eq!(
+            escrow.get_treasury_contract_address(),
+            treasury,
+            "Invalid Treasury contract address"
+        );
     }
 
     #[test]
@@ -436,13 +513,17 @@ mod tests {
     }
 
     fn setup(env: &HostEnv) -> EscrowHostRef {
-        Escrow::deploy(
+        let mut escrow = Escrow::deploy(
             env,
             EscrowInitArgs {
                 owner: env.get_account(0),
-                lease: env.get_account(15),
                 min_deadline: MIN_DEADLINE,
             },
-        )
+        );
+
+        escrow.set_lease(env.get_account(15));
+        escrow.set_treasury(env.get_account(14));
+
+        escrow
     }
 }

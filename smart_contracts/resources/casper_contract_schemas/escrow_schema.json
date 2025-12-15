@@ -147,7 +147,7 @@
     {
       "name": "CallerIsNotBuyer",
       "description": "",
-      "discriminant": 65005
+      "discriminant": 65006
     },
     {
       "name": "CallerNotLeaseContract",
@@ -167,32 +167,32 @@
     {
       "name": "EqualBuyerAndSeller",
       "description": "",
-      "discriminant": 65009
+      "discriminant": 65010
     },
     {
       "name": "InvalidAmountAttached",
       "description": "",
-      "discriminant": 65008
+      "discriminant": 65009
     },
     {
       "name": "InvalidDeadline",
       "description": "",
-      "discriminant": 65003
+      "discriminant": 65004
     },
     {
       "name": "InvalidInvoiceId",
       "description": "",
-      "discriminant": 65004
+      "discriminant": 65005
     },
     {
       "name": "InvoiceIsAlreadyPaid",
       "description": "",
-      "discriminant": 65006
+      "discriminant": 65007
     },
     {
       "name": "InvoiceIsExpired",
       "description": "",
-      "discriminant": 65007
+      "discriminant": 65008
     },
     {
       "name": "LeaseContractIsNotSet",
@@ -215,9 +215,14 @@
       "discriminant": 20004
     },
     {
-      "name": "ZeroAmount",
+      "name": "TreasuryContractIsNotSet",
       "description": "",
       "discriminant": 65002
+    },
+    {
+      "name": "ZeroAmount",
+      "description": "",
+      "discriminant": 65003
     }
   ],
   "entry_points": [
@@ -230,6 +235,38 @@
           "name": "new_min_deadline",
           "description": null,
           "ty": "U64",
+          "optional": false
+        }
+      ],
+      "return_ty": "Unit",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "set_lease",
+      "description": "",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "lease",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        }
+      ],
+      "return_ty": "Unit",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "set_treasury",
+      "description": "",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "treasury",
+          "description": null,
+          "ty": "Key",
           "optional": false
         }
       ],
@@ -297,6 +334,15 @@
     },
     {
       "name": "get_lease_contract_address",
+      "description": "",
+      "is_mutable": false,
+      "arguments": [],
+      "return_ty": "Key",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "get_treasury_contract_address",
       "description": "",
       "is_mutable": false,
       "arguments": [],
@@ -421,12 +467,6 @@
       },
       {
         "name": "owner",
-        "description": null,
-        "ty": "Key",
-        "optional": false
-      },
-      {
-        "name": "lease",
         "description": null,
         "ty": "Key",
         "optional": false
