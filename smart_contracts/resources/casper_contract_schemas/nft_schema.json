@@ -68,6 +68,32 @@
     },
     {
       "struct": {
+        "name": "BurnerAdded",
+        "description": null,
+        "members": [
+          {
+            "name": "burner",
+            "description": null,
+            "ty": "Key"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
+        "name": "BurnerRemoved",
+        "description": null,
+        "members": [
+          {
+            "name": "burner",
+            "description": null,
+            "ty": "Key"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
         "name": "MetadataUpdate",
         "description": null,
         "members": [
@@ -93,6 +119,32 @@
             "name": "token_id",
             "description": null,
             "ty": "U256"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
+        "name": "MinterAdded",
+        "description": null,
+        "members": [
+          {
+            "name": "minter",
+            "description": null,
+            "ty": "Key"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
+        "name": "MinterRemoved",
+        "description": null,
+        "members": [
+          {
+            "name": "minter",
+            "description": null,
+            "ty": "Key"
           }
         ]
       }
@@ -194,6 +246,21 @@
       "name": "ApproveToCaller",
       "description": "The caller is the same as the operator.",
       "discriminant": 40004
+    },
+    {
+      "name": "CallerNotBurner",
+      "description": "",
+      "discriminant": 62001
+    },
+    {
+      "name": "CallerNotMinter",
+      "description": "",
+      "discriminant": 62000
+    },
+    {
+      "name": "CallerNotMinterNorBurner",
+      "description": "",
+      "discriminant": 62002
     },
     {
       "name": "CallerNotTheNewOwner",
@@ -755,12 +822,28 @@
       "ty": "Burn"
     },
     {
+      "name": "BurnerAdded",
+      "ty": "BurnerAdded"
+    },
+    {
+      "name": "BurnerRemoved",
+      "ty": "BurnerRemoved"
+    },
+    {
       "name": "MetadataUpdate",
       "ty": "MetadataUpdate"
     },
     {
       "name": "Mint",
       "ty": "Mint"
+    },
+    {
+      "name": "MinterAdded",
+      "ty": "MinterAdded"
+    },
+    {
+      "name": "MinterRemoved",
+      "ty": "MinterRemoved"
     },
     {
       "name": "OwnershipTransferred",

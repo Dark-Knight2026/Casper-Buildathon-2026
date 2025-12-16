@@ -2,6 +2,54 @@
   "name": "NFT",
   "events": [
     {
+      "name": "MinterAdded",
+      "args": [
+        {
+          "name": "minter",
+          "ty": "Key",
+          "is_ref": false,
+          "is_slice": false,
+          "is_required": true
+        }
+      ]
+    },
+    {
+      "name": "MinterRemoved",
+      "args": [
+        {
+          "name": "minter",
+          "ty": "Key",
+          "is_ref": false,
+          "is_slice": false,
+          "is_required": true
+        }
+      ]
+    },
+    {
+      "name": "BurnerAdded",
+      "args": [
+        {
+          "name": "burner",
+          "ty": "Key",
+          "is_ref": false,
+          "is_slice": false,
+          "is_required": true
+        }
+      ]
+    },
+    {
+      "name": "BurnerRemoved",
+      "args": [
+        {
+          "name": "burner",
+          "ty": "Key",
+          "is_ref": false,
+          "is_slice": false,
+          "is_required": true
+        }
+      ]
+    },
+    {
       "name": "Transfer",
       "args": [
         {

@@ -1,4 +1,4 @@
-last_updated = "2025-12-15T18:13:20Z"
+last_updated = "2025-12-16T17:21:09Z"
 
 [[contracts]]
 name = "TailorCoin"
@@ -11,3 +11,7 @@ package_hash = "hash-f4e25da3d0b8fdbee2208a9c20c6ccd102886f26b773c19cbc69b55baf0
 [[contracts]]
 name = "Treasury"
 package_hash = "hash-a5a594f2b6f887896e8873f21a2380b720a8497caa6180cd4dcd1925dfb096e6"
+
+[[contracts]]
+name = "NFT"
+package_hash = "hash-3e2c49ed5fca9bffeb4115753f4d6458af4b485030daa1c0b83b59f25b572c50"

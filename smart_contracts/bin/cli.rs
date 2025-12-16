@@ -6,6 +6,7 @@ use odra::{
 use odra_cli::{deploy::DeployScript, DeployedContractsContainer, DeployerExt, OdraCli};
 
 use leasefi_contracts::{
+    nft::{NFTInitArgs, NFT},
     roles::{Roles, RolesInitArgs},
     tailor_coin::{TailorCoin, TailorCoinInitArgs},
     treasury::{Treasury, TreasuryInitArgs},
@@ -27,6 +28,19 @@ impl DeployScript for LeasefiDeployScript {
             InstallConfig::upgradable::<Roles>(),
             container,
             310_000_000_000,
+        )?;
+        NFT::load_or_deploy_with_cfg(
+            &env,
+            NFTInitArgs {
+                owner: env.caller(),
+                symbol: String::from("NFT"),
+                name: String::from("NFT"),
+                minters: vec![],
+                burners: vec![],
+            },
+            InstallConfig::upgradable::<NFT>(),
+            container,
+            450_000_000_000,
         )?;
 
         let tailor_coin = TailorCoin::load_or_deploy_with_cfg(
@@ -63,6 +77,7 @@ pub fn main() {
         .about("CLI tool for deploying of leasefi smart contracts")
         .deploy(LeasefiDeployScript)
         .contract::<TailorCoin>()
+        .contract::<NFT>()
         .contract::<Roles>()
         .contract::<Treasury>()
         .build()
