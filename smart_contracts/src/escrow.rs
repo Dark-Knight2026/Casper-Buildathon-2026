@@ -255,23 +255,23 @@ pub mod errors {
 
     #[odra::odra_error]
     pub enum Error {
-        CallerNotLeaseContract = 65_000,
-        LeaseContractIsNotSet = 65_001,
-        TreasuryContractIsNotSet = 65_002,
-        ZeroAmount = 65_003,
-        InvalidDeadline = 65_004,
-        InvalidInvoiceId = 65_005,
-        CallerIsNotBuyer = 65_006,
-        InvoiceIsAlreadyPaid = 65_007,
-        InvoiceIsExpired = 65_008,
-        InvalidAmountAttached = 65_009,
-        EqualBuyerAndSeller = 65_010,
+        CallerNotLeaseContract = 61_000,
+        LeaseContractIsNotSet = 61_001,
+        TreasuryContractIsNotSet = 61_002,
+        ZeroAmount = 61_003,
+        InvalidDeadline = 61_004,
+        InvalidInvoiceId = 61_005,
+        CallerIsNotBuyer = 61_006,
+        InvoiceIsAlreadyPaid = 61_007,
+        InvoiceIsExpired = 61_008,
+        InvalidAmountAttached = 61_009,
+        EqualBuyerAndSeller = 61_010,
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use odra::host::{Deployer, HostEnv};
+    use odra::host::{Deployer, HostEnv, HostRef};
     use odra_modules::access::errors::Error as AccessError;
 
     use super::*;
@@ -281,6 +281,14 @@ mod tests {
     struct TestData {
         env: HostEnv,
         escrow: EscrowHostRef,
+    }
+
+    struct InvoiceParams {
+        tenant: Address,
+        landlord: Address,
+        currency: Option<Address>,
+        amount: U256,
+        deadline: u64,
     }
 
     #[test]
@@ -503,19 +511,113 @@ mod tests {
     #[test]
     fn test_create_lease_invoice_should_create_lease_invoice_properly() {
         let mut test_data = setup(odra_test::env());
-        let tenant = test_data.env.get_account(0);
-        let landlord = test_data.env.get_account(1);
-        let currency = None;
-        let amount = U256::from_dec_str("1000000000000000000").unwrap();
-        let deadline = test_data.env.block_time() + test_data.escrow.get_min_deadline();
-        let invoice_id =
-            create_lease_invoice(&mut test_data, tenant, landlord, currency, amount, deadline);
+        let params = generate_invoice_params(&mut test_data);
+        let invoice_id = create_lease_invoice(
+            &mut test_data,
+            params.tenant,
+            params.landlord,
+            params.currency,
+            params.amount,
+            params.deadline,
+        );
 
         assert_eq!(invoice_id, U256::zero(), "Invalid invoice ID");
     }
 
     #[test]
-    fn test_pay_invoice_should_fail_if_invoice_does_not_exist() {}
+    fn test_pay_invoice_should_fail_if_invoice_does_not_exist() {
+        let mut test_data = setup(odra_test::env());
+
+        assert_eq!(
+            test_data.escrow.try_pay_invoice(U256::zero()).unwrap_err(),
+            Error::InvalidInvoiceId.into(),
+            "Should revert when invoice does not exist"
+        );
+    }
+
+    #[test]
+    fn test_pay_invoice_should_fail_if_not_buyer_is_trying_to_pay_invoice() {
+        let mut test_data = setup(odra_test::env());
+        let params = generate_invoice_params(&mut test_data);
+        let invoice_id = create_lease_invoice(
+            &mut test_data,
+            params.tenant,
+            params.landlord,
+            params.currency,
+            params.amount,
+            params.deadline,
+        );
+
+        test_data.env.set_caller(params.landlord);
+
+        assert_eq!(
+            test_data.escrow.try_pay_invoice(invoice_id).unwrap_err(),
+            Error::CallerIsNotBuyer.into(),
+            "Should revert when caller is not buyer"
+        );
+    }
+
+    #[test]
+    fn test_pay_invoice_should_fail_if_invoice_is_already_paid() {
+        // TODO
+    }
+
+    #[test]
+    fn test_pay_invoice_should_fail_if_invoice_is_expired() {
+        let mut test_data = setup(odra_test::env());
+        let params = generate_invoice_params(&mut test_data);
+        let invoice_id = create_lease_invoice(
+            &mut test_data,
+            params.tenant,
+            params.landlord,
+            params.currency,
+            params.amount,
+            params.deadline,
+        );
+
+        test_data
+            .env
+            .advance_block_time(test_data.escrow.get_invoice_by_id(invoice_id).deadline + 1);
+
+        assert_eq!(
+            test_data.escrow.try_pay_invoice(invoice_id).unwrap_err(),
+            Error::InvoiceIsExpired.into(),
+            "Should revert when invoice is expired"
+        );
+    }
+
+    #[test]
+    fn test_pay_invoice_should_fail_if_attached_cspr_value_is_invalid() {
+        let mut test_data = setup(odra_test::env());
+        let params = generate_invoice_params(&mut test_data);
+        let invoice_id = create_lease_invoice(
+            &mut test_data,
+            params.tenant,
+            params.landlord,
+            params.currency,
+            params.amount,
+            params.deadline,
+        );
+
+        assert_eq!(
+            test_data
+                .escrow
+                .with_tokens(params.amount.to_u512() - 1)
+                .try_pay_invoice(invoice_id)
+                .unwrap_err(),
+            Error::InvalidAmountAttached.into(),
+            "Should revert when attached CSPR value is invalid - 1"
+        );
+        assert_eq!(
+            test_data
+                .escrow
+                .with_tokens(params.amount.to_u512() + 1)
+                .try_pay_invoice(invoice_id)
+                .unwrap_err(),
+            Error::InvalidAmountAttached.into(),
+            "Should revert when attached CSPR value is invalid - 2"
+        );
+    }
 
     fn setup(env: HostEnv) -> TestData {
         let mut escrow = Escrow::deploy(
@@ -530,6 +632,16 @@ mod tests {
         escrow.set_treasury(env.get_account(14));
 
         TestData { env, escrow }
+    }
+
+    fn generate_invoice_params(test_data: &mut TestData) -> InvoiceParams {
+        InvoiceParams {
+            tenant: test_data.env.get_account(0),
+            landlord: test_data.env.get_account(1),
+            currency: None,
+            amount: U256::from_dec_str("1000000000000000000").unwrap(),
+            deadline: test_data.env.block_time() + test_data.escrow.get_min_deadline(),
+        }
     }
 
     fn create_lease_invoice(
@@ -547,6 +659,8 @@ mod tests {
         let invoice_id = test_data
             .escrow
             .create_lease_invoice(tenant, landlord, currency, amount, deadline);
+
+        test_data.env.set_caller(test_data.env.get_account(0));
 
         assert!(test_data.env.emitted_native_event(
             &test_data.escrow,

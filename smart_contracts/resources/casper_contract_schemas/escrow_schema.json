@@ -147,12 +147,12 @@
     {
       "name": "CallerIsNotBuyer",
       "description": "",
-      "discriminant": 65006
+      "discriminant": 61006
     },
     {
       "name": "CallerNotLeaseContract",
       "description": "",
-      "discriminant": 65000
+      "discriminant": 61000
     },
     {
       "name": "CallerNotTheNewOwner",
@@ -167,37 +167,37 @@
     {
       "name": "EqualBuyerAndSeller",
       "description": "",
-      "discriminant": 65010
+      "discriminant": 61010
     },
     {
       "name": "InvalidAmountAttached",
       "description": "",
-      "discriminant": 65009
+      "discriminant": 61009
     },
     {
       "name": "InvalidDeadline",
       "description": "",
-      "discriminant": 65004
+      "discriminant": 61004
     },
     {
       "name": "InvalidInvoiceId",
       "description": "",
-      "discriminant": 65005
+      "discriminant": 61005
     },
     {
       "name": "InvoiceIsAlreadyPaid",
       "description": "",
-      "discriminant": 65007
+      "discriminant": 61007
     },
     {
       "name": "InvoiceIsExpired",
       "description": "",
-      "discriminant": 65008
+      "discriminant": 61008
     },
     {
       "name": "LeaseContractIsNotSet",
       "description": "",
-      "discriminant": 65001
+      "discriminant": 61001
     },
     {
       "name": "MissingRole",
@@ -217,12 +217,12 @@
     {
       "name": "TreasuryContractIsNotSet",
       "description": "",
-      "discriminant": 65002
+      "discriminant": 61002
     },
     {
       "name": "ZeroAmount",
       "description": "",
-      "discriminant": 65003
+      "discriminant": 61003
     }
   ],
   "entry_points": [
