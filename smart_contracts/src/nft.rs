@@ -537,13 +537,12 @@ mod tests {
         )];
         let mut metadata_update =
             vec![(String::from("website"), String::from("https://website.com"))];
-
         let token_id = mint(&mut test_data, recipient, metadata.clone());
 
         test_data.env.set_caller(test_data.minters[0]);
         test_data
             .nft
-            .set_metadata(token_id, metadata_update.clone());
+            .update_metadata(token_id, metadata_update.clone());
 
         metadata.append(&mut metadata_update);
 
@@ -552,7 +551,7 @@ mod tests {
             .emitted_event(&test_data.nft, MetadataUpdate { token_id }));
         assert_eq!(
             test_data.nft.token_metadata(token_id),
-            metadata_update,
+            metadata,
             "Invalid token metadata"
         );
     }
