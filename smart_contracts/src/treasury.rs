@@ -23,13 +23,13 @@ impl Treasury {
 
     /// Sets the Staking contract address by the owner
     pub fn set_staking(&mut self, staking: Address) {
-        self.ownable.assert_owner(&self.env().caller());
+        self.assert_owner();
         self.staking.set(staking);
     }
 
     /// Sets the TailorCoin (BIG) token contract address by the owner
     pub fn set_tailor_coin(&mut self, tailor_coin: Address) {
-        self.ownable.assert_owner(&self.env().caller());
+        self.assert_owner();
         self.tailor_coin.set(tailor_coin);
     }
 
@@ -53,7 +53,7 @@ impl Treasury {
 
     /// Allows to withdraw any available reserves amount by the owner
     pub fn withdraw_reserves(&mut self, recipient: Address, amount: U256) {
-        self.ownable.assert_owner(&self.env().caller());
+        self.assert_owner();
 
         if self.get_reserves() < amount {
             self.env().revert(Error::NotEnoughReserves);
@@ -92,6 +92,13 @@ impl Treasury {
             fn renounce_ownership(&mut self);
             fn get_owner(&self) -> Address;
         }
+    }
+}
+
+impl Treasury {
+    #[inline]
+    fn assert_owner(&self) {
+        self.ownable.assert_owner(&self.env().caller());
     }
 }
 

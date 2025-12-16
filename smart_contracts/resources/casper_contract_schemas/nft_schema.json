@@ -99,6 +99,28 @@
     },
     {
       "struct": {
+        "name": "OwnershipTransferred",
+        "description": null,
+        "members": [
+          {
+            "name": "previous_owner",
+            "description": null,
+            "ty": {
+              "Option": "Key"
+            }
+          },
+          {
+            "name": "new_owner",
+            "description": null,
+            "ty": {
+              "Option": "Key"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
         "name": "RevokeApproval",
         "description": null,
         "members": [
@@ -174,14 +196,39 @@
       "discriminant": 40004
     },
     {
+      "name": "CallerNotTheNewOwner",
+      "description": "The caller is not the new owner.",
+      "discriminant": 20002
+    },
+    {
+      "name": "CallerNotTheOwner",
+      "description": "The caller is not the owner.",
+      "discriminant": 20001
+    },
+    {
       "name": "InvalidTokenId",
       "description": "The token ID is invalid.",
       "discriminant": 40005
     },
     {
+      "name": "MissingRole",
+      "description": "The role is missing.",
+      "discriminant": 20003
+    },
+    {
       "name": "NotAnOwnerOrApproved",
       "description": "The token ID is invalid.",
       "discriminant": 40002
+    },
+    {
+      "name": "OwnerNotSet",
+      "description": "The owner is not set.",
+      "discriminant": 20000
+    },
+    {
+      "name": "RoleRenounceForAnotherAddress",
+      "description": "The role cannot be renounced for another address.",
+      "discriminant": 20004
     },
     {
       "name": "TokenAlreadyExists",
@@ -201,8 +248,250 @@
   ],
   "entry_points": [
     {
+      "name": "add_minter",
+      "description": "Allows to add a new minter by the owner",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "minter",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        }
+      ],
+      "return_ty": "Unit",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "remove_minter",
+      "description": "Allows to remove a minter by the owner",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "minter",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        }
+      ],
+      "return_ty": "Unit",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "add_burner",
+      "description": "Allows to add a new burner by the owner",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "burner",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        }
+      ],
+      "return_ty": "Unit",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "remove_burner",
+      "description": "Allows to remove a burner by the owner",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "burner",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        }
+      ],
+      "return_ty": "Unit",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "mint",
+      "description": "Allows to mint new token and set its metadata by the minter",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "to",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        },
+        {
+          "name": "metadata",
+          "description": null,
+          "ty": {
+            "List": {
+              "Tuple2": [
+                "String",
+                "String"
+              ]
+            }
+          },
+          "optional": false
+        }
+      ],
+      "return_ty": "Unit",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "burn",
+      "description": "Allows to burn a token by the burner",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "token_id",
+          "description": null,
+          "ty": "U256",
+          "optional": false
+        }
+      ],
+      "return_ty": "Unit",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "set_metadata",
+      "description": "Allows to set new metadata for a token by the minter or the burner",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "token_id",
+          "description": null,
+          "ty": "U256",
+          "optional": false
+        },
+        {
+          "name": "metadata",
+          "description": null,
+          "ty": {
+            "List": {
+              "Tuple2": [
+                "String",
+                "String"
+              ]
+            }
+          },
+          "optional": false
+        }
+      ],
+      "return_ty": "Unit",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "update_metadata",
+      "description": "Allows to update metadata for a token by the minter or the burner",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "token_id",
+          "description": null,
+          "ty": "U256",
+          "optional": false
+        },
+        {
+          "name": "metadata",
+          "description": null,
+          "ty": {
+            "List": {
+              "Tuple2": [
+                "String",
+                "String"
+              ]
+            }
+          },
+          "optional": false
+        }
+      ],
+      "return_ty": "Unit",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "is_minter",
+      "description": "Returns `true` if `address` has the `minter` role, `false` otherwise",
+      "is_mutable": false,
+      "arguments": [
+        {
+          "name": "address",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        }
+      ],
+      "return_ty": "Bool",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "is_burner",
+      "description": "Returns `true` if `address` has the `burner` role, `false` otherwise",
+      "is_mutable": false,
+      "arguments": [
+        {
+          "name": "address",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        }
+      ],
+      "return_ty": "Bool",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "get_tokens_count",
+      "description": "Returns a number of minted tokens",
+      "is_mutable": false,
+      "arguments": [],
+      "return_ty": "U256",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "transfer_ownership",
+      "description": "Delegated. See `self.ownable.transfer_ownership()` for details.",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "new_owner",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        }
+      ],
+      "return_ty": "Unit",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "renounce_ownership",
+      "description": "Delegated. See `self.ownable.renounce_ownership()` for details.",
+      "is_mutable": true,
+      "arguments": [],
+      "return_ty": "Unit",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "get_owner",
+      "description": "Delegated. See `self.ownable.get_owner()` for details.",
+      "is_mutable": false,
+      "arguments": [],
+      "return_ty": "Key",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
       "name": "name",
-      "description": "Delegated. See `self.nft.name()` for details.",
+      "description": "Delegated. See `self.cep95.name()` for details.",
       "is_mutable": false,
       "arguments": [],
       "return_ty": "String",
@@ -211,7 +500,7 @@
     },
     {
       "name": "symbol",
-      "description": "Delegated. See `self.nft.symbol()` for details.",
+      "description": "Delegated. See `self.cep95.symbol()` for details.",
       "is_mutable": false,
       "arguments": [],
       "return_ty": "String",
@@ -220,7 +509,7 @@
     },
     {
       "name": "balance_of",
-      "description": "Delegated. See `self.nft.balance_of()` for details.",
+      "description": "Delegated. See `self.cep95.balance_of()` for details.",
       "is_mutable": false,
       "arguments": [
         {
@@ -236,7 +525,7 @@
     },
     {
       "name": "owner_of",
-      "description": "Delegated. See `self.nft.owner_of()` for details.",
+      "description": "Delegated. See `self.cep95.owner_of()` for details.",
       "is_mutable": false,
       "arguments": [
         {
@@ -254,7 +543,7 @@
     },
     {
       "name": "safe_transfer_from",
-      "description": "Delegated. See `self.nft.safe_transfer_from()` for details.",
+      "description": "Delegated. See `self.cep95.safe_transfer_from()` for details.",
       "is_mutable": true,
       "arguments": [
         {
@@ -292,7 +581,7 @@
     },
     {
       "name": "transfer_from",
-      "description": "Delegated. See `self.nft.transfer_from()` for details.",
+      "description": "Delegated. See `self.cep95.transfer_from()` for details.",
       "is_mutable": true,
       "arguments": [
         {
@@ -320,7 +609,7 @@
     },
     {
       "name": "approve",
-      "description": "Delegated. See `self.nft.approve()` for details.",
+      "description": "Delegated. See `self.cep95.approve()` for details.",
       "is_mutable": true,
       "arguments": [
         {
@@ -342,7 +631,7 @@
     },
     {
       "name": "revoke_approval",
-      "description": "Delegated. See `self.nft.revoke_approval()` for details.",
+      "description": "Delegated. See `self.cep95.revoke_approval()` for details.",
       "is_mutable": true,
       "arguments": [
         {
@@ -358,7 +647,7 @@
     },
     {
       "name": "approved_for",
-      "description": "Delegated. See `self.nft.approved_for()` for details.",
+      "description": "Delegated. See `self.cep95.approved_for()` for details.",
       "is_mutable": false,
       "arguments": [
         {
@@ -376,7 +665,7 @@
     },
     {
       "name": "approve_for_all",
-      "description": "Delegated. See `self.nft.approve_for_all()` for details.",
+      "description": "Delegated. See `self.cep95.approve_for_all()` for details.",
       "is_mutable": true,
       "arguments": [
         {
@@ -392,7 +681,7 @@
     },
     {
       "name": "revoke_approval_for_all",
-      "description": "Delegated. See `self.nft.revoke_approval_for_all()` for details.",
+      "description": "Delegated. See `self.cep95.revoke_approval_for_all()` for details.",
       "is_mutable": true,
       "arguments": [
         {
@@ -408,7 +697,7 @@
     },
     {
       "name": "is_approved_for_all",
-      "description": "Delegated. See `self.nft.is_approved_for_all()` for details.",
+      "description": "Delegated. See `self.cep95.is_approved_for_all()` for details.",
       "is_mutable": false,
       "arguments": [
         {
@@ -430,7 +719,7 @@
     },
     {
       "name": "token_metadata",
-      "description": "Delegated. See `self.nft.token_metadata()` for details.",
+      "description": "Delegated. See `self.cep95.token_metadata()` for details.",
       "is_mutable": false,
       "arguments": [
         {
@@ -474,6 +763,10 @@
       "ty": "Mint"
     },
     {
+      "name": "OwnershipTransferred",
+      "ty": "OwnershipTransferred"
+    },
+    {
       "name": "RevokeApproval",
       "ty": "RevokeApproval"
     },
@@ -515,6 +808,12 @@
         "optional": false
       },
       {
+        "name": "owner",
+        "description": null,
+        "ty": "Key",
+        "optional": false
+      },
+      {
         "name": "symbol",
         "description": null,
         "ty": "String",
@@ -524,6 +823,22 @@
         "name": "name",
         "description": null,
         "ty": "String",
+        "optional": false
+      },
+      {
+        "name": "minters",
+        "description": null,
+        "ty": {
+          "List": "Key"
+        },
+        "optional": false
+      },
+      {
+        "name": "burners",
+        "description": null,
+        "ty": {
+          "List": "Key"
+        },
         "optional": false
       }
     ]

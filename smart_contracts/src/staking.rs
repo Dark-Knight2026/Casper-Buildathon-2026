@@ -17,7 +17,7 @@ impl Staking {
 
     /// Sets the TailorCoin (BIG) token contract address by the owner
     pub fn set_tailor_coin(&mut self, tailor_coin: Address) {
-        self.ownable.assert_owner(&self.env().caller());
+        self.assert_owner();
         self.tailor_coin.set(tailor_coin);
     }
 
@@ -44,6 +44,13 @@ impl Staking {
             fn renounce_ownership(&mut self);
             fn get_owner(&self) -> Address;
         }
+    }
+}
+
+impl Staking {
+    #[inline]
+    fn assert_owner(&self) {
+        self.ownable.assert_owner(&self.env().caller());
     }
 }
 

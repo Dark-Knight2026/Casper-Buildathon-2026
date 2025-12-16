@@ -41,7 +41,7 @@ impl Escrow {
 
     /// Sets the minimum possible invoice deadline by the owner
     pub fn set_min_deadline(&mut self, new_min_deadline: u64) {
-        self.ownable.assert_owner(&self.env().caller());
+        self.assert_owner();
 
         let old_min_deadline = self.min_deadline.get_or_default();
 
@@ -55,13 +55,13 @@ impl Escrow {
 
     /// Sets the Lease contract address by the owner
     pub fn set_lease(&mut self, lease: Address) {
-        self.ownable.assert_owner(&self.env().caller());
+        self.assert_owner();
         self.lease.set(lease);
     }
 
     /// Sets the Treasury contract address by the owner
     pub fn set_treasury(&mut self, treasury: Address) {
-        self.ownable.assert_owner(&self.env().caller());
+        self.assert_owner();
         self.treasury.set(treasury);
     }
 
@@ -74,7 +74,7 @@ impl Escrow {
         amount: U256,
         deadline: u64,
     ) -> U256 {
-        self.assert_lease(self.env().caller());
+        self.assert_lease();
         self.create_invoice(
             InvoiceKind::LEASE,
             tenant,
@@ -216,8 +216,13 @@ impl Escrow {
     }
 
     #[inline]
-    fn assert_lease(&self, caller: Address) {
-        if caller != self.get_lease_contract_address() {
+    fn assert_owner(&self) {
+        self.ownable.assert_owner(&self.env().caller());
+    }
+
+    #[inline]
+    fn assert_lease(&self) {
+        if self.env().caller() != self.get_lease_contract_address() {
             self.env().revert(Error::CallerNotLeaseContract);
         }
     }
