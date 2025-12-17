@@ -2,8 +2,10 @@
 #![cfg_attr(not(test), no_main)]
 extern crate alloc;
 
+pub mod common;
 pub mod constants;
 pub mod escrow;
+pub mod lease;
 pub mod nft;
 pub mod roles;
 pub mod staking;

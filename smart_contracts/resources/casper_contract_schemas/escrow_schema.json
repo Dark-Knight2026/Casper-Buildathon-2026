@@ -9,6 +9,26 @@
   "types": [
     {
       "struct": {
+        "name": "CurrencyAmount",
+        "description": null,
+        "members": [
+          {
+            "name": "currency",
+            "description": null,
+            "ty": {
+              "Option": "Key"
+            }
+          },
+          {
+            "name": "amount",
+            "description": null,
+            "ty": "U256"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
         "name": "Invoice",
         "description": null,
         "members": [
@@ -28,16 +48,9 @@
             "ty": "Key"
           },
           {
-            "name": "currency",
+            "name": "amount_due",
             "description": null,
-            "ty": {
-              "Option": "Key"
-            }
-          },
-          {
-            "name": "amount",
-            "description": null,
-            "ty": "U256"
+            "ty": "CurrencyAmount"
           },
           {
             "name": "deadline",

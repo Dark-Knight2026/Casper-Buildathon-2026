@@ -12,3 +12,9 @@ fqn = "treasury::Treasury"
 
 [[contracts]]
 fqn = "nft::NFT"
+
+[[contracts]]
+fqn = "lease::Lease"
+
+[[contracts]]
+fqn = "staking::Staking"

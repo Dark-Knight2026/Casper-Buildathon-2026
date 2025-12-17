@@ -6,26 +6,14 @@ use odra::{
 };
 use odra_modules::{access::Ownable, cep18_token::Cep18ContractRef};
 
-use crate::escrow::{
-    errors::Error,
-    events::{InvoiceCreated, InvoicePaid, MinDeadlineSet},
+use crate::{
+    common::CurrencyAmount,
+    escrow::{
+        errors::Error,
+        events::{InvoiceCreated, InvoicePaid, MinDeadlineSet},
+        types::{Invoice, InvoiceKind},
+    },
 };
-
-#[odra::odra_type]
-pub enum InvoiceKind {
-    LEASE,
-}
-
-#[odra::odra_type]
-pub struct Invoice {
-    kind: InvoiceKind,
-    buyer: Address,
-    seller: Address,
-    currency: Option<Address>,
-    amount: U256,
-    deadline: u64,
-    is_paid: bool,
-}
 
 #[odra::module(errors = Error, events = [MinDeadlineSet, InvoiceCreated, InvoicePaid])]
 pub struct Escrow {
@@ -112,10 +100,10 @@ impl Escrow {
 
         let recipient = invoice.seller;
 
-        if invoice.currency.is_none() {
+        if invoice.amount_due.currency().is_none() {
             let attached_value = self.env().attached_value();
 
-            if attached_value != invoice.amount.to_u512() {
+            if attached_value != invoice.amount_due.amount().to_u512() {
                 self.env().revert(Error::InvalidAmountAttached);
             }
 
@@ -125,11 +113,8 @@ impl Escrow {
                 self.env().revert(Error::InvalidAmountAttached);
             }
 
-            Cep18ContractRef::new(self.env(), invoice.currency.unwrap()).transfer_from(
-                &invoice.buyer,
-                &recipient,
-                &invoice.amount,
-            );
+            Cep18ContractRef::new(self.env(), invoice.amount_due.currency().unwrap())
+                .transfer_from(&invoice.buyer, &recipient, invoice.amount_due.amount());
         }
 
         invoice.is_paid = true;
@@ -200,13 +185,12 @@ impl Escrow {
             self.env().revert(Error::InvalidDeadline);
         }
 
-        let invoice_id = self.invoices_count.get_or_default();
+        let invoice_id = self.get_invoices_count();
         let invoice = Invoice {
             kind,
             buyer,
             seller,
-            currency,
-            amount,
+            amount_due: CurrencyAmount::new(currency, amount),
             deadline,
             is_paid: false,
         };
@@ -273,6 +257,27 @@ pub mod errors {
         InvoiceIsExpired = 61_008,
         InvalidAmountAttached = 61_009,
         EqualBuyerAndSeller = 61_010,
+    }
+}
+
+pub mod types {
+    use odra::prelude::*;
+
+    use crate::common::CurrencyAmount;
+
+    #[odra::odra_type]
+    pub enum InvoiceKind {
+        LEASE,
+    }
+
+    #[odra::odra_type]
+    pub struct Invoice {
+        pub kind: InvoiceKind,
+        pub buyer: Address,
+        pub seller: Address,
+        pub amount_due: CurrencyAmount,
+        pub deadline: u64,
+        pub is_paid: bool,
     }
 }
 
@@ -768,8 +773,7 @@ mod tests {
                 kind: InvoiceKind::LEASE,
                 buyer: params.tenant,
                 seller: params.landlord,
-                currency: params.currency,
-                amount: params.amount,
+                amount_due: CurrencyAmount::new(params.currency, params.amount),
                 deadline: params.deadline,
                 is_paid: false
             },
