@@ -6,6 +6,7 @@ use odra::{
 use odra_cli::{deploy::DeployScript, DeployedContractsContainer, DeployerExt, OdraCli};
 
 use leasefi_contracts::{
+    escrow::{Escrow, EscrowInitArgs},
     nft::{NFTInitArgs, NFT},
     roles::{Roles, RolesInitArgs},
     tailor_coin::{TailorCoin, TailorCoinInitArgs},
@@ -64,9 +65,32 @@ impl DeployScript for LeasefiDeployScript {
             container,
             100_000_000_000,
         )?;
+        let mut escrow = Escrow::load_or_deploy_with_cfg(
+            &env,
+            EscrowInitArgs {
+                owner: env.caller(),
+                min_deadline: 5 * 60,
+            },
+            InstallConfig::upgradable::<Escrow>(),
+            container,
+            400_000_000_000,
+        )?;
 
-        treasury.set_tailor_coin(tailor_coin.address());
-        // treasury.set_staking(staking.address());
+        if treasury.get_tailor_coin_contract_address() != treasury.address() {
+            treasury.set_tailor_coin(tailor_coin.address());
+        }
+
+        // if treasury.get_staking_contract_address() != staking.address() {
+        //     treasury.set_staking(staking.address());
+        // }
+
+        // if escrow.get_lease_contract_address() != lease.address() {
+        //     escrow.set_lease(lease.address());
+        // }
+
+        if escrow.get_treasury_contract_address() != treasury.address() {
+            escrow.set_treasury(treasury.address());
+        }
 
         Ok(())
     }
@@ -80,6 +104,7 @@ pub fn main() {
         .contract::<NFT>()
         .contract::<Roles>()
         .contract::<Treasury>()
+        .contract::<Escrow>()
         .build()
         .run();
 }
