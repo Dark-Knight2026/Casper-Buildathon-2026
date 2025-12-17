@@ -63,17 +63,26 @@ impl Escrow {
         &mut self,
         tenant: Address,
         landlord: Address,
-        currency: Option<Address>,
-        amount: U256,
+        amount_due: CurrencyAmount,
+        deadline: u64,
+    ) -> U256 {
+        self.assert_lease();
+        self.create_invoice(InvoiceKind::Lease, tenant, landlord, amount_due, deadline)
+    }
+
+    /// Allows to create a security deposit invoice by the Lease contract
+    pub fn create_security_deposit_invoice(
+        &mut self,
+        tenant: Address,
+        amount_due: CurrencyAmount,
         deadline: u64,
     ) -> U256 {
         self.assert_lease();
         self.create_invoice(
-            InvoiceKind::LEASE,
+            InvoiceKind::SecurityDeposit,
             tenant,
-            landlord,
-            currency,
-            amount,
+            self.get_lease_contract_address(),
+            amount_due,
             deadline,
         )
     }
@@ -169,15 +178,14 @@ impl Escrow {
         kind: InvoiceKind,
         buyer: Address,
         seller: Address,
-        currency: Option<Address>,
-        amount: U256,
+        mut amount_due: CurrencyAmount,
         deadline: u64,
     ) -> U256 {
         if buyer == seller {
             self.env().revert(Error::EqualBuyerAndSeller)
         }
 
-        if amount == U256::zero() {
+        if *amount_due.amount() == U256::zero() {
             self.env().revert(Error::ZeroAmount);
         }
 
@@ -190,7 +198,7 @@ impl Escrow {
             kind,
             buyer,
             seller,
-            amount_due: CurrencyAmount::new(currency, amount),
+            amount_due,
             deadline,
             is_paid: false,
         };
@@ -267,7 +275,8 @@ pub mod types {
 
     #[odra::odra_type]
     pub enum InvoiceKind {
-        LEASE,
+        SecurityDeposit,
+        Lease,
     }
 
     #[odra::odra_type]
@@ -301,8 +310,7 @@ mod tests {
     struct InvoiceParams {
         tenant: Address,
         landlord: Address,
-        currency: Option<Address>,
-        amount: U256,
+        amount_due: CurrencyAmount,
         deadline: u64,
     }
 
@@ -441,8 +449,7 @@ mod tests {
                 .try_create_lease_invoice(
                     test_data.env.get_account(0),
                     test_data.env.get_account(0),
-                    None,
-                    U256::zero(),
+                    CurrencyAmount::new(None, U256::zero()),
                     0
                 )
                 .unwrap_err(),
@@ -465,8 +472,7 @@ mod tests {
                 .try_create_lease_invoice(
                     test_data.env.get_account(0),
                     test_data.env.get_account(0),
-                    None,
-                    U256::zero(),
+                    CurrencyAmount::new(None, U256::zero()),
                     0
                 )
                 .unwrap_err(),
@@ -489,8 +495,7 @@ mod tests {
                 .try_create_lease_invoice(
                     test_data.env.get_account(0),
                     test_data.env.get_account(1),
-                    None,
-                    U256::zero(),
+                    CurrencyAmount::new(None, U256::zero()),
                     0
                 )
                 .unwrap_err(),
@@ -513,8 +518,7 @@ mod tests {
                 .try_create_lease_invoice(
                     test_data.env.get_account(0),
                     test_data.env.get_account(1),
-                    None,
-                    U256::one(),
+                    CurrencyAmount::new(None, U256::one()),
                     test_data.env.block_time() + test_data.escrow.get_min_deadline() - 1
                 )
                 .unwrap_err(),
@@ -561,12 +565,12 @@ mod tests {
     #[test]
     fn test_pay_invoice_should_fail_if_invoice_is_already_paid() {
         let mut test_data = setup(odra_test::env());
-        let params = generate_invoice_params(&mut test_data);
+        let mut params = generate_invoice_params(&mut test_data);
         let invoice_id = create_lease_invoice(&mut test_data, &params);
 
         test_data
             .escrow
-            .with_tokens(params.amount.to_u512())
+            .with_tokens(params.amount_due.amount().to_u512())
             .pay_invoice(invoice_id);
 
         assert_eq!(
@@ -597,13 +601,13 @@ mod tests {
     fn test_pay_invoice_should_fail_if_attached_cspr_value_is_invalid_for_invoice_in_native_token()
     {
         let mut test_data = setup(odra_test::env());
-        let params = generate_invoice_params(&mut test_data);
+        let mut params = generate_invoice_params(&mut test_data);
         let invoice_id = create_lease_invoice(&mut test_data, &params);
 
         assert_eq!(
             test_data
                 .escrow
-                .with_tokens(params.amount.to_u512() - 1)
+                .with_tokens(params.amount_due.amount().to_u512() - 1)
                 .try_pay_invoice(invoice_id)
                 .unwrap_err(),
             Error::InvalidAmountAttached.into(),
@@ -612,7 +616,7 @@ mod tests {
         assert_eq!(
             test_data
                 .escrow
-                .with_tokens(params.amount.to_u512() + 1)
+                .with_tokens(params.amount_due.amount().to_u512() + 1)
                 .try_pay_invoice(invoice_id)
                 .unwrap_err(),
             Error::InvalidAmountAttached.into(),
@@ -625,7 +629,7 @@ mod tests {
         let mut test_data = setup(odra_test::env());
         let mut params = generate_invoice_params(&mut test_data);
 
-        params.currency = Some(test_data.mock_cep18.address());
+        *params.amount_due.currency() = Some(test_data.mock_cep18.address());
 
         let invoice_id = create_lease_invoice(&mut test_data, &params);
 
@@ -643,13 +647,13 @@ mod tests {
     #[test]
     fn test_pay_invoice_should_pay_invoice_in_native_token_properly() {
         let mut test_data = setup(odra_test::env());
-        let params = generate_invoice_params(&mut test_data);
+        let mut params = generate_invoice_params(&mut test_data);
         let invoice_id = create_lease_invoice(&mut test_data, &params);
         let prev_recipient_token_balance = test_data.env.balance_of(&params.landlord);
 
         test_data
             .escrow
-            .with_tokens(params.amount.to_u512())
+            .with_tokens(params.amount_due.amount().to_u512())
             .pay_invoice(invoice_id);
 
         let curr_recipient_token_balance = test_data.env.balance_of(&params.landlord);
@@ -663,7 +667,7 @@ mod tests {
         ));
         assert_eq!(
             curr_recipient_token_balance,
-            prev_recipient_token_balance + params.amount.to_u512(),
+            prev_recipient_token_balance + params.amount_due.amount().to_u512(),
             "Invalid current recipient balance"
         );
         assert!(
@@ -677,14 +681,14 @@ mod tests {
         let mut test_data = setup(odra_test::env());
         let mut params = generate_invoice_params(&mut test_data);
 
-        params.currency = Some(test_data.mock_cep18.address());
+        *params.amount_due.currency() = Some(test_data.mock_cep18.address());
 
         let invoice_id = create_lease_invoice(&mut test_data, &params);
         let prev_recipient_token_balance = test_data.mock_cep18.balance_of(&params.landlord);
 
         test_data
             .mock_cep18
-            .approve(&test_data.escrow.address(), &params.amount);
+            .approve(&test_data.escrow.address(), params.amount_due.amount());
         test_data.escrow.pay_invoice(invoice_id);
 
         let curr_recipient_token_balance = test_data.mock_cep18.balance_of(&params.landlord);
@@ -698,7 +702,7 @@ mod tests {
         ));
         assert_eq!(
             curr_recipient_token_balance,
-            prev_recipient_token_balance + params.amount,
+            prev_recipient_token_balance + *params.amount_due.amount(),
             "Invalid current recipient balance"
         );
         assert!(
@@ -739,8 +743,10 @@ mod tests {
         InvoiceParams {
             tenant: test_data.env.get_account(0),
             landlord: test_data.env.get_account(1),
-            currency: None,
-            amount: U256::from_dec_str("1000000000000000000").unwrap(),
+            amount_due: CurrencyAmount::new(
+                None,
+                U256::from_dec_str("1000000000000000000").unwrap(),
+            ),
             deadline: test_data.env.block_time() + test_data.escrow.get_min_deadline(),
         }
     }
@@ -753,8 +759,7 @@ mod tests {
         let invoice_id = test_data.escrow.create_lease_invoice(
             params.tenant,
             params.landlord,
-            params.currency,
-            params.amount,
+            params.amount_due,
             params.deadline,
         );
 
@@ -770,10 +775,10 @@ mod tests {
         assert_eq!(
             test_data.escrow.get_invoice_by_id(invoice_id),
             Invoice {
-                kind: InvoiceKind::LEASE,
+                kind: InvoiceKind::Lease,
                 buyer: params.tenant,
                 seller: params.landlord,
-                amount_due: CurrencyAmount::new(params.currency, params.amount),
+                amount_due: params.amount_due,
                 deadline: params.deadline,
                 is_paid: false
             },

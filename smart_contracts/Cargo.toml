@@ -7,7 +7,6 @@ edition = "2021"
 odra-modules = { version="2.4.0", features = [], default-features = false }
 sha3 = { version = "0.10.8", features = [], default-features = false }
 odra = { version = "2.4.0", features = [], default-features = false }
-derive-getters = "0.5.0"
 
 [dev-dependencies]
 odra-test = { version = "2.4.0", features = [], default-features = false }

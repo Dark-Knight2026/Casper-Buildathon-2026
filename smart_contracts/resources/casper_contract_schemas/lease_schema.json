@@ -9,6 +9,132 @@
   "types": [
     {
       "struct": {
+        "name": "CreateLeaseAgreementParams",
+        "description": null,
+        "members": [
+          {
+            "name": "tenant",
+            "description": null,
+            "ty": "Key"
+          },
+          {
+            "name": "monthly_rent",
+            "description": null,
+            "ty": "CurrencyAmount"
+          },
+          {
+            "name": "security_deposit",
+            "description": null,
+            "ty": "CurrencyAmount"
+          },
+          {
+            "name": "start",
+            "description": null,
+            "ty": "U64"
+          },
+          {
+            "name": "end",
+            "description": null,
+            "ty": "U64"
+          },
+          {
+            "name": "invoice_validity_duration",
+            "description": null,
+            "ty": "U64"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
+        "name": "CurrencyAmount",
+        "description": null,
+        "members": [
+          {
+            "name": "currency",
+            "description": null,
+            "ty": {
+              "Option": "Key"
+            }
+          },
+          {
+            "name": "amount",
+            "description": null,
+            "ty": "U256"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
+        "name": "LeaseAgreement",
+        "description": null,
+        "members": [
+          {
+            "name": "tenant",
+            "description": null,
+            "ty": "Key"
+          },
+          {
+            "name": "landlord",
+            "description": null,
+            "ty": "Key"
+          },
+          {
+            "name": "monthly_rent",
+            "description": null,
+            "ty": "CurrencyAmount"
+          },
+          {
+            "name": "security_deposit",
+            "description": null,
+            "ty": "CurrencyAmount"
+          },
+          {
+            "name": "invoices_ids",
+            "description": null,
+            "ty": {
+              "List": "U256"
+            }
+          },
+          {
+            "name": "start",
+            "description": null,
+            "ty": "U64"
+          },
+          {
+            "name": "end",
+            "description": null,
+            "ty": "U64"
+          },
+          {
+            "name": "is_closed",
+            "description": null,
+            "ty": "Bool"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
+        "name": "LeaseAgreementCreated",
+        "description": null,
+        "members": [
+          {
+            "name": "lease_agreement_id",
+            "description": null,
+            "ty": "U256"
+          },
+          {
+            "name": "created_at",
+            "description": null,
+            "ty": "U64"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
         "name": "OwnershipTransferred",
         "description": null,
         "members": [
@@ -47,6 +173,21 @@
       "discriminant": 20001
     },
     {
+      "name": "EqualTenantAndLandlord",
+      "description": "",
+      "discriminant": 60002
+    },
+    {
+      "name": "InvalidLeaseAgreementId",
+      "description": "",
+      "discriminant": 60001
+    },
+    {
+      "name": "InvalidTimeframes",
+      "description": "",
+      "discriminant": 60003
+    },
+    {
       "name": "MissingRole",
       "description": "The role is missing.",
       "discriminant": 20003
@@ -60,6 +201,11 @@
       "name": "RoleRenounceForAnotherAddress",
       "description": "The role cannot be renounced for another address.",
       "discriminant": 20004
+    },
+    {
+      "name": "ZeroAmount",
+      "description": "",
+      "discriminant": 60004
     }
   ],
   "entry_points": [
@@ -96,6 +242,31 @@
       "access": "public"
     },
     {
+      "name": "create_lease_agreement",
+      "description": "Allows to create a new lease agreement and all invoices for this agreement by a landlord",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "params",
+          "description": null,
+          "ty": "CreateLeaseAgreementParams",
+          "optional": false
+        }
+      ],
+      "return_ty": "U256",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "close_lease_agreement",
+      "description": "",
+      "is_mutable": true,
+      "arguments": [],
+      "return_ty": "Unit",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
       "name": "get_roles_contract_address",
       "description": "Returns the Roles contract address",
       "is_mutable": false,
@@ -110,6 +281,47 @@
       "is_mutable": false,
       "arguments": [],
       "return_ty": "Key",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "get_lease_agreement_by_id",
+      "description": "Returns lease agreement by its ID",
+      "is_mutable": false,
+      "arguments": [
+        {
+          "name": "lease_agreement_id",
+          "description": null,
+          "ty": "U256",
+          "optional": false
+        }
+      ],
+      "return_ty": "LeaseAgreement",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "get_lease_agreements_count",
+      "description": "Returns number of lease agreements created through this contract",
+      "is_mutable": false,
+      "arguments": [],
+      "return_ty": "U256",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "is_security_deposit_paid",
+      "description": "Returns `true` if security deposit is paid for lease agreement, `false` otherwise",
+      "is_mutable": false,
+      "arguments": [
+        {
+          "name": "lease_agreement_id",
+          "description": null,
+          "ty": "U256",
+          "optional": false
+        }
+      ],
+      "return_ty": "Bool",
       "is_contract_context": true,
       "access": "public"
     },
@@ -149,6 +361,10 @@
     }
   ],
   "events": [
+    {
+      "name": "LeaseAgreementCreated",
+      "ty": "LeaseAgreementCreated"
+    },
     {
       "name": "OwnershipTransferred",
       "ty": "OwnershipTransferred"

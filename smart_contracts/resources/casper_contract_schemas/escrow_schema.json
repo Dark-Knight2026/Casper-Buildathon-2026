@@ -147,9 +147,15 @@
         "description": null,
         "variants": [
           {
-            "name": "LEASE",
+            "name": "SecurityDeposit",
             "description": null,
             "discriminant": 0,
+            "ty": "Unit"
+          },
+          {
+            "name": "Lease",
+            "description": null,
+            "discriminant": 1,
             "ty": "Unit"
           }
         ]
@@ -305,17 +311,37 @@
           "optional": false
         },
         {
-          "name": "currency",
+          "name": "amount_due",
           "description": null,
-          "ty": {
-            "Option": "Key"
-          },
+          "ty": "CurrencyAmount",
           "optional": false
         },
         {
-          "name": "amount",
+          "name": "deadline",
           "description": null,
-          "ty": "U256",
+          "ty": "U64",
+          "optional": false
+        }
+      ],
+      "return_ty": "U256",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "create_security_deposit_invoice",
+      "description": "Allows to create a security deposit invoice by the Lease contract",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "tenant",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        },
+        {
+          "name": "amount_due",
+          "description": null,
+          "ty": "CurrencyAmount",
           "optional": false
         },
         {

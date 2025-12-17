@@ -2,6 +2,25 @@
   "name": "Lease",
   "events": [
     {
+      "name": "LeaseAgreementCreated",
+      "args": [
+        {
+          "name": "lease_agreement_id",
+          "ty": "U256",
+          "is_ref": false,
+          "is_slice": false,
+          "is_required": true
+        },
+        {
+          "name": "created_at",
+          "ty": "U64",
+          "is_ref": false,
+          "is_slice": false,
+          "is_required": true
+        }
+      ]
+    },
+    {
       "name": "OwnershipTransferred",
       "args": [
         {
@@ -75,6 +94,30 @@
       "attributes": []
     },
     {
+      "name": "create_lease_agreement",
+      "args": [
+        {
+          "name": "params",
+          "ty": "Any",
+          "is_ref": false,
+          "is_slice": false,
+          "is_required": true
+        }
+      ],
+      "is_mutable": true,
+      "return_ty": "U256",
+      "ty": "Public",
+      "attributes": []
+    },
+    {
+      "name": "close_lease_agreement",
+      "args": [],
+      "is_mutable": true,
+      "return_ty": "Unit",
+      "ty": "Public",
+      "attributes": []
+    },
+    {
       "name": "get_roles_contract_address",
       "args": [],
       "is_mutable": false,
@@ -87,6 +130,46 @@
       "args": [],
       "is_mutable": false,
       "return_ty": "Key",
+      "ty": "Public",
+      "attributes": []
+    },
+    {
+      "name": "get_lease_agreement_by_id",
+      "args": [
+        {
+          "name": "lease_agreement_id",
+          "ty": "U256",
+          "is_ref": false,
+          "is_slice": false,
+          "is_required": true
+        }
+      ],
+      "is_mutable": false,
+      "return_ty": "Any",
+      "ty": "Public",
+      "attributes": []
+    },
+    {
+      "name": "get_lease_agreements_count",
+      "args": [],
+      "is_mutable": false,
+      "return_ty": "U256",
+      "ty": "Public",
+      "attributes": []
+    },
+    {
+      "name": "is_security_deposit_paid",
+      "args": [
+        {
+          "name": "lease_agreement_id",
+          "ty": "U256",
+          "is_ref": false,
+          "is_slice": false,
+          "is_required": true
+        }
+      ],
+      "is_mutable": false,
+      "return_ty": "Bool",
       "ty": "Public",
       "attributes": []
     },

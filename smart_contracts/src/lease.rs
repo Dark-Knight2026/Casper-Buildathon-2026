@@ -2,6 +2,7 @@ use odra::{casper_types::U256, prelude::*, ContractRef};
 use odra_modules::access::Ownable;
 
 use crate::{
+    constants::ONE_MONTH_IN_SECONDS,
     escrow::EscrowContractRef,
     lease::{
         errors::Error,
@@ -38,7 +39,7 @@ impl Lease {
         self.escrow.set(escrow);
     }
 
-    /// Allows to create a new lease agreement by a landlord
+    /// Allows to create a new lease agreement and all invoices for this agreement by a landlord
     pub fn create_lease_agreement(&mut self, params: CreateLeaseAgreementParams) -> U256 {
         self.assert_landlord();
 
@@ -48,23 +49,45 @@ impl Lease {
             self.env().revert(Error::EqualTenantAndLandlord);
         }
 
-        // TODO
+        if params.start >= params.end {
+            self.env().revert(Error::InvalidTimeframes);
+        }
 
-        let invoice_id = self.escrow.create_lease_invoice(
+        let lease_duration = params.end - params.start;
+
+        if lease_duration % ONE_MONTH_IN_SECONDS != 0 {
+            self.env().revert(Error::InvalidTimeframes);
+        }
+
+        let mut monthly_rent = params.monthly_rent;
+
+        if *monthly_rent.amount() == U256::zero() {
+            self.env().revert(Error::ZeroAmount);
+        }
+
+        let block_timestamp = self.env().get_block_time();
+        let mut invoices_ids = vec![self.escrow.create_security_deposit_invoice(
             params.tenant,
-            landlord,
-            *params.monthly_rent.currency(),
-            *params.monthly_rent.amount(),
-            0,
-        );
+            params.security_deposit,
+            block_timestamp + params.invoice_validity_duration,
+        )];
+
+        for i in 0..(lease_duration / ONE_MONTH_IN_SECONDS) {
+            invoices_ids.push(self.escrow.create_lease_invoice(
+                params.tenant,
+                landlord,
+                monthly_rent,
+                block_timestamp + (params.invoice_validity_duration * (i + 1)),
+            ));
+        }
 
         let lease_agreement_id = self.get_lease_agreements_count();
         let lease_agreement = LeaseAgreement {
             tenant: params.tenant,
             landlord,
-            monthly_rent: params.monthly_rent,
+            monthly_rent,
             security_deposit: params.security_deposit,
-            invoices_ids: vec![invoice_id],
+            invoices_ids,
             start: params.start,
             end: params.end,
             is_closed: false,
@@ -75,7 +98,7 @@ impl Lease {
 
         self.env().emit_native_event(LeaseAgreementCreated {
             lease_agreement_id,
-            created_at: self.env().get_block_time(),
+            created_at: block_timestamp,
         });
 
         lease_agreement_id
@@ -105,6 +128,16 @@ impl Lease {
     /// Returns number of lease agreements created through this contract
     pub fn get_lease_agreements_count(&self) -> U256 {
         self.leases_count.get_or_default()
+    }
+
+    /// Returns `true` if security deposit is paid for lease agreement, `false` otherwise
+    pub fn is_security_deposit_paid(&self, lease_agreement_id: &U256) -> bool {
+        let lease_agreement = self.get_lease_agreement_by_id(lease_agreement_id);
+        let security_deposit_invoice_id = lease_agreement.invoices_ids[0];
+
+        self.escrow
+            .get_invoice_by_id(security_deposit_invoice_id)
+            .is_paid
     }
 
     delegate! {
@@ -150,6 +183,8 @@ pub mod errors {
         CallerNotLandlord = 60_000,
         InvalidLeaseAgreementId = 60_001,
         EqualTenantAndLandlord = 60_002,
+        InvalidTimeframes = 60_003,
+        ZeroAmount = 60_004,
     }
 }
 
@@ -177,6 +212,7 @@ pub mod types {
         pub security_deposit: CurrencyAmount,
         pub start: u64,
         pub end: u64,
+        pub invoice_validity_duration: u64,
     }
 }
 

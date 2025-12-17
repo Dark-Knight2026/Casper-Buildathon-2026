@@ -172,17 +172,38 @@
           "is_required": true
         },
         {
-          "name": "currency",
-          "ty": {
-            "Option": "Key"
-          },
+          "name": "amount_due",
+          "ty": "Any",
           "is_ref": false,
           "is_slice": false,
           "is_required": true
         },
         {
-          "name": "amount",
-          "ty": "U256",
+          "name": "deadline",
+          "ty": "U64",
+          "is_ref": false,
+          "is_slice": false,
+          "is_required": true
+        }
+      ],
+      "is_mutable": true,
+      "return_ty": "U256",
+      "ty": "Public",
+      "attributes": []
+    },
+    {
+      "name": "create_security_deposit_invoice",
+      "args": [
+        {
+          "name": "tenant",
+          "ty": "Key",
+          "is_ref": false,
+          "is_slice": false,
+          "is_required": true
+        },
+        {
+          "name": "amount_due",
+          "ty": "Any",
           "is_ref": false,
           "is_slice": false,
           "is_required": true
