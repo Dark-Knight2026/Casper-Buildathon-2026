@@ -21,6 +21,44 @@
       ]
     },
     {
+      "name": "LeaseAgreementFinished",
+      "args": [
+        {
+          "name": "lease_agreement_id",
+          "ty": "U256",
+          "is_ref": false,
+          "is_slice": false,
+          "is_required": true
+        },
+        {
+          "name": "finished_at",
+          "ty": "U64",
+          "is_ref": false,
+          "is_slice": false,
+          "is_required": true
+        }
+      ]
+    },
+    {
+      "name": "LeaseAgreementProlonged",
+      "args": [
+        {
+          "name": "lease_agreement_id",
+          "ty": "U256",
+          "is_ref": false,
+          "is_slice": false,
+          "is_required": true
+        },
+        {
+          "name": "prolonged_at",
+          "ty": "U64",
+          "is_ref": false,
+          "is_slice": false,
+          "is_required": true
+        }
+      ]
+    },
+    {
       "name": "OwnershipTransferred",
       "args": [
         {
@@ -110,8 +148,53 @@
       "attributes": []
     },
     {
-      "name": "close_lease_agreement",
-      "args": [],
+      "name": "finalize_lease_agreement",
+      "args": [
+        {
+          "name": "lease_agreement_id",
+          "ty": "U256",
+          "is_ref": false,
+          "is_slice": false,
+          "is_required": true
+        },
+        {
+          "name": "security_deposit_charge",
+          "ty": "U256",
+          "is_ref": false,
+          "is_slice": false,
+          "is_required": true
+        }
+      ],
+      "is_mutable": true,
+      "return_ty": "Unit",
+      "ty": "Public",
+      "attributes": []
+    },
+    {
+      "name": "prolong_lease_agreement",
+      "args": [
+        {
+          "name": "lease_agreement_id",
+          "ty": "U256",
+          "is_ref": false,
+          "is_slice": false,
+          "is_required": true
+        },
+        {
+          "name": "new_end",
+          "ty": "U64",
+          "is_ref": false,
+          "is_slice": false,
+          "is_required": true
+        },
+        {
+          "name": "invoice_validity_duration",
+          "ty": "U64",
+          "is_ref": false,
+          "is_slice": false,
+          "is_required": true
+        }
+      ],
       "is_mutable": true,
       "return_ty": "Unit",
       "ty": "Public",
@@ -159,6 +242,22 @@
     },
     {
       "name": "is_security_deposit_paid",
+      "args": [
+        {
+          "name": "lease_agreement_id",
+          "ty": "U256",
+          "is_ref": false,
+          "is_slice": false,
+          "is_required": true
+        }
+      ],
+      "is_mutable": false,
+      "return_ty": "Bool",
+      "ty": "Public",
+      "attributes": []
+    },
+    {
+      "name": "is_all_invoices_paid",
       "args": [
         {
           "name": "lease_agreement_id",

@@ -108,7 +108,7 @@
             "ty": "U64"
           },
           {
-            "name": "is_closed",
+            "name": "is_finished",
             "description": null,
             "ty": "Bool"
           }
@@ -127,6 +127,42 @@
           },
           {
             "name": "created_at",
+            "description": null,
+            "ty": "U64"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
+        "name": "LeaseAgreementFinished",
+        "description": null,
+        "members": [
+          {
+            "name": "lease_agreement_id",
+            "description": null,
+            "ty": "U256"
+          },
+          {
+            "name": "finished_at",
+            "description": null,
+            "ty": "U64"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
+        "name": "LeaseAgreementProlonged",
+        "description": null,
+        "members": [
+          {
+            "name": "lease_agreement_id",
+            "description": null,
+            "ty": "U256"
+          },
+          {
+            "name": "prolonged_at",
             "description": null,
             "ty": "U64"
           }
@@ -178,6 +214,11 @@
       "discriminant": 60002
     },
     {
+      "name": "InvalidLandlord",
+      "description": "",
+      "discriminant": 60005
+    },
+    {
       "name": "InvalidLeaseAgreementId",
       "description": "",
       "discriminant": 60001
@@ -188,9 +229,19 @@
       "discriminant": 60003
     },
     {
+      "name": "LeaseAgreementHasNotFinishedYet",
+      "description": "",
+      "discriminant": 60006
+    },
+    {
       "name": "MissingRole",
       "description": "The role is missing.",
       "discriminant": 20003
+    },
+    {
+      "name": "NotAllInvoicesArePaid",
+      "description": "",
+      "discriminant": 60007
     },
     {
       "name": "OwnerNotSet",
@@ -201,6 +252,11 @@
       "name": "RoleRenounceForAnotherAddress",
       "description": "The role cannot be renounced for another address.",
       "discriminant": 20004
+    },
+    {
+      "name": "SecurityDepositChargeIsTooHigh",
+      "description": "",
+      "discriminant": 60008
     },
     {
       "name": "ZeroAmount",
@@ -258,10 +314,51 @@
       "access": "public"
     },
     {
-      "name": "close_lease_agreement",
-      "description": "",
+      "name": "finalize_lease_agreement",
+      "description": "Allows to finalize lease agreement between tenant and landlord when agreement has finished and won't be prolonged",
       "is_mutable": true,
-      "arguments": [],
+      "arguments": [
+        {
+          "name": "lease_agreement_id",
+          "description": null,
+          "ty": "U256",
+          "optional": false
+        },
+        {
+          "name": "security_deposit_charge",
+          "description": null,
+          "ty": "U256",
+          "optional": false
+        }
+      ],
+      "return_ty": "Unit",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "prolong_lease_agreement",
+      "description": "Allows to prolong lease agreement between tenant and landlord when agreement has finished and both parties",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "lease_agreement_id",
+          "description": null,
+          "ty": "U256",
+          "optional": false
+        },
+        {
+          "name": "new_end",
+          "description": null,
+          "ty": "U64",
+          "optional": false
+        },
+        {
+          "name": "invoice_validity_duration",
+          "description": null,
+          "ty": "U64",
+          "optional": false
+        }
+      ],
       "return_ty": "Unit",
       "is_contract_context": true,
       "access": "public"
@@ -326,6 +423,22 @@
       "access": "public"
     },
     {
+      "name": "is_all_invoices_paid",
+      "description": "Returns `true` if all invoices are paid for lease agreement, `false` if at least one invoice is not paid",
+      "is_mutable": false,
+      "arguments": [
+        {
+          "name": "lease_agreement_id",
+          "description": null,
+          "ty": "U256",
+          "optional": false
+        }
+      ],
+      "return_ty": "Bool",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
       "name": "transfer_ownership",
       "description": "Delegated. See `self.ownable.transfer_ownership()` for details.",
       "is_mutable": true,
@@ -364,6 +477,14 @@
     {
       "name": "LeaseAgreementCreated",
       "ty": "LeaseAgreementCreated"
+    },
+    {
+      "name": "LeaseAgreementFinished",
+      "ty": "LeaseAgreementFinished"
+    },
+    {
+      "name": "LeaseAgreementProlonged",
+      "ty": "LeaseAgreementProlonged"
     },
     {
       "name": "OwnershipTransferred",

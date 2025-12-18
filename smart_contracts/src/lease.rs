@@ -1,18 +1,19 @@
-use odra::{casper_types::U256, prelude::*, ContractRef};
-use odra_modules::access::Ownable;
+use odra::{casper_types::U256, prelude::*, uints::ToU512, ContractRef};
+use odra_modules::{access::Ownable, cep18_token::Cep18ContractRef};
 
 use crate::{
+    common::CurrencyAmount,
     constants::ONE_MONTH_IN_SECONDS,
     escrow::EscrowContractRef,
     lease::{
         errors::Error,
-        events::LeaseAgreementCreated,
+        events::{LeaseAgreementCreated, LeaseAgreementFinished, LeaseAgreementProlonged},
         types::{CreateLeaseAgreementParams, LeaseAgreement},
     },
     roles::RolesContractRef,
 };
 
-#[odra::module(errors = Error, events = [LeaseAgreementCreated])]
+#[odra::module(errors = Error, events = [LeaseAgreementCreated, LeaseAgreementFinished, LeaseAgreementProlonged])]
 pub struct Lease {
     ownable: SubModule<Ownable>,
     roles: External<RolesContractRef>,
@@ -90,7 +91,7 @@ impl Lease {
             invoices_ids,
             start: params.start,
             end: params.end,
-            is_closed: false,
+            is_finished: false,
         };
 
         self.leases.set(&lease_agreement_id, lease_agreement);
@@ -104,8 +105,89 @@ impl Lease {
         lease_agreement_id
     }
 
-    pub fn close_lease_agreement(&mut self) {
-        self.assert_landlord();
+    /// Allows to finalize lease agreement between tenant and landlord when agreement has finished and won't be prolonged
+    pub fn finalize_lease_agreement(
+        &mut self,
+        lease_agreement_id: &U256,
+        security_deposit_charge: &U256,
+    ) {
+        let mut lease_agreement = self.get_lease_agreement_by_id(lease_agreement_id);
+
+        if lease_agreement.landlord != self.env().caller() {
+            self.env().revert(Error::InvalidLandlord);
+        }
+
+        if self.env().get_block_time() < lease_agreement.end {
+            self.env().revert(Error::LeaseAgreementHasNotFinishedYet);
+        }
+
+        self.assert_all_invoices_paid(&lease_agreement_id);
+        self.release_security_deposit(
+            &lease_agreement.tenant,
+            &lease_agreement.landlord,
+            &mut lease_agreement.security_deposit,
+            security_deposit_charge,
+        );
+
+        lease_agreement.is_finished = true;
+        self.leases.set(lease_agreement_id, lease_agreement);
+
+        self.env().emit_native_event(LeaseAgreementFinished {
+            lease_agreement_id: *lease_agreement_id,
+            finished_at: self.env().get_block_time(),
+        });
+    }
+
+    /// Allows to prolong lease agreement between tenant and landlord when agreement has finished and both parties
+    /// decided to prolong it
+    pub fn prolong_lease_agreement(
+        &mut self,
+        lease_agreement_id: &U256,
+        new_end: u64,
+        invoice_validity_duration: u64,
+    ) {
+        let mut lease_agreement = self.get_lease_agreement_by_id(lease_agreement_id);
+
+        if lease_agreement.landlord != self.env().caller() {
+            self.env().revert(Error::InvalidLandlord);
+        }
+
+        if self.env().get_block_time() < lease_agreement.end {
+            self.env().revert(Error::LeaseAgreementHasNotFinishedYet);
+        }
+
+        self.assert_all_invoices_paid(&lease_agreement_id);
+
+        if lease_agreement.end >= new_end {
+            self.env().revert(Error::InvalidTimeframes);
+        }
+
+        let lease_duration = new_end - lease_agreement.end;
+
+        if lease_duration % ONE_MONTH_IN_SECONDS != 0 {
+            self.env().revert(Error::InvalidTimeframes);
+        }
+
+        let block_timestamp = self.env().get_block_time();
+
+        for i in 0..(lease_duration / ONE_MONTH_IN_SECONDS) {
+            lease_agreement
+                .invoices_ids
+                .push(self.escrow.create_lease_invoice(
+                    lease_agreement.tenant,
+                    lease_agreement.landlord,
+                    lease_agreement.monthly_rent,
+                    block_timestamp + (invoice_validity_duration * (i + 1)),
+                ));
+        }
+
+        lease_agreement.end = new_end;
+        self.leases.set(lease_agreement_id, lease_agreement);
+
+        self.env().emit_native_event(LeaseAgreementProlonged {
+            lease_agreement_id: *lease_agreement_id,
+            prolonged_at: self.env().get_block_time(),
+        });
     }
 
     /// Returns the Roles contract address
@@ -140,6 +222,19 @@ impl Lease {
             .is_paid
     }
 
+    /// Returns `true` if all invoices are paid for lease agreement, `false` if at least one invoice is not paid
+    pub fn is_all_invoices_paid(&self, lease_agreement_id: &U256) -> bool {
+        let lease_agreement = self.get_lease_agreement_by_id(lease_agreement_id);
+
+        for invoice_id in &lease_agreement.invoices_ids {
+            if !self.escrow.get_invoice_by_id(*invoice_id).is_paid {
+                return false;
+            }
+        }
+
+        true
+    }
+
     delegate! {
         to self.ownable {
             fn transfer_ownership(&mut self, new_owner: &Address);
@@ -163,6 +258,53 @@ impl Lease {
             self.env().revert(Error::CallerNotLandlord);
         }
     }
+
+    fn assert_all_invoices_paid(&self, lease_agreement_id: &U256) {
+        if !self.is_all_invoices_paid(lease_agreement_id) {
+            self.env().revert(Error::NotAllInvoicesArePaid);
+        }
+    }
+
+    fn transfer_currency_amount(&self, currency_amount: &mut CurrencyAmount, recipient: &Address) {
+        if currency_amount.currency().is_none() {
+            self.env()
+                .transfer_tokens(recipient, &currency_amount.amount().to_u512());
+        } else {
+            Cep18ContractRef::new(self.env(), currency_amount.currency().unwrap())
+                .transfer(&recipient, currency_amount.amount());
+        }
+    }
+
+    fn release_security_deposit(
+        &self,
+        tenant: &Address,
+        landlord: &Address,
+        security_deposit: &mut CurrencyAmount,
+        security_deposit_charge: &U256,
+    ) {
+        if security_deposit_charge > security_deposit.amount() {
+            self.env().revert(Error::SecurityDepositChargeIsTooHigh);
+        }
+
+        if *security_deposit_charge > U256::zero() {
+            self.transfer_currency_amount(
+                &mut CurrencyAmount::new(*security_deposit.currency(), *security_deposit_charge),
+                landlord,
+            );
+            self.transfer_currency_amount(
+                &mut CurrencyAmount::new(
+                    *security_deposit.currency(),
+                    *security_deposit.amount() - *security_deposit_charge,
+                ),
+                tenant,
+            );
+        } else {
+            self.transfer_currency_amount(
+                &mut CurrencyAmount::new(*security_deposit.currency(), *security_deposit.amount()),
+                tenant,
+            );
+        }
+    }
 }
 
 pub mod events {
@@ -172,6 +314,18 @@ pub mod events {
     pub struct LeaseAgreementCreated {
         pub lease_agreement_id: U256,
         pub created_at: u64,
+    }
+
+    #[odra::event]
+    pub struct LeaseAgreementFinished {
+        pub lease_agreement_id: U256,
+        pub finished_at: u64,
+    }
+
+    #[odra::event]
+    pub struct LeaseAgreementProlonged {
+        pub lease_agreement_id: U256,
+        pub prolonged_at: u64,
     }
 }
 
@@ -185,6 +339,10 @@ pub mod errors {
         EqualTenantAndLandlord = 60_002,
         InvalidTimeframes = 60_003,
         ZeroAmount = 60_004,
+        InvalidLandlord = 60_005,
+        LeaseAgreementHasNotFinishedYet = 60_006,
+        NotAllInvoicesArePaid = 60_007,
+        SecurityDepositChargeIsTooHigh = 60_008,
     }
 }
 
@@ -202,7 +360,7 @@ pub mod types {
         pub invoices_ids: Vec<U256>,
         pub start: u64,
         pub end: u64,
-        pub is_closed: bool,
+        pub is_finished: bool,
     }
 
     #[odra::odra_type]

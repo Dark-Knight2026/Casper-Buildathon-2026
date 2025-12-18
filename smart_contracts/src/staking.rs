@@ -9,6 +9,8 @@ pub struct Staking {
     tailor_coin: Var<Address>,
 }
 
+// TODO implement all staking and rewards distribution related logic
+
 #[odra::module]
 impl Staking {
     pub fn init(&mut self, owner: Address) {

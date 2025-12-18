@@ -109,6 +109,8 @@ impl Escrow {
 
         let recipient = invoice.seller;
 
+        // TODO charge 2% fee for every payment, swap to TailorCoin (BIG) token and send to the Treasury
+
         if invoice.amount_due.currency().is_none() {
             let attached_value = self.env().attached_value();
 
