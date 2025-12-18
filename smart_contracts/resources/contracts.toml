@@ -1,21 +1,25 @@
-last_updated = "2025-12-17T11:34:17Z"
+last_updated = "2025-12-18T22:53:58Z"
 
 [[contracts]]
 name = "TailorCoin"
-package_hash = "hash-0dcc6825cb168e8c498ddcddd5798013bf28c2116a360c2ec1b6019f7e3e58f6"
-
-[[contracts]]
-name = "Roles"
-package_hash = "hash-f4e25da3d0b8fdbee2208a9c20c6ccd102886f26b773c19cbc69b55baf03cade"
-
-[[contracts]]
-name = "Treasury"
-package_hash = "hash-a5a594f2b6f887896e8873f21a2380b720a8497caa6180cd4dcd1925dfb096e6"
+package_hash = "hash-0d01c736b37a3125122be6839f63860265fa008b812df99cb8bbcbdfa8918fb7"
 
 [[contracts]]
 name = "NFT"
-package_hash = "hash-3e2c49ed5fca9bffeb4115753f4d6458af4b485030daa1c0b83b59f25b572c50"
+package_hash = "hash-4ed8773715ec57aa86deedcf9054ac42dd7407346fb59f5e449c599b70ab76bb"
+
+[[contracts]]
+name = "Roles"
+package_hash = "hash-593a11ae1ae10cf18d5e02e39f528eefb582d5b83f58056c6807abc6bc5e0009"
+
+[[contracts]]
+name = "Treasury"
+package_hash = "hash-61c12c3c7061b5ae09b90fbde6f04df20cf497efb622358da5950ca75f86733b"
 
 [[contracts]]
 name = "Escrow"
-package_hash = "hash-d4b350b679ff37b46b2b2e9191160064ab7fe8be2446534465158a146a3a1345"
+package_hash = "hash-f87baf47986b3a627653558f35d9b55c0511525b883963dede547a35a7637d00"
+
+[[contracts]]
+name = "Lease"
+package_hash = "hash-f7685beca0c86bfee3f208b16d06c98080294736406caf33a0caae5bb8026d1a"

@@ -109,7 +109,7 @@ impl Escrow {
 
         let recipient = invoice.seller;
 
-        // TODO charge 2% fee for every payment, swap to TailorCoin (BIG) token and send to the Treasury
+        // TODO charge 2% fee for every payment, and accumulate unless TailorCoin (BIG) token pool is deployed
 
         if invoice.amount_due.currency().is_none() {
             let attached_value = self.env().attached_value();
@@ -532,7 +532,7 @@ mod tests {
     #[test]
     fn test_create_lease_invoice_should_create_lease_invoice_properly() {
         let mut test_data = setup(odra_test::env());
-        let params = generate_invoice_params(&mut test_data);
+        let params = generate_invoice_params(&test_data);
         let invoice_id = create_lease_invoice(&mut test_data, &params);
 
         assert_eq!(invoice_id, U256::zero(), "Invalid invoice ID");
@@ -552,7 +552,7 @@ mod tests {
     #[test]
     fn test_pay_invoice_should_fail_if_not_buyer_is_trying_to_pay_invoice() {
         let mut test_data = setup(odra_test::env());
-        let params = generate_invoice_params(&mut test_data);
+        let params = generate_invoice_params(&test_data);
         let invoice_id = create_lease_invoice(&mut test_data, &params);
 
         test_data.env.set_caller(params.landlord);
@@ -567,7 +567,7 @@ mod tests {
     #[test]
     fn test_pay_invoice_should_fail_if_invoice_is_already_paid() {
         let mut test_data = setup(odra_test::env());
-        let mut params = generate_invoice_params(&mut test_data);
+        let mut params = generate_invoice_params(&test_data);
         let invoice_id = create_lease_invoice(&mut test_data, &params);
 
         test_data
@@ -585,7 +585,7 @@ mod tests {
     #[test]
     fn test_pay_invoice_should_fail_if_invoice_is_expired() {
         let mut test_data = setup(odra_test::env());
-        let params = generate_invoice_params(&mut test_data);
+        let params = generate_invoice_params(&test_data);
         let invoice_id = create_lease_invoice(&mut test_data, &params);
 
         test_data
@@ -603,7 +603,7 @@ mod tests {
     fn test_pay_invoice_should_fail_if_attached_cspr_value_is_invalid_for_invoice_in_native_token()
     {
         let mut test_data = setup(odra_test::env());
-        let mut params = generate_invoice_params(&mut test_data);
+        let mut params = generate_invoice_params(&test_data);
         let invoice_id = create_lease_invoice(&mut test_data, &params);
 
         assert_eq!(
@@ -629,7 +629,7 @@ mod tests {
     #[test]
     fn test_pay_invoice_should_fail_if_attached_cspr_value_is_invalid_for_invoice_in_cep18_token() {
         let mut test_data = setup(odra_test::env());
-        let mut params = generate_invoice_params(&mut test_data);
+        let mut params = generate_invoice_params(&test_data);
 
         *params.amount_due.currency() = Some(test_data.mock_cep18.address());
 
@@ -649,7 +649,7 @@ mod tests {
     #[test]
     fn test_pay_invoice_should_pay_invoice_in_native_token_properly() {
         let mut test_data = setup(odra_test::env());
-        let mut params = generate_invoice_params(&mut test_data);
+        let mut params = generate_invoice_params(&test_data);
         let invoice_id = create_lease_invoice(&mut test_data, &params);
         let prev_recipient_token_balance = test_data.env.balance_of(&params.landlord);
 
@@ -681,7 +681,7 @@ mod tests {
     #[test]
     fn test_pay_invoice_should_pay_invoice_in_cep18_token_properly() {
         let mut test_data = setup(odra_test::env());
-        let mut params = generate_invoice_params(&mut test_data);
+        let mut params = generate_invoice_params(&test_data);
 
         *params.amount_due.currency() = Some(test_data.mock_cep18.address());
 
@@ -741,7 +741,7 @@ mod tests {
         }
     }
 
-    fn generate_invoice_params(test_data: &mut TestData) -> InvoiceParams {
+    fn generate_invoice_params(test_data: &TestData) -> InvoiceParams {
         InvoiceParams {
             tenant: test_data.env.get_account(0),
             landlord: test_data.env.get_account(1),

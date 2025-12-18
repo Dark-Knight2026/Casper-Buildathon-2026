@@ -1,14 +1,16 @@
 use odra::{
-    casper_types::U256,
+    casper_types::{account::AccountHash, U256},
     host::{HostEnv, InstallConfig},
-    prelude::Addressable,
+    prelude::{Address, Addressable},
 };
 use odra_cli::{deploy::DeployScript, DeployedContractsContainer, DeployerExt, OdraCli};
 
 use leasefi_contracts::{
     escrow::{Escrow, EscrowInitArgs},
+    lease::{Lease, LeaseInitArgs},
     nft::{NFTInitArgs, NFT},
     roles::{Roles, RolesInitArgs},
+    staking::Staking,
     tailor_coin::{TailorCoin, TailorCoinInitArgs},
     treasury::{Treasury, TreasuryInitArgs},
 };
@@ -21,29 +23,12 @@ impl DeployScript for LeasefiDeployScript {
         env: &HostEnv,
         container: &mut DeployedContractsContainer,
     ) -> Result<(), odra_cli::deploy::Error> {
-        Roles::load_or_deploy_with_cfg(
-            &env,
-            RolesInitArgs {
-                admin: env.caller(),
-            },
-            InstallConfig::upgradable::<Roles>(),
-            container,
-            310_000_000_000,
-        )?;
-        NFT::load_or_deploy_with_cfg(
-            &env,
-            NFTInitArgs {
-                owner: env.caller(),
-                symbol: String::from("NFT"),
-                name: String::from("NFT"),
-                minters: vec![],
-                burners: vec![],
-            },
-            InstallConfig::upgradable::<NFT>(),
-            container,
-            450_000_000_000,
-        )?;
-
+        let new_owner = Address::Account(
+            AccountHash::from_formatted_str(
+                "account-hash-4314047331390718c1aba071219b386d100f5a668633aa93c1cca3dc4b154e24",
+            )
+            .unwrap(),
+        );
         let tailor_coin = TailorCoin::load_or_deploy_with_cfg(
             &env,
             TailorCoinInitArgs {
@@ -56,6 +41,26 @@ impl DeployScript for LeasefiDeployScript {
             container,
             350_000_000_000,
         )?;
+        let mut nft = NFT::load_or_deploy_with_cfg(
+            &env,
+            NFTInitArgs {
+                owner: env.caller(),
+                symbol: String::from("BIG"),
+                name: String::from("BIG"),
+                minters: vec![],
+                burners: vec![],
+            },
+            InstallConfig::upgradable::<NFT>(),
+            container,
+            450_000_000_000,
+        )?;
+        let roles = Roles::load_or_deploy_with_cfg(
+            &env,
+            RolesInitArgs { admin: new_owner },
+            InstallConfig::upgradable::<Roles>(),
+            container,
+            310_000_000_000,
+        )?;
         let mut treasury = Treasury::load_or_deploy_with_cfg(
             &env,
             TreasuryInitArgs {
@@ -63,7 +68,7 @@ impl DeployScript for LeasefiDeployScript {
             },
             InstallConfig::upgradable::<Treasury>(),
             container,
-            100_000_000_000,
+            400_000_000_000,
         )?;
         let mut escrow = Escrow::load_or_deploy_with_cfg(
             &env,
@@ -75,22 +80,30 @@ impl DeployScript for LeasefiDeployScript {
             container,
             400_000_000_000,
         )?;
+        let mut lease = Lease::load_or_deploy_with_cfg(
+            &env,
+            LeaseInitArgs {
+                owner: env.caller(),
+            },
+            InstallConfig::upgradable::<Lease>(),
+            container,
+            400_000_000_000,
+        )?;
 
-        if treasury.get_tailor_coin_contract_address() != treasury.address() {
-            treasury.set_tailor_coin(tailor_coin.address());
-        }
+        treasury.set_tailor_coin(tailor_coin.address());
+        // treasury.set_staking(staking.address());
 
-        // if treasury.get_staking_contract_address() != staking.address() {
-        //     treasury.set_staking(staking.address());
-        // }
+        lease.set_roles(roles.address());
+        lease.set_escrow(escrow.address());
 
-        // if escrow.get_lease_contract_address() != lease.address() {
-        //     escrow.set_lease(lease.address());
-        // }
+        escrow.set_lease(lease.address());
+        escrow.set_treasury(treasury.address());
 
-        if escrow.get_treasury_contract_address() != treasury.address() {
-            escrow.set_treasury(treasury.address());
-        }
+        // Transfer ownership
+        nft.transfer_ownership(&new_owner);
+        treasury.transfer_ownership(&new_owner);
+        escrow.transfer_ownership(&new_owner);
+        lease.transfer_ownership(&new_owner);
 
         Ok(())
     }
@@ -105,6 +118,8 @@ pub fn main() {
         .contract::<Roles>()
         .contract::<Treasury>()
         .contract::<Escrow>()
+        .contract::<Lease>()
+        .contract::<Staking>()
         .build()
         .run();
 }
