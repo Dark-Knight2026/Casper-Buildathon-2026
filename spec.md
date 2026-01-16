@@ -1344,12 +1344,6 @@ Response → Service → Hook → Component → UI Update
 - Hooks: > 75%
 - Components: > 60%
 
-**Test Locations:**
-- `src/components/__tests__/`
-- `src/hooks/__tests__/`
-- `src/services/__tests__/`
-- `src/contexts/__tests__/`
-
 **Commands:**
 ```bash
 pnpm run test:unit         # Run all tests
