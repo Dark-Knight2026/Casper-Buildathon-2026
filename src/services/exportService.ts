@@ -1,4 +1,4 @@
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import Papa from 'papaparse';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -43,11 +43,11 @@ class ExportService {
   /**
    * Export data to Excel format
    */
-  exportToExcel<T extends Record<string, unknown>>(
+  async exportToExcel<T extends Record<string, unknown>>(
     data: T[],
     filename: string = 'export.xlsx',
     options: ExportOptions = {}
-  ): void {
+  ): Promise<void> {
     try {
       // Filter columns if specified
       let exportData = data;
@@ -63,24 +63,41 @@ class ExportService {
         });
       }
 
-      // Create worksheet
-      const worksheet = XLSX.utils.json_to_sheet(exportData);
+      // Create workbook and worksheet
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet('Data');
 
-      // Auto-size columns
-      const columnWidths = Object.keys(exportData[0] || {}).map((key) => ({
-        wch: Math.max(
+      // Get column keys
+      const columnKeys = Object.keys(exportData[0] || {});
+
+      // Set columns with auto-sizing
+      worksheet.columns = columnKeys.map((key) => ({
+        header: key,
+        key: key,
+        width: Math.max(
           key.length,
           ...exportData.map((row) => String(row[key] || '').length)
         ),
       }));
-      worksheet['!cols'] = columnWidths;
 
-      // Create workbook
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'Data');
+      // Add data rows
+      exportData.forEach((row) => {
+        worksheet.addRow(row);
+      });
+
+      // Style header row
+      const headerRow = worksheet.getRow(1);
+      headerRow.font = { bold: true };
+      headerRow.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFD9D9D9' },
+      };
 
       // Write file
-      XLSX.writeFile(workbook, filename);
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      this.downloadBlob(blob, filename);
     } catch (error) {
       console.error('Excel export error:', error);
       throw new Error('Failed to export to Excel');
@@ -168,12 +185,12 @@ class ExportService {
   /**
    * Export data in the specified format
    */
-  export<T extends Record<string, unknown>>(
+  async export<T extends Record<string, unknown>>(
     data: T[],
     format: ExportFormat,
     filename?: string,
     options: ExportOptions = {}
-  ): void {
+  ): Promise<void> {
     const timestamp = new Date().toISOString().split('T')[0];
     const defaultFilename = `export-${timestamp}`;
 
@@ -182,7 +199,7 @@ class ExportService {
         this.exportToCSV(data, filename || `${defaultFilename}.csv`, options);
         break;
       case 'excel':
-        this.exportToExcel(data, filename || `${defaultFilename}.xlsx`, options);
+        await this.exportToExcel(data, filename || `${defaultFilename}.xlsx`, options);
         break;
       case 'pdf':
         this.exportToPDF(data, filename || `${defaultFilename}.pdf`, options as PDFExportOptions);

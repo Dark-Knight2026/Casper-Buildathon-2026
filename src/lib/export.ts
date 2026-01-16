@@ -1,4 +1,4 @@
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import { logger } from '@/utils/logger';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -55,7 +55,7 @@ export function exportToCSV<T extends Record<string, unknown>>(
 /**
  * Export data to Excel format with formatting
  */
-export function exportToExcel<T extends Record<string, unknown>>(
+export async function exportToExcel<T extends Record<string, unknown>>(
   data: T[],
   filename: string,
   options?: {
@@ -64,7 +64,7 @@ export function exportToExcel<T extends Record<string, unknown>>(
     includeFilters?: boolean;
     freezeHeader?: boolean;
   }
-): void {
+): Promise<void> {
   if (data.length === 0) {
     throw new Error('No data to export');
   }
@@ -76,75 +76,105 @@ export function exportToExcel<T extends Record<string, unknown>>(
     freezeHeader = true,
   } = options || {};
 
-  // Create worksheet data
-  const wsData: unknown[][] = [];
+  // Create workbook and worksheet
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet(sheetName);
 
-  // Add header row
-  wsData.push(columns.map((col) => col.label));
+  // Set columns with headers
+  worksheet.columns = columns.map((col) => ({
+    header: col.label,
+    key: String(col.key),
+    width: col.width || 15,
+  }));
 
   // Add data rows
   data.forEach((row) => {
-    wsData.push(columns.map((col) => row[col.key]));
+    const rowData: Record<string, unknown> = {};
+    columns.forEach((col) => {
+      rowData[String(col.key)] = row[col.key];
+    });
+    worksheet.addRow(rowData);
   });
 
-  // Create worksheet
-  const ws = XLSX.utils.aoa_to_sheet(wsData);
-
-  // Set column widths
-  ws['!cols'] = columns.map((col) => ({ wch: col.width || 15 }));
+  // Style header row
+  const headerRow = worksheet.getRow(1);
+  headerRow.font = { bold: true };
+  headerRow.fill = {
+    type: 'pattern',
+    pattern: 'solid',
+    fgColor: { argb: 'FFD9D9D9' },
+  };
 
   // Freeze header row
   if (freezeHeader) {
-    ws['!freeze'] = { xSplit: 0, ySplit: 1 };
+    worksheet.views = [{ state: 'frozen', xSplit: 0, ySplit: 1 }];
   }
 
   // Add auto-filter
   if (includeFilters) {
-    ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { c: 0, r: 0 }, e: { c: columns.length - 1, r: data.length } }) };
+    worksheet.autoFilter = {
+      from: { row: 1, column: 1 },
+      to: { row: data.length + 1, column: columns.length },
+    };
   }
 
-  // Create workbook
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, sheetName);
-
   // Write file
-  XLSX.writeFile(wb, `${filename}.xlsx`);
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  downloadBlob(blob, `${filename}.xlsx`);
 }
 
 /**
  * Export data to Excel with multiple sheets
  */
-export function exportToExcelMultiSheet(
+export async function exportToExcelMultiSheet(
   sheets: Array<{
     name: string;
     data: Array<Record<string, unknown>>;
     columns?: Array<{ key: string; label: string; width?: number }>;
   }>,
   filename: string
-): void {
-  const wb = XLSX.utils.book_new();
+): Promise<void> {
+  const workbook = new ExcelJS.Workbook();
 
   sheets.forEach((sheet) => {
     if (sheet.data.length === 0) return;
 
     const columns = sheet.columns || Object.keys(sheet.data[0]).map((key) => ({ key, label: key }));
 
-    // Create worksheet data
-    const wsData: unknown[][] = [];
-    wsData.push(columns.map((col) => col.label));
+    // Create worksheet
+    const worksheet = workbook.addWorksheet(sheet.name);
 
+    // Set columns with headers
+    worksheet.columns = columns.map((col) => ({
+      header: col.label,
+      key: col.key,
+      width: col.width || 15,
+    }));
+
+    // Add data rows
     sheet.data.forEach((row) => {
-      wsData.push(columns.map((col) => row[col.key]));
+      const rowData: Record<string, unknown> = {};
+      columns.forEach((col) => {
+        rowData[col.key] = row[col.key];
+      });
+      worksheet.addRow(rowData);
     });
 
-    // Create worksheet
-    const ws = XLSX.utils.aoa_to_sheet(wsData);
-    ws['!cols'] = columns.map((col) => ({ wch: col.width || 15 }));
-
-    XLSX.utils.book_append_sheet(wb, ws, sheet.name);
+    // Style header row
+    const headerRow = worksheet.getRow(1);
+    headerRow.font = { bold: true };
+    headerRow.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFD9D9D9' },
+    };
   });
 
-  XLSX.writeFile(wb, `${filename}.xlsx`);
+  // Write file
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  downloadBlob(blob, `${filename}.xlsx`);
 }
 
 /**
