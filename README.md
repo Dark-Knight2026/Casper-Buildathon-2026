@@ -193,22 +193,6 @@ See [unified_dashboard_arch.plantuml](unified_dashboard_arch.plantuml) for visua
 - **Page Components** (`@/pages/*`): Route-level components
 - **Layout Components** (`@/layouts/*`): Page structure templates
 
-## Deployment
-
-### Vercel Deployment
-
-The project is configured for Vercel deployment with [vercel.json](vercel.json).
-
-```bash
-# Deploy to Vercel
-vercel deploy
-
-# Deploy to production
-vercel --prod
-```
-
-See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed deployment instructions.
-
 ## Documentation
 
 - [Environment Setup](docs/ENVIRONMENT_SETUP.md) - Environment configuration guide
