@@ -1,0 +1,194 @@
+[
+  {
+    "id": "lease_draft_001",
+    "propertyId": "prop_001",
+    "propertyAddress": "123 Main St, Apt 4B, New York, NY",
+    "startDate": "2026-01-13T07:52:22.428Z",
+    "endDate": "2027-01-13T07:52:22.428Z",
+    "rentAmount": 2500,
+    "securityDeposit": 2500,
+    "status": "draft",
+    "tenants": [
+      {
+        "id": "tenant_001",
+        "name": "John Doe",
+        "email": "john@example.com",
+        "phone": "555-0101"
+      }
+    ],
+    "documents": [],
+    "signatures": [],
+    "createdAt": "2025-12-12T07:52:22.428Z",
+    "updatedAt": "2025-12-13T07:52:22.428Z"
+  },
+  {
+    "id": "lease_pending_002",
+    "propertyId": "prop_002",
+    "propertyAddress": "456 Oak Ave, Unit 2, San Francisco, CA",
+    "startDate": "2025-12-29T07:52:22.428Z",
+    "endDate": "2026-12-29T07:52:22.428Z",
+    "rentAmount": 3200,
+    "securityDeposit": 3200,
+    "status": "pending_signature",
+    "tenants": [
+      {
+        "id": "tenant_002",
+        "name": "Jane Smith",
+        "email": "jane@example.com",
+        "phone": "555-0102"
+      }
+    ],
+    "documents": [
+      {
+        "id": "doc_001",
+        "name": "Lease Agreement.pdf",
+        "type": "lease",
+        "url": "/docs/lease_002.pdf",
+        "uploadedAt": "2025-12-12T07:52:22.428Z"
+      }
+    ],
+    "signatures": [
+      {
+        "signerId": "landlord_01",
+        "status": "signed",
+        "signedAt": "2025-12-13T07:52:22.428Z"
+      },
+      {
+        "signerId": "tenant_002",
+        "status": "pending"
+      }
+    ],
+    "createdAt": "2025-12-09T07:52:22.428Z",
+    "updatedAt": "2025-12-13T07:52:22.428Z"
+  },
+  {
+    "id": "lease_active_003",
+    "propertyId": "prop_003",
+    "propertyAddress": "789 Pine Rd, Suite 100, Austin, TX",
+    "startDate": "2025-09-05T06:52:22.428Z",
+    "endDate": "2026-09-05T06:52:22.428Z",
+    "rentAmount": 1800,
+    "securityDeposit": 1800,
+    "status": "active",
+    "tenants": [
+      {
+        "id": "tenant_003",
+        "name": "Bob Johnson",
+        "email": "bob@example.com",
+        "phone": "555-0103"
+      }
+    ],
+    "documents": [
+      {
+        "id": "doc_002",
+        "name": "Signed Lease.pdf",
+        "type": "lease_signed",
+        "url": "/docs/lease_003_signed.pdf",
+        "uploadedAt": "2025-09-05T06:52:22.428Z"
+      }
+    ],
+    "signatures": [
+      {
+        "signerId": "landlord_01",
+        "status": "signed",
+        "signedAt": "2025-08-31T06:52:22.428Z"
+      },
+      {
+        "signerId": "tenant_003",
+        "status": "signed",
+        "signedAt": "2025-09-03T06:52:22.428Z"
+      }
+    ],
+    "createdAt": "2025-08-26T06:52:22.428Z",
+    "updatedAt": "2025-09-05T06:52:22.428Z"
+  },
+  {
+    "id": "lease_expiring_004",
+    "propertyId": "prop_004",
+    "propertyAddress": "101 Maple Dr, Seattle, WA",
+    "startDate": "2025-01-18T07:52:22.428Z",
+    "endDate": "2026-01-18T07:52:22.428Z",
+    "rentAmount": 2100,
+    "securityDeposit": 2100,
+    "status": "expiring_soon",
+    "tenants": [
+      {
+        "id": "tenant_004",
+        "name": "Alice Brown",
+        "email": "alice@example.com",
+        "phone": "555-0104"
+      }
+    ],
+    "documents": [
+      {
+        "id": "doc_003",
+        "name": "Lease Agreement 2024.pdf",
+        "type": "lease_signed",
+        "url": "/docs/lease_004.pdf",
+        "uploadedAt": "2025-01-18T07:52:22.428Z"
+      }
+    ],
+    "signatures": [
+      {
+        "signerId": "landlord_01",
+        "status": "signed",
+        "signedAt": "2025-01-13T07:52:22.428Z"
+      },
+      {
+        "signerId": "tenant_004",
+        "status": "signed",
+        "signedAt": "2025-01-16T07:52:22.428Z"
+      }
+    ],
+    "createdAt": "2025-01-08T07:52:22.428Z",
+    "updatedAt": "2025-01-18T07:52:22.428Z"
+  },
+  {
+    "id": "lease_terminated_005",
+    "propertyId": "prop_005",
+    "propertyAddress": "202 Birch Ln, Miami, FL",
+    "startDate": "2025-05-28T06:52:22.428Z",
+    "endDate": "2025-12-04T07:52:22.428Z",
+    "rentAmount": 2800,
+    "securityDeposit": 2800,
+    "status": "terminated",
+    "tenants": [
+      {
+        "id": "tenant_005",
+        "name": "Charlie Davis",
+        "email": "charlie@example.com",
+        "phone": "555-0105"
+      }
+    ],
+    "documents": [
+      {
+        "id": "doc_004",
+        "name": "Lease Agreement.pdf",
+        "type": "lease_signed",
+        "url": "/docs/lease_005.pdf",
+        "uploadedAt": "2025-05-28T06:52:22.428Z"
+      },
+      {
+        "id": "doc_005",
+        "name": "Termination Notice.pdf",
+        "type": "termination",
+        "url": "/docs/term_005.pdf",
+        "uploadedAt": "2025-11-29T07:52:22.428Z"
+      }
+    ],
+    "signatures": [
+      {
+        "signerId": "landlord_01",
+        "status": "signed",
+        "signedAt": "2025-05-23T06:52:22.428Z"
+      },
+      {
+        "signerId": "tenant_005",
+        "status": "signed",
+        "signedAt": "2025-05-26T06:52:22.428Z"
+      }
+    ],
+    "createdAt": "2025-05-18T06:52:22.428Z",
+    "updatedAt": "2025-12-04T07:52:22.428Z"
+  }
+]
