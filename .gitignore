@@ -28,6 +28,6 @@ dist-ssr
 Cargo.lock
 .vscode
 .env
-.sqlx/*
+
 
 
