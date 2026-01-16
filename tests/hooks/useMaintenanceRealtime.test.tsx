@@ -4,7 +4,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
-import { useMaintenanceRealtime } from '../useMaintenanceRealtime';
+import { useMaintenanceRealtime } from '@/hooks/useMaintenanceRealtime';
 import { supabase } from '@/lib/supabase/client';
 
 vi.mock('@/lib/supabase/client');

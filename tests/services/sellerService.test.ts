@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { sellerService } from '../sellerService';
+import { sellerService } from '@/services/sellerService';
 
 // Mock Supabase client
 vi.mock('@/lib/supabase/client', () => ({

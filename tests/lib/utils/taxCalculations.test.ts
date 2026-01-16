@@ -1,4 +1,4 @@
-import { calculateStraightLineDepreciation, calculateNetIncome, estimateTaxLiability, aggregateExpensesByCategory } from './taxCalculations';
+import { calculateStraightLineDepreciation, calculateNetIncome, estimateTaxLiability, aggregateExpensesByCategory } from '@/lib/utils/taxCalculations';
 import { ScheduleEProperty } from '@/types/landlordTax';
 
 describe('Tax Calculations', () => {

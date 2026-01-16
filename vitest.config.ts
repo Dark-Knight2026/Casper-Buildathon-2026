@@ -8,6 +8,10 @@ export default defineConfig({
     globals: true,
     environment: 'happy-dom',
     setupFiles: ['./src/test/setup.ts'],
+    env: {
+      VITE_SUPABASE_URL: 'https://test.supabase.co',
+      VITE_SUPABASE_ANON_KEY: 'test-anon-key-for-vitest-mocking',
+    },
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html', 'lcov'],
@@ -31,7 +35,7 @@ export default defineConfig({
         statements: 70,
       },
     },
-    include: ['src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
+    include: ['src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}', 'tests/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
     exclude: ['node_modules', 'dist', '.next', 'coverage'],
   },
   resolve: {
