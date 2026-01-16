@@ -27,12 +27,12 @@ SELECT
   SUM(l.security_deposit) as total_security_deposits,
   
   -- Lease duration metrics
-  AVG(EXTRACT(DAY FROM (l.end_date - l.start_date))) as average_lease_duration_days,
+  AVG(l.end_date - l.start_date) as average_lease_duration_days,
   MIN(l.start_date) as earliest_lease_start,
   MAX(l.end_date) as latest_lease_end,
   
   -- Tenant metrics
-  COUNT(DISTINCT unnest(l.tenant_ids)) as total_unique_tenants,
+  SUM(COALESCE(array_length(l.tenant_ids, 1), 0)) as total_tenants_count,
   
   -- Date aggregations
   DATE_TRUNC('month', CURRENT_DATE) as report_month,

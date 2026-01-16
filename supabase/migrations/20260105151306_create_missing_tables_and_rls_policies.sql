@@ -7,24 +7,76 @@
 -- PART 1: CREATE ENUMS AND TYPES
 -- =====================================================
 
--- User role enum
-CREATE TYPE user_role AS ENUM ('tenant', 'landlord', 'agent', 'admin');
+DO $$ BEGIN
+    CREATE TYPE user_role AS ENUM ('tenant', 'landlord', 'agent', 'admin');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
 
--- Property type enum
-CREATE TYPE property_type AS ENUM ('apartment', 'house', 'condo', 'townhouse', 'commercial', 'other');
+DO $$ BEGIN
+    CREATE TYPE property_type AS ENUM ('apartment', 'house', 'condo', 'townhouse', 'commercial', 'other');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
 
--- Property status enum
-CREATE TYPE property_status AS ENUM ('available', 'occupied', 'maintenance', 'unavailable');
+DO $$ BEGIN
+    CREATE TYPE property_status AS ENUM ('available', 'occupied', 'maintenance', 'unavailable');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
 
--- Maintenance request status enum
-CREATE TYPE maintenance_status AS ENUM ('pending', 'in_progress', 'completed', 'cancelled');
+DO $$ BEGIN
+    CREATE TYPE maintenance_status AS ENUM ('pending', 'in_progress', 'completed', 'cancelled');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
 
--- Maintenance priority enum
-CREATE TYPE maintenance_priority AS ENUM ('low', 'medium', 'high', 'urgent');
+DO $$ BEGIN
+    CREATE TYPE maintenance_priority AS ENUM ('low', 'medium', 'high', 'urgent');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
 
--- Renewal status enum
-CREATE TYPE renewal_status AS ENUM ('pending', 'approved', 'rejected', 'expired');
 
+
+-- =====================================================
+-- Add missing columns to existing tables
+-- =====================================================
+DO $$ 
+BEGIN 
+    -- 1. PROPERTIES TABLE
+    -- Add is_published if it doesn't exist
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='properties' AND column_name='is_published') THEN
+        ALTER TABLE properties ADD COLUMN is_published BOOLEAN DEFAULT true;
+    END IF;
+
+    -- Add is_featured if it doesn't exist
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='properties' AND column_name='is_featured') THEN
+        ALTER TABLE properties ADD COLUMN is_featured BOOLEAN DEFAULT false;
+    END IF;
+
+    -- Add view_count if it doesn't exist
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='properties' AND column_name='view_count') THEN
+        ALTER TABLE properties ADD COLUMN view_count INTEGER DEFAULT 0;
+    END IF;
+
+    -- 2. MAINTENANCE_REQUESTS TABLE
+    -- Add landlord_id if it doesn't exist
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='maintenance_requests' AND column_name='landlord_id') THEN
+        ALTER TABLE maintenance_requests ADD COLUMN landlord_id UUID REFERENCES users(id);
+    END IF;
+    
+    -- Add vendor_id if it doesn't exist
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='maintenance_requests' AND column_name='vendor_id') THEN
+        ALTER TABLE maintenance_requests ADD COLUMN vendor_id UUID REFERENCES users(id);
+    END IF;
+
+    -- 3. DOCUMENTS TABLE
+    -- Add is_deleted if it doesn't exist
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='documents' AND column_name='is_deleted') THEN
+        ALTER TABLE documents ADD COLUMN is_deleted BOOLEAN DEFAULT false;
+    END IF;
+END $$;
 -- =====================================================
 -- PART 2: CREATE MISSING TABLES
 -- =====================================================
@@ -83,7 +135,7 @@ CREATE TABLE IF NOT EXISTS tenants (
     employer_phone TEXT,
     monthly_income DECIMAL(10,2),
     credit_score INTEGER,
-    references JSONB DEFAULT '[]',
+    "references" JSONB DEFAULT '[]',
     background_check_status TEXT,
     background_check_date TIMESTAMPTZ,
     move_in_date DATE,
@@ -238,7 +290,7 @@ CREATE TABLE IF NOT EXISTS lease_renewals (
     rent_increase_percentage DECIMAL(5,2),
     rent_increase_amount DECIMAL(10,2),
     proposed_terms TEXT,
-    status renewal_status DEFAULT 'pending',
+    status renewal_status DEFAULT 'draft',
     landlord_notes TEXT,
     tenant_notes TEXT,
     tenant_response TEXT,
@@ -301,25 +353,25 @@ CREATE TABLE IF NOT EXISTS renewal_reminders (
 -- =====================================================
 
 -- Profiles indexes
-CREATE INDEX idx_profiles_email ON profiles(email);
-CREATE INDEX idx_profiles_role ON profiles(role);
-CREATE INDEX idx_profiles_is_active ON profiles(is_active);
+CREATE INDEX IF NOT EXISTS idx_profiles_email ON profiles(email);
+CREATE INDEX IF NOT EXISTS idx_profiles_role ON profiles(role);
+CREATE INDEX IF NOT EXISTS idx_profiles_is_active ON profiles(is_active);
 
 -- Landlords indexes
-CREATE INDEX idx_landlords_user_id ON landlords(user_id);
-CREATE INDEX idx_landlords_is_verified ON landlords(is_verified);
+CREATE INDEX IF NOT EXISTS idx_landlords_user_id ON landlords(user_id);
+CREATE INDEX IF NOT EXISTS idx_landlords_is_verified ON landlords(is_verified);
 
 -- Tenants indexes
-CREATE INDEX idx_tenants_user_id ON tenants(user_id);
-CREATE INDEX idx_tenants_background_check_status ON tenants(background_check_status);
+CREATE INDEX IF NOT EXISTS idx_tenants_user_id ON tenants(user_id);
+CREATE INDEX IF NOT EXISTS idx_tenants_background_check_status ON tenants(background_check_status);
 
 -- Properties indexes
-CREATE INDEX idx_properties_landlord_id ON properties(landlord_id);
-CREATE INDEX idx_properties_status ON properties(status);
-CREATE INDEX idx_properties_city_state ON properties(city, state);
-CREATE INDEX idx_properties_property_type ON properties(property_type);
-CREATE INDEX idx_properties_is_published ON properties(is_published);
-CREATE INDEX idx_properties_created_at ON properties(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_properties_landlord_id ON properties(landlord_id);
+CREATE INDEX IF NOT EXISTS idx_properties_status ON properties(status);
+CREATE INDEX IF NOT EXISTS idx_properties_city_state ON properties(city, state);
+CREATE INDEX IF NOT EXISTS idx_properties_property_type ON properties(property_type);
+CREATE INDEX IF NOT EXISTS idx_properties_is_published ON properties(is_published);
+CREATE INDEX IF NOT EXISTS idx_properties_created_at ON properties(created_at DESC);
 
 -- Leases indexes (existing table)
 CREATE INDEX IF NOT EXISTS idx_leases_landlord_id ON leases(landlord_id);
@@ -336,30 +388,30 @@ CREATE INDEX IF NOT EXISTS idx_payments_payment_status ON payments(payment_statu
 CREATE INDEX IF NOT EXISTS idx_payments_payment_date ON payments(payment_date DESC);
 
 -- Maintenance Requests indexes
-CREATE INDEX idx_maintenance_requests_property_id ON maintenance_requests(property_id);
-CREATE INDEX idx_maintenance_requests_tenant_id ON maintenance_requests(tenant_id);
-CREATE INDEX idx_maintenance_requests_landlord_id ON maintenance_requests(landlord_id);
-CREATE INDEX idx_maintenance_requests_vendor_id ON maintenance_requests(vendor_id);
-CREATE INDEX idx_maintenance_requests_status ON maintenance_requests(status);
-CREATE INDEX idx_maintenance_requests_priority ON maintenance_requests(priority);
-CREATE INDEX idx_maintenance_requests_created_at ON maintenance_requests(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_maintenance_requests_property_id ON maintenance_requests(property_id);
+CREATE INDEX IF NOT EXISTS idx_maintenance_requests_tenant_id ON maintenance_requests(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_maintenance_requests_landlord_id ON maintenance_requests(landlord_id);
+CREATE INDEX IF NOT EXISTS idx_maintenance_requests_vendor_id ON maintenance_requests(vendor_id);
+CREATE INDEX IF NOT EXISTS idx_maintenance_requests_status ON maintenance_requests(status);
+CREATE INDEX IF NOT EXISTS idx_maintenance_requests_priority ON maintenance_requests(priority);
+CREATE INDEX IF NOT EXISTS idx_maintenance_requests_created_at ON maintenance_requests(created_at DESC);
 
 -- Maintenance Messages indexes
-CREATE INDEX idx_maintenance_messages_request_id ON maintenance_messages(maintenance_request_id);
-CREATE INDEX idx_maintenance_messages_sender_id ON maintenance_messages(sender_id);
-CREATE INDEX idx_maintenance_messages_created_at ON maintenance_messages(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_maintenance_messages_request_id ON maintenance_messages(maintenance_request_id);
+CREATE INDEX IF NOT EXISTS idx_maintenance_messages_sender_id ON maintenance_messages(sender_id);
+CREATE INDEX IF NOT EXISTS idx_maintenance_messages_created_at ON maintenance_messages(created_at DESC);
 
 -- Vendors indexes
-CREATE INDEX idx_vendors_landlord_id ON vendors(landlord_id);
-CREATE INDEX idx_vendors_is_active ON vendors(is_active);
-CREATE INDEX idx_vendors_service_types ON vendors USING GIN(service_types);
+CREATE INDEX IF NOT EXISTS idx_vendors_landlord_id ON vendors(landlord_id);
+CREATE INDEX IF NOT EXISTS idx_vendors_is_active ON vendors(is_active);
+CREATE INDEX IF NOT EXISTS idx_vendors_service_types ON vendors USING GIN(service_types);
 
 -- Lease Renewals indexes
-CREATE INDEX idx_lease_renewals_lease_id ON lease_renewals(lease_id);
-CREATE INDEX idx_lease_renewals_landlord_id ON lease_renewals(landlord_id);
-CREATE INDEX idx_lease_renewals_tenant_id ON lease_renewals(tenant_id);
-CREATE INDEX idx_lease_renewals_status ON lease_renewals(status);
-CREATE INDEX idx_lease_renewals_expires_at ON lease_renewals(expires_at);
+CREATE INDEX IF NOT EXISTS idx_lease_renewals_lease_id ON lease_renewals(lease_id);
+CREATE INDEX IF NOT EXISTS idx_lease_renewals_landlord_id ON lease_renewals(landlord_id);
+CREATE INDEX IF NOT EXISTS idx_lease_renewals_tenant_id ON lease_renewals(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_lease_renewals_status ON lease_renewals(status);
+CREATE INDEX IF NOT EXISTS idx_lease_renewals_expires_at ON lease_renewals(expires_at);
 
 -- Documents indexes (existing table)
 CREATE INDEX IF NOT EXISTS idx_documents_lease_id ON documents(lease_id);
@@ -384,13 +436,13 @@ CREATE INDEX IF NOT EXISTS idx_audit_logs_resource_id ON audit_logs(resource_id)
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at DESC);
 
 -- Dashboard Configs indexes
-CREATE INDEX idx_dashboard_configs_user_id ON dashboard_configs(user_id);
+CREATE INDEX IF NOT EXISTS idx_dashboard_configs_user_id ON dashboard_configs(user_id);
 
 -- Renewal Reminders indexes
-CREATE INDEX idx_renewal_reminders_lease_renewal_id ON renewal_reminders(lease_renewal_id);
-CREATE INDEX idx_renewal_reminders_recipient_id ON renewal_reminders(recipient_id);
-CREATE INDEX idx_renewal_reminders_status ON renewal_reminders(status);
-CREATE INDEX idx_renewal_reminders_scheduled_date ON renewal_reminders(scheduled_date);
+CREATE INDEX IF NOT EXISTS idx_renewal_reminders_lease_renewal_id ON renewal_reminders(lease_renewal_id);
+CREATE INDEX IF NOT EXISTS idx_renewal_reminders_recipient_id ON renewal_reminders(recipient_id);
+CREATE INDEX IF NOT EXISTS idx_renewal_reminders_status ON renewal_reminders(status);
+CREATE INDEX IF NOT EXISTS idx_renewal_reminders_scheduled_date ON renewal_reminders(scheduled_date);
 
 -- =====================================================
 -- PART 4: CREATE TRIGGERS FOR UPDATED_AT
@@ -405,29 +457,29 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Apply triggers to all tables with updated_at
-CREATE TRIGGER update_profiles_updated_at BEFORE UPDATE ON profiles
+-- Apply triggers (Using CREATE OR REPLACE for idempotency)
+CREATE OR REPLACE TRIGGER update_profiles_updated_at BEFORE UPDATE ON profiles
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
-CREATE TRIGGER update_landlords_updated_at BEFORE UPDATE ON landlords
+CREATE OR REPLACE TRIGGER update_landlords_updated_at BEFORE UPDATE ON landlords
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
-CREATE TRIGGER update_tenants_updated_at BEFORE UPDATE ON tenants
+CREATE OR REPLACE TRIGGER update_tenants_updated_at BEFORE UPDATE ON tenants
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
-CREATE TRIGGER update_properties_updated_at BEFORE UPDATE ON properties
+CREATE OR REPLACE TRIGGER update_properties_updated_at BEFORE UPDATE ON properties
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
-CREATE TRIGGER update_vendors_updated_at BEFORE UPDATE ON vendors
+CREATE OR REPLACE TRIGGER update_vendors_updated_at BEFORE UPDATE ON vendors
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
-CREATE TRIGGER update_maintenance_requests_updated_at BEFORE UPDATE ON maintenance_requests
+CREATE OR REPLACE TRIGGER update_maintenance_requests_updated_at BEFORE UPDATE ON maintenance_requests
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
-CREATE TRIGGER update_lease_renewals_updated_at BEFORE UPDATE ON lease_renewals
+CREATE OR REPLACE TRIGGER update_lease_renewals_updated_at BEFORE UPDATE ON lease_renewals
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
-CREATE TRIGGER update_dashboard_configs_updated_at BEFORE UPDATE ON dashboard_configs
+CREATE OR REPLACE TRIGGER update_dashboard_configs_updated_at BEFORE UPDATE ON dashboard_configs
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- =====================================================

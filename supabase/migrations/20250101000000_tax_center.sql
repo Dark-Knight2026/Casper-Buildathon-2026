@@ -72,23 +72,23 @@ CREATE POLICY "Enable read access for authenticated users" ON tax_categories FOR
 
 -- Property Tax Profiles: Users can manage their own properties' profiles
 ALTER TABLE property_tax_profiles ENABLE ROW LEVEL SECURITY;
--- Assuming properties table has owner_id or similar. If not, we rely on the join.
+-- Assuming properties table has landlord_id or similar. If not, we rely on the join.
 -- For simplicity in this migration, we assume the user has access if they have access to the property.
 -- A more robust policy would check property ownership.
 CREATE POLICY "Users can view own property tax profiles" ON property_tax_profiles FOR SELECT TO authenticated USING (
-  EXISTS (SELECT 1 FROM properties p WHERE p.id = property_tax_profiles.property_id AND p.owner_id = auth.uid())
+  EXISTS (SELECT 1 FROM properties p WHERE p.id = property_tax_profiles.property_id AND p.landlord_id = auth.uid())
 );
 CREATE POLICY "Users can update own property tax profiles" ON property_tax_profiles FOR UPDATE TO authenticated USING (
-  EXISTS (SELECT 1 FROM properties p WHERE p.id = property_tax_profiles.property_id AND p.owner_id = auth.uid())
+  EXISTS (SELECT 1 FROM properties p WHERE p.id = property_tax_profiles.property_id AND p.landlord_id = auth.uid())
 );
 CREATE POLICY "Users can insert own property tax profiles" ON property_tax_profiles FOR INSERT TO authenticated WITH CHECK (
-  EXISTS (SELECT 1 FROM properties p WHERE p.id = property_tax_profiles.property_id AND p.owner_id = auth.uid())
+  EXISTS (SELECT 1 FROM properties p WHERE p.id = property_tax_profiles.property_id AND p.landlord_id = auth.uid())
 );
 
 -- Capital Assets
 ALTER TABLE capital_assets ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users can manage own capital assets" ON capital_assets FOR ALL TO authenticated USING (
-  EXISTS (SELECT 1 FROM properties p WHERE p.id = capital_assets.property_id AND p.owner_id = auth.uid())
+  EXISTS (SELECT 1 FROM properties p WHERE p.id = capital_assets.property_id AND p.landlord_id = auth.uid())
 );
 
 -- Tax Documents

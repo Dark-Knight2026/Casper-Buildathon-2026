@@ -81,7 +81,7 @@ CREATE INDEX IF NOT EXISTS idx_properties_property_type ON properties(property_t
 
 -- Geospatial index (if PostGIS is enabled)
 CREATE INDEX IF NOT EXISTS idx_properties_coordinates ON properties USING gist(
-  ST_MakePoint(longitude::double precision, latitude::double precision)::geography
+  (ST_SetSRID(ST_MakePoint(longitude, latitude), 4326)::geography)
 ) WHERE deleted_at IS NULL AND latitude IS NOT NULL AND longitude IS NOT NULL;
 
 -- Full-text search index

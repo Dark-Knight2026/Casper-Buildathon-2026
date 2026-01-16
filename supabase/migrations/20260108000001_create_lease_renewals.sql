@@ -26,10 +26,10 @@ CREATE TABLE IF NOT EXISTS public.app_25a44123a6_lease_renewals (
 );
 
 -- Create indexes for performance
-CREATE INDEX idx_lease_renewals_lease_id ON public.app_25a44123a6_lease_renewals(lease_id);
-CREATE INDEX idx_lease_renewals_status ON public.app_25a44123a6_lease_renewals(status);
-CREATE INDEX idx_lease_renewals_proposed_start ON public.app_25a44123a6_lease_renewals(proposed_start_date);
-CREATE INDEX idx_lease_renewals_created_at ON public.app_25a44123a6_lease_renewals(created_at);
+CREATE INDEX IF NOT EXISTS idx_lease_renewals_lease_id ON public.app_25a44123a6_lease_renewals(lease_id);
+CREATE INDEX IF NOT EXISTS idx_lease_renewals_status ON public.app_25a44123a6_lease_renewals(status);
+CREATE INDEX IF NOT EXISTS idx_lease_renewals_proposed_start ON public.app_25a44123a6_lease_renewals(proposed_start_date);
+CREATE INDEX IF NOT EXISTS idx_lease_renewals_created_at ON public.app_25a44123a6_lease_renewals(created_at);
 
 -- Enable RLS
 ALTER TABLE public.app_25a44123a6_lease_renewals ENABLE ROW LEVEL SECURITY;
@@ -43,7 +43,7 @@ CREATE POLICY "Users can view their own lease renewals"
       SELECT 1 FROM public.leases
       WHERE leases.id = app_25a44123a6_lease_renewals.lease_id
       AND (
-        leases.tenant_id = auth.uid()
+        auth.uid() = ANY(leases.tenant_ids)
         OR leases.landlord_id = auth.uid()
         OR leases.agent_id = auth.uid()
       )
@@ -69,7 +69,7 @@ CREATE POLICY "Landlords, agents, and tenants can update lease renewals"
       SELECT 1 FROM public.leases
       WHERE leases.id = app_25a44123a6_lease_renewals.lease_id
       AND (
-        leases.tenant_id = auth.uid()
+        auth.uid() = ANY(leases.tenant_ids)
         OR leases.landlord_id = auth.uid()
         OR leases.agent_id = auth.uid()
       )

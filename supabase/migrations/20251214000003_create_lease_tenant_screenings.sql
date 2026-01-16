@@ -86,7 +86,7 @@ CREATE TABLE IF NOT EXISTS app_1fa2dc8566_lease_tenant_screenings (
   income_documents JSONB DEFAULT '[]', -- Array of document URLs
   
   -- References
-  references JSONB DEFAULT '[]', -- Array of reference objects
+  "references" JSONB DEFAULT '[]', -- Array of reference objects
   references_verified BOOLEAN DEFAULT false,
   
   -- Identity Verification

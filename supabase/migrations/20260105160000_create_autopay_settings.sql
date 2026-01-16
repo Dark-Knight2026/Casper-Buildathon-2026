@@ -25,7 +25,7 @@ CREATE POLICY "Users can view their own autopay settings"
   USING (
     lease_id IN (
       SELECT id FROM leases 
-      WHERE tenant_id = auth.uid() OR landlord_id = auth.uid()
+      WHERE auth.uid() = ANY(tenant_ids) OR landlord_id = auth.uid()
     )
   );
 
@@ -34,7 +34,7 @@ CREATE POLICY "Tenants can insert their own autopay settings"
   TO authenticated
   WITH CHECK (
     lease_id IN (
-      SELECT id FROM leases WHERE tenant_id = auth.uid()
+      SELECT id FROM leases WHERE auth.uid() = ANY(tenant_ids)
     )
   );
 
@@ -43,7 +43,7 @@ CREATE POLICY "Tenants can update their own autopay settings"
   TO authenticated
   USING (
     lease_id IN (
-      SELECT id FROM leases WHERE tenant_id = auth.uid()
+      SELECT id FROM leases WHERE auth.uid() = ANY(tenant_ids)
     )
   );
 
@@ -52,7 +52,7 @@ CREATE POLICY "Tenants can delete their own autopay settings"
   TO authenticated
   USING (
     lease_id IN (
-      SELECT id FROM leases WHERE tenant_id = auth.uid()
+      SELECT id FROM leases WHERE auth.uid() = ANY(tenant_ids)
     )
   );
 

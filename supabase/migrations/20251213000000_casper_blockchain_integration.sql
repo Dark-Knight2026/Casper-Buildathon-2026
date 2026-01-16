@@ -9,7 +9,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- ============================================
 
 -- Add blockchain-related columns to existing users table
-ALTER TABLE IF EXISTS user_profiles
+ALTER TABLE IF EXISTS users
 ADD COLUMN IF NOT EXISTS wallet_address TEXT UNIQUE,
 ADD COLUMN IF NOT EXISTS cspr_name TEXT UNIQUE,
 ADD COLUMN IF NOT EXISTS kyc_status TEXT DEFAULT 'pending' CHECK (kyc_status IN ('pending', 'verified', 'rejected')),
@@ -17,13 +17,13 @@ ADD COLUMN IF NOT EXISTS kyc_verified_at TIMESTAMPTZ,
 ADD COLUMN IF NOT EXISTS blockchain_reputation_score INTEGER DEFAULT 0;
 
 -- Add constraints
-ALTER TABLE IF EXISTS user_profiles
+ALTER TABLE IF EXISTS users
 ADD CONSTRAINT valid_wallet_address CHECK (wallet_address IS NULL OR length(wallet_address) = 68),
 ADD CONSTRAINT valid_cspr_name CHECK (cspr_name IS NULL OR cspr_name ~ '^[a-z0-9-]+\.cspr$');
 
 -- Create indexes
-CREATE INDEX IF NOT EXISTS idx_users_wallet_address ON user_profiles(wallet_address);
-CREATE INDEX IF NOT EXISTS idx_users_cspr_name ON user_profiles(cspr_name);
+CREATE INDEX IF NOT EXISTS idx_users_wallet_address ON users(wallet_address);
+CREATE INDEX IF NOT EXISTS idx_users_cspr_name ON users(cspr_name);
 
 -- ============================================
 -- PROPERTIES TABLE EXTENSION
@@ -103,7 +103,7 @@ CREATE TABLE IF NOT EXISTS blockchain_transactions (
   gas_fee DECIMAL(30, 9),
   property_id UUID REFERENCES properties(id) ON DELETE SET NULL,
   lease_id UUID REFERENCES leases(id) ON DELETE SET NULL,
-  user_id UUID REFERENCES user_profiles(id) ON DELETE SET NULL,
+  user_id UUID REFERENCES users(id) ON DELETE SET NULL,
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'confirmed', 'failed', 'cancelled')),
   confirmations INTEGER DEFAULT 0,
   error_message TEXT,
@@ -163,7 +163,7 @@ CREATE INDEX idx_fractional_status ON fractional_ownership(status);
 CREATE TABLE IF NOT EXISTS token_holdings (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   fractional_ownership_id UUID NOT NULL REFERENCES fractional_ownership(id) ON DELETE CASCADE,
-  user_id UUID NOT NULL REFERENCES user_profiles(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   wallet_address TEXT NOT NULL,
   token_balance BIGINT NOT NULL DEFAULT 0,
   percentage_owned DECIMAL(10, 6) NOT NULL,
@@ -234,7 +234,7 @@ CREATE INDEX idx_cspr_price_timestamp ON cspr_price_history(timestamp DESC);
 
 CREATE TABLE IF NOT EXISTS wallet_connections (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id UUID NOT NULL REFERENCES user_profiles(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   wallet_address TEXT NOT NULL,
   provider TEXT NOT NULL,
   is_primary BOOLEAN DEFAULT FALSE,
@@ -257,7 +257,7 @@ CREATE TABLE IF NOT EXISTS cspr_names (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   name TEXT UNIQUE NOT NULL,
   account_hash TEXT NOT NULL,
-  user_id UUID REFERENCES user_profiles(id) ON DELETE SET NULL,
+  user_id UUID REFERENCES users(id) ON DELETE SET NULL,
   registration_tx_hash TEXT NOT NULL,
   registered_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -328,7 +328,7 @@ CREATE POLICY "Users can view own transactions" ON blockchain_transactions
   FOR SELECT USING (
     auth.uid() = user_id OR
     EXISTS (
-      SELECT 1 FROM user_profiles
+      SELECT 1 FROM users
       WHERE id = auth.uid()
       AND (wallet_address = from_address OR wallet_address = to_address)
     )
@@ -343,7 +343,7 @@ CREATE POLICY "Property owners can manage fractional ownership" ON fractional_ow
     EXISTS (
       SELECT 1 FROM properties
       WHERE id = fractional_ownership.property_id
-      AND owner_id = auth.uid()
+      AND landlord_id = auth.uid()
     )
   );
 
@@ -357,7 +357,7 @@ CREATE POLICY "Property owners can view all holders" ON token_holdings
       SELECT 1 FROM fractional_ownership fo
       JOIN properties p ON p.id = fo.property_id
       WHERE fo.id = token_holdings.fractional_ownership_id
-      AND p.owner_id = auth.uid()
+      AND p.landlord_id = auth.uid()
     )
   );
 

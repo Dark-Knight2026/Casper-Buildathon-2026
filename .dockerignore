@@ -1,0 +1,6 @@
+target/
+.git/
+.env
+sqlx-data.json.bak
+docker-compose.yml
+README.md

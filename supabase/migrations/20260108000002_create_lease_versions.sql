@@ -31,7 +31,7 @@ CREATE POLICY "Users can view their lease versions"
       SELECT 1 FROM public.leases
       WHERE leases.id = app_25a44123a6_lease_versions.lease_id
       AND (
-        leases.tenant_id = auth.uid()
+        auth.uid() = ANY(leases.tenant_ids)
         OR leases.landlord_id = auth.uid()
         OR leases.agent_id = auth.uid()
       )

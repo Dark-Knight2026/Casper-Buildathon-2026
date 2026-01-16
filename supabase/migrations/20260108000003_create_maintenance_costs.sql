@@ -1,11 +1,11 @@
 -- Create maintenance_costs table for tracking repair expenses
 CREATE TABLE IF NOT EXISTS public.app_25a44123a6_maintenance_costs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  maintenance_request_id UUID NOT NULL REFERENCES public.app_25a44123a6_maintenance_requests(id) ON DELETE CASCADE,
+  maintenance_request_id UUID NOT NULL REFERENCES maintenance_requests(id) ON DELETE CASCADE,
   cost_type VARCHAR(50) NOT NULL,
   description TEXT NOT NULL,
   amount DECIMAL(10, 2) NOT NULL,
-  vendor_id UUID REFERENCES public.profiles(id),
+  vendor_id UUID REFERENCES users(id),
   vendor_name VARCHAR(255),
   invoice_number VARCHAR(100),
   invoice_date DATE,

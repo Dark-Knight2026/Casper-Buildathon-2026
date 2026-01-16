@@ -2,6 +2,16 @@
 -- Description: Add pipeline stage tracking and milestone management to transactions
 -- Date: 2024-12-02
 
+CREATE TABLE IF NOT EXISTS app_a5f54_transactions (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    agent_id UUID REFERENCES auth.users(id),
+    property_address TEXT,
+    client_name TEXT,
+    amount DECIMAL(12,2) DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 -- ============================================================================
 -- PART 1: Modify existing transactions table
 -- ============================================================================
