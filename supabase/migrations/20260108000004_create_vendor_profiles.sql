@@ -1,5 +1,5 @@
 -- Create vendor_profiles table for maintenance vendors
-CREATE TABLE IF NOT EXISTS public.app_25a44123a6_vendor_profiles (
+CREATE TABLE IF NOT EXISTS vendor_profiles (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   company_name VARCHAR(255) NOT NULL,
@@ -30,41 +30,41 @@ CREATE TABLE IF NOT EXISTS public.app_25a44123a6_vendor_profiles (
 );
 
 -- Create indexes
-CREATE INDEX idx_vendor_profiles_user_id ON public.app_25a44123a6_vendor_profiles(user_id);
-CREATE INDEX idx_vendor_profiles_specialty ON public.app_25a44123a6_vendor_profiles USING GIN(specialty);
-CREATE INDEX idx_vendor_profiles_service_area ON public.app_25a44123a6_vendor_profiles USING GIN(service_area);
-CREATE INDEX idx_vendor_profiles_availability ON public.app_25a44123a6_vendor_profiles(availability_status);
-CREATE INDEX idx_vendor_profiles_rating ON public.app_25a44123a6_vendor_profiles(rating DESC);
+CREATE INDEX IF NOT EXISTS idx_vendor_profiles_user_id ON vendor_profiles(user_id);
+CREATE INDEX IF NOT EXISTS idx_vendor_profiles_specialty ON vendor_profiles USING GIN(specialty);
+CREATE INDEX IF NOT EXISTS idx_vendor_profiles_service_area ON vendor_profiles USING GIN(service_area);
+CREATE INDEX IF NOT EXISTS idx_vendor_profiles_availability ON vendor_profiles(availability_status);
+CREATE INDEX IF NOT EXISTS idx_vendor_profiles_rating ON vendor_profiles(rating DESC);
 
 -- Enable RLS
-ALTER TABLE public.app_25a44123a6_vendor_profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE vendor_profiles ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies
 CREATE POLICY "Anyone can view verified vendor profiles"
-  ON public.app_25a44123a6_vendor_profiles
+  ON vendor_profiles
   FOR SELECT
   USING (is_verified = true);
 
 CREATE POLICY "Vendors can view their own profile"
-  ON public.app_25a44123a6_vendor_profiles
+  ON vendor_profiles
   FOR SELECT
   USING (user_id = auth.uid());
 
 CREATE POLICY "Vendors can create their own profile"
-  ON public.app_25a44123a6_vendor_profiles
+  ON vendor_profiles
   FOR INSERT
   WITH CHECK (user_id = auth.uid());
 
 CREATE POLICY "Vendors can update their own profile"
-  ON public.app_25a44123a6_vendor_profiles
+  ON vendor_profiles
   FOR UPDATE
   USING (user_id = auth.uid());
 
 -- Create updated_at trigger
-CREATE TRIGGER vendor_profiles_updated_at
-  BEFORE UPDATE ON public.app_25a44123a6_vendor_profiles
+CREATE OR REPLACE TRIGGER vendor_profiles_updated_at
+  BEFORE UPDATE ON vendor_profiles
   FOR EACH ROW
   EXECUTE FUNCTION update_updated_at_column();
 
 -- Add comment
-COMMENT ON TABLE public.app_25a44123a6_vendor_profiles IS 'Profiles for maintenance service vendors';
+COMMENT ON TABLE vendor_profiles IS 'Profiles for maintenance service vendors';

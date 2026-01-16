@@ -2,7 +2,8 @@
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 -- Add fingerprint and parcel_id columns
-ALTER TABLE listings 
+-- FIX: Changed 'listings' to 'properties' as 'listings' table does not exist
+ALTER TABLE properties 
 ADD COLUMN IF NOT EXISTS fingerprint TEXT,
 ADD COLUMN IF NOT EXISTS parcel_id TEXT;
 
@@ -20,27 +21,26 @@ DECLARE
   raw_string TEXT;
 BEGIN
   -- Normalize Address (street + city + state + zip)
-  -- Removes non-alphanumeric characters and converts to lowercase
   normalized_address := LOWER(REGEXP_REPLACE(
-    COALESCE(NEW.address->>'street', '') || 
-    COALESCE(NEW.address->>'city', '') || 
-    COALESCE(NEW.address->>'state', '') || 
-    COALESCE(NEW.address->>'zipCode', ''), 
+    COALESCE(NEW.address_line1, '') || 
+    COALESCE(NEW.city, '') || 
+    COALESCE(NEW.state, '') || 
+    COALESCE(NEW.zip_code, ''), 
     '[^a-z0-9]', '', 'g'
   ));
   
-  -- Geocode (round to 4 decimal places for ~11m precision)
-  geo_lat := COALESCE(ROUND(CAST(NULLIF(NEW.address->>'lat', '') AS NUMERIC), 4)::TEXT, '');
-  geo_lng := COALESCE(ROUND(CAST(NULLIF(NEW.address->>'lng', '') AS NUMERIC), 4)::TEXT, '');
+  -- Geocode
+  geo_lat := COALESCE(ROUND(CAST(NEW.latitude AS NUMERIC), 4)::TEXT, '');
+  geo_lng := COALESCE(ROUND(CAST(NEW.longitude AS NUMERIC), 4)::TEXT, '');
   
-  -- Unit (normalize)
-  unit_val := LOWER(REGEXP_REPLACE(COALESCE(NEW.address->>'unit', ''), '[^a-z0-9]', '', 'g'));
+  -- Unit (normalize) - Using address_line2 as unit if needed, or skip
+  unit_val := LOWER(REGEXP_REPLACE(COALESCE(NEW.address_line2, ''), '[^a-z0-9]', '', 'g'));
   
-  -- Lot Size & Living Area (handle nulls)
+  -- Lot Size & Living Area
   lot_val := COALESCE(NEW.lot_size::TEXT, '');
-  area_val := COALESCE(NEW.square_footage::TEXT, '');
+  area_val := COALESCE(NEW.square_feet::TEXT, '');
   
-  -- Parcel ID (normalize)
+  -- Parcel ID
   parcel_val := LOWER(REGEXP_REPLACE(COALESCE(NEW.parcel_id, ''), '[^a-z0-9]', '', 'g'));
 
   -- Concatenate all parts with pipe separator
@@ -54,13 +54,12 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Create Trigger to update fingerprint on Insert or Update
-DROP TRIGGER IF EXISTS set_property_fingerprint_trigger ON listings;
+DROP TRIGGER IF EXISTS set_property_fingerprint_trigger ON properties;
 CREATE TRIGGER set_property_fingerprint_trigger
-BEFORE INSERT OR UPDATE ON listings
+BEFORE INSERT OR UPDATE ON properties
 FOR EACH ROW
 EXECUTE FUNCTION generate_property_fingerprint();
 
 -- Add Unique Index to prevent duplicates
--- Using partial index where fingerprint is not null to allow drafts/incomplete listings if needed
-CREATE UNIQUE INDEX IF NOT EXISTS idx_listings_fingerprint 
-ON listings(fingerprint);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_properties_fingerprint 
+ON properties(fingerprint);

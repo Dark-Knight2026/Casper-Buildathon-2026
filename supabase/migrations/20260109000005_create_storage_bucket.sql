@@ -58,7 +58,7 @@ VALUES (
 )
 ON CONFLICT (id) DO NOTHING;
 
--- RLS policies for listing documents (more restrictive)
+-- RLS policies for listing documents
 CREATE POLICY "Users can view their own listing documents"
   ON storage.objects FOR SELECT
   TO authenticated

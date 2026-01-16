@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS notification_batch_queue (
   action_url TEXT,
   action_label TEXT,
   metadata JSONB,
-  batch_id UUID REFERENCES notification_batches(id),
+  batch_id UUID, -- Removed forward reference to avoid dependency issues, or create tables in order
   created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );
 
@@ -41,6 +41,14 @@ CREATE TABLE IF NOT EXISTS notification_batches (
   error_message TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );
+
+-- Add constraint after tables are created
+DO $$ BEGIN
+  ALTER TABLE notification_batch_queue ADD CONSTRAINT fk_batch 
+  FOREIGN KEY (batch_id) REFERENCES notification_batches(id);
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Create indexes for performance
 CREATE INDEX IF NOT EXISTS notification_batching_preferences_user_idx ON notification_batching_preferences(user_id);
@@ -60,7 +68,7 @@ ALTER TABLE notification_batching_preferences ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notification_batch_queue ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notification_batches ENABLE ROW LEVEL SECURITY;
 
--- RLS Policies for notification_batching_preferences
+-- RLS Policies
 CREATE POLICY "Users can view their own batching preferences"
   ON notification_batching_preferences FOR SELECT
   TO authenticated
@@ -77,20 +85,18 @@ CREATE POLICY "Users can update their own batching preferences"
   USING (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);
 
--- RLS Policies for notification_batch_queue
 CREATE POLICY "Users can view their own batch queue"
   ON notification_batch_queue FOR SELECT
   TO authenticated
   USING (auth.uid() = user_id);
 
--- RLS Policies for notification_batches
 CREATE POLICY "Users can view their own batches"
   ON notification_batches FOR SELECT
   TO authenticated
   USING (auth.uid() = user_id);
 
 -- Trigger for notification_batching_preferences updated_at
-CREATE TRIGGER update_notification_batching_preferences_updated_at
+CREATE OR REPLACE TRIGGER update_notification_batching_preferences_updated_at
   BEFORE UPDATE ON notification_batching_preferences
   FOR EACH ROW
   EXECUTE FUNCTION update_updated_at_column();
@@ -99,7 +105,7 @@ CREATE TRIGGER update_notification_batching_preferences_updated_at
 INSERT INTO notification_batching_preferences (user_id, enabled, frequency, batch_time, exclude_priorities, timezone)
 SELECT 
   id,
-  false, -- Disabled by default
+  false,
   'daily',
   '09:00',
   ARRAY['urgent', 'high']::TEXT[],
@@ -108,7 +114,7 @@ FROM auth.users
 WHERE id NOT IN (SELECT user_id FROM notification_batching_preferences)
 ON CONFLICT (user_id) DO NOTHING;
 
--- Function to clean up old batch queue items (older than 30 days)
+-- Function to clean up old batch queue items
 CREATE OR REPLACE FUNCTION cleanup_old_batch_queue_items()
 RETURNS void AS $$
 BEGIN
@@ -118,7 +124,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Function to clean up old batches (older than 90 days)
+-- Function to clean up old batches
 CREATE OR REPLACE FUNCTION cleanup_old_batches()
 RETURNS void AS $$
 BEGIN

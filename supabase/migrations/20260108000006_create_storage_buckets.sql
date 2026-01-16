@@ -70,17 +70,18 @@ CREATE POLICY "Users can upload maintenance photos"
     AND (
       -- Tenants can upload for their requests
       EXISTS (
-        SELECT 1 FROM public.app_25a44123a6_maintenance_requests mr
+        SELECT 1 FROM maintenance_requests mr
         WHERE mr.id::text = (storage.foldername(name))[2]
         AND mr.tenant_id = auth.uid()
       )
       OR
       -- Landlords/agents can upload for their properties
       EXISTS (
-        SELECT 1 FROM public.app_25a44123a6_maintenance_requests mr
-        JOIN public.properties p ON mr.property_id = p.id
+        SELECT 1 FROM maintenance_requests mr
+        JOIN properties p ON mr.property_id = p.id
         WHERE mr.id::text = (storage.foldername(name))[2]
-        AND (p.owner_id = auth.uid() OR p.agent_id = auth.uid())
+        -- FIX: owner_id -> landlord_id, agent_id -> property_manager_id
+        AND (p.landlord_id = auth.uid() OR p.property_manager_id = auth.uid())
       )
     )
   );
@@ -92,16 +93,16 @@ CREATE POLICY "Users can view maintenance photos for their requests"
     bucket_id = 'maintenance-photos'
     AND (
       EXISTS (
-        SELECT 1 FROM public.app_25a44123a6_maintenance_requests mr
+        SELECT 1 FROM maintenance_requests mr
         WHERE mr.id::text = (storage.foldername(name))[2]
         AND mr.tenant_id = auth.uid()
       )
       OR
       EXISTS (
-        SELECT 1 FROM public.app_25a44123a6_maintenance_requests mr
-        JOIN public.properties p ON mr.property_id = p.id
+        SELECT 1 FROM maintenance_requests mr
+        JOIN properties p ON mr.property_id = p.id
         WHERE mr.id::text = (storage.foldername(name))[2]
-        AND (p.owner_id = auth.uid() OR p.agent_id = auth.uid())
+        AND (p.landlord_id = auth.uid() OR p.property_manager_id = auth.uid())
       )
     )
   );
@@ -113,16 +114,16 @@ CREATE POLICY "Users can delete their maintenance photos"
     bucket_id = 'maintenance-photos'
     AND (
       EXISTS (
-        SELECT 1 FROM public.app_25a44123a6_maintenance_requests mr
+        SELECT 1 FROM maintenance_requests mr
         WHERE mr.id::text = (storage.foldername(name))[2]
         AND mr.tenant_id = auth.uid()
       )
       OR
       EXISTS (
-        SELECT 1 FROM public.app_25a44123a6_maintenance_requests mr
-        JOIN public.properties p ON mr.property_id = p.id
+        SELECT 1 FROM maintenance_requests mr
+        JOIN properties p ON mr.property_id = p.id
         WHERE mr.id::text = (storage.foldername(name))[2]
-        AND (p.owner_id = auth.uid() OR p.agent_id = auth.uid())
+        AND (p.landlord_id = auth.uid() OR p.property_manager_id = auth.uid())
       )
     )
   );
@@ -181,9 +182,10 @@ CREATE POLICY "Property owners can upload images"
   WITH CHECK (
     bucket_id = 'property-images'
     AND EXISTS (
-      SELECT 1 FROM public.properties p
+      SELECT 1 FROM properties p
       WHERE p.id::text = (storage.foldername(name))[1]
-      AND (p.owner_id = auth.uid() OR p.agent_id = auth.uid())
+      -- FIX: owner_id -> landlord_id
+      AND (p.landlord_id = auth.uid() OR p.property_manager_id = auth.uid())
     )
   );
 
@@ -193,14 +195,8 @@ CREATE POLICY "Property owners can delete images"
   USING (
     bucket_id = 'property-images'
     AND EXISTS (
-      SELECT 1 FROM public.properties p
+      SELECT 1 FROM properties p
       WHERE p.id::text = (storage.foldername(name))[1]
-      AND (p.owner_id = auth.uid() OR p.agent_id = auth.uid())
+      AND (p.landlord_id = auth.uid() OR p.property_manager_id = auth.uid())
     )
   );
-
--- Add comments
-COMMENT ON COLUMN storage.buckets.id IS 'Unique identifier for the storage bucket';
-COMMENT ON COLUMN storage.buckets.public IS 'Whether the bucket allows public access';
-COMMENT ON COLUMN storage.buckets.file_size_limit IS 'Maximum file size in bytes';
-COMMENT ON COLUMN storage.buckets.allowed_mime_types IS 'Array of allowed MIME types';

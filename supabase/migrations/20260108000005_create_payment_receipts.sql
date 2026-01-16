@@ -1,7 +1,7 @@
 -- Create payment_receipts table for payment documentation
-CREATE TABLE IF NOT EXISTS public.app_25a44123a6_payment_receipts (
+CREATE TABLE IF NOT EXISTS payment_receipts (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  payment_id UUID NOT NULL REFERENCES public.payments(id) ON DELETE CASCADE,
+  payment_id UUID NOT NULL REFERENCES payments(id) ON DELETE CASCADE,
   receipt_number VARCHAR(100) NOT NULL UNIQUE,
   receipt_date DATE NOT NULL DEFAULT CURRENT_DATE,
   amount DECIMAL(10, 2) NOT NULL,
@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS public.app_25a44123a6_payment_receipts (
   payer_name VARCHAR(255) NOT NULL,
   payer_email VARCHAR(255),
   property_address TEXT NOT NULL,
-  lease_id UUID REFERENCES public.leases(id),
+  lease_id UUID REFERENCES leases(id),
   description TEXT,
   notes TEXT,
   pdf_url TEXT,
@@ -24,30 +24,32 @@ CREATE TABLE IF NOT EXISTS public.app_25a44123a6_payment_receipts (
 );
 
 -- Create indexes
-CREATE INDEX idx_payment_receipts_payment_id ON public.app_25a44123a6_payment_receipts(payment_id);
-CREATE INDEX idx_payment_receipts_receipt_number ON public.app_25a44123a6_payment_receipts(receipt_number);
-CREATE INDEX idx_payment_receipts_receipt_date ON public.app_25a44123a6_payment_receipts(receipt_date);
-CREATE INDEX idx_payment_receipts_lease_id ON public.app_25a44123a6_payment_receipts(lease_id);
+CREATE INDEX IF NOT EXISTS idx_payment_receipts_payment_id ON payment_receipts(payment_id);
+CREATE INDEX IF NOT EXISTS idx_payment_receipts_receipt_number ON payment_receipts(receipt_number);
+CREATE INDEX IF NOT EXISTS idx_payment_receipts_receipt_date ON payment_receipts(receipt_date);
+CREATE INDEX IF NOT EXISTS idx_payment_receipts_lease_id ON payment_receipts(lease_id);
 
 -- Enable RLS
-ALTER TABLE public.app_25a44123a6_payment_receipts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE payment_receipts ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies
 CREATE POLICY "Users can view their own payment receipts"
-  ON public.app_25a44123a6_payment_receipts
+  ON payment_receipts
   FOR SELECT
   USING (
     EXISTS (
-      SELECT 1 FROM public.payments p
-      WHERE p.id = app_25a44123a6_payment_receipts.payment_id
-      AND (p.tenant_id = auth.uid() OR p.landlord_id = auth.uid())
+      SELECT 1 FROM payments p
+      WHERE p.id = payment_receipts.payment_id
+      AND (p.tenant_id = auth.uid() OR p.lease_id IN (
+          SELECT id FROM leases WHERE landlord_id = auth.uid()
+      ))
     )
   );
 
 CREATE POLICY "System can create payment receipts"
-  ON public.app_25a44123a6_payment_receipts
+  ON payment_receipts
   FOR INSERT
   WITH CHECK (true); -- Created by payment processing function
 
 -- Add comment
-COMMENT ON TABLE public.app_25a44123a6_payment_receipts IS 'Payment receipts and documentation';
+COMMENT ON TABLE payment_receipts IS 'Payment receipts and documentation';

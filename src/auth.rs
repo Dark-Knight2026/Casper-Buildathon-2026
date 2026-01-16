@@ -33,10 +33,7 @@ where
         let token = &auth_header[7..];
         let secret = env::var("SUPABASE_JWT_SECRET").map_err(|_| AuthError::ServerConfiguration)?;
         
-        // Supabase JWTs usually don't require audience validation by default unless configured
-        let mut validation = Validation::default();
-        validation.validate_exp = true;
-        validation.insecure_disable_signature_validation(); // TODO: Remove this in production and use proper secret handling if needed, but usually we validate signature.
+        
         // Re-enabling signature validation
         let validation = Validation::new(jsonwebtoken::Algorithm::HS256);
 

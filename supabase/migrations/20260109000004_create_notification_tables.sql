@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS notification_preferences (
 -- Create index for faster lookups
 CREATE INDEX IF NOT EXISTS notification_preferences_user_idx ON notification_preferences(user_id);
 
--- Create notification_delivery_log table for tracking sent notifications
+-- Create notification_delivery_log table
 CREATE TABLE IF NOT EXISTS notification_delivery_log (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   channel TEXT NOT NULL CHECK (channel IN ('in_app', 'email', 'sms', 'push')),
@@ -58,7 +58,7 @@ CREATE POLICY "Users can update their own notification preferences"
   USING (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);
 
--- RLS Policies for notification_delivery_log (read-only for users, write for service role)
+-- RLS Policies for notification_delivery_log
 CREATE POLICY "Users can view their own notification delivery logs"
   ON notification_delivery_log FOR SELECT
   TO authenticated
@@ -77,7 +77,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Trigger for notification_preferences
-CREATE TRIGGER update_notification_preferences_updated_at
+CREATE OR REPLACE TRIGGER update_notification_preferences_updated_at
   BEFORE UPDATE ON notification_preferences
   FOR EACH ROW
   EXECUTE FUNCTION update_updated_at_column();

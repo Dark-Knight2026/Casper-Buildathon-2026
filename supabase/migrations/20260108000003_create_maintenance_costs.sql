@@ -24,24 +24,25 @@ CREATE TABLE IF NOT EXISTS public.app_25a44123a6_maintenance_costs (
 );
 
 -- Create indexes
-CREATE INDEX idx_maintenance_costs_request_id ON public.app_25a44123a6_maintenance_costs(maintenance_request_id);
-CREATE INDEX idx_maintenance_costs_vendor_id ON public.app_25a44123a6_maintenance_costs(vendor_id);
-CREATE INDEX idx_maintenance_costs_payment_status ON public.app_25a44123a6_maintenance_costs(payment_status);
-CREATE INDEX idx_maintenance_costs_invoice_date ON public.app_25a44123a6_maintenance_costs(invoice_date);
+CREATE INDEX IF NOT EXISTS idx_maintenance_costs_request_id ON public.app_25a44123a6_maintenance_costs(maintenance_request_id);
+CREATE INDEX IF NOT EXISTS idx_maintenance_costs_vendor_id ON public.app_25a44123a6_maintenance_costs(vendor_id);
+CREATE INDEX IF NOT EXISTS idx_maintenance_costs_payment_status ON public.app_25a44123a6_maintenance_costs(payment_status);
+CREATE INDEX IF NOT EXISTS idx_maintenance_costs_invoice_date ON public.app_25a44123a6_maintenance_costs(invoice_date);
 
 -- Enable RLS
 ALTER TABLE public.app_25a44123a6_maintenance_costs ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies
+-- FIX: Updated table names and column names (owner_id -> landlord_id)
 CREATE POLICY "Landlords and agents can view maintenance costs"
   ON public.app_25a44123a6_maintenance_costs
   FOR SELECT
   USING (
     EXISTS (
-      SELECT 1 FROM public.app_25a44123a6_maintenance_requests mr
+      SELECT 1 FROM public.maintenance_requests mr
       JOIN public.properties p ON mr.property_id = p.id
       WHERE mr.id = app_25a44123a6_maintenance_costs.maintenance_request_id
-      AND (p.owner_id = auth.uid() OR p.agent_id = auth.uid())
+      AND (p.landlord_id = auth.uid() OR p.property_manager_id = auth.uid())
     )
   );
 
@@ -50,10 +51,10 @@ CREATE POLICY "Landlords and agents can insert maintenance costs"
   FOR INSERT
   WITH CHECK (
     EXISTS (
-      SELECT 1 FROM public.app_25a44123a6_maintenance_requests mr
+      SELECT 1 FROM public.maintenance_requests mr
       JOIN public.properties p ON mr.property_id = p.id
       WHERE mr.id = maintenance_request_id
-      AND (p.owner_id = auth.uid() OR p.agent_id = auth.uid())
+      AND (p.landlord_id = auth.uid() OR p.property_manager_id = auth.uid())
     )
   );
 
@@ -62,15 +63,15 @@ CREATE POLICY "Landlords and agents can update maintenance costs"
   FOR UPDATE
   USING (
     EXISTS (
-      SELECT 1 FROM public.app_25a44123a6_maintenance_requests mr
+      SELECT 1 FROM public.maintenance_requests mr
       JOIN public.properties p ON mr.property_id = p.id
       WHERE mr.id = app_25a44123a6_maintenance_costs.maintenance_request_id
-      AND (p.owner_id = auth.uid() OR p.agent_id = auth.uid())
+      AND (p.landlord_id = auth.uid() OR p.property_manager_id = auth.uid())
     )
   );
 
--- Create updated_at trigger
-CREATE TRIGGER maintenance_costs_updated_at
+-- Create updated_at trigger 
+CREATE OR REPLACE TRIGGER maintenance_costs_updated_at
   BEFORE UPDATE ON public.app_25a44123a6_maintenance_costs
   FOR EACH ROW
   EXECUTE FUNCTION update_updated_at_column();

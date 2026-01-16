@@ -7,12 +7,13 @@ services:
     container_name: leasefi_api
     ports:
       - "8080:8080"
+    env_file:
+      - .env
+    
     environment:
+      - DATABASE_URL=postgres://postgres:postgres@host.docker.internal:54322/postgres
+      - REDIS_URL=redis://redis:6379
       
-      DATABASE_URL: postgres://postgres:postgres@host.docker.internal:54322/postgres
-      REDIS_URL: redis://redis:6379
-      
-      RUST_LOG: info
     depends_on:
       - redis
     extra_hosts:
