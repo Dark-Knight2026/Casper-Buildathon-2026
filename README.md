@@ -28,9 +28,11 @@ Update `DATABASE_URL` with the output from `supabase start`.
 
 ### 3. Prepare SQLx Metadata
 Since we use `SQLX_OFFLINE=true` for Docker builds, you must regenerate metadata whenever SQL queries change:
+
 ```bash
 cargo sqlx prepare
 ```
+
 
 ### 4. Run with Docker
 ```bash

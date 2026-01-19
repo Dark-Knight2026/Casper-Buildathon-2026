@@ -38,7 +38,7 @@ pub async fn calculate_tax_liability(
     // TODO: Fetch real income/expenses from DB using sqlx
     
     // Mock data simulation
-    let mut total_income = Decimal::from_i64(150000).unwrap();
+    let total_income = Decimal::from_i64(150000).unwrap();
     let mut total_deductions = Decimal::from_i64(45000).unwrap();
     
     if payload.include_depreciation {
