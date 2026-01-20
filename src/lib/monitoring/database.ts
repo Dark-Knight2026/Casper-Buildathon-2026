@@ -12,7 +12,6 @@
  */
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { captureMessage, addBreadcrumb } from './sentry';
 import { trackDatabaseQuery } from './performance';
 
 /**
@@ -127,60 +126,28 @@ class DatabaseMonitor {
     // Alert on slow queries
     if (metric.duration > DATABASE_THRESHOLDS.SLOW_QUERY_MS) {
       this.slowQueryCount++;
-      
-      const severity = metric.duration > DATABASE_THRESHOLDS.VERY_SLOW_QUERY_MS ? 'error' : 'warning';
-      
-      addBreadcrumb({
-        message: `Slow query detected: ${metric.query.substring(0, 100)}...`,
-        category: 'database',
-        level: severity,
-        data: {
-          duration: metric.duration,
-          table: metric.table,
-          operation: metric.operation,
-          cached: metric.cached,
-        },
-      });
 
-      // Capture very slow queries
-      if (metric.duration > DATABASE_THRESHOLDS.VERY_SLOW_QUERY_MS) {
-        captureMessage(
-          `Very slow database query: ${metric.duration.toFixed(2)}ms`,
-          severity,
-          {
-            tags: {
-              query_type: metric.operation || 'unknown',
-              table: metric.table || 'unknown',
-            },
-            extra: {
-              query: metric.query,
-              duration: metric.duration,
-              cached: metric.cached,
-              rowCount: metric.rowCount,
-            },
-          }
-        );
-      }
+      const severity = metric.duration > DATABASE_THRESHOLDS.VERY_SLOW_QUERY_MS ? 'error' : 'warning';
+
+      // Log slow query
+      console.warn(`[DATABASE] Slow query detected: ${metric.query.substring(0, 100)}...`, {
+        duration: metric.duration,
+        table: metric.table,
+        operation: metric.operation,
+        cached: metric.cached,
+        severity,
+      });
     }
 
     // Track errors
     if (metric.error) {
       this.errorCount++;
-      
-      captureMessage(
-        `Database query error: ${metric.error}`,
-        'error',
-        {
-          tags: {
-            query_type: metric.operation || 'unknown',
-            table: metric.table || 'unknown',
-          },
-          extra: {
-            query: metric.query,
-            error: metric.error,
-          },
-        }
-      );
+
+      console.error(`[DATABASE] Query error: ${metric.error}`, {
+        query: metric.query,
+        operation: metric.operation,
+        table: metric.table,
+      });
     }
   }
 
@@ -205,21 +172,9 @@ class DatabaseMonitor {
 
     // Alert on high utilization
     if (utilization >= DATABASE_THRESHOLDS.CONNECTION_POOL_CRITICAL) {
-      captureMessage(
-        `Critical connection pool utilization: ${utilization.toFixed(1)}%`,
-        'error',
-        {
-          tags: { alert_type: 'connection_pool' },
-          extra: poolStatus,
-        }
-      );
+      console.error(`[DATABASE] Critical connection pool utilization: ${utilization.toFixed(1)}%`, poolStatus);
     } else if (utilization >= DATABASE_THRESHOLDS.CONNECTION_POOL_WARNING) {
-      addBreadcrumb({
-        message: `High connection pool utilization: ${utilization.toFixed(1)}%`,
-        category: 'database',
-        level: 'warning',
-        data: poolStatus,
-      });
+      console.warn(`[DATABASE] High connection pool utilization: ${utilization.toFixed(1)}%`, poolStatus);
     }
   }
 
@@ -388,18 +343,14 @@ class DatabaseMonitor {
 
     // Alert on poor cache hit rate
     if (summary.cacheHitRate < DATABASE_THRESHOLDS.CACHE_HIT_RATE_WARNING) {
-      const severity = summary.cacheHitRate < DATABASE_THRESHOLDS.CACHE_HIT_RATE_CRITICAL
-        ? 'error'
-        : 'warning';
-      
-      captureMessage(
-        `Low cache hit rate: ${summary.cacheHitRate.toFixed(1)}%`,
-        severity,
-        {
-          tags: { alert_type: 'cache_performance' },
-          extra: summary,
-        }
-      );
+      const logMethod = summary.cacheHitRate < DATABASE_THRESHOLDS.CACHE_HIT_RATE_CRITICAL
+        ? console.error
+        : console.warn;
+
+      logMethod(`Low cache hit rate: ${summary.cacheHitRate.toFixed(1)}%`, {
+        alert_type: 'cache_performance',
+        ...summary,
+      });
     }
   }
 
@@ -443,20 +394,27 @@ export function createMonitoredSupabaseClient(
   
   // Wrap the from method to track queries
   const originalFrom = client.from.bind(client);
-  
+
   client.from = function(table: string) {
     const query = originalFrom(table);
-    
+
     // Wrap query methods
-    const wrapQueryMethod = (method: any, operation: QueryMetric['operation']) => {
-      return async function(...args: any[]) {
+    // Note: Supabase query builder methods have complex generic types that are difficult to type correctly
+    // when creating wrapper functions. Using Function type with explicit assertions for practical reasons.
+    type QueryMethod = (...args: never[]) => unknown;
+
+    const wrapQueryMethod = <T extends QueryMethod>(
+      method: T,
+      operation: QueryMetric['operation']
+    ): T => {
+      const wrapped = async function(this: unknown, ...args: unknown[]) {
         const start = performance.now();
         const queryString = `${operation} FROM ${table}`;
-        
+
         try {
-          const result = await method.apply(query, args);
+          const result = await (method as unknown as (...args: unknown[]) => Promise<unknown>).apply(this, args) as { data: unknown; error: unknown };
           const duration = performance.now() - start;
-          
+
           databaseMonitor.trackQuery({
             query: queryString,
             duration,
@@ -466,11 +424,12 @@ export function createMonitoredSupabaseClient(
             operation,
             rowCount: Array.isArray(result.data) ? result.data.length : 1,
           });
-          
+
           return result;
-        } catch (error: any) {
+        } catch (error) {
           const duration = performance.now() - start;
-          
+          const errorMessage = error instanceof Error ? error.message : String(error);
+
           databaseMonitor.trackQuery({
             query: queryString,
             duration,
@@ -478,14 +437,15 @@ export function createMonitoredSupabaseClient(
             cached: false,
             table,
             operation,
-            error: error.message,
+            error: errorMessage,
           });
-          
+
           throw error;
         }
       };
+      return wrapped as unknown as T;
     };
-    
+
     // Wrap common query methods
     if (query.select) {
       query.select = wrapQueryMethod(query.select.bind(query), 'SELECT');
@@ -499,10 +459,10 @@ export function createMonitoredSupabaseClient(
     if (query.delete) {
       query.delete = wrapQueryMethod(query.delete.bind(query), 'DELETE');
     }
-    
+
     return query;
   };
-  
+
   return client;
 }
 

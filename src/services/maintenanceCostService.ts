@@ -27,6 +27,26 @@ export interface CostSummary {
   itemCount: number;
 }
 
+interface MaintenanceCostUpdateData {
+  item_description?: string;
+  quantity?: number;
+  unit_price?: number;
+  total_price?: number;
+  cost_type?: 'labor' | 'materials' | 'equipment' | 'other';
+}
+
+interface MaintenanceCostRow {
+  id: string;
+  request_id: string;
+  item_description: string;
+  quantity: number;
+  unit_price: number;
+  total_price: number;
+  cost_type: 'labor' | 'materials' | 'equipment' | 'other';
+  created_at: string;
+  created_by: string;
+}
+
 class MaintenanceCostService {
   /**
    * Add cost item to maintenance request
@@ -132,7 +152,7 @@ class MaintenanceCostService {
     updates: Partial<Omit<MaintenanceCost, 'id' | 'requestId' | 'createdAt' | 'createdBy'>>
   ): Promise<MaintenanceCost> {
     try {
-      const updateData: any = {};
+      const updateData: MaintenanceCostUpdateData = {};
 
       if (updates.itemDescription !== undefined) {
         updateData.item_description = updates.itemDescription;
@@ -223,7 +243,7 @@ class MaintenanceCostService {
   /**
    * Map database row to MaintenanceCost
    */
-  private mapCostItem(data: any): MaintenanceCost {
+  private mapCostItem(data: MaintenanceCostRow): MaintenanceCost {
     return {
       id: data.id,
       requestId: data.request_id,

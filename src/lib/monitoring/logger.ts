@@ -11,8 +11,6 @@
  * @module monitoring/logger
  */
 
-import { captureMessage, captureException, addBreadcrumb } from './sentry';
-
 /**
  * Log levels
  */
@@ -42,7 +40,7 @@ interface LogEntry {
   level: LogLevel;
   message: string;
   timestamp: number;
-  context?: Record<string, any>;
+  context?: Record<string, unknown>;
   error?: Error;
   stack?: string;
   userId?: string;
@@ -56,7 +54,6 @@ interface LogEntry {
 interface LoggerConfig {
   minLevel: LogLevel;
   enableConsole: boolean;
-  enableSentry: boolean;
   enableStorage: boolean;
   maxStoredLogs: number;
   retentionDays: {
@@ -81,7 +78,6 @@ class Logger {
     this.config = {
       minLevel: import.meta.env.DEV ? LogLevel.DEBUG : LogLevel.INFO,
       enableConsole: true,
-      enableSentry: !import.meta.env.DEV,
       enableStorage: true,
       maxStoredLogs: 1000,
       retentionDays: {
@@ -140,35 +136,35 @@ class Logger {
   /**
    * Log debug message
    */
-  debug(message: string, context?: Record<string, any>): void {
+  debug(message: string, context?: Record<string, unknown>): void {
     this.log(LogLevel.DEBUG, message, context);
   }
 
   /**
    * Log info message
    */
-  info(message: string, context?: Record<string, any>): void {
+  info(message: string, context?: Record<string, unknown>): void {
     this.log(LogLevel.INFO, message, context);
   }
 
   /**
    * Log warning message
    */
-  warn(message: string, context?: Record<string, any>): void {
+  warn(message: string, context?: Record<string, unknown>): void {
     this.log(LogLevel.WARN, message, context);
   }
 
   /**
    * Log error message
    */
-  error(message: string, error?: Error, context?: Record<string, any>): void {
+  error(message: string, error?: Error, context?: Record<string, unknown>): void {
     this.log(LogLevel.ERROR, message, context, error);
   }
 
   /**
    * Log fatal error
    */
-  fatal(message: string, error?: Error, context?: Record<string, any>): void {
+  fatal(message: string, error?: Error, context?: Record<string, unknown>): void {
     this.log(LogLevel.FATAL, message, context, error);
   }
 
@@ -178,7 +174,7 @@ class Logger {
   private log(
     level: LogLevel,
     message: string,
-    context?: Record<string, any>,
+    context?: Record<string, unknown>,
     error?: Error
   ): void {
     // Check if level is enabled
@@ -204,14 +200,6 @@ class Logger {
     if (this.config.enableConsole) {
       this.logToConsole(entry);
     }
-
-    // Send to Sentry
-    if (this.config.enableSentry && level >= LogLevel.WARN) {
-      this.logToSentry(entry);
-    }
-
-    // Add breadcrumb for all logs
-    this.addBreadcrumb(entry);
   }
 
   /**
@@ -248,7 +236,7 @@ class Logger {
     const timestamp = new Date(entry.timestamp).toISOString();
     const prefix = `[${timestamp}] [${levelName}]`;
 
-    const logData: any[] = [prefix, entry.message];
+    const logData: unknown[] = [prefix, entry.message];
 
     if (entry.context) {
       logData.push('\nContext:', entry.context);
@@ -272,75 +260,6 @@ class Logger {
       case LogLevel.FATAL:
         console.error(...logData);
         break;
-    }
-  }
-
-  /**
-   * Log to Sentry
-   */
-  private logToSentry(entry: LogEntry): void {
-    const sentryLevel = this.getSentryLevel(entry.level);
-
-    if (entry.error) {
-      captureException(entry.error, {
-        level: sentryLevel,
-        tags: {
-          log_level: LOG_LEVEL_NAMES[entry.level],
-          session_id: entry.sessionId,
-        },
-        extra: {
-          message: entry.message,
-          context: entry.context,
-          userId: entry.userId,
-        },
-      });
-    } else {
-      captureMessage(entry.message, sentryLevel, {
-        tags: {
-          log_level: LOG_LEVEL_NAMES[entry.level],
-          session_id: entry.sessionId,
-        },
-        extra: {
-          context: entry.context,
-          userId: entry.userId,
-        },
-      });
-    }
-  }
-
-  /**
-   * Add breadcrumb
-   */
-  private addBreadcrumb(entry: LogEntry): void {
-    addBreadcrumb({
-      message: entry.message,
-      category: 'log',
-      level: this.getSentryLevel(entry.level),
-      data: {
-        ...entry.context,
-        userId: entry.userId,
-        sessionId: entry.sessionId,
-      },
-    });
-  }
-
-  /**
-   * Convert log level to Sentry level
-   */
-  private getSentryLevel(level: LogLevel): 'debug' | 'info' | 'warning' | 'error' | 'fatal' {
-    switch (level) {
-      case LogLevel.DEBUG:
-        return 'debug';
-      case LogLevel.INFO:
-        return 'info';
-      case LogLevel.WARN:
-        return 'warning';
-      case LogLevel.ERROR:
-        return 'error';
-      case LogLevel.FATAL:
-        return 'fatal';
-      default:
-        return 'info';
     }
   }
 
@@ -531,35 +450,35 @@ export function clearLogUser(): void {
 /**
  * Log debug message
  */
-export function debug(message: string, context?: Record<string, any>): void {
+export function debug(message: string, context?: Record<string, unknown>): void {
   logger.debug(message, context);
 }
 
 /**
  * Log info message
  */
-export function info(message: string, context?: Record<string, any>): void {
+export function info(message: string, context?: Record<string, unknown>): void {
   logger.info(message, context);
 }
 
 /**
  * Log warning message
  */
-export function warn(message: string, context?: Record<string, any>): void {
+export function warn(message: string, context?: Record<string, unknown>): void {
   logger.warn(message, context);
 }
 
 /**
  * Log error message
  */
-export function error(message: string, err?: Error, context?: Record<string, any>): void {
+export function error(message: string, err?: Error, context?: Record<string, unknown>): void {
   logger.error(message, err, context);
 }
 
 /**
  * Log fatal error
  */
-export function fatal(message: string, err?: Error, context?: Record<string, any>): void {
+export function fatal(message: string, err?: Error, context?: Record<string, unknown>): void {
   logger.fatal(message, err, context);
 }
 
@@ -607,11 +526,6 @@ export function getLogStatistics() {
  * Export logger instance for advanced usage
  */
 export { logger };
-
-/**
- * Export LogLevel enum
- */
-export { LogLevel };
 
 /**
  * Example Usage:

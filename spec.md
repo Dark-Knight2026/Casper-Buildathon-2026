@@ -1,9 +1,30 @@
 # LeaseFi Real Estate CRM - Frontend Specification
 
 **Version:** 1.0
-**Last Updated:** 2026-01-16
+**Last Updated:** 2026-01-20
 **Project Size:** ~250,000+ lines of code
-**Status:** Production-Ready
+**Status:** Under Review (Audit Phase)
+
+---
+
+## Project Status Notice
+
+> **Current Phase:** Code Audit & Review
+>
+> This project is currently undergoing a comprehensive code audit. The features documented in this specification represent the **intended functionality** based on the existing codebase structure and implementation patterns.
+>
+> **What this means:**
+> - Features are documented based on code analysis, not verified through comprehensive testing
+> - Test coverage is minimal at this stage
+> - Subsequent pull requests will focus on:
+>   1. **Refactoring** - Code quality improvements and architectural refinements
+>   2. **Testing** - Adding unit, integration, and E2E tests to verify documented features
+>   3. **Validation** - Confirming which features are fully functional vs. partially implemented
+>
+> **Feature Status Legend:**
+> - Features listed here reflect what the code **appears to implement**
+> - Actual functionality will be verified and documented as tests are added
+> - Any discrepancies found during testing will be updated in this specification
 
 ---
 

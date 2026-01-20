@@ -120,7 +120,7 @@ export function useAuthPrompt() {
  * Hook for saving guest progress to localStorage
  * Useful for preserving form data, favorites, etc. before authentication
  */
-export function useGuestProgress<T = any>(key: string) {
+export function useGuestProgress<T = unknown>(key: string) {
   const { isAuthenticated } = useAuth();
 
   const saveProgress = useCallback((data: T) => {

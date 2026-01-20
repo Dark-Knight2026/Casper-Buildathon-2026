@@ -84,7 +84,7 @@ export async function generatePaymentReceiptPDF(
   });
 
   // Amount section
-  const finalY = (doc as any).lastAutoTable.finalY || 150;
+  const finalY = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY || 150;
   doc.setLineWidth(0.5);
   doc.line(20, finalY + 10, 190, finalY + 10);
 

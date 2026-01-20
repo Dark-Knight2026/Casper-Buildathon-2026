@@ -126,7 +126,7 @@ export default function BuyerFinancing() {
     }
   };
 
-  const calculateMonthlyPayment = () => {
+  const calculateMonthlyPayment = useCallback(() => {
     const principal = homePrice - downPayment;
     const monthlyRate = interestRate / 100 / 12;
     const numberOfPayments = loanTerm * 12;
@@ -141,13 +141,13 @@ export default function BuyerFinancing() {
       (Math.pow(1 + monthlyRate, numberOfPayments) - 1);
 
     setMonthlyPayment(Math.round(payment));
-  };
+  }, [homePrice, downPayment, interestRate, loanTerm]);
 
   useEffect(() => {
     if (homePrice > 0 && downPayment >= 0 && interestRate > 0) {
       calculateMonthlyPayment();
     }
-  }, [homePrice, downPayment, interestRate, loanTerm]);
+  }, [homePrice, downPayment, interestRate, loanTerm, calculateMonthlyPayment]);
 
   const getStatusColor = (status: string) => {
     switch (status) {

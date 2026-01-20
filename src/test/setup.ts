@@ -31,23 +31,26 @@ Object.defineProperty(window, 'matchMedia', {
 });
 
 // Mock IntersectionObserver
-global.IntersectionObserver = class IntersectionObserver {
-  constructor() {}
+global.IntersectionObserver = class IntersectionObserver implements globalThis.IntersectionObserver {
+  readonly root: Element | Document | null = null;
+  readonly rootMargin: string = '';
+  readonly thresholds: ReadonlyArray<number> = [];
+  constructor(_callback: IntersectionObserverCallback, _options?: IntersectionObserverInit) {}
   disconnect() {}
-  observe() {}
-  takeRecords() {
+  observe(_target: Element) {}
+  takeRecords(): IntersectionObserverEntry[] {
     return [];
   }
-  unobserve() {}
-} as any;
+  unobserve(_target: Element) {}
+};
 
 // Mock ResizeObserver
-global.ResizeObserver = class ResizeObserver {
-  constructor() {}
+global.ResizeObserver = class ResizeObserver implements globalThis.ResizeObserver {
+  constructor(_callback: ResizeObserverCallback) {}
   disconnect() {}
-  observe() {}
-  unobserve() {}
-} as any;
+  observe(_target: Element, _options?: ResizeObserverOptions) {}
+  unobserve(_target: Element) {}
+};
 
 // Mock Supabase client
 vi.mock('@/lib/supabase/client', () => ({
@@ -87,7 +90,7 @@ vi.mock('@/lib/supabase/client', () => ({
 // Suppress console errors in tests
 const originalError = console.error;
 beforeAll(() => {
-  console.error = (...args: any[]) => {
+  console.error = (...args: unknown[]) => {
     if (
       typeof args[0] === 'string' &&
       args[0].includes('Warning: ReactDOM.render')

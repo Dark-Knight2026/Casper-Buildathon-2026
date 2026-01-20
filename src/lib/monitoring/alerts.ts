@@ -11,7 +11,6 @@
  * @module monitoring/alerts
  */
 
-import { captureMessage } from './sentry';
 import { getPerformanceSummary } from './performance';
 import { getQueryMetricsSummary, getCacheStatistics } from './database';
 import { getLogStatistics, LogLevel } from './logger';
@@ -39,6 +38,16 @@ export enum AlertType {
 }
 
 /**
+ * Alert data interface for message formatting
+ */
+interface AlertData {
+  errorRate?: number;
+  avgPageLoad?: number;
+  avgDuration?: number;
+  cacheHitRate?: number;
+}
+
+/**
  * Alert configuration
  */
 interface AlertConfig {
@@ -59,7 +68,7 @@ interface AlertRule {
   description: string;
   config: AlertConfig;
   check: () => Promise<boolean>;
-  message: (data?: any) => string;
+  message: (data?: AlertData) => string;
 }
 
 /**
@@ -72,7 +81,7 @@ interface AlertNotification {
   severity: AlertSeverity;
   message: string;
   timestamp: number;
-  data?: any;
+  data?: AlertData;
   acknowledged: boolean;
 }
 
@@ -372,7 +381,7 @@ class AlertManager {
   /**
    * Trigger an alert
    */
-  private async triggerAlert(rule: AlertRule, data?: any): Promise<void> {
+  private async triggerAlert(rule: AlertRule, data?: AlertData): Promise<void> {
     const notification: AlertNotification = {
       id: `${rule.id}-${Date.now()}`,
       ruleId: rule.id,
@@ -406,24 +415,15 @@ class AlertManager {
    * Send notification to monitoring services
    */
   private async sendNotification(notification: AlertNotification): Promise<void> {
-    // Send to Sentry
-    const sentryLevel = this.getSentryLevel(notification.severity);
-    captureMessage(
-      `[${notification.type.toUpperCase()}] ${notification.message}`,
-      sentryLevel,
-      {
-        tags: {
-          alert_type: notification.type,
-          alert_severity: notification.severity,
-          rule_id: notification.ruleId,
-        },
-        extra: {
-          notification_id: notification.id,
-          timestamp: notification.timestamp,
-          data: notification.data,
-        },
-      }
-    );
+    // TODO: Integrate with monitoring service (Sentry, etc.) when ready for production
+    console.warn(`[${notification.type.toUpperCase()}] ${notification.message}`, {
+      alert_type: notification.type,
+      alert_severity: notification.severity,
+      rule_id: notification.ruleId,
+      notification_id: notification.id,
+      timestamp: notification.timestamp,
+      data: notification.data,
+    });
 
     // Send to other notification channels (email, Slack, PagerDuty, etc.)
     // Implement based on your notification preferences
@@ -447,24 +447,6 @@ class AlertManager {
     // Example: Send email
     if (notification.severity >= AlertSeverity.ERROR) {
       // await sendEmail(notification);
-    }
-  }
-
-  /**
-   * Convert alert severity to Sentry level
-   */
-  private getSentryLevel(severity: AlertSeverity): 'info' | 'warning' | 'error' | 'fatal' {
-    switch (severity) {
-      case AlertSeverity.INFO:
-        return 'info';
-      case AlertSeverity.WARNING:
-        return 'warning';
-      case AlertSeverity.ERROR:
-        return 'error';
-      case AlertSeverity.CRITICAL:
-        return 'fatal';
-      default:
-        return 'warning';
     }
   }
 

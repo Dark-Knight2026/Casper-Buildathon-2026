@@ -1,5 +1,8 @@
 // Google Analytics 4 Event Tracking
 
+// Import to ensure Window type augmentation is available
+import '@/lib/monitoring/performance';
+
 export interface GAEvent {
   action: string;
   category: string;
@@ -18,7 +21,7 @@ export const initGA = (measurementId: string) => {
 
     // Initialize gtag
     window.dataLayer = window.dataLayer || [];
-    function gtag(...args: any[]) {
+    function gtag(...args: (string | Date | Record<string, unknown>)[]) {
       window.dataLayer.push(args);
     }
     gtag('js', new Date());
@@ -136,10 +139,4 @@ export const trackTimeOnPage = (seconds: number) => {
   });
 };
 
-// Type declarations for window.gtag
-declare global {
-  interface Window {
-    dataLayer: any[];
-    gtag: (...args: any[]) => void;
-  }
-}
+// Note: Window.gtag type is declared in @/lib/monitoring/performance.ts

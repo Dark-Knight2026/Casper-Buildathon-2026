@@ -3,13 +3,24 @@
  * Provides real-time updates for maintenance requests using Supabase Realtime
  */
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import type { MaintenanceRequest } from '@/services/maintenanceService';
 import { RealtimeChannel } from '@supabase/supabase-js';
 import { logger } from '@/utils/logger';
 
 export type UserType = 'tenant' | 'landlord' | 'vendor';
+
+export interface MaintenanceMessage {
+  id: string;
+  request_id: string;
+  sender_id: string;
+  message: string;
+  created_at: string;
+  sender?: {
+    full_name: string;
+  };
+}
 
 export interface UseMaintenanceRealtimeOptions {
   userId: string;
@@ -36,12 +47,12 @@ export function useMaintenanceRealtime({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
-  const fetchRequests = async () => {
+  const fetchRequests = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
 
-      const filterColumn = 
+      const filterColumn =
         userType === 'tenant' ? 'tenant_id' :
         userType === 'landlord' ? 'landlord_id' : 'vendor_id';
 
@@ -59,7 +70,7 @@ export function useMaintenanceRealtime({
 
       if (fetchError) throw fetchError;
 
-      setRequests(data as any || []);
+      setRequests((data as MaintenanceRequest[]) || []);
     } catch (err) {
       const error = err instanceof Error ? err : new Error('Failed to fetch maintenance requests');
       setError(error);
@@ -67,7 +78,7 @@ export function useMaintenanceRealtime({
     } finally {
       setLoading(false);
     }
-  };
+  }, [userId, userType]);
 
   useEffect(() => {
     if (!autoFetch) return;
@@ -111,7 +122,7 @@ export function useMaintenanceRealtime({
                 .single();
 
               if (data) {
-                setRequests((prev) => [data as any, ...prev]);
+                setRequests((prev) => [data as MaintenanceRequest, ...prev]);
               }
             } else if (payload.eventType === 'UPDATE') {
               // Fetch updated request with relations
@@ -130,7 +141,7 @@ export function useMaintenanceRealtime({
               if (data) {
                 setRequests((prev) =>
                   prev.map((req) =>
-                    req.id === payload.new.id ? (data as any) : req
+                    req.id === payload.new.id ? (data as MaintenanceRequest) : req
                   )
                 );
               }
@@ -153,7 +164,7 @@ export function useMaintenanceRealtime({
         supabase.removeChannel(channel);
       }
     };
-  }, [userId, userType, autoFetch]);
+  }, [userId, userType, autoFetch, fetchRequests]);
 
   return { 
     requests, 
@@ -167,7 +178,7 @@ export function useMaintenanceRealtime({
  * Hook for real-time maintenance message updates
  */
 export function useMaintenanceMessagesRealtime(requestId: string) {
-  const [messages, setMessages] = useState<any[]>([]);
+  const [messages, setMessages] = useState<MaintenanceMessage[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {

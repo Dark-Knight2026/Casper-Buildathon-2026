@@ -12,7 +12,6 @@
  */
 
 import { onCLS, onFCP, onFID, onLCP, onTTFB, Metric } from 'web-vitals';
-import { captureMessage, addBreadcrumb } from './sentry';
 
 /**
  * Performance metric thresholds
@@ -40,7 +39,7 @@ interface PerformanceMetric {
   rating: 'good' | 'needs-improvement' | 'poor';
   timestamp: number;
   url?: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 /**
@@ -208,15 +207,10 @@ class PerformanceMonitor {
           
           // Track slow resources
           if (resource.duration > 1000) {
-            addBreadcrumb({
-              message: `Slow resource: ${resource.name}`,
-              category: 'performance',
-              level: 'warning',
-              data: {
-                duration: resource.duration,
-                size: resource.transferSize,
-                type: resource.initiatorType,
-              },
+            console.warn(`Slow resource: ${resource.name}`, {
+              duration: resource.duration,
+              size: resource.transferSize,
+              type: resource.initiatorType,
             });
           }
         }
@@ -266,21 +260,13 @@ class PerformanceMonitor {
 
     // Alert on poor performance
     if (metric.rating === 'poor') {
-      captureMessage(
-        `Poor ${metric.name} performance: ${metric.value.toFixed(2)}ms`,
-        'warning',
-        {
-          tags: {
-            metric: metric.name,
-            rating: metric.rating,
-          },
-          extra: {
-            value: metric.value,
-            url: metric.url,
-            metadata: metric.metadata,
-          },
-        }
-      );
+      console.warn(`Poor ${metric.name} performance: ${metric.value.toFixed(2)}ms`, {
+        metric: metric.name,
+        rating: metric.rating,
+        value: metric.value,
+        url: metric.url,
+        metadata: metric.metadata,
+      });
     }
 
     // Send to analytics
@@ -313,14 +299,9 @@ class PerformanceMonitor {
 
     // Alert on slow API requests
     if (duration > PERFORMANCE_THRESHOLDS.API_RESPONSE.needsImprovement) {
-      addBreadcrumb({
-        message: `Slow API request: ${method} ${endpoint}`,
-        category: 'api',
-        level: 'warning',
-        data: {
-          duration,
-          status,
-        },
+      console.warn(`Slow API request: ${method} ${endpoint}`, {
+        duration,
+        status,
       });
     }
 
@@ -354,14 +335,9 @@ class PerformanceMonitor {
 
     // Alert on slow queries
     if (!cached && duration > PERFORMANCE_THRESHOLDS.DATABASE_QUERY.needsImprovement) {
-      addBreadcrumb({
-        message: `Slow database query: ${query.substring(0, 100)}...`,
-        category: 'database',
-        level: 'warning',
-        data: {
-          duration,
-          cached,
-        },
+      console.warn(`Slow database query: ${query.substring(0, 100)}...`, {
+        duration,
+        cached,
       });
     }
 
@@ -523,13 +499,8 @@ export async function measureAsync<T>(
   } catch (error) {
     const duration = performance.now() - start;
     
-    addBreadcrumb({
-      message: `Failed ${category} operation: ${name}`,
-      category,
-      level: 'error',
-      data: { duration },
-    });
-    
+    console.error(`Failed ${category} operation: ${name}`, { duration });
+
     throw error;
   }
 }
@@ -557,14 +528,9 @@ export function measureSync<T>(
     return result;
   } catch (error) {
     const duration = performance.now() - start;
-    
-    addBreadcrumb({
-      message: `Failed operation: ${name}`,
-      category: 'performance',
-      level: 'error',
-      data: { duration },
-    });
-    
+
+    console.error(`Failed operation: ${name}`, { duration });
+
     throw error;
   }
 }
@@ -612,7 +578,8 @@ export function clearPerformanceMetrics(): void {
 // Type declarations for external libraries
 declare global {
   interface Window {
-    va?: (event: string, name: string, data?: Record<string, any>) => void;
-    gtag?: (event: string, name: string, data?: Record<string, any>) => void;
+    va?: (event: string, name: string, data?: Record<string, unknown>) => void;
+    gtag?: (event: string, name: string, data?: Record<string, unknown>) => void;
+    dataLayer?: (string | Date | Record<string, unknown>)[][];
   }
 }

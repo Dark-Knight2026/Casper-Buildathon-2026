@@ -20,13 +20,13 @@ describe('useMaintenanceRealtime', () => {
       subscribe: vi.fn(),
     };
 
-    (supabase.from as any).mockReturnValue({
+    (supabase.from as ReturnType<typeof vi.fn>).mockReturnValue({
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
       order: vi.fn().mockResolvedValue({ data: [], error: null }),
     });
 
-    (supabase.channel as any).mockReturnValue(mockChannel);
+    (supabase.channel as ReturnType<typeof vi.fn>).mockReturnValue(mockChannel);
 
     const { result } = renderHook(() =>
       useMaintenanceRealtime({
@@ -62,13 +62,13 @@ describe('useMaintenanceRealtime', () => {
       subscribe: vi.fn(),
     };
 
-    (supabase.from as any).mockReturnValue({
+    (supabase.from as ReturnType<typeof vi.fn>).mockReturnValue({
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
       order: vi.fn().mockResolvedValue({ data: mockRequests, error: null }),
     });
 
-    (supabase.channel as any).mockReturnValue(mockChannel);
+    (supabase.channel as ReturnType<typeof vi.fn>).mockReturnValue(mockChannel);
 
     const { result } = renderHook(() =>
       useMaintenanceRealtime({
@@ -91,13 +91,13 @@ describe('useMaintenanceRealtime', () => {
       subscribe: vi.fn(),
     };
 
-    (supabase.from as any).mockReturnValue({
+    (supabase.from as ReturnType<typeof vi.fn>).mockReturnValue({
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
       order: vi.fn().mockResolvedValue({ data: [], error: null }),
     });
 
-    (supabase.channel as any).mockReturnValue(mockChannel);
+    (supabase.channel as ReturnType<typeof vi.fn>).mockReturnValue(mockChannel);
 
     renderHook(() =>
       useMaintenanceRealtime({
@@ -121,7 +121,7 @@ describe('useMaintenanceRealtime', () => {
       subscribe: vi.fn(),
     };
 
-    (supabase.from as any).mockReturnValue({
+    (supabase.from as ReturnType<typeof vi.fn>).mockReturnValue({
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
       order: vi
@@ -129,7 +129,7 @@ describe('useMaintenanceRealtime', () => {
         .mockResolvedValue({ data: null, error: new Error('Database error') }),
     });
 
-    (supabase.channel as any).mockReturnValue(mockChannel);
+    (supabase.channel as ReturnType<typeof vi.fn>).mockReturnValue(mockChannel);
 
     const { result } = renderHook(() =>
       useMaintenanceRealtime({
@@ -162,13 +162,13 @@ describe('useMaintenanceRealtime', () => {
       subscribe: vi.fn(),
     };
 
-    (supabase.from as any).mockReturnValue({
+    (supabase.from as ReturnType<typeof vi.fn>).mockReturnValue({
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
       order: vi.fn().mockResolvedValue({ data: mockRequests, error: null }),
     });
 
-    (supabase.channel as any).mockReturnValue(mockChannel);
+    (supabase.channel as ReturnType<typeof vi.fn>).mockReturnValue(mockChannel);
 
     const { result } = renderHook(() =>
       useMaintenanceRealtime({

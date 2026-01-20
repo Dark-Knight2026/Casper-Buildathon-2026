@@ -32,7 +32,7 @@ interface ComponentHealth {
   status: HealthStatus;
   latency?: number;
   message?: string;
-  details?: Record<string, any>;
+  details?: Record<string, unknown>;
 }
 
 /**
