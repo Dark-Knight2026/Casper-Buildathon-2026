@@ -4,6 +4,35 @@ use rust_decimal::Decimal;
 
 // --- Auth Models ---
 
+#[derive(Debug, Deserialize)]
+pub struct NonceRequest {
+    pub wallet_address: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct NonceResponse {
+    pub nonce: String,
+    pub message: String, 
+}
+
+#[derive(Debug, Deserialize)]
+pub struct LoginRequest {
+    pub wallet_address: String,
+    pub signature: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct LoginResponse {
+    pub token: String,
+    pub user: UserInfo,
+}
+
+#[derive(Debug, Serialize)]
+pub struct UserInfo {
+    pub id: Uuid,
+    pub role: String,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Claims {
     pub sub: String, // User UUID

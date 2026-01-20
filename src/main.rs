@@ -5,12 +5,13 @@ use redis::Client as RedisClient;
 use std::net::SocketAddr;
 use std::sync::Arc;
 // Import handlers explicitly
-use handlers::{calculate_tax_liability, get_property_performance, health_handler};
+use handlers::{calculate_tax_liability, get_property_performance, health_handler, get_nonce,login,};
 
 pub mod auth;
 pub mod db;
 pub mod handlers;
 pub mod models;
+pub mod crypto;
 
 
 
@@ -58,6 +59,8 @@ async fn main() {
         .route("/health", get(health_handler))
         .route("/api/v1/tax/calculate-liability", post(calculate_tax_liability))
         .route("/api/v1/analytics/property-performance", post(get_property_performance))
+        .route("/api/v1/auth/nonce", get(get_nonce))
+        .route("/api/v1/auth/login", post(login)) 
         .with_state(state);
 
     // 7. Start server

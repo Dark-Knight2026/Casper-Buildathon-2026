@@ -7,13 +7,19 @@ use rust_decimal::Decimal;
 use rust_decimal::prelude::FromPrimitive;
 use crate::models::{
     PropertyPerformanceReport, PropertyPerformanceRequest, TaxCalculationRequest, TaxCategory,
-    TaxReport,
+    TaxReport, NonceRequest, NonceResponse, LoginRequest, LoginResponse, UserInfo
 };
 use serde_json::{json, Value}; 
 use std::sync::Arc;
 use serde::Serialize;
 use crate::auth::AuthUser;
 use crate::AppState;
+use redis::AsyncCommands;
+use rand::{distr::Alphanumeric, Rng};
+use chrono::{Duration, Utc};
+use jsonwebtoken::{encode, EncodingKey, Header};
+use crate::crypto::verify_casper_signature; 
+use crate::models::Claims; 
 
 // NOTE: This is a Mock implementation for Phase 1. 
 // Real DB queries will be implemented in the next iteration.
@@ -143,4 +149,138 @@ pub async fn health_handler(State(state): State<Arc<AppState>>) -> (StatusCode, 
     });
 
     (status_code, Json(response))
+}
+
+
+pub async fn get_nonce(
+    State(state): State<Arc<AppState>>,
+    axum::extract::Query(payload): axum::extract::Query<NonceRequest>,
+) -> Result<Json<NonceResponse>, StatusCode> {
+    // Generate a random string (16 characters)
+    let random_string: String = rand::rng()
+        .sample_iter(&Alphanumeric)
+        .take(16)
+        .map(char::from)
+        .collect();
+
+    // Create a message that the user will sign
+    let message = format!("Sign this message to login to LeaseFi. Nonce: {}", random_string);
+
+    // Store in Redis
+    let redis_key = format!("nonce:{}", payload.wallet_address);
+    
+    let mut redis_conn = state.redis.get_multiplexed_async_connection().await
+        .map_err(|e| {
+            tracing::error!("Redis connection error: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    let _: () = redis_conn.set_ex(&redis_key, &message, 300).await
+        .map_err(|e| {
+            tracing::error!("Failed to save nonce to Redis: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+
+    Ok(Json(NonceResponse {
+        nonce: random_string,
+        message,
+    }))
+}
+
+pub async fn login(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<LoginRequest>,
+) -> Result<Json<LoginResponse>, StatusCode> {
+
+    let mut redis_conn = state.redis.get_multiplexed_async_connection().await
+        .map_err(|e| {
+            tracing::error!("Redis connection error: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    let redis_key = format!("nonce:{}", payload.wallet_address);
+
+    let stored_nonce: String = redis_conn.get(&redis_key).await
+        .map_err(|_| {
+            tracing::error!("❌ Nonce NOT FOUND or EXPIRED for key: {}", redis_key);
+            StatusCode::UNAUTHORIZED
+        })?;
+
+
+    let expected_message = stored_nonce;
+
+    let is_valid = verify_casper_signature(
+        &payload.wallet_address,
+        &payload.signature,
+        &expected_message
+    );
+
+    match &is_valid {
+        Ok(true) => tracing::info!("🔓 Signature VALID"),
+        Ok(false) => tracing::error!("🔒 Signature INVALID (Math mismatch)"),
+        Err(e) => tracing::error!("💥 Crypto Error: {:?}", e),
+    }
+
+    // Remove Nonce (protection against signature reuse)
+    let _: () = redis_conn.del(&redis_key).await.unwrap_or(());
+
+    // Since the users table requires an email address, we generate a fake one for new users.
+    let placeholder_email = format!("wallet_{}@leasefi.local", &payload.wallet_address[..16]);
+    
+    // If a user with this wallet_address already exists, return it.
+    // If not, create a new one.
+    let user = sqlx::query!(
+        r#"
+        INSERT INTO users (
+            email, 
+            role, 
+            wallet_address, 
+            first_name, 
+            last_name,
+            auth_id,
+            status
+        )
+        VALUES ($1, 'tenant', $2, 'Wallet', 'User', NULL, 'active')
+        ON CONFLICT (email) DO UPDATE 
+            SET last_login_at = NOW() -- Якщо юзер існує, просто оновлюємо час входу
+        RETURNING id, role
+        "#,
+        placeholder_email,
+        payload.wallet_address
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|e| {
+        tracing::error!("Database error: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    // Generating a JWT token
+    let expiration = Utc::now()
+        .checked_add_signed(Duration::hours(24))
+        .expect("valid timestamp")
+        .timestamp();
+
+    let claims = Claims {
+        sub: user.id.to_string(),
+        role: user.role.clone(),
+        exp: expiration as usize,
+    };
+
+    let secret = std::env::var("SUPABASE_JWT_SECRET").expect("JWT_SECRET must be set");
+    
+    let token = encode(
+        &Header::default(),
+        &claims,
+        &EncodingKey::from_secret(secret.as_bytes()),
+    ).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(Json(LoginResponse {
+        token,
+        user: UserInfo {
+            id: user.id,
+            role: user.role,
+        },
+    }))
 }
