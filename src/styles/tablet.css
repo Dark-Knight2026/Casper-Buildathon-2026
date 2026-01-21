@@ -1,0 +1,285 @@
+/**
+ * Tablet Layout Optimizations
+ * Responsive styles for tablet devices (768px - 1024px)
+ */
+
+/* Tablet breakpoint: 768px - 1024px */
+@media (min-width: 768px) and (max-width: 1024px) {
+  /* Navigation optimizations */
+  .tablet-nav {
+    padding: 0.75rem 1rem;
+  }
+
+  .tablet-nav-item {
+    padding: 0.5rem 1rem;
+    min-height: 44px; /* Touch-friendly size */
+  }
+
+  /* Table optimizations */
+  .tablet-table {
+    font-size: 0.875rem;
+  }
+
+  .tablet-table th,
+  .tablet-table td {
+    padding: 0.75rem 0.5rem;
+  }
+
+  /* Hide less important columns on tablet */
+  .tablet-table .hide-tablet {
+    display: none;
+  }
+
+  /* Form optimizations */
+  .tablet-form input,
+  .tablet-form select,
+  .tablet-form textarea {
+    min-height: 44px; /* Touch-friendly */
+    font-size: 16px; /* Prevent zoom on iOS */
+  }
+
+  .tablet-form label {
+    font-size: 0.875rem;
+    margin-bottom: 0.5rem;
+  }
+
+  /* Grid layouts */
+  .tablet-grid-2 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .tablet-grid-1 {
+    grid-template-columns: 1fr;
+  }
+
+  /* Card layouts */
+  .tablet-card {
+    padding: 1rem;
+  }
+
+  /* Button groups */
+  .tablet-button-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .tablet-button-group button {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  /* Dashboard layouts */
+  .tablet-dashboard-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1rem;
+  }
+
+  /* Property cards */
+  .tablet-property-card {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .tablet-property-card img {
+    width: 100%;
+    height: 200px;
+    object-fit: cover;
+  }
+
+  /* Modal optimizations */
+  .tablet-modal {
+    max-width: 90vw;
+    max-height: 85vh;
+    overflow-y: auto;
+  }
+
+  /* Sidebar */
+  .tablet-sidebar {
+    width: 240px;
+  }
+
+  /* Typography */
+  .tablet-heading-1 {
+    font-size: 1.75rem;
+  }
+
+  .tablet-heading-2 {
+    font-size: 1.5rem;
+  }
+
+  .tablet-heading-3 {
+    font-size: 1.25rem;
+  }
+
+  /* Spacing */
+  .tablet-spacing-sm {
+    padding: 0.5rem;
+  }
+
+  .tablet-spacing-md {
+    padding: 1rem;
+  }
+
+  .tablet-spacing-lg {
+    padding: 1.5rem;
+  }
+
+  /* Touch targets */
+  .tablet-touch-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Comparison table */
+  .tablet-comparison {
+    overflow-x: auto;
+  }
+
+  .tablet-comparison table {
+    min-width: 600px;
+  }
+
+  /* Payment method cards */
+  .tablet-payment-method {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .tablet-payment-method .actions {
+    width: 100%;
+    margin-top: 0.75rem;
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  /* Lease document list */
+  .tablet-document-list {
+    flex-direction: column;
+  }
+
+  .tablet-document-item {
+    padding: 1rem;
+  }
+
+  /* Performance dashboard */
+  .tablet-performance-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* Automation dashboard */
+  .tablet-automation-tabs {
+    overflow-x: auto;
+  }
+
+  /* Property search filters */
+  .tablet-filters {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: white;
+    padding: 1rem;
+    border-bottom: 1px solid #e5e7eb;
+  }
+
+  /* Maintenance request cards */
+  .tablet-maintenance-card {
+    padding: 1rem;
+  }
+
+  /* Vendor directory */
+  .tablet-vendor-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* Analytics charts */
+  .tablet-chart-container {
+    height: 300px;
+  }
+
+  /* Notification list */
+  .tablet-notification-item {
+    padding: 0.75rem;
+  }
+
+  /* Message center */
+  .tablet-message-layout {
+    flex-direction: column;
+  }
+
+  .tablet-message-list {
+    height: 300px;
+    overflow-y: auto;
+  }
+
+  /* Tenant profile */
+  .tablet-profile-section {
+    padding: 1rem;
+  }
+
+  /* Landlord dashboard */
+  .tablet-dashboard-card {
+    min-height: 120px;
+  }
+
+  /* Lease creation wizard */
+  .tablet-wizard-step {
+    padding: 1.5rem 1rem;
+  }
+
+  /* Report builder */
+  .tablet-report-builder {
+    flex-direction: column;
+  }
+
+  .tablet-report-preview {
+    width: 100%;
+    margin-top: 1rem;
+  }
+}
+
+/* Portrait tablet (768px - 834px) */
+@media (min-width: 768px) and (max-width: 834px) and (orientation: portrait) {
+  .tablet-portrait-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .tablet-portrait-hide {
+    display: none;
+  }
+}
+
+/* Landscape tablet (834px - 1024px) */
+@media (min-width: 834px) and (max-width: 1024px) and (orientation: landscape) {
+  .tablet-landscape-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .tablet-landscape-sidebar {
+    width: 280px;
+  }
+}
+
+/* iPad specific (768px, 810px, 820px, 834px) */
+@media (min-width: 768px) and (max-width: 834px) {
+  .ipad-optimized {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .ipad-safe-area {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+}
+
+/* Android tablet specific */
+@media (min-width: 768px) and (max-width: 1024px) {
+  .android-tablet-optimized {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .android-tablet-scroll {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}

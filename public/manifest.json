@@ -1,0 +1,115 @@
+{
+  "name": "KeyChain Property Management",
+  "short_name": "KeyChain",
+  "description": "Professional property management platform for landlords",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#3b82f6",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/images/Landlords.jpg",
+      "sizes": "72x72",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/images/photo1764585020.jpg",
+      "sizes": "96x96",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/images/Icon.jpg",
+      "sizes": "128x128",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/images/photo1764585019.jpg",
+      "sizes": "144x144",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/images/photo1764585019.jpg",
+      "sizes": "152x152",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/images/photo1764585020.jpg",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/images/Icon.jpg",
+      "sizes": "384x384",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/images/photo1764585019.jpg",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/images/MobileScreenshot.jpg",
+      "sizes": "540x720",
+      "type": "image/png",
+      "form_factor": "narrow"
+    },
+    {
+      "src": "/images/Productivity.jpg",
+      "sizes": "1280x720",
+      "type": "image/png",
+      "form_factor": "wide"
+    }
+  ],
+  "categories": ["business", "productivity", "utilities"],
+  "shortcuts": [
+    {
+      "name": "Dashboard",
+      "short_name": "Dashboard",
+      "description": "View your property dashboard",
+      "url": "/dashboard",
+      "icons": [
+        {
+          "src": "/images/photo1764585020.jpg",
+          "sizes": "96x96"
+        }
+      ]
+    },
+    {
+      "name": "Add Property",
+      "short_name": "Add Property",
+      "description": "Add a new property",
+      "url": "/dashboard?action=add-property",
+      "icons": [
+        {
+          "src": "/images/photo1764585020.jpg",
+          "sizes": "96x96"
+        }
+      ]
+    },
+    {
+      "name": "Maintenance",
+      "short_name": "Maintenance",
+      "description": "View maintenance requests",
+      "url": "/dashboard?tab=maintenance",
+      "icons": [
+        {
+          "src": "/images/photo1764585020.jpg",
+          "sizes": "96x96"
+        }
+      ]
+    }
+  ],
+  "related_applications": [],
+  "prefer_related_applications": false
+}
