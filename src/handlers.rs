@@ -26,16 +26,38 @@ use crate::models::Claims;
 
 
 // Enum for Health Status
+
+/// Represents the status of a connection to an external service (Redis, Database, etc.).
 #[derive(Serialize, PartialEq)]
 #[serde(rename_all = "snake_case")] 
 enum ConnectionStatus {
+    /// Service is reachable and responding correctly.
     Connected,
+    /// Service is unreachable or connection failed.
     Disconnected,
+    /// An error occurred while checking the service status.
     Error,
+    /// The service returned a response that was not expected.
     UnknownResponse,
 }
 
 // Tax Calculation Handler
+
+/// Calculates the estimated tax liability for a given fiscal year.
+///
+/// This handler processes a `TaxCalculationRequest`, which includes income and deduction details,
+/// and returns a `TaxReport` with the estimated tax and a breakdown of categories.
+///
+/// # Arguments
+///
+/// * `state` - The application state (shared DB pool, etc.).
+/// * `_user` - The authenticated user (extracted from JWT).
+/// * `payload` - JSON payload containing fiscal year and property IDs.
+///
+/// # Returns
+///
+/// * `Ok(Json<TaxReport>)` - The calculated tax report.
+/// * `Err(StatusCode)` - HTTP error code if calculation fails.
 pub async fn calculate_tax_liability(
     State(_state): State<Arc<AppState>>, 
     _user: AuthUser, // Ensure user is authenticated
@@ -79,6 +101,21 @@ pub async fn calculate_tax_liability(
 }
 
 // Analytics Handler
+
+/// Retrieves performance metrics for a set of properties over a specified date range.
+///
+/// Calculates total revenue, expenses, net operating income (NOI), ROI, and occupancy rates.
+///
+/// # Arguments
+///
+/// * `state` - The application state.
+/// * `_user` - The authenticated user.
+/// * `payload` - JSON payload containing date range and property IDs.
+///
+/// # Returns
+///
+/// * `Ok(Json<PropertyPerformanceReport>)` - The performance report.
+/// * `Err(StatusCode)` - HTTP error code if retrieval fails.
 pub async fn get_property_performance(
     State(_state): State<Arc<AppState>>,
     _user: AuthUser,
@@ -107,6 +144,17 @@ pub async fn get_property_performance(
 }
 
 // Health Check Handler
+
+/// Checks the health status of the application and its dependencies.
+///
+/// verifies connectivity to:
+/// - Redis (Cache)
+/// - PostgreSQL (Database)
+///
+/// # Returns
+///
+/// * `(StatusCode, Json<Value>)` - HTTP status 200 if healthy, 503 if any service is down,
+///   along with a JSON body detailing the status of each component.
 pub async fn health_handler(State(state): State<Arc<AppState>>) -> (StatusCode, Json<Value>) {
     // 1. Check Redis
     let redis_status = match state.redis.get_multiplexed_async_connection().await {
@@ -152,6 +200,20 @@ pub async fn health_handler(State(state): State<Arc<AppState>>) -> (StatusCode, 
 }
 
 
+/// Generates a cryptographic nonce for login challenge-response.
+///
+/// The nonce is securely stored in Redis with a short expiration time (5 minutes).
+/// The user must sign the generated message using their wallet's private key to authenticate.
+///
+/// # Arguments
+///
+/// * `state` - The application state containing the Redis connection.
+/// * `payload` - Query parameters containing the user's wallet address.
+///
+/// # Returns
+///
+/// * `Ok(Json<NonceResponse>)` - JSON containing the nonce and the message to sign.
+/// * `Err(StatusCode)` - 500 Internal Server Error if Redis operations fail.
 pub async fn get_nonce(
     State(state): State<Arc<AppState>>,
     axum::extract::Query(payload): axum::extract::Query<NonceRequest>,
@@ -188,6 +250,23 @@ pub async fn get_nonce(
     }))
 }
 
+/// Authenticates a user by verifying their signature against a stored nonce.
+///
+/// 1. Retrieves the previously generated nonce from Redis using the wallet address.
+/// 2. Verifies the provided signature against the stored message and public key.
+/// 3. If valid, creates or updates the user record in the database.
+/// 4. Generates a signed JWT for session management.
+///
+/// # Arguments
+///
+/// * `state` - The application state.
+/// * `payload` - JSON payload containing the wallet address and signature.
+///
+/// # Returns
+///
+/// * `Ok(Json<LoginResponse>)` - JSON containing the JWT and user info.
+/// * `Err(StatusCode)` - 401 Unauthorized if signature or nonce is invalid,
+///   or 500 Internal Server Error for DB/Redis failures.
 pub async fn login(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<LoginRequest>,
@@ -243,7 +322,7 @@ pub async fn login(
         )
         VALUES ($1, 'tenant', $2, 'Wallet', 'User', NULL, 'active')
         ON CONFLICT (email) DO UPDATE 
-            SET last_login_at = NOW() -- Якщо юзер існує, просто оновлюємо час входу
+            SET last_login_at = NOW()
         RETURNING id, role
         "#,
         placeholder_email,

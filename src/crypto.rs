@@ -6,18 +6,39 @@ use casper_types::{
 };
 use thiserror::Error;
 
+/// Custom error types for cryptographic operations.
 #[derive(Debug, Error)]
 pub enum CryptoError {
+    /// Error when failing to decode a hexadecimal string.
     #[error("Failed to decode hex: {0}")]
     HexError(#[from] hex::FromHexError),
     
+    /// Error related to Casper-specific type parsing or operations.
     #[error("Failed to parse Casper type: {0}")]
     CasperError(String),
     
+    /// Represents a scenario where the signature itself is malformed or verification cannot proceed.
     #[error("Signature verification failed")]
     InvalidSignature,
 }
 
+/// Verifies a Casper-compatible cryptographic signature.
+///
+/// This function takes a public key, a signature, and a message, all in their string representation
+/// (hex for key and signature), and verifies if the signature corresponds to the message signed
+/// by the private key associated with the provided public key.
+///
+/// # Arguments
+///
+/// * `public_key_hex` - The hexadecimal string representation of the public key.
+/// * `signature_hex` - The hexadecimal string representation of the signature.
+/// * `message` - The raw message string that was signed.
+///
+/// # Returns
+///
+/// * `Ok(true)` if the signature is valid.
+/// * `Ok(false)` if the signature is invalid but the input format was correct.
+/// * `Err(CryptoError)` if parsing the keys or signature fails.
 pub fn verify_casper_signature(
     public_key_hex: &str,
     signature_hex: &str,
