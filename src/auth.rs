@@ -1,3 +1,4 @@
+use crate::models::Claims;
 use axum::{
     async_trait,
     extract::FromRequestParts,
@@ -8,7 +9,6 @@ use axum::{
 use jsonwebtoken::{decode, DecodingKey, Validation};
 use serde_json::json;
 use std::env;
-use crate::models::Claims;
 
 pub struct AuthUser(pub Claims);
 
@@ -32,8 +32,7 @@ where
 
         let token = &auth_header[7..];
         let secret = env::var("SUPABASE_JWT_SECRET").map_err(|_| AuthError::ServerConfiguration)?;
-        
-        
+
         // Re-enabling signature validation
         let validation = Validation::new(jsonwebtoken::Algorithm::HS256);
 
@@ -60,7 +59,10 @@ impl IntoResponse for AuthError {
         let (status, error_message) = match self {
             AuthError::MissingCredentials => (StatusCode::UNAUTHORIZED, "Missing credentials"),
             AuthError::InvalidToken => (StatusCode::UNAUTHORIZED, "Invalid token"),
-            AuthError::ServerConfiguration => (StatusCode::INTERNAL_SERVER_ERROR, "Server configuration error"),
+            AuthError::ServerConfiguration => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Server configuration error",
+            ),
         };
         let body = Json(json!({
             "error": error_message,

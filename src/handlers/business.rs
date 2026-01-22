@@ -1,24 +1,36 @@
 use axum::{extract::State, http::StatusCode, Json};
 use axum::{routing::post, Router};
-use rust_decimal::Decimal;
+use chrono::NaiveDate;
 use rust_decimal::prelude::FromPrimitive;
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use uuid::Uuid;
-use crate::AppState;
-use crate::auth::AuthUser;
 
+use crate::auth::AuthUser;
+use crate::models::PropertyId;
+use crate::AppState;
+
+/// Represents the specific category of a tax-deductible expense.
+#[derive(Debug, Serialize, Deserialize)]
+pub enum TaxCategoryType {
+    #[serde(rename = "Property Tax")]
+    PropertyTax,
+    #[serde(rename = "Maintenance")]
+    Maintenance,
+    #[serde(rename = "Management Fees")]
+    ManagementFees,
+    Other(String),
+}
 
 // --- Tax Models ---
 
 /// Request payload for calculating tax liability.
 #[derive(Debug, Deserialize)]
 pub struct TaxCalculationRequest {
-    /// The fiscal year for which to calculate taxes (e.g., 2024).
-    pub fiscal_year: i32,
-    /// List of property IDs to include in the calculation.
-    pub property_ids: Vec<Uuid>,
-    /// Whether to include depreciation calculations in deductions.
+    /// The fiscal year (must be positive).
+    pub fiscal_year: u32,
+    /// List of property IDs.
+    pub property_ids: Vec<PropertyId>,
     #[serde(default)]
     pub include_depreciation: bool,
 }
@@ -40,7 +52,7 @@ pub struct TaxReport {
 #[derive(Debug, Serialize)]
 pub struct TaxCategory {
     /// The name of the tax category (e.g., "Property Tax", "Maintenance").
-    pub category: String,
+    pub category: TaxCategoryType,
     /// The calculated amount for this category.
     pub amount: Decimal,
 }
@@ -50,12 +62,12 @@ pub struct TaxCategory {
 /// Request payload for retrieving property performance analytics.
 #[derive(Debug, Deserialize)]
 pub struct PropertyPerformanceRequest {
-    /// The start date for the analysis period (ISO 8601 format, e.g., "2024-01-01").
-    pub start_date: String, 
-    /// The end date for the analysis period (ISO 8601 format).
-    pub end_date: String,
+    /// Start date (YYYY-MM-DD).
+    pub start_date: NaiveDate,
+    /// End date (YYYY-MM-DD).
+    pub end_date: NaiveDate,
     /// List of property IDs to analyze.
-    pub property_ids: Vec<Uuid>,
+    pub property_ids: Vec<PropertyId>,
 }
 
 /// Comprehensive report on property performance metrics.
@@ -72,7 +84,6 @@ pub struct PropertyPerformanceReport {
     /// The average occupancy rate as a percentage (0-100).
     pub occupancy_rate: Decimal,
 }
-
 
 // Tax Calculation Handler
 
@@ -92,45 +103,41 @@ pub struct PropertyPerformanceReport {
 /// * `Ok(Json<TaxReport>)` - The calculated tax report.
 /// * `Err(StatusCode)` - HTTP error code if calculation fails.
 pub async fn calculate_tax_liability(
-    State(_state): State<Arc<AppState>>, 
-    _user: AuthUser, // Ensure user is authenticated
+    State(_state): State<Arc<AppState>>,
+    _user: AuthUser,
     Json(payload): Json<TaxCalculationRequest>,
 ) -> Result<Json<TaxReport>, StatusCode> {
-    // TODO: Fetch real income/expenses from DB using sqlx
-    
-    // Mock data simulation
+    // MOCK Implementation
     let total_income = Decimal::from_i64(150000).unwrap();
     let mut total_deductions = Decimal::from_i64(45000).unwrap();
-    
+
     if payload.include_depreciation {
         total_deductions += Decimal::from_i64(12000).unwrap();
     }
 
     let taxable_income = total_income - total_deductions;
-    let tax_rate = Decimal::from_f64(0.24).unwrap(); // Simplified 24% tax rate
+    let tax_rate = Decimal::from_f64(0.24).unwrap();
     let estimated_tax = taxable_income * tax_rate;
 
-    let report = TaxReport {
+    Ok(Json(TaxReport {
         total_taxable_income: taxable_income,
         total_deductions,
         estimated_tax,
         breakdown: vec![
             TaxCategory {
-                category: "Property Tax".to_string(),
+                category: TaxCategoryType::PropertyTax,
                 amount: Decimal::from_i64(15000).unwrap(),
             },
             TaxCategory {
-                category: "Maintenance".to_string(),
+                category: TaxCategoryType::Maintenance,
                 amount: Decimal::from_i64(20000).unwrap(),
             },
             TaxCategory {
-                category: "Management Fees".to_string(),
+                category: TaxCategoryType::ManagementFees,
                 amount: Decimal::from_i64(10000).unwrap(),
             },
         ],
-    };
-
-    Ok(Json(report))
+    }))
 }
 
 // Analytics Handler
@@ -154,34 +161,24 @@ pub async fn get_property_performance(
     _user: AuthUser,
     Json(_payload): Json<PropertyPerformanceRequest>,
 ) -> Result<Json<PropertyPerformanceReport>, StatusCode> {
-    // TODO: Implement complex aggregation queries via SQLx
-    
-    let total_revenue = Decimal::from_i64(240000).unwrap();
-    let total_expenses = Decimal::from_i64(80000).unwrap();
-    let net_operating_income = total_revenue - total_expenses;
-    
-    // ROI = (Net Profit / Total Investment) * 100
-    // Assuming total investment is 1,000,000 for this example
-    let roi_percentage = Decimal::from_f64(16.0).unwrap(); 
-    let occupancy_rate = Decimal::from_f64(95.5).unwrap();
-
-    let report = PropertyPerformanceReport {
-        total_revenue,
-        total_expenses,
-        net_operating_income,
-        roi_percentage,
-        occupancy_rate,
-    };
-
-    Ok(Json(report))
+    // MOCK Implementation
+    Ok(Json(PropertyPerformanceReport {
+        total_revenue: Decimal::from_i64(240000).unwrap(),
+        total_expenses: Decimal::from_i64(80000).unwrap(),
+        net_operating_income: Decimal::from_i64(160000).unwrap(),
+        roi_percentage: Decimal::from_f64(16.0).unwrap(),
+        occupancy_rate: Decimal::from_f64(95.5).unwrap(),
+    }))
 }
 
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/tax/calculate-liability", post(calculate_tax_liability))
-        .route("/analytics/property-performance", post(get_property_performance))
+        .route(
+            "/analytics/property-performance",
+            post(get_property_performance),
+        )
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -191,7 +188,6 @@ mod tests {
 
     #[test]
     fn test_tax_request_deserialization() {
-        
         let property_id = Uuid::new_v4();
         let json_data = json!({
             "fiscal_year": 2024,
@@ -199,12 +195,27 @@ mod tests {
             "include_depreciation": true
         });
 
-        
-        let request: TaxCalculationRequest = serde_json::from_value(json_data).expect("Failed to deserialize");
+        let request: TaxCalculationRequest =
+            serde_json::from_value(json_data).expect("Failed to deserialize");
 
-        
         assert_eq!(request.fiscal_year, 2024);
         assert_eq!(request.property_ids[0], property_id);
         assert!(request.include_depreciation);
+    }
+
+    #[test]
+    fn test_date_parsing() {
+        let json_data = json!({
+            "start_date": "2024-01-01",
+            "end_date": "2024-12-31",
+            "property_ids": []
+        });
+
+        let request: PropertyPerformanceRequest =
+            serde_json::from_value(json_data).expect("Date parsing failed");
+        assert_eq!(
+            request.start_date,
+            NaiveDate::from_ymd_opt(2024, 1, 1).unwrap()
+        );
     }
 }

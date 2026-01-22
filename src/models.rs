@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 use strum::{Display, EnumString};
+use uuid::Uuid;
 
 // --- Type Aliases ---
 pub type UserId = Uuid;
@@ -10,14 +10,14 @@ pub type PropertyId = Uuid;
 
 /// Defines the role of a user in the system.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, EnumString, Display)]
-#[serde(rename_all = "snake_case")] 
-#[strum(serialize_all = "snake_case")] 
+#[serde(rename_all = "snake_case")]
+#[strum(serialize_all = "snake_case")]
 pub enum UserRole {
     Tenant,
     Landlord,
     Agent,
     Admin,
-    #[serde(other)] 
+    #[serde(other)]
     Unknown,
 }
 
@@ -27,7 +27,7 @@ pub enum UserRole {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Claims {
     /// Subject: The User UUID.
-    pub sub: UserId, 
+    pub sub: UserId,
     /// The role assigned to the user.
     pub role: UserRole,
     /// Expiration time of the token (Unix timestamp).
