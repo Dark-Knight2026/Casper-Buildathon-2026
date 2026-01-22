@@ -1,11 +1,12 @@
 use axum::{
 routing::{get, post}, Router,
 };
+use tower_http::trace::TraceLayer;
 use redis::Client as RedisClient;
 use std::net::SocketAddr;
 use std::sync::Arc;
 // Import handlers explicitly
-use handlers::{calculate_tax_liability, get_property_performance, health_handler, get_nonce,login,};
+use handlers::{calculate_tax_liability, get_property_performance, get_nonce, login, health_check};
 
 pub mod auth;
 pub mod db;
@@ -56,11 +57,10 @@ async fn main() {
 
     // 6. Configure router 
     let app = Router::new()
-        .route("/health", get(health_handler))
-        .route("/api/v1/tax/calculate-liability", post(calculate_tax_liability))
-        .route("/api/v1/analytics/property-performance", post(get_property_performance))
-        .route("/api/v1/auth/nonce", get(get_nonce))
-        .route("/api/v1/auth/login", post(login)) 
+        .merge(handlers::health::router()) 
+        .nest("/api/v1/auth", handlers::auth::router())         
+        .nest("/api/v1", handlers::business::router())          
+        .layer(TraceLayer::new_for_http())
         .with_state(state);
 
     // 7. Start server
@@ -71,6 +71,35 @@ async fn main() {
     tracing::info!("🚀 Server listening on {}", addr);
     
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
-    axum::serve(listener, app).await.unwrap();
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal())
+        .await
+        .unwrap();
+}
+
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("failed to install Ctrl+C handler");
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            .expect("failed to install signal handler")
+            .recv()
+            .await;
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => {},
+        _ = terminate => {},
+    }
+
+    tracing::info!("Shutting down gracefully...");
 }
 

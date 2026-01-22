@@ -118,7 +118,7 @@ mod tests {
 
         let wallet_address = public_key.to_hex();
 
-        let message_from_server = "Sign this message to login to LeaseFi. Nonce: fvlClyzRRxxoYP9N";
+        let message_from_server = "Sign this message to login to LeaseFi. Nonce: srR9hcpHIECpVdQx";
         
         let message_bytes = message_from_server.as_bytes();
 
