@@ -145,8 +145,9 @@ pub async fn login(
     Json(payload): Json<LoginRequest>,
 ) -> Result<Json<LoginResponse>, StatusCode> {
     // Validation: Check wallet address length
-    if payload.wallet_address.len() < 16 {
-        tracing::error!("Wallet address is too short");
+    let len = payload.wallet_address.len();
+    if len != 66 && len != 68 {
+        tracing::error!("Invalid wallet address length: {}. Expected 66 or 68.", len);
         return Err(StatusCode::BAD_REQUEST);
     }
 
