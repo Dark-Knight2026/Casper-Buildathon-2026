@@ -5,6 +5,10 @@ use serde::Serialize;
 use serde_json::{json, Value};
 use std::sync::Arc;
 
+pub fn router() -> Router<Arc<AppState>> {
+    Router::new().route("/health", get(health_check))
+}
+
 // Enum for Health Status
 
 /// Represents the status of a connection to an external service (Redis, Database, etc.).
@@ -78,26 +82,4 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> (StatusCode, Js
     });
 
     (status_code, Json(response))
-}
-
-pub fn router() -> Router<Arc<AppState>> {
-    Router::new().route("/health", get(health_check))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_health_response_structure() {
-        let response = json!({
-            "status": "ok",
-            "service": "leasefi-backend",
-            "redis": "connected",
-            "database": "connected"
-        });
-
-        assert_eq!(response["status"], "ok");
-        assert_eq!(response["service"], "leasefi-backend");
-    }
 }

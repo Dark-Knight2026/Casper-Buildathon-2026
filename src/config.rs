@@ -1,3 +1,4 @@
+use redis::Client as RedisClient;
 use secrecy::SecretString;
 use std::env;
 
@@ -11,7 +12,7 @@ pub struct Config {
 
 impl Config {
     /// Loads configuration from environment variables.
-    /// Panics if required variables are missing.
+    /// Returns error if required variables are missing.
     pub fn from_env() -> Result<Self, String> {
         let database_url = env::var("DATABASE_URL")
             .map(SecretString::from)
@@ -35,4 +36,12 @@ impl Config {
             port,
         })
     }
+}
+
+/// Global application state
+#[derive(Clone)]
+pub struct AppState {
+    pub db: sqlx::PgPool,
+    pub redis: RedisClient,
+    pub config: Config,
 }

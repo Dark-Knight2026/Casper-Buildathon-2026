@@ -1,6 +1,6 @@
 use axum::Router;
 use config::Config;
-use redis::Client as RedisClient;
+
 use secrecy::ExposeSecret;
 use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
 use std::net::SocketAddr;
@@ -9,18 +9,13 @@ use std::sync::Arc;
 use std::time::Duration;
 use tower_http::trace::TraceLayer;
 
+use crate::config::AppState;
+
 pub mod auth;
 pub mod config;
 pub mod crypto;
 pub mod handlers;
 pub mod models;
-
-// Global application state
-pub struct AppState {
-    pub db: sqlx::PgPool,
-    pub redis: RedisClient,
-    pub config: Config,
-}
 
 #[tokio::main]
 async fn main() {

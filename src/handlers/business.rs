@@ -10,6 +10,15 @@ use crate::auth::AuthUser;
 use crate::models::PropertyId;
 use crate::AppState;
 
+pub fn router() -> Router<Arc<AppState>> {
+    Router::new()
+        .route("/tax/calculate-liability", post(calculate_tax_liability))
+        .route(
+            "/analytics/property-performance",
+            post(get_property_performance),
+        )
+}
+
 /// Represents the specific category of a tax-deductible expense.
 #[derive(Debug, Serialize, Deserialize)]
 pub enum TaxCategoryType {
@@ -169,15 +178,6 @@ pub async fn get_property_performance(
         roi_percentage: Decimal::from_f64(16.0).unwrap(),
         occupancy_rate: Decimal::from_f64(95.5).unwrap(),
     }))
-}
-
-pub fn router() -> Router<Arc<AppState>> {
-    Router::new()
-        .route("/tax/calculate-liability", post(calculate_tax_liability))
-        .route(
-            "/analytics/property-performance",
-            post(get_property_performance),
-        )
 }
 
 #[cfg(test)]

@@ -20,6 +20,12 @@ use crate::AppState;
 // --- Constants ---
 const LOGIN_NONCE_TTL: u64 = 300;
 
+pub fn router() -> Router<Arc<AppState>> {
+    Router::new()
+        .route("/nonce", get(get_nonce))
+        .route("/login", post(login))
+}
+
 // --- Auth Models ---
 
 /// Request payload for generating a login nonce.
@@ -226,10 +232,7 @@ pub async fn login(
         exp: expiration as usize,
     };
 
-    let secret = std::env::var("SUPABASE_JWT_SECRET").map_err(|_| {
-        tracing::error!("CRITICAL: SUPABASE_JWT_SECRET is not set");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let secret = state.config.jwt_secret.expose_secret();
 
     let token = encode(
         &Header::default(),
@@ -248,10 +251,4 @@ pub async fn login(
             role: user_role,
         },
     }))
-}
-
-pub fn router() -> Router<Arc<AppState>> {
-    Router::new()
-        .route("/nonce", get(get_nonce))
-        .route("/login", post(login))
 }
