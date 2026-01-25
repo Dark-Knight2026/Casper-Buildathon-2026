@@ -5,7 +5,7 @@ use styks_contracts::styks_price_feed::StyksPriceFeedContractRef;
 use crate::ico::{
     errors::Error,
     events::{CurrencyAdded, CurrencyRemoved, ICOScheduleAdded},
-    types::{Currency, ICOSchedule},
+    types::{Currency, ICOSchedule, ICOScheduleCreateParams},
 };
 
 pub type ICOScheduleId = U128;
@@ -52,7 +52,7 @@ impl ICO {
     }
 
     /// Adds a new ICO schedule by the owner
-    pub fn add_ico_schedule(&mut self, ico_schedule: ICOSchedule) -> ICOScheduleId {
+    pub fn add_ico_schedule(&mut self, ico_schedule: ICOScheduleCreateParams) -> ICOScheduleId {
         self.assert_owner();
 
         let ico_id = self.ico_schedules_count.get_or_default();
@@ -68,7 +68,7 @@ impl ICO {
         let self_address = self.env().self_address();
         let sale_amount = ico_schedule.sale_amount;
 
-        self.ico_schedules.set(&ico_id, ico_schedule);
+        self.ico_schedules.set(&ico_id, ico_schedule.into());
         self.ico_schedules_count.set(ico_id + 1);
 
         self.tailor_coin
@@ -97,7 +97,7 @@ impl ICO {
 
     fn validate_ico_schedule(
         &self,
-        ico_schedule: &ICOSchedule,
+        ico_schedule: &ICOScheduleCreateParams,
         prev_ico_schedule_id: Option<ICOScheduleId>,
     ) {
         if prev_ico_schedule_id.is_some() {
@@ -180,10 +180,19 @@ pub mod types {
     use odra::{casper_types::U256, ContractEnv};
 
     #[odra::odra_type]
+    pub struct ICOScheduleCreateParams {
+        pub start_timestamp: u64,
+        pub end_timestamp: u64,
+        pub sale_amount: U256,
+        pub price: U256,
+    }
+
+    #[odra::odra_type]
     pub struct ICOSchedule {
         pub start_timestamp: u64,
         pub end_timestamp: u64,
         pub sale_amount: U256,
+        pub sold_amount: U256,
         pub price: U256,
     }
 
@@ -197,6 +206,18 @@ pub mod types {
     impl ICOSchedule {
         pub fn is_active(&self, env: &ContractEnv) -> bool {
             env.get_block_time() <= self.end_timestamp
+        }
+    }
+
+    impl From<ICOScheduleCreateParams> for ICOSchedule {
+        fn from(ico_schedule: ICOScheduleCreateParams) -> Self {
+            Self {
+                start_timestamp: ico_schedule.start_timestamp,
+                end_timestamp: ico_schedule.end_timestamp,
+                sale_amount: ico_schedule.sale_amount,
+                sold_amount: U256::zero(),
+                price: ico_schedule.price,
+            }
         }
     }
 }
