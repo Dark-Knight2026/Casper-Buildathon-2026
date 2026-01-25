@@ -5,6 +5,7 @@ extern crate alloc;
 pub mod common;
 pub mod constants;
 pub mod escrow;
+pub mod ico;
 pub mod lease;
 pub mod nft;
 pub mod roles;

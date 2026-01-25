@@ -4,9 +4,76 @@
   "authors": [],
   "repository": null,
   "homepage": null,
-  "contract_name": "Treasury",
+  "contract_name": "ICO",
   "contract_version": "0.1.0",
   "types": [
+    {
+      "struct": {
+        "name": "CurrencyAdded",
+        "description": null,
+        "members": [
+          {
+            "name": "currency",
+            "description": null,
+            "ty": "Currency"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
+        "name": "CurrencyRemoved",
+        "description": null,
+        "members": [
+          {
+            "name": "currency",
+            "description": null,
+            "ty": "Currency"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
+        "name": "ICOSchedule",
+        "description": null,
+        "members": [
+          {
+            "name": "start_timestamp",
+            "description": null,
+            "ty": "U64"
+          },
+          {
+            "name": "end_timestamp",
+            "description": null,
+            "ty": "U64"
+          },
+          {
+            "name": "sale_amount",
+            "description": null,
+            "ty": "U256"
+          },
+          {
+            "name": "price",
+            "description": null,
+            "ty": "U256"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
+        "name": "ICOScheduleAdded",
+        "description": null,
+        "members": [
+          {
+            "name": "id",
+            "description": null,
+            "ty": "U128"
+          }
+        ]
+      }
+    },
     {
       "struct": {
         "name": "OwnershipTransferred",
@@ -30,32 +97,27 @@
       }
     },
     {
-      "struct": {
-        "name": "ReservesWithdrawn",
+      "enum": {
+        "name": "Currency",
         "description": null,
-        "members": [
+        "variants": [
           {
-            "name": "recipient",
+            "name": "CSPR",
             "description": null,
-            "ty": "Key"
+            "discriminant": 0,
+            "ty": "Unit"
           },
           {
-            "name": "amount",
+            "name": "USDC",
             "description": null,
-            "ty": "U256"
-          }
-        ]
-      }
-    },
-    {
-      "struct": {
-        "name": "RewardsDeposited",
-        "description": null,
-        "members": [
+            "discriminant": 1,
+            "ty": "Unit"
+          },
           {
-            "name": "amount",
+            "name": "USDT",
             "description": null,
-            "ty": "U256"
+            "discriminant": 2,
+            "ty": "Unit"
           }
         ]
       }
@@ -73,14 +135,34 @@
       "discriminant": 20001
     },
     {
+      "name": "InvalidICOScheduleEndTimestamp",
+      "description": "",
+      "discriminant": 59002
+    },
+    {
+      "name": "InvalidICOScheduleId",
+      "description": "",
+      "discriminant": 59000
+    },
+    {
+      "name": "InvalidICOSchedulePrice",
+      "description": "",
+      "discriminant": 59004
+    },
+    {
+      "name": "InvalidICOScheduleSaleAmount",
+      "description": "",
+      "discriminant": 59003
+    },
+    {
+      "name": "InvalidICOScheduleStartTimestamp",
+      "description": "",
+      "discriminant": 59001
+    },
+    {
       "name": "MissingRole",
       "description": "The role is missing.",
       "discriminant": 20003
-    },
-    {
-      "name": "NotEnoughReserves",
-      "description": "",
-      "discriminant": 64002
     },
     {
       "name": "OwnerNotSet",
@@ -91,35 +173,9 @@
       "name": "RoleRenounceForAnotherAddress",
       "description": "The role cannot be renounced for another address.",
       "discriminant": 20004
-    },
-    {
-      "name": "StakingContractIsNotSet",
-      "description": "",
-      "discriminant": 64001
-    },
-    {
-      "name": "TailorCoinContractIsNotSet",
-      "description": "",
-      "discriminant": 64000
     }
   ],
   "entry_points": [
-    {
-      "name": "set_staking",
-      "description": "Sets the Staking contract address by the owner",
-      "is_mutable": true,
-      "arguments": [
-        {
-          "name": "staking",
-          "description": null,
-          "ty": "Key",
-          "optional": false
-        }
-      ],
-      "return_ty": "Unit",
-      "is_contract_context": true,
-      "access": "public"
-    },
     {
       "name": "set_tailor_coin",
       "description": "Sets the TailorCoin (BIG) token contract address by the owner",
@@ -137,36 +193,20 @@
       "access": "public"
     },
     {
-      "name": "deposit_rewards",
-      "description": "Allows to deposit any rewards amount in the TailorCoin (BIG) token by anyone, then distributes these rewards",
+      "name": "add_currency",
+      "description": "Adds a new currency by the owner. Added currency will be supported for making purchases during ICOs",
       "is_mutable": true,
       "arguments": [
         {
-          "name": "amount",
+          "name": "currency",
           "description": null,
-          "ty": "U256",
-          "optional": false
-        }
-      ],
-      "return_ty": "Unit",
-      "is_contract_context": true,
-      "access": "public"
-    },
-    {
-      "name": "withdraw_reserves",
-      "description": "Allows to withdraw any available reserves amount by the owner",
-      "is_mutable": true,
-      "arguments": [
-        {
-          "name": "recipient",
-          "description": null,
-          "ty": "Key",
+          "ty": "Currency",
           "optional": false
         },
         {
-          "name": "amount",
+          "name": "address",
           "description": null,
-          "ty": "U256",
+          "ty": "Key",
           "optional": false
         }
       ],
@@ -175,29 +215,34 @@
       "access": "public"
     },
     {
-      "name": "get_reserves",
-      "description": "Returns the TailorCoin (BIG) token reserves stored on this contract and available to withdraw by the owner",
-      "is_mutable": false,
-      "arguments": [],
-      "return_ty": "U256",
+      "name": "remove_currency",
+      "description": "Removes a currency by the owner. Removed currency will not be supported for making purchases during ICOs",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "currency",
+          "description": null,
+          "ty": "Currency",
+          "optional": false
+        }
+      ],
+      "return_ty": "Unit",
       "is_contract_context": true,
       "access": "public"
     },
     {
-      "name": "get_staking_contract_address",
-      "description": "Returns the Staking contract address",
-      "is_mutable": false,
-      "arguments": [],
-      "return_ty": "Key",
-      "is_contract_context": true,
-      "access": "public"
-    },
-    {
-      "name": "get_tailor_coin_contract_address",
-      "description": "Returns the TailorCoin (BIG) token contract address",
-      "is_mutable": false,
-      "arguments": [],
-      "return_ty": "Key",
+      "name": "add_ico_schedule",
+      "description": "Adds a new ICO schedule by the owner",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "ico_schedule",
+          "description": null,
+          "ty": "ICOSchedule",
+          "optional": false
+        }
+      ],
+      "return_ty": "U128",
       "is_contract_context": true,
       "access": "public"
     },
@@ -238,20 +283,24 @@
   ],
   "events": [
     {
+      "name": "CurrencyAdded",
+      "ty": "CurrencyAdded"
+    },
+    {
+      "name": "CurrencyRemoved",
+      "ty": "CurrencyRemoved"
+    },
+    {
+      "name": "ICOScheduleAdded",
+      "ty": "ICOScheduleAdded"
+    },
+    {
       "name": "OwnershipTransferred",
       "ty": "OwnershipTransferred"
-    },
-    {
-      "name": "ReservesWithdrawn",
-      "ty": "ReservesWithdrawn"
-    },
-    {
-      "name": "RewardsDeposited",
-      "ty": "RewardsDeposited"
     }
   ],
   "call": {
-    "wasm_file_name": "Treasury.wasm",
+    "wasm_file_name": "ICO.wasm",
     "description": "",
     "arguments": [
       {
@@ -280,6 +329,12 @@
       },
       {
         "name": "owner",
+        "description": null,
+        "ty": "Key",
+        "optional": false
+      },
+      {
+        "name": "styks_price_feed",
         "description": null,
         "ty": "Key",
         "optional": false

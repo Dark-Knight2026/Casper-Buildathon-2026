@@ -7,6 +7,7 @@ use odra_cli::{deploy::DeployScript, DeployedContractsContainer, DeployerExt, Od
 
 use leasefi_contracts::{
     escrow::{Escrow, EscrowInitArgs},
+    ico::ICO,
     lease::{Lease, LeaseInitArgs},
     nft::{NFTInitArgs, NFT},
     roles::{Roles, RolesInitArgs},
@@ -120,6 +121,7 @@ pub fn main() {
         .contract::<Escrow>()
         .contract::<Lease>()
         .contract::<Staking>()
+        .contract::<ICO>()
         .build()
         .run();
 }

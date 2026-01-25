@@ -1,6 +1,6 @@
 {
   "casper_contract_schema_version": 1,
-  "toolchain": "rustc 1.85.0-nightly (d117b7f21 2024-12-31)",
+  "toolchain": "rustc 1.88.0-nightly (0b45675cf 2025-03-31)",
   "authors": [],
   "repository": null,
   "homepage": null,
