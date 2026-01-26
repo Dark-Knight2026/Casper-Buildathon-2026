@@ -35,6 +35,7 @@ impl Treasury {
 
     /// Allows to deposit any rewards amount in the TailorCoin (BIG) token by anyone, then distributes these rewards
     /// between the Staking contract and internal reserves
+    #[odra(non_reentrant)]
     pub fn deposit_rewards(&mut self, amount: U256) {
         if amount > U256::zero() {
             let mut tailor_coin =

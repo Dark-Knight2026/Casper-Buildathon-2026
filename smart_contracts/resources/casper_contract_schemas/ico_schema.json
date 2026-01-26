@@ -54,6 +54,11 @@
             "ty": "U256"
           },
           {
+            "name": "sold_amount",
+            "description": null,
+            "ty": "U256"
+          },
+          {
             "name": "price",
             "description": null,
             "ty": "U256"
@@ -76,6 +81,34 @@
     },
     {
       "struct": {
+        "name": "ICOScheduleCreateParams",
+        "description": null,
+        "members": [
+          {
+            "name": "start_timestamp",
+            "description": null,
+            "ty": "U64"
+          },
+          {
+            "name": "end_timestamp",
+            "description": null,
+            "ty": "U64"
+          },
+          {
+            "name": "sale_amount",
+            "description": null,
+            "ty": "U256"
+          },
+          {
+            "name": "price",
+            "description": null,
+            "ty": "U256"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
         "name": "OwnershipTransferred",
         "description": null,
         "members": [
@@ -92,6 +125,39 @@
             "ty": {
               "Option": "Key"
             }
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
+        "name": "TokensPurchased",
+        "description": null,
+        "members": [
+          {
+            "name": "amount",
+            "description": null,
+            "ty": "U256"
+          },
+          {
+            "name": "currency",
+            "description": null,
+            "ty": "Currency"
+          },
+          {
+            "name": "price",
+            "description": null,
+            "ty": "U256"
+          },
+          {
+            "name": "cost",
+            "description": null,
+            "ty": "U256"
+          },
+          {
+            "name": "timestamp",
+            "description": null,
+            "ty": "U64"
           }
         ]
       }
@@ -125,6 +191,11 @@
   ],
   "errors": [
     {
+      "name": "AddressIsRequired",
+      "description": "",
+      "discriminant": 59009
+    },
+    {
       "name": "CallerNotTheNewOwner",
       "description": "The caller is not the new owner.",
       "discriminant": 20002
@@ -133,6 +204,16 @@
       "name": "CallerNotTheOwner",
       "description": "The caller is not the owner.",
       "discriminant": 20001
+    },
+    {
+      "name": "InsufficientSellingTokensAmount",
+      "description": "",
+      "discriminant": 59012
+    },
+    {
+      "name": "InvalidAmountAttached",
+      "description": "",
+      "discriminant": 59010
     },
     {
       "name": "InvalidICOScheduleEndTimestamp",
@@ -160,9 +241,19 @@
       "discriminant": 59001
     },
     {
+      "name": "InvalidPurchaseAmount",
+      "description": "",
+      "discriminant": 59005
+    },
+    {
       "name": "MissingRole",
       "description": "The role is missing.",
       "discriminant": 20003
+    },
+    {
+      "name": "NoActiveIcoSchedule",
+      "description": "",
+      "discriminant": 59007
     },
     {
       "name": "OwnerNotSet",
@@ -173,6 +264,21 @@
       "name": "RoleRenounceForAnotherAddress",
       "description": "The role cannot be renounced for another address.",
       "discriminant": 20004
+    },
+    {
+      "name": "StyksOracleCanNotReturnTWAP",
+      "description": "",
+      "discriminant": 59008
+    },
+    {
+      "name": "TreasuryContractIsNotSet",
+      "description": "",
+      "discriminant": 59011
+    },
+    {
+      "name": "UnsupportedCurrency",
+      "description": "",
+      "discriminant": 59006
     }
   ],
   "entry_points": [
@@ -183,6 +289,22 @@
       "arguments": [
         {
           "name": "tailor_coin",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        }
+      ],
+      "return_ty": "Unit",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "set_treasury",
+      "description": "Sets the Treasury contract address by the owner",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "treasury",
           "description": null,
           "ty": "Key",
           "optional": false
@@ -206,7 +328,9 @@
         {
           "name": "address",
           "description": null,
-          "ty": "Key",
+          "ty": {
+            "Option": "Key"
+          },
           "optional": false
         }
       ],
@@ -238,11 +362,134 @@
         {
           "name": "ico_schedule",
           "description": null,
-          "ty": "ICOSchedule",
+          "ty": "ICOScheduleCreateParams",
           "optional": false
         }
       ],
       "return_ty": "U128",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "purchase",
+      "description": "",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "amount",
+          "description": null,
+          "ty": "U256",
+          "optional": false
+        },
+        {
+          "name": "currency",
+          "description": null,
+          "ty": "Currency",
+          "optional": false
+        },
+        {
+          "name": "__cargo_purse",
+          "description": null,
+          "ty": "URef",
+          "optional": false
+        }
+      ],
+      "return_ty": "Unit",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "get_current_ico_schedule",
+      "description": "",
+      "is_mutable": false,
+      "arguments": [],
+      "return_ty": {
+        "Option": {
+          "Tuple2": [
+            "U128",
+            "ICOSchedule"
+          ]
+        }
+      },
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "get_currency_by_key",
+      "description": "",
+      "is_mutable": false,
+      "arguments": [
+        {
+          "name": "currency",
+          "description": null,
+          "ty": "Currency",
+          "optional": false
+        }
+      ],
+      "return_ty": {
+        "Option": {
+          "Tuple2": [
+            "Bool",
+            {
+              "Option": "Key"
+            }
+          ]
+        }
+      },
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "get_ico_schedule_by_id",
+      "description": "",
+      "is_mutable": false,
+      "arguments": [
+        {
+          "name": "ico_schedule_id",
+          "description": null,
+          "ty": "U128",
+          "optional": false
+        }
+      ],
+      "return_ty": {
+        "Option": "ICOSchedule"
+      },
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "get_ico_schedules_count",
+      "description": "",
+      "is_mutable": false,
+      "arguments": [],
+      "return_ty": "U128",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "get_styks_price_feed_contract_address",
+      "description": "",
+      "is_mutable": false,
+      "arguments": [],
+      "return_ty": "Key",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "get_tailor_coin_contract_address",
+      "description": "",
+      "is_mutable": false,
+      "arguments": [],
+      "return_ty": "Key",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "get_treasury_contract_address",
+      "description": "",
+      "is_mutable": false,
+      "arguments": [],
+      "return_ty": "Key",
       "is_contract_context": true,
       "access": "public"
     },
@@ -297,6 +544,10 @@
     {
       "name": "OwnershipTransferred",
       "ty": "OwnershipTransferred"
+    },
+    {
+      "name": "TokensPurchased",
+      "ty": "TokensPurchased"
     }
   ],
   "call": {

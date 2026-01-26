@@ -25,6 +25,7 @@ impl Staking {
 
     /// Allows to deposit any rewards amount in the TailorCoin (BIG) token by anyone, then distributes these rewards
     /// between all stakers in this contract proportionally to their shares
+    #[odra(non_reentrant)]
     pub fn deposit_rewards(&mut self, amount: U256) {
         let mut tailor_coin =
             Cep18ContractRef::new(self.env(), self.get_tailor_coin_contract_address());

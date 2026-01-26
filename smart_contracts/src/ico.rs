@@ -1,25 +1,32 @@
-use odra::{casper_types::U128, prelude::*};
+use odra::{
+    casper_types::{U128, U256, U512},
+    prelude::*,
+    uints::ToU512,
+    ContractRef,
+};
 use odra_modules::{access::Ownable, cep18_token::Cep18ContractRef};
 use styks_contracts::styks_price_feed::StyksPriceFeedContractRef;
 
 use crate::ico::{
     errors::Error,
-    events::{CurrencyAdded, CurrencyRemoved, ICOScheduleAdded},
+    events::{CurrencyAdded, CurrencyRemoved, ICOScheduleAdded, TokensPurchased},
     types::{Currency, ICOSchedule, ICOScheduleCreateParams},
 };
 
 pub type ICOScheduleId = U128;
 
-#[odra::module(errors = Error, events = [ICOScheduleAdded, CurrencyAdded, CurrencyRemoved])]
+#[odra::module(errors = Error, events = [ICOScheduleAdded, CurrencyAdded, CurrencyRemoved, TokensPurchased])]
 pub struct ICO {
     ownable: SubModule<Ownable>,
-    currencies: Mapping<Currency, Option<Address>>,
+    currencies: Mapping<Currency, (bool, Option<Address>)>,
     ico_schedules: Mapping<ICOScheduleId, ICOSchedule>,
     ico_schedules_count: Var<U128>,
-    current_ico_id: Var<ICOScheduleId>,
     styks_price_feed: External<StyksPriceFeedContractRef>,
     tailor_coin: External<Cep18ContractRef>,
+    treasury: Var<Address>,
 }
+
+static STYKS_ORACLE_CSPR_USDT_PRICE_FEED_ID: &'static str = "CSPRUSD";
 
 #[odra::module]
 impl ICO {
@@ -35,10 +42,25 @@ impl ICO {
         self.tailor_coin.set(tailor_coin);
     }
 
-    /// Adds a new currency by the owner. Added currency will be supported for making purchases during ICOs
-    pub fn add_currency(&mut self, currency: Currency, address: Address) {
+    /// Sets the Treasury contract address by the owner
+    pub fn set_treasury(&mut self, treasury: Address) {
         self.assert_owner();
-        self.currencies.set(&currency, Some(address));
+        self.treasury.set(treasury);
+    }
+
+    /// Adds a new currency by the owner. Added currency will be supported for making purchases during ICOs
+    pub fn add_currency(&mut self, currency: Currency, address: Option<Address>) {
+        self.assert_owner();
+
+        if currency != Currency::CSPR {
+            if address.is_none() {
+                self.revert(Error::AddressIsRequired);
+            }
+
+            self.currencies.set(&currency, (true, address));
+        } else {
+            self.currencies.set(&currency, (true, None));
+        }
 
         self.env().emit_native_event(CurrencyAdded { currency });
     }
@@ -46,7 +68,7 @@ impl ICO {
     /// Removes a currency by the owner. Removed currency will not be supported for making purchases during ICOs
     pub fn remove_currency(&mut self, currency: Currency) {
         self.assert_owner();
-        self.currencies.set(&currency, None);
+        self.currencies.set(&currency, (false, None));
 
         self.env().emit_native_event(CurrencyRemoved { currency });
     }
@@ -55,13 +77,12 @@ impl ICO {
     pub fn add_ico_schedule(&mut self, ico_schedule: ICOScheduleCreateParams) -> ICOScheduleId {
         self.assert_owner();
 
-        let ico_id = self.ico_schedules_count.get_or_default();
+        let ico_id = self.get_ico_schedules_count();
 
         if ico_id > U128::zero() {
             self.validate_ico_schedule(&ico_schedule, Some(ico_id - 1));
         } else {
             self.validate_ico_schedule(&ico_schedule, None);
-            self.current_ico_id.set(ico_id);
         }
 
         let owner = self.get_owner();
@@ -78,6 +99,111 @@ impl ICO {
             .emit_native_event(ICOScheduleAdded { id: ico_id });
 
         ico_id
+    }
+
+    #[odra(payable)]
+    #[odra(non_reentrant)]
+    pub fn purchase(&mut self, amount: U256, currency: Currency) {
+        if amount.is_zero() {
+            self.env().revert(Error::InvalidPurchaseAmount);
+        }
+
+        let (is_supported_currency, currency_address) = self
+            .get_currency_by_key(&currency)
+            .unwrap_or_revert_with(&self.env(), Error::UnsupportedCurrency);
+
+        if !is_supported_currency {
+            self.env().revert(Error::UnsupportedCurrency);
+        }
+
+        let (current_ico_schedule_id, mut current_ico_schedule) = self
+            .get_current_ico_schedule()
+            .unwrap_or_revert_with(&self.env(), Error::NoActiveIcoSchedule);
+
+        if amount > current_ico_schedule.sale_amount - current_ico_schedule.sold_amount {
+            self.env().revert(Error::InsufficientSellingTokensAmount);
+        }
+
+        let ico_token_price = self.get_ico_token_price(&currency, &current_ico_schedule);
+        let purchase_cost = ico_token_price * amount;
+        let caller = &self.env().caller();
+        let attached_value = self.env().attached_value();
+        let treasury = self.get_treasury_contract_address();
+
+        if currency == Currency::CSPR {
+            if attached_value != purchase_cost.to_u512() {
+                self.env().revert(Error::InvalidAmountAttached);
+            }
+
+            self.env().transfer_tokens(&treasury, &attached_value);
+        } else {
+            if attached_value > U512::zero() {
+                self.env().revert(Error::InvalidAmountAttached);
+            }
+
+            Cep18ContractRef::new(
+                self.env(),
+                currency_address.unwrap_or_revert_with(&self.env(), Error::AddressIsRequired),
+            )
+            .transfer_from(&caller, &treasury, &purchase_cost);
+        }
+
+        current_ico_schedule.sold_amount += amount;
+        self.ico_schedules
+            .set(&current_ico_schedule_id, current_ico_schedule);
+
+        self.tailor_coin.transfer(&caller, &amount);
+
+        self.env().emit_native_event(TokensPurchased {
+            amount,
+            currency,
+            price: ico_token_price,
+            cost: purchase_cost,
+            timestamp: self.env().get_block_time(),
+        });
+    }
+
+    pub fn get_current_ico_schedule(&self) -> Option<(ICOScheduleId, ICOSchedule)> {
+        let mut result = None;
+
+        for i in 0..self.get_ico_schedules_count().as_u128() {
+            let ico_schedule = self
+                .get_ico_schedule_by_id(&U128::from(i))
+                .unwrap_or_revert_with(&self.env(), Error::InvalidICOScheduleId);
+
+            if ico_schedule.is_active(&self.env()) {
+                result = Some((U128::from(i), ico_schedule));
+
+                break;
+            }
+        }
+
+        result
+    }
+
+    pub fn get_currency_by_key(&self, currency: &Currency) -> Option<(bool, Option<Address>)> {
+        self.currencies.get(currency)
+    }
+
+    pub fn get_ico_schedule_by_id(&self, ico_schedule_id: &ICOScheduleId) -> Option<ICOSchedule> {
+        self.ico_schedules.get(ico_schedule_id)
+    }
+
+    pub fn get_ico_schedules_count(&self) -> U128 {
+        self.ico_schedules_count.get_or_default()
+    }
+
+    pub fn get_styks_price_feed_contract_address(&self) -> Address {
+        *self.styks_price_feed.address()
+    }
+
+    pub fn get_tailor_coin_contract_address(&self) -> Address {
+        *self.tailor_coin.address()
+    }
+
+    pub fn get_treasury_contract_address(&self) -> Address {
+        self.treasury
+            .get_or_revert_with(Error::TreasuryContractIsNotSet)
     }
 
     delegate! {
@@ -102,8 +228,7 @@ impl ICO {
     ) {
         if prev_ico_schedule_id.is_some() {
             let prev_ico_schedule = self
-                .ico_schedules
-                .get(&prev_ico_schedule_id.unwrap())
+                .get_ico_schedule_by_id(&prev_ico_schedule_id.unwrap())
                 .unwrap_or_revert_with(&self.env(), Error::InvalidICOScheduleId);
 
             // Start timestamp validation when previous ICO schedule exists
@@ -140,10 +265,24 @@ impl ICO {
             self.env().revert(Error::InvalidICOSchedulePrice);
         }
     }
+
+    fn get_ico_token_price(&self, currency: &Currency, current_ico_schedule: &ICOSchedule) -> U256 {
+        match currency {
+            Currency::USDC | Currency::USDT => current_ico_schedule.price,
+            Currency::CSPR => {
+                let cspr_price_usd = self
+                    .styks_price_feed
+                    .get_twap_price(&String::from(STYKS_ORACLE_CSPR_USDT_PRICE_FEED_ID))
+                    .unwrap_or_revert_with(&self.env(), Error::StyksOracleCanNotReturnTWAP);
+
+                current_ico_schedule.price * 10u32.pow(9) / cspr_price_usd
+            }
+        }
+    }
 }
 
 pub mod events {
-    use odra::prelude::*;
+    use odra::{casper_types::U256, prelude::*};
 
     use crate::ico::{types::Currency, ICOScheduleId};
 
@@ -161,6 +300,15 @@ pub mod events {
     pub struct ICOScheduleAdded {
         pub id: ICOScheduleId,
     }
+
+    #[odra::event]
+    pub struct TokensPurchased {
+        pub amount: U256,
+        pub currency: Currency,
+        pub price: U256,
+        pub cost: U256,
+        pub timestamp: u64,
+    }
 }
 
 pub mod errors {
@@ -173,6 +321,14 @@ pub mod errors {
         InvalidICOScheduleEndTimestamp = 59_002,
         InvalidICOScheduleSaleAmount = 59_003,
         InvalidICOSchedulePrice = 59_004,
+        InvalidPurchaseAmount = 59_005,
+        UnsupportedCurrency = 59_006,
+        NoActiveIcoSchedule = 59_007,
+        StyksOracleCanNotReturnTWAP = 59_008,
+        AddressIsRequired = 59_009,
+        InvalidAmountAttached = 59_010,
+        TreasuryContractIsNotSet = 59_011,
+        InsufficientSellingTokensAmount = 59_012,
     }
 }
 
@@ -205,7 +361,9 @@ pub mod types {
 
     impl ICOSchedule {
         pub fn is_active(&self, env: &ContractEnv) -> bool {
-            env.get_block_time() <= self.end_timestamp
+            let now = env.get_block_time();
+
+            self.start_timestamp <= now && now <= self.end_timestamp
         }
     }
 

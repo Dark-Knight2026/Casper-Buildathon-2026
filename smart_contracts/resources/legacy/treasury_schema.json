@@ -119,7 +119,9 @@
       "is_mutable": true,
       "return_ty": "Unit",
       "ty": "Public",
-      "attributes": []
+      "attributes": [
+        "NonReentrant"
+      ]
     },
     {
       "name": "withdraw_reserves",

@@ -41,6 +41,7 @@ impl Lease {
     }
 
     /// Allows to create a new lease agreement and all invoices for this agreement by a landlord
+    #[odra(non_reentrant)]
     pub fn create_lease_agreement(&mut self, params: CreateLeaseAgreementParams) -> U256 {
         self.assert_landlord();
 
@@ -106,6 +107,7 @@ impl Lease {
     }
 
     /// Allows to finalize lease agreement between tenant and landlord when agreement has finished and won't be prolonged
+    #[odra(non_reentrant)]
     pub fn finalize_lease_agreement(
         &mut self,
         lease_agreement_id: &U256,
@@ -140,6 +142,7 @@ impl Lease {
 
     /// Allows to prolong lease agreement between tenant and landlord when agreement has finished and both parties
     /// decided to prolong it
+    #[odra(non_reentrant)]
     pub fn prolong_lease_agreement(
         &mut self,
         lease_agreement_id: &U256,
