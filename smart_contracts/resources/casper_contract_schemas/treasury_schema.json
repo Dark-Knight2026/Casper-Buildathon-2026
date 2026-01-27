@@ -145,6 +145,22 @@
   ],
   "entry_points": [
     {
+      "name": "receive",
+      "description": "Allows to receive CSPR tokens by this contract",
+      "is_mutable": false,
+      "arguments": [
+        {
+          "name": "__cargo_purse",
+          "description": null,
+          "ty": "URef",
+          "optional": false
+        }
+      ],
+      "return_ty": "Unit",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
       "name": "set_staking",
       "description": "Sets the Staking contract address by the owner",
       "is_mutable": true,

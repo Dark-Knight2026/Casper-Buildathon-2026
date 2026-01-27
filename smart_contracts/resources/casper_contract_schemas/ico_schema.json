@@ -226,7 +226,7 @@
     {
       "name": "InsufficientSellingTokensAmount",
       "description": "",
-      "discriminant": 59012
+      "discriminant": 59011
     },
     {
       "name": "InvalidAmountAttached",
@@ -287,11 +287,6 @@
       "name": "StyksOracleCanNotReturnTWAP",
       "description": "",
       "discriminant": 59008
-    },
-    {
-      "name": "TreasuryContractIsNotSet",
-      "description": "",
-      "discriminant": 59011
     },
     {
       "name": "UnsupportedCurrency",

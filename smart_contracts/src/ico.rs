@@ -17,6 +17,7 @@ use crate::{
         },
         types::{Currency, ICOSchedule, ICOScheduleCreateParams},
     },
+    treasury::TreasuryContractRef,
 };
 
 pub type ICOScheduleId = U128;
@@ -32,7 +33,7 @@ pub struct ICO {
     ico_schedules_count: Var<U128>,
     styks_price_feed: External<StyksPriceFeedContractRef>,
     tailor_coin: External<Cep18ContractRef>,
-    treasury: Var<Address>,
+    treasury: External<TreasuryContractRef>,
 }
 
 #[odra::module]
@@ -136,30 +137,34 @@ impl ICO {
         let purchase_cost = ico_token_price * amount;
         let caller = &self.env().caller();
         let attached_value = self.env().attached_value();
-        let treasury = self.get_treasury_contract_address();
 
-        if currency == Currency::CSPR {
-            if attached_value != purchase_cost.to_u512() {
-                self.env().revert(Error::InvalidAmountAttached);
+        match currency {
+            Currency::CSPR => {
+                if attached_value != purchase_cost.to_u512() {
+                    self.env().revert(Error::InvalidAmountAttached);
+                }
+
+                self.treasury.with_tokens(attached_value).receive();
             }
+            Currency::USDC | Currency::USDT => {
+                if attached_value > U512::zero() {
+                    self.env().revert(Error::InvalidAmountAttached);
+                }
 
-            self.env().transfer_tokens(&treasury, &attached_value);
-        } else {
-            if attached_value > U512::zero() {
-                self.env().revert(Error::InvalidAmountAttached);
+                let mut currency = Cep18ContractRef::new(
+                    self.env(),
+                    currency_address.unwrap_or_revert_with(&self.env(), Error::AddressIsRequired),
+                );
+
+                currency.transfer_from(&caller, &self.treasury.address(), &purchase_cost);
             }
-
-            Cep18ContractRef::new(
-                self.env(),
-                currency_address.unwrap_or_revert_with(&self.env(), Error::AddressIsRequired),
-            )
-            .transfer_from(&caller, &treasury, &purchase_cost);
         }
 
         current_ico_schedule.sold_amount += amount;
         self.ico_schedules
             .set(&current_ico_schedule_id, current_ico_schedule);
 
+        // TODO remove direct transfer to users, add vesting position creation
         self.tailor_coin.transfer(&caller, &amount);
 
         self.env().emit_native_event(TokensPurchased {
@@ -244,8 +249,7 @@ impl ICO {
 
     /// Returns the Treasury contract address
     pub fn get_treasury_contract_address(&self) -> Address {
-        self.treasury
-            .get_or_revert_with(Error::TreasuryContractIsNotSet)
+        *self.treasury.address()
     }
 
     delegate! {
@@ -375,8 +379,7 @@ pub mod errors {
         StyksOracleCanNotReturnTWAP = 59_008,
         AddressIsRequired = 59_009,
         InvalidAmountAttached = 59_010,
-        TreasuryContractIsNotSet = 59_011,
-        InsufficientSellingTokensAmount = 59_012,
+        InsufficientSellingTokensAmount = 59_011,
     }
 }
 

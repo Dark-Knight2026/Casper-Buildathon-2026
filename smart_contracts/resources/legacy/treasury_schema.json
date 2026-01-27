@@ -102,6 +102,16 @@
       "attributes": []
     },
     {
+      "name": "receive",
+      "args": [],
+      "is_mutable": false,
+      "return_ty": "Unit",
+      "ty": "Public",
+      "attributes": [
+        "Payable"
+      ]
+    },
+    {
       "name": "set_staking",
       "args": [
         {
