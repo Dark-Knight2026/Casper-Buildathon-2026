@@ -404,6 +404,7 @@ pub mod types {
     }
 
     #[odra::odra_type]
+    #[derive(Copy)]
     pub enum Currency {
         CSPR,
         USDC,
@@ -434,6 +435,7 @@ pub mod types {
 #[cfg(test)]
 mod tests {
     use odra::host::{Deployer, HostEnv};
+    use odra_modules::access::errors::Error as AccessError;
 
     use crate::{
         tailor_coin::{TailorCoin, TailorCoinHostRef, TailorCoinInitArgs},
@@ -449,6 +451,7 @@ mod tests {
     }
 
     struct Context {
+        env: HostEnv,
         tailor_coin: TailorCoinHostRef,
         usdc: TailorCoinHostRef,
         usdt: TailorCoinHostRef,
@@ -457,10 +460,13 @@ mod tests {
         users: Users,
     }
 
+    /////////////////////////////////////////////////////////////////////////////
+    //                                  init()                                 //
+    /////////////////////////////////////////////////////////////////////////////
+
     #[test]
     fn test_init_should_initialize_contract_properly() {
-        let env = odra_test::env();
-        let ctx = setup(&env);
+        let ctx = setup(odra_test::env());
 
         assert_eq!(ctx.ico.get_owner(), ctx.users.owner, "Invalid owner");
         assert_eq!(
@@ -480,19 +486,252 @@ mod tests {
         );
     }
 
-    fn setup(env: &HostEnv) -> Context {
+    /////////////////////////////////////////////////////////////////////////////
+    //                            set_tailor_coin()                            //
+    /////////////////////////////////////////////////////////////////////////////
+
+    #[test]
+    fn test_set_tailor_coin_should_revert_if_not_owner_is_calling() {
+        let mut ctx = setup(odra_test::env());
+
+        ctx.env.set_caller(ctx.users.alice);
+
+        assert_eq!(
+            ctx.ico.try_set_tailor_coin(ctx.usdc.address()).unwrap_err(),
+            AccessError::CallerNotTheOwner.into(),
+            "Should revert when is called by not the owner"
+        );
+    }
+
+    #[test]
+    fn test_set_tailor_coin_should_set_tailor_coin_properly() {
+        let mut ctx = setup(odra_test::env());
+        let tailor_coin = ctx.usdc.address();
+
+        ctx.ico.set_tailor_coin(tailor_coin);
+
+        assert_eq!(
+            ctx.ico.get_tailor_coin_contract_address(),
+            tailor_coin,
+            "Invalid TailorCoin contract address"
+        );
+    }
+
+    /////////////////////////////////////////////////////////////////////////////
+    //                              set_treasury()                             //
+    /////////////////////////////////////////////////////////////////////////////
+
+    #[test]
+    fn test_set_treasury_should_revert_if_not_owner_is_calling() {
+        let mut ctx = setup(odra_test::env());
+
+        ctx.env.set_caller(ctx.users.alice);
+
+        assert_eq!(
+            ctx.ico.try_set_treasury(ctx.usdt.address()).unwrap_err(),
+            AccessError::CallerNotTheOwner.into(),
+            "Should revert when is called by not the owner"
+        );
+    }
+
+    #[test]
+    fn test_set_treasury_should_set_treasury_properly() {
+        let mut ctx = setup(odra_test::env());
+        let treasury = ctx.usdt.address();
+
+        ctx.ico.set_treasury(treasury);
+
+        assert_eq!(
+            ctx.ico.get_treasury_contract_address(),
+            treasury,
+            "Invalid Treasury contract address"
+        );
+    }
+
+    /////////////////////////////////////////////////////////////////////////////
+    //                              add_currency()                             //
+    /////////////////////////////////////////////////////////////////////////////
+
+    #[test]
+    fn test_add_currency_should_revert_if_not_owner_is_calling() {
+        let mut ctx = setup(odra_test::env());
+
+        ctx.env.set_caller(ctx.users.alice);
+
+        assert_eq!(
+            ctx.ico.try_add_currency(Currency::CSPR, None).unwrap_err(),
+            AccessError::CallerNotTheOwner.into(),
+            "Should revert when is called by not the owner"
+        );
+    }
+
+    #[test]
+    fn test_add_currency_should_revert_if_currency_address_is_not_provided_for_cep18_token() {
+        let mut ctx = setup(odra_test::env());
+
+        assert_eq!(
+            ctx.ico.try_add_currency(Currency::USDC, None).unwrap_err(),
+            Error::AddressIsRequired.into(),
+            "Should revert when currency address is not provided for CEP18 token"
+        );
+    }
+
+    #[test]
+    fn test_add_currency_should_add_cspr_token_support_properly() {
+        let mut ctx = setup(odra_test::env());
+        let currency = Currency::CSPR;
+
+        ctx.ico.add_currency(currency, None);
+
+        assert!(
+            ctx.env
+                .emitted_native_event(&ctx.ico, CurrencyAdded { currency }),
+            "CurrencyAdded event should be emitted"
+        );
+        assert_eq!(
+            ctx.ico.get_currency_by_key(&currency),
+            Some((true, None)),
+            "CSPR currency support should be enabled"
+        );
+    }
+
+    #[test]
+    fn test_add_currency_should_add_cep18_token_support_properly() {
+        let mut ctx = setup(odra_test::env());
+        let currencies = vec![(Currency::USDC, "USDC"), (Currency::USDT, "USDT")];
+
+        for currency in &currencies {
+            let currency_address = Some(if currency.0 == Currency::USDC {
+                ctx.usdc.address()
+            } else {
+                ctx.usdt.address()
+            });
+
+            ctx.ico.add_currency(currency.0, currency_address);
+
+            assert!(
+                ctx.env.emitted_native_event(
+                    &ctx.ico,
+                    CurrencyAdded {
+                        currency: currency.0
+                    }
+                ),
+                "CurrencyAdded event should be emitted"
+            );
+            assert_eq!(
+                ctx.ico.get_currency_by_key(&currency.0),
+                Some((true, currency_address)),
+                "{} CEP18 currency support should be enabled",
+                currency.1
+            );
+        }
+    }
+
+    /////////////////////////////////////////////////////////////////////////////
+    //                            remove_currency()                            //
+    /////////////////////////////////////////////////////////////////////////////
+
+    #[test]
+    fn test_remove_currency_should_revert_if_not_owner_is_calling() {
+        let mut ctx = setup(odra_test::env());
+
+        ctx.env.set_caller(ctx.users.alice);
+
+        assert_eq!(
+            ctx.ico.try_remove_currency(Currency::CSPR).unwrap_err(),
+            AccessError::CallerNotTheOwner.into(),
+            "Should revert when is called by not the owner"
+        );
+    }
+
+    #[test]
+    fn test_remove_currency_should_remove_cspr_token_support_properly() {
+        let mut ctx = setup(odra_test::env());
+        let currency = Currency::CSPR;
+
+        ctx.ico.remove_currency(currency);
+
+        assert!(
+            ctx.env
+                .emitted_native_event(&ctx.ico, CurrencyRemoved { currency }),
+            "CurrencyRemoved event should be emitted"
+        );
+        assert_eq!(
+            ctx.ico.get_currency_by_key(&currency),
+            Some((false, None)),
+            "CSPR currency support should be disabled"
+        );
+    }
+
+    #[test]
+    fn test_remove_currency_should_remove_cep18_token_support_properly() {
+        let mut ctx = setup(odra_test::env());
+        let currencies = vec![(Currency::USDC, "USDC"), (Currency::USDT, "USDT")];
+
+        for currency in &currencies {
+            ctx.ico.remove_currency(currency.0);
+
+            assert!(
+                ctx.env.emitted_native_event(
+                    &ctx.ico,
+                    CurrencyRemoved {
+                        currency: currency.0
+                    }
+                ),
+                "CurrencyRemoved event should be emitted"
+            );
+            assert_eq!(
+                ctx.ico.get_currency_by_key(&currency.0),
+                Some((false, None)),
+                "{} CEP18 currency support should be disabled",
+                currency.1
+            );
+        }
+    }
+
+    /////////////////////////////////////////////////////////////////////////////
+    //                            add_ico_schedule()                           //
+    /////////////////////////////////////////////////////////////////////////////
+
+    #[test]
+    fn test_add_ico_schedule_should_revert_if_not_owner_is_calling() {
+        let mut ctx = setup(odra_test::env());
+
+        ctx.env.set_caller(ctx.users.alice);
+
+        assert_eq!(
+            ctx.ico
+                .try_add_ico_schedule(get_ico_schedules_creation_params(&ctx.env)[0].clone())
+                .unwrap_err(),
+            AccessError::CallerNotTheOwner.into(),
+            "Should revert when is called by not the owner"
+        );
+    }
+
+    // TODO tests for validation and creation
+
+    /////////////////////////////////////////////////////////////////////////////
+    //                                 Helpers                                 //
+    /////////////////////////////////////////////////////////////////////////////
+
+    const ONE_MINUTE: u64 = 60;
+    const ONE_HOUR: u64 = 60 * ONE_MINUTE;
+    const ONE_DAY: u64 = 24 * ONE_HOUR;
+    const ONE_MONTH: u64 = 30 * ONE_DAY;
+
+    fn setup(env: HostEnv) -> Context {
         let users = Users {
             owner: env.get_account(0),
             alice: env.get_account(1),
             bob: env.get_account(2),
         };
         let initial_supply = 5000000000000000000000000000000;
-        let tailor_coin = deploy_mock_cep18_token(env, "BIG", "BIG", 18, initial_supply);
-        let mut usdc = deploy_mock_cep18_token(env, "USDC", "USD Coin", 6, initial_supply);
-        let mut usdt = deploy_mock_cep18_token(env, "USDT", "Tether USD", 6, initial_supply);
-        let mut treasury = Treasury::deploy(env, TreasuryInitArgs { owner: users.owner });
+        let tailor_coin = deploy_mock_cep18_token(&env, "BIG", "BIG", 18, initial_supply);
+        let mut usdc = deploy_mock_cep18_token(&env, "USDC", "USD Coin", 6, initial_supply);
+        let mut usdt = deploy_mock_cep18_token(&env, "USDT", "Tether USD", 6, initial_supply);
+        let mut treasury = Treasury::deploy(&env, TreasuryInitArgs { owner: users.owner });
         let mut ico = ICO::deploy(
-            env,
+            &env,
             ICOInitArgs {
                 owner: users.owner,
                 styks_price_feed: users.owner, // TODO mock properly
@@ -515,6 +754,7 @@ mod tests {
         usdt.transfer(&users.bob, &U256::from(initial_supply / 2));
 
         Context {
+            env,
             tailor_coin,
             usdc,
             usdt,
@@ -540,5 +780,28 @@ mod tests {
                 initial_supply: U256::from(initial_supply),
             },
         )
+    }
+
+    fn get_ico_schedules_creation_params(env: &HostEnv) -> [ICOScheduleCreateParams; 3] {
+        let pre_sale = ICOScheduleCreateParams {
+            start_timestamp: env.block_time() + ONE_DAY,
+            end_timestamp: env.block_time() + ONE_DAY + ONE_MONTH,
+            sale_amount: U256::from(5000000000000000000000000000000u128),
+            price: U256::from(150000), // 0.15 USD (0.15 * 1 * 10^6)
+        };
+        let sale = ICOScheduleCreateParams {
+            start_timestamp: pre_sale.end_timestamp + ONE_DAY,
+            end_timestamp: pre_sale.end_timestamp + ONE_DAY + ONE_MONTH,
+            sale_amount: U256::from(10000000000000000000000000000000u128),
+            price: U256::from(500000), // 0.5 USD (0.5 * 1 * 10^6)
+        };
+        let post_sale = ICOScheduleCreateParams {
+            start_timestamp: sale.end_timestamp + ONE_DAY,
+            end_timestamp: sale.end_timestamp + ONE_DAY + ONE_MONTH,
+            sale_amount: U256::from(15000000000000000000000000000000u128),
+            price: U256::from(1000000), // 1 USD (1 * 1 * 10^6)
+        };
+
+        [pre_sale, sale, post_sale]
     }
 }
