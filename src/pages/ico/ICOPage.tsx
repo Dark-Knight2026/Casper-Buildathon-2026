@@ -12,10 +12,6 @@ const DashboardICOCountdown = lazy(() => import('./components/states/DashboardIC
 const ActiveICO = lazy(() => import('./components/states/ActiveICO'));
 const PostICODashboard = lazy(() => import('./components/states/PostICODashboard'));
 
-// Lazy load tab components
-const TokenomicsTab = lazy(() => import('./components/tabs/TokenomicsTab'));
-const RewardsTab = lazy(() => import('./components/tabs/RewardsTab'));
-const WhitepaperTab = lazy(() => import('./components/tabs/WhitepaperTab'));
 
 // Loading fallback
 function LoadingFallback() {
@@ -54,7 +50,7 @@ export function ICOPage() {
       case 2:
         return (
           <ActivePresale
-            endTimestamp={timestamps.presaleEnd}
+            
           />
         );
       case 3:
@@ -73,24 +69,6 @@ export function ICOPage() {
         return <PostICODashboard />;
       default:
         return <PresaleCountdown targetTimestamp={timestamps.presaleStart} endTimestamp={timestamps.presaleEnd} />;
-    }
-  };
-
-  // Render tab content
-  const renderTabContent = () => {
-    if (activeTab === 'main') {
-      return renderStateComponent();
-    }
-
-    switch (activeTab) {
-      case 'tokenomics':
-        return <TokenomicsTab />;
-      case 'rewards':
-        return <RewardsTab />;
-      case 'whitepaper':
-        return <WhitepaperTab />;
-      default:
-        return renderStateComponent();
     }
   };
 
@@ -113,7 +91,7 @@ export function ICOPage() {
       {/* Main Content */}
       <main className="container min-h-[calc(100vh-112px-92px)] mx-auto px-4 py-8">
         <Suspense fallback={<LoadingFallback />}>
-          {renderTabContent()}
+          {renderStateComponent()}
         </Suspense>
       </main>
 
