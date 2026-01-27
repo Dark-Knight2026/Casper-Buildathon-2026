@@ -1,0 +1,64 @@
+import { cn } from '@/lib/utils';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+
+export type PaymentCurrency = 'USDT' | 'USDC' | 'CSPR';
+
+const CURRENCY_OPTIONS: { value: PaymentCurrency; label: string }[] = [
+  { value: 'USDT', label: 'USDT' },
+  { value: 'USDC', label: 'USDC' },
+  { value: 'CSPR', label: 'CSPR (Casper)' },
+];
+
+interface CurrencySelectorProps {
+  value: PaymentCurrency;
+  onValueChange: (value: PaymentCurrency) => void;
+  disabled?: boolean;
+  className?: string;
+}
+
+export function CurrencySelector({
+  value,
+  onValueChange,
+  disabled,
+  className,
+}: CurrencySelectorProps) {
+  return (
+    <Select
+      value={value}
+      onValueChange={(val) => onValueChange(val as PaymentCurrency)}
+      disabled={disabled}
+    >
+      <SelectTrigger
+        className={cn(
+          'w-32 border-0',
+          'bg-transparent text-[hsl(var(--ico-text-primary))] focus-visible:ring-0',
+          'focus:outline-none focus:ring-0 focus:ring-offset-0 focus:border-0 ',
+          className
+        )}
+      >
+        <SelectValue placeholder="Currency" />
+      </SelectTrigger>
+      <SelectContent className="bg-[hsl(var(--ico-bg-secondary))] border border-sky-800/50 p-2">
+
+          {CURRENCY_OPTIONS.map((option) => (
+            <SelectItem
+              key={option.value}
+              value={option.value}
+              className="text-white rounded-0 cursor-pointer data-highlighted:bg-sky-800!"
+            >
+              {option.label}
+            </SelectItem>
+          ))}
+
+      </SelectContent>
+    </Select>
+  );
+}
+
+export default CurrencySelector;
