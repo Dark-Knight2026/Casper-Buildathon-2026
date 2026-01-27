@@ -1,81 +1,35 @@
 use serde::{Deserialize, Serialize};
+use strum::{Display, EnumString};
 use uuid::Uuid;
-use rust_decimal::Decimal;
 
-// --- Auth Models ---
+// --- Type Aliases ---
+pub type UserId = Uuid;
+pub type PropertyId = Uuid;
 
+// --- Enums ---
+
+/// Defines the role of a user in the system.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, EnumString, Display)]
+#[serde(rename_all = "snake_case")]
+#[strum(serialize_all = "snake_case")]
+pub enum UserRole {
+    Tenant,
+    Landlord,
+    Agent,
+    Admin,
+    #[serde(other)]
+    Unknown,
+}
+
+// --- Shared Structures ---
+
+/// JWT Claims structure used for token generation and validation.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Claims {
-    pub sub: String, // User UUID
-    pub role: String,
+    /// Subject: The User UUID.
+    pub sub: UserId,
+    /// The role assigned to the user.
+    pub role: UserRole,
+    /// Expiration time of the token (Unix timestamp).
     pub exp: usize,
-}
-
-// --- Tax Models ---
-
-#[derive(Debug, Deserialize)]
-pub struct TaxCalculationRequest {
-    pub fiscal_year: i32,
-    pub property_ids: Vec<Uuid>,
-    #[serde(default)]
-    pub include_depreciation: bool,
-}
-
-#[derive(Debug, Serialize)]
-pub struct TaxReport {
-    pub total_taxable_income: Decimal,
-    pub total_deductions: Decimal,
-    pub estimated_tax: Decimal,
-    pub breakdown: Vec<TaxCategory>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct TaxCategory {
-    pub category: String,
-    pub amount: Decimal,
-}
-
-// --- Analytics Models ---
-
-#[derive(Debug, Deserialize)]
-pub struct PropertyPerformanceRequest {
-    pub start_date: String, // ISO 8601
-    pub end_date: String,
-    pub property_ids: Vec<Uuid>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct PropertyPerformanceReport {
-    pub total_revenue: Decimal,
-    pub total_expenses: Decimal,
-    pub net_operating_income: Decimal,
-    pub roi_percentage: Decimal,
-    pub occupancy_rate: Decimal,
-}
-
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_json::json;
-    use uuid::Uuid;
-
-    #[test]
-    fn test_tax_request_deserialization() {
-        
-        let property_id = Uuid::new_v4();
-        let json_data = json!({
-            "fiscal_year": 2024,
-            "property_ids": [property_id.to_string()],
-            "include_depreciation": true
-        });
-
-        
-        let request: TaxCalculationRequest = serde_json::from_value(json_data).expect("Failed to deserialize");
-
-        
-        assert_eq!(request.fiscal_year, 2024);
-        assert_eq!(request.property_ids[0], property_id);
-        assert_eq!(request.include_depreciation, true);
-    }
 }

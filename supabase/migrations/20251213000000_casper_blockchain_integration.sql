@@ -18,7 +18,7 @@ ADD COLUMN IF NOT EXISTS blockchain_reputation_score INTEGER DEFAULT 0;
 
 -- Add constraints
 ALTER TABLE IF EXISTS users
-ADD CONSTRAINT valid_wallet_address CHECK (wallet_address IS NULL OR length(wallet_address) = 68),
+ADD CONSTRAINT valid_wallet_address CHECK (wallet_address IS NULL OR length(wallet_address) IN (66, 68)),
 ADD CONSTRAINT valid_cspr_name CHECK (cspr_name IS NULL OR cspr_name ~ '^[a-z0-9-]+\.cspr$');
 
 -- Create indexes
