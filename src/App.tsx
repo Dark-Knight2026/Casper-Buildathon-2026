@@ -125,6 +125,9 @@ const PerformanceDashboard = lazy(() => import('@/pages/performance/PerformanceD
 // Lazy load accessibility pages
 const AccessibilityTestPage = lazy(() => import('@/pages/accessibility/AccessibilityTestPage'));
 
+// Lazy load ICO page
+const ICOPage = lazy(() => import('@/pages/ico/ICOPage'));
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -156,6 +159,9 @@ function App() {
               <Route path="/listings" element={<PropertySearch />} />
               <Route path="/properties" element={<PropertySearch />} />
               <Route path="/properties/:id" element={<TenantPropertyDetail />} />
+
+              {/* ICO Page - Public access for token sale */}
+              <Route path="/ico" element={<ICOPage />} />
               
               {/* 
                 AUTHENTICATION ROUTES

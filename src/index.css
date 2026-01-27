@@ -32,6 +32,60 @@
     --chart-3: 197 37% 24%;
     --chart-4: 43 74% 66%;
     --chart-5: 27 87% 67%;
+
+    /* ICO Page Variables */
+    --ico-bg-primary: 0 0% 4%;
+    --ico-bg-secondary: 0 0% 0%;
+    --ico-bg-card: 0 0% 100%;
+
+    /* ICO Brand Colors - Key Chain Token */
+    --ico-brand-primary: 209 67% 21%;
+    --ico-brand-secondary: 221 83% 53%;
+    --ico-brand-accent: 199 89% 48%;
+
+    /* ICO State Colors */
+    --ico-state-countdown: 220 70% 50%;
+    --ico-state-active: 142 76% 36%;
+    --ico-state-dashboard: 221 83% 53%;
+    --ico-state-completed: 142 69% 58%;
+
+    /* ICO Progress Bar */
+    --ico-progress-bg: 220 14% 90%;
+    --ico-progress-fill: 142 76% 36%;
+    --ico-progress-text: 220 9% 46%;
+
+    /* ICO Countdown Timer */
+    --ico-timer-bg: 220 20% 97%;
+    --ico-timer-text: 220 9% 20%;
+    --ico-timer-label: 220 9% 46%;
+    --ico-timer-separator: 220 9% 70%;
+
+    /* ICO Purchase Form */
+    --ico-form-bg: 0 0% 100%;
+    --ico-form-border: 220 13% 91%;
+    --ico-form-input-bg: 220 14% 96%;
+    --ico-form-button: 142 76% 36%;
+    --ico-form-button-hover: 142 76% 30%;
+
+    /* ICO Dashboard Cards */
+    --ico-card-wallet: 199 89% 48%;
+    --ico-card-staked: 142 76% 36%;
+    --ico-card-rewards: 262 83% 58%;
+    --ico-card-total: 217 91% 60%;
+
+    /* ICO Text Colors */
+    --ico-text-primary: 0 9% 100%;
+    --ico-text-secondary: 220 9% 46%;
+    --ico-text-muted: 220 9% 64%;
+    --ico-text-highlight: 142 76% 36%;
+
+    /* ICO Gradients (as separate values for use in backgrounds) */
+    --ico-gradient-primary-start: 217 91% 60%;
+    --ico-gradient-primary-end: 199 89% 48%;
+    --ico-gradient-success-start: 142 76% 36%;
+    --ico-gradient-success-end: 142 69% 58%;
+
+    --ico-border-color: 0 0% 15%;
   }
 
   .dark {
@@ -59,6 +113,58 @@
     --chart-3: 30 80% 55%;
     --chart-4: 280 65% 60%;
     --chart-5: 340 75% 55%;
+
+    /* ICO Page Variables - Dark Mode */
+    --ico-bg-primary: 222 47% 8%;
+    --ico-bg-secondary: 222 47% 11%;
+    --ico-bg-card: 222 47% 11%;
+
+    /* ICO Brand Colors - Dark Mode */
+    --ico-brand-primary: 217 91% 65%;
+    --ico-brand-secondary: 221 83% 58%;
+    --ico-brand-accent: 199 89% 53%;
+
+    /* ICO State Colors - Dark Mode */
+    --ico-state-countdown: 220 70% 55%;
+    --ico-state-active: 142 76% 42%;
+    --ico-state-dashboard: 221 83% 58%;
+    --ico-state-completed: 142 69% 63%;
+
+    /* ICO Progress Bar - Dark Mode */
+    --ico-progress-bg: 222 47% 18%;
+    --ico-progress-fill: 142 76% 42%;
+    --ico-progress-text: 220 9% 70%;
+
+    /* ICO Countdown Timer - Dark Mode */
+    --ico-timer-bg: 222 47% 14%;
+    --ico-timer-text: 210 40% 98%;
+    --ico-timer-label: 220 9% 60%;
+    --ico-timer-separator: 220 9% 40%;
+
+    /* ICO Purchase Form - Dark Mode */
+    --ico-form-bg: 222 47% 11%;
+    --ico-form-border: 222 47% 20%;
+    --ico-form-input-bg: 222 47% 14%;
+    --ico-form-button: 142 76% 42%;
+    --ico-form-button-hover: 142 76% 36%;
+
+    /* ICO Dashboard Cards - Dark Mode */
+    --ico-card-wallet: 199 89% 53%;
+    --ico-card-staked: 142 76% 42%;
+    --ico-card-rewards: 262 83% 63%;
+    --ico-card-total: 217 91% 65%;
+
+    /* ICO Text Colors - Dark Mode */
+    --ico-text-primary: 210 40% 98%;
+    --ico-text-secondary: 220 9% 70%;
+    --ico-text-muted: 220 9% 50%;
+    --ico-text-highlight: 142 76% 50%;
+
+    /* ICO Gradients - Dark Mode */
+    --ico-gradient-primary-start: 217 91% 65%;
+    --ico-gradient-primary-end: 199 89% 53%;
+    --ico-gradient-success-start: 142 76% 42%;
+    --ico-gradient-success-end: 142 69% 58%;
   }
 }
 
