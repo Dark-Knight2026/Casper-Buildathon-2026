@@ -108,6 +108,7 @@ impl ICO {
         ico_id
     }
 
+    /// Gives a possibility to purchase tokens from active ICO schedule
     #[odra(payable)]
     #[odra(non_reentrant)]
     pub fn purchase(&mut self, amount: U256, currency: Currency) {
@@ -170,6 +171,7 @@ impl ICO {
         });
     }
 
+    /// Allows to withdraw all unsold tokens from all finished ICO schedules. Only the owner can interact with it
     pub fn withdraw_unsold_tokens(&mut self, recipient: Address) {
         self.assert_owner();
 
@@ -195,6 +197,7 @@ impl ICO {
         }
     }
 
+    /// Returns current ICO schedule and its ID if some schedule is active, `None` otherwise
     pub fn get_current_ico_schedule(&self) -> Option<(ICOScheduleId, ICOSchedule)> {
         let mut result = None;
 
@@ -213,26 +216,32 @@ impl ICO {
         result
     }
 
+    /// Returns info about currency by its key
     pub fn get_currency_by_key(&self, currency: &Currency) -> Option<(bool, Option<Address>)> {
         self.currencies.get(currency)
     }
 
+    /// Returns ICO schedule by its ID, `None` if ICO schedule does not exist
     pub fn get_ico_schedule_by_id(&self, ico_schedule_id: &ICOScheduleId) -> Option<ICOSchedule> {
         self.ico_schedules.get(ico_schedule_id)
     }
 
+    /// Returns a number of registered ICO schedules
     pub fn get_ico_schedules_count(&self) -> U128 {
         self.ico_schedules_count.get_or_default()
     }
 
+    /// Returns the Styks Oracle Price Feed contract address
     pub fn get_styks_price_feed_contract_address(&self) -> Address {
         *self.styks_price_feed.address()
     }
 
+    /// Returns the TailorCoin (BIG) token contract address
     pub fn get_tailor_coin_contract_address(&self) -> Address {
         *self.tailor_coin.address()
     }
 
+    /// Returns the Treasury contract address
     pub fn get_treasury_contract_address(&self) -> Address {
         self.treasury
             .get_or_revert_with(Error::TreasuryContractIsNotSet)

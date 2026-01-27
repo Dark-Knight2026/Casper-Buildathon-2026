@@ -390,7 +390,7 @@
     },
     {
       "name": "purchase",
-      "description": "",
+      "description": "Gives a possibility to purchase tokens from active ICO schedule",
       "is_mutable": true,
       "arguments": [
         {
@@ -418,7 +418,7 @@
     },
     {
       "name": "withdraw_unsold_tokens",
-      "description": "",
+      "description": "Allows to withdraw all unsold tokens from all finished ICO schedules. Only the owner can interact with it",
       "is_mutable": true,
       "arguments": [
         {
@@ -434,7 +434,7 @@
     },
     {
       "name": "get_current_ico_schedule",
-      "description": "",
+      "description": "Returns current ICO schedule and its ID if some schedule is active, `None` otherwise",
       "is_mutable": false,
       "arguments": [],
       "return_ty": {
@@ -450,7 +450,7 @@
     },
     {
       "name": "get_currency_by_key",
-      "description": "",
+      "description": "Returns info about currency by its key",
       "is_mutable": false,
       "arguments": [
         {
@@ -475,7 +475,7 @@
     },
     {
       "name": "get_ico_schedule_by_id",
-      "description": "",
+      "description": "Returns ICO schedule by its ID, `None` if ICO schedule does not exist",
       "is_mutable": false,
       "arguments": [
         {
@@ -493,7 +493,7 @@
     },
     {
       "name": "get_ico_schedules_count",
-      "description": "",
+      "description": "Returns a number of registered ICO schedules",
       "is_mutable": false,
       "arguments": [],
       "return_ty": "U128",
@@ -502,7 +502,7 @@
     },
     {
       "name": "get_styks_price_feed_contract_address",
-      "description": "",
+      "description": "Returns the Styks Oracle Price Feed contract address",
       "is_mutable": false,
       "arguments": [],
       "return_ty": "Key",
@@ -511,7 +511,7 @@
     },
     {
       "name": "get_tailor_coin_contract_address",
-      "description": "",
+      "description": "Returns the TailorCoin (BIG) token contract address",
       "is_mutable": false,
       "arguments": [],
       "return_ty": "Key",
@@ -520,7 +520,7 @@
     },
     {
       "name": "get_treasury_contract_address",
-      "description": "",
+      "description": "Returns the Treasury contract address",
       "is_mutable": false,
       "arguments": [],
       "return_ty": "Key",
