@@ -7,15 +7,24 @@ use odra::{
 use odra_modules::{access::Ownable, cep18_token::Cep18ContractRef};
 use styks_contracts::styks_price_feed::StyksPriceFeedContractRef;
 
-use crate::ico::{
-    errors::Error,
-    events::{CurrencyAdded, CurrencyRemoved, ICOScheduleAdded, TokensPurchased},
-    types::{Currency, ICOSchedule, ICOScheduleCreateParams},
+use crate::{
+    constants::STYKS_ORACLE_CSPR_USDT_PRICE_FEED_ID,
+    ico::{
+        errors::Error,
+        events::{
+            CurrencyAdded, CurrencyRemoved, ICOScheduleAdded, TokensPurchased,
+            UnsoldTokensWithdrawn,
+        },
+        types::{Currency, ICOSchedule, ICOScheduleCreateParams},
+    },
 };
 
 pub type ICOScheduleId = U128;
 
-#[odra::module(errors = Error, events = [ICOScheduleAdded, CurrencyAdded, CurrencyRemoved, TokensPurchased])]
+#[odra::module(
+    errors = Error,
+    events = [ICOScheduleAdded, CurrencyAdded, CurrencyRemoved, TokensPurchased, UnsoldTokensWithdrawn]
+)]
 pub struct ICO {
     ownable: SubModule<Ownable>,
     currencies: Mapping<Currency, (bool, Option<Address>)>,
@@ -25,8 +34,6 @@ pub struct ICO {
     tailor_coin: External<Cep18ContractRef>,
     treasury: Var<Address>,
 }
-
-static STYKS_ORACLE_CSPR_USDT_PRICE_FEED_ID: &'static str = "CSPRUSD";
 
 #[odra::module]
 impl ICO {
@@ -161,6 +168,31 @@ impl ICO {
             cost: purchase_cost,
             timestamp: self.env().get_block_time(),
         });
+    }
+
+    pub fn withdraw_unsold_tokens(&mut self, recipient: Address) {
+        self.assert_owner();
+
+        let mut amount = U256::zero();
+
+        for i in 0..self.get_ico_schedules_count().as_u128() {
+            let ico_schedule = self
+                .get_ico_schedule_by_id(&U128::from(i))
+                .unwrap_or_revert_with(&self.env(), Error::InvalidICOScheduleId);
+
+            if self.env().get_block_time() <= ico_schedule.end_timestamp {
+                break;
+            }
+
+            amount += ico_schedule.sale_amount - ico_schedule.sold_amount;
+        }
+
+        if amount > U256::zero() {
+            self.tailor_coin.transfer(&recipient, &amount);
+
+            self.env()
+                .emit_native_event(UnsoldTokensWithdrawn { recipient, amount });
+        }
     }
 
     pub fn get_current_ico_schedule(&self) -> Option<(ICOScheduleId, ICOSchedule)> {
@@ -308,6 +340,12 @@ pub mod events {
         pub price: U256,
         pub cost: U256,
         pub timestamp: u64,
+    }
+
+    #[odra::event]
+    pub struct UnsoldTokensWithdrawn {
+        pub recipient: Address,
+        pub amount: U256,
     }
 }
 

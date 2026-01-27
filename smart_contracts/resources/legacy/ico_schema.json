@@ -78,6 +78,25 @@
       ]
     },
     {
+      "name": "UnsoldTokensWithdrawn",
+      "args": [
+        {
+          "name": "recipient",
+          "ty": "Key",
+          "is_ref": false,
+          "is_slice": false,
+          "is_required": true
+        },
+        {
+          "name": "amount",
+          "ty": "U256",
+          "is_ref": false,
+          "is_slice": false,
+          "is_required": true
+        }
+      ]
+    },
+    {
       "name": "OwnershipTransferred",
       "args": [
         {
@@ -239,6 +258,22 @@
         "Payable",
         "NonReentrant"
       ]
+    },
+    {
+      "name": "withdraw_unsold_tokens",
+      "args": [
+        {
+          "name": "recipient",
+          "ty": "Key",
+          "is_ref": false,
+          "is_slice": false,
+          "is_required": true
+        }
+      ],
+      "is_mutable": true,
+      "return_ty": "Unit",
+      "ty": "Public",
+      "attributes": []
     },
     {
       "name": "get_current_ico_schedule",

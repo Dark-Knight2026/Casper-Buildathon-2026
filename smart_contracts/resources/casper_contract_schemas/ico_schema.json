@@ -163,6 +163,24 @@
       }
     },
     {
+      "struct": {
+        "name": "UnsoldTokensWithdrawn",
+        "description": null,
+        "members": [
+          {
+            "name": "recipient",
+            "description": null,
+            "ty": "Key"
+          },
+          {
+            "name": "amount",
+            "description": null,
+            "ty": "U256"
+          }
+        ]
+      }
+    },
+    {
       "enum": {
         "name": "Currency",
         "description": null,
@@ -399,6 +417,22 @@
       "access": "public"
     },
     {
+      "name": "withdraw_unsold_tokens",
+      "description": "",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "recipient",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        }
+      ],
+      "return_ty": "Unit",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
       "name": "get_current_ico_schedule",
       "description": "",
       "is_mutable": false,
@@ -548,6 +582,10 @@
     {
       "name": "TokensPurchased",
       "ty": "TokensPurchased"
+    },
+    {
+      "name": "UnsoldTokensWithdrawn",
+      "ty": "UnsoldTokensWithdrawn"
     }
   ],
   "call": {

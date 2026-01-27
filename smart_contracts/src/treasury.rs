@@ -69,6 +69,8 @@ impl Treasury {
         }
     }
 
+    // TODO implement withdraw function for CSPR and CEP18 tokens
+
     /// Returns the TailorCoin (BIG) token reserves stored on this contract and available to withdraw by the owner
     pub fn get_reserves(&self) -> U256 {
         Cep18ContractRef::new(self.env(), self.get_tailor_coin_contract_address())
