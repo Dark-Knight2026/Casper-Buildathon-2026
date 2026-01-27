@@ -49,8 +49,8 @@ export function ICOPage() {
         );
       case 2:
         return (
-          <ActivePresale
-            
+          <ActivePresale 
+            endTimestamp={timestamps.presaleEnd}
           />
         );
       case 3:

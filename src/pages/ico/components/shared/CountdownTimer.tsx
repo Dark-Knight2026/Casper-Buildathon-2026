@@ -15,6 +15,7 @@ interface CountdownTimerProps {
 const calculateTimeLeft = (targetTimestamp: number): CountdownTime => {
   const now = Date.now();
   const difference = targetTimestamp - now;
+  console.log('Time targetTimestamp:', targetTimestamp);
 
   if (difference <= 0) {
     return {
@@ -107,20 +108,23 @@ export function CountdownTimer({
 
   if (variant === 'compact') {
     return (
-      <div className={cn('flex items-center gap-1 font-mono', className)}>
-        {timeLeft.days > 0 && (
-          <>
-            <span className="font-semibold">{timeLeft.days}</span>
-            <span className="text-[hsl(var(--ico-timer-label))]">d</span>
-          </>
-        )}
-        <span className="font-semibold">{formatNumber(timeLeft.hours)}</span>
-        <span className="text-[hsl(var(--ico-timer-label))]">h</span>
-        <span className="font-semibold">{formatNumber(timeLeft.minutes)}</span>
-        <span className="text-[hsl(var(--ico-timer-label))]">m</span>
-        <span className="font-semibold">{formatNumber(timeLeft.seconds)}</span>
-        <span className="text-[hsl(var(--ico-timer-label))]">s</span>
-      </div>
+      <Card className='p-4 flex justify-center items-center'>
+        <div className={cn('flex items-center justify-center gap-2 font-mono text-white', className)}>
+          {timeLeft.days > 0 && (
+            <>
+              <span className="text-xl font-semibold">{timeLeft.days}</span>
+              <span className="text-[hsl(var(--ico-timer-label))]">Days</span>
+            </>
+          )}
+          <div className='text-xl flex gap-1'>
+            <span className="font-semibold">{formatNumber(timeLeft.hours)}</span>
+            <span className="text-[hsl(var(--ico-timer-label))]">:</span>
+            <span className="font-semibold">{formatNumber(timeLeft.minutes)}</span>
+            <span className="text-[hsl(var(--ico-timer-label))]">:</span>
+            <span className="font-semibold">{formatNumber(timeLeft.seconds)}</span>
+          </div>
+        </div>
+      </Card>
     );
   }
 

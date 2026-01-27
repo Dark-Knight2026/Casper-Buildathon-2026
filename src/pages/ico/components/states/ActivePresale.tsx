@@ -4,9 +4,11 @@ import { Title } from '../shared/Title';
 import { ProgressBar } from '../shared/ProgressBar';
 import { WalletCard } from '../shared/WalletCard';
 import { TransactionHistory, Transaction } from '../shared/TransactionHistory';
+import CountdownTimer from '../shared/CountdownTimer';
 
 interface ActivePresaleProps {
   className?: string;
+  endTimestamp: number;
 }
 
 // Mock data for development
@@ -61,7 +63,7 @@ const MOCK_TRANSACTIONS: Transaction[] = [
   },
 ];
 
-export function ActivePresale({ className }: ActivePresaleProps) {
+export function ActivePresale({ className, endTimestamp }: ActivePresaleProps) {
   return (
     <div className={cn('max-w-5xl mx-auto', className)}>
       {/* Hero Section */}
@@ -76,17 +78,21 @@ export function ActivePresale({ className }: ActivePresaleProps) {
         </p>
       </div>
       <div className='mx-auto flex flex-col md:flex-row gap-4 items-start justify-center'>
+        <div className='w-full flex flex-col gap-4'>
+          <p className='text-[hsl(var(--ico-text-secondary))] pl-2'>Presale ends in:</p>
+          <CountdownTimer variant='compact' targetTimestamp={endTimestamp} className="py-2" />
 
-        {/* Progress Bar */}
-        <ProgressBar
-          currentValue={MOCK_PROGRESS.tokensSold}
-          maxValue={MOCK_PROGRESS.totalAllocation}
-          amountRaised={MOCK_PROGRESS.amountRaised}
-          hardCap={Number(ICO_CONFIG.PRE_SALE.hardCap)}
-          tokenSymbol={ICO_CONFIG.TOKEN.symbol}
-          initialPrice={Number(ICO_CONFIG.PRE_SALE.price)}
-          className="w-full"
-        />
+          {/* Progress Bar */}
+          <ProgressBar
+            currentValue={MOCK_PROGRESS.tokensSold}
+            maxValue={MOCK_PROGRESS.totalAllocation}
+            amountRaised={MOCK_PROGRESS.amountRaised}
+            hardCap={Number(ICO_CONFIG.PRE_SALE.hardCap)}
+            tokenSymbol={ICO_CONFIG.TOKEN.symbol}
+            initialPrice={Number(ICO_CONFIG.PRE_SALE.price)}
+            className="w-full"
+          />
+        </div>
 
         {/* Wallet Card */}
         <WalletCard
