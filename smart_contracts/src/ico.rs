@@ -171,7 +171,8 @@ impl ICO {
         });
     }
 
-    /// Allows to withdraw all unsold tokens from all finished ICO schedules. Only the owner can interact with it
+    /// Allows to withdraw all unsold tokens from all finished ICO schedules. Only the owner can interact with this
+    /// entrypoint
     pub fn withdraw_unsold_tokens(&mut self, recipient: Address) {
         self.assert_owner();
 

@@ -418,7 +418,7 @@
     },
     {
       "name": "withdraw_unsold_tokens",
-      "description": "Allows to withdraw all unsold tokens from all finished ICO schedules. Only the owner can interact with it",
+      "description": "Allows to withdraw all unsold tokens from all finished ICO schedules. Only the owner can interact with this",
       "is_mutable": true,
       "arguments": [
         {

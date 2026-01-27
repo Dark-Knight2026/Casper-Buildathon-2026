@@ -1,14 +1,14 @@
-use odra::{casper_types::U256, prelude::*, ContractRef};
+use odra::{casper_types::U256, prelude::*, uints::ToU512, ContractRef};
 use odra_modules::{access::Ownable, cep18_token::Cep18ContractRef};
 
 use crate::constants::{ONE_HUNDRED_PERCENT_BPS, STAKING_REWARDS_BPS};
 use crate::staking::StakingContractRef;
 use crate::treasury::{
     errors::Error,
-    events::{ReservesWithdrawn, RewardsDeposited},
+    events::{ReservesWithdrawn, RewardsDeposited, TokenWithdrawn},
 };
 
-#[odra::module(errors = Error, events = [RewardsDeposited, ReservesWithdrawn])]
+#[odra::module(errors = Error, events = [RewardsDeposited, ReservesWithdrawn, TokenWithdrawn])]
 pub struct Treasury {
     ownable: SubModule<Ownable>,
     staking: Var<Address>,
@@ -69,7 +69,47 @@ impl Treasury {
         }
     }
 
-    // TODO implement withdraw function for CSPR and CEP18 tokens
+    /// Allows to withdraw any token that is stored on this contract except of the TailorCoin (BIG) token which is the
+    /// reserves token. Only the owner can interact with this entrypoint
+    pub fn withdraw_token(&mut self, token: Option<Address>, amount: U256, recipient: Address) {
+        self.assert_owner();
+
+        if amount.is_zero() {
+            self.env().revert(Error::InvalidWithdrawalAmount);
+        }
+
+        match token {
+            None => {
+                let amount = amount.to_u512();
+
+                if amount > self.env().self_balance() {
+                    self.env().revert(Error::InsufficientWithdrawalTokenAmount);
+                }
+
+                self.env().transfer_tokens(&recipient, &amount);
+            }
+            Some(token) => {
+                if token == self.get_tailor_coin_contract_address() {
+                    self.env()
+                        .revert(Error::DirectReservesTokenWithdrawalIsNotAllowed);
+                }
+
+                let mut token = Cep18ContractRef::new(self.env(), token);
+
+                if amount > token.balance_of(&self.env().self_address()) {
+                    self.env().revert(Error::InsufficientWithdrawalTokenAmount);
+                }
+
+                token.transfer(&recipient, &amount);
+            }
+        }
+
+        self.env().emit_native_event(TokenWithdrawn {
+            token,
+            amount,
+            recipient,
+        });
+    }
 
     /// Returns the TailorCoin (BIG) token reserves stored on this contract and available to withdraw by the owner
     pub fn get_reserves(&self) -> U256 {
@@ -118,6 +158,13 @@ pub mod events {
         pub recipient: Address,
         pub amount: U256,
     }
+
+    #[odra::event]
+    pub struct TokenWithdrawn {
+        pub token: Option<Address>,
+        pub amount: U256,
+        pub recipient: Address,
+    }
 }
 
 pub mod errors {
@@ -128,6 +175,9 @@ pub mod errors {
         TailorCoinContractIsNotSet = 64_000,
         StakingContractIsNotSet = 64_001,
         NotEnoughReserves = 64_002,
+        InvalidWithdrawalAmount = 64_003,
+        DirectReservesTokenWithdrawalIsNotAllowed = 64_004,
+        InsufficientWithdrawalTokenAmount = 64_005,
     }
 }
 
