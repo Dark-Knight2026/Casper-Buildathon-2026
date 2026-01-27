@@ -7,7 +7,7 @@ use odra_cli::{deploy::DeployScript, DeployedContractsContainer, DeployerExt, Od
 
 use leasefi_contracts::{
     escrow::{Escrow, EscrowInitArgs},
-    ico::ICO,
+    ico::{types::Currency, ICOInitArgs, ICO},
     lease::{Lease, LeaseInitArgs},
     nft::{NFTInitArgs, NFT},
     roles::{Roles, RolesInitArgs},
@@ -32,6 +32,7 @@ impl DeployScript for LeasefiDeployScript {
         );
         let tailor_coin = TailorCoin::load_or_deploy_with_cfg(
             &env,
+            None,
             TailorCoinInitArgs {
                 symbol: String::from("BIG"),
                 name: String::from("BIG"),
@@ -44,6 +45,7 @@ impl DeployScript for LeasefiDeployScript {
         )?;
         let mut nft = NFT::load_or_deploy_with_cfg(
             &env,
+            None,
             NFTInitArgs {
                 owner: env.caller(),
                 symbol: String::from("BIG"),
@@ -57,6 +59,7 @@ impl DeployScript for LeasefiDeployScript {
         )?;
         let roles = Roles::load_or_deploy_with_cfg(
             &env,
+            None,
             RolesInitArgs { admin: new_owner },
             InstallConfig::upgradable::<Roles>(),
             container,
@@ -64,6 +67,7 @@ impl DeployScript for LeasefiDeployScript {
         )?;
         let mut treasury = Treasury::load_or_deploy_with_cfg(
             &env,
+            None,
             TreasuryInitArgs {
                 owner: env.caller(),
             },
@@ -73,6 +77,7 @@ impl DeployScript for LeasefiDeployScript {
         )?;
         let mut escrow = Escrow::load_or_deploy_with_cfg(
             &env,
+            None,
             EscrowInitArgs {
                 owner: env.caller(),
                 min_deadline: 5 * 60,
@@ -83,6 +88,7 @@ impl DeployScript for LeasefiDeployScript {
         )?;
         let mut lease = Lease::load_or_deploy_with_cfg(
             &env,
+            None,
             LeaseInitArgs {
                 owner: env.caller(),
             },
@@ -90,15 +96,56 @@ impl DeployScript for LeasefiDeployScript {
             container,
             400_000_000_000,
         )?;
+        let mut ico = ICO::load_or_deploy_with_cfg(
+            &env,
+            None,
+            ICOInitArgs {
+                owner: env.caller(),
+                styks_price_feed: Address::new(
+                    "814fedbd4ae53b82ab19b1ff6698ce412445c3266271fcb639986d37dc0ae121", // mainnet, 2879d6e927289197aab0101cc033f532fe22e4ab4686e44b5743cb1333031acc - testnet
+                )
+                .unwrap(),
+            },
+            InstallConfig::upgradable::<ICO>(),
+            container,
+            400_000_000_000,
+        )?;
 
+        // Setup Treasury
         treasury.set_tailor_coin(tailor_coin.address());
         // treasury.set_staking(staking.address());
 
+        // Setup Lease
         lease.set_roles(roles.address());
         lease.set_escrow(escrow.address());
 
+        // Setup Escrow
         escrow.set_lease(lease.address());
         escrow.set_treasury(treasury.address());
+
+        // Setup ICO
+        ico.set_tailor_coin(tailor_coin.address());
+        ico.set_treasury(treasury.address());
+        ico.add_currency(Currency::CSPR, None);
+        ico.add_currency(
+            Currency::USDC,
+            Some(
+                Address::new(
+                    "48bd364532febf044cca8d2d716336b93d27458ce0aa48ad292ca28304fa8649", // mainnet
+                )
+                .unwrap(),
+            ),
+        );
+        ico.add_currency(
+            Currency::USDT,
+            Some(
+                Address::new(
+                    "b53fa728c7074c84f35407f4d0989eb4133d391402b7ce13b7feeb01479a4f01", // mainnet
+                )
+                .unwrap(),
+            ),
+        );
+        // TODO setup ICO sales
 
         // Transfer ownership
         nft.transfer_ownership(&new_owner);
