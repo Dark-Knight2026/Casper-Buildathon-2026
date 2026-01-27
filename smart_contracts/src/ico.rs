@@ -430,3 +430,115 @@ pub mod types {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use odra::host::{Deployer, HostEnv};
+
+    use crate::{
+        tailor_coin::{TailorCoin, TailorCoinHostRef, TailorCoinInitArgs},
+        treasury::{Treasury, TreasuryHostRef, TreasuryInitArgs},
+    };
+
+    use super::*;
+
+    struct Users {
+        owner: Address,
+        alice: Address,
+        bob: Address,
+    }
+
+    struct Context {
+        tailor_coin: TailorCoinHostRef,
+        usdc: TailorCoinHostRef,
+        usdt: TailorCoinHostRef,
+        treasury: TreasuryHostRef,
+        ico: ICOHostRef,
+        users: Users,
+    }
+
+    #[test]
+    fn test_init_should_initialize_contract_properly() {
+        let env = odra_test::env();
+        let ctx = setup(&env);
+
+        assert_eq!(ctx.ico.get_owner(), ctx.users.owner, "Invalid owner");
+        assert_eq!(
+            ctx.ico.get_styks_price_feed_contract_address(),
+            ctx.users.owner,
+            "Invalid Styks Oracle Price Feed contract address"
+        );
+        assert_eq!(
+            ctx.ico.get_tailor_coin_contract_address(),
+            ctx.tailor_coin.address(),
+            "Invalid TailorCoin contract address"
+        );
+        assert_eq!(
+            ctx.ico.get_treasury_contract_address(),
+            ctx.treasury.address(),
+            "Invalid Treasury contract address"
+        );
+    }
+
+    fn setup(env: &HostEnv) -> Context {
+        let users = Users {
+            owner: env.get_account(0),
+            alice: env.get_account(1),
+            bob: env.get_account(2),
+        };
+        let initial_supply = 5000000000000000000000000000000;
+        let tailor_coin = deploy_mock_cep18_token(env, "BIG", "BIG", 18, initial_supply);
+        let mut usdc = deploy_mock_cep18_token(env, "USDC", "USD Coin", 6, initial_supply);
+        let mut usdt = deploy_mock_cep18_token(env, "USDT", "Tether USD", 6, initial_supply);
+        let mut treasury = Treasury::deploy(env, TreasuryInitArgs { owner: users.owner });
+        let mut ico = ICO::deploy(
+            env,
+            ICOInitArgs {
+                owner: users.owner,
+                styks_price_feed: users.owner, // TODO mock properly
+            },
+        );
+
+        treasury.set_tailor_coin(tailor_coin.address());
+
+        ico.set_tailor_coin(tailor_coin.address());
+        ico.set_treasury(treasury.address());
+
+        ico.add_currency(Currency::CSPR, None);
+        ico.add_currency(Currency::USDC, Some(usdc.address()));
+        ico.add_currency(Currency::USDT, Some(usdt.address()));
+
+        usdc.transfer(&users.alice, &U256::from(initial_supply / 2));
+        usdc.transfer(&users.bob, &U256::from(initial_supply / 2));
+
+        usdt.transfer(&users.alice, &U256::from(initial_supply / 2));
+        usdt.transfer(&users.bob, &U256::from(initial_supply / 2));
+
+        Context {
+            tailor_coin,
+            usdc,
+            usdt,
+            treasury,
+            ico,
+            users,
+        }
+    }
+
+    fn deploy_mock_cep18_token(
+        env: &HostEnv,
+        symbol: &str,
+        name: &str,
+        decimals: u8,
+        initial_supply: u128,
+    ) -> TailorCoinHostRef {
+        TailorCoin::deploy(
+            env,
+            TailorCoinInitArgs {
+                symbol: String::from(symbol),
+                name: String::from(name),
+                decimals,
+                initial_supply: U256::from(initial_supply),
+            },
+        )
+    }
+}
