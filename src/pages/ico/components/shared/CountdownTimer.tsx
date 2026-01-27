@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import type { CountdownTime } from '@/types/ico';
+import { Card } from './Card';
 
 interface CountdownTimerProps {
   targetTimestamp: number;
@@ -135,16 +136,7 @@ export function CountdownTimer({
     <div className={cn('flex items-center justify-center', classes.container, className)}>
       {timeUnits.map((unit) => (
         <div key={unit.label} className="flex items-center">
-          <div
-            className={cn(
-              'relative flex flex-col gap-2 items-center justify-center rounded-xl overflow-hidden',
-              'bg-[hsl(var(--ico-bg-secondary))] border  border-sky-800/70',
-              'shadow-2xl shadow-sky-500/20',
-              classes.card
-            )}
-          >
-            {/* Light gradient from bottom-right corner */}
-            <div className="absolute inset-0 bg-gradient-to-tl from-white/15 via-transparent to-transparent pointer-events-none" />
+          <Card className={classes.card}>
             <span
               className={cn(
                 'relative font-mono font-bold text-white',
@@ -163,7 +155,7 @@ export function CountdownTimer({
                 {unit.label}
               </span>
             )}
-          </div>
+          </Card>
         </div>
       ))}
     </div>

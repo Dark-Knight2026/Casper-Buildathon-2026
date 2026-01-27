@@ -2,6 +2,8 @@ import { cn } from '@/lib/utils';
 import { CountdownTimer } from '../shared/CountdownTimer';
 import { ICO_CONFIG } from '@/constants/ico';
 import { MainButton } from '../shared/MainButton';
+import { Title } from '../shared/Title';
+import { InfoCard } from '../shared/InfoCard';
 
 interface PresaleCountdownProps {
   targetTimestamp: number;
@@ -18,9 +20,9 @@ export function PresaleCountdown({ targetTimestamp, endTimestamp, className }: P
       {/* Hero Section */}
       <div className="text-center mb-12">
 
-        <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold text-[hsl(var(--ico-text-primary))] mb-4">
+        <Title className="mb-4">
           {ICO_CONFIG.TOKEN.symbol} Token Presale
-        </h1>
+        </Title>
 
         <p className="text-lg md:text-xl font-thin text-[hsl(var(--ico-text-secondary))] max-w-2xl mx-auto">
           Presale Sale Starts In
@@ -37,7 +39,7 @@ export function PresaleCountdown({ targetTimestamp, endTimestamp, className }: P
         />
 
         {/* Pre-sale Info */}
-        <div className="mt-14 grid grid-cols-1 bg-black rounded-xl md:grid-cols-4 z-20">
+        <InfoCard className="mt-14">
           <div className="text-center p-4">
             <p className="text-sm text-[hsl(var(--ico-text-secondary))] mb-1">Token Price</p>
             <p className="text-lg font-bold text-[hsl(var(--ico-text-primary))]">
@@ -63,7 +65,7 @@ export function PresaleCountdown({ targetTimestamp, endTimestamp, className }: P
             <p className="text-sm text-[hsl(var(--ico-text-secondary))] mb-1">Presale Ends:</p>
             <p className="text-sm text-[hsl(var(--ico-text-secondary))] mb-1">{new Date(endTimestamp).toLocaleString()}</p>
           </div>
-        </div>
+        </InfoCard>
       </div>
       <MainButton text="Learn More"/>
     </div>
