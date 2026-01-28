@@ -847,13 +847,173 @@ mod tests {
     //                         withdraw_unsold_tokens()                        //
     /////////////////////////////////////////////////////////////////////////////
 
-    // TODO
+    #[test]
+    fn test_withdraw_unsold_tokens_should_revert_if_not_owner_is_calling() {
+        let mut ctx = setup(odra_test::env(), false);
+
+        ctx.env.set_caller(ctx.users.alice);
+
+        assert_eq!(
+            ctx.ico
+                .try_withdraw_unsold_tokens(ctx.users.owner)
+                .unwrap_err(),
+            AccessError::CallerNotTheOwner.into(),
+            "Should revert when is called by not the owner"
+        );
+    }
+
+    #[test]
+    fn test_withdraw_unsold_tokens_should_do_nothing_if_withdrawal_amount_is_zero() {
+        let ctx = setup(odra_test::env(), false);
+
+        assert!(
+            !ctx.env.emitted_native_event(
+                &ctx.ico,
+                UnsoldTokensWithdrawn {
+                    recipient: ctx.users.owner,
+                    amount: U256::zero()
+                }
+            ),
+            "UnsoldTokensWithdrawn event should not be emitted"
+        );
+    }
+
+    #[test]
+    fn test_withdraw_unsold_tokens_should_withdraw_unsold_tokens_from_one_ico_schedule_properly() {
+        let mut ctx = setup(odra_test::env(), true);
+        let creation_params = get_ico_schedules_creation_params(&ctx.env);
+        let recipient = ctx.users.owner;
+
+        ctx.env
+            .advance_block_time(creation_params[0].end_timestamp + 1 - ctx.env.block_time());
+
+        let prev_recipient_balance = ctx.tailor_coin.balance_of(&recipient);
+        let prev_ico_balance = ctx.tailor_coin.balance_of(&ctx.ico.address());
+
+        ctx.ico.withdraw_unsold_tokens(recipient);
+
+        let curr_recipient_balance = ctx.tailor_coin.balance_of(&recipient);
+        let curr_ico_balance = ctx.tailor_coin.balance_of(&ctx.ico.address());
+
+        assert!(
+            ctx.env.emitted_native_event(
+                &ctx.ico,
+                UnsoldTokensWithdrawn {
+                    recipient,
+                    amount: creation_params[0].sale_amount
+                }
+            ),
+            "UnsoldTokensWithdrawn event should be emitted"
+        );
+        assert_eq!(
+            curr_recipient_balance,
+            prev_recipient_balance + creation_params[0].sale_amount,
+            "Invalid recipient token balance"
+        );
+        assert_eq!(
+            curr_ico_balance,
+            prev_ico_balance - creation_params[0].sale_amount,
+            "Invalid ICO contract token balance"
+        );
+    }
+
+    #[test]
+    fn test_withdraw_unsold_tokens_should_withdraw_unsold_tokens_from_all_ico_schedules_properly() {
+        let mut ctx: Context = setup(odra_test::env(), true);
+        let creation_params = get_ico_schedules_creation_params(&ctx.env);
+        let recipient = ctx.users.owner;
+        let prev_recipient_balance = ctx.tailor_coin.balance_of(&recipient);
+        let prev_ico_balance = ctx.tailor_coin.balance_of(&ctx.ico.address());
+        let withdrawn_amount = creation_params
+            .iter()
+            .fold(U256::zero(), |acc, params| acc + params.sale_amount);
+
+        ctx.env.advance_block_time(
+            creation_params[creation_params.len() - 1].end_timestamp + 1 - ctx.env.block_time(),
+        );
+
+        ctx.ico.withdraw_unsold_tokens(recipient);
+
+        let curr_recipient_balance = ctx.tailor_coin.balance_of(&recipient);
+        let curr_ico_balance = ctx.tailor_coin.balance_of(&ctx.ico.address());
+
+        assert!(
+            ctx.env.emitted_native_event(
+                &ctx.ico,
+                UnsoldTokensWithdrawn {
+                    recipient,
+                    amount: withdrawn_amount
+                }
+            ),
+            "UnsoldTokensWithdrawn event should be emitted"
+        );
+        assert_eq!(
+            curr_recipient_balance,
+            prev_recipient_balance + withdrawn_amount,
+            "Invalid recipient token balance"
+        );
+        assert_eq!(
+            curr_ico_balance,
+            prev_ico_balance - withdrawn_amount,
+            "Invalid ICO contract token balance"
+        );
+    }
 
     /////////////////////////////////////////////////////////////////////////////
     //                        get_current_ico_schedule()                       //
     /////////////////////////////////////////////////////////////////////////////
 
-    // TODO
+    #[test]
+    fn test_get_current_ico_schedule_should_return_none_if_no_active_ico_schedule() {
+        let ctx = setup(odra_test::env(), true);
+        let creation_params = get_ico_schedules_creation_params(&ctx.env);
+
+        for params in &creation_params {
+            ctx.env
+                .advance_block_time(params.start_timestamp - ctx.env.block_time() - 1);
+
+            assert_eq!(
+                ctx.ico.get_current_ico_schedule(),
+                None,
+                "Should be None if ICO schedule has not started yet"
+            );
+        }
+
+        ctx.env.advance_block_time(
+            creation_params[creation_params.len() - 1].end_timestamp - ctx.env.block_time() + 1,
+        );
+
+        assert_eq!(
+            ctx.ico.get_current_ico_schedule(),
+            None,
+            "Should be None if the last ICO schedule has finished already"
+        );
+    }
+
+    #[test]
+    fn test_get_current_ico_schedule_should_return_current_ico_schedule_properly() {
+        let ctx = setup(odra_test::env(), true);
+        let creation_params = get_ico_schedules_creation_params(&ctx.env);
+
+        for (id, params) in creation_params.iter().enumerate() {
+            ctx.env
+                .advance_block_time(params.start_timestamp - ctx.env.block_time());
+
+            assert_eq!(
+                ctx.ico.get_current_ico_schedule(),
+                Some((ICOScheduleId::from(id), params.clone().into())),
+                "Should return proper ICO schedule and its ID - 1"
+            );
+
+            ctx.env.advance_block_time(1);
+
+            assert_eq!(
+                ctx.ico.get_current_ico_schedule(),
+                Some((ICOScheduleId::from(id), params.clone().into())),
+                "Should return proper ICO schedule and its ID - 2"
+            );
+        }
+    }
 
     /////////////////////////////////////////////////////////////////////////////
     //                                 Helpers                                 //
