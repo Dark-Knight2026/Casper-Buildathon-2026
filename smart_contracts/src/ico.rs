@@ -278,7 +278,7 @@ impl ICO {
                 .unwrap_or_revert_with(&self.env(), Error::InvalidICOScheduleId);
 
             // Start timestamp validation when previous ICO schedule exists
-            if prev_ico_schedule.is_active(&self.env()) {
+            if prev_ico_schedule.end_timestamp > self.env().get_block_time() {
                 if ico_schedule.start_timestamp <= prev_ico_schedule.end_timestamp {
                     self.env().revert(Error::InvalidICOScheduleStartTimestamp);
                 }
@@ -466,7 +466,7 @@ mod tests {
 
     #[test]
     fn test_init_should_initialize_contract_properly() {
-        let ctx = setup(odra_test::env());
+        let ctx = setup(odra_test::env(), false);
 
         assert_eq!(ctx.ico.get_owner(), ctx.users.owner, "Invalid owner");
         assert_eq!(
@@ -492,7 +492,7 @@ mod tests {
 
     #[test]
     fn test_set_tailor_coin_should_revert_if_not_owner_is_calling() {
-        let mut ctx = setup(odra_test::env());
+        let mut ctx = setup(odra_test::env(), false);
 
         ctx.env.set_caller(ctx.users.alice);
 
@@ -505,7 +505,7 @@ mod tests {
 
     #[test]
     fn test_set_tailor_coin_should_set_tailor_coin_properly() {
-        let mut ctx = setup(odra_test::env());
+        let mut ctx = setup(odra_test::env(), false);
         let tailor_coin = ctx.usdc.address();
 
         ctx.ico.set_tailor_coin(tailor_coin);
@@ -523,7 +523,7 @@ mod tests {
 
     #[test]
     fn test_set_treasury_should_revert_if_not_owner_is_calling() {
-        let mut ctx = setup(odra_test::env());
+        let mut ctx = setup(odra_test::env(), false);
 
         ctx.env.set_caller(ctx.users.alice);
 
@@ -536,7 +536,7 @@ mod tests {
 
     #[test]
     fn test_set_treasury_should_set_treasury_properly() {
-        let mut ctx = setup(odra_test::env());
+        let mut ctx = setup(odra_test::env(), false);
         let treasury = ctx.usdt.address();
 
         ctx.ico.set_treasury(treasury);
@@ -554,7 +554,7 @@ mod tests {
 
     #[test]
     fn test_add_currency_should_revert_if_not_owner_is_calling() {
-        let mut ctx = setup(odra_test::env());
+        let mut ctx = setup(odra_test::env(), false);
 
         ctx.env.set_caller(ctx.users.alice);
 
@@ -567,7 +567,7 @@ mod tests {
 
     #[test]
     fn test_add_currency_should_revert_if_currency_address_is_not_provided_for_cep18_token() {
-        let mut ctx = setup(odra_test::env());
+        let mut ctx = setup(odra_test::env(), false);
 
         assert_eq!(
             ctx.ico.try_add_currency(Currency::USDC, None).unwrap_err(),
@@ -578,7 +578,7 @@ mod tests {
 
     #[test]
     fn test_add_currency_should_add_cspr_token_support_properly() {
-        let mut ctx = setup(odra_test::env());
+        let mut ctx = setup(odra_test::env(), false);
         let currency = Currency::CSPR;
 
         ctx.ico.add_currency(currency, None);
@@ -597,7 +597,7 @@ mod tests {
 
     #[test]
     fn test_add_currency_should_add_cep18_token_support_properly() {
-        let mut ctx = setup(odra_test::env());
+        let mut ctx = setup(odra_test::env(), false);
         let currencies = vec![(Currency::USDC, "USDC"), (Currency::USDT, "USDT")];
 
         for currency in &currencies {
@@ -633,7 +633,7 @@ mod tests {
 
     #[test]
     fn test_remove_currency_should_revert_if_not_owner_is_calling() {
-        let mut ctx = setup(odra_test::env());
+        let mut ctx = setup(odra_test::env(), false);
 
         ctx.env.set_caller(ctx.users.alice);
 
@@ -646,7 +646,7 @@ mod tests {
 
     #[test]
     fn test_remove_currency_should_remove_cspr_token_support_properly() {
-        let mut ctx = setup(odra_test::env());
+        let mut ctx = setup(odra_test::env(), false);
         let currency = Currency::CSPR;
 
         ctx.ico.remove_currency(currency);
@@ -665,7 +665,7 @@ mod tests {
 
     #[test]
     fn test_remove_currency_should_remove_cep18_token_support_properly() {
-        let mut ctx = setup(odra_test::env());
+        let mut ctx = setup(odra_test::env(), false);
         let currencies = vec![(Currency::USDC, "USDC"), (Currency::USDT, "USDT")];
 
         for currency in &currencies {
@@ -695,7 +695,7 @@ mod tests {
 
     #[test]
     fn test_add_ico_schedule_should_revert_if_not_owner_is_calling() {
-        let mut ctx = setup(odra_test::env());
+        let mut ctx = setup(odra_test::env(), false);
 
         ctx.env.set_caller(ctx.users.alice);
 
@@ -708,7 +708,152 @@ mod tests {
         );
     }
 
-    // TODO tests for validation and creation
+    #[test]
+    fn test_add_ico_schedule_should_fail_if_invalid_ico_schedule_start_timestamp_1() {
+        let mut ctx = setup(odra_test::env(), false);
+        let mut creation_params = get_ico_schedules_creation_params(&ctx.env);
+
+        ctx.env.advance_block_time(ONE_MINUTE * 1000);
+
+        let now = ctx.env.block_time();
+
+        for start_timestamp in vec![now, now - 1] {
+            creation_params[0].start_timestamp = start_timestamp;
+
+            assert_eq!(
+                ctx.ico
+                    .try_add_ico_schedule(creation_params[0].clone())
+                    .unwrap_err(),
+                Error::InvalidICOScheduleStartTimestamp.into(),
+                "Should revert when ICO schedule start timestamp is LTE to block timestamp"
+            );
+        }
+    }
+
+    #[test]
+    fn test_add_ico_schedule_should_fail_if_invalid_ico_schedule_start_timestamp_2() {
+        let mut ctx = setup(odra_test::env(), false);
+        let mut creation_params = get_ico_schedules_creation_params(&ctx.env);
+
+        ctx.tailor_coin
+            .approve(&ctx.ico.address(), &creation_params[0].sale_amount);
+        ctx.ico.add_ico_schedule(creation_params[0].clone());
+
+        let end_timestamp = creation_params[0].end_timestamp;
+
+        for start_timestamp in vec![end_timestamp, end_timestamp - 1] {
+            creation_params[1].start_timestamp = start_timestamp;
+
+            assert_eq!(
+                ctx.ico
+                    .try_add_ico_schedule(creation_params[1].clone())
+                    .unwrap_err(),
+                Error::InvalidICOScheduleStartTimestamp.into(),
+                "Should revert when ICO schedule start timestamp is LTE to previous ICO schedule end timestamp"
+            );
+        }
+    }
+
+    #[test]
+    fn test_add_ico_schedule_should_fail_if_invalid_ico_schedule_start_timestamp_3() {
+        let mut ctx = setup(odra_test::env(), false);
+        let mut creation_params = get_ico_schedules_creation_params(&ctx.env);
+
+        ctx.tailor_coin
+            .approve(&ctx.ico.address(), &creation_params[0].sale_amount);
+        ctx.ico.add_ico_schedule(creation_params[0].clone());
+
+        ctx.env
+            .advance_block_time(creation_params[0].end_timestamp - ctx.env.block_time());
+
+        let now = ctx.env.block_time();
+
+        for start_timestamp in vec![now, now - 1] {
+            creation_params[1].start_timestamp = start_timestamp;
+
+            assert_eq!(
+                ctx.ico
+                    .try_add_ico_schedule(creation_params[1].clone())
+                    .unwrap_err(),
+                Error::InvalidICOScheduleStartTimestamp.into(),
+                "Should revert when ICO schedule start timestamp is LTE to block timestamp"
+            );
+        }
+    }
+
+    #[test]
+    fn test_add_ico_schedule_should_fail_if_invalid_ico_schedule_end_timestamp() {
+        let mut ctx = setup(odra_test::env(), false);
+        let mut creation_params = get_ico_schedules_creation_params(&ctx.env);
+        let start_timestamp = creation_params[0].start_timestamp;
+
+        for end_timestamp in vec![start_timestamp, start_timestamp - 1] {
+            creation_params[0].end_timestamp = end_timestamp;
+
+            assert_eq!(
+                ctx.ico
+                    .try_add_ico_schedule(creation_params[0].clone())
+                    .unwrap_err(),
+                Error::InvalidICOScheduleEndTimestamp.into(),
+                "Should revert when ICO schedule end timestamp is LTE to ICO schedule start timestamp"
+            );
+        }
+    }
+
+    #[test]
+    fn test_add_ico_schedule_should_fail_if_invalid_ico_schedule_sale_amount() {
+        let mut ctx = setup(odra_test::env(), false);
+        let mut creation_params = get_ico_schedules_creation_params(&ctx.env);
+
+        creation_params[0].sale_amount = U256::zero();
+
+        assert_eq!(
+            ctx.ico
+                .try_add_ico_schedule(creation_params[0].clone())
+                .unwrap_err(),
+            Error::InvalidICOScheduleSaleAmount.into(),
+            "Should revert when ICO schedule sale amount is zero"
+        );
+    }
+
+    #[test]
+    fn test_add_ico_schedule_should_fail_if_invalid_ico_schedule_price() {
+        let mut ctx = setup(odra_test::env(), false);
+        let mut creation_params = get_ico_schedules_creation_params(&ctx.env);
+
+        creation_params[0].price = U256::zero();
+
+        assert_eq!(
+            ctx.ico
+                .try_add_ico_schedule(creation_params[0].clone())
+                .unwrap_err(),
+            Error::InvalidICOSchedulePrice.into(),
+            "Should revert when ICO schedule price is zero"
+        );
+    }
+
+    #[test]
+    fn test_add_ico_schedule_should_add_ico_schedules_properly() {
+        add_and_verify_ico_schedules(&mut setup(odra_test::env(), false));
+    }
+
+    /////////////////////////////////////////////////////////////////////////////
+    //                                purchase()                               //
+    /////////////////////////////////////////////////////////////////////////////
+
+    // TODO
+
+    /////////////////////////////////////////////////////////////////////////////
+    //                         withdraw_unsold_tokens()                        //
+    /////////////////////////////////////////////////////////////////////////////
+
+    // TODO
+
+    /////////////////////////////////////////////////////////////////////////////
+    //                        get_current_ico_schedule()                       //
+    /////////////////////////////////////////////////////////////////////////////
+
+    // TODO
 
     /////////////////////////////////////////////////////////////////////////////
     //                                 Helpers                                 //
@@ -719,13 +864,13 @@ mod tests {
     const ONE_DAY: u64 = 24 * ONE_HOUR;
     const ONE_MONTH: u64 = 30 * ONE_DAY;
 
-    fn setup(env: HostEnv) -> Context {
+    fn setup(env: HostEnv, add_ico_schedules: bool) -> Context {
         let users = Users {
             owner: env.get_account(0),
             alice: env.get_account(1),
             bob: env.get_account(2),
         };
-        let initial_supply = 5000000000000000000000000000000;
+        let initial_supply = 5000000000000 * 10u128.pow(18);
         let tailor_coin = deploy_mock_cep18_token(&env, "BIG", "BIG", 18, initial_supply);
         let mut usdc = deploy_mock_cep18_token(&env, "USDC", "USD Coin", 6, initial_supply);
         let mut usdt = deploy_mock_cep18_token(&env, "USDT", "Tether USD", 6, initial_supply);
@@ -753,7 +898,7 @@ mod tests {
         usdt.transfer(&users.alice, &U256::from(initial_supply / 2));
         usdt.transfer(&users.bob, &U256::from(initial_supply / 2));
 
-        Context {
+        let mut ctx = Context {
             env,
             tailor_coin,
             usdc,
@@ -761,7 +906,13 @@ mod tests {
             treasury,
             ico,
             users,
+        };
+
+        if add_ico_schedules {
+            add_and_verify_ico_schedules(&mut ctx);
         }
+
+        ctx
     }
 
     fn deploy_mock_cep18_token(
@@ -786,22 +937,73 @@ mod tests {
         let pre_sale = ICOScheduleCreateParams {
             start_timestamp: env.block_time() + ONE_DAY,
             end_timestamp: env.block_time() + ONE_DAY + ONE_MONTH,
-            sale_amount: U256::from(5000000000000000000000000000000u128),
+            sale_amount: U256::from(125000000000 * 10u128.pow(18)),
             price: U256::from(150000), // 0.15 USD (0.15 * 1 * 10^6)
         };
         let sale = ICOScheduleCreateParams {
             start_timestamp: pre_sale.end_timestamp + ONE_DAY,
             end_timestamp: pre_sale.end_timestamp + ONE_DAY + ONE_MONTH,
-            sale_amount: U256::from(10000000000000000000000000000000u128),
+            sale_amount: U256::from(125000000000 * 10u128.pow(18)),
             price: U256::from(500000), // 0.5 USD (0.5 * 1 * 10^6)
         };
         let post_sale = ICOScheduleCreateParams {
             start_timestamp: sale.end_timestamp + ONE_DAY,
             end_timestamp: sale.end_timestamp + ONE_DAY + ONE_MONTH,
-            sale_amount: U256::from(15000000000000000000000000000000u128),
+            sale_amount: U256::from(500000000000 * 10u128.pow(18)),
             price: U256::from(1000000), // 1 USD (1 * 1 * 10^6)
         };
 
         [pre_sale, sale, post_sale]
+    }
+
+    fn add_and_verify_ico_schedules(ctx: &mut Context) {
+        let creation_params = get_ico_schedules_creation_params(&ctx.env);
+
+        for params in &creation_params {
+            let expected_ico_schedule_id = ctx.ico.get_ico_schedules_count();
+            let prev_owner_balance = ctx.tailor_coin.balance_of(&ctx.users.owner);
+            let prev_ico_balance = ctx.tailor_coin.balance_of(&ctx.ico.address());
+
+            ctx.tailor_coin
+                .approve(&ctx.ico.address(), &params.sale_amount);
+
+            let ico_schedule_id = ctx.ico.add_ico_schedule(params.clone());
+            let curr_owner_balance = ctx.tailor_coin.balance_of(&ctx.users.owner);
+            let curr_ico_balance = ctx.tailor_coin.balance_of(&ctx.ico.address());
+
+            assert!(
+                ctx.env.emitted_native_event(
+                    &ctx.ico,
+                    ICOScheduleAdded {
+                        id: expected_ico_schedule_id
+                    }
+                ),
+                "ICOScheduleAdded event should be emitted"
+            );
+            assert_eq!(
+                ico_schedule_id, expected_ico_schedule_id,
+                "Invalid created ICO schedule ID"
+            );
+            assert_eq!(
+                curr_owner_balance,
+                prev_owner_balance - params.sale_amount,
+                "Invalid owner token balance"
+            );
+            assert_eq!(
+                curr_ico_balance,
+                prev_ico_balance + params.sale_amount,
+                "Invalid ICO contract token balance"
+            );
+            assert_eq!(
+                ctx.ico.get_ico_schedules_count(),
+                expected_ico_schedule_id + 1,
+                "Invalid ICO schedules count"
+            );
+            assert_eq!(
+                ctx.ico.get_ico_schedule_by_id(&expected_ico_schedule_id),
+                Some(params.clone().into()),
+                "Invalid ICO schedule data"
+            );
+        }
     }
 }
