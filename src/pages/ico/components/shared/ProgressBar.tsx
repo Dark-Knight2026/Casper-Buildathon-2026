@@ -1,65 +1,93 @@
 import { cn } from '@/lib/utils';
 import { Card } from './Card';
 
+interface InfoColumn {
+  label: string;
+  value: string;
+}
+
 interface ProgressBarProps {
+  /** Current progress value */
   currentValue: number;
+  /** Maximum value (100% point) */
   maxValue: number;
-  amountRaised: number;
-  hardCap: number;
-  tokenSymbol: string;
-  initialPrice: number;
+  /** Label on the left side (e.g., "Progress", "Vesting Progress") */
+  label?: string;
+  /** Custom right-side label. If not provided, shows percentage */
+  rightLabel?: string;
+  /** Whether to show percentage in left label (default: true) */
+  showPercentage?: boolean;
+  /** Info columns to display below the progress bar */
+  infoColumns?: InfoColumn[];
+  /** Height of the progress bar: 'sm' (8px), 'md' (12px), 'lg' (16px) */
+  size?: 'sm' | 'md' | 'lg';
+  /** Whether to wrap in Card component (default: true) */
+  withCard?: boolean;
   className?: string;
 }
 
 export function ProgressBar({
   currentValue,
   maxValue,
-  amountRaised,
-  hardCap,
-  tokenSymbol,
-  initialPrice,
+  label = 'Progress',
+  rightLabel,
+  showPercentage = true,
+  infoColumns,
+  size = 'lg',
+  withCard = true,
   className,
 }: ProgressBarProps) {
-  const percentage = (currentValue / maxValue) * 100;
+  const percentage = maxValue > 0 ? (currentValue / maxValue) * 100 : 0;
 
-  return (
-    <Card className={cn('p-6', className)}>
+  const sizeClasses = {
+    sm: 'h-2',
+    md: 'h-3',
+    lg: 'h-4',
+  };
+
+  const content = (
+    <>
       <div className="flex justify-between items-center mb-3 w-full">
         <span className="text-sm font-medium text-[hsl(var(--ico-text-secondary))]">
-          Progress: {percentage.toFixed(1)}% sold
+          {label}{showPercentage ? `: ${percentage.toFixed(1)}%` : ''}
         </span>
-        <span className="text-sm font-medium text-[hsl(var(--ico-text-secondary))]">
-          ${amountRaised.toLocaleString()} / ${hardCap.toLocaleString()}
-        </span>
+        {rightLabel && (
+          <span className="text-sm font-medium text-[hsl(var(--ico-text-secondary))]">
+            {rightLabel}
+          </span>
+        )}
       </div>
 
-      <div className="w-full h-4 bg-[hsl(var(--ico-progress-bg))] rounded-full overflow-hidden">
+      <div className={cn('w-full bg-[hsl(var(--ico-progress-bg))] rounded-full overflow-hidden', sizeClasses[size])}>
         <div
-          className="h-full bg-gradient-to-r from-sky-900 to-sky-500 rounded-full transition-all duration-500"
-          style={{ width: `${percentage}%` }}
+          className="h-full bg-linear-to-r from-sky-900 to-sky-500 rounded-full transition-all duration-500"
+          style={{ width: `${Math.min(percentage, 100)}%` }}
         />
       </div>
 
-      {/* Info Columns */}
-      <div className="flex items-center justify-center w-full mt-6 pt-6 border-t border-sky-800/50">
-        <div className="flex-1 text-center">
-          <p className="text-sm text-[hsl(var(--ico-text-secondary))] mb-1">Funds Raised</p>
-          <p className="text-lg font-bold text-[hsl(var(--ico-text-primary))]">
-            ${amountRaised.toLocaleString()}
-          </p>
+      {infoColumns && infoColumns.length > 0 && (
+        <div className="flex items-center justify-center w-full mt-6 pt-6 border-t border-sky-800/50">
+          {infoColumns.map((column, index) => (
+            <div key={column.label} className="contents">
+              {index > 0 && <div className="w-px h-12 bg-sky-800/50" />}
+              <div className="flex-1 text-center">
+                <p className="text-sm text-[hsl(var(--ico-text-secondary))] mb-1">{column.label}</p>
+                <p className="text-lg font-bold text-[hsl(var(--ico-text-primary))]">
+                  {column.value}
+                </p>
+              </div>
+            </div>
+          ))}
         </div>
-
-        <div className="w-px h-12 bg-sky-800/50" />
-
-        <div className="flex-1 text-center">
-          <p className="text-sm text-[hsl(var(--ico-text-secondary))] mb-1">Initial Price</p>
-          <p className="text-lg font-bold text-[hsl(var(--ico-text-primary))]">
-            ${initialPrice} per {tokenSymbol}
-          </p>
-        </div>
-      </div>
-    </Card>
+      )}
+    </>
   );
+
+  if (withCard) {
+    return <Card className={cn('p-6', className)}>{content}</Card>;
+  }
+
+  return <div className={cn('w-full', className)}>{content}</div>;
 }
 
 export default ProgressBar;

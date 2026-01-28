@@ -86,10 +86,13 @@ export function ActivePresale({ className, endTimestamp }: ActivePresaleProps) {
           <ProgressBar
             currentValue={MOCK_PROGRESS.tokensSold}
             maxValue={MOCK_PROGRESS.totalAllocation}
-            amountRaised={MOCK_PROGRESS.amountRaised}
-            hardCap={Number(ICO_CONFIG.PRE_SALE.hardCap)}
-            tokenSymbol={ICO_CONFIG.TOKEN.symbol}
-            initialPrice={Number(ICO_CONFIG.PRE_SALE.price)}
+            label="Progress"
+            rightLabel={`$${MOCK_PROGRESS.amountRaised.toLocaleString()} / $${Number(ICO_CONFIG.PRE_SALE.hardCap).toLocaleString()}`}
+            showPercentage={true}
+            infoColumns={[
+              { label: 'Funds Raised', value: `$${MOCK_PROGRESS.amountRaised.toLocaleString()}` },
+              { label: 'Initial Price', value: `$${ICO_CONFIG.PRE_SALE.price} per ${ICO_CONFIG.TOKEN.symbol}` },
+            ]}
             className="w-full"
           />
         </div>
