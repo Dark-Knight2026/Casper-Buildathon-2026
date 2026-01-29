@@ -1,9 +1,9 @@
 # Code Review: LeaseFi Backend
 
-Date: 2025-11-07  
+Date: 2026-01-29  
 Reviewer: Ivan Kinder  
-Environment: GCP  
-DeploymentMethod: Cloud Build  
+Environment: TBD  
+DeploymentMethod: TBD (Dockerfile ready)  
 CompletionStatus: completed
 
 ---
@@ -202,6 +202,7 @@ axum = "~0.7"  # allows 0.7.x but not 0.8
 **Problem details:**
 
 Per company onboarding rulebook, each repository should have a `codestyle.md` that defines:
+
 - Task markers (e.g., `xxx:`, `qqq:`, `aaa:`) for tracking tasks/questions in code
 - Project-specific formatting rules
 - Vocabulary and naming conventions
@@ -642,20 +643,43 @@ assert_matches = "1.5"
 
 ---
 
-### Deviation BP-002: Missing Integration Tests
+### Deviation BP-002: Tests Structure Violation
 
-**Observation:** No integration tests for HTTP endpoints or complete flows.
+**Observation:** No integration tests, and unit tests are inline in source files instead of separate `tests/` module.
 
-**Evidence:** Only unit tests exist in `crypto.rs` and `business.rs`.
+**Evidence:** `crypto.rs` and `business.rs` contain `#[cfg(test)] mod tests { ... }` blocks.
 
-**Action Item:** Create `tests/` directory:
+```rust
+// crypto.rs:56
+#[cfg(test)]
+mod tests {
+  use super::*;
+  // ...
+}
+```
+
+**Problem details:**
+
+Per company standards, tests must be in a separate `tests/` directory, not inline in source files:
+
+- Inline tests clutter source files
+- Harder to navigate and maintain
+- Inconsistent with company codebase structure
+
+**Action Item:**
+
+1. Move all unit tests from source files to `tests/` directory
+2. Create integration tests for HTTP endpoints
 
 ```
 tests/
 ├── common/
-│   └── mod.rs        # Test utilities
-├── auth_test.rs      # Auth flow tests
-└── health_test.rs    # Health check tests
+│   └── mod.rs           # Test utilities
+├── unit/
+│   ├── crypto_test.rs   # Tests from crypto.rs
+│   └── business_test.rs # Tests from business.rs
+├── auth_test.rs         # Auth flow integration tests
+└── health_test.rs       # Health check integration tests
 ```
 
 ---
