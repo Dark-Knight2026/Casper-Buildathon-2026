@@ -5,6 +5,7 @@ import { ProgressBar } from '../shared/ProgressBar';
 import { WalletCard } from '../shared/WalletCard';
 import { TransactionHistory, Transaction } from '../shared/TransactionHistory';
 import CountdownTimer from '../shared/CountdownTimer';
+import { UserTokenBalance } from '../shared/UserTokenBalance';
 
 interface ActivePresaleProps {
   className?: string;
@@ -24,6 +25,12 @@ const MOCK_WALLET = {
   balanceUSDT: 5000,
   balanceUSDC: 3500,
   balanceCSPR: 10000,
+};
+
+// Mock user purchased tokens data
+const MOCK_USER_BALANCE = {
+  tokensPurchased: 17500,
+  totalSpentUSD: 1750,
 };
 
 // Mock transactions for development
@@ -110,6 +117,15 @@ export function ActivePresale({ className, endTimestamp }: ActivePresaleProps) {
           className="w-full"
         />
       </div>
+
+      {/* User Token Balance */}
+      <UserTokenBalance
+        tokensPurchased={MOCK_USER_BALANCE.tokensPurchased}
+        totalSpentUSD={MOCK_USER_BALANCE.totalSpentUSD}
+        tokenPrice={Number(ICO_CONFIG.PRE_SALE.price)}
+        tokenSymbol={ICO_CONFIG.TOKEN.symbol}
+        className="mt-8"
+      />
 
       {/* Transaction History */}
       <TransactionHistory
