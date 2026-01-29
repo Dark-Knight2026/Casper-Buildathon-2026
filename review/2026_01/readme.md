@@ -193,6 +193,41 @@ axum = "~0.7"  # allows 0.7.x but not 0.8
 
 ---
 
+### Deviation ST-005: Missing `codestyle.md`
+
+**Observation:** Repository lacks a `codestyle.md` file documenting project-specific coding standards.
+
+**Evidence:** No `codestyle.md` in repository root.
+
+**Problem details:**
+
+Per company onboarding rulebook, each repository should have a `codestyle.md` that defines:
+- Task markers (e.g., `xxx:`, `qqq:`, `aaa:`) for tracking tasks/questions in code
+- Project-specific formatting rules
+- Vocabulary and naming conventions
+- Guidelines ensuring consistency across the codebase
+
+**Action Item:** Create `codestyle.md` in repository root following company template. Include:
+
+```markdown
+# Code Style
+
+## Task Markers
+
+- `xxx:` — TODO item, work in progress
+- `qqq:` — Question, needs clarification
+- `aaa:` — Resolved question/decision
+
+## Rust Conventions
+
+- Follow standard `rustfmt` formatting
+- Group imports: std, external crates, crate::
+- Use `thiserror` for internal errors
+- ... (project-specific rules)
+```
+
+---
+
 ## Code Style Issues (CS)
 
 ### Deviation CS-001: Emoji Usage in Logs
@@ -785,6 +820,7 @@ impl IntoResponse for ApiError {
 | ST-001 | Add Makefile                          | Developer experience        |
 | ST-003 | Add CI/CD configuration               | Quality automation          |
 | ST-004 | Update dependencies and edition       | Compiler warnings, security |
+| ST-005 | Add `codestyle.md`                    | Company standards           |
 | CS-001 | Replace emojis in logs                | Production readiness        |
 | SC-001 | Fix placeholder email                 | Security (collisions)       |
 
@@ -817,6 +853,7 @@ impl IntoResponse for ApiError {
 
 * Remove `Cargo.lock` from `.gitignore`, commit `Cargo.lock`
 * Create basic `Makefile`
+* Add `codestyle.md`
 * Update dependencies and Rust edition
 * Fix placeholder email (use hash)
 * Replace emojis in logs
