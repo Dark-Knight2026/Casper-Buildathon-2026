@@ -10,14 +10,59 @@ CompletionStatus: completed
 
 ## Table of Contents
 
-1. [Overview](#overview)
-2. [Deviations from Standards (ST)](#deviations-from-standards-st)
-3. [Code Style Issues (CS)](#code-style-issues-cs)
-4. [Architectural Anti-patterns (AP)](#architectural-anti-patterns-ap)
-5. [Security Concerns (SC)](#security-concerns-sc)
-6. [Best Practice Violations (BP)](#best-practice-violations-bp)
-7. [Recommendations](#recommendations)
-8. [Prioritized Action Plan](#prioritized-action-plan)
+1. [Review Methodology](#review-methodology)
+2. [Overview](#overview)
+3. [Deviations from Standards (ST)](#deviations-from-standards-st)
+4. [Code Style Issues (CS)](#code-style-issues-cs)
+5. [Architectural Anti-patterns (AP)](#architectural-anti-patterns-ap)
+6. [Security Concerns (SC)](#security-concerns-sc)
+7. [Best Practice Violations (BP)](#best-practice-violations-bp)
+8. [Recommendations](#recommendations)
+9. [Prioritized Action Plan](#prioritized-action-plan)
+
+---
+
+## Review Methodology
+
+### How Findings Were Gathered
+
+This review was conducted through:
+
+1. **Manual code inspection** - line-by-line review of all source files
+2. **Static analysis** - `cargo clippy` with `-D warnings` flag
+3. **Dependency audit** - `cargo tree` and `Cargo.toml` analysis
+4. **Pattern matching** - `grep`/`rg` searches for common antipatterns (`unwrap`, `expect`, hardcoded values)
+5. **Security checklist** - OWASP Top 10 and Rust-specific security patterns
+
+### Verification Commands Used
+
+```bash
+# Check for anyhow usage
+grep -r "use.*anyhow" src/
+grep -r "anyhow" src/
+
+# Inventory unwrap/expect
+grep -rn "\.unwrap\(" src/
+grep -rn "\.expect\(" src/
+
+# Check dependencies
+cargo tree -i anyhow
+cargo clippy --all-targets -- -D warnings
+```
+
+### Confidence Levels
+
+| Category           | Confidence | Notes                                          |
+|--------------------|------------|------------------------------------------------|
+| ST (Standards)     | High       | Verified against file system and Cargo.toml    |
+| CS (Code Style)    | High       | Direct code inspection with line numbers       |
+| AP (Architecture)  | Medium     | Subjective assessment based on project size    |
+| SC (Security)      | Medium     | Some findings are theoretical (timing attacks) |
+| BP (Best Practice) | High       | Based on Rust ecosystem conventions            |
+
+### Verification Disclaimer
+
+> **Note:** Readers should independently verify findings before implementing fixes. Line numbers may shift as code evolves. Use `grep` commands above to locate current positions.
 
 ---
 
@@ -66,15 +111,16 @@ help: ## Show available targets
 
 env_up: ## Start docker-compose services
 	@echo "[*] Starting Docker containers..."
-	docker compose up -d
+	@docker compose up -d
 
 env_down: ## Stop docker-compose services
 	@echo "[*] Stopping Docker containers..."
-	docker compose down --volumes
+	@docker compose down --volumes
 
 migrate: ## Run database migrations
 	@echo "[*] Running migrations..."
-	. ./.env && cargo sqlx migrate run
+	@test -f .env || (echo "Error: .env file not found" && exit 1)
+	@. ./.env && cargo sqlx migrate run
 
 restart: env_down env_up migrate ## Restart environment and run migrations
 
@@ -82,19 +128,21 @@ ci: fmt lint prepare test ## Full CI pipeline
 
 lint: ## Run clippy in strict mode
 	@echo "[*] Running clippy..."
-	cargo clippy --workspace --all-targets -- -D warnings
+	@cargo clippy --workspace --all-targets -- -D warnings
 
 fmt: ## Check formatting
 	@echo "[*] Checking formatting..."
-	cargo fmt --all -- --check
+	@cargo fmt --all -- --check
 
 prepare: ## Generate SQLx offline query metadata for CI builds
 	@echo "[*] Generating SQLx offline query metadata..."
-	. ./.env && cargo sqlx prepare --workspace -- --all-features --tests
+	@test -f .env || (echo "Error: .env file not found" && exit 1)
+	@. ./.env && cargo sqlx prepare --workspace -- --all-features --tests
 
 test: ## Run nextest (use ARGS="..." for extra arguments)
 	@echo "[*] Running tests..."
-	. ./.env && cargo nextest run --all-features --no-fail-fast --build-jobs 0 $(ARGS)
+	@test -f .env || (echo "Error: .env file not found" && exit 1)
+	@. ./.env && cargo nextest run --all-features --no-fail-fast --build-jobs 0 $(ARGS)
 
 test_one: ## Run single test: `make test_one <test_name>`
 	@$(MAKE) test ARGS="$(filter-out $@,$(MAKECMDGOALS))"
@@ -106,7 +154,7 @@ test_not: ## Exclude test: `make test_not <test_name>`
 	@$(MAKE) test ARGS="-E 'not test($(filter-out $@,$(MAKECMDGOALS)))'"
 
 debug: ## Run API in debug mode
-	cargo r --bin api
+	@cargo r --bin api
 
 # Prevent "No rule to make target" error for arguments
 #   %: — catch-all target, matches any unknown target (e.g. arguments like "test_name")
@@ -290,33 +338,80 @@ if ! matches!(len, CASPER_ED25519_PUBLIC_KEY_LEN | CASPER_SECP256K1_PUBLIC_KEY_L
 
 ---
 
-### Deviation CS-003: Unwrap in Production Code
+### Deviation CS-003: Unwrap/Expect in Production Code
 
-**Observation:** Multiple uses of `unwrap()` and `expect()` in handler code can cause server panics.
+**Observation:** Multiple uses of `unwrap()` and `expect()` in code can cause server panics.
 
-**Evidence:**
+**Complete Inventory:**
 
-| Location                       | Code                                                   |
-|--------------------------------|--------------------------------------------------------|
-| `main.rs:71`                   | `listener.bind(addr).await.unwrap()`                   |
-| `main.rs:75`                   | `axum::serve(...).await.unwrap()`                      |
-| `main.rs:82`                   | `expect("failed to install Ctrl+C handler")`           |
-| `handlers/auth.rs:195`         | `redis_conn.del(&redis_key).await.unwrap_or(())`       |
-| `handlers/auth.rs:222`         | `UserRole::from_str(&user_record.role).unwrap_or(...)` |
-| `handlers/business.rs:120-178` | Multiple `Decimal::from_i64(...).unwrap()`             |
+Total: 10 `expect()` + 19 `unwrap()` = 29 occurrences
 
-**Action Item:**
+#### ⚠️ CRITICAL - Requires Immediate Fix
 
-- `main.rs`: Acceptable — no point continuing if startup fails
-- Handlers: Use `?` operator or explicit error handling:
+| Location               | Code                         | Risk                                          |
+|------------------------|------------------------------|-----------------------------------------------|
+| `handlers/auth.rs:226` | `.expect("valid timestamp")` | Can panic on timestamp overflow (theoretical) |
+
+#### ⚡ MOCK DATA - Will Be Replaced
+
+| Location                       | Code                                      | Note                           |
+|--------------------------------|-------------------------------------------|--------------------------------|
+| `handlers/business.rs:120`     | `Decimal::from_i64(150000).unwrap()`      | Mock implementation            |
+| `handlers/business.rs:121`     | `Decimal::from_i64(45000).unwrap()`       | Mock implementation            |
+| `handlers/business.rs:124`     | `Decimal::from_i64(12000).unwrap()`       | Mock implementation            |
+| `handlers/business.rs:128`     | `Decimal::from_f64(0.24).unwrap()`        | Mock implementation            |
+| `handlers/business.rs:138-179` | Multiple `Decimal::from_*(...).unwrap()`  | Mock implementation (10 total) |
+| `handlers/business.rs:199`     | `serde_json::from_value(...).expect(...)` | Mock implementation            |
+| `handlers/business.rs:215`     | `serde_json::from_value(...).expect(...)` | Mock implementation            |
+| `handlers/business.rs:218`     | `NaiveDate::from_ymd_opt(...).unwrap()`   | Mock implementation            |
+
+#### ✅ ACCEPTABLE - Startup Failures
+
+| Location     | Code                                         | Rationale                             |
+|--------------|----------------------------------------------|---------------------------------------|
+| `main.rs:27` | `expect("Failed to load configuration")`     | No point continuing without config    |
+| `main.rs:30` | `expect("Invalid DATABASE_URL")`             | No point continuing without valid URL |
+| `main.rs:37` | `expect("Failed to connect to Postgres")`    | No point continuing without DB        |
+| `main.rs:44` | `expect("Failed to run migrations")`         | No point continuing with bad schema   |
+| `main.rs:50` | `expect("Invalid Redis URL")`                | No point continuing without Redis     |
+| `main.rs:71` | `TcpListener::bind(addr).await.unwrap()`     | No point continuing without listener  |
+| `main.rs:75` | `axum::serve(...).await.unwrap()`            | No point continuing if serve fails    |
+| `main.rs:82` | `expect("failed to install Ctrl+C handler")` | Signal handlers are critical          |
+| `main.rs:88` | `expect("failed to install signal handler")` | Signal handlers are critical          |
+
+#### ✅ ACCEPTABLE - Test Code
+
+| Location        | Code                                            | Rationale      |
+|-----------------|-------------------------------------------------|----------------|
+| `crypto.rs:67`  | `SecretKey::ed25519_from_bytes(bytes).unwrap()` | Test code      |
+| `crypto.rs:91`  | `result.unwrap()`                               | Test assertion |
+| `crypto.rs:109` | `result.unwrap()`                               | Test assertion |
+| `crypto.rs:117` | `SecretKey::ed25519_from_bytes(...).unwrap()`   | Test code      |
+
+#### ✅ SAFE - Has Fallback
+
+| Location               | Code                                                   | Rationale                |
+|------------------------|--------------------------------------------------------|--------------------------|
+| `handlers/auth.rs:195` | `redis_conn.del(...).await.unwrap_or(())`              | Safe fallback to unit    |
+| `handlers/auth.rs:222` | `UserRole::from_str(...).unwrap_or(UserRole::Unknown)` | Safe fallback to Unknown |
+
+**Action Items:**
+
+* **CRITICAL**: Fix `handlers/auth.rs:226`:
 
 ```rust
 // Instead of:
-let tax_rate = Decimal::from_f64(0.24).unwrap();
+let expiration = Utc::now().checked_add_signed(Duration::hours(24)).expect("valid timestamp").timestamp();
 
 // Better:
-let tax_rate = Decimal::from_f64(0.24).ok_or_else( | | StatusCode::INTERNAL_SERVER_ERROR) ?;
+let expiration = Utc::now().checked_add_signed(Duration::hours(24)).ok_or_else(| | {
+tracing::error ! ("Timestamp overflow calculating expiration"); StatusCode::INTERNAL_SERVER_ERROR
+}) ?.timestamp();
 ```
+
+* **MOCK DATA**: Will be replaced when real business logic is implemented. Track with issue/ticket.
+
+* **STARTUP**: Keep as-is — fail-fast on critical initialization is appropriate.
 
 ---
 
@@ -622,6 +717,172 @@ tracing::info!(
 
 ---
 
+### Deviation SC-004: Potential Timing Attack in Signature Verification
+
+**Observation:** Signature verification may be vulnerable to timing side-channel attacks if the underlying comparison is not constant-time.
+
+**Evidence:** `handlers/auth.rs:177-185` and `crypto.rs`
+
+```rust
+let is_valid = verify_casper_signature( & payload.wallet_address,
+payload.signature.expose_secret(),
+& stored_nonce,
+)
+```
+
+**Risk:** Timing attacks can potentially leak information about valid signatures through response time differences.
+
+**Action Item:** Verify that the Casper SDK's signature verification uses constant-time comparison. If using custom comparison, use `subtle::ConstantTimeEq`:
+
+```rust
+use subtle::ConstantTimeEq;
+
+// Constant-time comparison
+if computed_sig.ct_eq( & provided_sig).into() {
+// Valid
+}
+```
+
+---
+
+### Deviation SC-005: No Rate Limiting on Authentication Endpoints
+
+**Observation:** Authentication endpoints lack rate limiting, making them vulnerable to brute force attacks.
+
+**Evidence:** `handlers/auth.rs` - routes `/nonce` and `/login` have no rate limiting middleware.
+
+**Attack Vector:**
+
+- Attacker can flood `/nonce` endpoint to exhaust Redis storage
+- Attacker can attempt brute force signature attacks on `/login`
+
+**Action Item:** Add rate limiting using `tower-governor`:
+
+```rust
+use tower_governor::{GovernorLayer, GovernorConfigBuilder};
+
+let governor_conf = GovernorConfigBuilder::default ().per_second(2)        // 2 requests per second
+.burst_size(5)        // Allow burst of 5
+.finish().unwrap();
+
+let app = Router::new().nest("/api/v1/auth", handlers::auth::router()).layer(GovernorLayer { config: governor_conf });
+```
+
+---
+
+### Deviation SC-006: JWT Expiry Uses Signed Arithmetic
+
+**Observation:** JWT expiration calculation uses signed duration arithmetic which could theoretically overflow.
+
+**Evidence:** `handlers/auth.rs:224-227`
+
+```rust
+let expiration = Utc::now().checked_add_signed(Duration::hours(24)).expect("valid timestamp").timestamp();
+```
+
+**Risk:** While extremely unlikely in practice (would require system clock set far in the future), this is a code smell. The `expect()` will panic on overflow.
+
+**Action Item:** Handle the error gracefully (see CS-003 fix).
+
+---
+
+### Deviation SC-007: Potential Credential Exposure in Error Logs
+
+**Observation:** Error messages may expose sensitive information like connection strings.
+
+**Evidence:** `main.rs:29-30`
+
+```rust
+let db_options = PgConnectOptions::from_str(config.database_url.expose_secret()).expect("Invalid DATABASE_URL");
+```
+
+**Risk:** If `expect()` triggers, the panic message might include the DATABASE_URL which could contain credentials.
+
+**Action Item:** Use custom error messages that don't expose secrets:
+
+```rust
+let db_options = PgConnectOptions::from_str(config.database_url.expose_secret()).map_err( | e| {
+tracing::error ! ("Failed to parse DATABASE_URL: {}", e);
+// Don't include the actual URL in the error
+}).expect("Invalid DATABASE_URL format");
+```
+
+---
+
+### Deviation SC-008: Missing CORS Configuration
+
+**Observation:** CORS is not configured despite `tower-http` cors feature being enabled.
+
+**Evidence:** `main.rs` - no `CorsLayer` applied to router. `Cargo.toml` includes `tower-http = { features = ["cors", ...] }`.
+
+**Risk:**
+
+- Without CORS, frontend apps on different origins cannot access the API
+- If CORS is added later without proper configuration, it could allow credential theft
+
+**Action Item:** Configure CORS explicitly with restrictive defaults:
+
+```rust
+use tower_http::cors::{CorsLayer, AllowOrigin};
+
+let cors = CorsLayer::new().allow_origin(AllowOrigin::exact(
+"https://leasefi.app".parse().unwrap()
+)).allow_methods([Method::GET, Method::POST]).allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION]).allow_credentials(false);  // Only set to true if absolutely needed
+
+let app = Router::new()
+// ... routes
+.layer(cors);
+```
+
+**Warning:** Never use `allow_credentials(true)` with `allow_origin(Any)` - this is a security vulnerability.
+
+---
+
+### Deviation SC-009: No Request Size Limits
+
+**Observation:** No limits on request body size, making the API vulnerable to DoS attacks via large payloads.
+
+**Evidence:** `main.rs` - no `RequestBodyLimitLayer` configured.
+
+**Attack Vector:** Attacker can send extremely large JSON payloads to exhaust server memory.
+
+**Action Item:** Add request size limits:
+
+```rust
+use tower_http::limit::RequestBodyLimitLayer;
+
+let app = Router::new()
+// ... routes
+.layer(RequestBodyLimitLayer::new(1024 * 1024)); // 1MB limit
+```
+
+---
+
+### Deviation SC-010: Integer Overflow in Timestamp Calculations
+
+**Observation:** Timestamp arithmetic uses `checked_add_signed` but panics on failure instead of handling gracefully.
+
+**Evidence:** `handlers/auth.rs:224-227` (same as SC-006)
+
+**Note:** This is a duplicate concern covered in CS-003 and SC-006. Listed here for completeness in security audit.
+
+**Action Item:** See CS-003 action item.
+
+---
+
+### Deviation SC-011: Password Hashing Not Used (Design Note)
+
+**Observation:** The system uses wallet-based authentication (cryptographic signatures) instead of passwords, so bcrypt/argon2 are not applicable.
+
+**Note:** This is actually a **positive security decision** - cryptographic signatures are stronger than password-based auth. No action needed.
+
+However, if password auth is added in the future:
+
+- Use `argon2` (preferred) or `bcrypt` with cost factor ≥ 12
+- Never store plaintext passwords
+
+---
+
 ## Best Practice Violations (BP)
 
 ### Deviation BP-001: Missing dev-dependencies
@@ -768,9 +1029,9 @@ let app = Router::new()
 
 ---
 
-### Deviation BP-007: Using `anyhow` in Production API
+### Deviation BP-007: Unused `anyhow` Dependency
 
-**Observation:** `anyhow` crate is used alongside `thiserror`, but `anyhow` is not recommended for production APIs.
+**Observation:** `anyhow` crate is declared in `Cargo.toml` but is **never imported or used** anywhere in the source code. This is a dead dependency that should be removed.
 
 **Evidence:** `Cargo.toml:20`
 
@@ -779,42 +1040,38 @@ anyhow = "1.0"
 thiserror = "1"
 ```
 
+**Verification:**
+
+```bash
+$ grep -r "use.*anyhow" src/
+# Result: NO MATCHES
+
+$ grep -r "anyhow" src/
+# Result: NO MATCHES
+```
+
 **Problem details:**
 
-- `anyhow` erases error types — caller cannot match on specific error variants
-- Harder to document which errors a function can return
-- Makes testing specific error cases difficult
-- `thiserror` is already present and is the correct choice for typed errors
-
-**When to use which:**
-
-- `thiserror` — internal errors, libraries (explicit error types with derive)
-- `anyhow` — CLI tools, scripts, prototypes (convenience over precision)
-- Manual `impl` — API response errors (full control over what's exposed)
+- Dead dependency increases compile times
+- Unused crates may introduce unnecessary security surface
+- `thiserror` is already present and correctly used for typed errors
 
 **Action Item:**
 
-* Remove `anyhow` from dependencies
-* Define explicit error types using `thiserror` for **internal** errors:
+1. Remove `anyhow` from `Cargo.toml` dependencies
+2. Define a unified `ApiError` enum with `IntoResponse` implementation (idiomatic Axum pattern):
 
 ```rust
-#[derive(Debug, thiserror::Error)]
-pub enum InternalError {
-  #[error("Database error: {0}")]
-  Database(#[from] sqlx::Error),
+use axum::{http::StatusCode, response::{IntoResponse, Response}, Json};
+use serde_json::json;
 
-  #[error("Redis error: {0}")]
-  Redis(#[from] redis::RedisError),
-}
-```
-
-* For **API response errors**, implement manually to avoid leaking sensitive info:
-
-```rust
+#[derive(Debug)]
 pub enum ApiError {
   BadRequest(String),
   Unauthorized,
-  InternalError,  // No details exposed!
+  NotFound,
+  Conflict(String),
+  Internal,
 }
 
 impl IntoResponse for ApiError {
@@ -822,19 +1079,47 @@ impl IntoResponse for ApiError {
     let (status, message) = match self {
       Self::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg),
       Self::Unauthorized => (StatusCode::UNAUTHORIZED, "Unauthorized".into()),
-      Self::InternalError => {
+      Self::NotFound => (StatusCode::NOT_FOUND, "Not found".into()),
+      Self::Conflict(msg) => (StatusCode::CONFLICT, msg),
+      Self::Internal => {
         // Log actual error internally, return generic message
         (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error".into())
       }
     };
-    // ...
+    (status, Json(json!({ "error": message }))).into_response()
+  }
+}
+
+// Convert infrastructure errors to ApiError
+impl From<sqlx::Error> for ApiError {
+  fn from(err: sqlx::Error) -> Self {
+    tracing::error!("Database error: {}", err);
+    Self::Internal
+  }
+}
+
+impl From<redis::RedisError> for ApiError {
+  fn from(err: redis::RedisError) -> Self {
+    tracing::error!("Redis error: {}", err);
+    Self::Internal
   }
 }
 ```
 
+> **Note:** A single unified `ApiError` is preferred over a two-tier system (InternalError + ApiError) for a codebase of this size (~958 lines). The two-tier approach adds unnecessary complexity without proportional benefits.
+
 ---
 
 ## Recommendations
+
+### Critical (Security)
+
+| ID     | Recommendation                  | Rationale                          |
+|--------|---------------------------------|------------------------------------|
+| SC-005 | Add rate limiting               | Brute force protection             |
+| SC-008 | Configure CORS properly         | Prevent credential theft           |
+| SC-009 | Add request size limits         | DoS protection                     |
+| CS-003 | Fix `expect()` in `auth.rs:226` | Prevent potential panic in handler |
 
 ### High Priority
 
@@ -847,17 +1132,18 @@ impl IntoResponse for ApiError {
 | ST-005 | Add `codestyle.md`                    | Company standards           |
 | CS-001 | Replace emojis in logs                | Production readiness        |
 | SC-001 | Fix placeholder email                 | Security (collisions)       |
+| SC-004 | Verify constant-time signature check  | Timing attack prevention    |
+| SC-007 | Sanitize error messages               | Credential exposure         |
 
 ### Medium Priority
 
 | ID     | Recommendation            | Rationale                    |
 |--------|---------------------------|------------------------------|
 | AP-001 | Extract service layer     | Testability, maintainability |
-| AP-004 | Add rate limiting         | Security                     |
 | AP-005 | Restructure as workspace  | Scalability, modularity      |
 | BP-002 | Add integration tests     | Quality                      |
-| BP-005 | Configure CORS            | Functionality                |
 | BP-007 | Remove anyhow, fix errors | Security, API stability      |
+| SC-003 | Add structured audit logs | Security monitoring          |
 
 ### Low Priority
 
@@ -873,26 +1159,34 @@ impl IntoResponse for ApiError {
 
 ## Prioritized Action Plan
 
-### Phase 1: Critical Fixes
+### Phase 1: Critical Security Fixes
 
-* Remove `Cargo.lock` from `.gitignore`, commit `Cargo.lock`
-* Create basic `Makefile`
-* Add `codestyle.md`
-* Update dependencies and Rust edition
-* Fix placeholder email (use hash)
-* Replace emojis in logs
+* Fix `expect()` in `handlers/auth.rs:226` (CS-003)
+* Add rate limiting on auth endpoints (SC-005)
+* Add request size limits (SC-009)
+* Configure CORS with restrictive defaults (SC-008)
 
-### Phase 2: CI/CD and Security
+### Phase 2: Standards and CI
 
-* Add GitHub Actions workflow
-* Configure CORS
-* Add rate limiting
-* Refactor error handling — remove `anyhow`
+* Remove `Cargo.lock` from `.gitignore`, commit `Cargo.lock` (ST-002)
+* Create basic `Makefile` (ST-001)
+* Add `codestyle.md` (ST-005)
+* Update dependencies and Rust edition (ST-004)
+* Add GitHub Actions workflow (ST-003)
+* Replace emojis in logs (CS-001)
 
-### Phase 3: Refactoring
+### Phase 3: Security Hardening
 
-* Restructure as Cargo workspace
-* Extract service layer
-* Create db module
-* Add integration tests
-* Improve documentation
+* Fix placeholder email collision (SC-001)
+* Verify constant-time signature verification (SC-004)
+* Sanitize error messages to prevent credential exposure (SC-007)
+* Add structured audit logging (SC-003)
+* Refactor error handling — remove `anyhow` (BP-007)
+
+### Phase 4: Architecture Refactoring
+
+* Restructure as Cargo workspace (AP-005)
+* Extract service layer (AP-001)
+* Create db module (AP-002)
+* Add integration tests (BP-002)
+* Improve documentation (CS-006)
