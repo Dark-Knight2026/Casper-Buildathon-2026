@@ -11,14 +11,13 @@ CompletionStatus: completed
 ## Table of Contents
 
 1. [Overview](#overview)
-2. [Deviations from Standards](#deviations-from-standards)
-3. [Code Style Issues](#code-style-issues)
-4. [Architectural Anti-patterns](#architectural-anti-patterns)
-5. [Security Concerns](#security-concerns)
-6. [Best Practice Violations](#best-practice-violations)
-7. [Positive Aspects](#positive-aspects)
-8. [Recommendations](#recommendations)
-9. [Prioritized Action Plan](#prioritized-action-plan)
+2. [Deviations from Standards (ST)](#deviations-from-standards-st)
+3. [Code Style Issues (CS)](#code-style-issues-cs)
+4. [Architectural Anti-patterns (AP)](#architectural-anti-patterns-ap)
+5. [Security Concerns (SC)](#security-concerns-sc)
+6. [Best Practice Violations (BP)](#best-practice-violations-bp)
+7. [Recommendations](#recommendations)
+8. [Prioritized Action Plan](#prioritized-action-plan)
 
 ---
 
@@ -35,15 +34,15 @@ CompletionStatus: completed
 
 ---
 
-## Deviations from Standards
+## Deviations from Standards (ST)
 
-### 1. Missing Makefile
+### Deviation ST-001: Missing Makefile
 
-**Problem:** The project lacks a Makefile with commonly used commands.
+**Observation:** The project lacks a Makefile with commonly used commands.
 
-**Impact:** Complicates onboarding for new developers, no standardized way to run typical operations (build, test, lint, migrate, deploy).
+**Evidence:** No `Makefile` present in the repository root.
 
-**Recommendation:** Add a Makefile following company project standards:
+**Action Item:** Add a Makefile following company project standards:
 
 ```Makefile
 .PHONY:   \
@@ -118,27 +117,31 @@ debug: ## Run API in debug mode
 
 ---
 
-### 2. Cargo.lock in .gitignore
+### Deviation ST-002: Cargo.lock in .gitignore
 
-**Problem:** The `.gitignore` file contains `Cargo.lock` (line 28).
+**Observation:** The `.gitignore` file excludes `Cargo.lock` from version control.
 
-**Impact:**
+Impact:
 
 - Team members may get different dependency versions
 - Cannot guarantee reproducible builds
 - `CI/CD` may produce different results across runs
 
-**Recommendation:** For binary projects (application crates), `Cargo.lock` **MUST** be in git. Remove the `Cargo.lock` line from `.gitignore`.
+**Evidence:** `.gitignore:28` contains `Cargo.lock`.
 
-> See official documentation: https://doc.rust-lang.org/cargo/faq.html#why-have-cargolock-in-version-control
+**Action Item:** Remove `Cargo.lock` from `.gitignore`. For binary projects (application crates), `Cargo.lock` **MUST** be committed to ensure reproducible builds.
+
+> See: https://doc.rust-lang.org/cargo/faq.html#why-have-cargolock-in-version-control
 
 ---
 
-### 3. Missing CI/CD Configuration
+### Deviation ST-003: Missing CI/CD Configuration
 
-**Problem:** No `.github/workflows/*.yml` files or equivalent for automation.
+**Observation:** No automated CI/CD pipeline configuration exists.
 
-**Recommendation:** Add GitHub Actions for:
+**Evidence:** No `.github/workflows/*.yml` files or equivalent.
+
+**Action Item:** Add GitHub Actions workflow with:
 
 - `cargo fmt --check`
 - `cargo clippy -- -D warnings`
@@ -147,9 +150,13 @@ debug: ## Run API in debug mode
 
 ---
 
-## Code Style Issues
+## Code Style Issues (CS)
 
-### 1. Emoji Usage in Logs
+### Deviation CS-001: Emoji Usage in Logs
+
+**Observation:** Log messages contain emojis which display poorly in many logging systems and complicate log searching.
+
+**Evidence:**
 
 ```rust
 // main.rs:69
@@ -165,13 +172,7 @@ tracing::error!("🔒 Signature INVALID");
 tracing::info!("🔓 Signature VALID");
 ```
 
-**Problem:** Emojis in logs:
-
-- Display poorly in logging systems without Unicode support
-- Complicate grep/log searching
-- Unprofessional appearance in production
-
-**Recommendation:** Replace with plain text:
+**Action Item:** Replace with structured logging:
 
 ```rust
 tracing::info!(address = %addr, "Server listening");
@@ -182,21 +183,20 @@ tracing::info!("Signature verified successfully");
 
 ---
 
-### 2. Magic Numbers Without Constants
+### Deviation CS-002: Magic Numbers Without Constants
 
-**Location:** `handlers/auth.rs:155`
+**Observation:** Wallet address length validation uses unexplained magic numbers.
+
+**Evidence:** `handlers/auth.rs:155`
 
 ```rust
-let len = payload.wallet_address.len();
-if len != 66 & & len != 68 {
+let len = payload.wallet_address.len(); if len != 66 & & len != 68 {
 tracing::error ! ("Invalid wallet address length: {}. Expected 66 or 68.", len);
 return Err(StatusCode::BAD_REQUEST);
 }
 ```
 
-**Problem:** Numbers `66` and `68` lack explanation and are not extracted to constants.
-
-**Recommendation:**
+**Action Item:** Extract to named constants:
 
 ```rust
 /// Ed25519 public key length with algorithm prefix (01 + 64 hex chars)
@@ -211,24 +211,25 @@ if ! matches!(len, CASPER_ED25519_PUBLIC_KEY_LEN | CASPER_SECP256K1_PUBLIC_KEY_L
 
 ---
 
-### 3. Unwrap in Production Code
+### Deviation CS-003: Unwrap in Production Code
 
-**Files with `.unwrap()`:**
+**Observation:** Multiple uses of `unwrap()` and `expect()` in handler code can cause server panics.
 
-| File                 | Line    | Code                                                   |
-|----------------------|---------|--------------------------------------------------------|
-| main.rs              | 71      | `listener.bind(addr).await.unwrap()`                   |
-| main.rs              | 75      | `axum::serve(...).await.unwrap()`                      |
-| main.rs              | 82      | `expect("failed to install Ctrl+C handler")`           |
-| handlers/auth.rs     | 195     | `redis_conn.del(&redis_key).await.unwrap_or(())`       |
-| handlers/auth.rs     | 222     | `UserRole::from_str(&user_record.role).unwrap_or(...)` |
-| handlers/business.rs | 120-178 | Multiple `Decimal::from_i64(...).unwrap()`             |
+**Evidence:**
 
-**Problem:** `unwrap()` and `expect()` panic on error, causing server crashes.
+| Location                       | Code                                                   |
+|--------------------------------|--------------------------------------------------------|
+| `main.rs:71`                   | `listener.bind(addr).await.unwrap()`                   |
+| `main.rs:75`                   | `axum::serve(...).await.unwrap()`                      |
+| `main.rs:82`                   | `expect("failed to install Ctrl+C handler")`           |
+| `handlers/auth.rs:195`         | `redis_conn.del(&redis_key).await.unwrap_or(())`       |
+| `handlers/auth.rs:222`         | `UserRole::from_str(&user_record.role).unwrap_or(...)` |
+| `handlers/business.rs:120-178` | Multiple `Decimal::from_i64(...).unwrap()`             |
 
-**Recommendation for** `main.rs`: Acceptable in `main()` since there's no point continuing if startup fails.
+**Action Item:**
 
-**Recommendation for handlers:** Use the `?` operator or explicit error handling:
+- `main.rs`: Acceptable — no point continuing if startup fails
+- Handlers: Use `?` operator or explicit error handling:
 
 ```rust
 // Instead of:
@@ -240,48 +241,48 @@ let tax_rate = Decimal::from_f64(0.24).ok_or_else( | | StatusCode::INTERNAL_SERV
 
 ---
 
-### 4. Non-idiomatic Import Grouping
+### Deviation CS-004: Non-idiomatic Import Grouping
 
-**Location:** `handlers/auth.rs`
+**Observation:** Imports are not grouped according to Rust conventions. Also, `std::` is used where `core::` would suffice (for `no_std` compatibility).
+
+**Evidence:** `handlers/auth.rs`
 
 ```rust
-use axum::{
-  extract::{Query, State},
-  http::StatusCode,
-  routing::{get, post},
-  Json, Router,
-};
+use axum::{...};
 use chrono::{Duration, Utc};
 // ...
 use std::str::FromStr;
 use std::sync::Arc;
 ```
 
-**Recommendation:** Group imports:
+**Action Item:** Group imports in order:
 
-1. `std` library
+1. `core`/`std` library (prefer `core::` when possible)
 2. External crates
 3. Internal modules (`crate::`)
 
 ```rust
-use std::str::FromStr;
+use core::str::FromStr;
 use std::sync::Arc;
 
 use axum::{...};
 use chrono::{Duration, Utc};
-// ...
 
-use crate::crypto::verify_casper_signature;
-use crate::models::{Claims, UserId, UserRole};
+use crate::{
+  crypto::verify_casper_signature,
+  models::{Claims, UserId, UserRole},
+};
 ```
 
 ---
 
-### 5. Missing `#[must_use]` Attributes
+### Deviation CS-005: Missing `#[must_use]` Attributes
 
-**Problem:** Functions returning important values lack `#[must_use]`.
+**Observation:** Functions returning important values lack `#[must_use]` attribute.
 
-**Recommendation:** Add to functions where ignoring the result is an error:
+**Evidence:** `crypto.rs` — `verify_casper_signature` returns `Result<bool, CryptoError>`.
+
+**Action Item:** Add `#[must_use]` to functions where ignoring the result is an error:
 
 ```rust
 #[must_use]
@@ -290,38 +291,48 @@ pub fn verify_casper_signature(...) -> Result<bool, CryptoError>
 
 ---
 
-### 6. Inconsistent Documentation
+### Deviation CS-006: Inconsistent Documentation
 
-**Problem:**
+**Observation:** Documentation coverage is inconsistent across modules. Most files lack module-level `//!` documentation comments.
 
-- `crypto.rs` - well documented
-- `handlers/auth.rs` - well documented
-- `config.rs` - minimal documentation
-- `auth.rs` (extractor) - no struct documentation
+**Evidence:**
 
-**Recommendation:** Add documentation to all public APIs:
+- `crypto.rs` — well documented
+- `handlers/auth.rs` — well documented
+- `config.rs` — minimal documentation
+- `auth.rs` (extractor) — no struct documentation
+- Most files missing `//!` module description at the top
+
+**Action Item:**
+
+* Add `//!` module documentation at the top of each file:
+
+```rust
+//! Authentication middleware for JWT token extraction and validation.
+//!
+//! This module provides the `AuthUser` extractor for Axum handlers.
+
+use...
+```
+
+* Add documentation to all public APIs:
 
 ```rust
 /// JWT Authentication extractor for Axum handlers.
 ///
 /// Extracts and validates JWT tokens from the `Authorization: Bearer <token>` header.
-///
-/// # Example
-/// ```
-/// async fn protected_handler(user: AuthUser) -> impl IntoResponse {
-///     format!("Hello, user {}", user.0.sub)
-/// }
-/// ```
 pub struct AuthUser(pub Claims);
 ```
 
 ---
 
-## Architectural Anti-patterns
+## Architectural Anti-patterns (AP)
 
-### 1. Business Logic in Handlers (Mock Code Without Separation)
+### Deviation AP-001: Business Logic in Handlers
 
-**Location:** `handlers/business.rs:119-150`
+**Observation:** Business logic is mixed with HTTP layer, making it untestable in isolation.
+
+**Evidence:** `handlers/business.rs:119-150`
 
 ```rust
 pub async fn calculate_tax_liability(...) -> Result<Json<TaxReport>, StatusCode> {
@@ -331,13 +342,7 @@ pub async fn calculate_tax_liability(...) -> Result<Json<TaxReport>, StatusCode>
 }
 ```
 
-**Problem:**
-
-- Business logic mixed with HTTP layer
-- Cannot test logic independently of HTTP
-- Handler will become huge when mock is replaced with real logic
-
-**Recommendation:** Extract a service layer:
+**Action Item:** Extract a service layer:
 
 ```
 src/
@@ -351,51 +356,50 @@ src/
 
 ---
 
-### 2. Missing Repository Layer
+### Deviation AP-002: Missing Database Layer
 
-**Problem:** SQL queries written directly in handlers:
+**Observation:** SQL queries are written directly in handlers, causing duplication and testing difficulties.
+
+**Evidence:** `handlers/auth.rs:202-220`
 
 ```rust
-// handlers/auth.rs:202-220
 let user_record = sqlx::query!(
     r#"INSERT INTO users (...) VALUES (...) RETURNING id, role"#,
     // ...
 ).fetch_one( & state.db).await
 ```
 
-**Impact:**
+**Action Item:** Move SQL queries to a dedicated `db` module:
 
-- Query duplication
-- Hard to test (requires real database)
-- Database schema changes require modifications in multiple places
-
-**Recommendation:** Create a repository:
+```
+src/
+├── db/                # Database layer
+│   ├── mod.rs
+│   └── user.rs        # User-related queries
+├── handlers/          # HTTP layer
+├── services/          # Business logic
+└── ...
+```
 
 ```rust
-// src/repositories/user.rs
-pub struct UserRepository<'a> {
-  pool: &'a PgPool,
-}
-
-impl<'a> UserRepository<'a> {
-  pub async fn find_or_create_by_wallet(&self, wallet: &str) -> Result<User, DbError> {
-    // SQL here
-  }
+// src/db/user.rs
+pub async fn find_or_create_by_wallet(
+  pool: &PgPool,
+  wallet: &str,
+) -> Result<User, DbError> {
+  sqlx::query_as!(...).fetch_one(pool).await
 }
 ```
 
 ---
 
-### 3. Config Not Fully Validated
+### Deviation AP-003: Config Not Fully Validated
 
-**Location:** `config.rs`
+**Observation:** Configuration values are not validated for correctness.
 
-**Problem:** No validation of configuration values:
+**Evidence:** `config.rs` — `port` can be 0, URLs are not validated.
 
-- `port` can be 0
-- `redis_url` and `database_url` are not checked for correct format
-
-**Recommendation:** Add validation:
+**Action Item:** Add validation:
 
 ```rust
 impl Config {
@@ -412,60 +416,74 @@ impl Config {
 
 ---
 
-### 4. Missing Rate Limiting Middleware
+### Deviation AP-004: Missing Rate Limiting Middleware
 
-**Problem:** Endpoint `/api/v1/auth/nonce` is vulnerable to:
+**Observation:** Authentication endpoints lack rate limiting, making them vulnerable to abuse.
 
-- DDoS attacks (nonce generation consumes Redis resources)
-- Brute-force attacks
+**Evidence:** `/api/v1/auth/nonce` has no rate limiting.
 
-**Recommendation:** Add rate limiting via `tower-governor` or custom middleware.
+**Action Item:** Add rate limiting via `tower-governor` or custom middleware.
 
 ---
 
-## Security Concerns
+## Security Concerns (SC)
 
-### 1. Placeholder Email May Cause Collisions
+### Deviation SC-001: Placeholder Email May Cause Collisions
 
-**Location:** `handlers/auth.rs:198`
+**Observation:** Generated placeholder emails use only first 16 characters of wallet address, risking collisions.
+
+**Evidence:** `handlers/auth.rs:198`
 
 ```rust
 let placeholder_email = format!("wallet_{}@leasefi.local", &payload.wallet_address[..16]);
 ```
 
-**Problem:** Only the first 16 characters of the wallet address are used, which may cause email collisions for different wallets with the same prefix.
-
-**Recommendation:** Use the full address or a hash:
+**Action Item:** Use a hash of the wallet address (full address exceeds email local part limit of 64 chars):
 
 ```rust
-let placeholder_email = format!("wallet_{}@leasefi.local", payload.wallet_address);
-// or
 use sha2::{Sha256, Digest};
-let hash = format!("{:x}", Sha256::digest(payload.wallet_address.as_bytes()));
-let placeholder_email = format!("wallet_{}@leasefi.local", &hash[..32]);
+
+let hash = Sha256::digest(payload.wallet_address.as_bytes()); let placeholder_email = format!("wallet_{:x}@leasefi.local", hash);
+// Result: wallet_a1b2c3d4e5f6...@leasefi.local (64 hex chars)
 ```
 
 ---
 
-### 2. Hardcoded Role for New Users
+### Deviation SC-002: Hardcoded Role for New Users
 
-**Location:** `handlers/auth.rs:207`
+**Observation:** All new users are assigned `tenant` role regardless of their intended use case.
+
+**Evidence:** `handlers/auth.rs:207`
 
 ```rust
 VALUES ($ 1, 'tenant', $ 2, 'Wallet', 'User', NULL, 'active')
 ```
 
-**Problem:** All new users receive the `tenant` role without choice.
+**Problem details:**
 
-**Recommendation:** Add a `requested_role` parameter to `LoginRequest` or a separate registration endpoint.
+LeaseFi has multiple user roles (`tenant`, `landlord`, `agent`, `admin`), but registration always assigns `tenant`:
+
+- Landlords cannot register with correct role — property owners who want to list rentals start as tenants
+- Agents cannot self-register with agent role
+- Role change requires manual admin intervention or separate process not present in code
+
+**Note:** This may be intentional if the business logic requires landlord/agent verification before role assignment. Clarify with the team.
+
+**Action Item:** Either:
+
+1. Add `requested_role` parameter to `LoginRequest` with validation (e.g., only allow `tenant`/`landlord`, not `admin`)
+2. Create separate registration flows for different user types
+3. Document that role upgrade is a separate admin-controlled process
 
 ---
 
-### 3. Missing Audit Logging
+### Deviation SC-003: Missing Audit Logging
 
-**Problem:** Critical operations (login, nonce generation) are not structurally logged for auditing.
+**Observation:** Critical operations are not logged with structured audit data.
 
-**Recommendation:**
+**Evidence:** Login and nonce generation lack structured audit fields.
+
+**Action Item:** Add structured audit logging:
 
 ```rust
 tracing::info!(
@@ -478,50 +496,15 @@ tracing::info!(
 
 ---
 
-### 4. JWT Missing Additional Claims
+## Best Practice Violations (BP)
 
-**Location:** `models.rs:27-35`
+### Deviation BP-001: Missing dev-dependencies
 
-```rust
-pub struct Claims {
-  pub sub: UserId,
-  pub role: UserRole,
-  pub exp: usize,
-}
-```
+**Observation:** No test utilities or mocking libraries configured.
 
-**Problem:** Missing:
+**Evidence:** `Cargo.toml` has no `[dev-dependencies]` section.
 
-- `iat` (issued at)
-- `jti` (JWT ID for revocation)
-- `iss` (issuer)
-- `aud` (audience)
-
-**Recommendation:** Extend Claims:
-
-```rust
-pub struct Claims {
-  pub sub: UserId,
-  pub role: UserRole,
-  pub exp: usize,
-  pub iat: usize,
-  pub jti: Uuid,
-  #[serde(default = "default_issuer")]
-  pub iss: String,
-}
-```
-
----
-
-## Best Practice Violations
-
-### 1. Missing dev-dependencies
-
-**Location:** `Cargo.toml`
-
-**Problem:** No `[dev-dependencies]` section.
-
-**Recommendation:**
+**Action Item:** Add dev dependencies:
 
 ```toml
 [dev-dependencies]
@@ -534,15 +517,13 @@ assert_matches = "1.5"
 
 ---
 
-### 2. Missing Integration Tests
+### Deviation BP-002: Missing Integration Tests
 
-**Problem:** Only unit tests exist in `crypto.rs` and `business.rs`. No tests for:
+**Observation:** No integration tests for HTTP endpoints or complete flows.
 
-- HTTP endpoints
-- Complete login flow
-- Health check
+**Evidence:** Only unit tests exist in `crypto.rs` and `business.rs`.
 
-**Recommendation:** Create a `tests/` directory with integration tests:
+**Action Item:** Create `tests/` directory:
 
 ```
 tests/
@@ -554,16 +535,18 @@ tests/
 
 ---
 
-### 3. Missing Debug Derive
+### Deviation BP-003: Missing Debug Derive
 
-**Location:** `handlers/health.rs:15-26`
+**Observation:** Enum lacks `Debug` derive, complicating debugging.
+
+**Evidence:** `handlers/health.rs:15-26`
 
 ```rust
 #[derive(Serialize, PartialEq)]
 enum ConnectionStatus {
 ```
 
-**Recommendation:** Add `Debug` for debugging:
+**Action Item:** Add `Debug`:
 
 ```rust
 #[derive(Debug, Serialize, PartialEq)]
@@ -571,21 +554,21 @@ enum ConnectionStatus {
 
 ---
 
-### 4. Suboptimal Error Structure
+### Deviation BP-004: Suboptimal Error Structure
 
-**Location:** `auth.rs:52-57`
+**Observation:** Error enum has unused variants and lacks context.
+
+**Evidence:** `auth.rs:52-57`
 
 ```rust
 pub enum AuthError {
   MissingCredentials,
   InvalidToken,
-  ServerConfiguration,
+  ServerConfiguration,  // unused
 }
 ```
 
-**Problem:** `ServerConfiguration` is unused. Errors lack context.
-
-**Recommendation:**
+**Action Item:** Improve error structure:
 
 ```rust
 #[derive(Debug, Error)]
@@ -603,19 +586,18 @@ pub enum AuthError {
 
 ---
 
-### 5. Missing CORS Configuration
+### Deviation BP-005: Missing CORS Configuration
 
-**Problem:** CORS is not configured, although `tower-http` is included with the `cors` feature.
+**Observation:** CORS is not configured despite `tower-http` being included with `cors` feature.
 
-**Location:** `main.rs` - no `.layer(CorsLayer::...)`
+**Evidence:** `main.rs` — no `.layer(CorsLayer::...)`.
 
-**Recommendation:**
+**Action Item:** Configure CORS:
 
 ```rust
 use tower_http::cors::{CorsLayer, Any};
 
-let cors = CorsLayer::new().allow_origin(Any) // or specific origins for production
-.allow_methods([Method::GET, Method::POST]).allow_headers(Any);
+let cors = CorsLayer::new().allow_origin(Any).allow_methods([Method::GET, Method::POST]).allow_headers(Any);
 
 let app = Router::new()
 // ... .layer(cors).layer(TraceLayer::new_for_http());
@@ -623,11 +605,13 @@ let app = Router::new()
 
 ---
 
-### 6. Missing Graceful Degradation for Redis
+### Deviation BP-006: Missing Graceful Degradation for Redis
 
-**Problem:** If Redis is unavailable, the server won't start at all.
+**Observation:** Server fails to start if Redis is unavailable.
 
-**Recommendation:** For production, consider:
+**Evidence:** `main.rs` — Redis connection failure is fatal.
+
+**Action Item:** Consider:
 
 - Retry logic on connection
 - Circuit breaker pattern
@@ -635,109 +619,58 @@ let app = Router::new()
 
 ---
 
-## Positive Aspects
-
-### 1. Security
-
-- **SecretString** to protect sensitive data from logging
-- **One-time nonce** to prevent replay attacks
-- **Nonce deletion after use**
-- **Casper signature verification** implemented correctly
-
-### 2. Architecture
-
-- Clear separation into modules (auth, config, crypto, handlers, models)
-- Proper use of Axum extractors
-- AppState via Arc for efficient sharing
-- Graceful shutdown implementation
-
-### 3. Database
-
-- SQLx with compile-time verification
-- SQLX_OFFLINE for Docker builds
-- Connection pooling configured
-
-### 4. Deployment
-
-- Multi-stage Docker build
-- cargo-chef for Docker cache optimization
-- docker-compose for local development
-
-### 5. Code
-
-- Good documentation in crypto.rs and handlers/auth.rs
-- Use of thiserror for error types
-- Proper serialization via serde
-
----
-
 ## Recommendations
 
 ### High Priority
 
-| # | Recommendation                        | Rationale             |
-|---|---------------------------------------|-----------------------|
-| 1 | Remove `Cargo.lock` from `.gitignore` | Reproducible builds   |
-| 2 | Add Makefile                          | Developer experience  |
-| 3 | Add CI/CD configuration               | Quality automation    |
-| 4 | Replace emojis in logs                | Production readiness  |
-| 5 | Fix placeholder email                 | Security (collisions) |
+| ID     | Recommendation                        | Rationale             |
+|--------|---------------------------------------|-----------------------|
+| ST-002 | Remove `Cargo.lock` from `.gitignore` | Reproducible builds   |
+| ST-001 | Add Makefile                          | Developer experience  |
+| ST-003 | Add CI/CD configuration               | Quality automation    |
+| CS-001 | Replace emojis in logs                | Production readiness  |
+| SC-001 | Fix placeholder email                 | Security (collisions) |
 
 ### Medium Priority
 
-| #  | Recommendation        | Rationale                    |
-|----|-----------------------|------------------------------|
-| 6  | Extract service layer | Testability, maintainability |
-| 7  | Add rate limiting     | Security                     |
-| 8  | Extend JWT claims     | Security best practices      |
-| 9  | Add integration tests | Quality                      |
-| 10 | Configure CORS        | Functionality                |
+| ID     | Recommendation        | Rationale                    |
+|--------|-----------------------|------------------------------|
+| AP-001 | Extract service layer | Testability, maintainability |
+| AP-004 | Add rate limiting     | Security                     |
+| BP-002 | Add integration tests | Quality                      |
+| BP-005 | Configure CORS        | Functionality                |
 
 ### Low Priority
 
-| #  | Recommendation                     | Rationale        |
-|----|------------------------------------|------------------|
-| 11 | Extract magic numbers to constants | Code readability |
-| 12 | Add #[must_use]                    | Compiler checks  |
-| 13 | Organize imports                   | Code style       |
-| 14 | Add Debug derives                  | Debugging        |
-| 15 | Improve error types                | Error handling   |
+| ID     | Recommendation                     | Rationale        |
+|--------|------------------------------------|------------------|
+| CS-002 | Extract magic numbers to constants | Code readability |
+| CS-005 | Add #[must_use]                    | Compiler checks  |
+| CS-004 | Organize imports                   | Code style       |
+| BP-003 | Add Debug derives                  | Debugging        |
+| BP-004 | Improve error types                | Error handling   |
 
 ---
 
 ## Prioritized Action Plan
 
-### Phase 1: Critical Fixes (1-2 days)
+### Phase 1: Critical Fixes
 
-1. Remove `Cargo.lock` from `.gitignore`, commit `Cargo.lock`
-2. Create basic `Makefile`
-3. Fix placeholder email (use full address)
-4. Replace emojis in logs
+* Remove `Cargo.lock` from `.gitignore`, commit `Cargo.lock`
+* Create basic `Makefile`
+* Fix placeholder email (use full address)
+* Replace emojis in logs
 
-### Phase 2: CI/CD and Security (3-5 days)
+### Phase 2: CI/CD and Security
 
-5. Add GitHub Actions workflow
-6. Configure CORS
-7. Add rate limiting
-8. Extend JWT claims
+* Add GitHub Actions workflow
+* Configure CORS
+* Add rate limiting
+* Extend JWT claims
 
-### Phase 3: Refactoring (1-2 weeks)
+### Phase 3: Refactoring
 
-9. Extract service layer
-10. Create repositories
-11. Add integration tests
-12. Improve documentation
-
----
-
-## Conclusion
-
-**Overall Score: 7/10**
-
-The project demonstrates a good understanding of Rust and security practices. Main issues relate to:
-
-- Missing infrastructure files (Makefile, CI)
-- Cargo.lock in .gitignore
-- Mock implementations without a business logic layer
-
-The code is ready for continued development after addressing critical remarks.
+* Extract service layer
+* Create repositories
+* Add integration tests
+* Improve documentation
