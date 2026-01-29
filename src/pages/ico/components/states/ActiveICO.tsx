@@ -6,6 +6,7 @@ import { WalletCard } from '../shared/WalletCard';
 import { TransactionHistory, Transaction } from '../shared/TransactionHistory';
 import { ICO_CONFIG } from '@/constants/ico';
 import type { PaymentCurrency } from '../shared/CurrencySelector';
+import { Title } from '../shared/Title';
 
 interface ActiveICOProps {
   endTimestamp: number;
@@ -66,9 +67,12 @@ export function ActiveICO({ endTimestamp, className }: ActiveICOProps) {
   };
 
   return (
-    <div className={cn('max-w-5xl mx-auto space-y-6', className)}>
+    <div className={cn('max-w-5xl mx-auto space-y-6 flex flex-col items-center', className)}>
+      <Title className="mb-4">
+        {ICO_CONFIG.TOKEN.symbol} Active ICO
+      </Title>
       {/* Stats Row */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 w-full md:grid-cols-3 gap-4">
         {/* Token Price */}
         <Card className="p-6 text-center">
           <p className="text-sm text-[hsl(var(--ico-text-secondary))] mb-2">Live Token Price</p>

@@ -108,7 +108,7 @@ export function WhitepaperTab({ className }: WhitepaperTabProps) {
   return (
     <div className={cn('flex gap-6 h-[700px]', className)}>
       {/* Sidebar */}
-      <div className="w-64 flex-shrink-0 rounded-xl bg-black/40 border border-white/10 overflow-hidden">
+      <div className="hidden md:block w-64 flex-shrink-0 rounded-xl bg-black/40 border border-white/10 overflow-hidden">
         <div className="p-4 border-b border-white/10">
           <div className="flex items-center gap-2 text-[hsl(var(--ico-text-primary))]">
             <FileText className="w-5 h-5 text-[#d4a847]" />
@@ -183,7 +183,7 @@ export function WhitepaperTab({ className }: WhitepaperTabProps) {
       <div className="flex-1 rounded-xl bg-black/40 border border-white/10 overflow-hidden">
         <iframe
           key={currentPage}
-          src={`/docs/LeaseFi_WhitePaper.pdf#page=${currentPage}`}
+          src={`/docs/LeaseFi_WhitePaper.pdf#page=${currentPage}&view=FitH`}
           className="w-full h-full"
           title="LeaseFi WhitePaper"
         >

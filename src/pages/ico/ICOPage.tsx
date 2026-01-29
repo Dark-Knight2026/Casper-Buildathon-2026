@@ -4,7 +4,7 @@ import { ICOHeader } from './components/ICOHeader';
 import { ICOFooter } from './components/ICOFooter';
 import { StarsBackground } from './components/StarsBackground';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import type { ICOTab } from '@/types/ico';
+
 
 // Lazy load state components
 const PresaleCountdown = lazy(() => import('./components/states/PresaleCountdown'));

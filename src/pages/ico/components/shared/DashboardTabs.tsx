@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@radix-ui/react-tabs';
+import { Menu } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 export interface TabData {
   label: string;
@@ -68,6 +75,8 @@ export function DashboardTabs({
     center: 'justify-center',
   };
 
+  const activeTab = tabs.find((tab) => tab.value === activeValue);
+
   return (
     <div className={cn('w-full', className)}>
       <Tabs
@@ -76,7 +85,44 @@ export function DashboardTabs({
         onValueChange={handleValueChange}
         className="flex flex-col w-full"
       >
-        <TabsList className="w-full">
+        {/* Mobile: Dropdown Menu */}
+        <div className="md:hidden w-full pb-3 border-b border-sky-900">
+          <DropdownMenu>
+            <DropdownMenuTrigger className="flex items-center justify-between w-full px-3 py-2 rounded-lg bg-sky-950/50 border border-sky-800 text-[hsl(var(--ico-text-primary))] focus:outline-none focus:ring-2 focus:ring-sky-500/50">
+              <span className="flex items-center gap-2">
+                {activeTab?.icon && (
+                  <span className="text-sky-500">{activeTab.icon}</span>
+                )}
+                <span className="font-medium">{activeTab?.label}</span>
+              </span>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="start"
+              className="w-[var(--radix-dropdown-menu-trigger-width)] bg-sky-950 border-sky-800"
+            >
+              {tabs.map((tab) => (
+                <DropdownMenuItem
+                  key={tab.value}
+                  onClick={() => handleValueChange(tab.value)}
+                  className={cn(
+                    'flex items-center gap-2 cursor-pointer text-sky-400',
+                    activeValue === tab.value && 'bg-sky-500/10 text-white'
+                  )}
+                >
+                  {tab.icon && (
+                    <span className={activeValue === tab.value ? 'text-sky-500' : ''}>
+                      {tab.icon}
+                    </span>
+                  )}
+                  <span>{tab.label}</span>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+
+        {/* Desktop: Original Tabs */}
+        <TabsList className="hidden md:block w-full">
           <div
             ref={containerRef}
             className={cn('relative flex w-full pb-3', positionClasses[tabsPosition])}
