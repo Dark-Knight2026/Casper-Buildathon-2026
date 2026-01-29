@@ -168,6 +168,7 @@ tower-http = { version = "0.5", features = ["cors", "trace"] }
 ```
 
 Compiler warning:
+
 ```
 warning: the following packages contain code that will be rejected by a future version of Rust: sqlx-postgres v0.7.4
 ```
@@ -499,6 +500,7 @@ leasefi/
 ```
 
 Root `Cargo.toml`:
+
 ```toml
 [workspace]
 resolver = "2"
@@ -707,6 +709,72 @@ let app = Router::new()
 
 ---
 
+### Deviation BP-007: Using `anyhow` in Production API
+
+**Observation:** `anyhow` crate is used alongside `thiserror`, but `anyhow` is not recommended for production APIs.
+
+**Evidence:** `Cargo.toml:20`
+
+```toml
+anyhow = "1.0"
+thiserror = "1"
+```
+
+**Problem details:**
+
+- `anyhow` erases error types — caller cannot match on specific error variants
+- Harder to document which errors a function can return
+- Makes testing specific error cases difficult
+- `thiserror` is already present and is the correct choice for typed errors
+
+**When to use which:**
+
+- `thiserror` — internal errors, libraries (explicit error types with derive)
+- `anyhow` — CLI tools, scripts, prototypes (convenience over precision)
+- Manual `impl` — API response errors (full control over what's exposed)
+
+**Action Item:**
+
+* Remove `anyhow` from dependencies
+* Define explicit error types using `thiserror` for **internal** errors:
+
+```rust
+#[derive(Debug, thiserror::Error)]
+pub enum InternalError {
+  #[error("Database error: {0}")]
+  Database(#[from] sqlx::Error),
+
+  #[error("Redis error: {0}")]
+  Redis(#[from] redis::RedisError),
+}
+```
+
+* For **API response errors**, implement manually to avoid leaking sensitive info:
+
+```rust
+pub enum ApiError {
+  BadRequest(String),
+  Unauthorized,
+  InternalError,  // No details exposed!
+}
+
+impl IntoResponse for ApiError {
+  fn into_response(self) -> Response {
+    let (status, message) = match self {
+      Self::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg),
+      Self::Unauthorized => (StatusCode::UNAUTHORIZED, "Unauthorized".into()),
+      Self::InternalError => {
+        // Log actual error internally, return generic message
+        (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error".into())
+      }
+    };
+    // ...
+  }
+}
+```
+
+---
+
 ## Recommendations
 
 ### High Priority
@@ -722,13 +790,14 @@ let app = Router::new()
 
 ### Medium Priority
 
-| ID     | Recommendation           | Rationale                    |
-|--------|--------------------------|------------------------------|
-| AP-001 | Extract service layer    | Testability, maintainability |
-| AP-004 | Add rate limiting        | Security                     |
-| AP-005 | Restructure as workspace | Scalability, modularity      |
-| BP-002 | Add integration tests    | Quality                      |
-| BP-005 | Configure CORS           | Functionality                |
+| ID     | Recommendation            | Rationale                    |
+|--------|---------------------------|------------------------------|
+| AP-001 | Extract service layer     | Testability, maintainability |
+| AP-004 | Add rate limiting         | Security                     |
+| AP-005 | Restructure as workspace  | Scalability, modularity      |
+| BP-002 | Add integration tests     | Quality                      |
+| BP-005 | Configure CORS            | Functionality                |
+| BP-007 | Remove anyhow, fix errors | Security, API stability      |
 
 ### Low Priority
 
@@ -748,7 +817,8 @@ let app = Router::new()
 
 * Remove `Cargo.lock` from `.gitignore`, commit `Cargo.lock`
 * Create basic `Makefile`
-* Fix placeholder email (use full address)
+* Update dependencies and Rust edition
+* Fix placeholder email (use hash)
 * Replace emojis in logs
 
 ### Phase 2: CI/CD and Security
@@ -756,11 +826,12 @@ let app = Router::new()
 * Add GitHub Actions workflow
 * Configure CORS
 * Add rate limiting
-* Extend JWT claims
+* Refactor error handling — remove `anyhow`
 
 ### Phase 3: Refactoring
 
+* Restructure as Cargo workspace
 * Extract service layer
-* Create repositories
+* Create db module
 * Add integration tests
 * Improve documentation
