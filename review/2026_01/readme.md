@@ -150,6 +150,48 @@ Impact:
 
 ---
 
+### Deviation ST-004: Outdated Dependencies and Edition
+
+**Observation:** Project uses Rust 2021 edition and has outdated/imprecise dependency versions.
+
+**Evidence:** `Cargo.toml`
+
+```toml
+[package]
+edition = "2021"
+
+[dependencies]
+axum = "0.7"
+jsonwebtoken = "9"
+thiserror = "1"
+tower-http = { version = "0.5", features = ["cors", "trace"] }
+```
+
+Compiler warning:
+```
+warning: the following packages contain code that will be rejected by a future version of Rust: sqlx-postgres v0.7.4
+```
+
+**Problems:**
+
+- Rust 2024 edition is available with new features and improvements
+- `sqlx-postgres v0.7.4` contains deprecated code patterns
+- Dependency versions without patch number (e.g., `"0.7"` instead of `"0.7.x"`) may lead to unexpected breakages
+
+**Action Item:**
+
+1. Update to Rust 2024 edition: `edition = "2024"`
+2. Update `sqlx` to latest version that fixes the warning
+3. Consider pinning exact versions or using `~` for minor version flexibility:
+
+```toml
+axum = "0.7.9"
+# or
+axum = "~0.7"  # allows 0.7.x but not 0.8
+```
+
+---
+
 ## Code Style Issues (CS)
 
 ### Deviation CS-001: Emoji Usage in Logs
@@ -426,6 +468,52 @@ impl Config {
 
 ---
 
+### Deviation AP-005: Missing Workspace Structure
+
+**Observation:** Project is a single crate without workspace organization, limiting scalability for future modules.
+
+**Evidence:** Root `Cargo.toml` defines a single package, not a workspace.
+
+**Problem details:**
+
+- No separation between different concerns (backend API, potential indexers, shared types)
+- Future modules (e.g., vesting/leasing indexer) would require separate repos or awkward structure
+- Dependencies cannot be shared/unified across multiple crates
+
+**Action Item:** Restructure as a Cargo workspace:
+
+```
+leasefi/
+├── Cargo.toml              # Workspace root
+├── crates/
+│   ├── api/                # Current backend service
+│   │   ├── Cargo.toml
+│   │   └── src/
+│   ├── indexer/            # Future: vesting/leasing indexer
+│   │   ├── Cargo.toml
+│   │   └── src/
+│   └── common/             # Shared types, utilities
+│       ├── Cargo.toml
+│       └── src/
+└── ...
+```
+
+Root `Cargo.toml`:
+```toml
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+
+[workspace.dependencies]
+axum = "0.7.9"
+sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres"] }
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+# ... shared deps
+```
+
+---
+
 ## Security Concerns (SC)
 
 ### Deviation SC-001: Placeholder Email May Cause Collisions
@@ -623,22 +711,24 @@ let app = Router::new()
 
 ### High Priority
 
-| ID     | Recommendation                        | Rationale             |
-|--------|---------------------------------------|-----------------------|
-| ST-002 | Remove `Cargo.lock` from `.gitignore` | Reproducible builds   |
-| ST-001 | Add Makefile                          | Developer experience  |
-| ST-003 | Add CI/CD configuration               | Quality automation    |
-| CS-001 | Replace emojis in logs                | Production readiness  |
-| SC-001 | Fix placeholder email                 | Security (collisions) |
+| ID     | Recommendation                        | Rationale                   |
+|--------|---------------------------------------|-----------------------------|
+| ST-002 | Remove `Cargo.lock` from `.gitignore` | Reproducible builds         |
+| ST-001 | Add Makefile                          | Developer experience        |
+| ST-003 | Add CI/CD configuration               | Quality automation          |
+| ST-004 | Update dependencies and edition       | Compiler warnings, security |
+| CS-001 | Replace emojis in logs                | Production readiness        |
+| SC-001 | Fix placeholder email                 | Security (collisions)       |
 
 ### Medium Priority
 
-| ID     | Recommendation        | Rationale                    |
-|--------|-----------------------|------------------------------|
-| AP-001 | Extract service layer | Testability, maintainability |
-| AP-004 | Add rate limiting     | Security                     |
-| BP-002 | Add integration tests | Quality                      |
-| BP-005 | Configure CORS        | Functionality                |
+| ID     | Recommendation           | Rationale                    |
+|--------|--------------------------|------------------------------|
+| AP-001 | Extract service layer    | Testability, maintainability |
+| AP-004 | Add rate limiting        | Security                     |
+| AP-005 | Restructure as workspace | Scalability, modularity      |
+| BP-002 | Add integration tests    | Quality                      |
+| BP-005 | Configure CORS           | Functionality                |
 
 ### Low Priority
 
