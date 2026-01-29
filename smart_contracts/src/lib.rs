@@ -7,6 +7,7 @@ pub mod constants;
 pub mod escrow;
 pub mod ico;
 pub mod lease;
+mod mocks;
 pub mod nft;
 pub mod roles;
 pub mod staking;

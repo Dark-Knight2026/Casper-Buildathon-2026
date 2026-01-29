@@ -117,9 +117,7 @@ impl ICO {
             self.env().revert(Error::InvalidPurchaseAmount);
         }
 
-        let (is_supported_currency, currency_address) = self
-            .get_currency_by_key(&currency)
-            .unwrap_or_revert_with(&self.env(), Error::UnsupportedCurrency);
+        let (is_supported_currency, currency_address) = self.get_currency_by_key(&currency);
 
         if !is_supported_currency {
             self.env().revert(Error::UnsupportedCurrency);
@@ -223,8 +221,8 @@ impl ICO {
     }
 
     /// Returns info about currency by its key
-    pub fn get_currency_by_key(&self, currency: &Currency) -> Option<(bool, Option<Address>)> {
-        self.currencies.get(currency)
+    pub fn get_currency_by_key(&self, currency: &Currency) -> (bool, Option<Address>) {
+        self.currencies.get(currency).unwrap_or_default()
     }
 
     /// Returns ICO schedule by its ID, `None` if ICO schedule does not exist
@@ -321,7 +319,7 @@ impl ICO {
                     .get_twap_price(&String::from(STYKS_ORACLE_CSPR_USDT_PRICE_FEED_ID))
                     .unwrap_or_revert_with(&self.env(), Error::StyksOracleCanNotReturnTWAP);
 
-                current_ico_schedule.price * 10u32.pow(9) / cspr_price_usd
+                current_ico_schedule.price * U256::from(10).pow(U256::from(12)) / cspr_price_usd
             }
         }
     }
@@ -434,10 +432,11 @@ pub mod types {
 
 #[cfg(test)]
 mod tests {
-    use odra::host::{Deployer, HostEnv};
+    use odra::host::{Deployer, HostEnv, NoArgs};
     use odra_modules::access::errors::Error as AccessError;
 
     use crate::{
+        mocks::styks_price_feed::{StyksPriceFeed, StyksPriceFeedHostRef},
         tailor_coin::{TailorCoin, TailorCoinHostRef, TailorCoinInitArgs},
         treasury::{Treasury, TreasuryHostRef, TreasuryInitArgs},
     };
@@ -457,6 +456,7 @@ mod tests {
         usdt: TailorCoinHostRef,
         treasury: TreasuryHostRef,
         ico: ICOHostRef,
+        styks_price_feed: StyksPriceFeedHostRef,
         users: Users,
     }
 
@@ -471,7 +471,7 @@ mod tests {
         assert_eq!(ctx.ico.get_owner(), ctx.users.owner, "Invalid owner");
         assert_eq!(
             ctx.ico.get_styks_price_feed_contract_address(),
-            ctx.users.owner,
+            ctx.styks_price_feed.address(),
             "Invalid Styks Oracle Price Feed contract address"
         );
         assert_eq!(
@@ -590,7 +590,7 @@ mod tests {
         );
         assert_eq!(
             ctx.ico.get_currency_by_key(&currency),
-            Some((true, None)),
+            (true, None),
             "CSPR currency support should be enabled"
         );
     }
@@ -620,7 +620,7 @@ mod tests {
             );
             assert_eq!(
                 ctx.ico.get_currency_by_key(&currency.0),
-                Some((true, currency_address)),
+                (true, currency_address),
                 "{} CEP18 currency support should be enabled",
                 currency.1
             );
@@ -658,7 +658,7 @@ mod tests {
         );
         assert_eq!(
             ctx.ico.get_currency_by_key(&currency),
-            Some((false, None)),
+            (false, None),
             "CSPR currency support should be disabled"
         );
     }
@@ -682,7 +682,7 @@ mod tests {
             );
             assert_eq!(
                 ctx.ico.get_currency_by_key(&currency.0),
-                Some((false, None)),
+                (false, None),
                 "{} CEP18 currency support should be disabled",
                 currency.1
             );
@@ -840,6 +840,97 @@ mod tests {
     /////////////////////////////////////////////////////////////////////////////
     //                                purchase()                               //
     /////////////////////////////////////////////////////////////////////////////
+
+    #[test]
+    fn test_purchase_should_fail_if_purchase_amount_is_zero() {
+        let mut ctx = setup(odra_test::env(), true);
+
+        assert_eq!(
+            ctx.ico
+                .try_purchase(U256::zero(), Currency::CSPR)
+                .unwrap_err(),
+            Error::InvalidPurchaseAmount.into(),
+            "Should revert when purchase amount is zero"
+        );
+    }
+
+    #[test]
+    fn test_purchase_should_fail_if_currency_is_not_supported() {
+        let mut ctx = setup(odra_test::env(), true);
+
+        assert_eq!(
+            ctx.ico
+                .try_purchase(U256::one(), Currency::USDT)
+                .unwrap_err(),
+            Error::UnsupportedCurrency.into(),
+            "Should revert when currency is not supported"
+        );
+    }
+
+    #[test]
+    fn test_purchase_should_fail_if_no_active_ice_schedule() {
+        let mut ctx = setup(odra_test::env(), true);
+
+        assert_eq!(
+            ctx.ico
+                .try_purchase(U256::one(), Currency::CSPR)
+                .unwrap_err(),
+            Error::NoActiveIcoSchedule.into(),
+            "Should revert when no active ICO schedule exist"
+        );
+    }
+
+    #[test]
+    fn test_purchase_should_fail_if_purchase_amount_is_gt_available_to_purchase_amount() {
+        let mut ctx = setup(odra_test::env(), true);
+        let creation_params = get_ico_schedules_creation_params(&ctx.env);
+
+        ctx.env
+            .advance_block_time(creation_params[0].start_timestamp - ctx.env.block_time());
+
+        assert_eq!(
+            ctx.ico
+                .try_purchase(creation_params[0].sale_amount + 1, Currency::CSPR)
+                .unwrap_err(),
+            Error::InsufficientSellingTokensAmount.into(),
+            "Should revert when purchase amount is GT available to purchase amount"
+        );
+    }
+
+    #[test]
+    fn test_purchase_should_fail_if_styks_price_feed_can_not_return_twap() {
+        let mut ctx = setup(odra_test::env(), true);
+        let creation_params = get_ico_schedules_creation_params(&ctx.env);
+
+        ctx.env
+            .advance_block_time(creation_params[0].start_timestamp - ctx.env.block_time());
+
+        assert_eq!(
+            ctx.ico
+                .try_purchase(U256::one(), Currency::CSPR)
+                .unwrap_err(),
+            Error::StyksOracleCanNotReturnTWAP.into(),
+            "Should revert when Styks Oracle Price Feed can not return TWAP"
+        );
+    }
+
+    #[test]
+    fn test_purchase_should_fail_if_attached_value_is_wrong() {
+        let mut ctx = setup(odra_test::env(), true);
+        let creation_params = get_ico_schedules_creation_params(&ctx.env);
+
+        ctx.env
+            .advance_block_time(creation_params[0].start_timestamp - ctx.env.block_time());
+        ctx.styks_price_feed.set_twap_price(4342000); // 0.004342 * 10^9
+
+        assert_eq!(
+            ctx.ico
+                .try_purchase(U256::from(100 * 10u128.pow(18)), Currency::CSPR)
+                .unwrap_err(),
+            Error::InvalidAmountAttached.into(),
+            "Should revert when attached CSPR amount is wrong"
+        );
+    }
 
     // TODO
 
@@ -1031,6 +1122,7 @@ mod tests {
             bob: env.get_account(2),
         };
         let initial_supply = 5000000000000 * 10u128.pow(18);
+        let styks_price_feed = StyksPriceFeed::deploy(&env, NoArgs);
         let tailor_coin = deploy_mock_cep18_token(&env, "BIG", "BIG", 18, initial_supply);
         let mut usdc = deploy_mock_cep18_token(&env, "USDC", "USD Coin", 6, initial_supply);
         let mut usdt = deploy_mock_cep18_token(&env, "USDT", "Tether USD", 6, initial_supply);
@@ -1039,7 +1131,7 @@ mod tests {
             &env,
             ICOInitArgs {
                 owner: users.owner,
-                styks_price_feed: users.owner, // TODO mock properly
+                styks_price_feed: styks_price_feed.address(),
             },
         );
 
@@ -1050,7 +1142,6 @@ mod tests {
 
         ico.add_currency(Currency::CSPR, None);
         ico.add_currency(Currency::USDC, Some(usdc.address()));
-        ico.add_currency(Currency::USDT, Some(usdt.address()));
 
         usdc.transfer(&users.alice, &U256::from(initial_supply / 2));
         usdc.transfer(&users.bob, &U256::from(initial_supply / 2));
@@ -1065,6 +1156,7 @@ mod tests {
             usdt,
             treasury,
             ico,
+            styks_price_feed,
             users,
         };
 
@@ -1093,27 +1185,21 @@ mod tests {
         )
     }
 
-    fn get_ico_schedules_creation_params(env: &HostEnv) -> [ICOScheduleCreateParams; 3] {
-        let pre_sale = ICOScheduleCreateParams {
+    fn get_ico_schedules_creation_params(env: &HostEnv) -> [ICOScheduleCreateParams; 2] {
+        let private_sale = ICOScheduleCreateParams {
             start_timestamp: env.block_time() + ONE_DAY,
             end_timestamp: env.block_time() + ONE_DAY + ONE_MONTH,
             sale_amount: U256::from(125000000000 * 10u128.pow(18)),
-            price: U256::from(150000), // 0.15 USD (0.15 * 1 * 10^6)
-        };
-        let sale = ICOScheduleCreateParams {
-            start_timestamp: pre_sale.end_timestamp + ONE_DAY,
-            end_timestamp: pre_sale.end_timestamp + ONE_DAY + ONE_MONTH,
-            sale_amount: U256::from(125000000000 * 10u128.pow(18)),
             price: U256::from(500000), // 0.5 USD (0.5 * 1 * 10^6)
         };
-        let post_sale = ICOScheduleCreateParams {
-            start_timestamp: sale.end_timestamp + ONE_DAY,
-            end_timestamp: sale.end_timestamp + ONE_DAY + ONE_MONTH,
-            sale_amount: U256::from(500000000000 * 10u128.pow(18)),
-            price: U256::from(1000000), // 1 USD (1 * 1 * 10^6)
+        let sale = ICOScheduleCreateParams {
+            start_timestamp: private_sale.end_timestamp + ONE_DAY,
+            end_timestamp: private_sale.end_timestamp + ONE_DAY + ONE_MONTH,
+            sale_amount: U256::from(250000000000 * 10u128.pow(18)),
+            price: U256::from(1000000), // 1 USD (1.0 * 1 * 10^6)
         };
 
-        [pre_sale, sale, post_sale]
+        [private_sale, sale]
     }
 
     fn add_and_verify_ico_schedules(ctx: &mut Context) {

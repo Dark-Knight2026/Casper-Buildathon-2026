@@ -21,3 +21,6 @@ fqn = "staking::Staking"
 
 [[contracts]]
 fqn = "ico::ICO"
+
+[[contracts]]
+fqn = "mocks::styks_price_feed::StyksPriceFeed"
