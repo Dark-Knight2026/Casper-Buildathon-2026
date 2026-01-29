@@ -15,6 +15,8 @@ interface ProgressBarProps {
   label?: string;
   /** Custom right-side label. If not provided, shows percentage */
   rightLabel?: string;
+  /** Custom right-side element (e.g., CountdownTimer). Takes precedence over rightLabel */
+  rightElement?: React.ReactNode;
   /** Whether to show percentage in left label (default: true) */
   showPercentage?: boolean;
   /** Info columns to display below the progress bar */
@@ -31,6 +33,7 @@ export function ProgressBar({
   maxValue,
   label = 'Progress',
   rightLabel,
+  rightElement,
   showPercentage = true,
   infoColumns,
   size = 'lg',
@@ -51,11 +54,13 @@ export function ProgressBar({
         <span className="text-sm font-medium text-[hsl(var(--ico-text-secondary))]">
           {label}{showPercentage ? `: ${percentage.toFixed(1)}%` : ''}
         </span>
-        {rightLabel && (
+        {rightElement ? (
+          rightElement
+        ) : rightLabel ? (
           <span className="text-sm font-medium text-[hsl(var(--ico-text-secondary))]">
             {rightLabel}
           </span>
-        )}
+        ) : null}
       </div>
 
       <div className={cn('w-full bg-[hsl(var(--ico-progress-bg))] rounded-full overflow-hidden', sizeClasses[size])}>

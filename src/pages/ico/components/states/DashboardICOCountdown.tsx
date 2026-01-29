@@ -19,6 +19,8 @@ const MOCK_VESTING_DATA = {
   vestingStartDate: 'After ICO ends',
   vestingDuration: '12 months',
   vestingCliff: '3 months',
+  // Mock: vesting ends 12 months from now
+  vestingEndTimestamp: Date.now() + 12 * 30 * 24 * 60 * 60 * 1000,
 };
 
 export function DashboardICOCountdown({ icoStartTimestamp, className }: DashboardICOCountdownProps) {
@@ -154,6 +156,13 @@ export function DashboardICOCountdown({ icoStartTimestamp, className }: Dashboar
             label="Vesting Progress"
             withCard={false}
             className="mt-6"
+            rightElement={
+              <CountdownTimer
+                targetTimestamp={MOCK_VESTING_DATA.vestingEndTimestamp}
+                variant="minimal"
+                className="text-sm text-[hsl(var(--ico-text-secondary))]"
+              />
+            }
           />
         </Card>
       </div>
