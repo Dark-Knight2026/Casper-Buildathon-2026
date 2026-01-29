@@ -4,7 +4,7 @@ import { MainButton } from './shared/MainButton';
 export function ICOHeader() {
 
   return (
-    <header className="relative border-b h-[112px] z-50 border-[hsl(var(--ico-border-color))] bg-[hsl(var(--ico-bg-secondary))] shadow-md shadow-slate-900">
+    <header className="relative border-b h-28 z-50 border-[hsl(var(--ico-border-color))] bg-[hsl(var(--ico-bg-secondary))] shadow-md shadow-slate-900">
       <div className="container mx-auto px-4 py-4">
         <div className="flex flex-row items-center justify-between gap-4">
           {/* Logo & Token Name */}

@@ -3,6 +3,7 @@ import { useICOState } from '@/hooks/ico/useICOState';
 import { ICOHeader } from './components/ICOHeader';
 import { ICOFooter } from './components/ICOFooter';
 import { StarsBackground } from './components/StarsBackground';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import type { ICOTab } from '@/types/ico';
 
 // Lazy load state components
@@ -24,14 +25,6 @@ function LoadingFallback() {
     </div>
   );
 }
-
-// Tab navigation
-const TABS: { id: ICOTab; label: string }[] = [
-  { id: 'main', label: 'Dashboard' },
-  { id: 'tokenomics', label: 'Tokenomics' },
-  { id: 'rewards', label: 'Rewards' },
-  { id: 'whitepaper', label: 'Whitepaper' },
-];
 
 export function ICOPage() {
   const { state, phase, timestamps, nextStateTimestamp } = useICOState();
@@ -89,11 +82,13 @@ export function ICOPage() {
 
 
       {/* Main Content */}
-      <main className="container min-h-[calc(100vh-112px-92px)] mx-auto px-4 py-8">
-        <Suspense fallback={<LoadingFallback />}>
-          {renderStateComponent()}
-        </Suspense>
-      </main>
+      <ScrollArea className="h-[calc(100vh-112px-92px)] ">
+        <main className="container mx-auto px-4 py-8">
+          <Suspense fallback={<LoadingFallback />}>
+            {renderStateComponent()}
+          </Suspense>
+        </main>
+      </ScrollArea>
 
       {/* Footer */}
       <ICOFooter />

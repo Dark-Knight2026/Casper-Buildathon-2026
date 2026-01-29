@@ -7,7 +7,7 @@ import type { PaymentMethod, TokenomicsAllocation } from '@/types/ico';
 
 export const ICO_CONFIG = {
   TOKEN: {
-    name: 'Tailor Coin',
+    name: 'BIG Token',
     symbol: 'BIG',
     decimals: 18,
     totalSupply: '5000000000', // 5 billion
