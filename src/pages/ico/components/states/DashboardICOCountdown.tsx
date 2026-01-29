@@ -1,9 +1,9 @@
 import { cn } from '@/lib/utils';
 import { Card } from '../shared/Card';
 import { CountdownTimer } from '../shared/CountdownTimer';
-import { ProgressBar } from '../shared/ProgressBar';
+import { VestingProgressBlock, VestingEntry } from '../shared/VestingProgressBlock';
 import { ICO_CONFIG } from '@/constants/ico';
-import { Wallet, Lock, Unlock, DollarSign, TrendingUp } from 'lucide-react';
+import { Wallet, Lock, Unlock, DollarSign } from 'lucide-react';
 import { Title } from '../shared/Title';
 
 interface DashboardICOCountdownProps {
@@ -19,9 +19,29 @@ const MOCK_VESTING_DATA = {
   vestingStartDate: 'After ICO ends',
   vestingDuration: '12 months',
   vestingCliff: '3 months',
-  // Mock: vesting ends 12 months from now
-  vestingEndTimestamp: Date.now() + 12 * 30 * 24 * 60 * 60 * 1000,
 };
+
+// Mock vesting entries - multiple purchases with linear unlock
+const MOCK_VESTING_ENTRIES: VestingEntry[] = [
+  {
+    id: '1',
+    lockedAmount: 200000,
+    unlockTimestamp: Date.now() + 30 * 24 * 60 * 60 * 1000, // 1 month from now
+    purchaseTimestamp: Date.now() - 60 * 24 * 60 * 60 * 1000, // 2 months ago
+  },
+  {
+    id: '2',
+    lockedAmount: 150000,
+    unlockTimestamp: Date.now() + 60 * 24 * 60 * 60 * 1000, // 2 months from now
+    purchaseTimestamp: Date.now() - 30 * 24 * 60 * 60 * 1000, // 1 month ago
+  },
+  {
+    id: '3',
+    lockedAmount: 150000,
+    unlockTimestamp: Date.now() + 90 * 24 * 60 * 60 * 1000, // 3 months from now
+    purchaseTimestamp: Date.now() - 14 * 24 * 60 * 60 * 1000, // 2 weeks ago
+  },
+];
 
 export function DashboardICOCountdown({ icoStartTimestamp, className }: DashboardICOCountdownProps) {
   const formatNumber = (value: string | number) => {
@@ -35,10 +55,7 @@ export function DashboardICOCountdown({ icoStartTimestamp, className }: Dashboar
   // Calculate USD values based on token prices
   const tokensOwned = Number(MOCK_VESTING_DATA.bigPurchased);
   const presalePrice = Number(ICO_CONFIG.PRE_SALE.price);
-  const icoPrice = Number(ICO_CONFIG.PUBLIC_ICO.price);
-
   const estValuePresale = tokensOwned * presalePrice;
-  const valueAtICO = tokensOwned * icoPrice;
   const availableTokens = Number(MOCK_VESTING_DATA.bigAvailable);
   const availableValuePresale = availableTokens * presalePrice;
 
@@ -83,6 +100,27 @@ export function DashboardICOCountdown({ icoStartTimestamp, className }: Dashboar
       <Title className="mb-12 w-full text-center">
         Dashboard
       </Title>
+
+      {/* ICO Countdown Card */}
+      <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-6">
+        <p className="text-center text-[hsl(var(--ico-text-secondary))] text-xl font-semibold">
+          Public ICO Starts In
+        </p>
+
+        <CountdownTimer
+          targetTimestamp={icoStartTimestamp}
+          size="lg"
+          showLabels
+          variant='compact'
+        />
+
+        <div className="text-center">
+          <p className="text-[hsl(var(--ico-text-secondary))]">
+            ICO Price: <span className="font-bold text-[hsl(var(--ico-text-primary))]">${ICO_CONFIG.PUBLIC_ICO.price}</span>
+          </p>
+        </div>
+      </div>
+
       {/* Dashboard Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
         {dashboardCards.map((card) => {
@@ -109,25 +147,6 @@ export function DashboardICOCountdown({ icoStartTimestamp, className }: Dashboar
         })}
       </div>
       <div className='flex flex-col md:flex-row'>
-        {/* ICO Countdown Card */}
-        <div className="mb-8 p-6 md:p-8">
-          <p className="text-center text-[hsl(var(--ico-text-secondary))] text-xl md:text-2xl font-semibold mb-6">
-            Public ICO Starts In
-          </p>
-
-          <CountdownTimer
-            targetTimestamp={icoStartTimestamp}
-            size="lg"
-            showLabels
-            variant='compact'
-          />
-
-          <div className="mt-6 text-center">
-            <p className="text-[hsl(var(--ico-text-secondary))]">
-              ICO Price: <span className="font-bold text-[hsl(var(--ico-text-primary))]">${ICO_CONFIG.PUBLIC_ICO.price}</span>
-            </p>
-          </div>
-        </div>
 
         {/* Vesting Schedule Card */}
         <Card className="mb-8 p-6 w-full items-stretch">
@@ -149,20 +168,12 @@ export function DashboardICOCountdown({ icoStartTimestamp, className }: Dashboar
             </div>
           </div>
 
-          {/* Vesting Progress Bar */}
-          <ProgressBar
-            currentValue={10}
-            maxValue={100}
-            label="Vesting Progress"
-            withCard={false}
+          {/* Vesting Progress Block */}
+          <VestingProgressBlock
+            vestingEntries={MOCK_VESTING_ENTRIES}
+            tokenSymbol={ICO_CONFIG.TOKEN.symbol}
+            tokenPrice={Number(ICO_CONFIG.PRE_SALE.price)}
             className="mt-6"
-            rightElement={
-              <CountdownTimer
-                targetTimestamp={MOCK_VESTING_DATA.vestingEndTimestamp}
-                variant="minimal"
-                className="text-sm text-[hsl(var(--ico-text-secondary))]"
-              />
-            }
           />
         </Card>
       </div>

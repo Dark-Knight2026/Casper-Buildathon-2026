@@ -17,7 +17,7 @@ const PostICODashboard = lazy(() => import('./components/states/PostICODashboard
 // Loading fallback
 function LoadingFallback() {
   return (
-    <div className="flex items-center justify-center min-h-[400px]">
+    <div className="flex items-center justify-center min-h-100">
       <div className="flex flex-col items-center gap-4">
         <div className="w-12 h-12 border-4 border-[hsl(var(--ico-brand-primary))] border-t-transparent rounded-full animate-spin" />
         <p className="text-[hsl(var(--ico-text-secondary))]">Loading...</p>
@@ -28,7 +28,6 @@ function LoadingFallback() {
 
 export function ICOPage() {
   const { state, phase, timestamps, nextStateTimestamp } = useICOState();
-  const [activeTab, setActiveTab] = useState<ICOTab>('main');
 
   // Render state-specific component
   const renderStateComponent = () => {
