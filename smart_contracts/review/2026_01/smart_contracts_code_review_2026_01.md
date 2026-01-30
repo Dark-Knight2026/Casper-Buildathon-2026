@@ -240,7 +240,7 @@ Per company onboarding rulebook, each repository should have a `codestyle.md` th
 
 ## Rust/Odra Conventions
 
-- Follow standard `rustfmt` formatting
+- Follow project codestyle rulebooks (see applicable rulebook files)
 - Group imports: odra/casper_types, external crates, crate::
 - Use `#[odra::odra_error]` for custom errors with unique error codes
 - Error codes: 60xxx (Lease), 61xxx (Escrow), 62xxx (NFT), 63xxx (Staking), 64xxx (Treasury)
@@ -964,21 +964,21 @@ U256::from_dec_str("5000000000000000000000000000000").expect("Invalid initial su
 
 ---
 
-### Deviation BP-002: Missing #[must_use] Attributes
+### Deviation BP-002: Missing #[must_use] Attributes on Pure Getters
 
-**Observation:** Functions returning important values lack `#[must_use]` attribute.
+**Observation:** Pure getter functions returning important values lack `#[must_use]` attribute.
 
-**Evidence:** Multiple functions across contracts:
+**Evidence:** Pure getters across contracts:
 
-- `lease.rs:44` - `create_lease_agreement` returns `U256`
-- `escrow.rs:62` - `create_lease_invoice` returns `U256`
 - `nft.rs:114` - `get_tokens_count` returns `U256`
 
-**Action Item:** Add `#[must_use]` to functions where ignoring the result is likely an error:
+**Note:** State-changing functions like `create_lease_agreement` and `create_lease_invoice` should NOT use `#[must_use]`. Their primary effect is mutation (`&mut self`), not the return value. This follows Rust stdlib conventions — `HashMap::insert()`, `Vec::push()`, etc. do not use `#[must_use]`.
+
+**Action Item:** Add `#[must_use]` only to pure getter functions:
 
 ```rust
 #[must_use]
-pub fn create_lease_agreement(&mut self, params: CreateLeaseAgreementParams) -> U256 {
+pub fn get_tokens_count(&self) -> U256 {
 ```
 
 ---
@@ -1084,7 +1084,7 @@ pub struct LeaseAgreementCreated {
 | ST-005 | Document nightly toolchain choice | Maintenance clarity  |
 | CS-002 | Add module-level documentation    | Code readability     |
 | CS-003 | Extract gas limits to constants   | Code clarity         |
-| BP-002 | Add `#[must_use]` attributes      | Compiler checks      |
+| BP-002 | Add `#[must_use]` to pure getters | Compiler checks      |
 | BP-004 | Document all events               | API documentation    |
 | ST-007 | Consider updating to edition 2024 | Modern Rust features |
 
@@ -1168,7 +1168,7 @@ pub struct LeaseAgreementCreated {
 | Add integration tests for cross-contract interactions (AP-001) | 12h    |
 | Document contract upgrade strategy (AP-003)                    | 4h     |
 | Add contract versioning (AP-003)                               | 1h     |
-| Add `#[must_use]` attributes (BP-002)                          | 1h     |
+| Add `#[must_use]` to pure getters (BP-002)                     | 1h     |
 | Document all events (BP-004)                                   | 4h     |
 
 ---
