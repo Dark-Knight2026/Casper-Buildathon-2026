@@ -82,7 +82,7 @@ cargo clippy --all-targets -- -D warnings
 | Framework     | Axum 0.7                                          |
 | Database      | PostgreSQL (SQLx) + Redis                         |
 | Lines of Code | ~958 lines of Rust                                |
-| Module Count  | 8 files                                           |
+| Module Count  | 9 files                                           |
 | Tests         | Present (unit tests in crypto.rs and business.rs) |
 
 ---
@@ -391,8 +391,8 @@ tracing::info!("Signature verified successfully");
 **Evidence:** `handlers/auth.rs:155`
 
 ```rust
-let len = payload.wallet_address.len(); if len != 66 & & len != 68 {
-tracing::error ! ("Invalid wallet address length: {}. Expected 66 or 68.", len);
+let len = payload.wallet_address.len(); if len != 66 && len != 68 {
+tracing::error! ("Invalid wallet address length: {}. Expected 66 or 68.", len);
 return Err(StatusCode::BAD_REQUEST);
 }
 ```
@@ -479,7 +479,7 @@ let expiration = Utc::now().checked_add_signed(Duration::hours(24)).expect("vali
 
 // Better:
 let expiration = Utc::now().checked_add_signed(Duration::hours(24)).ok_or_else(| | {
-tracing::error ! ("Timestamp overflow calculating expiration"); StatusCode::INTERNAL_SERVER_ERROR
+tracing::error! ("Timestamp overflow calculating expiration"); StatusCode::INTERNAL_SERVER_ERROR
 }) ?.timestamp();
 ```
 
@@ -884,7 +884,7 @@ let db_options = PgConnectOptions::from_str(config.database_url.expose_secret())
 
 ```rust
 let db_options = PgConnectOptions::from_str(config.database_url.expose_secret()).map_err( | e| {
-tracing::error ! ("Failed to parse DATABASE_URL: {}", e);
+tracing::error! ("Failed to parse DATABASE_URL: {}", e);
 // Don't include the actual URL in the error
 }).expect("Invalid DATABASE_URL format");
 ```
@@ -940,19 +940,7 @@ let app = Router::new()
 
 ---
 
-### Deviation SC-010: Integer Overflow in Timestamp Calculations
-
-**Observation:** Timestamp arithmetic uses `checked_add_signed` but panics on failure instead of handling gracefully.
-
-**Evidence:** `handlers/auth.rs:224-227` (same as SC-006)
-
-**Note:** This is a duplicate concern covered in CS-003 and SC-006. Listed here for completeness in security audit.
-
-**Action Item:** See CS-003 action item.
-
----
-
-### Deviation SC-011: Password Hashing Not Used (Design Note)
+### Deviation SC-010: Password Hashing Not Used (Design Note)
 
 **Observation:** The system uses wallet-based authentication (cryptographic signatures) instead of passwords, so bcrypt/argon2 are not applicable.
 
@@ -1074,26 +1062,7 @@ pub enum AuthError {
 
 ---
 
-### Deviation BP-005: Missing CORS Configuration
-
-**Observation:** CORS is not configured despite `tower-http` being included with `cors` feature.
-
-**Evidence:** `main.rs` — no `.layer(CorsLayer::...)`.
-
-**Action Item:** Configure CORS:
-
-```rust
-use tower_http::cors::{CorsLayer, Any};
-
-let cors = CorsLayer::new().allow_origin(Any).allow_methods([Method::GET, Method::POST]).allow_headers(Any);
-
-let app = Router::new()
-// ... .layer(cors).layer(TraceLayer::new_for_http());
-```
-
----
-
-### Deviation BP-006: Missing Graceful Degradation for Redis
+### Deviation BP-005: Missing Graceful Degradation for Redis
 
 **Observation:** Server fails to start if Redis is unavailable.
 
