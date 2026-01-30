@@ -232,7 +232,6 @@ One-Second Test applied to `src/` directory:
  migrate  \
  restart  \
  ci       \
- fmt      \
  lint     \
  prepare  \
  test     \
@@ -259,15 +258,11 @@ migrate: ## Run database migrations (requires bash/zsh)
 
 restart: env_down env_up migrate ## Restart environment and run migrations
 
-ci: fmt lint prepare test ## Full CI pipeline
+ci: lint prepare test ## Full CI pipeline
 
 lint: ## Run clippy in strict mode
 	@echo "[*] Running clippy..."
 	@cargo clippy --workspace --all-targets -- -D warnings
-
-fmt: ## Check formatting
-	@echo "[*] Checking formatting..."
-	@cargo fmt --all -- --check
 
 prepare: ## Generate SQLx offline query metadata for CI builds (requires bash/zsh)
 	@echo "[*] Generating SQLx offline query metadata..."
@@ -326,7 +321,6 @@ Impact:
 
 **Action Item:** Add GitHub Actions workflow with:
 
-- `cargo fmt --check`
 - `cargo clippy -- -D warnings`
 - `cargo test`
 - `cargo audit` (vulnerability scanning)
@@ -396,15 +390,14 @@ Per company onboarding rulebook, each repository should have a `codestyle.md` th
 ```markdown
 # Code Style
 
-## Task Markers
+### Task Markers
 
 - `xxx:` — TODO item, work in progress
 - `qqq:` — Question, needs clarification
 - `aaa:` — Resolved question/decision
 
-## Rust Conventions
+### Rust Conventions
 
-- Follow standard `rustfmt` formatting
 - Group imports: std, external crates, crate::
 - Use `thiserror` for internal errors
 - ... (project-specific rules)
@@ -426,55 +419,13 @@ Error handling architecture should be documented in SPEC.md as a canonical refer
 - Consistent implementation across handlers
 - Easier onboarding for new developers
 
-**Action Item:** Add "5. Error Handling Architecture" section to SPEC.md with the following content:
+**Action Item:** Add "Error Handling Architecture" section to SPEC.md defining:
 
-```rust
-// SPEC.md Section 5: Error Handling Architecture
-// Use a unified ApiError enum with IntoResponse implementation (idiomatic Axum pattern)
+- Unified `ApiError` enum with `IntoResponse` implementation (idiomatic Axum pattern)
+- Variants: `BadRequest(String)`, `Unauthorized`, `NotFound`, `Conflict(String)`, `Internal`
+- `From` implementations for `sqlx::Error` and `redis::RedisError`
 
-use axum::{http::StatusCode, response::{IntoResponse, Response}, Json};
-use serde_json::json;
-
-#[derive(Debug)]
-pub enum ApiError {
-  BadRequest(String),
-  Unauthorized,
-  NotFound,
-  Conflict(String),
-  Internal,
-}
-
-impl IntoResponse for ApiError {
-  fn into_response(self) -> Response {
-    let (status, message) = match self {
-      Self::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg),
-      Self::Unauthorized => (StatusCode::UNAUTHORIZED, "Unauthorized".into()),
-      Self::NotFound => (StatusCode::NOT_FOUND, "Not found".into()),
-      Self::Conflict(msg) => (StatusCode::CONFLICT, msg),
-      Self::Internal => {
-        (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error".into())
-      }
-    };
-    (status, Json(json!({ "error": message }))).into_response()
-  }
-}
-
-impl From<sqlx::Error> for ApiError {
-  fn from(err: sqlx::Error) -> Self {
-    tracing::error!("Database error: {}", err);
-    Self::Internal
-  }
-}
-
-impl From<redis::RedisError> for ApiError {
-  fn from(err: redis::RedisError) -> Self {
-    tracing::error!("Redis error: {}", err);
-    Self::Internal
-  }
-}
-```
-
-> **Note:** A single unified `ApiError` is preferred over a two-tier system for a codebase of this size.
+> **Note:** A single unified `ApiError` is preferred over a two-tier system for a codebase of this size. Implementation details belong in SPEC.md, not in review documents.
 
 ---
 
