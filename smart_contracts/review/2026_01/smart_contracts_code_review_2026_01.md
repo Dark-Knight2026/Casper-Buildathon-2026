@@ -71,15 +71,17 @@ cargo run --bin leasefi_contracts_build_contract
 
 ## Overview
 
-| Parameter      | Value                 |
-|----------------|-----------------------|
-| Language       | Rust 2021 edition     |
-| Framework      | Odra 2.4.0            |
-| Target         | Casper Network (WASM) |
-| Lines of Code  | 3,680 lines of Rust   |
-| Contract Count | 7 contracts           |
-| Test Count     | 88 tests              |
-| Toolchain      | nightly-2025-01-01    |
+| Parameter       | Value                 |
+|-----------------|-----------------------|
+| Language        | Rust 2021 edition     |
+| Framework       | Odra 2.4.0            |
+| Target          | Casper Network (WASM) |
+| Lines of Code   | 3,680 lines of Rust   |
+| Contract Count  | 7 contracts           |
+| Test Count      | 88 tests              |
+| Toolchain       | nightly-2025-01-01    |
+| Total Findings  | 28                    |
+| Critical Issues | 6                     |
 
 ---
 
@@ -479,6 +481,7 @@ mod gas_limits {
 **Context:**
 
 Inline unit tests are the **standard convention for Odra framework**:
+
 - `odra_test::env()` testing framework is designed for inline tests
 - All official Odra examples (CEP-18, CEP-95, Governance) use inline tests
 - Moving tests would break the Odra testing model
@@ -679,6 +682,258 @@ pub fn create_lease_agreement(&mut self, params: CreateLeaseAgreementParams) -> 
 
 ---
 
+### Deviation SC-003: Missing Finalization Check in finalize_lease_agreement
+
+**Observation:** The `finalize_lease_agreement` function doesn't check if the lease is already finalized before processing.
+
+**Evidence:** `src/lease.rs:109-139`
+
+```rust
+pub fn finalize_lease_agreement(&mut self, lease_agreement_id: &U256) {
+  let mut lease_agreement = self.get_lease_agreement_by_id(lease_agreement_id);
+  // Missing: if lease_agreement.is_finished { revert }
+
+  // ... processes security deposit ...
+
+  lease_agreement.is_finished = true;  // Set AFTER external calls
+}
+```
+
+**Risk:** Landlord can finalize lease multiple times, withdrawing security deposit repeatedly (double-spend attack).
+
+**Severity:** Critical
+
+**Action Item:** Add finalization check at the beginning:
+
+```rust
+pub fn finalize_lease_agreement(&mut self, lease_agreement_id: &U256) {
+  let mut lease_agreement = self.get_lease_agreement_by_id(lease_agreement_id);
+
+  if lease_agreement.is_finished {
+    self.env().revert(Error::LeaseAgreementAlreadyFinalized);
+  }
+
+  // ... rest of function
+}
+```
+
+---
+
+### Deviation SC-004: Reward Rounding Attack
+
+**Observation:** Integer division in reward calculation loses precision, allowing accumulated rounding errors.
+
+**Evidence:** `src/treasury.rs:42`
+
+```rust
+let staking_rewards = amount * STAKING_REWARDS_BPS / ONE_HUNDRED_PERCENT_BPS;
+```
+
+**Risk:** Attacker can exploit rounding errors through many small transactions to drain staking rewards. Example: 10,000 transactions could result in ~2,000 tokens stolen.
+
+**Severity:** Critical
+
+**Action Item:** Use higher precision arithmetic or accumulate remainders:
+
+```rust
+// Option 1: Scale up before division
+let staking_rewards = (amount * STAKING_REWARDS_BPS * PRECISION) / ONE_HUNDRED_PERCENT_BPS / PRECISION;
+
+// Option 2: Track and distribute remainders periodically
+```
+
+---
+
+### Deviation SC-005: Mutable Critical Addresses
+
+**Observation:** Owner can change Lease/Treasury contract addresses at any time without restrictions.
+
+**Evidence:** `src/escrow.rs:50-58`, `src/lease.rs:32-41`
+
+```rust
+pub fn set_lease(&mut self, lease: Address) {
+  self.assert_owner();
+  self.lease.set(lease);  // No timelock, no restrictions
+}
+```
+
+**Risk:** Compromised owner account can redirect all protocol funds to attacker-controlled contracts. Complete protocol takeover possible.
+
+**Severity:** Critical
+
+**Action Item:** Make critical addresses immutable after initialization, or add timelock:
+
+```rust
+pub fn set_lease(&mut self, lease: Address) {
+  self.assert_owner();
+  if self.lease.get().is_some() {
+    self.env().revert(Error::AddressAlreadySet);
+  }
+  self.lease.set(lease);
+}
+```
+
+---
+
+### Deviation SC-006: Reentrancy Risk in Payment Flow
+
+**Observation:** External CEP-18 transfer calls are made before state updates, violating Checks-Effects-Interactions pattern.
+
+**Evidence:** `src/escrow.rs:90-138`
+
+```rust
+// External call FIRST
+Cep18ContractRef::new( self .env(), currency).transfer_from( & invoice.buyer, & recipient, amount);
+
+// State update AFTER
+invoice.is_paid = true;
+```
+
+**Risk:** Malicious token contract could re-enter the payment function before `is_paid` is set, allowing double-payment exploitation.
+
+**Severity:** Critical
+
+**Action Item:** Follow Checks-Effects-Interactions pattern:
+
+```rust
+// 1. Checks
+if invoice.is_paid { revert }
+
+// 2. Effects (state changes FIRST)
+invoice.is_paid = true; self .invoices.set(invoice_id, invoice);
+
+// 3. Interactions (external calls LAST)
+Cep18ContractRef::new( self .env(), currency).transfer_from( & invoice.buyer, & recipient, amount);
+```
+
+---
+
+### Deviation SC-007: Integer Overflow in Deadline Calculation
+
+**Observation:** Unchecked arithmetic in invoice deadline calculation can overflow with malicious inputs.
+
+**Evidence:** `src/lease.rs:70-83`
+
+```rust
+let invoice_due = start + ONE_MONTH_IN_SECONDS * (i + 1);
+// Can overflow for large values of start or i
+```
+
+**Risk:** Integer overflow could result in incorrect invoice deadlines, potentially allowing invoices to be marked as overdue immediately or never.
+
+**Severity:** Medium
+
+**Action Item:** Use checked arithmetic:
+
+```rust
+let invoice_due = start
+.checked_add(ONE_MONTH_IN_SECONDS.checked_mul(i + 1).unwrap_or_revert_with( & self .env(), Error::ArithmeticOverflow)).unwrap_or_revert_with( & self .env(), Error::ArithmeticOverflow);
+```
+
+---
+
+### Deviation SC-008: Unchecked CEP-18 Transfer Returns
+
+**Observation:** CEP-18 token transfer results are not checked for success.
+
+**Evidence:** Multiple locations in `escrow.rs`
+
+```rust
+Cep18ContractRef::new( self .env(), currency).transfer_from( & invoice.buyer, & recipient, amount);
+// Return value not checked
+```
+
+**Risk:** Silent transfer failures could lead to inconsistent state where invoice is marked paid but funds were not transferred.
+
+**Severity:** High
+
+**Action Item:** Check transfer return value or use transfer methods that revert on failure.
+
+---
+
+### Deviation SC-009: Incomplete Staking Contract
+
+**Observation:** Staking contract has stub implementations with TODO markers.
+
+**Evidence:** `src/staking.rs:12,34`
+
+```rust
+pub fn distribute_rewards(&mut self) {
+  // xxx: @wangua implement distributing logic
+}
+
+pub fn total_staked(&self) -> U256 {
+  // aaa: stub for testing
+  U256::zero()
+}
+```
+
+**Risk:** Users can deposit tokens via TailorCoin staking, but funds are permanently locked — no withdrawal or reward distribution logic exists.
+
+**Severity:** Critical (funds at risk)
+
+**Action Item:** Either complete the implementation or disable staking functionality until ready:
+
+```rust
+pub fn stake(&mut self, amount: U256) {
+  self.env().revert(Error::StakingNotYetImplemented);
+}
+```
+
+---
+
+### Deviation SC-010: No Zero Address Validation
+
+**Observation:** Contract initialization and setter functions don't validate against zero/null addresses.
+
+**Evidence:** Multiple setter functions across contracts
+
+**Risk:** Accidentally setting critical addresses to zero would brick the contract.
+
+**Severity:** Medium
+
+**Action Item:** Add zero address validation:
+
+```rust
+fn assert_valid_address(env: &Env, address: &Address) {
+  if address == &Address::default() {
+    env.revert(Error::InvalidAddress);
+  }
+}
+```
+
+---
+
+### Deviation SC-011: Single-Step Ownership Transfer
+
+**Observation:** Ownership transfer is immediate with no confirmation step.
+
+**Evidence:** Inherited from Odra's `Ownable` module
+
+**Risk:** Typo in new owner address permanently locks out admin access.
+
+**Severity:** Medium
+
+**Action Item:** Implement two-step ownership transfer:
+
+```rust
+pub fn transfer_ownership(&mut self, new_owner: Address) {
+  self.assert_owner();
+  self.pending_owner.set(Some(new_owner));
+}
+
+pub fn accept_ownership(&mut self) {
+  let pending = self.pending_owner.get().unwrap_or_revert();
+  if self.env().caller() != pending {
+    self.env().revert(Error::NotPendingOwner);
+  }
+  self.owner.set(pending);
+  self.pending_owner.set(None);
+}
+```
+
+---
+
 ## Best Practice Violations (BP)
 
 ### Deviation BP-001: Using unwrap() in Deployment Script
@@ -787,31 +1042,40 @@ pub struct LeaseAgreementCreated {
 
 ## Recommendations
 
-### Critical (Security)
+### Critical (Security) — BLOCKS DEPLOYMENT
 
-| ID     | Recommendation                            | Rationale                           |
-|--------|-------------------------------------------|-------------------------------------|
-| SC-001 | Add finalization check in `prolong_lease` | Prevent prolonging finalized leases |
+| ID     | Recommendation                             | Rationale                             |
+|--------|--------------------------------------------|---------------------------------------|
+| SC-001 | Add finalization check in `prolong_lease`  | Prevent prolonging finalized leases   |
+| SC-003 | Add finalization check in `finalize_lease` | Prevent double-spend security deposit |
+| SC-004 | Fix reward rounding vulnerability          | Prevent token drainage attack         |
+| SC-005 | Make critical addresses immutable          | Prevent protocol takeover             |
+| SC-006 | Fix CEI pattern in payment flow            | Prevent reentrancy attacks            |
+| SC-009 | Complete or disable Staking contract       | Prevent locked user funds             |
 
 ### High Priority
 
-| ID     | Recommendation                        | Rationale              |
-|--------|---------------------------------------|------------------------|
-| ST-001 | Remove `Cargo.lock` from `.gitignore` | Reproducible builds    |
-| ST-002 | Add Makefile                          | Developer experience   |
-| ST-003 | Add CI/CD configuration               | Quality automation     |
-| ST-006 | Add Prerequisites to README.md        | Onboarding new devs    |
-| AP-002 | Make owner address configurable       | Deployment flexibility |
-| CS-001 | Fix CurrencyAmount mutable getters    | Encapsulation, safety  |
+| ID     | Recommendation                        | Rationale               |
+|--------|---------------------------------------|-------------------------|
+| SC-008 | Check CEP-18 transfer return values   | Prevent silent failures |
+| ST-001 | Remove `Cargo.lock` from `.gitignore` | Reproducible builds     |
+| ST-002 | Add Makefile                          | Developer experience    |
+| ST-003 | Add CI/CD configuration               | Quality automation      |
+| ST-006 | Add Prerequisites to README.md        | Onboarding new devs     |
+| AP-002 | Make owner address configurable       | Deployment flexibility  |
+| CS-001 | Fix CurrencyAmount mutable getters    | Encapsulation, safety   |
 
 ### Medium Priority
 
-| ID     | Recommendation                   | Rationale           |
-|--------|----------------------------------|---------------------|
-| ST-004 | Add `codestyle.md`               | Company standards   |
-| SC-002 | Add max lease duration limit     | Prevent state bloat |
-| AP-001 | Add integration tests             | Cross-contract testing |
-| AP-003 | Document upgrade strategy        | Operational clarity |
+| ID     | Recommendation               | Rationale              |
+|--------|------------------------------|------------------------|
+| SC-007 | Use checked arithmetic       | Prevent overflow       |
+| SC-010 | Add zero address validation  | Prevent bricked state  |
+| SC-011 | Two-step ownership transfer  | Prevent lockout        |
+| ST-004 | Add `codestyle.md`           | Company standards      |
+| SC-002 | Add max lease duration limit | Prevent state bloat    |
+| AP-001 | Add integration tests        | Cross-contract testing |
+| AP-003 | Document upgrade strategy    | Operational clarity    |
 
 ### Low Priority
 
@@ -828,9 +1092,17 @@ pub struct LeaseAgreementCreated {
 
 ## Prioritized Action Plan
 
-### Phase 0: Critical Security (Immediate)
+### Phase 0: Critical Security (BLOCKS ALL DEPLOYMENT)
 
-* Add finalization check in `prolong_lease_agreement` (SC-001) — prevents prolonging finalized leases, potential double-spending of security deposits
+**⚠️ DO NOT DEPLOY until Phase 0 is complete**
+
+* Add finalization check in `prolong_lease_agreement` (SC-001)
+* Add finalization check in `finalize_lease_agreement` (SC-003)
+* Fix reward rounding vulnerability in Treasury (SC-004)
+* Make critical addresses immutable after initialization (SC-005)
+* Fix Checks-Effects-Interactions pattern in Escrow (SC-006)
+* Check CEP-18 transfer return values (SC-008)
+* Complete Staking implementation OR disable staking entry points (SC-009)
 
 ### Phase 1: Standards and CI
 
@@ -842,6 +1114,9 @@ pub struct LeaseAgreementCreated {
 
 ### Phase 2: Remaining Security Fixes
 
+* Use checked arithmetic in deadline calculations (SC-007)
+* Add zero address validation (SC-010)
+* Implement two-step ownership transfer (SC-011)
 * Add maximum lease duration limit (SC-002)
 
 ### Phase 3: Code Quality
@@ -858,3 +1133,14 @@ pub struct LeaseAgreementCreated {
 * Add contract versioning (AP-003)
 * Add `#[must_use]` attributes (BP-002)
 * Document all events (BP-004)
+
+---
+
+## Deployment Readiness
+
+| Environment | Status    | Blocking Issues                |
+|-------------|-----------|--------------------------------|
+| **Testnet** | ❌ BLOCKED | Phase 0 + Phase 1              |
+| **Mainnet** | ❌ BLOCKED | Phase 0-2 + Professional Audit |
+
+**Recommendation:** Engage professional smart contract auditors (Trail of Bits, OpenZeppelin, ConsenSys Diligence) before mainnet deployment.
