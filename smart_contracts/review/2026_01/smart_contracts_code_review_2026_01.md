@@ -47,10 +47,10 @@ grep -rn "\* \|+ \|- \|/ " src/ --include="*.rs"
 cat Cargo.toml
 
 # Run tests
-cargo odra test
+cargo nextest run
 
 # Build contracts
-cargo odra build
+cargo run --bin leasefi_contracts_build_contract
 ```
 
 ### Confidence Levels
@@ -128,15 +128,15 @@ help: ## Show available targets
 
 build: ## Build all contracts
 	@echo "[*] Building contracts..."
-	@cargo odra build
+	@cargo run --bin leasefi_contracts_build_contract
 
 test: ## Run all tests
 	@echo "[*] Running tests..."
-	@cargo odra test
+	@cargo nextest run
 
 schema: ## Generate contract schemas (ABI)
 	@echo "[*] Generating schemas..."
-	@cargo odra schema
+	@cargo run --bin leasefi_contracts_build_schema
 
 clean: ## Clean build artifacts
 	@echo "[*] Cleaning..."
@@ -189,14 +189,11 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-action@stable
+        uses: dtolnay/rust-toolchain@master
         with:
           toolchain: nightly-2025-01-01
           targets: wasm32-unknown-unknown
           components: rustfmt, clippy
-
-      - name: Install cargo-odra
-        run: cargo install cargo-odra --locked
 
       - name: Check formatting
         run: cargo fmt --all -- --check
@@ -205,10 +202,10 @@ jobs:
         run: cargo clippy --all-targets -- -D warnings
 
       - name: Run tests
-        run: cargo odra test
+        run: cargo nextest run
 
       - name: Build contracts
-        run: cargo odra build
+        run: cargo run --bin leasefi_contracts_build_contract
 ```
 
 ---
@@ -271,7 +268,7 @@ While the toolchain is properly pinned, there's no documentation explaining:
 # rust-toolchain
 # Nightly required for: Odra framework WASM compilation
 # Last verified: 2025-01-01
-# Upgrade procedure: Test with cargo odra build && cargo odra test before updating
+# Upgrade procedure: Test with cargo run --bin leasefi_contracts_build_contract && cargo nextest run before updating
 nightly-2025-01-01
 ```
 
@@ -279,27 +276,26 @@ nightly-2025-01-01
 
 ### Deviation ST-006: Missing Prerequisites in README.md
 
-**Observation:** README.md documents `cargo odra` commands but doesn't mention that `cargo-odra` tool must be installed first.
+**Observation:** README.md lacks a Prerequisites section documenting required tools and setup steps.
 
-**Evidence:** `README.md:37-53` — commands like `cargo odra build` and `cargo odra test` are documented without mentioning that `cargo-odra` must be installed first.
+**Evidence:** `README.md` — no "Prerequisites" or "Requirements" section exists.
 
 **Problem details:**
 
-- New developers will get `error: no such command: odra` when trying to build/test
 - No "Prerequisites" or "Requirements" section exists
-- Installation command `cargo install cargo-odra` is not documented
 - WASM target `wasm32-unknown-unknown` is required but not documented
+- `cargo-nextest` for running tests is not documented
 
 **Action Item:** Add Prerequisites section to README.md before Build section:
 
 > **Prerequisites:**
 > 1. Rust nightly toolchain (see `rust-toolchain` file)
-> 2. WASM compilation target:
-> 3. cargo-odra CLI tool:
+> 2. WASM compilation target
+> 3. cargo-nextest for running tests
 
 ```bash
 rustup target add wasm32-unknown-unknown
-cargo install cargo-odra --locked
+cargo install cargo-nextest --locked
 ```
 
 ---
@@ -328,7 +324,7 @@ edition = "2021"
 edition = "2024"
 ```
 
-**Note:** Test thoroughly with `cargo odra build && cargo odra test` before committing.
+**Note:** Test thoroughly with `cargo run --bin leasefi_contracts_build_contract && cargo nextest run` before committing.
 
 ---
 
@@ -466,9 +462,9 @@ mod gas_limits {
 
 ## Architectural Anti-patterns (AP)
 
-### Deviation AP-001: Tests Inline in Source Files
+### Deviation AP-001: Missing Integration Tests
 
-**Observation:** All tests are inline in source files instead of a separate `tests/` directory.
+**Observation:** The project has comprehensive inline unit tests but lacks integration tests for cross-contract interactions.
 
 **Evidence:** Each contract file contains `#[cfg(test)] mod tests { ... }`:
 
@@ -480,34 +476,28 @@ mod gas_limits {
 - `tailor_coin.rs:33-196`
 - `staking.rs:68-140`
 
+**Context:**
+
+Inline unit tests are the **standard convention for Odra framework**:
+- `odra_test::env()` testing framework is designed for inline tests
+- All official Odra examples (CEP-18, CEP-95, Governance) use inline tests
+- Moving tests would break the Odra testing model
+
 **Problem details:**
 
-Per company standards, tests must be in a separate `tests/` directory:
-
-- Inline tests clutter source files
-- Harder to navigate and maintain
-- Inconsistent with company codebase structure
-- Source files become very long (lease.rs is 1059 lines, 682 of which are tests)
+- No integration tests exist for cross-contract interactions
+- Lease ↔ Escrow ↔ Treasury flow is not tested end-to-end
 
 **Action Item:**
 
-1. Move all unit tests from source files to `tests/` directory
-2. Create integration tests for cross-contract interactions
+Keep inline unit tests (Odra convention) and add integration tests in `tests/` directory:
 
 ```
 tests/
 ├── common/
-│   └── mod.rs           # Test utilities, setup helpers
-├── unit/
-│   ├── lease_test.rs
-│   ├── escrow_test.rs
-│   ├── treasury_test.rs
-│   ├── nft_test.rs
-│   ├── roles_test.rs
-│   ├── tailor_coin_test.rs
-│   └── staking_test.rs
+│   └── mod.rs                   # Test utilities, setup helpers
 └── integration/
-    ├── lease_escrow_test.rs    # Lease + Escrow interaction
+    ├── lease_escrow_test.rs     # Lease + Escrow interaction
     └── treasury_staking_test.rs # Treasury + Staking interaction
 ```
 
@@ -820,7 +810,7 @@ pub struct LeaseAgreementCreated {
 |--------|----------------------------------|---------------------|
 | ST-004 | Add `codestyle.md`               | Company standards   |
 | SC-002 | Add max lease duration limit     | Prevent state bloat |
-| AP-001 | Move tests to `tests/` directory | Code organization   |
+| AP-001 | Add integration tests             | Cross-contract testing |
 | AP-003 | Document upgrade strategy        | Operational clarity |
 
 ### Low Priority
@@ -848,7 +838,7 @@ pub struct LeaseAgreementCreated {
 * Create basic `Makefile` (ST-002)
 * Add GitHub Actions workflow (ST-003)
 * Add `codestyle.md` (ST-004)
-* Add Prerequisites section to README.md with `cargo-odra` installation (ST-006)
+* Add Prerequisites section to README.md (ST-006)
 
 ### Phase 2: Remaining Security Fixes
 
@@ -863,7 +853,7 @@ pub struct LeaseAgreementCreated {
 
 ### Phase 4: Architecture Refactoring
 
-* Move tests to `tests/` directory (AP-001)
+* Add integration tests for cross-contract interactions (AP-001)
 * Document contract upgrade strategy (AP-003)
 * Add contract versioning (AP-003)
 * Add `#[must_use]` attributes (BP-002)
