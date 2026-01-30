@@ -59,6 +59,22 @@ grep -rn "\.expect\(" src/
 # Check dependencies
 cargo tree -i anyhow
 cargo clippy --all-targets -- -D warnings
+
+# Verify sqlx deprecation warning (ST-004)
+cargo check 2>&1 | grep "will be rejected"
+
+# Count source files (Overview)
+find src -name "*.rs" | wc -l
+
+# Count lines of code
+tokei src/ --type Rust 2>/dev/null || wc -l src/**/*.rs
+
+# Verify test structure
+find . -path ./target -prune -o -name "*_test.rs" -print
+ls tests/ 2>/dev/null || echo "No tests/ directory"
+
+# Check for README files
+ls -la src/readme.md review/readme.md 2>/dev/null
 ```
 
 ### Confidence Levels
@@ -1068,6 +1084,15 @@ tests/
 
 > **Note:** Inline `#[cfg(test)] mod tests` blocks are idiomatic Rust for unit tests and should remain in source files.
 
+**Test Documentation Quality (additional recommendations):**
+
+| Aspect            | Current State | Recommendation                             |
+|-------------------|---------------|--------------------------------------------|
+| Test doc comments | ❌ Missing     | Add `///` comments describing test purpose |
+| Test naming       | ✅ Descriptive | `test_verify_valid_signature` is clear     |
+| `tests/readme.md` | ❌ Missing     | Create with test Responsibility Table      |
+| Fixtures          | ❌ Hardcoded   | Extract test data to `common/fixtures.rs`  |
+
 ---
 
 ### Deviation BP-003: Missing Debug Derive
@@ -1166,6 +1191,8 @@ $ grep -r "anyhow" src/
 
 1. Remove `anyhow` from `Cargo.toml` dependencies
 2. Implement `ApiError` enum as documented in **ST-006** (see SPEC.md Error Handling Architecture)
+
+> **Note:** If organizational standards require `error_tools` crate for error handling, use that framework instead of custom `ApiError`. Verify applicable standards before implementation.
 
 ---
 
