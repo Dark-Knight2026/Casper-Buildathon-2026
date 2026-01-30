@@ -1092,47 +1092,84 @@ pub struct LeaseAgreementCreated {
 
 ## Prioritized Action Plan
 
+### Effort Summary
+
+| Phase       | Focus              | Estimated Effort |
+|-------------|--------------------|------------------|
+| **Phase 0** | Critical Security  | ~21 hours        |
+| **Phase 1** | Standards and CI   | ~12 hours        |
+| **Phase 2** | Remaining Security | ~14 hours        |
+| **Phase 3** | Code Quality       | ~20 hours        |
+| **Phase 4** | Architecture       | ~22 hours        |
+| **TOTAL**   |                    | **~89 hours**    |
+
+---
+
 ### Phase 0: Critical Security (BLOCKS ALL DEPLOYMENT)
 
 **⚠️ DO NOT DEPLOY until Phase 0 is complete**
 
-* Add finalization check in `prolong_lease_agreement` (SC-001)
-* Add finalization check in `finalize_lease_agreement` (SC-003)
-* Fix reward rounding vulnerability in Treasury (SC-004)
-* Make critical addresses immutable after initialization (SC-005)
-* Fix Checks-Effects-Interactions pattern in Escrow (SC-006)
-* Check CEP-18 transfer return values (SC-008)
-* Complete Staking implementation OR disable staking entry points (SC-009)
+**Estimated effort: ~21 hours**
+
+| Task                                                             | Effort |
+|------------------------------------------------------------------|--------|
+| Add finalization check in `prolong_lease_agreement` (SC-001)     | 0.5h   |
+| Add finalization check in `finalize_lease_agreement` (SC-003)    | 0.5h   |
+| Fix reward rounding vulnerability in Treasury (SC-004)           | 2h     |
+| Make critical addresses immutable after initialization (SC-005)  | 2h     |
+| Fix Checks-Effects-Interactions pattern in Escrow (SC-006)       | 1h     |
+| Check CEP-18 transfer return values (SC-008)                     | 1.5h   |
+| Complete Staking implementation OR disable entry points (SC-009) | 8h     |
+| Testing and verification                                         | 5.5h   |
 
 ### Phase 1: Standards and CI
 
-* Remove `Cargo.lock` from `.gitignore`, commit `Cargo.lock` (ST-001)
-* Create basic `Makefile` (ST-002)
-* Add GitHub Actions workflow (ST-003)
-* Add `codestyle.md` (ST-004)
-* Add Prerequisites section to README.md (ST-006)
+**Estimated effort: ~12 hours**
+
+| Task                                                                | Effort |
+|---------------------------------------------------------------------|--------|
+| Remove `Cargo.lock` from `.gitignore`, commit `Cargo.lock` (ST-001) | 0.25h  |
+| Create basic `Makefile` (ST-002)                                    | 1h     |
+| Add GitHub Actions workflow (ST-003)                                | 3h     |
+| Add `codestyle.md` (ST-004)                                         | 1h     |
+| Add Prerequisites section to README.md (ST-006)                     | 0.5h   |
+| Testing CI pipeline                                                 | 6h     |
 
 ### Phase 2: Remaining Security Fixes
 
-* Use checked arithmetic in deadline calculations (SC-007)
-* Add zero address validation (SC-010)
-* Implement two-step ownership transfer (SC-011)
-* Add maximum lease duration limit (SC-002)
+**Estimated effort: ~14 hours**
+
+| Task                                                     | Effort |
+|----------------------------------------------------------|--------|
+| Use checked arithmetic in deadline calculations (SC-007) | 3h     |
+| Add zero address validation (SC-010)                     | 2h     |
+| Implement two-step ownership transfer (SC-011)           | 4h     |
+| Add maximum lease duration limit (SC-002)                | 1h     |
+| Testing and verification                                 | 4h     |
 
 ### Phase 3: Code Quality
 
-* Fix `CurrencyAmount` mutable getters pattern (CS-001)
-* Make deployment owner address configurable (AP-002)
-* Extract gas limits to named constants (CS-003)
-* Add module-level documentation (CS-002)
+**Estimated effort: ~20 hours**
+
+| Task                                                  | Effort |
+|-------------------------------------------------------|--------|
+| Fix `CurrencyAmount` mutable getters pattern (CS-001) | 2h     |
+| Make deployment owner address configurable (AP-002)   | 2h     |
+| Extract gas limits to named constants (CS-003)        | 1h     |
+| Add module-level documentation (CS-002)               | 8h     |
+| Testing and refactoring                               | 7h     |
 
 ### Phase 4: Architecture Refactoring
 
-* Add integration tests for cross-contract interactions (AP-001)
-* Document contract upgrade strategy (AP-003)
-* Add contract versioning (AP-003)
-* Add `#[must_use]` attributes (BP-002)
-* Document all events (BP-004)
+**Estimated effort: ~22 hours**
+
+| Task                                                           | Effort |
+|----------------------------------------------------------------|--------|
+| Add integration tests for cross-contract interactions (AP-001) | 12h    |
+| Document contract upgrade strategy (AP-003)                    | 4h     |
+| Add contract versioning (AP-003)                               | 1h     |
+| Add `#[must_use]` attributes (BP-002)                          | 1h     |
+| Document all events (BP-004)                                   | 4h     |
 
 ---
 
