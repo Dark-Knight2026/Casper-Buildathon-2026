@@ -2,6 +2,7 @@ import { cn } from '@/lib/utils';
 import { DashboardTabs, type TabData } from '../shared/DashboardTabs';
 import { OverviewTab } from './OverviewTab';
 import { RewardsTab } from './RewardsTab';
+import { TokenomicsTab } from './TokenomicsTab';
 import { WhitepaperTab } from './WhitepaperTab';
 import { ArrowLeftRight, LayoutDashboard, Gift, PieChart, FileText } from 'lucide-react';
 
@@ -37,11 +38,7 @@ export function PostICODashboard({ className }: PostICODashboardProps) {
       label: 'Tokenomics',
       value: 'tokenomics',
       icon: <PieChart className="w-4 h-4" />,
-      content: (
-        <div className="text-center py-12 text-[hsl(var(--ico-text-secondary))]">
-          Tokenomics information coming soon...
-        </div>
-      ),
+      content: <TokenomicsTab />,
     },
     {
       label: 'WhitePaper',
