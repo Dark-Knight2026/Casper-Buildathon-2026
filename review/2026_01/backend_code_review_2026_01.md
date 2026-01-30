@@ -502,7 +502,9 @@ pub struct AuthUser(pub Claims);
 
 ## Architectural Anti-patterns (AP)
 
-### Deviation AP-001: Business Logic in Handlers
+### Deviation AP-001: Business Logic in Handlers *(DEFERRED)*
+
+> **Deferral rationale:** Current codebase is ~958 lines. Extracting a service layer adds complexity without proportional benefit at this scale. Revisit when codebase exceeds ~2000 lines or when multiple handlers share business logic.
 
 **Observation:** Business logic is mixed with HTTP layer, making it untestable in isolation.
 
@@ -516,7 +518,7 @@ pub async fn calculate_tax_liability(...) -> Result<Json<TaxReport>, StatusCode>
 }
 ```
 
-**Action Item:** Extract a service layer:
+**Future Action:** Extract a service layer when complexity warrants:
 
 ```
 src/
@@ -530,7 +532,9 @@ src/
 
 ---
 
-### Deviation AP-002: Missing Database Layer
+### Deviation AP-002: Missing Database Layer *(DEFERRED)*
+
+> **Deferral rationale:** With only 2-3 SQL queries in the codebase, a separate db layer adds indirection without benefit. Revisit when query count exceeds 10 or when queries are duplicated across handlers.
 
 **Observation:** SQL queries are written directly in handlers, causing duplication and testing difficulties.
 
@@ -543,7 +547,7 @@ let user_record = sqlx::query!(
 ).fetch_one( & state.db).await
 ```
 
-**Action Item:** Move SQL queries to a dedicated `db` module:
+**Future Action:** Move SQL queries to a dedicated `db` module when query count grows:
 
 ```
 src/
@@ -600,7 +604,9 @@ impl Config {
 
 ---
 
-### Deviation AP-005: Missing Workspace Structure
+### Deviation AP-005: Missing Workspace Structure *(DEFERRED)*
+
+> **Deferral rationale:** Single-crate structure is appropriate for a ~958 line codebase with one binary. Workspace overhead (multiple Cargo.toml files, cross-crate dependency management) not justified until a second crate (e.g., indexer) is actually needed.
 
 **Observation:** Project is a single crate without workspace organization, limiting scalability for future modules.
 
@@ -612,7 +618,7 @@ impl Config {
 - Future modules (e.g., vesting/leasing indexer) would require separate repos or awkward structure
 - Dependencies cannot be shared/unified across multiple crates
 
-**Action Item:** Restructure as a Cargo workspace:
+**Future Action:** Restructure as a Cargo workspace when adding second crate:
 
 ```
 leasefi/
@@ -1142,11 +1148,17 @@ impl From<redis::RedisError> for ApiError {
 
 | ID     | Recommendation            | Rationale                    |
 |--------|---------------------------|------------------------------|
-| AP-001 | Extract service layer     | Testability, maintainability |
-| AP-005 | Restructure as workspace  | Scalability, modularity      |
 | BP-002 | Add integration tests     | Quality                      |
 | BP-007 | Remove anyhow, fix errors | Security, API stability      |
 | SC-003 | Add structured audit logs | Security monitoring          |
+
+### Deferred (Future Considerations)
+
+| ID     | Recommendation           | Deferral Rationale                                      |
+|--------|--------------------------|--------------------------------------------------------|
+| AP-001 | Extract service layer    | Codebase too small (~958 lines); revisit at ~2000 lines |
+| AP-002 | Create db module         | Only 2-3 queries; revisit when query count exceeds 10   |
+| AP-005 | Restructure as workspace | Single crate sufficient; revisit when adding 2nd crate  |
 
 ### Low Priority
 
@@ -1186,10 +1198,15 @@ impl From<redis::RedisError> for ApiError {
 * Add structured audit logging (SC-003)
 * Refactor error handling — remove `anyhow` (BP-007)
 
-### Phase 4: Architecture Refactoring
+### Phase 4: Quality Improvements
 
-* Restructure as Cargo workspace (AP-005)
-* Extract service layer (AP-001)
-* Create db module (AP-002)
 * Add integration tests (BP-002)
 * Improve documentation (CS-006)
+
+### Future Considerations (Deferred)
+
+The following architectural refactorings are deferred until the codebase grows to justify their complexity:
+
+* Extract service layer (AP-001) — revisit when codebase exceeds ~2000 lines
+* Create db module (AP-002) — revisit when query count exceeds 10
+* Restructure as Cargo workspace (AP-005) — revisit when adding second crate (e.g., indexer)
