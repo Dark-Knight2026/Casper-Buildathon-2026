@@ -263,7 +263,7 @@ logger.info(`Subscribed to ${channelName}`);
 
 ```bash
 grep -rn "TODO\|FIXME" src/ --include="*.ts" --include="*.tsx" | wc -l
-# Result: 23
+# Result: 43
 ```
 
 **Evidence:**
@@ -286,6 +286,10 @@ grep -rn "TODO\|FIXME" src/ --include="*.ts" --include="*.tsx" | wc -l
 | `ContactLandlordModal.tsx:32`     | Get landlordId from property data             |
 | `ApplicationDetail.tsx:60`        | Fetch actual property rent from property data |
 | `ApplicationForm.tsx:24`          | Get landlordId from property data             |
+| `alerts.ts:418`                   | Integrate with monitoring service             |
+| `errorLogger.ts:89`               | Integrate with error tracking service         |
+| `utils/logger.ts:58`              | Integrate with error tracking service         |
+| `documentSharingService.ts:30`    | Send email notification if requested          |
 
 **Action Item:** Create issues/tickets for each TODO and either implement or remove them. Critical items:
 
@@ -315,6 +319,37 @@ const landlordId = 'default-landlord-id'; // TODO: Get from property data
 **Problem:** This can cause data integrity issues if the placeholder reaches production.
 
 **Action Item:** Implement proper landlordId resolution from property data or throw an error if not available.
+
+---
+
+### Deviation CS-005: Incorrect Environment Variable Pattern
+
+**Observation:** The `matchingService.ts` uses Next.js environment variable patterns in a Vite project.
+
+**Evidence:** `src/services/matchingService.ts:107-108`
+
+```typescript
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+```
+
+**Problem:**
+
+- This is a Vite project that uses `import.meta.env.VITE_*` convention
+- `process.env.NEXT_PUBLIC_*` variables are Next.js-specific and will be `undefined` at runtime
+- This code will fail silently or cause runtime errors
+
+**Action Item:** Update to Vite environment variable convention:
+
+```typescript
+// Instead of:
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+// Use:
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+```
 
 ---
 
@@ -399,23 +434,59 @@ If SMS is needed, it should be handled by the backend API.
 
 ---
 
+### Deviation SC-003: Lodash Prototype Pollution Vulnerability
+
+**Observation:** `npm audit` reveals a moderate severity prototype pollution vulnerability in lodash.
+
+**Verification:**
+
+```bash
+npm audit
+# Shows: lodash 4.0.0 - 4.17.21 | Moderate | Prototype Pollution | GHSA-xxjr-mmjv-4gpg
+```
+
+**Evidence:** Lodash versions 4.0.0 through 4.17.21 are affected by prototype pollution vulnerability (GHSA-xxjr-mmjv-4gpg).
+
+**Problem:**
+
+- Prototype pollution can lead to property injection attacks
+- Attackers could potentially modify object prototypes
+- May affect application behavior in unexpected ways
+
+**Action Item:** Run security audit and fix vulnerabilities:
+
+```bash
+npm audit fix
+# or update lodash to a patched version if available
+pnpm update lodash
+```
+
+If no fix is available, consider:
+1. Monitoring for lodash updates
+2. Evaluating if lodash can be replaced with native JavaScript methods
+3. Using lodash-es with tree-shaking to minimize attack surface
+
+---
+
 ## Recommendations
 
 ### Critical
 
-| ID     | Recommendation                  | Rationale                              |
-|--------|---------------------------------|----------------------------------------|
-| SC-001 | Remove Twilio from dependencies | Server-side package in frontend bundle |
+| ID     | Recommendation                          | Rationale                              |
+|--------|-----------------------------------------|----------------------------------------|
+| SC-001 | Remove Twilio from dependencies         | Server-side package in frontend bundle |
+| CS-005 | Fix environment variable pattern        | Runtime failure in matchingService.ts  |
 
 ### High Priority
 
-| ID     | Recommendation                        | Rationale                 |
-|--------|---------------------------------------|---------------------------|
-| ST-002 | Add CI/CD configuration               | Quality automation        |
-| CS-001 | Replace `any` types with proper types | Type safety               |
-| CS-003 | Resolve or track TODO comments        | Technical debt visibility |
-| CS-004 | Fix hardcoded landlordId values       | Data integrity            |
-| SC-002 | Add security headers                  | Security hardening        |
+| ID     | Recommendation                        | Rationale                    |
+|--------|---------------------------------------|------------------------------|
+| ST-002 | Add CI/CD configuration               | Quality automation           |
+| CS-001 | Replace `any` types with proper types | Type safety                  |
+| CS-003 | Resolve or track TODO comments        | Technical debt visibility    |
+| CS-004 | Fix hardcoded landlordId values       | Data integrity               |
+| SC-002 | Add security headers                  | Security hardening           |
+| SC-003 | Fix lodash prototype pollution        | Security vulnerability       |
 
 ### Medium Priority
 
@@ -434,9 +505,11 @@ If SMS is needed, it should be handled by the backend API.
 
 ## Prioritized Action Plan
 
-### Phase 1: Critical Security Fixes
+### Phase 1: Critical Security & Runtime Fixes
 
 * Remove Twilio dependency (SC-001)
+* Fix environment variable pattern in matchingService.ts (CS-005)
+* Fix lodash prototype pollution vulnerability (SC-003)
 * Add security headers to vercel.json (SC-002)
 
 ### Phase 2: Standards and CI
@@ -451,4 +524,3 @@ If SMS is needed, it should be handled by the backend API.
 * Replace console.* calls with logger service (CS-002)
 * Create issues for all TODO comments (CS-003)
 * Fix hardcoded landlordId values (CS-004)
-
