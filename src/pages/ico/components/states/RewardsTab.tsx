@@ -11,14 +11,14 @@ const MOCK_STAKING = {
 };
 
 const MOCK_FEE_DATA = [
-  { day: 'Day 1', swap: 10, transfer: 5, bridge: 2, lease: 8, liquidation: 1 },
-  { day: 'Day 10', swap: 45, transfer: 20, bridge: 12, lease: 30, liquidation: 5 },
-  { day: 'Day 20', swap: 90, transfer: 48, bridge: 25, lease: 65, liquidation: 12 },
-  { day: 'Day 30', swap: 140, transfer: 75, bridge: 40, lease: 110, liquidation: 20 },
-  { day: 'Day 45', swap: 200, transfer: 110, bridge: 58, lease: 160, liquidation: 32 },
-  { day: 'Day 60', swap: 280, transfer: 155, bridge: 80, lease: 220, liquidation: 48 },
-  { day: 'Day 90', swap: 320, transfer: 180, bridge: 95, lease: 250, liquidation: 60 },
-  { day: 'Day 120', swap: 350, transfer: 180, bridge: 95, lease: 250, liquidation: 60 },
+  { day: '1', swap: 10, transfer: 5, bridge: 2, lease: 8, liquidation: 1 },
+  { day: '10', swap: 45, transfer: 20, bridge: 12, lease: 30, liquidation: 5 },
+  { day: '20', swap: 90, transfer: 48, bridge: 25, lease: 65, liquidation: 12 },
+  { day: '30', swap: 140, transfer: 75, bridge: 40, lease: 110, liquidation: 20 },
+  { day: '45', swap: 200, transfer: 110, bridge: 58, lease: 160, liquidation: 32 },
+  { day: '60', swap: 260, transfer: 150, bridge: 75, lease: 210, liquidation: 45 },
+  { day: '75', swap: 320, transfer: 190, bridge: 90, lease: 260, liquidation: 60 },
+  { day: '90', swap: 400, transfer: 240, bridge: 110, lease: 320, liquidation: 80 },
 ];
 
 const FEE_LINES = [
@@ -112,15 +112,15 @@ export function RewardsTab() {
           <h3 className="text-lg font-semibold text-[hsl(var(--ico-text-primary))] mb-4">
             Transaction Fee Rewards
           </h3>
-          <div className="flex flex-wrap gap-x-4 gap-y-1 mb-4">
+          {/* <div className="flex flex-wrap gap-x-4 gap-y-1 mb-4">
             {FEE_LINES.map(({ key, label, color }) => (
               <div key={key} className="flex items-center gap-1.5">
                 <span className="w-3 h-3 rounded-full" style={{ backgroundColor: color }} />
                 <span className="text-xs text-[hsl(var(--ico-text-secondary))]">{label}</span>
               </div>
             ))}
-          </div>
-          <ChartContainer config={feeChartConfig} className="h-62.5 w-full">
+          </div> */}
+          <ChartContainer config={feeChartConfig} className="h-62.5 w-full aspect-auto md:aspect-video">
             <AreaChart data={MOCK_FEE_DATA}>
               <defs>
                 {FEE_LINES.map(({ key, color }) => (
