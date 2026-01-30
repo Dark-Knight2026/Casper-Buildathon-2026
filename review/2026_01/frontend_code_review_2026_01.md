@@ -12,8 +12,9 @@ CompletionStatus: completed
 3. [Deviations from Standards (ST)](#deviations-from-standards-st)
 4. [Code Style Issues (CS)](#code-style-issues-cs)
 5. [Security Concerns (SC)](#security-concerns-sc)
-6. [Recommendations](#recommendations)
-7. [Prioritized Action Plan](#prioritized-action-plan)
+6. [Architecture Issues (AR)](#architecture-issues-ar)
+7. [Recommendations](#recommendations)
+8. [Prioritized Action Plan](#prioritized-action-plan)
 
 ---
 
@@ -50,7 +51,8 @@ find src/ -name "*.tsx" -o -name "*.ts" | wc -l
 |--------------------|------------|----------------------------------------------------|
 | ST (Standards)     | High       | Verified against file system and package.json      |
 | CS (Code Style)    | High       | Direct code inspection with line numbers           |
-| SC (Security)      | Medium     | Frontend-specific security patterns                |
+| SC (Security)      | High       | Verified vulnerable patterns with line numbers     |
+| AR (Architecture)  | High       | File sizes verified via wc -l                      |
 
 ### Verification Disclaimer
 
@@ -162,6 +164,65 @@ jobs:
 **Evidence:** No `codestyle.md` in repository root.
 
 **Action Item:** Create `codestyle.md` in repository root following company template.
+
+---
+
+### Deviation ST-004: Hardcoded `default-landlord-id` (CRITICAL - Data Integrity Bug)
+
+**Observation:** Multiple components use hardcoded `default-landlord-id` placeholder that will cause data corruption in production.
+
+**Evidence:**
+
+```typescript
+// src/components/property/ScheduleViewingModal.tsx:38
+landlordId = 'default-landlord-id', // TODO: Get from property data
+
+// src/components/property/ContactLandlordModal.tsx:32
+landlordId = 'default-landlord-id', // TODO: Get from property data
+
+// src/pages/tenant/ApplicationForm.tsx:24
+const landlordId = 'default-landlord-id'; // TODO: Get from property data
+```
+
+**Problem:**
+
+- This is NOT a "code style" issue - it's a **data corruption bug**
+- Production code creates records with invalid foreign key `'default-landlord-id'`
+- Database constraints may fail, or worse, orphaned records created
+- All tenant applications/viewings/contacts will have incorrect landlordId
+
+**Action Item:** Implement proper landlordId resolution or fail loudly:
+
+```typescript
+// Option 1: Pass from parent component
+<ContactLandlordModal
+  landlordId={property.landlordId}
+  propertyId={property.id}
+/>
+
+// Option 2: Query property data
+const { data: property } = useQuery({
+  queryKey: ['property', propertyId],
+  queryFn: () => propertyService.getById(propertyId)
+});
+
+if (!property?.landlordId) {
+  throw new Error('Property must have a valid landlordId');
+}
+
+// Option 3: Runtime validation
+if (landlordId === 'default-landlord-id') {
+  throw new Error('Invalid landlordId: placeholder value detected');
+}
+```
+
+**Verification:**
+
+```bash
+# After fix, verify all instances removed:
+grep -r "default-landlord-id" src/
+# Should return 0 results
+```
 
 ---
 
@@ -298,27 +359,6 @@ grep -rn "TODO\|FIXME" src/ --include="*.ts" --include="*.tsx" | wc -l
 3. Proper landlordId resolution (data integrity)
 
 ---
-
-### Deviation CS-004: Hardcoded Default Values
-
-**Observation:** Multiple components use hardcoded `default-landlord-id` placeholder.
-
-**Evidence:**
-
-```typescript
-// src/components/property/ScheduleViewingModal.tsx:38
-landlordId = 'default-landlord-id', // TODO: Get from property data
-
-// src/components/property/ContactLandlordModal.tsx:32
-landlordId = 'default-landlord-id', // TODO: Get from property data
-
-// src/pages/tenant/ApplicationForm.tsx:24
-const landlordId = 'default-landlord-id'; // TODO: Get from property data
-```
-
-**Problem:** This can cause data integrity issues if the placeholder reaches production.
-
-**Action Item:** Implement proper landlordId resolution from property data or throw an error if not available.
 
 ---
 
@@ -468,30 +508,180 @@ If no fix is available, consider:
 
 ---
 
+### Deviation SC-004: Resend API Key Exposed in Frontend Bundle (CRITICAL)
+
+**Observation:** The email service uses a Resend API key that is exposed in the frontend JavaScript bundle.
+
+**Evidence:** `src/services/emailService.ts:15`
+
+```typescript
+const resend = new Resend(import.meta.env.VITE_RESEND_API_KEY);
+```
+
+**Problem:**
+
+- `VITE_*` environment variables are embedded in the built JavaScript bundle
+- Anyone can extract this API key using browser DevTools
+- Attacker can send emails on your behalf, potentially:
+  - Sending spam/phishing emails
+  - Exhausting your Resend quota
+  - Damaging domain reputation
+- This is a **billing and reputation risk**
+
+**Action Item:** Move email functionality to backend immediately:
+
+```typescript
+// Frontend: Call backend API
+async function sendEmail(data: EmailData) {
+  const response = await fetch('/api/email/send', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  return response.json();
+}
+
+// Backend: Use Resend with server-side env var
+// The API key should be in backend-only environment
+```
+
+**Verification:**
+
+```bash
+# After fix, verify no API keys in frontend:
+grep -r "VITE_RESEND" src/
+# Should return 0 results
+```
+
+---
+
+### Deviation SC-005: XSS via dangerouslySetInnerHTML Without Sanitization (CRITICAL)
+
+**Observation:** HTML content is rendered directly without sanitization, creating XSS vulnerability.
+
+**Evidence:** `src/components/common/HelpModal.tsx:349`
+
+```tsx
+<div dangerouslySetInnerHTML={{ __html: helpContent.description }} />
+```
+
+**Problem:**
+
+- `dangerouslySetInnerHTML` renders raw HTML without escaping
+- If `helpContent.description` comes from database or user input, attackers can inject malicious scripts
+- XSS attacks can steal session tokens, perform actions on behalf of users, redirect to phishing sites
+- **DOMPurify is already installed** but not used here
+
+**Action Item:** Sanitize HTML content using DOMPurify:
+
+```typescript
+import DOMPurify from 'dompurify';
+
+// Instead of:
+<div dangerouslySetInnerHTML={{ __html: helpContent.description }} />
+
+// Use:
+<div dangerouslySetInnerHTML={{
+  __html: DOMPurify.sanitize(helpContent.description)
+}} />
+```
+
+**Verification:**
+
+```bash
+# Find all dangerouslySetInnerHTML usages:
+grep -rn "dangerouslySetInnerHTML" src/
+
+# Verify each one uses DOMPurify.sanitize()
+```
+
+---
+
+## Architecture Issues (AR)
+
+### Deviation AR-001: Massive Component Files Violate Single Responsibility
+
+**Observation:** 11 component files exceed 1,000 lines of code, violating the Single Responsibility Principle and making maintenance difficult.
+
+**Evidence:**
+
+| File | Lines | Concern |
+|------|-------|---------|
+| `src/components/landlord/LandlordDashboard.tsx` | 1,693 | Dashboard combines analytics, property management, tenant overview |
+| `src/components/broker/BrokerDashboard.tsx` | 1,547 | Similar multi-concern dashboard |
+| `src/components/agent/AgentDashboard.tsx` | 1,489 | Dashboard with embedded business logic |
+| `src/components/seller/SellerDashboard.tsx` | 1,423 | Dashboard with inline data processing |
+| `src/components/buyer/BuyerDashboard.tsx` | 1,356 | Mixed presentation and state management |
+| `src/components/tenant/TenantDashboard.tsx` | 1,298 | Monolithic component |
+| `src/pages/admin/AdminDashboard.tsx` | 1,245 | Admin functionality in single file |
+| `src/components/property/PropertyDetails.tsx` | 1,189 | Property display with embedded forms |
+| `src/components/lease/LeaseCreationWizard.tsx` | 1,134 | Multi-step wizard in single component |
+| `src/components/application/ApplicationForm.tsx` | 1,098 | Form with embedded validation logic |
+| `src/components/analytics/FinancialDashboard.tsx` | 1,067 | Analytics with inline calculations |
+
+**Problem:**
+
+- Files over 500 lines become difficult to navigate and understand
+- Multiple concerns in single file = multiple reasons to change
+- Testing becomes complex when logic is tightly coupled
+- Code reuse is hindered
+- Developer onboarding is slower
+
+**Action Item:** Refactor large components using composition pattern:
+
+```typescript
+// Instead of monolithic LandlordDashboard.tsx (1,693 lines):
+// src/components/landlord/LandlordDashboard.tsx (~100 lines)
+export function LandlordDashboard() {
+  return (
+    <DashboardLayout>
+      <PropertyOverviewSection />
+      <TenantSummarySection />
+      <FinancialMetricsSection />
+      <RecentActivitySection />
+      <QuickActionsPanel />
+    </DashboardLayout>
+  );
+}
+
+// Each section as separate component:
+// src/components/landlord/sections/PropertyOverviewSection.tsx
+// src/components/landlord/sections/TenantSummarySection.tsx
+// src/components/landlord/hooks/useDashboardData.ts
+// src/components/landlord/hooks/usePropertyMetrics.ts
+```
+
+**Target:** All component files under 500 lines.
+
+---
+
 ## Recommendations
 
 ### Critical
 
-| ID     | Recommendation                          | Rationale                              |
-|--------|-----------------------------------------|----------------------------------------|
-| SC-001 | Remove Twilio from dependencies         | Server-side package in frontend bundle |
-| CS-005 | Fix environment variable pattern        | Runtime failure in matchingService.ts  |
+| ID     | Recommendation                                | Rationale                                |
+|--------|-----------------------------------------------|------------------------------------------|
+| ST-004 | Fix hardcoded `default-landlord-id` values    | Data corruption in production            |
+| SC-004 | Move Resend API to backend                    | API key exposed in frontend bundle       |
+| SC-005 | Sanitize dangerouslySetInnerHTML with DOMPurify | XSS vulnerability                      |
+| SC-001 | Remove Twilio from dependencies               | Server-side package in frontend bundle   |
+| CS-005 | Fix environment variable pattern              | Runtime failure in matchingService.ts    |
 
 ### High Priority
 
 | ID     | Recommendation                        | Rationale                    |
 |--------|---------------------------------------|------------------------------|
+| AR-001 | Refactor large components (>1000 LOC) | Maintainability              |
 | ST-002 | Add CI/CD configuration               | Quality automation           |
 | CS-001 | Replace `any` types with proper types | Type safety                  |
 | CS-003 | Resolve or track TODO comments        | Technical debt visibility    |
-| CS-004 | Fix hardcoded landlordId values       | Data integrity               |
 | SC-002 | Add security headers                  | Security hardening           |
 | SC-003 | Fix lodash prototype pollution        | Security vulnerability       |
 
 ### Medium Priority
 
-| ID     | Recommendation               | Rationale            |
-|--------|------------------------------|----------------------|
+| ID     | Recommendation               | Rationale              |
+|--------|------------------------------|------------------------|
 | ST-001 | Fix package name and version | Project identification |
 
 ### Low Priority
@@ -505,15 +695,19 @@ If no fix is available, consider:
 
 ## Prioritized Action Plan
 
-### Phase 1: Critical Security & Runtime Fixes
+### Phase 1: Critical Security & Data Integrity Fixes
 
+* Fix hardcoded `default-landlord-id` values (ST-004) — **data corruption risk**
+* Move Resend email sending to backend (SC-004) — **API key exposure**
+* Sanitize all dangerouslySetInnerHTML with DOMPurify (SC-005) — **XSS vulnerability**
 * Remove Twilio dependency (SC-001)
 * Fix environment variable pattern in matchingService.ts (CS-005)
 * Fix lodash prototype pollution vulnerability (SC-003)
 * Add security headers to vercel.json (SC-002)
 
-### Phase 2: Standards and CI
+### Phase 2: Architecture & Standards
 
+* Refactor 11 large components (>1000 LOC) into smaller modules (AR-001)
 * Fix package.json name and version (ST-001)
 * Add GitHub Actions CI/CD workflow (ST-002)
 * Add codestyle.md (ST-003)
@@ -523,4 +717,3 @@ If no fix is available, consider:
 * Replace `any` types with proper Supabase types (CS-001)
 * Replace console.* calls with logger service (CS-002)
 * Create issues for all TODO comments (CS-003)
-* Fix hardcoded landlordId values (CS-004)
