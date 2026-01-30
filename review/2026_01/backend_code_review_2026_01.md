@@ -14,14 +14,15 @@ CompletionStatus: completed
 2. [Specification Compliance](#specification-compliance)
 3. [Rulebook Compliance](#rulebook-compliance)
 4. [Knowledge Preservation](#knowledge-preservation)
-5. [Overview](#overview)
-6. [Deviations from Standards (ST)](#deviations-from-standards-st)
-7. [Code Style Issues (CS)](#code-style-issues-cs)
-8. [Architectural Anti-patterns (AP)](#architectural-anti-patterns-ap)
-9. [Security Concerns (SC)](#security-concerns-sc)
-10. [Best Practice Violations (BP)](#best-practice-violations-bp)
-11. [Recommendations](#recommendations)
-12. [Prioritized Action Plan](#prioritized-action-plan)
+5. [Architecture Documentation](#architecture-documentation)
+6. [Overview](#overview)
+7. [Deviations from Standards (ST)](#deviations-from-standards-st)
+8. [Code Style Issues (CS)](#code-style-issues-cs)
+9. [Architectural Anti-patterns (AP)](#architectural-anti-patterns-ap)
+10. [Security Concerns (SC)](#security-concerns-sc)
+11. [Best Practice Violations (BP)](#best-practice-violations-bp)
+12. [Recommendations](#recommendations)
+13. [Prioritized Action Plan](#prioritized-action-plan)
 
 ---
 
@@ -146,6 +147,57 @@ Analysis of bug fix documentation per organizational standards:
 1. Failing MRE test created first
 2. Test file documents: Root Cause, Why Not Caught, Fix Applied, Prevention, Pitfall
 3. Source code includes: `Fix(issue-NNN)`, Root cause comment, Pitfall warning
+
+---
+
+## Architecture Documentation
+
+Analysis of architectural documentation per organizational standards:
+
+### Documentation Inventory
+
+| Document               | Status    | Notes                                 |
+|------------------------|-----------|---------------------------------------|
+| `docs/architecture.md` | ❌ Missing | No high-level architecture overview   |
+| `src/readme.md`        | ❌ Missing | No module Responsibility Table        |
+| `SPEC.md`              | ✅ Present | API contract and requirements defined |
+| `docs/readme.md`       | ✅ Present | Documentation directory index         |
+
+### Module Responsibility Analysis
+
+One-Second Test applied to `src/` directory:
+
+| Module                 | Inferred Responsibility                | Boundary Clarity                   |
+|------------------------|----------------------------------------|------------------------------------|
+| `main.rs`              | Application entry, server setup        | ✅ Clear                            |
+| `config.rs`            | Environment configuration              | ✅ Clear                            |
+| `auth.rs`              | JWT token extraction middleware        | ✅ Clear                            |
+| `crypto.rs`            | Casper signature verification          | ✅ Clear                            |
+| `models.rs`            | Shared data types (Claims, User, etc.) | ✅ Clear                            |
+| `handlers/auth.rs`     | Authentication endpoints               | ⚠️ Mixed (contains DB queries)     |
+| `handlers/business.rs` | Tax/Analytics endpoints                | ⚠️ Mixed (contains business logic) |
+| `handlers/health.rs`   | Health check endpoint                  | ✅ Clear                            |
+| `handlers/mod.rs`      | Handler module exports                 | ✅ Clear                            |
+
+**Findings:**
+
+- `handlers/auth.rs` and `handlers/business.rs` violate single responsibility (see AP-001, AP-002)
+- Missing `src/readme.md` with formal Responsibility Table
+
+**Recommendation:** Create `src/readme.md`:
+
+```markdown
+# Source Directory
+
+| File/Directory | Responsibility |
+|----------------|----------------|
+| `main.rs` | Application bootstrap and server configuration |
+| `config.rs` | Environment variable parsing and validation |
+| `auth.rs` | JWT authentication middleware extractor |
+| `crypto.rs` | Casper wallet signature verification |
+| `models.rs` | Shared domain types and DTOs |
+| `handlers/` | HTTP request handlers for API endpoints |
+```
 
 ---
 
