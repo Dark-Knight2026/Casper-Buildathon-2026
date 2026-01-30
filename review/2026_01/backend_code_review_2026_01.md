@@ -605,9 +605,13 @@ Total: 10 `expect()` + 19 `unwrap()` = 29 occurrences
 let expiration = Utc::now().checked_add_signed(Duration::hours(24)).expect("valid timestamp").timestamp();
 
 // Better:
-let expiration = Utc::now().checked_add_signed(Duration::hours(24)).ok_or_else(| | {
-tracing::error ! ("Timestamp overflow calculating expiration"); StatusCode::INTERNAL_SERVER_ERROR
-}) ?.timestamp();
+let expiration = Utc::now()
+    .checked_add_signed(Duration::hours(24))
+    .ok_or_else(|| {
+        tracing::error!("Timestamp overflow calculating expiration");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?
+    .timestamp();
 ```
 
 * **MOCK DATA**: Will be replaced when real business logic is implemented. Track with issue/ticket.
@@ -795,17 +799,7 @@ impl Config {
 
 ---
 
-### Deviation AP-004: Missing Rate Limiting Middleware
-
-**Observation:** Authentication endpoints lack rate limiting, making them vulnerable to abuse.
-
-**Evidence:** `/api/v1/auth/nonce` has no rate limiting.
-
-**Action Item:** Add rate limiting via `tower-governor` or custom middleware.
-
----
-
-### Deviation AP-005: Missing Workspace Structure *(DEFERRED)*
+### Deviation AP-004: Missing Workspace Structure *(DEFERRED)*
 
 > **Deferral rationale:** Single-crate structure is appropriate for a ~958 line codebase with one binary. Workspace overhead (multiple Cargo.toml files, cross-crate dependency management) not justified until a second crate (e.g., indexer) is actually needed.
 
@@ -871,7 +865,8 @@ let placeholder_email = format!("wallet_{}@leasefi.local", &payload.wallet_addre
 ```rust
 use sha2::{Sha256, Digest};
 
-let hash = Sha256::digest(payload.wallet_address.as_bytes()); let hash_hex = format!("{:x}", hash);
+let hash = Sha256::digest(payload.wallet_address.as_bytes());
+let hash_hex = format!("{:x}", hash);
 // Truncate to 57 chars: 64 (limit) - 7 ("wallet_" prefix) = 57
 let placeholder_email = format!("wallet_{}@leasefi.local", &hash_hex[..57]);
 // Result: wallet_a1b2c3d4e5f6...@leasefi.local (64 chars total in local part)
@@ -979,23 +974,7 @@ let app = Router::new().nest("/api/v1/auth", handlers::auth::router()).layer(Gov
 
 ---
 
-### Deviation SC-006: JWT Expiry Uses Signed Arithmetic
-
-**Observation:** JWT expiration calculation uses signed duration arithmetic which could theoretically overflow.
-
-**Evidence:** `handlers/auth.rs:224-227`
-
-```rust
-let expiration = Utc::now().checked_add_signed(Duration::hours(24)).expect("valid timestamp").timestamp();
-```
-
-**Risk:** While extremely unlikely in practice (would require system clock set far in the future), this is a code smell. The `expect()` will panic on overflow.
-
-**Action Item:** Handle the error gracefully (see CS-003 fix).
-
----
-
-### Deviation SC-007: Potential Credential Exposure in Error Logs
+### Deviation SC-006: Potential Credential Exposure in Error Logs
 
 **Observation:** Error messages may expose sensitive information like connection strings.
 
@@ -1018,7 +997,7 @@ tracing::error ! ("Failed to parse DATABASE_URL: {}", e);
 
 ---
 
-### Deviation SC-008: Missing CORS Configuration
+### Deviation SC-007: Missing CORS Configuration
 
 **Observation:** CORS is not configured despite `tower-http` cors feature being enabled.
 
@@ -1047,7 +1026,7 @@ let app = Router::new()
 
 ---
 
-### Deviation SC-009: No Request Size Limits
+### Deviation SC-008: No Request Size Limits
 
 **Observation:** No limits on request body size, making the API vulnerable to DoS attacks via large payloads.
 
@@ -1064,19 +1043,6 @@ let app = Router::new()
 // ... routes
 .layer(RequestBodyLimitLayer::new(1024 * 1024)); // 1MB limit
 ```
-
----
-
-### Deviation SC-010: Password Hashing Not Used (Design Note)
-
-**Observation:** The system uses wallet-based authentication (cryptographic signatures) instead of passwords, so bcrypt/argon2 are not applicable.
-
-**Note:** This is actually a **positive security decision** - cryptographic signatures are stronger than password-based auth. No action needed.
-
-However, if password auth is added in the future:
-
-- Use `argon2` (preferred) or `bcrypt` with cost factor ≥ 12
-- Never store plaintext passwords
 
 ---
 
@@ -1212,7 +1178,7 @@ pub enum AuthError {
 
 ---
 
-### Deviation BP-007: Unused `anyhow` Dependency
+### Deviation BP-006: Unused `anyhow` Dependency
 
 **Observation:** `anyhow` crate is declared in `Cargo.toml` but is **never imported or used** anywhere in the source code. This is a dead dependency that should be removed.
 
@@ -1255,15 +1221,15 @@ $ grep -r "anyhow" src/
 | ID     | Recommendation                  | Rationale                          |
 |--------|---------------------------------|------------------------------------|
 | SC-005 | Add rate limiting               | Brute force protection             |
-| SC-008 | Configure CORS properly         | Prevent credential theft           |
-| SC-009 | Add request size limits         | DoS protection                     |
+| SC-007 | Configure CORS properly         | Prevent credential theft           |
+| SC-008 | Add request size limits         | DoS protection                     |
 | CS-003 | Fix `expect()` in `auth.rs:226` | Prevent potential panic in handler |
 
 ### High Priority
 
 | ID     | Recommendation                        | Rationale                   |
 |--------|---------------------------------------|-----------------------------|
-| ST-002 | Remove `Cargo.lock` from `.gitignore` | Reproducible builds         |
+| ST-002 | Commit `Cargo.lock` to version control | Reproducible builds         |
 | ST-001 | Add Makefile                          | Developer experience        |
 | ST-003 | Add CI/CD configuration               | Quality automation          |
 | ST-004 | Update dependencies and edition       | Compiler warnings, security |
@@ -1272,15 +1238,18 @@ $ grep -r "anyhow" src/
 | CS-001 | Replace emojis in logs                | Production readiness        |
 | SC-001 | Fix placeholder email                 | Security (collisions)       |
 | SC-004 | Verify constant-time signature check  | Timing attack prevention    |
-| SC-007 | Sanitize error messages               | Credential exposure         |
+| SC-006 | Sanitize error messages               | Credential exposure         |
 
 ### Medium Priority
 
-| ID     | Recommendation            | Rationale               |
-|--------|---------------------------|-------------------------|
-| BP-002 | Add integration tests     | Quality                 |
-| BP-007 | Remove anyhow, fix errors | Security, API stability |
-| SC-003 | Add structured audit logs | Security monitoring     |
+| ID     | Recommendation                | Rationale                 |
+|--------|-------------------------------|---------------------------|
+| BP-001 | Add dev-dependencies          | Test utilities            |
+| BP-002 | Add integration tests         | Quality                   |
+| BP-006 | Remove anyhow, fix errors     | Security, API stability   |
+| SC-002 | Clarify role assignment logic | Business logic clarity    |
+| SC-003 | Add structured audit logs     | Security monitoring       |
+| AP-003 | Validate config values        | Fail-fast on bad config   |
 
 ### Deferred (Future Considerations)
 
@@ -1288,17 +1257,19 @@ $ grep -r "anyhow" src/
 |--------|--------------------------|---------------------------------------------------------|
 | AP-001 | Extract service layer    | Codebase too small (~958 lines); revisit at ~2000 lines |
 | AP-002 | Create db module         | Only 2-3 queries; revisit when query count exceeds 10   |
-| AP-005 | Restructure as workspace | Single crate sufficient; revisit when adding 2nd crate  |
+| AP-004 | Restructure as workspace | Single crate sufficient; revisit when adding 2nd crate  |
 
 ### Low Priority
 
-| ID     | Recommendation                     | Rationale        |
-|--------|------------------------------------|------------------|
-| CS-002 | Extract magic numbers to constants | Code readability |
-| CS-005 | Add #[must_use]                    | Compiler checks  |
-| CS-004 | Organize imports                   | Code style       |
-| BP-003 | Add Debug derives                  | Debugging        |
-| BP-004 | Improve error types                | Error handling   |
+| ID     | Recommendation                       | Rationale          |
+|--------|--------------------------------------|--------------------|
+| CS-002 | Extract magic numbers to constants   | Code readability   |
+| CS-004 | Organize imports                     | Code style         |
+| CS-005 | Add #[must_use]                      | Compiler checks    |
+| CS-006 | Improve documentation consistency    | Maintainability    |
+| BP-003 | Add Debug derives                    | Debugging          |
+| BP-004 | Improve error types                  | Error handling     |
+| BP-005 | Add graceful degradation for Redis   | Fault tolerance    |
 
 ---
 
@@ -1308,8 +1279,8 @@ $ grep -r "anyhow" src/
 
 * Fix `expect()` in `handlers/auth.rs:226` (CS-003)
 * Add rate limiting on auth endpoints (SC-005)
-* Add request size limits (SC-009)
-* Configure CORS with restrictive defaults (SC-008)
+* Add request size limits (SC-008)
+* Configure CORS with restrictive defaults (SC-007)
 
 ### Phase 2: Standards and CI
 
@@ -1324,15 +1295,19 @@ $ grep -r "anyhow" src/
 ### Phase 3: Security Hardening
 
 * Fix placeholder email collision (SC-001)
+* Clarify or document role assignment logic (SC-002)
 * Verify constant-time signature verification (SC-004)
-* Sanitize error messages to prevent credential exposure (SC-007)
+* Sanitize error messages to prevent credential exposure (SC-006)
 * Add structured audit logging (SC-003)
-* Refactor error handling — remove `anyhow` (BP-007)
+* Validate config values (AP-003)
+* Refactor error handling — remove `anyhow` (BP-006)
 
 ### Phase 4: Quality Improvements
 
+* Add dev-dependencies (BP-001)
 * Add integration tests (BP-002)
 * Improve documentation (CS-006)
+* Add graceful degradation for Redis (BP-005)
 
 ### Future Considerations (Deferred)
 
@@ -1340,4 +1315,4 @@ The following architectural refactorings are deferred until the codebase grows t
 
 * Extract service layer (AP-001) — revisit when codebase exceeds ~2000 lines
 * Create db module (AP-002) — revisit when query count exceeds 10
-* Restructure as Cargo workspace (AP-005) — revisit when adding second crate (e.g., indexer)
+* Restructure as Cargo workspace (AP-004) — revisit when adding second crate (e.g., indexer)
