@@ -986,14 +986,14 @@ assert_matches = "1.5"
 
 ---
 
-### Deviation BP-002: Tests Structure Violation
+### Deviation BP-002: Missing Integration Tests
 
-**Observation:** No integration tests, and unit tests are inline in source files instead of separate `tests/` module.
+**Observation:** Project has unit tests but lacks integration tests for HTTP endpoints.
 
-**Evidence:** `crypto.rs` and `business.rs` contain `#[cfg(test)] mod tests { ... }` blocks.
+**Evidence:** `crypto.rs` and `business.rs` contain `#[cfg(test)] mod tests { ... }` blocks (idiomatic Rust pattern for unit tests ✓), but no `tests/` directory exists for integration tests.
 
 ```rust
-// crypto.rs:56
+// crypto.rs:56 — unit tests (idiomatic, keep as-is)
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -1003,27 +1003,23 @@ mod tests {
 
 **Problem details:**
 
-Per company standards, tests must be in a separate `tests/` directory, not inline in source files:
-
-- Inline tests clutter source files
-- Harder to navigate and maintain
-- Inconsistent with company codebase structure
+- Unit tests exist inline (correct Rust convention)
+- No integration tests for API endpoints
+- Cannot verify end-to-end behavior (auth flow, health checks)
 
 **Action Item:**
 
-1. Move all unit tests from source files to `tests/` directory
-2. Create integration tests for HTTP endpoints
+Create `tests/` directory for integration tests only:
 
 ```
 tests/
 ├── common/
-│   └── mod.rs           # Test utilities
-├── unit/
-│   ├── crypto_test.rs   # Tests from crypto.rs
-│   └── business_test.rs # Tests from business.rs
+│   └── mod.rs           # Test utilities (test app setup, fixtures)
 ├── auth_test.rs         # Auth flow integration tests
 └── health_test.rs       # Health check integration tests
 ```
+
+> **Note:** Inline `#[cfg(test)] mod tests` blocks are idiomatic Rust for unit tests and should remain in source files.
 
 ---
 
