@@ -78,7 +78,7 @@ cargo odra build
 | Target         | Casper Network (WASM) |
 | Lines of Code  | 3,680 lines of Rust   |
 | Contract Count | 7 contracts           |
-| Test Count     | 93 tests              |
+| Test Count     | 88 tests              |
 | Toolchain      | nightly-2025-01-01    |
 
 ---
@@ -251,15 +251,15 @@ Per company onboarding rulebook, each repository should have a `codestyle.md` th
 
 ---
 
-### Deviation ST-005: Unpinned Nightly Toolchain
+### Deviation ST-005: Missing Toolchain Documentation
 
-**Observation:** The project uses a specific nightly toolchain, but it's only pinned in `rust-toolchain` file.
+**Observation:** The project uses a specific nightly toolchain pinned via `rust-toolchain` file, but lacks documentation explaining the choice.
 
 **Evidence:** `rust-toolchain` contains `nightly-2025-01-01`.
 
 **Problem details:**
 
-While the toolchain is pinned, there's no documentation explaining:
+While the toolchain is properly pinned, there's no documentation explaining:
 
 - Why nightly is required
 - What specific features are being used
@@ -618,9 +618,9 @@ pub fn prolong_lease_agreement(
 }
 ```
 
-**Risk:** A finalized lease agreement could potentially be prolonged, which may not be the intended behavior.
+**Risk:** A finalized lease agreement could potentially be prolonged, which may cause double-spending of security deposits.
 
-**Severity:** Medium
+**Severity:** Critical
 
 **Action Item:** Add finalization check:
 
@@ -838,7 +838,11 @@ pub struct LeaseAgreementCreated {
 
 ## Prioritized Action Plan
 
-### Phase 1: Standards and CI (Immediate)
+### Phase 0: Critical Security (Immediate)
+
+* Add finalization check in `prolong_lease_agreement` (SC-001) — prevents prolonging finalized leases, potential double-spending of security deposits
+
+### Phase 1: Standards and CI
 
 * Remove `Cargo.lock` from `.gitignore`, commit `Cargo.lock` (ST-001)
 * Create basic `Makefile` (ST-002)
@@ -846,9 +850,8 @@ pub struct LeaseAgreementCreated {
 * Add `codestyle.md` (ST-004)
 * Add Prerequisites section to README.md with `cargo-odra` installation (ST-006)
 
-### Phase 2: Security Fixes
+### Phase 2: Remaining Security Fixes
 
-* Add finalization check in `prolong_lease_agreement` (SC-001)
 * Add maximum lease duration limit (SC-002)
 
 ### Phase 3: Code Quality
