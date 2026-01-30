@@ -11,14 +11,17 @@ CompletionStatus: completed
 ## Table of Contents
 
 1. [Review Methodology](#review-methodology)
-2. [Overview](#overview)
-3. [Deviations from Standards (ST)](#deviations-from-standards-st)
-4. [Code Style Issues (CS)](#code-style-issues-cs)
-5. [Architectural Anti-patterns (AP)](#architectural-anti-patterns-ap)
-6. [Security Concerns (SC)](#security-concerns-sc)
-7. [Best Practice Violations (BP)](#best-practice-violations-bp)
-8. [Recommendations](#recommendations)
-9. [Prioritized Action Plan](#prioritized-action-plan)
+2. [Specification Compliance](#specification-compliance)
+3. [Rulebook Compliance](#rulebook-compliance)
+4. [Knowledge Preservation](#knowledge-preservation)
+5. [Overview](#overview)
+6. [Deviations from Standards (ST)](#deviations-from-standards-st)
+7. [Code Style Issues (CS)](#code-style-issues-cs)
+8. [Architectural Anti-patterns (AP)](#architectural-anti-patterns-ap)
+9. [Security Concerns (SC)](#security-concerns-sc)
+10. [Best Practice Violations (BP)](#best-practice-violations-bp)
+11. [Recommendations](#recommendations)
+12. [Prioritized Action Plan](#prioritized-action-plan)
 
 ---
 
@@ -71,6 +74,62 @@ cargo clippy --all-targets -- -D warnings
 ### Verification Disclaimer
 
 > **Note:** Readers should independently verify findings before implementing fixes. Line numbers may shift as code evolves. Use `grep` commands above to locate current positions.
+
+---
+
+## Specification Compliance
+
+Verification of implementation against `SPEC.md` requirements:
+
+| Requirement                                   | Status         | Notes                                            |
+|-----------------------------------------------|----------------|--------------------------------------------------|
+| **API Contract**                              |                |                                                  |
+| GET `/health`                                 | ✅ Implemented  | Returns status, redis, database fields           |
+| POST `/api/v1/tax/calculate-liability`        | ✅ Implemented  | Mock implementation (Phase 1)                    |
+| POST `/api/v1/analytics/property-performance` | ✅ Implemented  | Mock implementation (Phase 1)                    |
+| GET `/api/v1/auth/nonce`                      | ✅ Implemented  | Returns nonce and message                        |
+| POST `/api/v1/auth/login`                     | ✅ Implemented  | Returns JWT token and user                       |
+| **Security Requirements**                     |                |                                                  |
+| JWT Bearer Token                              | ✅ Implemented  | `auth.rs` extractor validates tokens             |
+| Signature verification                        | ⚠️ Partial     | Uses Ed25519/Secp256k1, not HS256 as spec states |
+| SQL injection prevention                      | ✅ Implemented  | SQLx compile-time checked queries                |
+| **Performance Goals**                         |                |                                                  |
+| Docker < 150MB                                | ❓ Not verified | Dockerfile exists, size not measured             |
+| SQLx compile-time verification                | ✅ Enabled      | `sqlx-data.json` present                         |
+
+**Spec Discrepancy Found:** SPEC.md states "Signature verification using HS256" but implementation uses Casper wallet signatures (Ed25519/Secp256k1). Recommend updating SPEC.md to reflect actual implementation.
+
+---
+
+## Rulebook Compliance
+
+This review was checked against applicable organizational standards:
+
+| Rulebook                                | Compliance  | Notes                                                    |
+|-----------------------------------------|-------------|----------------------------------------------------------|
+| `organizational_principles.rulebook.md` | ⚠️ Partial  | Missing `src/readme.md` with module Responsibility Table |
+| `code_design.rulebook.md`               | ✅ Compliant | Error types use `thiserror`, structured appropriately    |
+| `pr_review.rulebook.md`                 | ✅ Compliant | Review follows finding format guidelines                 |
+
+**Note:** Full rulebook discovery (`clm .rulebooks.list`) should be performed in CI environment to verify complete compliance.
+
+---
+
+## Knowledge Preservation
+
+Analysis of bug fix documentation per organizational standards:
+
+| Requirement              | Status    | Notes                                                  |
+|--------------------------|-----------|--------------------------------------------------------|
+| Bug fix MRE tests        | N/A       | No bug fixes in reviewed code (initial implementation) |
+| Source code bug comments | N/A       | No `Fix(issue-NNN)` comments found (no bugs fixed yet) |
+| Known Pitfalls sections  | ❌ Missing | Module docs lack Known Pitfalls sections               |
+
+**Recommendation:** When bug fixes are implemented, ensure:
+
+1. Failing MRE test created first
+2. Test file documents: Root Cause, Why Not Caught, Fix Applied, Prevention, Pitfall
+3. Source code includes: `Fix(issue-NNN)`, Root cause comment, Pitfall warning
 
 ---
 
@@ -391,8 +450,8 @@ tracing::info!("Signature verified successfully");
 **Evidence:** `handlers/auth.rs:155`
 
 ```rust
-let len = payload.wallet_address.len(); if len != 66 && len != 68 {
-tracing::error! ("Invalid wallet address length: {}. Expected 66 or 68.", len);
+let len = payload.wallet_address.len(); if len != 66 & & len != 68 {
+tracing::error ! ("Invalid wallet address length: {}. Expected 66 or 68.", len);
 return Err(StatusCode::BAD_REQUEST);
 }
 ```
@@ -479,7 +538,7 @@ let expiration = Utc::now().checked_add_signed(Duration::hours(24)).expect("vali
 
 // Better:
 let expiration = Utc::now().checked_add_signed(Duration::hours(24)).ok_or_else(| | {
-tracing::error! ("Timestamp overflow calculating expiration"); StatusCode::INTERNAL_SERVER_ERROR
+tracing::error ! ("Timestamp overflow calculating expiration"); StatusCode::INTERNAL_SERVER_ERROR
 }) ?.timestamp();
 ```
 
@@ -884,7 +943,7 @@ let db_options = PgConnectOptions::from_str(config.database_url.expose_secret())
 
 ```rust
 let db_options = PgConnectOptions::from_str(config.database_url.expose_secret()).map_err( | e| {
-tracing::error! ("Failed to parse DATABASE_URL: {}", e);
+tracing::error ! ("Failed to parse DATABASE_URL: {}", e);
 // Don't include the actual URL in the error
 }).expect("Invalid DATABASE_URL format");
 ```
