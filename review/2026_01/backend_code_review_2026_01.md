@@ -24,6 +24,14 @@ CompletionStatus: completed
 
 ## Review Methodology
 
+### Review Scope
+
+| Parameter      | Value                                                        |
+|----------------|--------------------------------------------------------------|
+| Commit         | `1fa76e9` (Merge PR #2)                                      |
+| Branch         | `master`                                                     |
+| Files reviewed | All `.rs` files in `src/`, `Cargo.toml`, configuration files |
+
 ### How Findings Were Gathered
 
 This review was conducted through:
@@ -274,6 +282,72 @@ Per company onboarding rulebook, each repository should have a `codestyle.md` th
 - Use `thiserror` for internal errors
 - ... (project-specific rules)
 ```
+
+---
+
+### Deviation ST-006: Missing Error Handling Architecture in SPEC.md
+
+**Observation:** Project lacks documented error handling standards in SPEC.md.
+
+**Evidence:** `SPEC.md` has no section defining error handling patterns.
+
+**Problem details:**
+
+Error handling architecture should be documented in SPEC.md as a canonical reference, not embedded in code review documents. This ensures:
+
+- Single source of truth for error patterns
+- Consistent implementation across handlers
+- Easier onboarding for new developers
+
+**Action Item:** Add "5. Error Handling Architecture" section to SPEC.md with the following content:
+
+```rust
+// SPEC.md Section 5: Error Handling Architecture
+// Use a unified ApiError enum with IntoResponse implementation (idiomatic Axum pattern)
+
+use axum::{http::StatusCode, response::{IntoResponse, Response}, Json};
+use serde_json::json;
+
+#[derive(Debug)]
+pub enum ApiError {
+  BadRequest(String),
+  Unauthorized,
+  NotFound,
+  Conflict(String),
+  Internal,
+}
+
+impl IntoResponse for ApiError {
+  fn into_response(self) -> Response {
+    let (status, message) = match self {
+      Self::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg),
+      Self::Unauthorized => (StatusCode::UNAUTHORIZED, "Unauthorized".into()),
+      Self::NotFound => (StatusCode::NOT_FOUND, "Not found".into()),
+      Self::Conflict(msg) => (StatusCode::CONFLICT, msg),
+      Self::Internal => {
+        (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error".into())
+      }
+    };
+    (status, Json(json!({ "error": message }))).into_response()
+  }
+}
+
+impl From<sqlx::Error> for ApiError {
+  fn from(err: sqlx::Error) -> Self {
+    tracing::error!("Database error: {}", err);
+    Self::Internal
+  }
+}
+
+impl From<redis::RedisError> for ApiError {
+  fn from(err: redis::RedisError) -> Self {
+    tracing::error!("Redis error: {}", err);
+    Self::Internal
+  }
+}
+```
+
+> **Note:** A single unified `ApiError` is preferred over a two-tier system for a codebase of this size.
 
 ---
 
@@ -670,8 +744,7 @@ let placeholder_email = format!("wallet_{}@leasefi.local", &payload.wallet_addre
 ```rust
 use sha2::{Sha256, Digest};
 
-let hash = Sha256::digest(payload.wallet_address.as_bytes());
-let hash_hex = format!("{:x}", hash);
+let hash = Sha256::digest(payload.wallet_address.as_bytes()); let hash_hex = format!("{:x}", hash);
 // Truncate to 57 chars: 64 (limit) - 7 ("wallet_" prefix) = 57
 let placeholder_email = format!("wallet_{}@leasefi.local", &hash_hex[..57]);
 // Result: wallet_a1b2c3d4e5f6...@leasefi.local (64 chars total in local part)
@@ -1068,54 +1141,7 @@ $ grep -r "anyhow" src/
 **Action Item:**
 
 1. Remove `anyhow` from `Cargo.toml` dependencies
-2. Define a unified `ApiError` enum with `IntoResponse` implementation (idiomatic Axum pattern):
-
-```rust
-use axum::{http::StatusCode, response::{IntoResponse, Response}, Json};
-use serde_json::json;
-
-#[derive(Debug)]
-pub enum ApiError {
-  BadRequest(String),
-  Unauthorized,
-  NotFound,
-  Conflict(String),
-  Internal,
-}
-
-impl IntoResponse for ApiError {
-  fn into_response(self) -> Response {
-    let (status, message) = match self {
-      Self::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg),
-      Self::Unauthorized => (StatusCode::UNAUTHORIZED, "Unauthorized".into()),
-      Self::NotFound => (StatusCode::NOT_FOUND, "Not found".into()),
-      Self::Conflict(msg) => (StatusCode::CONFLICT, msg),
-      Self::Internal => {
-        // Log actual error internally, return generic message
-        (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error".into())
-      }
-    };
-    (status, Json(json!({ "error": message }))).into_response()
-  }
-}
-
-// Convert infrastructure errors to ApiError
-impl From<sqlx::Error> for ApiError {
-  fn from(err: sqlx::Error) -> Self {
-    tracing::error!("Database error: {}", err);
-    Self::Internal
-  }
-}
-
-impl From<redis::RedisError> for ApiError {
-  fn from(err: redis::RedisError) -> Self {
-    tracing::error!("Redis error: {}", err);
-    Self::Internal
-  }
-}
-```
-
-> **Note:** A single unified `ApiError` is preferred over a two-tier system (InternalError + ApiError) for a codebase of this size (~958 lines). The two-tier approach adds unnecessary complexity without proportional benefits.
+2. Implement `ApiError` enum as documented in **ST-006** (see SPEC.md Error Handling Architecture)
 
 ---
 
@@ -1139,6 +1165,7 @@ impl From<redis::RedisError> for ApiError {
 | ST-003 | Add CI/CD configuration               | Quality automation          |
 | ST-004 | Update dependencies and edition       | Compiler warnings, security |
 | ST-005 | Add `codestyle.md`                    | Company standards           |
+| ST-006 | Add error handling to SPEC.md         | Canonical architecture docs |
 | CS-001 | Replace emojis in logs                | Production readiness        |
 | SC-001 | Fix placeholder email                 | Security (collisions)       |
 | SC-004 | Verify constant-time signature check  | Timing attack prevention    |
@@ -1146,16 +1173,16 @@ impl From<redis::RedisError> for ApiError {
 
 ### Medium Priority
 
-| ID     | Recommendation            | Rationale                    |
-|--------|---------------------------|------------------------------|
-| BP-002 | Add integration tests     | Quality                      |
-| BP-007 | Remove anyhow, fix errors | Security, API stability      |
-| SC-003 | Add structured audit logs | Security monitoring          |
+| ID     | Recommendation            | Rationale               |
+|--------|---------------------------|-------------------------|
+| BP-002 | Add integration tests     | Quality                 |
+| BP-007 | Remove anyhow, fix errors | Security, API stability |
+| SC-003 | Add structured audit logs | Security monitoring     |
 
 ### Deferred (Future Considerations)
 
 | ID     | Recommendation           | Deferral Rationale                                      |
-|--------|--------------------------|--------------------------------------------------------|
+|--------|--------------------------|---------------------------------------------------------|
 | AP-001 | Extract service layer    | Codebase too small (~958 lines); revisit at ~2000 lines |
 | AP-002 | Create db module         | Only 2-3 queries; revisit when query count exceeds 10   |
 | AP-005 | Restructure as workspace | Single crate sufficient; revisit when adding 2nd crate  |
@@ -1186,6 +1213,7 @@ impl From<redis::RedisError> for ApiError {
 * Remove `Cargo.lock` from `.gitignore`, commit `Cargo.lock` (ST-002)
 * Create basic `Makefile` (ST-001)
 * Add `codestyle.md` (ST-005)
+* Add error handling architecture to SPEC.md (ST-006)
 * Update dependencies and Rust edition (ST-004)
 * Add GitHub Actions workflow (ST-003)
 * Replace emojis in logs (CS-001)
