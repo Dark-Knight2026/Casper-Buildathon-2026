@@ -22,59 +22,59 @@ const WHITEPAPER_SECTIONS: Section[] = [
     id: 'introduction',
     title: '2. Introduction',
     page: 1,
-    subsections: [
-    ],
   },
   {
     id: 'proposed-solution',
     title: '3. Proposed Solution',
     page: 2,
     subsections: [
-      { id: 'platform', title: 'KeyChain - Blockchain Real Estate Platform', page: 2 },
-      { id: 'rewards', title: 'Realtor Rewards & Ranking System', page: 3 },
-      { id: 'deal-difficulty', title: 'Deal Difficulty Adjustment ', page: 4 },
-      { id: 'career-growth', title: 'Career Growth & Credentials ', page: 5 },
-    ],
-  },
-  {
-    id: 'platform',
-    title: '4. Tokenomics',
-    page: 5,
-    subsections: [
-      { id: 'overview', title: '4.1 Token Overview', page: 5 },
-      { id: 'cases', title: '4.2 Utility & Use Cases', page: 6 },
-      { id: 'distribution', title: '4.3 Distribution', page: 6 },
-      { id: 'vesting', title: '4.4 Vesting & Lock-Up', page: 7 },
-      { id: 'inflation', title: '4.5 Inflation / Deflation Policy', page: 7 },
-      { id: 'pricing', title: '4.7 Pricing & Fundraising', page: 7 },
-      { id: 'fundamentals', title: '4.8 Growth-Oriented Token Fundamentals', page: 7 },
-      { id: 'fee', title: '4.9 Transaction Fee Allocation', page: 9 },
+      { id: 'keychain', title: 'KeyChain', page: 2 },
+      { id: 'leasefi', title: 'LeaseFi - Blockchain Real Estate Transaction Layer', page: 3 },
     ],
   },
   {
     id: 'tokenomics',
-    title: '4.8 Growth-Oriented Token Fundamentals',
-    page: 7,
+    title: '4. Tokenomics',
+    page: 2,
     subsections: [
-      { id: 'distribution', title: 'Token Distribution', page: 8 },
-      { id: 'utility', title: 'Token Utility', page: 9 },
-      { id: 'vesting', title: 'Vesting Schedule', page: 10 },
+      { id: 'overview', title: '4.1 Token Overview', page: 2 },
+      { id: 'cases', title: '4.2 Utility & Use Cases', page: 3 },
+      { id: 'distribution', title: '4.3 Distribution', page: 3 },
+      { id: 'vesting', title: '4.4 Vesting & Lock-Up', page: 3 },
+      { id: 'inflation', title: '4.5 Inflation / Deflation Policy', page: 4 },
+      { id: 'pricing', title: '4.7 Pricing & Fundraising', page: 4 },
+      { id: 'fundamentals', title: '4.8 Growth-Oriented Token Fundamentals', page: 4 },
+      { id: 'fee', title: '4.9 Transaction Fee Allocation', page: 5 },
+      { id: 'pre-ico', title: '4.10 Pre-Initial Coin Offering Funding', page: 6 },
+      { id: 'priority-hires', title: '4.11 Priority Hires', page: 7 },
     ],
   },
   {
-    id: 'roadmap',
-    title: 'Roadmap',
+    id: 'how-it-works',
+    title: '5. How It Works - KeyChain App Ecosystem',
     page: 11,
+    subsections: [
+      { id: 'real-estate', title: 'Real Estate on the Blockchain', page: 11 },
+      { id: 'architecture-overview', title: 'Architecture overview', page: 12 },
+      { id: 'iterative-development', title: 'Iterative development strategy', page: 14 },
+      { id: 'security-compliance', title: 'Security & Compliance', page: 14 },
+      { id: 'staking-rewards-model', title: 'Staking & Rewards Model', page: 15 },
+    ],
   },
   {
-    id: 'team',
-    title: 'Team',
-    page: 12,
+    id: 'career-growth-credentials',
+    title: '6. Career Growth & Credentials',
+    page: 19,
+  },
+  {
+    id: 'roadmap',
+    title: '7. Roadmap',
+    page: 20,
   },
   {
     id: 'legal',
-    title: 'Legal & Compliance',
-    page: 13,
+    title: '8. Legal Disclaimer',
+    page: 21,
   },
 ];
 
@@ -100,15 +100,15 @@ export function WhitepaperTab({ className }: WhitepaperTabProps) {
 
   const handleDownload = () => {
     const link = document.createElement('a');
-    link.href = '/docs/LeaseFi_WhitePaper.pdf';
-    link.download = 'LeaseFi_WhitePaper.pdf';
+    link.href = '/docs/BIG_WhitePaper.pdf';
+    link.download = 'BIG_WhitePaper.pdf';
     link.click();
   };
 
   return (
-    <div className={cn('flex gap-6 h-[700px]', className)}>
+    <div className={cn('flex gap-6 h-175', className)}>
       {/* Sidebar */}
-      <div className="hidden md:block w-64 flex-shrink-0 rounded-xl bg-black/40 border border-white/10 overflow-hidden">
+      <div className="hidden md:block w-64 shrink-0 rounded-xl bg-black/40 border border-white/10 overflow-hidden">
         <div className="p-4 border-b border-white/10">
           <div className="flex items-center gap-2 text-[hsl(var(--ico-text-primary))]">
             <FileText className="w-5 h-5 text-[#d4a847]" />
@@ -128,7 +128,7 @@ export function WhitepaperTab({ className }: WhitepaperTabProps) {
                     }
                   }}
                   className={cn(
-                    'w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-left transition-colors',
+                    'w-full flex items-start gap-2 px-3 py-2 rounded-lg text-sm text-start transition-colors',
                     activeSection === section.id
                       ? 'bg-[#d4a847]/20 text-[#d4a847]'
                       : 'text-[hsl(var(--ico-text-secondary))] hover:bg-white/5 hover:text-[hsl(var(--ico-text-primary))]'
@@ -137,12 +137,12 @@ export function WhitepaperTab({ className }: WhitepaperTabProps) {
                   {section.subsections && (
                     <ChevronRight
                       className={cn(
-                        'w-4 h-4 flex-shrink-0 transition-transform',
+                        'w-4 h-4 shrink-0 transition-transform',
                         expandedSections.includes(section.id) && 'rotate-90'
                       )}
                     />
                   )}
-                  <span className="flex-1 text-left">{section.title}</span>
+                  <span className="flex-1 text-start">{section.title}</span>
                 </button>
 
                 {section.subsections && expandedSections.includes(section.id) && (
@@ -152,7 +152,7 @@ export function WhitepaperTab({ className }: WhitepaperTabProps) {
                         key={sub.id}
                         onClick={() => navigateToPage(sub.id, sub.page)}
                         className={cn(
-                          'w-full text-left px-3 py-1.5 rounded-lg text-xs transition-colors',
+                          'w-full flex justify-items-start text-left px-3 py-1.5 rounded-lg text-xs transition-colors',
                           activeSection === sub.id
                             ? 'bg-[#d4a847]/10 text-[#d4a847]'
                             : 'text-[hsl(var(--ico-text-muted))] hover:bg-white/5 hover:text-[hsl(var(--ico-text-secondary))]'
@@ -183,9 +183,9 @@ export function WhitepaperTab({ className }: WhitepaperTabProps) {
       <div className="flex-1 rounded-xl bg-black/40 border border-white/10 overflow-hidden">
         <iframe
           key={currentPage}
-          src={`/docs/LeaseFi_WhitePaper.pdf#page=${currentPage}&view=FitH`}
+          src={`/docs/BIG_WhitePaper.pdf#page=${currentPage}&view=FitH`}
           className="w-full h-full"
-          title="LeaseFi WhitePaper"
+          title="BIG WhitePaper"
         >
           <div className="flex flex-col items-center justify-center h-full text-[hsl(var(--ico-text-secondary))]">
             <FileText className="w-16 h-16 mb-4 text-[hsl(var(--ico-text-muted))]" />
