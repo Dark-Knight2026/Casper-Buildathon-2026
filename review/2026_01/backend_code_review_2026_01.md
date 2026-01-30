@@ -117,10 +117,10 @@ env_down: ## Stop docker-compose services
 	@echo "[*] Stopping Docker containers..."
 	@docker compose down --volumes
 
-migrate: ## Run database migrations
+migrate: ## Run database migrations (requires bash/zsh)
 	@echo "[*] Running migrations..."
 	@test -f .env || (echo "Error: .env file not found" && exit 1)
-	@. ./.env && cargo sqlx migrate run
+	@set -a && . ./.env && set +a && cargo sqlx migrate run
 
 restart: env_down env_up migrate ## Restart environment and run migrations
 
@@ -134,15 +134,15 @@ fmt: ## Check formatting
 	@echo "[*] Checking formatting..."
 	@cargo fmt --all -- --check
 
-prepare: ## Generate SQLx offline query metadata for CI builds
+prepare: ## Generate SQLx offline query metadata for CI builds (requires bash/zsh)
 	@echo "[*] Generating SQLx offline query metadata..."
 	@test -f .env || (echo "Error: .env file not found" && exit 1)
-	@. ./.env && cargo sqlx prepare --workspace -- --all-features --tests
+	@set -a && . ./.env && set +a && cargo sqlx prepare --workspace -- --all-features --tests
 
-test: ## Run nextest (use ARGS="..." for extra arguments)
+test: ## Run nextest (use ARGS="..." for extra arguments, requires bash/zsh)
 	@echo "[*] Running tests..."
 	@test -f .env || (echo "Error: .env file not found" && exit 1)
-	@. ./.env && cargo nextest run --all-features --no-fail-fast --build-jobs 0 $(ARGS)
+	@set -a && . ./.env && set +a && cargo nextest run --all-features --no-fail-fast --build-jobs 0 $(ARGS)
 
 test_one: ## Run single test: `make test_one <test_name>`
 	@$(MAKE) test ARGS="$(filter-out $@,$(MAKECMDGOALS))"
@@ -659,13 +659,16 @@ serde = { version = "1", features = ["derive"] }
 let placeholder_email = format!("wallet_{}@leasefi.local", &payload.wallet_address[..16]);
 ```
 
-**Action Item:** Use a hash of the wallet address (full address exceeds email local part limit of 64 chars):
+**Action Item:** Use a truncated hash of the wallet address (RFC 5321 limits local part to 64 chars):
 
 ```rust
 use sha2::{Sha256, Digest};
 
-let hash = Sha256::digest(payload.wallet_address.as_bytes()); let placeholder_email = format!("wallet_{:x}@leasefi.local", hash);
-// Result: wallet_a1b2c3d4e5f6...@leasefi.local (64 hex chars)
+let hash = Sha256::digest(payload.wallet_address.as_bytes());
+let hash_hex = format!("{:x}", hash);
+// Truncate to 57 chars: 64 (limit) - 7 ("wallet_" prefix) = 57
+let placeholder_email = format!("wallet_{}@leasefi.local", &hash_hex[..57]);
+// Result: wallet_a1b2c3d4e5f6...@leasefi.local (64 chars total in local part)
 ```
 
 ---
@@ -897,8 +900,8 @@ However, if password auth is added in the future:
 [dev-dependencies]
 tokio-test = "0.4"
 wiremock = "0.6"         # HTTP mocking
-fake = "2"               # Test data generation
-rstest = "0.18"          # Parametrized tests
+fake = "4"               # Test data generation
+rstest = "0.24"          # Parametrized tests
 assert_matches = "1.5"
 ```
 
