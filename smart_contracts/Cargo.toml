@@ -4,7 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-styks-contracts = { git = "https://github.com/odradev/styks.git", branch = "feature/casper-shorts-client", features = []}
 odra-modules = { version="2.5.0", features = [], default-features = false }
 sha3 = { version = "0.10.8", features = [], default-features = false }
 odra = { version = "2.5.0", features = [], default-features = false }

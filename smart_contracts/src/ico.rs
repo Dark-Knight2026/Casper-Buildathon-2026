@@ -5,7 +5,6 @@ use odra::{
     ContractRef,
 };
 use odra_modules::{access::Ownable, cep18_token::Cep18ContractRef};
-use styks_contracts::styks_price_feed::StyksPriceFeedContractRef;
 
 use crate::{
     constants::STYKS_ORACLE_CSPR_USDT_PRICE_FEED_ID,
@@ -17,6 +16,7 @@ use crate::{
         },
         types::{Currency, ICOSchedule, ICOScheduleCreateParams},
     },
+    mocks::styks_price_feed::StyksPriceFeedContractRef,
     treasury::TreasuryContractRef,
 };
 

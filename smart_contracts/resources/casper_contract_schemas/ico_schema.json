@@ -389,7 +389,7 @@
       "is_mutable": true,
       "arguments": [
         {
-          "name": "amount",
+          "name": "purchase_amount",
           "description": null,
           "ty": "U256",
           "optional": false
@@ -444,6 +444,22 @@
       "access": "public"
     },
     {
+      "name": "get_ico_token_price",
+      "description": "Returns ICO token price in USD",
+      "is_mutable": false,
+      "arguments": [
+        {
+          "name": "currency",
+          "description": null,
+          "ty": "Currency",
+          "optional": false
+        }
+      ],
+      "return_ty": "U256",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
       "name": "get_currency_by_key",
       "description": "Returns info about currency by its key",
       "is_mutable": false,
@@ -456,14 +472,12 @@
         }
       ],
       "return_ty": {
-        "Option": {
-          "Tuple2": [
-            "Bool",
-            {
-              "Option": "Key"
-            }
-          ]
-        }
+        "Tuple2": [
+          "Bool",
+          {
+            "Option": "Key"
+          }
+        ]
       },
       "is_contract_context": true,
       "access": "public"

@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use odra::prelude::*;
 
 #[odra::module]
@@ -11,6 +13,7 @@ impl StyksPriceFeed {
         self.twap_price.set(twap_price);
     }
 
+    // Signature should be exact like this to mimic Styks Oracle Price Feed contract's behavior
     #[allow(unused_variables)]
     pub fn get_twap_price(&self, id: &String) -> Option<u64> {
         self.twap_price.get()

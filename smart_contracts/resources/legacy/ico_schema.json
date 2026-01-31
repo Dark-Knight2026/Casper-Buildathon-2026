@@ -237,7 +237,7 @@
       "name": "purchase",
       "args": [
         {
-          "name": "amount",
+          "name": "purchase_amount",
           "ty": "U256",
           "is_ref": false,
           "is_slice": false,
@@ -291,6 +291,22 @@
       "attributes": []
     },
     {
+      "name": "get_ico_token_price",
+      "args": [
+        {
+          "name": "currency",
+          "ty": "U8",
+          "is_ref": false,
+          "is_slice": false,
+          "is_required": true
+        }
+      ],
+      "is_mutable": false,
+      "return_ty": "U256",
+      "ty": "Public",
+      "attributes": []
+    },
+    {
       "name": "get_currency_by_key",
       "args": [
         {
@@ -303,14 +319,12 @@
       ],
       "is_mutable": false,
       "return_ty": {
-        "Option": {
-          "Tuple2": [
-            "Bool",
-            {
-              "Option": "Key"
-            }
-          ]
-        }
+        "Tuple2": [
+          "Bool",
+          {
+            "Option": "Key"
+          }
+        ]
       },
       "ty": "Public",
       "attributes": []
