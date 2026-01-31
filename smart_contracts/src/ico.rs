@@ -112,8 +112,8 @@ impl ICO {
     /// Gives a possibility to purchase tokens from active ICO schedule
     #[odra(payable)]
     #[odra(non_reentrant)]
-    pub fn purchase(&mut self, amount: U256, currency: Currency) {
-        if amount.is_zero() {
+    pub fn purchase(&mut self, purchase_amount: U256, currency: Currency) {
+        if purchase_amount.is_zero() {
             self.env().revert(Error::InvalidPurchaseAmount);
         }
 
@@ -127,12 +127,12 @@ impl ICO {
             .get_current_ico_schedule()
             .unwrap_or_revert_with(&self.env(), Error::NoActiveIcoSchedule);
 
-        if amount > current_ico_schedule.sale_amount - current_ico_schedule.sold_amount {
+        if purchase_amount > current_ico_schedule.sale_amount - current_ico_schedule.sold_amount {
             self.env().revert(Error::InsufficientSellingTokensAmount);
         }
 
-        let ico_token_price = self.get_ico_token_price(&currency, &current_ico_schedule);
-        let purchase_cost = ico_token_price * amount;
+        let ico_token_price = self.get_ico_token_price(currency);
+        let purchase_cost = ico_token_price * purchase_amount / U256::from(10).pow(U256::from(18));
         let caller = &self.env().caller();
         let attached_value = self.env().attached_value();
 
@@ -158,15 +158,15 @@ impl ICO {
             }
         }
 
-        current_ico_schedule.sold_amount += amount;
+        current_ico_schedule.sold_amount += purchase_amount;
         self.ico_schedules
             .set(&current_ico_schedule_id, current_ico_schedule);
 
-        // TODO remove direct transfer to users, add vesting position creation
-        self.tailor_coin.transfer(&caller, &amount);
+        // TODO remove direct transfer to users. Add vesting position creation + stake it to earn rewards while under vesting.
+        self.tailor_coin.transfer(&caller, &purchase_amount);
 
         self.env().emit_native_event(TokensPurchased {
-            amount,
+            amount: purchase_amount,
             currency,
             price: ico_token_price,
             cost: purchase_cost,
@@ -218,6 +218,25 @@ impl ICO {
         }
 
         result
+    }
+
+    /// Returns ICO token price in USD
+    pub fn get_ico_token_price(&self, currency: Currency) -> U256 {
+        match self.get_current_ico_schedule() {
+            None => U256::zero(),
+            Some(current_ico_schedule) => match currency {
+                Currency::CSPR => {
+                    let cspr_price_usd = self
+                        .styks_price_feed
+                        .get_twap_price(&String::from(STYKS_ORACLE_CSPR_USDT_PRICE_FEED_ID))
+                        .unwrap_or_revert_with(&self.env(), Error::StyksOracleCanNotReturnTWAP);
+
+                    current_ico_schedule.1.price * U256::from(10).pow(U256::from(9))
+                        / cspr_price_usd
+                }
+                Currency::USDC | Currency::USDT => current_ico_schedule.1.price,
+            },
+        }
     }
 
     /// Returns info about currency by its key
@@ -307,20 +326,6 @@ impl ICO {
         // Price validation
         if ico_schedule.price.is_zero() {
             self.env().revert(Error::InvalidICOSchedulePrice);
-        }
-    }
-
-    fn get_ico_token_price(&self, currency: &Currency, current_ico_schedule: &ICOSchedule) -> U256 {
-        match currency {
-            Currency::USDC | Currency::USDT => current_ico_schedule.price,
-            Currency::CSPR => {
-                let cspr_price_usd = self
-                    .styks_price_feed
-                    .get_twap_price(&String::from(STYKS_ORACLE_CSPR_USDT_PRICE_FEED_ID))
-                    .unwrap_or_revert_with(&self.env(), Error::StyksOracleCanNotReturnTWAP);
-
-                current_ico_schedule.price * U256::from(10).pow(U256::from(12)) / cspr_price_usd
-            }
         }
     }
 }
@@ -432,7 +437,7 @@ pub mod types {
 
 #[cfg(test)]
 mod tests {
-    use odra::host::{Deployer, HostEnv, NoArgs};
+    use odra::host::{Deployer, HostEnv, HostRef, NoArgs};
     use odra_modules::access::errors::Error as AccessError;
 
     use crate::{
@@ -915,24 +920,167 @@ mod tests {
     }
 
     #[test]
-    fn test_purchase_should_fail_if_attached_value_is_wrong() {
+    fn test_purchase_should_fail_if_attached_value_is_wrong_when_purchasing_with_cspr_token() {
         let mut ctx = setup(odra_test::env(), true);
         let creation_params = get_ico_schedules_creation_params(&ctx.env);
 
         ctx.env
             .advance_block_time(creation_params[0].start_timestamp - ctx.env.block_time());
-        ctx.styks_price_feed.set_twap_price(4342000); // 0.004342 * 10^9
+        ctx.styks_price_feed.set_twap_price(4342); // 0.004342 * 10^6
 
         assert_eq!(
             ctx.ico
                 .try_purchase(U256::from(100 * 10u128.pow(18)), Currency::CSPR)
                 .unwrap_err(),
             Error::InvalidAmountAttached.into(),
-            "Should revert when attached CSPR amount is wrong"
+            "Should revert when attached CSPR amount is wrong when purchasing with CSPR"
         );
     }
 
-    // TODO
+    #[test]
+    fn test_purchase_should_fail_if_attached_value_is_wrong_when_purchasing_with_cep18_token() {
+        let mut ctx = setup(odra_test::env(), true);
+        let creation_params = get_ico_schedules_creation_params(&ctx.env);
+
+        ctx.env
+            .advance_block_time(creation_params[0].start_timestamp - ctx.env.block_time());
+        ctx.styks_price_feed.set_twap_price(4342); // 0.004342 * 10^6
+
+        assert_eq!(
+            ctx.ico
+                .with_tokens(U512::one())
+                .try_purchase(U256::one(), Currency::USDC)
+                .unwrap_err(),
+            Error::InvalidAmountAttached.into(),
+            "Should revert when attached CSPR amount is wrong when purchasing with CEP18 token"
+        );
+    }
+
+    #[test]
+    fn test_purchase_should_purchase_with_cspr_token_properly() {
+        let mut ctx = setup(odra_test::env(), true);
+        let creation_params = get_ico_schedules_creation_params(&ctx.env);
+
+        ctx.env
+            .advance_block_time(creation_params[0].start_timestamp - ctx.env.block_time());
+        ctx.styks_price_feed.set_twap_price(4342); // 0.004342 * 10^6
+
+        let purchase_amount = U256::from(100) * U256::from(10).pow(U256::from(18));
+        let currency = Currency::CSPR;
+        let price = ctx.ico.get_ico_token_price(currency);
+        let cost = price * purchase_amount / U256::from(10).pow(U256::from(18));
+        let prev_current_ico_schedule = ctx.ico.get_current_ico_schedule().unwrap();
+        let prev_buyer_balance = ctx.tailor_coin.balance_of(&ctx.users.alice);
+        let prev_ico_balance = ctx.tailor_coin.balance_of(&ctx.ico.address());
+        let prev_treasury_balance = ctx.env.balance_of(&ctx.treasury.address());
+
+        ctx.env.set_caller(ctx.users.alice);
+        ctx.ico
+            .with_tokens(cost.to_u512())
+            .purchase(purchase_amount, currency);
+        ctx.env.set_caller(ctx.users.owner);
+
+        let curr_current_ico_schedule = ctx.ico.get_current_ico_schedule().unwrap();
+        let curr_buyer_balance = ctx.tailor_coin.balance_of(&ctx.users.alice);
+        let curr_ico_balance = ctx.tailor_coin.balance_of(&ctx.ico.address());
+        let curr_treasury_balance = ctx.env.balance_of(&ctx.treasury.address());
+
+        assert!(
+            ctx.env.emitted_native_event(
+                &ctx.ico,
+                TokensPurchased {
+                    amount: purchase_amount,
+                    currency,
+                    price,
+                    cost,
+                    timestamp: ctx.env.block_time(),
+                }
+            ),
+            "TokensPurchased event should be emitted"
+        );
+        assert_eq!(
+            curr_current_ico_schedule.1.sold_amount,
+            prev_current_ico_schedule.1.sold_amount + purchase_amount,
+            "Invalid current ICO schedule sold amount"
+        );
+        assert_eq!(
+            curr_buyer_balance,
+            prev_buyer_balance + purchase_amount,
+            "Invalid current buyer ICO token balance"
+        );
+        assert_eq!(
+            curr_ico_balance,
+            prev_ico_balance - purchase_amount,
+            "Invalid current ICO contract ICO token balance"
+        );
+        assert_eq!(
+            curr_treasury_balance,
+            prev_treasury_balance + cost.to_u512(),
+            "Invalid current Treasury CSPR balance"
+        );
+    }
+
+    #[test]
+    fn test_purchase_should_purchase_with_cep18_token_properly() {
+        let mut ctx = setup(odra_test::env(), true);
+        let creation_params = get_ico_schedules_creation_params(&ctx.env);
+
+        ctx.env
+            .advance_block_time(creation_params[0].start_timestamp - ctx.env.block_time());
+
+        let purchase_amount = U256::from(100) * U256::from(10).pow(U256::from(18));
+        let currency = Currency::USDC;
+        let price = ctx.ico.get_ico_token_price(currency);
+        let cost = price * purchase_amount / U256::from(10).pow(U256::from(18));
+        let prev_current_ico_schedule = ctx.ico.get_current_ico_schedule().unwrap();
+        let prev_buyer_balance = ctx.tailor_coin.balance_of(&ctx.users.alice);
+        let prev_ico_balance = ctx.tailor_coin.balance_of(&ctx.ico.address());
+        let prev_treasury_balance = ctx.usdc.balance_of(&ctx.treasury.address());
+
+        ctx.env.set_caller(ctx.users.alice);
+        ctx.usdc.approve(&ctx.ico.address(), &cost);
+        ctx.ico.purchase(purchase_amount, currency);
+        ctx.env.set_caller(ctx.users.owner);
+
+        let curr_current_ico_schedule = ctx.ico.get_current_ico_schedule().unwrap();
+        let curr_buyer_balance = ctx.tailor_coin.balance_of(&ctx.users.alice);
+        let curr_ico_balance = ctx.tailor_coin.balance_of(&ctx.ico.address());
+        let curr_treasury_balance = ctx.usdc.balance_of(&ctx.treasury.address());
+
+        assert!(
+            ctx.env.emitted_native_event(
+                &ctx.ico,
+                TokensPurchased {
+                    amount: purchase_amount,
+                    currency,
+                    price,
+                    cost,
+                    timestamp: ctx.env.block_time(),
+                }
+            ),
+            "TokensPurchased event should be emitted"
+        );
+        assert_eq!(
+            curr_current_ico_schedule.1.sold_amount,
+            prev_current_ico_schedule.1.sold_amount + purchase_amount,
+            "Invalid current ICO schedule sold amount"
+        );
+        assert_eq!(
+            curr_buyer_balance,
+            prev_buyer_balance + purchase_amount,
+            "Invalid current buyer ICO token balance"
+        );
+        assert_eq!(
+            curr_ico_balance,
+            prev_ico_balance - purchase_amount,
+            "Invalid current ICO contract ICO token balance"
+        );
+        assert_eq!(
+            curr_treasury_balance,
+            prev_treasury_balance + cost,
+            "Invalid current Treasury USDC balance"
+        );
+    }
 
     /////////////////////////////////////////////////////////////////////////////
     //                         withdraw_unsold_tokens()                        //
@@ -1104,6 +1252,87 @@ mod tests {
                 "Should return proper ICO schedule and its ID - 2"
             );
         }
+    }
+
+    /////////////////////////////////////////////////////////////////////////////
+    //                          get_ico_token_price()                          //
+    /////////////////////////////////////////////////////////////////////////////
+
+    #[test]
+    fn test_get_ico_token_price_should_return_zero_when_no_active_ico_schedule() {
+        let ctx = setup(odra_test::env(), true);
+
+        assert_eq!(
+            ctx.ico.get_ico_token_price(Currency::CSPR),
+            U256::zero(),
+            "Invalid ICO token price - 1"
+        );
+        assert_eq!(
+            ctx.ico.get_ico_token_price(Currency::USDC),
+            U256::zero(),
+            "Invalid ICO token price - 2"
+        );
+        assert_eq!(
+            ctx.ico.get_ico_token_price(Currency::USDT),
+            U256::zero(),
+            "Invalid ICO token price - 3"
+        );
+    }
+
+    #[test]
+    fn test_get_ico_token_price_should_fail_if_styks_price_feed_can_not_return_twap() {
+        let ctx = setup(odra_test::env(), true);
+        let creation_params = get_ico_schedules_creation_params(&ctx.env);
+
+        ctx.env
+            .advance_block_time(creation_params[0].start_timestamp - ctx.env.block_time());
+
+        assert_eq!(
+            ctx.ico.try_get_ico_token_price(Currency::CSPR).unwrap_err(),
+            Error::StyksOracleCanNotReturnTWAP.into(),
+            "Should revert when Styks Oracle Price Feed can not return TWAP"
+        );
+    }
+
+    #[test]
+    fn test_get_ico_token_price_should_return_proper_ico_token_price_in_cspr() {
+        let mut ctx = setup(odra_test::env(), true);
+        let creation_params = get_ico_schedules_creation_params(&ctx.env);
+        let cspr_price_usd = 4342; // 0.004342 * 10^6
+
+        ctx.env
+            .advance_block_time(creation_params[0].start_timestamp - ctx.env.block_time());
+        ctx.styks_price_feed.set_twap_price(cspr_price_usd);
+
+        let current_ico_schedule = ctx.ico.get_current_ico_schedule().unwrap();
+
+        assert_eq!(
+            ctx.ico.get_ico_token_price(Currency::CSPR),
+            current_ico_schedule.1.price * U256::from(10).pow(U256::from(9)) / cspr_price_usd,
+            "Invalid ICO token price"
+        );
+    }
+
+    #[test]
+    fn test_get_ico_token_price_should_return_proper_ico_token_price_in_usd() {
+        let ctx = setup(odra_test::env(), true);
+        let creation_params = get_ico_schedules_creation_params(&ctx.env);
+
+        ctx.env
+            .advance_block_time(creation_params[0].start_timestamp - ctx.env.block_time());
+
+        let current_ico_schedule = ctx.ico.get_current_ico_schedule().unwrap();
+
+        assert_eq!(
+            ctx.ico.get_ico_token_price(Currency::USDC),
+            current_ico_schedule.1.price,
+            "Invalid ICO token price - 1"
+        );
+        assert_eq!(
+            ctx.ico.get_ico_token_price(Currency::USDT),
+            current_ico_schedule.1.price,
+            "Invalid ICO token price - 2"
+        );
     }
 
     /////////////////////////////////////////////////////////////////////////////
