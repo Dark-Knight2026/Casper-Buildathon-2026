@@ -15,7 +15,6 @@ interface CountdownTimerProps {
 const calculateTimeLeft = (targetTimestamp: number): CountdownTime => {
   const now = Date.now();
   const difference = targetTimestamp - now;
-  console.log('Time targetTimestamp:', targetTimestamp);
 
   if (difference <= 0) {
     return {
