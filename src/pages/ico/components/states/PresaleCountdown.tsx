@@ -1,4 +1,6 @@
+import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { CountdownTimer } from '../shared/CountdownTimer';
 import { ICO_CONFIG } from '@/constants/ico';
 import { MainButton } from '../shared/MainButton';
@@ -13,6 +15,8 @@ interface PresaleCountdownProps {
 }
 
 export function PresaleCountdown({ targetTimestamp, endTimestamp, className }: PresaleCountdownProps) {
+  const navigate = useNavigate();
+  const isMobile = useIsMobile();
 
   return (
     <div className={cn('max-w-5xl mx-auto relative flex flex-col items-center', className)}>
@@ -34,7 +38,7 @@ export function PresaleCountdown({ targetTimestamp, endTimestamp, className }: P
 
         <CountdownTimer
           targetTimestamp={targetTimestamp}
-          size="lg"
+          size={isMobile ? 'md' : 'lg'}
           showLabels
         />
 
@@ -55,9 +59,9 @@ export function PresaleCountdown({ targetTimestamp, endTimestamp, className }: P
           </div>
 
           <div className="text-center p-4">
-            <p className="text-sm text-[hsl(var(--ico-text-secondary))] mb-1">Funds Raised</p>
+            <p className="text-sm text-[hsl(var(--ico-text-secondary))] mb-1">Hard Cap</p>
             <p className="text-lg font-bold text-[hsl(var(--ico-text-primary))]">
-              ${(Number(ICO_CONFIG.PRE_SALE.fundsRaised)).toLocaleString()} USD
+              {(Number(ICO_CONFIG.PRE_SALE.hardCap)).toLocaleString()} BIG
             </p>
           </div>
 
@@ -67,7 +71,7 @@ export function PresaleCountdown({ targetTimestamp, endTimestamp, className }: P
           </div>
         </InfoCard>
       </div>
-      <MainButton text="Learn More"/>
+      <MainButton text="Learn More" onClick={() => navigate('/ico/whitepaper')}/>
     </div>
   );
 }

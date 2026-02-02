@@ -81,16 +81,18 @@ export function ICOPage() {
 
 
       {/* Main Content */}
-      <ScrollArea className="h-[calc(100vh-112px-92px)] ">
-        <main className="container mx-auto px-4 py-8">
-          <Suspense fallback={<LoadingFallback />}>
-            {renderStateComponent()}
-          </Suspense>
-        </main>
-      </ScrollArea>
+      <ScrollArea className="min-h-[calc(100vh-112px)]">
+        <div className='min-h-[calc(100vh-112px)] flex flex-col justify-between'>
+          <main className="container h-full mx-auto px-4 py-8">
+            <Suspense fallback={<LoadingFallback />}>
+              {renderStateComponent()}
+            </Suspense>
+          </main>
 
-      {/* Footer */}
-      <ICOFooter />
+          {/* Footer */}
+          <ICOFooter />
+        </div>
+      </ScrollArea>
     </div>
   );
 }
