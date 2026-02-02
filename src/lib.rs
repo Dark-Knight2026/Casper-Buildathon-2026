@@ -11,6 +11,7 @@ pub mod implementation {
         errors::ServerError,
         handlers,
     };
+    use axum::http::{header, Method};
     use axum::Router;
     use secrecy::ExposeSecret;
     use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
@@ -19,7 +20,7 @@ pub mod implementation {
     use std::sync::Arc;
     use std::time::Duration;
     use tower_governor::{governor::GovernorConfigBuilder, GovernorLayer};
-    use tower_http::{limit::RequestBodyLimitLayer, trace::TraceLayer};
+    use tower_http::{cors::CorsLayer, limit::RequestBodyLimitLayer, trace::TraceLayer};
 
     #[inline]
     pub async fn main() -> Result<(), ServerError> {
@@ -70,7 +71,19 @@ pub mod implementation {
                 .unwrap_or_default(),
         );
 
-        // 5. Configure router
+        // 5. Configure CORS (SC-007)
+        let cors = CorsLayer::new()
+            .allow_origin(
+                config
+                    .cors_origin
+                    .parse::<header::HeaderValue>()
+                    .expect("Invalid CORS_ORIGIN"),
+            )
+            .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE])
+            .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION])
+            .allow_credentials(false);
+
+        // 6. Configure router
         let app = Router::new()
             .merge(handlers::health::router())
             .nest(
@@ -78,6 +91,7 @@ pub mod implementation {
                 handlers::auth::router().layer(GovernorLayer::new(auth_rate_limit)),
             )
             .nest("/api/v1", handlers::business::router())
+            .layer(cors)
             .layer(TraceLayer::new_for_http())
             .layer(RequestBodyLimitLayer::new(1024 * 1024)) // 1MB limit (SC-008)
             .with_state(state);

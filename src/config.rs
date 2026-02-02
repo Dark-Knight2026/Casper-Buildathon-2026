@@ -8,6 +8,7 @@ pub struct Config {
     pub redis_url: String,
     pub jwt_secret: SecretString,
     pub port: u16,
+    pub cors_origin: String,
 }
 
 impl Config {
@@ -29,11 +30,15 @@ impl Config {
             .parse::<u16>()
             .map_err(|_| "PORT must be a valid number")?;
 
+        let cors_origin =
+            env::var("CORS_ORIGIN").unwrap_or_else(|_| "http://localhost:3000".to_string());
+
         Ok(Self {
             database_url,
             redis_url,
             jwt_secret,
             port,
+            cors_origin,
         })
     }
 }
