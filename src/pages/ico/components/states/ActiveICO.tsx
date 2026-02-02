@@ -59,11 +59,9 @@ export function ActiveICO({ endTimestamp, className }: ActiveICOProps) {
   const tokensRemaining = MOCK_PROGRESS.totalAllocation - MOCK_PROGRESS.tokensSold;
 
   const handleConnect = () => {
-    console.log('Connect wallet');
   };
 
   const handlePurchase = (amount: number, currency: PaymentCurrency) => {
-    console.log('Purchase:', amount, currency);
   };
 
   return (
