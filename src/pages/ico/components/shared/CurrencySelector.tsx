@@ -49,7 +49,7 @@ export function CurrencySelector({
             <SelectItem
               key={option.value}
               value={option.value}
-              className="text-white rounded-0 cursor-pointer data-highlighted:bg-sky-800!"
+              className="text-white rounded-none cursor-pointer data-highlighted:bg-sky-800!"
             >
               {option.label}
             </SelectItem>
