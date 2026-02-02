@@ -10,6 +10,7 @@ use rand::{Rng, distr::Alphanumeric};
 use redis::AsyncCommands;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -198,8 +199,10 @@ pub async fn login(
     // Remove Nonce (protection against signature reuse)
     let _: () = redis_conn.del(&redis_key).await.unwrap_or(());
 
-    // Since the users table requires an email address, we generate a fake one for new users.
-    let placeholder_email = format!("wallet_{}@leasefi.local", &payload.wallet_address[..16]);
+    // Since the users table requires an email address, we generate a unique one using a hash.
+    // Using `SHA-256` hash prevents collisions that could occur with simple address truncation.
+    let hash = Sha256::digest(payload.wallet_address.as_bytes());
+    let placeholder_email = format!("wallet_{}@leasefi.local", hex::encode(&hash[..20]));
 
     // If a user with this wallet_address already exists, return it.
     // If not, create a new one.
