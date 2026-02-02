@@ -102,6 +102,7 @@ export function ActivePresale({ className, endTimestamp }: ActivePresaleProps) {
             ]}
             className="w-full"
           />
+          <p className='text-[hsl(var(--ico-text-secondary))] pl-2'>Hard Cap: ${Number(ICO_CONFIG.PRE_SALE.hardCap).toLocaleString()}</p>
         </div>
 
         {/* Wallet Card */}

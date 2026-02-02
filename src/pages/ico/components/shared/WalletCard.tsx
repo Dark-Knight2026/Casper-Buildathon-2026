@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
+import { ICO_CONFIG } from '@/constants/ico';
 import { Card } from './Card';
 import { PaymentCurrency } from './CurrencySelector';
 import { MainButton } from './MainButton';
@@ -38,7 +39,9 @@ export function WalletCard({
     CSPR: balanceCSPR,
   };
   const currentBalance = balances[currency];
-  const tokensToReceive = amount ? Number(amount) / tokenPrice : 0;
+  const currencyRate = ICO_CONFIG.CURRENCY_RATES[currency];
+  const amountInUsd = amount ? Number(amount) * currencyRate : 0;
+  const tokensToReceive = amountInUsd / tokenPrice;
 
   const truncateAddress = (address: string) => {
     return `${address.slice(0, 6)}...${address.slice(-4)}`;
@@ -111,7 +114,7 @@ export function WalletCard({
             </span>
           </div>
           <p className="text-xs text-sky-400 mt-1">
-            Rate: 1 {tokenSymbol} = ${tokenPrice}
+            Rate: 1 {tokenSymbol} = {(tokenPrice / currencyRate).toLocaleString(undefined, { maximumFractionDigits: 6 })} {currency}
           </p>
         </div>
       )}

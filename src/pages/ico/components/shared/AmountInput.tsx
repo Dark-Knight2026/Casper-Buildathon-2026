@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import { cn } from '@/lib/utils';
+import { ICO_CONFIG } from '@/constants/ico';
 import { CurrencySelector, PaymentCurrency } from './CurrencySelector';
 
 interface AmountInputProps {
@@ -26,6 +28,34 @@ export function AmountInput({
   placeholder = '0.00',
   className,
 }: AmountInputProps) {
+  const [error, setError] = useState<string | null>(null);
+  const { min, max } = ICO_CONFIG.PURCHASE_LIMITS;
+
+  const handleChange = (rawValue: string) => {
+    if (rawValue === '') {
+      setError(null);
+      onChange(rawValue);
+      return;
+    }
+
+    const num = parseFloat(rawValue);
+
+    if (isNaN(num) || num < 0) {
+      setError('Amount must be a positive number');
+      return;
+    }
+
+    if (num > 0 && num < min) {
+      setError(`Minimum amount is $${min}`);
+    } else if (num > max) {
+      setError(`Maximum amount is $${max.toLocaleString()}`);
+    } else {
+      setError(null);
+    }
+
+    onChange(rawValue);
+  };
+
   return (
     <div className={cn('w-full', className)}>
       <label className="block text-sm text-[hsl(var(--ico-text-secondary))] mb-2">
@@ -35,11 +65,16 @@ export function AmountInput({
         <input
           type="number"
           value={value}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(e) => handleChange(e.target.value)}
+          min={0}
+          max={max}
           placeholder={placeholder}
           disabled={disabled}
           className={cn(
-            'w-full px-4 py-3 pr-36 rounded-xl border border-sky-800/50',
+            'w-full px-4 py-3 pr-36 rounded-xl border',
+            error
+              ? 'border-red-500/70'
+              : 'border-sky-800/50',
             'bg-black/50 text-[hsl(var(--ico-text-primary))]',
             'focus:outline-none focus:ring-0',
             'disabled:opacity-50 disabled:cursor-not-allowed'
@@ -53,7 +88,10 @@ export function AmountInput({
           />
         </div>
       </div>
-      {showBalance && (
+      {error && (
+        <p className="text-xs text-red-400 mt-1">{error}</p>
+      )}
+      {!error && showBalance && (
         <p className="text-xs text-[hsl(var(--ico-text-secondary))] mt-1">
           Available: {availableBalance.toLocaleString()} {currency}
         </p>

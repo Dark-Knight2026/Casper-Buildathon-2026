@@ -62,6 +62,13 @@ export const ICO_CONFIG = {
     min: 10,      // $10 minimum
     max: 100000,  // $100,000 maximum
   },
+
+  // Currency to USD conversion rates (constant for now)
+  CURRENCY_RATES: {
+    USDT: 1,       // 1 USDT = $1
+    USDC: 1,       // 1 USDC = $1
+    CSPR: 0.02,    // 1 CSPR = $0.02
+  },
 } as const;
 
 // Payment method display info
