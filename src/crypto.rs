@@ -1,4 +1,4 @@
-use casper_types::{crypto, AsymmetricType, PublicKey, Signature};
+use casper_types::{AsymmetricType, PublicKey, Signature, crypto};
 use thiserror::Error;
 
 /// Custom error types for cryptographic operations.

@@ -1,18 +1,19 @@
 [package]
 name = "rust-service"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
+publish = false
 
 [dependencies]
 axum = { version = "0.8", features = ["macros"] }
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres", "uuid", "rust_decimal", "migrate"] }
-jsonwebtoken = "9"
+sqlx = { version = "0.8.6", features = ["runtime-tokio-rustls", "postgres", "uuid", "rust_decimal", "migrate"] }
+jsonwebtoken = "10.3"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-thiserror = "1"
+thiserror = "2.0"
 uuid = { version = "1", features = ["serde", "v4"] }
 rust_decimal = { version = "1", features = ["serde"] }
 tower-http = { version = "0.6.8", features = ["cors", "trace", "limit"] }

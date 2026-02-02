@@ -1,13 +1,13 @@
 use crate::{config::AppState, models::Claims};
 use axum::{
-    extract::FromRequestParts,
-    http::{request::Parts, StatusCode},
-    response::{IntoResponse, Response},
     Json,
+    extract::FromRequestParts,
+    http::{StatusCode, request::Parts},
+    response::{IntoResponse, Response},
 };
 use core::fmt;
 use error_tools::dependency::thiserror;
-use jsonwebtoken::{decode, DecodingKey, Validation};
+use jsonwebtoken::{DecodingKey, Validation, decode};
 use secrecy::ExposeSecret;
 use serde_json::json;
 use std::sync::Arc;

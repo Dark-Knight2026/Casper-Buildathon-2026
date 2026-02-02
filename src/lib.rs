@@ -11,15 +11,15 @@ pub mod implementation {
         errors::ServerError,
         handlers,
     };
-    use axum::http::{header, Method};
     use axum::Router;
+    use axum::http::{Method, header};
     use secrecy::ExposeSecret;
     use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
     use std::net::SocketAddr;
     use std::str::FromStr;
     use std::sync::Arc;
     use std::time::Duration;
-    use tower_governor::{governor::GovernorConfigBuilder, GovernorLayer};
+    use tower_governor::{GovernorLayer, governor::GovernorConfigBuilder};
     use tower_http::{cors::CorsLayer, limit::RequestBodyLimitLayer, trace::TraceLayer};
 
     #[inline]

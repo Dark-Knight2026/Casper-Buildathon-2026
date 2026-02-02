@@ -1,12 +1,12 @@
 use axum::{
+    Json, Router,
     extract::{Query, State},
     http::StatusCode,
     routing::{get, post},
-    Json, Router,
 };
 use chrono::{Duration, Utc};
-use jsonwebtoken::{encode, EncodingKey, Header};
-use rand::{distr::Alphanumeric, Rng};
+use jsonwebtoken::{EncodingKey, Header, encode};
+use rand::{Rng, distr::Alphanumeric};
 use redis::AsyncCommands;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};

@@ -1,8 +1,8 @@
 use crate::config::AppState;
-use axum::{extract::State, http::StatusCode, Json};
-use axum::{routing::get, Router};
+use axum::{Json, extract::State, http::StatusCode};
+use axum::{Router, routing::get};
 use serde::Serialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::sync::Arc;
 
 pub fn router() -> Router<Arc<AppState>> {
