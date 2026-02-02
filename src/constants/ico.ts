@@ -3,7 +3,7 @@
  * Key Chain Token (BIG) on Casper Network
  */
 
-import type { PaymentMethod, TokenomicsAllocation } from '@/types/ico';
+import type { PaymentCurrency, TokenomicsAllocation } from '@/types/ico';
 
 export const ICO_CONFIG = {
   TOKEN: {
@@ -29,7 +29,7 @@ export const ICO_CONFIG = {
     autoStake: false,         // ICO tokens not auto-staked
   },
 
-  PAYMENT_METHODS: ['USDC', 'USDT', 'CARD'] as const,
+  PAYMENT_METHODS: ['USDT', 'USDC', 'CSPR', 'CARD'] as const,
 
   CONTRACTS: {
     tokenAddress: '',    // To be filled after deployment
@@ -68,24 +68,30 @@ export const ICO_CONFIG = {
     USDT: 1,       // 1 USDT = $1
     USDC: 1,       // 1 USDC = $1
     CSPR: 0.02,    // 1 CSPR = $0.02
+    CARD: 1,       // 1 USD = $1 (fiat)
   },
 } as const;
 
-// Payment method display info
-export const PAYMENT_METHOD_INFO: Record<PaymentMethod, {
+// Payment currency display info
+export const PAYMENT_CURRENCY_INFO: Record<PaymentCurrency, {
   name: string;
   icon: string;
   description: string;
 }> = {
+  USDT: {
+    name: 'USDT',
+    icon: 'usdt',
+    description: 'Tether on Casper Network',
+  },
   USDC: {
     name: 'USDC',
     icon: 'usdc',
     description: 'USD Coin on Casper Network',
   },
-  USDT: {
-    name: 'USDT',
-    icon: 'usdt',
-    description: 'Tether on Casper Network',
+  CSPR: {
+    name: 'CSPR',
+    icon: 'cspr',
+    description: 'Casper Network native token',
   },
   CARD: {
     name: 'Credit Card',
@@ -176,4 +182,3 @@ export const ICO_STATE_INFO = {
   },
 } as const;
 
-export type PaymentMethodType = typeof ICO_CONFIG.PAYMENT_METHODS[number];

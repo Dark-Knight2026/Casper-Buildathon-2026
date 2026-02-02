@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { ICO_CONFIG } from '@/constants/ico';
-import { CurrencySelector, PaymentCurrency } from './CurrencySelector';
+import type { PaymentCurrency } from '@/types/ico';
+import { CurrencySelector } from './CurrencySelector';
 
 interface AmountInputProps {
   value: string;

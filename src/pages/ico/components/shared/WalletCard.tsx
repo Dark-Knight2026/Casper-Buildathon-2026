@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { ICO_CONFIG } from '@/constants/ico';
 import { Card } from './Card';
-import { PaymentCurrency } from './CurrencySelector';
+import type { PaymentCurrency } from '@/types/ico';
 import { MainButton } from './MainButton';
 import { AmountInput } from './AmountInput';
 
@@ -37,6 +37,7 @@ export function WalletCard({
     USDT: balanceUSDT,
     USDC: balanceUSDC,
     CSPR: balanceCSPR,
+    CARD: 0,
   };
   const currentBalance = balances[currency];
   const currencyRate = ICO_CONFIG.CURRENCY_RATES[currency];

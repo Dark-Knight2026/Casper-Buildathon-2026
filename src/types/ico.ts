@@ -14,8 +14,8 @@ export type ICOPhase =
   | 'ico-active'           // State 4
   | 'post-ico';            // State 5
 
-// Payment methods supported
-export type PaymentMethod = 'USDC' | 'USDT' | 'CARD';
+// Payment currencies supported
+export type PaymentCurrency = 'USDT' | 'USDC' | 'CSPR' | 'CARD';
 
 // Token types on Casper
 export type TokenType = 'CSPR' | 'USDC' | 'USDT' | 'BIG';
@@ -41,7 +41,7 @@ export interface SaleStatus {
 export interface Purchase {
   deployHash: string;
   timestamp: number;
-  paymentMethod: PaymentMethod;
+  paymentMethod: PaymentCurrency;
   paymentAmount: string;
   tokenAmount: string;
   status: 'pending' | 'confirmed' | 'failed';
@@ -131,7 +131,7 @@ export type ICOTab = 'main' | 'tokenomics' | 'rewards' | 'whitepaper';
 
 // Purchase form data
 export interface PurchaseFormData {
-  paymentMethod: PaymentMethod;
+  paymentMethod: PaymentCurrency;
   amount: string;
   estimatedTokens: string;
 }

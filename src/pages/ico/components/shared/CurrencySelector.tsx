@@ -1,4 +1,5 @@
 import { cn } from '@/lib/utils';
+import type { PaymentCurrency } from '@/types/ico';
 import {
   Select,
   SelectContent,
@@ -6,8 +7,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-
-export type PaymentCurrency = 'USDT' | 'USDC' | 'CSPR';
 
 const CURRENCY_OPTIONS: { value: PaymentCurrency; label: string }[] = [
   { value: 'USDT', label: 'USDT' },

@@ -5,7 +5,7 @@ import { ProgressBar } from '../shared/ProgressBar';
 import { WalletCard } from '../shared/WalletCard';
 import { TransactionHistory, Transaction } from '../shared/TransactionHistory';
 import { ICO_CONFIG } from '@/constants/ico';
-import type { PaymentCurrency } from '../shared/CurrencySelector';
+import type { PaymentCurrency } from '@/types/ico';
 import { Title } from '../shared/Title';
 
 interface ActiveICOProps {
