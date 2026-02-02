@@ -13,8 +13,9 @@ CompletionStatus: completed
 4. [Code Style Issues (CS)](#code-style-issues-cs)
 5. [Security Concerns (SC)](#security-concerns-sc)
 6. [Architecture Issues (AR)](#architecture-issues-ar)
-7. [Recommendations](#recommendations)
-8. [Prioritized Action Plan](#prioritized-action-plan)
+7. [Testing (TS)](#testing-ts)
+8. [Recommendations](#recommendations)
+9. [Prioritized Action Plan](#prioritized-action-plan)
 
 ---
 
@@ -53,6 +54,7 @@ find src/ -name "*.tsx" -o -name "*.ts" | wc -l
 | CS (Code Style)    | High       | Direct code inspection with line numbers           |
 | SC (Security)      | High       | Verified vulnerable patterns with line numbers     |
 | AR (Architecture)  | High       | File sizes verified via wc -l                      |
+| TS (Testing)       | High       | Verified via npx vitest run and file counts        |
 
 ### Verification Disclaimer
 
@@ -323,7 +325,7 @@ logger.info(`Subscribed to ${channelName}`);
 **Verification:**
 
 ```bash
-grep -rn "TODO\|FIXME" src/ --include="*.ts" --include="*.tsx" | wc -l
+grep -rn "TODO\|FIXME\|XXX\|HACK" src/ --include="*.ts" --include="*.tsx" | wc -l
 # Result: 43
 ```
 
@@ -360,17 +362,24 @@ grep -rn "TODO\|FIXME" src/ --include="*.ts" --include="*.tsx" | wc -l
 
 ---
 
----
+### Deviation CS-004: Incorrect Environment Variable Pattern
 
-### Deviation CS-005: Incorrect Environment Variable Pattern
+**Observation:** Two files use Next.js environment variable patterns in a Vite project.
 
-**Observation:** The `matchingService.ts` uses Next.js environment variable patterns in a Vite project.
+**Evidence:**
 
-**Evidence:** `src/services/matchingService.ts:107-108`
+`src/services/matchingService.ts:107-108`
 
 ```typescript
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+```
+
+`src/hooks/useTaxData.ts:7-8`
+
+```typescript
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 ```
 
 **Problem:**
@@ -379,7 +388,7 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 - `process.env.NEXT_PUBLIC_*` variables are Next.js-specific and will be `undefined` at runtime
 - This code will fail silently or cause runtime errors
 
-**Action Item:** Update to Vite environment variable convention:
+**Action Item:** Update both files to Vite environment variable convention:
 
 ```typescript
 // Instead of:
@@ -390,6 +399,10 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 ```
+
+**Affected files:**
+- `src/services/matchingService.ts:107-108`
+- `src/hooks/useTaxData.ts:7-8`
 
 ---
 
@@ -559,10 +572,18 @@ grep -r "VITE_RESEND" src/
 
 **Observation:** HTML content is rendered directly without sanitization, creating XSS vulnerability.
 
-**Evidence:** `src/components/common/HelpModal.tsx:349`
+**Evidence:**
+
+`src/components/common/HelpModal.tsx:349`
 
 ```tsx
 <div dangerouslySetInnerHTML={{ __html: helpContent.description }} />
+```
+
+`src/components/ui/chart.tsx:70` (shadcn/ui library — lower risk)
+
+```tsx
+<style dangerouslySetInnerHTML={{ __html: Object.entries(THEMES)... }} />
 ```
 
 **Problem:**
@@ -571,6 +592,7 @@ grep -r "VITE_RESEND" src/
 - If `helpContent.description` comes from database or user input, attackers can inject malicious scripts
 - XSS attacks can steal session tokens, perform actions on behalf of users, redirect to phishing sites
 - **DOMPurify is already installed** but not used here
+- The `chart.tsx` instance is from shadcn/ui and uses internally generated CSS, so the risk is lower
 
 **Action Item:** Sanitize HTML content using DOMPurify:
 
@@ -601,23 +623,25 @@ grep -rn "dangerouslySetInnerHTML" src/
 
 ### Deviation AR-001: Massive Component Files Violate Single Responsibility
 
-**Observation:** 11 component files exceed 1,000 lines of code, violating the Single Responsibility Principle and making maintenance difficult.
+**Observation:** 7 files exceed 1,000 lines of code, violating the Single Responsibility Principle and making maintenance difficult.
+
+**Verification:**
+
+```bash
+find src/ \( -name "*.tsx" -o -name "*.ts" \) -exec wc -l {} + | sort -rn | head -10
+```
 
 **Evidence:**
 
 | File | Lines | Concern |
 |------|-------|---------|
-| `src/components/landlord/LandlordDashboard.tsx` | 1,693 | Dashboard combines analytics, property management, tenant overview |
-| `src/components/broker/BrokerDashboard.tsx` | 1,547 | Similar multi-concern dashboard |
-| `src/components/agent/AgentDashboard.tsx` | 1,489 | Dashboard with embedded business logic |
-| `src/components/seller/SellerDashboard.tsx` | 1,423 | Dashboard with inline data processing |
-| `src/components/buyer/BuyerDashboard.tsx` | 1,356 | Mixed presentation and state management |
-| `src/components/tenant/TenantDashboard.tsx` | 1,298 | Monolithic component |
-| `src/pages/admin/AdminDashboard.tsx` | 1,245 | Admin functionality in single file |
-| `src/components/property/PropertyDetails.tsx` | 1,189 | Property display with embedded forms |
-| `src/components/lease/LeaseCreationWizard.tsx` | 1,134 | Multi-step wizard in single component |
-| `src/components/application/ApplicationForm.tsx` | 1,098 | Form with embedded validation logic |
-| `src/components/analytics/FinancialDashboard.tsx` | 1,067 | Analytics with inline calculations |
+| `src/pages/LandlordDashboard.tsx` | 1,693 | Dashboard combines analytics, property management, tenant overview |
+| `src/services/agentService.ts` | 1,236 | Service with multiple responsibilities |
+| `src/services/documentStorageService.ts` | 1,132 | Document handling with embedded business logic |
+| `src/types/lease.ts` | 1,097 | Type definitions - may be acceptable for shared types |
+| `src/components/lease/LeaseAgreementGenerator.tsx` | 1,066 | Complex lease generation logic |
+| `src/components/lease/LeaseTemplateMarketplace.tsx` | 1,053 | Marketplace with inline data processing |
+| `src/components/property/AddPropertyWizard.tsx` | 1,038 | Multi-step wizard in single component |
 
 **Problem:**
 
@@ -655,6 +679,75 @@ export function LandlordDashboard() {
 
 ---
 
+## Testing (TS)
+
+### Deviation TS-001: Critically Low Test Coverage
+
+**Observation:** The project has minimal test coverage with only 4 test files for 1,094 source files.
+
+**Verification:**
+
+```bash
+# Count test files
+find . -name "*.test.ts" -o -name "*.test.tsx" | grep -v node_modules | wc -l
+# Result: 4
+
+# Count source files
+find src/ \( -name "*.ts" -o -name "*.tsx" \) | wc -l
+# Result: 1094
+
+# Run tests
+npx vitest run
+# Test Files: 4 passed (4)
+# Tests: 47 passed (47)
+```
+
+**Evidence:**
+
+| Metric | Value |
+|--------|-------|
+| Test files | 4 |
+| Source files | 1,094 |
+| File coverage | 0.37% |
+| Total tests | 47 |
+| Passing tests | 47 (100%) |
+
+**Existing test files:**
+
+| File | Description |
+|------|-------------|
+| `tests/hooks/useFinancialDashboard.test.ts` | Financial dashboard hook tests |
+| `tests/hooks/useMaintenanceRealtime.test.tsx` | Maintenance realtime hook tests |
+| `tests/lib/utils/taxCalculations.test.ts` | Tax calculation utility tests |
+| `tests/services/sellerService.test.ts` | Seller service tests |
+
+**Test infrastructure:**
+
+- **Vitest v4.0.17** is installed and configured
+- Test infrastructure is functional (all 47 tests pass)
+- The problem is **test authoring**, not tooling
+
+**Untested critical areas:**
+
+| Area | Risk Level | Notes |
+|------|------------|-------|
+| Authentication (authService.ts) | Critical | No tests for login, logout, session handling |
+| Payment processing (Stripe integration) | Critical | No tests for payment flows |
+| Lease management services | High | Core business logic untested |
+| Form validation (Zod schemas) | Medium | User input validation untested |
+| API error handling | Medium | Error states not verified |
+
+**Action Item:** Prioritize testing for critical paths:
+
+1. Add authentication flow tests
+2. Add payment processing tests (mock Stripe)
+3. Add lease creation/management tests
+4. Add form validation tests for user-facing forms
+
+**Target:** Minimum 60% coverage for critical services before production deployment.
+
+---
+
 ## Recommendations
 
 ### Critical
@@ -665,13 +758,14 @@ export function LandlordDashboard() {
 | SC-004 | Move Resend API to backend                    | API key exposed in frontend bundle       |
 | SC-005 | Sanitize dangerouslySetInnerHTML with DOMPurify | XSS vulnerability                      |
 | SC-001 | Remove Twilio from dependencies               | Server-side package in frontend bundle   |
-| CS-005 | Fix environment variable pattern              | Runtime failure in matchingService.ts    |
+| CS-004 | Fix environment variable pattern              | Runtime failure in matchingService.ts and useTaxData.ts |
 
 ### High Priority
 
 | ID     | Recommendation                        | Rationale                    |
 |--------|---------------------------------------|------------------------------|
-| AR-001 | Refactor large components (>1000 LOC) | Maintainability              |
+| TS-001 | Add tests for critical paths          | Zero coverage on auth/payment |
+| AR-001 | Refactor large files (>1000 LOC)      | Maintainability              |
 | ST-002 | Add CI/CD configuration               | Quality automation           |
 | CS-001 | Replace `any` types with proper types | Type safety                  |
 | CS-003 | Resolve or track TODO comments        | Technical debt visibility    |
@@ -701,13 +795,16 @@ export function LandlordDashboard() {
 * Move Resend email sending to backend (SC-004) — **API key exposure**
 * Sanitize all dangerouslySetInnerHTML with DOMPurify (SC-005) — **XSS vulnerability**
 * Remove Twilio dependency (SC-001)
-* Fix environment variable pattern in matchingService.ts (CS-005)
+* Fix environment variable pattern in matchingService.ts and useTaxData.ts (CS-004)
 * Fix lodash prototype pollution vulnerability (SC-003)
 * Add security headers to vercel.json (SC-002)
 
-### Phase 2: Architecture & Standards
+### Phase 2: Testing & Architecture
 
-* Refactor 11 large components (>1000 LOC) into smaller modules (AR-001)
+* Add tests for authentication flows (TS-001)
+* Add tests for payment processing (TS-001)
+* Add tests for lease management services (TS-001)
+* Refactor 7 large files (>1000 LOC) into smaller modules (AR-001)
 * Fix package.json name and version (ST-001)
 * Add GitHub Actions CI/CD workflow (ST-002)
 * Add codestyle.md (ST-003)
