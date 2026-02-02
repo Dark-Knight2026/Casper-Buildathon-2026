@@ -124,6 +124,7 @@ export function WalletCard({
       {/* Purchase Button */}
       <MainButton
         text={isConnected ? `Purchase ${tokenSymbol}` : 'Connect Wallet'}
+        onClick={isConnected ? handlePurchase : onConnect}
       />
     </Card>
   );
