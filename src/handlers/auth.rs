@@ -111,7 +111,7 @@ pub async fn get_nonce(
         .get_multiplexed_async_connection()
         .await
         .map_err(|e| {
-            tracing::error!("Redis connection error: {}", e);
+            tracing::error!(error = %e, "Redis connection error");
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
@@ -119,7 +119,7 @@ pub async fn get_nonce(
         .set_ex(&redis_key, &message, LOGIN_NONCE_TTL)
         .await
         .map_err(|e| {
-            tracing::error!("Failed to save nonce to Redis: {}", e);
+            tracing::error!(error = %e, "Failed to save nonce to Redis");
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
@@ -153,7 +153,11 @@ pub async fn login(
     // Validation: Check wallet address length
     let len = payload.wallet_address.len();
     if len != 66 && len != 68 {
-        tracing::error!("Invalid wallet address length: {}. Expected 66 or 68.", len);
+        tracing::error!(
+            length = len,
+            expected = "66 or 68",
+            "Invalid wallet address length"
+        );
         return Err(StatusCode::BAD_REQUEST);
     }
 
@@ -162,14 +166,14 @@ pub async fn login(
         .get_multiplexed_async_connection()
         .await
         .map_err(|e| {
-            tracing::error!("Redis connection error: {}", e);
+            tracing::error!(error = %e, "Redis connection error");
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
     let redis_key = format!("nonce:{}", payload.wallet_address);
 
     let stored_nonce: String = redis_conn.get(&redis_key).await.map_err(|_| {
-        tracing::error!("❌ Nonce NOT FOUND or EXPIRED for key: {}", redis_key);
+        tracing::error!(key = %redis_key, "Nonce not found or expired");
         StatusCode::UNAUTHORIZED
     })?;
 
@@ -180,16 +184,16 @@ pub async fn login(
         &stored_nonce,
     )
     .map_err(|e| {
-        tracing::error!("Crypto verification error: {:?}", e);
+        tracing::error!(error = ?e, "Crypto verification error");
         StatusCode::BAD_REQUEST
     })?;
 
     if !is_valid {
-        tracing::error!("🔒 Signature INVALID");
+        tracing::error!("Signature verification failed");
         return Err(StatusCode::UNAUTHORIZED);
     }
 
-    tracing::info!("🔓 Signature VALID");
+    tracing::info!("Signature verified successfully");
 
     // Remove Nonce (protection against signature reuse)
     let _: () = redis_conn.del(&redis_key).await.unwrap_or(());
@@ -215,7 +219,7 @@ pub async fn login(
     .fetch_one(&state.db)
     .await
     .map_err(|e| {
-        tracing::error!("Database error: {}", e);
+        tracing::error!(error = %e, "Database error");
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
@@ -243,7 +247,7 @@ pub async fn login(
         &EncodingKey::from_secret(secret.as_bytes()),
     )
     .map_err(|e| {
-        tracing::error!("Token encoding error: {}", e);
+        tracing::error!(error = %e, "Token encoding error");
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 

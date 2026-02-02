@@ -98,7 +98,7 @@ pub mod implementation {
 
         let addr = SocketAddr::from(([0, 0, 0, 0], config.port));
 
-        tracing::info!("🚀 Server listening on {}", addr);
+        tracing::info!(address = %addr, "Server listening");
 
         let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
         axum::serve(listener, app)

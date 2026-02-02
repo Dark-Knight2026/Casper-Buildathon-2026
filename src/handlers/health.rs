@@ -44,12 +44,12 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> (StatusCode, Js
             Ok(pong) if pong == "PONG" => ConnectionStatus::Connected,
             Ok(_) => ConnectionStatus::UnknownResponse,
             Err(e) => {
-                tracing::error!("Redis ping failed: {}", e);
+                tracing::error!(error = %e, "Redis ping failed");
                 ConnectionStatus::Error
             }
         },
         Err(e) => {
-            tracing::error!("Failed to connect to Redis: {}", e);
+            tracing::error!(error = %e, "Failed to connect to Redis");
             ConnectionStatus::Disconnected
         }
     };
@@ -61,7 +61,7 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> (StatusCode, Js
     {
         Ok(_) => ConnectionStatus::Connected,
         Err(e) => {
-            tracing::error!("Database ping failed: {}", e);
+            tracing::error!(error = %e, "Database ping failed");
             ConnectionStatus::Error
         }
     };
