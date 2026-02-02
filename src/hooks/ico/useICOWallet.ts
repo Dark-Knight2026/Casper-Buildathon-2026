@@ -87,22 +87,23 @@ export function useICOWallet() {
   }, [clickRef]);
 
   const connect = useCallback(() => {
-    setState(prev => ({ ...prev, isConnecting: true, error: null }));
+    if (!clickRef) return;
     try {
-      window.csprclick?.signIn();
+      clickRef.signIn();
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to open wallet connection';
-      setState(prev => ({ ...prev, isConnecting: false, error: message }));
+      setState(prev => ({ ...prev, error: message }));
     }
-  }, []);
+  }, [clickRef]);
 
   const disconnect = useCallback(() => {
+    if (!clickRef) return;
     try {
-      window.csprclick?.signOut();
+      clickRef.signOut();
     } catch (error) {
       console.error('Failed to disconnect:', error);
     }
-  }, []);
+  }, [clickRef]);
 
   return {
     ...state,

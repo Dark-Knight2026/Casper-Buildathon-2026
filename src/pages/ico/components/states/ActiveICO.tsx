@@ -7,6 +7,7 @@ import { TransactionHistory, Transaction } from '../shared/TransactionHistory';
 import { ICO_CONFIG } from '@/constants/ico';
 import type { PaymentCurrency } from '@/types/ico';
 import { Title } from '../shared/Title';
+import { useICOWallet } from '@/hooks/ico/useICOWallet';
 
 interface ActiveICOProps {
   endTimestamp: number;
@@ -56,11 +57,8 @@ const MOCK_TRANSACTIONS: Transaction[] = [
 ];
 
 export function ActiveICO({ endTimestamp, className }: ActiveICOProps) {
+  const { isConnected, account, connect } = useICOWallet();
   const tokensRemaining = MOCK_PROGRESS.totalAllocation - MOCK_PROGRESS.tokensSold;
-
-  const handleConnect = () => {
-    console.log('Connect wallet');
-  };
 
   const handlePurchase = (amount: number, currency: PaymentCurrency) => {
     console.log('Purchase:', amount, currency);
@@ -147,12 +145,10 @@ export function ActiveICO({ endTimestamp, className }: ActiveICOProps) {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Wallet Purchase */}
         <WalletCard
+          walletAddress={isConnected ? account?.publicKey : undefined}
           tokenPrice={Number(ICO_CONFIG.PUBLIC_ICO.price)}
           tokenSymbol={ICO_CONFIG.TOKEN.symbol}
-          balanceUSDT={1500}
-          balanceUSDC={2000}
-          balanceCSPR={5000}
-          onConnect={handleConnect}
+          onConnect={connect}
           onPurchase={handlePurchase}
           className="w-full"
         />
