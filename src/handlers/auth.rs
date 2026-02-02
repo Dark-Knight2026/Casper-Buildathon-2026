@@ -223,7 +223,10 @@ pub async fn login(
 
     let expiration = Utc::now()
         .checked_add_signed(Duration::hours(24))
-        .expect("valid timestamp")
+        .ok_or_else(|| {
+            tracing::error!("Timestamp overflow calculating JWT expiration");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?
         .timestamp();
 
     let claims = Claims {
