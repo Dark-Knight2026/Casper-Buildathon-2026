@@ -7,8 +7,8 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 use crate::auth::AuthUser;
+use crate::config::AppState;
 use crate::models::PropertyId;
-use crate::AppState;
 
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()

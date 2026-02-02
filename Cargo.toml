@@ -4,25 +4,25 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-axum = "0.7"
+axum = { version = "0.8", features = ["macros"] }
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres", "uuid", "rust_decimal",  "migrate"] }
+sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres", "uuid", "rust_decimal", "migrate"] }
 jsonwebtoken = "9"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 thiserror = "1"
 uuid = { version = "1", features = ["serde", "v4"] }
 rust_decimal = { version = "1", features = ["serde"] }
-tower-http = { version = "0.5", features = ["cors", "trace"] }
+tower-http = { version = "0.6", features = ["cors", "trace"] }
 dotenv = "0.15"
-anyhow = "1.0"
 redis = { version = "1.0.2", features = ["tokio-comp"] }
-casper-types = "6.1.0" 
+casper-types = "6.1.0"
 hex = "0.4"
 rand = "0.9"
 chrono = { version = "0.4", features = ["serde"] }
-secrecy = { version = "0.10", features = ["serde"] } 
+secrecy = { version = "0.10", features = ["serde"] }
 strum = { version = "0.27", features = ["derive"] }
-strum_macros = "0.27"
+tower_governor = { version = "0.8", features = ["axum"] }
+error_tools = "0.37"

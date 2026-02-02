@@ -13,9 +13,9 @@ use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use std::sync::Arc;
 
+use crate::config::AppState;
 use crate::crypto::verify_casper_signature;
 use crate::models::{Claims, UserId, UserRole};
-use crate::AppState;
 
 // --- Constants ---
 const LOGIN_NONCE_TTL: u64 = 300;

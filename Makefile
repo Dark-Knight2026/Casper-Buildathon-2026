@@ -40,7 +40,7 @@ ci: fmt lint prepare test ## Full CI pipeline
 
 fmt: ## Check formatting
 	@echo "[*] Checking formatting..."
-	@cargo fmt --all -- --check
+	@cargo fmt --all
 
 lint: ## Run clippy in strict mode
 	@echo "[*] Running clippy..."

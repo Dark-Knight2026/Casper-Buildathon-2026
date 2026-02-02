@@ -1,20 +1,19 @@
-use std::sync::Arc;
-
 use crate::{config::AppState, models::Claims};
 use axum::{
-    async_trait,
     extract::FromRequestParts,
     http::{request::Parts, StatusCode},
     response::{IntoResponse, Response},
     Json,
 };
+use core::fmt;
+use error_tools::dependency::thiserror;
 use jsonwebtoken::{decode, DecodingKey, Validation};
 use secrecy::ExposeSecret;
 use serde_json::json;
+use std::sync::Arc;
 
 pub struct AuthUser(pub Claims);
 
-#[async_trait]
 impl FromRequestParts<Arc<AppState>> for AuthUser {
     type Rejection = AuthError;
 
@@ -49,7 +48,7 @@ impl FromRequestParts<Arc<AppState>> for AuthUser {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum AuthError {
     MissingCredentials,
     InvalidToken,
@@ -70,5 +69,15 @@ impl IntoResponse for AuthError {
             "error": error_message,
         }));
         (status, body).into_response()
+    }
+}
+
+impl fmt::Display for AuthError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            AuthError::MissingCredentials => write!(f, "Missing credentials"),
+            AuthError::InvalidToken => write!(f, "Invalid token"),
+            AuthError::ServerConfiguration => write!(f, "Server configuration error"),
+        }
     }
 }
