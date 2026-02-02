@@ -6,34 +6,25 @@ import { WalletCard } from '../shared/WalletCard';
 import { TransactionHistory, Transaction } from '../shared/TransactionHistory';
 import CountdownTimer from '../shared/CountdownTimer';
 import { UserTokenBalance } from '../shared/UserTokenBalance';
+import { useICOWallet } from '@/hooks/ico/useICOWallet';
 
 interface ActivePresaleProps {
   className?: string;
   endTimestamp: number;
 }
 
-// Mock data for development
+// Mock data for development (progress & transactions will come from backend later)
 const MOCK_PROGRESS = {
   tokensSold: 450000000,
   totalAllocation: 1000000000,
   amountRaised: 450000,
 };
 
-// Mock wallet data for development
-const MOCK_WALLET = {
-  address: '0x1234567890abcdef1234567890abcdef12345678',
-  balanceUSDT: 5000,
-  balanceUSDC: 3500,
-  balanceCSPR: 10000,
-};
-
-// Mock user purchased tokens data
 const MOCK_USER_BALANCE = {
   tokensPurchased: 17500,
   totalSpentUSD: 1750,
 };
 
-// Mock transactions for development
 const MOCK_TRANSACTIONS: Transaction[] = [
   {
     id: '1',
@@ -71,6 +62,8 @@ const MOCK_TRANSACTIONS: Transaction[] = [
 ];
 
 export function ActivePresale({ className, endTimestamp }: ActivePresaleProps) {
+  const { isConnected, account, connect } = useICOWallet();
+
   return (
     <div className={cn('max-w-5xl mx-auto', className)}>
       {/* Hero Section */}
@@ -107,13 +100,10 @@ export function ActivePresale({ className, endTimestamp }: ActivePresaleProps) {
 
         {/* Wallet Card */}
         <WalletCard
-          walletAddress={MOCK_WALLET.address}
-          balanceUSDT={MOCK_WALLET.balanceUSDT}
-          balanceUSDC={MOCK_WALLET.balanceUSDC}
-          balanceCSPR={MOCK_WALLET.balanceCSPR}
+          walletAddress={isConnected ? account?.publicKey : undefined}
           tokenPrice={Number(ICO_CONFIG.PRE_SALE.price)}
           tokenSymbol={ICO_CONFIG.TOKEN.symbol}
-          onConnect={() => console.log('Connect wallet')}
+          onConnect={connect}
           onPurchase={(amount, currency) => console.log('Purchase', amount, currency)}
           className="w-full"
         />
