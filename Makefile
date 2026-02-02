@@ -1,0 +1,81 @@
+.PHONY:   \
+ help     \
+ env_up   \
+ env_down \
+ migrate  \
+ restart  \
+ ci       \
+ fmt      \
+ lint     \
+ prepare  \
+ test     \
+ test_one \
+ test_in  \
+ test_not \
+ run      \
+ clean    \
+
+help: ## Show available targets
+	@grep -E '^[a-zA-Z0-9_.-]+:.*?## ' Makefile | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  make %-10s %s\n", $$1, $$2}'
+
+env_up: ## Start Supabase and Redis
+	@echo "[*] Starting Supabase..."
+	@supabase start
+	@echo "[*] Starting Redis..."
+	@docker compose up -d redis
+
+env_down: ## Stop Supabase and Redis
+	@echo "[*] Stopping Redis..."
+	@docker compose down --volumes
+	@echo "[*] Stopping Supabase..."
+	@supabase stop
+
+migrate: ## Reset local database and apply all migrations
+	@echo "[*] Resetting database and applying migrations..."
+	@supabase db reset
+
+restart: env_down env_up migrate ## Restart environment and run migrations
+
+ci: fmt lint prepare test ## Full CI pipeline
+
+fmt: ## Check formatting
+	@echo "[*] Checking formatting..."
+	@cargo fmt --all -- --check
+
+lint: ## Run clippy in strict mode
+	@echo "[*] Running clippy..."
+	@cargo clippy --workspace --all-targets -- -D warnings
+
+prepare: ## Generate SQLx offline query metadata for CI builds (requires bash/zsh)
+	@echo "[*] Generating SQLx offline query metadata..."
+	@test -f .env || (echo "Error: .env file not found" && exit 1)
+	@set -a && . ./.env && set +a && cargo sqlx prepare --workspace -- --all-features --tests
+
+test: ## Run nextest (use ARGS="..." for extra arguments, requires bash/zsh)
+	@echo "[*] Running tests..."
+	@test -f .env || (echo "Error: .env file not found" && exit 1)
+	@set -a && . ./.env && set +a && cargo nextest run --all-features --no-fail-fast $(ARGS)
+
+test_one: ## Run single test: `make test_one <test_name>`
+	@$(MAKE) test ARGS="$(filter-out $@,$(MAKECMDGOALS))"
+
+test_in: ## Run tests in module: `make test_in <module_name>`
+	@$(MAKE) test ARGS="--test $(filter-out $@,$(MAKECMDGOALS))"
+
+test_not: ## Exclude tests: `make test_not <test1> <test2> ...`
+	@expr=$$(echo "$(filter-out $@,$(MAKECMDGOALS))" \
+		| awk '{for(i=1;i<=NF;i++){printf "not test(%s)%s", $$i, (i<NF?" and ":"")}}'); \
+	$(MAKE) test ARGS="-E '$$expr'"
+
+run: ## Run API server with .env loaded
+	@set -a && . ./.env && set +a && cargo run --bin api
+
+clean: ## Clean build artifacts
+	@echo "[*] Cleaning build artifacts..."
+	@cargo clean
+
+# Prevent "No rule to make target" error for arguments
+#   %: — catch-all target, matches any unknown target (e.g. arguments like "test_name")
+#   @: — no-op command, does nothing silently
+%:
+	@:
