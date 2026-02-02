@@ -19,7 +19,7 @@ pub mod implementation {
     use std::sync::Arc;
     use std::time::Duration;
     use tower_governor::{governor::GovernorConfigBuilder, GovernorLayer};
-    use tower_http::trace::TraceLayer;
+    use tower_http::{limit::RequestBodyLimitLayer, trace::TraceLayer};
 
     #[inline]
     pub async fn main() -> Result<(), ServerError> {
@@ -79,6 +79,7 @@ pub mod implementation {
             )
             .nest("/api/v1", handlers::business::router())
             .layer(TraceLayer::new_for_http())
+            .layer(RequestBodyLimitLayer::new(1024 * 1024)) // 1MB limit (SC-008)
             .with_state(state);
 
         let addr = SocketAddr::from(([0, 0, 0, 0], config.port));

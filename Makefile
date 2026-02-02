@@ -38,9 +38,10 @@ restart: env_down env_up migrate ## Restart environment and run migrations
 
 ci: fmt lint prepare test ## Full CI pipeline
 
-fmt: ## Check formatting
+fmt: ## Check and fix formatting if needed
 	@echo "[*] Checking formatting..."
-	@cargo fmt --all
+	@cargo fmt --all -- --check \
+		|| (echo "[*] Formatting code..." && cargo fmt --all)
 
 lint: ## Run clippy in strict mode
 	@echo "[*] Running clippy..."
