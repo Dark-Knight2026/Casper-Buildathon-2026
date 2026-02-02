@@ -97,7 +97,7 @@ export function CountdownTimer({
 
   if (variant === 'minimal') {
     return (
-      <span className={cn('font-mono font-semibold', className)}>
+      <span role="timer" aria-live="polite" aria-label={`${timeLeft.days} days ${timeLeft.hours} hours ${timeLeft.minutes} minutes ${timeLeft.seconds} seconds remaining`} className={cn('font-mono font-semibold', className)}>
         {timeLeft.days > 0 && `${timeLeft.days}d `}
         {formatNumber(timeLeft.hours)}:{formatNumber(timeLeft.minutes)}:
         {formatNumber(timeLeft.seconds)}
@@ -108,7 +108,7 @@ export function CountdownTimer({
   if (variant === 'compact') {
     return (
       <Card className='p-4 flex justify-center items-center'>
-        <div className={cn('flex items-center justify-center gap-2 font-mono text-white', className)}>
+        <div role="timer" aria-live="polite" aria-label={`${timeLeft.days} days ${timeLeft.hours} hours ${timeLeft.minutes} minutes ${timeLeft.seconds} seconds remaining`} className={cn('flex items-center justify-center gap-2 font-mono text-white', className)}>
           {timeLeft.days > 0 && (
             <>
               <span className="text-xl font-semibold">{timeLeft.days}</span>
@@ -136,7 +136,7 @@ export function CountdownTimer({
   ];
 
   return (
-    <div className={cn('flex items-center justify-center', classes.container, className)}>
+    <div role="timer" aria-live="polite" aria-label={`${timeLeft.days} days ${timeLeft.hours} hours ${timeLeft.minutes} minutes ${timeLeft.seconds} seconds remaining`} className={cn('flex items-center justify-center', classes.container, className)}>
       {timeUnits.map((unit) => (
         <div key={unit.label} className="flex items-center">
           <Card className={classes.card}>

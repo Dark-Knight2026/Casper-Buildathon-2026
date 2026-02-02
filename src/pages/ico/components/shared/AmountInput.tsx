@@ -59,11 +59,12 @@ export function AmountInput({
 
   return (
     <div className={cn('w-full', className)}>
-      <label className="block text-sm text-[hsl(var(--ico-text-secondary))] mb-2">
+      <label htmlFor="amount-input" className="block text-sm text-[hsl(var(--ico-text-secondary))] mb-2">
         {label}
       </label>
       <div className="relative flex items-center">
         <input
+          id="amount-input"
           type="number"
           value={value}
           onChange={(e) => handleChange(e.target.value)}
@@ -71,6 +72,8 @@ export function AmountInput({
           max={max}
           placeholder={placeholder}
           disabled={disabled}
+          aria-describedby={error ? 'amount-input-error' : undefined}
+          aria-invalid={!!error}
           className={cn(
             'w-full px-4 py-3 pr-36 rounded-xl border',
             error
@@ -90,7 +93,7 @@ export function AmountInput({
         </div>
       </div>
       {error && (
-        <p className="text-xs text-red-400 mt-1">{error}</p>
+        <p id="amount-input-error" role="alert" className="text-xs text-red-400 mt-1">{error}</p>
       )}
       {!error && showBalance && (
         <p className="text-xs text-[hsl(var(--ico-text-secondary))] mt-1">

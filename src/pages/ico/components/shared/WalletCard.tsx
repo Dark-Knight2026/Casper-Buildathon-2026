@@ -68,6 +68,7 @@ export function WalletCard({
         ) : (
           <button
             onClick={onConnect}
+            aria-label="Connect your crypto wallet"
             className="text-sm font-medium text-sky-400 hover:text-sky-300 transition-colors"
           >
             Connect Wallet
