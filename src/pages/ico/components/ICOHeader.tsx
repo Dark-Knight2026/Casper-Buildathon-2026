@@ -1,7 +1,11 @@
-import { ICO_CONFIG} from '@/constants/ico';
+import { ICO_CONFIG } from '@/constants/ico';
 import { MainButton } from './shared/MainButton';
+import { useICOWallet } from '@/hooks/ico/useICOWallet';
 
 export function ICOHeader() {
+  const { isConnected, account, isConnecting, connect, disconnect } = useICOWallet();
+
+  const truncateKey = (key: string) => `${key.slice(0, 6)}...${key.slice(-4)}`;
 
   return (
     <header className="relative border-b h-28 z-50 border-[hsl(var(--ico-border-color))] bg-[hsl(var(--ico-bg-secondary))] shadow-md shadow-slate-900">
@@ -9,7 +13,7 @@ export function ICOHeader() {
         <div className="flex flex-row items-center justify-between gap-4">
           {/* Logo & Token Name */}
           <div className="flex items-center gap-3">
-            <div className="w-20 h-20  ">
+            <div className="w-20 h-20">
               <img src="/leaseFiLogo.png" alt="Token Logo" />
             </div>
             <div>
@@ -22,7 +26,20 @@ export function ICOHeader() {
             </div>
           </div>
 
-          <MainButton text="Connect Wallet" />
+          {isConnected && account ? (
+            <div className="flex items-center gap-3">
+              <span className="font-mono text-sm text-[hsl(var(--ico-text-primary))] bg-sky-900/30 px-3 py-1 rounded-lg">
+                {truncateKey(account.publicKey)}
+              </span>
+              <MainButton text="Disconnect" onClick={disconnect} />
+            </div>
+          ) : (
+            <MainButton
+              text={isConnecting ? 'Connecting...' : 'Connect Wallet'}
+              onClick={connect}
+              disabled={isConnecting}
+            />
+          )}
         </div>
       </div>
     </header>
