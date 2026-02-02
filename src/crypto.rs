@@ -19,9 +19,14 @@ pub enum CryptoError {
 
 /// Verifies a Casper-compatible cryptographic signature.
 ///
-/// This function takes a public key, a signature, and a message, all in their string representation
-/// (hex for key and signature), and verifies if the signature corresponds to the message signed
-/// by the private key associated with the provided public key.
+/// Takes a public key, signature, and message as hex strings.
+/// Verifies if the signature was created by the private key matching the public key.
+///
+/// # Security
+///
+/// This function uses constant-time comparison internally through the `ed25519-dalek` crate,
+/// which relies on the `subtle` crate for timing-attack resistant operations. This prevents
+/// timing side-channel attacks that could leak information about valid signatures.
 ///
 /// # Arguments
 ///
