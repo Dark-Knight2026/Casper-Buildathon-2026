@@ -32,7 +32,11 @@ pub mod implementation {
         let config = Config::from_env().expect("Failed to load configuration");
 
         let db_options = PgConnectOptions::from_str(config.database_url.expose_secret())
-            .expect("Invalid DATABASE_URL");
+            .map_err(|e| {
+                // Log error details server-side without exposing the connection string
+                tracing::error!(error = %e, "Failed to parse DATABASE_URL");
+            })
+            .expect("Invalid DATABASE_URL format - check server logs for details");
 
         let pool = PgPoolOptions::new()
             .max_connections(5)
