@@ -1,10 +1,25 @@
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from "@tailwindcss/vite"
 import path from 'path';
 import { VitePWA } from 'vite-plugin-pwa';
 
-export default defineConfig({
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '');
+
+  return {
+  server: {
+    proxy: {
+      '/api/cspr-cloud': {
+        target: 'https://api.testnet.cspr.cloud',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/cspr-cloud/, ''),
+        headers: {
+          authorization: env.VITE_CSPR_CLOUD_API_KEY || '',
+        },
+      },
+    },
+  },
   plugins: [
     react(),
     tailwindcss(),
@@ -106,4 +121,5 @@ export default defineConfig({
     ],
     exclude: ['@radix-ui/react-icons'],
   },
+};
 });

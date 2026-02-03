@@ -8,6 +8,7 @@ const clickOptions: CsprClickInitOptions = {
   contentMode: CONTENT_MODE.IFRAME,
   providers: ['casper-wallet', 'ledger', 'metamask-snap'],
   appId: 'csprclick-template',
+  chainName: 'casper-test',
 };
 
 const theme = buildTheme(DefaultThemes.csprclick);

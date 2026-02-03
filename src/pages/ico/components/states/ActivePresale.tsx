@@ -8,6 +8,7 @@ import { TransactionHistory, Transaction } from '../shared/TransactionHistory';
 import CountdownTimer from '../shared/CountdownTimer';
 import { UserTokenBalance } from '../shared/UserTokenBalance';
 import { useICOWallet } from '@/hooks/ico/useICOWallet';
+import { useWalletBalances } from '@/hooks/ico/useWalletBalances';
 
 interface ActivePresaleProps {
   className?: string;
@@ -64,6 +65,7 @@ const MOCK_TRANSACTIONS: Transaction[] = [
 
 export function ActivePresale({ className, endTimestamp }: ActivePresaleProps) {
   const { isConnected, account, connect } = useICOWallet();
+  const { balances } = useWalletBalances(account?.publicKey);
 
   const handlePurchase = (amount: number, currency: PaymentCurrency) => {
   };
@@ -105,6 +107,9 @@ export function ActivePresale({ className, endTimestamp }: ActivePresaleProps) {
         {/* Wallet Card */}
         <WalletCard
           walletAddress={isConnected ? account?.publicKey : undefined}
+          balanceCSPR={balances.cspr}
+          balanceUSDT={balances.usdt}
+          balanceUSDC={balances.usdc}
           tokenPrice={Number(ICO_CONFIG.PRE_SALE.price)}
           tokenSymbol={ICO_CONFIG.TOKEN.symbol}
           onConnect={connect}

@@ -49,8 +49,9 @@ export const ICO_CONFIG = {
   },
 
   CASPER: {
-    networkName: 'casper', // or 'casper-test' for testnet
-    explorerUrl: 'https://cspr.live',
+    networkName: 'casper-test', // or 'casper' for mainnet
+    explorerUrl: 'https://testnet.cspr.live', // or mainnet explorer URL
+    rpcUrl: 'https://node.testnet.casper.network/rpc', // or 'https://node.casper.network/rpc' for mainnet
   },
 
   FIAT_ONRAMP: {
