@@ -123,7 +123,7 @@ describe('AmountInput', () => {
       expect(onChange).not.toHaveBeenCalled();
     });
 
-    it('should still call onChange when value is below minimum (shows warning)', () => {
+    it('should NOT call onChange when value is below minimum', () => {
       const onChange = vi.fn();
       render(<AmountInput {...defaultProps} onChange={onChange} />);
 
@@ -131,10 +131,10 @@ describe('AmountInput', () => {
         target: { value: '5' },
       });
 
-      expect(onChange).toHaveBeenCalledWith('5');
+      expect(onChange).not.toHaveBeenCalled();
     });
 
-    it('should still call onChange when value exceeds maximum (shows warning)', () => {
+    it('should NOT call onChange when value exceeds maximum', () => {
       const onChange = vi.fn();
       render(<AmountInput {...defaultProps} onChange={onChange} />);
 
@@ -142,7 +142,7 @@ describe('AmountInput', () => {
         target: { value: '200000' },
       });
 
-      expect(onChange).toHaveBeenCalledWith('200000');
+      expect(onChange).not.toHaveBeenCalled();
     });
   });
 
@@ -196,9 +196,9 @@ describe('AmountInput', () => {
     });
 
     it('should clear error when input is emptied', () => {
-      // Use a stateful wrapper so controlled value updates between events
+      // Start with a valid value so React's value tracker allows transitions
       function Wrapper() {
-        const [val, setVal] = useState('');
+        const [val, setVal] = useState('50');
         return (
           <AmountInput
             {...defaultProps}
@@ -211,11 +211,11 @@ describe('AmountInput', () => {
       render(<Wrapper />);
       const input = screen.getByPlaceholderText('0.00');
 
-      // Trigger an error first
+      // Trigger an error (onChange is blocked, so controlled value stays '50')
       fireEvent.change(input, { target: { value: '5' } });
       expect(screen.getByText('Minimum amount is $10')).toBeInTheDocument();
 
-      // Clear input
+      // Clear input (tracker sees '50' → '' which is different, so event fires)
       fireEvent.change(input, { target: { value: '' } });
       expect(
         screen.queryByText('Minimum amount is $10')
