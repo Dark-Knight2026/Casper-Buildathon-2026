@@ -2,7 +2,7 @@
 //!
 //! ## Database strategy
 //!
-//! - **PostgreSQL**: Single container via docker-compose, isolated DBs via `#[sqlx::test]`
+//! - **`PostgreSQL`**: Single container via docker-compose, isolated DBs via `#[sqlx::test]`
 //! - **Redis**: Testcontainers per test (needs full isolation for nonce storage)
 //!
 //! Alternatives considered:
@@ -10,6 +10,8 @@
 //! - Shared Redis — breaks parallel test isolation
 
 #![allow(dead_code)]
+#![allow(clippy::missing_panics_doc)]
+#![allow(clippy::must_use_candidate)]
 
 use api::{
     config::AppState,
@@ -30,19 +32,32 @@ use testcontainers::{
     runners::AsyncRunner,
 };
 
-/// Test database URL for docker-compose PostgreSQL.
+/// Test database URL for docker-compose `PostgreSQL`.
 pub const TEST_DATABASE_URL: &str = "postgres://postgres:postgres@127.0.0.1:5433/postgres";
 
 /// Holds a running Redis container and client.
 /// Container stays alive as long as this struct exists.
 pub struct RedisTestEnv {
+    /// Redis client for test connections.
     pub client: redis::Client,
+    /// Redis connection URL.
     pub url: String,
     _container: ContainerAsync<GenericImage>,
 }
 
+impl core::fmt::Debug for RedisTestEnv {
+    #[inline]
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("RedisTestEnv")
+            .field("client", &"redis::Client")
+            .field("url", &self.url)
+            .finish_non_exhaustive()
+    }
+}
+
 impl RedisTestEnv {
     /// Starts a Redis container and returns the environment.
+    #[inline]
     pub async fn start() -> Self {
         let image = GenericImage::new("redis", "7-alpine")
             .with_exposed_port(6379.tcp())
@@ -66,16 +81,20 @@ impl RedisTestEnv {
 }
 
 /// Test environment with server and JWT secret.
+#[derive(Debug)]
 pub struct TestEnv {
+    /// Test server instance.
     pub server: TestServer,
+    /// JWT secret used for token generation.
     pub jwt_secret: String,
     _redis: Option<RedisTestEnv>,
 }
 
-/// Creates a test server using a pool from #[sqlx::test].
+/// Creates a test server using a pool from `#[sqlx::test]`.
 ///
-/// - PostgreSQL pool comes from #[sqlx::test] (isolated per test).
+/// - `PostgreSQL` pool comes from `#[sqlx::test]` (isolated per test).
 /// - Redis is optional: when `with_redis = true`, creates a dedicated container.
+#[inline]
 pub async fn setup_test_server_with_pool(pool: PgPool, with_redis: bool) -> TestEnv {
     let jwt_secret = "test_jwt_secret_for_integration_tests".to_string();
 
@@ -116,18 +135,18 @@ pub async fn setup_test_server_with_pool(pool: PgPool, with_redis: bool) -> Test
 }
 
 /// Creates a test JWT token.
+#[inline]
 pub fn create_test_jwt(user_id: UserId, role: UserRole, secret: &str) -> String {
     let expiration = Utc::now()
         .checked_add_signed(Duration::hours(24))
         .expect("Valid timestamp")
         .timestamp();
-
+    let exp = usize::try_from(expiration.max(0)).expect("Valid expiration timestamp");
     let claims = Claims {
         sub: user_id,
         role,
-        exp: expiration as usize,
+        exp,
     };
-
     encode(
         &Header::default(),
         &claims,
@@ -137,6 +156,7 @@ pub fn create_test_jwt(user_id: UserId, role: UserRole, secret: &str) -> String 
 }
 
 /// Makes an authenticated request.
+#[inline]
 pub async fn authed_request<T: DeserializeOwned>(
     server: &TestServer,
     method: &Method,

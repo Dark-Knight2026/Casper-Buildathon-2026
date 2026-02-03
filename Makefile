@@ -36,7 +36,7 @@ migrate: ## Reset local database and apply all migrations
 
 restart: env_down env_up migrate ## Restart environment and run migrations
 
-ci: fmt lint prepare test ## Full CI pipeline
+ci: fmt prepare lint test ## Full CI pipeline
 
 fmt: ## Check and fix formatting if needed
 	@echo "[*] Checking formatting..."

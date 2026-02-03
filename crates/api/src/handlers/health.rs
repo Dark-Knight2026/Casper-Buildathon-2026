@@ -1,3 +1,5 @@
+//! Health check endpoint for monitoring service status.
+
 use crate::config::AppState;
 use axum::{Json, extract::State, http::StatusCode};
 use axum::{Router, routing::get};
@@ -5,6 +7,8 @@ use serde::Serialize;
 use serde_json::{Value, json};
 use std::sync::Arc;
 
+/// Creates the health check router.
+#[inline]
 pub fn router() -> Router<Arc<AppState>> {
     Router::new().route("/health", get(health_check))
 }
@@ -12,7 +16,7 @@ pub fn router() -> Router<Arc<AppState>> {
 // Enum for Health Status
 
 /// Represents the status of a connection to an external service (Redis, Database, etc.).
-#[derive(Serialize, PartialEq)]
+#[derive(Debug, Serialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 enum ConnectionStatus {
     /// Service is reachable and responding correctly.
@@ -29,14 +33,15 @@ enum ConnectionStatus {
 
 /// Checks the health status of the application and its dependencies.
 ///
-/// verifies connectivity to:
+/// Verifies connectivity to:
 /// - Redis (Cache)
-/// - PostgreSQL (Database)
+/// - `PostgreSQL` (Database)
 ///
 /// # Returns
 ///
 /// * `(StatusCode, Json<Value>)` - HTTP status 200 if healthy, 503 if any service is down,
 ///   along with a JSON body detailing the status of each component.
+#[inline]
 pub async fn health_check(State(state): State<Arc<AppState>>) -> (StatusCode, Json<Value>) {
     // 1. Check Redis
     let redis_status = match state.redis.get_multiplexed_async_connection().await {

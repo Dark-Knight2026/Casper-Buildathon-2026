@@ -1,10 +1,22 @@
+//! `LeaseFi` Backend API
+//!
+//! This crate provides the backend API for the `LeaseFi` platform,
+//! including authentication, business logic handlers, and health checks.
+
+/// Authentication middleware and extractors.
 pub mod auth;
+/// Application configuration and state management.
 pub mod config;
+/// Cryptographic utilities for signature verification.
 pub mod crypto;
+/// Error types for the application.
 pub mod errors;
+/// HTTP request handlers.
 pub mod handlers;
+/// Shared data models and types.
 pub mod models;
 
+/// Server implementation and startup logic.
 pub mod implementation {
     use crate::{
         config::{AppState, Config},
@@ -13,15 +25,35 @@ pub mod implementation {
     };
     use axum::Router;
     use axum::http::{Method, header};
+    use core::net::SocketAddr;
+    use core::str::FromStr;
+    use core::time::Duration;
     use secrecy::ExposeSecret;
     use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
-    use std::net::SocketAddr;
-    use std::str::FromStr;
     use std::sync::Arc;
-    use std::time::Duration;
     use tower_governor::{GovernorLayer, governor::GovernorConfigBuilder};
     use tower_http::{cors::CorsLayer, limit::RequestBodyLimitLayer, trace::TraceLayer};
 
+    /// Starts the application server.
+    ///
+    /// Initializes logging, loads configuration, connects to databases,
+    /// and starts the HTTP server with graceful shutdown support.
+    ///
+    /// # Errors
+    ///
+    /// Returns `ServerError` if:
+    /// - Database connection fails
+    /// - Database migrations fail (when enabled)
+    /// - Server binding fails
+    ///
+    /// # Panics
+    ///
+    /// Panics if:
+    /// - Configuration cannot be loaded from environment variables
+    /// - `DATABASE_URL` format is invalid
+    /// - Redis URL is invalid
+    /// - `CORS_ORIGIN` header value is invalid
+    /// - TCP listener binding fails
     #[inline]
     pub async fn main() -> Result<(), ServerError> {
         // 1. Initialize logging
@@ -129,8 +161,8 @@ pub mod implementation {
         let terminate = std::future::pending::<()>();
 
         tokio::select! {
-            _ = ctrl_c => {},
-            _ = terminate => {},
+            () = ctrl_c => {},
+            () = terminate => {},
         }
 
         tracing::info!("Shutting down gracefully...");

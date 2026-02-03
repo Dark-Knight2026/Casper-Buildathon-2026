@@ -1,19 +1,35 @@
+//! Application configuration and state management.
+
 use redis::Client as RedisClient;
 use secrecy::SecretString;
 use std::env;
 
-#[derive(Clone)]
+/// Application configuration loaded from environment variables.
+#[derive(Debug, Clone)]
 pub struct Config {
+    /// `PostgreSQL` database connection URL.
     pub database_url: SecretString,
+    /// `Redis` connection URL.
     pub redis_url: String,
+    /// Secret key for JWT token signing.
     pub jwt_secret: SecretString,
+    /// HTTP server port.
     pub port: u16,
+    /// Allowed CORS origin.
     pub cors_origin: String,
 }
 
 impl Config {
     /// Loads and validates configuration from environment variables.
-    /// Returns error if required variables are missing or invalid.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error string if:
+    /// - Required environment variables are missing
+    /// - `REDIS_URL` doesn't start with `redis://` or `rediss://`
+    /// - `PORT` is not a valid number or is zero
+    /// - `CORS_ORIGIN` doesn't start with `http://` or `https://`
+    #[inline]
     pub fn from_env() -> Result<Self, String> {
         let database_url = env::var("DATABASE_URL")
             .map(SecretString::from)
@@ -52,10 +68,24 @@ impl Config {
     }
 }
 
-/// Global application state
+/// Global application state shared across request handlers.
 #[derive(Clone)]
 pub struct AppState {
+    /// `PostgreSQL` connection pool.
     pub db: sqlx::PgPool,
+    /// `Redis` client for caching and session storage.
     pub redis: RedisClient,
+    /// Application configuration.
     pub config: Config,
+}
+
+impl core::fmt::Debug for AppState {
+    #[inline]
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("AppState")
+            .field("db", &"PgPool")
+            .field("redis", &"RedisClient")
+            .field("config", &self.config)
+            .finish()
+    }
 }

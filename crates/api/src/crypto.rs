@@ -1,3 +1,5 @@
+//! Cryptographic utilities for Casper signature verification.
+
 use casper_types::{AsymmetricType, PublicKey, Signature, crypto};
 use thiserror::Error;
 
@@ -39,21 +41,28 @@ pub enum CryptoError {
 /// * `Ok(true)` if the signature is valid.
 /// * `Ok(false)` if the signature is invalid but the input format was correct.
 /// * `Err(CryptoError)` if parsing the keys or signature fails.
+///
+/// # Errors
+///
+/// Returns `CryptoError::CasperError` if:
+/// - The public key hex string is invalid
+/// - The signature hex string is invalid
+#[inline]
 pub fn verify_casper_signature(
     public_key_hex: &str,
     signature_hex: &str,
     message: &str,
 ) -> Result<bool, CryptoError> {
     let public_key = PublicKey::from_hex(public_key_hex)
-        .map_err(|e| CryptoError::CasperError(format!("Invalid public key: {:?}", e)))?;
+        .map_err(|e| CryptoError::CasperError(format!("Invalid public key: {e:?}")))?;
 
     let signature = Signature::from_hex(signature_hex)
-        .map_err(|e| CryptoError::CasperError(format!("Invalid signature: {:?}", e)))?;
+        .map_err(|e| CryptoError::CasperError(format!("Invalid signature: {e:?}")))?;
 
     let message_bytes = message.as_bytes();
 
     match crypto::verify(message_bytes, &signature, &public_key) {
-        Ok(_) => Ok(true),
+        Ok(()) => Ok(true),
         Err(_) => Ok(false),
     }
 }
@@ -133,10 +142,10 @@ mod tests {
 
         println!("\n============================================");
         println!("1. Wallet Address:");
-        println!("{}", wallet_address);
+        println!("{wallet_address}");
         println!("--------------------------------------------");
         println!("2. Signature:");
-        println!("{}", signature_hex);
+        println!("{signature_hex}");
         println!("============================================\n");
     }
 }

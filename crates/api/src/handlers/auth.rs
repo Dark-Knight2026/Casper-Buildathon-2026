@@ -1,3 +1,5 @@
+//! Authentication handlers for nonce generation and login.
+
 use axum::{
     Json, Router,
     extract::{Query, State},
@@ -5,13 +7,13 @@ use axum::{
     routing::{get, post},
 };
 use chrono::{Duration, Utc};
+use core::str::FromStr;
 use jsonwebtoken::{EncodingKey, Header, encode};
 use rand::{Rng, distr::Alphanumeric};
 use redis::AsyncCommands;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::str::FromStr;
 use std::sync::Arc;
 
 use crate::config::AppState;
@@ -21,6 +23,8 @@ use crate::models::{Claims, UserId, UserRole};
 // --- Constants ---
 const LOGIN_NONCE_TTL: u64 = 300;
 
+/// Creates the authentication router with nonce and login endpoints.
+#[inline]
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/nonce", get(get_nonce))
@@ -42,7 +46,7 @@ pub struct NonceResponse {
     /// A randomly generated string used to prevent replay attacks.
     pub nonce: String,
     /// The full message string that the user must sign with their wallet.
-    /// Format: "Sign this message to login to LeaseFi. Nonce: <nonce>"
+    /// Format: `"Sign this message to login to LeaseFi. Nonce: <nonce>"`
     pub message: String,
 }
 
@@ -86,7 +90,11 @@ pub struct UserInfo {
 /// # Returns
 ///
 /// * `Ok(Json<NonceResponse>)` - JSON containing the nonce and the message to sign.
-/// * `Err(StatusCode)` - 500 Internal Server Error if Redis operations fail.
+///
+/// # Errors
+///
+/// Returns `StatusCode::INTERNAL_SERVER_ERROR` if Redis operations fail.
+#[inline]
 pub async fn get_nonce(
     State(state): State<Arc<AppState>>,
     Query(payload): Query<NonceRequest>,
@@ -99,10 +107,7 @@ pub async fn get_nonce(
         .collect();
 
     // Create a message that the user will sign
-    let message = format!(
-        "Sign this message to login to LeaseFi. Nonce: {}",
-        random_string
-    );
+    let message = format!("Sign this message to login to LeaseFi. Nonce: {random_string}");
 
     // Store in Redis
     let redis_key = format!("nonce:{}", payload.wallet_address);
@@ -145,8 +150,14 @@ pub async fn get_nonce(
 /// # Returns
 ///
 /// * `Ok(Json<LoginResponse>)` - JSON containing the JWT and user info.
-/// * `Err(StatusCode)` - 401 Unauthorized if signature or nonce is invalid,
-///   or 500 Internal Server Error for DB/Redis failures.
+///
+/// # Errors
+///
+/// Returns:
+/// - `StatusCode::BAD_REQUEST` if wallet address length is invalid or signature format is wrong
+/// - `StatusCode::UNAUTHORIZED` if signature or nonce is invalid
+/// - `StatusCode::INTERNAL_SERVER_ERROR` for DB/Redis failures or timestamp overflow
+#[inline]
 pub async fn login(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<LoginRequest>,
@@ -212,7 +223,7 @@ pub async fn login(
             email, role, wallet_address, first_name, last_name, auth_id, status
         )
         VALUES ($1, 'tenant', $2, 'Wallet', 'User', NULL, 'active')
-        ON CONFLICT (wallet_address) DO UPDATE 
+        ON CONFLICT (wallet_address) DO UPDATE
             SET last_login_at = NOW()
         RETURNING id, role
         "#,
@@ -236,10 +247,18 @@ pub async fn login(
         })?
         .timestamp();
 
+    // Safe conversion: timestamp is always positive for dates after 1970,
+    // and JWT expiration within 24 hours fits in usize on all platforms
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let exp = usize::try_from(expiration.max(0)).map_err(|_| {
+        tracing::error!("JWT expiration timestamp overflow");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
     let claims = Claims {
         sub: user_record.id,
         role: user_role.clone(),
-        exp: expiration as usize,
+        exp,
     };
 
     let secret = state.config.jwt_secret.expose_secret();

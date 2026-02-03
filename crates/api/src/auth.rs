@@ -1,3 +1,5 @@
+//! Authentication middleware and error types.
+
 use crate::{config::AppState, models::Claims};
 use axum::{
     Json,
@@ -5,18 +7,20 @@ use axum::{
     http::{StatusCode, request::Parts},
     response::{IntoResponse, Response},
 };
-use core::fmt;
 use error_tools::dependency::thiserror;
 use jsonwebtoken::{DecodingKey, Validation, decode};
 use secrecy::ExposeSecret;
 use serde_json::json;
 use std::sync::Arc;
 
+/// Authenticated user extracted from JWT token.
+#[derive(Debug)]
 pub struct AuthUser(pub Claims);
 
 impl FromRequestParts<Arc<AppState>> for AuthUser {
     type Rejection = AuthError;
 
+    #[inline]
     async fn from_request_parts(
         parts: &mut Parts,
         state: &Arc<AppState>,
@@ -48,14 +52,22 @@ impl FromRequestParts<Arc<AppState>> for AuthUser {
     }
 }
 
+/// Authentication errors.
 #[derive(Debug, thiserror::Error)]
 pub enum AuthError {
+    /// Authorization header is missing or malformed.
+    #[error("Missing credentials")]
     MissingCredentials,
+    /// JWT token is invalid or expired.
+    #[error("Invalid token")]
     InvalidToken,
+    /// Server configuration error (e.g., missing JWT secret).
+    #[error("Server configuration error")]
     ServerConfiguration,
 }
 
 impl IntoResponse for AuthError {
+    #[inline]
     fn into_response(self) -> Response {
         let (status, error_message) = match self {
             AuthError::MissingCredentials => (StatusCode::UNAUTHORIZED, "Missing credentials"),
@@ -69,15 +81,5 @@ impl IntoResponse for AuthError {
             "error": error_message,
         }));
         (status, body).into_response()
-    }
-}
-
-impl fmt::Display for AuthError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            AuthError::MissingCredentials => write!(f, "Missing credentials"),
-            AuthError::InvalidToken => write!(f, "Invalid token"),
-            AuthError::ServerConfiguration => write!(f, "Server configuration error"),
-        }
     }
 }

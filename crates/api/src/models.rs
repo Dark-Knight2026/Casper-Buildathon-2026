@@ -1,9 +1,14 @@
+//! Shared data models and type definitions.
+
 use serde::{Deserialize, Serialize};
 use strum::{Display, EnumString};
 use uuid::Uuid;
 
 // --- Type Aliases ---
+
+/// Unique identifier for a user.
 pub type UserId = Uuid;
+/// Unique identifier for a property.
 pub type PropertyId = Uuid;
 
 // --- Enums ---
@@ -13,10 +18,15 @@ pub type PropertyId = Uuid;
 #[serde(rename_all = "snake_case")]
 #[strum(serialize_all = "snake_case")]
 pub enum UserRole {
+    /// A tenant renting a property.
     Tenant,
+    /// A landlord owning properties.
     Landlord,
+    /// A real estate agent.
     Agent,
+    /// System administrator.
     Admin,
+    /// Unknown or unrecognized role.
     #[serde(other)]
     Unknown,
 }

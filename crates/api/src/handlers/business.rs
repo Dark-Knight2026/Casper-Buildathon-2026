@@ -1,8 +1,9 @@
+//! Business logic handlers for tax calculation and property analytics.
+
 use axum::{Json, extract::State, http::StatusCode};
 use axum::{Router, routing::post};
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
-use rust_decimal::prelude::FromPrimitive;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -10,6 +11,8 @@ use crate::auth::AuthUser;
 use crate::config::AppState;
 use crate::models::PropertyId;
 
+/// Creates the business logic router with tax and analytics endpoints.
+#[inline]
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/tax/calculate-liability", post(calculate_tax_liability))
@@ -22,12 +25,16 @@ pub fn router() -> Router<Arc<AppState>> {
 /// Represents the specific category of a tax-deductible expense.
 #[derive(Debug, Serialize, Deserialize)]
 pub enum TaxCategoryType {
+    /// Property tax expenses.
     #[serde(rename = "Property Tax")]
     PropertyTax,
+    /// Maintenance and repair costs.
     #[serde(rename = "Maintenance")]
     Maintenance,
+    /// Property management fees.
     #[serde(rename = "Management Fees")]
     ManagementFees,
+    /// Other miscellaneous expenses.
     Other(String),
 }
 
@@ -40,6 +47,7 @@ pub struct TaxCalculationRequest {
     pub fiscal_year: u32,
     /// List of property IDs.
     pub property_ids: Vec<PropertyId>,
+    /// Whether to include depreciation in calculations.
     #[serde(default)]
     pub include_depreciation: bool,
 }
@@ -110,22 +118,28 @@ pub struct PropertyPerformanceReport {
 /// # Returns
 ///
 /// * `Ok(Json<TaxReport>)` - The calculated tax report.
-/// * `Err(StatusCode)` - HTTP error code if calculation fails.
+///
+/// # Errors
+///
+/// Returns `StatusCode` error if calculation fails.
+#[inline]
 pub async fn calculate_tax_liability(
     State(_state): State<Arc<AppState>>,
     _user: AuthUser,
     Json(payload): Json<TaxCalculationRequest>,
 ) -> Result<Json<TaxReport>, StatusCode> {
-    // MOCK Implementation
-    let total_income = Decimal::from_i64(150_000).unwrap();
-    let mut total_deductions = Decimal::from_i64(45_000).unwrap();
+    // MOCK Implementation - using checked arithmetic to avoid panics
+    let total_income = Decimal::from(150_000_i64);
+    let base_deductions = Decimal::from(45_000_i64);
 
-    if payload.include_depreciation {
-        total_deductions += Decimal::from_i64(12_000).unwrap();
-    }
+    let total_deductions = if payload.include_depreciation {
+        base_deductions + Decimal::from(12_000_i64)
+    } else {
+        base_deductions
+    };
 
     let taxable_income = total_income - total_deductions;
-    let tax_rate = Decimal::from_f64(0.24).unwrap();
+    let tax_rate = Decimal::new(24, 2); // 0.24
     let estimated_tax = taxable_income * tax_rate;
 
     Ok(Json(TaxReport {
@@ -135,15 +149,15 @@ pub async fn calculate_tax_liability(
         breakdown: vec![
             TaxCategory {
                 category: TaxCategoryType::PropertyTax,
-                amount: Decimal::from_i64(15_000).unwrap(),
+                amount: Decimal::from(15_000_i64),
             },
             TaxCategory {
                 category: TaxCategoryType::Maintenance,
-                amount: Decimal::from_i64(20_000).unwrap(),
+                amount: Decimal::from(20_000_i64),
             },
             TaxCategory {
                 category: TaxCategoryType::ManagementFees,
-                amount: Decimal::from_i64(10_000).unwrap(),
+                amount: Decimal::from(10_000_i64),
             },
         ],
     }))
@@ -164,19 +178,23 @@ pub async fn calculate_tax_liability(
 /// # Returns
 ///
 /// * `Ok(Json<PropertyPerformanceReport>)` - The performance report.
-/// * `Err(StatusCode)` - HTTP error code if retrieval fails.
+///
+/// # Errors
+///
+/// Returns `StatusCode` error if retrieval fails.
+#[inline]
 pub async fn get_property_performance(
     State(_state): State<Arc<AppState>>,
     _user: AuthUser,
     Json(_payload): Json<PropertyPerformanceRequest>,
 ) -> Result<Json<PropertyPerformanceReport>, StatusCode> {
-    // MOCK Implementation
+    // MOCK Implementation - using checked arithmetic to avoid panics
     Ok(Json(PropertyPerformanceReport {
-        total_revenue: Decimal::from_i64(240_000).unwrap(),
-        total_expenses: Decimal::from_i64(80_000).unwrap(),
-        net_operating_income: Decimal::from_i64(160_000).unwrap(),
-        roi_percentage: Decimal::from_f64(16.0).unwrap(),
-        occupancy_rate: Decimal::from_f64(95.5).unwrap(),
+        total_revenue: Decimal::from(240_000_i64),
+        total_expenses: Decimal::from(80_000_i64),
+        net_operating_income: Decimal::from(160_000_i64),
+        roi_percentage: Decimal::from(16_i64),
+        occupancy_rate: Decimal::new(955, 1), // 95.5
     }))
 }
 

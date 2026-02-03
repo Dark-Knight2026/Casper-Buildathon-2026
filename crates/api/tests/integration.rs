@@ -1,13 +1,13 @@
 //! Integration tests for API endpoints.
 //!
-//! Uses #[sqlx::test] for isolated PostgreSQL databases per test.
+//! Uses `#[sqlx::test]` for isolated `PostgreSQL` databases per test.
 //! Redis uses testcontainers (one container per test that needs it).
 //!
 //! Requires:
 //! - Docker running
-//! - PostgreSQL via: docker compose -f docker-compose.test.yml up -d
+//! - `PostgreSQL` via: docker compose -f docker-compose.test.yml up -d
 //!
-//! Run with: `cargo test --test api_integration`
+//! Run with: `cargo test --test integration`
 
 mod common;
 

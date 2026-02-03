@@ -1,3 +1,5 @@
+//! `LeaseFi` Backend API server entry point.
+
 #[tokio::main]
 async fn main() {
     if let Err(e) = api::implementation::main().await {
