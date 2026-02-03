@@ -46,7 +46,9 @@ pub mod implementation {
 
         // Run migrations
         if std::env::var("RUN_MIGRATIONS").unwrap_or_default() == "true" {
-            sqlx::migrate!("./supabase/migrations").run(&pool).await?;
+            sqlx::migrate!("../../supabase/migrations")
+                .run(&pool)
+                .await?;
         }
 
         tracing::info!("Database connected");

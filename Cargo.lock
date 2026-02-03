@@ -44,6 +44,37 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a23eb6b1614318a8071c9b2521f36b424b2c83db5eb3a0fead4a6c0809af6e61"
 
 [[package]]
+name = "api"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "axum-test",
+ "casper-types",
+ "chrono",
+ "dotenv",
+ "error_tools",
+ "hex",
+ "jsonwebtoken",
+ "rand 0.9.2",
+ "redis",
+ "rust_decimal",
+ "secrecy",
+ "serde",
+ "serde_json",
+ "sha2",
+ "sqlx",
+ "strum",
+ "testcontainers",
+ "thiserror 2.0.18",
+ "tokio",
+ "tower-http",
+ "tower_governor",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
 name = "arcstr"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2568,37 +2599,6 @@ dependencies = [
  "mime",
  "rand 0.9.2",
  "thiserror 2.0.18",
-]
-
-[[package]]
-name = "rust-service"
-version = "0.1.0"
-dependencies = [
- "axum",
- "axum-test",
- "casper-types",
- "chrono",
- "dotenv",
- "error_tools",
- "hex",
- "jsonwebtoken",
- "rand 0.9.2",
- "redis",
- "rust_decimal",
- "secrecy",
- "serde",
- "serde_json",
- "sha2",
- "sqlx",
- "strum",
- "testcontainers",
- "thiserror 2.0.18",
- "tokio",
- "tower-http",
- "tower_governor",
- "tracing",
- "tracing-subscriber",
- "uuid",
 ]
 
 [[package]]

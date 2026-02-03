@@ -14,7 +14,7 @@ mod common;
 use axum::http::{Method, StatusCode};
 use sqlx::PgPool;
 
-#[sqlx::test(migrations = "./supabase/migrations")]
+#[sqlx::test(migrations = "../../supabase/migrations")]
 async fn health_check_returns_status(pool: PgPool) {
     let env = common::setup_test_server_with_pool(pool, true).await;
 
@@ -33,7 +33,7 @@ async fn health_check_returns_status(pool: PgPool) {
     assert_eq!(body["service"], "leasefi-backend");
 }
 
-#[sqlx::test(migrations = "./supabase/migrations")]
+#[sqlx::test(migrations = "../../supabase/migrations")]
 async fn nonce_endpoint_requires_wallet_address(pool: PgPool) {
     let env = common::setup_test_server_with_pool(pool, true).await;
 
@@ -42,7 +42,7 @@ async fn nonce_endpoint_requires_wallet_address(pool: PgPool) {
     assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
 }
 
-#[sqlx::test(migrations = "./supabase/migrations")]
+#[sqlx::test(migrations = "../../supabase/migrations")]
 async fn nonce_endpoint_returns_challenge(pool: PgPool) {
     let env = common::setup_test_server_with_pool(pool, true).await;
 
@@ -65,7 +65,7 @@ async fn nonce_endpoint_returns_challenge(pool: PgPool) {
     assert!(message.starts_with("Sign this message to login to LeaseFi. Nonce:"));
 }
 
-#[sqlx::test(migrations = "./supabase/migrations")]
+#[sqlx::test(migrations = "../../supabase/migrations")]
 async fn login_rejects_invalid_wallet_address(pool: PgPool) {
     let env = common::setup_test_server_with_pool(pool, false).await;
 
@@ -81,7 +81,7 @@ async fn login_rejects_invalid_wallet_address(pool: PgPool) {
     assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
 }
 
-#[sqlx::test(migrations = "./supabase/migrations")]
+#[sqlx::test(migrations = "../../supabase/migrations")]
 async fn login_rejects_invalid_signature_format(pool: PgPool) {
     let env = common::setup_test_server_with_pool(pool, false).await;
 
@@ -99,7 +99,7 @@ async fn login_rejects_invalid_signature_format(pool: PgPool) {
     assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
 }
 
-#[sqlx::test(migrations = "./supabase/migrations")]
+#[sqlx::test(migrations = "../../supabase/migrations")]
 async fn protected_endpoint_requires_auth(pool: PgPool) {
     let env = common::setup_test_server_with_pool(pool, false).await;
 
@@ -115,7 +115,7 @@ async fn protected_endpoint_requires_auth(pool: PgPool) {
     assert_eq!(response.status_code(), StatusCode::UNAUTHORIZED);
 }
 
-#[sqlx::test(migrations = "./supabase/migrations")]
+#[sqlx::test(migrations = "../../supabase/migrations")]
 async fn protected_endpoint_rejects_invalid_token(pool: PgPool) {
     let env = common::setup_test_server_with_pool(pool, false).await;
 

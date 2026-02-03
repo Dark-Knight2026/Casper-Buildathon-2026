@@ -1,34 +1,96 @@
-[package]
-name = "rust-service"
+[workspace]
+members = ["crates/api"]
+resolver = "2"
+
+[workspace.package]
 version = "0.1.0"
 edition = "2024"
 publish = false
 
-[dependencies]
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+
+[workspace.lints.rust]
+# Denies non-idiomatic code for Rust 2018 edition.
+rust_2018_idioms = { level = "warn", priority = -1 }
+# Denies using features that may break in future Rust versions.
+future_incompatible = { level = "warn", priority = -1 }
+# Warns if public items lack documentation.
+missing_docs = "warn"
+# Warns for public types not implementing Debug.
+missing_debug_implementations = "warn"
+# Denies all unsafe code usage.
+unsafe-code = "deny"
+
+[workspace.lints.clippy]
+# Denies pedantic lints, enforcing strict coding styles and conventions.
+pedantic = { level = "warn", priority = -1 }
+# Denies undocumented unsafe blocks.
+undocumented_unsafe_blocks = "deny"
+# Denies to prefer `core` over `std` when available, for `no_std` compatibility.
+std_instead_of_core = "warn"
+# Denies including files in documentation unconditionally.
+doc_include_without_cfg = "warn"
+# Denies missing inline in public items.
+missing_inline_in_public_items = "warn"
+
+# exceptions
+
+# Allows functions that are only called once.
+single_call_fn = "allow"
+# Allows forcing a function to always be inlined.
+inline_always = "allow"
+# Allows item names that repeat the module name (e.g., `mod user { struct User; }`).
+module_name_repetitions = "allow"
+# Allows using fully qualified paths instead of `use` statements.
+absolute_paths = "allow"
+# Allows wildcard imports (e.g., `use std::io::*;`).
+wildcard_imports = "allow"
+# Allow to prefer `alloc` over `std` when available, for `no_std` compatibility.
+std_instead_of_alloc = "allow"
+# Allow put definitions of struct at any point in functions.
+items_after_statements = "allow"
+# Allow precission loss, for example during conversion from i64 to f64
+cast_precision_loss = "allow"
+# Allows `pub use` statements.
+pub_use = "allow"
+# Allows the `? operator.
+question_mark_used = "allow"
+# Allows implicit returns.
+implicit_return = "allow"
+# Allow ordering of fields in intuitive way.
+arbitrary_source_item_ordering = "allow"
+# Allow mod.rs files
+mod_module_files = "allow"
+# Allow missing docs for private items
+missing_docs_in_private_items = "allow"
+
+[workspace.dependencies]
 axum = { version = "0.8", features = ["macros"] }
 tokio = { version = "1", features = ["full"] }
+tower-http = { version = "0.6.8", features = ["cors", "trace", "limit"] }
+tower_governor = { version = "0.8", features = ["axum"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sqlx = { version = "0.8.6", features = ["runtime-tokio-rustls", "postgres", "uuid", "rust_decimal", "migrate"] }
+redis = { version = "1.0.2", features = ["tokio-comp"] }
 jsonwebtoken = "10.3"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 thiserror = "2.0"
+error_tools = "0.37"
 uuid = { version = "1", features = ["serde", "v4"] }
 rust_decimal = { version = "1", features = ["serde"] }
-tower-http = { version = "0.6.8", features = ["cors", "trace", "limit"] }
+chrono = { version = "0.4", features = ["serde"] }
+secrecy = { version = "0.10", features = ["serde"] }
+strum = { version = "0.27", features = ["derive"] }
 dotenv = "0.15"
-redis = { version = "1.0.2", features = ["tokio-comp"] }
 casper-types = "6.1.0"
 hex = "0.4"
 sha2 = "0.10"
 rand = "0.9"
-chrono = { version = "0.4", features = ["serde"] }
-secrecy = { version = "0.10", features = ["serde"] }
-strum = { version = "0.27", features = ["derive"] }
-tower_governor = { version = "0.8", features = ["axum"] }
-error_tools = "0.37"
-
-[dev-dependencies]
 axum-test = "18"
 testcontainers = "0.26"

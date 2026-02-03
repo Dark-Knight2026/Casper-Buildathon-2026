@@ -117,11 +117,11 @@ pub async fn calculate_tax_liability(
     Json(payload): Json<TaxCalculationRequest>,
 ) -> Result<Json<TaxReport>, StatusCode> {
     // MOCK Implementation
-    let total_income = Decimal::from_i64(150000).unwrap();
-    let mut total_deductions = Decimal::from_i64(45000).unwrap();
+    let total_income = Decimal::from_i64(150_000).unwrap();
+    let mut total_deductions = Decimal::from_i64(45_000).unwrap();
 
     if payload.include_depreciation {
-        total_deductions += Decimal::from_i64(12000).unwrap();
+        total_deductions += Decimal::from_i64(12_000).unwrap();
     }
 
     let taxable_income = total_income - total_deductions;
@@ -135,15 +135,15 @@ pub async fn calculate_tax_liability(
         breakdown: vec![
             TaxCategory {
                 category: TaxCategoryType::PropertyTax,
-                amount: Decimal::from_i64(15000).unwrap(),
+                amount: Decimal::from_i64(15_000).unwrap(),
             },
             TaxCategory {
                 category: TaxCategoryType::Maintenance,
-                amount: Decimal::from_i64(20000).unwrap(),
+                amount: Decimal::from_i64(20_000).unwrap(),
             },
             TaxCategory {
                 category: TaxCategoryType::ManagementFees,
-                amount: Decimal::from_i64(10000).unwrap(),
+                amount: Decimal::from_i64(10_000).unwrap(),
             },
         ],
     }))
@@ -172,9 +172,9 @@ pub async fn get_property_performance(
 ) -> Result<Json<PropertyPerformanceReport>, StatusCode> {
     // MOCK Implementation
     Ok(Json(PropertyPerformanceReport {
-        total_revenue: Decimal::from_i64(240000).unwrap(),
-        total_expenses: Decimal::from_i64(80000).unwrap(),
-        net_operating_income: Decimal::from_i64(160000).unwrap(),
+        total_revenue: Decimal::from_i64(240_000).unwrap(),
+        total_expenses: Decimal::from_i64(80_000).unwrap(),
+        net_operating_income: Decimal::from_i64(160_000).unwrap(),
         roi_percentage: Decimal::from_f64(16.0).unwrap(),
         occupancy_rate: Decimal::from_f64(95.5).unwrap(),
     }))
