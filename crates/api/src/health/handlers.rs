@@ -55,7 +55,6 @@ pub async fn health_check(
             ConnectionStatus::Error
         }
     };
-
     let status_code = if redis_status == ConnectionStatus::Connected
         && db_status == ConnectionStatus::Connected
     {

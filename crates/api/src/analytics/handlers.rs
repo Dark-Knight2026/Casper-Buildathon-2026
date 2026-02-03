@@ -3,9 +3,9 @@
 use crate::{
     analytics::models::{PropertyPerformanceReport, PropertyPerformanceRequest},
     auth::AuthUser,
-    common::AppState,
+    common::{ApiResult, AppState},
 };
-use axum::{Json, extract::State, http::StatusCode};
+use axum::{Json, extract::State};
 use rust_decimal::Decimal;
 use std::sync::Arc;
 
@@ -25,7 +25,7 @@ use std::sync::Arc;
 ///
 /// # Errors
 ///
-/// Returns `StatusCode` error if retrieval fails.
+/// Returns `ApiError` if retrieval fails.
 #[utoipa::path(
     post,
     path = "/analytics/property-performance",
@@ -45,7 +45,7 @@ pub async fn get_property_performance(
     State(_state): State<Arc<AppState>>,
     _user: AuthUser,
     Json(_payload): Json<PropertyPerformanceRequest>,
-) -> Result<Json<PropertyPerformanceReport>, StatusCode> {
+) -> ApiResult<Json<PropertyPerformanceReport>> {
     // MOCK Implementation - using checked arithmetic to avoid panics
     Ok(Json(PropertyPerformanceReport {
         total_revenue: Decimal::from(240_000_i64),

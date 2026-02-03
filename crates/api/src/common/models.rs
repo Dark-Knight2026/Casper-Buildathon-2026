@@ -5,14 +5,10 @@ use strum::{Display, EnumString};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-// --- Type Aliases ---
-
 /// Unique identifier for a user.
 pub type UserId = Uuid;
 /// Unique identifier for a property.
 pub type PropertyId = Uuid;
-
-// --- Enums ---
 
 /// Defines the role of a user in the system.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, EnumString, Display, ToSchema)]
@@ -31,8 +27,6 @@ pub enum UserRole {
     #[serde(other)]
     Unknown,
 }
-
-// --- Shared Structures ---
 
 /// JWT Claims structure used for token generation and validation.
 #[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]

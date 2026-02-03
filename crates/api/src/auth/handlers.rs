@@ -1,9 +1,13 @@
 //! HTTP request handlers for authentication.
 
+use crate::{
+    auth,
+    auth::models::{LoginRequest, LoginResponse, NonceRequest, NonceResponse, UserInfo},
+    common::{self, ApiError, ApiResult, AppState, Claims, UserRole},
+};
 use axum::{
     Json,
     extract::{Query, State},
-    http::StatusCode,
 };
 use chrono::{Duration, Utc};
 use core::str::FromStr;
@@ -13,10 +17,6 @@ use redis::AsyncCommands;
 use secrecy::ExposeSecret;
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
-
-use crate::auth;
-use crate::auth::models::{LoginRequest, LoginResponse, NonceRequest, NonceResponse, UserInfo};
-use crate::common::{self, AppState, Claims, UserRole};
 
 // --- Constants ---
 const LOGIN_NONCE_TTL: u64 = 300;
@@ -37,7 +37,7 @@ const LOGIN_NONCE_TTL: u64 = 300;
 ///
 /// # Errors
 ///
-/// Returns `StatusCode::INTERNAL_SERVER_ERROR` if Redis operations fail.
+/// Returns `ApiError::Internal` if Redis operations fail.
 #[utoipa::path(
     get,
     path = "/nonce",
@@ -54,7 +54,7 @@ const LOGIN_NONCE_TTL: u64 = 300;
 pub async fn get_nonce(
     State(state): State<Arc<AppState>>,
     Query(payload): Query<NonceRequest>,
-) -> Result<Json<NonceResponse>, StatusCode> {
+) -> ApiResult<Json<NonceResponse>> {
     // Generate a random string (16 characters)
     let random_string: String = rand::rng()
         .sample_iter(&Alphanumeric)
@@ -74,7 +74,7 @@ pub async fn get_nonce(
         .await
         .map_err(|e| {
             tracing::error!(error = %e, "Redis connection error");
-            StatusCode::INTERNAL_SERVER_ERROR
+            ApiError::Internal(format!("Redis connection error: {e}"))
         })?;
 
     let _: () = redis_conn
@@ -82,7 +82,7 @@ pub async fn get_nonce(
         .await
         .map_err(|e| {
             tracing::error!(error = %e, "Failed to save nonce to Redis");
-            StatusCode::INTERNAL_SERVER_ERROR
+            ApiError::Internal(format!("Failed to save nonce to Redis: {e}"))
         })?;
 
     Ok(Json(NonceResponse {
@@ -110,9 +110,9 @@ pub async fn get_nonce(
 /// # Errors
 ///
 /// Returns:
-/// - `StatusCode::BAD_REQUEST` if wallet address length is invalid or signature format is wrong
-/// - `StatusCode::UNAUTHORIZED` if signature or nonce is invalid
-/// - `StatusCode::INTERNAL_SERVER_ERROR` for DB/Redis failures or timestamp overflow
+/// - `ApiError::BadRequest` if wallet address length is invalid or signature format is wrong
+/// - `ApiError::Unauthorized` if signature or nonce is invalid
+/// - `ApiError::Internal` for DB/Redis failures or timestamp overflow
 #[utoipa::path(
     post,
     path = "/login",
@@ -129,16 +129,18 @@ pub async fn get_nonce(
 pub async fn login(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<LoginRequest>,
-) -> Result<Json<LoginResponse>, StatusCode> {
+) -> ApiResult<Json<LoginResponse>> {
     // Validation: Check wallet address length
     let len = payload.wallet_address.len();
     if len != 66 && len != 68 {
-        tracing::error!(
+        tracing::warn!(
             length = len,
             expected = "66 or 68",
             "Invalid wallet address length"
         );
-        return Err(StatusCode::BAD_REQUEST);
+        return Err(ApiError::BadRequest(
+            "Invalid wallet address length".to_owned(),
+        ));
     }
 
     let mut redis_conn = state
@@ -147,14 +149,14 @@ pub async fn login(
         .await
         .map_err(|e| {
             tracing::error!(error = %e, "Redis connection error");
-            StatusCode::INTERNAL_SERVER_ERROR
+            ApiError::Internal(format!("Redis connection error: {e}"))
         })?;
 
     let redis_key = format!("nonce:{}", payload.wallet_address);
 
     let stored_nonce: String = redis_conn.get(&redis_key).await.map_err(|_| {
-        tracing::error!(key = %redis_key, "Nonce not found or expired");
-        StatusCode::UNAUTHORIZED
+        tracing::warn!(key = %redis_key, "Nonce not found or expired");
+        ApiError::Unauthorized("Nonce not found or expired".to_owned())
     })?;
 
     // Security: Verify Signature and RETURN ERROR if invalid
@@ -164,13 +166,13 @@ pub async fn login(
         &stored_nonce,
     )
     .map_err(|e| {
-        tracing::error!(error = ?e, "Crypto verification error");
-        StatusCode::BAD_REQUEST
+        tracing::warn!(error = ?e, "Signature verification error");
+        ApiError::BadRequest("Invalid signature format".to_owned())
     })?;
 
     if !is_valid {
-        tracing::error!("Signature verification failed");
-        return Err(StatusCode::UNAUTHORIZED);
+        tracing::warn!("Signature verification failed");
+        return Err(ApiError::Unauthorized("Invalid signature".to_owned()));
     }
 
     tracing::info!("Signature verified successfully");
@@ -183,33 +185,23 @@ pub async fn login(
     let hash = Sha256::digest(payload.wallet_address.as_bytes());
     let placeholder_email = format!("wallet_{}@leasefi.local", hex::encode(&hash[..20]));
 
-    // If a user with this wallet_address already exists, return it.
-    // If not, create a new one.
+    // If a user with this wallet_address already exists, return it. If not, create a new one.
     let user_record =
-        auth::upsert_user_by_wallet(&state.db, &placeholder_email, &payload.wallet_address)
-            .await
-            .map_err(|e| {
-                tracing::error!(error = %e, "Database error");
-                StatusCode::INTERNAL_SERVER_ERROR
-            })?;
-
+        auth::upsert_user_by_wallet(&state.db, &placeholder_email, &payload.wallet_address).await?;
     let user_role = UserRole::from_str(&user_record.role).unwrap_or(UserRole::Unknown);
 
     let expiration = Utc::now()
         .checked_add_signed(Duration::hours(24))
         .ok_or_else(|| {
-            tracing::error!("Timestamp overflow calculating JWT expiration");
-            StatusCode::INTERNAL_SERVER_ERROR
+            ApiError::Internal("Timestamp overflow calculating JWT expiration".to_owned())
         })?
         .timestamp();
 
     // Safe conversion: timestamp is always positive for dates after 1970,
     // and JWT expiration within 24 hours fits in usize on all platforms
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-    let exp = usize::try_from(expiration.max(0)).map_err(|_| {
-        tracing::error!("JWT expiration timestamp overflow");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let exp = usize::try_from(expiration.max(0))
+        .map_err(|_| ApiError::Internal("JWT expiration timestamp overflow".to_owned()))?;
 
     let claims = Claims {
         sub: user_record.id,
@@ -224,10 +216,7 @@ pub async fn login(
         &claims,
         &EncodingKey::from_secret(secret.as_bytes()),
     )
-    .map_err(|e| {
-        tracing::error!(error = %e, "Token encoding error");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    .map_err(|e| ApiError::Internal(format!("Token encoding error: {e}")))?;
 
     Ok(Json(LoginResponse {
         token,

@@ -2,10 +2,10 @@
 
 use crate::{
     auth::AuthUser,
-    common::AppState,
+    common::{ApiResult, AppState},
     tax::models::{TaxCalculationRequest, TaxCategory, TaxCategoryType, TaxReport},
 };
-use axum::{Json, extract::State, http::StatusCode};
+use axum::{Json, extract::State};
 use rust_decimal::Decimal;
 use std::sync::Arc;
 
@@ -26,7 +26,7 @@ use std::sync::Arc;
 ///
 /// # Errors
 ///
-/// Returns `StatusCode` error if calculation fails.
+/// Returns `ApiError` if calculation fails.
 #[utoipa::path(
     post,
     path = "/tax/calculate-liability",
@@ -46,7 +46,7 @@ pub async fn calculate_tax_liability(
     State(_state): State<Arc<AppState>>,
     _user: AuthUser,
     Json(payload): Json<TaxCalculationRequest>,
-) -> Result<Json<TaxReport>, StatusCode> {
+) -> ApiResult<Json<TaxReport>> {
     // MOCK Implementation - using checked arithmetic to avoid panics
     let total_income = Decimal::from(150_000_i64);
     let base_deductions = Decimal::from(45_000_i64);

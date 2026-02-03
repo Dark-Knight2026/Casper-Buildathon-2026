@@ -11,5 +11,5 @@ pub mod models;
 
 pub use config::{AppState, Config};
 pub use crypto::{CryptoError, verify_casper_signature};
-pub use errors::ServerError;
+pub use errors::{ApiError, ApiResult, ErrorResponse, ServerError};
 pub use models::{Claims, PropertyId, UserId, UserRole};
