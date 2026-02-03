@@ -90,6 +90,12 @@ pub async fn get_nonce(
             ApiError::Internal(format!("Failed to save nonce to Redis: {e}"))
         })?;
 
+    tracing::info!(
+        event = "nonce_generated",
+        wallet_address = %payload.wallet_address,
+        "Login nonce generated"
+    );
+
     Ok(Json(NonceResponse {
         nonce: random_string,
         message,
@@ -161,7 +167,12 @@ pub async fn login(
     let redis_key = format!("nonce:{}", payload.wallet_address);
 
     let stored_nonce: String = redis_conn.get(&redis_key).await.map_err(|_| {
-        tracing::warn!(key = %redis_key, "Nonce not found or expired");
+        tracing::warn!(
+            event = "login_failed",
+            reason = "nonce_expired",
+            wallet_address = %payload.wallet_address,
+            "Nonce not found or expired"
+        );
         ApiError::Unauthorized("Nonce not found or expired".to_owned())
     })?;
 
@@ -172,16 +183,25 @@ pub async fn login(
         &stored_nonce,
     )
     .map_err(|e| {
-        tracing::warn!(error = ?e, "Signature verification error");
+        tracing::warn!(
+            event = "login_failed",
+            reason = "invalid_signature_format",
+            wallet_address = %payload.wallet_address,
+            error = ?e,
+            "Signature verification error"
+        );
         ApiError::BadRequest("Invalid signature format".to_owned())
     })?;
 
     if !is_valid {
-        tracing::warn!("Signature verification failed");
+        tracing::warn!(
+            event = "login_failed",
+            reason = "signature_mismatch",
+            wallet_address = %payload.wallet_address,
+            "Signature verification failed"
+        );
         return Err(ApiError::Unauthorized("Invalid signature".to_owned()));
     }
-
-    tracing::info!("Signature verified successfully");
 
     // Remove Nonce (protection against signature reuse)
     let _: () = redis_conn.del(&redis_key).await.unwrap_or(());
@@ -223,6 +243,13 @@ pub async fn login(
         &EncodingKey::from_secret(secret.as_bytes()),
     )
     .map_err(|e| ApiError::Internal(format!("Token encoding error: {e}")))?;
+
+    tracing::info!(
+        event = "user_login",
+        user_id = %user_record.id,
+        wallet_address = %payload.wallet_address,
+        "User logged in successfully"
+    );
 
     Ok(Json(LoginResponse {
         token,
