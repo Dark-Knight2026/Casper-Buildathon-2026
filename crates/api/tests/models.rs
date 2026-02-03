@@ -1,10 +1,10 @@
 //! Tests for API model serialization/deserialization.
 
-use api::analytics::PropertyPerformanceRequest;
-use api::tax::TaxCalculationRequest;
 use chrono::NaiveDate;
 use serde_json::json;
 use uuid::Uuid;
+
+use api::{analytics::PropertyPerformanceRequest, tax::TaxCalculationRequest};
 
 #[test]
 fn test_property_performance_request_date_parsing() {

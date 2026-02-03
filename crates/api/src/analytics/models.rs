@@ -1,10 +1,11 @@
 //! Request and response models for analytics endpoints.
 
-use crate::common::PropertyId;
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
+
+use crate::common::PropertyId;
 
 /// Request payload for retrieving property performance analytics.
 #[derive(Debug, Deserialize, ToSchema)]

@@ -1,12 +1,14 @@
 //! HTTP request handlers for health checks.
 
+use std::sync::Arc;
+
+use axum::{Json, extract::State, http::StatusCode};
+
 use crate::{
     common::AppState,
     health::db::heartbeat,
     health::models::{ConnectionStatus, HealthResponse},
 };
-use axum::{Json, extract::State, http::StatusCode};
-use std::sync::Arc;
 
 /// Checks the health status of the application and its dependencies.
 ///

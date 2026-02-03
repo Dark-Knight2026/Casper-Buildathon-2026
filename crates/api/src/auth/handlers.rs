@@ -1,5 +1,19 @@
 //! HTTP request handlers for authentication.
 
+use core::str::FromStr;
+use std::sync::Arc;
+
+use axum::{
+    Json,
+    extract::{Query, State},
+};
+use chrono::{Duration, Utc};
+use jsonwebtoken::{EncodingKey, Header};
+use rand::{Rng, distr::Alphanumeric};
+use redis::AsyncCommands;
+use secrecy::ExposeSecret;
+use sha2::{Digest, Sha256};
+
 use crate::{
     auth,
     auth::models::{LoginRequest, LoginResponse, NonceRequest, NonceResponse, UserInfo},
@@ -8,18 +22,6 @@ use crate::{
         CASPER_SECP256K1_PUBKEY_HEX_LEN, Claims, UserRole,
     },
 };
-use axum::{
-    Json,
-    extract::{Query, State},
-};
-use chrono::{Duration, Utc};
-use core::str::FromStr;
-use jsonwebtoken::{EncodingKey, Header};
-use rand::{Rng, distr::Alphanumeric};
-use redis::AsyncCommands;
-use secrecy::ExposeSecret;
-use sha2::{Digest, Sha256};
-use std::sync::Arc;
 
 // --- Constants ---
 const LOGIN_NONCE_TTL: u64 = 300;

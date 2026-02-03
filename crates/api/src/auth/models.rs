@@ -1,9 +1,10 @@
 //! Request and response models for authentication endpoints.
 
-use crate::common::{UserId, UserRole};
 use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
+
+use crate::common::{UserId, UserRole};
 
 /// Request payload for generating a login nonce.
 #[derive(Debug, Deserialize, ToSchema)]

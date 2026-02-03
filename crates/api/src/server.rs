@@ -1,5 +1,20 @@
 //! Server implementation and startup logic.
 
+use core::{net::SocketAddr, str::FromStr, time::Duration};
+use std::sync::Arc;
+
+use axum::{
+    Router,
+    http::{Method, header},
+};
+use secrecy::ExposeSecret;
+use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
+use tower_governor::{GovernorLayer, governor::GovernorConfigBuilder};
+use tower_http::{cors::CorsLayer, limit::RequestBodyLimitLayer, trace::TraceLayer};
+use utoipa::OpenApi;
+use utoipa_axum::{router::OpenApiRouter, routes};
+use utoipa_swagger_ui::SwaggerUi;
+
 use crate::{
     analytics, auth,
     common::{AppState, Config, ServerError},
@@ -7,19 +22,6 @@ use crate::{
     openapi::ApiDoc,
     tax,
 };
-use axum::{
-    Router,
-    http::{Method, header},
-};
-use core::{net::SocketAddr, str::FromStr, time::Duration};
-use secrecy::ExposeSecret;
-use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
-use std::sync::Arc;
-use tower_governor::{GovernorLayer, governor::GovernorConfigBuilder};
-use tower_http::{cors::CorsLayer, limit::RequestBodyLimitLayer, trace::TraceLayer};
-use utoipa::OpenApi;
-use utoipa_axum::{router::OpenApiRouter, routes};
-use utoipa_swagger_ui::SwaggerUi;
 
 /// Creates an `OpenAPI` router for public API endpoints that do not require authentication.
 ///

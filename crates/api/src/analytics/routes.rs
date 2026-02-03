@@ -1,8 +1,10 @@
 //! Router configuration for analytics endpoints.
 
-use crate::{analytics, common::AppState};
-use axum::{Router, routing::post};
 use std::sync::Arc;
+
+use axum::{Router, routing::post};
+
+use crate::{analytics, common::AppState};
 
 /// Creates the analytics router with performance endpoints.
 #[inline]

@@ -1,13 +1,15 @@
 //! HTTP request handlers for analytics.
 
+use std::sync::Arc;
+
+use axum::{Json, extract::State};
+use rust_decimal::Decimal;
+
 use crate::{
     analytics::models::{PropertyPerformanceReport, PropertyPerformanceRequest},
     auth::AuthUser,
     common::{ApiResult, AppState},
 };
-use axum::{Json, extract::State};
-use rust_decimal::Decimal;
-use std::sync::Arc;
 
 /// Retrieves performance metrics for a set of properties over a specified date range.
 ///

@@ -1,6 +1,7 @@
 //! Authentication middleware and error types.
 
-use crate::common::{AppState, Claims};
+use std::sync::Arc;
+
 use axum::{
     Json,
     extract::FromRequestParts,
@@ -11,7 +12,8 @@ use error_tools::dependency::thiserror;
 use jsonwebtoken::{DecodingKey, Validation, decode};
 use secrecy::ExposeSecret;
 use serde_json::json;
-use std::sync::Arc;
+
+use crate::common::{AppState, Claims};
 
 /// Authenticated user extracted from JWT token.
 #[derive(Debug)]

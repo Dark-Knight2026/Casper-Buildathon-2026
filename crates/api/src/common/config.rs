@@ -1,8 +1,9 @@
 //! Application configuration and state management.
 
+use std::env;
+
 use redis::Client as RedisClient;
 use secrecy::SecretString;
-use std::env;
 
 /// Application configuration loaded from environment variables.
 #[derive(Debug, Clone)]

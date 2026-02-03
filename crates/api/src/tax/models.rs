@@ -1,9 +1,10 @@
 //! Request and response models for tax endpoints.
 
-use crate::common::PropertyId;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
+
+use crate::common::PropertyId;
 
 /// Represents the specific category of a tax-deductible expense.
 #[derive(Debug, Serialize, Deserialize, ToSchema)]

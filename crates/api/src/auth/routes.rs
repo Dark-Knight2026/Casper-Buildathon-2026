@@ -1,12 +1,14 @@
 //! Router configuration for authentication endpoints.
 
-use crate::auth::handlers::{get_nonce, login};
-use crate::common::AppState;
+use std::sync::Arc;
+
 use axum::{
     Router,
     routing::{get, post},
 };
-use std::sync::Arc;
+
+use crate::auth::handlers::{get_nonce, login};
+use crate::common::AppState;
 
 /// Creates the authentication router with nonce and login endpoints.
 #[inline]

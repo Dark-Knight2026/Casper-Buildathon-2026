@@ -13,7 +13,8 @@
 #![allow(clippy::missing_panics_doc)]
 #![allow(clippy::must_use_candidate)]
 
-use api::{AppState, Claims, Config, UserId, UserRole, server};
+use std::sync::Arc;
+
 use axum::http::{Method, StatusCode};
 use axum_test::{
     TestResponse, TestServer, TestServerConfig, Transport, http::header::AUTHORIZATION,
@@ -25,12 +26,13 @@ use secrecy::SecretString;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 use sqlx::PgPool;
-use std::sync::Arc;
 use testcontainers::{
     ContainerAsync, GenericImage,
     core::{IntoContainerPort, WaitFor},
     runners::AsyncRunner,
 };
+
+use api::{AppState, Claims, Config, UserId, UserRole, server};
 
 /// Test database URL for docker-compose `PostgreSQL`.
 pub const TEST_DATABASE_URL: &str = "postgres://postgres:postgres@127.0.0.1:5433/postgres";

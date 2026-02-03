@@ -1,8 +1,9 @@
 //! Tests for cryptographic signature verification.
 
-use api::common::verify_casper_signature;
 use casper_types::{AsymmetricType, PublicKey, SecretKey, crypto};
 use rand::RngCore;
+
+use api::common::verify_casper_signature;
 
 fn generate_random_ed25519() -> (SecretKey, PublicKey) {
     let mut rng = rand::rng();

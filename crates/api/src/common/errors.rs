@@ -1,6 +1,5 @@
 //! Application-level error types.
 
-use crate::auth::AuthError;
 use axum::{
     Json,
     http::StatusCode,
@@ -8,6 +7,8 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
+
+use crate::auth::AuthError;
 
 /// Represents errors that can occur at the application level (e.g., startup).
 /// These are not intended to be converted into API responses but are for logging
