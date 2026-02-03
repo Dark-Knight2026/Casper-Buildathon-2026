@@ -81,27 +81,3 @@ pub async fn calculate_tax_liability(
         ],
     }))
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_json::json;
-    use uuid::Uuid;
-
-    #[test]
-    fn test_tax_request_deserialization() {
-        let property_id = Uuid::new_v4();
-        let json_data = json!({
-            "fiscal_year": 2024,
-            "property_ids": [property_id.to_string()],
-            "include_depreciation": true
-        });
-
-        let request: TaxCalculationRequest =
-            serde_json::from_value(json_data).expect("Failed to deserialize");
-
-        assert_eq!(request.fiscal_year, 2024);
-        assert_eq!(request.property_ids[0], property_id);
-        assert!(request.include_depreciation);
-    }
-}

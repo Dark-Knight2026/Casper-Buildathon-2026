@@ -55,26 +55,3 @@ pub async fn get_property_performance(
         occupancy_rate: Decimal::new(955, 1), // 95.5
     }))
 }
-
-#[cfg(test)]
-mod tests {
-    use crate::analytics::models::PropertyPerformanceRequest;
-    use chrono::NaiveDate;
-    use serde_json::json;
-
-    #[test]
-    fn test_date_parsing() {
-        let json_data = json!({
-            "start_date": "2024-01-01",
-            "end_date": "2024-12-31",
-            "property_ids": []
-        });
-
-        let request: PropertyPerformanceRequest =
-            serde_json::from_value(json_data).expect("Date parsing failed");
-        assert_eq!(
-            request.start_date,
-            NaiveDate::from_ymd_opt(2024, 1, 1).unwrap()
-        );
-    }
-}

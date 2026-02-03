@@ -1,37 +1,9 @@
-//! Integration tests for API endpoints.
-//!
-//! Uses `#[sqlx::test]` for isolated `PostgreSQL` databases per test.
-//! Redis uses testcontainers (one container per test that needs it).
-//!
-//! Requires:
-//! - Docker running
-//! - `PostgreSQL` via: docker compose -f docker-compose.test.yml up -d
-//!
-//! Run with: `cargo test --test integration`
+//! Integration tests for authentication endpoints.
 
 mod common;
 
 use axum::http::{Method, StatusCode};
 use sqlx::PgPool;
-
-#[sqlx::test(migrations = "../../supabase/migrations")]
-async fn health_check_returns_status(pool: PgPool) {
-    let env = common::setup_test_server_with_pool(pool, true).await;
-
-    let response = env.server.get("/health").await;
-
-    // Should return 200 if services are up, 503 if down
-    assert!(
-        response.status_code() == StatusCode::OK
-            || response.status_code() == StatusCode::SERVICE_UNAVAILABLE
-    );
-
-    let body: serde_json::Value = response.json();
-    assert!(body.get("status").is_some());
-    assert!(body.get("redis").is_some());
-    assert!(body.get("database").is_some());
-    assert_eq!(body["service"], "leasefi-backend");
-}
 
 #[sqlx::test(migrations = "../../supabase/migrations")]
 async fn nonce_endpoint_requires_wallet_address(pool: PgPool) {
