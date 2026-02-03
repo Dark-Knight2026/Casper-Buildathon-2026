@@ -3,6 +3,12 @@
 use casper_types::{AsymmetricType, PublicKey, Signature, crypto};
 use thiserror::Error;
 
+/// Length of `Ed25519` public key in hex format (01 prefix + 32 bytes = 66 hex chars).
+pub const CASPER_ED25519_PUBKEY_HEX_LEN: usize = 66;
+
+/// Length of `Secp256k1` public key in hex format (02 prefix + 33 bytes = 68 hex chars).
+pub const CASPER_SECP256K1_PUBKEY_HEX_LEN: usize = 68;
+
 /// Custom error types for cryptographic operations.
 #[derive(Debug, Error)]
 pub enum CryptoError {

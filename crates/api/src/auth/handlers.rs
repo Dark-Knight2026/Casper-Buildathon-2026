@@ -3,7 +3,10 @@
 use crate::{
     auth,
     auth::models::{LoginRequest, LoginResponse, NonceRequest, NonceResponse, UserInfo},
-    common::{self, ApiError, ApiResult, AppState, Claims, UserRole},
+    common::{
+        self, ApiError, ApiResult, AppState, CASPER_ED25519_PUBKEY_HEX_LEN,
+        CASPER_SECP256K1_PUBKEY_HEX_LEN, Claims, UserRole,
+    },
 };
 use axum::{
     Json,
@@ -130,12 +133,13 @@ pub async fn login(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<LoginRequest>,
 ) -> ApiResult<Json<LoginResponse>> {
-    // Validation: Check wallet address length
+    // Validation: Check wallet address length (Ed25519 or Secp256k1)
     let len = payload.wallet_address.len();
-    if len != 66 && len != 68 {
+    if len != CASPER_ED25519_PUBKEY_HEX_LEN && len != CASPER_SECP256K1_PUBKEY_HEX_LEN {
         tracing::warn!(
             length = len,
-            expected = "66 or 68",
+            expected_ed25519 = CASPER_ED25519_PUBKEY_HEX_LEN,
+            expected_secp256k1 = CASPER_SECP256K1_PUBKEY_HEX_LEN,
             "Invalid wallet address length"
         );
         return Err(ApiError::BadRequest(

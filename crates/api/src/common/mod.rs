@@ -10,6 +10,9 @@ pub mod errors;
 pub mod models;
 
 pub use config::{AppState, Config};
-pub use crypto::{CryptoError, verify_casper_signature};
+pub use crypto::{
+    CASPER_ED25519_PUBKEY_HEX_LEN, CASPER_SECP256K1_PUBKEY_HEX_LEN, CryptoError,
+    verify_casper_signature,
+};
 pub use errors::{ApiError, ApiResult, ErrorResponse, ServerError};
 pub use models::{Claims, PropertyId, UserId, UserRole};
