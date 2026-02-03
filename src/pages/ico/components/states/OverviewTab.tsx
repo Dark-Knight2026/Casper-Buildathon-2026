@@ -60,7 +60,7 @@ const MOCK_TRANSACTIONS: Transaction[] = [
     type: 'purchase',
     amount: 500,
     currency: 'USDC',
-    tokensReceived: 500000,
+    tokensReceived: 333333,    // 500 USDC / $0.0015 = 333,333 BIG (public ICO price)
     tokenSymbol: 'BIG',
     status: 'completed',
     timestamp: new Date('2025-01-10T09:15:00'),
