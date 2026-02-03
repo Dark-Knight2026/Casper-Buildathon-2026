@@ -1,5 +1,6 @@
 import { cn } from '@/lib/utils';
 import { ICO_CONFIG } from '@/constants/ico';
+import type { PaymentCurrency } from '@/types/ico';
 import { Title } from '../shared/Title';
 import { ProgressBar } from '../shared/ProgressBar';
 import { WalletCard } from '../shared/WalletCard';
@@ -64,6 +65,9 @@ const MOCK_TRANSACTIONS: Transaction[] = [
 export function ActivePresale({ className, endTimestamp }: ActivePresaleProps) {
   const { isConnected, account, connect } = useICOWallet();
 
+  const handlePurchase = (amount: number, currency: PaymentCurrency) => {
+  };
+
   return (
     <div className={cn('max-w-5xl mx-auto', className)}>
       {/* Hero Section */}
@@ -104,7 +108,7 @@ export function ActivePresale({ className, endTimestamp }: ActivePresaleProps) {
           tokenPrice={Number(ICO_CONFIG.PRE_SALE.price)}
           tokenSymbol={ICO_CONFIG.TOKEN.symbol}
           onConnect={connect}
-          onPurchase={(amount, currency) => console.log('Purchase', amount, currency)}
+          onPurchase={handlePurchase}
           className="w-full"
         />
       </div>

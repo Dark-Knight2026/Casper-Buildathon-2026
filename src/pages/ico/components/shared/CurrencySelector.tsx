@@ -36,8 +36,9 @@ export function CurrencySelector({
       <SelectTrigger
         className={cn(
           'w-32 border-0',
-          'bg-transparent text-[hsl(var(--ico-text-primary))] focus-visible:ring-0',
-          'focus:outline-none focus:ring-0 focus:ring-offset-0 focus:border-0 ',
+          'bg-transparent text-[hsl(var(--ico-text-primary))]',
+          'focus:outline-none focus:ring-0 focus:ring-offset-0 focus:border-0',
+          'focus-visible:ring-0 focus-visible:bg-sky-800/30',
           className
         )}
       >

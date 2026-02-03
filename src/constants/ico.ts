@@ -39,7 +39,8 @@ export const ICO_CONFIG = {
     usdtAddress: '',     // USDT CEP-18 contract
   },
 
-  // Demo timestamps for development (set to future dates)
+  // TODO: Replace with real timestamps from backend API.
+  // Mock values — Date.now() is evaluated once at module load, so these become stale on long sessions.
   TIMESTAMPS: {
     presaleStart: Date.now() + 2 * 24 * 60 * 60 * 1000, // 2 days from now
     presaleEnd: Date.now() + 9 * 24 * 60 * 60 * 1000,   // 9 days from now

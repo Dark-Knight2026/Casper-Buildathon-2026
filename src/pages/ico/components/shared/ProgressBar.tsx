@@ -63,7 +63,14 @@ export function ProgressBar({
         ) : null}
       </div>
 
-      <div className={cn('w-full bg-[hsl(var(--ico-progress-bg))] rounded-full overflow-hidden', sizeClasses[size])}>
+      <div
+        role="progressbar"
+        aria-valuenow={Math.round(percentage)}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label={label}
+        className={cn('w-full bg-[hsl(var(--ico-progress-bg))] rounded-full overflow-hidden', sizeClasses[size])}
+      >
         <div
           className="h-full bg-linear-to-r from-sky-900 to-sky-500 rounded-full transition-all duration-500"
           style={{ width: `${Math.min(percentage, 100)}%` }}

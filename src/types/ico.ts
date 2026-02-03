@@ -146,15 +146,6 @@ export interface ICOStateResponse {
 }
 
 // Hook return types
-export interface UseICOStateReturn {
-  state: ICOState;
-  phase: ICOPhase;
-  isLoading: boolean;
-  error: Error | null;
-  timestamps: SaleTimestamps | null;
-  refetch: () => void;
-}
-
 export interface UseCountdownReturn {
   time: CountdownTime;
   isExpired: boolean;
