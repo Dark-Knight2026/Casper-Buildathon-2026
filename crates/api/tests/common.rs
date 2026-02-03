@@ -13,13 +13,13 @@
 #![allow(clippy::missing_panics_doc)]
 #![allow(clippy::must_use_candidate)]
 
-use api::{
-    config::AppState,
-    models::{Claims, UserId, UserRole},
-};
+use api::{AppState, Claims, Config, UserId, UserRole, server};
 use axum::http::{Method, StatusCode};
-use axum_test::{TestResponse, TestServer, http::header::AUTHORIZATION};
+use axum_test::{
+    TestResponse, TestServer, TestServerConfig, Transport, http::header::AUTHORIZATION,
+};
 use chrono::{Duration, Utc};
+use core::net::SocketAddr;
 use jsonwebtoken::{EncodingKey, Header, encode};
 use secrecy::SecretString;
 use serde::de::DeserializeOwned;
@@ -104,31 +104,32 @@ pub async fn setup_test_server_with_pool(pool: PgPool, with_redis: bool) -> Test
     } else {
         // Fake Redis URL - will fail if actually used
         let url = "redis://127.0.0.1:6379".to_string();
-        let client = ::redis::Client::open(url.clone()).expect("Invalid Redis URL");
+        let client = redis::Client::open(url.clone()).expect("Invalid Redis URL");
         (url, client, None)
     };
 
-    let config = api::config::Config {
+    let config = Config {
         database_url: SecretString::from(TEST_DATABASE_URL),
         redis_url,
         jwt_secret: SecretString::from(jwt_secret.clone()),
         port: 0,
         cors_origin: "http://localhost:3000".to_string(),
     };
-
     let state = Arc::new(AppState {
         db: pool,
         redis: redis_client,
         config,
     });
 
-    let app = api::handlers::health::router()
-        .merge(api::handlers::auth::router())
-        .nest("/api/v1", api::handlers::business::router())
-        .with_state(state);
+    // Use real HTTP transport so ConnectInfo works for rate limiting (GovernorLayer)
+    let app = server::create_router(state).into_make_service_with_connect_info::<SocketAddr>();
+    let config = TestServerConfig {
+        transport: Some(Transport::HttpRandomPort),
+        ..TestServerConfig::default()
+    };
 
     TestEnv {
-        server: TestServer::new(app).expect("Failed to create test server"),
+        server: TestServer::new_with_config(app, config).expect("Failed to create test server"),
         jwt_secret,
         _redis: redis_env,
     }

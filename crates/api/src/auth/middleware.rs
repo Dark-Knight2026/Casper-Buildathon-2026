@@ -1,6 +1,6 @@
 //! Authentication middleware and error types.
 
-use crate::{config::AppState, models::Claims};
+use crate::common::{AppState, Claims};
 use axum::{
     Json,
     extract::FromRequestParts,

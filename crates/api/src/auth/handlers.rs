@@ -1,81 +1,24 @@
-//! Authentication handlers for nonce generation and login.
+//! HTTP request handlers for authentication.
 
 use axum::{
-    Json, Router,
+    Json,
     extract::{Query, State},
     http::StatusCode,
-    routing::{get, post},
 };
 use chrono::{Duration, Utc};
 use core::str::FromStr;
 use jsonwebtoken::{EncodingKey, Header, encode};
 use rand::{Rng, distr::Alphanumeric};
 use redis::AsyncCommands;
-use secrecy::{ExposeSecret, SecretString};
-use serde::{Deserialize, Serialize};
+use secrecy::ExposeSecret;
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
 
-use crate::config::AppState;
-use crate::crypto::verify_casper_signature;
-use crate::models::{Claims, UserId, UserRole};
+use crate::auth::models::{LoginRequest, LoginResponse, NonceRequest, NonceResponse, UserInfo};
+use crate::common::{AppState, Claims, UserRole, verify_casper_signature};
 
 // --- Constants ---
 const LOGIN_NONCE_TTL: u64 = 300;
-
-/// Creates the authentication router with nonce and login endpoints.
-#[inline]
-pub fn router() -> Router<Arc<AppState>> {
-    Router::new()
-        .route("/nonce", get(get_nonce))
-        .route("/login", post(login))
-}
-
-// --- Auth Models ---
-
-/// Request payload for generating a login nonce.
-#[derive(Debug, Deserialize)]
-pub struct NonceRequest {
-    /// The wallet address (public key).
-    pub wallet_address: String,
-}
-
-/// Response containing the generated nonce.
-#[derive(Debug, Serialize)]
-pub struct NonceResponse {
-    /// A randomly generated string used to prevent replay attacks.
-    pub nonce: String,
-    /// The full message string that the user must sign with their wallet.
-    /// Format: `"Sign this message to login to LeaseFi. Nonce: <nonce>"`
-    pub message: String,
-}
-
-/// Request payload for verifying a login signature.
-#[derive(Debug, Deserialize)]
-pub struct LoginRequest {
-    /// The wallet address (public key) of the user.
-    pub wallet_address: String,
-    /// The signature is sensitive.
-    pub signature: SecretString,
-}
-
-/// Response returned upon successful login.
-#[derive(Debug, Serialize)]
-pub struct LoginResponse {
-    /// Use this JSON Web Token (JWT) for authenticating subsequent requests.
-    pub token: String,
-    /// Basic information about the authenticated user.
-    pub user: UserInfo,
-}
-
-/// Basic user information.
-#[derive(Debug, Serialize)]
-pub struct UserInfo {
-    /// The unique identifier of the user in the database.
-    pub id: UserId,
-    /// The user's role (e.g., "tenant", "landlord").
-    pub role: UserRole,
-}
 
 /// Generates a cryptographic nonce for login challenge-response.
 ///

@@ -9,11 +9,11 @@ services:
       - "8080:8080"
     env_file:
       - .env
-    
+
     environment:
       - DATABASE_URL=postgres://postgres:postgres@host.docker.internal:54322/postgres
       - REDIS_URL=redis://redis:6379
-      
+
     depends_on:
       - redis
     extra_hosts:

@@ -38,7 +38,7 @@ async fn nonce_endpoint_requires_wallet_address(pool: PgPool) {
     let env = common::setup_test_server_with_pool(pool, true).await;
 
     // Missing wallet_address parameter
-    let response = env.server.get("/nonce").await;
+    let response = env.server.get("/api/v1/auth/nonce").await;
     assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
 }
 
@@ -48,7 +48,7 @@ async fn nonce_endpoint_returns_challenge(pool: PgPool) {
 
     let response = env
         .server
-        .get("/nonce")
+        .get("/api/v1/auth/nonce")
         .add_query_param(
             "wallet_address",
             "01a234567890abcdef01234567890abcdef01234567890abcdef01234567890abcdef",
@@ -71,7 +71,7 @@ async fn login_rejects_invalid_wallet_address(pool: PgPool) {
 
     let response = env
         .server
-        .post("/login")
+        .post("/api/v1/auth/login")
         .json(&serde_json::json!({
             "wallet_address": "invalid",
             "signature": "fake_signature"
@@ -89,7 +89,7 @@ async fn login_rejects_invalid_signature_format(pool: PgPool) {
     // Returns 400 (BAD_REQUEST) because signature parsing fails before nonce check
     let response = env
         .server
-        .post("/login")
+        .post("/api/v1/auth/login")
         .json(&serde_json::json!({
             "wallet_address": "01a234567890abcdef01234567890abcdef01234567890abcdef01234567890abcdef",
             "signature": "01a234567890abcdef01234567890abcdef01234567890abcdef01234567890abcdef01234567890abcdef01234567890abcdef01234567890abcdef01234567890abcdef"
