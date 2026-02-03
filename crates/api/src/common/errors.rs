@@ -84,14 +84,13 @@ fn auth_error_response(err: &AuthError) -> (StatusCode, String) {
         AuthError::MissingCredentials => {
             (StatusCode::UNAUTHORIZED, "Missing credentials".to_owned())
         }
-        AuthError::InvalidToken => (
-            StatusCode::UNAUTHORIZED,
-            "Invalid or expired token".to_owned(),
-        ),
-        AuthError::ServerConfiguration => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "An unexpected error occurred".to_owned(),
-        ),
+        AuthError::InvalidToken(jwt_err) => {
+            tracing::warn!(error = %jwt_err, "JWT validation failed");
+            (
+                StatusCode::UNAUTHORIZED,
+                "Invalid or expired token".to_owned(),
+            )
+        }
     }
 }
 
