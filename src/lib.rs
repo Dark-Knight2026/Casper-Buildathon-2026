@@ -42,15 +42,11 @@ pub mod implementation {
             .max_connections(5)
             .acquire_timeout(Duration::from_secs(3))
             .connect_with(db_options)
-            .await
-            .expect("Failed to connect to Postgres");
+            .await?;
 
         // Run migrations
         if std::env::var("RUN_MIGRATIONS").unwrap_or_default() == "true" {
-            sqlx::migrate!("./supabase/migrations")
-                .run(&pool)
-                .await
-                .expect("Failed to run migrations");
+            sqlx::migrate!("./supabase/migrations").run(&pool).await?;
         }
 
         tracing::info!("Database connected");
@@ -107,8 +103,7 @@ pub mod implementation {
         let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
         axum::serve(listener, app)
             .with_graceful_shutdown(shutdown_signal())
-            .await
-            .unwrap();
+            .await?;
 
         Ok(())
     }

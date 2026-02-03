@@ -1,20 +1,22 @@
 //! Integration tests for API endpoints.
 //!
-//! Uses testcontainers for isolated PostgreSQL and Redis instances.
-//! PostgreSQL container is shared across tests, each test gets its own database.
-//! Redis container is created only for tests that need it.
+//! Uses #[sqlx::test] for isolated PostgreSQL databases per test.
+//! Redis uses testcontainers (one container per test that needs it).
 //!
-//! Requires Docker to be running.
+//! Requires:
+//! - Docker running
+//! - PostgreSQL via: docker compose -f docker-compose.test.yml up -d
 //!
 //! Run with: `cargo test --test api_integration`
 
 mod common;
 
 use axum::http::{Method, StatusCode};
+use sqlx::PgPool;
 
-#[tokio::test]
-async fn health_check_returns_status() {
-    let env = common::setup_test_server(true).await;
+#[sqlx::test(migrations = "./supabase/migrations")]
+async fn health_check_returns_status(pool: PgPool) {
+    let env = common::setup_test_server_with_pool(pool, true).await;
 
     let response = env.server.get("/health").await;
 
@@ -31,18 +33,18 @@ async fn health_check_returns_status() {
     assert_eq!(body["service"], "leasefi-backend");
 }
 
-#[tokio::test]
-async fn nonce_endpoint_requires_wallet_address() {
-    let env = common::setup_test_server(true).await;
+#[sqlx::test(migrations = "./supabase/migrations")]
+async fn nonce_endpoint_requires_wallet_address(pool: PgPool) {
+    let env = common::setup_test_server_with_pool(pool, true).await;
 
     // Missing wallet_address parameter
     let response = env.server.get("/nonce").await;
     assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
 }
 
-#[tokio::test]
-async fn nonce_endpoint_returns_challenge() {
-    let env = common::setup_test_server(true).await;
+#[sqlx::test(migrations = "./supabase/migrations")]
+async fn nonce_endpoint_returns_challenge(pool: PgPool) {
+    let env = common::setup_test_server_with_pool(pool, true).await;
 
     let response = env
         .server
@@ -63,9 +65,9 @@ async fn nonce_endpoint_returns_challenge() {
     assert!(message.starts_with("Sign this message to login to LeaseFi. Nonce:"));
 }
 
-#[tokio::test]
-async fn login_rejects_invalid_wallet_address() {
-    let env = common::setup_test_server(false).await;
+#[sqlx::test(migrations = "./supabase/migrations")]
+async fn login_rejects_invalid_wallet_address(pool: PgPool) {
+    let env = common::setup_test_server_with_pool(pool, false).await;
 
     let response = env
         .server
@@ -79,9 +81,9 @@ async fn login_rejects_invalid_wallet_address() {
     assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
 }
 
-#[tokio::test]
-async fn login_rejects_invalid_signature_format() {
-    let env = common::setup_test_server(false).await;
+#[sqlx::test(migrations = "./supabase/migrations")]
+async fn login_rejects_invalid_signature_format(pool: PgPool) {
+    let env = common::setup_test_server_with_pool(pool, false).await;
 
     // Valid length wallet address but invalid Casper signature format
     // Returns 400 (BAD_REQUEST) because signature parsing fails before nonce check
@@ -97,9 +99,9 @@ async fn login_rejects_invalid_signature_format() {
     assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
 }
 
-#[tokio::test]
-async fn protected_endpoint_requires_auth() {
-    let env = common::setup_test_server(false).await;
+#[sqlx::test(migrations = "./supabase/migrations")]
+async fn protected_endpoint_requires_auth(pool: PgPool) {
+    let env = common::setup_test_server_with_pool(pool, false).await;
 
     let response = env
         .server
@@ -113,9 +115,9 @@ async fn protected_endpoint_requires_auth() {
     assert_eq!(response.status_code(), StatusCode::UNAUTHORIZED);
 }
 
-#[tokio::test]
-async fn protected_endpoint_rejects_invalid_token() {
-    let env = common::setup_test_server(false).await;
+#[sqlx::test(migrations = "./supabase/migrations")]
+async fn protected_endpoint_rejects_invalid_token(pool: PgPool) {
+    let env = common::setup_test_server_with_pool(pool, false).await;
 
     let (status, _): (StatusCode, Option<serde_json::Value>) = common::authed_request(
         &env.server,

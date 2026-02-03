@@ -52,10 +52,12 @@ prepare: ## Generate SQLx offline query metadata for CI builds (requires bash/zs
 	@test -f .env || (echo "Error: .env file not found" && exit 1)
 	@set -a && . ./.env && set +a && cargo sqlx prepare --workspace -- --all-features --tests
 
-test: ## Run nextest (use ARGS="..." for extra arguments, requires bash/zsh)
+test: ## Run nextest (use ARGS="..." for extra arguments)
+	@echo "[*] Starting test database..."
+	@docker compose -f docker-compose.test.yml up -d --wait
 	@echo "[*] Running tests..."
-	@test -f .env || (echo "Error: .env file not found" && exit 1)
-	@set -a && . ./.env && set +a && cargo nextest run --all-features --no-fail-fast $(ARGS)
+	@DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5433/postgres \
+		cargo nextest run --all-features --no-fail-fast $(ARGS)
 
 test_one: ## Run single test: `make test_one <test_name>`
 	@$(MAKE) test ARGS="$(filter-out $@,$(MAKECMDGOALS))"
