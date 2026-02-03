@@ -1,12 +1,13 @@
 //! HTTP request handlers for analytics.
 
+use crate::{
+    analytics::models::{PropertyPerformanceReport, PropertyPerformanceRequest},
+    auth::AuthUser,
+    common::AppState,
+};
 use axum::{Json, extract::State, http::StatusCode};
 use rust_decimal::Decimal;
 use std::sync::Arc;
-
-use crate::analytics::models::{PropertyPerformanceReport, PropertyPerformanceRequest};
-use crate::auth::AuthUser;
-use crate::common::AppState;
 
 /// Retrieves performance metrics for a set of properties over a specified date range.
 ///

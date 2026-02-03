@@ -2,6 +2,8 @@
 //!
 //! Provides health check endpoints for monitoring service status.
 
+/// Database operations for health checks.
+pub mod db;
 /// HTTP request handlers for health checks.
 pub mod handlers;
 /// Models for health check responses.

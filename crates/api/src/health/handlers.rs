@@ -1,10 +1,12 @@
 //! HTTP request handlers for health checks.
 
+use crate::{
+    common::AppState,
+    health::db::heartbeat,
+    health::models::{ConnectionStatus, HealthResponse},
+};
 use axum::{Json, extract::State, http::StatusCode};
 use std::sync::Arc;
-
-use crate::common::AppState;
-use crate::health::models::{ConnectionStatus, HealthResponse};
 
 /// Checks the health status of the application and its dependencies.
 ///
@@ -46,11 +48,8 @@ pub async fn health_check(
     };
 
     // 2. Check Database
-    let db_status = match sqlx::query!("SELECT 1 AS heartbeat")
-        .fetch_one(&state.db)
-        .await
-    {
-        Ok(_) => ConnectionStatus::Connected,
+    let db_status = match heartbeat(&state.db).await {
+        Ok(()) => ConnectionStatus::Connected,
         Err(e) => {
             tracing::error!(error = %e, "Database ping failed");
             ConnectionStatus::Error

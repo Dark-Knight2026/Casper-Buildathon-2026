@@ -2,15 +2,14 @@
 
 #![allow(clippy::needless_for_each)]
 
+use crate::{
+    analytics::models as analytics_models, auth::models as auth_models,
+    health::models as health_models, tax::models as tax_models,
+};
 use utoipa::{
     Modify, OpenApi,
     openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme},
 };
-
-use crate::analytics::models as analytics_models;
-use crate::auth::models as auth_models;
-use crate::health::models as health_models;
-use crate::tax::models as tax_models;
 
 /// `OpenAPI` documentation configuration.
 ///

@@ -7,15 +7,16 @@ use axum::{
 };
 use chrono::{Duration, Utc};
 use core::str::FromStr;
-use jsonwebtoken::{EncodingKey, Header, encode};
+use jsonwebtoken::{EncodingKey, Header};
 use rand::{Rng, distr::Alphanumeric};
 use redis::AsyncCommands;
 use secrecy::ExposeSecret;
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
 
+use crate::auth;
 use crate::auth::models::{LoginRequest, LoginResponse, NonceRequest, NonceResponse, UserInfo};
-use crate::common::{AppState, Claims, UserRole, verify_casper_signature};
+use crate::common::{self, AppState, Claims, UserRole};
 
 // --- Constants ---
 const LOGIN_NONCE_TTL: u64 = 300;
@@ -157,7 +158,7 @@ pub async fn login(
     })?;
 
     // Security: Verify Signature and RETURN ERROR if invalid
-    let is_valid = verify_casper_signature(
+    let is_valid = common::verify_casper_signature(
         &payload.wallet_address,
         payload.signature.expose_secret(),
         &stored_nonce,
@@ -184,25 +185,13 @@ pub async fn login(
 
     // If a user with this wallet_address already exists, return it.
     // If not, create a new one.
-    let user_record = sqlx::query!(
-        r#"
-        INSERT INTO users (
-            email, role, wallet_address, first_name, last_name, auth_id, status
-        )
-        VALUES ($1, 'tenant', $2, 'Wallet', 'User', NULL, 'active')
-        ON CONFLICT (wallet_address) DO UPDATE
-            SET last_login_at = NOW()
-        RETURNING id, role
-        "#,
-        placeholder_email,
-        payload.wallet_address
-    )
-    .fetch_one(&state.db)
-    .await
-    .map_err(|e| {
-        tracing::error!(error = %e, "Database error");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let user_record =
+        auth::upsert_user_by_wallet(&state.db, &placeholder_email, &payload.wallet_address)
+            .await
+            .map_err(|e| {
+                tracing::error!(error = %e, "Database error");
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
 
     let user_role = UserRole::from_str(&user_record.role).unwrap_or(UserRole::Unknown);
 
@@ -230,7 +219,7 @@ pub async fn login(
 
     let secret = state.config.jwt_secret.expose_secret();
 
-    let token = encode(
+    let token = jsonwebtoken::encode(
         &Header::default(),
         &claims,
         &EncodingKey::from_secret(secret.as_bytes()),

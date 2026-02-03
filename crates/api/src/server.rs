@@ -7,11 +7,11 @@ use crate::{
     openapi::ApiDoc,
     tax,
 };
-use axum::Router;
-use axum::http::{Method, header};
-use core::net::SocketAddr;
-use core::str::FromStr;
-use core::time::Duration;
+use axum::{
+    Router,
+    http::{Method, header},
+};
+use core::{net::SocketAddr, str::FromStr, time::Duration};
 use secrecy::ExposeSecret;
 use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
 use std::sync::Arc;
@@ -159,7 +159,6 @@ pub async fn main() -> Result<(), ServerError> {
         .layer(RequestBodyLimitLayer::new(1024 * 1024)); // 1MB limit
 
     let addr = SocketAddr::from(([0, 0, 0, 0], config.port));
-
     tracing::info!(address = %addr, "Server listening");
 
     let listener = tokio::net::TcpListener::bind(addr).await?;

@@ -1,12 +1,13 @@
 //! HTTP request handlers for tax calculations.
 
+use crate::{
+    auth::AuthUser,
+    common::AppState,
+    tax::models::{TaxCalculationRequest, TaxCategory, TaxCategoryType, TaxReport},
+};
 use axum::{Json, extract::State, http::StatusCode};
 use rust_decimal::Decimal;
 use std::sync::Arc;
-
-use crate::auth::AuthUser;
-use crate::common::AppState;
-use crate::tax::models::{TaxCalculationRequest, TaxCategory, TaxCategoryType, TaxReport};
 
 /// Calculates the estimated tax liability for a given fiscal year.
 ///

@@ -1,10 +1,8 @@
 //! Router configuration for health endpoints.
 
+use crate::{common::AppState, health::handlers::health_check};
 use axum::{Router, routing::get};
 use std::sync::Arc;
-
-use crate::common::AppState;
-use crate::health::handlers::health_check;
 
 /// Creates the health check router.
 #[inline]
