@@ -40,7 +40,7 @@ const calculateState = (timestamps: SaleTimestamps): ICOState => {
 
   // State 1: Before presale starts
   if (now < timestamps.presaleStart) {
-    return 2;
+    return 1;
   }
 
   // State 2: During presale
