@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { ICO_CONFIG } from '@/constants/ico';
+import { getIcoTimestamps } from '@/constants/ico';
 import type { ICOState, ICOPhase, SaleTimestamps, SaleStatus } from '@/types/ico';
 
 interface UseICOStateOptions {
@@ -89,14 +89,9 @@ export function useICOState(options: UseICOStateOptions = {}): UseICOStateReturn
     devOverrideState: initialDevState = null,
   } = options;
 
-  // Use custom timestamps or default from config
+  // Use custom timestamps or compute fresh mock timestamps
   const timestamps: SaleTimestamps = useMemo(() => {
-    return customTimestamps || {
-      presaleStart: ICO_CONFIG.TIMESTAMPS.presaleStart,
-      presaleEnd: ICO_CONFIG.TIMESTAMPS.presaleEnd,
-      icoStart: ICO_CONFIG.TIMESTAMPS.icoStart,
-      icoEnd: ICO_CONFIG.TIMESTAMPS.icoEnd,
-    };
+    return customTimestamps || getIcoTimestamps();
   }, [customTimestamps]);
 
   // Dev mode: manual state override

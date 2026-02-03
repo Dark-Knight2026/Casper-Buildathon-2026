@@ -40,12 +40,12 @@ export const ICO_CONFIG = {
   },
 
   // TODO: Replace with real timestamps from backend API.
-  // Mock values — Date.now() is evaluated once at module load, so these become stale on long sessions.
-  TIMESTAMPS: {
-    presaleStart: Date.now() + 2 * 24 * 60 * 60 * 1000, // 2 days from now
-    presaleEnd: Date.now() + 9 * 24 * 60 * 60 * 1000,   // 9 days from now
-    icoStart: Date.now() + 12 * 24 * 60 * 60 * 1000,    // 12 days from now
-    icoEnd: Date.now() + 26 * 24 * 60 * 60 * 1000,      // 26 days from now
+  // Use getIcoTimestamps() for fresh values — see below.
+  TIMESTAMPS_OFFSETS: {
+    presaleStart: 2 * 24 * 60 * 60 * 1000, // 2 days
+    presaleEnd: 9 * 24 * 60 * 60 * 1000,   // 9 days
+    icoStart: 12 * 24 * 60 * 60 * 1000,    // 12 days
+    icoEnd: 26 * 24 * 60 * 60 * 1000,      // 26 days
   },
 
   CASPER: {
@@ -72,6 +72,17 @@ export const ICO_CONFIG = {
     CARD: 1,       // 1 USD = $1 (fiat)
   },
 } as const;
+
+/** Returns fresh mock timestamps relative to the current time. */
+export function getIcoTimestamps() {
+  const now = Date.now();
+  return {
+    presaleStart: now + ICO_CONFIG.TIMESTAMPS_OFFSETS.presaleStart,
+    presaleEnd: now + ICO_CONFIG.TIMESTAMPS_OFFSETS.presaleEnd,
+    icoStart: now + ICO_CONFIG.TIMESTAMPS_OFFSETS.icoStart,
+    icoEnd: now + ICO_CONFIG.TIMESTAMPS_OFFSETS.icoEnd,
+  };
+}
 
 // Payment currency display info
 export const PAYMENT_CURRENCY_INFO: Record<PaymentCurrency, {
