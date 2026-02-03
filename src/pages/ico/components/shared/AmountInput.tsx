@@ -48,8 +48,10 @@ export function AmountInput({
 
     if (num > 0 && num < min) {
       setError(`Minimum amount is $${min}`);
+      return;
     } else if (num > max) {
       setError(`Maximum amount is $${max.toLocaleString()}`);
+      return;
     } else {
       setError(null);
     }

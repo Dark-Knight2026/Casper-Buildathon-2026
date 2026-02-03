@@ -10,6 +10,9 @@ export function ICOHeader() {
     navigate('/ico');
   }
 
+  const handleConnectWallet = () => {
+  };
+
   return (
     <header className="relative border-b h-28 z-50 border-[hsl(var(--ico-border-color))] bg-[hsl(var(--ico-bg-secondary))] shadow-md shadow-slate-900">
       <div className="container mx-auto px-4 py-4">
@@ -29,7 +32,7 @@ export function ICOHeader() {
             </div>
           </div>
 
-          <MainButton text="Connect Wallet" />
+          <MainButton text="Connect Wallet" onClick={handleConnectWallet} />
         </div>
       </div>
     </header>
