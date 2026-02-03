@@ -84,7 +84,7 @@ interface WhitepaperTabProps {
 
 export function WhitepaperTab({ className }: WhitepaperTabProps) {
   const [activeSection, setActiveSection] = useState<string>('introduction');
-  const [expandedSections, setExpandedSections] = useState<string[]>(['introduction', 'platform', 'tokenomics']);
+  const [expandedSections, setExpandedSections] = useState<string[]>(['introduction', 'tokenomics']);
   const [currentPage, setCurrentPage] = useState<number>(1);
 
   const toggleSection = (sectionId: string) => {
