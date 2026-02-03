@@ -10,7 +10,6 @@ use axum::{
 use chrono::{Duration, Utc};
 use jsonwebtoken::{EncodingKey, Header};
 use rand::{Rng, distr::Alphanumeric};
-use redis::AsyncCommands;
 use secrecy::ExposeSecret;
 use sha2::{Digest, Sha256};
 
@@ -22,9 +21,6 @@ use crate::{
         CASPER_SECP256K1_PUBKEY_HEX_LEN, Claims, UserRole,
     },
 };
-
-// --- Constants ---
-const LOGIN_NONCE_TTL: u64 = 300;
 
 /// Generates a cryptographic nonce for login challenge-response.
 ///
@@ -70,24 +66,14 @@ pub async fn get_nonce(
     // Create a message that the user will sign
     let message = format!("Sign this message to login to LeaseFi. Nonce: {random_string}");
 
-    // Store in Redis
-    let redis_key = format!("nonce:{}", payload.wallet_address);
-
-    let mut redis_conn = state
+    // Store nonce in Redis
+    state
         .redis
-        .get_multiplexed_async_connection()
+        .save_nonce(&payload.wallet_address, &message)
         .await
         .map_err(|e| {
-            tracing::error!(error = %e, "Redis connection error");
-            ApiError::Internal(format!("Redis connection error: {e}"))
-        })?;
-
-    let _: () = redis_conn
-        .set_ex(&redis_key, &message, LOGIN_NONCE_TTL)
-        .await
-        .map_err(|e| {
-            tracing::error!(error = %e, "Failed to save nonce to Redis");
-            ApiError::Internal(format!("Failed to save nonce to Redis: {e}"))
+            tracing::error!(error = %e, "Failed to save nonce");
+            ApiError::Internal(format!("Failed to save nonce: {e}"))
         })?;
 
     tracing::info!(
@@ -155,26 +141,24 @@ pub async fn login(
         ));
     }
 
-    let mut redis_conn = state
+    // Get stored nonce from Redis
+    let stored_nonce = state
         .redis
-        .get_multiplexed_async_connection()
+        .get_nonce(&payload.wallet_address)
         .await
         .map_err(|e| {
-            tracing::error!(error = %e, "Redis connection error");
-            ApiError::Internal(format!("Redis connection error: {e}"))
+            tracing::error!(error = %e, "Failed to get nonce");
+            ApiError::Internal(format!("Failed to get nonce: {e}"))
+        })?
+        .ok_or_else(|| {
+            tracing::warn!(
+                event = "login_failed",
+                reason = "nonce_expired",
+                wallet_address = %payload.wallet_address,
+                "Nonce not found or expired"
+            );
+            ApiError::Unauthorized("Nonce not found or expired".to_owned())
         })?;
-
-    let redis_key = format!("nonce:{}", payload.wallet_address);
-
-    let stored_nonce: String = redis_conn.get(&redis_key).await.map_err(|_| {
-        tracing::warn!(
-            event = "login_failed",
-            reason = "nonce_expired",
-            wallet_address = %payload.wallet_address,
-            "Nonce not found or expired"
-        );
-        ApiError::Unauthorized("Nonce not found or expired".to_owned())
-    })?;
 
     // Security: Verify Signature and RETURN ERROR if invalid
     let is_valid = common::verify_casper_signature(
@@ -203,8 +187,8 @@ pub async fn login(
         return Err(ApiError::Unauthorized("Invalid signature".to_owned()));
     }
 
-    // Remove Nonce (protection against signature reuse)
-    let _: () = redis_conn.del(&redis_key).await.unwrap_or(());
+    // Remove nonce (protection against signature reuse)
+    let _ = state.redis.delete_nonce(&payload.wallet_address).await;
 
     // Since the users table requires an email address, we generate a unique one using a hash.
     // Using `SHA-256` hash prevents collisions that could occur with simple address truncation.

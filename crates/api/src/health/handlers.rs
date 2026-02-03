@@ -34,17 +34,10 @@ pub async fn health_check(
     State(state): State<Arc<AppState>>,
 ) -> (StatusCode, Json<HealthResponse>) {
     // 1. Check Redis
-    let redis_status = match state.redis.get_multiplexed_async_connection().await {
-        Ok(mut conn) => match redis::cmd("PING").query_async::<String>(&mut conn).await {
-            Ok(pong) if pong == "PONG" => ConnectionStatus::Connected,
-            Ok(_) => ConnectionStatus::UnknownResponse,
-            Err(e) => {
-                tracing::error!(error = %e, "Redis ping failed");
-                ConnectionStatus::Error
-            }
-        },
+    let redis_status = match state.redis.ping().await {
+        Ok(()) => ConnectionStatus::Connected,
         Err(e) => {
-            tracing::error!(error = %e, "Failed to connect to Redis");
+            tracing::error!(error = %e, "Redis ping failed");
             ConnectionStatus::Disconnected
         }
     };

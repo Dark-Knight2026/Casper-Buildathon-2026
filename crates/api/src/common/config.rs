@@ -2,8 +2,9 @@
 
 use std::env;
 
-use redis::Client as RedisClient;
 use secrecy::SecretString;
+
+use crate::common::RedisStore;
 
 /// Application configuration loaded from environment variables.
 #[derive(Debug, Clone)]
@@ -74,8 +75,8 @@ impl Config {
 pub struct AppState {
     /// `PostgreSQL` connection pool.
     pub db: sqlx::PgPool,
-    /// `Redis` client for caching and session storage.
-    pub redis: RedisClient,
+    /// `Redis` client wrapper for caching and session storage.
+    pub redis: RedisStore,
     /// Application configuration.
     pub config: Config,
 }
@@ -85,7 +86,7 @@ impl core::fmt::Debug for AppState {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("AppState")
             .field("db", &"PgPool")
-            .field("redis", &"RedisClient")
+            .field("redis", &"RedisStore")
             .field("config", &self.config)
             .finish()
     }

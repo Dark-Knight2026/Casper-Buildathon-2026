@@ -17,7 +17,7 @@ use utoipa_swagger_ui::SwaggerUi;
 
 use crate::{
     analytics, auth,
-    common::{AppState, Config, ServerError},
+    common::{AppState, Config, RedisStore, ServerError},
     health,
     openapi::ApiDoc,
     tax,
@@ -132,13 +132,14 @@ pub async fn main() -> Result<(), ServerError> {
 
     tracing::info!("Database connected");
 
-    // 2. Initialize Redis client
+    // 2. Initialize Redis store
     let redis_client = redis::Client::open(config.redis_url.clone()).expect("Invalid Redis URL");
+    let redis = RedisStore::new(redis_client);
 
     // 3. Build application state
     let state = Arc::new(AppState {
         db: pool,
-        redis: redis_client,
+        redis,
         config: config.clone(),
     });
 

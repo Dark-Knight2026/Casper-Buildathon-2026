@@ -8,6 +8,8 @@ pub mod crypto;
 pub mod errors;
 /// Shared data models and type definitions.
 pub mod models;
+/// Redis client wrapper.
+pub mod redis;
 
 pub use config::{AppState, Config};
 pub use crypto::{
@@ -16,3 +18,4 @@ pub use crypto::{
 };
 pub use errors::{ApiError, ApiResult, ErrorResponse, ServerError};
 pub use models::{Claims, PropertyId, UserId, UserRole};
+pub use redis::RedisStore;

@@ -32,7 +32,7 @@ use testcontainers::{
     runners::AsyncRunner,
 };
 
-use api::{AppState, Claims, Config, UserId, UserRole, server};
+use api::{AppState, Claims, Config, UserId, UserRole, common::RedisStore, server};
 
 /// Test database URL for docker-compose `PostgreSQL`.
 pub const TEST_DATABASE_URL: &str = "postgres://postgres:postgres@127.0.0.1:5433/postgres";
@@ -119,7 +119,7 @@ pub async fn setup_test_server_with_pool(pool: PgPool, with_redis: bool) -> Test
     };
     let state = Arc::new(AppState {
         db: pool,
-        redis: redis_client,
+        redis: RedisStore::new(redis_client),
         config,
     });
 
