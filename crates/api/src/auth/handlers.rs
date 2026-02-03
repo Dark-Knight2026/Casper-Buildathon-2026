@@ -37,6 +37,18 @@ const LOGIN_NONCE_TTL: u64 = 300;
 /// # Errors
 ///
 /// Returns `StatusCode::INTERNAL_SERVER_ERROR` if Redis operations fail.
+#[utoipa::path(
+    get,
+    path = "/nonce",
+    tag = "Auth",
+    params(
+        ("wallet_address" = String, Query, description = "The wallet address (public key)")
+    ),
+    responses(
+        (status = 200, description = "Nonce generated successfully", body = NonceResponse),
+        (status = 500, description = "Internal server error")
+    )
+)]
 #[inline]
 pub async fn get_nonce(
     State(state): State<Arc<AppState>>,
@@ -100,6 +112,18 @@ pub async fn get_nonce(
 /// - `StatusCode::BAD_REQUEST` if wallet address length is invalid or signature format is wrong
 /// - `StatusCode::UNAUTHORIZED` if signature or nonce is invalid
 /// - `StatusCode::INTERNAL_SERVER_ERROR` for DB/Redis failures or timestamp overflow
+#[utoipa::path(
+    post,
+    path = "/login",
+    tag = "Auth",
+    request_body = LoginRequest,
+    responses(
+        (status = 200, description = "Login successful", body = LoginResponse),
+        (status = 400, description = "Invalid wallet address or signature format"),
+        (status = 401, description = "Invalid signature or expired nonce"),
+        (status = 500, description = "Internal server error")
+    )
+)]
 #[inline]
 pub async fn login(
     State(state): State<Arc<AppState>>,

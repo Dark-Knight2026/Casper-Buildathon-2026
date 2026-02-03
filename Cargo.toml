@@ -94,3 +94,6 @@ sha2 = "0.10"
 rand = "0.9"
 axum-test = "18"
 testcontainers = "0.26"
+utoipa = { version = "5", features = ["axum_extras", "uuid", "chrono"] }
+utoipa-axum = "0.2"
+utoipa-swagger-ui = { version = "9", features = ["axum"] }

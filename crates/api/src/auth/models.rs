@@ -3,16 +3,17 @@
 use crate::common::{UserId, UserRole};
 use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 /// Request payload for generating a login nonce.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct NonceRequest {
     /// The wallet address (public key).
     pub wallet_address: String,
 }
 
 /// Response containing the generated nonce.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct NonceResponse {
     /// A randomly generated string used to prevent replay attacks.
     pub nonce: String,
@@ -22,16 +23,17 @@ pub struct NonceResponse {
 }
 
 /// Request payload for verifying a login signature.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct LoginRequest {
     /// The wallet address (public key) of the user.
     pub wallet_address: String,
-    /// The signature is sensitive.
+    /// The cryptographic signature of the nonce message.
+    #[schema(value_type = String)]
     pub signature: SecretString,
 }
 
 /// Response returned upon successful login.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct LoginResponse {
     /// Use this JSON Web Token (JWT) for authenticating subsequent requests.
     pub token: String,
@@ -40,9 +42,10 @@ pub struct LoginResponse {
 }
 
 /// Basic user information.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct UserInfo {
     /// The unique identifier of the user in the database.
+    #[schema(value_type = uuid::Uuid)]
     pub id: UserId,
     /// The user's role (e.g., "tenant", "landlord").
     pub role: UserRole,

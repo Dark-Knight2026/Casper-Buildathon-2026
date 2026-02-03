@@ -3,7 +3,9 @@
 use crate::{
     analytics, auth,
     common::{AppState, Config, ServerError},
-    health, tax,
+    health,
+    openapi::ApiDoc,
+    tax,
 };
 use axum::Router;
 use axum::http::{Method, header};
@@ -15,13 +17,16 @@ use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
 use std::sync::Arc;
 use tower_governor::{GovernorLayer, governor::GovernorConfigBuilder};
 use tower_http::{cors::CorsLayer, limit::RequestBodyLimitLayer, trace::TraceLayer};
+use utoipa::OpenApi;
+use utoipa_axum::{router::OpenApiRouter, routes};
+use utoipa_swagger_ui::SwaggerUi;
 
-/// Creates a router for public API endpoints that do not require authentication.
+/// Creates an `OpenAPI` router for public API endpoints that do not require authentication.
 ///
 /// Includes rate limiting:
 /// - Authentication endpoints (`/auth/*`)
 #[inline]
-pub fn public_router() -> Router<Arc<AppState>> {
+pub fn public_router() -> OpenApiRouter<Arc<AppState>> {
     let rate_limit = Arc::new(
         GovernorConfigBuilder::default()
             .per_second(1)
@@ -30,12 +35,13 @@ pub fn public_router() -> Router<Arc<AppState>> {
             .unwrap_or_default(),
     );
 
-    Router::new()
-        .nest("/auth", auth::router())
+    OpenApiRouter::new()
+        .routes(routes!(auth::handlers::get_nonce))
+        .routes(routes!(auth::handlers::login))
         .route_layer(GovernorLayer::new(rate_limit))
 }
 
-/// Creates a router for protected endpoints that require JWT authentication.
+/// Creates an `OpenAPI` router for protected endpoints that require JWT authentication.
 ///
 /// Authentication is enforced via the `AuthUser` extractor in handlers.
 ///
@@ -43,10 +49,10 @@ pub fn public_router() -> Router<Arc<AppState>> {
 /// - Tax endpoints (`/tax/*`)
 /// - Analytics endpoints (`/analytics/*`)
 #[inline]
-pub fn protected_router() -> Router<Arc<AppState>> {
-    Router::new()
-        .merge(tax::router())
-        .merge(analytics::router())
+pub fn protected_router() -> OpenApiRouter<Arc<AppState>> {
+    OpenApiRouter::new()
+        .routes(routes!(tax::handlers::calculate_tax_liability))
+        .routes(routes!(analytics::handlers::get_property_performance))
 }
 
 /// Creates the full application router combining public and protected routes.
@@ -55,17 +61,22 @@ pub fn protected_router() -> Router<Arc<AppState>> {
 /// - `/health` - Health check (no rate limiting)
 /// - `/api/v1/auth/*` - Authentication (rate limited)
 /// - `/api/v1/*` - Protected endpoints (require JWT)
+/// - `/swagger-ui` - `OpenAPI` documentation UI
+/// - `/api-docs/openapi.json` - `OpenAPI` specification
 ///
 /// # Arguments
 ///
 /// * `state` - The shared application state.
 #[inline]
 pub fn create_router(state: Arc<AppState>) -> Router {
-    Router::new()
-        .merge(health::router())
-        .nest("/api/v1", public_router())
+    let (router, api) = OpenApiRouter::with_openapi(ApiDoc::openapi())
+        .routes(routes!(health::handlers::health_check))
+        .nest("/api/v1/auth", public_router())
         .nest("/api/v1", protected_router())
         .with_state(state)
+        .split_for_parts();
+
+    router.merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", api))
 }
 
 /// Starts the application server.

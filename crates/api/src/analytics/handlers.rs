@@ -25,6 +25,20 @@ use crate::common::AppState;
 /// # Errors
 ///
 /// Returns `StatusCode` error if retrieval fails.
+#[utoipa::path(
+    post,
+    path = "/analytics/property-performance",
+    tag = "Analytics",
+    request_body = PropertyPerformanceRequest,
+    responses(
+        (status = 200, description = "Property performance report", body = PropertyPerformanceReport),
+        (status = 401, description = "Unauthorized"),
+        (status = 500, description = "Internal server error")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 #[inline]
 pub async fn get_property_performance(
     State(_state): State<Arc<AppState>>,

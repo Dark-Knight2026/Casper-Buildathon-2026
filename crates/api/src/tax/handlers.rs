@@ -26,6 +26,20 @@ use crate::tax::models::{TaxCalculationRequest, TaxCategory, TaxCategoryType, Ta
 /// # Errors
 ///
 /// Returns `StatusCode` error if calculation fails.
+#[utoipa::path(
+    post,
+    path = "/tax/calculate-liability",
+    tag = "Tax",
+    request_body = TaxCalculationRequest,
+    responses(
+        (status = 200, description = "Tax liability calculated successfully", body = TaxReport),
+        (status = 401, description = "Unauthorized"),
+        (status = 500, description = "Internal server error")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 #[inline]
 pub async fn calculate_tax_liability(
     State(_state): State<Arc<AppState>>,

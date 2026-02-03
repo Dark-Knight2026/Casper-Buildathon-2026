@@ -1,11 +1,10 @@
 //! HTTP request handlers for health checks.
 
 use axum::{Json, extract::State, http::StatusCode};
-use serde_json::{Value, json};
 use std::sync::Arc;
 
 use crate::common::AppState;
-use crate::health::models::ConnectionStatus;
+use crate::health::models::{ConnectionStatus, HealthResponse};
 
 /// Checks the health status of the application and its dependencies.
 ///
@@ -15,10 +14,21 @@ use crate::health::models::ConnectionStatus;
 ///
 /// # Returns
 ///
-/// * `(StatusCode, Json<Value>)` - HTTP status 200 if healthy, 503 if any service is down,
+/// * (`StatusCode`, `Json<HealthResponse>`) - HTTP status 200 if healthy, 503 if any service is down,
 ///   along with a JSON body detailing the status of each component.
+#[utoipa::path(
+    get,
+    path = "/health",
+    tag = "Health",
+    responses(
+        (status = 200, description = "All services are healthy", body = HealthResponse),
+        (status = 503, description = "One or more services are unavailable", body = HealthResponse)
+    )
+)]
 #[inline]
-pub async fn health_check(State(state): State<Arc<AppState>>) -> (StatusCode, Json<Value>) {
+pub async fn health_check(
+    State(state): State<Arc<AppState>>,
+) -> (StatusCode, Json<HealthResponse>) {
     // 1. Check Redis
     let redis_status = match state.redis.get_multiplexed_async_connection().await {
         Ok(mut conn) => match redis::cmd("PING").query_async::<String>(&mut conn).await {
@@ -55,12 +65,12 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> (StatusCode, Js
         StatusCode::SERVICE_UNAVAILABLE
     };
 
-    let response = json!({
-        "status": if status_code == StatusCode::OK { "ok" } else { "error" },
-        "service": "leasefi-backend",
-        "redis": redis_status,
-        "database": db_status
-    });
+    let response = HealthResponse {
+        status: status_code,
+        service: "leasefi-backend".to_owned(),
+        redis: redis_status,
+        database: db_status,
+    };
 
     (status_code, Json(response))
 }

@@ -12,6 +12,7 @@
 //! - [`analytics`] - Property performance analytics
 //! - [`health`] - Health check endpoint
 //! - [`common`] - Shared utilities (config, errors, crypto, models)
+//! - [`openapi`] - `OpenAPI` documentation configuration
 //! - [`server`] - Server startup logic
 
 /// Property analytics feature module.
@@ -22,6 +23,8 @@ pub mod auth;
 pub mod common;
 /// Health check feature module.
 pub mod health;
+/// OpenAPI documentation configuration.
+pub mod openapi;
 /// Server implementation and startup logic.
 pub mod server;
 /// Tax calculation feature module.
