@@ -152,7 +152,7 @@ export function WhitepaperTab({ className }: WhitepaperTabProps) {
                         key={sub.id}
                         onClick={() => navigateToPage(sub.id, sub.page)}
                         className={cn(
-                          'w-full flex justify-items-start text-left px-3 py-1.5 rounded-lg text-xs transition-colors',
+                          'w-full flex! justify-start! text-left px-3 py-1.5 rounded-lg text-xs transition-colors',
                           activeSection === sub.id
                             ? 'bg-[#d4a847]/10 text-[#d4a847]'
                             : 'text-[hsl(var(--ico-text-muted))] hover:bg-white/5 hover:text-[hsl(var(--ico-text-secondary))]'
@@ -182,7 +182,7 @@ export function WhitepaperTab({ className }: WhitepaperTabProps) {
       {/* PDF Viewer */}
       <div className="flex-1 rounded-xl bg-black/40 border border-white/10 overflow-hidden">
         <iframe
-          key={currentPage}
+          key={activeSection}
           src={`/docs/BIG_WhitePaper.pdf#page=${currentPage}&view=FitH`}
           className="w-full h-full"
           title="BIG WhitePaper"
