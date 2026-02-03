@@ -82,7 +82,7 @@ export function AmountInput({
               ? 'border-red-500/70'
               : 'border-sky-800/50',
             'bg-black/50 text-[hsl(var(--ico-text-primary))]',
-            'focus:outline-none focus:ring-0',
+            'focus:outline-none focus:ring-0 focus:border-sky-500/70',
             'disabled:opacity-50 disabled:cursor-not-allowed'
           )}
         />
