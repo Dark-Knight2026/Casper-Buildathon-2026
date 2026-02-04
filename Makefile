@@ -48,7 +48,7 @@ fmt: ## Check and fix formatting if needed
 
 lint: ## Run clippy in strict mode
 	@echo "[*] Running clippy..."
-	@cargo clippy --workspace --all-targets -- -D warnings
+	@cargo clippy --workspace --all-targets --all-features -- -D warnings
 
 prepare: ## Generate SQLx offline query metadata for CI builds (requires bash/zsh)
 	@echo "[*] Generating SQLx offline query metadata..."
