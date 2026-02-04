@@ -4,6 +4,7 @@ import { ICOHeader } from './components/ICOHeader';
 import { ICOFooter } from './components/ICOFooter';
 import { StarsBackground } from './components/StarsBackground';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { PageErrorBoundary } from '@/components/common/PageErrorBoundary';
 
 
 // Lazy load state components
@@ -84,9 +85,11 @@ export function ICOPage() {
       <ScrollArea className="min-h-[calc(100vh-112px)]">
         <div className='min-h-[calc(100vh-112px)] flex flex-col justify-between'>
           <main className="container h-full mx-auto px-4 py-8">
-            <Suspense fallback={<LoadingFallback />}>
-              {renderStateComponent()}
-            </Suspense>
+            <PageErrorBoundary pageName="ICO">
+              <Suspense fallback={<LoadingFallback />}>
+                {renderStateComponent()}
+              </Suspense>
+            </PageErrorBoundary>
           </main>
 
           {/* Footer */}
