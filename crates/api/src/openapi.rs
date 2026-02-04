@@ -47,6 +47,7 @@ use crate::{
             analytics_models::PropertyPerformanceReport,
             // Common models
             crate::common::UserRole,
+            crate::common::Claims,
         )
     ),
     modifiers(&SecurityAddon),

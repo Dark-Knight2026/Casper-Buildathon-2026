@@ -8,6 +8,7 @@
  ci       \
  fmt      \
  lint     \
+ openapi  \
  prepare  \
  test     \
  test_one \
@@ -39,7 +40,7 @@ restart: env_down env_up migrate ## Restart environment and run migrations
 
 ci: check test ## Full CI pipeline
 
-check: fmt prepare lint ## Quick code quality check
+check: fmt prepare lint openapi ## Quick code quality check
 
 fmt: ## Check and fix formatting if needed
 	@echo "[*] Checking formatting..."
@@ -49,6 +50,25 @@ fmt: ## Check and fix formatting if needed
 lint: ## Run clippy in strict mode
 	@echo "[*] Running clippy..."
 	@cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+openapi: ## Check all ToSchema types are registered in openapi.rs
+	@echo "[*] Checking OpenAPI schema completeness..."
+	@missing=0; \
+	for f in $$(find crates/api/src -name 'models.rs' -type f | sort); do \
+		for name in $$(grep -A5 'derive.*ToSchema' "$$f" \
+			| grep -oE 'pub (struct|enum) [A-Za-z0-9_]+' \
+			| awk '{print $$3}'); do \
+			if ! grep -q "$$name" crates/api/src/openapi.rs; then \
+				echo "  $${f#crates/api/src/}: $$name"; \
+				missing=$$((missing + 1)); \
+			fi; \
+		done; \
+	done; \
+	if [ "$$missing" -gt 0 ]; then \
+		echo ""; \
+		echo "[!] $$missing type(s) with ToSchema not found in openapi.rs"; \
+		exit 1; \
+	fi
 
 prepare: ## Generate SQLx offline query metadata for CI builds (requires bash/zsh)
 	@echo "[*] Generating SQLx offline query metadata..."
