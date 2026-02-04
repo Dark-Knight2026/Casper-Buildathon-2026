@@ -4,37 +4,38 @@ version.workspace = true
 edition.workspace = true
 publish.workspace = true
 
+[lints]
+workspace = true
+
 [dependencies]
 axum = { workspace = true }
+casper-types = { workspace = true }
+chrono = { workspace = true }
+dotenv = { workspace = true }
+error_tools = { workspace = true }
+hex = { workspace = true }
+jsonwebtoken = { workspace = true }
+rand = { workspace = true }
+redis = { workspace = true }
+rust_decimal = { workspace = true }
+secrecy = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+sqlx = { workspace = true }
+strum = { workspace = true }
+thiserror = { workspace = true }
 tokio = { workspace = true }
 tower-http = { workspace = true }
 tower_governor = { workspace = true }
-serde = { workspace = true }
-serde_json = { workspace = true }
-sqlx = { workspace = true }
-redis = { workspace = true }
-jsonwebtoken = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
-thiserror = { workspace = true }
-error_tools = { workspace = true }
-uuid = { workspace = true }
-rust_decimal = { workspace = true }
-chrono = { workspace = true }
-secrecy = { workspace = true }
-strum = { workspace = true }
-dotenv = { workspace = true }
-casper-types = { workspace = true }
-hex = { workspace = true }
-sha2 = { workspace = true }
-rand = { workspace = true }
 utoipa = { workspace = true }
 utoipa-axum = { workspace = true }
 utoipa-swagger-ui = { workspace = true }
+uuid = { workspace = true }
 
 [dev-dependencies]
 axum-test = { workspace = true }
+serial_test = { workspace = true }
 testcontainers = { workspace = true }
-
-[lints]
-workspace = true

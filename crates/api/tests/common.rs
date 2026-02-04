@@ -101,8 +101,6 @@ pub struct TestEnv {
 /// - Redis is optional: when `with_redis = true`, creates a dedicated container.
 #[inline]
 pub async fn setup_test_server(pool: PgPool, with_redis: bool) -> TestEnv {
-    let jwt_secret = "test_jwt_secret_for_integration_tests".to_owned();
-
     let (redis_url, redis_client, redis_env) = if with_redis {
         let env = RedisTestEnv::start().await;
         (env.url.clone(), env.client.clone(), Some(env))
@@ -113,6 +111,7 @@ pub async fn setup_test_server(pool: PgPool, with_redis: bool) -> TestEnv {
         (url, client, None)
     };
 
+    let jwt_secret = "test_jwt_secret_for_integration_tests".to_owned();
     let config = Config {
         database_url: SecretString::from(TEST_DATABASE_URL),
         redis_url,

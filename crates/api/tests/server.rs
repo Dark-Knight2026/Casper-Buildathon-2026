@@ -1,4 +1,4 @@
-//! Integration tests for security features.
+//! Integration tests for server configuration: rate limiting, CORS.
 
 mod common;
 
