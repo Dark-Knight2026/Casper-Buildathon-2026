@@ -127,7 +127,9 @@ pub async fn setup_test_server(pool: PgPool, with_redis: bool) -> TestEnv {
 
     // Use real HTTP transport so ConnectInfo works for rate limiting (GovernorLayer).
     // create_app applies production middleware (CORS, tracing, body limit).
-    let app = server::create_app(state).into_make_service_with_connect_info::<SocketAddr>();
+    let app = server::create_app(state)
+        .expect("Failed to build app")
+        .into_make_service_with_connect_info::<SocketAddr>();
     let config = TestServerConfig {
         transport: Some(Transport::HttpRandomPort),
         ..TestServerConfig::default()

@@ -86,27 +86,27 @@ const REQUEST_BODY_LIMIT: usize = 1024 * 1024;
 
 /// Builds the full application router with production middleware (CORS, tracing, body limit).
 ///
-/// # Panics
+/// # Errors
 ///
-/// Panics if `CORS_ORIGIN` in the application config is not a valid header value.
+/// Returns `ServerError::EnvVar` if `CORS_ORIGIN` is not a valid HTTP header value.
 #[inline]
-pub fn create_app(state: Arc<AppState>) -> Router {
+pub fn create_app(state: Arc<AppState>) -> Result<Router, ServerError> {
     let cors = CorsLayer::new()
         .allow_origin(
             state
                 .config
                 .cors_origin
                 .parse::<header::HeaderValue>()
-                .expect("Invalid CORS_ORIGIN"),
+                .map_err(|e| ServerError::EnvVar(format!("Invalid CORS_ORIGIN: {e}")))?,
         )
         .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE])
         .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION])
         .allow_credentials(false);
 
-    create_router(state)
+    Ok(create_router(state)
         .layer(cors)
         .layer(TraceLayer::new_for_http())
-        .layer(RequestBodyLimitLayer::new(REQUEST_BODY_LIMIT))
+        .layer(RequestBodyLimitLayer::new(REQUEST_BODY_LIMIT)))
 }
 
 /// Starts the application server.
@@ -119,16 +119,9 @@ pub fn create_app(state: Arc<AppState>) -> Router {
 /// Returns `ServerError` if:
 /// - Database connection fails
 /// - Database migrations fail (when enabled)
-/// - Server binding fails
-///
-/// # Panics
-///
-/// Panics if:
-/// - Configuration cannot be loaded from environment variables
-/// - `DATABASE_URL` format is invalid
-/// - Redis URL is invalid
 /// - `CORS_ORIGIN` header value is invalid
-/// - TCP listener binding fails
+/// - Signal handlers cannot be installed
+/// - Server binding fails
 #[inline]
 pub async fn main() -> Result<(), ServerError> {
     // Initialize logging
@@ -173,7 +166,7 @@ pub async fn main() -> Result<(), ServerError> {
     });
 
     // 4. Build app with production middleware
-    let app = create_app(state);
+    let app = create_app(state)?;
     let addr = SocketAddr::from(([0, 0, 0, 0], config.port));
     tracing::info!(address = %addr, "Server listening");
     let listener = tokio::net::TcpListener::bind(addr).await?;
@@ -184,23 +177,24 @@ pub async fn main() -> Result<(), ServerError> {
     Ok(())
 }
 
+/// Awaits a shutdown signal (e.g., Ctrl+C) to gracefully shut down the server.
 async fn shutdown_signal() {
     let ctrl_c = async {
         tokio::signal::ctrl_c()
             .await
-            .expect("failed to install Ctrl+C handler");
+            .expect("Failed to install Ctrl+C handler - OS may not support graceful shutdown");
     };
 
     #[cfg(unix)]
     let terminate = async {
         tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
-            .expect("failed to install signal handler")
+            .expect("Failed to install SIGTERM handler - OS may not support graceful shutdown")
             .recv()
             .await;
     };
 
     #[cfg(not(unix))]
-    let terminate = std::future::pending::<()>();
+    let terminate = core::future::pending::<()>();
 
     tokio::select! {
         () = ctrl_c => {},
