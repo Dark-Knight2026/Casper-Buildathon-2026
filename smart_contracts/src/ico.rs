@@ -718,7 +718,7 @@ mod tests {
         let mut ctx = setup(odra_test::env(), false);
         let mut creation_params = get_ico_schedules_creation_params(&ctx.env);
 
-        ctx.env.advance_block_time(ONE_MINUTE * 1000);
+        ctx.env.advance_block_time(ONE_MINUTE * 1_000);
 
         let now = ctx.env.block_time();
 
@@ -930,7 +930,10 @@ mod tests {
 
         assert_eq!(
             ctx.ico
-                .try_purchase(U256::from(100 * 10u128.pow(18)), Currency::CSPR)
+                .try_purchase(
+                    U256::from(100) * U256::from(10).pow(U256::from(18)),
+                    Currency::CSPR
+                )
                 .unwrap_err(),
             Error::InvalidAmountAttached.into(),
             "Should revert when attached CSPR amount is wrong when purchasing with CSPR"
@@ -1350,7 +1353,7 @@ mod tests {
             alice: env.get_account(1),
             bob: env.get_account(2),
         };
-        let initial_supply = 5000000000000 * 10u128.pow(18);
+        let initial_supply = 5_000_000_000_000 * 10u128.pow(18);
         let styks_price_feed = StyksPriceFeed::deploy(&env, NoArgs);
         let tailor_coin = deploy_mock_cep18_token(&env, "BIG", "BIG", 18, initial_supply);
         let mut usdc = deploy_mock_cep18_token(&env, "USDC", "USD Coin", 6, initial_supply);
@@ -1418,14 +1421,14 @@ mod tests {
         let private_sale = ICOScheduleCreateParams {
             start_timestamp: env.block_time() + ONE_DAY,
             end_timestamp: env.block_time() + ONE_DAY + ONE_MONTH,
-            sale_amount: U256::from(125000000000 * 10u128.pow(18)),
-            price: U256::from(500000), // 0.5 USD (0.5 * 1 * 10^6)
+            sale_amount: U256::from(125_000_000_000u64) * U256::from(10).pow(U256::from(18)),
+            price: U256::from(500_000), // 0.5 USD (0.5 * 1 * 10^6)
         };
         let sale = ICOScheduleCreateParams {
             start_timestamp: private_sale.end_timestamp + ONE_DAY,
             end_timestamp: private_sale.end_timestamp + ONE_DAY + ONE_MONTH,
-            sale_amount: U256::from(250000000000 * 10u128.pow(18)),
-            price: U256::from(1000000), // 1 USD (1.0 * 1 * 10^6)
+            sale_amount: U256::from(250_000_000_000u64) * U256::from(10).pow(U256::from(18)),
+            price: U256::from(1_000_000), // 1 USD (1.0 * 1 * 10^6)
         };
 
         [private_sale, sale]
