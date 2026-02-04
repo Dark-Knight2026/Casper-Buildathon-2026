@@ -238,11 +238,11 @@ importers:
         specifier: ^1.11.0
         version: 1.11.0
       '@make-software/csprclick-core-types':
-        specifier: ^1.13.1
-        version: 1.13.1
+        specifier: ~1.12.3
+        version: 1.12.3
       '@make-software/csprclick-ui':
-        specifier: ^1.13.0
-        version: 1.13.0(@types/react@18.3.27)(react-country-flag@3.1.0(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react-modal@3.16.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)(styled-components@5.3.11(@babel/core@7.28.5)(react-dom@18.3.1(react@18.3.1))(react-is@18.3.1)(react@18.3.1))(typescript@5.9.3)
+        specifier: ~1.12.1
+        version: 1.12.1(@types/react@18.3.27)(react-country-flag@3.1.0(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react-modal@3.16.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)(styled-components@5.3.11(@babel/core@7.28.5)(react-dom@18.3.1(react@18.3.1))(react-is@18.3.1)(react@18.3.1))(typescript@5.9.3)
       '@playwright/test':
         specifier: ^1.57.0
         version: 1.57.0
@@ -1311,11 +1311,11 @@ packages:
   '@make-software/csprclick-core-client@1.11.0':
     resolution: {integrity: sha512-WTb0DWbVMOeGh2+NChq6QlevJM9RIK5zEiQx643u1LySmLZJh8/tWZQCjsT6bMJvmBS6xcj27AtXcAVHkj5U7w==}
 
-  '@make-software/csprclick-core-types@1.13.1':
-    resolution: {integrity: sha512-Tf7FsfznjD2h7U/uOmOYFF6R+TRRDBVL4nuJiA62w7WMpeB4FcUrRvWDB8zgYT3fXUc8MFWjzl5fHjNs2Xj6Aw==}
+  '@make-software/csprclick-core-types@1.12.3':
+    resolution: {integrity: sha512-CZVIEVXGuB5s1pkZV4GLPGhVJZ9acMkH46EMOuTsG6SASyJJm5dZUfJ68O1fdCJWhKX+UtCjmxVzAiAbFNqJhA==}
 
-  '@make-software/csprclick-ui@1.13.0':
-    resolution: {integrity: sha512-VcsLyFRQiN7l+NLx3hTIYFX80Bk6d2iOeuAb3hYwAdIttcc5BOERE0rSEe8cm0tKosCj3kkFkyxZjhw+gdG2lQ==}
+  '@make-software/csprclick-ui@1.12.1':
+    resolution: {integrity: sha512-O8UktrCbfTSYCh+izzayQPvpZ6hIsUdX1ZpZ0KyY0b5axNdE3zJUFgTjyGtch9tA9o5h1++d6DKmlMDCxJ0cuA==}
     peerDependencies:
       react: ^18.3.1
       react-country-flag: ^3.1.0
@@ -6703,11 +6703,11 @@ snapshots:
 
   '@make-software/csprclick-core-client@1.11.0': {}
 
-  '@make-software/csprclick-core-types@1.13.1':
+  '@make-software/csprclick-core-types@1.12.3':
     dependencies:
       '@metamask/safe-event-emitter': 2.0.0
 
-  '@make-software/csprclick-ui@1.13.0(@types/react@18.3.27)(react-country-flag@3.1.0(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react-modal@3.16.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)(styled-components@5.3.11(@babel/core@7.28.5)(react-dom@18.3.1(react@18.3.1))(react-is@18.3.1)(react@18.3.1))(typescript@5.9.3)':
+  '@make-software/csprclick-ui@1.12.1(@types/react@18.3.27)(react-country-flag@3.1.0(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react-modal@3.16.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)(styled-components@5.3.11(@babel/core@7.28.5)(react-dom@18.3.1(react@18.3.1))(react-is@18.3.1)(react@18.3.1))(typescript@5.9.3)':
     dependencies:
       '@make-software/cspr-design': 2.0.6(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-components@5.3.11(@babel/core@7.28.5)(react-dom@18.3.1(react@18.3.1))(react-is@18.3.1)(react@18.3.1))(typescript@5.9.3)
       qrcode.react: 4.2.0(react@18.3.1)
