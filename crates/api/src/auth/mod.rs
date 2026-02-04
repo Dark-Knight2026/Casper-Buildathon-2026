@@ -14,6 +14,7 @@ pub mod models;
 /// Router configuration for authentication endpoints.
 pub mod routes;
 
+// Re-exports
 pub use db::upsert_user_by_wallet;
 pub use handlers::{get_nonce, login};
 pub use middleware::{AuthError, AuthUser};

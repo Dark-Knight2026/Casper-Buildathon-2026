@@ -4,7 +4,7 @@ use std::env;
 
 use secrecy::SecretString;
 
-use crate::common::RedisStore;
+use crate::{ServerError, common::RedisStore};
 
 /// Application configuration loaded from environment variables.
 #[derive(Debug, Clone)]
@@ -32,32 +32,37 @@ impl Config {
     /// - `PORT` is not a valid number or is zero
     /// - `CORS_ORIGIN` doesn't start with `http://` or `https://`
     #[inline]
-    pub fn from_env() -> Result<Self, String> {
+    pub fn from_env() -> Result<Self, ServerError> {
         let database_url = env::var("DATABASE_URL")
             .map(SecretString::from)
-            .map_err(|_| "DATABASE_URL must be set")?;
+            .map_err(|_| ServerError::EnvVar("DATABASE_URL must be set".to_owned()))?;
 
-        let redis_url = env::var("REDIS_URL").map_err(|_| "REDIS_URL must be set")?;
+        let redis_url = env::var("REDIS_URL")
+            .map_err(|_| ServerError::EnvVar("REDIS_URL must be set".to_owned()))?;
         if !redis_url.starts_with("redis://") && !redis_url.starts_with("rediss://") {
-            return Err("REDIS_URL must start with redis:// or rediss://".to_owned());
+            return Err(ServerError::EnvVar(
+                "REDIS_URL must start with redis:// or rediss://".to_owned(),
+            ));
         }
 
         let jwt_secret = env::var("SUPABASE_JWT_SECRET")
             .map(SecretString::from)
-            .map_err(|_| "SUPABASE_JWT_SECRET must be set")?;
+            .map_err(|_| ServerError::EnvVar("SUPABASE_JWT_SECRET must be set".to_owned()))?;
 
         let port = env::var("PORT")
             .unwrap_or_else(|_| "8080".to_owned())
             .parse::<u16>()
-            .map_err(|_| "PORT must be a valid number")?;
+            .map_err(|_| ServerError::EnvVar("PORT must be a valid number".to_owned()))?;
         if port == 0 {
-            return Err("PORT cannot be 0".to_owned());
+            return Err(ServerError::EnvVar("PORT cannot be 0".to_owned()));
         }
 
         let cors_origin =
-            env::var("CORS_ORIGIN").unwrap_or_else(|_| "http://localhost:3000".to_owned());
+            env::var("CORS_ORIGIN").unwrap_or_else(|_| "http://localhost:8080".to_owned());
         if !cors_origin.starts_with("http://") && !cors_origin.starts_with("https://") {
-            return Err("CORS_ORIGIN must start with http:// or https://".to_owned());
+            return Err(ServerError::EnvVar(
+                "CORS_ORIGIN must start with http:// or https://".to_owned(),
+            ));
         }
 
         Ok(Self {

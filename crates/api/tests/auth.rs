@@ -7,7 +7,7 @@ use sqlx::PgPool;
 
 #[sqlx::test(migrations = "../../supabase/migrations")]
 async fn nonce_endpoint_requires_wallet_address(pool: PgPool) {
-    let env = common::setup_test_server_with_pool(pool, true).await;
+    let env = common::setup_test_server(pool, true).await;
 
     // Missing wallet_address parameter
     let response = env.server.get("/api/v1/auth/nonce").await;
@@ -16,7 +16,7 @@ async fn nonce_endpoint_requires_wallet_address(pool: PgPool) {
 
 #[sqlx::test(migrations = "../../supabase/migrations")]
 async fn nonce_endpoint_returns_challenge(pool: PgPool) {
-    let env = common::setup_test_server_with_pool(pool, true).await;
+    let env = common::setup_test_server(pool, true).await;
 
     let response = env
         .server
@@ -39,7 +39,7 @@ async fn nonce_endpoint_returns_challenge(pool: PgPool) {
 
 #[sqlx::test(migrations = "../../supabase/migrations")]
 async fn login_rejects_invalid_wallet_address(pool: PgPool) {
-    let env = common::setup_test_server_with_pool(pool, false).await;
+    let env = common::setup_test_server(pool, false).await;
 
     let response = env
         .server
@@ -55,7 +55,7 @@ async fn login_rejects_invalid_wallet_address(pool: PgPool) {
 
 #[sqlx::test(migrations = "../../supabase/migrations")]
 async fn login_rejects_invalid_signature_format(pool: PgPool) {
-    let env = common::setup_test_server_with_pool(pool, false).await;
+    let env = common::setup_test_server(pool, false).await;
 
     // Valid length wallet address but invalid Casper signature format
     // Returns 400 (BAD_REQUEST) because signature parsing fails before nonce check
@@ -73,7 +73,7 @@ async fn login_rejects_invalid_signature_format(pool: PgPool) {
 
 #[sqlx::test(migrations = "../../supabase/migrations")]
 async fn protected_endpoint_requires_auth(pool: PgPool) {
-    let env = common::setup_test_server_with_pool(pool, false).await;
+    let env = common::setup_test_server(pool, false).await;
 
     let response = env
         .server
@@ -89,7 +89,7 @@ async fn protected_endpoint_requires_auth(pool: PgPool) {
 
 #[sqlx::test(migrations = "../../supabase/migrations")]
 async fn protected_endpoint_rejects_invalid_token(pool: PgPool) {
-    let env = common::setup_test_server_with_pool(pool, false).await;
+    let env = common::setup_test_server(pool, false).await;
 
     let (status, _): (StatusCode, Option<serde_json::Value>) = common::authed_request(
         &env.server,

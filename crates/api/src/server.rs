@@ -15,13 +15,13 @@ use utoipa::OpenApi;
 use utoipa_axum::{router::OpenApiRouter, routes};
 use utoipa_swagger_ui::SwaggerUi;
 
-use crate::{
-    analytics, auth,
-    common::{AppState, Config, RedisStore, ServerError},
-    health,
-    openapi::ApiDoc,
-    tax,
-};
+use crate::{ApiDoc, AppState, Config, RedisStore, ServerError, analytics, auth, health, tax};
+
+/// Rate limit: requests allowed per second for auth endpoints.
+pub const AUTH_RATE_LIMIT_PER_SECOND: u64 = 1;
+
+/// Rate limit: maximum burst size for auth endpoints.
+pub const AUTH_RATE_LIMIT_BURST: u32 = 15;
 
 /// Creates an `OpenAPI` router for public API endpoints that do not require authentication.
 ///
@@ -31,8 +31,8 @@ use crate::{
 pub fn public_router() -> OpenApiRouter<Arc<AppState>> {
     let rate_limit = Arc::new(
         GovernorConfigBuilder::default()
-            .per_second(1)
-            .burst_size(15)
+            .per_second(AUTH_RATE_LIMIT_PER_SECOND)
+            .burst_size(AUTH_RATE_LIMIT_BURST)
             .finish()
             .unwrap_or_default(),
     );
@@ -81,6 +81,34 @@ pub fn create_router(state: Arc<AppState>) -> Router {
     router.merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", api))
 }
 
+/// Maximum request body size (1 MB).
+const REQUEST_BODY_LIMIT: usize = 1024 * 1024;
+
+/// Builds the full application router with production middleware (CORS, tracing, body limit).
+///
+/// # Panics
+///
+/// Panics if `CORS_ORIGIN` in the application config is not a valid header value.
+#[inline]
+pub fn create_app(state: Arc<AppState>) -> Router {
+    let cors = CorsLayer::new()
+        .allow_origin(
+            state
+                .config
+                .cors_origin
+                .parse::<header::HeaderValue>()
+                .expect("Invalid CORS_ORIGIN"),
+        )
+        .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE])
+        .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION])
+        .allow_credentials(false);
+
+    create_router(state)
+        .layer(cors)
+        .layer(TraceLayer::new_for_http())
+        .layer(RequestBodyLimitLayer::new(REQUEST_BODY_LIMIT))
+}
+
 /// Starts the application server.
 ///
 /// Initializes logging, loads configuration, connects to databases,
@@ -103,20 +131,20 @@ pub fn create_router(state: Arc<AppState>) -> Router {
 /// - TCP listener binding fails
 #[inline]
 pub async fn main() -> Result<(), ServerError> {
-    // 1. Initialize logging
+    // Initialize logging
     tracing_subscriber::fmt::init();
     dotenv::dotenv().ok();
 
     // Load environment variables
-    let config = Config::from_env().expect("Failed to load configuration");
-
-    let db_options = PgConnectOptions::from_str(config.database_url.expose_secret())
-        .map_err(|e| {
+    let config = Config::from_env()?;
+    let db_options =
+        PgConnectOptions::from_str(config.database_url.expose_secret()).map_err(|e| {
             // Log error details server-side without exposing the connection string
             tracing::error!(error = %e, "Failed to parse DATABASE_URL");
-        })
-        .expect("Invalid DATABASE_URL format - check server logs for details");
-
+            ServerError::EnvVar(
+                "Invalid DATABASE_URL format - check server logs for details".to_owned(),
+            )
+        })?;
     let pool = PgPoolOptions::new()
         .max_connections(5)
         .acquire_timeout(Duration::from_secs(3))
@@ -129,41 +157,25 @@ pub async fn main() -> Result<(), ServerError> {
             .run(&pool)
             .await?;
     }
-
     tracing::info!("Database connected");
 
-    // 2. Initialize Redis store
-    let redis_client = redis::Client::open(config.redis_url.clone()).expect("Invalid Redis URL");
-    let redis = RedisStore::new(redis_client);
+    // Initialize Redis store
+    let redis_client = redis::Client::open(config.redis_url.clone()).map_err(|e| {
+        tracing::error!(error = %e, "Failed to parse REDIS_URL");
+        ServerError::EnvVar("Invalid Redis URL".to_owned())
+    })?;
 
     // 3. Build application state
     let state = Arc::new(AppState {
         db: pool,
-        redis,
+        redis: RedisStore::new(redis_client),
         config: config.clone(),
     });
 
-    // 4. Configure CORS
-    let cors = CorsLayer::new()
-        .allow_origin(
-            config
-                .cors_origin
-                .parse::<header::HeaderValue>()
-                .expect("Invalid CORS_ORIGIN"),
-        )
-        .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE])
-        .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION])
-        .allow_credentials(false);
-
-    // 5. Configure router with production middleware
-    let app = create_router(state)
-        .layer(cors)
-        .layer(TraceLayer::new_for_http())
-        .layer(RequestBodyLimitLayer::new(1024 * 1024)); // 1MB limit
-
+    // 4. Build app with production middleware
+    let app = create_app(state);
     let addr = SocketAddr::from(([0, 0, 0, 0], config.port));
     tracing::info!(address = %addr, "Server listening");
-
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app)
         .with_graceful_shutdown(shutdown_signal())

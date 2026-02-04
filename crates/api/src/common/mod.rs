@@ -11,6 +11,7 @@ pub mod models;
 /// Redis client wrapper.
 pub mod redis;
 
+// Re-exports
 pub use config::{AppState, Config};
 pub use crypto::{
     CASPER_ED25519_PUBKEY_HEX_LEN, CASPER_SECP256K1_PUBKEY_HEX_LEN, CryptoError,

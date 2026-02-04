@@ -7,7 +7,7 @@ use sqlx::PgPool;
 
 #[sqlx::test(migrations = "../../supabase/migrations")]
 async fn health_check_returns_status(pool: PgPool) {
-    let env = common::setup_test_server_with_pool(pool, true).await;
+    let env = common::setup_test_server(pool, true).await;
 
     let response = env.server.get("/health").await;
 

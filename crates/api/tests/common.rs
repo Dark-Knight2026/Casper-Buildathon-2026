@@ -37,6 +37,9 @@ use api::{AppState, Claims, Config, UserId, UserRole, common::RedisStore, server
 /// Test database URL for docker-compose `PostgreSQL`.
 pub const TEST_DATABASE_URL: &str = "postgres://postgres:postgres@127.0.0.1:5433/postgres";
 
+/// CORS origin used in test server configuration.
+pub const TEST_CORS_ORIGIN: &str = "http://localhost:8080";
+
 /// Holds a running Redis container and client.
 /// Container stays alive as long as this struct exists.
 pub struct RedisTestEnv {
@@ -97,15 +100,15 @@ pub struct TestEnv {
 /// - `PostgreSQL` pool comes from `#[sqlx::test]` (isolated per test).
 /// - Redis is optional: when `with_redis = true`, creates a dedicated container.
 #[inline]
-pub async fn setup_test_server_with_pool(pool: PgPool, with_redis: bool) -> TestEnv {
-    let jwt_secret = "test_jwt_secret_for_integration_tests".to_string();
+pub async fn setup_test_server(pool: PgPool, with_redis: bool) -> TestEnv {
+    let jwt_secret = "test_jwt_secret_for_integration_tests".to_owned();
 
     let (redis_url, redis_client, redis_env) = if with_redis {
         let env = RedisTestEnv::start().await;
         (env.url.clone(), env.client.clone(), Some(env))
     } else {
         // Fake Redis URL - will fail if actually used
-        let url = "redis://127.0.0.1:6379".to_string();
+        let url = "redis://127.0.0.1:6379".to_owned();
         let client = redis::Client::open(url.clone()).expect("Invalid Redis URL");
         (url, client, None)
     };
@@ -115,7 +118,7 @@ pub async fn setup_test_server_with_pool(pool: PgPool, with_redis: bool) -> Test
         redis_url,
         jwt_secret: SecretString::from(jwt_secret.clone()),
         port: 0,
-        cors_origin: "http://localhost:3000".to_string(),
+        cors_origin: TEST_CORS_ORIGIN.to_owned(),
     };
     let state = Arc::new(AppState {
         db: pool,
@@ -123,8 +126,9 @@ pub async fn setup_test_server_with_pool(pool: PgPool, with_redis: bool) -> Test
         config,
     });
 
-    // Use real HTTP transport so ConnectInfo works for rate limiting (GovernorLayer)
-    let app = server::create_router(state).into_make_service_with_connect_info::<SocketAddr>();
+    // Use real HTTP transport so ConnectInfo works for rate limiting (GovernorLayer).
+    // create_app applies production middleware (CORS, tracing, body limit).
+    let app = server::create_app(state).into_make_service_with_connect_info::<SocketAddr>();
     let config = TestServerConfig {
         transport: Some(Transport::HttpRandomPort),
         ..TestServerConfig::default()

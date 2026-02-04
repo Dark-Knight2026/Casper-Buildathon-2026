@@ -30,6 +30,7 @@ pub mod server;
 /// Tax calculation feature module.
 pub mod tax;
 
-// Re-exports for convenience
+// Re-exports
 pub use auth::AuthUser;
-pub use common::{AppState, Claims, Config, PropertyId, ServerError, UserId, UserRole};
+pub use common::{AppState, Claims, Config, PropertyId, ServerError, UserId, UserRole, RedisStore};
+pub use openapi::ApiDoc;

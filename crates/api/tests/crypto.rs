@@ -3,7 +3,7 @@
 use casper_types::{AsymmetricType, PublicKey, SecretKey, crypto};
 use rand::RngCore;
 
-use api::common::verify_casper_signature;
+use api::common;
 
 fn generate_random_ed25519() -> (SecretKey, PublicKey) {
     let mut rng = rand::rng();
@@ -27,7 +27,7 @@ fn test_verify_valid_signature() {
     let pk_hex = public_key.to_hex();
     let sig_hex = signature.to_hex();
 
-    let result = verify_casper_signature(&pk_hex, &sig_hex, message);
+    let result = common::verify_casper_signature(&pk_hex, &sig_hex, message);
 
     assert!(
         result.is_ok(),
@@ -48,7 +48,7 @@ fn test_verify_invalid_message() {
     let pk_hex = public_key.to_hex();
     let sig_hex = signature.to_hex();
 
-    let result = verify_casper_signature(&pk_hex, &sig_hex, "Fake Message");
+    let result = common::verify_casper_signature(&pk_hex, &sig_hex, "Fake Message");
 
     assert!(result.is_ok());
     assert!(
