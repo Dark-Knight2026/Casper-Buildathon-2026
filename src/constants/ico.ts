@@ -32,14 +32,14 @@ export const ICO_CONFIG = {
   PAYMENT_METHODS: ['USDT', 'USDC', 'CSPR', 'CARD'] as const,
 
   CONTRACTS: {
-    tokenAddress: '',    // To be filled after deployment
-    saleAddress: '',     // To be filled after deployment
-    stakingAddress: '',  // To be filled after deployment
-    usdcAddress: '',     // USDC CEP-18 contract
-    usdtAddress: '',     // USDT CEP-18 contract
+    icoAddress: import.meta.env.VITE_ICO_CONTRACT_HASH ?? '',
+    tokenAddress: import.meta.env.VITE_BIG_TOKEN_CONTRACT_HASH ?? '',
+    treasuryAddress: import.meta.env.VITE_TREASURY_CONTRACT_HASH ?? '',
+    usdcAddress: import.meta.env.VITE_USDC_CONTRACT_HASH ?? '',
+    usdtAddress: import.meta.env.VITE_USDT_CONTRACT_HASH ?? '',
   },
 
-  // TODO: Replace with real timestamps from backend API.
+  // TODO: Replace with real timestamps from ICO contract (get_current_ico_schedule)
   // Mock values — Date.now() is evaluated once at module load, so these become stale on long sessions.
   TIMESTAMPS: {
     presaleStart: Date.now() + 2 * 24 * 60 * 60 * 1000, // 2 days from now
@@ -49,9 +49,9 @@ export const ICO_CONFIG = {
   },
 
   CASPER: {
-    networkName: 'casper-test', // or 'casper' for mainnet
-    explorerUrl: 'https://testnet.cspr.live', // or mainnet explorer URL
-    rpcUrl: 'https://node.testnet.casper.network/rpc', // or 'https://node.casper.network/rpc' for mainnet
+    networkName: import.meta.env.VITE_CASPER_NETWORK ?? 'casper-test',
+    explorerUrl: import.meta.env.VITE_CASPER_EXPLORER_URL ?? 'https://testnet.cspr.live',
+    rpcUrl: import.meta.env.VITE_CASPER_RPC_URL ?? 'https://node.testnet.casper.network/rpc',
   },
 
   FIAT_ONRAMP: {
@@ -72,7 +72,7 @@ export const ICO_CONFIG = {
     CSPR: 0.02,    // 1 CSPR = $0.02
     CARD: 1,       // 1 USD = $1 (fiat)
   },
-} as const;
+};
 
 // Payment currency display info
 export const PAYMENT_CURRENCY_INFO: Record<PaymentCurrency, {
