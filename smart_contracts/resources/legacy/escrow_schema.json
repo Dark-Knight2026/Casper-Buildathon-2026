@@ -189,7 +189,9 @@
       "is_mutable": true,
       "return_ty": "U256",
       "ty": "Public",
-      "attributes": []
+      "attributes": [
+        "NonReentrant"
+      ]
     },
     {
       "name": "create_security_deposit_invoice",
@@ -219,7 +221,9 @@
       "is_mutable": true,
       "return_ty": "U256",
       "ty": "Public",
-      "attributes": []
+      "attributes": [
+        "NonReentrant"
+      ]
     },
     {
       "name": "pay_invoice",
@@ -236,7 +240,8 @@
       "return_ty": "Unit",
       "ty": "Public",
       "attributes": [
-        "Payable"
+        "Payable",
+        "NonReentrant"
       ]
     },
     {

@@ -1,18 +1,75 @@
 {
-  "name": "Lease",
+  "name": "ICO",
   "events": [
     {
-      "name": "LeaseAgreementCreated",
+      "name": "ICOScheduleAdded",
       "args": [
         {
-          "name": "lease_agreement_id",
+          "name": "id",
+          "ty": "U128",
+          "is_ref": false,
+          "is_slice": false,
+          "is_required": true
+        }
+      ]
+    },
+    {
+      "name": "CurrencyAdded",
+      "args": [
+        {
+          "name": "currency",
+          "ty": "U8",
+          "is_ref": false,
+          "is_slice": false,
+          "is_required": true
+        }
+      ]
+    },
+    {
+      "name": "CurrencyRemoved",
+      "args": [
+        {
+          "name": "currency",
+          "ty": "U8",
+          "is_ref": false,
+          "is_slice": false,
+          "is_required": true
+        }
+      ]
+    },
+    {
+      "name": "TokensPurchased",
+      "args": [
+        {
+          "name": "amount",
           "ty": "U256",
           "is_ref": false,
           "is_slice": false,
           "is_required": true
         },
         {
-          "name": "created_at",
+          "name": "currency",
+          "ty": "U8",
+          "is_ref": false,
+          "is_slice": false,
+          "is_required": true
+        },
+        {
+          "name": "price",
+          "ty": "U256",
+          "is_ref": false,
+          "is_slice": false,
+          "is_required": true
+        },
+        {
+          "name": "cost",
+          "ty": "U256",
+          "is_ref": false,
+          "is_slice": false,
+          "is_required": true
+        },
+        {
+          "name": "timestamp",
           "ty": "U64",
           "is_ref": false,
           "is_slice": false,
@@ -21,37 +78,18 @@
       ]
     },
     {
-      "name": "LeaseAgreementFinished",
+      "name": "UnsoldTokensWithdrawn",
       "args": [
         {
-          "name": "lease_agreement_id",
-          "ty": "U256",
+          "name": "recipient",
+          "ty": "Key",
           "is_ref": false,
           "is_slice": false,
           "is_required": true
         },
         {
-          "name": "finished_at",
-          "ty": "U64",
-          "is_ref": false,
-          "is_slice": false,
-          "is_required": true
-        }
-      ]
-    },
-    {
-      "name": "LeaseAgreementProlonged",
-      "args": [
-        {
-          "name": "lease_agreement_id",
+          "name": "amount",
           "ty": "U256",
-          "is_ref": false,
-          "is_slice": false,
-          "is_required": true
-        },
-        {
-          "name": "prolonged_at",
-          "ty": "U64",
           "is_ref": false,
           "is_slice": false,
           "is_required": true
@@ -92,6 +130,13 @@
           "is_ref": false,
           "is_slice": false,
           "is_required": true
+        },
+        {
+          "name": "styks_price_feed",
+          "ty": "Key",
+          "is_ref": false,
+          "is_slice": false,
+          "is_required": true
         }
       ],
       "is_mutable": true,
@@ -100,10 +145,10 @@
       "attributes": []
     },
     {
-      "name": "set_roles",
+      "name": "set_tailor_coin",
       "args": [
         {
-          "name": "roles",
+          "name": "tailor_coin",
           "ty": "Key",
           "is_ref": false,
           "is_slice": false,
@@ -116,10 +161,10 @@
       "attributes": []
     },
     {
-      "name": "set_escrow",
+      "name": "set_treasury",
       "args": [
         {
-          "name": "escrow",
+          "name": "treasury",
           "ty": "Key",
           "is_ref": false,
           "is_slice": false,
@@ -132,10 +177,51 @@
       "attributes": []
     },
     {
-      "name": "create_lease_agreement",
+      "name": "add_currency",
       "args": [
         {
-          "name": "params",
+          "name": "currency",
+          "ty": "U8",
+          "is_ref": false,
+          "is_slice": false,
+          "is_required": true
+        },
+        {
+          "name": "address",
+          "ty": {
+            "Option": "Key"
+          },
+          "is_ref": false,
+          "is_slice": false,
+          "is_required": true
+        }
+      ],
+      "is_mutable": true,
+      "return_ty": "Unit",
+      "ty": "Public",
+      "attributes": []
+    },
+    {
+      "name": "remove_currency",
+      "args": [
+        {
+          "name": "currency",
+          "ty": "U8",
+          "is_ref": false,
+          "is_slice": false,
+          "is_required": true
+        }
+      ],
+      "is_mutable": true,
+      "return_ty": "Unit",
+      "ty": "Public",
+      "attributes": []
+    },
+    {
+      "name": "add_ico_schedule",
+      "args": [
+        {
+          "name": "ico_schedule",
           "ty": "Any",
           "is_ref": false,
           "is_slice": false,
@@ -143,25 +229,23 @@
         }
       ],
       "is_mutable": true,
-      "return_ty": "U256",
+      "return_ty": "U128",
       "ty": "Public",
-      "attributes": [
-        "NonReentrant"
-      ]
+      "attributes": []
     },
     {
-      "name": "finalize_lease_agreement",
+      "name": "purchase",
       "args": [
         {
-          "name": "lease_agreement_id",
+          "name": "purchase_amount",
           "ty": "U256",
           "is_ref": false,
           "is_slice": false,
           "is_required": true
         },
         {
-          "name": "security_deposit_charge",
-          "ty": "U256",
+          "name": "currency",
+          "ty": "U8",
           "is_ref": false,
           "is_slice": false,
           "is_required": true
@@ -171,29 +255,16 @@
       "return_ty": "Unit",
       "ty": "Public",
       "attributes": [
+        "Payable",
         "NonReentrant"
       ]
     },
     {
-      "name": "prolong_lease_agreement",
+      "name": "withdraw_unsold_tokens",
       "args": [
         {
-          "name": "lease_agreement_id",
-          "ty": "U256",
-          "is_ref": false,
-          "is_slice": false,
-          "is_required": true
-        },
-        {
-          "name": "new_end",
-          "ty": "U64",
-          "is_ref": false,
-          "is_slice": false,
-          "is_required": true
-        },
-        {
-          "name": "invoice_validity_duration",
-          "ty": "U64",
+          "name": "recipient",
+          "ty": "Key",
           "is_ref": false,
           "is_slice": false,
           "is_required": true
@@ -202,79 +273,109 @@
       "is_mutable": true,
       "return_ty": "Unit",
       "ty": "Public",
-      "attributes": [
-        "NonReentrant"
-      ]
+      "attributes": []
     },
     {
-      "name": "get_roles_contract_address",
+      "name": "get_current_ico_schedule",
       "args": [],
       "is_mutable": false,
-      "return_ty": "Key",
+      "return_ty": {
+        "Option": {
+          "Tuple2": [
+            "U128",
+            "Any"
+          ]
+        }
+      },
       "ty": "Public",
       "attributes": []
     },
     {
-      "name": "get_escrow_contract_address",
-      "args": [],
-      "is_mutable": false,
-      "return_ty": "Key",
-      "ty": "Public",
-      "attributes": []
-    },
-    {
-      "name": "get_lease_agreement_by_id",
+      "name": "get_ico_token_price",
       "args": [
         {
-          "name": "lease_agreement_id",
-          "ty": "U256",
+          "name": "currency",
+          "ty": "U8",
           "is_ref": false,
           "is_slice": false,
           "is_required": true
         }
       ],
-      "is_mutable": false,
-      "return_ty": "Any",
-      "ty": "Public",
-      "attributes": []
-    },
-    {
-      "name": "get_lease_agreements_count",
-      "args": [],
       "is_mutable": false,
       "return_ty": "U256",
       "ty": "Public",
       "attributes": []
     },
     {
-      "name": "is_security_deposit_paid",
+      "name": "get_currency_by_key",
       "args": [
         {
-          "name": "lease_agreement_id",
-          "ty": "U256",
+          "name": "currency",
+          "ty": "U8",
           "is_ref": false,
           "is_slice": false,
           "is_required": true
         }
       ],
       "is_mutable": false,
-      "return_ty": "Bool",
+      "return_ty": {
+        "Tuple2": [
+          "Bool",
+          {
+            "Option": "Key"
+          }
+        ]
+      },
       "ty": "Public",
       "attributes": []
     },
     {
-      "name": "is_all_invoices_paid",
+      "name": "get_ico_schedule_by_id",
       "args": [
         {
-          "name": "lease_agreement_id",
-          "ty": "U256",
+          "name": "ico_schedule_id",
+          "ty": "U128",
           "is_ref": false,
           "is_slice": false,
           "is_required": true
         }
       ],
       "is_mutable": false,
-      "return_ty": "Bool",
+      "return_ty": {
+        "Option": "Any"
+      },
+      "ty": "Public",
+      "attributes": []
+    },
+    {
+      "name": "get_ico_schedules_count",
+      "args": [],
+      "is_mutable": false,
+      "return_ty": "U128",
+      "ty": "Public",
+      "attributes": []
+    },
+    {
+      "name": "get_styks_price_feed_contract_address",
+      "args": [],
+      "is_mutable": false,
+      "return_ty": "Key",
+      "ty": "Public",
+      "attributes": []
+    },
+    {
+      "name": "get_tailor_coin_contract_address",
+      "args": [],
+      "is_mutable": false,
+      "return_ty": "Key",
+      "ty": "Public",
+      "attributes": []
+    },
+    {
+      "name": "get_treasury_contract_address",
+      "args": [],
+      "is_mutable": false,
+      "return_ty": "Key",
       "ty": "Public",
       "attributes": []
     },

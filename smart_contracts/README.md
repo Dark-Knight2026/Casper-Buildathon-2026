@@ -34,6 +34,12 @@ Each contract is modular, upgradeable, and interacts with others through well-de
    contract provides: stake/unstake functionality, rewards calculation and distribution, integration with the `Treasury`
    contract for rewards funding. Designed to incentivize long-term participation in the ecosystem.
 
+8. `ICO` - allows the owner to manage the `TailorCoin (BIG)` token sales in multiple currencies, including CSPR, USDC,
+    and USDT. It supports creating multiple ICO schedules with configurable start/end times, sale amounts, and token
+    prices. Users can purchase `TailorCoin (BIG)` tokens during active ICO schedules, with payments automatically
+    handled. The contract integrates with the Styks Price Feed Oracle to determine token prices in CSPR dynamically.
+    Owners can also withdraw unsold tokens from finished ICO schedules and manage supported currencies.
+
 ## Build
 
 ```bash

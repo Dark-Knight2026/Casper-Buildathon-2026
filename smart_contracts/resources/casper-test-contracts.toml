@@ -1,0 +1,16 @@
+last_updated = "2026-02-03T16:28:41Z"
+
+[[contracts]]
+name = "TailorCoin"
+package_name = "TailorCoin"
+package_hash = "hash-f7d94fd8670fdc69aabd07c214ab8d52c3fc1fd839f0cc7713e1574cdfd899ec"
+
+[[contracts]]
+name = "Treasury"
+package_name = "Treasury"
+package_hash = "hash-04d0c23574c3c89be4cac153918327a3cc9c7bd24bc5a568d41ae5854b6e1ea2"
+
+[[contracts]]
+name = "ICO"
+package_name = "ICO"
+package_hash = "hash-6ffbe3eefcee2e98b657527edddcd386d532e10725e941a9dbe990d545095b9e"

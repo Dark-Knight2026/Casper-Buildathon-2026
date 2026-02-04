@@ -33,6 +33,34 @@
       ]
     },
     {
+      "name": "TokenWithdrawn",
+      "args": [
+        {
+          "name": "token",
+          "ty": {
+            "Option": "Key"
+          },
+          "is_ref": false,
+          "is_slice": false,
+          "is_required": true
+        },
+        {
+          "name": "amount",
+          "ty": "U256",
+          "is_ref": false,
+          "is_slice": false,
+          "is_required": true
+        },
+        {
+          "name": "recipient",
+          "ty": "Key",
+          "is_ref": false,
+          "is_slice": false,
+          "is_required": true
+        }
+      ]
+    },
+    {
       "name": "OwnershipTransferred",
       "args": [
         {
@@ -72,6 +100,16 @@
       "return_ty": "Unit",
       "ty": "Constructor",
       "attributes": []
+    },
+    {
+      "name": "receive",
+      "args": [],
+      "is_mutable": false,
+      "return_ty": "Unit",
+      "ty": "Public",
+      "attributes": [
+        "Payable"
+      ]
     },
     {
       "name": "set_staking",
@@ -119,7 +157,9 @@
       "is_mutable": true,
       "return_ty": "Unit",
       "ty": "Public",
-      "attributes": []
+      "attributes": [
+        "NonReentrant"
+      ]
     },
     {
       "name": "withdraw_reserves",
@@ -134,6 +174,38 @@
         {
           "name": "amount",
           "ty": "U256",
+          "is_ref": false,
+          "is_slice": false,
+          "is_required": true
+        }
+      ],
+      "is_mutable": true,
+      "return_ty": "Unit",
+      "ty": "Public",
+      "attributes": []
+    },
+    {
+      "name": "withdraw_token",
+      "args": [
+        {
+          "name": "token",
+          "ty": {
+            "Option": "Key"
+          },
+          "is_ref": false,
+          "is_slice": false,
+          "is_required": true
+        },
+        {
+          "name": "amount",
+          "ty": "U256",
+          "is_ref": false,
+          "is_slice": false,
+          "is_required": true
+        },
+        {
+          "name": "recipient",
+          "ty": "Key",
           "is_ref": false,
           "is_slice": false,
           "is_required": true

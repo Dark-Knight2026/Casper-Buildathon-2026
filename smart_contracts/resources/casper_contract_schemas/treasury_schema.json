@@ -1,6 +1,6 @@
 {
   "casper_contract_schema_version": 1,
-  "toolchain": "rustc 1.85.0-nightly (d117b7f21 2024-12-31)",
+  "toolchain": "rustc 1.85.0-nightly (7f75bfa1a 2024-12-30)",
   "authors": [],
   "repository": null,
   "homepage": null,
@@ -59,6 +59,31 @@
           }
         ]
       }
+    },
+    {
+      "struct": {
+        "name": "TokenWithdrawn",
+        "description": null,
+        "members": [
+          {
+            "name": "token",
+            "description": null,
+            "ty": {
+              "Option": "Key"
+            }
+          },
+          {
+            "name": "amount",
+            "description": null,
+            "ty": "U256"
+          },
+          {
+            "name": "recipient",
+            "description": null,
+            "ty": "Key"
+          }
+        ]
+      }
     }
   ],
   "errors": [
@@ -71,6 +96,21 @@
       "name": "CallerNotTheOwner",
       "description": "The caller is not the owner.",
       "discriminant": 20001
+    },
+    {
+      "name": "DirectReservesTokenWithdrawalIsNotAllowed",
+      "description": "",
+      "discriminant": 64004
+    },
+    {
+      "name": "InsufficientWithdrawalTokenAmount",
+      "description": "",
+      "discriminant": 64005
+    },
+    {
+      "name": "InvalidWithdrawalAmount",
+      "description": "",
+      "discriminant": 64003
     },
     {
       "name": "MissingRole",
@@ -104,6 +144,22 @@
     }
   ],
   "entry_points": [
+    {
+      "name": "receive",
+      "description": "Allows to receive CSPR tokens by this contract",
+      "is_mutable": false,
+      "arguments": [
+        {
+          "name": "__cargo_purse",
+          "description": null,
+          "ty": "URef",
+          "optional": false
+        }
+      ],
+      "return_ty": "Unit",
+      "is_contract_context": true,
+      "access": "public"
+    },
     {
       "name": "set_staking",
       "description": "Sets the Staking contract address by the owner",
@@ -167,6 +223,36 @@
           "name": "amount",
           "description": null,
           "ty": "U256",
+          "optional": false
+        }
+      ],
+      "return_ty": "Unit",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "withdraw_token",
+      "description": "Allows to withdraw any token that is stored on this contract except of the TailorCoin (BIG) token which is the",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "token",
+          "description": null,
+          "ty": {
+            "Option": "Key"
+          },
+          "optional": false
+        },
+        {
+          "name": "amount",
+          "description": null,
+          "ty": "U256",
+          "optional": false
+        },
+        {
+          "name": "recipient",
+          "description": null,
+          "ty": "Key",
           "optional": false
         }
       ],
@@ -248,6 +334,10 @@
     {
       "name": "RewardsDeposited",
       "ty": "RewardsDeposited"
+    },
+    {
+      "name": "TokenWithdrawn",
+      "ty": "TokenWithdrawn"
     }
   ],
   "call": {

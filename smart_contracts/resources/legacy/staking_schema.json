@@ -72,7 +72,9 @@
       "is_mutable": true,
       "return_ty": "Unit",
       "ty": "Public",
-      "attributes": []
+      "attributes": [
+        "NonReentrant"
+      ]
     },
     {
       "name": "get_tailor_coin_contract_address",

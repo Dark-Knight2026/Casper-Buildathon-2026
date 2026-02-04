@@ -59,6 +59,7 @@ impl Escrow {
     }
 
     /// Allows to create a lease invoice by the Lease contract
+    #[odra(non_reentrant)]
     pub fn create_lease_invoice(
         &mut self,
         tenant: Address,
@@ -71,6 +72,7 @@ impl Escrow {
     }
 
     /// Allows to create a security deposit invoice by the Lease contract
+    #[odra(non_reentrant)]
     pub fn create_security_deposit_invoice(
         &mut self,
         tenant: Address,
@@ -89,6 +91,7 @@ impl Escrow {
 
     /// Allows to pay any invoice created earlier
     #[odra(payable)]
+    #[odra(non_reentrant)]
     pub fn pay_invoice(&mut self, invoice_id: U256) {
         let mut invoice = self
             .invoices
@@ -107,20 +110,19 @@ impl Escrow {
             self.env().revert(Error::InvoiceIsExpired);
         }
 
+        let attached_value = self.env().attached_value();
         let recipient = invoice.seller;
 
         // TODO charge 2% fee for every payment, and accumulate unless TailorCoin (BIG) token pool is deployed
 
         if invoice.amount_due.currency().is_none() {
-            let attached_value = self.env().attached_value();
-
             if attached_value != invoice.amount_due.amount().to_u512() {
                 self.env().revert(Error::InvalidAmountAttached);
             }
 
             self.env().transfer_tokens(&recipient, &attached_value);
         } else {
-            if self.env().attached_value() > U512::zero() {
+            if attached_value > U512::zero() {
                 self.env().revert(Error::InvalidAmountAttached);
             }
 
