@@ -8,10 +8,10 @@ use axum::{
     http::{StatusCode, request::Parts},
     response::{IntoResponse, Response},
 };
-use error_tools::dependency::thiserror;
 use jsonwebtoken::{DecodingKey, Validation, decode};
 use secrecy::ExposeSecret;
 use serde_json::json;
+use thiserror::Error;
 
 use crate::common::{AppState, Claims};
 
@@ -49,7 +49,7 @@ impl FromRequestParts<Arc<AppState>> for AuthUser {
 }
 
 /// Authentication errors.
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Error)]
 pub enum AuthError {
     /// Authorization header is missing or malformed.
     #[error("Missing credentials")]

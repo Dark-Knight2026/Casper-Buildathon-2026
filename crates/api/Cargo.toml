@@ -12,7 +12,6 @@ axum = { workspace = true }
 casper-types = { workspace = true }
 chrono = { workspace = true }
 dotenv = { workspace = true }
-error_tools = { workspace = true }
 hex = { workspace = true }
 jsonwebtoken = { workspace = true }
 rand = { workspace = true }

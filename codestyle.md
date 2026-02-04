@@ -63,7 +63,7 @@ Most rules in this document follow a consistent structure for clarity:
 |                             | [Short matches](#macros--short-matches)                                                                                                                      | Place short macro patterns and bodies on the same line.                                                          |
 | **Naming Conventions**      | [File Naming](#naming-conventions--file-naming)                                                                                                              | All file names must use `snake_case` and be in all lowercase letters.                                            |
 |                             | [Directory Naming: Avoid Redundant Prefixes](#naming-conventions--directory-naming-avoid-redundant-prefixes)                                                 | If a crate's name has a prefix matching its parent directory, remove the prefix from the crate's directory name. |
-| **Error Handling**          | [`error_tools` and `thiserror`](#error-handling--error_tools-and-thiserror)                                                                                  | Both `error_tools` and `thiserror` are permitted for error handling; `anyhow` is forbidden.                      |
+| **Error Handling**          | [`thiserror`](#error-handling--thiserror)                                                                                                                     | `thiserror` is the standard error handling library; `anyhow` is forbidden.                                       |
 
 ### Scope & Applicability : Universal Applicability of Codestyle
 
@@ -1303,14 +1303,14 @@ name = "api_gemini"
 name = "api_gemini" # The full name is preserved here
 ```
 
-### Error Handling : `error_tools` and `thiserror`
+### Error Handling : `thiserror`
 
-Both `error_tools` and `thiserror` are permitted for error handling. The use of `anyhow` is forbidden to ensure structured, typed error management across the codebase.
+`thiserror` is the standard error handling library for this project. The use of `anyhow` is forbidden to ensure structured, typed error management across the codebase.
 
 **Usage guidelines:**
 
-- **`thiserror`** — Use for API-facing error types that implement `IntoResponse`, or any `#[derive(Error)]` enum. Preferred when the error type needs custom `Display` formatting or `#[from]` conversions. Can be used directly or via `error_tools::dependency::thiserror`.
-- **`error_tools`** — Use when its `err!` macro or `Result` alias provides additional convenience.
+- Use `thiserror` for all error types that need `#[derive(Error)]`, custom `Display` formatting, or `#[from]` conversions.
+- Always import directly: `use thiserror::Error;`.
 
 > ✅ **Good** (Using `thiserror`)
 
@@ -1323,23 +1323,6 @@ pub enum AuthError {
     InvalidToken,
     #[error("Token expired")]
     Expired,
-}
-```
-
-> ✅ **Good** (Using `error_tools`)
-
-```rust
-use error_tools::{err, Result};
-
-#[derive(Debug, error_tools::Error)]
-pub enum MyError {
-    #[error("Failed to read data")]
-    ReadError,
-}
-
-fn do_something() -> Result<()> {
-    // ...
-    Err(err!(MyError::ReadError))
 }
 ```
 

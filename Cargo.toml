@@ -74,7 +74,6 @@ axum-test = "18"
 casper-types = "6.1.0"
 chrono = { version = "0.4", features = ["serde"] }
 dotenv = "0.15"
-error_tools = "0.37"
 hex = "0.4"
 jsonwebtoken = { version = "10.3", features = ["rust_crypto"] }
 rand = "0.9"
