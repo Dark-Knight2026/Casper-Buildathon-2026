@@ -50,11 +50,11 @@ pub async fn calculate_tax_liability(
     Json(payload): Json<TaxCalculationRequest>,
 ) -> ApiResult<Json<TaxReport>> {
     // MOCK Implementation - using checked arithmetic to avoid panics
-    let total_income = Decimal::from(150_000_i64);
-    let base_deductions = Decimal::from(45_000_i64);
+    let total_income = Decimal::from(150_000);
+    let base_deductions = Decimal::from(45_000);
 
     let total_deductions = if payload.include_depreciation {
-        base_deductions + Decimal::from(12_000_i64)
+        base_deductions + Decimal::from(12_000)
     } else {
         base_deductions
     };
@@ -70,15 +70,15 @@ pub async fn calculate_tax_liability(
         breakdown: vec![
             TaxCategory {
                 category: TaxCategoryType::PropertyTax,
-                amount: Decimal::from(15_000_i64),
+                amount: Decimal::from(15_000),
             },
             TaxCategory {
                 category: TaxCategoryType::Maintenance,
-                amount: Decimal::from(20_000_i64),
+                amount: Decimal::from(20_000),
             },
             TaxCategory {
                 category: TaxCategoryType::ManagementFees,
-                amount: Decimal::from(10_000_i64),
+                amount: Decimal::from(10_000),
             },
         ],
     }))

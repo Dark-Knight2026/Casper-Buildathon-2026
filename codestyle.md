@@ -2,7 +2,7 @@
 
 ## Rationale
 
-This document provides a comprehensive set of coding standards for the Rust backend of the HypeProxies Dashboard. Given the critical nature of the backend—handling core business logic, financial transactions, and system infrastructure—a strict and detailed codestyle is essential for ensuring code quality, security, long-term maintainability, and consistency across the development team.
+This document provides a comprehensive set of coding standards for the Rust backend of the LeaseFi Backend. Given the critical nature of the backend—handling core business logic, financial transactions, and system infrastructure—a strict and detailed codestyle is essential for ensuring code quality, security, long-term maintainability, and consistency across the development team.
 
 ### Governing Principles
 
@@ -63,7 +63,7 @@ Most rules in this document follow a consistent structure for clarity:
 |                             | [Short matches](#macros--short-matches)                                                                                                                      | Place short macro patterns and bodies on the same line.                                                           |
 | **Naming Conventions**      | [File Naming](#naming-conventions--file-naming)                                                                                                              | All file names must use `snake_case` and be in all lowercase letters.                                             |
 |                             | [Directory Naming: Avoid Redundant Prefixes](#naming-conventions--directory-naming-avoid-redundant-prefixes)                                                 | If a crate's name has a prefix matching its parent directory, remove the prefix from the crate's directory name.  |
-| **Error Handling**          | [Exclusive Use of `error_tools`](#error-handling--exclusive-use-of-error_tools)                                                                              | The `error_tools` crate is the only library permitted for error handling; `anyhow` and `thiserror` are forbidden. |
+| **Error Handling**          | [`error_tools` and `thiserror`](#error-handling--error_tools-and-thiserror)                                                                                  | Both `error_tools` and `thiserror` are permitted for error handling; `anyhow` is forbidden.                       |
 
 ### Scope & Applicability : Universal Applicability of Codestyle
 
@@ -1273,9 +1273,28 @@ name = "api_gemini"
 name = "api_gemini" # The full name is preserved here
 ```
 
-### Error Handling : Exclusive Use of `error_tools`
+### Error Handling : `error_tools` and `thiserror`
 
-The `error_tools` crate is the sole library permitted for error handling. The use of other error handling libraries, specifically `anyhow` and `thiserror`, is forbidden to ensure a single, consistent approach to error management across the codebase.
+Both `error_tools` and `thiserror` are permitted for error handling. The use of `anyhow` is forbidden to ensure structured, typed error management across the codebase.
+
+**Usage guidelines:**
+
+- **`thiserror`** — Use for API-facing error types that implement `IntoResponse`, or any `#[derive(Error)]` enum. Preferred when the error type needs custom `Display` formatting or `#[from]` conversions. Can be used directly or via `error_tools::dependency::thiserror`.
+- **`error_tools`** — Use when its `err!` macro or `Result` alias provides additional convenience.
+
+> ✅ **Good** (Using `thiserror`)
+
+```rust
+use thiserror::Error;
+
+#[derive(Debug, Error)]
+pub enum AuthError {
+    #[error("Invalid token")]
+    InvalidToken,
+    #[error("Token expired")]
+    Expired,
+}
+```
 
 > ✅ **Good** (Using `error_tools`)
 
@@ -1294,23 +1313,14 @@ fn do_something() -> Result<()> {
 }
 ```
 
-> ❌ **Bad** (Using `anyhow` or `thiserror`)
+> ❌ **Bad** (Using `anyhow`)
 
 ```rust
-// Using anyhow is forbidden
+// Using anyhow is forbidden — use typed errors instead
 use anyhow::Result;
 
 fn do_anyhow_thing() -> Result<()> {
     // ...
     Ok(())
-}
-
-// Using thiserror is forbidden
-use thiserror::Error;
-
-#[derive(Error, Debug)]
-pub enum AnotherError {
-    #[error("data store disconnected")]
-    Disconnect(#[from] std::io::Error),
 }
 ```

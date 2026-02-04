@@ -50,10 +50,10 @@ pub async fn get_property_performance(
 ) -> ApiResult<Json<PropertyPerformanceReport>> {
     // MOCK Implementation - using checked arithmetic to avoid panics
     Ok(Json(PropertyPerformanceReport {
-        total_revenue: Decimal::from(240_000_i64),
-        total_expenses: Decimal::from(80_000_i64),
-        net_operating_income: Decimal::from(160_000_i64),
-        roi_percentage: Decimal::from(16_i64),
+        total_revenue: Decimal::from(240_000),
+        total_expenses: Decimal::from(80_000),
+        net_operating_income: Decimal::from(160_000),
+        roi_percentage: Decimal::from(16),
         occupancy_rate: Decimal::new(955, 1), // 95.5
     }))
 }
