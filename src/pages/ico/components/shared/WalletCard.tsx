@@ -40,6 +40,9 @@ export function WalletCard({
     CARD: 0,
   };
   const currentBalance = balances[currency];
+  // TODO: [Next PR] Replace hardcoded CURRENCY_RATES with live rate from useCSPRPrice hook.
+  // Currently uses a static CSPR rate — see src/hooks/useCSPRPrice.ts for the existing
+  // real-time price fetching implementation that should be integrated here.
   const currencyRate = ICO_CONFIG.CURRENCY_RATES[currency];
   const amountInUsd = amount ? Number(amount) * currencyRate : 0;
   const tokensToReceive = amountInUsd / tokenPrice;

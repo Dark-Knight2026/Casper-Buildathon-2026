@@ -65,10 +65,24 @@ export const ICO_CONFIG = {
   },
 
   // Currency to USD conversion rates (constant for now)
+  // TODO: [Next PR] Replace hardcoded CSPR rate with real-time price oracle.
+  // CSPR is volatile — a hardcoded rate can cause significant over/under-charging.
+  // Integration plan:
+  //   1. Use useCSPRPrice hook (src/hooks/useCSPRPrice.ts) which already fetches
+  //      live rates from csprCloudService every 60 seconds.
+  //   2. Add staleness detection — reject transactions if rate is > 5 min old.
+  //   3. USDT/USDC rates should also be fetched to handle minor de-peg scenarios.
+  //   4. Keep these hardcoded values only as fallback defaults.
+  //
+  // NOTE: These client-side rates are for UI display/estimation only.
+  // They are inherently manipulable (browser DevTools, etc.) and MUST NOT be
+  // trusted for actual financial calculations. The backend will independently
+  // compute token amounts using its own exchange rates and reject any request
+  // where client-submitted values diverge from the server-side truth.
   CURRENCY_RATES: {
     USDT: 1,       // 1 USDT = $1
     USDC: 1,       // 1 USDC = $1
-    CSPR: 0.02,    // 1 CSPR = $0.02
+    CSPR: 0.02,    // 1 CSPR = $0.02 — PLACEHOLDER, must be replaced with live rate
     CARD: 1,       // 1 USD = $1 (fiat)
   },
 } as const;

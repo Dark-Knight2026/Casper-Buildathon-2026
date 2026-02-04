@@ -72,9 +72,23 @@ const MOCK_TRANSACTIONS: Transaction[] = [
 ];
 
 export function ActivePresale({ className, endTimestamp }: ActivePresaleProps) {
+  // TODO: [Next PR] Implement wallet connection via CasperWalletProvider.
+  // Should prompt user to connect Casper Signer / Casper Wallet extension,
+  // retrieve the active public key, and store it in app state.
   const handleConnect = () => {
   };
 
+  // TODO: [Next PR] Implement full purchase flow with server-side validation.
+  // This handler is intentionally empty in the current UI-only PR.
+  // Required integration steps:
+  //   1. Validate amount & currency on the backend (never trust client-side math).
+  //   2. Create a pending transaction record server-side before accepting payment.
+  //   3. Submit blockchain transaction (CEP-18 transfer for USDT/USDC, native deploy for CSPR).
+  //   4. Backend must verify the deploy on-chain and confirm token allocation.
+  //   5. Implement idempotency keys / nonce to prevent double-spending.
+  //   6. Handle edge cases: insufficient balance, network errors, deploy failures.
+  //   7. CSRF protection: API layer must enforce CSRF tokens (via cookies/headers),
+  //      SameSite cookie policy, and Origin/Referer header validation.
   const handlePurchase = (amount: number, currency: PaymentCurrency) => {
   };
 
