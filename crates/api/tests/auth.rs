@@ -5,7 +5,18 @@ mod common;
 use axum::http::{Method, StatusCode};
 use casper_types::{AsymmetricType, PublicKey, SecretKey, crypto};
 use rand::RngCore;
+use redis::AsyncCommands;
 use sqlx::PgPool;
+
+fn generate_random_ed25519() -> (SecretKey, PublicKey) {
+    let mut rng = rand::rng();
+    let mut bytes = [0u8; 32];
+    rng.fill_bytes(&mut bytes);
+
+    let secret_key = SecretKey::ed25519_from_bytes(bytes).unwrap();
+    let public_key = PublicKey::from(&secret_key);
+    (secret_key, public_key)
+}
 
 #[sqlx::test(migrations = "../../supabase/migrations")]
 async fn nonce_endpoint_requires_wallet_address(pool: PgPool) {
@@ -108,7 +119,7 @@ async fn protected_endpoint_rejects_invalid_token(pool: PgPool) {
     assert_eq!(status, StatusCode::UNAUTHORIZED);
 }
 
-/// End-to-end: generate keypair → get nonce → sign → login → receive JWT.
+/// End-to-end: generate keypair -> get nonce -> sign -> login -> receive JWT.
 #[sqlx::test(migrations = "../../supabase/migrations")]
 async fn full_auth_flow_nonce_sign_login(pool: PgPool) {
     let env = common::setup_test_server(pool, true).await;
@@ -158,16 +169,169 @@ async fn full_auth_flow_nonce_sign_login(pool: PgPool) {
     );
 }
 
-// --- Cryptographic signature verification ---
+/// Replay attack: nonce is deleted after successful login, second attempt must fail.
+#[sqlx::test(migrations = "../../supabase/migrations")]
+async fn replay_attack_prevention(pool: PgPool) {
+    let env = common::setup_test_server(pool, true).await;
 
-fn generate_random_ed25519() -> (SecretKey, PublicKey) {
-    let mut rng = rand::rng();
-    let mut bytes = [0u8; 32];
-    rng.fill_bytes(&mut bytes);
-
-    let secret_key = SecretKey::ed25519_from_bytes(bytes).unwrap();
+    let secret_key = SecretKey::ed25519_from_bytes([2u8; 32]).unwrap();
     let public_key = PublicKey::from(&secret_key);
-    (secret_key, public_key)
+    let wallet_address = public_key.to_hex();
+
+    // Get nonce and sign
+    let nonce_body: serde_json::Value = env
+        .server
+        .get("/api/v1/auth/nonce")
+        .add_query_param("wallet_address", &wallet_address)
+        .await
+        .json();
+    let message = nonce_body["message"].as_str().unwrap();
+    let signature_hex = crypto::sign(message.as_bytes(), &secret_key, &public_key).to_hex();
+
+    // First login succeeds
+    let first = env
+        .server
+        .post("/api/v1/auth/login")
+        .json(&serde_json::json!({
+            "wallet_address": wallet_address,
+            "signature": signature_hex
+        }))
+        .await;
+    assert_eq!(first.status_code(), StatusCode::OK);
+
+    // Second login with same signature fails (nonce was deleted)
+    let second = env
+        .server
+        .post("/api/v1/auth/login")
+        .json(&serde_json::json!({
+            "wallet_address": wallet_address,
+            "signature": signature_hex
+        }))
+        .await;
+    assert_eq!(
+        second.status_code(),
+        StatusCode::UNAUTHORIZED,
+        "Replay attack must be rejected after nonce deletion"
+    );
+}
+
+/// Requesting a new nonce overwrites the previous one; only the latest nonce is valid.
+#[sqlx::test(migrations = "../../supabase/migrations")]
+async fn concurrent_nonce_overwrites_previous(pool: PgPool) {
+    let env = common::setup_test_server(pool, true).await;
+
+    let secret_key = SecretKey::ed25519_from_bytes([3u8; 32]).unwrap();
+    let public_key = PublicKey::from(&secret_key);
+    let wallet_address = public_key.to_hex();
+
+    // Request first nonce
+    let first_body: serde_json::Value = env
+        .server
+        .get("/api/v1/auth/nonce")
+        .add_query_param("wallet_address", &wallet_address)
+        .await
+        .json();
+    let first_message = first_body["message"].as_str().unwrap();
+    let first_sig = crypto::sign(first_message.as_bytes(), &secret_key, &public_key).to_hex();
+
+    // Request second nonce (overwrites first in Redis)
+    let second_body: serde_json::Value = env
+        .server
+        .get("/api/v1/auth/nonce")
+        .add_query_param("wallet_address", &wallet_address)
+        .await
+        .json();
+    let second_message = second_body["message"].as_str().unwrap();
+    let second_sig = crypto::sign(second_message.as_bytes(), &secret_key, &public_key).to_hex();
+
+    // Login with first (stale) nonce fails
+    let stale = env
+        .server
+        .post("/api/v1/auth/login")
+        .json(&serde_json::json!({
+            "wallet_address": wallet_address,
+            "signature": first_sig
+        }))
+        .await;
+    assert_eq!(
+        stale.status_code(),
+        StatusCode::UNAUTHORIZED,
+        "Stale nonce signature must be rejected"
+    );
+
+    // Login with latest nonce succeeds
+    let fresh = env
+        .server
+        .post("/api/v1/auth/login")
+        .json(&serde_json::json!({
+            "wallet_address": wallet_address,
+            "signature": second_sig
+        }))
+        .await;
+    assert_eq!(fresh.status_code(), StatusCode::OK);
+}
+
+/// Login without requesting a nonce first must be rejected.
+#[sqlx::test(migrations = "../../supabase/migrations")]
+async fn login_without_nonce_is_rejected(pool: PgPool) {
+    let env = common::setup_test_server(pool, true).await;
+
+    let secret_key = SecretKey::ed25519_from_bytes([4u8; 32]).unwrap();
+    let public_key = PublicKey::from(&secret_key);
+    let wallet_address = public_key.to_hex();
+
+    // Sign an arbitrary message (no nonce was ever stored)
+    let fake_message = "Sign this message to login to LeaseFi. Nonce: nonexistent";
+    let signature_hex = crypto::sign(fake_message.as_bytes(), &secret_key, &public_key).to_hex();
+
+    let response = env
+        .server
+        .post("/api/v1/auth/login")
+        .json(&serde_json::json!({
+            "wallet_address": wallet_address,
+            "signature": signature_hex
+        }))
+        .await;
+    assert_eq!(
+        response.status_code(),
+        StatusCode::UNAUTHORIZED,
+        "Login without prior nonce request must return 401"
+    );
+}
+
+/// Nonce key in Redis must have TTL set (`LOGIN_NONCE_TTL` = 300s).
+#[sqlx::test(migrations = "../../supabase/migrations")]
+async fn nonce_has_ttl_set_in_redis(pool: PgPool) {
+    let env = common::setup_test_server(pool, true).await;
+
+    let secret_key = SecretKey::ed25519_from_bytes([5u8; 32]).unwrap();
+    let public_key = PublicKey::from(&secret_key);
+    let wallet_address = public_key.to_hex();
+
+    // Request nonce
+    let response = env
+        .server
+        .get("/api/v1/auth/nonce")
+        .add_query_param("wallet_address", &wallet_address)
+        .await;
+    assert_eq!(response.status_code(), StatusCode::OK);
+
+    // Check TTL on the Redis key directly
+    let redis_env = env.redis.as_ref().expect("Redis required for this test");
+    let mut conn = redis_env
+        .client
+        .get_multiplexed_async_connection()
+        .await
+        .expect("Redis connection failed");
+
+    let key = format!("nonce:{wallet_address}");
+    let ttl: i64 = conn.ttl(&key).await.expect("TTL query failed");
+
+    // TTL should be positive and close to 300s (allow some margin for test execution)
+    assert!(
+        ttl > 0 && ttl <= 300,
+        "Nonce TTL must be between 1 and 300 seconds, got {ttl}"
+    );
 }
 
 #[test]

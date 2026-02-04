@@ -47,6 +47,7 @@ pub struct RedisTestEnv {
     pub client: redis::Client,
     /// Redis connection URL.
     pub url: String,
+    /// Keeps the container alive for the duration of the test.
     _container: ContainerAsync<GenericImage>,
 }
 
@@ -92,7 +93,8 @@ pub struct TestEnv {
     pub server: TestServer,
     /// JWT secret used for token generation.
     pub jwt_secret: String,
-    _redis: Option<RedisTestEnv>,
+    /// Redis environment (keeps container alive, provides client for assertions).
+    pub redis: Option<RedisTestEnv>,
 }
 
 /// Creates a test server using a pool from `#[sqlx::test]`.
@@ -138,7 +140,7 @@ pub async fn setup_test_server(pool: PgPool, with_redis: bool) -> TestEnv {
     TestEnv {
         server: TestServer::new_with_config(app, config).expect("Failed to create test server"),
         jwt_secret,
-        _redis: redis_env,
+        redis: redis_env,
     }
 }
 
