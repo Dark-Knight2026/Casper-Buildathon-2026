@@ -1,9 +1,31 @@
-//! Casper Network event indexer for the `LeaseFi` platform.
-//!
-//! Subscribes to smart contract events via `CSPR.cloud` APIs
-//! and persists them to the database for the backend API to serve.
+//! Casper Network event indexer entry point.
+
+use indexer::IndexerConfig;
 
 #[tokio::main]
 async fn main() {
-    println!("Hello, world!");
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .init();
+
+    dotenv::dotenv().ok();
+
+    let config = match IndexerConfig::from_env() {
+        Ok(config) => config,
+        Err(e) => {
+            tracing::error!(error = %e, "Failed to load configuration");
+            std::process::exit(1);
+        }
+    };
+
+    let active = config.contracts.active_contracts();
+    tracing::info!(
+        contracts = active.len(),
+        "Indexer started, tracking {} contract(s)",
+        active.len()
+    );
+
+    for (contract_type, hash) in &active {
+        tracing::info!(contract = %contract_type, hash = %hash, "Tracking contract");
+    }
 }
