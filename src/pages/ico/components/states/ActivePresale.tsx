@@ -1,6 +1,7 @@
 import { cn } from '@/lib/utils';
 import { ICO_CONFIG } from '@/constants/ico';
 import type { PaymentCurrency } from '@/types/ico';
+import type { ScheduleProgress } from '@/hooks/ico/useICOSchedules';
 import { Title } from '../shared/Title';
 import { ProgressBar } from '../shared/ProgressBar';
 import { WalletCard } from '../shared/WalletCard';
@@ -13,14 +14,8 @@ import { useWalletBalances } from '@/hooks/ico/useWalletBalances';
 interface ActivePresaleProps {
   className?: string;
   endTimestamp: number;
+  progress?: ScheduleProgress | null;
 }
-
-// Mock data for development (progress & transactions will come from backend later)
-const MOCK_PROGRESS = {
-  tokensSold: 450000000,
-  totalAllocation: 1000000000,
-  amountRaised: 450000,
-};
 
 const MOCK_USER_BALANCE = {
   tokensPurchased: 17500,
@@ -63,12 +58,17 @@ const MOCK_TRANSACTIONS: Transaction[] = [
   },
 ];
 
-export function ActivePresale({ className, endTimestamp }: ActivePresaleProps) {
+export function ActivePresale({ className, endTimestamp, progress }: ActivePresaleProps) {
   const { isConnected, account, connect } = useICOWallet();
   const { balances } = useWalletBalances(account?.publicKey);
+  console.log('Wallet Balances:', balances);
+  console.log('Account Info:', account);
+  console.log('progress:', progress);
 
   const handlePurchase = (amount: number, currency: PaymentCurrency) => {
   };
+
+
 
   return (
     <div className={cn('max-w-5xl mx-auto', className)}>
@@ -88,19 +88,21 @@ export function ActivePresale({ className, endTimestamp }: ActivePresaleProps) {
           <p className='text-[hsl(var(--ico-text-secondary))] pl-2'>Presale ends in:</p>
           <CountdownTimer variant='compact' targetTimestamp={endTimestamp} className="py-2" />
 
-          {/* Progress Bar */}
-          <ProgressBar
-            currentValue={MOCK_PROGRESS.tokensSold}
-            maxValue={MOCK_PROGRESS.totalAllocation}
-            label="Progress"
-            rightLabel={`$${MOCK_PROGRESS.amountRaised.toLocaleString()} / $${Number(ICO_CONFIG.PRE_SALE.hardCap).toLocaleString()}`}
-            showPercentage={true}
-            infoColumns={[
-              { label: 'Funds Raised', value: `$${MOCK_PROGRESS.amountRaised.toLocaleString()}` },
-              { label: 'Initial Price', value: `$${ICO_CONFIG.PRE_SALE.price} per ${ICO_CONFIG.TOKEN.symbol}` },
-            ]}
-            className="w-full"
-          />
+          {/* Progress Bar - show only when progress data exists */}
+          {progress && (
+            <ProgressBar
+              currentValue={progress.tokensSold}
+              maxValue={progress.totalAllocation}
+              label="Progress"
+              rightLabel={`$${Math.round(progress.amountRaised).toLocaleString()} / $${Number(ICO_CONFIG.PRE_SALE.hardCap).toLocaleString()}`}
+              showPercentage={true}
+              infoColumns={[
+                { label: 'Funds Raised', value: `$${Math.round(progress.amountRaised).toLocaleString()}` },
+                { label: 'Initial Price', value: `$${progress.priceUsd.toFixed(2)} per ${ICO_CONFIG.TOKEN.symbol}` },
+              ]}
+              className="w-full"
+            />
+          )}
           <p className='text-[hsl(var(--ico-text-secondary))] pl-2'>Hard Cap: ${Number(ICO_CONFIG.PRE_SALE.hardCap).toLocaleString()}</p>
         </div>
 
@@ -110,7 +112,7 @@ export function ActivePresale({ className, endTimestamp }: ActivePresaleProps) {
           balanceCSPR={balances.cspr}
           balanceUSDT={balances.usdt}
           balanceUSDC={balances.usdc}
-          tokenPrice={Number(ICO_CONFIG.PRE_SALE.price)}
+          tokenPrice={progress?.priceUsd ?? 0}
           tokenSymbol={ICO_CONFIG.TOKEN.symbol}
           onConnect={connect}
           onPurchase={handlePurchase}
@@ -118,14 +120,16 @@ export function ActivePresale({ className, endTimestamp }: ActivePresaleProps) {
         />
       </div>
 
-      {/* User Token Balance */}
-      <UserTokenBalance
-        tokensPurchased={MOCK_USER_BALANCE.tokensPurchased}
-        totalSpentUSD={MOCK_USER_BALANCE.totalSpentUSD}
-        tokenPrice={Number(ICO_CONFIG.PRE_SALE.price)}
-        tokenSymbol={ICO_CONFIG.TOKEN.symbol}
-        className="mt-8"
-      />
+      {/* User Token Balance - show only when progress data exists */}
+      {progress && (
+        <UserTokenBalance
+          tokensPurchased={MOCK_USER_BALANCE.tokensPurchased}
+          totalSpentUSD={MOCK_USER_BALANCE.totalSpentUSD}
+          tokenPrice={progress.priceUsd}
+          tokenSymbol={ICO_CONFIG.TOKEN.symbol}
+          className="mt-8"
+        />
+      )}
 
       {/* Transaction History */}
       <TransactionHistory
