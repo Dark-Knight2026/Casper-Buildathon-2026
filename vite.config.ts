@@ -18,6 +18,14 @@ export default defineConfig(({ mode }) => {
           authorization: env.VITE_CSPR_CLOUD_API_KEY || '',
         },
       },
+      '/api/casper-rpc': {
+        target: 'https://node.testnet.cspr.cloud',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/casper-rpc/, '/rpc'),
+        headers: {
+          authorization: env.VITE_CSPR_CLOUD_API_KEY || '',
+        },
+      },
     },
   },
   plugins: [
