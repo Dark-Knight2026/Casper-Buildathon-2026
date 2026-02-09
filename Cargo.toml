@@ -76,7 +76,7 @@ chrono = { version = "0.4", features = ["serde"] }
 dotenv = "0.15"
 hex = "0.4"
 jsonwebtoken = { version = "10.3", features = ["rust_crypto"] }
-rand = "0.9"
+rand = "0.10.0"
 redis = { version = "1.0.2", features = ["tokio-comp"] }
 rust_decimal = { version = "1", features = ["serde"] }
 secrecy = { version = "0.10", features = ["serde"] }
@@ -86,7 +86,7 @@ serial_test = "3"
 sha2 = "0.10"
 sqlx = { version = "0.8.6", features = ["runtime-tokio-rustls", "postgres", "uuid", "rust_decimal", "migrate"] }
 strum = { version = "0.27", features = ["derive"] }
-testcontainers = "0.26"
+testcontainers = "0.27.0"
 thiserror = "2.0"
 tokio = { version = "1", features = ["full"] }
 tower-http = { version = "0.6.8", features = ["cors", "trace", "limit"] }
