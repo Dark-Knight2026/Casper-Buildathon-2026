@@ -260,6 +260,84 @@ describe('WalletCard', () => {
     });
   });
 
+  // --- Purchase flow ---
+
+  describe('purchase flow', () => {
+    it('should call onPurchase with correct amount and currency when button clicked', () => {
+      const onPurchase = vi.fn();
+      render(<WalletCard {...connectedProps} onPurchase={onPurchase} />);
+
+      fireEvent.change(screen.getByPlaceholderText('0.00'), {
+        target: { value: '100' },
+      });
+
+      fireEvent.click(screen.getByText('Purchase BIG'));
+
+      expect(onPurchase).toHaveBeenCalledTimes(1);
+      expect(onPurchase).toHaveBeenCalledWith(100, 'USDT');
+    });
+
+    it('should call onPurchase with correct currency after currency change', () => {
+      const onPurchase = vi.fn();
+      render(<WalletCard {...connectedProps} onPurchase={onPurchase} />);
+
+      fireEvent.change(screen.getByPlaceholderText('0.00'), {
+        target: { value: '500' },
+      });
+
+      fireEvent.change(screen.getByTestId('currency-selector'), {
+        target: { value: 'USDC' },
+      });
+
+      fireEvent.click(screen.getByText('Purchase BIG'));
+
+      expect(onPurchase).toHaveBeenCalledWith(500, 'USDC');
+    });
+
+    it('should not call onPurchase when amount is empty', () => {
+      const onPurchase = vi.fn();
+      render(<WalletCard {...connectedProps} onPurchase={onPurchase} />);
+
+      // Button should be disabled, but let's verify onPurchase isn't called
+      const button = screen.getByText('Purchase BIG').closest('button');
+      expect(button).toBeDisabled();
+    });
+
+    it('should not call onPurchase when balance is insufficient', () => {
+      const onPurchase = vi.fn();
+      render(
+        <WalletCard
+          {...connectedProps}
+          balanceUSDT={50}
+          onPurchase={onPurchase}
+        />
+      );
+
+      fireEvent.change(screen.getByPlaceholderText('0.00'), {
+        target: { value: '100' },
+      });
+
+      // Button should be disabled due to insufficient balance
+      const button = screen.getByText('Purchase BIG').closest('button');
+      expect(button).toBeDisabled();
+    });
+
+    it('should show insufficient balance warning', () => {
+      render(
+        <WalletCard
+          {...connectedProps}
+          balanceUSDT={50}
+        />
+      );
+
+      fireEvent.change(screen.getByPlaceholderText('0.00'), {
+        target: { value: '100' },
+      });
+
+      expect(screen.getByText(/Insufficient USDT balance/)).toBeInTheDocument();
+    });
+  });
+
   // --- Custom className ---
 
   describe('className prop', () => {
