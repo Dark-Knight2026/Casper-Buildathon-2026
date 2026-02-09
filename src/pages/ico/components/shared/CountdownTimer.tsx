@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, memo } from 'react';
 import { cn } from '@/lib/utils';
 import type { CountdownTime } from '@/types/ico';
 import { Card } from './Card';
@@ -35,7 +35,7 @@ const calculateTimeLeft = (targetTimestamp: number): CountdownTime => {
   };
 };
 
-export function CountdownTimer({
+export const CountdownTimer = memo(function CountdownTimer({
   targetTimestamp,
   onExpire,
   size = 'md',
@@ -163,6 +163,6 @@ export function CountdownTimer({
       ))}
     </div>
   );
-}
+});
 
 export default CountdownTimer;
