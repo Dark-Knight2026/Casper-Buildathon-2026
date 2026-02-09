@@ -123,7 +123,7 @@ describe('AmountInput', () => {
       expect(onChange).not.toHaveBeenCalled();
     });
 
-    it('should still call onChange when value is below minimum (shows warning)', () => {
+    it('should NOT call onChange when value is below minimum (shows error instead)', () => {
       const onChange = vi.fn();
       render(<AmountInput {...defaultProps} onChange={onChange} />);
 
@@ -131,10 +131,11 @@ describe('AmountInput', () => {
         target: { value: '5' },
       });
 
-      expect(onChange).toHaveBeenCalledWith('5');
+      expect(onChange).not.toHaveBeenCalled();
+      expect(screen.getByText('Minimum amount is $10')).toBeInTheDocument();
     });
 
-    it('should still call onChange when value exceeds maximum (shows warning)', () => {
+    it('should NOT call onChange when value exceeds maximum (shows error instead)', () => {
       const onChange = vi.fn();
       render(<AmountInput {...defaultProps} onChange={onChange} />);
 
@@ -142,7 +143,8 @@ describe('AmountInput', () => {
         target: { value: '200000' },
       });
 
-      expect(onChange).toHaveBeenCalledWith('200000');
+      expect(onChange).not.toHaveBeenCalled();
+      expect(screen.getByText('Maximum amount is $100,000')).toBeInTheDocument();
     });
   });
 
@@ -211,14 +213,14 @@ describe('AmountInput', () => {
       render(<Wrapper />);
       const input = screen.getByPlaceholderText('0.00');
 
-      // Trigger an error first
-      fireEvent.change(input, { target: { value: '5' } });
-      expect(screen.getByText('Minimum amount is $10')).toBeInTheDocument();
+      // First enter a valid value
+      fireEvent.change(input, { target: { value: '50' } });
+      expect(screen.queryByText(/Minimum amount|Maximum amount/)).not.toBeInTheDocument();
 
-      // Clear input
+      // Clear input - should have no error
       fireEvent.change(input, { target: { value: '' } });
       expect(
-        screen.queryByText('Minimum amount is $10')
+        screen.queryByText(/Minimum amount|Maximum amount|positive number/)
       ).not.toBeInTheDocument();
     });
 
