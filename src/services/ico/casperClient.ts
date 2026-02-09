@@ -22,10 +22,16 @@ import {
   EntityAddr,
   EntityIdentifier,
   Deploy,
+  DeployHeader,
+  ExecutableDeployItem,
+  StoredContractByHash,
+  ContractHash,
   Transaction,
   ContractCallBuilder,
   Args,
   PublicKey,
+  Timestamp,
+  Duration,
 } from 'casper-js-sdk';
 
 import { ICO_CONFIG } from '@/constants/ico';
@@ -352,7 +358,7 @@ export async function inspectContractEntity(
     try {
       const entityAddr = EntityAddr.fromPrefixedString(key);
       const entityId = EntityIdentifier.fromEntityAddr(entityAddr);
-      const result = await client.getLatestEntity(entityId); 
+      const result = await client.getLatestEntity(entityId);
       // const store = client.getLate
       console.log(`[inspect] getLatestEntity OK with key="${key}":`, result);
       console.log('[inspect] Raw JSON:', result.rawJSON);
@@ -439,7 +445,7 @@ export async function queryICOData(contractHash: string): Promise<{
 
     return {
       schedulesCount,
-      currentSchedule: null, // Requires speculativeExec or deploy
+      currentSchedule: null,
       currentScheduleId: null,
     };
   } catch (err) {
@@ -595,3 +601,55 @@ export async function getDeployStatus(deployHash: string) {
   }
 }
 
+// ── Deploy creation ─────────────────────────────────────────────────
+
+/**
+ * Creates a Deploy object for contract calls.
+ * This is the legacy Deploy format for Casper 1.5.x.
+ *
+ * @param senderPublicKeyHex - Public key of the sender
+ * @param contractHashStr - Contract hash in `hash-<hex>` format
+ * @param entryPoint - Entry point name to call
+ * @param args - Arguments for the entry point
+ * @param paymentAmount - Payment amount in motes
+ * @returns Deploy object
+ */
+export function createDeploy(
+  senderPublicKeyHex: string,
+  contractHashStr: string,
+  entryPoint: string,
+  args: Args = Args.fromMap({}),
+  paymentAmount: bigint = 2_500_000_000n // 2.5 CSPR
+): Deploy {
+  const senderPublicKey = PublicKey.fromHex(senderPublicKeyHex);
+  const contractHashHex = stripHashPrefix(contractHashStr);
+
+  // Create deploy header
+  const deployHeader = new DeployHeader(
+    ICO_CONFIG.CASPER.networkName, // chainName
+    [],                             // dependencies
+    1,                              // gasPrice
+    new Timestamp(new Date()),      // timestamp (now)
+    new Duration(1800000),          // ttl (30 minutes)
+    senderPublicKey,                // account
+  );
+
+  // Create payment (standard payment)
+  const payment = ExecutableDeployItem.standardPayment(paymentAmount.toString());
+
+  // Create session (contract call by hash)
+  const contractHash = ContractHash.newContract(contractHashHex);
+  const storedContractByHash = new StoredContractByHash(contractHash, entryPoint, args);
+  const session = new ExecutableDeployItem();
+  session.storedContractByHash = storedContractByHash;
+
+  // Create the deploy
+  const deploy = Deploy.makeDeploy(deployHeader, payment, session);
+
+  console.log('[createDeploy] Deploy created:', {
+    hash: deploy.hash?.toHex(),
+    header: deploy.header,
+  });
+
+  return deploy;
+}

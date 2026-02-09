@@ -15,14 +15,12 @@ import {
   Args,
   CLValue,
   Key,
-  URef,
-  UrefAccess,
-  Transaction,
+  Deploy,
 } from 'casper-js-sdk';
 
 import { ICO_CONFIG } from '@/constants/ico';
 import {
-  createContractCallTransaction,
+  createDeploy,
   stripHashPrefix,
   getCasperRpcClient,
 } from './casperClient';
@@ -62,10 +60,10 @@ export interface PurchaseParams {
 export interface PurchaseResult {
   /** Whether approval was needed and executed */
   approvalNeeded: boolean;
-  /** Approval transaction (if needed) */
-  approvalTransaction?: Transaction;
-  /** Purchase transaction */
-  purchaseTransaction: Transaction;
+  /** Approval deploy (if needed) */
+  approvalDeploy?: Deploy;
+  /** Purchase deploy */
+  purchaseDeploy: Deploy;
 }
 
 export interface ApprovalCheckResult {
@@ -171,13 +169,13 @@ export async function checkApprovalNeeded(
 }
 
 /**
- * Creates an approve transaction for CEP-18 tokens.
+ * Creates an approve deploy for CEP-18 tokens.
  */
-export function createApproveTransaction(
+export function createApproveDeploy(
   senderPublicKey: string,
   currency: PaymentCurrency,
   amount: string,
-): Transaction {
+): Deploy {
   const tokenContract = getCurrencyContractHash(currency);
   if (!tokenContract) {
     throw new Error(`No contract address for currency: ${currency}`);
@@ -196,7 +194,7 @@ export function createApproveTransaction(
     amount: CLValue.newCLUInt256(rawAmount),
   });
 
-  return createContractCallTransaction(
+  return createDeploy(
     senderPublicKey,
     tokenContract,
     'approve',
@@ -205,33 +203,25 @@ export function createApproveTransaction(
   );
 }
 
+// Keep old function name as alias for backward compatibility
+export const createApproveTransaction = createApproveDeploy;
+
 // ── Purchase functions ──────────────────────────────────────────────
 
 /**
- * Creates a dummy URef for the __cargo_purse parameter.
- * For CEP-18 token payments, the purse is not used (contract uses transferFrom).
- * For CSPR payments, the attached value is handled by the transaction itself.
- */
-function createDummyPurseURef(): URef {
-  // Create a zero-filled 32-byte array for an empty/dummy URef
-  const emptyData = new Uint8Array(32);
-  return new URef(emptyData, UrefAccess.ReadAddWrite);
-}
-
-/**
- * Creates a purchase transaction for the ICO contract.
+ * Creates a purchase deploy for the ICO contract.
  *
  * The ICO contract entry point signature (from schema):
- *   purchase(purchase_amount: U256, currency: Currency, __cargo_purse: URef)
+ *   purchase(purchase_amount: U256, currency: Currency)
  *
- * For CSPR payments, the amount is sent as attached value.
- * For CEP-18 payments, the contract will transferFrom the buyer.
+ * For CSPR payments, the amount is attached as payment.
+ * For CEP-18 payments, the contract will transferFrom the buyer (after approve).
  */
-export function createPurchaseTransaction(
+export function createPurchaseDeploy(
   senderPublicKey: string,
   amount: string,
   currency: PaymentCurrency,
-): Transaction {
+): Deploy {
   if (currency === 'CARD') {
     throw new Error('CARD payments are handled via fiat on-ramp, not blockchain transaction');
   }
@@ -242,21 +232,17 @@ export function createPurchaseTransaction(
     currency as 'CSPR' | 'USDC' | 'USDT'
   );
 
-  // Create a dummy purse URef (for CEP-18 payments, the actual purse is not used)
-  const cargoPurse = createDummyPurseURef();
-
-  // Build args for purchase(purchase_amount: U256, currency: Currency, __cargo_purse: URef)
+  // Build args for purchase(purchase_amount: U256, currency: Currency)
   const args = Args.fromMap({
     purchase_amount: CLValue.newCLUInt256(rawAmount),
     currency: CLValue.newCLUint8(contractCurrency),
-    __cargo_purse: CLValue.newCLUref(cargoPurse),
   });
 
   const gasCost = currency === 'CSPR'
     ? GAS_COST.BUY_TOKENS_CSPR
     : GAS_COST.BUY_TOKENS_CEP18;
 
-  return createContractCallTransaction(
+  return createDeploy(
     senderPublicKey,
     ICO_HASH,
     'purchase',
@@ -265,12 +251,13 @@ export function createPurchaseTransaction(
   );
 }
 
-// Keep old function name as alias for backward compatibility
-export const createBuyTokensTransaction = createPurchaseTransaction;
+// Keep old function names as aliases for backward compatibility
+export const createPurchaseTransaction = createPurchaseDeploy;
+export const createBuyTokensTransaction = createPurchaseDeploy;
 
 /**
  * Prepares a complete purchase flow.
- * Returns approval transaction (if needed) and purchase transaction.
+ * Returns approval deploy (if needed) and purchase deploy.
  */
 export async function preparePurchase(
   params: PurchaseParams,
@@ -284,17 +271,17 @@ export async function preparePurchase(
     currency,
   );
 
-  let approvalTransaction: Transaction | undefined;
+  let approvalDeploy: Deploy | undefined;
   if (approvalCheck.needed) {
-    approvalTransaction = createApproveTransaction(
+    approvalDeploy = createApproveDeploy(
       senderPublicKey,
       currency,
       amount,
     );
   }
 
-  // Create the purchase transaction
-  const purchaseTransaction = createBuyTokensTransaction(
+  // Create the purchase deploy
+  const purchaseDeploy = createPurchaseDeploy(
     senderPublicKey,
     amount,
     currency,
@@ -302,35 +289,36 @@ export async function preparePurchase(
 
   return {
     approvalNeeded: approvalCheck.needed,
-    approvalTransaction,
-    purchaseTransaction,
+    approvalDeploy,
+    purchaseDeploy,
   };
 }
 
-// ── Transaction submission ──────────────────────────────────────────
+// ── Deploy submission ───────────────────────────────────────────────
 
 /**
- * Submits a signed transaction to the blockchain.
+ * Submits a signed deploy to the blockchain.
  * Returns the deploy hash.
  */
-export async function submitTransaction(
-  signedTransaction: Transaction,
+export async function submitDeploy(
+  signedDeploy: Deploy,
 ): Promise<string> {
   const client = getCasperRpcClient();
 
-  // Submit as Transaction (Casper 2.0) or Deploy (Casper 1.x)
-  // For testnet (1.x), we use putDeploy
-  const result = await client.putTransaction(signedTransaction);
+  const result = await client.putDeploy(signedDeploy);
 
-  console.log('[icoPurchaseService] Transaction submitted:', result);
-  return result.transactionHash.toString();
+  console.log('[icoPurchaseService] Deploy submitted:', result);
+  return result.deployHash.toString();
 }
 
+// Keep old function name as alias for backward compatibility
+export const submitTransaction = submitDeploy;
+
 /**
- * Gets the status of a submitted transaction.
+ * Gets the status of a submitted deploy.
  */
-export async function getTransactionStatus(
-  transactionHash: string,
+export async function getDeployStatus(
+  deployHash: string,
 ): Promise<{
   status: 'pending' | 'executed' | 'failed';
   errorMessage?: string;
@@ -338,34 +326,37 @@ export async function getTransactionStatus(
   const client = getCasperRpcClient();
 
   try {
-    const result = await client.getTransactionByTransactionHash(transactionHash);
+    const result = await client.getDeploy(deployHash);
 
-    // Check execution results
-    const executionInfo = result.executionInfo;
-    if (!executionInfo) {
+    // Check execution results from the raw JSON response
+    const execResults = result.rawJSON?.execution_results;
+    if (!execResults || execResults.length === 0) {
       return { status: 'pending' };
     }
 
     // Check if execution was successful
-    // ExecutionResult has errorMessage property - if undefined/empty, it's success
-    const executionResult = executionInfo.executionResult;
-    if (executionResult) {
-      if (executionResult.errorMessage) {
-        return {
-          status: 'failed',
-          errorMessage: executionResult.errorMessage,
-        };
-      }
+    const execResult = execResults[0]?.result;
+    if (execResult?.Success) {
       return { status: 'executed' };
+    }
+
+    if (execResult?.Failure) {
+      return {
+        status: 'failed',
+        errorMessage: execResult.Failure.error_message || 'Deploy failed',
+      };
     }
 
     return { status: 'pending' };
   } catch (err) {
-    // Transaction not found yet = still pending
-    console.warn('[icoPurchaseService] getTransactionStatus error:', err);
+    // Deploy not found yet = still pending
+    console.warn('[icoPurchaseService] getDeployStatus error:', err);
     return { status: 'pending' };
   }
 }
+
+// Keep old function name as alias for backward compatibility
+export const getTransactionStatus = getDeployStatus;
 
 // ── Validation ──────────────────────────────────────────────────────
 
