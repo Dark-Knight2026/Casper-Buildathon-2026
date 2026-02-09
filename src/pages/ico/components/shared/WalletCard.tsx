@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import { ICO_CONFIG } from '@/constants/ico';
 import { Card } from './Card';
@@ -49,8 +49,14 @@ export function WalletCard({
   // arithmetic in smallest units (motes for CSPR, token decimals for BIG)
   // to avoid JavaScript floating-point precision errors.
   const currencyRate = ICO_CONFIG.CURRENCY_RATES[currency];
-  const amountInUsd = amount ? Number(amount) * currencyRate : 0;
-  const tokensToReceive = amountInUsd / tokenPrice;
+  const amountInUsd = useMemo(
+    () => (amount ? Number(amount) * currencyRate : 0),
+    [amount, currencyRate]
+  );
+  const tokensToReceive = useMemo(
+    () => amountInUsd / tokenPrice,
+    [amountInUsd, tokenPrice]
+  );
 
   // Balance validation
   const amountInCurrency = Number(amount) || 0;

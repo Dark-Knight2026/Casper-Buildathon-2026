@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { Card } from '../shared/Card';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 import { AreaChart, Area, XAxis, YAxis } from 'recharts';
@@ -83,38 +84,37 @@ const formatUSD = (value: string | number) => {
   return `$${Number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
 
-const dashboardCards = [
-  {
-    label: 'BIG Balance',
-    value: MOCK_DASHBOARD.bigInWallet,
-    usdValue: '100.00',
-    icon: Wallet,
-    color: 'var(--ico-card-wallet)',
-  },
-  {
-    label: 'BIG Staked',
-    value: MOCK_DASHBOARD.bigStaked,
-    usdValue: '750.00',
-    icon: TrendingUp,
-    color: 'var(--ico-card-staked)',
-  },
-  {
-    label: 'Rewards Earned',
-    value: MOCK_DASHBOARD.rewardsEarned,
-    usdValue: '8.25',
-    icon: TrendingUp,
-    color: 'var(--ico-card-rewards)',
-  },
-  {
-    label: 'BIG Value',
-    value: MOCK_DASHBOARD.totalBig,
-    usdValue: MOCK_DASHBOARD.estimatedUsdcValue,
-    icon: TrendingUp,
-    color: 'var(--ico-card-total)',
-  },
-];
-
 export function OverviewTab() {
+  const dashboardCards = useMemo(() => [
+    {
+      label: 'BIG Balance',
+      value: MOCK_DASHBOARD.bigInWallet,
+      usdValue: '100.00',
+      icon: Wallet,
+      color: 'var(--ico-card-wallet)',
+    },
+    {
+      label: 'BIG Staked',
+      value: MOCK_DASHBOARD.bigStaked,
+      usdValue: '750.00',
+      icon: TrendingUp,
+      color: 'var(--ico-card-staked)',
+    },
+    {
+      label: 'Rewards Earned',
+      value: MOCK_DASHBOARD.rewardsEarned,
+      usdValue: '8.25',
+      icon: TrendingUp,
+      color: 'var(--ico-card-rewards)',
+    },
+    {
+      label: 'BIG Value',
+      value: MOCK_DASHBOARD.totalBig,
+      usdValue: MOCK_DASHBOARD.estimatedUsdcValue,
+      icon: TrendingUp,
+      color: 'var(--ico-card-total)',
+    },
+  ], []);
   return (
     <div className="space-y-6">
       {/* Main Stats Cards */}
