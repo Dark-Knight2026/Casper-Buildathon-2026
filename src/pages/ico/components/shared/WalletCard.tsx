@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import { ICO_CONFIG } from '@/constants/ico';
 import { Card } from './Card';
@@ -60,11 +60,11 @@ export function WalletCard({
     return `${address.slice(0, 6)}...${address.slice(-4)}`;
   };
 
-  const handlePurchase = () => {
+  const handlePurchase = useCallback(() => {
     if (amount && onPurchase && !insufficientBalance) {
       onPurchase(Number(amount), currency);
     }
-  };
+  }, [amount, onPurchase, insufficientBalance, currency]);
 
   return (
     <Card className={cn('p-6', className)}>
