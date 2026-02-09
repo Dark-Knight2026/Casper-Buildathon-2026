@@ -1,3 +1,8 @@
+/**
+ * STYLING EXCEPTION: This component uses styled-components via @make-software/csprclick-ui.
+ * This is the ONLY acceptable use of styled-components in the codebase.
+ * All custom components MUST use Tailwind CSS. See spec.md "Styling Exception".
+ */
 import { ClickProvider, ClickUI, DefaultThemes, buildTheme, ThemeModeType } from '@make-software/csprclick-ui';
 import { CONTENT_MODE } from '@make-software/csprclick-core-types';
 import type { CsprClickInitOptions } from '@make-software/csprclick-core-types';
