@@ -3,6 +3,16 @@ import { ICO_CONFIG } from '@/constants/ico';
 
 const MOTES_PER_CSPR = 1_000_000_000; // 1 CSPR = 10^9 motes
 
+/**
+ * Validates Casper public key format.
+ * Public keys are 66 hex characters starting with '01' (Ed25519) or '02' (Secp256k1).
+ */
+function isValidPublicKey(key: string): boolean {
+  if (key.length !== 66) return false;
+  if (!key.startsWith('01') && !key.startsWith('02')) return false;
+  return /^[0-9a-fA-F]+$/.test(key);
+}
+
 interface TokenBalance {
   balance: string;
   contractPackageHash: string;
@@ -153,6 +163,12 @@ export function useWalletBalances(publicKey: string | null | undefined): UseCSPR
 
   const refetch = useCallback(async () => {
     if (!publicKey) {
+      setBalances(EMPTY_BALANCES);
+      return;
+    }
+
+    if (!isValidPublicKey(publicKey)) {
+      setError('Invalid public key format');
       setBalances(EMPTY_BALANCES);
       return;
     }

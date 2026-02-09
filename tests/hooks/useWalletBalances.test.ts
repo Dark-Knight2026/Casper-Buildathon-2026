@@ -270,6 +270,80 @@ describe('useWalletBalances', () => {
     });
   });
 
+  // --- PublicKey validation ---
+
+  describe('publicKey validation', () => {
+    it('should set error for publicKey with wrong length', () => {
+      const { result } = renderHook(() => useWalletBalances('01abc123'));
+
+      expect(result.current.error).toBe('Invalid public key format');
+      expect(result.current.balances.cspr).toBe(0);
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it('should set error for publicKey with wrong prefix', () => {
+      // Valid length but starts with '03' instead of '01' or '02'
+      const invalidKey = '03abc123def456789abc123def456789abc123def456789abc123def456789abc1';
+      const { result } = renderHook(() => useWalletBalances(invalidKey));
+
+      expect(result.current.error).toBe('Invalid public key format');
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it('should set error for publicKey with non-hex characters', () => {
+      // Valid length and prefix but contains 'xyz' (non-hex)
+      const invalidKey = '01xyz123def456789abc123def456789abc123def456789abc123def456789abc1';
+      const { result } = renderHook(() => useWalletBalances(invalidKey));
+
+      expect(result.current.error).toBe('Invalid public key format');
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it('should accept valid Ed25519 publicKey (01 prefix)', async () => {
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve(mockCSPRBalanceResponse),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ data: [] }),
+        });
+
+      const validKey = '01abc123def456789abc123def456789abc123def456789abc123def456789abc1';
+      const { result } = renderHook(() => useWalletBalances(validKey));
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      expect(result.current.error).toBeNull();
+      expect(mockFetch).toHaveBeenCalled();
+    });
+
+    it('should accept valid Secp256k1 publicKey (02 prefix)', async () => {
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve(mockCSPRBalanceResponse),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ data: [] }),
+        });
+
+      const validKey = '02abc123def456789abc123def456789abc123def456789abc123def456789abc1';
+      const { result } = renderHook(() => useWalletBalances(validKey));
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      expect(result.current.error).toBeNull();
+      expect(mockFetch).toHaveBeenCalled();
+    });
+  });
+
   // --- PublicKey changes ---
 
   describe('publicKey changes', () => {
