@@ -49,6 +49,11 @@ LeaseFi is a comprehensive real estate Customer Relationship Management (CRM) pl
 | **Backend/API** | Supabase | 2.48.1 |
 | **Testing** | Vitest + Playwright | Latest |
 
+#### Styling Exception
+
+- **styled-components (5.3.11)** - Required exclusively for CSPR.click wallet SDK theming (`@make-software/csprclick-ui`)
+- All custom application components must continue using **Tailwind CSS only**
+
 ### 1.3 Project Statistics
 
 - **82+ Pages** covering all user journeys
