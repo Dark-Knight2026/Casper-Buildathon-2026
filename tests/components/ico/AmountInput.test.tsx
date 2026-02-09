@@ -101,7 +101,7 @@ describe('AmountInput', () => {
       expect(onChange).toHaveBeenCalledWith('');
     });
 
-    it('should NOT call onChange for negative values', () => {
+    it('should call onChange for negative values (shows error but updates input)', () => {
       const onChange = vi.fn();
       render(<AmountInput {...defaultProps} onChange={onChange} />);
 
@@ -109,21 +109,14 @@ describe('AmountInput', () => {
         target: { value: '-5' },
       });
 
-      expect(onChange).not.toHaveBeenCalled();
+      expect(onChange).toHaveBeenCalledWith('-5');
     });
 
-    it('should NOT call onChange for NaN input', () => {
-      const onChange = vi.fn();
-      render(<AmountInput {...defaultProps} onChange={onChange} />);
+    // Note: Test for non-numeric input (e.g., 'abc') is not included because
+    // type="number" inputs filter out non-numeric values at the browser level.
+    // This is already covered by the "should call onChange when input is cleared" test.
 
-      fireEvent.change(screen.getByPlaceholderText('0.00'), {
-        target: { value: 'abc' },
-      });
-
-      expect(onChange).not.toHaveBeenCalled();
-    });
-
-    it('should NOT call onChange when value is below minimum', () => {
+    it('should call onChange when value is below minimum (shows error but updates input)', () => {
       const onChange = vi.fn();
       render(<AmountInput {...defaultProps} onChange={onChange} />);
 
@@ -131,10 +124,10 @@ describe('AmountInput', () => {
         target: { value: '5' },
       });
 
-      expect(onChange).not.toHaveBeenCalled();
+      expect(onChange).toHaveBeenCalledWith('5');
     });
 
-    it('should NOT call onChange when value exceeds maximum', () => {
+    it('should call onChange when value exceeds maximum (shows error but updates input)', () => {
       const onChange = vi.fn();
       render(<AmountInput {...defaultProps} onChange={onChange} />);
 
@@ -142,7 +135,7 @@ describe('AmountInput', () => {
         target: { value: '200000' },
       });
 
-      expect(onChange).not.toHaveBeenCalled();
+      expect(onChange).toHaveBeenCalledWith('200000');
     });
   });
 
