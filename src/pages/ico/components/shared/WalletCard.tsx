@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import { ICO_CONFIG } from '@/constants/ico';
 import { Card } from './Card';
@@ -51,18 +51,28 @@ export function WalletCard({
   // arithmetic in smallest units (motes for CSPR, token decimals for BIG)
   // to avoid JavaScript floating-point precision errors.
   const currencyRate = ICO_CONFIG.CURRENCY_RATES[currency];
-  const amountInUsd = amount ? Number(amount) * currencyRate : 0;
-  const tokensToReceive = amountInUsd / tokenPrice;
+  const amountInUsd = useMemo(
+    () => (amount ? Number(amount) * currencyRate : 0),
+    [amount, currencyRate]
+  );
+  const tokensToReceive = useMemo(
+    () => amountInUsd / tokenPrice,
+    [amountInUsd, tokenPrice]
+  );
+
+  // Balance validation
+  const amountInCurrency = Number(amount) || 0;
+  const insufficientBalance = isConnected && amountInCurrency > currentBalance;
 
   const truncateAddress = (address: string) => {
     return `${address.slice(0, 6)}...${address.slice(-4)}`;
   };
 
-  const handlePurchase = () => {
-    if (amount && onPurchase) {
+  const handlePurchase = useCallback(() => {
+    if (amount && onPurchase && !insufficientBalance) {
       onPurchase(Number(amount), currency);
     }
-  };
+  }, [amount, onPurchase, insufficientBalance, currency]);
 
   return (
     <Card className={cn('p-6', className)}>
@@ -136,10 +146,18 @@ export function WalletCard({
         </div>
       )}
 
+      {/* Insufficient Balance Warning */}
+      {insufficientBalance && (
+        <p className="text-xs text-red-400 mb-4">
+          Insufficient {currency} balance. You have {currentBalance.toLocaleString()} {currency}.
+        </p>
+      )}
+
       {/* Purchase Button */}
       <MainButton
         text={isConnected ? `Purchase ${tokenSymbol}` : 'Connect Wallet'}
         onClick={isConnected ? handlePurchase : onConnect}
+        disabled={isConnected && (insufficientBalance || !amount)}
       />
     </Card>
   );

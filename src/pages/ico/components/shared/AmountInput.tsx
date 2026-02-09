@@ -43,15 +43,14 @@ export function AmountInput({
 
     if (isNaN(num) || num < 0) {
       setError('Amount must be a positive number');
+      onChange(rawValue);
       return;
     }
 
     if (num > 0 && num < min) {
       setError(`Minimum amount is $${min}`);
-      return;
     } else if (num > max) {
       setError(`Maximum amount is $${max.toLocaleString()}`);
-      return;
     } else {
       setError(null);
     }

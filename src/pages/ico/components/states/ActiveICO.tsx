@@ -3,8 +3,8 @@ import { Card } from '../shared/Card';
 import { CountdownTimer } from '../shared/CountdownTimer';
 import { ProgressBar } from '../shared/ProgressBar';
 import { WalletCard } from '../shared/WalletCard';
-import { TransactionHistory, Transaction } from '../shared/TransactionHistory';
-import { ICO_CONFIG } from '@/constants/ico';
+import { TransactionHistory } from '../shared/TransactionHistory';
+import { ICO_CONFIG, MOCK_TRANSACTIONS } from '@/constants/ico';
 import type { ScheduleProgress } from '@/hooks/ico/useICOSchedules';
 import { Title } from '../shared/Title';
 import { usePurchaseFlow } from '@/hooks/ico/usePurchaseFlow';
@@ -16,41 +16,6 @@ interface ActiveICOProps {
   className?: string;
   progress?: ScheduleProgress | null;
 }
-
-const MOCK_TRANSACTIONS: Transaction[] = [
-  {
-    id: '1',
-    type: 'purchase',
-    amount: 100,
-    currency: 'USDC',
-    tokensReceived: 66666,
-    tokenSymbol: ICO_CONFIG.TOKEN.symbol,
-    status: 'completed',
-    timestamp: new Date('2025-01-15T10:30:00'),
-    txHash: '0x1234567890abcdef1234567890abcdef12345678',
-  },
-  {
-    id: '2',
-    type: 'purchase',
-    amount: 500,
-    currency: 'USDT',
-    tokensReceived: 500000,
-    tokenSymbol: ICO_CONFIG.TOKEN.symbol,
-    status: 'completed',
-    timestamp: new Date('2025-01-10T14:20:00'),
-    txHash: '0xabcdef1234567890abcdef1234567890abcdef12',
-  },
-  {
-    id: '3',
-    type: 'purchase',
-    amount: 250,
-    currency: 'USDC',
-    tokensReceived: 250000,
-    tokenSymbol: ICO_CONFIG.TOKEN.symbol,
-    status: 'pending',
-    timestamp: new Date('2025-01-16T09:15:00'),
-  },
-];
 
 export function ActiveICO({ endTimestamp, className, progress }: ActiveICOProps) {
   const tokenPrice = progress?.priceUsd ?? 0;

@@ -1,8 +1,10 @@
+import { useMemo } from 'react';
 import { Card } from '../shared/Card';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 import { AreaChart, Area, XAxis, YAxis } from 'recharts';
 import { TrendingUp, Clock, Percent, Wallet } from 'lucide-react';
-import { TransactionHistory, Transaction } from '../shared/TransactionHistory';
+import { TransactionHistory } from '../shared/TransactionHistory';
+import { MOCK_TRANSACTIONS } from '@/constants/ico';
 
 // Mock data
 const MOCK_DASHBOARD = {
@@ -32,42 +34,6 @@ const MOCK_PORTFOLIO = {
   change24h: '+2.4',
 };
 
-const MOCK_TRANSACTIONS: Transaction[] = [
-  {
-    id: '1',
-    type: 'purchase',
-    amount: 1500,
-    currency: 'USDC',
-    tokensReceived: 1000000,
-    tokenSymbol: 'BIG',
-    status: 'completed',
-    timestamp: new Date('2025-01-20T10:30:00'),
-    txHash: '0x1234567890abcdef1234567890abcdef12345678',
-  },
-  {
-    id: '2',
-    type: 'purchase',
-    amount: 100,
-    currency: 'USDC',
-    tokensReceived: 66666,
-    tokenSymbol: 'BIG',
-    status: 'completed',
-    timestamp: new Date('2025-01-15T14:20:00'),
-    txHash: '0xabcdef1234567890abcdef1234567890abcdef12',
-  },
-  {
-    id: '3',
-    type: 'purchase',
-    amount: 500,
-    currency: 'USDC',
-    tokensReceived: 333333,    // 500 USDC / $0.0015 = 333,333 BIG (public ICO price)
-    tokenSymbol: 'BIG',
-    status: 'completed',
-    timestamp: new Date('2025-01-10T09:15:00'),
-    txHash: '0x7890abcdef1234567890abcdef1234567890abcd',
-  },
-];
-
 const chartConfig = {
   earnings: {
     label: 'Earnings',
@@ -83,38 +49,37 @@ const formatUSD = (value: string | number) => {
   return `$${Number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
 
-const dashboardCards = [
-  {
-    label: 'BIG Balance',
-    value: MOCK_DASHBOARD.bigInWallet,
-    usdValue: '100.00',
-    icon: Wallet,
-    color: 'var(--ico-card-wallet)',
-  },
-  {
-    label: 'BIG Staked',
-    value: MOCK_DASHBOARD.bigStaked,
-    usdValue: '750.00',
-    icon: TrendingUp,
-    color: 'var(--ico-card-staked)',
-  },
-  {
-    label: 'Rewards Earned',
-    value: MOCK_DASHBOARD.rewardsEarned,
-    usdValue: '8.25',
-    icon: TrendingUp,
-    color: 'var(--ico-card-rewards)',
-  },
-  {
-    label: 'BIG Value',
-    value: MOCK_DASHBOARD.totalBig,
-    usdValue: MOCK_DASHBOARD.estimatedUsdcValue,
-    icon: TrendingUp,
-    color: 'var(--ico-card-total)',
-  },
-];
-
 export function OverviewTab() {
+  const dashboardCards = useMemo(() => [
+    {
+      label: 'BIG Balance',
+      value: MOCK_DASHBOARD.bigInWallet,
+      usdValue: '100.00',
+      icon: Wallet,
+      color: 'var(--ico-card-wallet)',
+    },
+    {
+      label: 'BIG Staked',
+      value: MOCK_DASHBOARD.bigStaked,
+      usdValue: '750.00',
+      icon: TrendingUp,
+      color: 'var(--ico-card-staked)',
+    },
+    {
+      label: 'Rewards Earned',
+      value: MOCK_DASHBOARD.rewardsEarned,
+      usdValue: '8.25',
+      icon: TrendingUp,
+      color: 'var(--ico-card-rewards)',
+    },
+    {
+      label: 'BIG Value',
+      value: MOCK_DASHBOARD.totalBig,
+      usdValue: MOCK_DASHBOARD.estimatedUsdcValue,
+      icon: TrendingUp,
+      color: 'var(--ico-card-total)',
+    },
+  ], []);
   return (
     <div className="space-y-6">
       {/* Main Stats Cards */}

@@ -1,10 +1,10 @@
 import { cn } from '@/lib/utils';
-import { ICO_CONFIG } from '@/constants/ico';
 import type { ScheduleProgress } from '@/hooks/ico/useICOSchedules';
+import { ICO_CONFIG, MOCK_TRANSACTIONS } from '@/constants/ico';
 import { Title } from '../shared/Title';
 import { ProgressBar } from '../shared/ProgressBar';
 import { WalletCard } from '../shared/WalletCard';
-import { TransactionHistory, Transaction } from '../shared/TransactionHistory';
+import { TransactionHistory } from '../shared/TransactionHistory';
 import CountdownTimer from '../shared/CountdownTimer';
 import { UserTokenBalance } from '../shared/UserTokenBalance';
 import { usePurchaseFlow } from '@/hooks/ico/usePurchaseFlow';
@@ -21,42 +21,6 @@ const MOCK_USER_BALANCE = {
   tokensPurchased: 1505000,  // 500,000 + 1,000,000 + 5,000
   totalSpentUSD: 1505,       // $500 + $1,000 + $5 (250 CSPR × $0.02)
 };
-
-const MOCK_TRANSACTIONS: Transaction[] = [
-  {
-    id: '1',
-    type: 'purchase',
-    amount: 500,
-    currency: 'USDT',
-    tokensReceived: 500000,     // 500 USDT × $1 = $500 → $500 / $0.001 = 500,000 BIG
-    tokenSymbol: ICO_CONFIG.TOKEN.symbol,
-    status: 'completed',
-    timestamp: new Date(Date.now() - 1000 * 60 * 30),
-    txHash: '0xabc123def456789abc123def456789abc123def4',
-  },
-  {
-    id: '2',
-    type: 'purchase',
-    amount: 1000,
-    currency: 'USDC',
-    tokensReceived: 1000000,    // 1000 USDC × $1 = $1000 → $1000 / $0.001 = 1,000,000 BIG
-    tokenSymbol: ICO_CONFIG.TOKEN.symbol,
-    status: 'completed',
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2),
-    txHash: '0xdef456789abc123def456789abc123def456789a',
-  },
-  {
-    id: '3',
-    type: 'purchase',
-    amount: 250,
-    currency: 'CSPR',
-    tokensReceived: 5000,       // 250 CSPR × $0.02 = $5 → $5 / $0.001 = 5,000 BIG
-    tokenSymbol: ICO_CONFIG.TOKEN.symbol,
-    status: 'pending',
-    timestamp: new Date(),
-    txHash: '0x789abc123def456789abc123def456789abc1234',
-  },
-];
 
 export function ActivePresale({ className, endTimestamp, progress }: ActivePresaleProps) {
   const tokenPrice = progress?.priceUsd ?? 0;
