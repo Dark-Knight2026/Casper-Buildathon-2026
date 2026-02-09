@@ -237,7 +237,7 @@
       "name": "purchase",
       "args": [
         {
-          "name": "purchase_amount",
+          "name": "amount_to_spend",
           "ty": "U256",
           "is_ref": false,
           "is_slice": false,

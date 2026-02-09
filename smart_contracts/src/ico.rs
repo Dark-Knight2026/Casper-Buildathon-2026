@@ -112,9 +112,9 @@ impl ICO {
     /// Gives a possibility to purchase tokens from active ICO schedule
     #[odra(payable)]
     #[odra(non_reentrant)]
-    pub fn purchase(&mut self, purchase_amount: U256, currency: Currency) {
-        if purchase_amount.is_zero() {
-            self.env().revert(Error::InvalidPurchaseAmount);
+    pub fn purchase(&mut self, amount_to_spend: U256, currency: Currency) -> U256 {
+        if amount_to_spend.is_zero() {
+            self.env().revert(Error::InvalidAmountToSpend);
         }
 
         let (is_supported_currency, currency_address) = self.get_currency_by_key(&currency);
@@ -126,19 +126,24 @@ impl ICO {
         let (current_ico_schedule_id, mut current_ico_schedule) = self
             .get_current_ico_schedule()
             .unwrap_or_revert_with(&self.env(), Error::NoActiveIcoSchedule);
+        let ico_token_price = self.get_ico_token_price(currency);
+        let purchase_amount =
+            amount_to_spend * U256::from(10).pow(U256::from(18)) / ico_token_price;
+
+        if purchase_amount.is_zero() {
+            self.env().revert(Error::InvalidPurchaseAmount);
+        }
 
         if purchase_amount > current_ico_schedule.sale_amount - current_ico_schedule.sold_amount {
             self.env().revert(Error::InsufficientSellingTokensAmount);
         }
 
-        let ico_token_price = self.get_ico_token_price(currency);
-        let purchase_cost = ico_token_price * purchase_amount / U256::from(10).pow(U256::from(18));
         let caller = &self.env().caller();
         let attached_value = self.env().attached_value();
 
         match currency {
             Currency::CSPR => {
-                if attached_value != purchase_cost.to_u512() {
+                if attached_value != amount_to_spend.to_u512() {
                     self.env().revert(Error::InvalidAmountAttached);
                 }
 
@@ -154,7 +159,7 @@ impl ICO {
                     currency_address.unwrap_or_revert_with(&self.env(), Error::AddressIsRequired),
                 );
 
-                currency.transfer_from(&caller, &self.treasury.address(), &purchase_cost);
+                currency.transfer_from(&caller, &self.treasury.address(), &amount_to_spend);
             }
         }
 
@@ -169,9 +174,11 @@ impl ICO {
             amount: purchase_amount,
             currency,
             price: ico_token_price,
-            cost: purchase_cost,
+            cost: amount_to_spend,
             timestamp: self.env().get_block_time(),
         });
+
+        purchase_amount
     }
 
     /// Allows to withdraw all unsold tokens from all finished ICO schedules. Only the owner can interact with this
@@ -376,13 +383,14 @@ pub mod errors {
         InvalidICOScheduleEndTimestamp = 59_002,
         InvalidICOScheduleSaleAmount = 59_003,
         InvalidICOSchedulePrice = 59_004,
-        InvalidPurchaseAmount = 59_005,
+        InvalidAmountToSpend = 59_005,
         UnsupportedCurrency = 59_006,
         NoActiveIcoSchedule = 59_007,
         StyksOracleCanNotReturnTWAP = 59_008,
         AddressIsRequired = 59_009,
         InvalidAmountAttached = 59_010,
         InsufficientSellingTokensAmount = 59_011,
+        InvalidPurchaseAmount = 59_012,
     }
 }
 
@@ -847,15 +855,15 @@ mod tests {
     /////////////////////////////////////////////////////////////////////////////
 
     #[test]
-    fn test_purchase_should_fail_if_purchase_amount_is_zero() {
+    fn test_purchase_should_fail_if_amount_to_spend_is_zero() {
         let mut ctx = setup(odra_test::env(), true);
 
         assert_eq!(
             ctx.ico
                 .try_purchase(U256::zero(), Currency::CSPR)
                 .unwrap_err(),
-            Error::InvalidPurchaseAmount.into(),
-            "Should revert when purchase amount is zero"
+            Error::InvalidAmountToSpend.into(),
+            "Should revert when amount to spend is zero"
         );
     }
 
@@ -889,13 +897,16 @@ mod tests {
     fn test_purchase_should_fail_if_purchase_amount_is_gt_available_to_purchase_amount() {
         let mut ctx = setup(odra_test::env(), true);
         let creation_params = get_ico_schedules_creation_params(&ctx.env);
+        let amount_to_spend = (creation_params[0].sale_amount * creation_params[0].price
+            / U256::from(10).pow(U256::from(18)))
+            + U256::one();
 
         ctx.env
             .advance_block_time(creation_params[0].start_timestamp - ctx.env.block_time());
 
         assert_eq!(
             ctx.ico
-                .try_purchase(creation_params[0].sale_amount + 1, Currency::CSPR)
+                .try_purchase(amount_to_spend, Currency::USDC)
                 .unwrap_err(),
             Error::InsufficientSellingTokensAmount.into(),
             "Should revert when purchase amount is GT available to purchase amount"
@@ -923,6 +934,7 @@ mod tests {
     fn test_purchase_should_fail_if_attached_value_is_wrong_when_purchasing_with_cspr_token() {
         let mut ctx = setup(odra_test::env(), true);
         let creation_params = get_ico_schedules_creation_params(&ctx.env);
+        let amount_to_spend = U256::one() * U256::from(10).pow(U256::from(18));
 
         ctx.env
             .advance_block_time(creation_params[0].start_timestamp - ctx.env.block_time());
@@ -930,13 +942,25 @@ mod tests {
 
         assert_eq!(
             ctx.ico
+                .with_tokens(amount_to_spend.to_u512() - 1)
                 .try_purchase(
                     U256::from(100) * U256::from(10).pow(U256::from(18)),
                     Currency::CSPR
                 )
                 .unwrap_err(),
             Error::InvalidAmountAttached.into(),
-            "Should revert when attached CSPR amount is wrong when purchasing with CSPR"
+            "Should revert when attached CSPR amount is wrong when purchasing with CSPR - 1"
+        );
+        assert_eq!(
+            ctx.ico
+                .with_tokens(amount_to_spend.to_u512() + 1)
+                .try_purchase(
+                    U256::from(100) * U256::from(10).pow(U256::from(18)),
+                    Currency::CSPR
+                )
+                .unwrap_err(),
+            Error::InvalidAmountAttached.into(),
+            "Should revert when attached CSPR amount is wrong when purchasing with CSPR - 2"
         );
     }
 
@@ -968,19 +992,22 @@ mod tests {
             .advance_block_time(creation_params[0].start_timestamp - ctx.env.block_time());
         ctx.styks_price_feed.set_twap_price(4342); // 0.004342 * 10^6
 
-        let purchase_amount = U256::from(100) * U256::from(10).pow(U256::from(18));
         let currency = Currency::CSPR;
         let price = ctx.ico.get_ico_token_price(currency);
-        let cost = price * purchase_amount / U256::from(10).pow(U256::from(18));
+        let amount_to_spend = U256::from(100) * price;
+        let expected_purchase_amount = amount_to_spend * U256::from(10).pow(U256::from(18)) / price;
         let prev_current_ico_schedule = ctx.ico.get_current_ico_schedule().unwrap();
         let prev_buyer_balance = ctx.tailor_coin.balance_of(&ctx.users.alice);
         let prev_ico_balance = ctx.tailor_coin.balance_of(&ctx.ico.address());
         let prev_treasury_balance = ctx.env.balance_of(&ctx.treasury.address());
 
         ctx.env.set_caller(ctx.users.alice);
-        ctx.ico
-            .with_tokens(cost.to_u512())
-            .purchase(purchase_amount, currency);
+
+        let actual_purchase_amount = ctx
+            .ico
+            .with_tokens(amount_to_spend.to_u512())
+            .purchase(amount_to_spend, currency);
+
         ctx.env.set_caller(ctx.users.owner);
 
         let curr_current_ico_schedule = ctx.ico.get_current_ico_schedule().unwrap();
@@ -992,33 +1019,37 @@ mod tests {
             ctx.env.emitted_native_event(
                 &ctx.ico,
                 TokensPurchased {
-                    amount: purchase_amount,
+                    amount: expected_purchase_amount,
                     currency,
                     price,
-                    cost,
+                    cost: amount_to_spend,
                     timestamp: ctx.env.block_time(),
                 }
             ),
             "TokensPurchased event should be emitted"
         );
         assert_eq!(
+            expected_purchase_amount, actual_purchase_amount,
+            "Invalid purchase amount"
+        );
+        assert_eq!(
             curr_current_ico_schedule.1.sold_amount,
-            prev_current_ico_schedule.1.sold_amount + purchase_amount,
+            prev_current_ico_schedule.1.sold_amount + expected_purchase_amount,
             "Invalid current ICO schedule sold amount"
         );
         assert_eq!(
             curr_buyer_balance,
-            prev_buyer_balance + purchase_amount,
+            prev_buyer_balance + expected_purchase_amount,
             "Invalid current buyer ICO token balance"
         );
         assert_eq!(
             curr_ico_balance,
-            prev_ico_balance - purchase_amount,
+            prev_ico_balance - expected_purchase_amount,
             "Invalid current ICO contract ICO token balance"
         );
         assert_eq!(
             curr_treasury_balance,
-            prev_treasury_balance + cost.to_u512(),
+            prev_treasury_balance + amount_to_spend.to_u512(),
             "Invalid current Treasury CSPR balance"
         );
     }
@@ -1031,18 +1062,20 @@ mod tests {
         ctx.env
             .advance_block_time(creation_params[0].start_timestamp - ctx.env.block_time());
 
-        let purchase_amount = U256::from(100) * U256::from(10).pow(U256::from(18));
         let currency = Currency::USDC;
         let price = ctx.ico.get_ico_token_price(currency);
-        let cost = price * purchase_amount / U256::from(10).pow(U256::from(18));
+        let amount_to_spend = U256::from(100) * price;
+        let expected_purchase_amount = amount_to_spend * U256::from(10).pow(U256::from(18)) / price;
         let prev_current_ico_schedule = ctx.ico.get_current_ico_schedule().unwrap();
         let prev_buyer_balance = ctx.tailor_coin.balance_of(&ctx.users.alice);
         let prev_ico_balance = ctx.tailor_coin.balance_of(&ctx.ico.address());
         let prev_treasury_balance = ctx.usdc.balance_of(&ctx.treasury.address());
 
         ctx.env.set_caller(ctx.users.alice);
-        ctx.usdc.approve(&ctx.ico.address(), &cost);
-        ctx.ico.purchase(purchase_amount, currency);
+        ctx.usdc.approve(&ctx.ico.address(), &amount_to_spend);
+
+        let actual_purchase_amount = ctx.ico.purchase(amount_to_spend, currency);
+
         ctx.env.set_caller(ctx.users.owner);
 
         let curr_current_ico_schedule = ctx.ico.get_current_ico_schedule().unwrap();
@@ -1054,33 +1087,37 @@ mod tests {
             ctx.env.emitted_native_event(
                 &ctx.ico,
                 TokensPurchased {
-                    amount: purchase_amount,
+                    amount: expected_purchase_amount,
                     currency,
                     price,
-                    cost,
+                    cost: amount_to_spend,
                     timestamp: ctx.env.block_time(),
                 }
             ),
             "TokensPurchased event should be emitted"
         );
         assert_eq!(
+            expected_purchase_amount, actual_purchase_amount,
+            "Invalid purchase amount"
+        );
+        assert_eq!(
             curr_current_ico_schedule.1.sold_amount,
-            prev_current_ico_schedule.1.sold_amount + purchase_amount,
+            prev_current_ico_schedule.1.sold_amount + expected_purchase_amount,
             "Invalid current ICO schedule sold amount"
         );
         assert_eq!(
             curr_buyer_balance,
-            prev_buyer_balance + purchase_amount,
+            prev_buyer_balance + expected_purchase_amount,
             "Invalid current buyer ICO token balance"
         );
         assert_eq!(
             curr_ico_balance,
-            prev_ico_balance - purchase_amount,
+            prev_ico_balance - expected_purchase_amount,
             "Invalid current ICO contract ICO token balance"
         );
         assert_eq!(
             curr_treasury_balance,
-            prev_treasury_balance + cost,
+            prev_treasury_balance + amount_to_spend,
             "Invalid current Treasury USDC balance"
         );
     }
