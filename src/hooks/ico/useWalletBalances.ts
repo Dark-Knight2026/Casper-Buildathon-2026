@@ -118,6 +118,34 @@ function findTokenBalance(tokens: TokenBalance[], contractAddress: string, symbo
 
 const EMPTY_BALANCES: WalletBalances = { cspr: 0, usdt: 0, usdc: 0, big: 0 };
 
+/**
+ * Hook for fetching wallet token balances from CSPR.Cloud API.
+ *
+ * Fetches CSPR native balance and CEP-18 token balances (USDT, USDC, BIG)
+ * with automatic 30-second refresh interval when a publicKey is provided.
+ *
+ * @param {string | null | undefined} publicKey - Casper account public key (hex string)
+ *
+ * @returns {Object} Balance data and control functions
+ * @returns {WalletBalances} returns.balances - Token balances (cspr, usdt, usdc, big)
+ * @returns {boolean} returns.isLoading - Whether balances are being fetched
+ * @returns {string | null} returns.error - Error message if fetch failed
+ * @returns {() => void} returns.refetch - Function to manually refresh balances
+ *
+ * @example
+ * const { balances, isLoading, error, refetch } = useWalletBalances(account?.publicKey);
+ *
+ * if (isLoading) return <Spinner />;
+ * if (error) return <Error message={error} />;
+ *
+ * return (
+ *   <div>
+ *     <p>CSPR: {balances.cspr}</p>
+ *     <p>USDT: {balances.usdt}</p>
+ *     <button onClick={refetch}>Refresh</button>
+ *   </div>
+ * );
+ */
 export function useWalletBalances(publicKey: string | null | undefined): UseCSPRBalanceReturn {
   const [balances, setBalances] = useState<WalletBalances>(EMPTY_BALANCES);
   const [isLoading, setIsLoading] = useState(false);

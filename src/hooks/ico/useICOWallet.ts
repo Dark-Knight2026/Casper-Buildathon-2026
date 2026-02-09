@@ -30,6 +30,30 @@ export interface ICOWalletState {
   error: string | null;
 }
 
+/**
+ * Hook for managing Casper wallet connection via CSPR.click SDK.
+ *
+ * Handles wallet sign-in/sign-out events, account switching, and derives
+ * account hash from public key for contract interactions.
+ *
+ * @returns {Object} Wallet state and control functions
+ * @returns {boolean} returns.isConnected - Whether wallet is connected
+ * @returns {ICOWalletAccount | null} returns.account - Connected account details (publicKey, accountHash, provider)
+ * @returns {boolean} returns.isConnecting - Whether connection is in progress
+ * @returns {string | null} returns.error - Error message if connection failed
+ * @returns {() => void} returns.connect - Function to trigger wallet sign-in
+ * @returns {() => void} returns.disconnect - Function to trigger wallet sign-out
+ * @returns {Object} returns.clickRef - Direct access to CSPR.click SDK instance
+ *
+ * @example
+ * const { isConnected, account, connect, disconnect } = useICOWallet();
+ *
+ * if (!isConnected) {
+ *   return <button onClick={connect}>Connect Wallet</button>;
+ * }
+ *
+ * return <span>Connected: {account?.publicKey}</span>;
+ */
 export function useICOWallet() {
   const clickRef = useClickRef();
   const [state, setState] = useState<ICOWalletState>({
