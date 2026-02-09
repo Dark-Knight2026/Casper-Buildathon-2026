@@ -198,9 +198,9 @@ describe('AmountInput', () => {
     });
 
     it('should clear error when input is emptied', () => {
-      // Use a stateful wrapper so controlled value updates between events
+      // Start with a valid value so React's value tracker allows transitions
       function Wrapper() {
-        const [val, setVal] = useState('');
+        const [val, setVal] = useState('50');
         return (
           <AmountInput
             {...defaultProps}

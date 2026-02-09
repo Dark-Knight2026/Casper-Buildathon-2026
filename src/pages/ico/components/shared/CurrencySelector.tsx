@@ -1,5 +1,6 @@
 import { cn } from '@/lib/utils';
 import type { PaymentCurrency } from '@/types/ico';
+import { ICO_CONFIG, PAYMENT_CURRENCY_INFO } from '@/constants/ico';
 import {
   Select,
   SelectContent,
@@ -8,11 +9,10 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 
-const CURRENCY_OPTIONS: { value: PaymentCurrency; label: string }[] = [
-  { value: 'USDT', label: 'USDT' },
-  { value: 'USDC', label: 'USDC' },
-  { value: 'CSPR', label: 'CSPR (Casper)' },
-];
+const CURRENCY_OPTIONS = ICO_CONFIG.PAYMENT_METHODS.map((method) => ({
+  value: method,
+  label: PAYMENT_CURRENCY_INFO[method].name,
+}));
 
 interface CurrencySelectorProps {
   value: PaymentCurrency;

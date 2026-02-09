@@ -4,6 +4,7 @@ import { useICOSchedules } from '@/hooks/ico/useICOSchedules';
 import { ICOHeader } from './components/ICOHeader';
 import { ICOFooter } from './components/ICOFooter';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { PageErrorBoundary } from '@/components/common/PageErrorBoundary';
 
 // Lazy load state components
 const PresaleCountdown = lazy(() => import('./components/states/PresaleCountdown'));

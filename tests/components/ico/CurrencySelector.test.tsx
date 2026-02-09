@@ -51,10 +51,10 @@ describe('CurrencySelector', () => {
       expect(screen.getByText('USDC')).toBeInTheDocument();
     });
 
-    it('should display CSPR (Casper) label when CSPR is selected', () => {
+    it('should display CSPR label when CSPR is selected', () => {
       render(<CurrencySelector {...defaultProps} value="CSPR" />);
 
-      expect(screen.getByText('CSPR (Casper)')).toBeInTheDocument();
+      expect(screen.getByText('CSPR')).toBeInTheDocument();
     });
   });
 
@@ -111,16 +111,17 @@ describe('CurrencySelector', () => {
 
       expect(labels).toContain('USDT');
       expect(labels).toContain('USDC');
-      expect(labels).toContain('CSPR (Casper)');
+      expect(labels).toContain('CSPR');
+      expect(labels).toContain('Credit Card');
     });
 
-    it('should render exactly 3 currency options', async () => {
+    it('should render exactly 4 currency options', async () => {
       const user = userEvent.setup();
       render(<CurrencySelector {...defaultProps} />);
 
       await user.click(screen.getByRole('combobox'));
 
-      expect(screen.getAllByRole('option')).toHaveLength(3);
+      expect(screen.getAllByRole('option')).toHaveLength(4);
     });
 
     it('should call onValueChange when a different option is selected', async () => {
@@ -144,7 +145,7 @@ describe('CurrencySelector', () => {
       );
 
       await user.click(screen.getByRole('combobox'));
-      await user.click(screen.getByRole('option', { name: 'CSPR (Casper)' }));
+      await user.click(screen.getByRole('option', { name: 'CSPR' }));
 
       expect(onValueChange).toHaveBeenCalledWith('CSPR');
     });

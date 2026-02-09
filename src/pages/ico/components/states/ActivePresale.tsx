@@ -18,8 +18,8 @@ interface ActivePresaleProps {
 }
 
 const MOCK_USER_BALANCE = {
-  tokensPurchased: 17500,
-  totalSpentUSD: 1750,
+  tokensPurchased: 1505000,  // 500,000 + 1,000,000 + 5,000
+  totalSpentUSD: 1505,       // $500 + $1,000 + $5 (250 CSPR × $0.02)
 };
 
 const MOCK_TRANSACTIONS: Transaction[] = [
@@ -28,7 +28,7 @@ const MOCK_TRANSACTIONS: Transaction[] = [
     type: 'purchase',
     amount: 500,
     currency: 'USDT',
-    tokensReceived: 5000,
+    tokensReceived: 500000,     // 500 USDT × $1 = $500 → $500 / $0.001 = 500,000 BIG
     tokenSymbol: ICO_CONFIG.TOKEN.symbol,
     status: 'completed',
     timestamp: new Date(Date.now() - 1000 * 60 * 30),
@@ -39,7 +39,7 @@ const MOCK_TRANSACTIONS: Transaction[] = [
     type: 'purchase',
     amount: 1000,
     currency: 'USDC',
-    tokensReceived: 10000,
+    tokensReceived: 1000000,    // 1000 USDC × $1 = $1000 → $1000 / $0.001 = 1,000,000 BIG
     tokenSymbol: ICO_CONFIG.TOKEN.symbol,
     status: 'completed',
     timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2),
@@ -50,7 +50,7 @@ const MOCK_TRANSACTIONS: Transaction[] = [
     type: 'purchase',
     amount: 250,
     currency: 'CSPR',
-    tokensReceived: 2500,
+    tokensReceived: 5000,       // 250 CSPR × $0.02 = $5 → $5 / $0.001 = 5,000 BIG
     tokenSymbol: ICO_CONFIG.TOKEN.symbol,
     status: 'pending',
     timestamp: new Date(),

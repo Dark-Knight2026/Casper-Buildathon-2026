@@ -39,13 +39,13 @@ export const ICO_CONFIG = {
     usdtAddress: import.meta.env.VITE_USDT_CONTRACT_HASH ?? 'hash-7c902e8a111b3116e00c7507138b92b83f96b29be98aa95247928583720e297a',
   },
 
-  // TODO: Replace with real timestamps from ICO contract (get_current_ico_schedule)
-  // Mock values — Date.now() is evaluated once at module load, so these become stale on long sessions.
-  TIMESTAMPS: {
-    presaleStart: Date.now() + 2 * 24 * 60 * 60 * 1000, // 2 days from now
-    presaleEnd: Date.now() + 9 * 24 * 60 * 60 * 1000,   // 9 days from now
-    icoStart: Date.now() + 12 * 24 * 60 * 60 * 1000,    // 12 days from now
-    icoEnd: Date.now() + 26 * 24 * 60 * 60 * 1000,      // 26 days from now
+  // TODO: Replace with real timestamps from backend API.
+  // Use getIcoTimestamps() for fresh values — see below.
+  TIMESTAMPS_OFFSETS: {
+    presaleStart: 2 * 24 * 60 * 60 * 1000, // 2 days
+    presaleEnd: 9 * 24 * 60 * 60 * 1000,   // 9 days
+    icoStart: 12 * 24 * 60 * 60 * 1000,    // 12 days
+    icoEnd: 26 * 24 * 60 * 60 * 1000,      // 26 days
   },
 
   CASPER: {
@@ -66,13 +66,38 @@ export const ICO_CONFIG = {
   },
 
   // Currency to USD conversion rates (constant for now)
+  // TODO: [Next PR] Replace hardcoded CSPR rate with real-time price oracle.
+  // CSPR is volatile — a hardcoded rate can cause significant over/under-charging.
+  // Integration plan:
+  //   1. Use useCSPRPrice hook (src/hooks/useCSPRPrice.ts) which already fetches
+  //      live rates from csprCloudService every 60 seconds.
+  //   2. Add staleness detection — reject transactions if rate is > 5 min old.
+  //   3. USDT/USDC rates should also be fetched to handle minor de-peg scenarios.
+  //   4. Keep these hardcoded values only as fallback defaults.
+  //
+  // NOTE: These client-side rates are for UI display/estimation only.
+  // They are inherently manipulable (browser DevTools, etc.) and MUST NOT be
+  // trusted for actual financial calculations. The backend will independently
+  // compute token amounts using its own exchange rates and reject any request
+  // where client-submitted values diverge from the server-side truth.
   CURRENCY_RATES: {
     USDT: 1,       // 1 USDT = $1
     USDC: 1,       // 1 USDC = $1
-    CSPR: 0.02,    // 1 CSPR = $0.02
+    CSPR: 0.02,    // 1 CSPR = $0.02 — PLACEHOLDER, must be replaced with live rate
     CARD: 1,       // 1 USD = $1 (fiat)
   },
 };
+
+/** Returns fresh mock timestamps relative to the current time. */
+export function getIcoTimestamps() {
+  const now = Date.now();
+  return {
+    presaleStart: now + ICO_CONFIG.TIMESTAMPS_OFFSETS.presaleStart,
+    presaleEnd: now + ICO_CONFIG.TIMESTAMPS_OFFSETS.presaleEnd,
+    icoStart: now + ICO_CONFIG.TIMESTAMPS_OFFSETS.icoStart,
+    icoEnd: now + ICO_CONFIG.TIMESTAMPS_OFFSETS.icoEnd,
+  };
+}
 
 // Payment currency display info
 export const PAYMENT_CURRENCY_INFO: Record<PaymentCurrency, {
