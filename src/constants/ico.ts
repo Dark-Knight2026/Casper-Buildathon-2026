@@ -33,10 +33,10 @@ export const ICO_CONFIG = {
 
   CONTRACTS: {
     icoAddress: import.meta.env.VITE_ICO_CONTRACT_HASH ?? '',
-    tokenAddress: import.meta.env.VITE_BIG_TOKEN_CONTRACT_HASH ?? '',
+    tokenAddress: import.meta.env.VITE_BIG_TOKEN_CONTRACT_HASH ?? 'hash-f7d94fd8670fdc69aabd07c214ab8d52c3fc1fd839f0cc7713e1574cdfd899ec',
     treasuryAddress: import.meta.env.VITE_TREASURY_CONTRACT_HASH ?? '',
-    usdcAddress: import.meta.env.VITE_USDC_CONTRACT_HASH ?? '',
-    usdtAddress: import.meta.env.VITE_USDT_CONTRACT_HASH ?? '',
+    usdcAddress: import.meta.env.VITE_USDC_CONTRACT_HASH ?? 'hash-7f06f66426f18ca8d3b8df69f977a54554d39fda43ebe942fd22ece0d20235bd',
+    usdtAddress: import.meta.env.VITE_USDT_CONTRACT_HASH ?? 'hash-7c902e8a111b3116e00c7507138b92b83f96b29be98aa95247928583720e297a',
   },
 
   // TODO: Replace with real timestamps from ICO contract (get_current_ico_schedule)

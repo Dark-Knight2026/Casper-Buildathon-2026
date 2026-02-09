@@ -1,9 +1,26 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useClickRef } from '@make-software/csprclick-ui';
+import { PublicKey } from 'casper-js-sdk';
 
 export interface ICOWalletAccount {
   publicKey: string;
+  accountHash: string;
   provider: string;
+}
+
+/**
+ * Derives account hash from public key.
+ * Account hash format: account-hash-<hex>
+ */
+function deriveAccountHash(publicKeyHex: string): string {
+  try {
+    const pk = PublicKey.fromHex(publicKeyHex);
+    const accountHash = pk.accountHash();
+    return accountHash.toPrefixedString();
+  } catch (err) {
+    console.warn('Failed to derive account hash:', err);
+    return '';
+  }
 }
 
 export interface ICOWalletState {
@@ -27,10 +44,12 @@ export function useICOWallet() {
     if (!clickRef) return;
 
     const handleSignedIn = (evt: { account: { public_key: string; provider: string } }) => {
+      const publicKey = evt.account.public_key;
       setState({
         isConnected: true,
         account: {
-          publicKey: evt.account.public_key,
+          publicKey,
+          accountHash: deriveAccountHash(publicKey),
           provider: evt.account.provider,
         },
         isConnecting: false,
@@ -39,10 +58,12 @@ export function useICOWallet() {
     };
 
     const handleSwitchedAccount = (evt: { account: { public_key: string; provider: string } }) => {
+      const publicKey = evt.account.public_key;
       setState(prev => ({
         ...prev,
         account: {
-          publicKey: evt.account.public_key,
+          publicKey,
+          accountHash: deriveAccountHash(publicKey),
           provider: evt.account.provider,
         },
       }));
@@ -74,10 +95,12 @@ export function useICOWallet() {
     // Check if already connected
     const activeAccount = clickRef.getActiveAccount();
     if (activeAccount) {
+      const publicKey = activeAccount.public_key;
       setState({
         isConnected: true,
         account: {
-          publicKey: activeAccount.public_key,
+          publicKey,
+          accountHash: deriveAccountHash(publicKey),
           provider: activeAccount.provider,
         },
         isConnecting: false,

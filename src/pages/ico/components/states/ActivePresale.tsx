@@ -1,6 +1,5 @@
 import { cn } from '@/lib/utils';
 import { ICO_CONFIG } from '@/constants/ico';
-import type { PaymentCurrency } from '@/types/ico';
 import type { ScheduleProgress } from '@/hooks/ico/useICOSchedules';
 import { Title } from '../shared/Title';
 import { ProgressBar } from '../shared/ProgressBar';
@@ -8,8 +7,9 @@ import { WalletCard } from '../shared/WalletCard';
 import { TransactionHistory, Transaction } from '../shared/TransactionHistory';
 import CountdownTimer from '../shared/CountdownTimer';
 import { UserTokenBalance } from '../shared/UserTokenBalance';
-import { useICOWallet } from '@/hooks/ico/useICOWallet';
-import { useWalletBalances } from '@/hooks/ico/useWalletBalances';
+import { usePurchaseFlow } from '@/hooks/ico/usePurchaseFlow';
+import { PurchaseConfirmationModal } from '../shared/PurchaseConfirmationModal';
+import { TransactionStatusToast } from '../shared/TransactionStatusToast';
 
 interface ActivePresaleProps {
   className?: string;
@@ -59,16 +59,20 @@ const MOCK_TRANSACTIONS: Transaction[] = [
 ];
 
 export function ActivePresale({ className, endTimestamp, progress }: ActivePresaleProps) {
-  const { isConnected, account, connect } = useICOWallet();
-  const { balances } = useWalletBalances(account?.publicKey);
-  console.log('Wallet Balances:', balances);
-  console.log('Account Info:', account);
-  console.log('progress:', progress);
+  const tokenPrice = progress?.priceUsd ?? 0;
 
-  const handlePurchase = (amount: number, currency: PaymentCurrency) => {
-  };
-
-
+  const {
+    isConnected,
+    account,
+    connect,
+    balances,
+    handlePurchase,
+    modalProps,
+    toastProps,
+  } = usePurchaseFlow({
+    tokenPrice,
+    tokenSymbol: ICO_CONFIG.TOKEN.symbol,
+  });
 
   return (
     <div className={cn('max-w-5xl mx-auto', className)}>
@@ -112,6 +116,7 @@ export function ActivePresale({ className, endTimestamp, progress }: ActivePresa
           balanceCSPR={balances.cspr}
           balanceUSDT={balances.usdt}
           balanceUSDC={balances.usdc}
+          balanceBIG={balances.big}
           tokenPrice={progress?.priceUsd ?? 0}
           tokenSymbol={ICO_CONFIG.TOKEN.symbol}
           onConnect={connect}
@@ -136,6 +141,16 @@ export function ActivePresale({ className, endTimestamp, progress }: ActivePresa
         transactions={MOCK_TRANSACTIONS}
         className="mt-8 max-w-5xl"
       />
+
+      {/* Purchase Confirmation Modal */}
+      {modalProps && (
+        <PurchaseConfirmationModal {...modalProps} />
+      )}
+
+      {/* Transaction Status Toast */}
+      {toastProps && (
+        <TransactionStatusToast {...toastProps} />
+      )}
     </div>
   );
 }

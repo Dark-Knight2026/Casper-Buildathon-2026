@@ -81,7 +81,9 @@ export class CSPRClickService {
    */
   async signTransaction(deploy: Record<string, unknown>): Promise<SignedDeploy> {
     try {
-      if (!this.connectedAccount) {
+      // Use getConnectedAccount() to restore from localStorage if needed
+      const account = this.getConnectedAccount();
+      if (!account) {
         throw new Error('No wallet connected');
       }
 
@@ -214,7 +216,8 @@ export class CSPRClickService {
    * Check if wallet is connected
    */
   isConnected(): boolean {
-    return this.connectedAccount !== null;
+    // Use getConnectedAccount() to restore from localStorage if needed
+    return this.getConnectedAccount() !== null;
   }
 }
 

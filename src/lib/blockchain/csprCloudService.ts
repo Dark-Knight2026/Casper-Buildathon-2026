@@ -248,6 +248,107 @@ export class CSPRCloudService {
       logger.error('Failed to update event cursor:', err);
     }
   }
+
+  /**
+   * Get deploy information by hash
+   * Uses CSPR.cloud REST API
+   */
+  async getDeploy(deployHash: string): Promise<{
+    status: 'pending' | 'executed' | 'failed';
+    confirmations?: number;
+    block_number?: number;
+    error_message?: string;
+  }> {
+    const apiUrl = import.meta.env.VITE_CSPR_CLOUD_API_URL || 'https://api.cspr.cloud';
+
+    try {
+      const response = await fetch(
+        `${apiUrl}/deploys/${deployHash}`,
+        {
+          headers: {
+            'Authorization': CSPR_CLOUD_API_KEY ? `Bearer ${CSPR_CLOUD_API_KEY}` : '',
+          },
+        }
+      );
+
+      if (!response.ok) {
+        if (response.status === 404) {
+          // Deploy not found yet - still pending
+          return { status: 'pending' };
+        }
+        throw new Error(`Failed to fetch deploy: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+
+      // Parse execution result
+      if (data.execution_results && data.execution_results.length > 0) {
+        const result = data.execution_results[0];
+        if (result.result?.Success) {
+          return {
+            status: 'executed',
+            confirmations: 1,
+            block_number: result.block_height,
+          };
+        } else if (result.result?.Failure) {
+          return {
+            status: 'failed',
+            error_message: result.result.Failure.error_message,
+          };
+        }
+      }
+
+      return { status: 'pending' };
+    } catch (err) {
+      logger.error('Failed to get deploy status:', err);
+      return { status: 'pending' };
+    }
+  }
+
+  /**
+   * Submit a signed deploy to the blockchain
+   * Uses CSPR.cloud REST API or direct RPC
+   */
+  async submitDeploy(signedDeploy: { deploy: Record<string, unknown>; signature: string }): Promise<{
+    deploy_hash: string;
+  }> {
+    const rpcUrl = import.meta.env.VITE_CASPER_RPC_URL || 'https://node.testnet.casper.network/rpc';
+
+    try {
+      // Submit via JSON-RPC
+      const response = await fetch(rpcUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'account_put_deploy',
+          params: {
+            deploy: signedDeploy.deploy,
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`RPC request failed: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+
+      if (result.error) {
+        throw new Error(result.error.message || 'Deploy submission failed');
+      }
+
+      return {
+        deploy_hash: result.result.deploy_hash,
+      };
+    } catch (err) {
+      logger.error('Failed to submit deploy:', err);
+      throw err;
+    }
+  }
 }
 
 // Export singleton instance

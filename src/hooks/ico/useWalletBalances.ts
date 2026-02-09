@@ -15,6 +15,7 @@ export interface WalletBalances {
   cspr: number;
   usdt: number;
   usdc: number;
+  big: number;
 }
 
 interface UseCSPRBalanceReturn {
@@ -81,17 +82,32 @@ async function fetchFTBalances(publicKey: string): Promise<TokenBalance[]> {
   return items;
 }
 
+/**
+ * Normalize contract hash by removing 'hash-' prefix for comparison
+ */
+function normalizeHash(hash: string): string {
+  return hash.replace(/^hash-/, '').toLowerCase();
+}
+
 function findTokenBalance(tokens: TokenBalance[], contractAddress: string, symbolFallback: string): number {
   // Match by contract address first (if configured)
-  let token = contractAddress
-    ? tokens.find(t => t.contractPackageHash === contractAddress)
+  // Compare normalized hashes (without 'hash-' prefix)
+  const normalizedAddress = contractAddress ? normalizeHash(contractAddress) : '';
+
+  let token = normalizedAddress
+    ? tokens.find(t => normalizeHash(t.contractPackageHash) === normalizedAddress)
     : undefined;
 
-  // Fallback: match by symbol
+  // Fallback: match by symbol (case-insensitive, handle tUSDC/tUSDT variants)
   if (!token) {
-    token = tokens.find(t =>
-      t.symbol?.toUpperCase() === symbolFallback.toUpperCase()
-    );
+    const symbolUpper = symbolFallback.toUpperCase();
+    token = tokens.find(t => {
+      const tokenSymbol = t.symbol?.toUpperCase() ?? '';
+      // Match exact or with 't' prefix (tUSDC, tUSDT for testnet)
+      return tokenSymbol === symbolUpper ||
+             tokenSymbol === `T${symbolUpper}` ||
+             tokenSymbol === symbolUpper.replace(/^T/, '');
+    });
   }
 
   if (!token) return 0;
@@ -100,7 +116,7 @@ function findTokenBalance(tokens: TokenBalance[], contractAddress: string, symbo
   return Number(token.balance) / Math.pow(10, decimals);
 }
 
-const EMPTY_BALANCES: WalletBalances = { cspr: 0, usdt: 0, usdc: 0 };
+const EMPTY_BALANCES: WalletBalances = { cspr: 0, usdt: 0, usdc: 0, big: 0 };
 
 export function useWalletBalances(publicKey: string | null | undefined): UseCSPRBalanceReturn {
   const [balances, setBalances] = useState<WalletBalances>(EMPTY_BALANCES);
@@ -126,6 +142,7 @@ export function useWalletBalances(publicKey: string | null | undefined): UseCSPR
         cspr,
         usdt: findTokenBalance(ftTokens, ICO_CONFIG.CONTRACTS.usdtAddress, 'USDT'),
         usdc: findTokenBalance(ftTokens, ICO_CONFIG.CONTRACTS.usdcAddress, 'USDC'),
+        big: findTokenBalance(ftTokens, ICO_CONFIG.CONTRACTS.tokenAddress, 'BIG'),
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to fetch balances';

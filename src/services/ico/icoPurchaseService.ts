@@ -26,7 +26,7 @@ import {
   stripHashPrefix,
   getCasperRpcClient,
 } from './casperClient';
-import { Currency, paymentCurrencyToContractCurrency } from './contractTypes';
+import { paymentCurrencyToContractCurrency } from './contractTypes';
 import { getAllowance } from './cep18Service';
 import type { PaymentCurrency } from '@/types/ico';
 

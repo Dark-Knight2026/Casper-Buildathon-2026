@@ -5,10 +5,11 @@ import { ProgressBar } from '../shared/ProgressBar';
 import { WalletCard } from '../shared/WalletCard';
 import { TransactionHistory, Transaction } from '../shared/TransactionHistory';
 import { ICO_CONFIG } from '@/constants/ico';
-import type { PaymentCurrency } from '@/types/ico';
 import type { ScheduleProgress } from '@/hooks/ico/useICOSchedules';
 import { Title } from '../shared/Title';
-import { useICOWallet } from '@/hooks/ico/useICOWallet';
+import { usePurchaseFlow } from '@/hooks/ico/usePurchaseFlow';
+import { PurchaseConfirmationModal } from '../shared/PurchaseConfirmationModal';
+import { TransactionStatusToast } from '../shared/TransactionStatusToast';
 
 interface ActiveICOProps {
   endTimestamp: number;
@@ -52,11 +53,20 @@ const MOCK_TRANSACTIONS: Transaction[] = [
 ];
 
 export function ActiveICO({ endTimestamp, className, progress }: ActiveICOProps) {
-  const { isConnected, account, connect } = useICOWallet();
+  const tokenPrice = progress?.priceUsd ?? 0;
 
-  const handlePurchase = (_amount: number, _currency: PaymentCurrency) => {
-    // TODO: implement purchase logic
-  };
+  const {
+    isConnected,
+    account,
+    connect,
+    balances,
+    handlePurchase,
+    modalProps,
+    toastProps,
+  } = usePurchaseFlow({
+    tokenPrice,
+    tokenSymbol: ICO_CONFIG.TOKEN.symbol,
+  });
 
   return (
     <div className={cn('max-w-5xl mx-auto space-y-6 flex flex-col items-center', className)}>
@@ -146,13 +156,17 @@ export function ActiveICO({ endTimestamp, className, progress }: ActiveICOProps)
         <div className=" w-full ">
           {/* Wallet Purchase */}
           <WalletCard
-            walletAddress={isConnected ? account?.publicKey : undefined}
-            tokenPrice={progress?.priceUsd ?? 0}
-            tokenSymbol={ICO_CONFIG.TOKEN.symbol}
-            onConnect={connect}
-            onPurchase={handlePurchase}
-            className="w-full"
-          />
+              walletAddress={isConnected ? account?.publicKey : undefined}
+              balanceCSPR={balances.cspr}
+              balanceUSDT={balances.usdt}
+              balanceUSDC={balances.usdc}
+              balanceBIG={balances.big}
+              tokenPrice={progress?.priceUsd ?? 0}
+              tokenSymbol={ICO_CONFIG.TOKEN.symbol}
+              onConnect={connect}
+              onPurchase={handlePurchase}
+              className="w-full"
+            />
       </div>
     </div>
 
@@ -176,6 +190,16 @@ export function ActiveICO({ endTimestamp, className, progress }: ActiveICOProps)
           </div>
         </div>
       </Card>
+
+      {/* Purchase Confirmation Modal */}
+      {modalProps && (
+        <PurchaseConfirmationModal {...modalProps} />
+      )}
+
+      {/* Transaction Status Toast */}
+      {toastProps && (
+        <TransactionStatusToast {...toastProps} />
+      )}
     </div>
   );
 }
