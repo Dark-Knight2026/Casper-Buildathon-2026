@@ -48,6 +48,9 @@ function csprCloudUrl(path: string): string {
 function csprCloudHeaders(): Record<string, string> {
   const headers: Record<string, string> = { 'accept': 'application/json' };
   if (!import.meta.env.DEV) {
+    // TODO: SECURITY - Move to backend proxy before production launch
+    // VITE_ prefix exposes this key in client bundle - visible to anyone via DevTools
+    // Solution: Create serverless function (Vercel/Netlify) to proxy CSPR.Cloud requests
     headers['authorization'] = import.meta.env.VITE_CSPR_CLOUD_API_KEY || '';
   }
   return headers;

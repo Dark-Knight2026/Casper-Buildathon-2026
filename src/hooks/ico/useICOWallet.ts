@@ -131,6 +131,14 @@ export function useICOWallet() {
         error: null,
       });
     }
+
+    // Cleanup: remove event listeners to prevent memory leaks
+    return () => {
+      clickRef.off('csprclick:signed_in', handleSignedIn);
+      clickRef.off('csprclick:switched_account', handleSwitchedAccount);
+      clickRef.off('csprclick:signed_out', handleSignedOut);
+      clickRef.off('csprclick:disconnected', handleDisconnected);
+    };
   }, [clickRef]);
 
   const connect = useCallback(() => {
