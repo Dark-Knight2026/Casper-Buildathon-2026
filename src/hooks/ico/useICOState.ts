@@ -85,7 +85,7 @@ const getNextStateTimestamp = (
 export function useICOState(options: UseICOStateOptions = {}): UseICOStateReturn {
   const {
     timestamps: customTimestamps,
-    pollInterval = 1000,
+    pollInterval = 10000, // 10 seconds - sufficient for state transitions
     devOverrideState: initialDevState = null,
   } = options;
 
