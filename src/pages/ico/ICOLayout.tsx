@@ -24,7 +24,7 @@ const theme = buildTheme(DefaultThemes.csprclick);
 export function ICOLayout({ children }: { children: React.ReactNode }) {
   return (
     <ClickProvider options={clickOptions}>
-      <ThemeProvider theme={theme[ThemeModeType.dark]}>
+      <ThemeProvider theme={theme[ThemeModeType.light]}>
         {/* ClickUI renders modals for wallet connection; top bar is hidden */}
         <div style={{ display: 'none' }}>
           <ClickUI topBarSettings={{}} themeMode={ThemeModeType.dark} />

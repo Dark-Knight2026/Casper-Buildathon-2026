@@ -18,7 +18,7 @@ export const ICO_CONFIG = {
     allocation: '1000000000', // 1 billion tokens (20%)
     hardCap: '1000000',       // $1,000,000 USD
     duration: 7 * 24 * 60 * 60 * 1000, // 7 days in ms
-    autoStake: true,          // Presale tokens auto-staked
+    autoStake: true,          // Private Sale tokens auto-staked
     fundsRaised: '500000',    // $500,000 USD raised so far
   },
 
@@ -168,7 +168,7 @@ export const PAYMENT_CURRENCY_INFO: Record<PaymentCurrency, {
 // Tokenomics distribution (from whitepaper)
 export const TOKENOMICS_ALLOCATION: TokenomicsAllocation[] = [
   {
-    category: 'Pre-Sale',
+    category: 'Private Sale',
     percentage: 20,
     amount: '1,000,000,000',
     vestingPeriod: 'Auto-staked',
@@ -221,13 +221,13 @@ export const TOKENOMICS_ALLOCATION: TokenomicsAllocation[] = [
 // State display info
 export const ICO_STATE_INFO = {
   1: {
-    name: 'Pre-Sale Countdown',
-    description: 'Pre-sale starts soon',
+    name: 'Private Sale Countdown',
+    description: 'Private Sale starts soon',
     color: 'hsl(var(--ico-state-countdown))',
   },
   2: {
-    name: 'Pre-Sale Live',
-    description: 'Pre-sale is active',
+    name: 'Private Sale Live',
+    description: 'Private Sale is active',
     color: 'hsl(var(--ico-state-active))',
   },
   3: {
