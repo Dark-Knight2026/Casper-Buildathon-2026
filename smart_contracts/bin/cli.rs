@@ -27,24 +27,16 @@ impl LeasefiDeployScript {
     const ONE_HOUR: u64 = 60 * Self::ONE_MINUTE;
     const ONE_DAY: u64 = 24 * Self::ONE_HOUR;
 
-    fn get_ico_schedules_creation_params(env: &HostEnv) -> [ICOScheduleCreateParams; 2] {
-        let private_sale = ICOScheduleCreateParams {
-            start_timestamp: env.block_time() + Self::ONE_MINUTE + (4 * Self::ONE_HOUR),
+    fn get_ico_schedule_creation_params(env: &HostEnv) -> ICOScheduleCreateParams {
+        ICOScheduleCreateParams {
+            start_timestamp: env.block_time() + Self::ONE_MINUTE + (12 * Self::ONE_HOUR),
             end_timestamp: env.block_time()
                 + Self::ONE_MINUTE
                 + (4 * Self::ONE_HOUR)
-                + (2 * Self::ONE_DAY),
-            sale_amount: U256::from(50_000_000) * U256::from(10).pow(U256::from(18)),
+                + (5 * Self::ONE_DAY),
+            sale_amount: U256::from(500_000_000) * U256::from(10).pow(U256::from(18)),
             price: U256::from(500_000), // 0.5 USD (0.5 * 1 * 10^6)
-        };
-        let sale = ICOScheduleCreateParams {
-            start_timestamp: private_sale.end_timestamp + (2 * Self::ONE_HOUR),
-            end_timestamp: private_sale.end_timestamp + (2 * Self::ONE_HOUR) + Self::ONE_DAY,
-            sale_amount: U256::from(100_000_000) * U256::from(10).pow(U256::from(18)),
-            price: U256::from(750_000), // 0.75 USD (0.75 * 1 * 10^6)
-        };
-
-        [private_sale, sale]
+        }
     }
 }
 
@@ -155,7 +147,7 @@ impl DeployScript for LeasefiDeployScript {
         escrow.set_treasury(treasury.address());
 
         // Setup ICO
-        let creation_params = LeasefiDeployScript::get_ico_schedules_creation_params(&env);
+        let creation_params = LeasefiDeployScript::get_ico_schedule_creation_params(&env);
 
         ico.set_tailor_coin(tailor_coin.address());
         ico.set_treasury(treasury.address());
@@ -180,12 +172,8 @@ impl DeployScript for LeasefiDeployScript {
             ),
         );
         env.set_gas(20_000_000_000);
-        tailor_coin.approve(
-            &ico.address(),
-            &(creation_params[0].sale_amount + creation_params[1].sale_amount),
-        );
-        ico.add_ico_schedule(creation_params[0].clone());
-        ico.add_ico_schedule(creation_params[1].clone());
+        tailor_coin.approve(&ico.address(), &(creation_params.sale_amount));
+        ico.add_ico_schedule(creation_params);
 
         // Transfer ownership
         nft.transfer_ownership(&new_owner);
