@@ -252,8 +252,16 @@ fn active_contracts_returns_only_configured_contracts() {
 
     let active = registry.active_contracts();
     assert_eq!(active.len(), 2);
-    assert!(active.contains(&(ContractType::Ico, "abc123")));
-    assert!(active.contains(&(ContractType::Treasury, "def456")));
+    assert!(
+        active
+            .iter()
+            .any(|c| c.contract_type == ContractType::Ico && c.hash == "abc123")
+    );
+    assert!(
+        active
+            .iter()
+            .any(|c| c.contract_type == ContractType::Treasury && c.hash == "def456")
+    );
 }
 
 #[test]

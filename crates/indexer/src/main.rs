@@ -25,7 +25,7 @@ async fn main() {
         active.len()
     );
 
-    for (contract_type, hash) in &active {
-        tracing::info!(contract = %contract_type, hash = %hash, "Tracking contract");
+    for contract in &active {
+        tracing::info!(contract = %contract.contract_type, hash = %contract.hash, "Tracking contract");
     }
 }

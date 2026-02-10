@@ -196,7 +196,7 @@ impl ContractRegistry {
     /// Returns a list of all configured (deployed) contracts with their types.
     #[inline]
     #[must_use]
-    pub fn active_contracts(&self) -> Vec<(ContractType, &str)> {
+    pub fn active_contracts(&self) -> Vec<ActiveContract<'_>> {
         let pairs: [(ContractType, &Option<String>); 10] = [
             (ContractType::Usdc, &self.usdc),
             (ContractType::Usdt, &self.usdt),
@@ -212,7 +212,21 @@ impl ContractRegistry {
 
         pairs
             .into_iter()
-            .filter_map(|(contract_type, hash)| hash.as_deref().map(|h| (contract_type, h)))
+            .filter_map(|(contract_type, hash)| {
+                hash.as_deref().map(|h| ActiveContract {
+                    contract_type,
+                    hash: h,
+                })
+            })
             .collect()
     }
+}
+
+/// A deployed contract with its type and package hash.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ActiveContract<'a> {
+    /// The logical type of this contract.
+    pub contract_type: ContractType,
+    /// The on-chain package hash (hex, no `hash-` prefix).
+    pub hash: &'a str,
 }

@@ -1,9 +1,37 @@
 //! Indexer error types.
 
+/// Details of a non-2xx response from the CSPR.cloud API.
+#[derive(Debug)]
+pub struct ApiErrorResponse {
+    /// HTTP status code.
+    pub status: u16,
+    /// Response body (truncated).
+    pub body: String,
+}
+
 /// Errors that can occur during indexer operation.
 #[derive(Debug, thiserror::Error)]
 pub enum IndexerError {
     /// A configuration error (missing or invalid environment variable).
     #[error("Configuration error: {0}")]
     Config(String),
+
+    /// An HTTP request to the CSPR.cloud API failed.
+    #[error("HTTP error: {0}")]
+    Http(#[from] reqwest::Error),
+
+    /// The CSPR.cloud API returned an unexpected status code.
+    #[error("API error: {} — {}", .0.status, .0.body)]
+    Api(ApiErrorResponse),
+
+    /// A database operation failed.
+    #[error("Database error: {0}")]
+    Database(#[from] sqlx::Error),
+
+    /// Failed to parse event data from the API response.
+    #[error("Parse error: {0}")]
+    Parse(String),
 }
+
+/// Shorthand for `Result<T, IndexerError>` used throughout the indexer crate.
+pub type IndexerResult<T> = Result<T, IndexerError>;
