@@ -75,6 +75,7 @@ export function VestingProgressBlock({
               targetTimestamp={nextUnlock.unlockTimestamp}
               variant="minimal"
               className="text-sm text-[hsl(var(--ico-text-secondary))]"
+              updateInterval={60000}
             />
           }
         />
