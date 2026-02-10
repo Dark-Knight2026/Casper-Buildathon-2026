@@ -55,10 +55,6 @@ export function ICOPage() {
     return (
       <ScrollArea className="h-screen overflow-hidden relative bg-[hsl(var(--ico-bg-primary))]">
         <ICOHeader />
-        <div className="absolute inset-0 z-0 pointer-events-none" style={{
-          background: 'radial-gradient(ellipse 100% 60% at center, rgba(56, 189, 248, 0.25) 0%, rgba(56, 189, 248, 0.1) 30%, transparent 70%)',
-          filter: 'blur(10px)',
-        }} />
         <div className="min-h-[calc(100vh-112px)] flex flex-col justify-between">
           <main className="container h-full mx-auto px-4 py-8">
             <LoadingFallback />
@@ -136,14 +132,6 @@ export function ICOPage() {
   return (
     <ScrollArea className="h-screen overflow-hidden relative bg-[hsl(var(--ico-bg-primary))]">
       <ICOHeader />
-      <div
-        className="absolute inset-0 z-0 pointer-events-none"
-        style={{
-          background: 'radial-gradient(ellipse 100% 60% at center, rgba(56, 189, 248, 0.25) 0%, rgba(56, 189, 248, 0.1) 30%, transparent 70%)',
-          filter: 'blur(10px)',
-        }}
-      />
-
       <div className="min-h-[calc(100vh-112px)] flex flex-col justify-between">
         <main className="container h-full mx-auto px-4 py-8">
           <Suspense fallback={<LoadingFallback />}>

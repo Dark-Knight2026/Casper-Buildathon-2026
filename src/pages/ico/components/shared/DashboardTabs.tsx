@@ -86,31 +86,31 @@ export function DashboardTabs({
         className="flex flex-col w-full"
       >
         {/* Mobile: Dropdown Menu */}
-        <div className="md:hidden w-full pb-3 border-b border-sky-900">
+        <div className="md:hidden w-full pb-3 border-b border-[hsl(var(--ico-border-color))]">
           <DropdownMenu>
-            <DropdownMenuTrigger className="flex items-center justify-between w-full px-3 py-2 rounded-lg bg-sky-950/50 border border-sky-800 text-[hsl(var(--ico-text-primary))] focus:outline-none focus:ring-2 focus:ring-sky-500/50">
+            <DropdownMenuTrigger className="flex items-center justify-between w-full px-3 py-2 rounded-md bg-[hsl(var(--ico-bg-card))] border border-[hsl(var(--ico-border-color))] text-[hsl(var(--ico-text-primary))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ico-brand-primary))]/50">
               <span className="flex items-center gap-2">
                 {activeTab?.icon && (
-                  <span className="text-sky-500">{activeTab.icon}</span>
+                  <span className="text-[hsl(var(--ico-brand-primary))]">{activeTab.icon}</span>
                 )}
                 <span className="font-medium">{activeTab?.label}</span>
               </span>
             </DropdownMenuTrigger>
             <DropdownMenuContent
               align="start"
-              className="w-[var(--radix-dropdown-menu-trigger-width)] bg-sky-950 border-sky-800"
+              className="w-[var(--radix-dropdown-menu-trigger-width)] bg-[hsl(var(--ico-bg-card))] border-[hsl(var(--ico-border-color))]"
             >
               {tabs.map((tab) => (
                 <DropdownMenuItem
                   key={tab.value}
                   onClick={() => handleValueChange(tab.value)}
                   className={cn(
-                    'flex items-center gap-2 cursor-pointer text-sky-400',
-                    activeValue === tab.value && 'bg-sky-500/10 text-white'
+                    'flex items-center gap-2 cursor-pointer text-[hsl(var(--ico-text-secondary))]',
+                    activeValue === tab.value && 'bg-[hsl(var(--ico-brand-primary))]/10 text-[hsl(var(--ico-text-primary))]'
                   )}
                 >
                   {tab.icon && (
-                    <span className={activeValue === tab.value ? 'text-sky-500' : ''}>
+                    <span className={activeValue === tab.value ? 'text-[hsl(var(--ico-brand-primary))]' : ''}>
                       {tab.icon}
                     </span>
                   )}
@@ -144,7 +144,7 @@ export function DashboardTabs({
                   )}
                   style={{ background: 'transparent', boxShadow: 'none' }}
                 >
-                  <span className="group-data-[state=active]:text-sky-500 group-data-[state=active]:bg-sky-500/15 transition-colors duration-200">
+                  <span className="group-data-[state=active]:text-[hsl(var(--ico-brand-primary))] transition-colors duration-200">
                     {tab.icon}
                   </span>
                   <span>{tab.label}</span>
@@ -153,11 +153,11 @@ export function DashboardTabs({
             </div>
 
             {/* Background line */}
-            <div className="absolute bottom-0 left-0 w-full h-px bg-sky-900" />
+            <div className="absolute bottom-0 left-0 w-full h-px bg-[hsl(var(--ico-border-color))]" />
 
             {/* Active indicator */}
             <div
-              className="absolute bottom-0 h-0.5 transition-all duration-300 ease-out rounded-full bg-sky-500"
+              className="absolute bottom-0 h-0.5 transition-all duration-300 ease-out rounded-full bg-[hsl(var(--ico-brand-primary))]"
               style={{
                 width: underlineStyle.width,
                 left: underlineStyle.left,

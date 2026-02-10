@@ -47,7 +47,7 @@ export function ActiveICO({ endTimestamp, className, progress }: ActiveICOProps)
             <p className="text-3xl font-bold text-[hsl(var(--ico-text-primary))]">
               ${progress.priceUsd}
             </p>
-            <p className="text-xs text-sky-400 mt-2">per {ICO_CONFIG.TOKEN.symbol}</p>
+            <p className="text-xs text-[hsl(var(--ico-text-highlight))] mt-2">per {ICO_CONFIG.TOKEN.symbol}</p>
           </Card>
 
           {/* ICO Allocation Remaining */}
@@ -56,7 +56,7 @@ export function ActiveICO({ endTimestamp, className, progress }: ActiveICOProps)
             <p className="text-3xl font-bold text-[hsl(var(--ico-text-primary))]">
               {(progress.tokensRemaining / 1e6).toFixed(1)}M
             </p>
-            <p className="text-xs text-sky-400 mt-2">
+            <p className="text-xs text-[hsl(var(--ico-text-highlight))] mt-2">
               of {(progress.totalAllocation / 1e6).toFixed(0)}M {ICO_CONFIG.TOKEN.symbol}
             </p>
           </Card>
@@ -69,7 +69,7 @@ export function ActiveICO({ endTimestamp, className, progress }: ActiveICOProps)
               variant="compact"
               className="text-2xl font-bold text-[hsl(var(--ico-text-primary))] justify-center"
             />
-            <p className="text-xs text-sky-400 mt-2">until ICO ends</p>
+            <p className="text-xs text-[hsl(var(--ico-text-highlight))] mt-2">until ICO ends</p>
           </div>
         </div>
       )}
@@ -144,8 +144,8 @@ export function ActiveICO({ endTimestamp, className, progress }: ActiveICOProps)
       {/* ICO End Trigger Info */}
       <Card className="p-4">
         <div className="flex items-start gap-3">
-          <div className="shrink-0 w-10 h-10 rounded-full bg-sky-500/20 flex items-center justify-center">
-            <span className="text-sky-400 text-lg">ℹ</span>
+          <div className="shrink-0 w-10 h-10 rounded-full bg-[hsl(var(--ico-brand-secondary))]/20 flex items-center justify-center">
+            <span className="text-[hsl(var(--ico-brand-secondary))] text-lg">ℹ</span>
           </div>
           <div>
             <p className="text-sm font-medium text-[hsl(var(--ico-text-primary))]">ICO End Conditions</p>

@@ -82,14 +82,14 @@ export function WalletCard({
           {isConnected ? 'Connected Wallet' : 'Wallet'}
         </span>
         {isConnected ? (
-          <span className="font-mono text-sm text-[hsl(var(--ico-text-primary))] bg-sky-900/30 px-3 py-1 rounded-lg">
+          <span className="font-mono text-sm text-[hsl(var(--ico-text-primary))] bg-[hsl(var(--ico-bg-secondary))] px-3 py-1 rounded-md border border-[hsl(var(--ico-border-color))]">
             {truncateAddress(walletAddress)}
           </span>
         ) : (
           <button
             onClick={onConnect}
             aria-label="Connect your crypto wallet"
-            className="text-sm font-medium text-sky-400 hover:text-sky-300 transition-colors"
+            className="text-sm font-medium text-[hsl(var(--ico-brand-secondary))] hover:text-[hsl(var(--ico-brand-secondary-hover))] transition-colors"
           >
             Connect Wallet
           </button>
@@ -98,11 +98,11 @@ export function WalletCard({
 
       {/* Balance */}
       {isConnected && (
-        <div className="flex justify-between items-center w-full mb-6 pb-6 border-b border-sky-800/50">
+        <div className="flex justify-between items-center w-full mb-6 pb-6 border-b border-[hsl(var(--ico-border-color))]">
           <span className="text-sm text-[hsl(var(--ico-text-secondary))]">Your Balance</span>
           <div className="text-right space-y-1">
             {balanceBIG > 0 && (
-              <p className="text-sm font-bold text-sky-400">
+              <p className="text-sm font-bold text-[hsl(var(--ico-text-highlight))]">
                 {balanceBIG.toLocaleString(undefined, { maximumFractionDigits: 2 })} {tokenSymbol}
               </p>
             )}
@@ -133,14 +133,14 @@ export function WalletCard({
 
       {/* Token Calculation */}
       {amount && Number(amount) > 0 && (
-        <div className="w-full p-4 rounded-xl bg-sky-900/20 border border-sky-800/30 mb-6">
+        <div className="w-full p-4 rounded-md bg-[hsl(var(--ico-bg-secondary))] border border-[hsl(var(--ico-border-color))] mb-6">
           <div className="flex justify-between items-center">
             <span className="text-sm text-[hsl(var(--ico-text-secondary))]">You will receive</span>
             <span className="text-lg font-bold text-[hsl(var(--ico-text-primary))]">
               {tokensToReceive.toLocaleString(undefined, { maximumFractionDigits: 2 })} {tokenSymbol}
             </span>
           </div>
-          <p className="text-xs text-sky-400 mt-1">
+          <p className="text-xs text-[hsl(var(--ico-text-highlight))] mt-1">
             Rate: 1 {tokenSymbol} = {(tokenPrice / currencyRate).toLocaleString(undefined, { maximumFractionDigits: 6 })} {currency}
           </p>
         </div>

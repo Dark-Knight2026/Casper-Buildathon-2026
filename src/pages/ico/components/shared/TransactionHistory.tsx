@@ -62,7 +62,7 @@ export function TransactionHistory({ transactions, className }: TransactionHisto
             {transactions.map((tx) => (
               <div
                 key={tx.id}
-                className="flex items-center justify-between p-3 rounded-lg bg-black/30 border border-sky-800/30"
+                className="flex items-center justify-between p-3 rounded-md bg-[hsl(var(--ico-bg-secondary))] border border-[hsl(var(--ico-border-color))]"
               >
                 <div className="flex flex-col gap-1">
                   <div className="flex items-center gap-2">

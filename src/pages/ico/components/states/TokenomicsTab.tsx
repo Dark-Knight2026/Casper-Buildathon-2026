@@ -2,7 +2,7 @@ import { memo } from 'react';
 import { Card } from '../shared/Card';
 import { SubTitle } from '../shared/SubTitle';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
-import { AreaChart, Area, XAxis, YAxis, PieChart, Pie, Cell } from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, PieChart, Pie, Cell, CartesianGrid } from 'recharts';
 import { Coins } from 'lucide-react';
 
 const TOTAL_SUPPLY = '1,000,000,000';
@@ -23,17 +23,17 @@ const MOCK_VESTING_DATA = [
 ];
 
 const ALLOCATION_DATA = [
-  { name: 'Public Sale', value: 20, color: '#3b82f6' },
-  { name: 'Private Sale', value: 15, color: '#8b5cf6' },
-  { name: 'Team & Advisors', value: 15, color: '#06b6d4' },
-  { name: 'Ecosystem & Rewards', value: 20, color: '#d4a847' },
-  { name: 'Liquidity Pool', value: 10, color: '#22c55e' },
-  { name: 'Reserve', value: 10, color: '#ef4444' },
-  { name: 'Treasury', value: 10, color: '#E8D613' },
+  { name: 'Public Sale', value: 20, color: '#1F7A63' },           /* Primary green */
+  { name: 'Private Sale', value: 15, color: '#2E8B6F' },          /* Green accent */
+  { name: 'Team & Advisors', value: 15, color: '#36A080' },       /* Green light */
+  { name: 'Ecosystem & Rewards', value: 20, color: '#4A9A85' },   /* Green medium */
+  { name: 'Liquidity Pool', value: 10, color: '#5DAA95' },        /* Green soft */
+  { name: 'Reserve', value: 10, color: '#70BAA5' },               /* Green pale */
+  { name: 'Treasury', value: 10, color: '#83C9B5' },              /* Green lightest */
 ];
 
 const vestingChartConfig = {
-  released: { label: 'Released Tokens', color: '#3b82f6' },
+  released: { label: 'Released Tokens', color: '#1F7A63' },  /* Primary green */
 };
 
 const allocationChartConfig = Object.fromEntries(
@@ -49,25 +49,14 @@ const VestingChart = memo(function VestingChart() {
       config={vestingChartConfig}
       className="h-62.5 w-full aspect-auto md:aspect-video"
     >
-      <AreaChart data={MOCK_VESTING_DATA}>
-        <defs>
-          <linearGradient id="fill-released" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="15%" stopColor="#3b82f6" stopOpacity={0.4} />
-            <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.05} />
-          </linearGradient>
-        </defs>
+      <AreaChart data={MOCK_VESTING_DATA} margin={{ left: 12, right: 12 }}>
+        <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="hsl(var(--ico-border-color))" />
         <XAxis
           dataKey="day"
           tickLine={false}
           axisLine={false}
+          tickMargin={8}
           tick={{ fill: 'hsl(var(--ico-text-muted))', fontSize: 12 }}
-          label={{
-            value: 'Days Since Launch',
-            position: 'insideBottom',
-            offset: -5,
-            fill: 'hsl(var(--ico-text-muted))',
-            fontSize: 12,
-          }}
         />
         <YAxis
           tickLine={false}
@@ -76,19 +65,24 @@ const VestingChart = memo(function VestingChart() {
           tickFormatter={(value) => `${(value / 1_000_000).toFixed(0)}M`}
         />
         <ChartTooltip
+          cursor={false}
           content={
             <ChartTooltipContent
-              className="text-white"
-              formatter={(value) => `${Number(value).toLocaleString()} BIG`}
+              indicator="line"
+              formatter={(value) => (
+                <span className="font-mono font-medium tabular-nums text-white">
+                  {Number(value).toLocaleString()} BIG
+                </span>
+              )}
             />
           }
         />
         <Area
-          type="monotone"
+          type="natural"
           dataKey="released"
-          stroke="#3b82f6"
-          fill="url(#fill-released)"
-          strokeWidth={2}
+          fill="var(--color-released)"
+          fillOpacity={0.4}
+          stroke="var(--color-released)"
         />
       </AreaChart>
     </ChartContainer>
@@ -144,7 +138,7 @@ export function TokenomicsTab() {
         <div className="w-full">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-lg bg-[hsl(var(--ico-accent)/0.2)] flex items-center justify-center">
-              <Coins className="w-5 h-5 text-sky-500" />
+              <Coins className="w-5 h-5 text-[hsl(var(--ico-brand-primary))]" />
             </div>
             <div>
               <p className="text-sm text-[hsl(var(--ico-text-secondary))]">

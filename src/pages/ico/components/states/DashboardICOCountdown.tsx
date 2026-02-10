@@ -65,8 +65,8 @@ export function DashboardICOCountdown({ icoStartTimestamp, className }: Dashboar
       value: MOCK_VESTING_DATA.bigPurchased,
       usdValue: estValuePresale,
       icon: Wallet,
-      iconColor: 'text-sky-500',
-      iconBg: 'bg-sky-500/10',
+      iconColor: 'text-[hsl(var(--ico-brand-secondary))]',
+      iconBg: 'bg-[hsl(var(--ico-brand-secondary))]/10',
     },
     {
       label: 'BIG Locked',

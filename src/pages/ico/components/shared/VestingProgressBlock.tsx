@@ -137,7 +137,7 @@ export function VestingProgressBlock({
                       className={cn(
                         'w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold',
                         index === 0
-                          ? 'bg-sky-500/20 text-sky-400'
+                          ? 'bg-[hsl(var(--ico-brand-primary))]/20 text-[hsl(var(--ico-brand-primary))]'
                           : 'bg-amber-500/10 text-amber-500'
                       )}
                     >
@@ -163,7 +163,7 @@ export function VestingProgressBlock({
                       </span>
                     </div>
                     {index === 0 && (
-                      <p className="text-xs text-sky-400 mt-0.5">Next unlock</p>
+                      <p className="text-xs text-[hsl(var(--ico-brand-primary))] mt-0.5">Next unlock</p>
                     )}
                   </div>
                 </div>

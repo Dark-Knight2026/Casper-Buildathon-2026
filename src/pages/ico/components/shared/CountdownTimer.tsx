@@ -108,7 +108,7 @@ export const CountdownTimer = memo(function CountdownTimer({
   if (variant === 'compact') {
     return (
       <Card className='p-4 flex justify-center items-center'>
-        <div role="timer" aria-live="polite" aria-label={`${timeLeft.days} days ${timeLeft.hours} hours ${timeLeft.minutes} minutes ${timeLeft.seconds} seconds remaining`} className={cn('flex items-center justify-center gap-2 font-mono text-white', className)}>
+        <div role="timer" aria-live="polite" aria-label={`${timeLeft.days} days ${timeLeft.hours} hours ${timeLeft.minutes} minutes ${timeLeft.seconds} seconds remaining`} className={cn('flex items-center justify-center gap-2 font-mono text-[hsl(var(--ico-timer-text))]', className)}>
           {timeLeft.days > 0 && (
             <>
               <span className="text-xl font-semibold">{timeLeft.days}</span>
@@ -142,7 +142,7 @@ export const CountdownTimer = memo(function CountdownTimer({
           <Card className={classes.card}>
             <span
               className={cn(
-                'relative font-mono font-bold text-white',
+                'relative font-mono font-bold text-[hsl(var(--ico-timer-text))]',
                 classes.digit
               )}
             >
@@ -151,7 +151,7 @@ export const CountdownTimer = memo(function CountdownTimer({
             {showLabels && (
               <span
                 className={cn(
-                  'relative uppercase tracking-wider font-medium text-white/70',
+                  'relative uppercase tracking-wider font-medium text-[hsl(var(--ico-timer-label))]',
                   classes.label
                 )}
               >

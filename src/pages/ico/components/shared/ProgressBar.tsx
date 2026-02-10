@@ -72,16 +72,16 @@ export function ProgressBar({
         className={cn('w-full bg-[hsl(var(--ico-progress-bg))] rounded-full overflow-hidden', sizeClasses[size])}
       >
         <div
-          className="h-full bg-linear-to-r from-sky-900 to-sky-500 rounded-full transition-all duration-500"
+          className="h-full bg-[hsl(var(--ico-progress-fill))] rounded-full transition-all duration-500"
           style={{ width: `${Math.min(percentage, 100)}%` }}
         />
       </div>
 
       {infoColumns && infoColumns.length > 0 && (
-        <div className="flex items-center justify-center w-full mt-6 pt-6 border-t border-sky-800/50">
+        <div className="flex items-center justify-center w-full mt-6 pt-6 border-t border-[hsl(var(--ico-border-color))]">
           {infoColumns.map((column, index) => (
             <div key={column.label} className="contents">
-              {index > 0 && <div className="w-px h-12 bg-sky-800/50" />}
+              {index > 0 && <div className="w-px h-12 bg-[hsl(var(--ico-border-color))]" />}
               <div className="flex-1 text-center">
                 <p className="text-sm text-[hsl(var(--ico-text-secondary))] mb-1">{column.label}</p>
                 <p className="text-lg font-bold text-[hsl(var(--ico-text-primary))]">

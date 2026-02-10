@@ -46,10 +46,10 @@ export function TransactionStatusToast({
     >
       <div
         className={cn(
-          'p-4 rounded-xl border shadow-2xl backdrop-blur-md',
+          'p-4 rounded-md border shadow-lg backdrop-blur-md',
           isSuccess && 'bg-green-900/90 border-green-700/50',
           isError && 'bg-red-900/90 border-red-700/50',
-          !isSuccess && !isError && 'bg-sky-900/90 border-sky-700/50',
+          !isSuccess && !isError && 'bg-[hsl(var(--ico-bg-card))] border-[hsl(var(--ico-border-color))]',
         )}
       >
         {/* Header with icon and close button */}
@@ -98,7 +98,7 @@ export function TransactionStatusToast({
                   'font-semibold',
                   isSuccess && 'text-green-300',
                   isError && 'text-red-300',
-                  !isSuccess && !isError && 'text-sky-300',
+                  !isSuccess && !isError && 'text-[hsl(var(--ico-brand-secondary))]',
                 )}
               >
                 {isSuccess && 'Purchase Successful!'}
@@ -157,7 +157,7 @@ export function TransactionStatusToast({
                 'inline-flex items-center gap-1 text-xs font-mono hover:underline',
                 isSuccess && 'text-green-400',
                 isError && 'text-red-400',
-                !isSuccess && !isError && 'text-sky-400',
+                !isSuccess && !isError && 'text-[hsl(var(--ico-brand-secondary))]',
               )}
             >
               <span>

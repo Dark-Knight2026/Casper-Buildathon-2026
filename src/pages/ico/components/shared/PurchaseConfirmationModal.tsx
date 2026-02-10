@@ -105,7 +105,7 @@ export function PurchaseConfirmationModal({
 
         {/* Purchase Details */}
         <div className="w-full space-y-4 mb-6">
-          <div className="flex justify-between items-center py-3 border-b border-sky-800/30">
+          <div className="flex justify-between items-center py-3 border-b border-[hsl(var(--ico-border-color))]">
             <span className="text-sm text-[hsl(var(--ico-text-secondary))]">
               You Pay
             </span>
@@ -114,7 +114,7 @@ export function PurchaseConfirmationModal({
             </span>
           </div>
 
-          <div className="flex justify-between items-center py-3 border-b border-sky-800/30">
+          <div className="flex justify-between items-center py-3 border-b border-[hsl(var(--ico-border-color))]">
             <span className="text-sm text-[hsl(var(--ico-text-secondary))]">
               USD Value
             </span>
@@ -123,7 +123,7 @@ export function PurchaseConfirmationModal({
             </span>
           </div>
 
-          <div className="flex justify-between items-center py-3 border-b border-sky-800/30">
+          <div className="flex justify-between items-center py-3 border-b border-[hsl(var(--ico-border-color))]">
             <span className="text-sm text-[hsl(var(--ico-text-secondary))]">
               Token Price
             </span>
@@ -132,11 +132,11 @@ export function PurchaseConfirmationModal({
             </span>
           </div>
 
-          <div className="flex justify-between items-center py-3 bg-sky-900/30 rounded-lg px-4">
-            <span className="text-sm font-medium text-sky-400">
+          <div className="flex justify-between items-center py-3 bg-[hsl(var(--ico-bg-secondary))] rounded-md px-4">
+            <span className="text-sm font-medium text-[hsl(var(--ico-text-highlight))]">
               You Receive
             </span>
-            <span className="text-xl font-bold text-sky-400">
+            <span className="text-xl font-bold text-[hsl(var(--ico-text-highlight))]">
               {tokensToReceive.toLocaleString(undefined, { maximumFractionDigits: 2 })} {tokenSymbol}
             </span>
           </div>
@@ -145,9 +145,9 @@ export function PurchaseConfirmationModal({
         {/* Status Message */}
         {isProcessing && (
           <div className="w-full mb-6">
-            <div className="flex items-center gap-3 p-4 rounded-lg bg-sky-900/20 border border-sky-800/30">
-              <div className="animate-spin rounded-full h-5 w-5 border-2 border-sky-400 border-t-transparent" />
-              <span className="text-sm text-sky-400">{stepMessage}</span>
+            <div className="flex items-center gap-3 p-4 rounded-md bg-[hsl(var(--ico-bg-secondary))] border border-[hsl(var(--ico-border-color))]">
+              <div className="animate-spin rounded-full h-5 w-5 border-2 border-[hsl(var(--ico-brand-primary))] border-t-transparent" />
+              <span className="text-sm text-[hsl(var(--ico-brand-primary))]">{stepMessage}</span>
             </div>
           </div>
         )}
@@ -155,7 +155,7 @@ export function PurchaseConfirmationModal({
         {/* Transaction Hash */}
         {purchaseState.purchaseTxHash && (
           <div className="w-full mb-6">
-            <div className="p-4 rounded-lg bg-sky-900/20 border border-sky-800/30">
+            <div className="p-4 rounded-md bg-[hsl(var(--ico-bg-secondary))] border border-[hsl(var(--ico-border-color))]">
               <span className="text-xs text-[hsl(var(--ico-text-secondary))] block mb-1">
                 Transaction Hash
               </span>
@@ -163,7 +163,7 @@ export function PurchaseConfirmationModal({
                 href={`${ICO_CONFIG.CASPER.explorerUrl}/deploy/${purchaseState.purchaseTxHash}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-sm font-mono text-sky-400 hover:underline break-all"
+                className="text-sm font-mono text-[hsl(var(--ico-brand-secondary))] hover:underline break-all"
               >
                 {purchaseState.purchaseTxHash.slice(0, 20)}...{purchaseState.purchaseTxHash.slice(-8)}
               </a>
@@ -186,7 +186,7 @@ export function PurchaseConfirmationModal({
             <>
               <button
                 onClick={onClose}
-                className="flex-1 px-6 py-3 bg-sky-900/30 text-[hsl(var(--ico-text-secondary))] rounded-xl hover:bg-sky-900/50 transition-colors"
+                className="flex-1 px-6 py-3 bg-[hsl(var(--ico-bg-secondary))] text-[hsl(var(--ico-text-secondary))] rounded-md border border-[hsl(var(--ico-brand-secondary))] hover:bg-[hsl(var(--ico-bg-primary))] transition-colors"
               >
                 Cancel
               </button>
@@ -210,7 +210,7 @@ export function PurchaseConfirmationModal({
             <>
               <button
                 onClick={onClose}
-                className="flex-1 px-6 py-3 bg-sky-900/30 text-[hsl(var(--ico-text-secondary))] rounded-xl hover:bg-sky-900/50 transition-colors"
+                className="flex-1 px-6 py-3 bg-[hsl(var(--ico-bg-secondary))] text-[hsl(var(--ico-text-secondary))] rounded-md border border-[hsl(var(--ico-brand-secondary))] hover:bg-[hsl(var(--ico-bg-primary))] transition-colors"
               >
                 Close
               </button>

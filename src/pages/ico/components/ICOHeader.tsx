@@ -15,7 +15,7 @@ export function ICOHeader() {
   }
 
   return (
-    <header className="relative border-b h-28 z-50 border-[hsl(var(--ico-border-color))] bg-[hsl(var(--ico-bg-secondary))] shadow-md shadow-slate-900">
+    <header className="relative border-b h-28 z-50 border-[hsl(var(--ico-border-color))] bg-[hsl(var(--ico-bg-card))] shadow-sm">
       <div className="container mx-auto px-4 py-4">
         <div className="flex flex-row items-center justify-between gap-4">
           {/* Logo & Token Name */}
@@ -35,7 +35,7 @@ export function ICOHeader() {
 
           {isConnected && account ? (
             <div className="flex items-center gap-3">
-              <span className="font-mono text-sm text-[hsl(var(--ico-text-primary))] bg-sky-900/30 px-3 py-1 rounded-lg">
+              <span className="font-mono text-sm text-[hsl(var(--ico-text-primary))] bg-[hsl(var(--ico-bg-secondary))] px-3 py-1 rounded-md border border-[hsl(var(--ico-border-color))]">
                 {truncateKey(account.publicKey)}
               </span>
               <MainButton text="Disconnect" onClick={disconnect} />
