@@ -1,8 +1,7 @@
-import { useState, lazy, Suspense } from 'react';
+import { lazy, Suspense } from 'react';
 import { useICOState } from '@/hooks/ico/useICOState';
 import { ICOHeader } from './components/ICOHeader';
 import { ICOFooter } from './components/ICOFooter';
-import { StarsBackground } from './components/StarsBackground';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { PageErrorBoundary } from '@/components/common/PageErrorBoundary';
 
@@ -77,9 +76,6 @@ export function ICOPage() {
           filter: 'blur(10px)',
         }}
       />
-      {/* Stars Background */}
-      {/* <StarsBackground /> */}
-
 
       {/* Main Content */}
       <ScrollArea className="min-h-[calc(100vh-112px)]">
