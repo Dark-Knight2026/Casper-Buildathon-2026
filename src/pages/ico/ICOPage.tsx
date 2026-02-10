@@ -32,14 +32,6 @@ export function ICOPage() {
     error,
   } = useICOSchedules();
 
-  console.log('[ICOPage] useICOSchedules result:', {
-    timestamps,
-    presaleProgress,
-    icoProgress,
-    isLoading,
-    error,
-  });
-
   // Show loading while fetching contract data
   // IMPORTANT: Check this BEFORE calling useICOState to avoid flash of wrong state
   const hasLoadedData = !isLoading && timestamps !== null;
@@ -49,11 +41,8 @@ export function ICOPage() {
     timestamps: hasLoadedData ? timestamps : undefined,
   });
 
-  console.log('[ICOPage] State:', { state, timestamps, isLoading, hasLoadedData });
-
   // Show loading until we have real contract data
   if (!hasLoadedData) {
-    console.log('[ICOPage] Showing loading state');
     return (
       <ScrollArea className="h-screen overflow-hidden relative bg-[hsl(var(--ico-bg-primary))]">
         <ICOHeader />
