@@ -42,10 +42,10 @@ describe('ICOHeader', () => {
       expect(screen.getByText(ICO_CONFIG.TOKEN.name)).toBeInTheDocument();
     });
 
-    it('should display token symbol with "Token Sale"', () => {
+    it('should display token symbol with "Token"', () => {
       render(<ICOHeader />);
 
-      expect(screen.getByText(`${ICO_CONFIG.TOKEN.symbol} Token Sale`)).toBeInTheDocument();
+      expect(screen.getByText(`${ICO_CONFIG.TOKEN.symbol} Token`)).toBeInTheDocument();
     });
 
     it('should render logo image', () => {
@@ -53,7 +53,7 @@ describe('ICOHeader', () => {
 
       const logo = screen.getByAltText('Token Logo');
       expect(logo).toBeInTheDocument();
-      expect(logo).toHaveAttribute('src', '/leaseFiLogo.png');
+      expect(logo).toHaveAttribute('src', '/leaseFilogo2.png');
     });
   });
 

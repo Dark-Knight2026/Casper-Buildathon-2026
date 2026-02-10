@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
-import { ActivePresale } from '@/pages/ico/components/states/ActivePresale';
+import { PrivateSaleActive } from '@/pages/ico/components/states/ActivePresale';
 import { ICO_CONFIG } from '@/constants/ico';
 import type { ScheduleProgress } from '@/hooks/ico/useICOSchedules';
 
@@ -61,74 +61,74 @@ const renderWithRouter = (ui: React.ReactElement) => {
   return render(<BrowserRouter>{ui}</BrowserRouter>);
 };
 
-describe('ActivePresale', () => {
+describe('PrivateSaleActive', () => {
   const mockEndTimestamp = Date.now() + 14 * 24 * 60 * 60 * 1000; // 14 days from now
 
   describe('rendering', () => {
     it('should render the component with title', () => {
-      renderWithRouter(<ActivePresale endTimestamp={mockEndTimestamp} />);
+      renderWithRouter(<PrivateSaleActive endTimestamp={mockEndTimestamp} />);
 
-      expect(screen.getByText(`${ICO_CONFIG.TOKEN.symbol} Token Presale`)).toBeInTheDocument();
+      expect(screen.getByText(`${ICO_CONFIG.TOKEN.symbol} Private Sale`)).toBeInTheDocument();
     });
 
     it('should render the subtitle', () => {
-      renderWithRouter(<ActivePresale endTimestamp={mockEndTimestamp} />);
+      renderWithRouter(<PrivateSaleActive endTimestamp={mockEndTimestamp} />);
 
-      expect(screen.getByText('Purchase BIG Tokens at Presale Rate')).toBeInTheDocument();
+      expect(screen.getByText('Purchase BIG Tokens at Private Sale Rate')).toBeInTheDocument();
     });
 
-    it('should render presale ends in label', () => {
-      renderWithRouter(<ActivePresale endTimestamp={mockEndTimestamp} />);
+    it('should render private sale ends in label', () => {
+      renderWithRouter(<PrivateSaleActive endTimestamp={mockEndTimestamp} />);
 
-      expect(screen.getByText('Presale ends in:')).toBeInTheDocument();
+      expect(screen.getByText('Private Sale ends in:')).toBeInTheDocument();
     });
 
     it('should render the countdown timer', () => {
-      renderWithRouter(<ActivePresale endTimestamp={mockEndTimestamp} />);
+      renderWithRouter(<PrivateSaleActive endTimestamp={mockEndTimestamp} />);
 
       expect(screen.getByTestId('countdown-timer')).toBeInTheDocument();
     });
 
     it('should render the progress bar when progress is provided', () => {
-      renderWithRouter(<ActivePresale endTimestamp={mockEndTimestamp} progress={mockProgress} />);
+      renderWithRouter(<PrivateSaleActive endTimestamp={mockEndTimestamp} progress={mockProgress} />);
 
       expect(screen.getByTestId('progress-bar')).toBeInTheDocument();
     });
 
     it('should not render progress bar when progress is not provided', () => {
-      renderWithRouter(<ActivePresale endTimestamp={mockEndTimestamp} />);
+      renderWithRouter(<PrivateSaleActive endTimestamp={mockEndTimestamp} />);
 
       expect(screen.queryByTestId('progress-bar')).not.toBeInTheDocument();
     });
 
     it('should render the wallet card', () => {
-      renderWithRouter(<ActivePresale endTimestamp={mockEndTimestamp} />);
+      renderWithRouter(<PrivateSaleActive endTimestamp={mockEndTimestamp} />);
 
       expect(screen.getByTestId('wallet-card')).toBeInTheDocument();
     });
 
     it('should render the user token balance when progress is provided', () => {
-      renderWithRouter(<ActivePresale endTimestamp={mockEndTimestamp} progress={mockProgress} />);
+      renderWithRouter(<PrivateSaleActive endTimestamp={mockEndTimestamp} progress={mockProgress} />);
 
       expect(screen.getByTestId('user-token-balance')).toBeInTheDocument();
     });
 
     it('should not render user token balance when progress is not provided', () => {
-      renderWithRouter(<ActivePresale endTimestamp={mockEndTimestamp} />);
+      renderWithRouter(<PrivateSaleActive endTimestamp={mockEndTimestamp} />);
 
       expect(screen.queryByTestId('user-token-balance')).not.toBeInTheDocument();
     });
 
     it('should render the transaction history', () => {
-      renderWithRouter(<ActivePresale endTimestamp={mockEndTimestamp} />);
+      renderWithRouter(<PrivateSaleActive endTimestamp={mockEndTimestamp} />);
 
       expect(screen.getByTestId('transaction-history')).toBeInTheDocument();
     });
   });
 
-  describe('presale info display', () => {
+  describe('private sale info display', () => {
     it('should display hard cap value', () => {
-      renderWithRouter(<ActivePresale endTimestamp={mockEndTimestamp} />);
+      renderWithRouter(<PrivateSaleActive endTimestamp={mockEndTimestamp} />);
 
       expect(screen.getByText(`Hard Cap: $${Number(ICO_CONFIG.PRE_SALE.hardCap).toLocaleString()}`)).toBeInTheDocument();
     });
@@ -137,7 +137,7 @@ describe('ActivePresale', () => {
   describe('custom className', () => {
     it('should apply custom className', () => {
       const { container } = renderWithRouter(
-        <ActivePresale endTimestamp={mockEndTimestamp} className="custom-class" />
+        <PrivateSaleActive endTimestamp={mockEndTimestamp} className="custom-class" />
       );
 
       expect(container.firstChild).toHaveClass('custom-class');

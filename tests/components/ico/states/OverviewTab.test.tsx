@@ -30,6 +30,7 @@ vi.mock('recharts', () => ({
   Area: () => <div data-testid="area" />,
   XAxis: () => <div data-testid="x-axis" />,
   YAxis: () => <div data-testid="y-axis" />,
+  CartesianGrid: () => <div data-testid="cartesian-grid" />,
 }));
 
 const renderWithRouter = (ui: React.ReactElement) => {

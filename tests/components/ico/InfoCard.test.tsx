@@ -50,16 +50,16 @@ describe('InfoCard', () => {
       expect(container.firstElementChild?.className).toContain('md:grid-cols-4');
     });
 
-    it('should have black background', () => {
+    it('should have card background', () => {
       const { container } = render(<InfoCard>Content</InfoCard>);
 
-      expect(container.firstElementChild?.className).toContain('bg-black');
+      expect(container.firstElementChild?.className).toContain('bg-[hsl(var(--ico-bg-card))]');
     });
 
     it('should have rounded corners', () => {
       const { container } = render(<InfoCard>Content</InfoCard>);
 
-      expect(container.firstElementChild?.className).toContain('rounded-xl');
+      expect(container.firstElementChild?.className).toContain('rounded-md');
     });
   });
 

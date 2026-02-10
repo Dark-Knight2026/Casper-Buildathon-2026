@@ -393,7 +393,7 @@ describe('AmountInput', () => {
 
       fireEvent.change(input, { target: { value: '500' } });
 
-      expect(input.className).toContain('border-sky-800/50');
+      expect(input.className).toContain('border-[hsl(var(--ico-border-color))]');
       expect(input.className).not.toContain('border-red-500/70');
     });
   });

@@ -44,7 +44,7 @@ export function PrivateSaleCountdown({ targetTimestamp, endTimestamp, progress, 
           showLabels
         />
 
-        {/* Pre-sale Info - show only if progress data exists */}
+        {/* Private Sale Info - show only if progress data exists */}
         {progress && (
           <InfoCard className="mt-14">
             <div className="text-center p-4">
@@ -69,7 +69,7 @@ export function PrivateSaleCountdown({ targetTimestamp, endTimestamp, progress, 
             </div>
 
             <div className="text-center p-4">
-              <p className="text-sm text-[hsl(var(--ico-text-secondary))] mb-1">Presale Ends:</p>
+              <p className="text-sm text-[hsl(var(--ico-text-secondary))] mb-1">Private Sale Ends:</p>
               <p className="text-sm text-[hsl(var(--ico-text-secondary))] mb-1">{new Date(endTimestamp).toLocaleString()}</p>
             </div>
           </InfoCard>

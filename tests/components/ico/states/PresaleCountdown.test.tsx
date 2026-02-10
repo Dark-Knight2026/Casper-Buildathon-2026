@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
-import { PresaleCountdown } from '@/pages/ico/components/states/PrivateSaleCountdown';
+import { PrivateSaleCountdown } from '@/pages/ico/components/states/PrivateSaleCountdown';
 import { ICO_CONFIG } from '@/constants/ico';
 import type { ScheduleProgress } from '@/hooks/ico/useICOSchedules';
 
@@ -52,7 +52,7 @@ const renderWithRouter = (ui: React.ReactElement) => {
   return render(<BrowserRouter>{ui}</BrowserRouter>);
 };
 
-describe('PresaleCountdown', () => {
+describe('PrivateSaleCountdown', () => {
   const mockTargetTimestamp = Date.now() + 7 * 24 * 60 * 60 * 1000; // 7 days from now
   const mockEndTimestamp = Date.now() + 30 * 24 * 60 * 60 * 1000; // 30 days from now
 
@@ -63,31 +63,31 @@ describe('PresaleCountdown', () => {
   describe('rendering', () => {
     it('should render the component with title', () => {
       renderWithRouter(
-        <PresaleCountdown targetTimestamp={mockTargetTimestamp} endTimestamp={mockEndTimestamp} />
+        <PrivateSaleCountdown targetTimestamp={mockTargetTimestamp} endTimestamp={mockEndTimestamp} />
       );
 
-      expect(screen.getByText(`${ICO_CONFIG.TOKEN.symbol} Token Presale`)).toBeInTheDocument();
+      expect(screen.getByText(`${ICO_CONFIG.TOKEN.symbol} Private Sale`)).toBeInTheDocument();
     });
 
-    it('should render the presale starts in text', () => {
+    it('should render the starts in text', () => {
       renderWithRouter(
-        <PresaleCountdown targetTimestamp={mockTargetTimestamp} endTimestamp={mockEndTimestamp} />
+        <PrivateSaleCountdown targetTimestamp={mockTargetTimestamp} endTimestamp={mockEndTimestamp} />
       );
 
-      expect(screen.getByText('Presale Sale Starts In')).toBeInTheDocument();
+      expect(screen.getByText('Starts In')).toBeInTheDocument();
     });
 
     it('should render the countdown timer', () => {
       renderWithRouter(
-        <PresaleCountdown targetTimestamp={mockTargetTimestamp} endTimestamp={mockEndTimestamp} />
+        <PrivateSaleCountdown targetTimestamp={mockTargetTimestamp} endTimestamp={mockEndTimestamp} />
       );
 
       expect(screen.getByTestId('countdown-timer')).toBeInTheDocument();
     });
 
-    it('should render the info card with presale details when progress is provided', () => {
+    it('should render the info card with private sale details when progress is provided', () => {
       renderWithRouter(
-        <PresaleCountdown targetTimestamp={mockTargetTimestamp} endTimestamp={mockEndTimestamp} progress={mockProgress} />
+        <PrivateSaleCountdown targetTimestamp={mockTargetTimestamp} endTimestamp={mockEndTimestamp} progress={mockProgress} />
       );
 
       expect(screen.getByTestId('info-card')).toBeInTheDocument();
@@ -95,7 +95,7 @@ describe('PresaleCountdown', () => {
 
     it('should display token price when progress is provided', () => {
       renderWithRouter(
-        <PresaleCountdown targetTimestamp={mockTargetTimestamp} endTimestamp={mockEndTimestamp} progress={mockProgress} />
+        <PrivateSaleCountdown targetTimestamp={mockTargetTimestamp} endTimestamp={mockEndTimestamp} progress={mockProgress} />
       );
 
       expect(screen.getByText('Token Price')).toBeInTheDocument();
@@ -104,7 +104,7 @@ describe('PresaleCountdown', () => {
 
     it('should display allocation when progress is provided', () => {
       renderWithRouter(
-        <PresaleCountdown targetTimestamp={mockTargetTimestamp} endTimestamp={mockEndTimestamp} progress={mockProgress} />
+        <PrivateSaleCountdown targetTimestamp={mockTargetTimestamp} endTimestamp={mockEndTimestamp} progress={mockProgress} />
       );
 
       expect(screen.getByText('Allocation')).toBeInTheDocument();
@@ -112,23 +112,23 @@ describe('PresaleCountdown', () => {
 
     it('should display hard cap when progress is provided', () => {
       renderWithRouter(
-        <PresaleCountdown targetTimestamp={mockTargetTimestamp} endTimestamp={mockEndTimestamp} progress={mockProgress} />
+        <PrivateSaleCountdown targetTimestamp={mockTargetTimestamp} endTimestamp={mockEndTimestamp} progress={mockProgress} />
       );
 
       expect(screen.getByText('Hard Cap')).toBeInTheDocument();
     });
 
-    it('should display presale ends date when progress is provided', () => {
+    it('should display private sale ends date when progress is provided', () => {
       renderWithRouter(
-        <PresaleCountdown targetTimestamp={mockTargetTimestamp} endTimestamp={mockEndTimestamp} progress={mockProgress} />
+        <PrivateSaleCountdown targetTimestamp={mockTargetTimestamp} endTimestamp={mockEndTimestamp} progress={mockProgress} />
       );
 
-      expect(screen.getByText('Presale Ends:')).toBeInTheDocument();
+      expect(screen.getByText('Private Sale Ends:')).toBeInTheDocument();
     });
 
     it('should not render info card when progress is not provided', () => {
       renderWithRouter(
-        <PresaleCountdown targetTimestamp={mockTargetTimestamp} endTimestamp={mockEndTimestamp} />
+        <PrivateSaleCountdown targetTimestamp={mockTargetTimestamp} endTimestamp={mockEndTimestamp} />
       );
 
       expect(screen.queryByTestId('info-card')).not.toBeInTheDocument();
@@ -136,7 +136,7 @@ describe('PresaleCountdown', () => {
 
     it('should render the Learn More button', () => {
       renderWithRouter(
-        <PresaleCountdown targetTimestamp={mockTargetTimestamp} endTimestamp={mockEndTimestamp} />
+        <PrivateSaleCountdown targetTimestamp={mockTargetTimestamp} endTimestamp={mockEndTimestamp} />
       );
 
       expect(screen.getByTestId('main-button')).toBeInTheDocument();
@@ -147,7 +147,7 @@ describe('PresaleCountdown', () => {
   describe('navigation', () => {
     it('should navigate to whitepaper when Learn More is clicked', () => {
       renderWithRouter(
-        <PresaleCountdown targetTimestamp={mockTargetTimestamp} endTimestamp={mockEndTimestamp} />
+        <PrivateSaleCountdown targetTimestamp={mockTargetTimestamp} endTimestamp={mockEndTimestamp} />
       );
 
       fireEvent.click(screen.getByText('Learn More'));
@@ -159,7 +159,7 @@ describe('PresaleCountdown', () => {
   describe('custom className', () => {
     it('should apply custom className', () => {
       const { container } = renderWithRouter(
-        <PresaleCountdown
+        <PrivateSaleCountdown
           targetTimestamp={mockTargetTimestamp}
           endTimestamp={mockEndTimestamp}
           className="custom-class"
