@@ -11,6 +11,8 @@ pub mod config;
 pub mod error;
 /// Rust types for all smart contract events.
 pub mod events;
+/// CES event parser (event name + JSON payload -> typed [`IndexedEvent`]).
+pub mod parser;
 
 pub use config::{ActiveContract, ContractRegistry, ContractType, IndexerConfig};
 pub use error::IndexerError;

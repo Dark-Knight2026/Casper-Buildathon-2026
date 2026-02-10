@@ -25,6 +25,7 @@ use sqlx::PgPool;
 use crate::{
     config::{ContractType, IndexerConfig},
     error::{ApiErrorResponse, IndexerError, IndexerResult},
+    parser,
 };
 
 /// Top-level paginated response returned by `GET /deploys`.
@@ -47,17 +48,17 @@ pub struct Deploy {
     pub deploy_hash: String,
     /// Hash of the block that includes this deploy.
     pub block_hash: String,
-    /// Block height at which the deploy was included.
+    /// Block height at which the deployment was included.
     pub block_height: u64,
-    /// ISO-8601 timestamp of the deploy.
+    /// ISO-8601 timestamp of the deployment.
     pub timestamp: String,
-    /// Public key of the account that submitted the deploy.
+    /// Public key of the account that submitted the deployment.
     pub caller_public_key: String,
     /// Contract package hash called by this deploy.
     pub contract_package_hash: Option<String>,
     /// Deploy execution status (`executed`, etc.).
     pub status: Option<String>,
-    /// Human-readable error if the deploy failed.
+    /// Human-readable error if the deployment failed.
     pub error_message: Option<String>,
 }
 
@@ -130,10 +131,18 @@ async fn backfill_contract(
                 "Processing deploy"
             );
 
-            // TODO (step 6): extract CES events from this deploy.
-            //   let events = parser::extract_events(client, config, deploy, contract_type).await?;
-            //   for event in events {
-            //       processor::process_event(db, event).await?;
+            let envelopes = parser::extract_events(client, config, deploy, contract_type).await?;
+            if !envelopes.is_empty() {
+                tracing::info!(
+                    deploy_hash = %deploy.deploy_hash,
+                    count = envelopes.len(),
+                    "Extracted CES events"
+                );
+            }
+
+            // TODO (step 7): process each event.
+            //   for envelope in envelopes {
+            //       processor::process_event(db, envelope).await?;
             //   }
         }
 

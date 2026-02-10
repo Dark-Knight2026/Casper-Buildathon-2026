@@ -6,14 +6,14 @@
 //! responses.
 
 use core::fmt::{Display, Formatter, Result as FmtResult};
-use serde::Serialize;
+use serde::{Deserialize, Deserializer, Serialize, de};
 
 // -----------------------------------------------------------------------------
 // Top-level event envelope
 // -----------------------------------------------------------------------------
 
 /// Every indexed event, regardless of which contract emitted it.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind")]
 pub enum IndexedEvent {
     // ICO events:
@@ -164,12 +164,54 @@ impl Display for Currency {
     }
 }
 
+impl<'de> Deserialize<'de> for Currency {
+    #[inline]
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_any(CurrencyVisitor)
+    }
+}
+
+/// Visitor that accepts both numeric discriminants and string labels.
+struct CurrencyVisitor;
+
+impl de::Visitor<'_> for CurrencyVisitor {
+    type Value = Currency;
+
+    fn expecting(&self, f: &mut Formatter<'_>) -> FmtResult {
+        f.write_str("a currency discriminant (0–2) or label (\"CSPR\", \"USDC\", \"USDT\")")
+    }
+
+    fn visit_i64<E: de::Error>(self, v: i64) -> Result<Currency, E> {
+        let disc = u8::try_from(v).map_err(E::custom)?;
+        Currency::from_discriminant(disc)
+            .ok_or_else(|| E::custom(format!("unknown currency discriminant: {v}")))
+    }
+
+    fn visit_u64<E: de::Error>(self, v: u64) -> Result<Currency, E> {
+        let disc = u8::try_from(v).map_err(E::custom)?;
+        Currency::from_discriminant(disc)
+            .ok_or_else(|| E::custom(format!("unknown currency discriminant: {v}")))
+    }
+
+    fn visit_str<E: de::Error>(self, v: &str) -> Result<Currency, E> {
+        match v.to_ascii_lowercase().as_str() {
+            "cspr" => Ok(Currency::Cspr),
+            "usdc" | "tusdc" => Ok(Currency::Usdc),
+            "usdt" | "tusdt" => Ok(Currency::Usdt),
+            _ => Err(E::custom(format!("unknown currency: {v}"))),
+        }
+    }
+}
+
 // -----------------------------------------------------------------------------
 // ICO events
 // -----------------------------------------------------------------------------
 
 /// A user purchased BIG tokens during an ICO round.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TokensPurchased {
     /// Number of BIG tokens purchased (U256 as string).
     pub amount: String,
@@ -184,28 +226,28 @@ pub struct TokensPurchased {
 }
 
 /// A new ICO schedule (sale round) was registered.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IcoScheduleAdded {
     /// Schedule identifier (U128 as string).
     pub id: String,
 }
 
 /// A payment currency was enabled for ICO purchases.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CurrencyAdded {
     /// The currency that was enabled.
     pub currency: Currency,
 }
 
 /// A payment currency was disabled for ICO purchases.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CurrencyRemoved {
     /// The currency that was disabled.
     pub currency: Currency,
 }
 
 /// Unsold tokens from a completed ICO round were withdrawn by the owner.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UnsoldTokensWithdrawn {
     /// Recipient Casper address (Key as string).
     pub recipient: String,
@@ -218,7 +260,7 @@ pub struct UnsoldTokensWithdrawn {
 // -----------------------------------------------------------------------------
 
 /// A new invoice (rent or security deposit) was created in the escrow.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InvoiceCreated {
     /// Invoice identifier (U256 as string).
     pub invoice_id: String,
@@ -227,7 +269,7 @@ pub struct InvoiceCreated {
 }
 
 /// An invoice was paid by the tenant.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InvoicePaid {
     /// Invoice identifier (U256 as string).
     pub invoice_id: String,
@@ -236,7 +278,7 @@ pub struct InvoicePaid {
 }
 
 /// The minimum invoice deadline was changed by the contract owner.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MinDeadlineSet {
     /// Previous minimum deadline (seconds).
     pub old_min_deadline: u64,
@@ -249,7 +291,7 @@ pub struct MinDeadlineSet {
 // -----------------------------------------------------------------------------
 
 /// A new lease agreement was created on-chain.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LeaseAgreementCreated {
     /// Lease agreement identifier (U256 as string).
     pub lease_agreement_id: String,
@@ -258,7 +300,7 @@ pub struct LeaseAgreementCreated {
 }
 
 /// A lease agreement was finished (tenant moved out or term ended).
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LeaseAgreementFinished {
     /// Lease agreement identifier (U256 as string).
     pub lease_agreement_id: String,
@@ -267,7 +309,7 @@ pub struct LeaseAgreementFinished {
 }
 
 /// A lease agreement was prolonged (extended for another term).
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LeaseAgreementProlonged {
     /// Lease agreement identifier (U256 as string).
     pub lease_agreement_id: String,
@@ -280,7 +322,7 @@ pub struct LeaseAgreementProlonged {
 // -----------------------------------------------------------------------------
 
 /// A new property NFT was minted.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NftMint {
     /// Recipient address (Key as string).
     pub to: String,
@@ -289,7 +331,7 @@ pub struct NftMint {
 }
 
 /// A property NFT was burned (removed from circulation).
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NftBurn {
     /// Owner whose token was burned (Key as string).
     pub from: String,
@@ -298,7 +340,7 @@ pub struct NftBurn {
 }
 
 /// A property NFT was transferred between accounts.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NftTransfer {
     /// Previous owner (Key as string).
     pub from: String,
@@ -309,7 +351,7 @@ pub struct NftTransfer {
 }
 
 /// An account was approved to manage a specific NFT.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NftApproval {
     /// Token owner (Key as string).
     pub owner: String,
@@ -320,7 +362,7 @@ pub struct NftApproval {
 }
 
 /// An operator was approved to manage all NFTs of an owner.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NftApprovalForAll {
     /// Token owner (Key as string).
     pub owner: String,
@@ -329,7 +371,7 @@ pub struct NftApprovalForAll {
 }
 
 /// Approval for a specific NFT was revoked.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NftRevokeApproval {
     /// Token owner (Key as string).
     pub owner: String,
@@ -340,7 +382,7 @@ pub struct NftRevokeApproval {
 }
 
 /// Operator approval for all NFTs was revoked.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NftRevokeApprovalForAll {
     /// Token owner (Key as string).
     pub owner: String,
@@ -349,35 +391,35 @@ pub struct NftRevokeApprovalForAll {
 }
 
 /// NFT metadata was updated (e.g. property valuation change).
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NftMetadataUpdate {
     /// NFT token identifier (U256 as string).
     pub token_id: String,
 }
 
 /// A new minter was authorized on the NFT contract.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NftMinterAdded {
     /// Minter address (Key as string).
     pub minter: String,
 }
 
 /// A minter was removed from the NFT contract.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NftMinterRemoved {
     /// Minter address (Key as string).
     pub minter: String,
 }
 
 /// A new burner was authorized on the NFT contract.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NftBurnerAdded {
     /// Burner address (Key as string).
     pub burner: String,
 }
 
 /// A burner was removed from the NFT contract.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NftBurnerRemoved {
     /// Burner address (Key as string).
     pub burner: String,
@@ -388,7 +430,7 @@ pub struct NftBurnerRemoved {
 // -----------------------------------------------------------------------------
 
 /// A direct token transfer between two accounts.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Cep18Transfer {
     /// Sender address (Key as string).
     pub sender: String,
@@ -399,7 +441,7 @@ pub struct Cep18Transfer {
 }
 
 /// A delegated transfer (spender moves tokens on behalf of the owner).
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Cep18TransferFrom {
     /// Account that initiated the transfer (Key as string).
     pub spender: String,
@@ -412,7 +454,7 @@ pub struct Cep18TransferFrom {
 }
 
 /// New tokens were minted.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Cep18Mint {
     /// Recipient of newly minted tokens (Key as string).
     pub recipient: String,
@@ -421,7 +463,7 @@ pub struct Cep18Mint {
 }
 
 /// Tokens were burned (removed from circulation).
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Cep18Burn {
     /// Owner whose tokens were burned (Key as string).
     pub owner: String,
@@ -430,7 +472,7 @@ pub struct Cep18Burn {
 }
 
 /// Spending allowance was set to an exact value.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Cep18SetAllowance {
     /// Token owner (Key as string).
     pub owner: String,
@@ -441,7 +483,7 @@ pub struct Cep18SetAllowance {
 }
 
 /// Spending allowance was increased.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Cep18IncreaseAllowance {
     /// Token owner (Key as string).
     pub owner: String,
@@ -454,7 +496,7 @@ pub struct Cep18IncreaseAllowance {
 }
 
 /// Spending allowance was decreased.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Cep18DecreaseAllowance {
     /// Token owner (Key as string).
     pub owner: String,
@@ -471,14 +513,14 @@ pub struct Cep18DecreaseAllowance {
 // -----------------------------------------------------------------------------
 
 /// Rewards (dividends) were deposited into the treasury for distribution.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RewardsDeposited {
     /// Amount deposited (U256 as string).
     pub amount: String,
 }
 
 /// Reserve funds were withdrawn by the treasury owner.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReservesWithdrawn {
     /// Recipient address (Key as string).
     pub recipient: String,
@@ -487,7 +529,7 @@ pub struct ReservesWithdrawn {
 }
 
 /// A specific token was withdrawn from the treasury.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TokenWithdrawn {
     /// Token contract address, `None` for native CSPR (Option<Key> as optional string).
     pub token: Option<String>,
@@ -502,7 +544,7 @@ pub struct TokenWithdrawn {
 // -----------------------------------------------------------------------------
 
 /// A role was granted to an address (e.g. landlord, agent, manager).
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RoleGranted {
     /// Role identifier (32-byte hash, hex-encoded).
     pub role: String,
@@ -513,7 +555,7 @@ pub struct RoleGranted {
 }
 
 /// A role was revoked from an address.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RoleRevoked {
     /// Role identifier (32-byte hash, hex-encoded).
     pub role: String,
@@ -524,7 +566,7 @@ pub struct RoleRevoked {
 }
 
 /// The admin role for a given role was changed.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RoleAdminChanged {
     /// Role whose admin was changed (32-byte hash, hex-encoded).
     pub role: String,
@@ -539,7 +581,7 @@ pub struct RoleAdminChanged {
 // -----------------------------------------------------------------------------
 
 /// Contract ownership was transferred (emitted by multiple contracts).
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OwnershipTransferred {
     /// Previous owner (Key as string), `None` if this is initial ownership.
     pub previous_owner: Option<String>,

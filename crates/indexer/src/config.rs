@@ -119,6 +119,13 @@ pub enum ContractType {
 }
 
 impl ContractType {
+    /// Returns `true` for CEP-18 fungible token contracts (BIG, tUSDC, tUSDT).
+    #[inline]
+    #[must_use]
+    pub fn is_cep18_token(self) -> bool {
+        matches!(self, Self::Usdc | Self::Usdt | Self::Big)
+    }
+
     /// Returns the string identifier for this contract type.
     #[inline]
     #[must_use]
