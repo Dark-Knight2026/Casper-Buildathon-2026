@@ -72,8 +72,11 @@ export function ProgressBar({
         className={cn('w-full bg-[hsl(var(--ico-progress-bg))] rounded-full overflow-hidden', sizeClasses[size])}
       >
         <div
-          className="h-full bg-[hsl(var(--ico-progress-fill))] rounded-full transition-all duration-500"
-          style={{ width: `${Math.min(percentage, 100)}%` }}
+          className="h-full rounded-full transition-all duration-500"
+          style={{
+            width: `${Math.min(percentage, 100)}%`,
+            backgroundColor: 'hsl(var(--ico-progress-fill))'
+          }}
         />
       </div>
 

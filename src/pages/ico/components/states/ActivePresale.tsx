@@ -22,7 +22,7 @@ const MOCK_USER_BALANCE = {
   totalSpentUSD: 1505,       // $500 + $1,000 + $5 (250 CSPR × $0.02)
 };
 
-export function ActivePresale({ className, endTimestamp, progress }: ActivePresaleProps) {
+export function PrivateSaleActive({ className, endTimestamp, progress }: ActivePresaleProps) {
   const tokenPrice = progress?.priceUsd ?? 0;
 
   const {
@@ -44,16 +44,16 @@ export function ActivePresale({ className, endTimestamp, progress }: ActivePresa
       <div className="text-center mb-12">
 
         <Title className="mb-4">
-          {ICO_CONFIG.TOKEN.symbol} Token Presale
+          {ICO_CONFIG.TOKEN.symbol} Private Sale
         </Title>
 
         <p className="text-lg md:text-xl font-thin text-[hsl(var(--ico-text-secondary))] max-w-2xl mx-auto">
-          Purchase BIG Tokens at Presale Rate
+          Purchase BIG Tokens at Private Sale Rate
         </p>
       </div>
       <div className='mx-auto flex flex-col md:flex-row gap-4 items-start justify-center'>
         <div className='w-full flex flex-col gap-4'>
-          <p className='text-[hsl(var(--ico-text-secondary))] pl-2'>Presale ends in:</p>
+          <p className='text-[hsl(var(--ico-text-secondary))] pl-2'>Private Sale ends in:</p>
           <CountdownTimer variant='compact' targetTimestamp={endTimestamp} className="py-2" />
 
           {/* Progress Bar - show only when progress data exists */}
@@ -119,4 +119,4 @@ export function ActivePresale({ className, endTimestamp, progress }: ActivePresa
   );
 }
 
-export default ActivePresale;
+export default PrivateSaleActive;

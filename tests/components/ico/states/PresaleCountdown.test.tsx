@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
-import { PresaleCountdown } from '@/pages/ico/components/states/PresaleCountdown';
+import { PresaleCountdown } from '@/pages/ico/components/states/PrivateSaleCountdown';
 import { ICO_CONFIG } from '@/constants/ico';
 import type { ScheduleProgress } from '@/hooks/ico/useICOSchedules';
 

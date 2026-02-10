@@ -7,7 +7,6 @@ import type { ScheduleProgress } from '@/hooks/ico/useICOSchedules';
 import { MainButton } from '../shared/MainButton';
 import { Title } from '../shared/Title';
 import { InfoCard } from '../shared/InfoCard';
-import { diagnoseOdraKeys, testReadICOData } from '@/services/ico/icoContractService';
 
 
 interface PresaleCountdownProps {
@@ -17,7 +16,7 @@ interface PresaleCountdownProps {
   className?: string;
 }
 
-export function PresaleCountdown({ targetTimestamp, endTimestamp, progress, className }: PresaleCountdownProps) {
+export function PrivateSaleCountdown({ targetTimestamp, endTimestamp, progress, className }: PresaleCountdownProps) {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
 
@@ -25,19 +24,19 @@ export function PresaleCountdown({ targetTimestamp, endTimestamp, progress, clas
     <div className={cn('max-w-5xl mx-auto relative flex flex-col items-center', className)}>
 
       {/* Hero Section */}
-      <div className="text-center mb-12">
+      <div className="text-center mb-4 mt-4">
 
         <Title className="mb-4">
-          {ICO_CONFIG.TOKEN.symbol} Token Presale
+          {ICO_CONFIG.TOKEN.symbol} Private Sale
         </Title>
 
         <p className="text-lg md:text-xl font-thin text-[hsl(var(--ico-text-secondary))] max-w-2xl mx-auto">
-          Presale Sale Starts In
+          Starts In
         </p>
       </div>
 
       {/* Countdown Card */}
-      <div className="rounded-2xl shadow-lg p-6 md:p-10 mb-8">
+      <div className=" p-6 md:p-10 mb-8">
 
         <CountdownTimer
           targetTimestamp={targetTimestamp}
@@ -81,4 +80,4 @@ export function PresaleCountdown({ targetTimestamp, endTimestamp, progress, clas
   );
 }
 
-export default PresaleCountdown;
+export default PrivateSaleCountdown;

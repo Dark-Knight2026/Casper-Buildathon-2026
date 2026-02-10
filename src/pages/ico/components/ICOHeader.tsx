@@ -45,6 +45,7 @@ export function ICOHeader() {
               text={isConnecting ? 'Connecting...' : 'Connect Wallet'}
               onClick={connect}
               disabled={isConnecting}
+              className='px-2 py-4'
             />
           )}
         </div>

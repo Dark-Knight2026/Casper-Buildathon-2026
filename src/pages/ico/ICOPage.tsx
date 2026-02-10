@@ -7,16 +7,14 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { PageErrorBoundary } from '@/components/common/PageErrorBoundary';
 
 // Lazy load state components
-const PresaleCountdown = lazy(() => import('./components/states/PresaleCountdown'));
+const PrivateSaleCountdown = lazy(() => import('./components/states/PrivateSaleCountdown'));
 const ActivePresale = lazy(() => import('./components/states/ActivePresale'));
-const DashboardICOCountdown = lazy(() => import('./components/states/DashboardICOCountdown'));
-const ActiveICO = lazy(() => import('./components/states/ActiveICO'));
 const PostICODashboard = lazy(() => import('./components/states/PostICODashboard'));
 
 // Loading component
 function LoadingFallback() {
   return (
-    <div className="flex items-center justify-center min-h-[400px]">
+    <div className="flex items-center justify-center min-h-100">
       <div className="flex flex-col items-center gap-4">
         <div className="w-12 h-12 border-4 border-[hsl(var(--ico-brand-primary))] border-t-transparent rounded-full animate-spin" />
         <p className="text-[hsl(var(--ico-text-secondary))]">Loading ICO data...</p>
@@ -42,16 +40,20 @@ export function ICOPage() {
     error,
   });
 
+  // Show loading while fetching contract data
+  // IMPORTANT: Check this BEFORE calling useICOState to avoid flash of wrong state
+  const hasLoadedData = !isLoading && timestamps !== null;
+
   // Determine state based on timestamps from contract
   const { state } = useICOState({
-    timestamps: timestamps ?? undefined,
+    timestamps: hasLoadedData ? timestamps : undefined,
   });
 
-  console.log('[ICOPage] useICOState result:', { state, timestamps });
+  console.log('[ICOPage] State:', { state, timestamps, isLoading, hasLoadedData });
 
-  // Show loading while fetching contract data
-  if (isLoading || !timestamps) {
-    console.log('[ICOPage] Showing loading state because:', { isLoading, hasTimestamps: !!timestamps });
+  // Show loading until we have real contract data
+  if (!hasLoadedData) {
+    console.log('[ICOPage] Showing loading state');
     return (
       <ScrollArea className="h-screen overflow-hidden relative bg-[hsl(var(--ico-bg-primary))]">
         <ICOHeader />
@@ -90,7 +92,7 @@ export function ICOPage() {
     switch (state) {
       case 1:
         return (
-          <PresaleCountdown
+          <PrivateSaleCountdown
             targetTimestamp={timestamps.presaleStart}
             endTimestamp={timestamps.presaleEnd}
             progress={presaleProgress}
@@ -104,27 +106,10 @@ export function ICOPage() {
           />
         );
       case 3:
-        return (
-          <DashboardICOCountdown
-            icoStartTimestamp={timestamps.icoStart}
-          />
-        );
-      case 4:
-        return (
-          <ActiveICO
-            endTimestamp={timestamps.icoEnd}
-            progress={icoProgress}
-          />
-        );
-      case 5:
         return <PostICODashboard />;
       default:
         return (
-          <PresaleCountdown
-            targetTimestamp={timestamps.presaleStart}
-            endTimestamp={timestamps.presaleEnd}
-            progress={presaleProgress}
-          />
+          <LoadingFallback />
         );
     }
   };

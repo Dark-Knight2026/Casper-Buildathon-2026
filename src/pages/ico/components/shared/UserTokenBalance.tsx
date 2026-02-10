@@ -45,7 +45,7 @@ export function UserTokenBalance({
             <span className="text-sm text-[hsl(var(--ico-text-secondary))]">
               Current Value
             </span>
-            <span className="text-2xl font-bold text-emerald-400">
+            <span className="text-2xl font-bold text-green-800">
               ${currentValue.toLocaleString()}
             </span>
           </div>

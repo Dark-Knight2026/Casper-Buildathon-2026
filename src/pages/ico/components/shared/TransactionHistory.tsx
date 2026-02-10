@@ -19,9 +19,9 @@ interface TransactionHistoryProps {
 }
 
 const STATUS_STYLES = {
-  pending: 'text-yellow-400 bg-yellow-400/10',
-  completed: 'text-green-400 bg-green-400/10',
-  failed: 'text-red-400 bg-red-400/10',
+  pending: 'text-yellow-800 bg-yellow-400/10',
+  completed: 'text-green-900 bg-green-400/10',
+  failed: 'text-red-800 bg-red-400/10',
 };
 
 const STATUS_LABELS = {
