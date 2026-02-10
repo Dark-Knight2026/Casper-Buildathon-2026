@@ -1,5 +1,6 @@
 import { cn } from '@/lib/utils';
 import { Card } from './Card';
+import { formatDateTime } from '../../utils/formatters';
 
 export interface Transaction {
   id: string;
@@ -33,15 +34,6 @@ const STATUS_LABELS = {
 export function TransactionHistory({ transactions, className }: TransactionHistoryProps) {
   const truncateHash = (hash: string) => {
     return `${hash.slice(0, 6)}...${hash.slice(-4)}`;
-  };
-
-  const formatDate = (date: Date) => {
-    return new Intl.DateTimeFormat('en-US', {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    }).format(date);
   };
 
   return (
@@ -79,7 +71,7 @@ export function TransactionHistory({ transactions, className }: TransactionHisto
                     </span>
                   </div>
                   <div className="flex items-center gap-2 text-xs text-[hsl(var(--ico-text-secondary))]">
-                    <span>{formatDate(tx.timestamp)}</span>
+                    <span>{formatDateTime(tx.timestamp)}</span>
                     {tx.txHash && (
                       <>
                         <span>•</span>

@@ -2,6 +2,7 @@ import { cn } from '@/lib/utils';
 import { ProgressBar } from './ProgressBar';
 import { CountdownTimer } from './CountdownTimer';
 import { Lock, Calendar } from 'lucide-react';
+import { formatNumber, formatUSD, formatDate } from '../../utils/formatters';
 
 export interface VestingEntry {
   /** Unique identifier for the vesting entry */
@@ -52,25 +53,6 @@ export function VestingProgressBlock({
     const vestingDuration = nextUnlock.unlockTimestamp - nextUnlock.purchaseTimestamp;
     const elapsed = now - nextUnlock.purchaseTimestamp;
     return Math.min((elapsed / vestingDuration) * 100, 100);
-  };
-
-  const formatNumber = (value: number) => {
-    return value.toLocaleString();
-  };
-
-  const formatUSD = (value: number) => {
-    return `$${value.toLocaleString(undefined, {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })}`;
-  };
-
-  const formatDate = (timestamp: number) => {
-    return new Date(timestamp).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
   };
 
   // Calculate total locked

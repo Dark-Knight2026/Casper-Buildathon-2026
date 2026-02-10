@@ -5,6 +5,7 @@ import { VestingProgressBlock, VestingEntry } from '../shared/VestingProgressBlo
 import { ICO_CONFIG } from '@/constants/ico';
 import { Wallet, Lock, Unlock, DollarSign } from 'lucide-react';
 import { Title } from '../shared/Title';
+import { formatNumber, formatUSD } from '../../utils/formatters';
 
 interface DashboardICOCountdownProps {
   icoStartTimestamp: number;
@@ -44,14 +45,6 @@ const MOCK_VESTING_ENTRIES: VestingEntry[] = [
 ];
 
 export function DashboardICOCountdown({ icoStartTimestamp, className }: DashboardICOCountdownProps) {
-  const formatNumber = (value: string | number) => {
-    return Number(value).toLocaleString();
-  };
-
-  const formatUSD = (value: string | number) => {
-    return `$${Number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  };
-
   // Calculate USD values based on token prices
   const tokensOwned = Number(MOCK_VESTING_DATA.bigPurchased);
   const presalePrice = Number(ICO_CONFIG.PRE_SALE.price);

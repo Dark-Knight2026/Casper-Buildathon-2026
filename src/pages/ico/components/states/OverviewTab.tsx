@@ -5,6 +5,7 @@ import { AreaChart, Area, XAxis, YAxis } from 'recharts';
 import { TrendingUp, Clock, Percent, Wallet } from 'lucide-react';
 import { TransactionHistory } from '../shared/TransactionHistory';
 import { MOCK_TRANSACTIONS } from '@/constants/ico';
+import { formatNumber, formatUSD } from '../../utils/formatters';
 
 // Mock data
 const MOCK_DASHBOARD = {
@@ -39,14 +40,6 @@ const chartConfig = {
     label: 'Earnings',
     color: '#d4a847',
   },
-};
-
-const formatNumber = (value: string | number) => {
-  return Number(value).toLocaleString();
-};
-
-const formatUSD = (value: string | number) => {
-  return `$${Number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
 
 export function OverviewTab() {
