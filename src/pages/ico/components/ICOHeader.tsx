@@ -2,6 +2,7 @@ import { ICO_CONFIG } from '@/constants/ico';
 import { MainButton } from './shared/MainButton';
 import { useNavigate } from 'react-router-dom';
 import { useICOWallet } from '@/hooks/ico/useICOWallet';
+import { LogOut } from 'lucide-react';
 
 export function ICOHeader() {
   const { isConnected, account, isConnecting, connect, disconnect } = useICOWallet();
@@ -15,21 +16,18 @@ export function ICOHeader() {
   }
 
   return (
-    <header className="relative border-b h-28 z-50 border-[hsl(var(--ico-border-color))] bg-[hsl(var(--ico-bg-card))] shadow-sm">
-      <div className="container mx-auto px-4 py-4">
+    <header className="relative border-b h-24 z-50 border-[hsl(var(--ico-border-color))] bg-[hsl(var(--ico-bg-card))] shadow-sm">
+      <div className="container mx-auto px-4 py-2">
         <div className="flex flex-row items-center justify-between gap-4">
           {/* Logo & Token Name */}
           <div className="flex items-center gap-3">
             <div className="w-20 h-20  ">
-              <img src="/leaseFiLogo.png" alt="Token Logo" onClick={handleLogoClick} className="cursor-pointer" />
+              <img src="/leaseFilogo2.png" alt="Token Logo" onClick={handleLogoClick} className="cursor-pointer" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-[hsl(var(--ico-text-primary))]">
+              <h1 className="text-lg md:text-xl font-bold text-[hsl(var(--ico-text-primary))]">
                 {ICO_CONFIG.TOKEN.name}
               </h1>
-              <p className="text-sm text-[hsl(var(--ico-text-secondary))]">
-                {ICO_CONFIG.TOKEN.symbol} Token Sale
-              </p>
             </div>
           </div>
 
@@ -38,14 +36,20 @@ export function ICOHeader() {
               <span className="font-mono text-sm text-[hsl(var(--ico-text-primary))] bg-[hsl(var(--ico-bg-secondary))] px-3 py-1 rounded-md border border-[hsl(var(--ico-border-color))]">
                 {truncateKey(account.publicKey)}
               </span>
-              <MainButton text="Disconnect" onClick={disconnect} />
+              <button
+                onClick={disconnect}
+                className="flex items-center gap-2 px-3 py-2 bg-[hsl(var(--ico-form-button))] text-white font-medium rounded-md transition-colors duration-200 hover:bg-[hsl(var(--ico-form-button-hover))] cursor-pointer"
+              >
+                <LogOut className="w-4 h-4 sm:hidden" />
+                <span className="hidden sm:inline">Disconnect</span>
+              </button>
             </div>
           ) : (
             <MainButton
               text={isConnecting ? 'Connecting...' : 'Connect Wallet'}
               onClick={connect}
               disabled={isConnecting}
-              className='px-2 py-4'
+              className=''
             />
           )}
         </div>
