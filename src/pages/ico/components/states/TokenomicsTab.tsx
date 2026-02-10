@@ -151,7 +151,7 @@ export function TokenomicsTab() {
           </div>
         </div>
       </Card>
-      <div className='flex gap-4'>
+      <div className='flex flex-col lg:flex-row gap-4'>
         {/* Vesting & Release Schedule */}
         <Card className="p-5">
           <div className="w-full">

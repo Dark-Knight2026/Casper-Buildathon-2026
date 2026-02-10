@@ -111,12 +111,37 @@ export function useICOWallet() {
       });
     };
 
+    // Handle SDK ready event (important for mobile redirect flow)
+    const handleReady = () => {
+      const activeAccount = clickRef.getActiveAccount();
+      if (activeAccount) {
+        const publicKey = activeAccount.public_key;
+        setState({
+          isConnected: true,
+          account: {
+            publicKey,
+            accountHash: deriveAccountHash(publicKey),
+            provider: activeAccount.provider,
+          },
+          isConnecting: false,
+          error: null,
+        });
+      }
+    };
+
+    // Handle modal/popup closed without completing sign-in
+    const handleCancelled = () => {
+      setState(prev => ({ ...prev, isConnecting: false }));
+    };
+
     clickRef.on('csprclick:signed_in', handleSignedIn);
     clickRef.on('csprclick:switched_account', handleSwitchedAccount);
     clickRef.on('csprclick:signed_out', handleSignedOut);
     clickRef.on('csprclick:disconnected', handleDisconnected);
+    clickRef.on('csprclick:ready', handleReady);
+    clickRef.on('csprclick:cancelled', handleCancelled);
 
-    // Check if already connected
+    // Check if already connected (sync check)
     const activeAccount = clickRef.getActiveAccount();
     if (activeAccount) {
       const publicKey = activeAccount.public_key;
@@ -138,16 +163,19 @@ export function useICOWallet() {
       clickRef.off('csprclick:switched_account', handleSwitchedAccount);
       clickRef.off('csprclick:signed_out', handleSignedOut);
       clickRef.off('csprclick:disconnected', handleDisconnected);
+      clickRef.off('csprclick:ready', handleReady);
+      clickRef.off('csprclick:cancelled', handleCancelled);
     };
   }, [clickRef]);
 
   const connect = useCallback(() => {
     if (!clickRef) return;
+    setState(prev => ({ ...prev, isConnecting: true, error: null }));
     try {
       clickRef.signIn();
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to open wallet connection';
-      setState(prev => ({ ...prev, error: message }));
+      setState(prev => ({ ...prev, isConnecting: false, error: message }));
     }
   }, [clickRef]);
 
