@@ -76,12 +76,12 @@ export function AmountInput({
           aria-describedby={error ? 'amount-input-error' : undefined}
           aria-invalid={!!error}
           className={cn(
-            'w-full px-4 py-3 pr-36 rounded-xl border',
+            'w-full px-4 py-3 pr-36 rounded-md border',
             error
               ? 'border-red-500/70'
-              : 'border-sky-800/50',
-            'bg-black/50 text-[hsl(var(--ico-text-primary))]',
-            'focus:outline-none focus:ring-0 focus:border-sky-500/70',
+              : 'border-[hsl(var(--ico-border-color))]',
+            'bg-[hsl(var(--ico-form-input-bg))] text-[hsl(var(--ico-text-primary))]',
+            'focus:outline-none focus:ring-0 focus:border-[hsl(var(--ico-brand-primary))]',
             'disabled:opacity-50 disabled:cursor-not-allowed'
           )}
         />
