@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { Card } from '../shared/Card';
 import { SubTitle } from '../shared/SubTitle';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
@@ -56,7 +57,7 @@ const REWARDS_LIST = [
   },
 ];
 
-export function RewardsTab() {
+export const RewardsTab = memo(function RewardsTab() {
   return (
     <div className="space-y-6">
       {/* Title */}
@@ -195,6 +196,6 @@ export function RewardsTab() {
       </Card>
     </div>
   );
-}
+});
 
 export default RewardsTab;

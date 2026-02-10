@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { memo, useMemo } from 'react';
 import { Card } from '../shared/Card';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 import { AreaChart, Area, XAxis, YAxis } from 'recharts';
@@ -42,7 +42,7 @@ const chartConfig = {
   },
 };
 
-export function OverviewTab() {
+export const OverviewTab = memo(function OverviewTab() {
   const dashboardCards = useMemo(() => [
     {
       label: 'BIG Balance',
@@ -206,6 +206,6 @@ export function OverviewTab() {
       </div>
     </div>
   );
-}
+});
 
 export default OverviewTab;
