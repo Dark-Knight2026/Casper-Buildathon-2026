@@ -9,12 +9,16 @@ pub mod backfill;
 pub mod client;
 /// Indexer configuration and contract registry.
 pub mod config;
+/// Event stream cursor management (resume-from-last-position).
+pub mod cursor;
 /// Indexer error types.
 pub mod error;
 /// Rust types for all smart contract events.
 pub mod events;
 /// CES event parser (event name + JSON payload -> typed [`IndexedEvent`]).
 pub mod parser;
+/// Event processor — persists events into PostgreSQL with business logic.
+pub mod processor;
 
 pub use config::{ActiveContract, ContractRegistry, ContractType, IndexerConfig};
 pub use error::IndexerError;

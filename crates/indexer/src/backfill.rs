@@ -25,7 +25,9 @@ use sqlx::PgPool;
 use crate::{
     client,
     config::{ContractType, IndexerConfig},
+    cursor,
     error::{ApiErrorResponse, IndexerError, IndexerResult},
+    processor,
 };
 
 /// Top-level paginated response returned by `GET /deploys`.
@@ -97,7 +99,6 @@ pub async fn run_backfill(config: &IndexerConfig, db: &PgPool) -> IndexerResult<
 }
 
 /// Backfill a single contract by paginating through its deploy history.
-#[allow(unused_variables)]
 async fn backfill_contract(
     client: &Client,
     config: &IndexerConfig,
@@ -105,9 +106,11 @@ async fn backfill_contract(
     contract_type: ContractType,
     contract_hash: &str,
 ) -> IndexerResult<()> {
-    // TODO (step 7): load starting page from cursor
-    //   let cursor = cursor::get_cursor(db, &format!("backfill_{contract_type}")).await?;
-    let mut page: u32 = 1;
+    let stream_key = format!("backfill_{contract_type}");
+    let saved_page = cursor::get_cursor(db, &stream_key).await?;
+    let mut page: u32 = saved_page.map_or(1, |p| u32::try_from(p.max(1)).unwrap_or(u32::MAX));
+
+    tracing::info!(contract = %contract_type, start_page = page, "Resuming backfill from cursor");
 
     loop {
         let response = fetch_deploys(client, config, contract_hash, page).await?;
@@ -140,11 +143,13 @@ async fn backfill_contract(
                 );
             }
 
-            // TODO (step 7): process each event.
-            //   for envelope in envelopes {
-            //       processor::process_event(db, envelope).await?;
-            //   }
+            for envelope in &envelopes {
+                processor::process_event(db, envelope).await?;
+            }
         }
+
+        // Checkpoint after each page so we can resume on restart.
+        cursor::update_cursor(db, &stream_key, i64::from(page)).await?;
 
         tracing::info!(
             contract = %contract_type,
@@ -161,9 +166,6 @@ async fn backfill_contract(
         }
         page += 1;
     }
-
-    // TODO (step 7): update cursor
-    //   cursor::update_cursor(db, &format!("backfill_{contract_type}"), page as i64).await?;
 
     Ok(())
 }
