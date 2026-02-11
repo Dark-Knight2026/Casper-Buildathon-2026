@@ -256,7 +256,7 @@ export async function testReadICOData(): Promise<void> {
         console.log(`  End:         ${formatTimestamp(schedule.endTimestamp)} (raw: ${schedule.endTimestamp})`);
         console.log(`  Sale Amount: ${formatAmount(schedule.saleAmount)} tokens (raw: ${schedule.saleAmount})`);
         console.log(`  Sold Amount: ${formatAmount(schedule.soldAmount)} tokens (raw: ${schedule.soldAmount})`);
-        console.log(`  Price:       ${formatAmount(schedule.price, 8)} USD (raw: ${schedule.price})`);
+        console.log(`  Price:       ${formatAmount(schedule.price, 6)} USD (raw: ${schedule.price})`);
 
         // Calculate progress
         if (schedule.saleAmount > 0n) {
