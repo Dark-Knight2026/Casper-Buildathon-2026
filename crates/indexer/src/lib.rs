@@ -9,8 +9,8 @@ pub mod backfill;
 pub mod client;
 /// Indexer configuration and contract registry.
 pub mod config;
-/// Event stream cursor management (resume-from-last-position).
-pub mod cursor;
+/// Database access layer — all SQL queries centralized here.
+pub mod db;
 /// Indexer error types.
 pub mod error;
 /// Rust types for all smart contract events.

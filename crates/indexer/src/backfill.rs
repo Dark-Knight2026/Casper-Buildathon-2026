@@ -25,7 +25,7 @@ use sqlx::PgPool;
 use crate::{
     client,
     config::{ContractType, IndexerConfig},
-    cursor,
+    db,
     error::{ApiErrorResponse, IndexerError, IndexerResult},
     processor,
 };
@@ -107,7 +107,7 @@ async fn backfill_contract(
     contract_hash: &str,
 ) -> IndexerResult<()> {
     let stream_key = format!("backfill_{contract_type}");
-    let saved_page = cursor::get_cursor(db, &stream_key).await?;
+    let saved_page = db::get_cursor(db, &stream_key).await?;
     let mut page: u32 = saved_page.map_or(1, |p| u32::try_from(p.max(1)).unwrap_or(u32::MAX));
 
     tracing::info!(contract = %contract_type, start_page = page, "Resuming backfill from cursor");
@@ -149,7 +149,7 @@ async fn backfill_contract(
         }
 
         // Checkpoint after each page so we can resume on restart.
-        cursor::update_cursor(db, &stream_key, i64::from(page)).await?;
+        db::update_cursor(db, &stream_key, i64::from(page)).await?;
 
         tracing::info!(
             contract = %contract_type,

@@ -14,6 +14,7 @@
 use sqlx::PgPool;
 
 use crate::{
+    db,
     error::{IndexerError, IndexerResult},
     events::{EventEnvelope, IndexedEvent},
 };
@@ -30,76 +31,91 @@ use crate::{
 /// on SQL failures or [`IndexerError::Parse`](IndexerError::Parse)
 /// if the event cannot be serialized to JSON.
 #[inline]
-pub async fn process_event(db: &PgPool, envelope: &EventEnvelope) -> IndexerResult<()> {
-    let mut tx = db.begin().await?;
+pub async fn process_event(db_pool: &PgPool, envelope: &EventEnvelope) -> IndexerResult<()> {
+    let mut tx = db_pool.begin().await?;
 
     // 1. Store raw event (idempotent)
     let event_json =
         serde_json::to_value(&envelope.event).map_err(|e| IndexerError::Parse(e.to_string()))?;
 
-    let inserted: Option<(sqlx::types::Uuid,)> = sqlx::query_as(
-        r"
-            INSERT INTO blockchain_events
-                (event_type, contract_address, transaction_hash, block_number, event_data)
-            VALUES ($1, $2, $3, $4, $5)
-            ON CONFLICT (transaction_hash, event_type, contract_address) DO NOTHING
-            RETURNING id
-        ",
+    let is_new = db::insert_blockchain_event(
+        &mut tx,
+        &envelope.event_name,
+        &envelope.contract_hash,
+        &envelope.deploy_hash,
+        envelope.block_height.cast_signed(),
+        &event_json,
     )
-    .bind(&envelope.event_name)
-    .bind(&envelope.contract_hash)
-    .bind(&envelope.deploy_hash)
-    .bind(envelope.block_height.cast_signed())
-    .bind(&event_json)
-    .fetch_optional(&mut *tx)
     .await?;
 
-    if inserted.is_none() {
+    if !is_new {
         // Duplicate — already processed, nothing to do.
         return Ok(());
     }
 
     // 2. Business logic per event type
+    let block_height = envelope.block_height.cast_signed();
+
     match &envelope.event {
         IndexedEvent::TokensPurchased(e) => {
-            insert_ico_purchase(&mut tx, envelope, e).await?;
-            insert_blockchain_transaction(
+            db::insert_ico_purchase(
                 &mut tx,
-                &envelope.deploy_hash,
-                envelope.block_height,
-                "token_purchase",
-                &envelope.caller,
-                Some(&e.cost),
-                Some(e.currency.as_str()),
-                &event_json,
+                &db::NewIcoPurchase {
+                    transaction_hash: &envelope.deploy_hash,
+                    block_height,
+                    buyer_address: &envelope.caller,
+                    amount: &e.amount,
+                    currency: e.currency.as_str(),
+                    price: &e.price,
+                    cost: &e.cost,
+                    event_timestamp: e.timestamp.cast_signed(),
+                },
+            )
+            .await?;
+
+            db::insert_blockchain_transaction(
+                &mut tx,
+                &db::NewBlockchainTx {
+                    deploy_hash: &envelope.deploy_hash,
+                    block_number: block_height,
+                    transaction_type: "token_purchase",
+                    from_address: &envelope.caller,
+                    amount: Some(&e.cost),
+                    currency: Some(e.currency.as_str()),
+                    metadata: &event_json,
+                },
             )
             .await?;
         }
 
         IndexedEvent::Cep18Transfer(e) => {
-            insert_blockchain_transaction(
+            db::insert_blockchain_transaction(
                 &mut tx,
-                &envelope.deploy_hash,
-                envelope.block_height,
-                "token_transfer",
-                &e.sender,
-                Some(&e.amount),
-                None,
-                &event_json,
+                &db::NewBlockchainTx {
+                    deploy_hash: &envelope.deploy_hash,
+                    block_number: block_height,
+                    transaction_type: "token_transfer",
+                    from_address: &e.sender,
+                    amount: Some(&e.amount),
+                    currency: None,
+                    metadata: &event_json,
+                },
             )
             .await?;
         }
 
         IndexedEvent::Cep18TransferFrom(e) => {
-            insert_blockchain_transaction(
+            db::insert_blockchain_transaction(
                 &mut tx,
-                &envelope.deploy_hash,
-                envelope.block_height,
-                "token_transfer",
-                &e.owner,
-                Some(&e.amount),
-                None,
-                &event_json,
+                &db::NewBlockchainTx {
+                    deploy_hash: &envelope.deploy_hash,
+                    block_number: block_height,
+                    transaction_type: "token_transfer",
+                    from_address: &e.owner,
+                    amount: Some(&e.amount),
+                    currency: None,
+                    metadata: &event_json,
+                },
             )
             .await?;
         }
@@ -111,20 +127,12 @@ pub async fn process_event(db: &PgPool, envelope: &EventEnvelope) -> IndexerResu
     }
 
     // 3. Mark event as processed
-    sqlx::query(
-        r"
-            UPDATE blockchain_events
-            SET    processed    = TRUE,
-                   processed_at = NOW()
-            WHERE  transaction_hash = $1
-              AND  event_type       = $2
-              AND  contract_address = $3
-        ",
+    db::mark_event_processed(
+        &mut tx,
+        &envelope.deploy_hash,
+        &envelope.event_name,
+        &envelope.contract_hash,
     )
-    .bind(&envelope.deploy_hash)
-    .bind(&envelope.event_name)
-    .bind(&envelope.contract_hash)
-    .execute(&mut *tx)
     .await?;
 
     tx.commit().await?;
@@ -134,68 +142,6 @@ pub async fn process_event(db: &PgPool, envelope: &EventEnvelope) -> IndexerResu
         event  = %envelope.event_name,
         "Event processed"
     );
-
-    Ok(())
-}
-
-/// Insert a row into `ico_purchases` for a `TokensPurchased` event.
-async fn insert_ico_purchase(
-    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-    envelope: &EventEnvelope,
-    e: &crate::events::TokensPurchased,
-) -> IndexerResult<()> {
-    sqlx::query(
-        r"
-            INSERT INTO ico_purchases (transaction_hash, block_height, buyer_address, amount, currency, price, cost, event_timestamp)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-            ON CONFLICT (transaction_hash) DO NOTHING
-        ",
-    )
-    .bind(&envelope.deploy_hash)
-    .bind(envelope.block_height.cast_signed())
-    .bind(&envelope.caller)
-    .bind(&e.amount)
-    .bind(e.currency.as_str())
-    .bind(&e.price)
-    .bind(&e.cost)
-    .bind(e.timestamp.cast_signed())
-    .execute(&mut **tx)
-    .await?;
-
-    Ok(())
-}
-
-/// Insert a row into `blockchain_transactions`.
-///
-/// Uses `ON CONFLICT DO NOTHING` on `transaction_hash` so re-processing the
-/// same deploy is safe.
-#[allow(clippy::too_many_arguments)]
-async fn insert_blockchain_transaction(
-    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-    deploy_hash: &str,
-    block_height: u64,
-    tx_type: &str,
-    from_address: &str,
-    amount: Option<&str>,
-    currency: Option<&str>,
-    metadata: &serde_json::Value,
-) -> IndexerResult<()> {
-    sqlx::query(
-        r"
-            INSERT INTO blockchain_transactions (transaction_hash, deploy_hash, block_number, transaction_type, from_address, amount, currency, status, metadata, confirmed_at)
-            VALUES ($1, $1, $2, $3, $4, $5::DECIMAL, $6, 'confirmed', $7, NOW())
-            ON CONFLICT (transaction_hash) DO NOTHING
-        ",
-    )
-    .bind(deploy_hash)
-    .bind(block_height.cast_signed())
-    .bind(tx_type)
-    .bind(from_address)
-    .bind(amount)
-    .bind(currency)
-    .bind(metadata)
-    .execute(&mut **tx)
-    .await?;
 
     Ok(())
 }

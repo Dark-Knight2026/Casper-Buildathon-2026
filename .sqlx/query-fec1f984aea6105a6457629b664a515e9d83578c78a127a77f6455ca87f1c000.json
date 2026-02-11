@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO event_cursors (stream_type, last_event_id, last_updated_at)\n            VALUES ($1, $2, NOW())\n            ON CONFLICT (stream_type) DO UPDATE SET\n                last_event_id   = $2,\n                last_updated_at = NOW()\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "fec1f984aea6105a6457629b664a515e9d83578c78a127a77f6455ca87f1c000"
+}
