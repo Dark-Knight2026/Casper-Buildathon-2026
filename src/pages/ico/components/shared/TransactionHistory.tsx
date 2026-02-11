@@ -50,9 +50,10 @@ export function TransactionHistory({ transactions, className }: TransactionHisto
             </p>
           </div>
         ) : (
-          <div className="space-y-3 max-h-80 overflow-y-auto">
+          // Semantic list structure for a11y (WCAG 1.3.1) — card-based layout uses ul/li instead of table
+          <ul aria-label="Transaction history" className="space-y-3 max-h-80 overflow-y-auto list-none p-0 m-0">
             {transactions.map((tx) => (
-              <div
+              <li
                 key={tx.id}
                 className="flex items-center justify-between p-3 rounded-lg bg-black/30 border border-sky-800/30"
               >
@@ -89,9 +90,9 @@ export function TransactionHistory({ transactions, className }: TransactionHisto
                     {tx.amount.toLocaleString()} {tx.currency}
                   </p>
                 </div>
-              </div>
+              </li>
             ))}
-          </div>
+          </ul>
         )}
       </div>
     </Card>
