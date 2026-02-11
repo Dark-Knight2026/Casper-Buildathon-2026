@@ -48,10 +48,13 @@ export function ActiveICO({ endTimestamp, className }: ActiveICOProps) {
       <Title className="mb-4">
         {ICO_CONFIG.TOKEN.symbol} Active ICO
       </Title>
-      {/* Stats Row */}
+      {/* Stats Row — using role="group" + aria-label for a11y (WCAG 1.3.1).
+          We intentionally avoid aria-hidden on visible text + duplicating content in aria-label,
+          as that creates a maintenance burden. Screen readers already read the <p> elements
+          in DOM order; role="group" simply announces logical grouping. */}
       <div className="grid grid-cols-1 w-full md:grid-cols-3 gap-4">
         {/* Token Price */}
-        <Card className="p-6 text-center">
+        <Card className="p-6 text-center" role="group" aria-label="Live token price">
           <p className="text-sm text-[hsl(var(--ico-text-secondary))] mb-2">Live Token Price</p>
           <p className="text-3xl font-bold text-[hsl(var(--ico-text-primary))]">
             ${ICO_CONFIG.PUBLIC_ICO.price}
@@ -60,7 +63,7 @@ export function ActiveICO({ endTimestamp, className }: ActiveICOProps) {
         </Card>
 
         {/* ICO Allocation Remaining */}
-        <Card className="p-6 text-center">
+        <Card className="p-6 text-center" role="group" aria-label="Allocation remaining">
           <p className="text-sm text-[hsl(var(--ico-text-secondary))] mb-2">Allocation Remaining</p>
           <p className="text-3xl font-bold text-[hsl(var(--ico-text-primary))]">
             {(tokensRemaining / 1e6).toFixed(1)}M
