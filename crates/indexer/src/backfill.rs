@@ -23,9 +23,9 @@ use serde::Deserialize;
 use sqlx::PgPool;
 
 use crate::{
+    client,
     config::{ContractType, IndexerConfig},
     error::{ApiErrorResponse, IndexerError, IndexerResult},
-    parser,
 };
 
 /// Top-level paginated response returned by `GET /deploys`.
@@ -131,7 +131,7 @@ async fn backfill_contract(
                 "Processing deploy"
             );
 
-            let envelopes = parser::extract_events(client, config, deploy, contract_type).await?;
+            let envelopes = client::extract_events(client, config, deploy, contract_type).await?;
             if !envelopes.is_empty() {
                 tracing::info!(
                     deploy_hash = %deploy.deploy_hash,

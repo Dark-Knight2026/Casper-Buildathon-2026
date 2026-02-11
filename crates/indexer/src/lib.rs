@@ -5,6 +5,8 @@
 
 /// REST backfill client for historical event synchronization.
 pub mod backfill;
+/// HTTP/RPC client for fetching deploy execution results from the Casper node.
+pub mod client;
 /// Indexer configuration and contract registry.
 pub mod config;
 /// Indexer error types.
