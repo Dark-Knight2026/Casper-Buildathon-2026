@@ -270,14 +270,14 @@ export const CURRENCY_DISCRIMINANT = {
  * Use these directly with queryContractDictionary.
  */
 export const ICO_DICTIONARY_KEYS = {
-  // Owner (from Ownable submodule at index 0)
+  // Owner (from Ownable submodule, storage index 17)
   owner: calculateStorageKey(ICO_STORAGE_LAYOUT.ownable.owner),
   pendingOwner: calculateStorageKey(ICO_STORAGE_LAYOUT.ownable.pendingOwner),
 
-  // ICO Schedules count (Var<U128> at index 3)
+  // ICO Schedules count (Var<U128> at index 4)
   icoSchedulesCount: calculateStorageKey(ICO_STORAGE_LAYOUT.icoSchedulesCount),
 
-  // External addresses (index 4, 5, 6)
+  // External addresses (index 5, 6, 7)
   styksPriceFeed: calculateStorageKey(ICO_STORAGE_LAYOUT.styksPriceFeed),
   tailorCoin: calculateStorageKey(ICO_STORAGE_LAYOUT.tailorCoin),
   treasury: calculateStorageKey(ICO_STORAGE_LAYOUT.treasury),
@@ -285,7 +285,7 @@ export const ICO_DICTIONARY_KEYS = {
 
 /**
  * Gets the dictionary key for a specific ICO schedule by ID.
- * ico_schedules is a Mapping<U128, ICOSchedule> at index 2.
+ * ico_schedules is a Mapping<U128, ICOSchedule> at index 3.
  * Uses variable-length U128 encoding (CLValue format).
  */
 export function getScheduleKey(scheduleId: number | bigint): string {
@@ -303,7 +303,7 @@ export function getScheduleKeyFixed(scheduleId: number | bigint): string {
 
 /**
  * Gets the dictionary key for a specific currency info.
- * currencies is a Mapping<Currency, (bool, Option<Address>)> at index 1.
+ * currencies is a Mapping<Currency, (bool, Option<Address>)> at index 2.
  * Currency is an enum encoded as U8.
  */
 export function getCurrencyKey(currency: keyof typeof CURRENCY_DISCRIMINANT): string {
@@ -319,24 +319,24 @@ export function getCurrencyKey(currency: keyof typeof CURRENCY_DISCRIMINANT): st
  */
 export function debugLogKeys(): void {
   console.log('[odraStorage] ICO Storage Layout (from ico.rs):');
-  console.log('  0: ownable (SubModule) -> owner at', ICO_STORAGE_LAYOUT.ownable.owner);
-  console.log('  1: currencies (Mapping)');
-  console.log('  2: ico_schedules (Mapping)');
-  console.log('  3: ico_schedules_count (Var<U128>)');
-  console.log('  4: styks_price_feed (External)');
-  console.log('  5: tailor_coin (External)');
-  console.log('  6: treasury (External)');
+  console.log('  1: ownable (SubModule) -> owner at', ICO_STORAGE_LAYOUT.ownable.owner);
+  console.log('  2: currencies (Mapping)');
+  console.log('  3: ico_schedules (Mapping)');
+  console.log('  4: ico_schedules_count (Var<U128>)');
+  console.log('  5: styks_price_feed (External)');
+  console.log('  6: tailor_coin (External)');
+  console.log('  7: treasury (External)');
   console.log('');
   console.log('[odraStorage] Pre-calculated dictionary keys:');
-  console.log('  owner (0):', ICO_DICTIONARY_KEYS.owner);
-  console.log('  pendingOwner (1):', ICO_DICTIONARY_KEYS.pendingOwner);
-  console.log('  icoSchedulesCount (3):', ICO_DICTIONARY_KEYS.icoSchedulesCount);
-  console.log('  styksPriceFeed (4):', ICO_DICTIONARY_KEYS.styksPriceFeed);
-  console.log('  tailorCoin (5):', ICO_DICTIONARY_KEYS.tailorCoin);
-  console.log('  treasury (6):', ICO_DICTIONARY_KEYS.treasury);
-  console.log('  schedule[0] (mapping 2 + key 0):', getScheduleKey(0));
-  console.log('  schedule[1] (mapping 2 + key 1):', getScheduleKey(1));
-  console.log('  currency[CSPR] (mapping 1 + key 0):', getCurrencyKey('CSPR'));
-  console.log('  currency[USDC] (mapping 1 + key 1):', getCurrencyKey('USDC'));
-  console.log('  currency[USDT] (mapping 1 + key 2):', getCurrencyKey('USDT'));
+  console.log('  owner (17):', ICO_DICTIONARY_KEYS.owner);
+  console.log('  pendingOwner (18):', ICO_DICTIONARY_KEYS.pendingOwner);
+  console.log('  icoSchedulesCount (4):', ICO_DICTIONARY_KEYS.icoSchedulesCount);
+  console.log('  styksPriceFeed (5):', ICO_DICTIONARY_KEYS.styksPriceFeed);
+  console.log('  tailorCoin (6):', ICO_DICTIONARY_KEYS.tailorCoin);
+  console.log('  treasury (7):', ICO_DICTIONARY_KEYS.treasury);
+  console.log('  schedule[0] (mapping 3 + key 0):', getScheduleKey(0));
+  console.log('  schedule[1] (mapping 3 + key 1):', getScheduleKey(1));
+  console.log('  currency[CSPR] (mapping 2 + key 0):', getCurrencyKey('CSPR'));
+  console.log('  currency[USDC] (mapping 2 + key 1):', getCurrencyKey('USDC'));
+  console.log('  currency[USDT] (mapping 2 + key 2):', getCurrencyKey('USDT'));
 }
