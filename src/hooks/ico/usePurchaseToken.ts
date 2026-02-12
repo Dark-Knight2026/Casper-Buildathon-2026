@@ -165,7 +165,7 @@ export function usePurchaseToken(
             approvalTransaction.toJSON() as object,
             publicKey,
             true, // waitProcessing
-            300000, // 5 min timeout
+            300, // 5 min timeout (seconds)
           );
 
           if (!approvalResult || approvalResult.cancelled) {
@@ -192,7 +192,7 @@ export function usePurchaseToken(
           purchaseTransaction.toJSON() as object,
           publicKey,
           true, // waitProcessing
-          300000, // 5 min timeout
+          300, // 5 min timeout (seconds)
         );
 
         if (!purchaseResult || purchaseResult.cancelled) {

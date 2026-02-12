@@ -33,6 +33,7 @@ export const ICO_CONFIG = {
 
   CONTRACTS: {
     icoAddress: import.meta.env.VITE_ICO_CONTRACT_HASH ?? '',
+    icoPackageHash: import.meta.env.VITE_ICO_PACKAGE_HASH ?? '',
     tokenAddress: import.meta.env.VITE_BIG_TOKEN_CONTRACT_HASH ?? 'hash-f7d94fd8670fdc69aabd07c214ab8d52c3fc1fd839f0cc7713e1574cdfd899ec',
     treasuryAddress: import.meta.env.VITE_TREASURY_CONTRACT_HASH ?? '',
     usdcAddress: import.meta.env.VITE_USDC_CONTRACT_HASH ?? 'hash-7f06f66426f18ca8d3b8df69f977a54554d39fda43ebe942fd22ece0d20235bd',

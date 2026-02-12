@@ -47,6 +47,8 @@ interface UsePurchaseFlowReturn {
     usdc: number;
     big: number;
   };
+  balanceError: string | null;
+  balancesLoading: boolean;
 
   // Modal state
   showConfirmModal: boolean;
@@ -94,7 +96,8 @@ export function usePurchaseFlow({
   onPurchaseError,
 }: UsePurchaseFlowOptions): UsePurchaseFlowReturn {
   const { isConnected, account, connect, clickRef } = useICOWallet();
-  const { balances } = useWalletBalances(account?.publicKey);
+  const { balances, error: balanceError, isLoading: balancesLoading, refetch: refetchBalances } = useWalletBalances(account?.publicKey);
+  console.log('usePurchaseFlow - wallet state:', { isConnected, account, balances });
 
   // Modal and toast state
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -117,6 +120,9 @@ export function usePurchaseFlow({
         setShowConfirmModal(false);
         setPendingPurchase(null);
         onPurchaseSuccess?.(txHash, tokensReceived);
+        // Refresh balances after purchase — delay to let the blockchain settle
+        refetchBalances();
+        setTimeout(() => refetchBalances(), 15_000);
       },
       onError: (error) => {
         console.error('Purchase failed:', error);
@@ -202,6 +208,8 @@ export function usePurchaseFlow({
     account,
     connect,
     balances,
+    balanceError,
+    balancesLoading,
 
     // Modal state
     showConfirmModal,

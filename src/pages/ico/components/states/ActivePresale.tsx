@@ -30,12 +30,23 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: ActiveP
     account,
     connect,
     balances,
+    balanceError,
+    balancesLoading,
     handlePurchase,
     modalProps,
     toastProps,
   } = usePurchaseFlow({
     tokenPrice,
     tokenSymbol: ICO_CONFIG.TOKEN.symbol,
+  });
+
+  console.log('Rendering ActivePresale with props:', {
+    endTimestamp,
+    progress,
+    tokenPrice,
+    isConnected,
+    account,
+    balances,
   });
 
   return (
@@ -81,6 +92,8 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: ActiveP
           balanceUSDT={balances.usdt}
           balanceUSDC={balances.usdc}
           balanceBIG={balances.big}
+          balanceError={balanceError}
+          balancesLoading={balancesLoading}
           tokenPrice={progress?.priceUsd ?? 0}
           tokenSymbol={ICO_CONFIG.TOKEN.symbol}
           onConnect={connect}

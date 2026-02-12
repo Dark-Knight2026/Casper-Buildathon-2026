@@ -12,6 +12,8 @@ interface WalletCardProps {
   balanceUSDC?: number;
   balanceCSPR?: number;
   balanceBIG?: number;
+  balanceError?: string | null;
+  balancesLoading?: boolean;
   tokenPrice: number;
   tokenSymbol: string;
   onConnect?: () => void;
@@ -25,6 +27,8 @@ export function WalletCard({
   balanceUSDC = 0,
   balanceCSPR = 0,
   balanceBIG = 0,
+  balanceError,
+  balancesLoading,
   tokenPrice,
   tokenSymbol,
   onConnect,
@@ -100,22 +104,29 @@ export function WalletCard({
       {isConnected && (
         <div className="flex justify-between items-center w-full mb-6 pb-6 border-b border-[hsl(var(--ico-border-color))]">
           <span className="text-sm text-[hsl(var(--ico-text-secondary))]">Your Balance</span>
-          <div className="text-right space-y-1">
-            {balanceBIG > 0 && (
-              <p className="text-sm font-bold text-[hsl(var(--ico-text-highlight))]">
-                {balanceBIG.toLocaleString(undefined, { maximumFractionDigits: 2 })} {tokenSymbol}
+          {balancesLoading ? (
+            <span className="text-sm text-[hsl(var(--ico-text-secondary))]">Loading...</span>
+          ) : (
+            <div className="text-right space-y-1">
+              {balanceError && (
+                <p className="text-xs text-red-400">{balanceError}</p>
+              )}
+              {balanceBIG > 0 && (
+                <p className="text-sm font-bold text-[hsl(var(--ico-text-highlight))]">
+                  {balanceBIG.toLocaleString(undefined, { maximumFractionDigits: 2 })} {tokenSymbol}
+                </p>
+              )}
+              <p className="text-sm font-medium text-[hsl(var(--ico-text-primary))]">
+                {balanceCSPR.toLocaleString(undefined, { maximumFractionDigits: 2 })} CSPR
               </p>
-            )}
-            <p className="text-sm font-medium text-[hsl(var(--ico-text-primary))]">
-              {balanceCSPR.toLocaleString(undefined, { maximumFractionDigits: 2 })} CSPR
-            </p>
-            <p className="text-sm font-medium text-[hsl(var(--ico-text-primary))]">
-              {balanceUSDT.toLocaleString(undefined, { maximumFractionDigits: 2 })} USDT
-            </p>
-            <p className="text-sm font-medium text-[hsl(var(--ico-text-primary))]">
-              {balanceUSDC.toLocaleString(undefined, { maximumFractionDigits: 2 })} USDC
-            </p>
-          </div>
+              <p className="text-sm font-medium text-[hsl(var(--ico-text-primary))]">
+                {balanceUSDT.toLocaleString(undefined, { maximumFractionDigits: 2 })} USDT
+              </p>
+              <p className="text-sm font-medium text-[hsl(var(--ico-text-primary))]">
+                {balanceUSDC.toLocaleString(undefined, { maximumFractionDigits: 2 })} USDC
+              </p>
+            </div>
+          )}
         </div>
       )}
 

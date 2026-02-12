@@ -15,14 +15,16 @@ import {
   Args,
   CLValue,
   Key,
-  Deploy,
+  Transaction,
+  URef,
 } from 'casper-js-sdk';
 
 import { ICO_CONFIG } from '@/constants/ico';
 import {
-  createDeploy,
+  createContractCallTransaction,
   stripHashPrefix,
   getCasperRpcClient,
+  getAccountMainPurseURef,
 } from './casperClient';
 import { paymentCurrencyToContractCurrency } from './contractTypes';
 import { getAllowance } from './cep18Service';
@@ -31,6 +33,7 @@ import type { PaymentCurrency } from '@/types/ico';
 // ── Constants ───────────────────────────────────────────────────────
 
 const ICO_HASH = ICO_CONFIG.CONTRACTS.icoAddress;
+const ICO_PACKAGE_HASH = ICO_CONFIG.CONTRACTS.icoPackageHash;
 const TOKEN_DECIMALS = ICO_CONFIG.TOKEN.decimals; // 18
 const STABLECOIN_DECIMALS = 6; // USDT/USDC typically use 6 decimals
 const CSPR_DECIMALS = 9; // CSPR uses 9 decimals (motes)
@@ -60,10 +63,10 @@ export interface PurchaseParams {
 export interface PurchaseResult {
   /** Whether approval was needed and executed */
   approvalNeeded: boolean;
-  /** Approval deploy (if needed) */
-  approvalDeploy?: Deploy;
-  /** Purchase deploy */
-  purchaseDeploy: Deploy;
+  /** Approval transaction (if needed) */
+  approvalTransaction?: Transaction;
+  /** Purchase transaction */
+  purchaseTransaction: Transaction;
 }
 
 export interface ApprovalCheckResult {
@@ -169,13 +172,13 @@ export async function checkApprovalNeeded(
 }
 
 /**
- * Creates an approve deploy for CEP-18 tokens.
+ * Creates an approve transaction for CEP-18 tokens.
  */
-export function createApproveDeploy(
+export function createApproveTransaction(
   senderPublicKey: string,
   currency: PaymentCurrency,
   amount: string,
-): Deploy {
+): Transaction {
   const tokenContract = getCurrencyContractHash(currency);
   if (!tokenContract) {
     throw new Error(`No contract address for currency: ${currency}`);
@@ -185,43 +188,44 @@ export function createApproveDeploy(
   const rawAmount = toRawAmount(amount, decimals);
 
   // Build args for approve(spender: Key, amount: U256)
-  // Create Key from prefixed string (e.g., "hash-abc123...")
-  const icoContractWithPrefix = ICO_HASH.startsWith('hash-') ? ICO_HASH : `hash-${ICO_HASH}`;
-  const spenderKey = Key.newKey(icoContractWithPrefix);
+  // Use ICO package hash as spender — cross-contract calls are identified by package hash
+  const icoPackageHash = ICO_CONFIG.CONTRACTS.icoPackageHash;
+  const spenderWithPrefix = icoPackageHash.startsWith('hash-') ? icoPackageHash : `hash-${icoPackageHash}`;
+  const spenderKey = Key.newKey(spenderWithPrefix);
 
   const args = Args.fromMap({
     spender: CLValue.newCLKey(spenderKey),
     amount: CLValue.newCLUInt256(rawAmount),
   });
 
-  return createDeploy(
+  return createContractCallTransaction(
     senderPublicKey,
     tokenContract,
     'approve',
     args,
     GAS_COST.APPROVE,
+    true, // token contracts are package hashes
   );
 }
-
-// Keep old function name as alias for backward compatibility
-export const createApproveTransaction = createApproveDeploy;
 
 // ── Purchase functions ──────────────────────────────────────────────
 
 /**
- * Creates a purchase deploy for the ICO contract.
+ * Creates a purchase transaction for the ICO contract.
  *
  * The ICO contract entry point signature (from schema):
- *   purchase(purchase_amount: U256, currency: Currency)
+ *   purchase(purchase_amount: U256, currency: Currency, __cargo_purse: URef)
  *
- * For CSPR payments, the amount is attached as payment.
- * For CEP-18 payments, the contract will transferFrom the buyer (after approve).
+ * `__cargo_purse` is required by the Odra framework for `#[payable]` entry points.
+ * It's the caller's purse from which the contract can pull CSPR.
+ * We pass the account's main purse URef obtained via RPC.
  */
-export function createPurchaseDeploy(
+export function createPurchaseTransaction(
   senderPublicKey: string,
   amount: string,
   currency: PaymentCurrency,
-): Deploy {
+  mainPurseURef: string,
+): Transaction {
   if (currency === 'CARD') {
     throw new Error('CARD payments are handled via fiat on-ramp, not blockchain transaction');
   }
@@ -232,37 +236,50 @@ export function createPurchaseDeploy(
     currency as 'CSPR' | 'USDC' | 'USDT'
   );
 
-  // Build args for purchase(purchase_amount: U256, currency: Currency)
+  // Parse the main purse URef (e.g. "uref-abc...def-007")
+  const cargoPurse = URef.fromString(mainPurseURef);
+
+  // Build args matching the Rust function signature:
+  //   pub fn purchase(&mut self, amount_to_spend: U256, currency: Currency) -> U256
+  // Odra uses function parameter names as named arg keys!
   const args = Args.fromMap({
-    purchase_amount: CLValue.newCLUInt256(rawAmount),
+    amount_to_spend: CLValue.newCLUInt256(rawAmount),
     currency: CLValue.newCLUint8(contractCurrency),
+    __cargo_purse: CLValue.newCLUref(cargoPurse),
   });
+
+  console.log('[createPurchaseTransaction] args:', {
+    purchase_amount: fromRawAmount(rawAmount, decimals),
+    currency,
+    cargo_purse: mainPurseURef,
+  });
+  console.log("args", args);
 
   const gasCost = currency === 'CSPR'
     ? GAS_COST.BUY_TOKENS_CSPR
     : GAS_COST.BUY_TOKENS_CEP18;
 
-  return createDeploy(
+  return createContractCallTransaction(
     senderPublicKey,
-    ICO_HASH,
+    ICO_PACKAGE_HASH,
     'purchase',
     args,
     gasCost,
+    true, // ICO is an Odra contract — call via package hash
   );
 }
 
-// Keep old function names as aliases for backward compatibility
-export const createPurchaseTransaction = createPurchaseDeploy;
-export const createBuyTokensTransaction = createPurchaseDeploy;
-
 /**
  * Prepares a complete purchase flow.
- * Returns approval deploy (if needed) and purchase deploy.
+ * Returns approval transaction (if needed) and purchase transaction.
  */
 export async function preparePurchase(
   params: PurchaseParams,
 ): Promise<PurchaseResult> {
   const { senderPublicKey, senderAccountHash, amount, currency } = params;
+
+  // Fetch account's main purse URef (needed for Odra __cargo_purse)
+  const mainPurseURef = await getAccountMainPurseURef(senderPublicKey);
 
   // Check if approval is needed (for CEP-18 tokens)
   const approvalCheck = await checkApprovalNeeded(
@@ -271,48 +288,46 @@ export async function preparePurchase(
     currency,
   );
 
-  let approvalDeploy: Deploy | undefined;
+  let approvalTransaction: Transaction | undefined;
   if (approvalCheck.needed) {
-    approvalDeploy = createApproveDeploy(
+    approvalTransaction = createApproveTransaction(
       senderPublicKey,
       currency,
       amount,
     );
   }
 
-  // Create the purchase deploy
-  const purchaseDeploy = createPurchaseDeploy(
+  // Create the purchase transaction
+  const purchaseTransaction = createPurchaseTransaction(
     senderPublicKey,
     amount,
     currency,
+    mainPurseURef,
   );
 
   return {
     approvalNeeded: approvalCheck.needed,
-    approvalDeploy,
-    purchaseDeploy,
+    approvalTransaction,
+    purchaseTransaction,
   };
 }
 
-// ── Deploy submission ───────────────────────────────────────────────
+// ── Transaction submission ───────────────────────────────────────────
 
 /**
- * Submits a signed deploy to the blockchain.
- * Returns the deploy hash.
+ * Submits a signed transaction to the blockchain.
+ * Returns the transaction hash.
  */
-export async function submitDeploy(
-  signedDeploy: Deploy,
+export async function submitTransaction(
+  signedTransaction: Transaction,
 ): Promise<string> {
   const client = getCasperRpcClient();
 
-  const result = await client.putDeploy(signedDeploy);
+  const result = await client.putTransaction(signedTransaction);
 
-  console.log('[icoPurchaseService] Deploy submitted:', result);
-  return result.deployHash.toString();
+  console.log('[icoPurchaseService] Transaction submitted:', result);
+  return result.transactionHash.toString();
 }
-
-// Keep old function name as alias for backward compatibility
-export const submitTransaction = submitDeploy;
 
 /**
  * Gets the status of a submitted deploy.

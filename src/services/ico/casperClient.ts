@@ -72,7 +72,38 @@ export function contractHashToEntityKey(hash: string): string {
  * Strips the `hash-` prefix from a contract hash, returning only the hex.
  */
 export function stripHashPrefix(hash: string): string {
-  return hash.replace(/^hash-/, '');
+  return hash.replace(/^(hash-|contract-)/, '');
+}
+
+// ── Account helpers ─────────────────────────────────────────────────
+
+/**
+ * Returns the account's main purse URef string (e.g. "uref-abc...def-007").
+ *
+ * Needed for Odra `#[payable]` entry points that require `__cargo_purse: URef`.
+ * The main purse URef grants the contract one-time access to transfer CSPR
+ * from the caller's purse during the deploy execution.
+ */
+export async function getAccountMainPurseURef(publicKeyHex: string): Promise<string> {
+  const client = getCasperRpcClient();
+  const pk = PublicKey.fromHex(publicKeyHex);
+  const accountHashHex = pk.accountHash().toPrefixedString().replace(/^account-hash-/, '');
+  const accountKey = `account-hash-${accountHashHex}`;
+
+  const stateResult = await client.queryLatestGlobalState(accountKey, []);
+  const mainPurse: string | undefined =
+    stateResult.rawJSON?.stored_value?.Account?.main_purse;
+  console.log('[casperClient] queryLatestGlobalState for account main purse:', {
+    accountKey,
+    stateResult,
+  });
+  
+  if (!mainPurse) {
+    throw new Error('Could not find main purse for account');
+  }
+
+  console.log('[casperClient] main purse URef:', mainPurse);
+  return mainPurse;
 }
 
 // ── Query helpers ──────────────────────────────────────────────────
@@ -526,6 +557,7 @@ export async function getContractInfo(contractHash: string): Promise<{
  * @param entryPoint          Entry point name
  * @param args                Args for entry point
  * @param paymentAmount       Payment amount in motes (default: 2.5 CSPR)
+ * @param isPackageHash       If true, use byPackageHash(); if false, use byHash()
  * @returns Transaction object ready for signing
  */
 export function createContractCallTransaction(
@@ -533,15 +565,21 @@ export function createContractCallTransaction(
   contractHashStr: string,
   entryPoint: string,
   args: Args = Args.fromMap({}),
-  paymentAmount: bigint = 2_500_000_000n // 2.5 CSPR
+  paymentAmount: bigint = 2_500_000_000n, // 2.5 CSPR
+  isPackageHash: boolean = false,
 ): Transaction {
   const senderPublicKey = PublicKey.fromHex(senderPublicKeyHex);
   const contractHashHex = stripHashPrefix(contractHashStr);
 
   // Using ContractCallBuilder for v5 SDK
-  const transaction = new ContractCallBuilder()
-    .from(senderPublicKey)
-    .byHash(contractHashHex)
+  const builder = new ContractCallBuilder()
+    .from(senderPublicKey);
+
+  const withTarget = isPackageHash
+    ? builder.byPackageHash(contractHashHex)
+    : builder.byHash(contractHashHex);
+
+  const transaction = withTarget
     .entryPoint(entryPoint)
     .runtimeArgs(args)
     .chainName(ICO_CONFIG.CASPER.networkName)
