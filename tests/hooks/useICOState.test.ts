@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import React from 'react';
 import type { ICOState, ICOPhase, SaleTimestamps } from '@/types/ico';
 
 // --- Pure functions extracted from hook for unit testing ---
@@ -203,18 +205,36 @@ describe('getNextStateTimestamp', () => {
 // =====================================================
 
 describe('useICOState hook', () => {
+  let queryClient: QueryClient;
+
   beforeEach(() => {
     vi.useFakeTimers();
+    queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+      },
+    });
   });
 
   afterEach(() => {
+    queryClient.clear();
     vi.useRealTimers();
   });
+
+  const wrapper = ({ children }: { children: React.ReactNode }) =>
+    React.createElement(QueryClientProvider, { client: queryClient }, children);
 
   // We need to dynamically import the hook so fake timers are active
   async function importHook() {
     const mod = await import('@/hooks/ico/useICOState');
     return mod.useICOState;
+  }
+
+  /** Flush React Query's internal async resolution after renderHook */
+  async function flushQueryUpdates() {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
   }
 
   it('should return state 1 when all timestamps are in the future', async () => {
@@ -229,7 +249,8 @@ describe('useICOState hook', () => {
       icoEnd: now + 26 * DAY,
     };
 
-    const { result } = renderHook(() => useICOState({ timestamps }));
+    const { result } = renderHook(() => useICOState({ timestamps }), { wrapper });
+    await flushQueryUpdates();
 
     expect(result.current.state).toBe(1);
     expect(result.current.phase).toBe('presale-countdown');
@@ -251,7 +272,8 @@ describe('useICOState hook', () => {
       icoEnd: now + 23 * DAY,
     };
 
-    const { result } = renderHook(() => useICOState({ timestamps }));
+    const { result } = renderHook(() => useICOState({ timestamps }), { wrapper });
+    await flushQueryUpdates();
 
     expect(result.current.state).toBe(2);
     expect(result.current.phase).toBe('presale-active');
@@ -270,7 +292,8 @@ describe('useICOState hook', () => {
       icoEnd: now + 12 * DAY,
     };
 
-    const { result } = renderHook(() => useICOState({ timestamps }));
+    const { result } = renderHook(() => useICOState({ timestamps }), { wrapper });
+    await flushQueryUpdates();
 
     expect(result.current.state).toBe(4);
     expect(result.current.phase).toBe('ico-active');
@@ -289,7 +312,8 @@ describe('useICOState hook', () => {
       icoEnd: now - 5 * DAY,
     };
 
-    const { result } = renderHook(() => useICOState({ timestamps }));
+    const { result } = renderHook(() => useICOState({ timestamps }), { wrapper });
+    await flushQueryUpdates();
 
     expect(result.current.state).toBe(5);
     expect(result.current.phase).toBe('post-ico');
@@ -311,7 +335,8 @@ describe('useICOState hook', () => {
       icoEnd: now + 16 * DAY,
     };
 
-    const { result } = renderHook(() => useICOState({ timestamps }));
+    const { result } = renderHook(() => useICOState({ timestamps }), { wrapper });
+    await flushQueryUpdates();
 
     expect(result.current.state).toBe(3);
     expect(result.current.status.isActive).toBe(false);
@@ -331,9 +356,11 @@ describe('useICOState hook', () => {
       icoEnd: now + 26 * DAY,
     };
 
-    const { result } = renderHook(() =>
-      useICOState({ timestamps, devOverrideState: 4 })
+    const { result } = renderHook(
+      () => useICOState({ timestamps, devOverrideState: 4 }),
+      { wrapper }
     );
+    await flushQueryUpdates();
 
     expect(result.current.state).toBe(4);
     expect(result.current.phase).toBe('ico-active');
@@ -352,7 +379,8 @@ describe('useICOState hook', () => {
       icoEnd: now + 26 * DAY,
     };
 
-    const { result } = renderHook(() => useICOState({ timestamps }));
+    const { result } = renderHook(() => useICOState({ timestamps }), { wrapper });
+    await flushQueryUpdates();
 
     expect(result.current.state).toBe(1);
     expect(result.current.isDevOverride).toBe(false);
@@ -378,9 +406,11 @@ describe('useICOState hook', () => {
       icoEnd: now + 26 * DAY,
     };
 
-    const { result } = renderHook(() =>
-      useICOState({ timestamps, devOverrideState: 4 })
+    const { result } = renderHook(
+      () => useICOState({ timestamps, devOverrideState: 4 }),
+      { wrapper }
     );
+    await flushQueryUpdates();
 
     expect(result.current.isDevOverride).toBe(true);
 
@@ -404,13 +434,15 @@ describe('useICOState hook', () => {
       icoEnd: now + 26 * DAY,
     };
 
-    const { result } = renderHook(() => useICOState({ timestamps }));
+    const { result } = renderHook(() => useICOState({ timestamps }), { wrapper });
+    await flushQueryUpdates();
 
     expect(result.current.state).toBe(1);
     expect(result.current.error).toBeNull();
 
-    act(() => {
+    await act(async () => {
       result.current.refetch();
+      await vi.advanceTimersByTimeAsync(0);
     });
 
     expect(result.current.isLoading).toBe(false);
@@ -429,7 +461,8 @@ describe('useICOState hook', () => {
       icoEnd: now + 4000,
     };
 
-    const { result } = renderHook(() => useICOState({ timestamps }));
+    const { result } = renderHook(() => useICOState({ timestamps }), { wrapper });
+    await flushQueryUpdates();
 
     expect(result.current.timestamps).toEqual(timestamps);
   });
