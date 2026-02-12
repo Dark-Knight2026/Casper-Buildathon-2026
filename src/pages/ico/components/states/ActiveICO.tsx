@@ -5,6 +5,7 @@ import { ProgressBar } from '../shared/ProgressBar';
 import { WalletCard } from '../shared/WalletCard';
 import { TransactionHistory } from '../shared/TransactionHistory';
 import { ICO_CONFIG, MOCK_TRANSACTIONS } from '@/constants/ico';
+import { MOCK_ICO_PROGRESS } from '@/constants/icoMockData';
 import type { PaymentCurrency } from '@/types/ico';
 import { toast } from '@/lib/toast';
 import { Title } from '../shared/Title';
@@ -14,15 +15,8 @@ interface ActiveICOProps {
   className?: string;
 }
 
-// Mock data for development
-const MOCK_PROGRESS = {
-  tokensSold: 225000000,
-  totalAllocation: 750000000,
-  amountRaised: 337500,
-};
-
 export function ActiveICO({ endTimestamp, className }: ActiveICOProps) {
-  const tokensRemaining = MOCK_PROGRESS.totalAllocation - MOCK_PROGRESS.tokensSold;
+  const tokensRemaining = MOCK_ICO_PROGRESS.totalAllocation - MOCK_ICO_PROGRESS.tokensSold;
 
   // TODO: [Next PR] Implement wallet connection via CasperWalletProvider.
   // Should prompt user to connect Casper Signer / Casper Wallet extension,
@@ -90,14 +84,14 @@ export function ActiveICO({ endTimestamp, className }: ActiveICOProps) {
 
       {/* ICO Progress */}
       <ProgressBar
-        currentValue={MOCK_PROGRESS.tokensSold}
-        maxValue={MOCK_PROGRESS.totalAllocation}
+        currentValue={MOCK_ICO_PROGRESS.tokensSold}
+        maxValue={MOCK_ICO_PROGRESS.totalAllocation}
         label="ICO Progress"
-        rightLabel={`$${MOCK_PROGRESS.amountRaised.toLocaleString()} / $${Number(ICO_CONFIG.PUBLIC_ICO.hardCap).toLocaleString()}`}
+        rightLabel={`$${MOCK_ICO_PROGRESS.amountRaised.toLocaleString()} / $${Number(ICO_CONFIG.PUBLIC_ICO.hardCap).toLocaleString()}`}
         infoColumns={[
           {
             label: 'Tokens Sold',
-            value: `${(MOCK_PROGRESS.tokensSold / 1e6).toFixed(1)}M ${ICO_CONFIG.TOKEN.symbol}`,
+            value: `${(MOCK_ICO_PROGRESS.tokensSold / 1e6).toFixed(1)}M ${ICO_CONFIG.TOKEN.symbol}`,
           },
           {
             label: 'Total Allocation',

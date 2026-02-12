@@ -1,5 +1,6 @@
 import { cn } from '@/lib/utils';
 import { ICO_CONFIG, MOCK_TRANSACTIONS } from '@/constants/ico';
+import { MOCK_PRESALE_PROGRESS, MOCK_WALLET, MOCK_USER_BALANCE } from '@/constants/icoMockData';
 import type { PaymentCurrency } from '@/types/ico';
 import { toast } from '@/lib/toast';
 import { Title } from '../shared/Title';
@@ -13,27 +14,6 @@ interface ActivePresaleProps {
   className?: string;
   endTimestamp: number;
 }
-
-// Mock data for development
-const MOCK_PROGRESS = {
-  tokensSold: 450000000,
-  totalAllocation: 1000000000,
-  amountRaised: 450000,
-};
-
-// Mock wallet data for development
-const MOCK_WALLET = {
-  address: '0x1234567890abcdef1234567890abcdef12345678',
-  balanceUSDT: 5000,
-  balanceUSDC: 3500,
-  balanceCSPR: 10000,
-};
-
-// Mock user purchased tokens data
-const MOCK_USER_BALANCE = {
-  tokensPurchased: 1505000,  // 500,000 + 1,000,000 + 5,000
-  totalSpentUSD: 1505,       // $500 + $1,000 + $5 (250 CSPR × $0.02)
-};
 
 export function ActivePresale({ className, endTimestamp }: ActivePresaleProps) {
   // TODO: [Next PR] Implement wallet connection via CasperWalletProvider.
@@ -78,13 +58,13 @@ export function ActivePresale({ className, endTimestamp }: ActivePresaleProps) {
 
           {/* Progress Bar */}
           <ProgressBar
-            currentValue={MOCK_PROGRESS.tokensSold}
-            maxValue={MOCK_PROGRESS.totalAllocation}
+            currentValue={MOCK_PRESALE_PROGRESS.tokensSold}
+            maxValue={MOCK_PRESALE_PROGRESS.totalAllocation}
             label="Progress"
-            rightLabel={`$${MOCK_PROGRESS.amountRaised.toLocaleString()} / $${Number(ICO_CONFIG.PRE_SALE.hardCap).toLocaleString()}`}
+            rightLabel={`$${MOCK_PRESALE_PROGRESS.amountRaised.toLocaleString()} / $${Number(ICO_CONFIG.PRE_SALE.hardCap).toLocaleString()}`}
             showPercentage={true}
             infoColumns={[
-              { label: 'Funds Raised', value: `$${MOCK_PROGRESS.amountRaised.toLocaleString()}` },
+              { label: 'Funds Raised', value: `$${MOCK_PRESALE_PROGRESS.amountRaised.toLocaleString()}` },
               { label: 'Initial Price', value: `$${ICO_CONFIG.PRE_SALE.price} per ${ICO_CONFIG.TOKEN.symbol}` },
             ]}
             className="w-full"

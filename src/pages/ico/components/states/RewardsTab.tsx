@@ -4,23 +4,7 @@ import { SubTitle } from '../shared/SubTitle';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 import { AreaChart, Area, XAxis, YAxis } from 'recharts';
 import { Coins, Percent, Clock, ArrowRightLeft, Users, Timer, Handshake } from 'lucide-react';
-
-const MOCK_STAKING = {
-  stakedTokens: '500,000',
-  currentAPY: '12.5',
-  nextRewards: '2d 14h 32m',
-};
-
-const MOCK_FEE_DATA = [
-  { day: '1', swap: 10, transfer: 5, bridge: 2, lease: 8, liquidation: 1 },
-  { day: '10', swap: 45, transfer: 20, bridge: 12, lease: 30, liquidation: 5 },
-  { day: '20', swap: 90, transfer: 48, bridge: 25, lease: 65, liquidation: 12 },
-  { day: '30', swap: 140, transfer: 75, bridge: 40, lease: 110, liquidation: 20 },
-  { day: '45', swap: 200, transfer: 110, bridge: 58, lease: 160, liquidation: 32 },
-  { day: '60', swap: 260, transfer: 150, bridge: 75, lease: 210, liquidation: 45 },
-  { day: '75', swap: 320, transfer: 190, bridge: 90, lease: 260, liquidation: 60 },
-  { day: '90', swap: 400, transfer: 240, bridge: 110, lease: 320, liquidation: 80 },
-];
+import { MOCK_STAKING, MOCK_FEE_DATA } from '@/constants/icoMockData';
 
 const FEE_LINES = [
   { key: 'swap', label: 'Swap', color: '#3b82f6' },
