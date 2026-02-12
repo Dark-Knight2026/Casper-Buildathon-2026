@@ -2,7 +2,7 @@ import { cn } from '@/lib/utils';
 import { Card } from './Card';
 import { formatDateTime } from '../../utils/formatters';
 
-export interface Transaction {
+export interface ICOTransaction {
   id: string;
   type: 'purchase' | 'claim';
   amount: number;
@@ -15,7 +15,7 @@ export interface Transaction {
 }
 
 interface TransactionHistoryProps {
-  transactions: Transaction[];
+  transactions: ICOTransaction[];
   className?: string;
 }
 
