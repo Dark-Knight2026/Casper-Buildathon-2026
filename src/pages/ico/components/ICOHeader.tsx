@@ -1,6 +1,7 @@
 import { ICO_CONFIG} from '@/constants/ico';
 import { MainButton } from './shared/MainButton';
 import { useNavigate } from 'react-router-dom';
+import { toast } from '@/lib/toast';
 
 
 export function ICOHeader() {
@@ -11,6 +12,7 @@ export function ICOHeader() {
   }
 
   const handleConnectWallet = () => {
+    toast.info('Wallet connection coming soon');
   };
 
   return (

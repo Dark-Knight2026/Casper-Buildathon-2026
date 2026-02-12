@@ -1,6 +1,7 @@
 import { cn } from '@/lib/utils';
 import { ICO_CONFIG, MOCK_TRANSACTIONS } from '@/constants/ico';
 import type { PaymentCurrency } from '@/types/ico';
+import { toast } from '@/lib/toast';
 import { Title } from '../shared/Title';
 import { ProgressBar } from '../shared/ProgressBar';
 import { WalletCard } from '../shared/WalletCard';
@@ -39,6 +40,7 @@ export function ActivePresale({ className, endTimestamp }: ActivePresaleProps) {
   // Should prompt user to connect Casper Signer / Casper Wallet extension,
   // retrieve the active public key, and store it in app state.
   const handleConnect = () => {
+    toast.info('Wallet connection coming soon');
   };
 
   // TODO: [Next PR] Implement full purchase flow with server-side validation.
@@ -52,7 +54,8 @@ export function ActivePresale({ className, endTimestamp }: ActivePresaleProps) {
   //   6. Handle edge cases: insufficient balance, network errors, deploy failures.
   //   7. CSRF protection: API layer must enforce CSRF tokens (via cookies/headers),
   //      SameSite cookie policy, and Origin/Referer header validation.
-  const handlePurchase = (amount: number, currency: PaymentCurrency) => {
+  const handlePurchase = (_amount: number, _currency: PaymentCurrency) => {
+    toast.info('Token purchase coming soon');
   };
 
   return (
