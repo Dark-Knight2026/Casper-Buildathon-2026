@@ -27,9 +27,9 @@ export function ICOHeader() {
               <img src="/leaseFiLogo.png" alt="" />
             </button>
             <div>
-              <h1 className="text-xl font-bold text-[hsl(var(--ico-text-primary))]">
+              <h2 className="text-xl font-bold text-[hsl(var(--ico-text-primary))]">
                 {ICO_CONFIG.TOKEN.name}
-              </h1>
+              </h2>
               <p className="text-sm text-[hsl(var(--ico-text-secondary))]">
                 {ICO_CONFIG.TOKEN.symbol} Token Sale
               </p>
