@@ -77,7 +77,7 @@ export const CountdownTimer = memo(function CountdownTimer({
       container: 'gap-2',
       card: 'w-14 h-16 md:w-16 md:h-18',
       digit: 'text-xl md:text-2xl',
-      label: 'text-[10px] md:text-xs',
+      label: 'text-xs md:text-sm',
       separator: 'text-xl md:text-2xl',
     },
     md: {
