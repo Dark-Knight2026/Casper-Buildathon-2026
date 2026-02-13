@@ -1,7 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { ICO_CONFIG } from '@/constants/ico';
 
 const MOTES_PER_CSPR = 1_000_000_000; // 1 CSPR = 10^9 motes
+const BALANCE_POLL_MS = 30_000; // 30 seconds
 
 /**
  * Validates Casper public key format.
@@ -131,84 +133,54 @@ function findTokenBalance(tokens: TokenBalance[], contractAddress: string, symbo
 
 const EMPTY_BALANCES: WalletBalances = { cspr: 0, usdt: 0, usdc: 0, big: 0 };
 
+async function fetchAllBalances(publicKey: string): Promise<WalletBalances> {
+  if (!isValidPublicKey(publicKey)) {
+    throw new Error('Invalid public key format');
+  }
+
+  const [cspr, ftTokens] = await Promise.all([
+    fetchCSPRBalance(publicKey),
+    fetchFTBalances(publicKey),
+  ]);
+
+  return {
+    cspr,
+    usdt: findTokenBalance(ftTokens, ICO_CONFIG.CONTRACTS.usdtAddress, 'USDT'),
+    usdc: findTokenBalance(ftTokens, ICO_CONFIG.CONTRACTS.usdcAddress, 'USDC'),
+    big: findTokenBalance(ftTokens, ICO_CONFIG.CONTRACTS.tokenAddress, 'BIG'),
+  };
+}
+
 /**
  * Hook for fetching wallet token balances from CSPR.Cloud API.
  *
  * Fetches CSPR native balance and CEP-18 token balances (USDT, USDC, BIG)
  * with automatic 30-second refresh interval when a publicKey is provided.
  *
- * @param {string | null | undefined} publicKey - Casper account public key (hex string)
- *
- * @returns {Object} Balance data and control functions
- * @returns {WalletBalances} returns.balances - Token balances (cspr, usdt, usdc, big)
- * @returns {boolean} returns.isLoading - Whether balances are being fetched
- * @returns {string | null} returns.error - Error message if fetch failed
- * @returns {() => void} returns.refetch - Function to manually refresh balances
- *
- * @example
- * const { balances, isLoading, error, refetch } = useWalletBalances(account?.publicKey);
- *
- * if (isLoading) return <Spinner />;
- * if (error) return <Error message={error} />;
- *
- * return (
- *   <div>
- *     <p>CSPR: {balances.cspr}</p>
- *     <p>USDT: {balances.usdt}</p>
- *     <button onClick={refetch}>Refresh</button>
- *   </div>
- * );
+ * @param publicKey - Casper account public key (hex string)
  */
 export function useWalletBalances(publicKey: string | null | undefined): UseCSPRBalanceReturn {
-  const [balances, setBalances] = useState<WalletBalances>(EMPTY_BALANCES);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const {
+    data,
+    isLoading,
+    error: queryError,
+    refetch: queryRefetch,
+  } = useQuery<WalletBalances, Error>({
+    queryKey: ['wallet-balances', publicKey],
+    queryFn: () => fetchAllBalances(publicKey!),
+    enabled: !!publicKey,
+    refetchInterval: BALANCE_POLL_MS,
+    staleTime: 10_000,
+  });
 
-  const refetch = useCallback(async () => {
-    if (!publicKey) {
-      setBalances(EMPTY_BALANCES);
-      return;
-    }
+  const refetch = useCallback(() => {
+    queryRefetch();
+  }, [queryRefetch]);
 
-    if (!isValidPublicKey(publicKey)) {
-      setError('Invalid public key format');
-      setBalances(EMPTY_BALANCES);
-      return;
-    }
-
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const [cspr, ftTokens] = await Promise.all([
-        fetchCSPRBalance(publicKey),
-        fetchFTBalances(publicKey),
-      ]);
-
-      setBalances({
-        cspr,
-        usdt: findTokenBalance(ftTokens, ICO_CONFIG.CONTRACTS.usdtAddress, 'USDT'),
-        usdc: findTokenBalance(ftTokens, ICO_CONFIG.CONTRACTS.usdcAddress, 'USDC'),
-        big: findTokenBalance(ftTokens, ICO_CONFIG.CONTRACTS.tokenAddress, 'BIG'),
-      });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to fetch balances';
-      setError(message);
-      setBalances(EMPTY_BALANCES);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [publicKey]);
-
-  useEffect(() => {
-    refetch();
-  }, [refetch]);
-
-  useEffect(() => {
-    if (!publicKey) return;
-    const interval = setInterval(refetch, 30_000);
-    return () => clearInterval(interval);
-  }, [publicKey, refetch]);
-
-  return { balances, isLoading, error, refetch };
+  return {
+    balances: data ?? EMPTY_BALANCES,
+    isLoading,
+    error: queryError?.message ?? null,
+    refetch,
+  };
 }

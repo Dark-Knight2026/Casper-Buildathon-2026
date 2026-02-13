@@ -19,6 +19,7 @@
  */
 
 import { useState, useCallback, useMemo } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import type { PaymentCurrency } from '@/types/ico';
 import { useICOWallet } from './useICOWallet';
 import { useWalletBalances } from './useWalletBalances';
@@ -93,6 +94,7 @@ export function usePurchaseFlow({
   onPurchaseSuccess,
   onPurchaseError,
 }: UsePurchaseFlowOptions): UsePurchaseFlowReturn {
+  const queryClient = useQueryClient();
   const { isConnected, account, connect, clickRef } = useICOWallet();
   const { balances } = useWalletBalances(account?.publicKey);
 
@@ -113,6 +115,7 @@ export function usePurchaseFlow({
     {
       onSuccess: (txHash, tokensReceived) => {
         console.log('Purchase successful:', txHash, tokensReceived);
+        queryClient.invalidateQueries({ queryKey: ['ico-schedules'] });
         setShowToast(true);
         setShowConfirmModal(false);
         setPendingPurchase(null);

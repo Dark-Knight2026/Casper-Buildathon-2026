@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useCallback, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { getAllSchedules } from '@/services/ico/icoContractService';
 import type { SaleTimestamps } from '@/types/ico';
 import type { ICOSchedule } from '@/services/ico/contractTypes';
@@ -25,8 +26,7 @@ export interface ICOScheduleData {
 
 // ── Constants ────────────────────────────────────────────────────────
 
-// Poll every 5 minutes - schedule data rarely changes
-const POLL_INTERVAL_MS = 5 * 60 * 1000;
+const POLL_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
 const TOKEN_DECIMALS = 18;
 const PRICE_DECIMALS = 6; // USD price uses 6 decimals (like USDC/USDT)
 const DECIMALS_DIVISOR = 10n ** BigInt(TOKEN_DECIMALS);
@@ -63,68 +63,39 @@ function scheduleToProgress(schedule: ICOSchedule): ScheduleProgress {
   };
 }
 
-// ── Hook ─────────────────────────────────────────────────────────────
+// ── Fetch function ──────────────────────────────────────────────────
 
 interface FetchedData {
   presale: ICOSchedule | null;
   ico: ICOSchedule | null;
 }
 
+async function fetchSchedules(): Promise<FetchedData> {
+  const schedules = await getAllSchedules();
+
+  const presale = schedules.find((s) => s.id === 0n)?.schedule ?? null;
+  const ico = schedules.find((s) => s.id === 1n)?.schedule ?? null;
+
+  return { presale, ico };
+}
+
+// ── Hook ─────────────────────────────────────────────────────────────
+
 export function useICOSchedules(): ICOScheduleData {
-  const [data, setData] = useState<FetchedData | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
-  const mountedRef = useRef(false);
-
-  // Reset mountedRef on mount (fixes React StrictMode double-mount)
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
-
-  const fetchSchedules = useCallback(async () => {
-    console.log('[useICOSchedules] Starting fetch...');
-    try {
-      const schedules = await getAllSchedules();
-      console.log('[useICOSchedules] Raw schedules from contract:', schedules);
-
-      if (!mountedRef.current) return;
-
-      const presale = schedules.find((s) => s.id === 0n)?.schedule ?? null;
-      const ico = schedules.find((s) => s.id === 1n)?.schedule ?? null;
-
-      console.log('[useICOSchedules] Parsed presale:', presale);
-      console.log('[useICOSchedules] Parsed ico:', ico);
-
-      setData({ presale, ico });
-      setError(null);
-    } catch (err) {
-      console.error('[useICOSchedules] Fetch error:', err);
-      if (!mountedRef.current) return;
-      setError(err instanceof Error ? err : new Error('Failed to fetch ICO schedules'));
-    } finally {
-      if (mountedRef.current) {
-        setIsLoading(false);
-        console.log('[useICOSchedules] Fetch complete, isLoading = false');
-      }
-    }
-  }, []);
-
-  // Initial fetch
-  useEffect(() => {
-    fetchSchedules();
-  }, [fetchSchedules]);
-
-  // Poll every 5 minutes
-  useEffect(() => {
-    const interval = setInterval(fetchSchedules, POLL_INTERVAL_MS);
-    return () => clearInterval(interval);
-  }, [fetchSchedules]);
+  const {
+    data,
+    isLoading,
+    error: queryError,
+    refetch: queryRefetch,
+  } = useQuery<FetchedData, Error>({
+    queryKey: ['ico-schedules'],
+    queryFn: fetchSchedules,
+    staleTime: POLL_INTERVAL_MS,
+    refetchInterval: POLL_INTERVAL_MS,
+    refetchOnWindowFocus: false,
+  });
 
   const result = useMemo((): Omit<ICOScheduleData, 'isLoading' | 'error' | 'refetch'> => {
-    // Still loading or no data
     if (!data) {
       return {
         timestamps: null,
@@ -153,10 +124,14 @@ export function useICOSchedules(): ICOScheduleData {
     };
   }, [data]);
 
+  const refetch = useCallback(() => {
+    queryRefetch();
+  }, [queryRefetch]);
+
   return {
     ...result,
     isLoading,
-    error,
-    refetch: fetchSchedules,
+    error: queryError ?? null,
+    refetch,
   };
 }
