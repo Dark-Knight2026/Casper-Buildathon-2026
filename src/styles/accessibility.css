@@ -55,20 +55,6 @@
   outline-offset: 2px;
 }
 
-/* Focus indicators - WCAG AA compliant */
-*:focus-visible {
-  outline: 2px solid #2563eb;
-  outline-offset: 2px;
-  border-radius: 0.25rem;
-}
-
-/* High contrast focus for buttons */
-button:focus-visible,
-a:focus-visible,
-[role="button"]:focus-visible {
-  outline: 3px solid #2563eb;
-  outline-offset: 2px;
-}
 
 /* Focus within for containers */
 *:focus-within {
@@ -188,7 +174,8 @@ select:valid {
 }
 
 /* Hidden content */
-[aria-hidden="true"],
+/* Note: Do NOT hide [aria-hidden="true"] with CSS - Radix UI uses this attribute
+   to manage accessibility for modals/dropdowns, and hiding it visually breaks the UI */
 [hidden] {
   display: none !important;
 }

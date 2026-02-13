@@ -1,11 +1,13 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import tailwindcss from "@tailwindcss/vite"
 import path from 'path';
 import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig({
   plugins: [
     react(),
+    tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', '/images/RealEstate.jpg', '/images/RealEstate.jpg'],
@@ -103,5 +105,11 @@ export default defineConfig({
       '@tanstack/react-query',
     ],
     exclude: ['@radix-ui/react-icons'],
+  },
+  // Test configuration
+  test: {
+    deps: {
+      inline: ['casper-js-sdk']
+    }
   },
 });
