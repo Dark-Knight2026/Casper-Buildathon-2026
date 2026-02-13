@@ -135,13 +135,19 @@ export function WalletCard({
       {amount && Number(amount) > 0 && (
         <div className="w-full p-4 rounded-xl bg-sky-900/20 border border-sky-800/30 mb-6">
           <div className="flex justify-between items-center">
-            <span className="text-sm text-[hsl(var(--ico-text-secondary))]">You will receive</span>
+            <span className="text-sm text-[hsl(var(--ico-text-secondary))]">You will receive (estimate)</span>
             <span className="text-lg font-bold text-[hsl(var(--ico-text-primary))]">
-              {tokensToReceive.toLocaleString(undefined, { maximumFractionDigits: 2 })} {tokenSymbol}
+              ≈{tokensToReceive.toLocaleString(undefined, { maximumFractionDigits: 2 })} {tokenSymbol}
             </span>
           </div>
           <p className="text-xs text-sky-400 mt-1">
             Rate: 1 {tokenSymbol} = {(tokenPrice / currencyRate).toLocaleString(undefined, { maximumFractionDigits: 6 })} {currency}
+          </p>
+          {/* Floating-point note: these are UI estimates only. Final amounts are validated
+              server-side using integer arithmetic in smallest units (motes/decimals).
+              BigInt is unnecessary here — the backend is the source of truth. */}
+          <p className="text-xs text-[hsl(var(--ico-text-secondary))] mt-1">
+            Final amount confirmed at purchase
           </p>
         </div>
       )}

@@ -88,7 +88,7 @@ export function DashboardTabs({
         {/* Mobile: Dropdown Menu */}
         <div className="md:hidden w-full pb-3 border-b border-sky-900">
           <DropdownMenu>
-            <DropdownMenuTrigger className="flex items-center justify-between w-full px-3 py-2 rounded-lg bg-sky-950/50 border border-sky-800 text-[hsl(var(--ico-text-primary))] focus:outline-none focus:ring-2 focus:ring-sky-500/50">
+            <DropdownMenuTrigger aria-label="Open tab menu" className="flex items-center justify-between w-full px-3 py-2 rounded-lg bg-sky-950/50 border border-sky-800 text-[hsl(var(--ico-text-primary))] focus:outline-none focus:ring-2 focus:ring-sky-500/50">
               <span className="flex items-center gap-2">
                 {activeTab?.icon && (
                   <span className="text-sky-500">{activeTab.icon}</span>

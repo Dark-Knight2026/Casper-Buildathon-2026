@@ -1,68 +1,30 @@
 import { cn } from '@/lib/utils';
 import { Card } from '../shared/Card';
 import { CountdownTimer } from '../shared/CountdownTimer';
-import { VestingProgressBlock, VestingEntry } from '../shared/VestingProgressBlock';
+import { VestingProgressBlock } from '../shared/VestingProgressBlock';
 import { ICO_CONFIG } from '@/constants/ico';
+import { MOCK_VESTING_INFO, MOCK_VESTING_ENTRIES } from '@/constants/icoMockData';
 import { Wallet, Lock, Unlock, DollarSign } from 'lucide-react';
 import { Title } from '../shared/Title';
+import { formatNumber, formatUSD } from '../../utils/formatters';
 
 interface DashboardICOCountdownProps {
   icoStartTimestamp: number;
   className?: string;
 }
 
-// Mock data for development - Vesting model
-const MOCK_VESTING_DATA = {
-  bigPurchased: '500000',
-  bigLocked: '500000',
-  bigAvailable: '0',
-  vestingStartDate: 'After ICO ends',
-  vestingDuration: '12 months',
-  vestingCliff: '3 months',
-};
-
-// Mock vesting entries - multiple purchases with linear unlock
-const MOCK_VESTING_ENTRIES: VestingEntry[] = [
-  {
-    id: '1',
-    lockedAmount: 200000,
-    unlockTimestamp: Date.now() + 30 * 24 * 60 * 60 * 1000, // 1 month from now
-    purchaseTimestamp: Date.now() - 60 * 24 * 60 * 60 * 1000, // 2 months ago
-  },
-  {
-    id: '2',
-    lockedAmount: 150000,
-    unlockTimestamp: Date.now() + 60 * 24 * 60 * 60 * 1000, // 2 months from now
-    purchaseTimestamp: Date.now() - 30 * 24 * 60 * 60 * 1000, // 1 month ago
-  },
-  {
-    id: '3',
-    lockedAmount: 150000,
-    unlockTimestamp: Date.now() + 90 * 24 * 60 * 60 * 1000, // 3 months from now
-    purchaseTimestamp: Date.now() - 14 * 24 * 60 * 60 * 1000, // 2 weeks ago
-  },
-];
-
 export function DashboardICOCountdown({ icoStartTimestamp, className }: DashboardICOCountdownProps) {
-  const formatNumber = (value: string | number) => {
-    return Number(value).toLocaleString();
-  };
-
-  const formatUSD = (value: string | number) => {
-    return `$${Number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  };
-
   // Calculate USD values based on token prices
-  const tokensOwned = Number(MOCK_VESTING_DATA.bigPurchased);
+  const tokensOwned = Number(MOCK_VESTING_INFO.bigPurchased);
   const presalePrice = Number(ICO_CONFIG.PRE_SALE.price);
   const estValuePresale = tokensOwned * presalePrice;
-  const availableTokens = Number(MOCK_VESTING_DATA.bigAvailable);
+  const availableTokens = Number(MOCK_VESTING_INFO.bigAvailable);
   const availableValuePresale = availableTokens * presalePrice;
 
   const dashboardCards = [
     {
       label: 'BIG Purchased',
-      value: MOCK_VESTING_DATA.bigPurchased,
+      value: MOCK_VESTING_INFO.bigPurchased,
       usdValue: estValuePresale,
       icon: Wallet,
       iconColor: 'text-sky-500',
@@ -70,7 +32,7 @@ export function DashboardICOCountdown({ icoStartTimestamp, className }: Dashboar
     },
     {
       label: 'BIG Locked',
-      value: MOCK_VESTING_DATA.bigLocked,
+      value: MOCK_VESTING_INFO.bigLocked,
       usdValue: estValuePresale,
       icon: Lock,
       iconColor: 'text-amber-500',
@@ -78,7 +40,7 @@ export function DashboardICOCountdown({ icoStartTimestamp, className }: Dashboar
     },
     {
       label: 'BIG Available',
-      value: MOCK_VESTING_DATA.bigAvailable,
+      value: MOCK_VESTING_INFO.bigAvailable,
       usdValue: availableValuePresale,
       icon: Unlock,
       iconColor: 'text-green-500',
@@ -156,15 +118,15 @@ export function DashboardICOCountdown({ icoStartTimestamp, className }: Dashboar
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full">
             <div className="flex flex-col">
               <span className="text-sm text-[hsl(var(--ico-text-muted))]">Vesting Starts</span>
-              <span className="font-medium text-[hsl(var(--ico-text-primary))]">{MOCK_VESTING_DATA.vestingStartDate}</span>
+              <span className="font-medium text-[hsl(var(--ico-text-primary))]">{MOCK_VESTING_INFO.vestingStartDate}</span>
             </div>
             <div className="flex flex-col">
               <span className="text-sm text-[hsl(var(--ico-text-muted))]">Cliff Period</span>
-              <span className="font-medium text-[hsl(var(--ico-text-primary))]">{MOCK_VESTING_DATA.vestingCliff}</span>
+              <span className="font-medium text-[hsl(var(--ico-text-primary))]">{MOCK_VESTING_INFO.vestingCliff}</span>
             </div>
             <div className="flex flex-col">
               <span className="text-sm text-[hsl(var(--ico-text-muted))]">Total Duration</span>
-              <span className="font-medium text-[hsl(var(--ico-text-primary))]">{MOCK_VESTING_DATA.vestingDuration}</span>
+              <span className="font-medium text-[hsl(var(--ico-text-primary))]">{MOCK_VESTING_INFO.vestingDuration}</span>
             </div>
           </div>
 

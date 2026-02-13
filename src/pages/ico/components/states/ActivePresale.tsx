@@ -1,6 +1,9 @@
 import { cn } from '@/lib/utils';
 import type { ScheduleProgress } from '@/hooks/ico/useICOSchedules';
 import { ICO_CONFIG, MOCK_TRANSACTIONS } from '@/constants/ico';
+import { MOCK_PRESALE_PROGRESS, MOCK_WALLET, MOCK_USER_BALANCE } from '@/constants/icoMockData';
+import type { PaymentCurrency } from '@/types/ico';
+import { toast } from '@/lib/toast';
 import { Title } from '../shared/Title';
 import { ProgressBar } from '../shared/ProgressBar';
 import { WalletCard } from '../shared/WalletCard';
@@ -17,11 +20,6 @@ interface ActivePresaleProps {
   progress?: ScheduleProgress | null;
 }
 
-const MOCK_USER_BALANCE = {
-  tokensPurchased: 1505000,  // 500,000 + 1,000,000 + 5,000
-  totalSpentUSD: 1505,       // $500 + $1,000 + $5 (250 CSPR × $0.02)
-};
-
 export function ActivePresale({ className, endTimestamp, progress }: ActivePresaleProps) {
   const tokenPrice = progress?.priceUsd ?? 0;
 
@@ -37,6 +35,7 @@ export function ActivePresale({ className, endTimestamp, progress }: ActivePresa
     tokenPrice,
     tokenSymbol: ICO_CONFIG.TOKEN.symbol,
   });
+
 
   return (
     <div className={cn('max-w-5xl mx-auto', className)}>

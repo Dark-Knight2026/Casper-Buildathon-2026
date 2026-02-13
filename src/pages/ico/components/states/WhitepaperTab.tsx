@@ -117,7 +117,7 @@ export function WhitepaperTab({ className }: WhitepaperTabProps) {
         </div>
 
         <div className="p-2 overflow-y-auto h-[calc(100%-120px)]">
-          <nav className="space-y-1">
+          <nav aria-label="Whitepaper table of contents" className="space-y-1">
             {WHITEPAPER_SECTIONS.map((section) => (
               <div key={section.id}>
                 <button
@@ -127,6 +127,9 @@ export function WhitepaperTab({ className }: WhitepaperTabProps) {
                       toggleSection(section.id);
                     }
                   }}
+                  aria-label={`Navigate to ${section.title}${section.subsections ? ', toggle subsections' : ''}`}
+                  aria-expanded={section.subsections ? expandedSections.includes(section.id) : undefined}
+                  aria-current={activeSection === section.id ? 'true' : undefined}
                   className={cn(
                     'w-full flex items-start gap-2 px-3 py-2 rounded-lg text-sm text-start transition-colors',
                     activeSection === section.id
@@ -151,6 +154,8 @@ export function WhitepaperTab({ className }: WhitepaperTabProps) {
                       <button
                         key={sub.id}
                         onClick={() => navigateToPage(sub.id, sub.page)}
+                        aria-label={`Navigate to ${sub.title}`}
+                        aria-current={activeSection === sub.id ? 'true' : undefined}
                         className={cn(
                           'w-full flex! justify-start! text-left px-3 py-1.5 rounded-lg text-xs transition-colors',
                           activeSection === sub.id
@@ -192,6 +197,7 @@ export function WhitepaperTab({ className }: WhitepaperTabProps) {
             <p className="mb-4">Unable to display PDF in browser</p>
             <button
               onClick={handleDownload}
+              aria-label="Download BIG WhitePaper PDF"
               className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#d4a847] text-black font-medium text-sm hover:bg-[#c49a3d] transition-colors"
             >
               <Download className="w-4 h-4" />

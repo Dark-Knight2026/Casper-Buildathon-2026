@@ -129,5 +129,13 @@ export default defineConfig(({ mode }) => {
     ],
     exclude: ['@radix-ui/react-icons'],
   },
+    // Test configuration
+  test: {
+    deps: {
+      inline: ['casper-js-sdk']
+    }
+  },
+
 };
+
 });

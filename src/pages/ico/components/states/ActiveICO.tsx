@@ -6,6 +6,7 @@ import { WalletCard } from '../shared/WalletCard';
 import { TransactionHistory } from '../shared/TransactionHistory';
 import { ICO_CONFIG, MOCK_TRANSACTIONS } from '@/constants/ico';
 import type { ScheduleProgress } from '@/hooks/ico/useICOSchedules';
+import { toast } from '@/lib/toast';
 import { Title } from '../shared/Title';
 import { usePurchaseFlow } from '@/hooks/ico/usePurchaseFlow';
 import { PurchaseConfirmationModal } from '../shared/PurchaseConfirmationModal';
@@ -32,6 +33,22 @@ export function ActiveICO({ endTimestamp, className, progress }: ActiveICOProps)
     tokenPrice,
     tokenSymbol: ICO_CONFIG.TOKEN.symbol,
   });
+
+  const handleConnect = () => {
+    toast.info('Wallet connection coming soon');
+  };
+
+  // TODO: [Next PR] Implement full purchase flow with server-side validation.
+  // This handler is intentionally empty in the current UI-only PR.
+  // Required integration steps:
+  //   1. Validate amount & currency on the backend (never trust client-side math).
+  //   2. Create a pending transaction record server-side before accepting payment.
+  //   3. Submit blockchain transaction (CEP-18 transfer for USDT/USDC, native deploy for CSPR).
+  //   4. Backend must verify the deploy on-chain and confirm token allocation.
+  //   5. Implement idempotency keys / nonce to prevent double-spending.
+  //   6. Handle edge cases: insufficient balance, network errors, deploy failures.
+  //   7. CSRF protection: API layer must enforce CSRF tokens (via cookies/headers),
+  //      SameSite cookie policy, and Origin/Referer header validation.
 
   return (
     <div className={cn('max-w-5xl mx-auto space-y-6 flex flex-col items-center', className)}>
@@ -73,6 +90,7 @@ export function ActiveICO({ endTimestamp, className, progress }: ActiveICOProps)
           </div>
         </div>
       )}
+
 
       <div className="w-full flex flex-col md:flex-row gap-6">
         <div className='flex flex-col gap-6 w-full'>

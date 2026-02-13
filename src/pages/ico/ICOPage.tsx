@@ -135,7 +135,16 @@ export function ICOPage() {
 
   return (
     <ScrollArea className="h-screen overflow-hidden relative bg-[hsl(var(--ico-bg-primary))]">
-      <ICOHeader />
+      {/* Skip navigation for keyboard users (WCAG 2.4.1) */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:bg-white focus:text-black focus:px-4 focus:py-2 focus:rounded"
+      >
+        Skip to main content
+      </a>
+      {/* Header */}
+      <ICOHeader/>
+      {/* Sky Glow Background */}
       <div
         className="absolute inset-0 z-0 pointer-events-none"
         style={{
@@ -146,9 +155,11 @@ export function ICOPage() {
 
       <div className="min-h-[calc(100vh-112px)] flex flex-col justify-between">
         <main className="container h-full mx-auto px-4 py-8">
-          <Suspense fallback={<LoadingFallback />}>
-            {renderStateComponent()}
-          </Suspense>
+            <PageErrorBoundary pageName="ICO">
+              <Suspense fallback={<LoadingFallback />}>
+                {renderStateComponent()}
+              </Suspense>
+            </PageErrorBoundary>
         </main>
 
         <ICOFooter />
