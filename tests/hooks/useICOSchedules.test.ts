@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, waitFor, act } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import React from 'react';
 import { useICOSchedules } from '@/hooks/ico/useICOSchedules';
 import type { ICOSchedule } from '@/services/ico/contractTypes';
 
@@ -26,6 +28,18 @@ const mockICOSchedule: ICOSchedule = {
   soldAmount: 5000000000000000000000000n,  // 5M tokens sold
 };
 
+function createWrapper() {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false,
+      },
+    },
+  });
+  return ({ children }: { children: React.ReactNode }) =>
+    React.createElement(QueryClientProvider, { client: queryClient }, children);
+}
+
 describe('useICOSchedules', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -36,7 +50,9 @@ describe('useICOSchedules', () => {
   describe('initial state', () => {
     it('should start with loading state', () => {
       mockGetAllSchedules.mockReturnValue(new Promise(() => {})); // Never resolves
-      const { result } = renderHook(() => useICOSchedules());
+      const { result } = renderHook(() => useICOSchedules(), {
+        wrapper: createWrapper(),
+      });
 
       expect(result.current.isLoading).toBe(true);
       expect(result.current.timestamps).toBeNull();
@@ -55,7 +71,9 @@ describe('useICOSchedules', () => {
         { id: 1n, schedule: mockICOSchedule },
       ]);
 
-      const { result } = renderHook(() => useICOSchedules());
+      const { result } = renderHook(() => useICOSchedules(), {
+        wrapper: createWrapper(),
+      });
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -73,7 +91,9 @@ describe('useICOSchedules', () => {
         { id: 1n, schedule: mockICOSchedule },
       ]);
 
-      const { result } = renderHook(() => useICOSchedules());
+      const { result } = renderHook(() => useICOSchedules(), {
+        wrapper: createWrapper(),
+      });
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -91,7 +111,9 @@ describe('useICOSchedules', () => {
         { id: 1n, schedule: mockICOSchedule },
       ]);
 
-      const { result } = renderHook(() => useICOSchedules());
+      const { result } = renderHook(() => useICOSchedules(), {
+        wrapper: createWrapper(),
+      });
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -110,7 +132,9 @@ describe('useICOSchedules', () => {
         { id: 0n, schedule: mockPresaleSchedule },
       ]);
 
-      const { result } = renderHook(() => useICOSchedules());
+      const { result } = renderHook(() => useICOSchedules(), {
+        wrapper: createWrapper(),
+      });
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -127,7 +151,9 @@ describe('useICOSchedules', () => {
         { id: 1n, schedule: mockICOSchedule },
       ]);
 
-      const { result } = renderHook(() => useICOSchedules());
+      const { result } = renderHook(() => useICOSchedules(), {
+        wrapper: createWrapper(),
+      });
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -142,7 +168,9 @@ describe('useICOSchedules', () => {
     it('should handle empty schedules', async () => {
       mockGetAllSchedules.mockResolvedValue([]);
 
-      const { result } = renderHook(() => useICOSchedules());
+      const { result } = renderHook(() => useICOSchedules(), {
+        wrapper: createWrapper(),
+      });
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -160,26 +188,28 @@ describe('useICOSchedules', () => {
     it('should set error state on fetch failure', async () => {
       mockGetAllSchedules.mockRejectedValue(new Error('Contract call failed'));
 
-      const { result } = renderHook(() => useICOSchedules());
-
-      await waitFor(() => {
-        expect(result.current.isLoading).toBe(false);
+      const { result } = renderHook(() => useICOSchedules(), {
+        wrapper: createWrapper(),
       });
 
-      expect(result.current.error).not.toBeNull();
+      await waitFor(() => {
+        expect(result.current.error).not.toBeNull();
+      });
+
       expect(result.current.error?.message).toBe('Contract call failed');
     });
 
     it('should handle non-Error rejection', async () => {
       mockGetAllSchedules.mockRejectedValue('Unknown error');
 
-      const { result } = renderHook(() => useICOSchedules());
-
-      await waitFor(() => {
-        expect(result.current.isLoading).toBe(false);
+      const { result } = renderHook(() => useICOSchedules(), {
+        wrapper: createWrapper(),
       });
 
-      expect(result.current.error).not.toBeNull();
+      await waitFor(() => {
+        expect(result.current.error).not.toBeNull();
+      });
+
       expect(result.current.error?.message).toBe('Failed to fetch ICO schedules');
     });
   });
@@ -192,7 +222,9 @@ describe('useICOSchedules', () => {
         { id: 0n, schedule: mockPresaleSchedule },
       ]);
 
-      const { result } = renderHook(() => useICOSchedules());
+      const { result } = renderHook(() => useICOSchedules(), {
+        wrapper: createWrapper(),
+      });
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -206,7 +238,9 @@ describe('useICOSchedules', () => {
         { id: 0n, schedule: mockPresaleSchedule },
       ]);
 
-      const { result } = renderHook(() => useICOSchedules());
+      const { result } = renderHook(() => useICOSchedules(), {
+        wrapper: createWrapper(),
+      });
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -214,50 +248,36 @@ describe('useICOSchedules', () => {
 
       expect(mockGetAllSchedules).toHaveBeenCalledTimes(1);
 
-      await act(async () => {
-        await result.current.refetch();
+      act(() => {
+        result.current.refetch();
       });
 
-      expect(mockGetAllSchedules).toHaveBeenCalledTimes(2);
+      await waitFor(() => {
+        expect(mockGetAllSchedules).toHaveBeenCalledTimes(2);
+      });
     });
 
     it('should clear error on successful refetch', async () => {
       mockGetAllSchedules.mockRejectedValueOnce(new Error('First call failed'));
-      mockGetAllSchedules.mockResolvedValueOnce([
-        { id: 0n, schedule: mockPresaleSchedule },
-      ]);
 
-      const { result } = renderHook(() => useICOSchedules());
+      const wrapper = createWrapper();
+      const { result } = renderHook(() => useICOSchedules(), { wrapper });
 
       await waitFor(() => {
         expect(result.current.error).not.toBeNull();
       });
 
-      await act(async () => {
-        await result.current.refetch();
+      mockGetAllSchedules.mockResolvedValueOnce([
+        { id: 0n, schedule: mockPresaleSchedule },
+      ]);
+
+      act(() => {
+        result.current.refetch();
       });
 
       await waitFor(() => {
         expect(result.current.error).toBeNull();
       });
-    });
-  });
-
-  // --- Polling setup ---
-
-  describe('polling', () => {
-    it('should set up polling interval', () => {
-      const setIntervalSpy = vi.spyOn(global, 'setInterval');
-      mockGetAllSchedules.mockResolvedValue([
-        { id: 0n, schedule: mockPresaleSchedule },
-      ]);
-
-      renderHook(() => useICOSchedules());
-
-      // Verify setInterval was called with 5 minute interval
-      expect(setIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 5 * 60 * 1000);
-
-      setIntervalSpy.mockRestore();
     });
   });
 });

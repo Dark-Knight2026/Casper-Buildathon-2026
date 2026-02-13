@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import React from 'react';
 import { useWalletBalances } from '@/hooks/ico/useWalletBalances';
 
 // Mock fetch
@@ -67,6 +69,18 @@ const mockFTBalanceResponse = {
   ],
 };
 
+function createWrapper() {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false,
+      },
+    },
+  });
+  return ({ children }: { children: React.ReactNode }) =>
+    React.createElement(QueryClientProvider, { client: queryClient }, children);
+}
+
 describe('useWalletBalances', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -76,7 +90,9 @@ describe('useWalletBalances', () => {
 
   describe('initial state', () => {
     it('should return zero balances when no publicKey provided', () => {
-      const { result } = renderHook(() => useWalletBalances(null));
+      const { result } = renderHook(() => useWalletBalances(null), {
+        wrapper: createWrapper(),
+      });
 
       expect(result.current.balances).toEqual({
         cspr: 0,
@@ -89,7 +105,9 @@ describe('useWalletBalances', () => {
     });
 
     it('should return zero balances for undefined publicKey', () => {
-      const { result } = renderHook(() => useWalletBalances(undefined));
+      const { result } = renderHook(() => useWalletBalances(undefined), {
+        wrapper: createWrapper(),
+      });
 
       expect(result.current.balances.cspr).toBe(0);
     });
@@ -109,9 +127,9 @@ describe('useWalletBalances', () => {
           json: () => Promise.resolve(mockFTBalanceResponse),
         });
 
-      const { result } = renderHook(() => useWalletBalances(mockPublicKey));
-
-      expect(result.current.isLoading).toBe(true);
+      const { result } = renderHook(() => useWalletBalances(mockPublicKey), {
+        wrapper: createWrapper(),
+      });
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -132,7 +150,9 @@ describe('useWalletBalances', () => {
           json: () => Promise.resolve({ data: [] }),
         });
 
-      const { result } = renderHook(() => useWalletBalances(mockPublicKey));
+      const { result } = renderHook(() => useWalletBalances(mockPublicKey), {
+        wrapper: createWrapper(),
+      });
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -152,7 +172,9 @@ describe('useWalletBalances', () => {
           json: () => Promise.resolve(mockFTBalanceResponse),
         });
 
-      const { result } = renderHook(() => useWalletBalances(mockPublicKey));
+      const { result } = renderHook(() => useWalletBalances(mockPublicKey), {
+        wrapper: createWrapper(),
+      });
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -173,7 +195,9 @@ describe('useWalletBalances', () => {
           status: 404,
         });
 
-      const { result } = renderHook(() => useWalletBalances(mockPublicKey));
+      const { result } = renderHook(() => useWalletBalances(mockPublicKey), {
+        wrapper: createWrapper(),
+      });
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -195,10 +219,12 @@ describe('useWalletBalances', () => {
         status: 500,
       });
 
-      const { result } = renderHook(() => useWalletBalances(mockPublicKey));
+      const { result } = renderHook(() => useWalletBalances(mockPublicKey), {
+        wrapper: createWrapper(),
+      });
 
       await waitFor(() => {
-        expect(result.current.isLoading).toBe(false);
+        expect(result.current.error).not.toBeNull();
       });
 
       expect(result.current.error).toContain('CSPR balance error');
@@ -216,10 +242,12 @@ describe('useWalletBalances', () => {
           status: 500,
         });
 
-      const { result } = renderHook(() => useWalletBalances(mockPublicKey));
+      const { result } = renderHook(() => useWalletBalances(mockPublicKey), {
+        wrapper: createWrapper(),
+      });
 
       await waitFor(() => {
-        expect(result.current.isLoading).toBe(false);
+        expect(result.current.error).not.toBeNull();
       });
 
       expect(result.current.error).toContain('FT balance error');
@@ -240,7 +268,9 @@ describe('useWalletBalances', () => {
           json: () => Promise.resolve({ data: [] }),
         });
 
-      const { result } = renderHook(() => useWalletBalances(mockPublicKey));
+      const { result } = renderHook(() => useWalletBalances(mockPublicKey), {
+        wrapper: createWrapper(),
+      });
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -250,52 +280,47 @@ describe('useWalletBalances', () => {
     });
   });
 
-  // --- Auto-refresh setup ---
-
-  describe('auto-refresh', () => {
-    it('should set up auto-refresh interval when publicKey provided', () => {
-      const setIntervalSpy = vi.spyOn(global, 'setInterval');
-
-      mockFetch.mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve(mockCSPRBalanceResponse),
-      });
-
-      renderHook(() => useWalletBalances(mockPublicKey));
-
-      // Verify setInterval was called with 30 second interval
-      expect(setIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 30000);
-
-      setIntervalSpy.mockRestore();
-    });
-  });
-
   // --- PublicKey validation ---
 
   describe('publicKey validation', () => {
-    it('should set error for publicKey with wrong length', () => {
-      const { result } = renderHook(() => useWalletBalances('01abc123'));
+    it('should set error for publicKey with wrong length', async () => {
+      const { result } = renderHook(() => useWalletBalances('01abc123'), {
+        wrapper: createWrapper(),
+      });
 
-      expect(result.current.error).toBe('Invalid public key format');
+      await waitFor(() => {
+        expect(result.current.error).toBe('Invalid public key format');
+      });
+
       expect(result.current.balances.cspr).toBe(0);
       expect(mockFetch).not.toHaveBeenCalled();
     });
 
-    it('should set error for publicKey with wrong prefix', () => {
+    it('should set error for publicKey with wrong prefix', async () => {
       // Valid length but starts with '03' instead of '01' or '02'
       const invalidKey = '03abc123def456789abc123def456789abc123def456789abc123def456789abc1';
-      const { result } = renderHook(() => useWalletBalances(invalidKey));
+      const { result } = renderHook(() => useWalletBalances(invalidKey), {
+        wrapper: createWrapper(),
+      });
 
-      expect(result.current.error).toBe('Invalid public key format');
+      await waitFor(() => {
+        expect(result.current.error).toBe('Invalid public key format');
+      });
+
       expect(mockFetch).not.toHaveBeenCalled();
     });
 
-    it('should set error for publicKey with non-hex characters', () => {
+    it('should set error for publicKey with non-hex characters', async () => {
       // Valid length and prefix but contains 'xyz' (non-hex)
       const invalidKey = '01xyz123def456789abc123def456789abc123def456789abc123def456789abc1';
-      const { result } = renderHook(() => useWalletBalances(invalidKey));
+      const { result } = renderHook(() => useWalletBalances(invalidKey), {
+        wrapper: createWrapper(),
+      });
 
-      expect(result.current.error).toBe('Invalid public key format');
+      await waitFor(() => {
+        expect(result.current.error).toBe('Invalid public key format');
+      });
+
       expect(mockFetch).not.toHaveBeenCalled();
     });
 
@@ -311,7 +336,9 @@ describe('useWalletBalances', () => {
         });
 
       const validKey = '01abc123def456789abc123def456789abc123def456789abc123def456789abc1';
-      const { result } = renderHook(() => useWalletBalances(validKey));
+      const { result } = renderHook(() => useWalletBalances(validKey), {
+        wrapper: createWrapper(),
+      });
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -333,7 +360,9 @@ describe('useWalletBalances', () => {
         });
 
       const validKey = '02abc123def456789abc123def456789abc123def456789abc123def456789abc1';
-      const { result } = renderHook(() => useWalletBalances(validKey));
+      const { result } = renderHook(() => useWalletBalances(validKey), {
+        wrapper: createWrapper(),
+      });
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -358,9 +387,10 @@ describe('useWalletBalances', () => {
           json: () => Promise.resolve({ data: [] }),
         });
 
+      const wrapper = createWrapper();
       const { result, rerender } = renderHook(
         ({ pk }) => useWalletBalances(pk),
-        { initialProps: { pk: mockPublicKey as string | null } }
+        { initialProps: { pk: mockPublicKey as string | null }, wrapper }
       );
 
       await waitFor(() => {

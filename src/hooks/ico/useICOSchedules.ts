@@ -71,12 +71,16 @@ interface FetchedData {
 }
 
 async function fetchSchedules(): Promise<FetchedData> {
-  const schedules = await getAllSchedules();
+  try {
+    const schedules = await getAllSchedules();
 
-  const presale = schedules.find((s) => s.id === 0n)?.schedule ?? null;
-  const ico = schedules.find((s) => s.id === 1n)?.schedule ?? null;
+    const presale = schedules.find((s) => s.id === 0n)?.schedule ?? null;
+    const ico = schedules.find((s) => s.id === 1n)?.schedule ?? null;
 
-  return { presale, ico };
+    return { presale, ico };
+  } catch (err) {
+    throw err instanceof Error ? err : new Error('Failed to fetch ICO schedules');
+  }
 }
 
 // ── Hook ─────────────────────────────────────────────────────────────
