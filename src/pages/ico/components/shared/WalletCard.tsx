@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo } from 'react';
 import { cn } from '@/lib/utils';
-import { ICO_CONFIG } from '@/constants/ico';
+import { getCurrencyRateUsd } from '@/constants/ico';
 import { Card } from './Card';
 import type { PaymentCurrency } from '@/types/ico';
 import { MainButton } from './MainButton';
@@ -16,6 +16,7 @@ interface WalletCardProps {
   balancesLoading?: boolean;
   tokenPrice: number;
   tokenSymbol: string;
+  csprPriceUsd?: number;
   onConnect?: () => void;
   onPurchase?: (amount: number, currency: PaymentCurrency) => void;
   className?: string;
@@ -31,6 +32,7 @@ export function WalletCard({
   balancesLoading,
   tokenPrice,
   tokenSymbol,
+  csprPriceUsd,
   onConnect,
   onPurchase,
   className,
@@ -46,15 +48,7 @@ export function WalletCard({
     CARD: 0,
   };
   const currentBalance = balances[currency];
-  // TODO: [Next PR] Replace hardcoded CURRENCY_RATES with live rate from useCSPRPrice hook.
-  // Currently uses a static CSPR rate — see src/hooks/useCSPRPrice.ts for the existing
-  // real-time price fetching implementation that should be integrated here.
-  //
-  // NOTE: These calculations are for UI estimation/display only.
-  // Authoritative token amounts must be computed on the backend using integer
-  // arithmetic in smallest units (motes for CSPR, token decimals for BIG)
-  // to avoid JavaScript floating-point precision errors.
-  const currencyRate = ICO_CONFIG.CURRENCY_RATES[currency];
+  const currencyRate = getCurrencyRateUsd(currency, csprPriceUsd);
   const amountInUsd = useMemo(
     () => (amount ? Number(amount) * currencyRate : 0),
     [amount, currencyRate]

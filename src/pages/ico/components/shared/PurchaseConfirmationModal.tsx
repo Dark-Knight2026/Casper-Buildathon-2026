@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { cn } from '@/lib/utils';
-import { ICO_CONFIG } from '@/constants/ico';
+import { ICO_CONFIG, getCurrencyRateUsd } from '@/constants/ico';
 import { Card } from './Card';
 import { MainButton } from './MainButton';
 import type { PaymentCurrency } from '@/types/ico';
@@ -16,6 +16,7 @@ interface PurchaseConfirmationModalProps {
   tokenPrice: number;
   tokenSymbol: string;
   purchaseState: PurchaseState;
+  csprPriceUsd?: number;
 }
 
 export function PurchaseConfirmationModal({
@@ -27,10 +28,11 @@ export function PurchaseConfirmationModal({
   tokenPrice,
   tokenSymbol,
   purchaseState,
+  csprPriceUsd,
 }: PurchaseConfirmationModalProps) {
 
   // Calculate tokens to receive
-  const currencyRate = ICO_CONFIG.CURRENCY_RATES[currency];
+  const currencyRate = getCurrencyRateUsd(currency, csprPriceUsd);
   const amountInUsd = amount * currencyRate;
   const tokensToReceive = tokenPrice > 0 ? amountInUsd / tokenPrice : 0;
 

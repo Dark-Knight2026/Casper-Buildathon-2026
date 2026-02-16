@@ -18,8 +18,10 @@ import {
   calculateTokensReceived,
   fromRawAmount,
 } from '@/services/ico/icoPurchaseService';
-import { ICO_CONFIG } from '@/constants/ico';
+import { ICO_CONFIG, getCurrencyRateUsd } from '@/constants/ico';
 import type { PaymentCurrency } from '@/types/ico';
+
+const LOG_PREFIX = '[usePurchaseToken]';
 
 /**
  * Derives account hash from public key hex string.
@@ -27,7 +29,7 @@ import type { PaymentCurrency } from '@/types/ico';
  */
 function deriveAccountHash(publicKeyHex: string): string {
   if (!publicKeyHex) {
-    console.warn('[usePurchaseToken] Empty public key provided');
+    console.warn(LOG_PREFIX, 'Empty public key provided');
     return '';
   }
 
@@ -36,7 +38,7 @@ function deriveAccountHash(publicKeyHex: string): string {
     const accountHash = pk.accountHash();
     return accountHash.toPrefixedString();
   } catch (err) {
-    console.warn('[usePurchaseToken] Failed to derive account hash:', err);
+    console.warn(LOG_PREFIX, 'Failed to derive account hash:', err);
     return '';
   }
 }
@@ -96,6 +98,7 @@ export function usePurchaseToken(
   tokenPriceUsd: number,
   clickRef: ICSPRClickSDK | null,
   options: UsePurchaseTokenOptions = {},
+  csprPriceUsd?: number,
 ): UsePurchaseTokenReturn {
   const [state, setState] = useState<PurchaseState>(initialState);
 
@@ -106,6 +109,8 @@ export function usePurchaseToken(
    */
   const purchase = useCallback(
     async (amount: string, currency: PaymentCurrency, balance: number) => {
+      console.log(LOG_PREFIX, '=== PURCHASE START ===', { amount, currency, balance, publicKey });
+
       if (!publicKey) {
         const error = 'Wallet not connected';
         setState((prev) => ({ ...prev, step: 'failed', error, isProcessing: false }));
@@ -138,12 +143,15 @@ export function usePurchaseToken(
 
       try {
         // 1. Validate purchase
-        const validation = validatePurchase(amount, currency, balance);
+        console.log(LOG_PREFIX, '[Step 1] Validating purchase...');
+        const validation = validatePurchase(amount, currency, balance, csprPriceUsd);
         if (!validation.valid) {
           throw new Error(validation.error);
         }
+        console.log(LOG_PREFIX, '[Step 1] Validation passed');
 
         // 2. Check approval and prepare transactions
+        console.log(LOG_PREFIX, '[Step 2] Preparing purchase (checking approval, building tx)...');
         setState((prev) => ({ ...prev, step: 'checking-approval' }));
 
         const { approvalNeeded, approvalTransaction, purchaseTransaction } =
@@ -154,19 +162,28 @@ export function usePurchaseToken(
             currency,
           });
 
+        console.log(LOG_PREFIX, '[Step 2] Purchase prepared:', {
+          approvalNeeded,
+        });
+
         // 3. Handle approval if needed
         if (approvalNeeded && approvalTransaction) {
+          console.log(LOG_PREFIX, '[Step 3] Approval needed, sending approval tx...');
           onApprovalNeeded?.();
 
-          // Sign and send approval transaction using CSPR.click SDK
           setState((prev) => ({ ...prev, step: 'awaiting-approval-signature' }));
 
+          const approvalJSON = approvalTransaction.toJSON();
+          console.log(LOG_PREFIX, '[Step 3] Approval JSON:', approvalJSON);
+
           const approvalResult = await clickRef.send(
-            approvalTransaction.toJSON() as object,
+            approvalJSON as object,
             publicKey,
-            true, // waitProcessing
-            300, // 5 min timeout (seconds)
+            true,
+            300,
           );
+
+          console.log(LOG_PREFIX, '[Step 3] Approval result:', approvalResult);
 
           if (!approvalResult || approvalResult.cancelled) {
             throw new Error('Approval transaction was cancelled');
@@ -183,17 +200,24 @@ export function usePurchaseToken(
             step: 'approval-pending',
             approvalTxHash,
           }));
+          console.log(LOG_PREFIX, '[Step 3] Approval confirmed:', approvalTxHash);
         }
 
         // 4. Sign and send purchase transaction
+        console.log(LOG_PREFIX, '[Step 4] Sending purchase tx...');
         setState((prev) => ({ ...prev, step: 'awaiting-purchase-signature' }));
 
+        const purchaseJSON = purchaseTransaction.toJSON();
+        console.log(LOG_PREFIX, '[Step 4] Transaction JSON:', purchaseJSON);
+
+        console.log(LOG_PREFIX, '[Step 4] Calling clickRef.send()...');
         const purchaseResult = await clickRef.send(
-          purchaseTransaction.toJSON() as object,
+          purchaseJSON as object,
           publicKey,
-          true, // waitProcessing
-          300, // 5 min timeout (seconds)
+          true,
+          300,
         );
+        console.log(LOG_PREFIX, '[Step 4] Send result:', purchaseResult);
 
         if (!purchaseResult || purchaseResult.cancelled) {
           throw new Error('Purchase transaction was cancelled');
@@ -210,9 +234,10 @@ export function usePurchaseToken(
           step: 'purchase-pending',
           purchaseTxHash,
         }));
+        console.log(LOG_PREFIX, '[Step 4] Purchase sent:', purchaseTxHash);
 
         // 5. Calculate tokens received
-        const tokensRaw = calculateTokensReceived(amount, currency, tokenPriceUsd);
+        const tokensRaw = calculateTokensReceived(amount, currency, tokenPriceUsd, csprPriceUsd);
         const tokensReceived = fromRawAmount(tokensRaw, ICO_CONFIG.TOKEN.decimals);
 
         // 6. Success!
@@ -223,9 +248,11 @@ export function usePurchaseToken(
           isProcessing: false,
         }));
 
+        console.log(LOG_PREFIX, '=== PURCHASE SUCCESS ===', { purchaseTxHash, tokensReceived });
         onSuccess?.(purchaseTxHash, tokensReceived);
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Purchase failed';
+        console.error(LOG_PREFIX, '=== PURCHASE FAILED ===', err);
 
         setState((prev) => ({
           ...prev,
@@ -237,7 +264,7 @@ export function usePurchaseToken(
         onError?.(errorMessage);
       }
     },
-    [publicKey, tokenPriceUsd, clickRef, onSuccess, onError, onApprovalNeeded],
+    [publicKey, tokenPriceUsd, clickRef, onSuccess, onError, onApprovalNeeded, csprPriceUsd],
   );
 
   /**
@@ -257,13 +284,13 @@ export function usePurchaseToken(
         return '0';
       }
 
-      const currencyRate = ICO_CONFIG.CURRENCY_RATES[currency];
+      const currencyRate = getCurrencyRateUsd(currency, csprPriceUsd);
       const amountInUsd = numAmount * currencyRate;
       const tokens = amountInUsd / tokenPrice;
 
       return tokens.toLocaleString(undefined, { maximumFractionDigits: 2 });
     },
-    [],
+    [csprPriceUsd],
   );
 
   return {

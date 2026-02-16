@@ -32,6 +32,7 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: ActiveP
     balances,
     balanceError,
     balancesLoading,
+    csprPriceUsd,
     handlePurchase,
     modalProps,
     toastProps,
@@ -73,7 +74,7 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: ActiveP
               currentValue={progress.tokensSold}
               maxValue={progress.totalAllocation}
               label="Progress"
-              rightLabel={`$${Math.round(progress.amountRaised).toLocaleString()} / $${Number(ICO_CONFIG.PRE_SALE.hardCap).toLocaleString()}`}
+              rightLabel={`$${Math.round(progress.amountRaised).toLocaleString()} / $${Math.round(progress.hardCapUsd).toLocaleString()}`}
               showPercentage={true}
               infoColumns={[
                 { label: 'Funds Raised', value: `$${Math.round(progress.amountRaised).toLocaleString()}` },
@@ -82,7 +83,9 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: ActiveP
               className="w-full"
             />
           )}
-          <p className='text-[hsl(var(--ico-text-secondary))] pl-2'>Hard Cap: ${Number(ICO_CONFIG.PRE_SALE.hardCap).toLocaleString()}</p>
+          {progress && (
+            <p className='text-[hsl(var(--ico-text-secondary))] pl-2'>Hard Cap: ${Math.round(progress.hardCapUsd).toLocaleString()}</p>
+          )}
         </div>
 
         {/* Wallet Card */}
@@ -96,6 +99,7 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: ActiveP
           balancesLoading={balancesLoading}
           tokenPrice={progress?.priceUsd ?? 0}
           tokenSymbol={ICO_CONFIG.TOKEN.symbol}
+          csprPriceUsd={csprPriceUsd}
           onConnect={connect}
           onPurchase={handlePurchase}
           className="w-full"

@@ -23,6 +23,7 @@ import type { PaymentCurrency } from '@/types/ico';
 import { useICOWallet } from './useICOWallet';
 import { useWalletBalances } from './useWalletBalances';
 import { usePurchaseToken, type PurchaseState } from './usePurchaseToken';
+import { useCSPRPrice } from '@/hooks/useCSPRPrice';
 
 interface PendingPurchase {
   amount: number;
@@ -50,6 +51,9 @@ interface UsePurchaseFlowReturn {
   balanceError: string | null;
   balancesLoading: boolean;
 
+  // Live CSPR/USD rate
+  csprPriceUsd: number;
+
   // Modal state
   showConfirmModal: boolean;
   pendingPurchase: PendingPurchase | null;
@@ -76,6 +80,7 @@ interface UsePurchaseFlowReturn {
     tokenPrice: number;
     tokenSymbol: string;
     purchaseState: PurchaseState;
+    csprPriceUsd: number;
   } | null;
 
   toastProps: {
@@ -97,7 +102,8 @@ export function usePurchaseFlow({
 }: UsePurchaseFlowOptions): UsePurchaseFlowReturn {
   const { isConnected, account, connect, clickRef } = useICOWallet();
   const { balances, error: balanceError, isLoading: balancesLoading, refetch: refetchBalances } = useWalletBalances(account?.publicKey);
-  console.log('usePurchaseFlow - wallet state:', { isConnected, account, balances });
+  const { priceUSD: csprPriceUsd } = useCSPRPrice();
+  console.log('usePurchaseFlow - wallet state:', { isConnected, account, balances, csprPriceUsd });
 
   // Modal and toast state
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -114,7 +120,7 @@ export function usePurchaseFlow({
     tokenPrice,
     clickRef ?? null,
     {
-      onSuccess: (txHash, tokensReceived) => {
+      onSuccess: (txHash: string, tokensReceived: string) => {
         console.log('Purchase successful:', txHash, tokensReceived);
         setShowToast(true);
         setShowConfirmModal(false);
@@ -129,7 +135,8 @@ export function usePurchaseFlow({
         setShowToast(true);
         onPurchaseError?.(error);
       },
-    }
+    },
+    csprPriceUsd,
   );
 
   // Handle purchase button click - show confirmation modal
@@ -184,8 +191,9 @@ export function usePurchaseFlow({
       tokenPrice,
       tokenSymbol,
       purchaseState,
+      csprPriceUsd,
     };
-  }, [showConfirmModal, pendingPurchase, handleCloseModal, handleConfirmPurchase, tokenPrice, tokenSymbol, purchaseState]);
+  }, [showConfirmModal, pendingPurchase, handleCloseModal, handleConfirmPurchase, tokenPrice, tokenSymbol, purchaseState, csprPriceUsd]);
 
   // Memoized props for toast component
   const toastProps = useMemo(() => {
@@ -210,6 +218,9 @@ export function usePurchaseFlow({
     balances,
     balanceError,
     balancesLoading,
+
+    // Live CSPR/USD rate
+    csprPriceUsd,
 
     // Modal state
     showConfirmModal,

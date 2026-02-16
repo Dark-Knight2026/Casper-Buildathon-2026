@@ -19,13 +19,14 @@ import {
   URef,
 } from 'casper-js-sdk';
 
-import { ICO_CONFIG } from '@/constants/ico';
+import { ICO_CONFIG, getCurrencyRateUsd } from '@/constants/ico';
 import {
   createContractCallTransaction,
   stripHashPrefix,
   getCasperRpcClient,
   getAccountMainPurseURef,
 } from './casperClient';
+import { loadProxyCallerWasm, createProxyCallerTransaction } from './proxyCallerService';
 import { paymentCurrencyToContractCurrency } from './contractTypes';
 import { getAllowance } from './cep18Service';
 import type { PaymentCurrency } from '@/types/ico';
@@ -41,7 +42,7 @@ const CSPR_DECIMALS = 9; // CSPR uses 9 decimals (motes)
 // Gas costs (in motes = 1e-9 CSPR)
 const GAS_COST = {
   APPROVE: 3_000_000_000n, // 3 CSPR for approve
-  BUY_TOKENS_CSPR: 5_000_000_000n, // 5 CSPR for buy with CSPR
+  BUY_TOKENS_CSPR: 15_000_000_000n, // 15 CSPR for buy with CSPR (proxy_caller.wasm session code)
   BUY_TOKENS_CEP18: 4_000_000_000n, // 4 CSPR for buy with tokens
 };
 
@@ -213,19 +214,23 @@ export function createApproveTransaction(
 /**
  * Creates a purchase transaction for the ICO contract.
  *
- * The ICO contract entry point signature (from schema):
- *   purchase(purchase_amount: U256, currency: Currency, __cargo_purse: URef)
+ * The ICO contract entry point (Odra #[payable]):
+ *   pub fn purchase(&mut self, amount_to_spend: U256, currency: Currency) -> U256
  *
- * `__cargo_purse` is required by the Odra framework for `#[payable]` entry points.
- * It's the caller's purse from which the contract can pull CSPR.
- * We pass the account's main purse URef obtained via RPC.
+ * For CSPR purchases:
+ *   Uses proxy_caller.wasm which creates a temporary cargo purse, funds it
+ *   with the exact CSPR amount, and passes it as "__cargo_purse" to the contract.
+ *   This is required because Odra's attached_value() reads the cargo purse BALANCE.
+ *
+ * For CEP-18 purchases (USDT/USDC):
+ *   Direct contract call (no CSPR transfer needed, uses approve + transfer_from).
  */
-export function createPurchaseTransaction(
+export async function createPurchaseTransaction(
   senderPublicKey: string,
   amount: string,
   currency: PaymentCurrency,
   mainPurseURef: string,
-): Transaction {
+): Promise<Transaction> {
   if (currency === 'CARD') {
     throw new Error('CARD payments are handled via fiat on-ramp, not blockchain transaction');
   }
@@ -236,35 +241,58 @@ export function createPurchaseTransaction(
     currency as 'CSPR' | 'USDC' | 'USDT'
   );
 
-  // Parse the main purse URef (e.g. "uref-abc...def-007")
-  const cargoPurse = URef.fromString(mainPurseURef);
+  console.log('[createPurchaseTransaction] params:', {
+    amount: fromRawAmount(rawAmount, decimals),
+    currency,
+    rawAmount: rawAmount.toString(),
+  });
 
-  // Build args matching the Rust function signature:
-  //   pub fn purchase(&mut self, amount_to_spend: U256, currency: Currency) -> U256
-  // Odra uses function parameter names as named arg keys!
+  // CSPR: use proxy_caller.wasm to create a proper cargo purse
+  if (currency === 'CSPR') {
+    console.log('[createPurchaseTransaction] Loading proxy_caller.wasm for CSPR...');
+    const proxyWasm = await loadProxyCallerWasm();
+    console.log('[createPurchaseTransaction] WASM loaded, size:', proxyWasm.length, 'bytes');
+
+    // Entry point args WITHOUT __cargo_purse — the proxy adds it automatically
+    const entryPointArgs = Args.fromMap({
+      amount_to_spend: CLValue.newCLUInt256(rawAmount),
+      currency: CLValue.newCLUint8(contractCurrency),
+    });
+
+    const serializedSize = entryPointArgs.toBytes().length;
+    console.log('[createPurchaseTransaction] Entry point args serialized:', serializedSize, 'bytes');
+
+    const transaction = createProxyCallerTransaction(
+      senderPublicKey,
+      ICO_PACKAGE_HASH,
+      'purchase',
+      entryPointArgs,
+      rawAmount,                  // attached_value = CSPR amount in motes
+      GAS_COST.BUY_TOKENS_CSPR,  // gas payment
+      proxyWasm,
+    );
+
+    console.log('[createPurchaseTransaction] Transaction created:', {
+      hash: transaction.hash?.toHex(),
+    });
+
+    return transaction;
+  }
+
+  // USDT/USDC: direct contract call (no CSPR transfer needed)
+  const cargoPurse = URef.fromString(mainPurseURef);
   const args = Args.fromMap({
     amount_to_spend: CLValue.newCLUInt256(rawAmount),
     currency: CLValue.newCLUint8(contractCurrency),
     __cargo_purse: CLValue.newCLUref(cargoPurse),
   });
 
-  console.log('[createPurchaseTransaction] args:', {
-    purchase_amount: fromRawAmount(rawAmount, decimals),
-    currency,
-    cargo_purse: mainPurseURef,
-  });
-  console.log("args", args);
-
-  const gasCost = currency === 'CSPR'
-    ? GAS_COST.BUY_TOKENS_CSPR
-    : GAS_COST.BUY_TOKENS_CEP18;
-
   return createContractCallTransaction(
     senderPublicKey,
     ICO_PACKAGE_HASH,
     'purchase',
     args,
-    gasCost,
+    GAS_COST.BUY_TOKENS_CEP18,
     true, // ICO is an Odra contract — call via package hash
   );
 }
@@ -297,8 +325,8 @@ export async function preparePurchase(
     );
   }
 
-  // Create the purchase transaction
-  const purchaseTransaction = createPurchaseTransaction(
+  // Create the purchase transaction (async for CSPR — loads proxy_caller.wasm)
+  const purchaseTransaction = await createPurchaseTransaction(
     senderPublicKey,
     amount,
     currency,
@@ -382,6 +410,7 @@ export function validatePurchase(
   amount: string,
   currency: PaymentCurrency,
   balance: number,
+  csprRate?: number,
 ): { valid: boolean; error?: string } {
   const numAmount = parseFloat(amount);
 
@@ -390,7 +419,7 @@ export function validatePurchase(
   }
 
   // Check minimum/maximum in USD
-  const currencyRate = ICO_CONFIG.CURRENCY_RATES[currency];
+  const currencyRate = getCurrencyRateUsd(currency, csprRate);
   const amountInUsd = numAmount * currencyRate;
 
   if (amountInUsd < ICO_CONFIG.PURCHASE_LIMITS.min) {
@@ -422,13 +451,14 @@ export function calculateTokensReceived(
   amount: string,
   currency: PaymentCurrency,
   tokenPriceUsd: number,
+  csprRate?: number,
 ): bigint {
   const numAmount = parseFloat(amount);
   if (isNaN(numAmount) || numAmount <= 0 || tokenPriceUsd <= 0) {
     return 0n;
   }
 
-  const currencyRate = ICO_CONFIG.CURRENCY_RATES[currency];
+  const currencyRate = getCurrencyRateUsd(currency, csprRate);
   const amountInUsd = numAmount * currencyRate;
   const tokensFloat = amountInUsd / tokenPriceUsd;
 

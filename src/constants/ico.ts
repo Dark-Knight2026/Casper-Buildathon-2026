@@ -10,23 +10,6 @@ export const ICO_CONFIG = {
     name: 'BIG Token',
     symbol: 'BIG',
     decimals: 18,
-    totalSupply: '5000000000', // 5 billion
-  },
-
-  PRE_SALE: {
-    price: '0.001',           // USD per token
-    allocation: '1000000000', // 1 billion tokens (20%)
-    hardCap: '1000000',       // $1,000,000 USD
-    duration: 7 * 24 * 60 * 60 * 1000, // 7 days in ms
-    autoStake: true,          // Private Sale tokens auto-staked
-    fundsRaised: '500000',    // $500,000 USD raised so far
-  },
-
-  PUBLIC_ICO: {
-    price: '0.0015',          // USD per token
-    allocation: '750000000',  // 750 million tokens (15%)
-    hardCap: '1500000',       // $1,500,000 USD
-    autoStake: false,         // ICO tokens not auto-staked
   },
 
   PAYMENT_METHODS: ['USDT', 'USDC', 'CSPR', 'CARD'] as const,
@@ -42,12 +25,7 @@ export const ICO_CONFIG = {
 
   // TODO: Replace with real timestamps from backend API.
   // Use getIcoTimestamps() for fresh values — see below.
-  TIMESTAMPS_OFFSETS: {
-    presaleStart: 2 * 24 * 60 * 60 * 1000, // 2 days
-    presaleEnd: 9 * 24 * 60 * 60 * 1000,   // 9 days
-    icoStart: 12 * 24 * 60 * 60 * 1000,    // 12 days
-    icoEnd: 26 * 24 * 60 * 60 * 1000,      // 26 days
-  },
+
 
   CASPER: {
     networkName: import.meta.env.VITE_CASPER_NETWORK ?? 'casper-test',
@@ -62,32 +40,20 @@ export const ICO_CONFIG = {
 
   // Minimum and maximum purchase amounts in USD
   PURCHASE_LIMITS: {
-    min: 10,      // $10 minimum
+    min: 1,      // $1 minimum
     max: 100000,  // $100,000 maximum
   },
 
-  // Currency to USD conversion rates (constant for now)
-  // TODO: [Next PR] Replace hardcoded CSPR rate with real-time price oracle.
-  // CSPR is volatile — a hardcoded rate can cause significant over/under-charging.
-  // Integration plan:
-  //   1. Use useCSPRPrice hook (src/hooks/useCSPRPrice.ts) which already fetches
-  //      live rates from csprCloudService every 60 seconds.
-  //   2. Add staleness detection — reject transactions if rate is > 5 min old.
-  //   3. USDT/USDC rates should also be fetched to handle minor de-peg scenarios.
-  //   4. Keep these hardcoded values only as fallback defaults.
-  //
-  // NOTE: These client-side rates are for UI display/estimation only.
-  // They are inherently manipulable (browser DevTools, etc.) and MUST NOT be
-  // trusted for actual financial calculations. The backend will independently
-  // compute token amounts using its own exchange rates and reject any request
-  // where client-submitted values diverge from the server-side truth.
-  CURRENCY_RATES: {
-    USDT: 1,       // 1 USDT = $1
-    USDC: 1,       // 1 USDC = $1
-    CSPR: 0.02,    // 1 CSPR = $0.02 — PLACEHOLDER, must be replaced with live rate
-    CARD: 1,       // 1 USD = $1 (fiat)
-  },
 };
+
+/**
+ * Returns currency-to-USD rate.
+ * CSPR: live rate from CoinGecko (passed as param), stablecoins/fiat: always 1.
+ */
+export function getCurrencyRateUsd(currency: PaymentCurrency, csprPriceUsd?: number): number {
+  if (currency === 'CSPR') return csprPriceUsd || 0;
+  return 1; // USDT, USDC, CARD are all 1:1 USD
+}
 
 // Mock transaction data - single source of truth
 // TODO: Replace with real API data
@@ -126,17 +92,6 @@ export const MOCK_TRANSACTIONS = [
     txHash: '0x7890abcdef1234567890abcdef1234567890abcd',
   },
 ];
-
-/** Returns fresh mock timestamps relative to the current time. */
-export function getIcoTimestamps() {
-  const now = Date.now();
-  return {
-    presaleStart: now + ICO_CONFIG.TIMESTAMPS_OFFSETS.presaleStart,
-    presaleEnd: now + ICO_CONFIG.TIMESTAMPS_OFFSETS.presaleEnd,
-    icoStart: now + ICO_CONFIG.TIMESTAMPS_OFFSETS.icoStart,
-    icoEnd: now + ICO_CONFIG.TIMESTAMPS_OFFSETS.icoEnd,
-  };
-}
 
 // Payment currency display info
 export const PAYMENT_CURRENCY_INFO: Record<PaymentCurrency, {

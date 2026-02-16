@@ -64,7 +64,7 @@ export function PrivateSaleCountdown({ targetTimestamp, endTimestamp, progress, 
             <div className="text-center p-4">
               <p className="text-sm text-[hsl(var(--ico-text-secondary))] mb-1">Hard Cap</p>
               <p className="text-lg font-bold text-[hsl(var(--ico-text-primary))]">
-                ${Number(ICO_CONFIG.PRE_SALE.hardCap).toLocaleString()}
+                ${Math.round(progress.hardCapUsd).toLocaleString()}
               </p>
             </div>
 

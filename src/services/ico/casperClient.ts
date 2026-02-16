@@ -27,6 +27,7 @@ import {
   StoredContractByHash,
   ContractHash,
   Transaction,
+  TransactionV1,
   ContractCallBuilder,
   Args,
   PublicKey,
@@ -549,6 +550,21 @@ export async function getContractInfo(contractHash: string): Promise<{
 // ── Transaction/Deploy creation for entry point calls ───────────────
 
 /**
+ * Serializes a bigint as Casper U512 (variable-length, little-endian).
+ * Format: [length_byte, ...value_bytes_le]
+ */
+function serializeU512(value: bigint): Uint8Array {
+  if (value === 0n) return new Uint8Array([0]);
+  const bytes: number[] = [];
+  let v = value;
+  while (v > 0n) {
+    bytes.push(Number(v & 0xffn));
+    v >>= 8n;
+  }
+  return new Uint8Array([bytes.length, ...bytes]);
+}
+
+/**
  * Creates an unsigned Transaction for calling a contract entry point.
  * Transaction must be signed via CSPR.click before submission.
  *
@@ -585,11 +601,72 @@ export function createContractCallTransaction(
     .chainName(ICO_CONFIG.CASPER.networkName)
     .payment(Number(paymentAmount))
     .ttl(1800000) // 30 minutes
-    .buildFor1_5(); // For Casper 1.x (testnet)
+    .buildFor1_5(); // For Casper 1.x compatible deploy
 
   // Debug
   console.log('[createContractCallTransaction] Transaction created:', {
     hash: transaction.hash?.toString(),
+    toJSON: transaction.toJSON(),
+  });
+
+  return transaction;
+}
+
+/**
+ * Creates a TransactionV1 for calling a payable contract entry point with attached CSPR.
+ *
+ * Uses Casper 2.0 TransactionV1 format with `transferred_value` (payload field 4)
+ * so the runtime creates a temporary purse funded with the specified CSPR amount.
+ * This is required for Odra #[payable] entry points that check `attached_value`.
+ *
+ * @param senderPublicKeyHex  Sender's public key (hex string)
+ * @param contractHashStr     Contract package hash in `hash-<hex>` format
+ * @param entryPoint          Entry point name
+ * @param args                Args for entry point
+ * @param paymentAmount       Gas payment in motes
+ * @param transferredValue    CSPR to attach to the call (in motes)
+ * @returns Transaction (TransactionV1) ready for signing
+ */
+export function createPayableContractCallTransaction(
+  senderPublicKeyHex: string,
+  contractHashStr: string,
+  entryPoint: string,
+  args: Args,
+  paymentAmount: bigint,
+  transferredValue: bigint,
+): Transaction {
+  const senderPublicKey = PublicKey.fromHex(senderPublicKeyHex);
+  const contractHashHex = stripHashPrefix(contractHashStr);
+
+  // 1. Build a base TransactionV1 via ContractCallBuilder.build()
+  const baseTransaction = new ContractCallBuilder()
+    .from(senderPublicKey)
+    .byPackageHash(contractHashHex)
+    .entryPoint(entryPoint)
+    .runtimeArgs(args)
+    .chainName(ICO_CONFIG.CASPER.networkName)
+    .payment(Number(paymentAmount))
+    .ttl(1800000)
+    .build(); // TransactionV1 (Casper 2.0)
+
+  const baseV1 = baseTransaction.getTransactionV1();
+  if (!baseV1) {
+    throw new Error('Failed to build TransactionV1');
+  }
+
+  // 2. Add transferred_value as payload field 4 (Casper 2.0 spec)
+  //    This tells the runtime to create a temp purse with this amount.
+  //    The contract's self.env().attached_value() will read this amount.
+  baseV1.payload.fields.addField(4, serializeU512(transferredValue));
+
+  // 3. Rebuild TransactionV1 to recompute the hash over the modified payload
+  const newV1 = TransactionV1.makeTransactionV1(baseV1.payload);
+
+  const transaction = Transaction.fromTransactionV1(newV1);
+
+  console.log('[createPayableContractCallTransaction] Transaction created:', {
+    hash: transaction.hash?.toString(),
+    transferredValue: transferredValue.toString(),
     toJSON: transaction.toJSON(),
   });
 

@@ -10,6 +10,7 @@ export interface ScheduleProgress {
   totalAllocation: number;
   tokensRemaining: number;
   amountRaised: number;
+  hardCapUsd: number;
   priceUsd: number;
   percentSold: number;
 }
@@ -53,11 +54,14 @@ function scheduleToProgress(schedule: ICOSchedule): ScheduleProgress {
     ? (tokensSold / totalAllocation) * 100
     : 0;
 
+  const hardCapUsd = totalAllocation * priceUsd;
+
   return {
     tokensSold,
     totalAllocation,
     tokensRemaining,
     amountRaised,
+    hardCapUsd,
     priceUsd,
     percentSold,
   };
