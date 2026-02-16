@@ -60,10 +60,10 @@ export interface PurchaseParams {
 export interface PurchaseResult {
   /** Whether approval was needed and executed */
   approvalNeeded: boolean;
-  /** Approval deploy (if needed) */
-  approvalDeploy?: Deploy;
-  /** Purchase deploy */
-  purchaseDeploy: Deploy;
+  /** Approval transaction (if needed) */
+  approvalTransaction?: Deploy;
+  /** Purchase transaction */
+  purchaseTransaction: Deploy;
 }
 
 export interface ApprovalCheckResult {
@@ -271,17 +271,17 @@ export async function preparePurchase(
     currency,
   );
 
-  let approvalDeploy: Deploy | undefined;
+  let approvalTransaction: Deploy | undefined;
   if (approvalCheck.needed) {
-    approvalDeploy = createApproveDeploy(
+    approvalTransaction = createApproveDeploy(
       senderPublicKey,
       currency,
       amount,
     );
   }
 
-  // Create the purchase deploy
-  const purchaseDeploy = createPurchaseDeploy(
+  // Create the purchase transaction
+  const purchaseTransaction = createPurchaseDeploy(
     senderPublicKey,
     amount,
     currency,
@@ -289,8 +289,8 @@ export async function preparePurchase(
 
   return {
     approvalNeeded: approvalCheck.needed,
-    approvalDeploy,
-    purchaseDeploy,
+    approvalTransaction,
+    purchaseTransaction,
   };
 }
 
