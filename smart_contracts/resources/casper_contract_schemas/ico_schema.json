@@ -412,7 +412,7 @@
           "optional": false
         }
       ],
-      "return_ty": "Unit",
+      "return_ty": "U256",
       "is_contract_context": true,
       "access": "public"
     },

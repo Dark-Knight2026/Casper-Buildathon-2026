@@ -252,7 +252,7 @@
         }
       ],
       "is_mutable": true,
-      "return_ty": "Unit",
+      "return_ty": "U256",
       "ty": "Public",
       "attributes": [
         "Payable",

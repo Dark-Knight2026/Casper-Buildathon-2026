@@ -238,7 +238,8 @@ impl ICO {
                         .get_twap_price(&String::from(STYKS_ORACLE_CSPR_USDT_PRICE_FEED_ID))
                         .unwrap_or_revert_with(&self.env(), Error::StyksOracleCanNotReturnTWAP);
 
-                    current_ico_schedule.1.price * U256::from(10).pow(U256::from(9))
+                    // Styks Oracle returns price with 8 decimals
+                    current_ico_schedule.1.price * U256::from(10).pow(U256::from(8))
                         / cspr_price_usd
                 }
                 Currency::USDC | Currency::USDT => current_ico_schedule.1.price,
@@ -1348,7 +1349,7 @@ mod tests {
 
         assert_eq!(
             ctx.ico.get_ico_token_price(Currency::CSPR),
-            current_ico_schedule.1.price * U256::from(10).pow(U256::from(9)) / cspr_price_usd,
+            current_ico_schedule.1.price * U256::from(10).pow(U256::from(8)) / cspr_price_usd,
             "Invalid ICO token price"
         );
     }
