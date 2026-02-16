@@ -1852,6 +1852,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "indexer_v2"
+version = "0.1.0"
+dependencies = [
+ "dotenv",
+ "reqwest",
+ "secrecy",
+ "serde",
+ "serde_json",
+ "serial_test",
+ "sqlx",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "indexmap"
 version = "1.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
