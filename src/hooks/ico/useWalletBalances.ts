@@ -41,27 +41,12 @@ function csprCloudUrl(path: string): string {
   if (import.meta.env.DEV) {
     return `/api/cspr-cloud${path}`;
   }
-  const base = ICO_CONFIG.CASPER.networkName === 'casper-test'
-    ? 'https://api.testnet.cspr.cloud'
-    : 'https://api.cspr.cloud';
-  return `${base}${path}`;
-}
-
-function csprCloudHeaders(): Record<string, string> {
-  const headers: Record<string, string> = { 'accept': 'application/json' };
-  if (!import.meta.env.DEV) {
-    // TODO: SECURITY - Move to backend proxy before production launch
-    // VITE_ prefix exposes this key in client bundle - visible to anyone via DevTools
-    // Solution: Create serverless function (Vercel/Netlify) to proxy CSPR.Cloud requests
-    headers['authorization'] = import.meta.env.VITE_CSPR_CLOUD_API_KEY || '';
-  }
-  return headers;
+  // Production: use Vercel serverless proxy (API key stays on server)
+  return `/api/cspr-cloud?path=${encodeURIComponent(path.replace(/^\//, ''))}`;
 }
 
 async function fetchCSPRBalance(publicKey: string): Promise<number> {
-  const res = await fetch(csprCloudUrl(`/accounts/${publicKey}`), {
-    headers: csprCloudHeaders(),
-  });
+  const res = await fetch(csprCloudUrl(`/accounts/${publicKey}`));
 
   if (!res.ok) throw new Error(`CSPR balance error: ${res.status}`);
 
@@ -73,7 +58,6 @@ async function fetchCSPRBalance(publicKey: string): Promise<number> {
 async function fetchFTBalances(publicKey: string): Promise<TokenBalance[]> {
   const res = await fetch(
     csprCloudUrl(`/accounts/${publicKey}/ft-token-ownership?includes=contract_package&page=1&page_size=50`),
-    { headers: csprCloudHeaders() },
   );
 
   if (!res.ok) {
