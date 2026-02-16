@@ -10,8 +10,8 @@
  */
 
 import { useState, useCallback } from 'react';
-import { PublicKey } from 'casper-js-sdk';
 import type { ICSPRClickSDK } from '@make-software/csprclick-core-types';
+import { deriveAccountHash } from '@/lib/blockchain/accountUtils';
 import {
   preparePurchase,
   validatePurchase,
@@ -20,26 +20,6 @@ import {
 } from '@/services/ico/icoPurchaseService';
 import { ICO_CONFIG } from '@/constants/ico';
 import type { PaymentCurrency } from '@/types/ico';
-
-/**
- * Derives account hash from public key hex string.
- * Uses casper-js-sdk PublicKey.accountHash().toPrefixedString()
- */
-function deriveAccountHash(publicKeyHex: string): string {
-  if (!publicKeyHex) {
-    console.warn('[usePurchaseToken] Empty public key provided');
-    return '';
-  }
-
-  try {
-    const pk = PublicKey.fromHex(publicKeyHex);
-    const accountHash = pk.accountHash();
-    return accountHash.toPrefixedString();
-  } catch (err) {
-    console.warn('[usePurchaseToken] Failed to derive account hash:', err);
-    return '';
-  }
-}
 
 // ── Types ───────────────────────────────────────────────────────────
 
