@@ -71,8 +71,7 @@ export class CSPRCloudService {
     let url = CSPR_CLOUD_WS_URL;
     const params = new URLSearchParams();
 
-    // NOTE: WebSocket connections cannot be proxied via serverless functions.
-    // The WS API key remains client-side for now. Consider a dedicated WS proxy if needed.
+    // Public key: domain-restricted & rate-limited on CSPR.cloud side, safe for client exposure.
     const wsApiKey = import.meta.env.VITE_CSPR_CLOUD_API_KEY || '';
     if (wsApiKey) {
       params.append('key', wsApiKey);

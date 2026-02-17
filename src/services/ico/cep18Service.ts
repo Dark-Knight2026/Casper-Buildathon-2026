@@ -12,6 +12,8 @@
  * Source schema: docs/casper_contract_schemas/tailor_coin_schema.json
  */
 
+import { blake2bHex } from 'blakejs';
+
 import { ICO_CONFIG } from '@/constants/ico';
 import {
   queryContractState,
@@ -71,16 +73,21 @@ export async function getBalance(
  * Returns the allowance granted by `owner` to `spender`.
  * Maps to entry point `allowance(owner: Key, spender: Key) → U256`.
  *
- * CEP-18 stores allowances in a dictionary keyed by a hash of (owner, spender).
- * The exact key format depends on the implementation.
+ * Standard CEP-18 stores allowances in a dictionary keyed by
+ * blake2b256(owner_bytes + spender_bytes) encoded as hex.
  */
 export async function getAllowance(
   contractHash: string,
   ownerHash: string,
   spenderHash: string,
 ): Promise<bigint> {
-  // CEP-18 typically uses a combined key: hash(owner + spender)
-  const dictKey = `${ownerHash}_${spenderHash}`;
+  const ownerBytes = hexToBytes(ownerHash);
+  const spenderBytes = hexToBytes(spenderHash);
+  const combined = new Uint8Array(ownerBytes.length + spenderBytes.length);
+  combined.set(ownerBytes, 0);
+  combined.set(spenderBytes, ownerBytes.length);
+  const dictKey = blake2bHex(combined, undefined, 32);
+
   const stored = await queryDictionaryItem(
     contractHash,
     STORAGE_KEYS.allowances,
@@ -89,6 +96,15 @@ export async function getAllowance(
 
   if (!stored?.clValue) return 0n;
   return clValueToBigInt(stored.clValue);
+}
+
+function hexToBytes(hex: string): Uint8Array {
+  const clean = hex.startsWith('hash-') ? hex.slice(5) : hex;
+  const bytes = new Uint8Array(clean.length / 2);
+  for (let i = 0; i < bytes.length; i++) {
+    bytes[i] = parseInt(clean.substring(i * 2, i * 2 + 2), 16);
+  }
+  return bytes;
 }
 
 /**
