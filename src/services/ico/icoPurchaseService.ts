@@ -16,6 +16,9 @@ import {
   CLValue,
   Key,
   Deploy,
+  URef,
+  PublicKey,
+  AccountIdentifier,
 } from 'casper-js-sdk';
 
 import { ICO_CONFIG } from '@/constants/ico';
@@ -206,13 +209,26 @@ export function createApproveDeploy(
 // Keep old function name as alias for backward compatibility
 export const createApproveTransaction = createApproveDeploy;
 
+// ── Account helpers ─────────────────────────────────────────────────
+
+/**
+ * Fetches the main purse URef for an account via RPC.
+ */
+async function getMainPurseURef(publicKeyHex: string): Promise<string> {
+  const client = getCasperRpcClient();
+  const pubKey = PublicKey.fromHex(publicKeyHex);
+  const accountId = new AccountIdentifier(undefined, pubKey);
+  const info = await client.getAccountInfo(null, accountId);
+  return info.account.mainPurse.toJSON();
+}
+
 // ── Purchase functions ──────────────────────────────────────────────
 
 /**
  * Creates a purchase deploy for the ICO contract.
  *
  * The ICO contract entry point signature (from schema):
- *   purchase(purchase_amount: U256, currency: Currency)
+ *   purchase(purchase_amount: U256, currency: Currency, __cargo_purse: URef)
  *
  * For CSPR payments, the amount is attached as payment.
  * For CEP-18 payments, the contract will transferFrom the buyer (after approve).
@@ -221,6 +237,7 @@ export function createPurchaseDeploy(
   senderPublicKey: string,
   amount: string,
   currency: PaymentCurrency,
+  mainPurseURef: string,
 ): Deploy {
   if (currency === 'CARD') {
     throw new Error('CARD payments are handled via fiat on-ramp, not blockchain transaction');
@@ -232,10 +249,13 @@ export function createPurchaseDeploy(
     currency as 'CSPR' | 'USDC' | 'USDT'
   );
 
-  // Build args for purchase(purchase_amount: U256, currency: Currency)
+  // Build args for purchase(purchase_amount: U256, currency: Currency, __cargo_purse: URef)
+  const purse = URef.fromString(mainPurseURef);
+
   const args = Args.fromMap({
     purchase_amount: CLValue.newCLUInt256(rawAmount),
     currency: CLValue.newCLUint8(contractCurrency),
+    __cargo_purse: CLValue.newCLUref(purse),
   });
 
   const gasCost = currency === 'CSPR'
@@ -280,11 +300,15 @@ export async function preparePurchase(
     );
   }
 
+  // Fetch sender's main purse for __cargo_purse contract argument
+  const mainPurseURef = await getMainPurseURef(senderPublicKey);
+
   // Create the purchase transaction
   const purchaseTransaction = createPurchaseDeploy(
     senderPublicKey,
     amount,
     currency,
+    mainPurseURef,
   );
 
   return {
