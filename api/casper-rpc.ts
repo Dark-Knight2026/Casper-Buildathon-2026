@@ -2,9 +2,23 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 const API_KEY = process.env.CSPR_CLOUD_API_KEY || '';
 
+const ALLOWED_RPC_METHODS = new Set([
+  'query_global_state',
+  'state_get_dictionary_item',
+  'info_get_deploy',
+  'account_put_deploy',
+  'state_get_entity',
+  'info_get_account_info',
+]);
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const rpcMethod = req.body?.method;
+  if (typeof rpcMethod !== 'string' || !ALLOWED_RPC_METHODS.has(rpcMethod)) {
+    return res.status(403).json({ error: `RPC method not allowed: ${rpcMethod}` });
   }
 
   const network = process.env.VITE_CASPER_NETWORK || 'casper-test';
