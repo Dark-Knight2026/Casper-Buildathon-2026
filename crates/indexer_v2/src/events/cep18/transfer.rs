@@ -42,6 +42,22 @@ impl IndexableEvent for Transfer {
         )
         .await?;
 
+        // Decrease sender balance, increase recipient balance.
+        db::update_token_balance(
+            &mut tx,
+            &self.sender,
+            ctx.contract_type,
+            db::BalanceUpdate::Decrease(&self.amount),
+        )
+        .await?;
+        db::update_token_balance(
+            &mut tx,
+            &self.recipient,
+            ctx.contract_type,
+            db::BalanceUpdate::Increase(&self.amount),
+        )
+        .await?;
+
         tx.commit().await?;
 
         tracing::debug!(
@@ -50,7 +66,7 @@ impl IndexableEvent for Transfer {
             recipient = %self.recipient,
             amount = %self.amount,
             contract = ?ctx.contract_type,
-            "Token transfer processed"
+            "Token transfer processed, balances updated"
         );
 
         Ok(())

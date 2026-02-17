@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    config::ContractType,
     db,
     error::IndexerResult,
     event_trait::{EventContext, IndexableEvent},
@@ -75,6 +76,15 @@ impl IndexableEvent for TokensPurchased {
         )
         .await?;
 
+        // Increase buyer's BIG token balance.
+        db::update_token_balance(
+            &mut tx,
+            ctx.caller,
+            ContractType::Big,
+            db::BalanceUpdate::Increase(&self.amount),
+        )
+        .await?;
+
         tx.commit().await?;
 
         tracing::debug!(
@@ -82,7 +92,7 @@ impl IndexableEvent for TokensPurchased {
             buyer = %ctx.caller,
             amount = %self.amount,
             currency = %self.currency_str(),
-            "ICO purchase processed"
+            "ICO purchase processed, BIG balance updated"
         );
 
         Ok(())
