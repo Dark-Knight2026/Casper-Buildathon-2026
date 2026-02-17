@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import type { ScheduleProgress } from '@/hooks/ico/useICOSchedules';
 import { ICO_CONFIG } from '@/constants/ico';
@@ -18,11 +18,6 @@ interface ActivePresaleProps {
   endTimestamp: number;
   progress?: ScheduleProgress | null;
 }
-
-const MOCK_USER_BALANCE = {
-  tokensPurchased: 1505000,  // 500,000 + 1,000,000 + 5,000
-  totalSpentUSD: 1505,       // $500 + $1,000 + $5 (250 CSPR × $0.02)
-};
 
 export function PrivateSaleActive({ className, endTimestamp, progress }: ActivePresaleProps) {
   const tokenPrice = progress?.priceUsd ?? 0;
@@ -62,6 +57,19 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: ActiveP
       }
     },
   });
+
+  // Aggregate user balance from completed transactions in localStorage
+  const userBalance = useMemo(() => {
+    const completed = transactions.filter(
+      (tx) => tx.type === 'purchase' && tx.status === 'completed',
+    );
+    const tokensPurchased = completed.reduce((sum, tx) => sum + tx.tokensReceived, 0);
+    const totalSpentUSD = completed.reduce((sum, tx) => {
+      if (tx.currency === 'CSPR') return sum + tx.amount * (csprPriceUsd ?? 0);
+      return sum + tx.amount; // USDT, USDC, CARD are 1:1 USD
+    }, 0);
+    return { tokensPurchased, totalSpentUSD };
+  }, [transactions, csprPriceUsd]);
 
   // Save as 'pending' when purchase tx is submitted to blockchain
   useEffect(() => {
@@ -150,11 +158,11 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: ActiveP
         />
       </div>
 
-      {/* User Token Balance - show only when progress data exists */}
-      {progress && (
+      {/* User Token Balance - show when there are completed purchases */}
+      {progress && userBalance.tokensPurchased > 0 && (
         <UserTokenBalance
-          tokensPurchased={MOCK_USER_BALANCE.tokensPurchased}
-          totalSpentUSD={MOCK_USER_BALANCE.totalSpentUSD}
+          tokensPurchased={userBalance.tokensPurchased}
+          totalSpentUSD={userBalance.totalSpentUSD}
           tokenPrice={progress.priceUsd}
           tokenSymbol={ICO_CONFIG.TOKEN.symbol}
           className="mt-8"
