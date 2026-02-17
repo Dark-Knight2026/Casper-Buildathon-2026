@@ -25,6 +25,8 @@
 //! processor::process_event(&db_pool, &registry, &raw_event).await?;
 //! ```
 
+/// REST backfill client for historical event synchronization.
+pub mod backfill;
 /// Indexer configuration and contract registry.
 pub mod config;
 /// Database access layer — all SQL queries.

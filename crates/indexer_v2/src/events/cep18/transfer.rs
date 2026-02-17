@@ -32,7 +32,7 @@ impl IndexableEvent for Transfer {
             &mut tx,
             &db::NewBlockchainTx {
                 deploy_hash: ctx.deploy_hash,
-                block_number: ctx.block_height,
+                block_number: ctx.block_height.cast_signed(),
                 transaction_type: "token_transfer",
                 from_address: &self.sender,
                 amount: Some(&self.amount),

@@ -49,7 +49,7 @@ impl IndexableEvent for TokensPurchased {
             &mut tx,
             &db::NewIcoPurchase {
                 transaction_hash: ctx.deploy_hash,
-                block_height: ctx.block_height,
+                block_height: ctx.block_height.cast_signed(),
                 buyer_address: ctx.caller,
                 amount: &self.amount,
                 currency: self.currency_str(),
@@ -66,7 +66,7 @@ impl IndexableEvent for TokensPurchased {
             &mut tx,
             &db::NewBlockchainTx {
                 deploy_hash: ctx.deploy_hash,
-                block_number: ctx.block_height,
+                block_number: ctx.block_height.cast_signed(),
                 transaction_type: "token_purchase",
                 from_address: ctx.caller,
                 amount: Some(&self.cost),

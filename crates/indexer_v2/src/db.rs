@@ -77,6 +77,21 @@ pub async fn update_cursor(
 // Events
 // -----------------------------------------------------------------------------
 
+/// Data required to insert a row into `blockchain_events`.
+#[derive(Debug)]
+pub struct NewBlockchainEvent<'a> {
+    /// CES event name (e.g. `"TokensPurchased"`).
+    pub event_type: &'a str,
+    /// Contract package hash that emitted the event.
+    pub contract_address: &'a str,
+    /// Deploy hash of the transaction containing this event.
+    pub transaction_hash: &'a str,
+    /// Block height where the event was included.
+    pub block_number: i64,
+    /// Raw event payload as JSON.
+    pub event_data: &'a serde_json::Value,
+}
+
 /// Insert a raw event into `blockchain_events` (idempotent).
 ///
 /// Returns `true` if the row was actually inserted (new event), `false` if it
@@ -89,11 +104,7 @@ pub async fn update_cursor(
 #[inline]
 pub async fn insert_blockchain_event(
     tx: &mut Transaction<'_, Postgres>,
-    event_type: &str,
-    contract_address: &str,
-    transaction_hash: &str,
-    block_number: i64,
-    event_data: &serde_json::Value,
+    row: NewBlockchainEvent<'_>,
 ) -> IndexerResult<bool> {
     let result = sqlx::query!(
         r"
@@ -102,11 +113,11 @@ pub async fn insert_blockchain_event(
             ON CONFLICT (transaction_hash, event_type, contract_address) DO NOTHING
             RETURNING id
         ",
-        event_type,
-        contract_address,
-        transaction_hash,
-        block_number,
-        event_data,
+        row.event_type,
+        row.contract_address,
+        row.transaction_hash,
+        row.block_number,
+        row.event_data,
     )
     .fetch_optional(tx.as_mut())
     .await?;
@@ -250,10 +261,10 @@ pub async fn update_token_balance(
         BalanceUpdate::Decrease(amount) => {
             sqlx::query!(
                 r"
-                    INSERT INTO token_holdings (user_address, token_type, balance, last_updated_at)
+                    INSERT INTO token_holdings as th (user_address, token_type, balance, last_updated_at)
                     VALUES ($1, $2, '0', NOW())
                     ON CONFLICT (user_address, token_type) DO UPDATE SET
-                        balance         = (token_holdings.balance::NUMERIC - $3::TEXT::NUMERIC)::TEXT,
+                        balance         = (th.balance::NUMERIC - $3::TEXT::NUMERIC)::TEXT,
                         last_updated_at = NOW()
                 ",
                 user_address,
@@ -266,10 +277,10 @@ pub async fn update_token_balance(
         BalanceUpdate::Increase(amount) => {
             sqlx::query!(
                 r"
-                    INSERT INTO token_holdings (user_address, token_type, balance, last_updated_at)
+                    INSERT INTO token_holdings as th (user_address, token_type, balance, last_updated_at)
                     VALUES ($1, $2, $3, NOW())
                     ON CONFLICT (user_address, token_type) DO UPDATE SET
-                        balance         = (token_holdings.balance::NUMERIC + $3::TEXT::NUMERIC)::TEXT,
+                        balance         = (th.balance::NUMERIC + $3::TEXT::NUMERIC)::TEXT,
                         last_updated_at = NOW()
                 ",
                 user_address,

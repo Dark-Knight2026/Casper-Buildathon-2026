@@ -11,7 +11,7 @@ use sqlx::PgPool;
 
 use crate::{
     config::ContractType,
-    db,
+    db::{self, NewBlockchainEvent},
     error::{IndexerError, IndexerResult},
     event_trait::EventContext,
     events::EventRegistry,
@@ -36,6 +36,19 @@ pub struct RawEvent {
     pub event_data: serde_json::Value,
 }
 
+impl<'a> From<&'a RawEvent> for NewBlockchainEvent<'a> {
+    #[inline]
+    fn from(raw: &'a RawEvent) -> Self {
+        Self {
+            event_type: &raw.event_name,
+            contract_address: &raw.contract_hash,
+            transaction_hash: &raw.deploy_hash,
+            block_number: raw.block_height.cast_signed(),
+            event_data: &raw.event_data,
+        }
+    }
+}
+
 /// Process a single event using the trait-based architecture.
 ///
 /// # Errors
@@ -50,17 +63,7 @@ pub async fn process_event(
     let mut tx = db_pool.begin().await?;
 
     // 1. Store raw event (idempotent via UNIQUE constraint)
-    let is_new = db::insert_blockchain_event(
-        &mut tx,
-        &raw.event_name,
-        &raw.contract_hash,
-        &raw.deploy_hash,
-        raw.block_height.cast_signed(),
-        &raw.event_data,
-    )
-    .await?;
-
-    if !is_new {
+    if !db::insert_blockchain_event(&mut tx, NewBlockchainEvent::from(raw)).await? {
         // Duplicate — already processed, nothing to do
         return Ok(());
     }
@@ -70,7 +73,7 @@ pub async fn process_event(
         db_pool,
         contract_hash: &raw.contract_hash,
         deploy_hash: &raw.deploy_hash,
-        block_height: raw.block_height.cast_signed(),
+        block_height: raw.block_height,
         caller: &raw.caller,
         contract_type: raw.contract_type,
     };
