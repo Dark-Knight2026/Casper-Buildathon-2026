@@ -13,4 +13,6 @@
 | TransactionHistory.test.tsx | Tests transaction list display and formatting |
 | UserTokenBalance.test.tsx | Tests token balance calculation and display |
 | VestingProgressBlock.test.tsx | Tests vesting entries sorting and unlocking |
+| PurchaseConfirmationModal.test.tsx | Tests modal states, buttons, and escape handling |
+| TransactionStatusToast.test.tsx | Tests toast success, failure, and auto-close |
 | WalletCard.test.tsx | Tests connected and disconnected wallet states |

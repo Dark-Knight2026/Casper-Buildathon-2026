@@ -125,6 +125,60 @@ describe('TransactionHistory', () => {
     });
   });
 
+  describe('integration with MOCK_TRANSACTIONS', () => {
+    it('should render all statuses from MOCK_TRANSACTIONS', async () => {
+      const { MOCK_TRANSACTIONS } = await import('@/constants/ico');
+      const transactions: Transaction[] = MOCK_TRANSACTIONS.map(tx => ({
+        ...tx,
+        timestamp: new Date(tx.timestamp),
+      }));
+
+      render(<TransactionHistory transactions={transactions} />);
+
+      expect(screen.getByText('Failed')).toBeInTheDocument();
+      expect(screen.getByText('Pending')).toBeInTheDocument();
+      expect(screen.getByText('Completed')).toBeInTheDocument();
+    });
+
+    it('should render failed transaction with correct styling class', () => {
+      const failedTx: Transaction[] = [{
+        id: '1',
+        type: 'purchase',
+        amount: 1500,
+        currency: 'USDC',
+        tokensReceived: 1000000,
+        tokenSymbol: 'BIG',
+        status: 'failed',
+        timestamp: new Date('2025-01-20T10:30:00'),
+        txHash: '0x1234567890abcdef1234567890abcdef12345678',
+      }];
+
+      render(<TransactionHistory transactions={failedTx} />);
+
+      const badge = screen.getByText('Failed');
+      expect(badge.className).toContain('text-red');
+    });
+
+    it('should render pending transaction with correct styling class', () => {
+      const pendingTx: Transaction[] = [{
+        id: '2',
+        type: 'purchase',
+        amount: 100,
+        currency: 'USDC',
+        tokensReceived: 66666,
+        tokenSymbol: 'BIG',
+        status: 'pending',
+        timestamp: new Date('2025-01-15T14:20:00'),
+        txHash: '0xabcdef1234567890abcdef1234567890abcdef12',
+      }];
+
+      render(<TransactionHistory transactions={pendingTx} />);
+
+      const badge = screen.getByText('Pending');
+      expect(badge.className).toContain('text-yellow');
+    });
+  });
+
   describe('className prop', () => {
     it('should forward custom className', () => {
       const { container } = render(

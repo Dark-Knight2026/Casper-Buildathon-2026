@@ -82,6 +82,21 @@ describe('useICOWallet', () => {
       expect(mockClickRef.on).toHaveBeenCalledWith('csprclick:switched_account', expect.any(Function));
       expect(mockClickRef.on).toHaveBeenCalledWith('csprclick:signed_out', expect.any(Function));
       expect(mockClickRef.on).toHaveBeenCalledWith('csprclick:disconnected', expect.any(Function));
+      expect(mockClickRef.on).toHaveBeenCalledWith('csprclick:ready', expect.any(Function));
+      expect(mockClickRef.on).toHaveBeenCalledWith('csprclick:cancelled', expect.any(Function));
+    });
+
+    it('should remove all event listeners on unmount', () => {
+      const { unmount } = renderHook(() => useICOWallet());
+
+      unmount();
+
+      expect(mockClickRef.off).toHaveBeenCalledWith('csprclick:signed_in', expect.any(Function));
+      expect(mockClickRef.off).toHaveBeenCalledWith('csprclick:switched_account', expect.any(Function));
+      expect(mockClickRef.off).toHaveBeenCalledWith('csprclick:signed_out', expect.any(Function));
+      expect(mockClickRef.off).toHaveBeenCalledWith('csprclick:disconnected', expect.any(Function));
+      expect(mockClickRef.off).toHaveBeenCalledWith('csprclick:ready', expect.any(Function));
+      expect(mockClickRef.off).toHaveBeenCalledWith('csprclick:cancelled', expect.any(Function));
     });
 
     it('should handle signed_in event', () => {
@@ -179,6 +194,75 @@ describe('useICOWallet', () => {
         handleDisconnected?.();
       });
 
+      expect(result.current.isConnected).toBe(false);
+      expect(result.current.account).toBeNull();
+    });
+
+    it('should handle ready event with active account (mobile redirect)', () => {
+      const { result } = renderHook(() => useICOWallet());
+
+      // Simulate SDK becoming ready with an active account (mobile redirect flow)
+      mockClickRef.getActiveAccount.mockReturnValue({
+        public_key: mockPublicKey,
+        provider: mockProvider,
+      });
+
+      const readyCall = mockClickRef.on.mock.calls.find(
+        (call) => call[0] === 'csprclick:ready'
+      );
+      const handleReady = readyCall?.[1];
+
+      act(() => {
+        handleReady?.();
+      });
+
+      expect(result.current.isConnected).toBe(true);
+      expect(result.current.account?.publicKey).toBe(mockPublicKey);
+      expect(result.current.account?.provider).toBe(mockProvider);
+      expect(result.current.account?.accountHash).toContain('account-hash-');
+      expect(result.current.isConnecting).toBe(false);
+    });
+
+    it('should handle ready event without active account', () => {
+      const { result } = renderHook(() => useICOWallet());
+
+      // SDK ready but no account connected
+      mockClickRef.getActiveAccount.mockReturnValue(null);
+
+      const readyCall = mockClickRef.on.mock.calls.find(
+        (call) => call[0] === 'csprclick:ready'
+      );
+      const handleReady = readyCall?.[1];
+
+      act(() => {
+        handleReady?.();
+      });
+
+      expect(result.current.isConnected).toBe(false);
+      expect(result.current.account).toBeNull();
+    });
+
+    it('should handle cancelled event and reset isConnecting', () => {
+      const { result } = renderHook(() => useICOWallet());
+
+      // Start connecting first
+      act(() => {
+        result.current.connect();
+      });
+
+      expect(result.current.isConnecting).toBe(true);
+
+      // Simulate user cancelling the sign-in modal
+      const cancelledCall = mockClickRef.on.mock.calls.find(
+        (call) => call[0] === 'csprclick:cancelled'
+      );
+      const handleCancelled = cancelledCall?.[1];
+
+      act(() => {
+        handleCancelled?.();
+      });
+
+      expect(result.current.isConnecting).toBe(false);
       expect(result.current.isConnected).toBe(false);
       expect(result.current.account).toBeNull();
     });

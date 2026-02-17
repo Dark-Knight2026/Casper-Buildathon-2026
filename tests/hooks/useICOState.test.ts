@@ -315,6 +315,117 @@ describe('useICOState hook', () => {
     expect(result.current.state).toBe(1); // back to calculated
   });
 
+  // --- Loading state ---
+
+  describe('loading state', () => {
+    it('should start with isLoading=true when no timestamps provided', async () => {
+      const now = Date.now();
+      vi.setSystemTime(now);
+
+      const useICOState = await importHook();
+      const { result } = renderHook(() => useICOState());
+
+      expect(result.current.isLoading).toBe(true);
+    });
+
+    it('should start with isLoading=false when timestamps provided', async () => {
+      const now = Date.now();
+      vi.setSystemTime(now);
+
+      const useICOState = await importHook();
+      const timestamps: SaleTimestamps = {
+        presaleStart: now + 2 * DAY,
+        presaleEnd: now + 9 * DAY,
+        icoStart: now + 12 * DAY,
+        icoEnd: now + 26 * DAY,
+      };
+
+      const { result } = renderHook(() => useICOState({ timestamps }));
+
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    it('should transition from loading to loaded when timestamps arrive', async () => {
+      const now = Date.now();
+      vi.setSystemTime(now);
+
+      const useICOState = await importHook();
+      const timestamps: SaleTimestamps = {
+        presaleStart: now + 2 * DAY,
+        presaleEnd: now + 9 * DAY,
+        icoStart: now + 12 * DAY,
+        icoEnd: now + 26 * DAY,
+      };
+
+      // Start without timestamps — loading
+      const { result, rerender } = renderHook(
+        (props: { timestamps?: SaleTimestamps }) => useICOState(props),
+        { initialProps: {} }
+      );
+
+      expect(result.current.isLoading).toBe(true);
+
+      // Provide timestamps — should transition to loaded
+      rerender({ timestamps });
+
+      expect(result.current.isLoading).toBe(false);
+      expect(result.current.state).toBe(1);
+    });
+
+    it('should use zero timestamps and not calculate state while loading', async () => {
+      const now = Date.now();
+      vi.setSystemTime(now);
+
+      const useICOState = await importHook();
+      const { result } = renderHook(() => useICOState());
+
+      // Without real timestamps, state defaults to 1 and timestamps are all zeros
+      expect(result.current.isLoading).toBe(true);
+      expect(result.current.state).toBe(1);
+      expect(result.current.timestamps).toEqual({
+        presaleStart: 0,
+        presaleEnd: 0,
+        icoStart: 0,
+        icoEnd: 0,
+      });
+    });
+
+    it('should not run poll timer without real timestamps', async () => {
+      const now = Date.now();
+      vi.setSystemTime(now);
+
+      const useICOState = await importHook();
+      const { result } = renderHook(() => useICOState({ pollInterval: 1000 }));
+
+      expect(result.current.isLoading).toBe(true);
+
+      // Advance time — state should remain unchanged since no real timestamps
+      act(() => {
+        vi.advanceTimersByTime(5000);
+      });
+
+      expect(result.current.isLoading).toBe(true);
+      expect(result.current.state).toBe(1);
+    });
+
+    it('refetch should be a no-op without real timestamps', async () => {
+      const now = Date.now();
+      vi.setSystemTime(now);
+
+      const useICOState = await importHook();
+      const { result } = renderHook(() => useICOState());
+
+      expect(result.current.isLoading).toBe(true);
+
+      act(() => {
+        result.current.refetch();
+      });
+
+      // isLoading should remain true — refetch did nothing
+      expect(result.current.isLoading).toBe(true);
+    });
+  });
+
   it('should recalculate state after refetch', async () => {
     const now = Date.now();
     vi.setSystemTime(now);
