@@ -8,7 +8,7 @@
 use secrecy::ExposeSecret;
 use serial_test::serial;
 
-use indexer::{ContractRegistry, ContractType, IndexerConfig};
+use indexer::config::{ContractRegistry, ContractType, IndexerConfig};
 
 /// All env var keys used by `IndexerConfig::from_env()`.
 const CONFIG_ENV_VARS: [&str; 7] = [
@@ -21,7 +21,7 @@ const CONFIG_ENV_VARS: [&str; 7] = [
     "RUST_LOG",
 ];
 
-/// Contract env var keys.
+/// Contract hash env var keys.
 const CONTRACT_ENV_VARS: [&str; 10] = [
     "CONTRACT_USDC",
     "CONTRACT_USDT",
@@ -35,6 +35,20 @@ const CONTRACT_ENV_VARS: [&str; 10] = [
     "CONTRACT_STAKING",
 ];
 
+/// Start-block env var keys (one per contract type).
+const START_BLOCK_ENV_VARS: [&str; 10] = [
+    "START_BLOCK_CONTRACT_USDC",
+    "START_BLOCK_CONTRACT_USDT",
+    "START_BLOCK_CONTRACT_BIG",
+    "START_BLOCK_CONTRACT_TREASURY",
+    "START_BLOCK_CONTRACT_ICO",
+    "START_BLOCK_CONTRACT_LEASE",
+    "START_BLOCK_CONTRACT_ESCROW",
+    "START_BLOCK_CONTRACT_NFT",
+    "START_BLOCK_CONTRACT_ROLES",
+    "START_BLOCK_CONTRACT_STAKING",
+];
+
 /// Removes all indexer-related env vars to ensure test isolation.
 ///
 /// # Safety
@@ -46,6 +60,10 @@ unsafe fn clear_all_env_vars() {
         unsafe { std::env::remove_var(key) };
     }
     for key in CONTRACT_ENV_VARS {
+        // SAFETY: #[serial] ensures no concurrent env var access.
+        unsafe { std::env::remove_var(key) };
+    }
+    for key in START_BLOCK_ENV_VARS {
         // SAFETY: #[serial] ensures no concurrent env var access.
         unsafe { std::env::remove_var(key) };
     }
@@ -65,8 +83,6 @@ unsafe fn set_required_env_vars() {
         std::env::set_var("CSPR_CLOUD_WSS_URL", "wss://streaming.testnet.cspr.cloud");
     }
 }
-
-// -- IndexerConfig tests --
 
 #[test]
 #[serial]
@@ -234,8 +250,6 @@ fn from_env_loads_custom_rate_limit_and_reconnect_delay() {
     assert_eq!(config.wss_reconnect_delay_ms, 3000);
 }
 
-// -- ContractRegistry tests --
-
 #[test]
 fn active_contracts_returns_empty_for_default_registry() {
     let registry = ContractRegistry::default();
@@ -282,24 +296,110 @@ fn active_contracts_returns_all_when_fully_configured() {
     assert_eq!(registry.active_contracts().len(), 10);
 }
 
-// -- ContractType tests --
+#[test]
+fn active_contracts_defaults_start_block_to_zero() {
+    let registry = ContractRegistry {
+        ico: Some("abc".to_owned()),
+        ..ContractRegistry::default()
+    };
+
+    let active = registry.active_contracts();
+    assert_eq!(active[0].start_block, 0, "start_block should default to 0");
+}
 
 #[test]
-fn contract_type_as_str_matches_display() {
-    let types = [
-        ContractType::Usdc,
-        ContractType::Usdt,
-        ContractType::Big,
-        ContractType::Treasury,
-        ContractType::Ico,
-        ContractType::Lease,
-        ContractType::Escrow,
-        ContractType::Nft,
-        ContractType::Roles,
-        ContractType::Staking,
+#[serial]
+fn active_contracts_reads_start_block_from_env() {
+    // SAFETY: #[serial] ensures no concurrent env var access.
+    unsafe {
+        clear_all_env_vars();
+        std::env::set_var("START_BLOCK_CONTRACT_ICO", "12345");
+    }
+
+    let registry = ContractRegistry {
+        ico: Some("abc".to_owned()),
+        ..ContractRegistry::default()
+    };
+
+    let active = registry.active_contracts();
+    assert_eq!(active[0].start_block, 12_345);
+}
+
+#[test]
+#[serial]
+fn active_contracts_falls_back_to_zero_on_invalid_start_block() {
+    // SAFETY: #[serial] ensures no concurrent env var access.
+    unsafe {
+        clear_all_env_vars();
+        std::env::set_var("START_BLOCK_CONTRACT_ICO", "not_a_number");
+    }
+
+    let registry = ContractRegistry {
+        ico: Some("abc".to_owned()),
+        ..ContractRegistry::default()
+    };
+
+    let active = registry.active_contracts();
+    assert_eq!(
+        active[0].start_block, 0,
+        "Invalid start_block should fall back to 0"
+    );
+}
+
+#[test]
+#[serial]
+fn active_contracts_reads_start_block_per_contract() {
+    // SAFETY: #[serial] ensures no concurrent env var access.
+    unsafe {
+        clear_all_env_vars();
+        std::env::set_var("START_BLOCK_CONTRACT_ICO", "12345");
+        std::env::set_var("START_BLOCK_CONTRACT_BIG", "12000");
+        std::env::set_var("START_BLOCK_CONTRACT_USDC", "0");
+    }
+
+    let registry = ContractRegistry {
+        ico: Some("ico_hash".to_owned()),
+        big: Some("big_hash".to_owned()),
+        usdc: Some("usdc_hash".to_owned()),
+        ..ContractRegistry::default()
+    };
+
+    let active = registry.active_contracts();
+
+    let ico = active
+        .iter()
+        .find(|c| c.contract_type == ContractType::Ico)
+        .unwrap();
+    let big = active
+        .iter()
+        .find(|c| c.contract_type == ContractType::Big)
+        .unwrap();
+    let usdc = active
+        .iter()
+        .find(|c| c.contract_type == ContractType::Usdc)
+        .unwrap();
+
+    assert_eq!(ico.start_block, 12_345);
+    assert_eq!(big.start_block, 12_000);
+    assert_eq!(usdc.start_block, 0);
+}
+
+#[test]
+fn contract_type_display_produces_correct_labels() {
+    let cases = [
+        (ContractType::Usdc, "usdc"),
+        (ContractType::Usdt, "usdt"),
+        (ContractType::Big, "big"),
+        (ContractType::Treasury, "treasury"),
+        (ContractType::Ico, "ico"),
+        (ContractType::Lease, "lease"),
+        (ContractType::Escrow, "escrow"),
+        (ContractType::Nft, "nft"),
+        (ContractType::Roles, "roles"),
+        (ContractType::Staking, "staking"),
     ];
 
-    for ct in types {
-        assert_eq!(ct.as_str(), ct.to_string());
+    for (ct, expected) in cases {
+        assert_eq!(ct.to_string(), expected, "Display mismatch for {ct:?}");
     }
 }

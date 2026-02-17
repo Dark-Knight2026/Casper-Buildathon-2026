@@ -1,19 +1,8 @@
 //! REST backfill client for historical event synchronization.
 //!
-//! Fetches deploy history from the `CSPR.cloud` REST API for each tracked
-//! contract, extracts CES events from the Casper Node RPC execution results,
-//! and forwards them for processing.
-//!
-//! ## How it works
-//!
-//! For each contract in [`ContractRegistry`](crate::config::ContractRegistry):
-//! - Load the cursor (last processed page) from the database.
-//! - Fetch deploys via `GET /deploys?contract_package_hash={hash}`.
-//! - For each deploy, call the Casper Node RPC (`info_get_deploy`) to
-//!   obtain the execution results that contain CES events.
-//! - Forward each event to the processor.
-//! - Sleep between pages to respect `CSPR.cloud` rate limits.
-//! After all pages are consumed the cursor is updated.
+//! Fetches deploy history from the CSPR.cloud Deploy API and processes events
+//! through the same trait-based processor as the streaming client, ensuring
+//! identical handling for both historical and live events.
 
 use core::time::Duration;
 
@@ -23,182 +12,243 @@ use serde::Deserialize;
 use sqlx::PgPool;
 
 use crate::{
-    client,
     config::{ContractType, IndexerConfig},
-    db,
     error::{ApiErrorResponse, IndexerError, IndexerResult},
-    processor,
+    events::EventRegistry,
+    processor::{self, RawEvent},
 };
 
-/// Top-level paginated response returned by `GET /deploys`.
+// -----------------------------------------------------------------------------
+// CSPR.cloud API response types
+// -----------------------------------------------------------------------------
+
+/// Top-level response from the `/deploys` endpoint.
 #[derive(Debug, Deserialize)]
-pub struct DeployListResponse {
-    /// List of deploys on the current page.
-    pub data: Vec<Deploy>,
-    /// Total number of pages available.
-    #[serde(rename = "pageCount")]
-    pub page_count: u32,
-    /// Total number of items across all pages.
-    #[serde(rename = "itemCount")]
-    pub item_count: u32,
+struct DeployListResponse {
+    data: Vec<DeployInfo>,
 }
 
-/// A single deploy (transaction) returned by the `CSPR.cloud` REST API.
+/// Metadata for a single deploy returned by the API.
 #[derive(Debug, Deserialize)]
-pub struct Deploy {
-    /// Hex-encoded deploy hash (64 characters).
-    pub deploy_hash: String,
-    /// Hash of the block that includes this deploy.
-    pub block_hash: String,
-    /// Block height at which the deployment was included.
-    pub block_height: u64,
-    /// ISO-8601 timestamp of the deployment.
-    pub timestamp: String,
-    /// Public key of the account that submitted the deployment.
-    pub caller_public_key: String,
-    /// Contract package hash called by this deploy.
-    pub contract_package_hash: Option<String>,
-    /// Deploy execution status (`executed`, etc.).
-    pub status: Option<String>,
-    /// Human-readable error if the deployment failed.
-    pub error_message: Option<String>,
+struct DeployInfo {
+    deploy_hash: String,
+    block_height: u64,
+    caller_public_key: String,
+    execution_results: Vec<ExecutionResult>,
 }
 
-/// Maximum number of characters kept from an error response body.
-const ERROR_BODY_LIMIT: usize = 512;
-/// Number of deploys fetched per page.
-const PAGE_SIZE: u32 = 100;
+/// Execution result of a deploy (may contain CES event transforms).
+#[derive(Debug, Deserialize)]
+struct ExecutionResult {
+    #[serde(default)]
+    transforms: Vec<Transform>,
+}
 
-/// Run backfill for **all** active contracts in the registry.
+/// A single state transform produced by a deploy.
+#[derive(Debug, Deserialize)]
+struct Transform {
+    #[allow(dead_code)]
+    key: String,
+    transform: TransformValue,
+}
+
+/// Discriminated transform payload — only `WriteCLValue` carries CES events.
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum TransformValue {
+    /// A `CLValue` write — CES events are stored here with `cl_type = "Any"`.
+    WriteCLValue {
+        #[serde(rename = "WriteCLValue")]
+        write_cl_value: ClValueData,
+    },
+    /// Any other transform kind (ignored by the indexer).
+    #[allow(dead_code)]
+    Other(serde_json::Value),
+}
+
+/// Parsed `CLValue` with its type tag and optional JSON representation.
+#[derive(Debug, Deserialize)]
+struct ClValueData {
+    cl_type: String,
+    #[serde(default)]
+    parsed: Option<serde_json::Value>,
+}
+
+// -----------------------------------------------------------------------------
+// Public API
+// -----------------------------------------------------------------------------
+
+/// Run backfill for all configured contracts.
 ///
-/// Iterates over every configured contract, fetches its full deploy history
-/// from the `CSPR.cloud` REST API, and processes the CES events found in each
-/// deploys execution results.
+/// Fetches every deploy from `start_block` onwards for each active contract
+/// and processes events through the shared [`processor`].
 ///
 /// # Errors
 ///
-/// Returns [`IndexerError::Http`] if a `CSPR.cloud` request fails,
-/// [`IndexerError::Api`] on non-2xx responses, or [`IndexerError::Database`]
-/// on cursor / event persistence failures.
+/// Returns [`IndexerError`] on HTTP, API, or database failures.
 #[inline]
-pub async fn run_backfill(config: &IndexerConfig, db: &PgPool) -> IndexerResult<()> {
-    let client = Client::builder().timeout(Duration::from_secs(30)).build()?;
+pub async fn run_backfill(config: &IndexerConfig, db_pool: &PgPool) -> IndexerResult<()> {
+    let client = Client::new();
+    let registry = EventRegistry::new();
+
+    tracing::info!("Starting backfill for all contracts");
 
     for contract in config.contracts.active_contracts() {
         tracing::info!(
-            contract = %contract.contract_type,
+            contract = ?contract.contract_type,
             hash = %contract.hash,
-            "Starting backfill"
+            start_block = contract.start_block,
+            "Backfilling contract"
         );
 
-        backfill_contract(&client, config, db, contract.contract_type, contract.hash).await?;
-        tracing::info!(contract = %contract.contract_type, "Backfill complete");
+        backfill_contract(
+            &client,
+            config,
+            db_pool,
+            &registry,
+            contract.contract_type,
+            contract.hash,
+            contract.start_block,
+        )
+        .await?;
     }
 
+    tracing::info!("Backfill completed successfully");
     Ok(())
 }
 
-/// Backfill a single contract by paginating through its deploy history.
+// -----------------------------------------------------------------------------
+// Internal helpers
+// -----------------------------------------------------------------------------
+
+/// Backfill a single contract by paginating through the CSPR.cloud deploy API.
 async fn backfill_contract(
     client: &Client,
     config: &IndexerConfig,
-    db: &PgPool,
+    db_pool: &PgPool,
+    registry: &EventRegistry,
     contract_type: ContractType,
     contract_hash: &str,
+    start_block: u64,
 ) -> IndexerResult<()> {
-    let stream_key = format!("backfill_{contract_type}");
-    let saved_page = db::get_cursor(db, &stream_key).await?;
-    let mut page: u32 = saved_page.map_or(1, |p| u32::try_from(p.max(1)).unwrap_or(u32::MAX));
-
-    tracing::info!(contract = %contract_type, start_page = page, "Resuming backfill from cursor");
+    let mut page = 1u32;
+    let mut total_events = 0u64;
 
     loop {
-        let response = fetch_deploys(client, config, contract_hash, page).await?;
-        if response.data.is_empty() {
-            break;
+        let url = format!(
+            "{}/deploys?contract_hash={}&page={}&limit=100&order_direction=ASC",
+            config.cspr_cloud_rest_url, contract_hash, page
+        );
+        tracing::debug!(%url, "Fetching deploys page {page}");
+
+        let response = client
+            .get(&url)
+            .header(
+                "Authorization",
+                format!("Bearer {}", config.cspr_cloud_api_token.expose_secret()),
+            )
+            .timeout(Duration::from_secs(30))
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(IndexerError::Api(ApiErrorResponse {
+                status: status.as_u16(),
+                body,
+            }));
         }
-        for deploy in &response.data {
-            // Skip failed deploys — they did not emit events.
-            if deploy.error_message.is_some() {
-                tracing::debug!(
-                    deploy_hash = %deploy.deploy_hash,
-                    "Skipping failed deploy"
-                );
+
+        let deploy_list = response.json::<DeployListResponse>().await?;
+        let page_len = deploy_list.data.len();
+
+        for deploy in &deploy_list.data {
+            if deploy.block_height < start_block {
                 continue;
             }
 
-            tracing::debug!(
-                deploy_hash = %deploy.deploy_hash,
-                block_height = deploy.block_height,
-                contract = %contract_type,
-                "Processing deploy"
-            );
+            let events = extract_ces_events(&deploy.execution_results);
 
-            let envelopes = client::extract_events(client, config, deploy, contract_type).await?;
-            if !envelopes.is_empty() {
-                tracing::info!(
-                    deploy_hash = %deploy.deploy_hash,
-                    count = envelopes.len(),
-                    "Extracted CES events"
-                );
-            }
+            for (event_name, event_data) in events {
+                let raw = RawEvent {
+                    contract_hash: contract_hash.to_owned(),
+                    deploy_hash: deploy.deploy_hash.clone(),
+                    block_height: deploy.block_height,
+                    caller: deploy.caller_public_key.clone(),
+                    contract_type,
+                    event_name: event_name.clone(),
+                    event_data,
+                };
 
-            for envelope in &envelopes {
-                processor::process_event(db, envelope).await?;
+                match processor::process_event(db_pool, registry, &raw).await {
+                    Ok(()) => total_events += 1,
+                    Err(e) => {
+                        tracing::warn!(
+                            error = %e,
+                            deploy = %deploy.deploy_hash,
+                            event = %event_name,
+                            "Failed to process event, skipping"
+                        );
+                    }
+                }
             }
         }
 
-        // Checkpoint after each page so we can resume on restart.
-        db::update_cursor(db, &stream_key, i64::from(page)).await?;
-
-        tracing::info!(
-            contract = %contract_type,
-            page,
-            total_pages = response.page_count,
-            "Backfill page processed"
-        );
-
-        // Respect rate limits.
         tokio::time::sleep(Duration::from_millis(config.backfill_rate_limit_ms)).await;
 
-        if page >= response.page_count {
+        if page_len < 100 {
             break;
         }
+
         page += 1;
     }
+
+    tracing::info!(
+        contract = ?contract_type,
+        events = total_events,
+        "Contract backfill complete"
+    );
 
     Ok(())
 }
 
-/// Fetch a single page of deploys for a given contract package hash.
-async fn fetch_deploys(
-    client: &Client,
-    config: &IndexerConfig,
-    contract_hash: &str,
-    page: u32,
-) -> IndexerResult<DeployListResponse> {
-    let url = format!(
-        "{}/deploys?contract_package_hash={}&page={page}&limit={PAGE_SIZE}&order_direction=ASC",
-        config.cspr_cloud_rest_url, contract_hash,
-    );
+/// Extract CES events from a deployment execution results.
+///
+/// CES events are stored as `WriteCLValue` transforms with `cl_type = "Any"`
+/// and a parsed JSON payload of the form `{ "event_name": "...", "data": {...} }`.
+fn extract_ces_events(results: &[ExecutionResult]) -> Vec<(String, serde_json::Value)> {
+    let mut events = Vec::new();
 
-    let response = client
-        .get(&url)
-        .header("authorization", config.cspr_cloud_api_token.expose_secret())
-        .send()
-        .await?;
+    for result in results {
+        for transform in &result.transforms {
+            let TransformValue::WriteCLValue { write_cl_value } = &transform.transform else {
+                continue;
+            };
 
-    if !response.status().is_success() {
-        let status = response.status().as_u16();
-        let body = response
-            .text()
-            .await
-            .unwrap_or_default()
-            .chars()
-            .take(ERROR_BODY_LIMIT)
-            .collect();
-        return Err(IndexerError::Api(ApiErrorResponse { status, body }));
+            if write_cl_value.cl_type != "Any" {
+                continue;
+            }
+
+            let Some(parsed) = &write_cl_value.parsed else {
+                continue;
+            };
+
+            let Some(obj) = parsed.as_object() else {
+                continue;
+            };
+
+            let Some(event_name) = obj.get("event_name").and_then(|v| v.as_str()) else {
+                continue;
+            };
+
+            let Some(data) = obj.get("data") else {
+                continue;
+            };
+
+            events.push((event_name.to_owned(), data.clone()));
+        }
     }
 
-    Ok(response.json().await?)
+    events
 }

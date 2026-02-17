@@ -2,7 +2,7 @@
 
 use serde_json::json;
 
-use indexer_v2::{
+use indexer::{
     config::ContractType,
     events::{EventRegistry, EventType},
 };

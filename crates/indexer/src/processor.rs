@@ -1,145 +1,120 @@
-//! Event processor — persists [`EventEnvelope`]s into PostgreSQL.
+//! This event processor uses [`EventRegistry`] for static dispatch.
 //!
 //! Each event is processed inside a single database transaction:
+//! 1. **Store** raw event in `blockchain_events` (idempotent)
+//! 2. **Dispatch** to the event's trait implementation via [`EventRegistry`]
+//! 3. **Mark** as processed
 //!
-//! 1. **Store** the raw event in `blockchain_events` (idempotent via UNIQUE
-//!    constraint — duplicates are silently skipped).
-//! 2. **Apply business logic** depending on the event type (e.g. record an ICO
-//!    purchase, log a token transfer).
-//! 3. **Mark** the event as processed.
-//!
-//! If any step fails the whole transaction is rolled back, so the event will be
-//! retried on the next indexer run.
+//! If any step fails, the transaction is rolled back.
 
 use sqlx::PgPool;
 
 use crate::{
-    db,
+    config::ContractType,
+    db::{self, NewBlockchainEvent},
     error::{IndexerError, IndexerResult},
-    events::{EventEnvelope, IndexedEvent},
+    event_trait::EventContext,
+    events::EventRegistry,
 };
 
-/// Process a single event inside a database transaction.
-///
-/// The function is **idempotent**: calling it twice with the same envelope is a
-/// no-op because the `blockchain_events` UNIQUE constraint prevents duplicate
-/// inserts.
+/// Metadata for an event extracted from the blockchain.
+#[derive(Debug, Clone)]
+pub struct RawEvent {
+    /// Contract package hash (hex, no prefix).
+    pub contract_hash: String,
+    /// Deploy hash containing this event.
+    pub deploy_hash: String,
+    /// Block height where event was emitted.
+    pub block_height: u64,
+    /// Public key of deploy caller.
+    pub caller: String,
+    /// Type of contract that emitted the event.
+    pub contract_type: ContractType,
+    /// CES event name (e.g. `TokensPurchased`).
+    pub event_name: String,
+    /// Raw event data as JSON.
+    pub event_data: serde_json::Value,
+}
+
+impl<'a> From<&'a RawEvent> for NewBlockchainEvent<'a> {
+    #[inline]
+    fn from(raw: &'a RawEvent) -> Self {
+        Self {
+            event_type: &raw.event_name,
+            contract_address: &raw.contract_hash,
+            transaction_hash: &raw.deploy_hash,
+            block_number: raw.block_height.cast_signed(),
+            event_data: &raw.event_data,
+        }
+    }
+}
+
+/// Process a single event using the trait-based architecture.
 ///
 /// # Errors
 ///
-/// Returns [`IndexerError::Database`](IndexerError::Database)
-/// on SQL failures or [`IndexerError::Parse`](IndexerError::Parse)
-/// if the event cannot be serialized to JSON.
+/// Returns [`IndexerError`] on database or parsing failures.
 #[inline]
-pub async fn process_event(db_pool: &PgPool, envelope: &EventEnvelope) -> IndexerResult<()> {
+pub async fn process_event(
+    db_pool: &PgPool,
+    registry: &EventRegistry,
+    raw: &RawEvent,
+) -> IndexerResult<()> {
     let mut tx = db_pool.begin().await?;
 
-    // 1. Store raw event (idempotent)
-    let event_json =
-        serde_json::to_value(&envelope.event).map_err(|e| IndexerError::Parse(e.to_string()))?;
-
-    let is_new = db::insert_blockchain_event(
-        &mut tx,
-        &envelope.event_name,
-        &envelope.contract_hash,
-        &envelope.deploy_hash,
-        envelope.block_height.cast_signed(),
-        &event_json,
-    )
-    .await?;
-
-    if !is_new {
-        // Duplicate — already processed, nothing to do.
+    // 1. Store raw event (idempotent via UNIQUE constraint)
+    if !db::insert_blockchain_event(&mut tx, NewBlockchainEvent::from(raw)).await? {
+        // Duplicate — already processed, nothing to do
         return Ok(());
     }
 
-    // 2. Business logic per event type
-    let block_height = envelope.block_height.cast_signed();
+    // 2. Dispatch to event handler via registry
+    let ctx = EventContext {
+        db_pool,
+        contract_hash: &raw.contract_hash,
+        deploy_hash: &raw.deploy_hash,
+        block_height: raw.block_height,
+        caller: &raw.caller,
+        contract_type: raw.contract_type,
+    };
 
-    match &envelope.event {
-        IndexedEvent::TokensPurchased(e) => {
-            db::insert_ico_purchase(
-                &mut tx,
-                &db::NewIcoPurchase {
-                    transaction_hash: &envelope.deploy_hash,
-                    block_height,
-                    buyer_address: &envelope.caller,
-                    amount: &e.amount,
-                    currency: e.currency.as_str(),
-                    price: &e.price,
-                    cost: &e.cost,
-                    event_timestamp: e.timestamp.cast_signed(),
-                },
-            )
-            .await?;
-
-            db::insert_blockchain_transaction(
-                &mut tx,
-                &db::NewBlockchainTx {
-                    deploy_hash: &envelope.deploy_hash,
-                    block_number: block_height,
-                    transaction_type: "token_purchase",
-                    from_address: &envelope.caller,
-                    amount: Some(&e.cost),
-                    currency: Some(e.currency.as_str()),
-                    metadata: &event_json,
-                },
-            )
-            .await?;
+    match registry
+        .process_event(&ctx, &raw.event_name, raw.event_data.clone())
+        .await
+    {
+        Ok(()) => {
+            // Event processed successfully
         }
-
-        IndexedEvent::Cep18Transfer(e) => {
-            db::insert_blockchain_transaction(
-                &mut tx,
-                &db::NewBlockchainTx {
-                    deploy_hash: &envelope.deploy_hash,
-                    block_number: block_height,
-                    transaction_type: "token_transfer",
-                    from_address: &e.sender,
-                    amount: Some(&e.amount),
-                    currency: None,
-                    metadata: &event_json,
-                },
-            )
-            .await?;
+        Err(IndexerError::UnknownEvent { .. }) => {
+            // Unknown event — store raw data only, don't fail
+            tracing::warn!(
+                contract = ?raw.contract_type,
+                event = %raw.event_name,
+                deploy = %raw.deploy_hash,
+                "Unknown event — stored raw data in blockchain_events"
+            );
         }
-
-        IndexedEvent::Cep18TransferFrom(e) => {
-            db::insert_blockchain_transaction(
-                &mut tx,
-                &db::NewBlockchainTx {
-                    deploy_hash: &envelope.deploy_hash,
-                    block_number: block_height,
-                    transaction_type: "token_transfer",
-                    from_address: &e.owner,
-                    amount: Some(&e.amount),
-                    currency: None,
-                    metadata: &event_json,
-                },
-            )
-            .await?;
+        Err(e) => {
+            // Other errors — rollback transaction
+            return Err(e);
         }
-
-        // Phase 1 MVP: remaining events are stored in blockchain_events only.
-        // Business-logic handlers for Lease, NFT, Treasury, etc. will be added
-        // in later phases.
-        _ => {}
     }
 
     // 3. Mark event as processed
     db::mark_event_processed(
         &mut tx,
-        &envelope.deploy_hash,
-        &envelope.event_name,
-        &envelope.contract_hash,
+        &raw.deploy_hash,
+        &raw.event_name,
+        &raw.contract_hash,
     )
     .await?;
 
     tx.commit().await?;
 
     tracing::debug!(
-        deploy = %envelope.deploy_hash,
-        event  = %envelope.event_name,
+        deploy = %raw.deploy_hash,
+        event = %raw.event_name,
+        contract = ?raw.contract_type,
         "Event processed"
     );
 

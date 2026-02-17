@@ -31,6 +31,19 @@ pub enum IndexerError {
     /// Failed to parse event data from the API response.
     #[error("Parse error: {0}")]
     Parse(String),
+
+    /// JSON serialization/deserialization error.
+    #[error("JSON error: {0}")]
+    Json(#[from] serde_json::Error),
+
+    /// Encountered an event with no registered handler.
+    #[error("Unknown event '{event_name}' for contract type '{contract_type}'")]
+    UnknownEvent {
+        /// Contract type that emitted the event.
+        contract_type: String,
+        /// CES event name.
+        event_name: String,
+    },
 }
 
 /// Shorthand for `Result<T, IndexerError>` used throughout the indexer crate.

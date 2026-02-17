@@ -94,7 +94,7 @@ impl IndexerConfig {
 }
 
 /// Known smart contract types deployed on Casper Network.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ContractType {
     /// USDC stablecoin token.
     Usdc,
@@ -125,12 +125,12 @@ impl ContractType {
     pub fn is_cep18_token(self) -> bool {
         matches!(self, Self::Usdc | Self::Usdt | Self::Big)
     }
+}
 
-    /// Returns the string identifier for this contract type.
+impl core::fmt::Display for ContractType {
     #[inline]
-    #[must_use]
-    pub fn as_str(self) -> &'static str {
-        match self {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str(match self {
             Self::Usdc => "usdc",
             Self::Usdt => "usdt",
             Self::Big => "big",
@@ -141,14 +141,7 @@ impl ContractType {
             Self::Nft => "nft",
             Self::Roles => "roles",
             Self::Staking => "staking",
-        }
-    }
-}
-
-impl core::fmt::Display for ContractType {
-    #[inline]
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.write_str(self.as_str())
+        })
     }
 }
 
@@ -201,6 +194,10 @@ impl ContractRegistry {
     }
 
     /// Returns a list of all configured (deployed) contracts with their types.
+    ///
+    /// The `start_block` for each contract is loaded from environment variables:
+    /// - `START_BLOCK_CONTRACT_{TYPE}` (e.g. `START_BLOCK_CONTRACT_ICO=1234`)
+    /// - Defaults to `0` (genesis) if not set
     #[inline]
     #[must_use]
     pub fn active_contracts(&self) -> Vec<ActiveContract<'_>> {
@@ -220,9 +217,18 @@ impl ContractRegistry {
         pairs
             .into_iter()
             .filter_map(|(contract_type, hash)| {
-                hash.as_deref().map(|h| ActiveContract {
-                    contract_type,
-                    hash: h,
+                hash.as_deref().map(|h| {
+                    // Load start_block from env (e.g. START_BLOCK_CONTRACT_ICO)
+                    let env_key = format!(
+                        "START_BLOCK_CONTRACT_{}",
+                        contract_type.to_string().to_uppercase()
+                    );
+                    let start_block = env::var(&env_key)
+                        .ok()
+                        .and_then(|s| s.parse::<u64>().ok())
+                        .unwrap_or(0);
+
+                    ActiveContract::new(contract_type, h, start_block)
                 })
             })
             .collect()
@@ -236,4 +242,19 @@ pub struct ActiveContract<'a> {
     pub contract_type: ContractType,
     /// The on-chain package hash (hex, no `hash-` prefix).
     pub hash: &'a str,
+    /// Block height from which to start indexing (0 = from genesis).
+    pub start_block: u64,
+}
+
+impl<'a> ActiveContract<'a> {
+    /// Creates a new active contract configuration.
+    #[inline]
+    #[must_use]
+    pub fn new(contract_type: ContractType, hash: &'a str, start_block: u64) -> Self {
+        Self {
+            contract_type,
+            hash,
+            start_block,
+        }
+    }
 }

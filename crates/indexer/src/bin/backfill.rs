@@ -12,7 +12,7 @@
 use secrecy::ExposeSecret;
 use sqlx::postgres::PgPoolOptions;
 
-use indexer_v2::{
+use indexer::{
     backfill,
     config::IndexerConfig,
     error::{IndexerError, IndexerResult},
