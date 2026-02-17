@@ -4,14 +4,33 @@ import {
   fromRawAmount,
   validatePurchase,
   calculateTokensReceived,
+  createPurchaseDeploy,
 } from '@/services/ico/icoPurchaseService';
+// Schema loaded inline to avoid path alias issues in test environment
+const icoSchema = JSON.parse(
+  require('fs').readFileSync(
+    require('path').resolve(__dirname, '../../docs/casper_contract_schemas/ico_schema.json'),
+    'utf-8',
+  ),
+);
+
+// Capture args passed to Args.fromMap so we can inspect deploy arguments
+let capturedArgsMap: Record<string, unknown> = {};
 
 // Mock dependencies that icoPurchaseService imports
 vi.mock('casper-js-sdk', () => ({
-  Args: { fromMap: vi.fn() },
-  CLValue: { newCLKey: vi.fn(), newCLUInt256: vi.fn(), newCLUint8: vi.fn() },
-  Key: { newKey: vi.fn() },
+  Args: { fromMap: vi.fn((map: Record<string, unknown>) => { capturedArgsMap = map; return map; }) },
+  CLValue: {
+    newCLKey: vi.fn((v: unknown) => ({ type: 'Key', value: v })),
+    newCLUInt256: vi.fn((v: unknown) => ({ type: 'U256', value: v })),
+    newCLUint8: vi.fn((v: unknown) => ({ type: 'U8', value: v })),
+    newCLUref: vi.fn((v: unknown) => ({ type: 'URef', value: v })),
+  },
+  Key: { newKey: vi.fn((v: unknown) => v) },
   Deploy: {},
+  URef: { fromString: vi.fn((s: string) => ({ uref: s })) },
+  PublicKey: { fromHex: vi.fn((s: string) => ({ hex: s })) },
+  AccountIdentifier: vi.fn(),
 }));
 
 vi.mock('@/services/ico/casperClient', () => ({
@@ -234,5 +253,44 @@ describe('calculateTokensReceived', () => {
     const raw = calculateTokensReceived('0.5', 'USDT', 0.001);
     const tokens = fromRawAmount(raw, 18);
     expect(tokens).toBe('500');
+  });
+});
+
+// ── Deploy args vs contract schema ──────────────────────────────────
+
+describe('createPurchaseDeploy args match contract schema', () => {
+  // Extract required argument names from the ICO contract schema
+  const purchaseEntryPoint = (icoSchema as { entry_points: Array<{ name: string; arguments: Array<{ name: string; optional: boolean }> }> })
+    .entry_points.find(ep => ep.name === 'purchase');
+  const requiredSchemaArgs = purchaseEntryPoint!.arguments
+    .filter(a => !a.optional)
+    .map(a => a.name);
+
+  it('includes all required contract arguments', () => {
+    capturedArgsMap = {};
+    createPurchaseDeploy(
+      '01abc123',
+      '100',
+      'CSPR',
+      'uref-abc-007',
+    );
+
+    const deployArgNames = Object.keys(capturedArgsMap);
+    for (const required of requiredSchemaArgs) {
+      expect(deployArgNames, `missing required arg: ${required}`).toContain(required);
+    }
+  });
+
+  it('includes __cargo_purse as URef type', () => {
+    capturedArgsMap = {};
+    createPurchaseDeploy(
+      '01abc123',
+      '50',
+      'USDT',
+      'uref-def-007',
+    );
+
+    expect(capturedArgsMap).toHaveProperty('__cargo_purse');
+    expect((capturedArgsMap.__cargo_purse as { type: string }).type).toBe('URef');
   });
 });
