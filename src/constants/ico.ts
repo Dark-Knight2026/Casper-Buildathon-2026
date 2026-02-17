@@ -55,43 +55,6 @@ export function getCurrencyRateUsd(currency: PaymentCurrency, csprPriceUsd?: num
   return 1; // USDT, USDC, CARD are all 1:1 USD
 }
 
-// Mock transaction data - single source of truth
-// TODO: Replace with real API data
-export const MOCK_TRANSACTIONS = [
-  {
-    id: '1',
-    type: 'purchase' as const,
-    amount: 1500,
-    currency: 'USDC',
-    tokensReceived: 1000000,
-    tokenSymbol: 'BIG',
-    status: 'failed' as const,
-    timestamp: new Date('2025-01-20T10:30:00'),
-    txHash: '0x1234567890abcdef1234567890abcdef12345678',
-  },
-  {
-    id: '2',
-    type: 'purchase' as const,
-    amount: 100,
-    currency: 'USDC',
-    tokensReceived: 66666,
-    tokenSymbol: 'BIG',
-    status: 'pending' as const,
-    timestamp: new Date('2025-01-15T14:20:00'),
-    txHash: '0xabcdef1234567890abcdef1234567890abcdef12',
-  },
-  {
-    id: '3',
-    type: 'purchase' as const,
-    amount: 500,
-    currency: 'USDC',
-    tokensReceived: 333333,
-    tokenSymbol: 'BIG',
-    status: 'completed' as const,
-    timestamp: new Date('2025-01-10T09:15:00'),
-    txHash: '0x7890abcdef1234567890abcdef1234567890abcd',
-  },
-];
 
 // Payment currency display info
 export const PAYMENT_CURRENCY_INFO: Record<PaymentCurrency, {

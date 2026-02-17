@@ -91,10 +91,10 @@ export function TransactionHistory({ transactions, className }: TransactionHisto
 
                 <div className="text-right">
                   <p className="text-sm font-medium text-[hsl(var(--ico-text-primary))]">
-                    +{tx.tokensReceived.toLocaleString()} {tx.tokenSymbol}
+                    +{tx.tokensReceived.toLocaleString('en-US', { maximumFractionDigits: 2 })} {tx.tokenSymbol}
                   </p>
                   <p className="text-xs text-[hsl(var(--ico-text-secondary))]">
-                    {tx.amount.toLocaleString()} {tx.currency}
+                    {tx.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {tx.currency}
                   </p>
                 </div>
               </div>

@@ -1,6 +1,7 @@
+import { useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
 import type { ScheduleProgress } from '@/hooks/ico/useICOSchedules';
-import { ICO_CONFIG, MOCK_TRANSACTIONS } from '@/constants/ico';
+import { ICO_CONFIG } from '@/constants/ico';
 import { Title } from '../shared/Title';
 import { ProgressBar } from '../shared/ProgressBar';
 import { WalletCard } from '../shared/WalletCard';
@@ -8,6 +9,7 @@ import { TransactionHistory } from '../shared/TransactionHistory';
 import CountdownTimer from '../shared/CountdownTimer';
 import { UserTokenBalance } from '../shared/UserTokenBalance';
 import { usePurchaseFlow } from '@/hooks/ico/usePurchaseFlow';
+import { useTransactionHistory } from '@/hooks/ico/useTransactionHistory';
 import { PurchaseConfirmationModal } from '../shared/PurchaseConfirmationModal';
 import { TransactionStatusToast } from '../shared/TransactionStatusToast';
 
@@ -24,6 +26,8 @@ const MOCK_USER_BALANCE = {
 
 export function PrivateSaleActive({ className, endTimestamp, progress }: ActivePresaleProps) {
   const tokenPrice = progress?.priceUsd ?? 0;
+  const { transactions, addTransaction, updateTransaction } = useTransactionHistory();
+  const pendingTxIdRef = useRef<string | null>(null);
 
   const {
     isConnected,
@@ -34,12 +38,52 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: ActiveP
     balancesLoading,
     csprPriceUsd,
     handlePurchase,
+    purchaseState,
+    pendingPurchase,
     modalProps,
     toastProps,
   } = usePurchaseFlow({
     tokenPrice,
     tokenSymbol: ICO_CONFIG.TOKEN.symbol,
+    onPurchaseSuccess: (txHash, tokensReceived) => {
+      if (pendingTxIdRef.current) {
+        updateTransaction(pendingTxIdRef.current, {
+          status: 'completed',
+          tokensReceived: Number(tokensReceived),
+          txHash,
+        });
+        pendingTxIdRef.current = null;
+      }
+    },
+    onPurchaseError: () => {
+      if (pendingTxIdRef.current) {
+        updateTransaction(pendingTxIdRef.current, { status: 'failed' });
+        pendingTxIdRef.current = null;
+      }
+    },
   });
+
+  // Save as 'pending' when purchase tx is submitted to blockchain
+  useEffect(() => {
+    if (
+      purchaseState.step === 'purchase-pending' &&
+      purchaseState.purchaseTxHash &&
+      !pendingTxIdRef.current &&
+      pendingPurchase
+    ) {
+      const tx = addTransaction({
+        type: 'purchase',
+        amount: pendingPurchase.amount,
+        currency: pendingPurchase.currency,
+        tokensReceived: 0,
+        tokenSymbol: ICO_CONFIG.TOKEN.symbol,
+        status: 'pending',
+        timestamp: new Date(),
+        txHash: purchaseState.purchaseTxHash,
+      });
+      pendingTxIdRef.current = tx.id;
+    }
+  }, [purchaseState.step, purchaseState.purchaseTxHash, pendingPurchase, addTransaction]);
 
   console.log('Rendering ActivePresale with props:', {
     endTimestamp,
@@ -119,7 +163,7 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: ActiveP
 
       {/* Transaction History */}
       <TransactionHistory
-        transactions={MOCK_TRANSACTIONS}
+        transactions={transactions}
         className="mt-8 max-w-5xl"
       />
 

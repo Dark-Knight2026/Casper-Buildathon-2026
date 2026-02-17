@@ -4,7 +4,7 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { TrendingUp, Clock, Percent, Wallet } from 'lucide-react';
 import { TransactionHistory } from '../shared/TransactionHistory';
-import { MOCK_TRANSACTIONS } from '@/constants/ico';
+import { useTransactionHistory } from '@/hooks/ico/useTransactionHistory';
 
 // Mock data
 const MOCK_DASHBOARD = {
@@ -50,6 +50,8 @@ const formatUSD = (value: string | number) => {
 };
 
 export function OverviewTab() {
+  const { transactions } = useTransactionHistory();
+
   const dashboardCards = useMemo(() => [
     {
       label: 'BIG Balance',
@@ -208,7 +210,7 @@ export function OverviewTab() {
         </Card>
 
         {/* Transactions Card */}
-        <TransactionHistory transactions={MOCK_TRANSACTIONS} className="md:col-span-2 p-5" />
+        <TransactionHistory transactions={transactions} className="md:col-span-2 p-5" />
       </div>
     </div>
   );
