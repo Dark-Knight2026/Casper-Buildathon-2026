@@ -7,10 +7,12 @@
 //! This trait-based architecture allows adding new events without modifying
 //! existing code (Open-Closed Principle).
 
+use core::fmt::Debug;
+
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 
-use crate::error::IndexerResult;
+use crate::{config::ContractType, error::IndexerResult};
 
 /// Context passed to event processors containing transaction metadata.
 #[derive(Debug)]
@@ -23,10 +25,10 @@ pub struct EventContext<'a> {
     pub deploy_hash: &'a str,
     /// Block height where this event was included.
     pub block_height: i64,
-    /// Public key of the account that submitted the deploy.
+    /// Public key of the account that submitted the deployment.
     pub caller: &'a str,
     /// Type of contract that emitted this event.
-    pub contract_type: crate::config::ContractType,
+    pub contract_type: ContractType,
 }
 
 /// Trait for blockchain events that can be indexed and processed.
@@ -57,9 +59,7 @@ pub struct EventContext<'a> {
 ///     }
 /// }
 /// ```
-pub trait IndexableEvent:
-    Serialize + for<'de> Deserialize<'de> + Send + Sync + core::fmt::Debug
-{
+pub trait IndexableEvent: Serialize + for<'de> Deserialize<'de> + Send + Sync + Debug {
     /// CES event name as it appears in the smart contract schema.
     const EVENT_NAME: &'static str;
 

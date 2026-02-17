@@ -125,12 +125,12 @@ impl ContractType {
     pub fn is_cep18_token(self) -> bool {
         matches!(self, Self::Usdc | Self::Usdt | Self::Big)
     }
+}
 
-    /// Returns the string identifier for this contract type.
+impl core::fmt::Display for ContractType {
     #[inline]
-    #[must_use]
-    pub fn as_str(self) -> &'static str {
-        match self {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str(match self {
             Self::Usdc => "usdc",
             Self::Usdt => "usdt",
             Self::Big => "big",
@@ -141,14 +141,7 @@ impl ContractType {
             Self::Nft => "nft",
             Self::Roles => "roles",
             Self::Staking => "staking",
-        }
-    }
-}
-
-impl core::fmt::Display for ContractType {
-    #[inline]
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.write_str(self.as_str())
+        })
     }
 }
 
@@ -228,7 +221,7 @@ impl ContractRegistry {
                     // Load start_block from env (e.g. START_BLOCK_CONTRACT_ICO)
                     let env_key = format!(
                         "START_BLOCK_CONTRACT_{}",
-                        contract_type.as_str().to_uppercase()
+                        contract_type.to_string().to_uppercase()
                     );
                     let start_block = env::var(&env_key)
                         .ok()

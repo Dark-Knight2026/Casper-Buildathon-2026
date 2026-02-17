@@ -15,10 +15,48 @@ use crate::{
     event_trait::{EventContext, IndexableEvent},
 };
 
+/// A typed event from any known contract — the single source of truth for
+/// valid `(contract_type, event_name)` pairs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EventType {
+    /// An event emitted by the ICO contract.
+    Ico(ico::IcoEventType),
+    /// An event emitted by a CEP-18 token contract (BIG, USDC, USDT).
+    Cep18(cep18::Cep18EventType),
+}
+
+impl EventType {
+    /// Parse a raw `(contract_type, event_name)` pair into a typed variant.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`IndexerError::UnknownEvent`] if the event name is not
+    /// recognized for the given contract type.
+    #[inline]
+    pub fn parse(contract_type: ContractType, event_name: &str) -> IndexerResult<Self> {
+        let unknown = || IndexerError::UnknownEvent {
+            contract_type: contract_type.to_string(),
+            event_name: event_name.to_owned(),
+        };
+
+        match contract_type {
+            ContractType::Ico => event_name
+                .parse::<ico::IcoEventType>()
+                .map(Self::Ico)
+                .map_err(|_| unknown()),
+
+            ContractType::Big | ContractType::Usdc | ContractType::Usdt => event_name
+                .parse::<cep18::Cep18EventType>()
+                .map(Self::Cep18)
+                .map_err(|_| unknown()),
+
+            _ => Err(unknown()),
+        }
+    }
+}
+
 /// Registry of event handlers for static dispatch.
-///
-/// Uses compile-time dispatch instead of a `HashMap` to avoid lifetime issues.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct EventRegistry;
 
 impl EventRegistry {
@@ -42,37 +80,30 @@ impl EventRegistry {
         event_name: &str,
         event_data: Value,
     ) -> IndexerResult<()> {
-        match (ctx.contract_type, event_name) {
+        // Parse raw string into typed event (single validation point).
+        let event_type = EventType::parse(ctx.contract_type, event_name)?;
+
+        // Type-safe dispatch — compiler enforces exhaustiveness.
+        match event_type {
             // ICO events
-            (ContractType::Ico, "TokensPurchased") => {
+            EventType::Ico(ico::IcoEventType::TokensPurchased) => {
                 process_typed_event::<ico::TokensPurchased>(ctx, event_data).await
             }
 
-            // CEP-18 Transfer events (BIG, tUSDC, tUSDT)
-            (ContractType::Big | ContractType::Usdc | ContractType::Usdt, "Transfer") => {
+            // CEP-18 events
+            EventType::Cep18(cep18::Cep18EventType::Transfer) => {
                 process_typed_event::<cep18::Transfer>(ctx, event_data).await
             }
 
-            // Unknown event
+            // Recognised but not yet implemented
             _ => {
-                tracing::warn!(
-                    contract = ?ctx.contract_type,
-                    event = %event_name,
-                    "Unknown event — storing raw data only"
-                );
+                tracing::warn!(?event_type, "Event type recognized but not implemented yet");
                 Err(IndexerError::UnknownEvent {
-                    contract_type: ctx.contract_type.as_str().to_owned(),
+                    contract_type: ctx.contract_type.to_string(),
                     event_name: event_name.to_owned(),
                 })
             }
         }
-    }
-}
-
-impl Default for EventRegistry {
-    #[inline]
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -81,6 +112,5 @@ async fn process_typed_event<E>(ctx: &EventContext<'_>, event_data: Value) -> In
 where
     E: IndexableEvent,
 {
-    let event: E = serde_json::from_value(event_data)?;
-    event.process(ctx).await
+    serde_json::from_value::<E>(event_data)?.process(ctx).await
 }

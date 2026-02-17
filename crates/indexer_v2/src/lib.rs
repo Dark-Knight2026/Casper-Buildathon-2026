@@ -37,9 +37,3 @@ pub mod event_trait;
 pub mod events;
 /// Event processor — persists events into PostgreSQL.
 pub mod processor;
-
-// Re-exports for convenience
-pub use config::{ActiveContract, ContractRegistry, ContractType, IndexerConfig};
-pub use error::{IndexerError, IndexerResult};
-pub use event_trait::{EventContext, IndexableEvent};
-pub use events::EventRegistry;

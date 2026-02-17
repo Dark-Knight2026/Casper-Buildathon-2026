@@ -1,7 +1,4 @@
-//! Event processor v2 — trait-based modular architecture.
-//!
-//! This processor uses [`EventRegistry`] for static dispatch instead of a
-//! large match statement over [`IndexedEvent`] variants.
+//! This event processor uses [`EventRegistry`] for static dispatch.
 //!
 //! Each event is processed inside a single database transaction:
 //! 1. **Store** raw event in `blockchain_events` (idempotent)
@@ -13,11 +10,11 @@
 use sqlx::PgPool;
 
 use crate::{
-    EventRegistry,
     config::ContractType,
     db,
     error::{IndexerError, IndexerResult},
     event_trait::EventContext,
+    events::EventRegistry,
 };
 
 /// Metadata for an event extracted from the blockchain.
