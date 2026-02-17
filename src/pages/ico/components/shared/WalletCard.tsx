@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo } from 'react';
 import { cn } from '@/lib/utils';
-import { getCurrencyRateUsd } from '@/constants/ico';
+import { getCurrencyRateUsd, ICO_CONFIG } from '@/constants/ico';
 import { Card } from './Card';
 import type { PaymentCurrency } from '@/types/ico';
 import { MainButton } from './MainButton';
@@ -19,6 +19,7 @@ interface WalletCardProps {
   csprPriceUsd?: number;
   onConnect?: () => void;
   onPurchase?: (amount: number, currency: PaymentCurrency) => void;
+  onBuyCspr?: () => void;
   className?: string;
 }
 
@@ -35,6 +36,7 @@ export function WalletCard({
   csprPriceUsd,
   onConnect,
   onPurchase,
+  onBuyCspr,
   className,
 }: WalletCardProps) {
   const [amount, setAmount] = useState('');
@@ -45,7 +47,6 @@ export function WalletCard({
     USDT: balanceUSDT,
     USDC: balanceUSDC,
     CSPR: balanceCSPR,
-    CARD: 0,
   };
   const currentBalance = balances[currency];
   const currencyRate = getCurrencyRateUsd(currency, csprPriceUsd);
@@ -57,6 +58,10 @@ export function WalletCard({
     () => amountInUsd / tokenPrice,
     [amountInUsd, tokenPrice]
   );
+
+  // Check if CSPR balance is too low for a minimum purchase ($1 equivalent)
+  const csprBalanceUsd = balanceCSPR * (csprPriceUsd ?? 0);
+  const lowCsprBalance = isConnected && csprBalanceUsd < ICO_CONFIG.PURCHASE_LIMITS.min;
 
   // Balance validation
   const amountInCurrency = Number(amount) || 0;
@@ -113,6 +118,15 @@ export function WalletCard({
               <p className="text-sm font-medium text-[hsl(var(--ico-text-primary))]">
                 {balanceCSPR.toLocaleString(undefined, { maximumFractionDigits: 2 })} CSPR
               </p>
+              {lowCsprBalance && onBuyCspr && (
+                <button
+                  type="button"
+                  onClick={onBuyCspr}
+                  className="text-xs text-[hsl(var(--ico-brand-secondary))] hover:text-[hsl(var(--ico-brand-secondary-hover))] transition-colors underline underline-offset-2 cursor-pointer"
+                >
+                  Buy CSPR with card
+                </button>
+              )}
               <p className="text-sm font-medium text-[hsl(var(--ico-text-primary))]">
                 {balanceUSDT.toLocaleString(undefined, { maximumFractionDigits: 2 })} USDT
               </p>

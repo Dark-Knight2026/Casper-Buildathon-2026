@@ -37,6 +37,7 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: ActiveP
     pendingPurchase,
     modalProps,
     toastProps,
+    buyCspr,
   } = usePurchaseFlow({
     tokenPrice,
     tokenSymbol: ICO_CONFIG.TOKEN.symbol,
@@ -66,7 +67,7 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: ActiveP
     const tokensPurchased = completed.reduce((sum, tx) => sum + tx.tokensReceived, 0);
     const totalSpentUSD = completed.reduce((sum, tx) => {
       if (tx.currency === 'CSPR') return sum + tx.amount * (csprPriceUsd ?? 0);
-      return sum + tx.amount; // USDT, USDC, CARD are 1:1 USD
+      return sum + tx.amount; // USDT, USDC are 1:1 USD
     }, 0);
     return { tokensPurchased, totalSpentUSD };
   }, [transactions, csprPriceUsd]);
@@ -154,6 +155,7 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: ActiveP
           csprPriceUsd={csprPriceUsd}
           onConnect={connect}
           onPurchase={handlePurchase}
+          onBuyCspr={buyCspr}
           className="w-full"
         />
       </div>

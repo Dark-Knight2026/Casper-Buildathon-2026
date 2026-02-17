@@ -12,7 +12,7 @@ export type ICOPhase =
   | 'private-sale-active'       // State 2
   | 'post-ico-dashboard';       // State 3
 // Payment currencies supported
-export type PaymentCurrency = 'USDT' | 'USDC' | 'CSPR' | 'CARD';
+export type PaymentCurrency = 'USDT' | 'USDC' | 'CSPR';
 
 // Token types on Casper
 export type TokenType = 'CSPR' | 'USDC' | 'USDT' | 'BIG';

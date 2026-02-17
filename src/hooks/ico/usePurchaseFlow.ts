@@ -69,6 +69,7 @@ interface UsePurchaseFlowReturn {
   handleConfirmPurchase: () => Promise<void>;
   handleCloseModal: () => void;
   handleCloseToast: () => void;
+  buyCspr: () => void;
 
   // Props for components
   modalProps: {
@@ -170,6 +171,12 @@ export function usePurchaseFlow({
     }
   }, [purchaseState.isProcessing, resetPurchase]);
 
+  // Open fiat on-ramp to buy CSPR with card
+  const buyCspr = useCallback(() => {
+    if (!clickRef) return;
+    clickRef.showBuyCsprUi();
+  }, [clickRef]);
+
   // Handle toast close
   const handleCloseToast = useCallback(() => {
     setShowToast(false);
@@ -237,6 +244,7 @@ export function usePurchaseFlow({
     handleConfirmPurchase,
     handleCloseModal,
     handleCloseToast,
+    buyCspr,
 
     // Component props
     modalProps,

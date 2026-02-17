@@ -113,8 +113,6 @@ function getDecimals(currency: PaymentCurrency): number {
     case 'USDT':
     case 'USDC':
       return STABLECOIN_DECIMALS;
-    case 'CARD':
-      return 2; // Fiat cents
     default:
       return 18;
   }
@@ -144,8 +142,8 @@ export async function checkApprovalNeeded(
   amount: string,
   currency: PaymentCurrency,
 ): Promise<ApprovalCheckResult> {
-  // CSPR and CARD don't need approval
-  if (currency === 'CSPR' || currency === 'CARD') {
+  // CSPR doesn't need approval
+  if (currency === 'CSPR') {
     return { needed: false, currentAllowance: 0n, requiredAmount: 0n };
   }
 
@@ -231,10 +229,6 @@ export async function createPurchaseTransaction(
   currency: PaymentCurrency,
   mainPurseURef: string,
 ): Promise<Transaction> {
-  if (currency === 'CARD') {
-    throw new Error('CARD payments are handled via fiat on-ramp, not blockchain transaction');
-  }
-
   const decimals = getDecimals(currency);
   const rawAmount = toRawAmount(amount, decimals);
   const contractCurrency = paymentCurrencyToContractCurrency(

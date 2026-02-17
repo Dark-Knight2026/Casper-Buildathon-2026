@@ -12,7 +12,7 @@ export const ICO_CONFIG = {
     decimals: 18,
   },
 
-  PAYMENT_METHODS: ['USDT', 'USDC', 'CSPR', 'CARD'] as const,
+  PAYMENT_METHODS: ['USDT', 'USDC', 'CSPR'] as const,
 
   CONTRACTS: {
     icoAddress: import.meta.env.VITE_ICO_CONTRACT_HASH ?? '',
@@ -52,7 +52,7 @@ export const ICO_CONFIG = {
  */
 export function getCurrencyRateUsd(currency: PaymentCurrency, csprPriceUsd?: number): number {
   if (currency === 'CSPR') return csprPriceUsd || 0;
-  return 1; // USDT, USDC, CARD are all 1:1 USD
+  return 1; // USDT, USDC are 1:1 USD
 }
 
 
@@ -76,11 +76,6 @@ export const PAYMENT_CURRENCY_INFO: Record<PaymentCurrency, {
     name: 'CSPR',
     icon: 'cspr',
     description: 'Casper Network native token',
-  },
-  CARD: {
-    name: 'Credit Card',
-    icon: 'credit-card',
-    description: 'Pay with Visa, Mastercard, or other cards',
   },
 };
 
