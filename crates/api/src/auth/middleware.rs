@@ -1,23 +1,28 @@
+//! Authentication middleware and error types.
+
 use std::sync::Arc;
 
-use crate::{config::AppState, models::Claims};
 use axum::{
-    async_trait,
-    extract::FromRequestParts,
-    http::{request::Parts, StatusCode},
-    response::{IntoResponse, Response},
     Json,
+    extract::FromRequestParts,
+    http::{StatusCode, request::Parts},
+    response::{IntoResponse, Response},
 };
-use jsonwebtoken::{decode, DecodingKey, Validation};
+use jsonwebtoken::{DecodingKey, Validation, decode};
 use secrecy::ExposeSecret;
 use serde_json::json;
+use thiserror::Error;
 
+use crate::common::{AppState, Claims};
+
+/// Authenticated user extracted from JWT token.
+#[derive(Debug)]
 pub struct AuthUser(pub Claims);
 
-#[async_trait]
 impl FromRequestParts<Arc<AppState>> for AuthUser {
     type Rejection = AuthError;
 
+    #[inline]
     async fn from_request_parts(
         parts: &mut Parts,
         state: &Arc<AppState>,
@@ -28,43 +33,41 @@ impl FromRequestParts<Arc<AppState>> for AuthUser {
             .and_then(|value| value.to_str().ok())
             .ok_or(AuthError::MissingCredentials)?;
 
-        if !auth_header.starts_with("Bearer ") {
+        let Some(token) = auth_header.strip_prefix("Bearer ") else {
             return Err(AuthError::MissingCredentials);
-        }
-
-        let token = &auth_header[7..];
-
+        };
         let secret = state.config.jwt_secret.expose_secret();
-
         let validation = Validation::new(jsonwebtoken::Algorithm::HS256);
-
         let token_data = decode::<Claims>(
             token,
             &DecodingKey::from_secret(secret.as_bytes()),
             &validation,
-        )
-        .map_err(|_| AuthError::InvalidToken)?;
+        )?;
 
         Ok(AuthUser(token_data.claims))
     }
 }
 
-#[derive(Debug)]
+/// Authentication errors.
+#[derive(Debug, Error)]
 pub enum AuthError {
+    /// Authorization header is missing or malformed.
+    #[error("Missing credentials")]
     MissingCredentials,
-    InvalidToken,
-    ServerConfiguration,
+    /// JWT token is invalid or expired.
+    #[error("Invalid token: {0}")]
+    InvalidToken(#[from] jsonwebtoken::errors::Error),
 }
 
 impl IntoResponse for AuthError {
+    #[inline]
     fn into_response(self) -> Response {
-        let (status, error_message) = match self {
+        let (status, error_message) = match &self {
             AuthError::MissingCredentials => (StatusCode::UNAUTHORIZED, "Missing credentials"),
-            AuthError::InvalidToken => (StatusCode::UNAUTHORIZED, "Invalid token"),
-            AuthError::ServerConfiguration => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Server configuration error",
-            ),
+            AuthError::InvalidToken(err) => {
+                tracing::warn!(error = %err, "JWT validation failed");
+                (StatusCode::UNAUTHORIZED, "Invalid token")
+            }
         };
         let body = Json(json!({
             "error": error_message,

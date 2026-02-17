@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO users ( email, role, wallet_address, first_name, last_name, auth_id, status )\n            VALUES ($1, 'tenant', $2, 'Wallet', 'User', NULL, 'active')\n            ON CONFLICT (wallet_address) DO UPDATE\n                SET last_login_at = NOW()\n            RETURNING id, role\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "role",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "4cab3573ef31d95cd90f459d2b0f4bd9bd4c632a28287d469cc4303b483f12d2"
+}
