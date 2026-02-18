@@ -74,11 +74,12 @@ axum-test = "18"
 casper-types = "6.1.0"
 chrono = { version = "0.4", features = ["serde"] }
 dotenv = "0.15"
+futures-util = "0.3"
 hex = "0.4"
 jsonwebtoken = { version = "10.3", features = ["rust_crypto"] }
 rand = "0.10.0"
 redis = { version = "1.0.2", features = ["tokio-comp"] }
-reqwest = { version = "0.12", features = ["json"] }
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls"] }
 rust_decimal = { version = "1", features = ["serde"] }
 secrecy = { version = "0.10", features = ["serde"] }
 serde = { version = "1", features = ["derive"] }
@@ -90,6 +91,7 @@ strum = { version = "0.27", features = ["derive"] }
 testcontainers = "0.27.0"
 thiserror = "2.0"
 tokio = { version = "1", features = ["full"] }
+tokio-tungstenite = { version = "0.28", features = ["rustls-tls-webpki-roots"] }
 tower-http = { version = "0.6.8", features = ["cors", "trace", "limit"] }
 tower_governor = { version = "0.8", features = ["axum"] }
 tracing = "0.1"
