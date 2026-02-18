@@ -34,10 +34,6 @@ export function ActiveICO({ endTimestamp, className, progress }: ActiveICOProps)
     tokenSymbol: ICO_CONFIG.TOKEN.symbol,
   });
 
-  const handleConnect = () => {
-    toast.info('Wallet connection coming soon');
-  };
-
   // TODO: [Next PR] Implement full purchase flow with server-side validation.
   // This handler is intentionally empty in the current UI-only PR.
   // Required integration steps:
@@ -153,7 +149,7 @@ export function ActiveICO({ endTimestamp, className, progress }: ActiveICOProps)
       </div>
     </div>
 
-      {/* Transaction History */}
+      {/* TODO: will be replaced with real transaction data */}
       <TransactionHistory
         transactions={MOCK_TRANSACTIONS}
         className="w-full"

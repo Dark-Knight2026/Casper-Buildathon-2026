@@ -88,7 +88,7 @@ export function ActivePresale({ className, endTimestamp, progress }: ActivePresa
         />
       </div>
 
-      {/* User Token Balance - show only when progress data exists */}
+      {/* TODO: will be replaced with real user data */}
       {progress && (
         <UserTokenBalance
           tokensPurchased={MOCK_USER_BALANCE.tokensPurchased}
@@ -99,7 +99,7 @@ export function ActivePresale({ className, endTimestamp, progress }: ActivePresa
         />
       )}
 
-      {/* Transaction History */}
+      {/* TODO: will be replaced with real transaction data */}
       <TransactionHistory
         transactions={MOCK_TRANSACTIONS}
         className="mt-8 max-w-5xl"
