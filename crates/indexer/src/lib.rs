@@ -39,3 +39,5 @@ pub mod event_trait;
 pub mod events;
 /// Event processor — persists events into PostgreSQL.
 pub mod processor;
+/// WebSocket streaming client for real-time event ingestion.
+pub mod streaming;
