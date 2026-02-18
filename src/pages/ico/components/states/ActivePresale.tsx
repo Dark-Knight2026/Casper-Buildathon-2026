@@ -1,15 +1,12 @@
 import { cn } from '@/lib/utils';
 import type { ScheduleProgress } from '@/hooks/ico/useICOSchedules';
-import { ICO_CONFIG, MOCK_TRANSACTIONS } from '@/constants/ico';
-import { MOCK_PRESALE_PROGRESS, MOCK_WALLET, MOCK_USER_BALANCE } from '@/constants/icoMockData';
+import { ICO_CONFIG } from '@/constants/ico';
 import type { PaymentCurrency } from '@/types/ico';
 import { toast } from '@/lib/toast';
 import { Title } from '../shared/Title';
 import { ProgressBar } from '../shared/ProgressBar';
 import { WalletCard } from '../shared/WalletCard';
-import { TransactionHistory } from '../shared/TransactionHistory';
 import CountdownTimer from '../shared/CountdownTimer';
-import { UserTokenBalance } from '../shared/UserTokenBalance';
 import { usePurchaseFlow } from '@/hooks/ico/usePurchaseFlow';
 import { PurchaseConfirmationModal } from '../shared/PurchaseConfirmationModal';
 import { TransactionStatusToast } from '../shared/TransactionStatusToast';
@@ -88,22 +85,8 @@ export function ActivePresale({ className, endTimestamp, progress }: ActivePresa
         />
       </div>
 
-      {/* TODO: will be replaced with real user data */}
-      {progress && (
-        <UserTokenBalance
-          tokensPurchased={MOCK_USER_BALANCE.tokensPurchased}
-          totalSpentUSD={MOCK_USER_BALANCE.totalSpentUSD}
-          tokenPrice={progress.priceUsd}
-          tokenSymbol={ICO_CONFIG.TOKEN.symbol}
-          className="mt-8"
-        />
-      )}
-
-      {/* TODO: will be replaced with real transaction data */}
-      <TransactionHistory
-        transactions={MOCK_TRANSACTIONS}
-        className="mt-8 max-w-5xl"
-      />
+      {/* TODO: [Next PR] Wire UserTokenBalance to real per-user contract data */}
+      {/* TODO: [Next PR] Wire TransactionHistory to real on-chain transaction data */}
 
       {/* Purchase Confirmation Modal */}
       {modalProps && (

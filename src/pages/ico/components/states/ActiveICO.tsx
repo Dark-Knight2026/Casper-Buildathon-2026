@@ -3,8 +3,7 @@ import { Card } from '../shared/Card';
 import { CountdownTimer } from '../shared/CountdownTimer';
 import { ProgressBar } from '../shared/ProgressBar';
 import { WalletCard } from '../shared/WalletCard';
-import { TransactionHistory } from '../shared/TransactionHistory';
-import { ICO_CONFIG, MOCK_TRANSACTIONS } from '@/constants/ico';
+import { ICO_CONFIG } from '@/constants/ico';
 import type { ScheduleProgress } from '@/hooks/ico/useICOSchedules';
 import { toast } from '@/lib/toast';
 import { Title } from '../shared/Title';
@@ -149,11 +148,7 @@ export function ActiveICO({ endTimestamp, className, progress }: ActiveICOProps)
       </div>
     </div>
 
-      {/* TODO: will be replaced with real transaction data */}
-      <TransactionHistory
-        transactions={MOCK_TRANSACTIONS}
-        className="w-full"
-      />
+      {/* TODO: [Next PR] Wire TransactionHistory to real on-chain transaction data */}
 
       {/* ICO End Trigger Info */}
       <Card className="p-4">
