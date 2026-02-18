@@ -143,10 +143,7 @@ async fn backfill_contract(
 
         let response = client
             .get(&url)
-            .header(
-                "authorization",
-                config.cspr_cloud_api_token.expose_secret(),
-            )
+            .header("authorization", config.cspr_cloud_api_token.expose_secret())
             .timeout(Duration::from_secs(30))
             .send()
             .await?;
