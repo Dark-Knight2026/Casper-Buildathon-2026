@@ -5,6 +5,7 @@ import { ICOHeader } from './components/ICOHeader';
 import { ICOFooter } from './components/ICOFooter';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { PageErrorBoundary } from '@/components/common/PageErrorBoundary';
+import { logger } from '@/utils/logger';
 
 // Lazy load state components
 const PresaleCountdown = lazy(() => import('./components/states/PresaleCountdown'));
@@ -34,7 +35,7 @@ export function ICOPage() {
     error,
   } = useICOSchedules();
 
-  console.log('[ICOPage] useICOSchedules result:', {
+  logger.debug('[ICOPage] useICOSchedules result:', {
     timestamps,
     presaleProgress,
     icoProgress,
@@ -47,11 +48,11 @@ export function ICOPage() {
     timestamps: timestamps ?? undefined,
   });
 
-  console.log('[ICOPage] useICOState result:', { state, timestamps });
+  logger.debug('[ICOPage] useICOState result:', { state, timestamps });
 
   // Show loading while fetching contract data
   if (isLoading || !timestamps) {
-    console.log('[ICOPage] Showing loading state because:', { isLoading, hasTimestamps: !!timestamps });
+    logger.debug('[ICOPage] Showing loading state because:', { isLoading, hasTimestamps: !!timestamps });
     return (
       <ScrollArea className="h-screen overflow-hidden relative bg-[hsl(var(--ico-bg-primary))]">
         <ICOHeader />
