@@ -1842,6 +1842,7 @@ dependencies = [
  "dotenv",
  "futures-util",
  "reqwest",
+ "rustls",
  "secrecy",
  "serde",
  "serde_json",
