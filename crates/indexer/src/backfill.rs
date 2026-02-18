@@ -37,14 +37,14 @@ struct DeployInfo {
     execution_results: Vec<ExecutionResult>,
 }
 
-/// Execution result of a deploy (may contain CES event transforms).
+/// Execution result of a deployment (may contain CES event transforms).
 #[derive(Debug, Deserialize)]
 struct ExecutionResult {
     #[serde(default)]
     transforms: Vec<Transform>,
 }
 
-/// A single state transform produced by a deploy.
+/// A single state transform produced by a deployment.
 #[derive(Debug, Deserialize)]
 struct Transform {
     #[allow(dead_code)]
@@ -144,8 +144,8 @@ async fn backfill_contract(
         let response = client
             .get(&url)
             .header(
-                "Authorization",
-                format!("Bearer {}", config.cspr_cloud_api_token.expose_secret()),
+                "authorization",
+                config.cspr_cloud_api_token.expose_secret(),
             )
             .timeout(Duration::from_secs(30))
             .send()

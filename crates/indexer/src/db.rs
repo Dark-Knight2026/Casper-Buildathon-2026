@@ -21,6 +21,32 @@ use crate::{config::ContractType, error::IndexerResult};
 // Cursors
 // -----------------------------------------------------------------------------
 
+/// Identifies which indexer stream owns a particular cursor row in
+/// `event_cursors`.
+///
+/// Using a typed enum instead of a raw `&str` prevents typos from causing
+/// silent cursor mismatches between the backfill and the streaming client.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StreamType {
+    /// Historical backfill cursor — tracks progress through the REST API.
+    Backfill,
+    /// Live-streaming cursor — tracks the last WebSocket event ID.
+    Streaming,
+}
+
+impl StreamType {
+    /// Returns the canonical string stored in the `event_cursors.stream_type`
+    /// column.
+    #[inline]
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Backfill => "backfill",
+            Self::Streaming => "streaming",
+        }
+    }
+}
+
 /// Retrieve the last processed position for the given stream.
 ///
 /// Returns `None` if the stream has never been checkpointed.
@@ -30,10 +56,10 @@ use crate::{config::ContractType, error::IndexerResult};
 /// Returns [`IndexerError::Database`](crate::error::IndexerError::Database)
 /// if the query fails.
 #[inline]
-pub async fn get_cursor(db: &PgPool, stream_type: &str) -> IndexerResult<Option<i64>> {
+pub async fn get_cursor(db: &PgPool, stream: StreamType) -> IndexerResult<Option<i64>> {
     let row = sqlx::query_scalar!(
         "SELECT last_event_id FROM event_cursors WHERE stream_type = $1",
-        stream_type
+        stream.as_str()
     )
     .fetch_optional(db)
     .await?;
@@ -53,7 +79,7 @@ pub async fn get_cursor(db: &PgPool, stream_type: &str) -> IndexerResult<Option<
 #[inline]
 pub async fn update_cursor(
     db: &PgPool,
-    stream_type: &str,
+    stream: StreamType,
     last_event_id: i64,
 ) -> IndexerResult<()> {
     sqlx::query!(
@@ -64,7 +90,7 @@ pub async fn update_cursor(
                 last_event_id   = $2,
                 last_updated_at = NOW()
         ",
-        stream_type,
+        stream.as_str(),
         last_event_id,
     )
     .execute(db)
