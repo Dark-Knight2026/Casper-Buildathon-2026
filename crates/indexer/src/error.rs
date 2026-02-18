@@ -36,6 +36,10 @@ pub enum IndexerError {
     #[error("JSON error: {0}")]
     Json(#[from] serde_json::Error),
 
+    /// A WebSocket connection or protocol error.
+    #[error("WebSocket error: {0}")]
+    Ws(#[from] tokio_tungstenite::tungstenite::Error),
+
     /// Encountered an event with no registered handler.
     #[error("Unknown event '{event_name}' for contract type '{contract_type}'")]
     UnknownEvent {
