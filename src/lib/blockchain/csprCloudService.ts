@@ -71,7 +71,15 @@ export class CSPRCloudService {
     let url = CSPR_CLOUD_WS_URL;
     const params = new URLSearchParams();
 
-    // Public key: domain-restricted & rate-limited on CSPR.cloud side, safe for client exposure.
+    // Security: This API key is intentionally client-exposed (VITE_* prefix).
+    // WebSocket connections cannot use custom headers, so a URL query param
+    // is the only available transport mechanism.
+    //
+    // Mitigations configured in the CSPR.cloud dashboard:
+    // - Key is restricted to production domain(s) via origin allowlist
+    // - Rate limiting is enforced per-key by CSPR.cloud
+    //
+    // Verify at: https://console.cspr.cloud → API Keys → [key name] → Restrictions
     const wsApiKey = import.meta.env.VITE_CSPR_CLOUD_API_KEY || '';
     if (wsApiKey) {
       params.append('key', wsApiKey);
