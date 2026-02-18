@@ -32,6 +32,7 @@ async fn main() -> IndexerResult<()> {
     tracing_subscriber::fmt()
         .with_target(false)
         .with_level(true)
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
     dotenv::dotenv().ok();
 
@@ -57,8 +58,7 @@ async fn main() -> IndexerResult<()> {
         let config = config.clone();
         let db_pool = db_pool.clone();
         tokio::spawn(async move {
-            if let Err(e) =
-                streaming::run_streaming(&config, &db_pool, &EventRegistry::new()).await
+            if let Err(e) = streaming::run_streaming(&config, &db_pool, &EventRegistry::new()).await
             {
                 tracing::error!(error = %e, "Streaming failed");
             }

@@ -3,8 +3,6 @@
 //! Connects to the CSPR.cloud Streaming API and processes contract-level
 //! events as they are emitted on-chain, using the same [`processor`] pipeline
 //! as the REST backfill client.
-//!
-//! [`processor`]: crate::processor
 
 use core::time::Duration;
 use std::collections::HashMap;
@@ -16,7 +14,7 @@ use sqlx::PgPool;
 use tokio::net::TcpStream;
 use tokio_tungstenite::{
     MaybeTlsStream, WebSocketStream,
-    tungstenite::{self, Message, http::Request},
+    tungstenite::{self, Message, client::IntoClientRequest},
 };
 
 use crate::{
@@ -127,13 +125,21 @@ pub(crate) async fn connect(
         config.cspr_cloud_wss_url
     );
 
-    // Build a full HTTP request so we can attach the authorization header.
-    // CSPR.cloud requires the token as a header, not a query parameter.
-    let request = Request::builder()
-        .uri(&url)
-        .header("authorization", config.cspr_cloud_api_token.expose_secret())
-        .body(())
+    // Build a WebSocket request via IntoClientRequest so that tungstenite
+    // fills in the required handshake headers (Sec-WebSocket-Key, Upgrade, etc.).
+    // Then inject the authorization header that CSPR.cloud requires.
+    let mut request = url
+        .clone()
+        .into_client_request()
         .map_err(|e| IndexerError::Parse(format!("Failed to build WebSocket request: {e}")))?;
+    request.headers_mut().insert(
+        "authorization",
+        config
+            .cspr_cloud_api_token
+            .expose_secret()
+            .parse()
+            .map_err(|e| IndexerError::Parse(format!("Invalid authorization header value: {e}")))?,
+    );
 
     tracing::debug!(%url, "Connecting to CSPR.cloud WebSocket");
     let (ws_stream, _response) = tokio_tungstenite::connect_async(request).await?;
@@ -207,7 +213,12 @@ async fn handle_text_message(
 ) -> IndexerResult<()> {
     tracing::debug!(%text, "WSS message received");
 
-    let msg = serde_json::from_str::<WssMessage>(text)?;
+    // CSPR.cloud sends periodic non-JSON keepalive text frames (e.g. empty strings).
+    // Treat any parse failure as a non-event and skip silently.
+    let Ok(msg) = serde_json::from_str::<WssMessage>(text) else {
+        tracing::debug!("Ignoring non-JSON WSS text frame");
+        return Ok(());
+    };
     let Some(&contract_type) = contract_map.get(&msg.data.contract_package_hash) else {
         tracing::warn!(
             hash = %msg.data.contract_package_hash,
