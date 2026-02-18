@@ -28,10 +28,8 @@ export type PurchaseStep =
   | 'validating'
   | 'checking-approval'
   | 'awaiting-approval-signature'
-  | 'submitting-approval'
   | 'approval-pending'
   | 'awaiting-purchase-signature'
-  | 'submitting-purchase'
   | 'purchase-pending'
   | 'confirmed'
   | 'failed';
@@ -266,14 +264,10 @@ export function getStepMessage(step: PurchaseStep): string {
       return 'Checking token approval...';
     case 'awaiting-approval-signature':
       return 'Please sign the approval transaction in your wallet...';
-    case 'submitting-approval':
-      return 'Submitting approval...';
     case 'approval-pending':
       return 'Waiting for approval confirmation...';
     case 'awaiting-purchase-signature':
       return 'Please sign the purchase transaction in your wallet...';
-    case 'submitting-purchase':
-      return 'Submitting purchase...';
     case 'purchase-pending':
       return 'Waiting for purchase confirmation...';
     case 'confirmed':

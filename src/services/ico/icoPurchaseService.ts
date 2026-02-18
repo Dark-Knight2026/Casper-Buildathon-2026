@@ -206,8 +206,6 @@ export function createApproveDeploy(
   );
 }
 
-// Keep old function name as alias for backward compatibility
-export const createApproveTransaction = createApproveDeploy;
 
 // ── Account helpers ─────────────────────────────────────────────────
 
@@ -271,9 +269,6 @@ export function createPurchaseDeploy(
   );
 }
 
-// Keep old function names as aliases for backward compatibility
-export const createPurchaseTransaction = createPurchaseDeploy;
-export const createBuyTokensTransaction = createPurchaseDeploy;
 
 /**
  * Prepares a complete purchase flow.
@@ -335,8 +330,6 @@ export async function submitDeploy(
   return result.deployHash.toString();
 }
 
-// Keep old function name as alias for backward compatibility
-export const submitTransaction = submitDeploy;
 
 /**
  * Gets the status of a submitted deploy.
@@ -379,8 +372,6 @@ export async function getDeployStatus(
   }
 }
 
-// Keep old function name as alias for backward compatibility
-export const getTransactionStatus = getDeployStatus;
 
 // ── Validation ──────────────────────────────────────────────────────
 
