@@ -46,11 +46,13 @@ const REWARDS_LIST: { title: string; description: string; icon: typeof ArrowRigh
     title: 'Early Adopter Rewards',
     description: 'Pre-sale participants earn from LeaseFi transaction fees starting December 2026, forming the initial rewards foundation',
     icon: Timer,
+    badge: 'Coming Soon',
   },
   {
     title: 'Realtor Performance Rewards',
     description: 'Agents earn BIG tokens based on the Agent Quality Index (AQI) rankings, with staking multipliers and priority placement for top performers',
     icon: Trophy,
+    badge: 'Coming Soon',
   },
   {
     title: 'Referral & Community Rewards',
