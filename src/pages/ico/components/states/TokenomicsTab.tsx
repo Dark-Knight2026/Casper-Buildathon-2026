@@ -158,7 +158,7 @@ export function TokenomicsTab() {
             <h3 className="text-lg font-semibold text-[hsl(var(--ico-text-primary))] mb-4">
               Vesting & Release Schedule
             </h3>
-<VestingChart />
+            <VestingChart />
           </div>
         </Card>
 

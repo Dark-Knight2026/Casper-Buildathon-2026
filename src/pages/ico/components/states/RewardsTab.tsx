@@ -186,7 +186,7 @@ export function RewardsTab() {
                         {reward.title}
                       </p>
                       {reward.badge && (
-                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-[hsl(var(--ico-text-muted))]">
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 whitespace-nowrap text-[hsl(var(--ico-text-muted))]">
                           {reward.badge}
                         </Badge>
                       )}
