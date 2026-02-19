@@ -74,18 +74,33 @@ export function OverviewTab() {
       icon: TrendingUp,
       color: 'var(--ico-card-rewards)',
     },
-    {
-      label: 'BIG Value',
-      value: MOCK_DASHBOARD.totalBig,
-      usdValue: MOCK_DASHBOARD.estimatedUsdcValue,
-      icon: TrendingUp,
-      color: 'var(--ico-card-total)',
-    },
   ], []);
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
+      {/* BIG Value */}
+      <Card className="p-5">
+        <div className="w-full flex flex-col md:flex-row md:items-center justify-between gap-3 md:gap-6">
+          <div className='flex flex-col md:flex-row gap-3 md:gap-6 md:items-center'>
+            <div
+              className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
+              style={{ backgroundColor: 'hsl(var(--ico-card-total) / 0.1)' }}
+            >
+              <TrendingUp className="w-5 h-5" style={{ color: 'hsl(var(--ico-card-total))' }} />
+            </div>
+            <p className="text-sm md:text-xl text-[hsl(var(--ico-text-secondary))]">BIG Value</p>
+          </div>
+        
+          <p className="text-xl font-bold text-[hsl(var(--ico-text-primary))]">
+            {formatNumber(MOCK_DASHBOARD.totalBig)}
+          </p>
+          <p className="text-sm md:text-xl text-[hsl(var(--ico-text-muted))]">
+            {formatUSD(MOCK_DASHBOARD.estimatedUsdcValue)}
+          </p>
+        </div>
+      </Card>
+
       {/* Main Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {dashboardCards.map((card) => {
           const Icon = card.icon;
           return (

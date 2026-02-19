@@ -20,7 +20,7 @@ interface TransactionHistoryProps {
   className?: string;
 }
 
-const PAGE_SIZE = 6;
+const PAGE_SIZE = 5;
 
 const STATUS_STYLES = {
   pending: 'text-yellow-800 bg-yellow-400/10',
