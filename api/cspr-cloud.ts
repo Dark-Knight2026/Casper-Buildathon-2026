@@ -16,21 +16,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'Missing path parameter' });
   }
 
+  if (/(?:^\/|\.\.|\/{2,}|%2f|%5c)/i.test(path)) {
+    return res.status(400).json({ error: 'Invalid path' });
+  }
+
   // Pick base URL based on network env var
   const network = process.env.VITE_CASPER_NETWORK || 'casper-test';
   const baseUrl = network === 'casper'
     ? 'https://api.cspr.cloud'
     : 'https://api.testnet.cspr.cloud';
 
-  const targetUrl = `${baseUrl}/${path}`;
+  const targetUrl = new URL(`${baseUrl}/${path}`);
+  const normalized = `${targetUrl.origin}${targetUrl.pathname}`;
 
-  // Validate target URL
-  if (!ALLOWED_BASE_URLS.some((base) => targetUrl.startsWith(base))) {
+  // Validate normalized URL against allowed prefixes
+  if (!ALLOWED_BASE_URLS.some((base) => normalized.startsWith(base))) {
     return res.status(403).json({ error: 'Forbidden target URL' });
   }
 
   try {
-    const response = await fetch(targetUrl, {
+    const response = await fetch(targetUrl.toString(), {
       headers: {
         'accept': 'application/json',
         'authorization': API_KEY,
