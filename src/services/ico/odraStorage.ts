@@ -318,14 +318,14 @@ export function getCurrencyKey(currency: keyof typeof CURRENCY_DISCRIMINANT): st
  * Logs all pre-calculated keys for debugging.
  */
 export function debugLogKeys(): void {
-  console.log('[odraStorage] ICO Storage Layout (from ico.rs):');
-  console.log('  0: ownable (SubModule) -> owner at', ICO_STORAGE_LAYOUT.ownable.owner);
-  console.log('  1: currencies (Mapping)');
-  console.log('  2: ico_schedules (Mapping)');
-  console.log('  3: ico_schedules_count (Var<U128>)');
-  console.log('  4: styks_price_feed (External)');
-  console.log('  5: tailor_coin (External)');
-  console.log('  6: treasury (External)');
+  console.log('[odraStorage] ICO Storage Layout (Odra indices from ico.rs):');
+  console.log('  index 1: ownable (SubModule) -> owner at', ICO_STORAGE_LAYOUT.ownable.owner);
+  console.log('  index 2: currencies (Mapping)');
+  console.log('  index 3: ico_schedules (Mapping)');
+  console.log('  index 4: ico_schedules_count (Var<U128>)');
+  console.log('  index 5: styks_price_feed (External)');
+  console.log('  index 6: tailor_coin (External)');
+  console.log('  index 7: treasury (External)');
   console.log('');
   console.log('[odraStorage] Pre-calculated dictionary keys:');
   console.log('  owner (0):', ICO_DICTIONARY_KEYS.owner);

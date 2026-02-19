@@ -248,6 +248,9 @@ export function createPurchaseDeploy(
   );
 
   // Build args for purchase(purchase_amount: U256, currency: Currency, __cargo_purse: URef)
+  // NOTE: purchase_amount is the payment sum in the currency's smallest unit
+  // (motes for CSPR, 6-decimal units for USDT/USDC), NOT a token count.
+  // The contract calculates token allocation internally based on the current ICO price.
   const purse = URef.fromString(mainPurseURef);
 
   const args = Args.fromMap({
