@@ -247,9 +247,10 @@ async fn handle_text_message(
 
 /// Run the streaming client forever, reconnecting with exponential backoff.
 ///
-/// Returns `Ok(())` only on a graceful server-initiated close
-/// ([`Message::Close`]). All transient errors (network drops, timeouts)
-/// are logged and retried with increasing delays up to 60 seconds.
+/// On a graceful server-initiated close ([`Message::Close`]) the backoff
+/// delay is reset and the connection is re-established immediately.
+/// All transient errors (network drops, timeouts) are logged and retried
+/// with increasing delays up to 60 seconds.
 ///
 /// The reconnect delay starts at [`IndexerConfig::wss_reconnect_delay_ms`]
 /// and doubles on every failure: 1s - 2s - 4s - ... - 60s (max).
@@ -276,9 +277,9 @@ pub async fn run_streaming(
 
         match connect_and_stream(config, db_pool, registry).await {
             Ok(()) => {
-                // TODO: reset delay
-                tracing::info!("WebSocket stream ended gracefully");
-                break;
+                // Graceful server-side close — reconnect immediately with reset backoff.
+                tracing::info!("WebSocket connection closed gracefully — reconnecting");
+                delay = initial_delay;
             }
             Err(e) => {
                 tracing::error!(error = %e, ?delay, "WebSocket error — reconnecting");
@@ -287,6 +288,4 @@ pub async fn run_streaming(
             }
         }
     }
-
-    Ok(())
 }

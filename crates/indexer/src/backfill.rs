@@ -1,14 +1,22 @@
 //! REST backfill client for historical event synchronization.
 //!
-//! Fetches deploy history from the CSPR.cloud Deploy API and processes events
-//! through the same trait-based processor as the streaming client, ensuring
-//! identical handling for both historical and live events.
+//! Uses strategy-per-contract-type:
+//!
+//! - **CEP-18 tokens** (USDC, USDT, BIG): CSPR.cloud `/ft-token-actions` endpoint,
+//!   which returns normalized Transfer/Mint/Approve actions with full history.
+//!
+//! - **ICO / Treasury / others**: not yet implemented — rely on live WebSocket
+//!   streaming for new events.
+//!
+//! All events are funneled through the same [`processor`] pipeline used by
+//! streaming, so balance updates and idempotency logic is shared.
 
 use core::time::Duration;
 
 use reqwest::Client;
 use secrecy::ExposeSecret;
 use serde::Deserialize;
+use serde_json::json;
 use sqlx::PgPool;
 
 use crate::{
@@ -19,59 +27,30 @@ use crate::{
 };
 
 // -----------------------------------------------------------------------------
-// CSPR.cloud API response types
+// CSPR.cloud /ft-token-actions response types
 // -----------------------------------------------------------------------------
 
-/// Top-level response from the `/deploys` endpoint.
+/// Top-level response from the `/ft-token-actions` endpoint.
 #[derive(Debug, Deserialize)]
-struct DeployListResponse {
-    data: Vec<DeployInfo>,
+struct FtTokenActionPage {
+    data: Vec<FtTokenAction>,
 }
 
-/// Metadata for a single deploy returned by the API.
+/// A single fungible-token action returned by CSPR.cloud.
 #[derive(Debug, Deserialize)]
-struct DeployInfo {
+struct FtTokenAction {
+    /// Hash of the deploy that triggered this action.
     deploy_hash: String,
+    /// Block in which the deploy was included.
     block_height: u64,
-    caller_public_key: String,
-    execution_results: Vec<ExecutionResult>,
-}
-
-/// Execution result of a deployment (may contain CES event transforms).
-#[derive(Debug, Deserialize)]
-struct ExecutionResult {
-    #[serde(default)]
-    transforms: Vec<Transform>,
-}
-
-/// A single state transform produced by a deployment.
-#[derive(Debug, Deserialize)]
-struct Transform {
-    #[allow(dead_code)]
-    key: String,
-    transform: TransformValue,
-}
-
-/// Discriminated transform payload — only `WriteCLValue` carries CES events.
-#[derive(Debug, Deserialize)]
-#[serde(untagged)]
-enum TransformValue {
-    /// A `CLValue` write — CES events are stored here with `cl_type = "Any"`.
-    WriteCLValue {
-        #[serde(rename = "WriteCLValue")]
-        write_cl_value: ClValueData,
-    },
-    /// Any other transform kind (ignored by the indexer).
-    #[allow(dead_code)]
-    Other(serde_json::Value),
-}
-
-/// Parsed `CLValue` with its type tag and optional JSON representation.
-#[derive(Debug, Deserialize)]
-struct ClValueData {
-    cl_type: String,
-    #[serde(default)]
-    parsed: Option<serde_json::Value>,
+    /// Sender account/contract hash. `None` for Mint actions.
+    from_hash: Option<String>,
+    /// Recipient account/contract hash.
+    to_hash: Option<String>,
+    /// Token amount as a decimal string.
+    amount: String,
+    /// `1` = Mint, `2` = Approve, `3` = Transfer.
+    ft_action_type_id: u8,
 }
 
 // -----------------------------------------------------------------------------
@@ -80,8 +59,8 @@ struct ClValueData {
 
 /// Run backfill for all configured contracts.
 ///
-/// Fetches every deploy from `start_block` onwards for each active contract
-/// and processes events through the shared [`processor`].
+/// Dispatches to the appropriate backfill strategy based on contract type.
+/// Contracts without a backfill strategy log a warning and are skipped.
 ///
 /// # Errors
 ///
@@ -101,16 +80,23 @@ pub async fn run_backfill(config: &IndexerConfig, db_pool: &PgPool) -> IndexerRe
             "Backfilling contract"
         );
 
-        backfill_contract(
-            &client,
-            config,
-            db_pool,
-            &registry,
-            contract.contract_type,
-            contract.hash,
-            contract.start_block,
-        )
-        .await?;
+        if contract.contract_type.is_cep18_token() {
+            backfill_cep18(
+                &client,
+                config,
+                db_pool,
+                &registry,
+                contract.contract_type,
+                contract.hash,
+                contract.start_block,
+            )
+            .await?;
+        } else {
+            tracing::warn!(
+                contract = ?contract.contract_type,
+                "Backfill not yet implemented for this contract type — relying on live streaming"
+            );
+        }
     }
 
     tracing::info!("Backfill completed successfully");
@@ -118,11 +104,15 @@ pub async fn run_backfill(config: &IndexerConfig, db_pool: &PgPool) -> IndexerRe
 }
 
 // -----------------------------------------------------------------------------
-// Internal helpers
+// CEP-18 backfill via /ft-token-actions
 // -----------------------------------------------------------------------------
 
-/// Backfill a single contract by paginating through the CSPR.cloud deploy API.
-async fn backfill_contract(
+/// Backfill a CEP-18 token contract using the `/ft-token-actions` endpoint.
+///
+/// Paginates through all token actions in ascending block order, filtering
+/// out anything before `start_block`, and feeds each action into the shared
+/// [`processor`] pipeline.
+async fn backfill_cep18(
     client: &Client,
     config: &IndexerConfig,
     db_pool: &PgPool,
@@ -136,10 +126,10 @@ async fn backfill_contract(
 
     loop {
         let url = format!(
-            "{}/deploys?contract_package_hash={}&page={}&limit=100&order_by=block_height&order_direction=ASC",
+            "{}/ft-token-actions?contract_package_hash={}&page={}&limit=100&order_by=block_height&order_direction=ASC",
             config.cspr_cloud_rest_url, contract_hash, page
         );
-        tracing::debug!(%url, "Fetching deploys page {page}");
+        tracing::debug!(%url, "Fetching ft-token-actions page {page}");
 
         let response = client
             .get(&url)
@@ -157,37 +147,38 @@ async fn backfill_contract(
             }));
         }
 
-        let deploy_list = response.json::<DeployListResponse>().await?;
-        let page_len = deploy_list.data.len();
+        let page_data = response.json::<FtTokenActionPage>().await?;
+        let page_len = page_data.data.len();
 
-        for deploy in &deploy_list.data {
-            if deploy.block_height < start_block {
+        for action in &page_data.data {
+            if action.block_height < start_block {
                 continue;
             }
 
-            let events = extract_ces_events(&deploy.execution_results);
+            let Some((event_name, event_data)) = ft_action_to_event(action) else {
+                continue;
+            };
 
-            for (event_name, event_data) in events {
-                let raw = RawEvent {
-                    contract_hash: contract_hash.to_owned(),
-                    deploy_hash: deploy.deploy_hash.clone(),
-                    block_height: deploy.block_height,
-                    caller: deploy.caller_public_key.clone(),
-                    contract_type,
-                    event_name: event_name.clone(),
-                    event_data,
-                };
+            // caller is not available in /ft-token-actions — same as streaming
+            let raw = RawEvent {
+                contract_hash: contract_hash.to_owned(),
+                deploy_hash: action.deploy_hash.clone(),
+                block_height: action.block_height,
+                caller: String::new(),
+                contract_type,
+                event_name: event_name.to_owned(),
+                event_data,
+            };
 
-                match processor::process_event(db_pool, registry, &raw).await {
-                    Ok(()) => total_events += 1,
-                    Err(e) => {
-                        tracing::warn!(
-                            error = %e,
-                            deploy = %deploy.deploy_hash,
-                            event = %event_name,
-                            "Failed to process event, skipping"
-                        );
-                    }
+            match processor::process_event(db_pool, registry, &raw).await {
+                Ok(()) => total_events += 1,
+                Err(e) => {
+                    tracing::warn!(
+                        error = %e,
+                        deploy = %action.deploy_hash,
+                        event = %event_name,
+                        "Failed to process ft-token-action, skipping"
+                    );
                 }
             }
         }
@@ -197,55 +188,59 @@ async fn backfill_contract(
         if page_len < 100 {
             break;
         }
-
         page += 1;
     }
 
     tracing::info!(
         contract = ?contract_type,
         events = total_events,
-        "Contract backfill complete"
+        "CEP-18 backfill complete"
     );
 
     Ok(())
 }
 
-/// Extract CES events from a deployment execution results.
+/// Map a raw CSPR.cloud `FtTokenAction` to a `(event_name, event_data)` pair
+/// suitable for the shared event processor.
 ///
-/// CES events are stored as `WriteCLValue` transforms with `cl_type = "Any"`
-/// and a parsed JSON payload of the form `{ "event_name": "...", "data": {...} }`.
-fn extract_ces_events(results: &[ExecutionResult]) -> Vec<(String, serde_json::Value)> {
-    let mut events = Vec::new();
+/// Returns `None` for action types that should be skipped entirely.
+fn ft_action_to_event(action: &FtTokenAction) -> Option<(&'static str, serde_json::Value)> {
+    match action.ft_action_type_id {
+        // Mint — new tokens created, no sender
+        1 => {
+            let recipient = action.to_hash.as_deref().unwrap_or_default();
+            Some((
+                "Mint",
+                json!({ "recipient": recipient, "amount": action.amount }),
+            ))
+        }
 
-    for result in results {
-        for transform in &result.transforms {
-            let TransformValue::WriteCLValue { write_cl_value } = &transform.transform else {
-                continue;
-            };
+        // Approve — allowance set; stored as raw data (no dedicated handler yet)
+        2 => {
+            let owner = action.from_hash.as_deref().unwrap_or_default();
+            let spender = action.to_hash.as_deref().unwrap_or_default();
+            Some((
+                "SetAllowance",
+                json!({ "owner": owner, "spender": spender, "amount": action.amount }),
+            ))
+        }
 
-            if write_cl_value.cl_type != "Any" {
-                continue;
-            }
+        // Transfer — the primary CEP-18 action with a dedicated handler
+        3 => {
+            let sender = action.from_hash.as_deref().unwrap_or_default();
+            let recipient = action.to_hash.as_deref().unwrap_or_default();
+            Some((
+                "Transfer",
+                json!({ "sender": sender, "recipient": recipient, "amount": action.amount }),
+            ))
+        }
 
-            let Some(parsed) = &write_cl_value.parsed else {
-                continue;
-            };
-
-            let Some(obj) = parsed.as_object() else {
-                continue;
-            };
-
-            let Some(event_name) = obj.get("event_name").and_then(|v| v.as_str()) else {
-                continue;
-            };
-
-            let Some(data) = obj.get("data") else {
-                continue;
-            };
-
-            events.push((event_name.to_owned(), data.clone()));
+        other => {
+            tracing::warn!(
+                ft_action_type_id = other,
+                "Unknown ft_action_type_id, skipping"
+            );
+            None
         }
     }
-
-    events
 }
