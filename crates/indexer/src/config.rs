@@ -23,6 +23,8 @@ pub struct IndexerConfig {
     pub cspr_cloud_rest_url: String,
     /// `CSPR.cloud` WebSocket streaming URL.
     pub cspr_cloud_wss_url: String,
+    /// Casper node JSON-RPC URL (used for ICO backfill via `info_get_deploy`).
+    pub casper_node_url: String,
     /// Registry of tracked smart contract package hashes.
     pub contracts: ContractRegistry,
     /// Delay between REST API requests in milliseconds (rate limiting).
@@ -62,6 +64,14 @@ impl IndexerConfig {
             ));
         }
 
+        let casper_node_url = env::var("CASPER_NODE_URL")
+            .map_err(|_| IndexerError::Config("CASPER_NODE_URL must be set".to_owned()))?;
+        if !casper_node_url.starts_with("https://") && !casper_node_url.starts_with("http://") {
+            return Err(IndexerError::Config(
+                "CASPER_NODE_URL must start with http:// or https://".to_owned(),
+            ));
+        }
+
         let contracts = ContractRegistry::from_env();
         if contracts.active_contracts().is_empty() {
             tracing::warn!(
@@ -86,6 +96,7 @@ impl IndexerConfig {
             cspr_cloud_api_token,
             cspr_cloud_rest_url,
             cspr_cloud_wss_url,
+            casper_node_url,
             contracts,
             backfill_rate_limit_ms,
             wss_reconnect_delay_ms,

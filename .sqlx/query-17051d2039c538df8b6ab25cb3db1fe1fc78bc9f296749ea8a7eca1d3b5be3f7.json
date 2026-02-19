@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT event_data->>'amount' AS amount\n        FROM   blockchain_events\n        WHERE  transaction_hash  = $1\n          AND  contract_address  = $2\n          AND  event_type        = 'Transfer'\n        LIMIT  1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "amount",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "17051d2039c538df8b6ab25cb3db1fe1fc78bc9f296749ea8a7eca1d3b5be3f7"
+}

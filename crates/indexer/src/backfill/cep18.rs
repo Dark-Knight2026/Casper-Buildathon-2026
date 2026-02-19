@@ -1,15 +1,4 @@
-//! REST backfill client for historical event synchronization.
-//!
-//! Uses strategy-per-contract-type:
-//!
-//! - **CEP-18 tokens** (USDC, USDT, BIG): CSPR.cloud `/ft-token-actions` endpoint,
-//!   which returns normalized Transfer/Mint/Approve actions with full history.
-//!
-//! - **ICO / Treasury / others**: not yet implemented — rely on live WebSocket
-//!   streaming for new events.
-//!
-//! All events are funneled through the same [`processor`] pipeline used by
-//! streaming, so balance updates and idempotency logic is shared.
+//! CEP-18 token backfill via CSPR.cloud `/ft-token-actions`.
 
 use core::time::Duration;
 
@@ -54,57 +43,7 @@ struct FtTokenAction {
 }
 
 // -----------------------------------------------------------------------------
-// Public API
-// -----------------------------------------------------------------------------
-
-/// Run backfill for all configured contracts.
-///
-/// Dispatches to the appropriate backfill strategy based on contract type.
-/// Contracts without a backfill strategy log a warning and are skipped.
-///
-/// # Errors
-///
-/// Returns [`IndexerError`] on HTTP, API, or database failures.
-#[inline]
-pub async fn run_backfill(config: &IndexerConfig, db_pool: &PgPool) -> IndexerResult<()> {
-    let client = Client::new();
-    let registry = EventRegistry::new();
-
-    tracing::info!("Starting backfill for all contracts");
-
-    for contract in config.contracts.active_contracts() {
-        tracing::info!(
-            contract = ?contract.contract_type,
-            hash = %contract.hash,
-            start_block = contract.start_block,
-            "Backfilling contract"
-        );
-
-        if contract.contract_type.is_cep18_token() {
-            backfill_cep18(
-                &client,
-                config,
-                db_pool,
-                &registry,
-                contract.contract_type,
-                contract.hash,
-                contract.start_block,
-            )
-            .await?;
-        } else {
-            tracing::warn!(
-                contract = ?contract.contract_type,
-                "Backfill not yet implemented for this contract type — relying on live streaming"
-            );
-        }
-    }
-
-    tracing::info!("Backfill completed successfully");
-    Ok(())
-}
-
-// -----------------------------------------------------------------------------
-// CEP-18 backfill via /ft-token-actions
+// Public-to-parent API
 // -----------------------------------------------------------------------------
 
 /// Backfill a CEP-18 token contract using the `/ft-token-actions` endpoint.
@@ -112,7 +51,7 @@ pub async fn run_backfill(config: &IndexerConfig, db_pool: &PgPool) -> IndexerRe
 /// Paginates through all token actions in ascending block order, filtering
 /// out anything before `start_block`, and feeds each action into the shared
 /// [`processor`] pipeline.
-async fn backfill_cep18(
+pub(super) async fn backfill_cep18(
     client: &Client,
     config: &IndexerConfig,
     db_pool: &PgPool,
@@ -126,8 +65,8 @@ async fn backfill_cep18(
 
     loop {
         let url = format!(
-            "{}/ft-token-actions?contract_package_hash={}&page={}&limit=100&order_by=block_height&order_direction=ASC",
-            config.cspr_cloud_rest_url, contract_hash, page
+            "{}/ft-token-actions?contract_package_hash={contract_hash}&page={page}&limit=100&order_by=block_height&order_direction=ASC",
+            config.cspr_cloud_rest_url,
         );
         tracing::debug!(%url, "Fetching ft-token-actions page {page}");
 
