@@ -3,6 +3,7 @@ import { cn } from '@/lib/utils';
 import { ICO_CONFIG, getCurrencyRateUsd } from '@/constants/ico';
 import { Card } from './Card';
 import { MainButton } from './MainButton';
+import { X } from 'lucide-react';
 import type { PaymentCurrency } from '@/types/ico';
 import type { PurchaseState } from '@/hooks/ico/usePurchaseToken';
 import { getStepMessage } from '@/hooks/ico/usePurchaseToken';
@@ -85,22 +86,10 @@ export function PurchaseConfirmationModal({
           {!isProcessing && (
             <button
               onClick={onClose}
-              className="text-[hsl(var(--ico-text-secondary))] hover:text-white transition-colors"
+              className="text-[hsl(var(--ico-text-secondary))] hover:text-[hsl(var(--ico-text-primary))] transition-colors"
               aria-label="Close modal"
             >
-              <svg
-                className="w-6 h-6"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              </svg>
+              <X className="w-6 h-6" />
             </button>
           )}
         </div>
@@ -148,7 +137,7 @@ export function PurchaseConfirmationModal({
         {isProcessing && (
           <div className="w-full mb-6">
             <div className="flex items-center gap-3 p-4 rounded-md bg-[hsl(var(--ico-bg-secondary))] border border-[hsl(var(--ico-border-color))]">
-              <div className="animate-spin rounded-full h-5 w-5 border-2 border-[hsl(var(--ico-brand-primary))] border-t-transparent" />
+              <div className="animate-spin rounded-full h-5 min-w-5 border-2 border-[hsl(var(--ico-brand-primary))] border-t-transparent" />
               <span className="text-sm text-[hsl(var(--ico-brand-primary))]">{stepMessage}</span>
             </div>
           </div>
@@ -193,7 +182,7 @@ export function PurchaseConfirmationModal({
                 Cancel
               </button>
               <MainButton
-                text="Confirm Purchase"
+                text="Confirm"
                 onClick={onConfirm}
                 className="flex-1"
               />
