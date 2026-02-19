@@ -4,6 +4,7 @@
 //! events as they are emitted on-chain, using the same [`processor`] pipeline
 //! as the REST backfill client.
 
+use core::fmt::Write as _;
 use core::time::Duration;
 use std::collections::HashMap;
 
@@ -108,6 +109,9 @@ pub fn build_hashes_csv(registry: &ContractRegistry) -> String {
 /// (no `Bearer` prefix) and a comma-separated list of contract package hashes
 /// as the `contract_package_hash` query parameter.
 ///
+/// If `last_event_id` is `Some`, it is appended as `&last_event_id={id}` so
+/// the server replays any events that arrived while the client was offline.
+///
 /// The returned stream is split into `(write, read)` halves by the caller so
 /// that the read loop and optional write operations borrow independently.
 ///
@@ -117,13 +121,18 @@ pub fn build_hashes_csv(registry: &ContractRegistry) -> String {
 /// or [`IndexerError::Parse`] if the URL cannot be constructed.
 pub(crate) async fn connect(
     config: &IndexerConfig,
+    last_event_id: Option<i64>,
 ) -> IndexerResult<WebSocketStream<MaybeTlsStream<TcpStream>>> {
     let hashes = build_hashes_csv(&config.contracts);
 
-    let url = format!(
+    let mut url = format!(
         "{}?contract_package_hash={hashes}",
         config.cspr_cloud_wss_url
     );
+
+    if let Some(id) = last_event_id {
+        write!(url, "&last_event_id={id}").expect("String write is infallible");
+    }
 
     // Build a WebSocket request via IntoClientRequest so that tungstenite
     // fills in the required handshake headers (Sec-WebSocket-Key, Upgrade, etc.).
@@ -168,9 +177,15 @@ pub(crate) async fn connect_and_stream(
         return Ok(());
     }
 
+    // Resume from the last processed event so no events are lost on reconnect.
+    let last_event_id = db::get_cursor(db_pool, StreamType::Streaming).await?;
+    if let Some(id) = last_event_id {
+        tracing::info!(last_event_id = id, "Resuming streaming from last cursor");
+    }
+
     // Build the hash (contract type lookup map) once for this connection lifetime.
     let contract_map = build_contract_map(&config.contracts);
-    let ws_stream = connect(config).await?;
+    let ws_stream = connect(config, last_event_id).await?;
 
     // Split into independent read/write halves.
     // `_write` must stay alive for the duration of the loop — dropping it

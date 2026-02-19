@@ -49,6 +49,7 @@ impl StreamType {
 
 /// Retrieve the last processed position for the given stream.
 ///
+/// For the streaming client the lookup key is `(stream_type, contract_hash = '')`.
 /// Returns `None` if the stream has never been checkpointed.
 ///
 /// # Errors
@@ -58,7 +59,7 @@ impl StreamType {
 #[inline]
 pub async fn get_cursor(db: &PgPool, stream: StreamType) -> IndexerResult<Option<i64>> {
     let row = sqlx::query_scalar!(
-        "SELECT last_event_id FROM event_cursors WHERE stream_type = $1",
+        "SELECT last_event_id FROM event_cursors WHERE stream_type = $1 AND contract_hash = ''",
         stream.as_str()
     )
     .fetch_optional(db)
@@ -69,6 +70,7 @@ pub async fn get_cursor(db: &PgPool, stream: StreamType) -> IndexerResult<Option
 
 /// Persist the stream position (upsert).
 ///
+/// For the streaming client `contract_hash` is always `''`.
 /// Creates a new cursor row on the first call; subsequent calls update the
 /// existing row in place.
 ///
@@ -84,14 +86,68 @@ pub async fn update_cursor(
 ) -> IndexerResult<()> {
     sqlx::query!(
         r"
-            INSERT INTO event_cursors (stream_type, last_event_id, last_updated_at)
-            VALUES ($1, $2, NOW())
-            ON CONFLICT (stream_type) DO UPDATE SET
+            INSERT INTO event_cursors (stream_type, contract_hash, last_event_id, last_updated_at)
+            VALUES ($1, '', $2, NOW())
+            ON CONFLICT (stream_type, contract_hash) DO UPDATE SET
                 last_event_id   = $2,
                 last_updated_at = NOW()
         ",
         stream.as_str(),
         last_event_id,
+    )
+    .execute(db)
+    .await?;
+
+    Ok(())
+}
+
+/// Retrieve the last processed block height for a specific contract during backfill.
+///
+/// Returns `None` if this contract has never been backfilled (i.e. it should
+/// start from `start_block` defined in config).
+///
+/// # Errors
+///
+/// Returns [`IndexerError::Database`](crate::error::IndexerError::Database)
+/// if the query fails.
+#[inline]
+pub async fn get_backfill_cursor(db: &PgPool, contract_hash: &str) -> IndexerResult<Option<i64>> {
+    let row = sqlx::query_scalar!(
+        "SELECT last_event_id FROM event_cursors WHERE stream_type = 'backfill' AND contract_hash = $1",
+        contract_hash
+    )
+    .fetch_optional(db)
+    .await?;
+
+    Ok(row)
+}
+
+/// Persist the backfill position for a specific contract (upsert).
+///
+/// `last_block` is the highest block height successfully processed so far.
+/// On the next indexer start the backfill will resume from `last_block + 1`
+/// instead of repeating already-processed history.
+///
+/// # Errors
+///
+/// Returns [`IndexerError::Database`](crate::error::IndexerError::Database)
+/// if the upsert fails.
+#[inline]
+pub async fn update_backfill_cursor(
+    db: &PgPool,
+    contract_hash: &str,
+    last_block: i64,
+) -> IndexerResult<()> {
+    sqlx::query!(
+        r"
+            INSERT INTO event_cursors (stream_type, contract_hash, last_event_id, last_updated_at)
+            VALUES ('backfill', $1, $2, NOW())
+            ON CONFLICT (stream_type, contract_hash) DO UPDATE SET
+                last_event_id   = $2,
+                last_updated_at = NOW()
+        ",
+        contract_hash,
+        last_block,
     )
     .execute(db)
     .await?;

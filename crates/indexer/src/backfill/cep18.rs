@@ -10,6 +10,7 @@ use sqlx::PgPool;
 
 use crate::{
     config::{ContractType, IndexerConfig},
+    db,
     error::{ApiErrorResponse, IndexerError, IndexerResult},
     events::EventRegistry,
     processor::{self, RawEvent},
@@ -63,6 +64,15 @@ pub(super) async fn backfill_cep18(
     let mut page = 1u32;
     let mut total_events = 0u64;
 
+    // Resume from the last saved block instead of re-processing the whole history.
+    let cursor_block = db::get_backfill_cursor(db_pool, contract_hash).await?;
+    let effective_start = cursor_block
+        .map_or(0, |b| b.cast_unsigned().saturating_add(1))
+        .max(start_block);
+    if let Some(b) = cursor_block {
+        tracing::info!(block = b, %contract_hash, "Resuming CEP-18 backfill from cursor");
+    }
+
     loop {
         let url = format!(
             "{}/ft-token-actions?contract_package_hash={contract_hash}&page={page}&limit=100&order_by=block_height&order_direction=ASC",
@@ -88,9 +98,10 @@ pub(super) async fn backfill_cep18(
 
         let page_data = response.json::<FtTokenActionPage>().await?;
         let page_len = page_data.data.len();
+        let mut page_max_block: Option<u64> = None;
 
         for action in &page_data.data {
-            if action.block_height < start_block {
+            if action.block_height < effective_start {
                 continue;
             }
 
@@ -120,8 +131,14 @@ pub(super) async fn backfill_cep18(
                     );
                 }
             }
+
+            page_max_block = Some(page_max_block.unwrap_or(0).max(action.block_height));
         }
 
+        // Persist progress so restarts resume from here instead of block 0.
+        if let Some(max_block) = page_max_block {
+            db::update_backfill_cursor(db_pool, contract_hash, max_block.cast_signed()).await?;
+        }
         tokio::time::sleep(Duration::from_millis(config.backfill_rate_limit_ms)).await;
 
         if page_len < 100 {

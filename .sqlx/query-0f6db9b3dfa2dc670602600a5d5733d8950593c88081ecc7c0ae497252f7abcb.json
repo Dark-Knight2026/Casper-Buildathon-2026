@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT last_event_id FROM event_cursors WHERE stream_type = $1",
+  "query": "SELECT last_event_id FROM event_cursors WHERE stream_type = $1 AND contract_hash = ''",
   "describe": {
     "columns": [
       {
@@ -18,5 +18,5 @@
       false
     ]
   },
-  "hash": "f2f6d8e74bf61eb02eaaa9f04ae1113cb632c437631dda6e42eb3ac928180dca"
+  "hash": "0f6db9b3dfa2dc670602600a5d5733d8950593c88081ecc7c0ae497252f7abcb"
 }
