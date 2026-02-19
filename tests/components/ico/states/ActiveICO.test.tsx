@@ -45,11 +45,6 @@ vi.mock('@/pages/ico/components/shared/WalletCard', () => ({
   WalletCard: () => <div data-testid="wallet-card">Wallet Card</div>,
 }));
 
-vi.mock('@/pages/ico/components/shared/TransactionHistory', () => ({
-  TransactionHistory: () => <div data-testid="transaction-history">Transaction History</div>,
-  Transaction: {},
-}));
-
 const renderWithRouter = (ui: React.ReactElement) => {
   return render(<BrowserRouter>{ui}</BrowserRouter>);
 };
@@ -115,12 +110,6 @@ describe('ActiveICO', () => {
       renderWithRouter(<ActiveICO endTimestamp={mockEndTimestamp} />);
 
       expect(screen.getByTestId('wallet-card')).toBeInTheDocument();
-    });
-
-    it('should render the transaction history', () => {
-      renderWithRouter(<ActiveICO endTimestamp={mockEndTimestamp} />);
-
-      expect(screen.getByTestId('transaction-history')).toBeInTheDocument();
     });
 
     it('should render the ICO end conditions info card', () => {

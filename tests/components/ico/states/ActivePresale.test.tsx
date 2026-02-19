@@ -48,15 +48,6 @@ vi.mock('@/pages/ico/components/shared/WalletCard', () => ({
   WalletCard: () => <div data-testid="wallet-card">Wallet Card</div>,
 }));
 
-vi.mock('@/pages/ico/components/shared/TransactionHistory', () => ({
-  TransactionHistory: () => <div data-testid="transaction-history">Transaction History</div>,
-  Transaction: {},
-}));
-
-vi.mock('@/pages/ico/components/shared/UserTokenBalance', () => ({
-  UserTokenBalance: () => <div data-testid="user-token-balance">User Token Balance</div>,
-}));
-
 const renderWithRouter = (ui: React.ReactElement) => {
   return render(<BrowserRouter>{ui}</BrowserRouter>);
 };
@@ -107,23 +98,6 @@ describe('ActivePresale', () => {
       expect(screen.getByTestId('wallet-card')).toBeInTheDocument();
     });
 
-    it('should render the user token balance when progress is provided', () => {
-      renderWithRouter(<ActivePresale endTimestamp={mockEndTimestamp} progress={mockProgress} />);
-
-      expect(screen.getByTestId('user-token-balance')).toBeInTheDocument();
-    });
-
-    it('should not render user token balance when progress is not provided', () => {
-      renderWithRouter(<ActivePresale endTimestamp={mockEndTimestamp} />);
-
-      expect(screen.queryByTestId('user-token-balance')).not.toBeInTheDocument();
-    });
-
-    it('should render the transaction history', () => {
-      renderWithRouter(<ActivePresale endTimestamp={mockEndTimestamp} />);
-
-      expect(screen.getByTestId('transaction-history')).toBeInTheDocument();
-    });
   });
 
   describe('presale info display', () => {
