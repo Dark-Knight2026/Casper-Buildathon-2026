@@ -136,7 +136,7 @@ async fn backfill_contract(
 
     loop {
         let url = format!(
-            "{}/deploys?contract_hash={}&page={}&limit=100&order_by=block_height&order_direction=ASC",
+            "{}/deploys?contract_package_hash={}&page={}&limit=100&order_by=block_height&order_direction=ASC",
             config.cspr_cloud_rest_url, contract_hash, page
         );
         tracing::debug!(%url, "Fetching deploys page {page}");

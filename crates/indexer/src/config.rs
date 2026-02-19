@@ -178,7 +178,8 @@ impl ContractRegistry {
     ///
     /// Missing variables are treated as undeployed contracts (set to `None`).
     #[inline]
-    fn from_env() -> Self {
+    #[must_use]
+    pub fn from_env() -> Self {
         Self {
             usdc: env::var("CONTRACT_USDC").ok(),
             usdt: env::var("CONTRACT_USDT").ok(),
