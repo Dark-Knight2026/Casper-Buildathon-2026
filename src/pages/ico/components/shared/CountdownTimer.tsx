@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, memo } from 'react';
-import { cn } from '@/lib/utils';
+import { cn, pluralize } from '@/lib/utils';
 import type { CountdownTime } from '@/types/ico';
 import { Card } from './Card';
 
@@ -97,7 +97,7 @@ export const CountdownTimer = memo(function CountdownTimer({
 
   if (variant === 'minimal') {
     return (
-      <span role="timer" aria-live="polite" aria-label={`${timeLeft.days} days ${timeLeft.hours} hours ${timeLeft.minutes} minutes ${timeLeft.seconds} seconds remaining`} className={cn('font-mono font-semibold', className)}>
+      <span role="timer" aria-live="polite" aria-label={`${timeLeft.days} ${pluralize(timeLeft.days, 'day', 'days')} ${timeLeft.hours} ${pluralize(timeLeft.hours, 'hour', 'hours')} ${timeLeft.minutes} ${pluralize(timeLeft.minutes, 'minute', 'minutes')} ${timeLeft.seconds} ${pluralize(timeLeft.seconds, 'second', 'seconds')} remaining`} className={cn('font-mono font-semibold', className)}>
         {timeLeft.days > 0 && `${timeLeft.days}d `}
         {formatNumber(timeLeft.hours)}:{formatNumber(timeLeft.minutes)}:
         {formatNumber(timeLeft.seconds)}
@@ -108,11 +108,11 @@ export const CountdownTimer = memo(function CountdownTimer({
   if (variant === 'compact') {
     return (
       <Card className='p-4 flex justify-center items-center'>
-        <div role="timer" aria-live="polite" aria-label={`${timeLeft.days} days ${timeLeft.hours} hours ${timeLeft.minutes} minutes ${timeLeft.seconds} seconds remaining`} className={cn('flex items-center justify-center gap-2 font-mono text-[hsl(var(--ico-timer-text))]', className)}>
+        <div role="timer" aria-live="polite" aria-label={`${timeLeft.days} ${pluralize(timeLeft.days, 'day', 'days')} ${timeLeft.hours} ${pluralize(timeLeft.hours, 'hour', 'hours')} ${timeLeft.minutes} ${pluralize(timeLeft.minutes, 'minute', 'minutes')} ${timeLeft.seconds} ${pluralize(timeLeft.seconds, 'second', 'seconds')} remaining`} className={cn('flex items-center justify-center gap-2 font-mono text-[hsl(var(--ico-timer-text))]', className)}>
           {timeLeft.days > 0 && (
             <>
               <span className="text-xl font-semibold">{timeLeft.days}</span>
-              <span className="text-[hsl(var(--ico-timer-label))]">Days</span>
+              <span className="text-[hsl(var(--ico-timer-label))]">{pluralize(timeLeft.days, 'Day', 'Days')}</span>
             </>
           )}
           <div className='text-xl flex gap-1'>
@@ -129,16 +129,16 @@ export const CountdownTimer = memo(function CountdownTimer({
 
   // Default variant
   const timeUnits = [
-    { value: timeLeft.days, label: 'Days' },
-    { value: timeLeft.hours, label: 'Hours' },
-    { value: timeLeft.minutes, label: 'Minutes' },
-    { value: timeLeft.seconds, label: 'Seconds' },
+    { value: timeLeft.days, label: pluralize(timeLeft.days, 'Day', 'Days') },
+    { value: timeLeft.hours, label: pluralize(timeLeft.hours, 'Hour', 'Hours') },
+    { value: timeLeft.minutes, label: pluralize(timeLeft.minutes, 'Minute', 'Minutes') },
+    { value: timeLeft.seconds, label: pluralize(timeLeft.seconds, 'Second', 'Seconds') },
   ];
 
   return (
-    <div role="timer" aria-live="polite" aria-label={`${timeLeft.days} days ${timeLeft.hours} hours ${timeLeft.minutes} minutes ${timeLeft.seconds} seconds remaining`} className={cn('flex items-center justify-center', classes.container, className)}>
-      {timeUnits.map((unit) => (
-        <div key={unit.label} className="flex items-center">
+    <div role="timer" aria-live="polite" aria-label={`${timeLeft.days} ${pluralize(timeLeft.days, 'day', 'days')} ${timeLeft.hours} ${pluralize(timeLeft.hours, 'hour', 'hours')} ${timeLeft.minutes} ${pluralize(timeLeft.minutes, 'minute', 'minutes')} ${timeLeft.seconds} ${pluralize(timeLeft.seconds, 'second', 'seconds')} remaining`} className={cn('flex items-center justify-center', classes.container, className)}>
+      {timeUnits.map((unit, index) => (
+        <div key={index} className="flex items-center">
           <Card className={classes.card}>
             <span
               className={cn(
