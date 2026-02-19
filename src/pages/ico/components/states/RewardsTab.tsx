@@ -1,8 +1,9 @@
 import { Card } from '../shared/Card';
 import { SubTitle } from '../shared/SubTitle';
+import { Badge } from '@/components/ui/badge';
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent } from '@/components/ui/chart';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid } from 'recharts';
-import { Coins, Percent, Clock, ArrowRightLeft, Users, Timer, Handshake } from 'lucide-react';
+import { Coins, Percent, Clock, ArrowRightLeft, Users, Timer, Trophy } from 'lucide-react';
 
 const MOCK_STAKING = {
   stakedTokens: '500,000',
@@ -10,49 +11,52 @@ const MOCK_STAKING = {
   nextRewards: '2d 14h 32m',
 };
 
-const MOCK_FEE_DATA = [
-  { day: '1', swap: 10, transfer: 5, bridge: 2, lease: 8, liquidation: 1 },
-  { day: '10', swap: 45, transfer: 20, bridge: 12, lease: 30, liquidation: 5 },
-  { day: '20', swap: 90, transfer: 48, bridge: 25, lease: 65, liquidation: 12 },
-  { day: '30', swap: 140, transfer: 75, bridge: 40, lease: 110, liquidation: 20 },
-  { day: '45', swap: 200, transfer: 110, bridge: 58, lease: 160, liquidation: 32 },
-  { day: '60', swap: 260, transfer: 150, bridge: 75, lease: 210, liquidation: 45 },
-  { day: '75', swap: 320, transfer: 190, bridge: 90, lease: 260, liquidation: 60 },
-  { day: '90', swap: 400, transfer: 240, bridge: 110, lease: 320, liquidation: 80 },
+// Mock user rewards accumulation over days
+// Two sources per whitepaper section 6:
+// 1. Staking Reserve Pool — 6% annual release from 1B BIG reserve, distributed pro rata
+// 2. Transaction Fees — 2% fee on KeyChain ecosystem transactions via Dynamic Scaling Model
+const MOCK_REWARDS_DATA = [
+  { day: 1,  stakingPool: 82,   txFees: 12 },
+  { day: 10, stakingPool: 822,  txFees: 135 },
+  { day: 20, stakingPool: 1644, txFees: 310 },
+  { day: 30, stakingPool: 2466, txFees: 520 },
+  { day: 45, stakingPool: 3699, txFees: 890 },
+  { day: 60, stakingPool: 4932, txFees: 1340 },
+  { day: 75, stakingPool: 6165, txFees: 1870 },
+  { day: 90, stakingPool: 7397, txFees: 2480 },
 ];
 
-const FEE_LINES = [
-  { key: 'swap', label: 'Swap', color: '#1F7A63' },           /* Primary green */
-  { key: 'transfer', label: 'Transfer', color: '#2E8B6F' },   /* Green accent */
-  { key: 'lease', label: 'Lease', color: '#36A080' },         /* Green light */
-  { key: 'bridge', label: 'Bridge', color: '#4A9A85' },       /* Green medium */
-  { key: 'liquidation', label: 'Liquidation', color: '#6BB5A0' }, /* Green lightest */
-] as const;
+const rewardsChartConfig = {
+  stakingPool: { label: 'Staking Reserve Pool', color: '#1F7A63' },
+  txFees: { label: 'Transaction Fees', color: '#6BB5A0' },
+};
 
-const feeChartConfig = Object.fromEntries(
-  FEE_LINES.map(({ key, label, color }) => [key, { label, color }])
-);
-
-const REWARDS_LIST = [
+const REWARDS_LIST: { title: string; description: string; icon: typeof ArrowRightLeft; badge?: string }[] = [
   {
-    title: 'Transaction Fee Rewards',
-    description: 'Earn a share of 2% of LeaseFi transaction volume',
+    title: 'Transaction Fee Distribution',
+    description: '2% fee on all KeyChain ecosystem transactions, distributed via Dynamic Scaling Model based on staking participation tiers (up to 100% of fees at 80%+ staked)',
     icon: ArrowRightLeft,
   },
   {
-    title: 'Referral Bonuses',
-    description: 'Earn rewards for referring new users to the platform',
-    icon: Users,
+    title: 'Staking Reserve Pool',
+    description: '6% annual release from the 1B BIG reserve (~60M tokens/year), distributed pro rata to stakers for approximately 17 years',
+    icon: Coins,
   },
   {
-    title: 'Long-Term Holder Bonuses',
-    description: 'Unlock additional rewards by holding BIG tokens long term',
+    title: 'Early Adopter Rewards',
+    description: 'Pre-sale participants earn from LeaseFi transaction fees starting December 2026, forming the initial rewards foundation',
     icon: Timer,
   },
   {
-    title: 'Partner Rewards',
-    description: 'Earn from bringing new partners or businesses to LeaseFi',
-    icon: Handshake,
+    title: 'Realtor Performance Rewards',
+    description: 'Agents earn BIG tokens based on the Agent Quality Index (AQI) rankings, with staking multipliers and priority placement for top performers',
+    icon: Trophy,
+  },
+  {
+    title: 'Referral & Community Rewards',
+    description: 'Earn rewards for referrals, platform usage, and community engagement within the KeyChain ecosystem',
+    icon: Users,
+    badge: 'Coming Soon',
   },
 ];
 
@@ -106,24 +110,19 @@ export function RewardsTab() {
         </div>
       </Card>
 
-      {/* Transaction Fee Rewards Chart */}
+      {/* Your Rewards Chart */}
       <Card className="p-5">
         <div className="w-full">
-          <h3 className="text-lg font-semibold text-[hsl(var(--ico-text-primary))] mb-4">
-            Transaction Fee Rewards
+          <h3 className="text-lg font-semibold text-[hsl(var(--ico-text-primary))] mb-1">
+            Your Rewards
           </h3>
-          {/* <div className="flex flex-wrap gap-x-4 gap-y-1 mb-4">
-            {FEE_LINES.map(({ key, label, color }) => (
-              <div key={key} className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded-full" style={{ backgroundColor: color }} />
-                <span className="text-xs text-[hsl(var(--ico-text-secondary))]">{label}</span>
-              </div>
-            ))}
-          </div> */}
-          <ChartContainer config={feeChartConfig} className="h-62.5 w-full aspect-auto md:aspect-video">
+          <p className="text-sm text-[hsl(var(--ico-text-secondary))] mb-4">
+            Accumulated BIG tokens by reward source
+          </p>
+          <ChartContainer config={rewardsChartConfig} className="h-70 w-full aspect-auto md:aspect-video">
             <AreaChart
-              data={MOCK_FEE_DATA}
-              margin={{ left: 12, right: 12 }}
+              data={MOCK_REWARDS_DATA}
+              margin={{ top: 10, left: 20, right: 12, bottom: 20 }}
             >
               <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="hsl(var(--ico-border-color))" />
               <XAxis
@@ -132,28 +131,35 @@ export function RewardsTab() {
                 axisLine={false}
                 tickMargin={8}
                 tick={{ fill: 'hsl(var(--ico-text-muted))', fontSize: 12 }}
+                label={{ value: 'Days', position: 'insideBottom', dy: 10, fill: 'hsl(var(--ico-text-muted))', fontSize: 12 }}
               />
               <YAxis
                 tickLine={false}
                 axisLine={false}
                 tick={{ fill: 'hsl(var(--ico-text-muted))', fontSize: 12 }}
-                tickFormatter={(value) => `$${value}`}
+                tickFormatter={(value) => value.toLocaleString()}
+                label={{ value: 'Amount, BIG', angle: -90, position: 'insideLeft', dx: -5, fill: 'hsl(var(--ico-text-muted))', fontSize: 12 }}
               />
               <ChartTooltip
                 cursor={false}
                 content={<ChartTooltipContent indicator="line" />}
               />
-              {FEE_LINES.map(({ key }) => (
-                <Area
-                  key={key}
-                  type="natural"
-                  dataKey={key}
-                  fill={`var(--color-${key})`}
-                  fillOpacity={0.4}
-                  stroke={`var(--color-${key})`}
-                  stackId="a"
-                />
-              ))}
+              <Area
+                type="natural"
+                dataKey="stakingPool"
+                fill="var(--color-stakingPool)"
+                fillOpacity={0.4}
+                stroke="var(--color-stakingPool)"
+                stackId="a"
+              />
+              <Area
+                type="natural"
+                dataKey="txFees"
+                fill="var(--color-txFees)"
+                fillOpacity={0.4}
+                stroke="var(--color-txFees)"
+                stackId="a"
+              />
               <ChartLegend content={<ChartLegendContent />} />
             </AreaChart>
           </ChartContainer>
@@ -175,9 +181,16 @@ export function RewardsTab() {
                     <Icon className="w-5 h-5 text-[hsl(var(--ico-brand-primary))]" />
                   </div>
                   <div>
-                    <p className="text-sm font-semibold text-[hsl(var(--ico-text-primary))]">
-                      {reward.title}
-                    </p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-semibold text-[hsl(var(--ico-text-primary))]">
+                        {reward.title}
+                      </p>
+                      {reward.badge && (
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-[hsl(var(--ico-text-muted))]">
+                          {reward.badge}
+                        </Badge>
+                      )}
+                    </div>
                     <p className="text-sm text-[hsl(var(--ico-text-secondary))]">
                       {reward.description}
                     </p>

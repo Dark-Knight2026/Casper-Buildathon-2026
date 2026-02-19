@@ -42,7 +42,7 @@ const calculateState = (timestamps: SaleTimestamps): ICOState => {
 
   // State 2: During presale
   if (now >= timestamps.presaleStart && now < timestamps.presaleEnd) {
-    return 2;
+    return 3;
   }
 
   // State 3: After ICO
