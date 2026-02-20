@@ -34,6 +34,7 @@ const connectedProps = {
   balanceCSPR: 100000,
   tokenPrice: 0.001,
   tokenSymbol: 'BIG',
+  csprPriceUsd: 0.02,
   onConnect: vi.fn(),
   onPurchase: vi.fn(),
 };

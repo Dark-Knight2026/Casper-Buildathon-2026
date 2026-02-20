@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderHook, act, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { renderHook, act } from '@testing-library/react';
 import { usePurchaseToken, getStepMessage } from '@/hooks/ico/usePurchaseToken';
 
 // Mock casper-js-sdk
@@ -69,7 +69,20 @@ const mockApprovalTransaction = {
 
 describe('usePurchaseToken', () => {
   beforeEach(() => {
+    vi.useFakeTimers();
     vi.clearAllMocks();
+
+    // Mock global.fetch for fetchActualTokensReceived (called after purchase tx)
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({
+        data: [{
+          contract_package_hash: 'f7d94fd8670fdc69aabd07c214ab8d52c3fc1fd839f0cc7713e1574cdfd899ec',
+          amount: '1000000000000000000000',
+        }],
+      }),
+    }));
+
     mockValidatePurchase.mockReturnValue({ valid: true });
     mockPreparePurchase.mockResolvedValue({
       approvalNeeded: false,
@@ -83,6 +96,11 @@ describe('usePurchaseToken', () => {
       cancelled: false,
       error: null,
     });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
   // --- Initial state ---
@@ -162,7 +180,9 @@ describe('usePurchaseToken', () => {
       );
 
       await act(async () => {
-        await result.current.purchase('100', 'USDT', 1000);
+        const promise = result.current.purchase('100', 'USDT', 1000);
+        await vi.runAllTimersAsync();
+        await promise;
       });
 
       expect(result.current.state.step).toBe('confirmed');
@@ -178,7 +198,9 @@ describe('usePurchaseToken', () => {
       );
 
       await act(async () => {
-        await result.current.purchase('100', 'USDC', 1000);
+        const promise = result.current.purchase('100', 'USDC', 1000);
+        await vi.runAllTimersAsync();
+        await promise;
       });
 
       expect(mockPreparePurchase).toHaveBeenCalledWith({
@@ -209,7 +231,9 @@ describe('usePurchaseToken', () => {
       );
 
       await act(async () => {
-        await result.current.purchase('100', 'USDT', 1000);
+        const promise = result.current.purchase('100', 'USDT', 1000);
+        await vi.runAllTimersAsync();
+        await promise;
       });
 
       expect(onApprovalNeeded).toHaveBeenCalled();
@@ -296,7 +320,9 @@ describe('usePurchaseToken', () => {
       );
 
       await act(async () => {
-        await result.current.purchase('100', 'USDT', 1000);
+        const promise = result.current.purchase('100', 'USDT', 1000);
+        await vi.runAllTimersAsync();
+        await promise;
       });
 
       expect(result.current.state.step).toBe('confirmed');
