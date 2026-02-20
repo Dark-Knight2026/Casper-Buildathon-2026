@@ -12,7 +12,7 @@ const clickOptions: CsprClickInitOptions = {
   appName: 'LeaseFi Token Sale',
   contentMode: CONTENT_MODE.IFRAME,
   providers: ['casper-wallet', 'ledger', 'metamask-snap'],
-  appId: 'csprclick-template',
+  appId: import.meta.env.VITE_CSPRCLICK_APP_ID ?? 'csprclick-template',
   chainName: import.meta.env.VITE_CASPER_NETWORK ?? 'casper-test',
 };
 

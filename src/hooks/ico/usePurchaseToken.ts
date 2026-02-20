@@ -9,7 +9,7 @@
  * 5. Handle success/failure callbacks
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import type { ICSPRClickSDK } from '@make-software/csprclick-core-types';
 import { deriveAccountHash } from '@/lib/blockchain/accountUtils';
 import {
@@ -76,6 +76,7 @@ export function usePurchaseToken(
   options: UsePurchaseTokenOptions = {},
 ): UsePurchaseTokenReturn {
   const [state, setState] = useState<PurchaseState>(initialState);
+  const submittingRef = useRef(false);
 
   const { onSuccess, onError, onApprovalNeeded } = options;
 
@@ -84,10 +85,15 @@ export function usePurchaseToken(
    */
   const purchase = useCallback(
     async (amount: string, currency: PaymentCurrency, balance: number) => {
+      // Synchronous guard — prevents duplicate submissions on rapid clicks
+      if (submittingRef.current) return;
+      submittingRef.current = true;
+
       if (!publicKey) {
         const error = 'Wallet not connected';
         setState((prev) => ({ ...prev, step: 'failed', error, isProcessing: false }));
         onError?.(error);
+        submittingRef.current = false;
         return;
       }
 
@@ -95,6 +101,7 @@ export function usePurchaseToken(
         const error = 'Wallet SDK not initialized';
         setState((prev) => ({ ...prev, step: 'failed', error, isProcessing: false }));
         onError?.(error);
+        submittingRef.current = false;
         return;
       }
 
@@ -104,6 +111,7 @@ export function usePurchaseToken(
         const error = 'Failed to derive account hash from public key';
         setState((prev) => ({ ...prev, step: 'failed', error, isProcessing: false }));
         onError?.(error);
+        submittingRef.current = false;
         return;
       }
 
@@ -213,6 +221,8 @@ export function usePurchaseToken(
         }));
 
         onError?.(errorMessage);
+      } finally {
+        submittingRef.current = false;
       }
     },
     [publicKey, tokenPriceUsd, clickRef, onSuccess, onError, onApprovalNeeded],
@@ -223,6 +233,7 @@ export function usePurchaseToken(
    */
   const reset = useCallback(() => {
     setState(initialState);
+    submittingRef.current = false;
   }, []);
 
   /**

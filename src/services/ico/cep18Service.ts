@@ -81,8 +81,10 @@ export async function getAllowance(
   ownerHash: string,
   spenderHash: string,
 ): Promise<bigint> {
-  const ownerBytes = hexToBytes(ownerHash);
-  const spenderBytes = hexToBytes(spenderHash);
+  // CEP-18 allowance dictionary key = blake2b(owner_key_bytes || spender_key_bytes)
+  // Key bytes include a tag prefix: 0x00 for Account, 0x01 for Hash/Contract
+  const ownerBytes = keyToBytes(ownerHash);
+  const spenderBytes = keyToBytes(spenderHash);
   const combined = new Uint8Array(ownerBytes.length + spenderBytes.length);
   combined.set(ownerBytes, 0);
   combined.set(spenderBytes, ownerBytes.length);
@@ -98,11 +100,43 @@ export async function getAllowance(
   return clValueToBigInt(stored.clValue);
 }
 
+/** Casper Key tag bytes used in dictionary key hashing */
+const KEY_TAG_ACCOUNT = 0x00;
+const KEY_TAG_HASH = 0x01;
+
+/**
+ * Converts a Casper key string to tagged bytes for dictionary key hashing.
+ * - `account-hash-<hex>` → [0x00, ...hash_bytes]
+ * - `hash-<hex>`         → [0x01, ...hash_bytes]
+ * - raw hex              → hash bytes without tag (fallback)
+ */
+function keyToBytes(key: string): Uint8Array {
+  if (key.startsWith('account-hash-')) {
+    const hex = key.slice('account-hash-'.length);
+    const hashBytes = hexToBytes(hex);
+    const tagged = new Uint8Array(1 + hashBytes.length);
+    tagged[0] = KEY_TAG_ACCOUNT;
+    tagged.set(hashBytes, 1);
+    return tagged;
+  }
+
+  if (key.startsWith('hash-')) {
+    const hex = key.slice('hash-'.length);
+    const hashBytes = hexToBytes(hex);
+    const tagged = new Uint8Array(1 + hashBytes.length);
+    tagged[0] = KEY_TAG_HASH;
+    tagged.set(hashBytes, 1);
+    return tagged;
+  }
+
+  // Fallback: raw hex without tag
+  return hexToBytes(key);
+}
+
 function hexToBytes(hex: string): Uint8Array {
-  const clean = hex.startsWith('hash-') ? hex.slice(5) : hex;
-  const bytes = new Uint8Array(clean.length / 2);
+  const bytes = new Uint8Array(hex.length / 2);
   for (let i = 0; i < bytes.length; i++) {
-    bytes[i] = parseInt(clean.substring(i * 2, i * 2 + 2), 16);
+    bytes[i] = parseInt(hex.substring(i * 2, i * 2 + 2), 16);
   }
   return bytes;
 }
