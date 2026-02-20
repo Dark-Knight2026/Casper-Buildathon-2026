@@ -4,7 +4,8 @@ import { OverviewTab } from './OverviewTab';
 import { RewardsTab } from './RewardsTab';
 import { TokenomicsTab } from './TokenomicsTab';
 import { WhitepaperTab } from './WhitepaperTab';
-import { ArrowLeftRight, LayoutDashboard, Gift, PieChart, FileText } from 'lucide-react';
+import { TransactionHistoryTab } from './TransactionHistoryTab';
+import { ArrowLeftRight, LayoutDashboard, Gift, PieChart, FileText, History } from 'lucide-react';
 
 interface PostICODashboardProps {
   className?: string;
@@ -39,6 +40,12 @@ export function PostICODashboard({ className }: PostICODashboardProps) {
       value: 'tokenomics',
       icon: <PieChart className="w-4 h-4" />,
       content: <TokenomicsTab />,
+    },
+    {
+      label: 'Transactions',
+      value: 'transactions',
+      icon: <History className="w-4 h-4" />,
+      content: <TransactionHistoryTab />,
     },
     {
       label: 'WhitePaper',
