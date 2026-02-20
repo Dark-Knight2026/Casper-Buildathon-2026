@@ -72,9 +72,9 @@ describe('TransactionHistory', () => {
     it('should display transaction amounts', () => {
       render(<TransactionHistory transactions={mockTransactions} />);
 
-      expect(screen.getByText('1,500 USDC')).toBeInTheDocument();
-      expect(screen.getByText('100 USDT')).toBeInTheDocument();
-      expect(screen.getByText('500 USDC')).toBeInTheDocument();
+      expect(screen.getByText('1,500.00 USDC')).toBeInTheDocument();
+      expect(screen.getByText('100.00 USDT')).toBeInTheDocument();
+      expect(screen.getByText('500.00 USDC')).toBeInTheDocument();
     });
 
     it('should display tokens received with + prefix', () => {
@@ -125,21 +125,7 @@ describe('TransactionHistory', () => {
     });
   });
 
-  describe('integration with MOCK_TRANSACTIONS', () => {
-    it('should render all statuses from MOCK_TRANSACTIONS', async () => {
-      const { MOCK_TRANSACTIONS } = await import('@/constants/ico');
-      const transactions: Transaction[] = MOCK_TRANSACTIONS.map(tx => ({
-        ...tx,
-        timestamp: new Date(tx.timestamp),
-      }));
-
-      render(<TransactionHistory transactions={transactions} />);
-
-      expect(screen.getByText('Failed')).toBeInTheDocument();
-      expect(screen.getByText('Pending')).toBeInTheDocument();
-      expect(screen.getByText('Completed')).toBeInTheDocument();
-    });
-
+  describe('status styling', () => {
     it('should render failed transaction with correct styling class', () => {
       const failedTx: Transaction[] = [{
         id: '1',

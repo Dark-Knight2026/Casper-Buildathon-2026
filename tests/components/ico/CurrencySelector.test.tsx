@@ -112,16 +112,15 @@ describe('CurrencySelector', () => {
       expect(labels).toContain('USDT');
       expect(labels).toContain('USDC');
       expect(labels).toContain('CSPR');
-      expect(labels).toContain('Credit Card');
     });
 
-    it('should render exactly 4 currency options', async () => {
+    it('should render exactly 3 currency options', async () => {
       const user = userEvent.setup();
       render(<CurrencySelector {...defaultProps} />);
 
       await user.click(screen.getByRole('combobox'));
 
-      expect(screen.getAllByRole('option')).toHaveLength(4);
+      expect(screen.getAllByRole('option')).toHaveLength(3);
     });
 
     it('should call onValueChange when a different option is selected', async () => {

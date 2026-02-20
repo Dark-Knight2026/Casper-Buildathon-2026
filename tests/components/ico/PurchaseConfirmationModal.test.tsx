@@ -91,7 +91,7 @@ describe('PurchaseConfirmationModal', () => {
       render(<PurchaseConfirmationModal {...defaultProps} />);
 
       expect(screen.getByText('Cancel')).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Confirm Purchase' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Confirm' })).toBeInTheDocument();
     });
 
     it('should call onClose when Cancel is clicked', () => {
@@ -107,7 +107,7 @@ describe('PurchaseConfirmationModal', () => {
       const onConfirm = vi.fn();
       render(<PurchaseConfirmationModal {...defaultProps} onConfirm={onConfirm} />);
 
-      fireEvent.click(screen.getByRole('button', { name: 'Confirm Purchase' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
 
       expect(onConfirm).toHaveBeenCalledTimes(1);
     });

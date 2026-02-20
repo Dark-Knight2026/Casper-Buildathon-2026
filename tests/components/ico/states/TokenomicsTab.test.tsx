@@ -32,11 +32,11 @@ vi.mock('recharts', () => ({
   XAxis: () => <div data-testid="x-axis" />,
   YAxis: () => <div data-testid="y-axis" />,
   CartesianGrid: () => <div data-testid="cartesian-grid" />,
-  PieChart: ({ children }: { children: React.ReactNode }) => (
-    <div data-testid="pie-chart">{children}</div>
+  BarChart: ({ children }: { children: React.ReactNode }) => (
+    <div data-testid="bar-chart">{children}</div>
   ),
-  Pie: ({ children }: { children: React.ReactNode }) => (
-    <div data-testid="pie">{children}</div>
+  Bar: ({ children }: { children: React.ReactNode }) => (
+    <div data-testid="bar">{children}</div>
   ),
   Cell: () => <div data-testid="cell" />,
 }));
@@ -60,17 +60,19 @@ describe('TokenomicsTab', () => {
     });
   });
 
-  describe('total supply', () => {
-    it('should display Total Supply label', () => {
+  describe('supply stats', () => {
+    it('should display Total Supply', () => {
       renderWithRouter(<TokenomicsTab />);
 
       expect(screen.getByText('Total Supply')).toBeInTheDocument();
+      expect(screen.getByText('5 000 000 000 BIG')).toBeInTheDocument();
     });
 
-    it('should display total supply value', () => {
+    it('should display Circulating Supply', () => {
       renderWithRouter(<TokenomicsTab />);
 
-      expect(screen.getByText('1,000,000,000 BIG')).toBeInTheDocument();
+      expect(screen.getByText('Circulating Supply')).toBeInTheDocument();
+      expect(screen.getByText('1 000 000 000 BIG')).toBeInTheDocument();
     });
   });
 
@@ -95,58 +97,23 @@ describe('TokenomicsTab', () => {
       expect(screen.getByText('Token Allocation')).toBeInTheDocument();
     });
 
-    it('should render the pie chart', () => {
+    it('should render the bar chart', () => {
       renderWithRouter(<TokenomicsTab />);
 
-      expect(screen.getByTestId('pie-chart')).toBeInTheDocument();
+      expect(screen.getByTestId('bar-chart')).toBeInTheDocument();
     });
 
-    it('should display Public Sale allocation', () => {
+    it('should display Circulating vs Locked legend', () => {
       renderWithRouter(<TokenomicsTab />);
 
-      expect(screen.getByText('Public Sale')).toBeInTheDocument();
-      // 20% appears for both Public Sale and Ecosystem & Rewards
-      const twentyPercents = screen.getAllByText('20%');
-      expect(twentyPercents.length).toBeGreaterThan(0);
+      expect(screen.getByText('Circulating')).toBeInTheDocument();
+      expect(screen.getByText('Locked')).toBeInTheDocument();
     });
 
-    it('should display Private Sale allocation', () => {
+    it('should render 6 allocation cells in bar chart', () => {
       renderWithRouter(<TokenomicsTab />);
 
-      expect(screen.getByText('Private Sale')).toBeInTheDocument();
-      // 15% appears for both Private Sale and Team & Advisors
-      const fifteenPercents = screen.getAllByText('15%');
-      expect(fifteenPercents.length).toBeGreaterThan(0);
-    });
-
-    it('should display Team & Advisors allocation', () => {
-      renderWithRouter(<TokenomicsTab />);
-
-      expect(screen.getByText('Team & Advisors')).toBeInTheDocument();
-    });
-
-    it('should display Ecosystem & Rewards allocation', () => {
-      renderWithRouter(<TokenomicsTab />);
-
-      expect(screen.getByText('Ecosystem & Rewards')).toBeInTheDocument();
-    });
-
-    it('should display Liquidity Pool allocation', () => {
-      renderWithRouter(<TokenomicsTab />);
-
-      expect(screen.getByText('Liquidity Pool')).toBeInTheDocument();
-    });
-
-    it('should display Reserve allocation', () => {
-      renderWithRouter(<TokenomicsTab />);
-
-      expect(screen.getByText('Reserve')).toBeInTheDocument();
-    });
-
-    it('should display Treasury allocation', () => {
-      renderWithRouter(<TokenomicsTab />);
-
-      expect(screen.getByText('Treasury')).toBeInTheDocument();
+      expect(screen.getAllByTestId('cell')).toHaveLength(6);
     });
   });
 });

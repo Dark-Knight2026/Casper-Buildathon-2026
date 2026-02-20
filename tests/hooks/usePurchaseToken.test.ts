@@ -32,11 +32,23 @@ vi.mock('@/constants/ico', () => ({
     TOKEN: {
       decimals: 18,
     },
+    CONTRACTS: {
+      tokenAddress: 'hash-f7d94fd8670fdc69aabd07c214ab8d52c3fc1fd839f0cc7713e1574cdfd899ec',
+      icoAddress: '',
+      icoPackageHash: '',
+      treasuryAddress: '',
+      usdcAddress: '',
+      usdtAddress: '',
+    },
     CURRENCY_RATES: {
       CSPR: 0.05,
       USDT: 1,
       USDC: 1,
     },
+  },
+  getCurrencyRateUsd: (currency: string) => {
+    const rates: Record<string, number> = { CSPR: 0.05, USDT: 1, USDC: 1 };
+    return rates[currency] ?? 1;
   },
 }));
 

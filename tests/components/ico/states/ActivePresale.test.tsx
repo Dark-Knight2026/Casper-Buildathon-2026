@@ -2,7 +2,6 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
 import { PrivateSaleActive } from '@/pages/ico/components/states/ActivePresale';
-import { ICO_CONFIG } from '@/constants/ico';
 import type { ScheduleProgress } from '@/hooks/ico/useICOSchedules';
 
 // Mock progress data for tests that need it
@@ -12,6 +11,7 @@ const mockProgress: ScheduleProgress = {
   tokensSold: 100000000,
   tokensRemaining: 650000000,
   amountRaised: 100000,
+  hardCapUsd: 750000,
   percentSold: 13.33,
 };
 
@@ -25,6 +25,14 @@ vi.mock('@/hooks/ico/usePurchaseFlow', () => ({
     handlePurchase: vi.fn(),
     modalProps: null,
     toastProps: null,
+    purchaseState: { step: 'idle', isProcessing: false, purchaseTxHash: null, tokensReceived: null, error: null },
+    pendingPurchase: null,
+    buyCspr: vi.fn(),
+    showConfirmModal: false,
+    showToast: false,
+    handleCloseModal: vi.fn(),
+    handleCloseToast: vi.fn(),
+    csprPriceUsd: 0,
   }),
 }));
 
@@ -68,7 +76,7 @@ describe('PrivateSaleActive', () => {
     it('should render the component with title', () => {
       renderWithRouter(<PrivateSaleActive endTimestamp={mockEndTimestamp} />);
 
-      expect(screen.getByText(`${ICO_CONFIG.TOKEN.symbol} Private Sale`)).toBeInTheDocument();
+      expect(screen.getByText('BIG Private Sale')).toBeInTheDocument();
     });
 
     it('should render the subtitle', () => {
@@ -107,14 +115,8 @@ describe('PrivateSaleActive', () => {
       expect(screen.getByTestId('wallet-card')).toBeInTheDocument();
     });
 
-    it('should render the user token balance when progress is provided', () => {
+    it('should not render user token balance when no completed purchases', () => {
       renderWithRouter(<PrivateSaleActive endTimestamp={mockEndTimestamp} progress={mockProgress} />);
-
-      expect(screen.getByTestId('user-token-balance')).toBeInTheDocument();
-    });
-
-    it('should not render user token balance when progress is not provided', () => {
-      renderWithRouter(<PrivateSaleActive endTimestamp={mockEndTimestamp} />);
 
       expect(screen.queryByTestId('user-token-balance')).not.toBeInTheDocument();
     });
@@ -128,9 +130,9 @@ describe('PrivateSaleActive', () => {
 
   describe('private sale info display', () => {
     it('should display hard cap value', () => {
-      renderWithRouter(<PrivateSaleActive endTimestamp={mockEndTimestamp} />);
+      renderWithRouter(<PrivateSaleActive endTimestamp={mockEndTimestamp} progress={mockProgress} />);
 
-      expect(screen.getByText(`Hard Cap: $${Number(ICO_CONFIG.PRE_SALE.hardCap).toLocaleString()}`)).toBeInTheDocument();
+      expect(screen.getByText(`Hard Cap: $${Math.round(mockProgress.hardCapUsd).toLocaleString()}`)).toBeInTheDocument();
     });
   });
 

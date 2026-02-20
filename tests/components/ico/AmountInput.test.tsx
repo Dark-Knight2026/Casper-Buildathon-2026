@@ -154,14 +154,14 @@ describe('AmountInput', () => {
       ).toBeInTheDocument();
     });
 
-    it('should show error when amount is below minimum ($10)', () => {
+    it('should show error when amount is below minimum ($1)', () => {
       render(<AmountInput {...defaultProps} />);
 
       fireEvent.change(screen.getByPlaceholderText('0.00'), {
-        target: { value: '5' },
+        target: { value: '0.5' },
       });
 
-      expect(screen.getByText('Minimum amount is $10')).toBeInTheDocument();
+      expect(screen.getByText('Minimum amount is $1')).toBeInTheDocument();
     });
 
     it('should show error when amount exceeds maximum ($100,000)', () => {
@@ -220,13 +220,13 @@ describe('AmountInput', () => {
       const input = screen.getByPlaceholderText('0.00');
 
       // Trigger error
-      fireEvent.change(input, { target: { value: '5' } });
-      expect(screen.getByText('Minimum amount is $10')).toBeInTheDocument();
+      fireEvent.change(input, { target: { value: '0.5' } });
+      expect(screen.getByText('Minimum amount is $1')).toBeInTheDocument();
 
       // Enter valid value
       fireEvent.change(input, { target: { value: '50' } });
       expect(
-        screen.queryByText('Minimum amount is $10')
+        screen.queryByText('Minimum amount is $1')
       ).not.toBeInTheDocument();
     });
 
@@ -301,11 +301,11 @@ describe('AmountInput', () => {
       );
 
       fireEvent.change(screen.getByPlaceholderText('0.00'), {
-        target: { value: '5' },
+        target: { value: '0.5' },
       });
 
       // Error is shown
-      expect(screen.getByText('Minimum amount is $10')).toBeInTheDocument();
+      expect(screen.getByText('Minimum amount is $1')).toBeInTheDocument();
       // Balance is hidden
       expect(screen.queryByText(/Available:/)).not.toBeInTheDocument();
     });
@@ -382,7 +382,7 @@ describe('AmountInput', () => {
       render(<AmountInput {...defaultProps} />);
       const input = screen.getByPlaceholderText('0.00');
 
-      fireEvent.change(input, { target: { value: '5' } });
+      fireEvent.change(input, { target: { value: '0.5' } });
 
       expect(input.className).toContain('border-red-500/70');
     });
