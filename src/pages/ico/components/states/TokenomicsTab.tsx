@@ -4,40 +4,16 @@ import { SubTitle } from '../shared/SubTitle';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 import { AreaChart, Area, XAxis, YAxis, PieChart, Pie, Cell, CartesianGrid } from 'recharts';
 import { Coins } from 'lucide-react';
+import { MOCK_VESTING_SCHEDULE, MOCK_ALLOCATION_DATA } from '@/constants/icoMockData';
 
 const TOTAL_SUPPLY = '1,000,000,000';
-
-const MOCK_VESTING_DATA = [
-  { day: '0', released: 50_000_000 },
-  { day: '30', released: 80_000_000 },
-  { day: '60', released: 120_000_000 },
-  { day: '90', released: 170_000_000 },
-  { day: '120', released: 230_000_000 },
-  { day: '180', released: 340_000_000 },
-  { day: '240', released: 460_000_000 },
-  { day: '300', released: 580_000_000 },
-  { day: '360', released: 700_000_000 },
-  { day: '480', released: 850_000_000 },
-  { day: '600', released: 950_000_000 },
-  { day: '720', released: 1_000_000_000 },
-];
-
-const ALLOCATION_DATA = [
-  { name: 'Public Sale', value: 20, color: '#1F7A63' },           /* Primary green */
-  { name: 'Private Sale', value: 15, color: '#2E8B6F' },          /* Green accent */
-  { name: 'Team & Advisors', value: 15, color: '#36A080' },       /* Green light */
-  { name: 'Ecosystem & Rewards', value: 20, color: '#4A9A85' },   /* Green medium */
-  { name: 'Liquidity Pool', value: 10, color: '#5DAA95' },        /* Green soft */
-  { name: 'Reserve', value: 10, color: '#70BAA5' },               /* Green pale */
-  { name: 'Treasury', value: 10, color: '#83C9B5' },              /* Green lightest */
-];
 
 const vestingChartConfig = {
   released: { label: 'Released Tokens', color: '#1F7A63' },  /* Primary green */
 };
 
 const allocationChartConfig = Object.fromEntries(
-  ALLOCATION_DATA.map(({ name, color }) => [
+  MOCK_ALLOCATION_DATA.map(({ name, color }) => [
     name.toLowerCase().replace(/\s+/g, '_'),
     { label: name, color },
   ])
@@ -49,7 +25,7 @@ const VestingChart = memo(function VestingChart() {
       config={vestingChartConfig}
       className="h-62.5 w-full aspect-auto md:aspect-video"
     >
-      <AreaChart data={MOCK_VESTING_DATA} margin={{ left: 12, right: 12 }}>
+      <AreaChart data={MOCK_VESTING_SCHEDULE} margin={{ left: 12, right: 12 }}>
         <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="hsl(var(--ico-border-color))" />
         <XAxis
           dataKey="day"
@@ -106,7 +82,7 @@ const AllocationChart = memo(function AllocationChart() {
           }
         />
         <Pie
-          data={ALLOCATION_DATA}
+          data={MOCK_ALLOCATION_DATA}
           dataKey="value"
           nameKey="name"
           cx="50%"
@@ -115,7 +91,7 @@ const AllocationChart = memo(function AllocationChart() {
           outerRadius={90}
           strokeWidth={2}
         >
-          {ALLOCATION_DATA.map((entry) => (
+          {MOCK_ALLOCATION_DATA.map((entry) => (
             <Cell
               key={entry.name}
               fill={`${entry.color}70`}
@@ -172,7 +148,7 @@ export function TokenomicsTab() {
               <AllocationChart />
 
               <div className="flex flex-col gap-2 w-full">
-                {ALLOCATION_DATA.map((entry) => (
+                {MOCK_ALLOCATION_DATA.map((entry) => (
                   <div key={entry.name} className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <span

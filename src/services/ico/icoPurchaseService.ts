@@ -158,11 +158,12 @@ export async function checkApprovalNeeded(
   const requiredAmount = toRawAmount(amount, decimals);
 
   // Get current allowance for ICO contract
-  const icoAccountHash = stripHashPrefix(ICO_HASH);
+  // Pass prefixed keys so getAllowance can determine tag bytes (account vs contract)
+  const icoContractKey = ICO_HASH.startsWith('hash-') ? ICO_HASH : `hash-${ICO_HASH}`;
   const currentAllowance = await getAllowance(
     tokenContract,
     senderAccountHash,
-    icoAccountHash,
+    icoContractKey,
   );
 
   return {
@@ -398,8 +399,6 @@ export async function getDeployStatus(
   }
 }
 
-// Keep old function name as alias for backward compatibility
-export const getTransactionStatus = getDeployStatus;
 
 // ── Validation ──────────────────────────────────────────────────────
 

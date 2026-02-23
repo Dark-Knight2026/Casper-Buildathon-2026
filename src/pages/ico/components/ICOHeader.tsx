@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useICOWallet } from '@/hooks/ico/useICOWallet';
 import { LogOut } from 'lucide-react';
 
+
 export function ICOHeader() {
   const { isConnected, account, isConnecting, connect, disconnect } = useICOWallet();
 
@@ -21,13 +22,20 @@ export function ICOHeader() {
         <div className="flex flex-row items-center justify-between gap-4">
           {/* Logo & Token Name */}
           <div className="flex items-center gap-3">
-            <div className="w-20 h-20  ">
-              <img src="/leaseFilogo2.png" alt="Token Logo" onClick={handleLogoClick} className="cursor-pointer" />
-            </div>
+            <button
+              onClick={handleLogoClick}
+              className="w-20 h-20 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 rounded"
+              aria-label="Return to ICO overview"
+            >
+              <img src="/leaseFilogo2.png" alt="" />
+            </button>
             <div>
-              <h1 className="text-lg md:text-xl font-bold text-[hsl(var(--ico-text-primary))]">
+              <h2 className="text-lg md:text-xl font-bold text-[hsl(var(--ico-text-primary))]">
                 {ICO_CONFIG.TOKEN.name}
-              </h1>
+              </h2>
+              <p className="text-sm text-[hsl(var(--ico-text-secondary))]">
+                {ICO_CONFIG.TOKEN.symbol} Token Sale
+              </p>
             </div>
           </div>
 

@@ -7,7 +7,6 @@ import { createClient } from '@supabase/supabase-js';
 import { logger } from '@/utils/logger';
 
 // Environment configuration
-const CSPR_CLOUD_API_KEY = import.meta.env.VITE_CSPR_CLOUD_API_KEY || '';
 const CSPR_CLOUD_WS_URL = import.meta.env.VITE_CSPR_CLOUD_WS_URL || 'wss://streaming.cspr.cloud';
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
@@ -72,8 +71,18 @@ export class CSPRCloudService {
     let url = CSPR_CLOUD_WS_URL;
     const params = new URLSearchParams();
 
-    if (CSPR_CLOUD_API_KEY) {
-      params.append('key', CSPR_CLOUD_API_KEY);
+    // Security: This API key is intentionally client-exposed (VITE_* prefix).
+    // WebSocket connections cannot use custom headers, so a URL query param
+    // is the only available transport mechanism.
+    //
+    // Mitigations configured in the CSPR.cloud dashboard:
+    // - Key is restricted to production domain(s) via origin allowlist
+    // - Rate limiting is enforced per-key by CSPR.cloud
+    //
+    // Verify at: https://console.cspr.cloud → API Keys → [key name] → Restrictions
+    const wsApiKey = import.meta.env.VITE_CSPR_CLOUD_API_KEY || '';
+    if (wsApiKey) {
+      params.append('key', wsApiKey);
     }
 
     if (lastEventId !== null) {
@@ -259,17 +268,13 @@ export class CSPRCloudService {
     block_number?: number;
     error_message?: string;
   }> {
-    const apiUrl = import.meta.env.VITE_CSPR_CLOUD_API_URL || 'https://api.cspr.cloud';
+    // Use proxy in both dev and prod (Vite proxy in dev, Vercel serverless in prod)
+    const proxyUrl = import.meta.env.DEV
+      ? `/api/cspr-cloud/deploys/${deployHash}`
+      : `/api/cspr-cloud?path=${encodeURIComponent(`deploys/${deployHash}`)}`;
 
     try {
-      const response = await fetch(
-        `${apiUrl}/deploys/${deployHash}`,
-        {
-          headers: {
-            'Authorization': CSPR_CLOUD_API_KEY ? `Bearer ${CSPR_CLOUD_API_KEY}` : '',
-          },
-        }
-      );
+      const response = await fetch(proxyUrl);
 
       if (!response.ok) {
         if (response.status === 404) {

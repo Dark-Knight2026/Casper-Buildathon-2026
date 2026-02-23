@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import type { ICOState, ICOPhase, SaleTimestamps, SaleStatus } from '@/types/ico';
 
 interface UseICOStateOptions {
@@ -83,21 +84,24 @@ export function useICOState(options: UseICOStateOptions = {}): UseICOStateReturn
     };
   }, [customTimestamps]);
 
-  // Track if we have real timestamps
-  const hasRealTimestamps = !!customTimestamps;
-
   // Dev mode: manual state override
   const [devState, setDevState] = useState<ICOState | null>(initialDevState);
   const isDevOverride = devState !== null;
 
-  const [calculatedState, setCalculatedState] = useState<ICOState>(() =>
-    hasRealTimestamps ? calculateState(timestamps) : 1
-  );
-  const [isLoading, setIsLoading] = useState(!hasRealTimestamps);
-  const [error, setError] = useState<Error | null>(null);
+  const {
+    data: calculatedState,
+    isLoading,
+    error: queryError,
+    refetch: queryRefetch,
+  } = useQuery<ICOState, Error>({
+    queryKey: ['ico-state', timestamps],
+    queryFn: () => calculateState(timestamps),
+    refetchInterval: isDevOverride ? false : pollInterval,
+    staleTime: 5000,
+  });
 
-  // Use dev override if set, otherwise use calculated state
-  const state = devState ?? calculatedState;
+  // Use dev override if set, otherwise use query data (with sync fallback for first render)
+  const state = devState ?? calculatedState ?? calculateState(timestamps);
 
   const phase = useMemo(() => getPhaseFromState(state), [state]);
   const nextStateTimestamp = useMemo(
@@ -113,43 +117,10 @@ export function useICOState(options: UseICOStateOptions = {}): UseICOStateReturn
     nextStateTimestamp,
   }), [state, phase, nextStateTimestamp]);
 
-  // Update state based on time (only if not in dev override mode and have real timestamps)
-  useEffect(() => {
-    if (isDevOverride || !hasRealTimestamps) return;
-
-    // Immediately calculate state when real timestamps arrive
-    const newState = calculateState(timestamps);
-    if (newState !== calculatedState) {
-      setCalculatedState(newState);
-    }
-    setIsLoading(false);
-
-    const updateState = () => {
-      const updatedState = calculateState(timestamps);
-      if (updatedState !== calculatedState) {
-        setCalculatedState(updatedState);
-      }
-    };
-
-    const timer = setInterval(updateState, pollInterval);
-    return () => clearInterval(timer);
-  }, [timestamps, calculatedState, pollInterval, isDevOverride, hasRealTimestamps]);
-
-  // Refetch function (for future API integration)
+  // Wrap refetch to preserve () => void signature
   const refetch = useCallback(() => {
-    if (!hasRealTimestamps) return;
-
-    setIsLoading(true);
-    try {
-      const newState = calculateState(timestamps);
-      setCalculatedState(newState);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err : new Error('Failed to fetch ICO state'));
-    } finally {
-      setIsLoading(false);
-    }
-  }, [timestamps, hasRealTimestamps]);
+    queryRefetch();
+  }, [queryRefetch]);
 
   return {
     state,
@@ -157,7 +128,7 @@ export function useICOState(options: UseICOStateOptions = {}): UseICOStateReturn
     status,
     timestamps,
     isLoading,
-    error,
+    error: queryError ?? null,
     nextStateTimestamp,
     refetch,
     setDevState,

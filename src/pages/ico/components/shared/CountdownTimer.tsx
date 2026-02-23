@@ -10,6 +10,8 @@ interface CountdownTimerProps {
   variant?: 'default' | 'compact' | 'minimal';
   showLabels?: boolean;
   className?: string;
+  /** Update interval in milliseconds. Use longer intervals (e.g., 60000) for secondary countdowns to reduce battery drain. Default: 1000ms */
+  updateInterval?: number;
 }
 
 const calculateTimeLeft = (targetTimestamp: number): CountdownTime => {
@@ -42,6 +44,7 @@ export const CountdownTimer = memo(function CountdownTimer({
   variant = 'default',
   showLabels = true,
   className,
+  updateInterval = 1000,
 }: CountdownTimerProps) {
   const [timeLeft, setTimeLeft] = useState<CountdownTime>(() =>
     calculateTimeLeft(targetTimestamp)
@@ -60,10 +63,10 @@ export const CountdownTimer = memo(function CountdownTimer({
         clearInterval(timer);
         handleExpire();
       }
-    }, 1000);
+    }, updateInterval);
 
     return () => clearInterval(timer);
-  }, [targetTimestamp, handleExpire]);
+  }, [targetTimestamp, handleExpire, updateInterval]);
 
   const formatNumber = (num: number): string => {
     return num.toString().padStart(2, '0');
@@ -74,7 +77,7 @@ export const CountdownTimer = memo(function CountdownTimer({
       container: 'gap-2',
       card: 'w-14 h-16 md:w-16 md:h-18',
       digit: 'text-xl md:text-2xl',
-      label: 'text-[10px] md:text-xs',
+      label: 'text-xs md:text-sm',
       separator: 'text-xl md:text-2xl',
     },
     md: {

@@ -13,6 +13,7 @@ const mockProgress: ScheduleProgress = {
   tokensRemaining: 650000000,
   amountRaised: 100000,
   percentSold: 13.33,
+  hardCapUsd: 750000,
 };
 
 // Mock usePurchaseFlow hook to avoid csprclick-ui dependency
@@ -46,15 +47,6 @@ vi.mock('@/pages/ico/components/shared/ProgressBar', () => ({
 
 vi.mock('@/pages/ico/components/shared/WalletCard', () => ({
   WalletCard: () => <div data-testid="wallet-card">Wallet Card</div>,
-}));
-
-vi.mock('@/pages/ico/components/shared/TransactionHistory', () => ({
-  TransactionHistory: () => <div data-testid="transaction-history">Transaction History</div>,
-  Transaction: {},
-}));
-
-vi.mock('@/pages/ico/components/shared/UserTokenBalance', () => ({
-  UserTokenBalance: () => <div data-testid="user-token-balance">User Token Balance</div>,
 }));
 
 const renderWithRouter = (ui: React.ReactElement) => {
@@ -107,30 +99,13 @@ describe('PrivateSaleActive', () => {
       expect(screen.getByTestId('wallet-card')).toBeInTheDocument();
     });
 
-    it('should render the user token balance when progress is provided', () => {
-      renderWithRouter(<PrivateSaleActive endTimestamp={mockEndTimestamp} progress={mockProgress} />);
-
-      expect(screen.getByTestId('user-token-balance')).toBeInTheDocument();
-    });
-
-    it('should not render user token balance when progress is not provided', () => {
-      renderWithRouter(<PrivateSaleActive endTimestamp={mockEndTimestamp} />);
-
-      expect(screen.queryByTestId('user-token-balance')).not.toBeInTheDocument();
-    });
-
-    it('should render the transaction history', () => {
-      renderWithRouter(<PrivateSaleActive endTimestamp={mockEndTimestamp} />);
-
-      expect(screen.getByTestId('transaction-history')).toBeInTheDocument();
-    });
   });
 
   describe('private sale info display', () => {
-    it('should display hard cap value', () => {
-      renderWithRouter(<PrivateSaleActive endTimestamp={mockEndTimestamp} />);
+    it('should display hard cap value when progress is provided', () => {
+      renderWithRouter(<PrivateSaleActive endTimestamp={mockEndTimestamp} progress={mockProgress} />);
 
-      expect(screen.getByText(`Hard Cap: $${Number(ICO_CONFIG.PRE_SALE.hardCap).toLocaleString()}`)).toBeInTheDocument();
+      expect(screen.getByText(`Hard Cap: $${Math.round(mockProgress.hardCapUsd).toLocaleString()}`)).toBeInTheDocument();
     });
   });
 

@@ -1,7 +1,8 @@
 import { cn } from '@/lib/utils';
 import { Card } from './Card';
+import { formatDateTime } from '../../utils/formatters';
 
-export interface Transaction {
+export interface ICOTransaction {
   id: string;
   type: 'purchase' | 'claim';
   amount: number;
@@ -14,7 +15,7 @@ export interface Transaction {
 }
 
 interface TransactionHistoryProps {
-  transactions: Transaction[];
+  transactions: ICOTransaction[];
   className?: string;
 }
 
@@ -35,15 +36,6 @@ export function TransactionHistory({ transactions, className }: TransactionHisto
     return `${hash.slice(0, 6)}...${hash.slice(-4)}`;
   };
 
-  const formatDate = (date: Date) => {
-    return new Intl.DateTimeFormat('en-US', {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    }).format(date);
-  };
-
   return (
     <Card className={cn('p-6 w-full', className)}>
       <div className="w-full">
@@ -58,9 +50,10 @@ export function TransactionHistory({ transactions, className }: TransactionHisto
             </p>
           </div>
         ) : (
-          <div className="space-y-3 max-h-80 overflow-y-auto">
+          // Semantic list structure for a11y (WCAG 1.3.1) — card-based layout uses ul/li instead of table
+          <ul aria-label="Transaction history" className="space-y-3 max-h-80 overflow-y-auto list-none p-0 m-0">
             {transactions.map((tx) => (
-              <div
+              <li
                 key={tx.id}
                 className="flex items-center justify-between p-3 rounded-md bg-[hsl(var(--ico-bg-secondary))] border border-[hsl(var(--ico-border-color))]"
               >
@@ -79,7 +72,7 @@ export function TransactionHistory({ transactions, className }: TransactionHisto
                     </span>
                   </div>
                   <div className="flex items-center gap-2 text-xs text-[hsl(var(--ico-text-secondary))]">
-                    <span>{formatDate(tx.timestamp)}</span>
+                    <span>{formatDateTime(tx.timestamp)}</span>
                     {tx.txHash && (
                       <>
                         <span>•</span>
@@ -97,9 +90,9 @@ export function TransactionHistory({ transactions, className }: TransactionHisto
                     {tx.amount.toLocaleString()} {tx.currency}
                   </p>
                 </div>
-              </div>
+              </li>
             ))}
-          </div>
+          </ul>
         )}
       </div>
     </Card>

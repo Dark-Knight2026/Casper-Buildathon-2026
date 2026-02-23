@@ -42,18 +42,19 @@ describe('ICOHeader', () => {
       expect(screen.getByText(ICO_CONFIG.TOKEN.name)).toBeInTheDocument();
     });
 
-    it('should display token symbol with "Token"', () => {
+    it('should display token symbol with "Token Sale"', () => {
       render(<ICOHeader />);
 
-      expect(screen.getByText(`${ICO_CONFIG.TOKEN.symbol} Token`)).toBeInTheDocument();
+      expect(screen.getByText(`${ICO_CONFIG.TOKEN.symbol} Token Sale`)).toBeInTheDocument();
     });
 
     it('should render logo image', () => {
       render(<ICOHeader />);
 
-      const logo = screen.getByAltText('Token Logo');
-      expect(logo).toBeInTheDocument();
-      expect(logo).toHaveAttribute('src', '/leaseFilogo2.png');
+      const logo = screen.getByRole('button', { name: 'Return to ICO overview' });
+      const img = logo.querySelector('img');
+      expect(img).toBeInTheDocument();
+      expect(img).toHaveAttribute('src', '/leaseFilogo2.png');
     });
   });
 
@@ -76,7 +77,7 @@ describe('ICOHeader', () => {
     it('should navigate to /ico when logo is clicked', () => {
       render(<ICOHeader />);
 
-      const logo = screen.getByAltText('Token Logo');
+      const logo = screen.getByRole('button', { name: 'Return to ICO overview' });
       fireEvent.click(logo);
 
       expect(mockNavigate).toHaveBeenCalledWith('/ico');
@@ -85,7 +86,7 @@ describe('ICOHeader', () => {
     it('should have cursor-pointer on logo', () => {
       render(<ICOHeader />);
 
-      const logo = screen.getByAltText('Token Logo');
+      const logo = screen.getByRole('button', { name: 'Return to ICO overview' });
       expect(logo.className).toContain('cursor-pointer');
     });
   });

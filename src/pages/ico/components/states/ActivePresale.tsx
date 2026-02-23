@@ -1,12 +1,12 @@
 import { cn } from '@/lib/utils';
 import type { ScheduleProgress } from '@/hooks/ico/useICOSchedules';
-import { ICO_CONFIG, MOCK_TRANSACTIONS } from '@/constants/ico';
+import { ICO_CONFIG } from '@/constants/ico';
+import type { PaymentCurrency } from '@/types/ico';
+import { toast } from '@/lib/toast';
 import { Title } from '../shared/Title';
 import { ProgressBar } from '../shared/ProgressBar';
 import { WalletCard } from '../shared/WalletCard';
-import { TransactionHistory } from '../shared/TransactionHistory';
 import CountdownTimer from '../shared/CountdownTimer';
-import { UserTokenBalance } from '../shared/UserTokenBalance';
 import { usePurchaseFlow } from '@/hooks/ico/usePurchaseFlow';
 import { PurchaseConfirmationModal } from '../shared/PurchaseConfirmationModal';
 import { TransactionStatusToast } from '../shared/TransactionStatusToast';
@@ -16,11 +16,6 @@ interface ActivePresaleProps {
   endTimestamp: number;
   progress?: ScheduleProgress | null;
 }
-
-const MOCK_USER_BALANCE = {
-  tokensPurchased: 1505000,  // 500,000 + 1,000,000 + 5,000
-  totalSpentUSD: 1505,       // $500 + $1,000 + $5 (250 CSPR × $0.02)
-};
 
 export function PrivateSaleActive({ className, endTimestamp, progress }: ActivePresaleProps) {
   const tokenPrice = progress?.priceUsd ?? 0;
@@ -41,14 +36,6 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: ActiveP
     tokenSymbol: ICO_CONFIG.TOKEN.symbol,
   });
 
-  console.log('Rendering ActivePresale with props:', {
-    endTimestamp,
-    progress,
-    tokenPrice,
-    isConnected,
-    account,
-    balances,
-  });
 
   return (
     <div className={cn('max-w-5xl mx-auto', className)}>
@@ -106,22 +93,8 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: ActiveP
         />
       </div>
 
-      {/* User Token Balance - show only when progress data exists */}
-      {progress && (
-        <UserTokenBalance
-          tokensPurchased={MOCK_USER_BALANCE.tokensPurchased}
-          totalSpentUSD={MOCK_USER_BALANCE.totalSpentUSD}
-          tokenPrice={progress.priceUsd}
-          tokenSymbol={ICO_CONFIG.TOKEN.symbol}
-          className="mt-8"
-        />
-      )}
-
-      {/* Transaction History */}
-      <TransactionHistory
-        transactions={MOCK_TRANSACTIONS}
-        className="mt-8 max-w-5xl"
-      />
+      {/* TODO: [Next PR] Wire UserTokenBalance to real per-user contract data */}
+      {/* TODO: [Next PR] Wire TransactionHistory to real on-chain transaction data */}
 
       {/* Purchase Confirmation Modal */}
       {modalProps && (
