@@ -11,6 +11,7 @@ interface WalletCardProps {
   balanceUSDT?: number;
   balanceUSDC?: number;
   balanceCSPR?: number;
+  balanceBIG?: number;
   tokenPrice: number;
   tokenSymbol: string;
   onConnect?: () => void;
@@ -23,6 +24,7 @@ export function WalletCard({
   balanceUSDT = 0,
   balanceUSDC = 0,
   balanceCSPR = 0,
+  balanceBIG = 0,
   tokenPrice,
   tokenSymbol,
   onConnect,
@@ -98,15 +100,20 @@ export function WalletCard({
       {isConnected && (
         <div className="flex justify-between items-center w-full mb-6 pb-6 border-b border-sky-800/50">
           <span className="text-sm text-[hsl(var(--ico-text-secondary))]">Your Balance</span>
-          <div className="text-right">
+          <div className="text-right space-y-1">
+            {balanceBIG > 0 && (
+              <p className="text-sm font-bold text-sky-400">
+                {balanceBIG.toLocaleString(undefined, { maximumFractionDigits: 2 })} {tokenSymbol}
+              </p>
+            )}
             <p className="text-sm font-medium text-[hsl(var(--ico-text-primary))]">
-              {balanceUSDT.toLocaleString()} USDT
+              {balanceCSPR.toLocaleString(undefined, { maximumFractionDigits: 2 })} CSPR
             </p>
             <p className="text-sm font-medium text-[hsl(var(--ico-text-primary))]">
-              {balanceUSDC.toLocaleString()} USDC
+              {balanceUSDT.toLocaleString(undefined, { maximumFractionDigits: 2 })} USDT
             </p>
             <p className="text-sm font-medium text-[hsl(var(--ico-text-primary))]">
-              {balanceCSPR.toLocaleString()} CSPR
+              {balanceUSDC.toLocaleString(undefined, { maximumFractionDigits: 2 })} USDC
             </p>
           </div>
         </div>

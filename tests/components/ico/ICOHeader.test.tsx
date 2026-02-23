@@ -9,6 +9,21 @@ vi.mock('react-router-dom', () => ({
   useNavigate: () => mockNavigate,
 }));
 
+// Mock useICOWallet hook to avoid csprclick-ui dependency
+const mockConnect = vi.fn();
+const mockDisconnect = vi.fn();
+vi.mock('@/hooks/ico/useICOWallet', () => ({
+  useICOWallet: () => ({
+    isConnected: false,
+    account: null,
+    isConnecting: false,
+    connect: mockConnect,
+    disconnect: mockDisconnect,
+    error: null,
+    clickRef: null,
+  }),
+}));
+
 describe('ICOHeader', () => {
   beforeEach(() => {
     vi.clearAllMocks();

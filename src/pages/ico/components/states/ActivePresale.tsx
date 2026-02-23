@@ -1,42 +1,38 @@
 import { cn } from '@/lib/utils';
-import { ICO_CONFIG, MOCK_TRANSACTIONS } from '@/constants/ico';
-import { MOCK_PRESALE_PROGRESS, MOCK_WALLET, MOCK_USER_BALANCE } from '@/constants/icoMockData';
+import type { ScheduleProgress } from '@/hooks/ico/useICOSchedules';
+import { ICO_CONFIG } from '@/constants/ico';
 import type { PaymentCurrency } from '@/types/ico';
 import { toast } from '@/lib/toast';
 import { Title } from '../shared/Title';
 import { ProgressBar } from '../shared/ProgressBar';
 import { WalletCard } from '../shared/WalletCard';
-import { TransactionHistory } from '../shared/TransactionHistory';
 import CountdownTimer from '../shared/CountdownTimer';
-import { UserTokenBalance } from '../shared/UserTokenBalance';
+import { usePurchaseFlow } from '@/hooks/ico/usePurchaseFlow';
+import { PurchaseConfirmationModal } from '../shared/PurchaseConfirmationModal';
+import { TransactionStatusToast } from '../shared/TransactionStatusToast';
 
 interface ActivePresaleProps {
   className?: string;
   endTimestamp: number;
+  progress?: ScheduleProgress | null;
 }
 
-export function ActivePresale({ className, endTimestamp }: ActivePresaleProps) {
-  // TODO: [Next PR] Implement wallet connection via CasperWalletProvider.
-  // Should prompt user to connect Casper Signer / Casper Wallet extension,
-  // retrieve the active public key, and store it in app state.
-  const handleConnect = () => {
-    toast.info('Wallet connection coming soon');
-  };
+export function ActivePresale({ className, endTimestamp, progress }: ActivePresaleProps) {
+  const tokenPrice = progress?.priceUsd ?? 0;
 
-  // TODO: [Next PR] Implement full purchase flow with server-side validation.
-  // This handler is intentionally empty in the current UI-only PR.
-  // Required integration steps:
-  //   1. Validate amount & currency on the backend (never trust client-side math).
-  //   2. Create a pending transaction record server-side before accepting payment.
-  //   3. Submit blockchain transaction (CEP-18 transfer for USDT/USDC, native deploy for CSPR).
-  //   4. Backend must verify the deploy on-chain and confirm token allocation.
-  //   5. Implement idempotency keys / nonce to prevent double-spending.
-  //   6. Handle edge cases: insufficient balance, network errors, deploy failures.
-  //   7. CSRF protection: API layer must enforce CSRF tokens (via cookies/headers),
-  //      SameSite cookie policy, and Origin/Referer header validation.
-  const handlePurchase = (_amount: number, _currency: PaymentCurrency) => {
-    toast.info('Token purchase coming soon');
-  };
+  const {
+    isConnected,
+    account,
+    connect,
+    balances,
+    handlePurchase,
+    modalProps,
+    toastProps,
+  } = usePurchaseFlow({
+    tokenPrice,
+    tokenSymbol: ICO_CONFIG.TOKEN.symbol,
+  });
+
 
   return (
     <div className={cn('max-w-5xl mx-auto', className)}>
@@ -56,50 +52,51 @@ export function ActivePresale({ className, endTimestamp }: ActivePresaleProps) {
           <p className='text-[hsl(var(--ico-text-secondary))] pl-2'>Presale ends in:</p>
           <CountdownTimer variant='compact' targetTimestamp={endTimestamp} className="py-2" />
 
-          {/* Progress Bar */}
-          <ProgressBar
-            currentValue={MOCK_PRESALE_PROGRESS.tokensSold}
-            maxValue={MOCK_PRESALE_PROGRESS.totalAllocation}
-            label="Progress"
-            rightLabel={`$${MOCK_PRESALE_PROGRESS.amountRaised.toLocaleString()} / $${Number(ICO_CONFIG.PRE_SALE.hardCap).toLocaleString()}`}
-            showPercentage={true}
-            infoColumns={[
-              { label: 'Funds Raised', value: `$${MOCK_PRESALE_PROGRESS.amountRaised.toLocaleString()}` },
-              { label: 'Initial Price', value: `$${ICO_CONFIG.PRE_SALE.price} per ${ICO_CONFIG.TOKEN.symbol}` },
-            ]}
-            className="w-full"
-          />
+          {/* Progress Bar - show only when progress data exists */}
+          {progress && (
+            <ProgressBar
+              currentValue={progress.tokensSold}
+              maxValue={progress.totalAllocation}
+              label="Progress"
+              rightLabel={`$${Math.round(progress.amountRaised).toLocaleString()} / $${Number(ICO_CONFIG.PRE_SALE.hardCap).toLocaleString()}`}
+              showPercentage={true}
+              infoColumns={[
+                { label: 'Funds Raised', value: `$${Math.round(progress.amountRaised).toLocaleString()}` },
+                { label: 'Initial Price', value: `$${progress.priceUsd.toFixed(2)} per ${ICO_CONFIG.TOKEN.symbol}` },
+              ]}
+              className="w-full"
+            />
+          )}
           <p className='text-[hsl(var(--ico-text-secondary))] pl-2'>Hard Cap: ${Number(ICO_CONFIG.PRE_SALE.hardCap).toLocaleString()}</p>
         </div>
 
         {/* Wallet Card */}
         <WalletCard
-          walletAddress={MOCK_WALLET.address}
-          balanceUSDT={MOCK_WALLET.balanceUSDT}
-          balanceUSDC={MOCK_WALLET.balanceUSDC}
-          balanceCSPR={MOCK_WALLET.balanceCSPR}
-          tokenPrice={Number(ICO_CONFIG.PRE_SALE.price)}
+          walletAddress={isConnected ? account?.publicKey : undefined}
+          balanceCSPR={balances.cspr}
+          balanceUSDT={balances.usdt}
+          balanceUSDC={balances.usdc}
+          balanceBIG={balances.big}
+          tokenPrice={progress?.priceUsd ?? 0}
           tokenSymbol={ICO_CONFIG.TOKEN.symbol}
-          onConnect={handleConnect}
+          onConnect={connect}
           onPurchase={handlePurchase}
           className="w-full"
         />
       </div>
 
-      {/* User Token Balance */}
-      <UserTokenBalance
-        tokensPurchased={MOCK_USER_BALANCE.tokensPurchased}
-        totalSpentUSD={MOCK_USER_BALANCE.totalSpentUSD}
-        tokenPrice={Number(ICO_CONFIG.PRE_SALE.price)}
-        tokenSymbol={ICO_CONFIG.TOKEN.symbol}
-        className="mt-8"
-      />
+      {/* TODO: [Next PR] Wire UserTokenBalance to real per-user contract data */}
+      {/* TODO: [Next PR] Wire TransactionHistory to real on-chain transaction data */}
 
-      {/* Transaction History */}
-      <TransactionHistory
-        transactions={MOCK_TRANSACTIONS}
-        className="mt-8 max-w-5xl"
-      />
+      {/* Purchase Confirmation Modal */}
+      {modalProps && (
+        <PurchaseConfirmationModal {...modalProps} />
+      )}
+
+      {/* Transaction Status Toast */}
+      {toastProps && (
+        <TransactionStatusToast {...toastProps} />
+      )}
     </div>
   );
 }

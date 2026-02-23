@@ -128,6 +128,7 @@ const AccessibilityTestPage = lazy(() => import('@/pages/accessibility/Accessibi
 // Lazy load ICO pages
 const ICOPage = lazy(() => import('@/pages/ico/ICOPage'));
 const ICOWhitepaperPage = lazy(() => import('@/pages/ico/ICOWhitepaperPage'));
+const ICOLayout = lazy(() => import('@/pages/ico/ICOLayout'));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -135,7 +136,7 @@ const queryClient = new QueryClient({
       refetchOnWindowFocus: false,
       retry: 1,
       staleTime: 5 * 60 * 1000, // 5 minutes
-      cacheTime: 10 * 60 * 1000, // 10 minutes
+      gcTime: 10 * 60 * 1000, // 10 minutes
     },
   },
 });
@@ -161,9 +162,9 @@ function App() {
               <Route path="/properties" element={<PropertySearch />} />
               <Route path="/properties/:id" element={<TenantPropertyDetail />} />
 
-              {/* ICO Pages - Public access for token sale */}
-              <Route path="/ico" element={<ICOPage />} />
-              <Route path="/ico/whitepaper" element={<ICOWhitepaperPage />} />
+              {/* ICO Pages - Public access for token sale, wrapped with Casper wallet provider */}
+              <Route path="/ico" element={<ICOLayout><ICOPage /></ICOLayout>} />
+              <Route path="/ico/whitepaper" element={<ICOLayout><ICOWhitepaperPage /></ICOLayout>} />
               
               {/* 
                 AUTHENTICATION ROUTES

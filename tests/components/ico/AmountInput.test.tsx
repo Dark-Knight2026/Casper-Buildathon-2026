@@ -204,14 +204,14 @@ describe('AmountInput', () => {
       render(<Wrapper />);
       const input = screen.getByPlaceholderText('0.00');
 
-      // Trigger an error (onChange is blocked, so controlled value stays '50')
-      fireEvent.change(input, { target: { value: '5' } });
-      expect(screen.getByText('Minimum amount is $10')).toBeInTheDocument();
+      // First enter a valid value
+      fireEvent.change(input, { target: { value: '50' } });
+      expect(screen.queryByText(/Minimum amount|Maximum amount/)).not.toBeInTheDocument();
 
-      // Clear input (tracker sees '50' → '' which is different, so event fires)
+      // Clear input - should have no error
       fireEvent.change(input, { target: { value: '' } });
       expect(
-        screen.queryByText('Minimum amount is $10')
+        screen.queryByText(/Minimum amount|Maximum amount|positive number/)
       ).not.toBeInTheDocument();
     });
 

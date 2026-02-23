@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { ICOPage } from '@/pages/ico/ICOPage';
 import type { SaleTimestamps } from '@/types/ico';
+import type { ScheduleProgress } from '@/hooks/ico/useICOSchedules';
 
 // --- Mocks ---
 
@@ -12,24 +13,38 @@ const mockTimestamps: SaleTimestamps = {
   icoEnd: 4000,
 };
 
+const mockProgress: ScheduleProgress = {
+  tokensSold: 1000000,
+  totalAllocation: 10000000,
+  tokensRemaining: 9000000,
+  amountRaised: 100000,
+  priceUsd: 0.1,
+  percentSold: 10,
+};
+
 const mockUseICOState = vi.fn();
+const mockUseICOSchedules = vi.fn();
 
 vi.mock('@/hooks/ico/useICOState', () => ({
   useICOState: (...args: unknown[]) => mockUseICOState(...args),
 }));
 
+vi.mock('@/hooks/ico/useICOSchedules', () => ({
+  useICOSchedules: () => mockUseICOSchedules(),
+}));
+
 // Mock lazy-loaded state components with sync default exports
 vi.mock('@/pages/ico/components/states/PresaleCountdown', () => ({
-  default: (props: { targetTimestamp: number; endTimestamp: number }) => (
+  default: (props: { targetTimestamp: number; endTimestamp: number; progress?: ScheduleProgress | null }) => (
     <div data-testid="presale-countdown">
-      PresaleCountdown target={props.targetTimestamp} end={props.endTimestamp}
+      PresaleCountdown target={props.targetTimestamp} end={props.endTimestamp} progress={props.progress ? 'yes' : 'no'}
     </div>
   ),
 }));
 
 vi.mock('@/pages/ico/components/states/ActivePresale', () => ({
-  default: (props: { endTimestamp: number }) => (
-    <div data-testid="active-presale">ActivePresale end={props.endTimestamp}</div>
+  default: (props: { endTimestamp: number; progress?: ScheduleProgress | null }) => (
+    <div data-testid="active-presale">ActivePresale end={props.endTimestamp} progress={props.progress ? 'yes' : 'no'}</div>
   ),
 }));
 
@@ -42,8 +57,8 @@ vi.mock('@/pages/ico/components/states/DashboardICOCountdown', () => ({
 }));
 
 vi.mock('@/pages/ico/components/states/ActiveICO', () => ({
-  default: (props: { endTimestamp: number }) => (
-    <div data-testid="active-ico">ActiveICO end={props.endTimestamp}</div>
+  default: (props: { endTimestamp: number; progress?: ScheduleProgress | null }) => (
+    <div data-testid="active-ico">ActiveICO end={props.endTimestamp} progress={props.progress ? 'yes' : 'no'}</div>
   ),
 }));
 
@@ -77,6 +92,16 @@ function setICOState(state: 1 | 2 | 3 | 4 | 5) {
     4: 'ico-active',
     5: 'post-ico',
   } as const;
+
+  // Mock useICOSchedules - provides timestamps and progress data
+  mockUseICOSchedules.mockReturnValue({
+    timestamps: mockTimestamps,
+    presaleProgress: mockProgress,
+    icoProgress: mockProgress,
+    isLoading: false,
+    error: null,
+    refetch: vi.fn(),
+  });
 
   mockUseICOState.mockReturnValue({
     state,

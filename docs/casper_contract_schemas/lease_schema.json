@@ -1,0 +1,530 @@
+{
+  "casper_contract_schema_version": 1,
+  "toolchain": "rustc 1.85.0-nightly (7f75bfa1a 2024-12-30)",
+  "authors": [],
+  "repository": null,
+  "homepage": null,
+  "contract_name": "Lease",
+  "contract_version": "0.1.0",
+  "types": [
+    {
+      "struct": {
+        "name": "CreateLeaseAgreementParams",
+        "description": null,
+        "members": [
+          {
+            "name": "tenant",
+            "description": null,
+            "ty": "Key"
+          },
+          {
+            "name": "monthly_rent",
+            "description": null,
+            "ty": "CurrencyAmount"
+          },
+          {
+            "name": "security_deposit",
+            "description": null,
+            "ty": "CurrencyAmount"
+          },
+          {
+            "name": "start",
+            "description": null,
+            "ty": "U64"
+          },
+          {
+            "name": "end",
+            "description": null,
+            "ty": "U64"
+          },
+          {
+            "name": "invoice_validity_duration",
+            "description": null,
+            "ty": "U64"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
+        "name": "CurrencyAmount",
+        "description": null,
+        "members": [
+          {
+            "name": "currency",
+            "description": null,
+            "ty": {
+              "Option": "Key"
+            }
+          },
+          {
+            "name": "amount",
+            "description": null,
+            "ty": "U256"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
+        "name": "LeaseAgreement",
+        "description": null,
+        "members": [
+          {
+            "name": "tenant",
+            "description": null,
+            "ty": "Key"
+          },
+          {
+            "name": "landlord",
+            "description": null,
+            "ty": "Key"
+          },
+          {
+            "name": "monthly_rent",
+            "description": null,
+            "ty": "CurrencyAmount"
+          },
+          {
+            "name": "security_deposit",
+            "description": null,
+            "ty": "CurrencyAmount"
+          },
+          {
+            "name": "invoices_ids",
+            "description": null,
+            "ty": {
+              "List": "U256"
+            }
+          },
+          {
+            "name": "start",
+            "description": null,
+            "ty": "U64"
+          },
+          {
+            "name": "end",
+            "description": null,
+            "ty": "U64"
+          },
+          {
+            "name": "is_finished",
+            "description": null,
+            "ty": "Bool"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
+        "name": "LeaseAgreementCreated",
+        "description": null,
+        "members": [
+          {
+            "name": "lease_agreement_id",
+            "description": null,
+            "ty": "U256"
+          },
+          {
+            "name": "created_at",
+            "description": null,
+            "ty": "U64"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
+        "name": "LeaseAgreementFinished",
+        "description": null,
+        "members": [
+          {
+            "name": "lease_agreement_id",
+            "description": null,
+            "ty": "U256"
+          },
+          {
+            "name": "finished_at",
+            "description": null,
+            "ty": "U64"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
+        "name": "LeaseAgreementProlonged",
+        "description": null,
+        "members": [
+          {
+            "name": "lease_agreement_id",
+            "description": null,
+            "ty": "U256"
+          },
+          {
+            "name": "prolonged_at",
+            "description": null,
+            "ty": "U64"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
+        "name": "OwnershipTransferred",
+        "description": null,
+        "members": [
+          {
+            "name": "previous_owner",
+            "description": null,
+            "ty": {
+              "Option": "Key"
+            }
+          },
+          {
+            "name": "new_owner",
+            "description": null,
+            "ty": {
+              "Option": "Key"
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "errors": [
+    {
+      "name": "CallerNotLandlord",
+      "description": "",
+      "discriminant": 60000
+    },
+    {
+      "name": "CallerNotTheNewOwner",
+      "description": "The caller is not the new owner.",
+      "discriminant": 20002
+    },
+    {
+      "name": "CallerNotTheOwner",
+      "description": "The caller is not the owner.",
+      "discriminant": 20001
+    },
+    {
+      "name": "EqualTenantAndLandlord",
+      "description": "",
+      "discriminant": 60002
+    },
+    {
+      "name": "InvalidLandlord",
+      "description": "",
+      "discriminant": 60005
+    },
+    {
+      "name": "InvalidLeaseAgreementId",
+      "description": "",
+      "discriminant": 60001
+    },
+    {
+      "name": "InvalidTimeframes",
+      "description": "",
+      "discriminant": 60003
+    },
+    {
+      "name": "LeaseAgreementHasNotFinishedYet",
+      "description": "",
+      "discriminant": 60006
+    },
+    {
+      "name": "MissingRole",
+      "description": "The role is missing.",
+      "discriminant": 20003
+    },
+    {
+      "name": "NotAllInvoicesArePaid",
+      "description": "",
+      "discriminant": 60007
+    },
+    {
+      "name": "OwnerNotSet",
+      "description": "The owner is not set.",
+      "discriminant": 20000
+    },
+    {
+      "name": "RoleRenounceForAnotherAddress",
+      "description": "The role cannot be renounced for another address.",
+      "discriminant": 20004
+    },
+    {
+      "name": "SecurityDepositChargeIsTooHigh",
+      "description": "",
+      "discriminant": 60008
+    },
+    {
+      "name": "ZeroAmount",
+      "description": "",
+      "discriminant": 60004
+    }
+  ],
+  "entry_points": [
+    {
+      "name": "set_roles",
+      "description": "Sets the Roles contract address by the owner",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "roles",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        }
+      ],
+      "return_ty": "Unit",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "set_escrow",
+      "description": "Sets the Escrow contract address by the owner",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "escrow",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        }
+      ],
+      "return_ty": "Unit",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "create_lease_agreement",
+      "description": "Allows to create a new lease agreement and all invoices for this agreement by a landlord",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "params",
+          "description": null,
+          "ty": "CreateLeaseAgreementParams",
+          "optional": false
+        }
+      ],
+      "return_ty": "U256",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "finalize_lease_agreement",
+      "description": "Allows to finalize lease agreement between tenant and landlord when agreement has finished and won't be prolonged",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "lease_agreement_id",
+          "description": null,
+          "ty": "U256",
+          "optional": false
+        },
+        {
+          "name": "security_deposit_charge",
+          "description": null,
+          "ty": "U256",
+          "optional": false
+        }
+      ],
+      "return_ty": "Unit",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "prolong_lease_agreement",
+      "description": "Allows to prolong lease agreement between tenant and landlord when agreement has finished and both parties",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "lease_agreement_id",
+          "description": null,
+          "ty": "U256",
+          "optional": false
+        },
+        {
+          "name": "new_end",
+          "description": null,
+          "ty": "U64",
+          "optional": false
+        },
+        {
+          "name": "invoice_validity_duration",
+          "description": null,
+          "ty": "U64",
+          "optional": false
+        }
+      ],
+      "return_ty": "Unit",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "get_roles_contract_address",
+      "description": "Returns the Roles contract address",
+      "is_mutable": false,
+      "arguments": [],
+      "return_ty": "Key",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "get_escrow_contract_address",
+      "description": "Returns the Escrow contract address",
+      "is_mutable": false,
+      "arguments": [],
+      "return_ty": "Key",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "get_lease_agreement_by_id",
+      "description": "Returns lease agreement by its ID",
+      "is_mutable": false,
+      "arguments": [
+        {
+          "name": "lease_agreement_id",
+          "description": null,
+          "ty": "U256",
+          "optional": false
+        }
+      ],
+      "return_ty": "LeaseAgreement",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "get_lease_agreements_count",
+      "description": "Returns number of lease agreements created through this contract",
+      "is_mutable": false,
+      "arguments": [],
+      "return_ty": "U256",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "is_security_deposit_paid",
+      "description": "Returns `true` if security deposit is paid for lease agreement, `false` otherwise",
+      "is_mutable": false,
+      "arguments": [
+        {
+          "name": "lease_agreement_id",
+          "description": null,
+          "ty": "U256",
+          "optional": false
+        }
+      ],
+      "return_ty": "Bool",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "is_all_invoices_paid",
+      "description": "Returns `true` if all invoices are paid for lease agreement, `false` if at least one invoice is not paid",
+      "is_mutable": false,
+      "arguments": [
+        {
+          "name": "lease_agreement_id",
+          "description": null,
+          "ty": "U256",
+          "optional": false
+        }
+      ],
+      "return_ty": "Bool",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "transfer_ownership",
+      "description": "Delegated. See `self.ownable.transfer_ownership()` for details.",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "new_owner",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        }
+      ],
+      "return_ty": "Unit",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "renounce_ownership",
+      "description": "Delegated. See `self.ownable.renounce_ownership()` for details.",
+      "is_mutable": true,
+      "arguments": [],
+      "return_ty": "Unit",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "get_owner",
+      "description": "Delegated. See `self.ownable.get_owner()` for details.",
+      "is_mutable": false,
+      "arguments": [],
+      "return_ty": "Key",
+      "is_contract_context": true,
+      "access": "public"
+    }
+  ],
+  "events": [
+    {
+      "name": "LeaseAgreementCreated",
+      "ty": "LeaseAgreementCreated"
+    },
+    {
+      "name": "LeaseAgreementFinished",
+      "ty": "LeaseAgreementFinished"
+    },
+    {
+      "name": "LeaseAgreementProlonged",
+      "ty": "LeaseAgreementProlonged"
+    },
+    {
+      "name": "OwnershipTransferred",
+      "ty": "OwnershipTransferred"
+    }
+  ],
+  "call": {
+    "wasm_file_name": "Lease.wasm",
+    "description": "",
+    "arguments": [
+      {
+        "name": "odra_cfg_package_hash_key_name",
+        "description": "The arg name for the package hash key name.",
+        "ty": "String",
+        "optional": false
+      },
+      {
+        "name": "odra_cfg_allow_key_override",
+        "description": "If true and the key specified in odra_cfg_package_hash_key_name already exists, it will be overwritten.",
+        "ty": "Bool",
+        "optional": false
+      },
+      {
+        "name": "odra_cfg_is_upgradable",
+        "description": "The arg name for the contract upgradeability setting.",
+        "ty": "Bool",
+        "optional": false
+      },
+      {
+        "name": "odra_cfg_is_upgrade",
+        "description": "The arg name for telling the installer that the contract is being upgraded.",
+        "ty": "Bool",
+        "optional": false
+      },
+      {
+        "name": "owner",
+        "description": null,
+        "ty": "Key",
+        "optional": false
+      }
+    ]
+  }
+}

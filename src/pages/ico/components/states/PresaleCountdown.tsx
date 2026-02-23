@@ -3,18 +3,21 @@ import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { CountdownTimer } from '../shared/CountdownTimer';
 import { ICO_CONFIG } from '@/constants/ico';
+import type { ScheduleProgress } from '@/hooks/ico/useICOSchedules';
 import { MainButton } from '../shared/MainButton';
 import { Title } from '../shared/Title';
 import { InfoCard } from '../shared/InfoCard';
+import { diagnoseOdraKeys, testReadICOData } from '@/services/ico/icoContractService';
+
 
 interface PresaleCountdownProps {
   targetTimestamp: number;
   endTimestamp: number;
+  progress?: ScheduleProgress | null;
   className?: string;
-
 }
 
-export function PresaleCountdown({ targetTimestamp, endTimestamp, className }: PresaleCountdownProps) {
+export function PresaleCountdown({ targetTimestamp, endTimestamp, progress, className }: PresaleCountdownProps) {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
 
@@ -42,34 +45,36 @@ export function PresaleCountdown({ targetTimestamp, endTimestamp, className }: P
           showLabels
         />
 
-        {/* Pre-sale Info */}
-        <InfoCard className="mt-14">
-          <div className="text-center p-4">
-            <p className="text-sm text-[hsl(var(--ico-text-secondary))] mb-1">Token Price</p>
-            <p className="text-lg font-bold text-[hsl(var(--ico-text-primary))]">
-              ${ICO_CONFIG.PRE_SALE.price}
-            </p>
-          </div>
+        {/* Pre-sale Info - show only if progress data exists */}
+        {progress && (
+          <InfoCard className="mt-14">
+            <div className="text-center p-4">
+              <p className="text-sm text-[hsl(var(--ico-text-secondary))] mb-1">Token Price</p>
+              <p className="text-lg font-bold text-[hsl(var(--ico-text-primary))]">
+                ${progress.priceUsd.toFixed(2)}
+              </p>
+            </div>
 
-          <div className="text-center p-4">
-            <p className="text-sm text-[hsl(var(--ico-text-secondary))] mb-1">Allocation</p>
-            <p className="text-lg font-bold text-[hsl(var(--ico-text-primary))]">
-              {(Number(ICO_CONFIG.PRE_SALE.allocation) / 1e9).toFixed(0)}B {ICO_CONFIG.TOKEN.symbol}
-            </p>
-          </div>
+            <div className="text-center p-4">
+              <p className="text-sm text-[hsl(var(--ico-text-secondary))] mb-1">Allocation</p>
+              <p className="text-lg font-bold text-[hsl(var(--ico-text-primary))]">
+                {progress.totalAllocation.toLocaleString()} {ICO_CONFIG.TOKEN.symbol}
+              </p>
+            </div>
 
-          <div className="text-center p-4">
-            <p className="text-sm text-[hsl(var(--ico-text-secondary))] mb-1">Hard Cap</p>
-            <p className="text-lg font-bold text-[hsl(var(--ico-text-primary))]">
-              {(Number(ICO_CONFIG.PRE_SALE.hardCap)).toLocaleString()} BIG
-            </p>
-          </div>
+            <div className="text-center p-4">
+              <p className="text-sm text-[hsl(var(--ico-text-secondary))] mb-1">Hard Cap</p>
+              <p className="text-lg font-bold text-[hsl(var(--ico-text-primary))]">
+                ${Number(ICO_CONFIG.PRE_SALE.hardCap).toLocaleString()}
+              </p>
+            </div>
 
-          <div className="text-center p-4">
-            <p className="text-sm text-[hsl(var(--ico-text-secondary))] mb-1">Presale Ends:</p>
-            <p className="text-sm text-[hsl(var(--ico-text-secondary))] mb-1">{new Date(endTimestamp).toLocaleString()}</p>
-          </div>
-        </InfoCard>
+            <div className="text-center p-4">
+              <p className="text-sm text-[hsl(var(--ico-text-secondary))] mb-1">Presale Ends:</p>
+              <p className="text-sm text-[hsl(var(--ico-text-secondary))] mb-1">{new Date(endTimestamp).toLocaleString()}</p>
+            </div>
+          </InfoCard>
+        )}
       </div>
       <MainButton text="Learn More" onClick={() => navigate('/ico/whitepaper')}/>
     </div>

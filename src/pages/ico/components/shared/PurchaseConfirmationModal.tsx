@@ -1,0 +1,235 @@
+import { useEffect } from 'react';
+import { cn } from '@/lib/utils';
+import { ICO_CONFIG } from '@/constants/ico';
+import { Card } from './Card';
+import { MainButton } from './MainButton';
+import type { PaymentCurrency } from '@/types/ico';
+import type { PurchaseState } from '@/hooks/ico/usePurchaseToken';
+import { getStepMessage } from '@/hooks/ico/usePurchaseToken';
+
+interface PurchaseConfirmationModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  amount: number;
+  currency: PaymentCurrency;
+  tokenPrice: number;
+  tokenSymbol: string;
+  purchaseState: PurchaseState;
+}
+
+export function PurchaseConfirmationModal({
+  isOpen,
+  onClose,
+  onConfirm,
+  amount,
+  currency,
+  tokenPrice,
+  tokenSymbol,
+  purchaseState,
+}: PurchaseConfirmationModalProps) {
+
+  // Calculate tokens to receive
+  const currencyRate = ICO_CONFIG.CURRENCY_RATES[currency];
+  const amountInUsd = amount * currencyRate;
+  const tokensToReceive = tokenPrice > 0 ? amountInUsd / tokenPrice : 0;
+
+  // Close on escape key
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !purchaseState.isProcessing) {
+        onClose();
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener('keydown', handleEscape);
+      document.body.style.overflow = 'hidden';
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleEscape);
+      document.body.style.overflow = '';
+    };
+  }, [isOpen, onClose, purchaseState.isProcessing]);
+
+  // Close on backdrop click
+  const handleBackdropClick = (e: React.MouseEvent) => {
+    if (e.target === e.currentTarget && !purchaseState.isProcessing) {
+      onClose();
+    }
+  };
+
+  if (!isOpen) return null;
+
+  const isProcessing = purchaseState.isProcessing;
+  const stepMessage = getStepMessage(purchaseState.step);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+      onClick={handleBackdropClick}
+    >
+      <Card
+        className={cn(
+          'w-full max-w-md p-6 animate-in fade-in zoom-in-95 duration-200',
+        )}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between w-full mb-6">
+          <h2 className="text-xl font-bold text-[hsl(var(--ico-text-primary))]">
+            Confirm Purchase
+          </h2>
+          {!isProcessing && (
+            <button
+              onClick={onClose}
+              className="text-[hsl(var(--ico-text-secondary))] hover:text-white transition-colors"
+              aria-label="Close modal"
+            >
+              <svg
+                className="w-6 h-6"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M6 18L18 6M6 6l12 12"
+                />
+              </svg>
+            </button>
+          )}
+        </div>
+
+        {/* Purchase Details */}
+        <div className="w-full space-y-4 mb-6">
+          <div className="flex justify-between items-center py-3 border-b border-sky-800/30">
+            <span className="text-sm text-[hsl(var(--ico-text-secondary))]">
+              You Pay
+            </span>
+            <span className="text-lg font-bold text-[hsl(var(--ico-text-primary))]">
+              {amount.toLocaleString()} {currency}
+            </span>
+          </div>
+
+          <div className="flex justify-between items-center py-3 border-b border-sky-800/30">
+            <span className="text-sm text-[hsl(var(--ico-text-secondary))]">
+              USD Value
+            </span>
+            <span className="text-lg font-medium text-[hsl(var(--ico-text-primary))]">
+              ${amountInUsd.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+            </span>
+          </div>
+
+          <div className="flex justify-between items-center py-3 border-b border-sky-800/30">
+            <span className="text-sm text-[hsl(var(--ico-text-secondary))]">
+              Token Price
+            </span>
+            <span className="text-lg font-medium text-[hsl(var(--ico-text-primary))]">
+              ${tokenPrice.toFixed(4)}
+            </span>
+          </div>
+
+          <div className="flex justify-between items-center py-3 bg-sky-900/30 rounded-lg px-4">
+            <span className="text-sm font-medium text-sky-400">
+              You Receive
+            </span>
+            <span className="text-xl font-bold text-sky-400">
+              {tokensToReceive.toLocaleString(undefined, { maximumFractionDigits: 2 })} {tokenSymbol}
+            </span>
+          </div>
+        </div>
+
+        {/* Status Message */}
+        {isProcessing && (
+          <div className="w-full mb-6">
+            <div className="flex items-center gap-3 p-4 rounded-lg bg-sky-900/20 border border-sky-800/30">
+              <div className="animate-spin rounded-full h-5 w-5 border-2 border-sky-400 border-t-transparent" />
+              <span className="text-sm text-sky-400">{stepMessage}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Transaction Hash */}
+        {purchaseState.purchaseTxHash && (
+          <div className="w-full mb-6">
+            <div className="p-4 rounded-lg bg-sky-900/20 border border-sky-800/30">
+              <span className="text-xs text-[hsl(var(--ico-text-secondary))] block mb-1">
+                Transaction Hash
+              </span>
+              <a
+                href={`${ICO_CONFIG.CASPER.explorerUrl}/deploy/${purchaseState.purchaseTxHash}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm font-mono text-sky-400 hover:underline break-all"
+              >
+                {purchaseState.purchaseTxHash.slice(0, 20)}...{purchaseState.purchaseTxHash.slice(-8)}
+              </a>
+            </div>
+          </div>
+        )}
+
+        {/* Error Message */}
+        {purchaseState.error && (
+          <div className="w-full mb-6">
+            <div className="p-4 rounded-lg bg-red-900/20 border border-red-800/30">
+              <span className="text-sm text-red-400">{purchaseState.error}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Action Buttons */}
+        <div className="w-full flex gap-3">
+          {!isProcessing && purchaseState.step === 'idle' && (
+            <>
+              <button
+                onClick={onClose}
+                className="flex-1 px-6 py-3 bg-sky-900/30 text-[hsl(var(--ico-text-secondary))] rounded-xl hover:bg-sky-900/50 transition-colors"
+              >
+                Cancel
+              </button>
+              <MainButton
+                text="Confirm Purchase"
+                onClick={onConfirm}
+                className="flex-1"
+              />
+            </>
+          )}
+
+          {purchaseState.step === 'confirmed' && (
+            <MainButton
+              text="Done"
+              onClick={onClose}
+              className="w-full"
+            />
+          )}
+
+          {purchaseState.step === 'failed' && (
+            <>
+              <button
+                onClick={onClose}
+                className="flex-1 px-6 py-3 bg-sky-900/30 text-[hsl(var(--ico-text-secondary))] rounded-xl hover:bg-sky-900/50 transition-colors"
+              >
+                Close
+              </button>
+              <MainButton
+                text="Try Again"
+                onClick={onConfirm}
+                className="flex-1"
+              />
+            </>
+          )}
+        </div>
+
+        {/* Disclaimer */}
+        <p className="text-xs text-[hsl(var(--ico-text-secondary))] text-center mt-4 opacity-70">
+          By confirming, you agree to the token purchase terms. Transactions are final and cannot be reversed.
+        </p>
+      </Card>
+    </div>
+  );
+}
+
+export default PurchaseConfirmationModal;

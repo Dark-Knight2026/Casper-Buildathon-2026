@@ -1,8 +1,19 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { BrowserRouter, useNavigate } from 'react-router-dom';
+import { BrowserRouter } from 'react-router-dom';
 import { PresaleCountdown } from '@/pages/ico/components/states/PresaleCountdown';
 import { ICO_CONFIG } from '@/constants/ico';
+import type { ScheduleProgress } from '@/hooks/ico/useICOSchedules';
+
+// Mock progress data for tests that need it
+const mockProgress: ScheduleProgress = {
+  priceUsd: 0.001,
+  totalAllocation: 750000000,
+  tokensSold: 100000000,
+  tokensRemaining: 650000000,
+  amountRaised: 100000,
+  percentSold: 13.33,
+};
 
 // Mock react-router-dom navigate
 const mockNavigate = vi.fn();
@@ -74,45 +85,53 @@ describe('PresaleCountdown', () => {
       expect(screen.getByTestId('countdown-timer')).toBeInTheDocument();
     });
 
-    it('should render the info card with presale details', () => {
+    it('should render the info card with presale details when progress is provided', () => {
       renderWithRouter(
-        <PresaleCountdown targetTimestamp={mockTargetTimestamp} endTimestamp={mockEndTimestamp} />
+        <PresaleCountdown targetTimestamp={mockTargetTimestamp} endTimestamp={mockEndTimestamp} progress={mockProgress} />
       );
 
       expect(screen.getByTestId('info-card')).toBeInTheDocument();
     });
 
-    it('should display token price', () => {
+    it('should display token price when progress is provided', () => {
       renderWithRouter(
-        <PresaleCountdown targetTimestamp={mockTargetTimestamp} endTimestamp={mockEndTimestamp} />
+        <PresaleCountdown targetTimestamp={mockTargetTimestamp} endTimestamp={mockEndTimestamp} progress={mockProgress} />
       );
 
       expect(screen.getByText('Token Price')).toBeInTheDocument();
-      expect(screen.getByText(`$${ICO_CONFIG.PRE_SALE.price}`)).toBeInTheDocument();
+      expect(screen.getByText(`$${mockProgress.priceUsd.toFixed(2)}`)).toBeInTheDocument();
     });
 
-    it('should display allocation', () => {
+    it('should display allocation when progress is provided', () => {
       renderWithRouter(
-        <PresaleCountdown targetTimestamp={mockTargetTimestamp} endTimestamp={mockEndTimestamp} />
+        <PresaleCountdown targetTimestamp={mockTargetTimestamp} endTimestamp={mockEndTimestamp} progress={mockProgress} />
       );
 
       expect(screen.getByText('Allocation')).toBeInTheDocument();
     });
 
-    it('should display hard cap', () => {
+    it('should display hard cap when progress is provided', () => {
       renderWithRouter(
-        <PresaleCountdown targetTimestamp={mockTargetTimestamp} endTimestamp={mockEndTimestamp} />
+        <PresaleCountdown targetTimestamp={mockTargetTimestamp} endTimestamp={mockEndTimestamp} progress={mockProgress} />
       );
 
       expect(screen.getByText('Hard Cap')).toBeInTheDocument();
     });
 
-    it('should display presale ends date', () => {
+    it('should display presale ends date when progress is provided', () => {
+      renderWithRouter(
+        <PresaleCountdown targetTimestamp={mockTargetTimestamp} endTimestamp={mockEndTimestamp} progress={mockProgress} />
+      );
+
+      expect(screen.getByText('Presale Ends:')).toBeInTheDocument();
+    });
+
+    it('should not render info card when progress is not provided', () => {
       renderWithRouter(
         <PresaleCountdown targetTimestamp={mockTargetTimestamp} endTimestamp={mockEndTimestamp} />
       );
 
-      expect(screen.getByText('Presale Ends:')).toBeInTheDocument();
+      expect(screen.queryByTestId('info-card')).not.toBeInTheDocument();
     });
 
     it('should render the Learn More button', () => {
