@@ -11,11 +11,12 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { useContractDeploys, type ContractDeploy } from '@/hooks/ico/useContractDeploys';
+import { useContractDeploys, isICOPurchase, type FTTokenAction } from '@/hooks/ico/useContractDeploys';
+import { ICO_CONFIG } from '@/constants/ico';
 
-const EXPLORER_URL = import.meta.env.VITE_CASPER_EXPLORER_URL || 'https://testnet.cspr.live';
+const EXPLORER_URL = ICO_CONFIG.CASPER.explorerUrl;
 const PAGE_SIZE = 10;
-const MOTES_PER_CSPR = 1_000_000_000;
+const BIG_DECIMALS = ICO_CONFIG.TOKEN.decimals; // 18
 
 function truncateHash(hash: string, start = 6, end = 4) {
   if (hash.length <= start + end + 3) return hash;
@@ -34,20 +35,33 @@ function formatRelativeTime(timestamp: string): string {
   return `${days}d ago`;
 }
 
-function formatAmount(deploy: ContractDeploy): string {
-  const raw = deploy.args?.amount_to_spend?.parsed;
-  if (!raw) return '-';
-  return Number(raw).toLocaleString('en-US');
+function formatBigAmount(raw: string): string {
+  const num = Number(raw) / 10 ** BIG_DECIMALS;
+  return num.toLocaleString('en-US', { maximumFractionDigits: 2 });
 }
 
-function formatCost(cost: string): string {
-  const cspr = Number(cost) / MOTES_PER_CSPR;
-  return `${cspr.toFixed(2)} CSPR`;
+function getActionLabel(action: FTTokenAction): string {
+  if (isICOPurchase(action)) return 'Purchase';
+  switch (action.ft_action_type_id) {
+    case 1: return 'Mint';
+    case 2: return 'Transfer';
+    case 3: return 'Burn';
+    default: return 'Action';
+  }
+}
+
+function getActionColor(action: FTTokenAction): string {
+  if (isICOPurchase(action)) return 'text-green-900 bg-green-400/10';
+  switch (action.ft_action_type_id) {
+    case 1: return 'text-blue-900 bg-blue-400/10';
+    case 3: return 'text-red-800 bg-red-400/10';
+    default: return 'text-gray-800 bg-gray-400/10';
+  }
 }
 
 export function TransactionHistoryTab() {
   const [page, setPage] = useState(1);
-  const { deploys, totalPages, totalItems, isLoading, error, refetch } = useContractDeploys(page, PAGE_SIZE);
+  const { actions, totalPages, totalItems, isLoading, error, refetch } = useContractDeploys(page, PAGE_SIZE);
 
   return (
     <div className="space-y-6">
@@ -85,7 +99,7 @@ export function TransactionHistoryTab() {
               Try again
             </button>
           </div>
-        ) : deploys.length === 0 ? (
+        ) : actions.length === 0 ? (
           <div className="text-center py-16">
             <p className="text-sm text-[hsl(var(--ico-text-secondary))]">No transactions found</p>
           </div>
@@ -98,54 +112,48 @@ export function TransactionHistoryTab() {
                     <TableHead className="text-[hsl(var(--ico-text-muted))] text-xs font-medium">Tx Hash</TableHead>
                     <TableHead className="text-[hsl(var(--ico-text-muted))] text-xs font-medium">Block</TableHead>
                     <TableHead className="text-[hsl(var(--ico-text-muted))] text-xs font-medium">Age</TableHead>
-                    <TableHead className="text-[hsl(var(--ico-text-muted))] text-xs font-medium">Caller</TableHead>
-                    <TableHead className="text-[hsl(var(--ico-text-muted))] text-xs font-medium text-right">Amount</TableHead>
-                    <TableHead className="text-[hsl(var(--ico-text-muted))] text-xs font-medium text-right">Cost</TableHead>
-                    <TableHead className="text-[hsl(var(--ico-text-muted))] text-xs font-medium text-center">Status</TableHead>
+                    <TableHead className="text-[hsl(var(--ico-text-muted))] text-xs font-medium">Type</TableHead>
+                    <TableHead className="text-[hsl(var(--ico-text-muted))] text-xs font-medium">From</TableHead>
+                    <TableHead className="text-[hsl(var(--ico-text-muted))] text-xs font-medium">To</TableHead>
+                    <TableHead className="text-[hsl(var(--ico-text-muted))] text-xs font-medium text-right">Amount (BIG)</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {deploys.map((deploy) => (
+                  {actions.map((action) => (
                     <TableRow
-                      key={deploy.deploy_hash}
+                      key={`${action.deploy_hash}-${action.transform_idx}`}
                       className="border-b border-[hsl(var(--ico-border-color))] hover:bg-[hsl(var(--ico-bg-secondary))]"
                     >
                       <TableCell className="font-mono text-sm">
                         <a
-                          href={`${EXPLORER_URL}/deploy/${deploy.deploy_hash}`}
+                          href={`${EXPLORER_URL}/deploy/${action.deploy_hash}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-[hsl(var(--ico-brand-primary))] hover:underline inline-flex items-center gap-1"
                         >
-                          {truncateHash(deploy.deploy_hash)}
+                          {truncateHash(action.deploy_hash)}
                           <ExternalLink className="w-3 h-3" />
                         </a>
                       </TableCell>
                       <TableCell className="text-sm text-[hsl(var(--ico-text-secondary))]">
-                        {deploy.block_height.toLocaleString('en-US')}
+                        {action.block_height.toLocaleString('en-US')}
                       </TableCell>
                       <TableCell className="text-sm text-[hsl(var(--ico-text-secondary))] whitespace-nowrap">
-                        {formatRelativeTime(deploy.timestamp)}
+                        {formatRelativeTime(action.timestamp)}
+                      </TableCell>
+                      <TableCell>
+                        <span className={`inline-flex text-xs px-2 py-0.5 rounded-full ${getActionColor(action)}`}>
+                          {getActionLabel(action)}
+                        </span>
                       </TableCell>
                       <TableCell className="font-mono text-sm text-[hsl(var(--ico-text-secondary))]">
-                        {truncateHash(deploy.caller_public_key, 8, 5)}
+                        {action.from_hash ? truncateHash(action.from_hash, 6, 4) : '-'}
+                      </TableCell>
+                      <TableCell className="font-mono text-sm text-[hsl(var(--ico-text-secondary))]">
+                        {action.to_hash ? truncateHash(action.to_hash, 6, 4) : '-'}
                       </TableCell>
                       <TableCell className="text-sm text-right text-[hsl(var(--ico-text-primary))] font-medium">
-                        {formatAmount(deploy)}
-                      </TableCell>
-                      <TableCell className="text-sm text-right text-[hsl(var(--ico-text-secondary))]">
-                        {formatCost(deploy.cost)}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <span
-                          className={`inline-flex text-xs px-2 py-0.5 rounded-full ${
-                            deploy.error_message
-                              ? 'text-red-800 bg-red-400/10'
-                              : 'text-green-900 bg-green-400/10'
-                          }`}
-                        >
-                          {deploy.error_message ? 'Failed' : 'Success'}
-                        </span>
+                        {formatBigAmount(action.amount)}
                       </TableCell>
                     </TableRow>
                   ))}

@@ -1,35 +1,33 @@
 import { useQuery } from '@tanstack/react-query';
+import { ICO_CONFIG } from '@/constants/ico';
 
-const PACKAGE_HASH_RAW = (import.meta.env.VITE_ICO_PACKAGE_HASH || '').replace('hash-', '');
+const BIG_TOKEN_PACKAGE_HASH = ICO_CONFIG.CONTRACTS.tokenAddress.replace(/^hash-/, '');
+const ICO_PACKAGE_HASH = ICO_CONFIG.CONTRACTS.icoPackageHash.replace(/^hash-/, '').toLowerCase();
 
 const STALE_TIME = 30 * 60 * 1000; // 30 minutes
 
-export interface DeployArgs {
-  amount_to_spend?: { cl_type: string; parsed: string };
-  currency?: { cl_type: string; parsed: number };
-}
-
-export interface ContractDeploy {
+export interface FTTokenAction {
   deploy_hash: string;
   block_height: number;
   timestamp: string;
-  caller_public_key: string;
-  args: DeployArgs;
-  cost: string;
-  consumed_gas: string;
-  status: string;
-  error_message: string | null;
+  amount: string;
   contract_package_hash: string;
+  from_hash: string | null;
+  from_type: number | null; // 0 = account, 1 = contract package
+  to_hash: string | null;
+  to_type: number | null;
+  ft_action_type_id: number;
+  transform_idx: number;
 }
 
-interface DeploysResponse {
+interface FTTokenActionsResponse {
   item_count: number;
   page_count: number;
-  data: ContractDeploy[];
+  data: FTTokenAction[];
 }
 
-async function fetchContractDeploys(page: number, pageSize: number): Promise<DeploysResponse> {
-  const url = `/api/cspr-cloud/deploys?contract_package_hash=${PACKAGE_HASH_RAW}&page=${page}&page_size=${pageSize}`;
+async function fetchBigTokenActions(page: number, pageSize: number): Promise<FTTokenActionsResponse> {
+  const url = `/api/cspr-cloud/contract-packages/${BIG_TOKEN_PACKAGE_HASH}/ft-token-actions?page=${page}&page_size=${pageSize}`;
 
   const res = await fetch(url, {
     headers: { accept: 'application/json' },
@@ -38,25 +36,33 @@ async function fetchContractDeploys(page: number, pageSize: number): Promise<Dep
   if (!res.ok) {
     throw new Error(`CSPR.cloud API error: ${res.status}`);
   }
-
-  return res.json();
+  const data = await res.json();
+  console.log(`[useContractDeploys] Fetched page ${page} of ft-token-actions for BIG token:`, data);
+  return data;
 }
 
 export function useContractDeploys(page = 1, pageSize = 10) {
   const query = useQuery({
-    queryKey: ['contract-deploys', page, pageSize],
-    queryFn: () => fetchContractDeploys(page, pageSize),
+    queryKey: ['big-token-actions', page, pageSize],
+    queryFn: () => fetchBigTokenActions(page, pageSize),
     staleTime: STALE_TIME,
     gcTime: STALE_TIME,
-    enabled: !!PACKAGE_HASH_RAW,
+    enabled: !!BIG_TOKEN_PACKAGE_HASH,
   });
 
   return {
-    deploys: query.data?.data ?? [],
+    actions: query.data?.data ?? [],
     totalPages: query.data?.page_count ?? 0,
     totalItems: query.data?.item_count ?? 0,
     isLoading: query.isLoading,
     error: query.error,
     refetch: query.refetch,
   };
+}
+
+/**
+ * Check if an ft-token-action originates from the ICO contract.
+ */
+export function isICOPurchase(action: FTTokenAction): boolean {
+  return action.from_type === 1 && action.from_hash?.toLowerCase() === ICO_PACKAGE_HASH;
 }
