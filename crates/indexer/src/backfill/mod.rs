@@ -7,9 +7,10 @@
 //!
 //! - **ICO**: CSPR.cloud `/deploys` for deploy list + Casper Node RPC `info_get_deploy`
 //!   for session args. `TokensPurchased` event data is reconstructed from deploy args
-//!   (`amount_to_spend`, `currency`) and the BIG Transfer amount already stored in the
-//!   database by the CEP-18 backfill. Only deploys accessible on the node (~last 2–3
-//!   days) are processed; older deploys are skipped with a warning.
+//!   (`amount_to_spend`, `currency`) and the BIG Transfer amount fetched directly from
+//!   CSPR.cloud `/ft-token-actions` (filtered by `from_hash == ICO contract hash`).
+//!   Only deploys accessible on the node (~last 2–3 days) are processed; older deploys
+//!   are skipped with a warning.
 //!
 //! - **Treasury / others**: not yet implemented — rely on live WebSocket streaming.
 //!
@@ -17,7 +18,7 @@
 //! streaming, so balance updates and idempotency logic is shared.
 
 mod cep18;
-mod ico;
+pub mod ico;
 
 use reqwest::Client;
 use sqlx::PgPool;
@@ -43,7 +44,7 @@ pub async fn run_backfill(config: &IndexerConfig, db_pool: &PgPool) -> IndexerRe
     let client = Client::new();
     let registry = EventRegistry::new();
 
-    // BIG contract hash is needed by the ICO backfill to look up purchase amounts.
+    // BIG contract hash is needed by the ICO backfill to fetch transfer amounts from CSPR.cloud.
     let big_hash = config
         .contracts
         .active_contracts()

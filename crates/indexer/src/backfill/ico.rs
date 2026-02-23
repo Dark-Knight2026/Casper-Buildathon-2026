@@ -2,9 +2,11 @@
 //!
 //! `TokensPurchased` event data is reconstructed from:
 //! - deploy session args (`amount_to_spend`, `currency`) fetched from the node
-//! - BIG Transfer amount already stored in DB by the CEP-18 backfill
+//! - BIG Transfer amount fetched directly from CSPR.cloud `/ft-token-actions`
+//!   (filtered by `from_hash = ICO contract package hash`)
 
 use core::time::Duration;
+use std::collections::HashMap;
 
 use reqwest::Client;
 use secrecy::ExposeSecret;
@@ -19,6 +21,27 @@ use crate::{
     events::EventRegistry,
     processor::{self, RawEvent},
 };
+
+// -----------------------------------------------------------------------------
+// CSPR.cloud /ft-token-actions response types (BIG transfers)
+// -----------------------------------------------------------------------------
+
+/// Top-level response from the `/ft-token-actions` endpoint.
+#[derive(Debug, Deserialize)]
+struct BigTransferPage {
+    data: Vec<BigTransferItem>,
+}
+
+/// Minimal fields needed to identify a BIG transfer triggered by the ICO.
+#[derive(Debug, Deserialize)]
+struct BigTransferItem {
+    /// Hash of the deploy that triggered this transfer.
+    deploy_hash: String,
+    /// Sender — for ICO-initiated transfers this is the ICO contract package hash.
+    from_hash: Option<String>,
+    /// Token amount as a decimal string.
+    amount: String,
+}
 
 // -----------------------------------------------------------------------------
 // CSPR.cloud /deploys response types
@@ -119,6 +142,13 @@ pub(super) async fn backfill_ico(
     contract_hash: &str,
     start_block: u64,
 ) -> IndexerResult<()> {
+    // Pre-fetch all BIG transfers from CSPR.cloud once, keyed by deploy_hash.
+    // ICO-initiated transfers are identified by from_hash == ICO contract package hash.
+    tracing::info!(%contract_hash, "Pre-fetching BIG transfers from CSPR.cloud");
+    let big_amounts =
+        load_big_transfers(ctx.client, ctx.config, ctx.big_hash, contract_hash).await?;
+    tracing::info!(count = big_amounts.len(), "BIG transfer map ready");
+
     let mut page = 1u32;
     let mut total_events = 0u64;
 
@@ -167,7 +197,9 @@ pub(super) async fn backfill_ico(
                 continue;
             }
 
-            match process_ico_deploy(ctx, contract_type, contract_hash, deploy_item).await {
+            match process_ico_deploy(ctx, contract_type, contract_hash, deploy_item, &big_amounts)
+                .await
+            {
                 Ok(true) => total_events += 1,
                 Ok(false) => {}
                 Err(e) => {
@@ -213,10 +245,11 @@ async fn process_ico_deploy(
     contract_type: ContractType,
     contract_hash: &str,
     deploy_item: &DeployListItem,
+    big_amounts: &HashMap<String, String>,
 ) -> IndexerResult<bool> {
     let deploy_hash = &deploy_item.deploy_hash;
 
-    // --- Step 1: fetch deploy from Casper node ---
+    // 1. fetch deploy from Casper node
     let rpc_body = json!({
         "jsonrpc": "2.0",
         "id": 1,
@@ -249,7 +282,7 @@ async fn process_ico_deploy(
 
     let deploy = result.deploy;
 
-    // --- Step 2: check entry_point ---
+    // 2. check entry_point
     let entry_point = deploy
         .session
         .get("StoredVersionedContractByHash")
@@ -261,23 +294,22 @@ async fn process_ico_deploy(
         return Ok(false);
     }
 
-    // --- Step 3: parse args (amount_to_spend, currency) ---
+    // 3. parse args (amount_to_spend, currency)
     let Some((cost, currency_id)) = parse_purchase_args(&deploy.session) else {
         tracing::warn!(deploy = %deploy_hash, "Could not parse purchase args, skipping");
         return Ok(false);
     };
 
-    // --- Step 4: look up BIG transfer amount from DB ---
-    let Some(big_amount) = find_big_transfer_amount(ctx.db_pool, deploy_hash, ctx.big_hash).await
-    else {
+    // 4. look up BIG transfer amount from pre-fetched map
+    let Some(big_amount) = big_amounts.get(deploy_hash.as_str()) else {
         tracing::warn!(
             deploy = %deploy_hash,
-            "BIG Transfer not found in DB for this deploy — CEP-18 backfill may not have run yet"
+            "BIG Transfer not found in CSPR.cloud for this deploy — skipping"
         );
         return Ok(false);
     };
 
-    // --- Step 5: build and process TokensPurchased event ---
+    // 5. build and process TokensPurchased event
     let currency_name = ico_currency_name(currency_id);
 
     let event_data = json!({
@@ -365,31 +397,65 @@ fn ico_currency_name(id: u8) -> &'static str {
     }
 }
 
-/// Look up the BIG token transfer amount for a given deploy from the database.
+/// Fetch all BIG token transfers initiated by the ICO contract from CSPR.cloud.
 ///
-/// The CEP-18 backfill stores BIG `Transfer` events keyed by `deploy_hash`.
-/// Since every ICO `purchase` triggers exactly one BIG `Transfer` (ICO → buyer),
-/// this cross-reference reliably gives us the purchased token amount.
-async fn find_big_transfer_amount(
-    db_pool: &PgPool,
-    deploy_hash: &str,
+/// Paginates through `/ft-token-actions` for the BIG contract, keeping only
+/// entries where `from_hash` matches the ICO contract package hash.
+///
+/// Returns a map of `deploy_hash → amount` for use during ICO backfill.
+///
+/// # Errors
+///
+/// Returns [`IndexerError`] on HTTP transport failures or non-2xx API responses.
+#[inline]
+pub async fn load_big_transfers(
+    client: &Client,
+    config: &IndexerConfig,
     big_hash: &str,
-) -> Option<String> {
-    let row = sqlx::query!(
-        r#"
-        SELECT event_data->>'amount' AS amount
-        FROM   blockchain_events
-        WHERE  transaction_hash  = $1
-          AND  contract_address  = $2
-          AND  event_type        = 'Transfer'
-        LIMIT  1
-        "#,
-        deploy_hash,
-        big_hash,
-    )
-    .fetch_optional(db_pool)
-    .await
-    .ok()??;
+    ico_hash: &str,
+) -> IndexerResult<HashMap<String, String>> {
+    let mut map = HashMap::new();
+    let mut page = 1u32;
 
-    row.amount
+    loop {
+        let url = format!(
+            "{}/ft-token-actions?contract_package_hash={big_hash}&page={page}&limit=100&order_by=block_height&order_direction=ASC",
+            config.cspr_cloud_rest_url,
+        );
+        tracing::debug!(%url, "Fetching BIG ft-token-actions page {page}");
+
+        let response = client
+            .get(&url)
+            .header("authorization", config.cspr_cloud_api_token.expose_secret())
+            .timeout(Duration::from_secs(30))
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(IndexerError::Api(ApiErrorResponse {
+                status: status.as_u16(),
+                body,
+            }));
+        }
+
+        let page_data = response.json::<BigTransferPage>().await?;
+        let page_len = page_data.data.len();
+
+        for item in page_data.data {
+            if item.from_hash.as_deref() == Some(ico_hash) {
+                map.insert(item.deploy_hash, item.amount);
+            }
+        }
+
+        tokio::time::sleep(Duration::from_millis(config.backfill_rate_limit_ms)).await;
+
+        if page_len < 100 {
+            break;
+        }
+        page += 1;
+    }
+
+    Ok(map)
 }
