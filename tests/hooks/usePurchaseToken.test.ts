@@ -32,11 +32,10 @@ vi.mock('@/constants/ico', () => ({
     TOKEN: {
       decimals: 18,
     },
-    CURRENCY_RATES: {
-      CSPR: 0.05,
-      USDT: 1,
-      USDC: 1,
-    },
+  },
+  getCurrencyRateUsd: (currency: string, csprPriceUsd?: number) => {
+    if (currency === 'CSPR') return csprPriceUsd || 0;
+    return 1;
   },
 }));
 
@@ -331,7 +330,7 @@ describe('usePurchaseToken', () => {
 
     it('should apply currency rate for CSPR', () => {
       const { result } = renderHook(() =>
-        usePurchaseToken(mockPublicKey, mockTokenPrice, mockClickRef as any)
+        usePurchaseToken(mockPublicKey, mockTokenPrice, mockClickRef as any, {}, 0.05)
       );
 
       // 100 CSPR * 0.05 (rate) = 5 USD / 0.1 (price) = 50 tokens

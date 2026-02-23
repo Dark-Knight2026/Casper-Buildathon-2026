@@ -4,7 +4,7 @@ import {
   fromRawAmount,
   validatePurchase,
   calculateTokensReceived,
-  createPurchaseDeploy,
+  createPurchaseTransaction,
 } from '@/services/ico/icoPurchaseService';
 // Schema loaded inline to avoid path alias issues in test environment
 const icoSchema = JSON.parse(
@@ -19,7 +19,7 @@ let capturedArgsMap: Record<string, unknown> = {};
 
 // Mock dependencies that icoPurchaseService imports
 vi.mock('casper-js-sdk', () => ({
-  Args: { fromMap: vi.fn((map: Record<string, unknown>) => { capturedArgsMap = map; return map; }) },
+  Args: { fromMap: vi.fn((map: Record<string, unknown>) => { capturedArgsMap = map; return { ...map, toBytes: () => new Uint8Array() }; }) },
   CLValue: {
     newCLKey: vi.fn((v: unknown) => ({ type: 'Key', value: v })),
     newCLUInt256: vi.fn((v: unknown) => ({ type: 'U256', value: v })),
@@ -35,16 +35,23 @@ vi.mock('casper-js-sdk', () => ({
 
 vi.mock('@/services/ico/casperClient', () => ({
   createDeploy: vi.fn(),
+  createContractCallTransaction: vi.fn(),
   stripHashPrefix: vi.fn((s: string) => s),
   getCasperRpcClient: vi.fn(),
+  getAccountMainPurseURef: vi.fn(),
 }));
 
 vi.mock('@/services/ico/contractTypes', () => ({
-  paymentCurrencyToContractCurrency: vi.fn(),
+  paymentCurrencyToContractCurrency: vi.fn(() => 1),
 }));
 
 vi.mock('@/services/ico/cep18Service', () => ({
   getAllowance: vi.fn(),
+}));
+
+vi.mock('@/services/ico/proxyCallerService', () => ({
+  loadProxyCallerWasm: vi.fn(() => Promise.resolve(new Uint8Array())),
+  createProxyCallerTransaction: vi.fn(),
 }));
 
 vi.mock('@/constants/ico', () => ({
@@ -52,21 +59,20 @@ vi.mock('@/constants/ico', () => ({
     TOKEN: { decimals: 18 },
     CONTRACTS: {
       icoAddress: 'hash-abc123',
+      icoPackageHash: 'hash-abc123-pkg',
       usdtAddress: 'hash-usdt',
       usdcAddress: 'hash-usdc',
       tokenAddress: 'hash-token',
-    },
-    CURRENCY_RATES: {
-      USDT: 1,
-      USDC: 1,
-      CSPR: 0.02,
-      CARD: 1,
     },
     PURCHASE_LIMITS: {
       min: 10,
       max: 100000,
     },
     CASPER: { networkName: 'casper-test' },
+  },
+  getCurrencyRateUsd: (currency: string) => {
+    const rates: Record<string, number> = { USDT: 1, USDC: 1, CSPR: 0.02, CARD: 1 };
+    return rates[currency] ?? 1;
   },
 }));
 
@@ -256,9 +262,9 @@ describe('calculateTokensReceived', () => {
   });
 });
 
-// ── Deploy args vs contract schema ──────────────────────────────────
+// ── Transaction args vs contract schema ──────────────────────────────
 
-describe('createPurchaseDeploy args match contract schema', () => {
+describe('createPurchaseTransaction args match contract schema', () => {
   // Extract required argument names from the ICO contract schema
   const purchaseEntryPoint = (icoSchema as { entry_points: Array<{ name: string; arguments: Array<{ name: string; optional: boolean }> }> })
     .entry_points.find(ep => ep.name === 'purchase');
@@ -266,12 +272,12 @@ describe('createPurchaseDeploy args match contract schema', () => {
     .filter(a => !a.optional)
     .map(a => a.name);
 
-  it('includes all required contract arguments', () => {
+  it('includes all required contract arguments', async () => {
     capturedArgsMap = {};
-    createPurchaseDeploy(
+    await createPurchaseTransaction(
       '01abc123',
       '100',
-      'CSPR',
+      'USDT',
       'uref-abc-007',
     );
 
@@ -281,9 +287,9 @@ describe('createPurchaseDeploy args match contract schema', () => {
     }
   });
 
-  it('includes __cargo_purse as URef type', () => {
+  it('includes __cargo_purse as URef type', async () => {
     capturedArgsMap = {};
-    createPurchaseDeploy(
+    await createPurchaseTransaction(
       '01abc123',
       '50',
       'USDT',

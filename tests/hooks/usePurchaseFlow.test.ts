@@ -47,7 +47,20 @@ vi.mock('@/hooks/ico/useICOWallet', () => ({
 }));
 
 vi.mock('@/hooks/ico/useWalletBalances', () => ({
-  useWalletBalances: () => ({ balances: mockBalances }),
+  useWalletBalances: () => ({
+    balances: mockBalances,
+    error: null,
+    isLoading: false,
+    refetch: vi.fn(),
+  }),
+}));
+
+vi.mock('@/hooks/useCSPRPrice', () => ({
+  useCSPRPrice: () => ({ priceUSD: 0.02 }),
+}));
+
+vi.mock('@/utils/logger', () => ({
+  logger: { debug: vi.fn(), error: vi.fn() },
 }));
 
 vi.mock('@/hooks/ico/usePurchaseToken', () => ({
