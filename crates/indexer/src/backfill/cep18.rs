@@ -21,28 +21,32 @@ use crate::{
 // -----------------------------------------------------------------------------
 
 /// Top-level response from the `/ft-token-actions` endpoint.
+///
+/// Exposed as `pub` so tests can inspect the deserialized response returned by
+/// [`fetch_ft_token_actions_page`].
 #[derive(Debug, Deserialize)]
-struct FtTokenActionPage {
-    data: Vec<FtTokenAction>,
+pub struct FtTokenActionPage {
+    /// Token actions on this page.
+    pub data: Vec<FtTokenAction>,
     /// Total number of pages for the current query (used for pagination).
-    page_count: u32,
+    pub page_count: u32,
 }
 
 /// A single fungible-token action returned by CSPR.cloud.
 #[derive(Debug, Deserialize)]
 pub struct FtTokenAction {
     /// Hash of the deploy that triggered this action.
-    deploy_hash: String,
+    pub deploy_hash: String,
     /// Block in which the deploy was included.
-    block_height: u64,
+    pub block_height: u64,
     /// Sender account/contract hash. `None` for Mint actions.
-    from_hash: Option<String>,
+    pub from_hash: Option<String>,
     /// Recipient account/contract hash.
-    to_hash: Option<String>,
+    pub to_hash: Option<String>,
     /// Token amount as a decimal string.
-    amount: String,
+    pub amount: String,
     /// `1` = Mint, `2` = Approve, `3` = Transfer.
-    ft_action_type_id: u8,
+    pub ft_action_type_id: u8,
 }
 
 impl FtTokenAction {
@@ -72,6 +76,49 @@ impl FtTokenAction {
 // Public-to-parent API
 // -----------------------------------------------------------------------------
 
+/// Fetch a single page of ft-token-actions from CSPR.cloud.
+///
+/// Returns a [`FtTokenActionPage`] containing the actions on this page and the
+/// total `page_count` (used by the caller to drive pagination).
+///
+/// Exposed as `pub` so integration tests can exercise the HTTP layer directly,
+/// following the same pattern as `backfill::ico::load_big_transfers`.
+///
+/// # Errors
+///
+/// Returns [`IndexerError::Api`] on non-2xx HTTP responses, or
+/// [`IndexerError::Http`] on network/timeout failures.
+#[inline]
+pub async fn fetch_ft_token_actions_page(
+    client: &Client,
+    config: &IndexerConfig,
+    contract_hash: &str,
+    page: u32,
+) -> IndexerResult<FtTokenActionPage> {
+    let url = format!(
+        "{}/ft-token-actions?contract_package_hash={contract_hash}&page={page}&limit=100&order_by=block_height&order_direction=ASC",
+        config.casper.rest_url,
+    );
+
+    let response = client
+        .get(&url)
+        .header("authorization", config.casper.api_token.expose_secret())
+        .timeout(Duration::from_secs(30))
+        .send()
+        .await?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        return Err(IndexerError::Api(ApiErrorResponse {
+            status: status.as_u16(),
+            body,
+        }));
+    }
+
+    Ok(response.json::<FtTokenActionPage>().await?)
+}
+
 /// Backfill a CEP-18 token contract using the `/ft-token-actions` endpoint.
 ///
 /// Paginates through all token actions in ascending block order, filtering
@@ -99,29 +146,9 @@ pub(super) async fn backfill_cep18(
     }
 
     loop {
-        let url = format!(
-            "{}/ft-token-actions?contract_package_hash={contract_hash}&page={page}&limit=100&order_by=block_height&order_direction=ASC",
-            config.casper.rest_url,
-        );
-        tracing::debug!(%url, "Fetching ft-token-actions page {page}");
+        tracing::debug!(%contract_hash, page, "Fetching ft-token-actions page");
 
-        let response = client
-            .get(&url)
-            .header("authorization", config.casper.api_token.expose_secret())
-            .timeout(Duration::from_secs(30))
-            .send()
-            .await?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            return Err(IndexerError::Api(ApiErrorResponse {
-                status: status.as_u16(),
-                body,
-            }));
-        }
-
-        let page_data = response.json::<FtTokenActionPage>().await?;
+        let page_data = fetch_ft_token_actions_page(client, config, contract_hash, page).await?;
         let page_count = page_data.page_count;
         let mut page_max_block: Option<u64> = None;
 

@@ -3,11 +3,12 @@
 
 use reqwest::Client;
 use serde_json::json;
-use wiremock::matchers::{method, path, query_param};
-use wiremock::{Mock, MockServer, ResponseTemplate};
+use wiremock::{Mock, MockServer, ResponseTemplate, matchers};
 
-use indexer::backfill::ico::{ico_currency_name, load_big_transfers, parse_purchase_args};
-use indexer::config::{Casper, ContractRegistry, IndexerConfig};
+use indexer::{
+    backfill::ico,
+    config::{Casper, ContractRegistry, IndexerConfig},
+};
 
 /// Builds a minimal `IndexerConfig` pointing at the given mock server URL.
 fn test_config(rest_url: String) -> IndexerConfig {
@@ -29,9 +30,9 @@ fn test_config(rest_url: String) -> IndexerConfig {
 async fn filters_only_ico_initiated_transfers() {
     let server = MockServer::start().await;
 
-    Mock::given(method("GET"))
-        .and(path("/ft-token-actions"))
-        .and(query_param("page", "1"))
+    Mock::given(matchers::method("GET"))
+        .and(matchers::path("/ft-token-actions"))
+        .and(matchers::query_param("page", "1"))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
             "data": [
                 // ICO -> buyer — must be included in the map
@@ -47,7 +48,7 @@ async fn filters_only_ico_initiated_transfers() {
         .mount(&server)
         .await;
 
-    let map = load_big_transfers(
+    let map = ico::load_big_transfers(
         &Client::new(),
         &test_config(server.uri()),
         "big_hash",
@@ -67,9 +68,9 @@ async fn paginates_all_pages_using_page_count_from_response() {
     let server = MockServer::start().await;
 
     // page=1: exactly 100 items — must trigger a request for page=2
-    Mock::given(method("GET"))
-        .and(path("/ft-token-actions"))
-        .and(query_param("page", "1"))
+    Mock::given(matchers::method("GET"))
+        .and(matchers::path("/ft-token-actions"))
+        .and(matchers::query_param("page", "1"))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
             "data": (0..100u32)
                 .map(|i| json!({ "deploy_hash": format!("d{i}"), "from_hash": "ico_hash", "amount": "1" }))
@@ -81,9 +82,9 @@ async fn paginates_all_pages_using_page_count_from_response() {
         .await;
 
     // page=2: 2 items — must stop paginating
-    Mock::given(method("GET"))
-        .and(path("/ft-token-actions"))
-        .and(query_param("page", "2"))
+    Mock::given(matchers::method("GET"))
+        .and(matchers::path("/ft-token-actions"))
+        .and(matchers::query_param("page", "2"))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
             "data": [
                 { "deploy_hash": "d100", "from_hash": "ico_hash", "amount": "2" },
@@ -95,7 +96,7 @@ async fn paginates_all_pages_using_page_count_from_response() {
         .mount(&server)
         .await;
 
-    let map = load_big_transfers(
+    let map = ico::load_big_transfers(
         &Client::new(),
         &test_config(server.uri()),
         "big_hash",
@@ -115,9 +116,9 @@ async fn paginates_all_pages_using_page_count_from_response() {
 async fn returns_empty_map_when_no_ico_transfers_exist() {
     let server = MockServer::start().await;
 
-    Mock::given(method("GET"))
-        .and(path("/ft-token-actions"))
-        .and(query_param("page", "1"))
+    Mock::given(matchers::method("GET"))
+        .and(matchers::path("/ft-token-actions"))
+        .and(matchers::query_param("page", "1"))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
             "data": [],
             "item_count": 0,
@@ -126,7 +127,7 @@ async fn returns_empty_map_when_no_ico_transfers_exist() {
         .mount(&server)
         .await;
 
-    let map = load_big_transfers(
+    let map = ico::load_big_transfers(
         &Client::new(),
         &test_config(server.uri()),
         "big_hash",
@@ -142,13 +143,13 @@ async fn returns_empty_map_when_no_ico_transfers_exist() {
 async fn load_big_transfers_returns_error_on_5xx_response() {
     let server = MockServer::start().await;
 
-    Mock::given(method("GET"))
-        .and(path("/ft-token-actions"))
+    Mock::given(matchers::method("GET"))
+        .and(matchers::path("/ft-token-actions"))
         .respond_with(ResponseTemplate::new(500).set_body_string("Internal Server Error"))
         .mount(&server)
         .await;
 
-    let result = load_big_transfers(
+    let result = ico::load_big_transfers(
         &Client::new(),
         &test_config(server.uri()),
         "big_hash",
@@ -165,13 +166,13 @@ async fn load_big_transfers_returns_error_on_5xx_response() {
 async fn load_big_transfers_returns_error_on_4xx_response() {
     let server = MockServer::start().await;
 
-    Mock::given(method("GET"))
-        .and(path("/ft-token-actions"))
+    Mock::given(matchers::method("GET"))
+        .and(matchers::path("/ft-token-actions"))
         .respond_with(ResponseTemplate::new(401).set_body_string("Unauthorized"))
         .mount(&server)
         .await;
 
-    let result = load_big_transfers(
+    let result = ico::load_big_transfers(
         &Client::new(),
         &test_config(server.uri()),
         "big_hash",
@@ -202,7 +203,7 @@ fn purchase_session(amount: &serde_json::Value, currency: u64) -> serde_json::Va
 #[test]
 fn parse_purchase_args_extracts_string_amount_and_currency() {
     let session = purchase_session(&json!("50000000"), 0);
-    let (cost, currency_id) = parse_purchase_args(&session).unwrap();
+    let (cost, currency_id) = ico::parse_purchase_args(&session).unwrap();
     assert_eq!(cost, "50000000");
     assert_eq!(currency_id, 0);
 }
@@ -211,15 +212,15 @@ fn parse_purchase_args_extracts_string_amount_and_currency() {
 fn parse_purchase_args_extracts_numeric_amount() {
     // Some node versions return `parsed` as a JSON number, not a string.
     let session = purchase_session(&json!(12345u64), 2);
-    let (cost, currency_id) = parse_purchase_args(&session).unwrap();
+    let (cost, currency_id) = ico::parse_purchase_args(&session).unwrap();
     assert_eq!(cost, "12345");
     assert_eq!(currency_id, 2);
 }
 
 #[test]
 fn parse_purchase_args_returns_none_when_top_level_key_missing() {
-    assert!(parse_purchase_args(&json!({})).is_none());
-    assert!(parse_purchase_args(&json!({ "Other": {} })).is_none());
+    assert!(ico::parse_purchase_args(&json!({})).is_none());
+    assert!(ico::parse_purchase_args(&json!({ "Other": {} })).is_none());
 }
 
 #[test]
@@ -231,7 +232,7 @@ fn parse_purchase_args_returns_none_when_amount_missing() {
             ]
         }
     });
-    assert!(parse_purchase_args(&session).is_none());
+    assert!(ico::parse_purchase_args(&session).is_none());
 }
 
 #[test]
@@ -243,7 +244,7 @@ fn parse_purchase_args_returns_none_when_currency_missing() {
             ]
         }
     });
-    assert!(parse_purchase_args(&session).is_none());
+    assert!(ico::parse_purchase_args(&session).is_none());
 }
 
 #[test]
@@ -251,20 +252,20 @@ fn parse_purchase_args_returns_none_when_args_is_empty() {
     let session = json!({
         "StoredVersionedContractByHash": { "args": [] }
     });
-    assert!(parse_purchase_args(&session).is_none());
+    assert!(ico::parse_purchase_args(&session).is_none());
 }
 
 // ico_currency_name
 
 #[test]
 fn ico_currency_name_maps_all_known_variants() {
-    assert_eq!(ico_currency_name(0), "CSPR");
-    assert_eq!(ico_currency_name(1), "USDC");
-    assert_eq!(ico_currency_name(2), "USDT");
+    assert_eq!(ico::ico_currency_name(0), "CSPR");
+    assert_eq!(ico::ico_currency_name(1), "USDC");
+    assert_eq!(ico::ico_currency_name(2), "USDT");
 }
 
 #[test]
 fn ico_currency_name_returns_unknown_for_unrecognised_ids() {
-    assert_eq!(ico_currency_name(3), "UNKNOWN");
-    assert_eq!(ico_currency_name(255), "UNKNOWN");
+    assert_eq!(ico::ico_currency_name(3), "UNKNOWN");
+    assert_eq!(ico::ico_currency_name(255), "UNKNOWN");
 }
