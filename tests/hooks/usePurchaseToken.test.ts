@@ -34,7 +34,12 @@ vi.mock('@/constants/ico', () => ({
     },
   },
   getCurrencyRateUsd: (currency: string, csprPriceUsd?: number) => {
-    if (currency === 'CSPR') return csprPriceUsd || 0;
+    if (currency === 'CSPR') {
+      if (!csprPriceUsd || csprPriceUsd <= 0) {
+        throw new Error('CSPR price unavailable - please try again later');
+      }
+      return csprPriceUsd;
+    }
     return 1;
   },
 }));

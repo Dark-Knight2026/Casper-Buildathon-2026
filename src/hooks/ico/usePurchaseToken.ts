@@ -250,7 +250,12 @@ export function usePurchaseToken(
         return '0';
       }
 
-      const currencyRate = getCurrencyRateUsd(currency, csprPriceUsd);
+      let currencyRate: number;
+      try {
+        currencyRate = getCurrencyRateUsd(currency, csprPriceUsd);
+      } catch {
+        return '—';
+      }
       const amountInUsd = numAmount * currencyRate;
       const tokens = amountInUsd / tokenPrice;
 

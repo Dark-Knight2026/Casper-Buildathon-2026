@@ -51,7 +51,12 @@ export const ICO_CONFIG = {
  * CSPR: live rate from CoinGecko (passed as param), stablecoins/fiat: always 1.
  */
 export function getCurrencyRateUsd(currency: PaymentCurrency, csprPriceUsd?: number): number {
-  if (currency === 'CSPR') return csprPriceUsd || 0;
+  if (currency === 'CSPR') {
+    if (!csprPriceUsd || csprPriceUsd <= 0) {
+      throw new Error('CSPR price unavailable - please try again later');
+    }
+    return csprPriceUsd;
+  }
   return 1; // USDT, USDC, CARD are all 1:1 USD
 }
 

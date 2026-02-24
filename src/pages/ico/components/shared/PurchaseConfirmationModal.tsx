@@ -32,8 +32,14 @@ export function PurchaseConfirmationModal({
 }: PurchaseConfirmationModalProps) {
 
   // Calculate tokens to receive
-  const currencyRate = getCurrencyRateUsd(currency, csprPriceUsd);
-  const amountInUsd = amount * currencyRate;
+  let currencyRate: number | null = null;
+  let csprPriceError = false;
+  try {
+    currencyRate = getCurrencyRateUsd(currency, csprPriceUsd);
+  } catch {
+    csprPriceError = true;
+  }
+  const amountInUsd = currencyRate !== null ? amount * currencyRate : 0;
   const tokensToReceive = tokenPrice > 0 ? amountInUsd / tokenPrice : 0;
 
   // Close on escape key
@@ -182,6 +188,17 @@ export function PurchaseConfirmationModal({
           </div>
         )}
 
+        {/* CSPR Price Unavailable Warning */}
+        {csprPriceError && (
+          <div className="w-full mb-6">
+            <div className="p-4 rounded-lg bg-red-900/20 border border-red-800/30">
+              <span className="text-sm text-red-400">
+                CSPR price unavailable — please try again later
+              </span>
+            </div>
+          </div>
+        )}
+
         {/* Action Buttons */}
         <div className="w-full flex gap-3">
           {!isProcessing && purchaseState.step === 'idle' && (
@@ -195,6 +212,7 @@ export function PurchaseConfirmationModal({
               <MainButton
                 text="Confirm Purchase"
                 onClick={onConfirm}
+                disabled={csprPriceError}
                 className="flex-1"
               />
             </>

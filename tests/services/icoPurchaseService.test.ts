@@ -70,8 +70,14 @@ vi.mock('@/constants/ico', () => ({
     },
     CASPER: { networkName: 'casper-test' },
   },
-  getCurrencyRateUsd: (currency: string) => {
-    const rates: Record<string, number> = { USDT: 1, USDC: 1, CSPR: 0.02, CARD: 1 };
+  getCurrencyRateUsd: (currency: string, csprPriceUsd?: number) => {
+    if (currency === 'CSPR') {
+      if (!csprPriceUsd || csprPriceUsd <= 0) {
+        throw new Error('CSPR price unavailable - please try again later');
+      }
+      return csprPriceUsd;
+    }
+    const rates: Record<string, number> = { USDT: 1, USDC: 1, CARD: 1 };
     return rates[currency] ?? 1;
   },
 }));
@@ -199,15 +205,21 @@ describe('validatePurchase', () => {
 
   it('applies CSPR exchange rate for min check', () => {
     // 100 CSPR * 0.02 = $2 < $10 min
-    const result = validatePurchase('100', 'CSPR', 10000);
+    const result = validatePurchase('100', 'CSPR', 10000, 0.02);
     expect(result.valid).toBe(false);
     expect(result.error).toContain('Minimum');
   });
 
   it('accepts valid CSPR purchase above minimum', () => {
     // 1000 CSPR * 0.02 = $20 > $10 min
-    const result = validatePurchase('1000', 'CSPR', 10000);
+    const result = validatePurchase('1000', 'CSPR', 10000, 0.02);
     expect(result).toEqual({ valid: true });
+  });
+
+  it('returns error when CSPR price is unavailable', () => {
+    const result = validatePurchase('1000', 'CSPR', 10000);
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain('CSPR price unavailable');
   });
 
   it('accepts exact minimum amount', () => {
@@ -229,9 +241,13 @@ describe('calculateTokensReceived', () => {
 
   it('calculates tokens for CSPR', () => {
     // 1000 CSPR * $0.02 rate = $20 / $0.001 = 20,000 tokens
-    const raw = calculateTokensReceived('1000', 'CSPR', 0.001);
+    const raw = calculateTokensReceived('1000', 'CSPR', 0.001, 0.02);
     const tokens = fromRawAmount(raw, 18);
     expect(tokens).toBe('20000');
+  });
+
+  it('returns 0 when CSPR price is unavailable', () => {
+    expect(calculateTokensReceived('1000', 'CSPR', 0.001)).toBe(0n);
   });
 
   it('returns 0 for invalid amount', () => {

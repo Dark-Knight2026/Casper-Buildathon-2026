@@ -418,7 +418,12 @@ export function validatePurchase(
   }
 
   // Check minimum/maximum in USD
-  const currencyRate = getCurrencyRateUsd(currency, csprRate);
+  let currencyRate: number;
+  try {
+    currencyRate = getCurrencyRateUsd(currency, csprRate);
+  } catch {
+    return { valid: false, error: 'CSPR price unavailable — please try again later' };
+  }
   const amountInUsd = numAmount * currencyRate;
 
   if (amountInUsd < ICO_CONFIG.PURCHASE_LIMITS.min) {
@@ -457,7 +462,12 @@ export function calculateTokensReceived(
     return 0n;
   }
 
-  const currencyRate = getCurrencyRateUsd(currency, csprRate);
+  let currencyRate: number;
+  try {
+    currencyRate = getCurrencyRateUsd(currency, csprRate);
+  } catch {
+    return 0n;
+  }
   const amountInUsd = numAmount * currencyRate;
   const tokensFloat = amountInUsd / tokenPriceUsd;
 

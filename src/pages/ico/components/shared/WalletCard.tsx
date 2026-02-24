@@ -48,9 +48,17 @@ export function WalletCard({
     CARD: 0,
   };
   const currentBalance = balances[currency];
-  const currencyRate = getCurrencyRateUsd(currency, csprPriceUsd);
+
+  let currencyRate: number | null = null;
+  let csprPriceError = false;
+  try {
+    currencyRate = getCurrencyRateUsd(currency, csprPriceUsd);
+  } catch {
+    csprPriceError = true;
+  }
+
   const amountInUsd = useMemo(
-    () => (amount ? Number(amount) * currencyRate : 0),
+    () => (amount && currencyRate !== null ? Number(amount) * currencyRate : 0),
     [amount, currencyRate]
   );
   const tokensToReceive = useMemo(
@@ -136,8 +144,17 @@ export function WalletCard({
         className="mb-4"
       />
 
+      {/* CSPR Price Unavailable Warning */}
+      {csprPriceError && currency === 'CSPR' && (
+        <div className="w-full p-4 rounded-md bg-red-900/20 border border-red-800/30 mb-4">
+          <p className="text-sm text-red-400">
+            CSPR price unavailable — please try again later
+          </p>
+        </div>
+      )}
+
       {/* Token Calculation */}
-      {amount && Number(amount) > 0 && (
+      {amount && Number(amount) > 0 && !csprPriceError && (
         <div className="w-full p-4 rounded-md bg-[hsl(var(--ico-bg-secondary))] border border-[hsl(var(--ico-border-color))] mb-6">
           <div className="flex justify-between items-center">
             <span className="text-sm text-[hsl(var(--ico-text-secondary))]">You will receive (estimate)</span>
@@ -146,7 +163,7 @@ export function WalletCard({
             </span>
           </div>
           <p className="text-xs text-[hsl(var(--ico-text-highlight))] mt-1">
-            Rate: 1 {tokenSymbol} = {(tokenPrice / currencyRate).toLocaleString(undefined, { maximumFractionDigits: 6 })} {currency}
+            Rate: 1 {tokenSymbol} = {(tokenPrice / currencyRate!).toLocaleString(undefined, { maximumFractionDigits: 6 })} {currency}
           </p>
           {/* Floating-point note: these are UI estimates only. Final amounts are validated
               server-side using integer arithmetic in smallest units (motes/decimals).
@@ -168,7 +185,7 @@ export function WalletCard({
       <MainButton
         text={isConnected ? `Purchase ${tokenSymbol}` : 'Connect Wallet'}
         onClick={isConnected ? handlePurchase : onConnect}
-        disabled={isConnected && (insufficientBalance || !amount)}
+        disabled={isConnected && (insufficientBalance || !amount || csprPriceError)}
       />
     </Card>
   );
