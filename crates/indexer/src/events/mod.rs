@@ -55,6 +55,30 @@ impl EventType {
     }
 }
 
+/// Dispatch a typed event to the correct handler.
+///
+/// Generates a `match` over `$event_type`. Each `$pat => $handler` arm
+/// deserializes `$data` into `$handler` and calls [`IndexableEvent::process`].
+/// The wildcard arm logs a warning and returns [`IndexerError::UnknownEvent`].
+macro_rules! dispatch_events {
+    (
+        $event_type:expr, $ctx:expr, $data:expr, $name:expr;
+        $($pat:pat => $handler:ty),+ $(,)?
+    ) => {
+        match $event_type {
+            $( $pat => process_typed_event::<$handler>($ctx, $data).await, )+
+            other => {
+               tracing::warn!(event_type = ?other, "Event type recognized but not implemented yet");
+                Err(IndexerError::UnknownEvent {
+                    contract_type: $ctx.contract_type.to_string(),
+                    event_name: $name.to_owned(),
+                })
+
+            }
+        }
+    };
+}
+
 /// Registry of event handlers for static dispatch.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct EventRegistry;
@@ -84,26 +108,12 @@ impl EventRegistry {
         let event_type = EventType::parse(ctx.contract_type, event_name)?;
 
         // Type-safe dispatch — compiler enforces exhaustiveness.
-        match event_type {
-            // ICO events
-            EventType::Ico(ico::IcoEventType::TokensPurchased) => {
-                process_typed_event::<ico::TokensPurchased>(ctx, event_data).await
-            }
-
-            // CEP-18 events
-            EventType::Cep18(cep18::Cep18EventType::Transfer) => {
-                process_typed_event::<cep18::Transfer>(ctx, event_data).await
-            }
-
-            // Recognised but not yet implemented
-            _ => {
-                tracing::warn!(?event_type, "Event type recognized but not implemented yet");
-                Err(IndexerError::UnknownEvent {
-                    contract_type: ctx.contract_type.to_string(),
-                    event_name: event_name.to_owned(),
-                })
-            }
-        }
+        dispatch_events!(
+            event_type, ctx, event_data, event_name;
+            EventType::Ico(ico::IcoEventType::TokensPurchased) => ico::TokensPurchased,
+            EventType::Cep18(cep18::Cep18EventType::Transfer) => cep18::Transfer,
+            EventType::Cep18(cep18::Cep18EventType::SetAllowance) => cep18::SetAllowance,
+        )
     }
 }
 

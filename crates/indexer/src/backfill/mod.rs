@@ -63,6 +63,9 @@ pub async fn run_backfill(config: &IndexerConfig, db_pool: &PgPool) -> IndexerRe
         );
 
         match contract.contract_type {
+            // CEP-18: CSPR.cloud exposes a dedicated `/ft-token-actions`
+            // endpoint that returns normalized `Transfer/Mint/Approve` records,
+            // no RPC calls needed.
             ct if ct.is_cep18_token() => {
                 cep18::backfill_cep18(
                     &client,
@@ -75,6 +78,10 @@ pub async fn run_backfill(config: &IndexerConfig, db_pool: &PgPool) -> IndexerRe
                 )
                 .await?;
             }
+            // ICO: no dedicated endpoint — events are reconstructed from raw
+            // deploys. Requires Casper Node RPC (`info_get_deploy`) for
+            // session args + BIG transfer amounts from CSPR.cloud.
+            // Node only keeps ~2–3 days of history.
             ContractType::Ico => {
                 if let Some(ref big) = big_hash {
                     ico::backfill_ico(

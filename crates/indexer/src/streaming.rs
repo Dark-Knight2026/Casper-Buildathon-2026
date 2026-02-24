@@ -135,7 +135,7 @@ pub(crate) async fn connect(
     // fills in the required handshake headers (Sec-WebSocket-Key, Upgrade, etc.).
     // Then inject the authorization header that CSPR.cloud requires.
     let mut request = url
-        .clone()
+        .as_str()
         .into_client_request()
         .map_err(|e| IndexerError::Parse(format!("Failed to build WebSocket request: {e}")))?;
     request.headers_mut().insert(

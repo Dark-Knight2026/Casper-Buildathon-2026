@@ -1,7 +1,9 @@
 //! CEP-18 token standard events (BIG, tUSDC, tUSDT).
 
+pub mod set_allowance;
 pub mod transfer;
 
+pub use set_allowance::SetAllowance;
 pub use transfer::Transfer;
 
 use core::{fmt, str::FromStr};
