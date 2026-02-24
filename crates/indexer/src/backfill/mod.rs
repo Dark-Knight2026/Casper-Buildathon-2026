@@ -18,6 +18,7 @@
 //! streaming, so balance updates and idempotency logic is shared.
 
 mod cep18;
+pub mod db;
 pub mod ico;
 
 use reqwest::Client;

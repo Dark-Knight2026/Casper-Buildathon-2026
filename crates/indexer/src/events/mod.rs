@@ -5,6 +5,7 @@
 //! based on contract type and event name.
 
 pub mod cep18;
+pub mod db;
 pub mod ico;
 
 use serde_json::Value;

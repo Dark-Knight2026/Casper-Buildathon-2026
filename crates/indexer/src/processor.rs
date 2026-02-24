@@ -11,10 +11,9 @@ use sqlx::PgPool;
 
 use crate::{
     config::ContractType,
-    db::{self, NewBlockchainEvent},
     error::{IndexerError, IndexerResult},
     event_trait::EventContext,
-    events::EventRegistry,
+    events::{EventRegistry, db},
 };
 
 /// Metadata for an event extracted from the blockchain.
@@ -36,7 +35,7 @@ pub struct RawEvent {
     pub event_data: serde_json::Value,
 }
 
-impl<'a> From<&'a RawEvent> for NewBlockchainEvent<'a> {
+impl<'a> From<&'a RawEvent> for db::NewBlockchainEvent<'a> {
     #[inline]
     fn from(raw: &'a RawEvent) -> Self {
         Self {
@@ -63,7 +62,7 @@ pub async fn process_event(
     let mut tx = db_pool.begin().await?;
 
     // 1. Store raw event (idempotent via UNIQUE constraint)
-    if !db::insert_blockchain_event(&mut tx, NewBlockchainEvent::from(raw)).await? {
+    if !db::insert_blockchain_event(&mut tx, db::NewBlockchainEvent::from(raw)).await? {
         // Duplicate — already processed, nothing to do
         return Ok(());
     }

@@ -4,9 +4,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     config::ContractType,
-    db,
     error::IndexerResult,
     event_trait::{EventContext, IndexableEvent},
+    events::db,
 };
 
 /// A user purchased BIG tokens during an ICO round.

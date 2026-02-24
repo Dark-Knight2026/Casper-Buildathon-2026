@@ -29,8 +29,6 @@
 pub mod backfill;
 /// Indexer configuration and contract registry.
 pub mod config;
-/// Database access layer — all SQL queries.
-pub mod db;
 /// Indexer error types.
 pub mod error;
 /// Trait definition for indexable events.

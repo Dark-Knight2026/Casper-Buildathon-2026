@@ -4,6 +4,8 @@
 //! events as they are emitted on-chain, using the same [`processor`] pipeline
 //! as the REST backfill client.
 
+pub mod db;
+
 use core::fmt::Write as _;
 use core::time::Duration;
 use std::collections::HashMap;
@@ -20,11 +22,12 @@ use tokio_tungstenite::{
 
 use crate::{
     config::{ContractRegistry, ContractType, IndexerConfig},
-    db::{self, StreamType},
     error::{IndexerError, IndexerResult},
     events::EventRegistry,
     processor,
 };
+
+use db::StreamType;
 
 // -----------------------------------------------------------------------------
 // CSPR.cloud WebSocket message types

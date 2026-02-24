@@ -3,9 +3,9 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    db,
     error::IndexerResult,
     event_trait::{EventContext, IndexableEvent},
+    events::db,
 };
 
 /// A direct token transfer between two accounts.
