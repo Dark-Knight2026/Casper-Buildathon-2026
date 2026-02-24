@@ -122,6 +122,30 @@ describe('transactionStorage', () => {
     });
   });
 
+  // --- MAX_TRANSACTIONS limit ---
+
+  describe('MAX_TRANSACTIONS limit', () => {
+    it('should not store more than 100 transactions', () => {
+      for (let i = 0; i < 105; i++) {
+        storage.addTransaction(makeTx({ id: `tx-${i}` }));
+      }
+
+      expect(storage.getTransactions()).toHaveLength(100);
+    });
+
+    it('should keep the newest transactions when the limit is exceeded', () => {
+      for (let i = 0; i < 101; i++) {
+        storage.addTransaction(makeTx({ id: `tx-${i}` }));
+      }
+
+      const stored = storage.getTransactions();
+      // tx-100 was added last so it's the newest and must be kept
+      expect(stored.some((t) => t.id === 'tx-100')).toBe(true);
+      // tx-0 was added first so it's the oldest and must be dropped
+      expect(stored.some((t) => t.id === 'tx-0')).toBe(false);
+    });
+  });
+
   // --- clearTransactions ---
 
   describe('clearTransactions', () => {

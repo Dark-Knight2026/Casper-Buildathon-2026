@@ -1,6 +1,7 @@
-import type { Transaction } from '@/pages/ico/components/shared/TransactionHistory';
+import type { ICOTransaction as Transaction } from '@/pages/ico/components/shared/TransactionHistory';
 
 const STORAGE_KEY = 'ico_transactions';
+const MAX_TRANSACTIONS = 100;
 
 interface StoredTransaction extends Omit<Transaction, 'timestamp'> {
   timestamp: string;
@@ -29,7 +30,7 @@ export function getTransactions(): Transaction[] {
 
 export function addTransaction(tx: Transaction): Transaction[] {
   const current = getTransactions();
-  const updated = [tx, ...current];
+  const updated = [tx, ...current].slice(0, MAX_TRANSACTIONS);
   localStorage.setItem(STORAGE_KEY, JSON.stringify(updated.map(serialize)));
   return updated;
 }
