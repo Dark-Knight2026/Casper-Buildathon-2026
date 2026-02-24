@@ -1,11 +1,12 @@
-//! Tests for ICO backfill BIG transfer loading logic.
+//! Tests for ICO backfill: `load_big_transfers` HTTP interaction,
+//! `parse_purchase_args` session decoding, and `ico_currency_name` mapping.
 
 use reqwest::Client;
 use serde_json::json;
 use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
-use indexer::backfill::ico::load_big_transfers;
+use indexer::backfill::ico::{ico_currency_name, load_big_transfers, parse_purchase_args};
 use indexer::config::{Casper, ContractRegistry, IndexerConfig};
 
 /// Builds a minimal `IndexerConfig` pointing at the given mock server URL.
@@ -62,7 +63,7 @@ async fn filters_only_ico_initiated_transfers() {
 }
 
 #[tokio::test]
-async fn paginates_until_page_has_fewer_than_100_items() {
+async fn paginates_all_pages_using_page_count_from_response() {
     let server = MockServer::start().await;
 
     // page=1: exactly 100 items — must trigger a request for page=2
@@ -135,4 +136,135 @@ async fn returns_empty_map_when_no_ico_transfers_exist() {
     .unwrap();
 
     assert!(map.is_empty());
+}
+
+#[tokio::test]
+async fn load_big_transfers_returns_error_on_5xx_response() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/ft-token-actions"))
+        .respond_with(ResponseTemplate::new(500).set_body_string("Internal Server Error"))
+        .mount(&server)
+        .await;
+
+    let result = load_big_transfers(
+        &Client::new(),
+        &test_config(server.uri()),
+        "big_hash",
+        "ico_hash",
+    )
+    .await;
+
+    assert!(result.is_err(), "5xx response must return an error");
+    let err = result.unwrap_err().to_string();
+    assert!(err.contains("500"), "Error must include status code: {err}");
+}
+
+#[tokio::test]
+async fn load_big_transfers_returns_error_on_4xx_response() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/ft-token-actions"))
+        .respond_with(ResponseTemplate::new(401).set_body_string("Unauthorized"))
+        .mount(&server)
+        .await;
+
+    let result = load_big_transfers(
+        &Client::new(),
+        &test_config(server.uri()),
+        "big_hash",
+        "ico_hash",
+    )
+    .await;
+
+    assert!(result.is_err(), "4xx response must return an error");
+    let err = result.unwrap_err().to_string();
+    assert!(err.contains("401"), "Error must include status code: {err}");
+}
+
+// parse_purchase_args
+
+/// Helper: build a purchase session with given amount and currency.
+fn purchase_session(amount: &serde_json::Value, currency: u64) -> serde_json::Value {
+    json!({
+        "StoredVersionedContractByHash": {
+            "entry_point": "purchase",
+            "args": [
+                ["amount_to_spend", {"parsed": amount}],
+                ["currency",        {"parsed": currency}]
+            ]
+        }
+    })
+}
+
+#[test]
+fn parse_purchase_args_extracts_string_amount_and_currency() {
+    let session = purchase_session(&json!("50000000"), 0);
+    let (cost, currency_id) = parse_purchase_args(&session).unwrap();
+    assert_eq!(cost, "50000000");
+    assert_eq!(currency_id, 0);
+}
+
+#[test]
+fn parse_purchase_args_extracts_numeric_amount() {
+    // Some node versions return `parsed` as a JSON number, not a string.
+    let session = purchase_session(&json!(12345u64), 2);
+    let (cost, currency_id) = parse_purchase_args(&session).unwrap();
+    assert_eq!(cost, "12345");
+    assert_eq!(currency_id, 2);
+}
+
+#[test]
+fn parse_purchase_args_returns_none_when_top_level_key_missing() {
+    assert!(parse_purchase_args(&json!({})).is_none());
+    assert!(parse_purchase_args(&json!({ "Other": {} })).is_none());
+}
+
+#[test]
+fn parse_purchase_args_returns_none_when_amount_missing() {
+    let session = json!({
+        "StoredVersionedContractByHash": {
+            "args": [
+                ["currency", {"parsed": 1u64}]
+            ]
+        }
+    });
+    assert!(parse_purchase_args(&session).is_none());
+}
+
+#[test]
+fn parse_purchase_args_returns_none_when_currency_missing() {
+    let session = json!({
+        "StoredVersionedContractByHash": {
+            "args": [
+                ["amount_to_spend", {"parsed": "100"}]
+            ]
+        }
+    });
+    assert!(parse_purchase_args(&session).is_none());
+}
+
+#[test]
+fn parse_purchase_args_returns_none_when_args_is_empty() {
+    let session = json!({
+        "StoredVersionedContractByHash": { "args": [] }
+    });
+    assert!(parse_purchase_args(&session).is_none());
+}
+
+// ico_currency_name
+
+#[test]
+fn ico_currency_name_maps_all_known_variants() {
+    assert_eq!(ico_currency_name(0), "CSPR");
+    assert_eq!(ico_currency_name(1), "USDC");
+    assert_eq!(ico_currency_name(2), "USDT");
+}
+
+#[test]
+fn ico_currency_name_returns_unknown_for_unrecognised_ids() {
+    assert_eq!(ico_currency_name(3), "UNKNOWN");
+    assert_eq!(ico_currency_name(255), "UNKNOWN");
 }
