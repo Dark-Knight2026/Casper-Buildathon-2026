@@ -13,64 +13,17 @@
 
 mod common;
 
-use common::payloads;
 use reqwest::Client;
 use serde_json::json;
 use sqlx::PgPool;
 use wiremock::{Mock, MockServer, ResponseTemplate, matchers};
 
+use common::{MIGRATOR, PURCHASE_DEPLOY_HASH, payloads};
 use indexer::{
     backfill::ico::{self, IcoBackfillCtx},
-    config::{Casper, ContractRegistry, ContractType, IndexerConfig},
+    config::ContractType,
     events::EventRegistry,
 };
-
-/// Runs all Supabase migrations before each `sqlx::test` that references it.
-static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("../../supabase/migrations");
-
-/// Fake 64-char deploy hash used in integration tests.
-///
-/// `blockchain_transactions` enforces `CHECK (length(transaction_hash) = 64)`,
-/// so any test that writes a purchase must use a 64-character string here.
-const PURCHASE_DEPLOY_HASH: &str =
-    "1234567890123456789012345678901234567890123456789012345678901234";
-
-/// Builds a minimal `IndexerConfig` pointing at the given mock server URL.
-fn test_config(rest_url: String) -> IndexerConfig {
-    IndexerConfig {
-        database_url: "postgres://localhost/test".to_owned().into(),
-        casper: Casper {
-            api_token: "test-token".to_owned().into(),
-            rest_url,
-            wss_url: "wss://test".to_owned(),
-            node_url: "https://node.test".to_owned(),
-        },
-        contracts: ContractRegistry::default(),
-        backfill_rate_limit_ms: 0,
-        wss_reconnect_delay_ms: 0,
-    }
-}
-
-/// Disable Row Level Security for all indexer-owned tables.
-///
-/// Migrations enable RLS on these tables for Supabase's auth layer, but
-/// `sqlx::test` connections run without a Supabase auth context. Without this,
-/// `INSERT` statements are silently blocked and `RETURNING id` returns nothing
-/// — which `insert_blockchain_event` interprets as "duplicate event", causing
-/// handlers to be skipped entirely.
-async fn disable_rls(pool: &PgPool) {
-    for table in [
-        "blockchain_events",
-        "blockchain_transactions",
-        "ico_purchases",
-        "token_holdings",
-    ] {
-        sqlx::query(&format!(r"ALTER TABLE {table} DISABLE ROW LEVEL SECURITY"))
-            .execute(pool)
-            .await
-            .unwrap_or_else(|e| panic!("failed to disable RLS on {table}: {e}"));
-    }
-}
 
 #[tokio::test]
 async fn filters_only_ico_initiated_transfers() {
@@ -87,7 +40,7 @@ async fn filters_only_ico_initiated_transfers() {
 
     let map = ico::load_big_transfers(
         &Client::new(),
-        &test_config(server.uri()),
+        &common::test_config(server.uri(), None),
         "big_hash",
         "ico_hash",
     )
@@ -126,7 +79,7 @@ async fn paginates_all_pages_using_page_count_from_response() {
 
     let map = ico::load_big_transfers(
         &Client::new(),
-        &test_config(server.uri()),
+        &common::test_config(server.uri(), None),
         "big_hash",
         "ico_hash",
     )
@@ -157,7 +110,7 @@ async fn returns_empty_map_when_no_ico_transfers_exist() {
 
     let map = ico::load_big_transfers(
         &Client::new(),
-        &test_config(server.uri()),
+        &common::test_config(server.uri(), None),
         "big_hash",
         "ico_hash",
     )
@@ -179,7 +132,7 @@ async fn load_big_transfers_returns_error_on_5xx_response() {
 
     let result = ico::load_big_transfers(
         &Client::new(),
-        &test_config(server.uri()),
+        &common::test_config(server.uri(), None),
         "big_hash",
         "ico_hash",
     )
@@ -202,7 +155,7 @@ async fn load_big_transfers_returns_error_on_4xx_response() {
 
     let result = ico::load_big_transfers(
         &Client::new(),
-        &test_config(server.uri()),
+        &common::test_config(server.uri(), None),
         "big_hash",
         "ico_hash",
     )
@@ -287,22 +240,6 @@ fn ico_currency_name_returns_unknown_for_unrecognised_ids() {
 
 // backfill_ico integration tests (sqlx::test + wiremock)
 
-/// Builds a minimal `IndexerConfig` pointing at both mock server URLs.
-fn test_config_with_node(rest_url: String, node_url: String) -> IndexerConfig {
-    IndexerConfig {
-        database_url: "postgres://localhost/test".to_owned().into(),
-        casper: Casper {
-            api_token: "test-token".to_owned().into(),
-            rest_url,
-            wss_url: "wss://test".to_owned(),
-            node_url,
-        },
-        contracts: ContractRegistry::default(),
-        backfill_rate_limit_ms: 0,
-        wss_reconnect_delay_ms: 0,
-    }
-}
-
 /// One-page `/deploys` wiremock response with the given deploy entries.
 #[allow(clippy::needless_pass_by_value)]
 fn deploys_page(deploys: serde_json::Value) -> ResponseTemplate {
@@ -324,10 +261,10 @@ fn rpc_deploy_not_found() -> ResponseTemplate {
 /// deploy's `block_height` because the deploy passed the `error_message` filter.
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn deploy_not_on_node_advances_cursor_but_writes_nothing(pool: PgPool) {
-    disable_rls(&pool).await;
+    common::disable_rls(&pool).await;
     let rest = MockServer::start().await;
     let node = MockServer::start().await;
-    let config = test_config_with_node(rest.uri(), node.uri());
+    let config = common::test_config(rest.uri(), Some(node.uri()));
     let client = Client::new();
     let registry = EventRegistry::new();
 
@@ -402,10 +339,10 @@ async fn deploy_not_on_node_advances_cursor_but_writes_nothing(pool: PgPool) {
 /// is never set for errored deploys.
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn failed_deploy_skipped_and_cursor_not_updated(pool: PgPool) {
-    disable_rls(&pool).await;
+    common::disable_rls(&pool).await;
     let rest = MockServer::start().await;
     let node = MockServer::start().await;
-    let config = test_config_with_node(rest.uri(), node.uri());
+    let config = common::test_config(rest.uri(), Some(node.uri()));
     let client = Client::new();
     let registry = EventRegistry::new();
 
@@ -443,7 +380,7 @@ async fn failed_deploy_skipped_and_cursor_not_updated(pool: PgPool) {
     .await
     .unwrap();
 
-    let tx_count: i64 = sqlx::query_scalar!("SELECT COUNT(*) FROM blockchain_transactions")
+    let tx_count: i64 = sqlx::query_scalar!(r"SELECT COUNT(*) FROM blockchain_transactions")
         .fetch_one(&pool)
         .await
         .unwrap()
@@ -473,10 +410,10 @@ async fn failed_deploy_skipped_and_cursor_not_updated(pool: PgPool) {
 /// Expected: node RPC is never called; no new DB writes; cursor unchanged.
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn cursor_resume_skips_already_processed_blocks(pool: PgPool) {
-    disable_rls(&pool).await;
+    common::disable_rls(&pool).await;
     let rest = MockServer::start().await;
     let node = MockServer::start().await;
-    let config = test_config_with_node(rest.uri(), node.uri());
+    let config = common::test_config(rest.uri(), Some(node.uri()));
     let client = Client::new();
     let registry = EventRegistry::new();
 
@@ -548,10 +485,10 @@ async fn cursor_resume_skips_already_processed_blocks(pool: PgPool) {
 /// `token_holdings`.
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn successful_purchase_written_to_all_tables(pool: PgPool) {
-    disable_rls(&pool).await;
+    common::disable_rls(&pool).await;
     let rest = MockServer::start().await;
     let node = MockServer::start().await;
-    let config = test_config_with_node(rest.uri(), node.uri());
+    let config = common::test_config(rest.uri(), Some(node.uri()));
     let client = Client::new();
     let registry = EventRegistry::new();
 

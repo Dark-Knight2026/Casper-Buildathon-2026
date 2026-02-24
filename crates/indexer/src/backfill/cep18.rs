@@ -124,7 +124,12 @@ pub async fn fetch_ft_token_actions_page(
 /// Paginates through all token actions in ascending block order, filtering
 /// out anything before `start_block`, and feeds each action into the shared
 /// [`processor`] pipeline.
-pub(super) async fn backfill_cep18(
+///
+/// # Errors
+///
+/// Returns [`IndexerError`] on HTTP, API, or database failures.
+#[inline]
+pub async fn backfill_cep18(
     client: &Client,
     config: &IndexerConfig,
     db_pool: &PgPool,
