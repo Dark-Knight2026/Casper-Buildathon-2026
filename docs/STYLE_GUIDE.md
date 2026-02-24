@@ -82,6 +82,11 @@ Target visual association: **Stripe / Vanguard / BlackRock-style fintech**
 
 ## CSS Variables Reference
 
+> **Note**: This is a design reference. The actual implementation
+> in `src/index.css` uses `--ico-*` prefixed names in HSL format (shadcn/ui convention)
+> with `hsl()` wrapping — e.g. `--ico-bg-primary: 220 20% 98%` instead of `--bg-primary: #F7F8FA`.
+> The color values are identical; only the naming and format differ.
+
 ```css
 :root {
   /* Backgrounds */
