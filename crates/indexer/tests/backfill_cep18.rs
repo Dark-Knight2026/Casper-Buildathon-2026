@@ -230,7 +230,7 @@ fn mint_includes_recipient_and_amount() {
 
 #[test]
 fn mint_with_null_recipient_falls_back_to_empty_string() {
-    // to_hash = None → recipient field must be ""
+    // to_hash = None -> recipient field must be ""
     let (_, data) = cep18::ft_action_to_event(&action(1, None, None, "1000")).unwrap();
     assert_eq!(data["recipient"], "");
 }
@@ -261,7 +261,7 @@ fn transfer_type2_with_null_hashes_falls_back_to_empty_string() {
     assert_eq!(data["recipient"], "");
 }
 
-// ft_action_type_id = 3 (Approve → "SetAllowance")
+// ft_action_type_id = 3 (Approve -> "SetAllowance")
 
 #[test]
 fn approve_type3_produces_set_allowance_event_name() {

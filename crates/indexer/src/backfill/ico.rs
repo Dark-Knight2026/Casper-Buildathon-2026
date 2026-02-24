@@ -421,7 +421,7 @@ pub fn ico_currency_name(id: u8) -> &'static str {
 /// Paginates through `/ft-token-actions` for the BIG contract, keeping only
 /// entries where `from_hash` matches the ICO contract package hash.
 ///
-/// Returns a map of `deploy_hash → amount` for use during ICO backfill.
+/// Returns a map of `deploy_hash -> amount` for use during ICO backfill.
 ///
 /// # Errors
 ///
