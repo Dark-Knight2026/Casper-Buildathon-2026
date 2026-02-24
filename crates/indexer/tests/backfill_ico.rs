@@ -1,14 +1,39 @@
-//! Tests for ICO backfill: `load_big_transfers` HTTP interaction,
-//! `parse_purchase_args` session decoding, and `ico_currency_name` mapping.
+//! Tests for ICO backfill.
+//!
+//! Covers two areas:
+//!
+//! 1. **HTTP helpers** — wiremock tests for `load_big_transfers` (paging,
+//!    filtering, error handling), `parse_purchase_args`, `ico_currency_name`.
+//!
+//! 2. **`backfill_ico` integration** — `sqlx::test` + wiremock tests that run
+//!    against a real migrated `PostgreSQL` database and verify the full pipeline:
+//!    cursor management, failed-deploy filtering, cursor resume, and successful
+//!    purchase writes to `ico_purchases`, `blockchain_transactions`, and
+//!    `token_holdings`.
 
+mod common;
+
+use common::payloads;
 use reqwest::Client;
 use serde_json::json;
+use sqlx::PgPool;
 use wiremock::{Mock, MockServer, ResponseTemplate, matchers};
 
 use indexer::{
-    backfill::ico,
-    config::{Casper, ContractRegistry, IndexerConfig},
+    backfill::ico::{self, IcoBackfillCtx},
+    config::{Casper, ContractRegistry, ContractType, IndexerConfig},
+    events::EventRegistry,
 };
+
+/// Runs all Supabase migrations before each `sqlx::test` that references it.
+static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("../../supabase/migrations");
+
+/// Fake 64-char deploy hash used in integration tests.
+///
+/// `blockchain_transactions` enforces `CHECK (length(transaction_hash) = 64)`,
+/// so any test that writes a purchase must use a 64-character string here.
+const PURCHASE_DEPLOY_HASH: &str =
+    "1234567890123456789012345678901234567890123456789012345678901234";
 
 /// Builds a minimal `IndexerConfig` pointing at the given mock server URL.
 fn test_config(rest_url: String) -> IndexerConfig {
@@ -26,6 +51,27 @@ fn test_config(rest_url: String) -> IndexerConfig {
     }
 }
 
+/// Disable Row Level Security for all indexer-owned tables.
+///
+/// Migrations enable RLS on these tables for Supabase's auth layer, but
+/// `sqlx::test` connections run without a Supabase auth context. Without this,
+/// `INSERT` statements are silently blocked and `RETURNING id` returns nothing
+/// — which `insert_blockchain_event` interprets as "duplicate event", causing
+/// handlers to be skipped entirely.
+async fn disable_rls(pool: &PgPool) {
+    for table in [
+        "blockchain_events",
+        "blockchain_transactions",
+        "ico_purchases",
+        "token_holdings",
+    ] {
+        sqlx::query(&format!(r"ALTER TABLE {table} DISABLE ROW LEVEL SECURITY"))
+            .execute(pool)
+            .await
+            .unwrap_or_else(|e| panic!("failed to disable RLS on {table}: {e}"));
+    }
+}
+
 #[tokio::test]
 async fn filters_only_ico_initiated_transfers() {
     let server = MockServer::start().await;
@@ -33,18 +79,9 @@ async fn filters_only_ico_initiated_transfers() {
     Mock::given(matchers::method("GET"))
         .and(matchers::path("/ft-token-actions"))
         .and(matchers::query_param("page", "1"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-            "data": [
-                // ICO -> buyer — must be included in the map
-                { "deploy_hash": "deploy_ico", "from_hash": "ico_hash", "amount": "700" },
-                // Different sender — must be ignored
-                { "deploy_hash": "deploy_other", "from_hash": "other_hash", "amount": "100" },
-                // Mint (from_hash = null) — must be ignored
-                { "deploy_hash": "deploy_mint", "from_hash": null, "amount": "5000" }
-            ],
-            "item_count": 3,
-            "page_count": 1
-        })))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(payloads::ft_actions_mixed_senders()),
+        )
         .mount(&server)
         .await;
 
@@ -71,13 +108,9 @@ async fn paginates_all_pages_using_page_count_from_response() {
     Mock::given(matchers::method("GET"))
         .and(matchers::path("/ft-token-actions"))
         .and(matchers::query_param("page", "1"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-            "data": (0..100u32)
-                .map(|i| json!({ "deploy_hash": format!("d{i}"), "from_hash": "ico_hash", "amount": "1" }))
-                .collect::<Vec<_>>(),
-            "item_count": 100,
-            "page_count": 2
-        })))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(payloads::ft_actions_100_items_page1()),
+        )
         .mount(&server)
         .await;
 
@@ -85,14 +118,9 @@ async fn paginates_all_pages_using_page_count_from_response() {
     Mock::given(matchers::method("GET"))
         .and(matchers::path("/ft-token-actions"))
         .and(matchers::query_param("page", "2"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-            "data": [
-                { "deploy_hash": "d100", "from_hash": "ico_hash", "amount": "2" },
-                { "deploy_hash": "d101", "from_hash": "ico_hash", "amount": "3" }
-            ],
-            "item_count": 2,
-            "page_count": 2
-        })))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(payloads::ft_actions_2_items_page2()),
+        )
         .mount(&server)
         .await;
 
@@ -187,22 +215,9 @@ async fn load_big_transfers_returns_error_on_4xx_response() {
 
 // parse_purchase_args
 
-/// Helper: build a purchase session with given amount and currency.
-fn purchase_session(amount: &serde_json::Value, currency: u64) -> serde_json::Value {
-    json!({
-        "StoredVersionedContractByHash": {
-            "entry_point": "purchase",
-            "args": [
-                ["amount_to_spend", {"parsed": amount}],
-                ["currency",        {"parsed": currency}]
-            ]
-        }
-    })
-}
-
 #[test]
 fn parse_purchase_args_extracts_string_amount_and_currency() {
-    let session = purchase_session(&json!("50000000"), 0);
+    let session = payloads::purchase_session(&json!("50000000"), 0);
     let (cost, currency_id) = ico::parse_purchase_args(&session).unwrap();
     assert_eq!(cost, "50000000");
     assert_eq!(currency_id, 0);
@@ -211,7 +226,7 @@ fn parse_purchase_args_extracts_string_amount_and_currency() {
 #[test]
 fn parse_purchase_args_extracts_numeric_amount() {
     // Some node versions return `parsed` as a JSON number, not a string.
-    let session = purchase_session(&json!(12345u64), 2);
+    let session = payloads::purchase_session(&json!(12345u64), 2);
     let (cost, currency_id) = ico::parse_purchase_args(&session).unwrap();
     assert_eq!(cost, "12345");
     assert_eq!(currency_id, 2);
@@ -268,4 +283,374 @@ fn ico_currency_name_maps_all_known_variants() {
 fn ico_currency_name_returns_unknown_for_unrecognised_ids() {
     assert_eq!(ico::ico_currency_name(3), "UNKNOWN");
     assert_eq!(ico::ico_currency_name(255), "UNKNOWN");
+}
+
+// backfill_ico integration tests (sqlx::test + wiremock)
+
+/// Builds a minimal `IndexerConfig` pointing at both mock server URLs.
+fn test_config_with_node(rest_url: String, node_url: String) -> IndexerConfig {
+    IndexerConfig {
+        database_url: "postgres://localhost/test".to_owned().into(),
+        casper: Casper {
+            api_token: "test-token".to_owned().into(),
+            rest_url,
+            wss_url: "wss://test".to_owned(),
+            node_url,
+        },
+        contracts: ContractRegistry::default(),
+        backfill_rate_limit_ms: 0,
+        wss_reconnect_delay_ms: 0,
+    }
+}
+
+/// One-page `/deploys` wiremock response with the given deploy entries.
+#[allow(clippy::needless_pass_by_value)]
+fn deploys_page(deploys: serde_json::Value) -> ResponseTemplate {
+    ResponseTemplate::new(200).set_body_json(json!({ "data": deploys, "page_count": 1 }))
+}
+
+/// Casper Node RPC response indicating the deploy was not found (too old).
+fn rpc_deploy_not_found() -> ResponseTemplate {
+    ResponseTemplate::new(200).set_body_json(json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "error": { "code": -32001, "message": "Deploy not found" }
+    }))
+}
+
+/// Deploy returned by `/deploys` but not found on the Casper node (RPC error).
+///
+/// Expected: `blockchain_transactions` is empty; cursor advances to the
+/// deploy's `block_height` because the deploy passed the `error_message` filter.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn deploy_not_on_node_advances_cursor_but_writes_nothing(pool: PgPool) {
+    disable_rls(&pool).await;
+    let rest = MockServer::start().await;
+    let node = MockServer::start().await;
+    let config = test_config_with_node(rest.uri(), node.uri());
+    let client = Client::new();
+    let registry = EventRegistry::new();
+
+    Mock::given(matchers::method("GET"))
+        .and(matchers::path("/ft-token-actions"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(json!({ "data": [], "page_count": 1 })),
+        )
+        .mount(&rest)
+        .await;
+    Mock::given(matchers::method("GET"))
+        .and(matchers::path("/deploys"))
+        .respond_with(deploys_page(json!([
+            { "deploy_hash": "deploy_abc", "block_height": 100, "error_message": null }
+        ])))
+        .mount(&rest)
+        .await;
+    Mock::given(matchers::method("POST"))
+        .respond_with(rpc_deploy_not_found())
+        .mount(&node)
+        .await;
+
+    ico::backfill_ico(
+        &IcoBackfillCtx {
+            client: &client,
+            config: &config,
+            db_pool: &pool,
+            registry: &registry,
+            big_hash: "big_hash",
+        },
+        ContractType::Ico,
+        "ico_hash",
+        0,
+    )
+    .await
+    .unwrap();
+
+    let tx_count: i64 = sqlx::query_scalar!(
+        r"
+            SELECT COUNT(*) FROM blockchain_transactions
+            WHERE transaction_type = 'token_purchase'
+        "
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap()
+    .unwrap_or(0);
+    assert_eq!(
+        tx_count, 0,
+        "no purchase should be written when node returns error"
+    );
+
+    let cursor: Option<i64> = sqlx::query_scalar!(
+        r"
+            SELECT last_event_id FROM event_cursors
+            WHERE stream_type = 'backfill' AND contract_hash = 'ico_hash'
+        "
+    )
+    .fetch_optional(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        cursor,
+        Some(100),
+        "cursor must advance even when deploy was skipped by node"
+    );
+}
+
+/// Deploy with `error_message` set is filtered out before any processing.
+///
+/// Expected: nothing written to DB; cursor NOT saved because `page_max_block`
+/// is never set for errored deploys.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn failed_deploy_skipped_and_cursor_not_updated(pool: PgPool) {
+    disable_rls(&pool).await;
+    let rest = MockServer::start().await;
+    let node = MockServer::start().await;
+    let config = test_config_with_node(rest.uri(), node.uri());
+    let client = Client::new();
+    let registry = EventRegistry::new();
+
+    Mock::given(matchers::method("GET"))
+        .and(matchers::path("/ft-token-actions"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(json!({ "data": [], "page_count": 1 })),
+        )
+        .mount(&rest)
+        .await;
+    Mock::given(matchers::method("GET"))
+        .and(matchers::path("/deploys"))
+        .respond_with(deploys_page(json!([
+            {
+                "deploy_hash": "failed_deploy",
+                "block_height": 200,
+                "error_message": "User error: insufficient funds"
+            }
+        ])))
+        .mount(&rest)
+        .await;
+
+    ico::backfill_ico(
+        &IcoBackfillCtx {
+            client: &client,
+            config: &config,
+            db_pool: &pool,
+            registry: &registry,
+            big_hash: "big_hash",
+        },
+        ContractType::Ico,
+        "ico_hash",
+        0,
+    )
+    .await
+    .unwrap();
+
+    let tx_count: i64 = sqlx::query_scalar!("SELECT COUNT(*) FROM blockchain_transactions")
+        .fetch_one(&pool)
+        .await
+        .unwrap()
+        .unwrap_or(0);
+    assert_eq!(
+        tx_count, 0,
+        "failed deploy must not produce any transaction"
+    );
+
+    let cursor: Option<i64> = sqlx::query_scalar!(
+        r"
+            SELECT last_event_id FROM event_cursors
+            WHERE stream_type = 'backfill' AND contract_hash = 'ico_hash'
+        "
+    )
+    .fetch_optional(&pool)
+    .await
+    .unwrap();
+    assert!(
+        cursor.is_none(),
+        "cursor must not be saved when all deploys are filtered out"
+    );
+}
+
+/// Pre-existing cursor makes the backfill skip deploys at or below that block.
+///
+/// Expected: node RPC is never called; no new DB writes; cursor unchanged.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn cursor_resume_skips_already_processed_blocks(pool: PgPool) {
+    disable_rls(&pool).await;
+    let rest = MockServer::start().await;
+    let node = MockServer::start().await;
+    let config = test_config_with_node(rest.uri(), node.uri());
+    let client = Client::new();
+    let registry = EventRegistry::new();
+
+    // Seed cursor at block 500 — simulates a previous successful run.
+    sqlx::query!(
+        r"
+            INSERT INTO event_cursors (stream_type, contract_hash, last_event_id, last_updated_at)
+            VALUES ('backfill', 'ico_hash', 500, NOW())
+        "
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    Mock::given(matchers::method("GET"))
+        .and(matchers::path("/ft-token-actions"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(json!({ "data": [], "page_count": 1 })),
+        )
+        .mount(&rest)
+        .await;
+    Mock::given(matchers::method("GET"))
+        .and(matchers::path("/deploys"))
+        .respond_with(deploys_page(json!([
+            { "deploy_hash": "old_deploy", "block_height": 400, "error_message": null }
+        ])))
+        .mount(&rest)
+        .await;
+    // Node must NOT be called for blocks below cursor.
+    Mock::given(matchers::method("POST"))
+        .respond_with(rpc_deploy_not_found())
+        .expect(0)
+        .mount(&node)
+        .await;
+
+    ico::backfill_ico(
+        &IcoBackfillCtx {
+            client: &client,
+            config: &config,
+            db_pool: &pool,
+            registry: &registry,
+            big_hash: "big_hash",
+        },
+        ContractType::Ico,
+        "ico_hash",
+        0,
+    )
+    .await
+    .unwrap();
+
+    let cursor: Option<i64> = sqlx::query_scalar!(
+        r"
+            SELECT last_event_id FROM event_cursors
+            WHERE stream_type = 'backfill' AND contract_hash = 'ico_hash'
+        "
+    )
+    .fetch_optional(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        cursor,
+        Some(500),
+        "cursor must not regress after skipping old deploys"
+    );
+}
+
+/// Full happy-path: valid `purchase` deploy with a matching BIG transfer
+/// must write rows to `ico_purchases`, `blockchain_transactions`, and
+/// `token_holdings`.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn successful_purchase_written_to_all_tables(pool: PgPool) {
+    disable_rls(&pool).await;
+    let rest = MockServer::start().await;
+    let node = MockServer::start().await;
+    let config = test_config_with_node(rest.uri(), node.uri());
+    let client = Client::new();
+    let registry = EventRegistry::new();
+
+    // BIG transfer: ICO sent 1000 BIG tokens for this deploy.
+    Mock::given(matchers::method("GET"))
+        .and(matchers::path("/ft-token-actions"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "data": [{ "deploy_hash": PURCHASE_DEPLOY_HASH, "from_hash": "ico_hash", "amount": "1000" }],
+            "page_count": 1
+        })))
+        .mount(&rest)
+        .await;
+    Mock::given(matchers::method("GET"))
+        .and(matchers::path("/deploys"))
+        .respond_with(deploys_page(json!([
+            { "deploy_hash": PURCHASE_DEPLOY_HASH, "block_height": 300, "error_message": null }
+        ])))
+        .mount(&rest)
+        .await;
+    // Node returns a valid `purchase` deploy; currency=1 (USDC), cost=50000000.
+    Mock::given(matchers::method("POST"))
+        .respond_with(payloads::rpc_purchase_deploy("50000000", 1))
+        .mount(&node)
+        .await;
+
+    ico::backfill_ico(
+        &IcoBackfillCtx {
+            client: &client,
+            config: &config,
+            db_pool: &pool,
+            registry: &registry,
+            big_hash: "big_hash",
+        },
+        ContractType::Ico,
+        "ico_hash",
+        0,
+    )
+    .await
+    .unwrap();
+
+    // ico_purchases must have exactly one row.
+    let purchase = sqlx::query!(
+        r"
+            SELECT buyer_address, amount, currency, cost FROM ico_purchases
+            WHERE transaction_hash = $1
+        ",
+        PURCHASE_DEPLOY_HASH
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("ico_purchases must have a row for the purchase deploy");
+
+    assert_eq!(purchase.buyer_address, "buyer_public_key_hex");
+    assert_eq!(purchase.amount, "1000");
+    assert_eq!(purchase.currency, "USDC");
+    assert_eq!(purchase.cost, "50000000");
+
+    // blockchain_transactions must have a 'token_purchase' row.
+    let tx_count: i64 = sqlx::query_scalar!(
+        r"
+            SELECT COUNT(*) FROM blockchain_transactions
+            WHERE transaction_hash = $1 AND transaction_type = 'token_purchase'
+        ",
+        PURCHASE_DEPLOY_HASH
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap()
+    .unwrap_or(0);
+    assert_eq!(
+        tx_count, 1,
+        "blockchain_transactions must have one token_purchase row"
+    );
+
+    // token_holdings must reflect 1000 BIG for the buyer.
+    let balance: Option<String> = sqlx::query_scalar!(
+        r"
+            SELECT balance FROM token_holdings
+            WHERE user_address = 'buyer_public_key_hex' AND token_type = 'BIG'
+         "
+    )
+    .fetch_optional(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        balance.as_deref(),
+        Some("1000"),
+        "buyer BIG balance must equal purchased amount"
+    );
+
+    // Cursor must advance to block 300.
+    let cursor: Option<i64> = sqlx::query_scalar!(
+        r"
+            SELECT last_event_id FROM event_cursors
+            WHERE stream_type = 'backfill' AND contract_hash = 'ico_hash'
+        "
+    )
+    .fetch_optional(&pool)
+    .await
+    .unwrap();
+    assert_eq!(cursor, Some(300));
 }

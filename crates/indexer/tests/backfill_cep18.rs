@@ -13,6 +13,9 @@
 //!    correct URL construction, authorization header, response parsing, and
 //!    error propagation without requiring a real database or CSPR.cloud access.
 
+mod common;
+
+use common::payloads;
 use reqwest::Client;
 use serde_json::json;
 use wiremock::{Mock, MockServer, ResponseTemplate, matchers};
@@ -174,19 +177,7 @@ async fn fetch_page_parses_data_and_page_count() {
 
     Mock::given(matchers::method("GET"))
         .and(matchers::path("/ft-token-actions"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-            "data": [
-                {
-                    "deploy_hash": "deploy_abc",
-                    "block_height": 1234,
-                    "from_hash": "sender",
-                    "to_hash": "receiver",
-                    "amount": "9999",
-                    "ft_action_type_id": 2
-                }
-            ],
-            "page_count": 5
-        })))
+        .respond_with(ResponseTemplate::new(200).set_body_json(payloads::ft_actions_one_transfer_page()))
         .mount(&server)
         .await;
 

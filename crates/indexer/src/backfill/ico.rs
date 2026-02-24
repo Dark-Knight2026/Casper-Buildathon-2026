@@ -112,17 +112,18 @@ struct CasperDeployHeader {
 // -----------------------------------------------------------------------------
 
 /// Shared dependencies for ICO backfill operations.
-pub(super) struct IcoBackfillCtx<'a> {
+#[derive(Debug)]
+pub struct IcoBackfillCtx<'a> {
     /// HTTP client used for CSPR.cloud and Casper Node RPC requests.
-    pub(super) client: &'a Client,
+    pub client: &'a Client,
     /// Indexer configuration (API token, URLs, rate limit).
-    pub(super) config: &'a IndexerConfig,
+    pub config: &'a IndexerConfig,
     /// Database connection pool for reading and writing events.
-    pub(super) db_pool: &'a PgPool,
+    pub db_pool: &'a PgPool,
     /// Event registry for dispatching processed events.
-    pub(super) registry: &'a EventRegistry,
+    pub registry: &'a EventRegistry,
     /// BIG token contract package hash — used to look up purchase amounts in DB.
-    pub(super) big_hash: &'a str,
+    pub big_hash: &'a str,
 }
 
 // -----------------------------------------------------------------------------
@@ -141,7 +142,12 @@ pub(super) struct IcoBackfillCtx<'a> {
 ///
 /// Deploys older than ~2–3 days are not accessible on the node and are
 /// skipped with a `WARN` log.
-pub(super) async fn backfill_ico(
+///
+/// # Errors
+///
+/// Returns [`IndexerError`] on HTTP, API, or database failures.
+#[inline]
+pub async fn backfill_ico(
     ctx: &IcoBackfillCtx<'_>,
     contract_type: ContractType,
     contract_hash: &str,

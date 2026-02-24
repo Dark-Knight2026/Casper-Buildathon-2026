@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT COUNT(*) FROM blockchain_transactions\n            WHERE transaction_hash = $1 AND transaction_type = 'token_purchase'\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "count",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "bbf90b1c6f7ab0589cf9bb2fcb9377d91901548905291a2c7362e46b512db8ca"
+}
