@@ -17,7 +17,7 @@
 //! All events are funneled through the same [`processor`] pipeline used by
 //! streaming, so balance updates and idempotency logic is shared.
 
-mod cep18;
+pub mod cep18;
 pub mod db;
 pub mod ico;
 

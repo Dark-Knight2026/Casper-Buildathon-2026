@@ -24,11 +24,13 @@ use crate::{
 #[derive(Debug, Deserialize)]
 struct FtTokenActionPage {
     data: Vec<FtTokenAction>,
+    /// Total number of pages for the current query (used for pagination).
+    page_count: u32,
 }
 
 /// A single fungible-token action returned by CSPR.cloud.
 #[derive(Debug, Deserialize)]
-struct FtTokenAction {
+pub struct FtTokenAction {
     /// Hash of the deploy that triggered this action.
     deploy_hash: String,
     /// Block in which the deploy was included.
@@ -41,6 +43,29 @@ struct FtTokenAction {
     amount: String,
     /// `1` = Mint, `2` = Approve, `3` = Transfer.
     ft_action_type_id: u8,
+}
+
+impl FtTokenAction {
+    /// Construct a token action — intended for use in tests.
+    #[inline]
+    #[must_use]
+    pub fn new(
+        deploy_hash: impl Into<String>,
+        block_height: u64,
+        from_hash: Option<impl Into<String>>,
+        to_hash: Option<impl Into<String>>,
+        amount: impl Into<String>,
+        ft_action_type_id: u8,
+    ) -> Self {
+        Self {
+            deploy_hash: deploy_hash.into(),
+            block_height,
+            from_hash: from_hash.map(Into::into),
+            to_hash: to_hash.map(Into::into),
+            amount: amount.into(),
+            ft_action_type_id,
+        }
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -97,7 +122,7 @@ pub(super) async fn backfill_cep18(
         }
 
         let page_data = response.json::<FtTokenActionPage>().await?;
-        let page_len = page_data.data.len();
+        let page_count = page_data.page_count;
         let mut page_max_block: Option<u64> = None;
 
         for action in &page_data.data {
@@ -141,7 +166,7 @@ pub(super) async fn backfill_cep18(
         }
         tokio::time::sleep(Duration::from_millis(config.backfill_rate_limit_ms)).await;
 
-        if page_len < 100 {
+        if page >= page_count {
             break;
         }
         page += 1;
@@ -160,7 +185,8 @@ pub(super) async fn backfill_cep18(
 /// suitable for the shared event processor.
 ///
 /// Returns `None` for action types that should be skipped entirely.
-fn ft_action_to_event(action: &FtTokenAction) -> Option<(&'static str, serde_json::Value)> {
+#[inline]
+pub fn ft_action_to_event(action: &FtTokenAction) -> Option<(&'static str, serde_json::Value)> {
     match action.ft_action_type_id {
         // Mint — new tokens created, no sender
         1 => {
@@ -171,23 +197,25 @@ fn ft_action_to_event(action: &FtTokenAction) -> Option<(&'static str, serde_jso
             ))
         }
 
-        // Approve — allowance set; stored as raw data (no dedicated handler yet)
+        // Transfer — the primary CEP-18 action with a dedicated handler.
+        // CSPR.cloud ft_action_type_id=2 is "Transfer" per /ft-token-action-types.
         2 => {
-            let owner = action.from_hash.as_deref().unwrap_or_default();
-            let spender = action.to_hash.as_deref().unwrap_or_default();
-            Some((
-                "SetAllowance",
-                json!({ "owner": owner, "spender": spender, "amount": action.amount }),
-            ))
-        }
-
-        // Transfer — the primary CEP-18 action with a dedicated handler
-        3 => {
             let sender = action.from_hash.as_deref().unwrap_or_default();
             let recipient = action.to_hash.as_deref().unwrap_or_default();
             Some((
                 "Transfer",
                 json!({ "sender": sender, "recipient": recipient, "amount": action.amount }),
+            ))
+        }
+
+        // Approve — allowance set; stored as raw data (no dedicated handler yet).
+        // CSPR.cloud ft_action_type_id=3 is "Approve" per /ft-token-action-types.
+        3 => {
+            let owner = action.from_hash.as_deref().unwrap_or_default();
+            let spender = action.to_hash.as_deref().unwrap_or_default();
+            Some((
+                "SetAllowance",
+                json!({ "owner": owner, "spender": spender, "amount": action.amount }),
             ))
         }
 

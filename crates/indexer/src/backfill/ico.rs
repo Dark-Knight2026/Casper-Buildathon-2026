@@ -30,6 +30,8 @@ use crate::{
 #[derive(Debug, Deserialize)]
 struct BigTransferPage {
     data: Vec<BigTransferItem>,
+    /// Total number of pages for the current query (used for pagination).
+    page_count: u32,
 }
 
 /// Minimal fields needed to identify a BIG transfer triggered by the ICO.
@@ -51,6 +53,8 @@ struct BigTransferItem {
 #[derive(Debug, Deserialize)]
 struct DeployListPage {
     data: Vec<DeployListItem>,
+    /// Total number of pages for the current query (used for pagination).
+    page_count: u32,
 }
 
 /// A single deploy entry returned by CSPR.cloud.
@@ -186,7 +190,7 @@ pub(super) async fn backfill_ico(
         }
 
         let page_data = response.json::<DeployListPage>().await?;
-        let page_len = page_data.data.len();
+        let page_count = page_data.page_count;
         let mut page_max_block: Option<u64> = None;
 
         for deploy_item in &page_data.data {
@@ -217,7 +221,7 @@ pub(super) async fn backfill_ico(
             db::update_cursor(ctx.db_pool, contract_hash, max_block.cast_signed()).await?;
         }
 
-        if page_len < 100 {
+        if page >= page_count {
             break;
         }
         page += 1;
@@ -342,7 +346,8 @@ async fn process_ico_deploy(
 /// Extract `(amount_to_spend, currency_id)` from the deploy session args.
 ///
 /// Returns `None` if the expected args are missing or malformed.
-fn parse_purchase_args(session: &serde_json::Value) -> Option<(String, u8)> {
+#[inline]
+pub fn parse_purchase_args(session: &serde_json::Value) -> Option<(String, u8)> {
     let args = session
         .get("StoredVersionedContractByHash")?
         .get("args")?
@@ -360,7 +365,7 @@ fn parse_purchase_args(session: &serde_json::Value) -> Option<(String, u8)> {
             "amount_to_spend" => {
                 // `parsed` is a decimal string for U256
                 cost = value.get("parsed").and_then(|v| {
-                    // May be a number or string depending on the node version
+                    // It may be a number or string depending on the node version
                     if let Some(s) = v.as_str() {
                         Some(s.to_owned())
                     } else {
@@ -385,7 +390,9 @@ fn parse_purchase_args(session: &serde_json::Value) -> Option<(String, u8)> {
 /// Map the ICO `Currency` enum variant index to a human-readable string.
 ///
 /// Matches the Rust enum order: `CSPR = 0`, `USDC = 1`, `USDT = 2`.
-fn ico_currency_name(id: u8) -> &'static str {
+#[inline]
+#[must_use]
+pub fn ico_currency_name(id: u8) -> &'static str {
     match id {
         0 => "CSPR",
         1 => "USDC",
@@ -438,7 +445,7 @@ pub async fn load_big_transfers(
         }
 
         let page_data = response.json::<BigTransferPage>().await?;
-        let page_len = page_data.data.len();
+        let page_count = page_data.page_count;
 
         for item in page_data.data {
             if item.from_hash.as_deref() == Some(ico_hash) {
@@ -448,7 +455,7 @@ pub async fn load_big_transfers(
 
         tokio::time::sleep(Duration::from_millis(config.backfill_rate_limit_ms)).await;
 
-        if page_len < 100 {
+        if page >= page_count {
             break;
         }
         page += 1;
