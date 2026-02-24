@@ -30,6 +30,21 @@ const BIG_TOKEN_HASH = ICO_CONFIG.CONTRACTS.tokenAddress.replace(/^hash-/, '').t
 const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 /**
+ * Safe BigInt parsing — returns null instead of throwing on invalid input.
+ * Handles: non-numeric strings, decimals ("1.5"), scientific notation ("1e18"), empty strings.
+ */
+function safeBigInt(raw: string): bigint | null {
+  // BigInt only accepts integer strings — strip any decimal part defensively
+  const intPart = raw.split('.')[0];
+  if (!intPart || !/^\d+$/.test(intPart)) return null;
+  try {
+    return BigInt(intPart);
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Fetches BIG token transfer amount from CSPR.Cloud REST API.
  * Uses `/ft-token-actions?deploy_hash={hash}` via Vite proxy.
  * Retries up to `maxRetries` times with a delay to account for indexer lag.
@@ -72,10 +87,10 @@ async function fetchActualTokensReceived(
       for (const item of items) {
         const contractHash = String(item.contract_package_hash ?? item.contract_hash ?? '').toLowerCase();
         if (contractHash === BIG_TOKEN_HASH) {
-          const rawAmount = String(item.amount ?? '0');
+          const rawAmount = String(item.amount ?? '');
           console.log(LOG_PREFIX, '[fetchTokens] Found BIG transfer:', rawAmount);
-          const value = BigInt(rawAmount);
-          if (value > 0n) return value;
+          const value = safeBigInt(rawAmount);
+          if (value !== null && value > 0n) return value;
         }
       }
 
