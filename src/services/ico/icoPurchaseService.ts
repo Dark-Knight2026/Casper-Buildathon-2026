@@ -358,6 +358,38 @@ export async function submitTransaction(
   return result.transactionHash.toString();
 }
 
+// ── Contract error code mapping (from ico_schema.json) ──────────────
+
+const CONTRACT_ERROR_MAP: Record<string, string> = {
+  '59000': 'Invalid ICO schedule',
+  '59001': 'Invalid ICO schedule start time',
+  '59002': 'Invalid ICO schedule end time',
+  '59003': 'Invalid ICO schedule sale amount',
+  '59004': 'Invalid ICO schedule price',
+  '59005': 'Invalid amount to spend',
+  '59006': 'Unsupported currency',
+  '59007': 'No active ICO schedule — sale is not currently open',
+  '59008': 'Price oracle unavailable — please try again later',
+  '59010': 'Invalid amount attached to transaction',
+  '59011': 'Insufficient tokens available for sale',
+  '59012': 'Purchase amount below minimum',
+  '20000': 'Contract owner not configured',
+  '20001': 'Unauthorized: caller is not the owner',
+  '20003': 'Unauthorized: missing required role',
+  '20004': 'Cannot renounce role for another address',
+};
+
+function parseContractError(rawMessage?: string): string {
+  if (!rawMessage) return 'Deploy failed';
+
+  const match = rawMessage.match(/User error: (\d+)/);
+  if (match) {
+    return CONTRACT_ERROR_MAP[match[1]] || rawMessage;
+  }
+
+  return rawMessage;
+}
+
 /**
  * Gets the status of a submitted deploy.
  */
@@ -387,7 +419,7 @@ export async function getDeployStatus(
     if (execResult?.Failure) {
       return {
         status: 'failed',
-        errorMessage: execResult.Failure.error_message || 'Deploy failed',
+        errorMessage: parseContractError(execResult.Failure.error_message),
       };
     }
 
