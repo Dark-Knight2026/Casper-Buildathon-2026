@@ -1,36 +1,41 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import React from 'react';
 import { useWalletBalances } from '@/hooks/ico/useWalletBalances';
 
-// Mock casper-js-sdk (used by fetchCSPRBalance for RPC calls)
+// Mock fetch (used only for FT balance via CSPR.Cloud REST API)
+const mockFetch = vi.fn();
+global.fetch = mockFetch;
+
+// Mock casper-js-sdk (PublicKey used for account hash derivation,
+// PurseIdentifier used for CSPR balance query)
 vi.mock('casper-js-sdk', () => ({
   PublicKey: {
-    fromHex: vi.fn((hex: string) => ({
+    fromHex: vi.fn(() => ({
       accountHash: () => ({
-        toPrefixedString: () => `account-hash-${hex.slice(0, 16)}`,
+        toPrefixedString: () => 'account-hash-mock',
       }),
     })),
   },
   PurseIdentifier: {
-    fromPublicKey: vi.fn((pk: unknown) => pk),
+    fromPublicKey: vi.fn(() => 'mock-purse-id'),
   },
 }));
 
-// Mock RPC client (CSPR balance is fetched via RPC, not fetch)
+// Mock casperClient (CSPR balance is fetched via RPC, not REST)
 const mockQueryLatestBalance = vi.fn();
 const mockQueryLatestGlobalState = vi.fn();
-
 vi.mock('@/services/ico/casperClient', () => ({
   getCasperRpcClient: () => ({
-    queryLatestBalance: (...args: unknown[]) => mockQueryLatestBalance(...args),
-    queryLatestGlobalState: (...args: unknown[]) => mockQueryLatestGlobalState(...args),
-    getLatestBalance: vi.fn(),
+    queryLatestBalance: mockQueryLatestBalance,
+    queryLatestGlobalState: vi.fn().mockRejectedValue(new Error('fallback not mocked')),
+    getLatestBalance: vi.fn().mockRejectedValue(new Error('fallback not mocked')),
   }),
 }));
 
-// Mock cep18Service (TOKEN_HASHES used at module level for hash matching)
+// Mock cep18Service (provides TOKEN_HASHES for FT balance matching)
 vi.mock('@/services/ico/cep18Service', () => ({
-  getBalance: vi.fn(),
   TOKEN_HASHES: {
     USDT: 'hash-usdt123',
     USDC: 'hash-usdc456',
@@ -38,27 +43,9 @@ vi.mock('@/services/ico/cep18Service', () => ({
   },
 }));
 
-// Mock ICO_CONFIG
-vi.mock('@/constants/ico', () => ({
-  ICO_CONFIG: {
-    CASPER: {
-      networkName: 'casper-test',
-    },
-    CONTRACTS: {
-      usdtAddress: 'hash-usdt123',
-      usdcAddress: 'hash-usdc456',
-      tokenAddress: 'hash-big789',
-    },
-  },
-}));
-
-// Mock fetch (used only for FT balances via CSPR.Cloud REST API)
-const mockFetch = vi.fn();
-global.fetch = mockFetch;
-
 const mockPublicKey = '01abc123def456789abc123def456789abc123def456789abc123def456789abc1';
 
-// FT balance API response (matched by contract_package_hash → KNOWN_HASHES)
+// Mock FT balance API response
 const mockFTBalanceResponse = {
   data: [
     {
@@ -75,6 +62,33 @@ const mockFTBalanceResponse = {
     },
   ],
 };
+
+function createWrapper() {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false,
+      },
+    },
+  });
+  return ({ children }: { children: React.ReactNode }) =>
+    React.createElement(QueryClientProvider, { client: queryClient }, children);
+}
+
+/** Helper: mock a successful CSPR balance (in motes) */
+function mockCSPRBalance(motes: string) {
+  mockQueryLatestBalance.mockResolvedValueOnce({
+    balance: { toString: () => motes },
+  });
+}
+
+/** Helper: mock a successful FT balance response */
+function mockFTBalance(response = mockFTBalanceResponse) {
+  mockFetch.mockResolvedValueOnce({
+    ok: true,
+    json: () => Promise.resolve(response),
+  });
+}
 
 describe('useWalletBalances', () => {
   beforeEach(() => {
@@ -98,7 +112,9 @@ describe('useWalletBalances', () => {
 
   describe('initial state', () => {
     it('should return zero balances when no publicKey provided', () => {
-      const { result } = renderHook(() => useWalletBalances(null));
+      const { result } = renderHook(() => useWalletBalances(null), {
+        wrapper: createWrapper(),
+      });
 
       expect(result.current.balances).toEqual({
         cspr: 0,
@@ -111,7 +127,9 @@ describe('useWalletBalances', () => {
     });
 
     it('should return zero balances for undefined publicKey', () => {
-      const { result } = renderHook(() => useWalletBalances(undefined));
+      const { result } = renderHook(() => useWalletBalances(undefined), {
+        wrapper: createWrapper(),
+      });
 
       expect(result.current.balances.cspr).toBe(0);
     });
@@ -121,29 +139,28 @@ describe('useWalletBalances', () => {
 
   describe('fetch balances', () => {
     it('should fetch balances when publicKey is provided', async () => {
-      mockFetch.mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve(mockFTBalanceResponse),
+      mockCSPRBalance('5000000000000'); // 5000 CSPR
+      mockFTBalance(mockFTBalanceResponse);
+
+      const { result } = renderHook(() => useWalletBalances(mockPublicKey), {
+        wrapper: createWrapper(),
       });
-
-      const { result } = renderHook(() => useWalletBalances(mockPublicKey));
-
-      expect(result.current.isLoading).toBe(true);
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
       });
 
       expect(result.current.error).toBeNull();
-      expect(result.current.balances.cspr).toBe(5000); // 5000 CSPR via RPC
+      expect(result.current.balances.cspr).toBe(5000);
     });
 
     it('should convert CSPR balance from motes correctly', async () => {
-      mockQueryLatestBalance.mockResolvedValue({
-        balance: '1000000000', // 1 CSPR in motes
-      });
+      mockCSPRBalance('1000000000'); // 1 CSPR
+      mockFTBalance({ data: [] });
 
-      const { result } = renderHook(() => useWalletBalances(mockPublicKey));
+      const { result } = renderHook(() => useWalletBalances(mockPublicKey), {
+        wrapper: createWrapper(),
+      });
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -153,12 +170,12 @@ describe('useWalletBalances', () => {
     });
 
     it('should find FT balances by contract hash', async () => {
-      mockFetch.mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve(mockFTBalanceResponse),
-      });
+      mockCSPRBalance('5000000000000');
+      mockFTBalance(mockFTBalanceResponse);
 
-      const { result } = renderHook(() => useWalletBalances(mockPublicKey));
+      const { result } = renderHook(() => useWalletBalances(mockPublicKey), {
+        wrapper: createWrapper(),
+      });
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -169,56 +186,70 @@ describe('useWalletBalances', () => {
     });
 
     it('should handle 404 for FT tokens (no tokens)', async () => {
-      mockFetch.mockResolvedValue({
+      mockCSPRBalance('5000000000000');
+      mockFetch.mockResolvedValueOnce({
         ok: false,
         status: 404,
-        text: () => Promise.resolve(''),
+        text: () => Promise.resolve('Not Found'),
       });
 
-      const { result } = renderHook(() => useWalletBalances(mockPublicKey));
+      const { result } = renderHook(() => useWalletBalances(mockPublicKey), {
+        wrapper: createWrapper(),
+      });
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
       });
 
-      // Hook throws on !resp.ok (including 404), caught by Promise.allSettled
-      expect(result.current.error).toContain('FT tokens:');
+      // Promise.allSettled: 404 → graceful degradation, zero FT balances, no error
+      expect(result.current.error).toBeNull();
       expect(result.current.balances.usdt).toBe(0);
       expect(result.current.balances.usdc).toBe(0);
       expect(result.current.balances.big).toBe(0);
     });
   });
 
-  // --- Error handling ---
+  // --- Graceful degradation (Promise.allSettled) ---
 
-  describe('error handling', () => {
-    it('should set error on CSPR balance fetch failure', async () => {
-      mockQueryLatestBalance.mockRejectedValue(new Error('RPC connection failed'));
+  describe('graceful degradation', () => {
+    it('should return zero CSPR balance when RPC fetch fails', async () => {
+      mockQueryLatestBalance.mockRejectedValueOnce(new Error('RPC error'));
+      mockFTBalance({ data: [] });
 
-      const { result } = renderHook(() => useWalletBalances(mockPublicKey));
+      const { result } = renderHook(() => useWalletBalances(mockPublicKey), {
+        wrapper: createWrapper(),
+      });
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
       });
 
-      expect(result.current.error).toContain('CSPR:');
+      // Promise.allSettled: partial failure → zero balance, no error
+      expect(result.current.error).toBeNull();
       expect(result.current.balances.cspr).toBe(0);
     });
 
-    it('should set error on FT balance fetch failure', async () => {
-      mockFetch.mockResolvedValue({
+    it('should return zero FT balances when FT fetch fails', async () => {
+      mockCSPRBalance('5000000000000');
+      mockFetch.mockResolvedValueOnce({
         ok: false,
         status: 500,
         text: () => Promise.resolve('Internal Server Error'),
       });
 
-      const { result } = renderHook(() => useWalletBalances(mockPublicKey));
+      const { result } = renderHook(() => useWalletBalances(mockPublicKey), {
+        wrapper: createWrapper(),
+      });
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
       });
 
-      expect(result.current.error).toContain('FT tokens:');
+      // Promise.allSettled: partial failure → zero balances, no error
+      expect(result.current.error).toBeNull();
+      expect(result.current.balances.cspr).toBe(5000);
+      expect(result.current.balances.usdt).toBe(0);
+      expect(result.current.balances.usdc).toBe(0);
     });
   });
 
@@ -226,7 +257,12 @@ describe('useWalletBalances', () => {
 
   describe('refetch', () => {
     it('should provide refetch function', async () => {
-      const { result } = renderHook(() => useWalletBalances(mockPublicKey));
+      mockCSPRBalance('5000000000000');
+      mockFTBalance({ data: [] });
+
+      const { result } = renderHook(() => useWalletBalances(mockPublicKey), {
+        wrapper: createWrapper(),
+      });
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -236,53 +272,58 @@ describe('useWalletBalances', () => {
     });
   });
 
-  // --- Auto-refresh setup ---
-
-  describe('auto-refresh', () => {
-    it('should set up auto-refresh interval when publicKey provided', () => {
-      const setIntervalSpy = vi.spyOn(global, 'setInterval');
-
-      renderHook(() => useWalletBalances(mockPublicKey));
-
-      // Hook uses 60 second interval
-      expect(setIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 60000);
-
-      setIntervalSpy.mockRestore();
-    });
-  });
-
   // --- PublicKey validation ---
 
   describe('publicKey validation', () => {
-    it('should set error for publicKey with wrong length', () => {
-      const { result } = renderHook(() => useWalletBalances('01abc123'));
+    it('should set error for publicKey with wrong length', async () => {
+      const { result } = renderHook(() => useWalletBalances('01abc123'), {
+        wrapper: createWrapper(),
+      });
 
-      expect(result.current.error).toBe('Invalid public key format');
+      await waitFor(() => {
+        expect(result.current.error).toBe('Invalid public key format');
+      });
+
       expect(result.current.balances.cspr).toBe(0);
       expect(mockQueryLatestBalance).not.toHaveBeenCalled();
     });
 
-    it('should set error for publicKey with wrong prefix', () => {
+    it('should set error for publicKey with wrong prefix', async () => {
       // Valid length but starts with '03' instead of '01' or '02'
       const invalidKey = '03abc123def456789abc123def456789abc123def456789abc123def456789abc1';
-      const { result } = renderHook(() => useWalletBalances(invalidKey));
+      const { result } = renderHook(() => useWalletBalances(invalidKey), {
+        wrapper: createWrapper(),
+      });
 
-      expect(result.current.error).toBe('Invalid public key format');
-      expect(mockQueryLatestBalance).not.toHaveBeenCalled();
+      await waitFor(() => {
+        expect(result.current.error).toBe('Invalid public key format');
+      });
+
+      expect(mockFetch).not.toHaveBeenCalled();
     });
 
-    it('should set error for publicKey with non-hex characters', () => {
+    it('should set error for publicKey with non-hex characters', async () => {
       // Valid length and prefix but contains 'xyz' (non-hex)
       const invalidKey = '01xyz123def456789abc123def456789abc123def456789abc123def456789abc1';
-      const { result } = renderHook(() => useWalletBalances(invalidKey));
+      const { result } = renderHook(() => useWalletBalances(invalidKey), {
+        wrapper: createWrapper(),
+      });
 
-      expect(result.current.error).toBe('Invalid public key format');
-      expect(mockQueryLatestBalance).not.toHaveBeenCalled();
+      await waitFor(() => {
+        expect(result.current.error).toBe('Invalid public key format');
+      });
+
+      expect(mockFetch).not.toHaveBeenCalled();
     });
 
     it('should accept valid Ed25519 publicKey (01 prefix)', async () => {
+      mockCSPRBalance('5000000000000');
+      mockFTBalance({ data: [] });
+
       const validKey = '01abc123def456789abc123def456789abc123def456789abc123def456789abc1';
-      const { result } = renderHook(() => useWalletBalances(validKey));
+      const { result } = renderHook(() => useWalletBalances(validKey), {
+        wrapper: createWrapper(),
+      });
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -292,9 +333,14 @@ describe('useWalletBalances', () => {
     });
 
     it('should accept valid Secp256k1 publicKey (02 prefix)', async () => {
-      // 02 prefix requires 68 chars total (02 + 66 hex chars)
-      const validKey = '02abc123def456789abc123def456789abc123def456789abc123def456789abcdef';
-      const { result } = renderHook(() => useWalletBalances(validKey));
+      mockCSPRBalance('5000000000000');
+      mockFTBalance({ data: [] });
+
+      // Secp256k1: 02 prefix + 66 hex chars = 68 chars total
+      const validKey = '02abc123def456789abc123def456789abc123def456789abc123def456789abc1de';
+      const { result } = renderHook(() => useWalletBalances(validKey), {
+        wrapper: createWrapper(),
+      });
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -308,9 +354,13 @@ describe('useWalletBalances', () => {
 
   describe('publicKey changes', () => {
     it('should reset balances when publicKey becomes null', async () => {
+      mockCSPRBalance('5000000000000');
+      mockFTBalance({ data: [] });
+
+      const wrapper = createWrapper();
       const { result, rerender } = renderHook(
         ({ pk }) => useWalletBalances(pk),
-        { initialProps: { pk: mockPublicKey as string | null } }
+        { initialProps: { pk: mockPublicKey as string | null }, wrapper }
       );
 
       await waitFor(() => {

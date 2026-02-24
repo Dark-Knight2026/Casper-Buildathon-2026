@@ -1,3 +1,7 @@
+# ICO State Components
+
+Components representing different ICO lifecycle states and dashboard tabs.
+
 | File | Responsibility |
 |------|----------------|
 | ActivePresale.tsx | Active presale page with countdown and purchase form |

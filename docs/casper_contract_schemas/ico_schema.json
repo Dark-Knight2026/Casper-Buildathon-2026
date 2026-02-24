@@ -234,6 +234,11 @@
       "discriminant": 59010
     },
     {
+      "name": "InvalidAmountToSpend",
+      "description": "",
+      "discriminant": 59005
+    },
+    {
       "name": "InvalidICOScheduleEndTimestamp",
       "description": "",
       "discriminant": 59002
@@ -261,7 +266,7 @@
     {
       "name": "InvalidPurchaseAmount",
       "description": "",
-      "discriminant": 59005
+      "discriminant": 59012
     },
     {
       "name": "MissingRole",
@@ -389,7 +394,7 @@
       "is_mutable": true,
       "arguments": [
         {
-          "name": "purchase_amount",
+          "name": "amount_to_spend",
           "description": null,
           "ty": "U256",
           "optional": false

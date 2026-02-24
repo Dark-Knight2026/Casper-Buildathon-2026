@@ -1,3 +1,7 @@
+# ICO Component Tests
+
+Unit tests for ICO shared components.
+
 | File | Responsibility |
 |------|----------------|
 | AmountInput.test.tsx | Tests input validation and balance display |

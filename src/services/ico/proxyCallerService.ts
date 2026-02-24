@@ -31,13 +31,20 @@ import {
 
 import { ICO_CONFIG } from '@/constants/ico';
 import { hexToBytes, stripHashPrefix } from './casperClient';
+import logger from '@/lib/logger';
 
 // ── WASM loader ─────────────────────────────────────────────────────
 
 let proxyWasmCache: Uint8Array | null = null;
 
+// SHA-256 of the trusted proxy_caller.wasm build.
+// Regenerate with: shasum -a 256 public/proxy_caller.wasm
+// If this check fails, the WASM file may have been tampered with — DO NOT proceed.
+const EXPECTED_WASM_HASH = 'e19fb6e86c4a8de96769913c4922d8a340884b98b6984ec0375d63d0ce64c998';
+
 /**
- * Loads proxy_caller.wasm from /public and caches it.
+ * Loads proxy_caller.wasm from /public, verifies SHA-256 integrity, and caches it.
+ * Throws if the hash does not match to prevent execution of tampered WASM.
  */
 export async function loadProxyCallerWasm(): Promise<Uint8Array> {
   if (proxyWasmCache) return proxyWasmCache;
@@ -46,8 +53,28 @@ export async function loadProxyCallerWasm(): Promise<Uint8Array> {
   if (!response.ok) {
     throw new Error(`Failed to load proxy_caller.wasm: ${response.status}`);
   }
-  const buffer = await response.arrayBuffer();
-  proxyWasmCache = new Uint8Array(buffer);
+
+  const wasmBytes = new Uint8Array(await response.arrayBuffer());
+
+  // crypto.subtle requires a secure context (HTTPS).
+  // On HTTP (local dev) it is undefined — skip verification with a warning.
+  if (crypto.subtle) {
+    const hashBuffer = await crypto.subtle.digest('SHA-256', wasmBytes);
+    const hashHex = Array.from(new Uint8Array(hashBuffer))
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
+
+    if (hashHex !== EXPECTED_WASM_HASH) {
+      throw new Error(
+        `WASM integrity check failed. Expected ${EXPECTED_WASM_HASH}, got ${hashHex}. ` +
+        `DO NOT PROCEED — file may be compromised.`
+      );
+    }
+  } else {
+    logger.warn('[proxyCallerService] WASM integrity check skipped: crypto.subtle unavailable (HTTP context). Production requires HTTPS.');
+  }
+
+  proxyWasmCache = wasmBytes;
   return proxyWasmCache;
 }
 
@@ -115,7 +142,7 @@ export function createProxyCallerTransaction(
     .payment(Number(gasPayment), 5)
     .build();
 
-  console.log('[proxyCallerService] Transaction created:', {
+  logger.log('[proxyCallerService] Transaction created:', {
     hash: transaction.hash?.toHex(),
     entryPoint,
     attachedValue: attachedValue.toString(),

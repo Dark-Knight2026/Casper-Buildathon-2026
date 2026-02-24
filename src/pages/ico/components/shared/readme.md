@@ -1,3 +1,7 @@
+# ICO Shared Components
+
+Reusable UI components shared across ICO states and pages.
+
 | File | Responsibility |
 |------|----------------|
 | Title.tsx | Large heading component for page titles |

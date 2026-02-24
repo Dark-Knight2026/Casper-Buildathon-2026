@@ -2,6 +2,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { usePurchaseFlow } from '@/hooks/ico/usePurchaseFlow';
 
+const mockInvalidateQueries = vi.fn();
+
+vi.mock('@tanstack/react-query', () => ({
+  useQueryClient: () => ({
+    invalidateQueries: mockInvalidateQueries,
+  }),
+}));
+
 // Mock dependent hooks
 const mockConnect = vi.fn();
 const mockDisconnect = vi.fn();
@@ -11,7 +19,7 @@ const mockRefetchBalances = vi.fn();
 
 const mockWalletState = {
   isConnected: false,
-  account: null,
+  account: null as { publicKey: string } | null,
   isConnecting: false,
   error: null,
   connect: mockConnect,
@@ -27,11 +35,11 @@ const mockBalances = {
 };
 
 const mockPurchaseState = {
-  step: 'idle' as const,
-  approvalTxHash: null,
-  purchaseTxHash: null,
-  tokensReceived: null,
-  error: null,
+  step: 'idle' as string,
+  approvalTxHash: null as string | null,
+  purchaseTxHash: null as string | null,
+  tokensReceived: null as string | null,
+  error: null as string | null,
   isProcessing: false,
 };
 

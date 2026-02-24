@@ -1,38 +1,12 @@
-import { useMemo } from 'react';
+import { memo, useMemo } from 'react';
 import { Card } from '../shared/Card';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { TrendingUp, Clock, Percent, Wallet } from 'lucide-react';
 import { TransactionHistory } from '../shared/TransactionHistory';
 import { useTransactionHistory } from '@/hooks/ico/useTransactionHistory';
-
-// Mock data
-const MOCK_DASHBOARD = {
-  bigInWallet: '66666',
-  bigStaked: '500000',
-  rewardsEarned: '5500',
-  totalBig: '572166',
-  estimatedUsdcValue: '858.25',
-};
-
-const MOCK_STAKING_INFO = {
-  nextRewards: '2d 14h 32m',
-  currentAPY: '12.5',
-};
-
-const MOCK_EARNINGS_DATA = [
-  { month: 'Jan', earnings: 120 },
-  { month: 'Feb', earnings: 250 },
-  { month: 'Mar', earnings: 180 },
-  { month: 'Apr', earnings: 420 },
-  { month: 'May', earnings: 380 },
-  { month: 'Jun', earnings: 550 },
-];
-
-const MOCK_PORTFOLIO = {
-  estimatedValue: '858.25',
-  change24h: '+2.4',
-};
+import { MOCK_DASHBOARD, MOCK_STAKING_INFO, MOCK_EARNINGS_DATA, MOCK_PORTFOLIO } from '@/constants/icoMockData';
+import { formatNumber, formatUSD } from '../../utils/formatters';
 
 const chartConfig = {
   earnings: {
@@ -41,15 +15,7 @@ const chartConfig = {
   },
 };
 
-const formatNumber = (value: string | number) => {
-  return Number(value).toLocaleString();
-};
-
-const formatUSD = (value: string | number) => {
-  return `$${Number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-};
-
-export function OverviewTab() {
+export const OverviewTab = memo(function OverviewTab() {
   const { transactions } = useTransactionHistory();
 
   const dashboardCards = useMemo(() => [
@@ -75,6 +41,7 @@ export function OverviewTab() {
       color: 'var(--ico-card-rewards)',
     },
   ], []);
+
   return (
     <div className="space-y-4">
       {/* BIG Value */}
@@ -89,7 +56,7 @@ export function OverviewTab() {
             </div>
             <p className="text-sm md:text-xl text-[hsl(var(--ico-text-secondary))]">BIG Value</p>
           </div>
-        
+
           <p className="text-xl font-bold text-[hsl(var(--ico-text-primary))]">
             {formatNumber(MOCK_DASHBOARD.totalBig)}
           </p>
@@ -229,6 +196,6 @@ export function OverviewTab() {
       </div>
     </div>
   );
-}
+});
 
 export default OverviewTab;

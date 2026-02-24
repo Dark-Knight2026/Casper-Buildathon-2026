@@ -9,6 +9,7 @@ export default defineConfig(({ mode }) => {
 
   return {
   server: {
+    allowedHosts: ['lvh.me'],
     proxy: {
       '/api/cspr-cloud': {
         target: 'https://api.testnet.cspr.cloud',
@@ -129,5 +130,13 @@ export default defineConfig(({ mode }) => {
     ],
     exclude: ['@radix-ui/react-icons'],
   },
+    // Test configuration
+  test: {
+    deps: {
+      inline: ['casper-js-sdk']
+    }
+  },
+
 };
+
 });

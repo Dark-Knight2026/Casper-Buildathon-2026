@@ -1,3 +1,7 @@
+# ICO State Component Tests
+
+Unit tests for ICO lifecycle state components.
+
 | File | Responsibility |
 |------|----------------|
 | ActivePresale.test.tsx | Tests presale countdown and progress display |

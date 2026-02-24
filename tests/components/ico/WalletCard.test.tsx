@@ -172,7 +172,7 @@ describe('WalletCard', () => {
     it('should not show calculation block when amount is empty', () => {
       render(<WalletCard {...connectedProps} />);
 
-      expect(screen.queryByText('You will receive')).not.toBeInTheDocument();
+      expect(screen.queryByText('You will receive (estimate)')).not.toBeInTheDocument();
     });
 
     it('should show calculation when amount is entered', () => {
@@ -182,7 +182,7 @@ describe('WalletCard', () => {
         target: { value: '100' },
       });
 
-      expect(screen.getByText('You will receive')).toBeInTheDocument();
+      expect(screen.getByText('You will receive (estimate)')).toBeInTheDocument();
     });
 
     it('should calculate tokens correctly for USDT (rate 1:1)', () => {
@@ -194,7 +194,7 @@ describe('WalletCard', () => {
         target: { value: '100' },
       });
 
-      const receiveLabel = screen.getByText('You will receive');
+      const receiveLabel = screen.getByText('You will receive (estimate)');
       const receiveBlock = receiveLabel.closest('div')!;
       const receiveValue = receiveBlock.querySelector('span.text-lg');
 
@@ -219,7 +219,7 @@ describe('WalletCard', () => {
         target: { value: '0' },
       });
 
-      expect(screen.queryByText('You will receive')).not.toBeInTheDocument();
+      expect(screen.queryByText('You will receive (estimate)')).not.toBeInTheDocument();
     });
 
     it('should update calculation when currency changes', () => {

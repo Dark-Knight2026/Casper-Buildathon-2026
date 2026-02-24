@@ -1,9 +1,11 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { PublicKey, PurseIdentifier } from 'casper-js-sdk';
 import { getCasperRpcClient } from '@/services/ico/casperClient';
-import { getBalance, TOKEN_HASHES } from '@/services/ico/cep18Service';
+import { TOKEN_HASHES } from '@/services/ico/cep18Service';
 
 const MOTES_PER_CSPR = 1_000_000_000n;
+const BALANCE_POLL_MS = 30_000; // 30 seconds
 
 function isValidPublicKey(key: string): boolean {
   // Ed25519: 01 + 64 hex = 66 chars; Secp256k1: 02 + 66 hex = 68 chars
@@ -97,7 +99,6 @@ async function fetchFTBalancesFromCloud(publicKeyHex: string): Promise<FTBalance
   }
 
   const json = await resp.json();
-  console.log('[fetchFTBalancesFromCloud] response:', json);
 
   const items: unknown[] = json.data ?? (Array.isArray(json) ? json : []);
 
@@ -137,78 +138,57 @@ async function fetchFTBalancesFromCloud(publicKeyHex: string): Promise<FTBalance
   return result;
 }
 
-// ── Hook ────────────────────────────────────────────────────────────
+// ── Combined fetch ──────────────────────────────────────────────────
 
 const EMPTY_BALANCES: WalletBalances = { cspr: 0, usdt: 0, usdc: 0, big: 0 };
 
+async function fetchAllBalances(publicKey: string): Promise<WalletBalances> {
+  if (!isValidPublicKey(publicKey)) {
+    throw new Error('Invalid public key format');
+  }
+
+  const [csprResult, ftResult] = await Promise.allSettled([
+    fetchCSPRBalance(publicKey),
+    fetchFTBalancesFromCloud(publicKey),
+  ]);
+
+  const cspr = csprResult.status === 'fulfilled' ? csprResult.value : 0;
+  const ft = ftResult.status === 'fulfilled'
+    ? ftResult.value
+    : { usdt: 0, usdc: 0, big: 0 };
+
+  return {
+    cspr,
+    usdt: ft.usdt,
+    usdc: ft.usdc,
+    big: ft.big,
+  };
+}
+
+// ── Hook ────────────────────────────────────────────────────────────
+
 export function useWalletBalances(publicKey: string | null | undefined): UseWalletBalancesReturn {
-  const [balances, setBalances] = useState<WalletBalances>(EMPTY_BALANCES);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const {
+    data,
+    isLoading,
+    error: queryError,
+    refetch: queryRefetch,
+  } = useQuery<WalletBalances, Error>({
+    queryKey: ['wallet-balances', publicKey],
+    queryFn: () => fetchAllBalances(publicKey!),
+    enabled: !!publicKey,
+    refetchInterval: BALANCE_POLL_MS,
+    staleTime: 10_000,
+  });
 
-  const refetch = useCallback(async () => {
-    if (!publicKey) {
-      setBalances(EMPTY_BALANCES);
-      return;
-    }
+  const refetch = useCallback(() => {
+    queryRefetch();
+  }, [queryRefetch]);
 
-    if (!isValidPublicKey(publicKey)) {
-      setError('Invalid public key format');
-      setBalances(EMPTY_BALANCES);
-      return;
-    }
-
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      // Hybrid: CSPR via RPC, FT tokens via CSPR.Cloud REST API
-      const [csprResult, ftResult] = await Promise.allSettled([
-        fetchCSPRBalance(publicKey),
-        fetchFTBalancesFromCloud(publicKey),
-      ]);
-
-      const errors: string[] = [];
-
-      const cspr = csprResult.status === 'fulfilled'
-        ? csprResult.value
-        : (errors.push(`CSPR: ${(csprResult.reason as Error)?.message ?? 'unknown'}`), 0);
-
-      const ft = ftResult.status === 'fulfilled'
-        ? ftResult.value
-        : (errors.push(`FT tokens: ${(ftResult.reason as Error)?.message ?? 'unknown'}`), { usdt: 0, usdc: 0, big: 0 });
-
-      const result: WalletBalances = {
-        cspr,
-        usdt: ft.usdt,
-        usdc: ft.usdc,
-        big: ft.big,
-      };
-
-      if (errors.length > 0) {
-        setError(errors.join('; '));
-      }
-
-      console.log('[useWalletBalances] balances:', result);
-      setBalances(result);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to fetch balances';
-      setError(message);
-      setBalances(EMPTY_BALANCES);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [publicKey]);
-
-  useEffect(() => {
-    refetch();
-  }, [refetch]);
-
-  useEffect(() => {
-    if (!publicKey) return;
-    const interval = setInterval(refetch, 60_000);
-    return () => clearInterval(interval);
-  }, [publicKey, refetch]);
-
-  return { balances, isLoading, error, refetch };
+  return {
+    balances: data ?? EMPTY_BALANCES,
+    isLoading,
+    error: queryError?.message ?? null,
+    refetch,
+  };
 }

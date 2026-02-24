@@ -1,26 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useClickRef } from '@make-software/csprclick-ui';
-import { PublicKey } from 'casper-js-sdk';
+import { deriveAccountHash } from '@/lib/blockchain/accountUtils';
+import logger from '@/lib/logger';
 
 export interface ICOWalletAccount {
   publicKey: string;
   accountHash: string;
   provider: string;
-}
-
-/**
- * Derives account hash from public key.
- * Account hash format: account-hash-<hex>
- */
-function deriveAccountHash(publicKeyHex: string): string {
-  try {
-    const pk = PublicKey.fromHex(publicKeyHex);
-    const accountHash = pk.accountHash();
-    return accountHash.toPrefixedString();
-  } catch (err) {
-    console.warn('Failed to derive account hash:', err);
-    return '';
-  }
 }
 
 export interface ICOWalletState {
@@ -184,7 +170,7 @@ export function useICOWallet() {
     try {
       clickRef.signOut();
     } catch (error) {
-      console.error('Failed to disconnect:', error);
+      logger.error('Failed to disconnect:', error);
     }
   }, [clickRef]);
 

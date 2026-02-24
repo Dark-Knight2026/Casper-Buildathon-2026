@@ -58,7 +58,6 @@ vi.mock('@/pages/ico/components/shared/WalletCard', () => ({
 
 vi.mock('@/pages/ico/components/shared/TransactionHistory', () => ({
   TransactionHistory: () => <div data-testid="transaction-history">Transaction History</div>,
-  Transaction: {},
 }));
 
 vi.mock('@/pages/ico/components/shared/UserTokenBalance', () => ({
@@ -129,7 +128,7 @@ describe('PrivateSaleActive', () => {
   });
 
   describe('private sale info display', () => {
-    it('should display hard cap value', () => {
+    it('should display hard cap value when progress is provided', () => {
       renderWithRouter(<PrivateSaleActive endTimestamp={mockEndTimestamp} progress={mockProgress} />);
 
       expect(screen.getByText(`Hard Cap: $${Math.round(mockProgress.hardCapUsd).toLocaleString()}`)).toBeInTheDocument();

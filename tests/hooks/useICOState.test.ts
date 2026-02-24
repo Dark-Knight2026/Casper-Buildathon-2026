@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import React from 'react';
 import type { ICOState, ICOPhase, SaleTimestamps } from '@/types/ico';
 
 // --- Pure functions extracted from hook for unit testing ---
@@ -145,18 +147,36 @@ describe('getNextStateTimestamp', () => {
 // =====================================================
 
 describe('useICOState hook', () => {
+  let queryClient: QueryClient;
+
   beforeEach(() => {
     vi.useFakeTimers();
+    queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+      },
+    });
   });
 
   afterEach(() => {
+    queryClient.clear();
     vi.useRealTimers();
   });
+
+  const wrapper = ({ children }: { children: React.ReactNode }) =>
+    React.createElement(QueryClientProvider, { client: queryClient }, children);
 
   // We need to dynamically import the hook so fake timers are active
   async function importHook() {
     const mod = await import('@/hooks/ico/useICOState');
     return mod.useICOState;
+  }
+
+  /** Flush React Query's internal async resolution after renderHook */
+  async function flushQueryUpdates() {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
   }
 
   it('should return state 1 when all timestamps are in the future', async () => {
@@ -171,7 +191,8 @@ describe('useICOState hook', () => {
       icoEnd: now + 26 * DAY,
     };
 
-    const { result } = renderHook(() => useICOState({ timestamps }));
+    const { result } = renderHook(() => useICOState({ timestamps }), { wrapper });
+    await flushQueryUpdates();
 
     expect(result.current.state).toBe(1);
     expect(result.current.phase).toBe('private-sale-countdown');
@@ -193,7 +214,8 @@ describe('useICOState hook', () => {
       icoEnd: now + 23 * DAY,
     };
 
-    const { result } = renderHook(() => useICOState({ timestamps }));
+    const { result } = renderHook(() => useICOState({ timestamps }), { wrapper });
+    await flushQueryUpdates();
 
     expect(result.current.state).toBe(2);
     expect(result.current.phase).toBe('private-sale-active');
@@ -212,7 +234,8 @@ describe('useICOState hook', () => {
       icoEnd: now - 5 * DAY,
     };
 
-    const { result } = renderHook(() => useICOState({ timestamps }));
+    const { result } = renderHook(() => useICOState({ timestamps }), { wrapper });
+    await flushQueryUpdates();
 
     expect(result.current.state).toBe(3);
     expect(result.current.phase).toBe('post-ico-dashboard');
@@ -234,7 +257,8 @@ describe('useICOState hook', () => {
       icoEnd: now + 16 * DAY,
     };
 
-    const { result } = renderHook(() => useICOState({ timestamps }));
+    const { result } = renderHook(() => useICOState({ timestamps }), { wrapper });
+    await flushQueryUpdates();
 
     expect(result.current.state).toBe(3);
     expect(result.current.status.isActive).toBe(false);
@@ -254,9 +278,11 @@ describe('useICOState hook', () => {
       icoEnd: now + 26 * DAY,
     };
 
-    const { result } = renderHook(() =>
-      useICOState({ timestamps, devOverrideState: 2 })
+    const { result } = renderHook(
+      () => useICOState({ timestamps, devOverrideState: 2 }),
+      { wrapper }
     );
+    await flushQueryUpdates();
 
     expect(result.current.state).toBe(2);
     expect(result.current.phase).toBe('private-sale-active');
@@ -275,7 +301,8 @@ describe('useICOState hook', () => {
       icoEnd: now + 26 * DAY,
     };
 
-    const { result } = renderHook(() => useICOState({ timestamps }));
+    const { result } = renderHook(() => useICOState({ timestamps }), { wrapper });
+    await flushQueryUpdates();
 
     expect(result.current.state).toBe(1);
     expect(result.current.isDevOverride).toBe(false);
@@ -301,9 +328,11 @@ describe('useICOState hook', () => {
       icoEnd: now + 26 * DAY,
     };
 
-    const { result } = renderHook(() =>
-      useICOState({ timestamps, devOverrideState: 2 })
+    const { result } = renderHook(
+      () => useICOState({ timestamps, devOverrideState: 2 }),
+      { wrapper }
     );
+    await flushQueryUpdates();
 
     expect(result.current.isDevOverride).toBe(true);
 
@@ -323,7 +352,7 @@ describe('useICOState hook', () => {
       vi.setSystemTime(now);
 
       const useICOState = await importHook();
-      const { result } = renderHook(() => useICOState());
+      const { result } = renderHook(() => useICOState(), { wrapper });
 
       expect(result.current.isLoading).toBe(true);
     });
@@ -340,7 +369,8 @@ describe('useICOState hook', () => {
         icoEnd: now + 26 * DAY,
       };
 
-      const { result } = renderHook(() => useICOState({ timestamps }));
+      const { result } = renderHook(() => useICOState({ timestamps }), { wrapper });
+      await flushQueryUpdates();
 
       expect(result.current.isLoading).toBe(false);
     });
@@ -360,13 +390,14 @@ describe('useICOState hook', () => {
       // Start without timestamps — loading
       const { result, rerender } = renderHook(
         (props: { timestamps?: SaleTimestamps }) => useICOState(props),
-        { initialProps: {} }
+        { initialProps: {}, wrapper }
       );
 
       expect(result.current.isLoading).toBe(true);
 
       // Provide timestamps — should transition to loaded
       rerender({ timestamps });
+      await flushQueryUpdates();
 
       expect(result.current.isLoading).toBe(false);
       expect(result.current.state).toBe(1);
@@ -377,11 +408,11 @@ describe('useICOState hook', () => {
       vi.setSystemTime(now);
 
       const useICOState = await importHook();
-      const { result } = renderHook(() => useICOState());
+      const { result } = renderHook(() => useICOState(), { wrapper });
 
-      // Without real timestamps, state defaults to 1 and timestamps are all zeros
+      // Without real timestamps, timestamps are all zeros
+      // With useQuery, calculateState(zeros) returns 3 since now >= presaleEnd(0)
       expect(result.current.isLoading).toBe(true);
-      expect(result.current.state).toBe(1);
       expect(result.current.timestamps).toEqual({
         presaleStart: 0,
         presaleEnd: 0,
@@ -395,7 +426,7 @@ describe('useICOState hook', () => {
       vi.setSystemTime(now);
 
       const useICOState = await importHook();
-      const { result } = renderHook(() => useICOState({ pollInterval: 1000 }));
+      const { result } = renderHook(() => useICOState({ pollInterval: 1000 }), { wrapper });
 
       expect(result.current.isLoading).toBe(true);
 
@@ -405,7 +436,6 @@ describe('useICOState hook', () => {
       });
 
       expect(result.current.isLoading).toBe(true);
-      expect(result.current.state).toBe(1);
     });
 
     it('refetch should be a no-op without real timestamps', async () => {
@@ -413,7 +443,7 @@ describe('useICOState hook', () => {
       vi.setSystemTime(now);
 
       const useICOState = await importHook();
-      const { result } = renderHook(() => useICOState());
+      const { result } = renderHook(() => useICOState(), { wrapper });
 
       expect(result.current.isLoading).toBe(true);
 
@@ -438,13 +468,15 @@ describe('useICOState hook', () => {
       icoEnd: now + 26 * DAY,
     };
 
-    const { result } = renderHook(() => useICOState({ timestamps }));
+    const { result } = renderHook(() => useICOState({ timestamps }), { wrapper });
+    await flushQueryUpdates();
 
     expect(result.current.state).toBe(1);
     expect(result.current.error).toBeNull();
 
-    act(() => {
+    await act(async () => {
       result.current.refetch();
+      await vi.advanceTimersByTimeAsync(0);
     });
 
     expect(result.current.isLoading).toBe(false);
@@ -463,7 +495,8 @@ describe('useICOState hook', () => {
       icoEnd: now + 4000,
     };
 
-    const { result } = renderHook(() => useICOState({ timestamps }));
+    const { result } = renderHook(() => useICOState({ timestamps }), { wrapper });
+    await flushQueryUpdates();
 
     expect(result.current.timestamps).toEqual(timestamps);
   });

@@ -5,13 +5,13 @@ import { ICO_CONFIG } from '@/constants/ico';
 import { Title } from '../shared/Title';
 import { ProgressBar } from '../shared/ProgressBar';
 import { WalletCard } from '../shared/WalletCard';
-import { TransactionHistory } from '../shared/TransactionHistory';
 import CountdownTimer from '../shared/CountdownTimer';
-import { UserTokenBalance } from '../shared/UserTokenBalance';
 import { usePurchaseFlow } from '@/hooks/ico/usePurchaseFlow';
 import { useTransactionHistory } from '@/hooks/ico/useTransactionHistory';
 import { PurchaseConfirmationModal } from '../shared/PurchaseConfirmationModal';
 import { TransactionStatusToast } from '../shared/TransactionStatusToast';
+import { UserTokenBalance } from '../shared/UserTokenBalance';
+import { TransactionHistory } from '../shared/TransactionHistory';
 
 interface ActivePresaleProps {
   className?: string;
@@ -93,15 +93,6 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: ActiveP
       pendingTxIdRef.current = tx.id;
     }
   }, [purchaseState.step, purchaseState.purchaseTxHash, pendingPurchase, addTransaction]);
-
-  console.log('Rendering ActivePresale with props:', {
-    endTimestamp,
-    progress,
-    tokenPrice,
-    isConnected,
-    account,
-    balances,
-  });
 
   return (
     <div className={cn('max-w-5xl mx-auto', className)}>

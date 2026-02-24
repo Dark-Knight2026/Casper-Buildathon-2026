@@ -1,14 +1,15 @@
+import { memo } from 'react';
 import { Card } from '../shared/Card';
 import { SubTitle } from '../shared/SubTitle';
 import { Badge } from '@/components/ui/badge';
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent } from '@/components/ui/chart';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { Coins, Percent, Clock, ArrowRightLeft, Users, Timer, Trophy } from 'lucide-react';
+import { MOCK_STAKING} from '@/constants/icoMockData';
 
-const MOCK_STAKING = {
-  stakedTokens: '500,000',
-  currentAPY: '12.5',
-  nextRewards: '2d 14h 32m',
+const rewardsChartConfig = {
+  stakingPool: { label: 'Staking Reserve Pool', color: '#1F7A63' },
+  txFees: { label: 'Transaction Fees', color: '#6BB5A0' },
 };
 
 // Mock user rewards accumulation over days
@@ -25,11 +26,6 @@ const MOCK_REWARDS_DATA = [
   { day: 75, stakingPool: 6165, txFees: 1870 },
   { day: 90, stakingPool: 7397, txFees: 2480 },
 ];
-
-const rewardsChartConfig = {
-  stakingPool: { label: 'Staking Reserve Pool', color: '#1F7A63' },
-  txFees: { label: 'Transaction Fees', color: '#6BB5A0' },
-};
 
 const REWARDS_LIST: { title: string; description: string; icon: typeof ArrowRightLeft; badge?: string }[] = [
   {
@@ -62,7 +58,7 @@ const REWARDS_LIST: { title: string; description: string; icon: typeof ArrowRigh
   },
 ];
 
-export function RewardsTab() {
+export const RewardsTab = memo(function RewardsTab() {
   return (
     <div className="space-y-6">
       {/* Title */}
@@ -205,6 +201,6 @@ export function RewardsTab() {
       </Card>
     </div>
   );
-}
+});
 
 export default RewardsTab;

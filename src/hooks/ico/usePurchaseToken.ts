@@ -9,9 +9,9 @@
  * 5. Handle success/failure callbacks
  */
 
-import { useState, useCallback } from 'react';
-import { PublicKey } from 'casper-js-sdk';
+import { useState, useCallback, useRef } from 'react';
 import type { ICSPRClickSDK } from '@make-software/csprclick-core-types';
+import { deriveAccountHash } from '@/lib/blockchain/accountUtils';
 import {
   preparePurchase,
   validatePurchase,
@@ -88,25 +88,6 @@ async function fetchActualTokensReceived(
   return null;
 }
 
-/**
- * Derives account hash from public key hex string.
- * Uses casper-js-sdk PublicKey.accountHash().toPrefixedString()
- */
-function deriveAccountHash(publicKeyHex: string): string {
-  if (!publicKeyHex) {
-    console.warn(LOG_PREFIX, 'Empty public key provided');
-    return '';
-  }
-
-  try {
-    const pk = PublicKey.fromHex(publicKeyHex);
-    const accountHash = pk.accountHash();
-    return accountHash.toPrefixedString();
-  } catch (err) {
-    console.warn(LOG_PREFIX, 'Failed to derive account hash:', err);
-    return '';
-  }
-}
 
 // ── Types ───────────────────────────────────────────────────────────
 
@@ -115,10 +96,8 @@ export type PurchaseStep =
   | 'validating'
   | 'checking-approval'
   | 'awaiting-approval-signature'
-  | 'submitting-approval'
   | 'approval-pending'
   | 'awaiting-purchase-signature'
-  | 'submitting-purchase'
   | 'purchase-pending'
   | 'confirmed'
   | 'failed';
@@ -166,6 +145,7 @@ export function usePurchaseToken(
   csprPriceUsd?: number,
 ): UsePurchaseTokenReturn {
   const [state, setState] = useState<PurchaseState>(initialState);
+  const submittingRef = useRef(false);
 
   const { onSuccess, onError, onApprovalNeeded } = options;
 
@@ -174,12 +154,15 @@ export function usePurchaseToken(
    */
   const purchase = useCallback(
     async (amount: string, currency: PaymentCurrency, balance: number) => {
-      console.log(LOG_PREFIX, '=== PURCHASE START ===', { amount, currency, balance, publicKey });
+      // Synchronous guard — prevents duplicate submissions on rapid clicks
+      if (submittingRef.current) return;
+      submittingRef.current = true;
 
       if (!publicKey) {
         const error = 'Wallet not connected';
         setState((prev) => ({ ...prev, step: 'failed', error, isProcessing: false }));
         onError?.(error);
+        submittingRef.current = false;
         return;
       }
 
@@ -187,6 +170,7 @@ export function usePurchaseToken(
         const error = 'Wallet SDK not initialized';
         setState((prev) => ({ ...prev, step: 'failed', error, isProcessing: false }));
         onError?.(error);
+        submittingRef.current = false;
         return;
       }
 
@@ -196,6 +180,7 @@ export function usePurchaseToken(
         const error = 'Failed to derive account hash from public key';
         setState((prev) => ({ ...prev, step: 'failed', error, isProcessing: false }));
         onError?.(error);
+        submittingRef.current = false;
         return;
       }
 
@@ -208,15 +193,12 @@ export function usePurchaseToken(
 
       try {
         // 1. Validate purchase
-        console.log(LOG_PREFIX, '[Step 1] Validating purchase...');
         const validation = validatePurchase(amount, currency, balance, csprPriceUsd);
         if (!validation.valid) {
           throw new Error(validation.error);
         }
-        console.log(LOG_PREFIX, '[Step 1] Validation passed');
 
         // 2. Check approval and prepare transactions
-        console.log(LOG_PREFIX, '[Step 2] Preparing purchase (checking approval, building tx)...');
         setState((prev) => ({ ...prev, step: 'checking-approval' }));
 
         const { approvalNeeded, approvalTransaction, purchaseTransaction } =
@@ -227,19 +209,13 @@ export function usePurchaseToken(
             currency,
           });
 
-        console.log(LOG_PREFIX, '[Step 2] Purchase prepared:', {
-          approvalNeeded,
-        });
-
         // 3. Handle approval if needed
         if (approvalNeeded && approvalTransaction) {
-          console.log(LOG_PREFIX, '[Step 3] Approval needed, sending approval tx...');
           onApprovalNeeded?.();
 
           setState((prev) => ({ ...prev, step: 'awaiting-approval-signature' }));
 
           const approvalJSON = approvalTransaction.toJSON();
-          console.log(LOG_PREFIX, '[Step 3] Approval JSON:', approvalJSON);
 
           const approvalResult = await clickRef.send(
             approvalJSON as object,
@@ -247,8 +223,6 @@ export function usePurchaseToken(
             true,
             300,
           );
-
-          console.log(LOG_PREFIX, '[Step 3] Approval result:', approvalResult);
 
           if (!approvalResult || approvalResult.cancelled) {
             throw new Error('Approval transaction was cancelled');
@@ -265,24 +239,19 @@ export function usePurchaseToken(
             step: 'approval-pending',
             approvalTxHash,
           }));
-          console.log(LOG_PREFIX, '[Step 3] Approval confirmed:', approvalTxHash);
         }
 
         // 4. Sign and send purchase transaction
-        console.log(LOG_PREFIX, '[Step 4] Sending purchase tx...');
         setState((prev) => ({ ...prev, step: 'awaiting-purchase-signature' }));
 
         const purchaseJSON = purchaseTransaction.toJSON();
-        console.log(LOG_PREFIX, '[Step 4] Transaction JSON:', purchaseJSON);
 
-        console.log(LOG_PREFIX, '[Step 4] Calling clickRef.send()...');
         const purchaseResult = await clickRef.send(
           purchaseJSON as object,
           publicKey,
           true,
           300,
         );
-        console.log(LOG_PREFIX, '[Step 4] Send result:', purchaseResult);
 
         if (!purchaseResult || purchaseResult.cancelled) {
           throw new Error('Purchase transaction was cancelled');
@@ -299,7 +268,6 @@ export function usePurchaseToken(
           step: 'purchase-pending',
           purchaseTxHash,
         }));
-        console.log(LOG_PREFIX, '[Step 4] Purchase sent:', purchaseTxHash);
 
         // 5. Fetch actual tokens received via CSPR.Cloud REST API
         let tokensReceived: string;
@@ -323,11 +291,9 @@ export function usePurchaseToken(
           isProcessing: false,
         }));
 
-        console.log(LOG_PREFIX, '=== PURCHASE SUCCESS ===', { purchaseTxHash, tokensReceived });
         onSuccess?.(purchaseTxHash, tokensReceived);
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Purchase failed';
-        console.error(LOG_PREFIX, '=== PURCHASE FAILED ===', err);
 
         setState((prev) => ({
           ...prev,
@@ -337,6 +303,8 @@ export function usePurchaseToken(
         }));
 
         onError?.(errorMessage);
+      } finally {
+        submittingRef.current = false;
       }
     },
     [publicKey, tokenPriceUsd, clickRef, onSuccess, onError, onApprovalNeeded, csprPriceUsd],
@@ -347,6 +315,7 @@ export function usePurchaseToken(
    */
   const reset = useCallback(() => {
     setState(initialState);
+    submittingRef.current = false;
   }, []);
 
   /**
@@ -388,14 +357,10 @@ export function getStepMessage(step: PurchaseStep): string {
       return 'Checking token approval...';
     case 'awaiting-approval-signature':
       return 'Please sign the approval transaction in your wallet...';
-    case 'submitting-approval':
-      return 'Submitting approval...';
     case 'approval-pending':
       return 'Waiting for approval confirmation...';
     case 'awaiting-purchase-signature':
       return 'Please sign the purchase transaction in your wallet...';
-    case 'submitting-purchase':
-      return 'Submitting purchase...';
     case 'purchase-pending':
       return 'Waiting for purchase confirmation...';
     case 'confirmed':
