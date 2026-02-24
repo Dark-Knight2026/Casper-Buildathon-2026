@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useClickRef } from '@make-software/csprclick-ui';
 import { deriveAccountHash } from '@/lib/blockchain/accountUtils';
+import logger from '@/lib/logger';
 
 export interface ICOWalletAccount {
   publicKey: string;
@@ -169,7 +170,7 @@ export function useICOWallet() {
     try {
       clickRef.signOut();
     } catch (error) {
-      console.error('Failed to disconnect:', error);
+      logger.error('Failed to disconnect:', error);
     }
   }, [clickRef]);
 

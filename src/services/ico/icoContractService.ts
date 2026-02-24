@@ -18,6 +18,7 @@
  */
 
 import { ICO_CONFIG } from '@/constants/ico';
+import logger from '@/lib/logger';
 import {
   queryOdraState,
   clValueListU8ToHex,
@@ -75,7 +76,7 @@ function parseICOSchedule(hex: string): ICOSchedule | null {
       price,
     };
   } catch (err) {
-    console.error('[parseICOSchedule] Failed to parse:', err);
+    logger.error('[parseICOSchedule] Failed to parse:', err);
     return null;
   }
 }
@@ -163,7 +164,7 @@ let inFlightSchedulesRequest: Promise<ICOScheduleWithId[]> | null = null;
 //       price,
 //     };
 //   } catch (err) {
-//     console.error('[icoService] Failed to parse ICOSchedule bytes:', err);
+//     logger.error('[icoService] Failed to parse ICOSchedule bytes:', err);
 //     return null;
 //   }
 // }
@@ -218,102 +219,102 @@ function formatAmount(amount: bigint, decimals: number = 18): string {
  *   testReadICOData();
  */
 export async function testReadICOData(): Promise<void> {
-  console.log('\n========================================');
-  console.log('ICO Contract Data Reader');
-  console.log('========================================\n');
+  logger.log('\n========================================');
+  logger.log('ICO Contract Data Reader');
+  logger.log('========================================\n');
 
   try {
     // Read schedules count
     const count = await readSchedulesCount();
-    console.log(`📊 Total ICO Schedules: ${count}\n`);
+    logger.log(`📊 Total ICO Schedules: ${count}\n`);
 
     if (count === 0n) {
-      console.log('⚠️ No schedules found. Check if icoSchedulesCount key is correct.');
+      logger.log('⚠️ No schedules found. Check if icoSchedulesCount key is correct.');
       return;
     }
 
     // Read and show raw hex for each schedule
-    console.log('── RAW HEX DATA ──────────────────────');
+    logger.log('── RAW HEX DATA ──────────────────────');
     for (let i = 0n; i < count; i++) {
       const key = getScheduleKey(i);
-      console.log(`  Schedule[${i}] dictionary key: ${key}`);
+      logger.log(`  Schedule[${i}] dictionary key: ${key}`);
       const stored = await queryOdraState(ICO_HASH, key);
       if (stored?.clValue) {
         const hex = clValueListU8ToHex(stored.clValue);
-        console.log(`  Schedule[${i}] raw hex (${hex?.length ?? 0} chars):`, hex?.slice(0, 80) + '...');
+        logger.log(`  Schedule[${i}] raw hex (${hex?.length ?? 0} chars):`, hex?.slice(0, 80) + '...');
       } else {
-        console.log(`  Schedule[${i}]: ❌ no data returned`);
+        logger.log(`  Schedule[${i}]: ❌ no data returned`);
       }
     }
 
     // Read and parse each schedule
-    console.log('\n── PARSED SCHEDULES ──────────────────────');
+    logger.log('\n── PARSED SCHEDULES ──────────────────────');
     for (let i = 0n; i < count; i++) {
       const schedule = await readScheduleByIndex(i);
       if (schedule) {
-        console.log(`\n── Schedule #${i} ──────────────────────`);
-        console.log(`  Start:       ${formatTimestamp(schedule.startTimestamp)} (raw: ${schedule.startTimestamp})`);
-        console.log(`  End:         ${formatTimestamp(schedule.endTimestamp)} (raw: ${schedule.endTimestamp})`);
-        console.log(`  Sale Amount: ${formatAmount(schedule.saleAmount)} tokens (raw: ${schedule.saleAmount})`);
-        console.log(`  Sold Amount: ${formatAmount(schedule.soldAmount)} tokens (raw: ${schedule.soldAmount})`);
-        console.log(`  Price:       ${formatAmount(schedule.price, 6)} USD (raw: ${schedule.price})`);
+        logger.log(`\n── Schedule #${i} ──────────────────────`);
+        logger.log(`  Start:       ${formatTimestamp(schedule.startTimestamp)} (raw: ${schedule.startTimestamp})`);
+        logger.log(`  End:         ${formatTimestamp(schedule.endTimestamp)} (raw: ${schedule.endTimestamp})`);
+        logger.log(`  Sale Amount: ${formatAmount(schedule.saleAmount)} tokens (raw: ${schedule.saleAmount})`);
+        logger.log(`  Sold Amount: ${formatAmount(schedule.soldAmount)} tokens (raw: ${schedule.soldAmount})`);
+        logger.log(`  Price:       ${formatAmount(schedule.price, 6)} USD (raw: ${schedule.price})`);
 
         // Calculate progress
         if (schedule.saleAmount > 0n) {
           const progress = Number(schedule.soldAmount * 100n / schedule.saleAmount);
-          console.log(`  Progress:    ${progress}%`);
+          logger.log(`  Progress:    ${progress}%`);
         }
 
         // Check if active (timestamps might be in ms or seconds)
         const nowMs = BigInt(Date.now());
         const startMs = toMilliseconds(schedule.startTimestamp);
         const endMs = toMilliseconds(schedule.endTimestamp);
-        console.log(`  Now (ms):    ${nowMs}`);
-        console.log(`  Start (ms):  ${startMs}`);
-        console.log(`  End (ms):    ${endMs}`);
+        logger.log(`  Now (ms):    ${nowMs}`);
+        logger.log(`  Start (ms):  ${startMs}`);
+        logger.log(`  End (ms):    ${endMs}`);
         if (nowMs >= startMs && nowMs < endMs) {
-          console.log(`  Status:      🟢 ACTIVE`);
+          logger.log(`  Status:      🟢 ACTIVE`);
         } else if (nowMs < startMs) {
-          console.log(`  Status:      ⏳ Upcoming`);
+          logger.log(`  Status:      ⏳ Upcoming`);
         } else {
-          console.log(`  Status:      ⏹️ Ended`);
+          logger.log(`  Status:      ⏹️ Ended`);
         }
       } else {
-        console.log(`\n── Schedule #${i} ──────────────────────`);
-        console.log(`  ❌ Failed to parse schedule bytes`);
+        logger.log(`\n── Schedule #${i} ──────────────────────`);
+        logger.log(`  ❌ Failed to parse schedule bytes`);
       }
     }
 
     // Read current schedule
     const current = await getCurrentSchedule();
-    console.log('\n\n── Current Active Schedule ──────────────');
+    logger.log('\n\n── Current Active Schedule ──────────────');
     if (current) {
-      console.log(`  ID: ${current.id}`);
-      console.log(`  Price: ${formatAmount(current.schedule.price, 8)} USD`);
+      logger.log(`  ID: ${current.id}`);
+      logger.log(`  Price: ${formatAmount(current.schedule.price, 8)} USD`);
     } else {
-      console.log('  No active schedule at this time (all schedules are past/future)');
+      logger.log('  No active schedule at this time (all schedules are past/future)');
     }
 
   } catch (err) {
-    console.error('❌ Error reading ICO data:', err);
+    logger.error('❌ Error reading ICO data:', err);
   }
 
-  console.log('\n========================================\n');
+  logger.log('\n========================================\n');
 }
 
 export async function diagnoseOdraKeys(): Promise<void> {
-  console.log('[diag] Testing Odra dictionary keys...');
-  console.log('[diag] Contract hash:', ICO_HASH);
+  logger.log('[diag] Testing Odra dictionary keys...');
+  logger.log('[diag] Contract hash:', ICO_HASH);
 
   // First, inspect the contract to see actual named keys
-  console.log('\n[diag] === STEP 1: Inspecting contract named keys ===');
+  logger.log('\n[diag] === STEP 1: Inspecting contract named keys ===');
   const { inspectContractEntity, getContractInfo } = await import('./casperClient');
   await inspectContractEntity(ICO_HASH);
 
   const contractInfo = await getContractInfo(ICO_HASH);
   if (contractInfo) {
-    console.log('[diag] Contract named keys:', contractInfo.namedKeys);
-    console.log('[diag] Contract entry points:', contractInfo.entryPoints);
+    logger.log('[diag] Contract named keys:', contractInfo.namedKeys);
+    logger.log('[diag] Contract entry points:', contractInfo.entryPoints);
 
     // Find dictionary-like named keys
     const dictionaryKeys = contractInfo.namedKeys.filter(
@@ -322,10 +323,10 @@ export async function diagnoseOdraKeys(): Promise<void> {
             nk.name.includes('storage') ||
             nk.name.includes('__')
     );
-    console.log('[diag] Potential dictionary keys:', dictionaryKeys);
+    logger.log('[diag] Potential dictionary keys:', dictionaryKeys);
   }
 
-  console.log('\n[diag] === STEP 2: Testing calculated blake2b keys ===');
+  logger.log('\n[diag] === STEP 2: Testing calculated blake2b keys ===');
   // Log all pre-calculated keys
   debugLogKeys();
 
@@ -350,16 +351,16 @@ export async function diagnoseOdraKeys(): Promise<void> {
         const cl = stored.clValue;
         const typeName = cl.type?.toString() ?? '?';
         const hexValue = clValueListU8ToHex(cl);
-        console.log(`[diag] ✅ ${name} → ${typeName}, hex: ${hexValue?.slice(0, 40)}...`);
+        logger.log(`[diag] ✅ ${name} → ${typeName}, hex: ${hexValue?.slice(0, 40)}...`);
       } else {
-        console.log(`[diag] ❌ ${name} → null`);
+        logger.log(`[diag] ❌ ${name} → null`);
       }
     } catch {
-      console.log(`[diag] ❌ ${name} → error`);
+      logger.log(`[diag] ❌ ${name} → error`);
     }
   }
 
-  console.log('\n[diag] Done.');
+  logger.log('\n[diag] Done.');
 }
 
 // ── Core data readers ───────────────────────────────────────────────
@@ -384,7 +385,7 @@ async function readSchedulesCount(): Promise<bigint> {
       }
     }
   } catch (err) {
-    console.warn('[icoService] Failed to read schedules count:', err);
+    logger.warn('[icoService] Failed to read schedules count:', err);
   }
 
   return 0n;
@@ -408,7 +409,7 @@ async function readScheduleByIndex(index: number | bigint): Promise<ICOSchedule 
       }
     }
   } catch (err) {
-    console.warn(`[icoService] Failed to read schedule ${index}:`, err);
+    logger.warn(`[icoService] Failed to read schedule ${index}:`, err);
   }
 
   return null;
@@ -526,11 +527,11 @@ export async function getCurrencyInfo(
     if (stored?.clValue) {
       // CurrencyInfo is (bool, Option<Key>)
       // Parse the tuple to get supported flag and optional address
-      console.log('[icoService] Currency info CLValue:', stored.clValue);
+      logger.log('[icoService] Currency info CLValue:', stored.clValue);
       return { supported: true, address: null };
     }
   } catch (err) {
-    console.warn(`[icoService] Failed to read currency info for ${currency}:`, err);
+    logger.warn(`[icoService] Failed to read currency info for ${currency}:`, err);
   }
 
   return { supported: false, address: null };
@@ -545,7 +546,7 @@ export async function getTailorCoinAddress(): Promise<string | null> {
       return stored.clValue.key.toString();
     }
   } catch (err) {
-    console.warn('[icoService] Failed to read tailor coin address:', err);
+    logger.warn('[icoService] Failed to read tailor coin address:', err);
   }
   return null;
 }
@@ -557,7 +558,7 @@ export async function getTreasuryAddress(): Promise<string | null> {
       return stored.clValue.key.toString();
     }
   } catch (err) {
-    console.warn('[icoService] Failed to read treasury address:', err);
+    logger.warn('[icoService] Failed to read treasury address:', err);
   }
   return null;
 }
@@ -569,7 +570,7 @@ export async function getOwnerAddress(): Promise<string | null> {
       return stored.clValue.key.toString();
     }
   } catch (err) {
-    console.warn('[icoService] Failed to read owner address:', err);
+    logger.warn('[icoService] Failed to read owner address:', err);
   }
   return null;
 }

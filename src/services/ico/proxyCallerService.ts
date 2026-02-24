@@ -31,6 +31,7 @@ import {
 
 import { ICO_CONFIG } from '@/constants/ico';
 import { hexToBytes, stripHashPrefix } from './casperClient';
+import logger from '@/lib/logger';
 
 // ── WASM loader ─────────────────────────────────────────────────────
 
@@ -70,7 +71,7 @@ export async function loadProxyCallerWasm(): Promise<Uint8Array> {
       );
     }
   } else {
-    console.warn('[proxyCallerService] WASM integrity check skipped: crypto.subtle unavailable (HTTP context). Production requires HTTPS.');
+    logger.warn('[proxyCallerService] WASM integrity check skipped: crypto.subtle unavailable (HTTP context). Production requires HTTPS.');
   }
 
   proxyWasmCache = wasmBytes;
@@ -141,7 +142,7 @@ export function createProxyCallerTransaction(
     .payment(Number(gasPayment), 5)
     .build();
 
-  console.log('[proxyCallerService] Transaction created:', {
+  logger.log('[proxyCallerService] Transaction created:', {
     hash: transaction.hash?.toHex(),
     entryPoint,
     attachedValue: attachedValue.toString(),
