@@ -1873,6 +1873,7 @@ dependencies = [
 name = "indexer"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "dotenv",
  "futures-util",
  "reqwest",

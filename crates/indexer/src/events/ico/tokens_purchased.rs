@@ -17,7 +17,9 @@ pub struct TokensPurchased {
     /// Payment currency (0=CSPR, 1=USDC, 2=USDT).
     pub currency: u8,
     /// Token price at the time of purchase (U256 as string).
-    pub price: String,
+    /// `None` when reconstructed via backfill (price unavailable from node RPC).
+    #[serde(default)]
+    pub price: Option<String>,
     /// Total cost paid by the buyer (U256 as string).
     pub cost: String,
     /// Block timestamp of the purchase.
@@ -53,7 +55,7 @@ impl IndexableEvent for TokensPurchased {
                 buyer_address: ctx.caller,
                 amount: &self.amount,
                 currency: self.currency_str(),
-                price: &self.price,
+                price: self.price.as_deref().unwrap_or(""),
                 cost: &self.cost,
                 event_timestamp: self.timestamp.cast_signed(),
             },

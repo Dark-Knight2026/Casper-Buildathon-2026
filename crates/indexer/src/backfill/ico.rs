@@ -8,6 +8,7 @@
 use core::time::Duration;
 use std::collections::HashMap;
 
+use chrono::DateTime;
 use reqwest::Client;
 use secrecy::ExposeSecret;
 use serde::Deserialize;
@@ -18,7 +19,7 @@ use super::db;
 use crate::{
     config::{ContractType, IndexerConfig},
     error::{ApiErrorResponse, IndexerError, IndexerResult},
-    events::EventRegistry,
+    events::{EventRegistry, ico::TokensPurchased},
     processor::{self, RawEvent},
 };
 
@@ -313,12 +314,20 @@ async fn process_ico_deploy(
     // 5. build and process TokensPurchased event
     let currency_name = ico_currency_name(currency_id);
 
-    let event_data = json!({
-        "amount":    big_amount,
-        "currency":  currency_name,
-        "cost":      cost,
-        "timestamp": deploy.header.timestamp,
-    });
+    // Convert ISO-8601 timestamp (from Casper node) to Unix epoch seconds (u64).
+    let timestamp_secs: u64 = DateTime::parse_from_rfc3339(&deploy.header.timestamp)
+        .map(|dt| dt.timestamp().max(0).cast_unsigned())
+        .unwrap_or(0);
+
+    // `price` is None: not available from node RPC during backfill.
+    let typed_event = TokensPurchased {
+        amount: big_amount.clone(),
+        currency: currency_id,
+        price: None,
+        cost: cost.clone(),
+        timestamp: timestamp_secs,
+    };
+    let event_data = serde_json::to_value(&typed_event)?;
 
     let raw = RawEvent {
         contract_hash: contract_hash.to_owned(),
