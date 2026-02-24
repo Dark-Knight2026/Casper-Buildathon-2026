@@ -12,6 +12,10 @@ pub struct ApiErrorResponse {
 /// Errors that can occur during indexer operation.
 #[derive(Debug, thiserror::Error)]
 pub enum IndexerError {
+    /// A startup error (failed to initialize a required system component).
+    #[error("Startup error: {0}")]
+    Startup(String),
+
     /// A configuration error (missing or invalid environment variable).
     #[error("Configuration error: {0}")]
     Config(String),

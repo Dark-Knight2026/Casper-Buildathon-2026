@@ -76,13 +76,13 @@ pub(super) async fn backfill_cep18(
     loop {
         let url = format!(
             "{}/ft-token-actions?contract_package_hash={contract_hash}&page={page}&limit=100&order_by=block_height&order_direction=ASC",
-            config.cspr_cloud_rest_url,
+            config.casper.rest_url,
         );
         tracing::debug!(%url, "Fetching ft-token-actions page {page}");
 
         let response = client
             .get(&url)
-            .header("authorization", config.cspr_cloud_api_token.expose_secret())
+            .header("authorization", config.casper.api_token.expose_secret())
             .timeout(Duration::from_secs(30))
             .send()
             .await?;

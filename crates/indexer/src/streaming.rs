@@ -125,10 +125,7 @@ pub(crate) async fn connect(
 ) -> IndexerResult<WebSocketStream<MaybeTlsStream<TcpStream>>> {
     let hashes = build_hashes_csv(&config.contracts);
 
-    let mut url = format!(
-        "{}?contract_package_hash={hashes}",
-        config.cspr_cloud_wss_url
-    );
+    let mut url = format!("{}?contract_package_hash={hashes}", config.casper.wss_url);
 
     if let Some(id) = last_event_id {
         write!(url, "&last_event_id={id}").expect("String write is infallible");
@@ -144,7 +141,8 @@ pub(crate) async fn connect(
     request.headers_mut().insert(
         "authorization",
         config
-            .cspr_cloud_api_token
+            .casper
+            .api_token
             .expose_secret()
             .parse()
             .map_err(|e| IndexerError::Parse(format!("Invalid authorization header value: {e}")))?,

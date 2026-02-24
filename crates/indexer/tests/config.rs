@@ -101,11 +101,8 @@ fn from_env_succeeds_with_all_required_vars() {
         config.database_url.expose_secret(),
         "postgres://localhost/test"
     );
-    assert_eq!(config.cspr_cloud_rest_url, "https://api.testnet.cspr.cloud");
-    assert_eq!(
-        config.cspr_cloud_wss_url,
-        "wss://streaming.testnet.cspr.cloud"
-    );
+    assert_eq!(config.casper.rest_url, "https://api.testnet.cspr.cloud");
+    assert_eq!(config.casper.wss_url, "wss://streaming.testnet.cspr.cloud");
     assert_eq!(config.backfill_rate_limit_ms, 200, "Default rate limit");
     assert_eq!(
         config.wss_reconnect_delay_ms, 1000,

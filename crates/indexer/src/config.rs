@@ -13,24 +13,30 @@ const DEFAULT_WSS_RECONNECT_DELAY_MS: u64 = 1000;
 
 /// Indexer configuration loaded from environment variables.
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct IndexerConfig {
     /// `PostgreSQL` database connection URL.
     pub database_url: SecretString,
-    /// `CSPR.cloud` API access token.
-    pub cspr_cloud_api_token: SecretString,
-    /// `CSPR.cloud` REST API base URL.
-    pub cspr_cloud_rest_url: String,
-    /// `CSPR.cloud` WebSocket streaming URL.
-    pub cspr_cloud_wss_url: String,
-    /// Casper node JSON-RPC URL (used for ICO backfill via `info_get_deploy`).
-    pub casper_node_url: String,
+    /// CSPR.cloud API credentials and Casper node connection settings.
+    pub casper: Casper,
     /// Registry of tracked smart contract package hashes.
     pub contracts: ContractRegistry,
     /// Delay between REST API requests in milliseconds (rate limiting).
     pub backfill_rate_limit_ms: u64,
     /// Initial WebSocket reconnect delay in milliseconds.
     pub wss_reconnect_delay_ms: u64,
+}
+
+/// CSPR.cloud API credentials and Casper node connection settings.
+#[derive(Debug, Clone)]
+pub struct Casper {
+    /// `CSPR.cloud` API access token.
+    pub api_token: SecretString,
+    /// `CSPR.cloud` REST API base URL.
+    pub rest_url: String,
+    /// `CSPR.cloud` WebSocket streaming URL.
+    pub wss_url: String,
+    /// Casper node JSON-RPC URL (used for ICO backfill via `info_get_deploy`).
+    pub node_url: String,
 }
 
 impl IndexerConfig {
@@ -45,33 +51,32 @@ impl IndexerConfig {
         let database_url = env::var("DATABASE_URL")
             .map(SecretString::from)
             .map_err(|_| IndexerError::Config("DATABASE_URL must be set".to_owned()))?;
-        let cspr_cloud_api_token = env::var("CSPR_CLOUD_API_TOKEN")
+        let api_token = env::var("CSPR_CLOUD_API_TOKEN")
             .map(SecretString::from)
             .map_err(|_| IndexerError::Config("CSPR_CLOUD_API_TOKEN must be set".to_owned()))?;
-        let cspr_cloud_rest_url = env::var("CSPR_CLOUD_REST_URL")
-            .map_err(|_| IndexerError::Config("CSPR_CLOUD_REST_URL must be set".to_owned()))?;
-        if !cspr_cloud_rest_url.starts_with("https://") {
-            return Err(IndexerError::Config(
-                "CSPR_CLOUD_REST_URL must start with https://".to_owned(),
-            ));
-        }
-
-        let cspr_cloud_wss_url = env::var("CSPR_CLOUD_WSS_URL")
-            .map_err(|_| IndexerError::Config("CSPR_CLOUD_WSS_URL must be set".to_owned()))?;
-        if !cspr_cloud_wss_url.starts_with("wss://") {
-            return Err(IndexerError::Config(
-                "CSPR_CLOUD_WSS_URL must start with wss://".to_owned(),
-            ));
-        }
-
-        let casper_node_url = env::var("CASPER_NODE_URL")
-            .map_err(|_| IndexerError::Config("CASPER_NODE_URL must be set".to_owned()))?;
-        if !casper_node_url.starts_with("https://") && !casper_node_url.starts_with("http://") {
-            return Err(IndexerError::Config(
-                "CASPER_NODE_URL must start with http:// or https://".to_owned(),
-            ));
-        }
-
+        let rest_url = env::var("CSPR_CLOUD_REST_URL")
+            .map_err(|_| IndexerError::Config("CSPR_CLOUD_REST_URL must be set".to_owned()))
+            .and_then(|url| {
+                url.starts_with("https://").then_some(url).ok_or_else(|| {
+                    IndexerError::Config("CSPR_CLOUD_REST_URL must start with https://".to_owned())
+                })
+            })?;
+        let wss_url = env::var("CSPR_CLOUD_WSS_URL")
+            .map_err(|_| IndexerError::Config("CSPR_CLOUD_WSS_URL must be set".to_owned()))
+            .and_then(|url| {
+                url.starts_with("wss://").then_some(url).ok_or_else(|| {
+                    IndexerError::Config("CSPR_CLOUD_WSS_URL must start with wss://".to_owned())
+                })
+            })?;
+        let node_url = env::var("CASPER_NODE_URL")
+            .map_err(|_| IndexerError::Config("CASPER_NODE_URL must be set".to_owned()))
+            .and_then(|url| {
+                url.starts_with("https://").then_some(url).ok_or_else(|| {
+                    IndexerError::Config(
+                        "CASPER_NODE_URL must start with http:// or https://".to_owned(),
+                    )
+                })
+            })?;
         let contracts = ContractRegistry::from_env();
         if contracts.active_contracts().is_empty() {
             tracing::warn!(
@@ -93,10 +98,12 @@ impl IndexerConfig {
 
         Ok(Self {
             database_url,
-            cspr_cloud_api_token,
-            cspr_cloud_rest_url,
-            cspr_cloud_wss_url,
-            casper_node_url,
+            casper: Casper {
+                api_token,
+                rest_url,
+                wss_url,
+                node_url,
+            },
             contracts,
             backfill_rate_limit_ms,
             wss_reconnect_delay_ms,

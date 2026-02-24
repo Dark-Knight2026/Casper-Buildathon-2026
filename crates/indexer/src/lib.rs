@@ -39,5 +39,7 @@ pub mod event_trait;
 pub mod events;
 /// Event processor — persists events into PostgreSQL.
 pub mod processor;
+/// Indexer runner — initializes resources and orchestrates backfill + streaming.
+pub mod runner;
 /// WebSocket streaming client for real-time event ingestion.
 pub mod streaming;

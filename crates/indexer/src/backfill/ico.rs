@@ -164,17 +164,14 @@ pub(super) async fn backfill_ico(
     loop {
         let url = format!(
             "{}/deploys?contract_package_hash={contract_hash}&page={page}&limit=100&order_by=block_height&order_direction=ASC",
-            ctx.config.cspr_cloud_rest_url,
+            ctx.config.casper.rest_url,
         );
         tracing::debug!(%url, "Fetching ICO deploy list page {page}");
 
         let response = ctx
             .client
             .get(&url)
-            .header(
-                "authorization",
-                ctx.config.cspr_cloud_api_token.expose_secret(),
-            )
+            .header("authorization", ctx.config.casper.api_token.expose_secret())
             .timeout(Duration::from_secs(30))
             .send()
             .await?;
@@ -259,7 +256,7 @@ async fn process_ico_deploy(
 
     let rpc_response = ctx
         .client
-        .post(&ctx.config.casper_node_url)
+        .post(&ctx.config.casper.node_url)
         .json(&rpc_body)
         .timeout(Duration::from_secs(15))
         .send()
@@ -420,13 +417,13 @@ pub async fn load_big_transfers(
     loop {
         let url = format!(
             "{}/ft-token-actions?contract_package_hash={big_hash}&page={page}&limit=100&order_by=block_height&order_direction=ASC",
-            config.cspr_cloud_rest_url,
+            config.casper.rest_url,
         );
         tracing::debug!(%url, "Fetching BIG ft-token-actions page {page}");
 
         let response = client
             .get(&url)
-            .header("authorization", config.cspr_cloud_api_token.expose_secret())
+            .header("authorization", config.casper.api_token.expose_secret())
             .timeout(Duration::from_secs(30))
             .send()
             .await?;

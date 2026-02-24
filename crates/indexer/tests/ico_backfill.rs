@@ -6,16 +6,18 @@ use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use indexer::backfill::ico::load_big_transfers;
-use indexer::config::{ContractRegistry, IndexerConfig};
+use indexer::config::{Casper, ContractRegistry, IndexerConfig};
 
 /// Builds a minimal `IndexerConfig` pointing at the given mock server URL.
 fn test_config(rest_url: String) -> IndexerConfig {
     IndexerConfig {
         database_url: "postgres://localhost/test".to_owned().into(),
-        cspr_cloud_api_token: "test-token".to_owned().into(),
-        cspr_cloud_rest_url: rest_url,
-        cspr_cloud_wss_url: "wss://test".to_owned(),
-        casper_node_url: "https://node.test".to_owned(),
+        casper: Casper {
+            api_token: "test-token".to_owned().into(),
+            rest_url,
+            wss_url: "wss://test".to_owned(),
+            node_url: "https://node.test".to_owned(),
+        },
         contracts: ContractRegistry::default(),
         backfill_rate_limit_ms: 0,
         wss_reconnect_delay_ms: 0,
