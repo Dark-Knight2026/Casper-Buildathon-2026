@@ -139,7 +139,7 @@ pub async fn insert_blockchain_transaction(
         r"
             INSERT INTO blockchain_transactions (transaction_hash, deploy_hash, block_number, transaction_type, from_address, amount, currency, status, metadata, confirmed_at)
             VALUES ($1, $1, $2, $3, $4, $5, $6, 'confirmed', $7, NOW())
-            ON CONFLICT (transaction_hash) DO NOTHING
+            ON CONFLICT (transaction_hash, transaction_type) DO NOTHING
         ",
         row.deploy_hash,
         row.block_number,
