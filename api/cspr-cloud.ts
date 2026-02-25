@@ -1,22 +1,34 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-const API_KEY = process.env.CSPR_CLOUD_API_KEY || '';
+const API_KEY = process.env.VITE_CSPR_CLOUD_API_KEY || process.env.CSPR_CLOUD_API_KEY || '';
 const ALLOWED_BASE_URLS = [
   'https://api.testnet.cspr.cloud',
   'https://api.cspr.cloud',
 ];
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  // CORS headers
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') {
+    return res.status(204).end();
+  }
+
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { path } = req.query;
-  if (!path || typeof path !== 'string') {
+  // Extract path from URL: /api/cspr-cloud/accounts/xxx → accounts/xxx
+  const urlPath = req.url?.replace(/^\/api\/cspr-cloud\/?/, '') || '';
+  const path = urlPath || (typeof req.query.path === 'string' ? req.query.path : '');
+
+  if (!path) {
     return res.status(400).json({ error: 'Missing path parameter' });
   }
 
-  if (/(?:^\/|\.\.|\/{2,}|%2f|%5c)/i.test(path)) {
+  if (/(?:\.\.|\/{2,}|%2f|%5c)/i.test(path)) {
     return res.status(400).json({ error: 'Invalid path' });
   }
 

@@ -1,7 +1,7 @@
 {
   "rewrites": [
     {
-      "source": "/api/cspr-cloud",
+      "source": "/api/cspr-cloud/:path*",
       "destination": "/api/cspr-cloud"
     },
     {
@@ -9,7 +9,7 @@
       "destination": "/api/casper-rpc"
     },
     {
-      "source": "/(.*)",
+      "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
   ]
