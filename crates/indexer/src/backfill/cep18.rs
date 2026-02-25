@@ -197,7 +197,12 @@ pub async fn backfill_cep18(
             };
 
             match processor::process_event(db_pool, registry, &raw).await {
-                Ok(()) => total_events += 1,
+                Ok(()) => {
+                    total_events += 1;
+                    // Advance cursor only on success — a transient DB error must
+                    // not silently skip this event on the next restart.
+                    page_max_block = Some(page_max_block.unwrap_or(0).max(action.block_height));
+                }
                 Err(e) => {
                     tracing::warn!(
                         error = %e,
@@ -207,8 +212,6 @@ pub async fn backfill_cep18(
                     );
                 }
             }
-
-            page_max_block = Some(page_max_block.unwrap_or(0).max(action.block_height));
         }
 
         // Persist progress so restarts resume from here instead of block 0.

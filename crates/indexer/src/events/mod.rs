@@ -109,6 +109,12 @@ impl EventRegistry {
         let event_type = EventType::parse(ctx.contract_type, event_name)?;
 
         // Type-safe dispatch — compiler enforces exhaustiveness.
+        //
+        // MVP scope: only the events below have full handlers. All other
+        // recognized event types (IcoScheduleAdded, CurrencyAdded,
+        // TransferFrom, Mint, Burn, IncreaseAllowance, DecreaseAllowance)
+        // fall through to the wildcard arm — they are stored as raw data in
+        // `blockchain_events` but do not update derived tables.
         dispatch_events!(
             event_type, ctx, event_data, event_name;
             EventType::Ico(ico::IcoEventType::TokensPurchased) => ico::TokensPurchased,

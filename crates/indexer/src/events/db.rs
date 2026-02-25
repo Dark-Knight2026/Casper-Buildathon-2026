@@ -210,7 +210,7 @@ pub async fn update_token_balance(
                     INSERT INTO token_holdings as th (user_address, token_type, balance, last_updated_at)
                     VALUES ($1, $2, '0', NOW())
                     ON CONFLICT (user_address, token_type) DO UPDATE SET
-                        balance         = (th.balance::NUMERIC - $3::TEXT::NUMERIC)::TEXT,
+                        balance         = GREATEST('0'::NUMERIC, th.balance::NUMERIC - $3::TEXT::NUMERIC)::TEXT,
                         last_updated_at = NOW()
                 ",
                 user_address,
@@ -259,7 +259,8 @@ pub struct NewIcoPurchase<'a> {
     /// Payment currency label (`"CSPR"`, `"USDC"`, `"USDT"`).
     pub currency: &'a str,
     /// Token price at the time of purchase (U256 as string).
-    pub price: &'a str,
+    /// `None` when reconstructed via backfill (price unavailable from node RPC).
+    pub price: Option<&'a str>,
     /// Total cost paid by the buyer (U256 as string).
     pub cost: &'a str,
     /// Block timestamp (epoch seconds).

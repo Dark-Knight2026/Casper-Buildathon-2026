@@ -53,7 +53,7 @@ impl IndexableEvent for TokensPurchased {
                 buyer_address: ctx.caller,
                 amount: &self.amount,
                 currency: self.currency_str(),
-                price: self.price.as_deref().unwrap_or(""),
+                price: self.price.as_deref(),
                 cost: &self.cost,
                 event_timestamp: self.timestamp.cast_signed(),
             },

@@ -33,12 +33,14 @@ pub async fn run() -> IndexerResult<()> {
             IndexerError::Startup("failed to install rustls crypto provider".to_owned())
         })?;
 
+    // Load .env before tracing_subscriber so that RUST_LOG defined in .env
+    // is visible to EnvFilter::from_default_env().
+    dotenv::dotenv().ok();
     tracing_subscriber::fmt()
         .with_target(false)
         .with_level(true)
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
-    dotenv::dotenv().ok();
 
     let config = IndexerConfig::from_env()?;
     let db_pool = PgPoolOptions::new()
@@ -74,6 +76,11 @@ pub async fn run() -> IndexerResult<()> {
 
     backfill_task.abort();
     streaming_task.abort();
+
+    // Wait for both tasks to fully stop before dropping db_pool, so that any
+    // in-flight DB operations can complete or be cleanly canceled first.
+    let _ = backfill_task.await;
+    let _ = streaming_task.await;
 
     Ok(())
 }

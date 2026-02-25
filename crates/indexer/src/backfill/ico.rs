@@ -321,9 +321,18 @@ async fn process_ico_deploy(
     let currency_name = ico_currency_name(currency_id);
 
     // Convert ISO-8601 timestamp (from Casper node) to Unix epoch seconds (u64).
-    let timestamp_secs: u64 = DateTime::parse_from_rfc3339(&deploy.header.timestamp)
-        .map(|dt| dt.timestamp().max(0).cast_unsigned())
-        .unwrap_or(0);
+    let timestamp_secs: u64 = DateTime::parse_from_rfc3339(&deploy.header.timestamp).map_or_else(
+        |e| {
+            tracing::warn!(
+                deploy = %deploy_hash,
+                raw = %deploy.header.timestamp,
+                error = %e,
+                "Failed to parse deploy timestamp — storing 0"
+            );
+            0
+        },
+        |dt| dt.timestamp().max(0).cast_unsigned(),
+    );
 
     // `price` is None: not available from node RPC during backfill.
     let typed_event = TokensPurchased {
