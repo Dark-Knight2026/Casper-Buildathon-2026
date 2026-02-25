@@ -239,6 +239,10 @@ pub async fn backfill_cep18(
 #[inline]
 pub fn ft_action_to_event(action: &FtTokenAction) -> Option<(&'static str, serde_json::Value)> {
     match action.ft_action_type {
+        // Mint — stored as raw data only. TailorCoin (BIG) has a fixed supply
+        // minted once at deploy; `mint()` is not exported. Mint records from
+        // CSPR.cloud represent the initial deployment allocation, not
+        // user-facing operations, so no `token_holdings` update is needed.
         FtActionType::Mint => {
             let Some(recipient) = action.to_hash.as_deref() else {
                 tracing::warn!(deploy = %action.deploy_hash, "Mint action missing to_hash — skipping");

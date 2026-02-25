@@ -71,11 +71,13 @@ impl IndexerConfig {
         let node_url = env::var("CASPER_NODE_URL")
             .map_err(|_| IndexerError::Config("CASPER_NODE_URL must be set".to_owned()))
             .and_then(|url| {
-                url.starts_with("https://").then_some(url).ok_or_else(|| {
-                    IndexerError::Config(
-                        "CASPER_NODE_URL must start with http:// or https://".to_owned(),
-                    )
-                })
+                (url.starts_with("http://") || url.starts_with("https://"))
+                    .then_some(url)
+                    .ok_or_else(|| {
+                        IndexerError::Config(
+                            "CASPER_NODE_URL must start with http:// or https://".to_owned(),
+                        )
+                    })
             })?;
         let contracts = ContractRegistry::from_env();
         if contracts.active_contracts().is_empty() {

@@ -86,7 +86,7 @@ async fn handler_error_rolls_back_blockchain_events_row(pool: PgPool) {
     let registry = EventRegistry::new();
 
     // `TokensPurchased` requires `amount`, `cost`, `currency`, and `timestamp`.
-    // An empty object fails serde deserialization -> IndexerError::Serde ->
+    // An empty object fails serde deserialization -> IndexerError::Json ->
     // the Err(e) arm in processor.rs returns early without committing.
     let bad_event = RawEvent {
         contract_hash: "ico_contract_hash".to_owned(),
