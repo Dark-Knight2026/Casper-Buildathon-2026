@@ -4,8 +4,9 @@ import { OverviewTab } from './OverviewTab';
 import { RewardsTab } from './RewardsTab';
 import { TokenomicsTab } from './TokenomicsTab';
 import { WhitepaperTab } from './WhitepaperTab';
+import { GitHubTab } from './GitHubTab';
 import { TransactionHistoryTab } from './TransactionHistoryTab';
-import { ArrowLeftRight, LayoutDashboard, Gift, PieChart, FileText, History } from 'lucide-react';
+import { ArrowLeftRight, LayoutDashboard, Gift, PieChart, FileText, History, Code } from 'lucide-react';
 
 interface PostICODashboardProps {
   className?: string;
@@ -52,6 +53,12 @@ export function PostICODashboard({ className }: PostICODashboardProps) {
       value: 'whitepaper',
       icon: <FileText className="w-4 h-4" />,
       content: <WhitepaperTab />,
+    },
+    {
+      label: 'GitHub',
+      value: 'github',
+      icon: <Code className="w-4 h-4" />,
+      content: <GitHubTab />,
     },
   ];
 
