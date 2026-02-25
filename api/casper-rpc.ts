@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-const API_KEY = process.env.CSPR_CLOUD_API_KEY || '';
+const API_KEY = process.env.VITE_CSPR_CLOUD_API_KEY || process.env.CSPR_CLOUD_API_KEY || '';
 
 const ALLOWED_RPC_METHODS = new Set([
   'query_global_state',
@@ -9,9 +9,20 @@ const ALLOWED_RPC_METHODS = new Set([
   'account_put_deploy',
   'state_get_entity',
   'info_get_account_info',
+  'info_get_status',
+  'chain_get_state_root_hash',
 ]);
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  // CORS headers
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') {
+    return res.status(204).end();
+  }
+
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
