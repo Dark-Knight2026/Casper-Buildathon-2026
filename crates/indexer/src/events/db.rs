@@ -193,7 +193,14 @@ pub async fn update_token_balance(
         ContractType::Big => "BIG",
         ContractType::Usdc => "USDC",
         ContractType::Usdt => "USDT",
-        _ => return Ok(()), // non-token contracts — no-op
+        _ => {
+            tracing::warn!(
+                contract_type = ?token_type,
+                %user_address,
+                "update_token_balance called for non-CEP18 contract — skipping"
+            );
+            return Ok(());
+        }
     };
 
     match update {

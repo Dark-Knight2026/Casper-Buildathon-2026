@@ -222,7 +222,10 @@ pub fn ft_action_to_event(action: &FtTokenAction) -> Option<(&'static str, serde
     match action.ft_action_type_id {
         // Mint — new tokens created, no sender
         1 => {
-            let recipient = action.to_hash.as_deref().unwrap_or_default();
+            let Some(recipient) = action.to_hash.as_deref() else {
+                tracing::warn!(deploy = %action.deploy_hash, "Mint action missing to_hash — skipping");
+                return None;
+            };
             Some((
                 "Mint",
                 json!({ "recipient": recipient, "amount": action.amount }),
@@ -232,8 +235,14 @@ pub fn ft_action_to_event(action: &FtTokenAction) -> Option<(&'static str, serde
         // Transfer — the primary CEP-18 action with a dedicated handler.
         // CSPR.cloud ft_action_type_id=2 is "Transfer" per /ft-token-action-types.
         2 => {
-            let sender = action.from_hash.as_deref().unwrap_or_default();
-            let recipient = action.to_hash.as_deref().unwrap_or_default();
+            let Some(sender) = action.from_hash.as_deref() else {
+                tracing::warn!(deploy = %action.deploy_hash, "Transfer action missing from_hash — skipping");
+                return None;
+            };
+            let Some(recipient) = action.to_hash.as_deref() else {
+                tracing::warn!(deploy = %action.deploy_hash, "Transfer action missing to_hash — skipping");
+                return None;
+            };
             Some((
                 "Transfer",
                 json!({ "sender": sender, "recipient": recipient, "amount": action.amount }),
@@ -243,8 +252,14 @@ pub fn ft_action_to_event(action: &FtTokenAction) -> Option<(&'static str, serde
         // Approve — allowance set; stored as raw data (no dedicated handler yet).
         // CSPR.cloud ft_action_type_id=3 is "Approve" per /ft-token-action-types.
         3 => {
-            let owner = action.from_hash.as_deref().unwrap_or_default();
-            let spender = action.to_hash.as_deref().unwrap_or_default();
+            let Some(owner) = action.from_hash.as_deref() else {
+                tracing::warn!(deploy = %action.deploy_hash, "SetAllowance action missing from_hash — skipping");
+                return None;
+            };
+            let Some(spender) = action.to_hash.as_deref() else {
+                tracing::warn!(deploy = %action.deploy_hash, "SetAllowance action missing to_hash — skipping");
+                return None;
+            };
             Some((
                 "SetAllowance",
                 json!({ "owner": owner, "spender": spender, "amount": action.amount }),
