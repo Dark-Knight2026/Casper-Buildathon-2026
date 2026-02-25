@@ -1,57 +1,106 @@
-//! Integration tests for the trait-based event registry.
-
-use serde_json::json;
+//! Tests for `EventType::parse` — validates that raw `(ContractType, event_name)`
+//! pairs are resolved to the correct typed variant.
 
 use indexer::{
     config::ContractType,
-    events::{EventRegistry, EventType},
+    events::{EventType, cep18::Cep18EventType, ico::IcoEventType},
 };
 
-/// Test that the event registry can dispatch ICO `TokensPurchased` events.
-#[tokio::test]
-async fn test_registry_dispatch_ico_purchase() {
-    let _registry = EventRegistry::new();
+// ---------------------------------------------------------------------------
+// ICO events
+// ---------------------------------------------------------------------------
 
-    // Mock event data matching TokensPurchased structure
-    let _event_data = json!({
-        "amount": "1000000000",
-        "currency": 0,  // CSPR
-        "price": "50000000",
-        "cost": "50000000000",
-        "timestamp": 1_700_000_000
-    });
-
-    // Note: This test requires a real database connection to fully execute.
-    // In a real scenario, you would:
-    // 1. Set up a test database (e.g., using testcontainers)
-    // 2. Create EventContext with real connection
-    // 3. Call registry.process_event()
-    // 4. Verify data was inserted correctly
-
-    assert!(
-        EventType::parse(ContractType::Ico, "TokensPurchased").is_ok(),
-        "EventRegistry should have handler for ICO TokensPurchased"
+/// `TokensPurchased` on the ICO contract must resolve to the correct variant.
+#[test]
+fn ico_tokens_purchased_parses_to_correct_variant() {
+    assert_eq!(
+        EventType::parse(ContractType::Ico, "TokensPurchased").unwrap(),
+        EventType::Ico(IcoEventType::TokensPurchased),
     );
 }
 
-/// Test that unknown events are handled gracefully.
-#[tokio::test]
-async fn test_registry_unknown_event() {
-    let _registry = EventRegistry::new();
+/// All remaining ICO event names must each parse to their respective variant.
+#[test]
+fn ico_all_variants_parse_correctly() {
+    let cases = [
+        ("IcoScheduleAdded", IcoEventType::IcoScheduleAdded),
+        ("CurrencyAdded", IcoEventType::CurrencyAdded),
+        ("CurrencyRemoved", IcoEventType::CurrencyRemoved),
+        ("UnsoldTokensWithdrawn", IcoEventType::UnsoldTokensWithdrawn),
+    ];
 
-    assert!(
-        EventType::parse(ContractType::Ico, "UnknownEvent").is_err(),
-        "EventRegistry should not have handler for UnknownEvent"
+    for (name, expected) in cases {
+        assert_eq!(
+            EventType::parse(ContractType::Ico, name).unwrap(),
+            EventType::Ico(expected),
+            "ICO event `{name}` must parse to the correct variant",
+        );
+    }
+}
+
+/// An unrecognized event name on an ICO contract must return `Err`.
+#[test]
+fn ico_unknown_event_name_returns_error() {
+    assert!(EventType::parse(ContractType::Ico, "UnknownEvent").is_err());
+}
+
+// ---------------------------------------------------------------------------
+// CEP-18 events
+// ---------------------------------------------------------------------------
+
+/// `Transfer` on BIG, USDC, and USDT must all resolve to
+/// `EventType::Cep18(Cep18EventType::Transfer)`.
+#[test]
+fn cep18_transfer_parses_for_all_token_contracts() {
+    let expected = EventType::Cep18(Cep18EventType::Transfer);
+
+    assert_eq!(
+        EventType::parse(ContractType::Big, "Transfer").unwrap(),
+        expected
+    );
+    assert_eq!(
+        EventType::parse(ContractType::Usdc, "Transfer").unwrap(),
+        expected
+    );
+    assert_eq!(
+        EventType::parse(ContractType::Usdt, "Transfer").unwrap(),
+        expected
     );
 }
 
-/// Test that CEP-18 Transfer is registered for all token contracts.
-#[tokio::test]
-async fn test_registry_cep18_transfer_multi_contract() {
-    let _registry = EventRegistry::new();
+/// All CEP-18 event names must each parse to their respective variant.
+#[test]
+fn cep18_all_variants_parse_correctly() {
+    let cases = [
+        ("TransferFrom", Cep18EventType::TransferFrom),
+        ("Mint", Cep18EventType::Mint),
+        ("Burn", Cep18EventType::Burn),
+        ("SetAllowance", Cep18EventType::SetAllowance),
+        ("IncreaseAllowance", Cep18EventType::IncreaseAllowance),
+        ("DecreaseAllowance", Cep18EventType::DecreaseAllowance),
+    ];
 
-    // Transfer should be registered for BIG, USDC, USDT
-    assert!(EventType::parse(ContractType::Big, "Transfer").is_ok());
-    assert!(EventType::parse(ContractType::Usdc, "Transfer").is_ok());
-    assert!(EventType::parse(ContractType::Usdt, "Transfer").is_ok());
+    for (name, expected) in cases {
+        assert_eq!(
+            EventType::parse(ContractType::Big, name).unwrap(),
+            EventType::Cep18(expected),
+            "CEP-18 event `{name}` must parse to the correct variant",
+        );
+    }
+}
+
+/// An unrecognized event name on a CEP-18 contract must return `Err`.
+#[test]
+fn cep18_unknown_event_name_returns_error() {
+    assert!(EventType::parse(ContractType::Big, "UnknownEvent").is_err());
+}
+
+// ---------------------------------------------------------------------------
+// Unknown contract type
+// ---------------------------------------------------------------------------
+
+/// An unrecognized `ContractType` must return `Err` regardless of event name.
+#[test]
+fn unknown_contract_type_returns_error() {
+    assert!(EventType::parse(ContractType::Unknown, "Transfer").is_err());
 }

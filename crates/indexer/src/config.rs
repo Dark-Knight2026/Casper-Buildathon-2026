@@ -134,6 +134,8 @@ pub enum ContractType {
     Roles,
     /// Staking contract.
     Staking,
+    /// Unknown contract.
+    Unknown,
 }
 
 impl ContractType {
@@ -159,6 +161,7 @@ impl core::fmt::Display for ContractType {
             Self::Nft => "nft",
             Self::Roles => "roles",
             Self::Staking => "staking",
+            Self::Unknown => "unknown",
         })
     }
 }
