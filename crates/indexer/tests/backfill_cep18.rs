@@ -229,10 +229,9 @@ fn mint_includes_recipient_and_amount() {
 }
 
 #[test]
-fn mint_with_null_recipient_falls_back_to_empty_string() {
-    // to_hash = None -> recipient field must be ""
-    let (_, data) = cep18::ft_action_to_event(&action(1, None, None, "1000")).unwrap();
-    assert_eq!(data["recipient"], "");
+fn mint_with_null_recipient_is_skipped() {
+    // to_hash = None -> no recipient to credit, skip the action entirely
+    assert!(cep18::ft_action_to_event(&action(1, None, None, "1000")).is_none());
 }
 
 // ft_action_type_id = 2 (Transfer)
@@ -255,10 +254,15 @@ fn transfer_type2_includes_sender_recipient_and_amount() {
 }
 
 #[test]
-fn transfer_type2_with_null_hashes_falls_back_to_empty_string() {
-    let (_, data) = cep18::ft_action_to_event(&action(2, None, None, "1")).unwrap();
-    assert_eq!(data["sender"], "");
-    assert_eq!(data["recipient"], "");
+fn transfer_with_null_sender_is_skipped() {
+    // from_hash = None -> no sender, skip to avoid empty address in DB
+    assert!(cep18::ft_action_to_event(&action(2, None, Some("recipient"), "1")).is_none());
+}
+
+#[test]
+fn transfer_with_null_recipient_is_skipped() {
+    // to_hash = None -> no recipient, skip to avoid empty address in DB
+    assert!(cep18::ft_action_to_event(&action(2, Some("sender"), None, "1")).is_none());
 }
 
 // ft_action_type_id = 3 (Approve -> "SetAllowance")
@@ -281,10 +285,15 @@ fn approve_type3_includes_owner_spender_and_amount() {
 }
 
 #[test]
-fn approve_type3_with_null_hashes_falls_back_to_empty_string() {
-    let (_, data) = cep18::ft_action_to_event(&action(3, None, None, "0")).unwrap();
-    assert_eq!(data["owner"], "");
-    assert_eq!(data["spender"], "");
+fn approve_with_null_owner_is_skipped() {
+    // from_hash = None -> no owner, skip to avoid empty address in DB
+    assert!(cep18::ft_action_to_event(&action(3, None, Some("spender"), "0")).is_none());
+}
+
+#[test]
+fn approve_with_null_spender_is_skipped() {
+    // to_hash = None -> no spender, skip to avoid empty address in DB
+    assert!(cep18::ft_action_to_event(&action(3, Some("owner"), None, "0")).is_none());
 }
 
 // ft_action_type_id = 4 (Burn) and unknowns — all return None

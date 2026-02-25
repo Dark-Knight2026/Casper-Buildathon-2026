@@ -15,7 +15,7 @@ mod common;
 use serde_json::json;
 use sqlx::PgPool;
 
-use common::{MIGRATOR, TRANSFER_DEPLOY_HASH};
+use common::{MIGRATOR, PURCHASE_DEPLOY_HASH, TRANSFER_DEPLOY_HASH};
 use indexer::{
     config::ContractType,
     events::EventRegistry,
@@ -207,6 +207,113 @@ async fn set_allowance_writes_blockchain_transaction_row(pool: PgPool) {
     assert_eq!(row.transaction_type, "token_allowance");
     assert_eq!(row.from_address, "alice");
     assert_eq!(row.amount.as_deref(), Some("1000"));
+}
+
+// TokensPurchased handler — ico_purchases + blockchain_transactions
+
+/// `TokensPurchased` must write one row to `ico_purchases` with correct buyer,
+/// amount, and currency label, and one row to `blockchain_transactions` with
+/// `transaction_type = 'token_purchase'`.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn tokens_purchased_writes_ico_purchase_and_blockchain_transaction(pool: PgPool) {
+    common::disable_rls(&pool).await;
+
+    processor::process_event(
+        &pool,
+        &EventRegistry::new(),
+        &RawEvent {
+            contract_hash: "ico_hash".to_owned(),
+            deploy_hash: PURCHASE_DEPLOY_HASH.to_owned(),
+            block_height: 100,
+            caller: "buyer".to_owned(),
+            contract_type: ContractType::Ico,
+            event_name: "TokensPurchased".to_owned(),
+            event_data: json!({
+                "amount": "1000000000",
+                "currency": 0,
+                "cost": "500000000",
+                "timestamp": 1_700_000_000_u64
+            }),
+        },
+    )
+    .await
+    .unwrap();
+
+    let purchase = sqlx::query!(
+        r"
+            SELECT buyer_address, amount, currency
+            FROM   ico_purchases
+            WHERE  transaction_hash = $1
+        ",
+        PURCHASE_DEPLOY_HASH,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(purchase.buyer_address, "buyer");
+    assert_eq!(purchase.amount, "1000000000");
+    assert_eq!(purchase.currency, "CSPR");
+
+    let tx_row = sqlx::query!(
+        r"
+            SELECT transaction_type, from_address, amount, currency
+            FROM   blockchain_transactions
+            WHERE  transaction_hash = $1
+        ",
+        PURCHASE_DEPLOY_HASH,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(tx_row.transaction_type, "token_purchase");
+    assert_eq!(tx_row.from_address, "buyer");
+    assert_eq!(tx_row.amount.as_deref(), Some("500000000"));
+    assert_eq!(tx_row.currency.as_deref(), Some("CSPR"));
+}
+
+/// `TokensPurchased` must increase the buyer's BIG balance by the purchased amount.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn tokens_purchased_increases_buyer_big_balance(pool: PgPool) {
+    common::disable_rls(&pool).await;
+
+    processor::process_event(
+        &pool,
+        &EventRegistry::new(),
+        &RawEvent {
+            contract_hash: "ico_hash".to_owned(),
+            deploy_hash: PURCHASE_DEPLOY_HASH.to_owned(),
+            block_height: 100,
+            caller: "buyer".to_owned(),
+            contract_type: ContractType::Ico,
+            event_name: "TokensPurchased".to_owned(),
+            event_data: json!({
+                "amount": "750",
+                "currency": 1,
+                "cost": "100",
+                "timestamp": 1_700_000_000_u64
+            }),
+        },
+    )
+    .await
+    .unwrap();
+
+    let balance: Option<String> = sqlx::query_scalar!(
+        r"
+            SELECT balance FROM token_holdings
+            WHERE user_address = 'buyer' AND token_type = 'BIG'
+        "
+    )
+    .fetch_optional(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(
+        balance.as_deref(),
+        Some("750"),
+        "buyer's BIG balance must equal the purchased amount"
+    );
 }
 
 // SetAllowance handler — token_holdings isolation
