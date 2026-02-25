@@ -22,7 +22,7 @@ use wiremock::{Mock, MockServer, ResponseTemplate, matchers};
 
 use common::{MIGRATOR, TRANSFER_DEPLOY_HASH, payloads};
 use indexer::{
-    backfill::cep18::{self, FtTokenAction},
+    backfill::cep18::{self, FtActionType, FtTokenAction},
     config::ContractType,
     events::EventRegistry,
 };
@@ -40,7 +40,7 @@ fn action(
         from_hash,
         to_hash,
         amount,
-        ft_action_type_id,
+        FtActionType::from(ft_action_type_id),
     )
 }
 
@@ -182,7 +182,7 @@ async fn fetch_page_parses_data_and_page_count() {
     assert_eq!(act.deploy_hash, "deploy_abc");
     assert_eq!(act.block_height, 1234);
     assert_eq!(act.amount, "9999");
-    assert_eq!(act.ft_action_type_id, 2);
+    assert_eq!(act.ft_action_type, FtActionType::Transfer);
 }
 
 #[tokio::test]

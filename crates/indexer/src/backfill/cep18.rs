@@ -16,10 +16,6 @@ use crate::{
     processor::{self, RawEvent},
 };
 
-// -----------------------------------------------------------------------------
-// CSPR.cloud /ft-token-actions response types
-// -----------------------------------------------------------------------------
-
 /// Top-level response from the `/ft-token-actions` endpoint.
 ///
 /// Exposed as `pub` so tests can inspect the deserialized response returned by
@@ -30,6 +26,32 @@ pub struct FtTokenActionPage {
     pub data: Vec<FtTokenAction>,
     /// Total number of pages for the current query (used for pagination).
     pub page_count: u32,
+}
+
+/// Type of fungible-token action as returned by CSPR.cloud `/ft-token-action-types`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(from = "u8")]
+pub enum FtActionType {
+    /// New tokens created (no sender).
+    Mint,
+    /// Direct transfer between accounts.
+    Transfer,
+    /// Allowance approval (owner authorizes spender).
+    Approve,
+    /// Any action type not explicitly handled (e.g. Burn = 4).
+    Unknown(u8),
+}
+
+impl From<u8> for FtActionType {
+    #[inline]
+    fn from(value: u8) -> Self {
+        match value {
+            1 => Self::Mint,
+            2 => Self::Transfer,
+            3 => Self::Approve,
+            other => Self::Unknown(other),
+        }
+    }
 }
 
 /// A single fungible-token action returned by CSPR.cloud.
@@ -45,8 +67,9 @@ pub struct FtTokenAction {
     pub to_hash: Option<String>,
     /// Token amount as a decimal string.
     pub amount: String,
-    /// `1` = Mint, `2` = Approve, `3` = Transfer.
-    pub ft_action_type_id: u8,
+    /// Action type — deserialized from the numeric `ft_action_type_id` JSON field.
+    #[serde(rename = "ft_action_type_id")]
+    pub ft_action_type: FtActionType,
 }
 
 impl FtTokenAction {
@@ -59,7 +82,7 @@ impl FtTokenAction {
         from_hash: Option<impl Into<String>>,
         to_hash: Option<impl Into<String>>,
         amount: impl Into<String>,
-        ft_action_type_id: u8,
+        ft_action_type: FtActionType,
     ) -> Self {
         Self {
             deploy_hash: deploy_hash.into(),
@@ -67,14 +90,10 @@ impl FtTokenAction {
             from_hash: from_hash.map(Into::into),
             to_hash: to_hash.map(Into::into),
             amount: amount.into(),
-            ft_action_type_id,
+            ft_action_type,
         }
     }
 }
-
-// -----------------------------------------------------------------------------
-// Public-to-parent API
-// -----------------------------------------------------------------------------
 
 /// Fetch a single page of ft-token-actions from CSPR.cloud.
 ///
@@ -219,9 +238,8 @@ pub async fn backfill_cep18(
 /// Returns `None` for action types that should be skipped entirely.
 #[inline]
 pub fn ft_action_to_event(action: &FtTokenAction) -> Option<(&'static str, serde_json::Value)> {
-    match action.ft_action_type_id {
-        // Mint — new tokens created, no sender
-        1 => {
+    match action.ft_action_type {
+        FtActionType::Mint => {
             let Some(recipient) = action.to_hash.as_deref() else {
                 tracing::warn!(deploy = %action.deploy_hash, "Mint action missing to_hash — skipping");
                 return None;
@@ -232,9 +250,7 @@ pub fn ft_action_to_event(action: &FtTokenAction) -> Option<(&'static str, serde
             ))
         }
 
-        // Transfer — the primary CEP-18 action with a dedicated handler.
-        // CSPR.cloud ft_action_type_id=2 is "Transfer" per /ft-token-action-types.
-        2 => {
+        FtActionType::Transfer => {
             let Some(sender) = action.from_hash.as_deref() else {
                 tracing::warn!(deploy = %action.deploy_hash, "Transfer action missing from_hash — skipping");
                 return None;
@@ -249,9 +265,7 @@ pub fn ft_action_to_event(action: &FtTokenAction) -> Option<(&'static str, serde
             ))
         }
 
-        // Approve — allowance set; stored as raw data (no dedicated handler yet).
-        // CSPR.cloud ft_action_type_id=3 is "Approve" per /ft-token-action-types.
-        3 => {
+        FtActionType::Approve => {
             let Some(owner) = action.from_hash.as_deref() else {
                 tracing::warn!(deploy = %action.deploy_hash, "SetAllowance action missing from_hash — skipping");
                 return None;
@@ -266,9 +280,9 @@ pub fn ft_action_to_event(action: &FtTokenAction) -> Option<(&'static str, serde
             ))
         }
 
-        other => {
+        FtActionType::Unknown(id) => {
             tracing::warn!(
-                ft_action_type_id = other,
+                ft_action_type_id = id,
                 "Unknown ft_action_type_id, skipping"
             );
             None
