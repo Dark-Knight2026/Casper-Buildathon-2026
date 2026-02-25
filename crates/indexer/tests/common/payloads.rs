@@ -7,6 +7,38 @@
 use serde_json::{Value, json};
 use wiremock::ResponseTemplate;
 
+/// Build a CSPR.cloud WebSocket message with the given fields.
+///
+/// Mirrors the `WssMessage` shape expected by `handle_text_message`.
+/// Unknown extra fields (`"action"`, `"transform_id"`, `"timestamp"`)
+/// are included to verify that the deserializer ignores them correctly.
+#[allow(clippy::needless_pass_by_value)]
+pub fn wss_message(
+    contract_package_hash: &str,
+    event_name: &str,
+    event_data: Value,
+    deploy_hash: &str,
+    event_id: i64,
+    block_height: u64,
+) -> Value {
+    json!({
+        "data": {
+            "contract_package_hash": contract_package_hash,
+            "contract_hash": "def456",
+            "name": event_name,
+            "data": event_data
+        },
+        "action": "emitted",
+        "extra": {
+            "deploy_hash": deploy_hash,
+            "event_id": event_id,
+            "transform_id": 0,
+            "block_height": block_height
+        },
+        "timestamp": "2025-01-01T12:00:00.000Z"
+    })
+}
+
 /// One page of `/ft-token-actions` with three items having different senders.
 ///
 /// Used to verify that `load_big_transfers` keeps only entries where

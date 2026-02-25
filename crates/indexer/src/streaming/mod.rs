@@ -221,12 +221,16 @@ pub(crate) async fn connect_and_stream(
 /// # Errors
 ///
 /// Returns [`IndexerError`] on JSON parse, processor, or database failures.
-async fn handle_text_message(
+#[inline]
+pub async fn handle_text_message<S>(
     text: &str,
-    contract_map: &HashMap<String, ContractType>,
+    contract_map: &HashMap<String, ContractType, S>,
     db_pool: &PgPool,
     registry: &EventRegistry,
-) -> IndexerResult<()> {
+) -> IndexerResult<()>
+where
+    S: core::hash::BuildHasher,
+{
     tracing::debug!(%text, "WSS message received");
 
     // CSPR.cloud sends periodic non-JSON keepalive text frames (e.g. empty strings).

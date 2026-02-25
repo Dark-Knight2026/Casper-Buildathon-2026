@@ -19,7 +19,10 @@ use crate::error::IndexerResult;
 #[inline]
 pub async fn get_cursor(db: &PgPool, contract_hash: &str) -> IndexerResult<Option<i64>> {
     let row = sqlx::query_scalar!(
-        "SELECT last_event_id FROM event_cursors WHERE stream_type = 'backfill' AND contract_hash = $1",
+        r"
+            SELECT last_event_id FROM event_cursors
+            WHERE stream_type = 'backfill' AND contract_hash = $1
+        ",
         contract_hash
     )
     .fetch_optional(db)

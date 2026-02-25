@@ -39,7 +39,10 @@ impl StreamType {
 #[inline]
 pub async fn get_cursor(db: &PgPool, stream: StreamType) -> IndexerResult<Option<i64>> {
     let row = sqlx::query_scalar!(
-        "SELECT last_event_id FROM event_cursors WHERE stream_type = $1 AND contract_hash = ''",
+        r"
+            SELECT last_event_id FROM event_cursors
+            WHERE stream_type = $1 AND contract_hash = ''
+        ",
         stream.as_str()
     )
     .fetch_optional(db)
