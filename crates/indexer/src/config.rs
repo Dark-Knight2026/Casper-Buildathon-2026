@@ -168,64 +168,100 @@ impl core::fmt::Display for ContractType {
     }
 }
 
-/// Registry of tracked smart contract package hashes.
+/// Configuration entry for a single contract in the registry.
+#[derive(Debug, Clone)]
+pub struct ContractEntry {
+    /// On-chain package hash (hex, no `hash-` prefix).
+    pub hash: String,
+    /// Block height from which to start indexing (0 = from genesis).
+    pub start_block: u64,
+}
+
+impl ContractEntry {
+    /// Creates a new contract entry.
+    #[inline]
+    #[must_use]
+    pub fn new(hash: impl Into<String>, start_block: u64) -> Self {
+        Self {
+            hash: hash.into(),
+            start_block,
+        }
+    }
+}
+
+/// Registry of tracked smart contract package hashes and their start blocks.
 ///
 /// Each field is optional because not all contracts may be deployed yet.
 /// Only contracts with a configured package hash will be indexed.
+///
+/// Both the hash and the start block are read once in [`ContractRegistry::from_env`]
+/// so that [`ContractRegistry::active_contracts`] does not re-read environment
+/// variables on every call.
 #[derive(Debug, Clone, Default)]
 pub struct ContractRegistry {
-    /// USDC contract package hash.
-    pub usdc: Option<String>,
-    /// USDT contract package hash.
-    pub usdt: Option<String>,
-    /// BIG contract package hash.
-    pub big: Option<String>,
-    /// Treasury contract package hash.
-    pub treasury: Option<String>,
-    /// ICO contract package hash.
-    pub ico: Option<String>,
-    /// Lease contract package hash.
-    pub lease: Option<String>,
-    /// Escrow contract package hash.
-    pub escrow: Option<String>,
-    /// NFT contract package hash.
-    pub nft: Option<String>,
-    /// Roles contract package hash.
-    pub roles: Option<String>,
-    /// Staking contract package hash.
-    pub staking: Option<String>,
+    /// USDC contract entry.
+    pub usdc: Option<ContractEntry>,
+    /// USDT contract entry.
+    pub usdt: Option<ContractEntry>,
+    /// BIG contract entry.
+    pub big: Option<ContractEntry>,
+    /// Treasury contract entry.
+    pub treasury: Option<ContractEntry>,
+    /// ICO contract entry.
+    pub ico: Option<ContractEntry>,
+    /// Lease contract entry.
+    pub lease: Option<ContractEntry>,
+    /// Escrow contract entry.
+    pub escrow: Option<ContractEntry>,
+    /// NFT contract entry.
+    pub nft: Option<ContractEntry>,
+    /// Roles contract entry.
+    pub roles: Option<ContractEntry>,
+    /// Staking contract entry.
+    pub staking: Option<ContractEntry>,
 }
 
 impl ContractRegistry {
-    /// Loads contract package hashes from environment variables.
+    /// Loads contract package hashes and start blocks from environment variables.
     ///
-    /// Missing variables are treated as undeployed contracts (set to `None`).
+    /// Missing or empty `CONTRACT_*` variables are treated as undeployed contracts
+    /// (set to `None`). Missing `START_BLOCK_CONTRACT_*` variables default to `0`.
     #[inline]
     #[must_use]
     pub fn from_env() -> Self {
         Self {
-            usdc: env::var("CONTRACT_USDC").ok(),
-            usdt: env::var("CONTRACT_USDT").ok(),
-            big: env::var("CONTRACT_BIG").ok(),
-            treasury: env::var("CONTRACT_TREASURY").ok(),
-            ico: env::var("CONTRACT_ICO").ok(),
-            lease: env::var("CONTRACT_LEASE").ok(),
-            escrow: env::var("CONTRACT_ESCROW").ok(),
-            nft: env::var("CONTRACT_NFT").ok(),
-            roles: env::var("CONTRACT_ROLES").ok(),
-            staking: env::var("CONTRACT_STAKING").ok(),
+            usdc: Self::read_contract("USDC"),
+            usdt: Self::read_contract("USDT"),
+            big: Self::read_contract("BIG"),
+            treasury: Self::read_contract("TREASURY"),
+            ico: Self::read_contract("ICO"),
+            lease: Self::read_contract("LEASE"),
+            escrow: Self::read_contract("ESCROW"),
+            nft: Self::read_contract("NFT"),
+            roles: Self::read_contract("ROLES"),
+            staking: Self::read_contract("STAKING"),
         }
     }
 
-    /// Returns a list of all configured (deployed) contracts with their types.
+    /// Read a [`ContractEntry`] from environment variables.
     ///
-    /// The `start_block` for each contract is loaded from environment variables:
-    /// - `START_BLOCK_CONTRACT_{TYPE}` (e.g. `START_BLOCK_CONTRACT_ICO=1234`)
-    /// - Defaults to `0` (genesis) if not set
+    /// Returns `None` if the hash variable is missing or empty.
+    fn read_contract(name: &str) -> Option<ContractEntry> {
+        let hash = env::var(format!("CONTRACT_{name}"))
+            .ok()
+            .filter(|s| !s.is_empty())?;
+        let start_block = env::var(format!("START_BLOCK_CONTRACT_{name}"))
+            .ok()
+            .and_then(|s| s.parse::<u64>().ok())
+            .unwrap_or(0);
+        Some(ContractEntry { hash, start_block })
+    }
+
+    /// Returns a list of all configured (deployed) contracts with their types.
     #[inline]
     #[must_use]
     pub fn active_contracts(&self) -> Vec<ActiveContract<'_>> {
-        let pairs: [(ContractType, &Option<String>); 10] = [
+        let pairs: [(ContractType, &Option<ContractEntry>); 10] = [
             (ContractType::Usdc, &self.usdc),
             (ContractType::Usdt, &self.usdt),
             (ContractType::Big, &self.big),
@@ -240,20 +276,10 @@ impl ContractRegistry {
 
         pairs
             .into_iter()
-            .filter_map(|(contract_type, hash)| {
-                hash.as_deref().map(|h| {
-                    // Load start_block from env (e.g. START_BLOCK_CONTRACT_ICO)
-                    let env_key = format!(
-                        "START_BLOCK_CONTRACT_{}",
-                        contract_type.to_string().to_uppercase()
-                    );
-                    let start_block = env::var(&env_key)
-                        .ok()
-                        .and_then(|s| s.parse::<u64>().ok())
-                        .unwrap_or(0);
-
-                    ActiveContract::new(contract_type, h, start_block)
-                })
+            .filter_map(|(contract_type, entry)| {
+                entry
+                    .as_ref()
+                    .map(|e| ActiveContract::new(contract_type, &e.hash, e.start_block))
             })
             .collect()
     }

@@ -20,7 +20,7 @@ use crate::error::IndexerResult;
 pub async fn get_cursor(db: &PgPool, contract_hash: &str) -> IndexerResult<Option<i64>> {
     let row = sqlx::query_scalar!(
         r"
-            SELECT last_event_id FROM event_cursors
+            SELECT cursor_value FROM event_cursors
             WHERE stream_type = 'backfill' AND contract_hash = $1
         ",
         contract_hash
@@ -45,10 +45,10 @@ pub async fn get_cursor(db: &PgPool, contract_hash: &str) -> IndexerResult<Optio
 pub async fn update_cursor(db: &PgPool, contract_hash: &str, last_block: i64) -> IndexerResult<()> {
     sqlx::query!(
         r"
-            INSERT INTO event_cursors (stream_type, contract_hash, last_event_id, last_updated_at)
+            INSERT INTO event_cursors (stream_type, contract_hash, cursor_value, last_updated_at)
             VALUES ('backfill', $1, $2, NOW())
             ON CONFLICT (stream_type, contract_hash) DO UPDATE SET
-                last_event_id   = $2,
+                cursor_value   = $2,
                 last_updated_at = NOW()
         ",
         contract_hash,

@@ -202,7 +202,10 @@ pub(crate) async fn connect_and_stream(
                 tracing::info!(?frame, "WebSocket connection closed by server");
                 return Ok(());
             }
-            // Ping responses are handled automatically by tokio-tungstenite.
+            // Known limitation: with a split stream the `write` half (_write) is
+            // never polled, so Pong responses queued by tungstenite in response
+            // to server Ping frames will not be flushed. If CSPR.cloud starts
+            // enforcing Ping/Pong keepalives, a dedicated write task will be needed.
             // Binary and other frame types are not used by CSPR.cloud.
             _ => {}
         }

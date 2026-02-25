@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT cursor_value FROM event_cursors\n            WHERE stream_type = 'streaming' AND contract_hash = ''\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "cursor_value",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "2822561a40f5bed0e020037fe7241ce38fd03ac4c156f3ecf4b6dbba4f827f2d"
+}

@@ -8,7 +8,7 @@ use sqlx::PgPool;
 
 use common::{MIGRATOR, TRANSFER_DEPLOY_HASH, payloads};
 use indexer::{
-    config::{ContractRegistry, ContractType},
+    config::{ContractEntry, ContractRegistry, ContractType},
     events::EventRegistry,
     streaming::{self, WssMessage},
 };
@@ -57,8 +57,8 @@ fn deserializes_ignores_unknown_fields() {
 #[test]
 fn build_contract_map_maps_hashes_to_types() {
     let registry = ContractRegistry {
-        ico: Some("ico_hash".to_owned()),
-        big: Some("big_hash".to_owned()),
+        ico: Some(ContractEntry::new("ico_hash", 0)),
+        big: Some(ContractEntry::new("big_hash", 0)),
         ..ContractRegistry::default()
     };
 
@@ -78,8 +78,8 @@ fn build_contract_map_empty_when_no_contracts() {
 #[test]
 fn build_hashes_csv_joins_with_comma() {
     let registry = ContractRegistry {
-        ico: Some("aaa".to_owned()),
-        big: Some("bbb".to_owned()),
+        ico: Some(ContractEntry::new("aaa", 0)),
+        big: Some(ContractEntry::new("bbb", 0)),
         ..ContractRegistry::default()
     };
 
@@ -103,7 +103,7 @@ fn build_hashes_csv_empty_when_no_contracts() {
 #[test]
 fn build_hashes_csv_single_contract_has_no_comma() {
     let registry = ContractRegistry {
-        ico: Some("only_hash".to_owned()),
+        ico: Some(ContractEntry::new("only_hash", 0)),
         ..ContractRegistry::default()
     };
 
@@ -209,7 +209,7 @@ async fn valid_message_processes_event_and_updates_cursor(pool: PgPool) {
 
     let cursor: Option<i64> = sqlx::query_scalar!(
         r"
-            SELECT last_event_id FROM event_cursors
+            SELECT cursor_value FROM event_cursors
             WHERE stream_type = 'streaming' AND contract_hash = ''
         "
     )

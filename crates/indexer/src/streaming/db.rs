@@ -40,7 +40,7 @@ impl StreamType {
 pub async fn get_cursor(db: &PgPool, stream: StreamType) -> IndexerResult<Option<i64>> {
     let row = sqlx::query_scalar!(
         r"
-            SELECT last_event_id FROM event_cursors
+            SELECT cursor_value FROM event_cursors
             WHERE stream_type = $1 AND contract_hash = ''
         ",
         stream.as_str()
@@ -64,18 +64,18 @@ pub async fn get_cursor(db: &PgPool, stream: StreamType) -> IndexerResult<Option
 pub async fn update_cursor(
     db: &PgPool,
     stream: StreamType,
-    last_event_id: i64,
+    cursor_value: i64,
 ) -> IndexerResult<()> {
     sqlx::query!(
         r"
-            INSERT INTO event_cursors (stream_type, contract_hash, last_event_id, last_updated_at)
+            INSERT INTO event_cursors (stream_type, contract_hash, cursor_value, last_updated_at)
             VALUES ($1, '', $2, NOW())
             ON CONFLICT (stream_type, contract_hash) DO UPDATE SET
-                last_event_id   = $2,
+                cursor_value   = $2,
                 last_updated_at = NOW()
         ",
         stream.as_str(),
-        last_event_id,
+        cursor_value,
     )
     .execute(db)
     .await?;

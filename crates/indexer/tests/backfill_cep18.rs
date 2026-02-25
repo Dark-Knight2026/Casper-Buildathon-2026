@@ -347,7 +347,7 @@ async fn empty_data_exits_cleanly_without_cursor(pool: PgPool) {
 
     let cursor: Option<i64> = sqlx::query_scalar!(
         r"
-            SELECT last_event_id FROM event_cursors
+            SELECT cursor_value FROM event_cursors
             WHERE stream_type = 'backfill' AND contract_hash = 'big_hash'
         "
     )
@@ -381,7 +381,7 @@ async fn cursor_resume_skips_actions_at_or_below_saved_block(pool: PgPool) {
     // Seed cursor at block 500.
     sqlx::query!(
         r"
-            INSERT INTO event_cursors (stream_type, contract_hash, last_event_id, last_updated_at)
+            INSERT INTO event_cursors (stream_type, contract_hash, cursor_value, last_updated_at)
             VALUES ('backfill', 'big_hash', 500, NOW())
         "
     )
@@ -419,7 +419,7 @@ async fn cursor_resume_skips_actions_at_or_below_saved_block(pool: PgPool) {
 
     let cursor: Option<i64> = sqlx::query_scalar!(
         r"
-            SELECT last_event_id FROM event_cursors
+            SELECT cursor_value FROM event_cursors
             WHERE stream_type = 'backfill' AND contract_hash = 'big_hash'
         "
     )
@@ -530,7 +530,7 @@ async fn transfer_action_written_to_tables_and_cursor_advances(pool: PgPool) {
     // Cursor must advance to block 200.
     let cursor: Option<i64> = sqlx::query_scalar!(
         r"
-            SELECT last_event_id FROM event_cursors
+            SELECT cursor_value FROM event_cursors
             WHERE stream_type = 'backfill' AND contract_hash = 'big_hash'
         "
     )
@@ -584,7 +584,7 @@ async fn burn_action_skipped_and_cursor_not_updated(pool: PgPool) {
 
     let cursor: Option<i64> = sqlx::query_scalar!(
         r"
-            SELECT last_event_id FROM event_cursors
+            SELECT cursor_value FROM event_cursors
             WHERE stream_type = 'backfill' AND contract_hash = 'big_hash'
         "
     )
@@ -685,7 +685,7 @@ async fn start_block_takes_precedence_over_cursor_when_greater(pool: PgPool) {
     // Seed cursor at block 100.
     sqlx::query!(
         r"
-            INSERT INTO event_cursors (stream_type, contract_hash, last_event_id, last_updated_at)
+            INSERT INTO event_cursors (stream_type, contract_hash, cursor_value, last_updated_at)
             VALUES ('backfill', 'big_hash', 100, NOW())
         "
     )
@@ -725,7 +725,7 @@ async fn start_block_takes_precedence_over_cursor_when_greater(pool: PgPool) {
     // Cursor must not advance — the action was skipped.
     let cursor: Option<i64> = sqlx::query_scalar!(
         r"
-            SELECT last_event_id FROM event_cursors
+            SELECT cursor_value FROM event_cursors
             WHERE stream_type = 'backfill' AND contract_hash = 'big_hash'
         "
     )

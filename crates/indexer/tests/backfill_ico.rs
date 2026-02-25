@@ -319,7 +319,7 @@ async fn deploy_not_on_node_advances_cursor_but_writes_nothing(pool: PgPool) {
 
     let cursor: Option<i64> = sqlx::query_scalar!(
         r"
-            SELECT last_event_id FROM event_cursors
+            SELECT cursor_value FROM event_cursors
             WHERE stream_type = 'backfill' AND contract_hash = 'ico_hash'
         "
     )
@@ -392,7 +392,7 @@ async fn failed_deploy_skipped_and_cursor_not_updated(pool: PgPool) {
 
     let cursor: Option<i64> = sqlx::query_scalar!(
         r"
-            SELECT last_event_id FROM event_cursors
+            SELECT cursor_value FROM event_cursors
             WHERE stream_type = 'backfill' AND contract_hash = 'ico_hash'
         "
     )
@@ -420,7 +420,7 @@ async fn cursor_resume_skips_already_processed_blocks(pool: PgPool) {
     // Seed cursor at block 500 — simulates a previous successful run.
     sqlx::query!(
         r"
-            INSERT INTO event_cursors (stream_type, contract_hash, last_event_id, last_updated_at)
+            INSERT INTO event_cursors (stream_type, contract_hash, cursor_value, last_updated_at)
             VALUES ('backfill', 'ico_hash', 500, NOW())
         "
     )
@@ -466,7 +466,7 @@ async fn cursor_resume_skips_already_processed_blocks(pool: PgPool) {
 
     let cursor: Option<i64> = sqlx::query_scalar!(
         r"
-            SELECT last_event_id FROM event_cursors
+            SELECT cursor_value FROM event_cursors
             WHERE stream_type = 'backfill' AND contract_hash = 'ico_hash'
         "
     )
@@ -582,7 +582,7 @@ async fn successful_purchase_written_to_all_tables(pool: PgPool) {
     // Cursor must advance to block 300.
     let cursor: Option<i64> = sqlx::query_scalar!(
         r"
-            SELECT last_event_id FROM event_cursors
+            SELECT cursor_value FROM event_cursors
             WHERE stream_type = 'backfill' AND contract_hash = 'ico_hash'
         "
     )

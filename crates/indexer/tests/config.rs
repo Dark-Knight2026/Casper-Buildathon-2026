@@ -8,7 +8,7 @@
 use secrecy::ExposeSecret;
 use serial_test::serial;
 
-use indexer::config::{ContractRegistry, ContractType, IndexerConfig};
+use indexer::config::{ContractEntry, ContractRegistry, ContractType, IndexerConfig};
 
 /// All env var keys used by `IndexerConfig::from_env()`.
 const CONFIG_ENV_VARS: [&str; 8] = [
@@ -258,8 +258,8 @@ fn active_contracts_returns_empty_for_default_registry() {
 #[test]
 fn active_contracts_returns_only_configured_contracts() {
     let registry = ContractRegistry {
-        ico: Some("abc123".to_owned()),
-        treasury: Some("def456".to_owned()),
+        ico: Some(ContractEntry::new("abc123", 0)),
+        treasury: Some(ContractEntry::new("def456", 0)),
         ..ContractRegistry::default()
     };
 
@@ -280,16 +280,16 @@ fn active_contracts_returns_only_configured_contracts() {
 #[test]
 fn active_contracts_returns_all_when_fully_configured() {
     let registry = ContractRegistry {
-        usdc: Some("1".to_owned()),
-        usdt: Some("2".to_owned()),
-        big: Some("3".to_owned()),
-        treasury: Some("4".to_owned()),
-        ico: Some("5".to_owned()),
-        lease: Some("6".to_owned()),
-        escrow: Some("7".to_owned()),
-        nft: Some("8".to_owned()),
-        roles: Some("9".to_owned()),
-        staking: Some("10".to_owned()),
+        usdc: Some(ContractEntry::new("1", 0)),
+        usdt: Some(ContractEntry::new("2", 0)),
+        big: Some(ContractEntry::new("3", 0)),
+        treasury: Some(ContractEntry::new("4", 0)),
+        ico: Some(ContractEntry::new("5", 0)),
+        lease: Some(ContractEntry::new("6", 0)),
+        escrow: Some(ContractEntry::new("7", 0)),
+        nft: Some(ContractEntry::new("8", 0)),
+        roles: Some(ContractEntry::new("9", 0)),
+        staking: Some(ContractEntry::new("10", 0)),
     };
 
     assert_eq!(registry.active_contracts().len(), 10);
@@ -298,7 +298,7 @@ fn active_contracts_returns_all_when_fully_configured() {
 #[test]
 fn active_contracts_defaults_start_block_to_zero() {
     let registry = ContractRegistry {
-        ico: Some("abc".to_owned()),
+        ico: Some(ContractEntry::new("abc", 0)),
         ..ContractRegistry::default()
     };
 
@@ -312,14 +312,11 @@ fn active_contracts_reads_start_block_from_env() {
     // SAFETY: #[serial] ensures no concurrent env var access.
     unsafe {
         clear_all_env_vars();
+        std::env::set_var("CONTRACT_ICO", "abc");
         std::env::set_var("START_BLOCK_CONTRACT_ICO", "12345");
     }
 
-    let registry = ContractRegistry {
-        ico: Some("abc".to_owned()),
-        ..ContractRegistry::default()
-    };
-
+    let registry = ContractRegistry::from_env();
     let active = registry.active_contracts();
     assert_eq!(active[0].start_block, 12_345);
 }
@@ -330,14 +327,11 @@ fn active_contracts_falls_back_to_zero_on_invalid_start_block() {
     // SAFETY: #[serial] ensures no concurrent env var access.
     unsafe {
         clear_all_env_vars();
+        std::env::set_var("CONTRACT_ICO", "abc");
         std::env::set_var("START_BLOCK_CONTRACT_ICO", "not_a_number");
     }
 
-    let registry = ContractRegistry {
-        ico: Some("abc".to_owned()),
-        ..ContractRegistry::default()
-    };
-
+    let registry = ContractRegistry::from_env();
     let active = registry.active_contracts();
     assert_eq!(
         active[0].start_block, 0,
@@ -351,18 +345,15 @@ fn active_contracts_reads_start_block_per_contract() {
     // SAFETY: #[serial] ensures no concurrent env var access.
     unsafe {
         clear_all_env_vars();
+        std::env::set_var("CONTRACT_ICO", "ico_hash");
+        std::env::set_var("CONTRACT_BIG", "big_hash");
+        std::env::set_var("CONTRACT_USDC", "usdc_hash");
         std::env::set_var("START_BLOCK_CONTRACT_ICO", "12345");
         std::env::set_var("START_BLOCK_CONTRACT_BIG", "12000");
         std::env::set_var("START_BLOCK_CONTRACT_USDC", "0");
     }
 
-    let registry = ContractRegistry {
-        ico: Some("ico_hash".to_owned()),
-        big: Some("big_hash".to_owned()),
-        usdc: Some("usdc_hash".to_owned()),
-        ..ContractRegistry::default()
-    };
-
+    let registry = ContractRegistry::from_env();
     let active = registry.active_contracts();
 
     let ico = active
