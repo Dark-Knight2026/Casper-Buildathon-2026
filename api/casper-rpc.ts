@@ -5,6 +5,8 @@ const API_KEY = process.env.VITE_CSPR_CLOUD_API_KEY || process.env.CSPR_CLOUD_AP
 const ALLOWED_RPC_METHODS = new Set([
   'query_global_state',
   'state_get_dictionary_item',
+  'state_get_balance',
+  'query_balance',
   'info_get_deploy',
   'account_put_deploy',
   'state_get_entity',
