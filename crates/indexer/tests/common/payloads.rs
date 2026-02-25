@@ -104,6 +104,34 @@ pub fn ft_actions_one_transfer_page() -> Value {
     })
 }
 
+/// Build a `/ft-token-actions` response with exactly one action.
+///
+/// Useful for tests that need a single action with specific fields without
+/// duplicating the full JSON structure every time.
+pub fn ft_actions_single(
+    deploy_hash: &str,
+    block_height: u64,
+    from_hash: Option<&str>,
+    to_hash: Option<&str>,
+    amount: &str,
+    ft_action_type_id: u8,
+    page_count: u32,
+) -> Value {
+    json!({
+        "data": [
+            {
+                "deploy_hash":       deploy_hash,
+                "block_height":      block_height,
+                "from_hash":         from_hash,
+                "to_hash":           to_hash,
+                "amount":            amount,
+                "ft_action_type_id": ft_action_type_id
+            }
+        ],
+        "page_count": page_count
+    })
+}
+
 /// Build a `purchase` session value with the given amount and currency.
 ///
 /// Used by `parse_purchase_args` unit tests to construct minimal deploy sessions

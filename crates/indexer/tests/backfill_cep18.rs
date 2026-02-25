@@ -1,6 +1,6 @@
 //! Tests for CEP-18 backfill logic.
 //!
-//! Covers two areas:
+//! Covers three areas:
 //!
 //! 1. **`ft_action_to_event` mapping** — pure unit tests, no I/O.
 //!    CSPR.cloud `/ft-token-action-types` reference (verified against testnet):
@@ -12,6 +12,11 @@
 //! 2. **`fetch_ft_token_actions_page` HTTP layer** — wiremock tests that verify
 //!    correct URL construction, authorization header, response parsing, and
 //!    error propagation without requiring a real database or CSPR.cloud access.
+//!
+//! 3. **`backfill_cep18` integration** — end-to-end tests covering:
+//!    * Mint stored raw without `token_holdings` update
+//!    * `effective_start = max(cursor + 1, start_block)` when `start_block > cursor`
+//!    * `page_count = 0` with non-empty data processes one page and stops
 
 mod common;
 
@@ -386,19 +391,17 @@ async fn cursor_resume_skips_actions_at_or_below_saved_block(pool: PgPool) {
 
     Mock::given(matchers::method("GET"))
         .and(matchers::path("/ft-token-actions"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-            "data": [
-                {
-                    "deploy_hash": "old_deploy",
-                    "block_height": 400,
-                    "from_hash": "alice",
-                    "to_hash": "bob",
-                    "amount": "500",
-                    "ft_action_type_id": 2
-                }
-            ],
-            "page_count": 1
-        })))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(payloads::ft_actions_single(
+                "old_deploy",
+                400,
+                Some("alice"),
+                Some("bob"),
+                "500",
+                2,
+                1,
+            )),
+        )
         .mount(&server)
         .await;
 
@@ -449,19 +452,17 @@ async fn transfer_action_written_to_tables_and_cursor_advances(pool: PgPool) {
 
     Mock::given(matchers::method("GET"))
         .and(matchers::path("/ft-token-actions"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-            "data": [
-                {
-                    "deploy_hash":       TRANSFER_DEPLOY_HASH,
-                    "block_height":      200,
-                    "from_hash":         "alice",
-                    "to_hash":           "bob",
-                    "amount":            "500",
-                    "ft_action_type_id": 2
-                }
-            ],
-            "page_count": 1
-        })))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(payloads::ft_actions_single(
+                TRANSFER_DEPLOY_HASH,
+                200,
+                Some("alice"),
+                Some("bob"),
+                "500",
+                2,
+                1,
+            )),
+        )
         .mount(&server)
         .await;
 
@@ -555,19 +556,17 @@ async fn burn_action_skipped_and_cursor_not_updated(pool: PgPool) {
 
     Mock::given(matchers::method("GET"))
         .and(matchers::path("/ft-token-actions"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-            "data": [
-                {
-                    "deploy_hash":       "burn_deploy",
-                    "block_height":      300,
-                    "from_hash":         "holder",
-                    "to_hash":           null,
-                    "amount":            "100",
-                    "ft_action_type_id": 4
-                }
-            ],
-            "page_count": 1
-        })))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(payloads::ft_actions_single(
+                "burn_deploy",
+                300,
+                Some("holder"),
+                None,
+                "100",
+                4,
+                1,
+            )),
+        )
         .mount(&server)
         .await;
 
@@ -605,5 +604,200 @@ async fn burn_action_skipped_and_cursor_not_updated(pool: PgPool) {
     assert_eq!(
         tx_count, 0,
         "no transactions must be written for a Burn action"
+    );
+}
+
+/// A Mint action (`type_id = 1`) is stored as a raw event in `blockchain_events`
+/// (with `processed = true`) but must NOT create any `token_holdings` rows.
+///
+/// `TailorCoin` (BIG) has a fixed supply minted at deploy; Mint records from
+/// CSPR.cloud represent the initial deployment allocation, not user-facing
+/// operations.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn mint_action_stored_raw_without_token_holdings_update(pool: PgPool) {
+    common::disable_rls(&pool).await;
+    let server = MockServer::start().await;
+
+    // 64-char deploy hash required by the `blockchain_transactions` CHECK constraint.
+    const MINT_DEPLOY_HASH: &str =
+        "bbbb000000000000000000000000000000000000000000000000000000000001";
+
+    Mock::given(matchers::method("GET"))
+        .and(matchers::path("/ft-token-actions"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(payloads::ft_actions_single(
+                MINT_DEPLOY_HASH,
+                50,
+                None,
+                Some("initial_holder"),
+                "5000000000000000000000000000000",
+                1,
+                1,
+            )),
+        )
+        .mount(&server)
+        .await;
+
+    cep18::backfill_cep18(
+        &Client::new(),
+        &common::test_config(server.uri(), None),
+        &pool,
+        &EventRegistry::new(),
+        ContractType::Big,
+        "big_hash",
+        0,
+    )
+    .await
+    .unwrap();
+
+    // One blockchain_events row must exist for Mint and be marked processed.
+    let event = sqlx::query!(r"SELECT processed FROM blockchain_events WHERE event_type = 'Mint'")
+        .fetch_optional(&pool)
+        .await
+        .unwrap();
+
+    let event = event.expect("blockchain_events row must exist for Mint");
+    assert_eq!(
+        event.processed,
+        Some(true),
+        "Mint event must be marked processed = true in blockchain_events"
+    );
+
+    // No token_holdings must be written — Mint is deployment allocation only.
+    let holdings: i64 = sqlx::query_scalar!(r"SELECT COUNT(*) FROM token_holdings")
+        .fetch_one(&pool)
+        .await
+        .unwrap()
+        .unwrap_or(0);
+    assert_eq!(holdings, 0, "Mint must not update token_holdings");
+}
+
+/// When `start_block` is greater than `cursor + 1`, the effective start block
+/// is `start_block` — actions in the range `(cursor, start_block)` are skipped.
+///
+/// Example: `cursor = 100`, `start_block = 200`, action at block `150`.
+/// `effective_start = max(101, 200) = 200` → block 150 is skipped.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn start_block_takes_precedence_over_cursor_when_greater(pool: PgPool) {
+    common::disable_rls(&pool).await;
+    let server = MockServer::start().await;
+
+    // Seed cursor at block 100.
+    sqlx::query!(
+        r"
+            INSERT INTO event_cursors (stream_type, contract_hash, last_event_id, last_updated_at)
+            VALUES ('backfill', 'big_hash', 100, NOW())
+        "
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    // Action is at block 150: above cursor (100) but below start_block (200).
+    Mock::given(matchers::method("GET"))
+        .and(matchers::path("/ft-token-actions"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(payloads::ft_actions_single(
+                TRANSFER_DEPLOY_HASH,
+                150,
+                Some("alice"),
+                Some("bob"),
+                "100",
+                2,
+                1,
+            )),
+        )
+        .mount(&server)
+        .await;
+
+    cep18::backfill_cep18(
+        &Client::new(),
+        &common::test_config(server.uri(), None),
+        &pool,
+        &EventRegistry::new(),
+        ContractType::Big,
+        "big_hash",
+        200, // start_block > cursor + 1
+    )
+    .await
+    .unwrap();
+
+    // Cursor must not advance — the action was skipped.
+    let cursor: Option<i64> = sqlx::query_scalar!(
+        r"
+            SELECT last_event_id FROM event_cursors
+            WHERE stream_type = 'backfill' AND contract_hash = 'big_hash'
+        "
+    )
+    .fetch_optional(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        cursor,
+        Some(100),
+        "cursor must not advance when all actions are below start_block"
+    );
+
+    let tx_count: i64 = sqlx::query_scalar!(r"SELECT COUNT(*) FROM blockchain_transactions")
+        .fetch_one(&pool)
+        .await
+        .unwrap()
+        .unwrap_or(0);
+    assert_eq!(
+        tx_count, 0,
+        "no transactions must be written for actions below start_block"
+    );
+}
+
+/// When the API returns `page_count = 0` alongside non-empty data, `backfill_cep18`
+/// must process the actions on that single page and stop (not loop or panic).
+///
+/// The loop condition `page >= page_count` evaluates `1 >= 0 = true` immediately,
+/// so exactly one page is fetched and processed.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn page_count_zero_with_data_processes_single_page_and_stops(pool: PgPool) {
+    common::disable_rls(&pool).await;
+    let server = MockServer::start().await;
+
+    Mock::given(matchers::method("GET"))
+        .and(matchers::path("/ft-token-actions"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(payloads::ft_actions_single(
+                TRANSFER_DEPLOY_HASH,
+                50,
+                Some("alice"),
+                Some("bob"),
+                "100",
+                2,
+                0,
+            )),
+        )
+        .mount(&server)
+        .await;
+
+    cep18::backfill_cep18(
+        &Client::new(),
+        &common::test_config(server.uri(), None),
+        &pool,
+        &EventRegistry::new(),
+        ContractType::Big,
+        "big_hash",
+        0,
+    )
+    .await
+    .unwrap();
+
+    // The Transfer on page 1 must have been processed despite page_count = 0.
+    let tx_count: i64 = sqlx::query_scalar!(
+        r"SELECT COUNT(*) FROM blockchain_transactions WHERE transaction_hash = $1",
+        TRANSFER_DEPLOY_HASH,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap()
+    .unwrap_or(0);
+    assert_eq!(
+        tx_count, 1,
+        "action must be processed even when page_count = 0"
     );
 }

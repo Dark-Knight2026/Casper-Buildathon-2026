@@ -7,8 +7,11 @@
 //!
 //! - **`Transfer`** — writes `blockchain_transactions` (`token_transfer`) and
 //!   updates two `token_holdings` rows (Decrease sender, Increase recipient).
+//!   Tested for all three CEP-18 token types (BIG, USDC, USDT).
 //! - **`SetAllowance`** — writes `blockchain_transactions` (`token_allowance`)
 //!   only; `token_holdings` must remain unchanged.
+//! - **`TokensPurchased`** — unknown `currency` discriminant (> 2) must be
+//!   stored as `"UNKNOWN"` in `ico_purchases` and `blockchain_transactions`.
 
 mod common;
 
@@ -313,6 +316,168 @@ async fn tokens_purchased_increases_buyer_big_balance(pool: PgPool) {
         balance.as_deref(),
         Some("750"),
         "buyer's BIG balance must equal the purchased amount"
+    );
+}
+
+// Transfer handler — non-BIG token types (USDC, USDT)
+
+/// Transfer for `ContractType::Usdc` must write `token_holdings` rows with
+/// `token_type = 'USDC'`, not `'BIG'`.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn transfer_usdc_updates_usdc_token_holdings(pool: PgPool) {
+    common::disable_rls(&pool).await;
+
+    processor::process_event(
+        &pool,
+        &EventRegistry::new(),
+        &RawEvent {
+            contract_hash: "usdc_hash".to_owned(),
+            deploy_hash: TRANSFER_DEPLOY_HASH.to_owned(),
+            block_height: 100,
+            caller: String::new(),
+            contract_type: ContractType::Usdc,
+            event_name: "Transfer".to_owned(),
+            event_data: json!({ "sender": "alice", "recipient": "bob", "amount": "250" }),
+        },
+    )
+    .await
+    .unwrap();
+
+    let bob: Option<String> = sqlx::query_scalar!(
+        r"
+            SELECT balance FROM token_holdings
+            WHERE user_address = 'bob' AND token_type = 'USDC'
+        "
+    )
+    .fetch_optional(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(
+        bob.as_deref(),
+        Some("250"),
+        "recipient USDC balance must equal transferred amount"
+    );
+
+    // BIG table must be untouched.
+    let big_count: i64 =
+        sqlx::query_scalar!(r"SELECT COUNT(*) FROM token_holdings WHERE token_type = 'BIG'")
+            .fetch_one(&pool)
+            .await
+            .unwrap()
+            .unwrap_or(0);
+    assert_eq!(
+        big_count, 0,
+        "Transfer on USDC contract must not touch BIG token_holdings"
+    );
+}
+
+/// Transfer for `ContractType::Usdt` must write `token_holdings` rows with
+/// `token_type = 'USDT'`, not `'BIG'`.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn transfer_usdt_updates_usdt_token_holdings(pool: PgPool) {
+    common::disable_rls(&pool).await;
+
+    processor::process_event(
+        &pool,
+        &EventRegistry::new(),
+        &RawEvent {
+            contract_hash: "usdt_hash".to_owned(),
+            deploy_hash: TRANSFER_DEPLOY_HASH.to_owned(),
+            block_height: 100,
+            caller: String::new(),
+            contract_type: ContractType::Usdt,
+            event_name: "Transfer".to_owned(),
+            event_data: json!({ "sender": "alice", "recipient": "bob", "amount": "350" }),
+        },
+    )
+    .await
+    .unwrap();
+
+    let bob: Option<String> = sqlx::query_scalar!(
+        r"
+            SELECT balance FROM token_holdings
+            WHERE user_address = 'bob' AND token_type = 'USDT'
+        "
+    )
+    .fetch_optional(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(
+        bob.as_deref(),
+        Some("350"),
+        "recipient USDT balance must equal transferred amount"
+    );
+
+    // BIG table must be untouched.
+    let big_count: i64 =
+        sqlx::query_scalar!(r"SELECT COUNT(*) FROM token_holdings WHERE token_type = 'BIG'")
+            .fetch_one(&pool)
+            .await
+            .unwrap()
+            .unwrap_or(0);
+    assert_eq!(
+        big_count, 0,
+        "Transfer on USDT contract must not touch BIG token_holdings"
+    );
+}
+
+// TokensPurchased handler — unknown currency discriminant
+
+/// `TokensPurchased` with a `currency` discriminant > 2 must store `"UNKNOWN"`
+/// in both `ico_purchases.currency` and `blockchain_transactions.currency`.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn tokens_purchased_unknown_currency_stored_as_unknown_label(pool: PgPool) {
+    common::disable_rls(&pool).await;
+
+    processor::process_event(
+        &pool,
+        &EventRegistry::new(),
+        &RawEvent {
+            contract_hash: "ico_hash".to_owned(),
+            deploy_hash: PURCHASE_DEPLOY_HASH.to_owned(),
+            block_height: 100,
+            caller: "buyer".to_owned(),
+            contract_type: ContractType::Ico,
+            event_name: "TokensPurchased".to_owned(),
+            event_data: json!({
+                "amount": "500",
+                "currency": 99u8,
+                "cost": "200",
+                "timestamp": 1_700_000_000_u64
+            }),
+        },
+    )
+    .await
+    .unwrap();
+
+    let purchase_currency: Option<String> = sqlx::query_scalar!(
+        r"SELECT currency FROM ico_purchases WHERE transaction_hash = $1",
+        PURCHASE_DEPLOY_HASH,
+    )
+    .fetch_optional(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(
+        purchase_currency.as_deref(),
+        Some("UNKNOWN"),
+        "unknown currency discriminant must be stored as 'UNKNOWN' in ico_purchases"
+    );
+
+    let tx_currency: Option<Option<String>> = sqlx::query_scalar!(
+        r"SELECT currency FROM blockchain_transactions WHERE transaction_hash = $1",
+        PURCHASE_DEPLOY_HASH,
+    )
+    .fetch_optional(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(
+        tx_currency.flatten().as_deref(),
+        Some("UNKNOWN"),
+        "unknown currency discriminant must be stored as 'UNKNOWN' in blockchain_transactions"
     );
 }
 
