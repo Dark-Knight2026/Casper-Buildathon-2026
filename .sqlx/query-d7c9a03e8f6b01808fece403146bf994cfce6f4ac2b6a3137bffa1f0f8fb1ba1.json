@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM token_holdings WHERE user_address IN ('alice', 'bob')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "d7c9a03e8f6b01808fece403146bf994cfce6f4ac2b6a3137bffa1f0f8fb1ba1"
+}

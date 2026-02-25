@@ -10,15 +10,20 @@
 use core::fmt::Debug;
 
 use serde::{Deserialize, Serialize};
-use sqlx::PgPool;
+use sqlx::PgTransaction;
 
 use crate::{config::ContractType, error::IndexerResult};
 
 /// Context passed to event processors containing transaction metadata.
+///
+/// The `tx` field is the **outer** database transaction started by
+/// [`crate::processor::process_event`]. Event handlers write to `tx` directly —
+/// they must not open nested transactions. The processor commits or rolls back
+/// `tx` atomically after all writes (including `mark_event_processed`) succeed.
 #[derive(Debug)]
 pub struct EventContext<'a> {
-    /// Active database transaction (for atomic event processing).
-    pub db_pool: &'a PgPool,
+    /// The active database transaction shared across all writes for this event.
+    pub tx: &'a mut PgTransaction<'static>,
     /// Contract package hash that emitted this event (hex, no prefix).
     pub contract_hash: &'a str,
     /// Deploy hash of the transaction containing this event.
@@ -65,12 +70,16 @@ pub trait IndexableEvent: Serialize + for<'de> Deserialize<'de> + Send + Sync + 
 
     /// Process this event and persist it to the database.
     ///
-    /// This method is called inside a database transaction. If it returns an
-    /// error, the transaction is rolled back and the event will be retried.
+    /// This method is called inside the outer database transaction provided by
+    /// [`crate::processor::process_event`] via [`EventContext::tx`]. All writes
+    /// must go through `ctx.tx` — do **not** open nested transactions.
+    /// If this method returns an error, the caller rolls back `ctx.tx` and the
+    /// entire event (including `blockchain_events`) is left uncommitted.
     ///
     /// # Errors
     ///
     /// Returns [`IndexerError`](crate::error::IndexerError) on database
     /// failures or business logic errors.
-    fn process(&self, ctx: &EventContext<'_>) -> impl Future<Output = IndexerResult<()>> + Send;
+    fn process(&self, ctx: &mut EventContext<'_>)
+    -> impl Future<Output = IndexerResult<()>> + Send;
 }

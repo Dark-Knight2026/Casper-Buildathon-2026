@@ -23,12 +23,10 @@ impl IndexableEvent for SetAllowance {
     const EVENT_NAME: &'static str = "SetAllowance";
 
     #[inline]
-    async fn process(&self, ctx: &EventContext<'_>) -> IndexerResult<()> {
-        let mut tx = ctx.db_pool.begin().await?;
-
+    async fn process(&self, ctx: &mut EventContext<'_>) -> IndexerResult<()> {
         let event_json = serde_json::to_value(self)?;
         db::insert_blockchain_transaction(
-            &mut tx,
+            ctx.tx,
             &db::NewBlockchainTx {
                 deploy_hash: ctx.deploy_hash,
                 block_number: ctx.block_height.cast_signed(),
@@ -40,8 +38,6 @@ impl IndexableEvent for SetAllowance {
             },
         )
         .await?;
-
-        tx.commit().await?;
 
         tracing::debug!(
             deploy = %ctx.deploy_hash,

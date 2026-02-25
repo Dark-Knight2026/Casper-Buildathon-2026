@@ -23,13 +23,11 @@ impl IndexableEvent for Transfer {
     const EVENT_NAME: &'static str = "Transfer";
 
     #[inline]
-    async fn process(&self, ctx: &EventContext<'_>) -> IndexerResult<()> {
-        let mut tx = ctx.db_pool.begin().await?;
-
+    async fn process(&self, ctx: &mut EventContext<'_>) -> IndexerResult<()> {
         // Insert into blockchain_transactions
         let event_json = serde_json::to_value(self)?;
         db::insert_blockchain_transaction(
-            &mut tx,
+            ctx.tx,
             &db::NewBlockchainTx {
                 deploy_hash: ctx.deploy_hash,
                 block_number: ctx.block_height.cast_signed(),
@@ -44,21 +42,19 @@ impl IndexableEvent for Transfer {
 
         // Decrease sender balance, increase recipient balance.
         db::update_token_balance(
-            &mut tx,
+            ctx.tx,
             &self.sender,
             ctx.contract_type,
             db::BalanceUpdate::Decrease(&self.amount),
         )
         .await?;
         db::update_token_balance(
-            &mut tx,
+            ctx.tx,
             &self.recipient,
             ctx.contract_type,
             db::BalanceUpdate::Increase(&self.amount),
         )
         .await?;
-
-        tx.commit().await?;
 
         tracing::debug!(
             deploy = %ctx.deploy_hash,

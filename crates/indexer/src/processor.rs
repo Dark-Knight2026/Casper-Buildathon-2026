@@ -67,9 +67,11 @@ pub async fn process_event(
         return Ok(());
     }
 
-    // 2. Dispatch to event handler via registry
-    let ctx = EventContext {
-        db_pool,
+    // 2. Dispatch to event handler via registry.
+    // ctx borrows `tx` mutably; the borrow ends after process_event returns,
+    // allowing `tx` to be used again for mark_event_processed below.
+    let mut ctx = EventContext {
+        tx: &mut tx,
         contract_hash: &raw.contract_hash,
         deploy_hash: &raw.deploy_hash,
         block_height: raw.block_height,
@@ -78,7 +80,7 @@ pub async fn process_event(
     };
 
     match registry
-        .process_event(&ctx, &raw.event_name, raw.event_data.clone())
+        .process_event(&mut ctx, &raw.event_name, raw.event_data.clone())
         .await
     {
         Ok(()) => {

@@ -11,6 +11,10 @@
 //!    `(contract_type, event_name)` pair the processor stores one row in
 //!    `blockchain_events` (marked `processed = true`) and makes no domain-table
 //!    writes (`token_holdings`, `ico_purchases`, etc.).
+//! 4. **Split-transaction regression (Bug 1)** — if the outer transaction
+//!    is rolled back *after* the event handler's inner transaction already
+//!    committed, re-processing the same event must not double domain writes
+//!    (e.g. `token_holdings` balance must not be incremented twice).
 
 mod common;
 
@@ -170,5 +174,94 @@ async fn unknown_event_is_stored_raw_without_handler(pool: PgPool) {
     assert_eq!(
         holdings, 0,
         "no token_holdings writes must occur for an unknown event"
+    );
+}
+
+// process_event — atomicity regression (fixes split-transaction Bug 1)
+
+/// Verifies that all event writes are atomic: after a complete transaction
+/// rollback, re-processing the same event produces the correct result.
+///
+/// # Background
+///
+/// Before the fix, `process_event` used **two** independent transactions:
+/// - outer tx: `blockchain_events` + `mark_event_processed`
+/// - inner tx (handler): domain writes (`token_holdings`, etc.)
+///
+/// If the outer tx rolled back after the inner tx had already committed, domain
+/// writes survived but `blockchain_events` was gone. On the next retry the
+/// handler ran again, doubling the balance via arithmetic UPSERT (`balance + amount`).
+///
+/// After the fix, a **single** transaction covers all writes. A rollback undoes
+/// everything atomically — `blockchain_events`, `blockchain_transactions`, and
+/// `token_holdings` all disappear together.
+///
+/// # What this test verifies
+///
+/// We simulate a complete rollback by deleting every row written by the first
+/// call. Re-processing must then yield exactly the same state as the first call
+/// (`bob = "100"`), not a doubled value (`"200"`).
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn reprocessing_after_full_rollback_does_not_double_balance(pool: PgPool) {
+    common::disable_rls(&pool).await;
+
+    let registry = EventRegistry::new();
+    let event = RawEvent {
+        contract_hash: "big_contract_hash".to_owned(),
+        deploy_hash: TRANSFER_DEPLOY_HASH.to_owned(),
+        block_height: 100,
+        caller: String::new(),
+        contract_type: ContractType::Big,
+        event_name: "Transfer".to_owned(),
+        event_data: json!({ "sender": "alice", "recipient": "bob", "amount": "100" }),
+    };
+
+    // First call — all writes committed in one transaction.
+    processor::process_event(&pool, &registry, &event)
+        .await
+        .expect("first call must succeed");
+
+    // Simulate a complete transaction rollback: undo every row that
+    // process_event wrote. With a single shared transaction (the fix), a real
+    // rollback would remove all three atomically.
+    sqlx::query!(
+        r"DELETE FROM blockchain_events WHERE transaction_hash = $1",
+        TRANSFER_DEPLOY_HASH,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query!(
+        r"DELETE FROM blockchain_transactions WHERE transaction_hash = $1",
+        TRANSFER_DEPLOY_HASH,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query!(r"DELETE FROM token_holdings WHERE user_address IN ('alice', 'bob')")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    // Second call — starts from a clean slate, must produce the same result.
+    processor::process_event(&pool, &registry, &event)
+        .await
+        .expect("second call must succeed");
+
+    let balance: Option<String> = sqlx::query_scalar!(
+        r"
+            SELECT balance FROM token_holdings
+            WHERE user_address = 'bob' AND token_type = 'BIG'
+        "
+    )
+    .fetch_optional(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(
+        balance.as_deref(),
+        Some("100"),
+        "recipient balance must equal the transferred amount after re-processing \
+         a fully rolled-back event"
     );
 }

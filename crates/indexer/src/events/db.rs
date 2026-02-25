@@ -10,7 +10,7 @@
 //! - **Token holdings** — current CEP-18 balances per user (`token_holdings`).
 //! - **ICO** — detailed ICO purchase log (`ico_purchases`).
 
-use sqlx::{Postgres, Transaction};
+use sqlx::PgTransaction;
 
 use crate::{config::ContractType, error::IndexerResult};
 
@@ -44,7 +44,7 @@ pub struct NewBlockchainEvent<'a> {
 /// on SQL failures.
 #[inline]
 pub async fn insert_blockchain_event(
-    tx: &mut Transaction<'_, Postgres>,
+    tx: &mut PgTransaction<'_>,
     row: NewBlockchainEvent<'_>,
 ) -> IndexerResult<bool> {
     let result = sqlx::query!(
@@ -74,7 +74,7 @@ pub async fn insert_blockchain_event(
 /// on SQL failures.
 #[inline]
 pub async fn mark_event_processed(
-    tx: &mut Transaction<'_, Postgres>,
+    tx: &mut PgTransaction<'_>,
     transaction_hash: &str,
     event_type: &str,
     contract_address: &str,
@@ -132,7 +132,7 @@ pub struct NewBlockchainTx<'a> {
 /// on SQL failures.
 #[inline]
 pub async fn insert_blockchain_transaction(
-    tx: &mut Transaction<'_, Postgres>,
+    tx: &mut PgTransaction<'_>,
     row: &NewBlockchainTx<'_>,
 ) -> IndexerResult<()> {
     sqlx::query!(
@@ -184,7 +184,7 @@ pub enum BalanceUpdate<'a> {
 /// if `amount` is not a valid decimal string or if the SQL fails.
 #[inline]
 pub async fn update_token_balance(
-    tx: &mut Transaction<'_, Postgres>,
+    tx: &mut PgTransaction<'_>,
     user_address: &str,
     token_type: ContractType,
     update: BalanceUpdate<'_>,
@@ -276,7 +276,7 @@ pub struct NewIcoPurchase<'a> {
 /// on SQL failures.
 #[inline]
 pub async fn insert_ico_purchase(
-    tx: &mut Transaction<'_, Postgres>,
+    tx: &mut PgTransaction<'_>,
     row: &NewIcoPurchase<'_>,
 ) -> IndexerResult<()> {
     sqlx::query!(

@@ -101,7 +101,7 @@ impl EventRegistry {
     #[inline]
     pub async fn process_event(
         &self,
-        ctx: &EventContext<'_>,
+        ctx: &mut EventContext<'_>,
         event_name: &str,
         event_data: Value,
     ) -> IndexerResult<()> {
@@ -119,7 +119,7 @@ impl EventRegistry {
 }
 
 /// Helper to deserialize and process a typed event.
-async fn process_typed_event<E>(ctx: &EventContext<'_>, event_data: Value) -> IndexerResult<()>
+async fn process_typed_event<E>(ctx: &mut EventContext<'_>, event_data: Value) -> IndexerResult<()>
 where
     E: IndexableEvent,
 {

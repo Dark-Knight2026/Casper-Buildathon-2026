@@ -43,12 +43,10 @@ impl IndexableEvent for TokensPurchased {
     const EVENT_NAME: &'static str = "TokensPurchased";
 
     #[inline]
-    async fn process(&self, ctx: &EventContext<'_>) -> IndexerResult<()> {
-        let mut tx = ctx.db_pool.begin().await?;
-
+    async fn process(&self, ctx: &mut EventContext<'_>) -> IndexerResult<()> {
         // 1. Insert into ico_purchases table
         db::insert_ico_purchase(
-            &mut tx,
+            ctx.tx,
             &db::NewIcoPurchase {
                 transaction_hash: ctx.deploy_hash,
                 block_height: ctx.block_height.cast_signed(),
@@ -65,7 +63,7 @@ impl IndexableEvent for TokensPurchased {
         // 2. Insert into blockchain_transactions
         let event_json = serde_json::to_value(self)?;
         db::insert_blockchain_transaction(
-            &mut tx,
+            ctx.tx,
             &db::NewBlockchainTx {
                 deploy_hash: ctx.deploy_hash,
                 block_number: ctx.block_height.cast_signed(),
@@ -80,14 +78,12 @@ impl IndexableEvent for TokensPurchased {
 
         // Increase buyer's BIG token balance.
         db::update_token_balance(
-            &mut tx,
+            ctx.tx,
             ctx.caller,
             ContractType::Big,
             db::BalanceUpdate::Increase(&self.amount),
         )
         .await?;
-
-        tx.commit().await?;
 
         tracing::debug!(
             deploy = %ctx.deploy_hash,
