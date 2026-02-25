@@ -20,9 +20,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  // Extract path from URL: /api/cspr-cloud/accounts/xxx → accounts/xxx
-  const urlPath = req.url?.replace(/^\/api\/cspr-cloud\/?/, '') || '';
-  const path = urlPath || (typeof req.query.path === 'string' ? req.query.path : '');
+  // Extract path: Vercel rewrite /:path* passes segments as req.query.path (array)
+  let path = '';
+  if (Array.isArray(req.query.path)) {
+    path = req.query.path.join('/');
+  } else if (typeof req.query.path === 'string') {
+    path = req.query.path;
+  } else {
+    // Fallback: extract from URL directly
+    path = (req.url?.split('?')[0] ?? '').replace(/^\/api\/cspr-cloud\/?/, '');
+  }
 
   if (!path) {
     return res.status(400).json({ error: 'Missing path parameter' });
