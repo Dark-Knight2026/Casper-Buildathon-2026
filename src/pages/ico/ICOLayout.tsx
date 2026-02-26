@@ -10,12 +10,14 @@ import { ThemeProvider } from 'styled-components';
 
 const theme = buildTheme(DefaultThemes.csprclick);
 
+const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
 // POPUP mode is broken in csprclick-sdk-1.12: opens /signin.html which returns 404 on accounts.cspr.click.
 // IFRAME uses /v1.12/index.html which works correctly. Switch back to POPUP when cspr.click fixes their CDN.
 const clickOptions: CsprClickInitOptions = {
   appName: 'LeaseFi Token Sale',
   contentMode: CONTENT_MODE.IFRAME,
-  providers: ['casper-wallet', 'ledger', 'metamask-snap'],
+  providers: isMobile ? ['casper-wallet'] : ['casper-wallet', 'ledger', 'metamask-snap'],
   appId: import.meta.env.VITE_CSPRCLICK_APP_ID ?? 'csprclick-template',
   chainName: import.meta.env.VITE_CASPER_NETWORK ?? 'casper-test',
 };
