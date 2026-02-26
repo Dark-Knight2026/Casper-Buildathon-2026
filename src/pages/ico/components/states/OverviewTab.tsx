@@ -4,7 +4,8 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { TrendingUp, Clock, Percent, Wallet } from 'lucide-react';
 import { TransactionHistory } from '../shared/TransactionHistory';
-import { useTransactionHistory } from '@/hooks/ico/useTransactionHistory';
+import { useUserTokenActions } from '@/hooks/ico/useUserTokenActions';
+import { useICOWallet } from '@/hooks/ico/useICOWallet';
 import { MOCK_DASHBOARD, MOCK_STAKING_INFO, MOCK_EARNINGS_DATA, MOCK_PORTFOLIO } from '@/constants/icoMockData';
 import { formatNumber, formatUSD } from '../../utils/formatters';
 
@@ -16,7 +17,8 @@ const chartConfig = {
 };
 
 export const OverviewTab = memo(function OverviewTab() {
-  const { transactions } = useTransactionHistory();
+  const { account } = useICOWallet();
+  const { transactions } = useUserTokenActions(account?.publicKey);
 
   const dashboardCards = useMemo(() => [
     {

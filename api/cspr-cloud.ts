@@ -46,6 +46,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     : 'https://api.testnet.cspr.cloud';
 
   const targetUrl = new URL(`${baseUrl}/${path}`);
+
+  // Forward query params (excluding Vercel's internal 'path' param)
+  for (const [key, value] of Object.entries(req.query)) {
+    if (key === 'path') continue;
+    if (typeof value === 'string') {
+      targetUrl.searchParams.set(key, value);
+    }
+  }
+
   const normalized = `${targetUrl.origin}${targetUrl.pathname}`;
 
   // Validate normalized URL against allowed prefixes

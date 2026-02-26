@@ -7,8 +7,6 @@ import { formatDateTime } from '../../utils/formatters';
 export interface ICOTransaction {
   id: string;
   type: 'purchase' | 'claim';
-  amount: number;
-  currency: string;
   tokensReceived: number;
   tokenSymbol: string;
   status: 'pending' | 'completed' | 'failed';
@@ -21,7 +19,7 @@ interface TransactionHistoryProps {
   className?: string;
 }
 
-const PAGE_SIZE = 5;
+const PAGE_SIZE = 8;
 
 const STATUS_STYLES = {
   pending: 'text-yellow-800 bg-yellow-400/10',
@@ -93,14 +91,9 @@ export function TransactionHistory({ transactions, className }: TransactionHisto
                     </div>
                   </div>
 
-                  <div className="text-right">
-                    <p className="text-sm font-medium text-[hsl(var(--ico-text-primary))]">
-                      +{tx.tokensReceived.toLocaleString('en-US', { maximumFractionDigits: 2 })} {tx.tokenSymbol}
-                    </p>
-                    <p className="text-xs text-[hsl(var(--ico-text-secondary))]">
-                      {tx.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {tx.currency}
-                    </p>
-                  </div>
+                  <p className="text-sm font-medium text-[hsl(var(--ico-text-primary))] text-right">
+                    +{tx.tokensReceived.toLocaleString('en-US', { maximumFractionDigits: 2 })} {tx.tokenSymbol}
+                  </p>
                 </li>
               ))}
             </ul>

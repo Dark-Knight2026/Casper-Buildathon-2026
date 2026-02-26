@@ -127,6 +127,7 @@ export function usePurchaseFlow({
       onSuccess: (txHash, tokensReceived) => {
         logger.debug('Purchase successful', { txHash, tokensReceived });
         queryClient.invalidateQueries({ queryKey: ['ico-schedules'] });
+        queryClient.invalidateQueries({ queryKey: ['user-token-actions'] });
         setShowToast(true);
         setShowConfirmModal(false);
         setPendingPurchase(null);
