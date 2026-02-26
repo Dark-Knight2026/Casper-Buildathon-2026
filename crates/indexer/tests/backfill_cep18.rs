@@ -107,7 +107,7 @@ async fn fetch_page_sends_correct_query_params() {
             "my_contract",
         ))
         .and(matchers::query_param("page", "3"))
-        .and(matchers::query_param("limit", "100"))
+        .and(matchers::query_param("page_size", "100"))
         .and(matchers::query_param("order_by", "block_height"))
         .and(matchers::query_param("order_direction", "ASC"))
         .respond_with(

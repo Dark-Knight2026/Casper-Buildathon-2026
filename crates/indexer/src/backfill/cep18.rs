@@ -115,7 +115,7 @@ pub async fn fetch_ft_token_actions_page(
     page: u32,
 ) -> IndexerResult<FtTokenActionPage> {
     let url = format!(
-        "{}/ft-token-actions?contract_package_hash={contract_hash}&page={page}&limit=100&order_by=block_height&order_direction=ASC",
+        "{}/ft-token-actions?contract_package_hash={contract_hash}&page={page}&page_size=100&order_by=block_height&order_direction=ASC",
         config.casper.rest_url,
     );
 

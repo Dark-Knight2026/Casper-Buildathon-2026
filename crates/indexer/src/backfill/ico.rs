@@ -174,7 +174,7 @@ pub async fn backfill_ico(
 
     loop {
         let url = format!(
-            "{}/deploys?contract_package_hash={contract_hash}&page={page}&limit=100&order_by=block_height&order_direction=ASC",
+            "{}/deploys?contract_package_hash={contract_hash}&page={page}&page_size=100&order_by=block_height&order_direction=ASC",
             ctx.config.casper.rest_url,
         );
         tracing::debug!(%url, "Fetching ICO deploy list page {page}");
@@ -447,7 +447,7 @@ pub async fn load_big_transfers(
 
     loop {
         let url = format!(
-            "{}/ft-token-actions?contract_package_hash={big_hash}&page={page}&limit=100&order_by=block_height&order_direction=ASC",
+            "{}/ft-token-actions?contract_package_hash={big_hash}&page={page}&page_size=100&order_by=block_height&order_direction=ASC",
             config.casper.rest_url,
         );
         tracing::debug!(%url, "Fetching BIG ft-token-actions page {page}");
