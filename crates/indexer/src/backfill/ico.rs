@@ -1,7 +1,7 @@
-//! ICO backfill via CSPR.cloud `/deploys` + Casper Node RPC `info_get_deploy`.
+//! ICO backfill via CSPR.cloud `/deploys` endpoint.
 //!
 //! `TokensPurchased` event data is reconstructed from:
-//! - deploy session args (`amount_to_spend`, `currency`) fetched from the node
+//! - deploy session args (`amount_to_spend`, `currency`) returned inline by CSPR.cloud
 //! - BIG Transfer amount fetched directly from CSPR.cloud `/ft-token-actions`
 //!   (filtered by `from_hash = ICO contract package hash`)
 
@@ -12,7 +12,6 @@ use chrono::DateTime;
 use reqwest::Client;
 use secrecy::ExposeSecret;
 use serde::Deserialize;
-use serde_json::json;
 use sqlx::PgPool;
 
 use super::db;
@@ -67,44 +66,13 @@ pub(super) struct DeployListItem {
     pub(super) block_height: u64,
     /// `None` on success, non-`None` if the deploy failed.
     pub(super) error_message: Option<String>,
-}
-
-// -----------------------------------------------------------------------------
-// Casper Node RPC response types
-// -----------------------------------------------------------------------------
-
-/// Top-level JSON-RPC response from the Casper node.
-#[derive(Debug, Deserialize)]
-struct CasperRpcResponse {
-    /// Populated on success; `None` when the node returns a JSON-RPC error.
-    result: Option<CasperRpcResult>,
-    /// Populated when the node returns a JSON-RPC error (e.g. deploy not found).
-    error: Option<serde_json::Value>,
-}
-
-/// `result` field of a successful `info_get_deploy` response.
-#[derive(Debug, Deserialize)]
-struct CasperRpcResult {
-    /// The full deploy object returned by `info_get_deploy`.
-    deploy: CasperDeploy,
-}
-
-/// Relevant fields of a Casper deploy object.
-#[derive(Debug, Deserialize)]
-struct CasperDeploy {
-    /// Block context: caller account and timestamp.
-    header: CasperDeployHeader,
-    /// Session body — contains `entry_point` and `args`.
-    session: serde_json::Value,
-}
-
-/// Deploy header fields used by the ICO backfill.
-#[derive(Debug, Deserialize)]
-struct CasperDeployHeader {
-    /// ISO-8601 timestamp of when the deploy was created.
-    timestamp: String,
+    /// Session args returned inline by CSPR.cloud (object keyed by arg name).
+    #[serde(default)]
+    pub(super) args: serde_json::Value,
     /// Hex-encoded public key of the account that submitted the deploy.
-    account: String,
+    pub(super) caller_public_key: String,
+    /// ISO-8601 timestamp of when the deploy was created.
+    pub(super) timestamp: String,
 }
 
 // -----------------------------------------------------------------------------
@@ -114,7 +82,7 @@ struct CasperDeployHeader {
 /// Shared dependencies for ICO backfill operations.
 #[derive(Debug)]
 pub struct IcoBackfillCtx<'a> {
-    /// HTTP client used for CSPR.cloud and Casper Node RPC requests.
+    /// HTTP client used for CSPR.cloud API requests.
     pub client: &'a Client,
     /// Indexer configuration (API token, URLs, rate limit).
     pub config: &'a IndexerConfig,
@@ -133,15 +101,10 @@ pub struct IcoBackfillCtx<'a> {
 /// Backfill the ICO contract by reconstructing `TokensPurchased` events.
 ///
 /// For each successful `purchase` deploy:
-/// 1. Fetches the deploy list from CSPR.cloud `/deploys`.
-/// 2. Calls Casper Node RPC `info_get_deploy` to get session args
-///    (`amount_to_spend`, `currency`).
-/// 3. Looks up the corresponding BIG Transfer amount from the database
-///    (already stored by the CEP-18 backfill using the same `deploy_hash`).
+/// 1. Fetches the deploy list from CSPR.cloud `/deploys` (includes session args inline).
+/// 2. Parses `amount_to_spend` and `currency` from the deploy's `args` object.
+/// 3. Looks up the corresponding BIG Transfer amount from the pre-fetched CSPR.cloud map.
 /// 4. Reconstructs and processes a `TokensPurchased` event.
-///
-/// Deploys older than ~2–3 days are not accessible on the node and are
-/// skipped with a `WARN` log.
 ///
 /// # Errors
 ///
@@ -243,11 +206,11 @@ pub async fn backfill_ico(
     Ok(())
 }
 
-/// Process a single ICO deploy — fetch from node, parse, and emit event.
+/// Process a single ICO deploy — parse inline args and emit event.
 ///
 /// Returns `Ok(true)` if a `TokensPurchased` event was successfully processed,
-/// `Ok(false)` if the deploy was skipped (not a `purchase`, node unavailable,
-/// or BIG amount not found in DB).
+/// `Ok(false)` if the deploy was skipped (not a `purchase` call or BIG amount
+/// not found in pre-fetched map).
 async fn process_ico_deploy(
     ctx: &IcoBackfillCtx<'_>,
     contract_type: ContractType,
@@ -257,58 +220,13 @@ async fn process_ico_deploy(
 ) -> IndexerResult<bool> {
     let deploy_hash = &deploy_item.deploy_hash;
 
-    // 1. fetch deploy from Casper node
-    let rpc_body = json!({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "info_get_deploy",
-        "params": { "deploy_hash": deploy_hash }
-    });
-
-    let rpc_response = ctx
-        .client
-        .post(&ctx.config.casper.node_url)
-        .json(&rpc_body)
-        .timeout(Duration::from_secs(15))
-        .send()
-        .await?
-        .json::<CasperRpcResponse>()
-        .await?;
-
-    // Node returns a JSON-RPC error when the deploy is too old or unknown.
-    if rpc_response.error.is_some() {
-        tracing::warn!(
-            deploy = %deploy_hash,
-            "Deploy not found on Casper node (too old or unknown) — skipping"
-        );
-        return Ok(false);
-    }
-
-    let Some(result) = rpc_response.result else {
+    // 1. parse args (amount_to_spend, currency) from inline CSPR.cloud data
+    let Some((cost, currency_id)) = parse_purchase_args(&deploy_item.args) else {
+        // Not a `purchase` call or args are malformed — skip silently.
         return Ok(false);
     };
 
-    let deploy = result.deploy;
-
-    // 2. check entry_point
-    let entry_point = deploy
-        .session
-        .get("StoredVersionedContractByHash")
-        .and_then(|s| s.get("entry_point"))
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
-
-    if entry_point != "purchase" {
-        return Ok(false);
-    }
-
-    // 3. parse args (amount_to_spend, currency)
-    let Some((cost, currency_id)) = parse_purchase_args(&deploy.session) else {
-        tracing::warn!(deploy = %deploy_hash, "Could not parse purchase args, skipping");
-        return Ok(false);
-    };
-
-    // 4. look up BIG transfer amount from pre-fetched map
+    // 2. look up BIG transfer amount from pre-fetched map
     let Some(big_amount) = big_amounts.get(deploy_hash.as_str()) else {
         tracing::warn!(
             deploy = %deploy_hash,
@@ -317,15 +235,15 @@ async fn process_ico_deploy(
         return Ok(false);
     };
 
-    // 5. build and process TokensPurchased event
+    // 3. build and process TokensPurchased event
     let currency_name = ico_currency_name(currency_id);
 
-    // Convert ISO-8601 timestamp (from Casper node) to Unix epoch seconds (u64).
-    let timestamp_secs: u64 = DateTime::parse_from_rfc3339(&deploy.header.timestamp).map_or_else(
+    // Convert ISO-8601 timestamp to Unix epoch seconds (u64).
+    let timestamp_secs: u64 = DateTime::parse_from_rfc3339(&deploy_item.timestamp).map_or_else(
         |e| {
             tracing::warn!(
                 deploy = %deploy_hash,
-                raw = %deploy.header.timestamp,
+                raw = %deploy_item.timestamp,
                 error = %e,
                 "Failed to parse deploy timestamp — storing 0"
             );
@@ -334,7 +252,7 @@ async fn process_ico_deploy(
         |dt| dt.timestamp().max(0).cast_unsigned(),
     );
 
-    // `price` is None: not available from node RPC during backfill.
+    // `price` is None: not available during backfill.
     let typed_event = TokensPurchased {
         amount: big_amount.clone(),
         currency: currency_id,
@@ -348,7 +266,7 @@ async fn process_ico_deploy(
         contract_hash: contract_hash.to_owned(),
         deploy_hash: deploy_hash.clone(),
         block_height: deploy_item.block_height,
-        caller: deploy.header.account.clone(),
+        caller: deploy_item.caller_public_key.clone(),
         contract_type,
         event_name: "TokensPurchased".to_owned(),
         event_data,
@@ -367,48 +285,25 @@ async fn process_ico_deploy(
     Ok(true)
 }
 
-/// Extract `(amount_to_spend, currency_id)` from the deploy session args.
+/// Extract `(amount_to_spend, currency_id)` from the deploy args object.
 ///
+/// CSPR.cloud returns args as `{ "arg_name": { "cl_type": "…", "parsed": … } }`.
 /// Returns `None` if the expected args are missing or malformed.
 #[inline]
-pub fn parse_purchase_args(session: &serde_json::Value) -> Option<(String, u8)> {
-    let args = session
-        .get("StoredVersionedContractByHash")?
-        .get("args")?
-        .as_array()?;
-
-    let mut cost: Option<String> = None;
-    let mut currency_id: Option<u8> = None;
-
-    for arg in args {
-        let pair = arg.as_array()?;
-        let name = pair.first()?.as_str()?;
-        let value = pair.get(1)?;
-
-        match name {
-            "amount_to_spend" => {
-                // `parsed` is a decimal string for U256
-                cost = value.get("parsed").and_then(|v| {
-                    // It may be a number or string depending on the node version
-                    if let Some(s) = v.as_str() {
-                        Some(s.to_owned())
-                    } else {
-                        v.as_u64().map(|n| n.to_string())
-                    }
-                });
-            }
-            "currency" => {
-                // ICO Currency enum: CSPR=0, USDC=1, USDT=2 (serialised as U8)
-                currency_id = value
-                    .get("parsed")
-                    .and_then(serde_json::Value::as_u64)
-                    .and_then(|n| u8::try_from(n).ok());
-            }
-            _ => {}
-        }
-    }
-
-    Some((cost?, currency_id?))
+#[must_use]
+pub fn parse_purchase_args(args: &serde_json::Value) -> Option<(String, u8)> {
+    let cost = args.get("amount_to_spend")?.get("parsed").and_then(|v| {
+        // `parsed` may be a string or number depending on the type
+        v.as_str()
+            .map(ToOwned::to_owned)
+            .or_else(|| v.as_u64().map(|n| n.to_string()))
+    })?;
+    let currency_id = args
+        .get("currency")?
+        .get("parsed")?
+        .as_u64()
+        .and_then(|n| u8::try_from(n).ok())?;
+    Some((cost, currency_id))
 }
 
 /// Map the ICO `Currency` enum variant index to a human-readable string.

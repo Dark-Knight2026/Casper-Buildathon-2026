@@ -5,12 +5,10 @@
 //! - **CEP-18 tokens** (USDC, USDT, BIG): CSPR.cloud `/ft-token-actions` endpoint,
 //!   which returns normalized Transfer/Mint/Approve actions with full history.
 //!
-//! - **ICO**: CSPR.cloud `/deploys` for deploy list + Casper Node RPC `info_get_deploy`
-//!   for session args. `TokensPurchased` event data is reconstructed from deploy args
-//!   (`amount_to_spend`, `currency`) and the BIG Transfer amount fetched directly from
+//! - **ICO**: CSPR.cloud `/deploys` endpoint returns deploy session args inline.
+//!   `TokensPurchased` event data is reconstructed from deploy args
+//!   (`amount_to_spend`, `currency`) and the BIG Transfer amount fetched from
 //!   CSPR.cloud `/ft-token-actions` (filtered by `from_hash == ICO contract hash`).
-//!   Only deploys accessible on the node (~last 2–3 days) are processed; older deploys
-//!   are skipped with a warning.
 //!
 //! - **Treasury / others**: not yet implemented — rely on live WebSocket streaming.
 //!
@@ -79,10 +77,8 @@ pub async fn run_backfill(config: &IndexerConfig, db_pool: &PgPool) -> IndexerRe
                 )
                 .await?;
             }
-            // ICO: no dedicated endpoint — events are reconstructed from raw
-            // deploys. Requires Casper Node RPC (`info_get_deploy`) for
-            // session args + BIG transfer amounts from CSPR.cloud.
-            // Node only keeps ~2–3 days of history.
+            // ICO: events are reconstructed from `/deploys` (session args inline)
+            // + BIG transfer amounts from CSPR.cloud `/ft-token-actions`.
             ContractType::Ico => {
                 if let Some(ref big) = big_hash {
                     ico::backfill_ico(

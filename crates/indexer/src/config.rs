@@ -16,7 +16,7 @@ const DEFAULT_WSS_RECONNECT_DELAY_MS: u64 = 1000;
 pub struct IndexerConfig {
     /// `PostgreSQL` database connection URL.
     pub database_url: SecretString,
-    /// CSPR.cloud API credentials and Casper node connection settings.
+    /// CSPR.cloud API credentials.
     pub casper: Casper,
     /// Registry of tracked smart contract package hashes.
     pub contracts: ContractRegistry,
@@ -26,7 +26,7 @@ pub struct IndexerConfig {
     pub wss_reconnect_delay_ms: u64,
 }
 
-/// CSPR.cloud API credentials and Casper node connection settings.
+/// CSPR.cloud API credentials.
 #[derive(Debug, Clone)]
 pub struct Casper {
     /// `CSPR.cloud` API access token.
@@ -35,8 +35,6 @@ pub struct Casper {
     pub rest_url: String,
     /// `CSPR.cloud` WebSocket streaming URL.
     pub wss_url: String,
-    /// Casper node JSON-RPC URL (used for ICO backfill via `info_get_deploy`).
-    pub node_url: String,
 }
 
 impl IndexerConfig {
@@ -68,17 +66,6 @@ impl IndexerConfig {
                     IndexerError::Config("CSPR_CLOUD_WSS_URL must start with wss://".to_owned())
                 })
             })?;
-        let node_url = env::var("CASPER_NODE_URL")
-            .map_err(|_| IndexerError::Config("CASPER_NODE_URL must be set".to_owned()))
-            .and_then(|url| {
-                (url.starts_with("http://") || url.starts_with("https://"))
-                    .then_some(url)
-                    .ok_or_else(|| {
-                        IndexerError::Config(
-                            "CASPER_NODE_URL must start with http:// or https://".to_owned(),
-                        )
-                    })
-            })?;
         let contracts = ContractRegistry::from_env();
         if contracts.active_contracts().is_empty() {
             tracing::warn!(
@@ -104,7 +91,6 @@ impl IndexerConfig {
                 api_token,
                 rest_url,
                 wss_url,
-                node_url,
             },
             contracts,
             backfill_rate_limit_ms,

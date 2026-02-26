@@ -62,7 +62,7 @@ async fn fetch_page_returns_error_on_5xx_response() {
 
     let result = cep18::fetch_ft_token_actions_page(
         &Client::new(),
-        &common::test_config(server.uri(), None),
+        &common::test_config(server.uri()),
         "contract_hash",
         1,
     )
@@ -84,7 +84,7 @@ async fn fetch_page_returns_error_on_4xx_response() {
 
     let result = cep18::fetch_ft_token_actions_page(
         &Client::new(),
-        &common::test_config(server.uri(), None),
+        &common::test_config(server.uri()),
         "contract_hash",
         1,
     )
@@ -118,7 +118,7 @@ async fn fetch_page_sends_correct_query_params() {
 
     let result = cep18::fetch_ft_token_actions_page(
         &Client::new(),
-        &common::test_config(server.uri(), None),
+        &common::test_config(server.uri()),
         "my_contract",
         3,
     )
@@ -147,7 +147,7 @@ async fn fetch_page_sends_authorization_header() {
 
     let result = cep18::fetch_ft_token_actions_page(
         &Client::new(),
-        &common::test_config(server.uri(), None),
+        &common::test_config(server.uri()),
         "any_hash",
         1,
     )
@@ -174,7 +174,7 @@ async fn fetch_page_parses_data_and_page_count() {
 
     let page = cep18::fetch_ft_token_actions_page(
         &Client::new(),
-        &common::test_config(server.uri(), None),
+        &common::test_config(server.uri()),
         "any_hash",
         1,
     )
@@ -204,7 +204,7 @@ async fn fetch_page_parses_empty_response() {
 
     let page = cep18::fetch_ft_token_actions_page(
         &Client::new(),
-        &common::test_config(server.uri(), None),
+        &common::test_config(server.uri()),
         "any_hash",
         1,
     )
@@ -335,7 +335,7 @@ async fn empty_data_exits_cleanly_without_cursor(pool: PgPool) {
 
     cep18::backfill_cep18(
         &Client::new(),
-        &common::test_config(server.uri(), None),
+        &common::test_config(server.uri()),
         &pool,
         &EventRegistry::new(),
         ContractType::Big,
@@ -407,7 +407,7 @@ async fn cursor_resume_skips_actions_at_or_below_saved_block(pool: PgPool) {
 
     cep18::backfill_cep18(
         &Client::new(),
-        &common::test_config(server.uri(), None),
+        &common::test_config(server.uri()),
         &pool,
         &EventRegistry::new(),
         ContractType::Big,
@@ -468,7 +468,7 @@ async fn transfer_action_written_to_tables_and_cursor_advances(pool: PgPool) {
 
     cep18::backfill_cep18(
         &Client::new(),
-        &common::test_config(server.uri(), None),
+        &common::test_config(server.uri()),
         &pool,
         &EventRegistry::new(),
         ContractType::Big,
@@ -572,7 +572,7 @@ async fn burn_action_skipped_and_cursor_not_updated(pool: PgPool) {
 
     cep18::backfill_cep18(
         &Client::new(),
-        &common::test_config(server.uri(), None),
+        &common::test_config(server.uri()),
         &pool,
         &EventRegistry::new(),
         ContractType::Big,
@@ -640,7 +640,7 @@ async fn mint_action_stored_raw_without_token_holdings_update(pool: PgPool) {
 
     cep18::backfill_cep18(
         &Client::new(),
-        &common::test_config(server.uri(), None),
+        &common::test_config(server.uri()),
         &pool,
         &EventRegistry::new(),
         ContractType::Big,
@@ -712,7 +712,7 @@ async fn start_block_takes_precedence_over_cursor_when_greater(pool: PgPool) {
 
     cep18::backfill_cep18(
         &Client::new(),
-        &common::test_config(server.uri(), None),
+        &common::test_config(server.uri()),
         &pool,
         &EventRegistry::new(),
         ContractType::Big,
@@ -777,7 +777,7 @@ async fn page_count_zero_with_data_processes_single_page_and_stops(pool: PgPool)
 
     cep18::backfill_cep18(
         &Client::new(),
-        &common::test_config(server.uri(), None),
+        &common::test_config(server.uri()),
         &pool,
         &EventRegistry::new(),
         ContractType::Big,

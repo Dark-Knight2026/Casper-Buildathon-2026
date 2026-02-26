@@ -50,14 +50,13 @@ pub async fn disable_rls(pool: &PgPool) {
 }
 
 /// Minimal `IndexerConfig` pointing at the given mock server URL.
-pub fn test_config(rest_url: String, node_url: Option<String>) -> IndexerConfig {
+pub fn test_config(rest_url: String) -> IndexerConfig {
     IndexerConfig {
         database_url: "postgres://localhost/test".to_owned().into(),
         casper: Casper {
             api_token: "test-token".to_owned().into(),
             rest_url,
             wss_url: "wss://test".to_owned(),
-            node_url: node_url.unwrap_or("https://node.test".to_owned()),
         },
         contracts: ContractRegistry::default(),
         backfill_rate_limit_ms: 0,

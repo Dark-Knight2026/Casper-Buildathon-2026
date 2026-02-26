@@ -40,7 +40,7 @@ async fn filters_only_ico_initiated_transfers() {
 
     let map = ico::load_big_transfers(
         &Client::new(),
-        &common::test_config(server.uri(), None),
+        &common::test_config(server.uri()),
         "big_hash",
         "ico_hash",
     )
@@ -79,7 +79,7 @@ async fn paginates_all_pages_using_page_count_from_response() {
 
     let map = ico::load_big_transfers(
         &Client::new(),
-        &common::test_config(server.uri(), None),
+        &common::test_config(server.uri()),
         "big_hash",
         "ico_hash",
     )
@@ -110,7 +110,7 @@ async fn returns_empty_map_when_no_ico_transfers_exist() {
 
     let map = ico::load_big_transfers(
         &Client::new(),
-        &common::test_config(server.uri(), None),
+        &common::test_config(server.uri()),
         "big_hash",
         "ico_hash",
     )
@@ -132,7 +132,7 @@ async fn load_big_transfers_returns_error_on_5xx_response() {
 
     let result = ico::load_big_transfers(
         &Client::new(),
-        &common::test_config(server.uri(), None),
+        &common::test_config(server.uri()),
         "big_hash",
         "ico_hash",
     )
@@ -155,7 +155,7 @@ async fn load_big_transfers_returns_error_on_4xx_response() {
 
     let result = ico::load_big_transfers(
         &Client::new(),
-        &common::test_config(server.uri(), None),
+        &common::test_config(server.uri()),
         "big_hash",
         "ico_hash",
     )
@@ -170,17 +170,17 @@ async fn load_big_transfers_returns_error_on_4xx_response() {
 
 #[test]
 fn parse_purchase_args_extracts_string_amount_and_currency() {
-    let session = payloads::purchase_session(&json!("50000000"), 0);
-    let (cost, currency_id) = ico::parse_purchase_args(&session).unwrap();
+    let args = payloads::purchase_args(&json!("50000000"), 0);
+    let (cost, currency_id) = ico::parse_purchase_args(&args).unwrap();
     assert_eq!(cost, "50000000");
     assert_eq!(currency_id, 0);
 }
 
 #[test]
 fn parse_purchase_args_extracts_numeric_amount() {
-    // Some node versions return `parsed` as a JSON number, not a string.
-    let session = payloads::purchase_session(&json!(12345u64), 2);
-    let (cost, currency_id) = ico::parse_purchase_args(&session).unwrap();
+    // Some responses return `parsed` as a JSON number, not a string.
+    let args = payloads::purchase_args(&json!(12345u64), 2);
+    let (cost, currency_id) = ico::parse_purchase_args(&args).unwrap();
     assert_eq!(cost, "12345");
     assert_eq!(currency_id, 2);
 }
@@ -188,39 +188,28 @@ fn parse_purchase_args_extracts_numeric_amount() {
 #[test]
 fn parse_purchase_args_returns_none_when_top_level_key_missing() {
     assert!(ico::parse_purchase_args(&json!({})).is_none());
-    assert!(ico::parse_purchase_args(&json!({ "Other": {} })).is_none());
+    assert!(ico::parse_purchase_args(&json!({ "other": {} })).is_none());
 }
 
 #[test]
 fn parse_purchase_args_returns_none_when_amount_missing() {
-    let session = json!({
-        "StoredVersionedContractByHash": {
-            "args": [
-                ["currency", {"parsed": 1u64}]
-            ]
-        }
+    let args = json!({
+        "currency": { "cl_type": "U8", "parsed": 1u64 }
     });
-    assert!(ico::parse_purchase_args(&session).is_none());
+    assert!(ico::parse_purchase_args(&args).is_none());
 }
 
 #[test]
 fn parse_purchase_args_returns_none_when_currency_missing() {
-    let session = json!({
-        "StoredVersionedContractByHash": {
-            "args": [
-                ["amount_to_spend", {"parsed": "100"}]
-            ]
-        }
+    let args = json!({
+        "amount_to_spend": { "cl_type": "U256", "parsed": "100" }
     });
-    assert!(ico::parse_purchase_args(&session).is_none());
+    assert!(ico::parse_purchase_args(&args).is_none());
 }
 
 #[test]
 fn parse_purchase_args_returns_none_when_args_is_empty() {
-    let session = json!({
-        "StoredVersionedContractByHash": { "args": [] }
-    });
-    assert!(ico::parse_purchase_args(&session).is_none());
+    assert!(ico::parse_purchase_args(&json!({})).is_none());
 }
 
 // ico_currency_name
@@ -246,25 +235,13 @@ fn deploys_page(deploys: serde_json::Value) -> ResponseTemplate {
     ResponseTemplate::new(200).set_body_json(json!({ "data": deploys, "page_count": 1 }))
 }
 
-/// Casper Node RPC response indicating the deploy was not found (too old).
-fn rpc_deploy_not_found() -> ResponseTemplate {
-    ResponseTemplate::new(200).set_body_json(json!({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "error": { "code": -32001, "message": "Deploy not found" }
-    }))
-}
-
-/// Deploy returned by `/deploys` but not found on the Casper node (RPC error).
-///
-/// Expected: `blockchain_transactions` is empty; cursor advances to the
-/// deploy's `block_height` because the deploy passed the `error_message` filter.
+/// Deploy without purchase args (e.g. a setup/init deploy) — cursor advances
+/// but no purchase is written.
 #[sqlx::test(migrator = "MIGRATOR")]
-async fn deploy_not_on_node_advances_cursor_but_writes_nothing(pool: PgPool) {
+async fn deploy_without_purchase_args_advances_cursor_but_writes_nothing(pool: PgPool) {
     common::disable_rls(&pool).await;
     let rest = MockServer::start().await;
-    let node = MockServer::start().await;
-    let config = common::test_config(rest.uri(), Some(node.uri()));
+    let config = common::test_config(rest.uri());
     let client = Client::new();
     let registry = EventRegistry::new();
 
@@ -278,13 +255,16 @@ async fn deploy_not_on_node_advances_cursor_but_writes_nothing(pool: PgPool) {
     Mock::given(matchers::method("GET"))
         .and(matchers::path("/deploys"))
         .respond_with(deploys_page(json!([
-            { "deploy_hash": "deploy_abc", "block_height": 100, "error_message": null }
+            {
+                "deploy_hash": "deploy_abc",
+                "block_height": 100,
+                "error_message": null,
+                "args": { "some_other_arg": { "cl_type": "String", "parsed": "hello" } },
+                "caller_public_key": "01abc",
+                "timestamp": "2024-06-01T12:00:00.000Z"
+            }
         ])))
         .mount(&rest)
-        .await;
-    Mock::given(matchers::method("POST"))
-        .respond_with(rpc_deploy_not_found())
-        .mount(&node)
         .await;
 
     ico::backfill_ico(
@@ -314,7 +294,7 @@ async fn deploy_not_on_node_advances_cursor_but_writes_nothing(pool: PgPool) {
     .unwrap_or(0);
     assert_eq!(
         tx_count, 0,
-        "no purchase should be written when node returns error"
+        "no purchase should be written when deploy has no purchase args"
     );
 
     let cursor: Option<i64> = sqlx::query_scalar!(
@@ -329,7 +309,7 @@ async fn deploy_not_on_node_advances_cursor_but_writes_nothing(pool: PgPool) {
     assert_eq!(
         cursor,
         Some(100),
-        "cursor must advance even when deploy was skipped by node"
+        "cursor must advance even when deploy was skipped (no purchase args)"
     );
 }
 
@@ -341,8 +321,7 @@ async fn deploy_not_on_node_advances_cursor_but_writes_nothing(pool: PgPool) {
 async fn failed_deploy_skipped_and_cursor_not_updated(pool: PgPool) {
     common::disable_rls(&pool).await;
     let rest = MockServer::start().await;
-    let node = MockServer::start().await;
-    let config = common::test_config(rest.uri(), Some(node.uri()));
+    let config = common::test_config(rest.uri());
     let client = Client::new();
     let registry = EventRegistry::new();
 
@@ -359,7 +338,10 @@ async fn failed_deploy_skipped_and_cursor_not_updated(pool: PgPool) {
             {
                 "deploy_hash": "failed_deploy",
                 "block_height": 200,
-                "error_message": "User error: insufficient funds"
+                "error_message": "User error: insufficient funds",
+                "args": {},
+                "caller_public_key": "01abc",
+                "timestamp": "2024-06-01T12:00:00.000Z"
             }
         ])))
         .mount(&rest)
@@ -407,13 +389,12 @@ async fn failed_deploy_skipped_and_cursor_not_updated(pool: PgPool) {
 
 /// Pre-existing cursor makes the backfill skip deploys at or below that block.
 ///
-/// Expected: node RPC is never called; no new DB writes; cursor unchanged.
+/// Expected: no new DB writes; cursor unchanged.
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn cursor_resume_skips_already_processed_blocks(pool: PgPool) {
     common::disable_rls(&pool).await;
     let rest = MockServer::start().await;
-    let node = MockServer::start().await;
-    let config = common::test_config(rest.uri(), Some(node.uri()));
+    let config = common::test_config(rest.uri());
     let client = Client::new();
     let registry = EventRegistry::new();
 
@@ -438,15 +419,16 @@ async fn cursor_resume_skips_already_processed_blocks(pool: PgPool) {
     Mock::given(matchers::method("GET"))
         .and(matchers::path("/deploys"))
         .respond_with(deploys_page(json!([
-            { "deploy_hash": "old_deploy", "block_height": 400, "error_message": null }
+            {
+                "deploy_hash": "old_deploy",
+                "block_height": 400,
+                "error_message": null,
+                "args": {},
+                "caller_public_key": "01abc",
+                "timestamp": "2024-06-01T12:00:00.000Z"
+            }
         ])))
         .mount(&rest)
-        .await;
-    // Node must NOT be called for blocks below cursor.
-    Mock::given(matchers::method("POST"))
-        .respond_with(rpc_deploy_not_found())
-        .expect(0)
-        .mount(&node)
         .await;
 
     ico::backfill_ico(
@@ -487,8 +469,7 @@ async fn cursor_resume_skips_already_processed_blocks(pool: PgPool) {
 async fn successful_purchase_written_to_all_tables(pool: PgPool) {
     common::disable_rls(&pool).await;
     let rest = MockServer::start().await;
-    let node = MockServer::start().await;
-    let config = common::test_config(rest.uri(), Some(node.uri()));
+    let config = common::test_config(rest.uri());
     let client = Client::new();
     let registry = EventRegistry::new();
 
@@ -504,14 +485,16 @@ async fn successful_purchase_written_to_all_tables(pool: PgPool) {
     Mock::given(matchers::method("GET"))
         .and(matchers::path("/deploys"))
         .respond_with(deploys_page(json!([
-            { "deploy_hash": PURCHASE_DEPLOY_HASH, "block_height": 300, "error_message": null }
+            {
+                "deploy_hash": PURCHASE_DEPLOY_HASH,
+                "block_height": 300,
+                "error_message": null,
+                "args": payloads::purchase_args(&json!("50000000"), 1),
+                "caller_public_key": "buyer_public_key_hex",
+                "timestamp": "2024-06-01T12:00:00.000Z"
+            }
         ])))
         .mount(&rest)
-        .await;
-    // Node returns a valid `purchase` deploy; currency=1 (USDC), cost=50000000.
-    Mock::given(matchers::method("POST"))
-        .respond_with(payloads::rpc_purchase_deploy("50000000", 1))
-        .mount(&node)
         .await;
 
     ico::backfill_ico(
