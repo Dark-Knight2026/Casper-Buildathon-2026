@@ -28,9 +28,11 @@ env_up: ## Start Supabase and Redis
 	@echo "[*] Starting Redis..."
 	@docker compose up -d redis
 
-env_down: ## Stop Supabase and Redis
+env_down: ## Stop Supabase, Redis, and test database
 	@echo "[*] Stopping Redis..."
 	@docker compose down --volumes
+	@echo "[*] Stopping test database..."
+	@docker compose -p leasefi-test -f docker-compose.test.yml down --volumes
 	@echo "[*] Stopping Supabase..."
 	@supabase stop
 
