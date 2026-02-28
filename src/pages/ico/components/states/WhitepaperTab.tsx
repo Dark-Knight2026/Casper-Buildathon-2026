@@ -187,11 +187,12 @@ export function WhitepaperTab({ className }: WhitepaperTabProps) {
 
       {/* PDF Viewer */}
       <div className="flex-1 rounded-md bg-[hsl(var(--ico-bg-card))] border border-[hsl(var(--ico-border-color))] overflow-hidden">
-        <iframe
+        <object
           key={activeSection}
-          src={`${whitepaperPdf}#page=${currentPage}&view=FitH`}
+          data={`${whitepaperPdf}#page=${currentPage}&view=FitH`}
+          type="application/pdf"
           className="w-full h-full"
-          title="BIG WhitePaper"
+          aria-label="BIG WhitePaper"
         >
           <div className="flex flex-col items-center justify-center h-full text-[hsl(var(--ico-text-secondary))]">
             <FileText className="w-16 h-16 mb-4 text-[hsl(var(--ico-text-muted))]" />
@@ -205,7 +206,7 @@ export function WhitepaperTab({ className }: WhitepaperTabProps) {
               Download PDF
             </button>
           </div>
-        </iframe>
+        </object>
       </div>
     </div>
   );
