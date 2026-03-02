@@ -20,6 +20,7 @@ import {
 } from 'casper-js-sdk';
 
 import { ICO_CONFIG, getCurrencyRateUsd } from '@/constants/ico';
+import logger from '@/lib/logger';
 import {
   createContractCallTransaction,
   stripHashPrefix,
@@ -242,7 +243,7 @@ export async function createPurchaseTransaction(
     currency as 'CSPR' | 'USDC' | 'USDT'
   );
 
-  console.log('[createPurchaseTransaction] params:', {
+  logger.log('[createPurchaseTransaction] params:', {
     amount: fromRawAmount(rawAmount, decimals),
     currency,
     rawAmount: rawAmount.toString(),
@@ -250,9 +251,9 @@ export async function createPurchaseTransaction(
 
   // CSPR: use proxy_caller.wasm to create a proper cargo purse
   if (currency === 'CSPR') {
-    console.log('[createPurchaseTransaction] Loading proxy_caller.wasm for CSPR...');
+    logger.log('[createPurchaseTransaction] Loading proxy_caller.wasm for CSPR...');
     const proxyWasm = await loadProxyCallerWasm();
-    console.log('[createPurchaseTransaction] WASM loaded, size:', proxyWasm.length, 'bytes');
+    logger.log('[createPurchaseTransaction] WASM loaded, size:', proxyWasm.length, 'bytes');
 
     // Entry point args WITHOUT __cargo_purse — the proxy adds it automatically
     const entryPointArgs = Args.fromMap({
@@ -261,7 +262,7 @@ export async function createPurchaseTransaction(
     });
 
     const serializedSize = entryPointArgs.toBytes().length;
-    console.log('[createPurchaseTransaction] Entry point args serialized:', serializedSize, 'bytes');
+    logger.log('[createPurchaseTransaction] Entry point args serialized:', serializedSize, 'bytes');
 
     const transaction = createProxyCallerTransaction(
       senderPublicKey,
@@ -273,7 +274,7 @@ export async function createPurchaseTransaction(
       proxyWasm,
     );
 
-    console.log('[createPurchaseTransaction] Transaction created:', {
+    logger.log('[createPurchaseTransaction] Transaction created:', {
       hash: transaction.hash?.toHex(),
     });
 
@@ -354,7 +355,7 @@ export async function submitTransaction(
 
   const result = await client.putTransaction(signedTransaction);
 
-  console.log('[icoPurchaseService] Transaction submitted:', result);
+  logger.log('[icoPurchaseService] Transaction submitted:', result);
   return result.transactionHash.toString();
 }
 
@@ -426,7 +427,7 @@ export async function getDeployStatus(
     return { status: 'pending' };
   } catch (err) {
     // Deploy not found yet = still pending
-    console.warn('[icoPurchaseService] getDeployStatus error:', err);
+    logger.warn('[icoPurchaseService] getDeployStatus error:', err);
     return { status: 'pending' };
   }
 }
