@@ -114,8 +114,9 @@ let schedulesCountCache: {
   fetchedAt: number;
 } | null = null;
 
-// In-flight request promise to prevent concurrent fetches
+// In-flight request promises to prevent concurrent fetches
 let inFlightSchedulesRequest: Promise<ICOScheduleWithId[]> | null = null;
+let inFlightCountRequest: Promise<bigint> | null = null;
 
 // ── CLValue Parsing for ICOSchedule ─────────────────────────────────
 
@@ -373,22 +374,34 @@ async function readSchedulesCount(): Promise<bigint> {
     return schedulesCountCache.count;
   }
 
-  try {
-    const stored = await queryOdraState(ICO_HASH, ICO_DICTIONARY_KEYS.icoSchedulesCount);
-
-    if (stored?.clValue) {
-      const hex = clValueListU8ToHex(stored.clValue);
-      if (hex) {
-        const count = parseU128Count(hex);
-        schedulesCountCache = { count, fetchedAt: Date.now() };
-        return count;
-      }
-    }
-  } catch (err) {
-    logger.warn('[icoService] Failed to read schedules count:', err);
+  if (inFlightCountRequest) {
+    return inFlightCountRequest;
   }
 
-  return 0n;
+  inFlightCountRequest = (async () => {
+    try {
+      const stored = await queryOdraState(ICO_HASH, ICO_DICTIONARY_KEYS.icoSchedulesCount);
+
+      if (stored?.clValue) {
+        const hex = clValueListU8ToHex(stored.clValue);
+        if (hex) {
+          const count = parseU128Count(hex);
+          schedulesCountCache = { count, fetchedAt: Date.now() };
+          return count;
+        }
+      }
+    } catch (err) {
+      logger.warn('[icoService] Failed to read schedules count:', err);
+    }
+
+    return 0n;
+  })();
+
+  try {
+    return await inFlightCountRequest;
+  } finally {
+    inFlightCountRequest = null;
+  }
 }
 
 /**

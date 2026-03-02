@@ -5,7 +5,7 @@ import { getCasperRpcClient } from '@/services/ico/casperClient';
 import { TOKEN_HASHES } from '@/services/ico/cep18Service';
 
 const MOTES_PER_CSPR = 1_000_000_000n;
-const BALANCE_POLL_MS = 30_000; // 30 seconds
+const BALANCE_POLL_MS = 60_000; // 60 seconds
 
 function isValidPublicKey(key: string): boolean {
   // Ed25519: 01 + 64 hex = 66 chars; Secp256k1: 02 + 66 hex = 68 chars
