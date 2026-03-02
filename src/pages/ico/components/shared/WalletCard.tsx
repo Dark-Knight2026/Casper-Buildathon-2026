@@ -17,6 +17,7 @@ interface WalletCardProps {
   tokenPrice: number;
   tokenSymbol: string;
   csprPriceUsd?: number;
+  csprPriceStale?: boolean;
   onConnect?: () => void;
   onPurchase?: (amount: number, currency: PaymentCurrency) => void;
   className?: string;
@@ -33,6 +34,7 @@ export function WalletCard({
   tokenPrice,
   tokenSymbol,
   csprPriceUsd,
+  csprPriceStale,
   onConnect,
   onPurchase,
   className,
@@ -149,6 +151,15 @@ export function WalletCard({
         <div className="w-full p-4 rounded-md bg-red-900/20 border border-red-800/30 mb-4">
           <p className="text-sm text-red-400">
             CSPR price unavailable — please try again later
+          </p>
+        </div>
+      )}
+
+      {/* Stale Price Warning (display-only — does not block purchase) */}
+      {!csprPriceError && csprPriceStale && currency === 'CSPR' && (
+        <div className="w-full p-3 rounded-md bg-yellow-900/20 border border-yellow-800/30 mb-4">
+          <p className="text-xs text-yellow-400">
+            CSPR rate may be outdated. Final amount is determined on-chain.
           </p>
         </div>
       )}

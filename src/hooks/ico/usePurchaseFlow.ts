@@ -53,8 +53,9 @@ interface UsePurchaseFlowReturn {
   balanceError: string | null;
   balancesLoading: boolean;
 
-  // Live CSPR/USD rate
+  // Live CSPR/USD rate (display-only — the smart contract determines the real rate)
   csprPriceUsd: number;
+  csprPriceStale: boolean;
 
   // Modal state
   showConfirmModal: boolean;
@@ -83,6 +84,7 @@ interface UsePurchaseFlowReturn {
     tokenSymbol: string;
     purchaseState: PurchaseState;
     csprPriceUsd: number;
+    csprPriceStale: boolean;
   } | null;
 
   toastProps: {
@@ -105,8 +107,10 @@ export function usePurchaseFlow({
   const queryClient = useQueryClient();
   const { isConnected, account, connect, clickRef } = useICOWallet();
   const { balances, error: balanceError, isLoading: balancesLoading, refetch: refetchBalances } = useWalletBalances(account?.publicKey);
-  const { priceUSD: csprPriceUsd } = useCSPRPrice();
-  logger.log('usePurchaseFlow - wallet state:', { isConnected, account, balances, csprPriceUsd });
+  // csprPriceUsd is display-only — used for UI estimations (token preview, USD equivalent).
+  // The smart contract determines the actual exchange rate on-chain.
+  const { priceUSD: csprPriceUsd, isStale: csprPriceStale } = useCSPRPrice();
+  logger.log('usePurchaseFlow - wallet state:', { isConnected, account, balances, csprPriceUsd, csprPriceStale });
 
   // Modal and toast state
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -196,8 +200,9 @@ export function usePurchaseFlow({
       tokenSymbol,
       purchaseState,
       csprPriceUsd,
+      csprPriceStale,
     };
-  }, [showConfirmModal, pendingPurchase, handleCloseModal, handleConfirmPurchase, tokenPrice, tokenSymbol, purchaseState, csprPriceUsd]);
+  }, [showConfirmModal, pendingPurchase, handleCloseModal, handleConfirmPurchase, tokenPrice, tokenSymbol, purchaseState, csprPriceUsd, csprPriceStale]);
 
   // Memoized props for toast component
   const toastProps = useMemo(() => {
@@ -223,8 +228,9 @@ export function usePurchaseFlow({
     balanceError,
     balancesLoading,
 
-    // Live CSPR/USD rate
+    // Live CSPR/USD rate (display-only)
     csprPriceUsd,
+    csprPriceStale,
 
     // Modal state
     showConfirmModal,

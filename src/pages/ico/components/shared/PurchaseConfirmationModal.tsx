@@ -17,6 +17,7 @@ interface PurchaseConfirmationModalProps {
   tokenSymbol: string;
   purchaseState: PurchaseState;
   csprPriceUsd?: number;
+  csprPriceStale?: boolean;
 }
 
 export function PurchaseConfirmationModal({
@@ -29,6 +30,7 @@ export function PurchaseConfirmationModal({
   tokenSymbol,
   purchaseState,
   csprPriceUsd,
+  csprPriceStale,
 }: PurchaseConfirmationModalProps) {
 
   // Calculate tokens to receive
@@ -194,6 +196,17 @@ export function PurchaseConfirmationModal({
             <div className="p-4 rounded-lg bg-red-900/20 border border-red-800/30">
               <span className="text-sm text-red-400">
                 CSPR price unavailable — please try again later
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* Stale Price Warning (display-only — does not block purchase) */}
+        {!csprPriceError && csprPriceStale && currency === 'CSPR' && (
+          <div className="w-full mb-6">
+            <div className="p-3 rounded-lg bg-yellow-900/20 border border-yellow-800/30">
+              <span className="text-xs text-yellow-400">
+                CSPR rate may be outdated. Final amount is determined on-chain.
               </span>
             </div>
           </div>

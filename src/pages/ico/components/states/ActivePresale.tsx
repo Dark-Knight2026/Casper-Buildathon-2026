@@ -28,6 +28,7 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: ActiveP
     balanceError,
     balancesLoading,
     csprPriceUsd,
+    csprPriceStale,
     handlePurchase,
     modalProps,
     toastProps,
@@ -87,6 +88,7 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: ActiveP
           tokenPrice={progress?.priceUsd ?? 0}
           tokenSymbol={ICO_CONFIG.TOKEN.symbol}
           csprPriceUsd={csprPriceUsd}
+          csprPriceStale={csprPriceStale}
           onConnect={connect}
           onPurchase={handlePurchase}
           className="w-full"

@@ -436,6 +436,8 @@ export async function getDeployStatus(
 
 /**
  * Validates purchase parameters before creating transactions.
+ * Note: csprRate is used for UI-side estimation only (min/max USD bounds).
+ * The smart contract determines the actual on-chain exchange rate.
  */
 export function validatePurchase(
   amount: string,
@@ -481,7 +483,10 @@ export function validatePurchase(
 }
 
 /**
- * Calculates the number of tokens that will be received for a given payment.
+ * Calculates the ESTIMATED number of tokens for UI preview.
+ * Actual token allocation is determined by the on-chain contract rate.
+ * csprRate is advisory only — staleness/bounds checks are intentionally
+ * omitted because this value cannot affect the real purchase outcome.
  */
 export function calculateTokensReceived(
   amount: string,
