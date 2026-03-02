@@ -174,7 +174,7 @@ export function WalletCard({
             </span>
           </div>
           <p className="text-xs text-[hsl(var(--ico-text-highlight))] mt-1">
-            Rate: 1 {tokenSymbol} = {(tokenPrice / currencyRate!).toLocaleString(undefined, { maximumFractionDigits: 6 })} {currency}
+            Rate: 1 {tokenSymbol} = {(tokenPrice / (currencyRate ?? 1)).toLocaleString(undefined, { maximumFractionDigits: 6 })} {currency}
           </p>
           {/* Floating-point note: these are UI estimates only. Final amounts are validated
               server-side using integer arithmetic in smallest units (motes/decimals).
