@@ -70,8 +70,13 @@ export async function loadProxyCallerWasm(): Promise<Uint8Array> {
         `DO NOT PROCEED — file may be compromised.`
       );
     }
+  } else if (import.meta.env.PROD) {
+    throw new Error(
+      'WASM integrity check unavailable in production (crypto.subtle missing). ' +
+      'This likely means the site is served over HTTP — production MUST use HTTPS.'
+    );
   } else {
-    logger.warn('[proxyCallerService] WASM integrity check skipped: crypto.subtle unavailable (HTTP context). Production requires HTTPS.');
+    logger.warn('[proxyCallerService] WASM integrity check skipped: crypto.subtle unavailable (HTTP dev context).');
   }
 
   proxyWasmCache = wasmBytes;
