@@ -120,7 +120,7 @@ fn from_env_fails_without_database_url() {
 
     let err = IndexerConfig::from_env().unwrap_err();
     assert!(
-        err.to_string().contains("DATABASE_URL must be set"),
+        err.to_string().contains("database_url"),
         "Unexpected error: {err}"
     );
 }
@@ -137,7 +137,7 @@ fn from_env_fails_without_api_token() {
 
     let err = IndexerConfig::from_env().unwrap_err();
     assert!(
-        err.to_string().contains("CSPR_CLOUD_API_TOKEN must be set"),
+        err.to_string().contains("cspr_cloud_api_token"),
         "Unexpected error: {err}"
     );
 }
@@ -154,7 +154,7 @@ fn from_env_fails_without_rest_url() {
 
     let err = IndexerConfig::from_env().unwrap_err();
     assert!(
-        err.to_string().contains("CSPR_CLOUD_REST_URL must be set"),
+        err.to_string().contains("cspr_cloud_rest_url"),
         "Unexpected error: {err}"
     );
 }
@@ -207,8 +207,7 @@ fn from_env_rejects_invalid_rate_limit() {
 
     let err = IndexerConfig::from_env().unwrap_err();
     assert!(
-        err.to_string()
-            .contains("BACKFILL_RATE_LIMIT_MS must be a valid number"),
+        err.to_string().contains("backfill_rate_limit_ms"),
         "Unexpected error: {err}"
     );
 }
@@ -225,8 +224,7 @@ fn from_env_rejects_invalid_reconnect_delay() {
 
     let err = IndexerConfig::from_env().unwrap_err();
     assert!(
-        err.to_string()
-            .contains("WSS_RECONNECT_DELAY_MS must be a valid number"),
+        err.to_string().contains("wss_reconnect_delay_ms"),
         "Unexpected error: {err}"
     );
 }

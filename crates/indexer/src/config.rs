@@ -1,8 +1,8 @@
-//! Indexer configuration loaded from environment variables.
+//! Indexer configuration loaded from environment variables via the `config` crate.
 
-use std::env;
-
+use config::{Config, Environment};
 use secrecy::SecretString;
+use serde::Deserialize;
 
 use crate::error::IndexerError;
 
@@ -10,6 +10,37 @@ use crate::error::IndexerError;
 const DEFAULT_BACKFILL_RATE_LIMIT_MS: u64 = 200;
 /// Default initial WebSocket reconnect delay in milliseconds.
 const DEFAULT_WSS_RECONNECT_DELAY_MS: u64 = 1000;
+
+/// Flat intermediate struct that mirrors environment variable names exactly.
+///
+/// Field names match the lowercase form of the env vars so that
+/// `config::Environment` can deserialize them without remapping.
+#[derive(Debug, Deserialize)]
+struct RawEnvConfig {
+    database_url: SecretString,
+    cspr_cloud_api_token: SecretString,
+    cspr_cloud_rest_url: String,
+    cspr_cloud_wss_url: String,
+    #[serde(default = "default_backfill_rate_limit_ms")]
+    backfill_rate_limit_ms: u64,
+    #[serde(default = "default_wss_reconnect_delay_ms")]
+    wss_reconnect_delay_ms: u64,
+}
+
+const fn default_backfill_rate_limit_ms() -> u64 {
+    DEFAULT_BACKFILL_RATE_LIMIT_MS
+}
+const fn default_wss_reconnect_delay_ms() -> u64 {
+    DEFAULT_WSS_RECONNECT_DELAY_MS
+}
+
+/// Build a [`Config`] from process environment variables.
+fn build_config() -> Result<Config, IndexerError> {
+    Config::builder()
+        .add_source(Environment::default().try_parsing(true).ignore_empty(true))
+        .build()
+        .map_err(|e| IndexerError::Config(e.to_string()))
+}
 
 /// Indexer configuration loaded from environment variables.
 #[derive(Debug, Clone)]
@@ -46,56 +77,49 @@ impl IndexerConfig {
     /// or have invalid values.
     #[inline]
     pub fn from_env() -> Result<Self, IndexerError> {
-        let database_url = env::var("DATABASE_URL")
-            .map(SecretString::from)
-            .map_err(|_| IndexerError::Config("DATABASE_URL must be set".to_owned()))?;
-        let api_token = env::var("CSPR_CLOUD_API_TOKEN")
-            .map(SecretString::from)
-            .map_err(|_| IndexerError::Config("CSPR_CLOUD_API_TOKEN must be set".to_owned()))?;
-        let rest_url = env::var("CSPR_CLOUD_REST_URL")
-            .map_err(|_| IndexerError::Config("CSPR_CLOUD_REST_URL must be set".to_owned()))
-            .and_then(|url| {
-                url.starts_with("https://").then_some(url).ok_or_else(|| {
-                    IndexerError::Config("CSPR_CLOUD_REST_URL must start with https://".to_owned())
-                })
-            })?;
-        let wss_url = env::var("CSPR_CLOUD_WSS_URL")
-            .map_err(|_| IndexerError::Config("CSPR_CLOUD_WSS_URL must be set".to_owned()))
-            .and_then(|url| {
-                url.starts_with("wss://").then_some(url).ok_or_else(|| {
-                    IndexerError::Config("CSPR_CLOUD_WSS_URL must start with wss://".to_owned())
-                })
-            })?;
-        let contracts = ContractRegistry::from_env();
-        if contracts.active_contracts().is_empty() {
-            tracing::warn!(
-                "No contract package hashes configured — indexer will have nothing to track"
-            );
-        }
-        let backfill_rate_limit_ms = env::var("BACKFILL_RATE_LIMIT_MS")
-            .unwrap_or_else(|_| DEFAULT_BACKFILL_RATE_LIMIT_MS.to_string())
-            .parse::<u64>()
-            .map_err(|_| {
-                IndexerError::Config("BACKFILL_RATE_LIMIT_MS must be a valid number".to_owned())
-            })?;
-        let wss_reconnect_delay_ms = env::var("WSS_RECONNECT_DELAY_MS")
-            .unwrap_or_else(|_| DEFAULT_WSS_RECONNECT_DELAY_MS.to_string())
-            .parse::<u64>()
-            .map_err(|_| {
-                IndexerError::Config("WSS_RECONNECT_DELAY_MS must be a valid number".to_owned())
-            })?;
+        let settings = build_config()?;
+        let contracts = ContractRegistry::from_config(&settings);
 
-        Ok(Self {
-            database_url,
+        let raw: RawEnvConfig = settings
+            .try_deserialize()
+            .map_err(|e| IndexerError::Config(e.to_string()))?;
+
+        let config = Self {
+            database_url: raw.database_url,
             casper: Casper {
-                api_token,
-                rest_url,
-                wss_url,
+                api_token: raw.cspr_cloud_api_token,
+                rest_url: raw.cspr_cloud_rest_url,
+                wss_url: raw.cspr_cloud_wss_url,
             },
             contracts,
-            backfill_rate_limit_ms,
-            wss_reconnect_delay_ms,
-        })
+            backfill_rate_limit_ms: raw.backfill_rate_limit_ms,
+            wss_reconnect_delay_ms: raw.wss_reconnect_delay_ms,
+        };
+
+        config.validate()?;
+
+        if config.contracts.active_contracts().is_empty() {
+            tracing::warn!(
+                "No contract package hashes configured - indexer will have nothing to track"
+            );
+        }
+
+        Ok(config)
+    }
+
+    /// Validates business rules that serde cannot express.
+    fn validate(&self) -> Result<(), IndexerError> {
+        if !self.casper.rest_url.starts_with("https://") {
+            return Err(IndexerError::Config(
+                "CSPR_CLOUD_REST_URL must start with https://".to_owned(),
+            ));
+        }
+        if !self.casper.wss_url.starts_with("wss://") {
+            return Err(IndexerError::Config(
+                "CSPR_CLOUD_WSS_URL must start with wss://".to_owned(),
+            ));
+        }
+        Ok(())
     }
 }
 
@@ -215,30 +239,39 @@ impl ContractRegistry {
     #[inline]
     #[must_use]
     pub fn from_env() -> Self {
+        // Build a fresh Config so this method stays usable standalone (e.g. in tests).
+        let settings = build_config().unwrap_or_default();
+        Self::from_config(&settings)
+    }
+
+    /// Build registry from an already-loaded [`Config`].
+    fn from_config(settings: &Config) -> Self {
         Self {
-            usdc: Self::read_contract("USDC"),
-            usdt: Self::read_contract("USDT"),
-            big: Self::read_contract("BIG"),
-            treasury: Self::read_contract("TREASURY"),
-            ico: Self::read_contract("ICO"),
-            lease: Self::read_contract("LEASE"),
-            escrow: Self::read_contract("ESCROW"),
-            nft: Self::read_contract("NFT"),
-            roles: Self::read_contract("ROLES"),
-            staking: Self::read_contract("STAKING"),
+            usdc: Self::read_contract(settings, "usdc"),
+            usdt: Self::read_contract(settings, "usdt"),
+            big: Self::read_contract(settings, "big"),
+            treasury: Self::read_contract(settings, "treasury"),
+            ico: Self::read_contract(settings, "ico"),
+            lease: Self::read_contract(settings, "lease"),
+            escrow: Self::read_contract(settings, "escrow"),
+            nft: Self::read_contract(settings, "nft"),
+            roles: Self::read_contract(settings, "roles"),
+            staking: Self::read_contract(settings, "staking"),
         }
     }
 
-    /// Read a [`ContractEntry`] from environment variables.
+    /// Read a [`ContractEntry`] from a [`Config`] instance.
     ///
-    /// Returns `None` if the hash variable is missing or empty.
-    fn read_contract(name: &str) -> Option<ContractEntry> {
-        let hash = env::var(format!("CONTRACT_{name}"))
+    /// Returns `None` if the hash key is missing or empty.
+    fn read_contract(settings: &Config, name: &str) -> Option<ContractEntry> {
+        let hash = settings
+            .get_string(&format!("contract_{name}"))
             .ok()
             .filter(|s| !s.is_empty())?;
-        let start_block = env::var(format!("START_BLOCK_CONTRACT_{name}"))
+        let start_block = settings
+            .get_int(&format!("start_block_contract_{name}"))
             .ok()
-            .and_then(|s| s.parse::<u64>().ok())
+            .and_then(|v| u64::try_from(v).ok())
             .unwrap_or(0);
         Some(ContractEntry { hash, start_block })
     }

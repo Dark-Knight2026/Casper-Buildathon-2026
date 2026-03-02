@@ -11,6 +11,7 @@ workspace = true
 axum = { workspace = true }
 casper-types = { workspace = true }
 chrono = { workspace = true }
+config = { workspace = true }
 dotenv = { workspace = true }
 hex = { workspace = true }
 jsonwebtoken = { workspace = true }

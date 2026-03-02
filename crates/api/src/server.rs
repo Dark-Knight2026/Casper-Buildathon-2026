@@ -15,7 +15,9 @@ use utoipa::OpenApi;
 use utoipa_axum::{router::OpenApiRouter, routes};
 use utoipa_swagger_ui::SwaggerUi;
 
-use crate::{ApiDoc, AppState, Config, RedisStore, ServerError, analytics, auth, health, tax};
+use crate::{
+    ApiDoc, AppState, RedisStore, ServerConfig, ServerError, analytics, auth, health, tax,
+};
 
 /// Rate limit: requests allowed per second for auth endpoints.
 pub const AUTH_RATE_LIMIT_PER_SECOND: u64 = 1;
@@ -129,7 +131,7 @@ pub async fn main() -> Result<(), ServerError> {
     dotenv::dotenv().ok();
 
     // Load environment variables
-    let config = Config::from_env()?;
+    let config = ServerConfig::from_env()?;
     let db_options =
         PgConnectOptions::from_str(config.database_url.expose_secret()).map_err(|e| {
             // Log error details server-side without exposing the connection string

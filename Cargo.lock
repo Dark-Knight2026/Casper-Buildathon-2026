@@ -57,6 +57,7 @@ dependencies = [
  "axum-test",
  "casper-types",
  "chrono",
+ "config",
  "dotenv",
  "hex",
  "jsonwebtoken",

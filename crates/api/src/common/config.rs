@@ -1,14 +1,33 @@
 //! Application configuration and state management.
 
-use std::env;
-
+use config::{Config, Environment};
 use secrecy::SecretString;
+use serde::Deserialize;
 
 use crate::{ServerError, common::RedisStore};
 
-/// Application configuration loaded from environment variables.
+/// Flat intermediate struct whose field names match lowercase env var names.
+#[derive(Debug, Deserialize)]
+struct RawEnvConfig {
+    database_url: SecretString,
+    redis_url: String,
+    supabase_jwt_secret: SecretString,
+    #[serde(default = "default_port")]
+    port: u16,
+    #[serde(default = "default_cors_origin")]
+    cors_origin: String,
+}
+
+const fn default_port() -> u16 {
+    8080
+}
+fn default_cors_origin() -> String {
+    "http://localhost:8080".to_owned()
+}
+
+/// Server application configuration loaded from environment variables.
 #[derive(Debug, Clone)]
-pub struct Config {
+pub struct ServerConfig {
     /// `PostgreSQL` database connection URL.
     pub database_url: SecretString,
     /// `Redis` connection URL.
@@ -21,7 +40,7 @@ pub struct Config {
     pub cors_origin: String,
 }
 
-impl Config {
+impl ServerConfig {
     /// Loads and validates configuration from environment variables.
     ///
     /// # Errors
@@ -33,45 +52,40 @@ impl Config {
     /// - `CORS_ORIGIN` doesn't start with `http://` or `https://`
     #[inline]
     pub fn from_env() -> Result<Self, ServerError> {
-        let database_url = env::var("DATABASE_URL")
-            .map(SecretString::from)
-            .map_err(|_| ServerError::EnvVar("DATABASE_URL must be set".to_owned()))?;
+        let raw: RawEnvConfig = Config::builder()
+            .add_source(Environment::default().try_parsing(true).ignore_empty(true))
+            .build()
+            .and_then(Config::try_deserialize)
+            .map_err(|e| ServerError::EnvVar(e.to_string()))?;
 
-        let redis_url = env::var("REDIS_URL")
-            .map_err(|_| ServerError::EnvVar("REDIS_URL must be set".to_owned()))?;
-        if !redis_url.starts_with("redis://") && !redis_url.starts_with("rediss://") {
+        let config = Self {
+            database_url: raw.database_url,
+            redis_url: raw.redis_url,
+            jwt_secret: raw.supabase_jwt_secret,
+            port: raw.port,
+            cors_origin: raw.cors_origin,
+        };
+
+        config.validate()?;
+        Ok(config)
+    }
+
+    /// Validates business rules that serde cannot express.
+    fn validate(&self) -> Result<(), ServerError> {
+        if !self.redis_url.starts_with("redis://") && !self.redis_url.starts_with("rediss://") {
             return Err(ServerError::EnvVar(
                 "REDIS_URL must start with redis:// or rediss://".to_owned(),
             ));
         }
-
-        let jwt_secret = env::var("SUPABASE_JWT_SECRET")
-            .map(SecretString::from)
-            .map_err(|_| ServerError::EnvVar("SUPABASE_JWT_SECRET must be set".to_owned()))?;
-
-        let port = env::var("PORT")
-            .unwrap_or_else(|_| "8080".to_owned())
-            .parse::<u16>()
-            .map_err(|_| ServerError::EnvVar("PORT must be a valid number".to_owned()))?;
-        if port == 0 {
+        if self.port == 0 {
             return Err(ServerError::EnvVar("PORT cannot be 0".to_owned()));
         }
-
-        let cors_origin =
-            env::var("CORS_ORIGIN").unwrap_or_else(|_| "http://localhost:8080".to_owned());
-        if !cors_origin.starts_with("http://") && !cors_origin.starts_with("https://") {
+        if !self.cors_origin.starts_with("http://") && !self.cors_origin.starts_with("https://") {
             return Err(ServerError::EnvVar(
                 "CORS_ORIGIN must start with http:// or https://".to_owned(),
             ));
         }
-
-        Ok(Self {
-            database_url,
-            redis_url,
-            jwt_secret,
-            port,
-            cors_origin,
-        })
+        Ok(())
     }
 }
 
@@ -83,7 +97,7 @@ pub struct AppState {
     /// `Redis` client wrapper for caching and session storage.
     pub redis: RedisStore,
     /// Application configuration.
-    pub config: Config,
+    pub config: ServerConfig,
 }
 
 impl core::fmt::Debug for AppState {

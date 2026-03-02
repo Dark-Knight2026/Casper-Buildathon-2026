@@ -32,7 +32,7 @@ use testcontainers::{
     runners::AsyncRunner,
 };
 
-use api::{AppState, Claims, Config, UserId, UserRole, common::RedisStore, server};
+use api::{AppState, Claims, ServerConfig, UserId, UserRole, common::RedisStore, server};
 
 /// Test database URL for docker-compose `PostgreSQL`.
 pub const TEST_DATABASE_URL: &str = "postgres://postgres:postgres@127.0.0.1:5433/postgres";
@@ -114,7 +114,7 @@ pub async fn setup_test_server(pool: PgPool, with_redis: bool) -> TestEnv {
     };
 
     let jwt_secret = "test_jwt_secret_for_integration_tests".to_owned();
-    let config = Config {
+    let config = ServerConfig {
         database_url: SecretString::from(TEST_DATABASE_URL),
         redis_url,
         jwt_secret: SecretString::from(jwt_secret.clone()),
@@ -138,7 +138,7 @@ pub async fn setup_test_server(pool: PgPool, with_redis: bool) -> TestEnv {
     };
 
     TestEnv {
-        server: TestServer::new_with_config(app, config).expect("Failed to create test server"),
+        server: TestServer::new_with_config(app, config),
         jwt_secret,
         redis: redis_env,
     }
