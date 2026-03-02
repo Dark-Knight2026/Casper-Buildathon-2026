@@ -27,7 +27,7 @@ export function ICOHeader() {
               className="w-20 h-20 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 rounded"
               aria-label="Return to ICO overview"
             >
-              <img src="/leaseFilogo2.png" alt="" />
+              <img src="/BIGLogo.jpg" alt="BIG Logo" />
             </button>
             <div>
               <h2 className="text-lg md:text-xl font-bold text-[hsl(var(--ico-text-primary))]">

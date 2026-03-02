@@ -54,6 +54,15 @@ export function ICOFooter() {
           </div>
           <div className="flex items-center gap-4">
             <a
+              href="/ico/whitepaper"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-[hsl(var(--ico-brand-primary))] transition-colors"
+            >
+              BIG Whitepaper
+            </a>
+            <span>|</span>
+            <a
               href={ICO_CONFIG.CASPER.explorerUrl}
               target="_blank"
               rel="noopener noreferrer"
@@ -61,8 +70,6 @@ export function ICOFooter() {
             >
               Block Explorer
             </a>
-            <span>|</span>
-            <span>CEP-18 Token Standard</span>
           </div>
         </div>
       </div>
