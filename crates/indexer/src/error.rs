@@ -48,7 +48,7 @@ pub enum IndexerError {
     #[error("Unknown event '{event_name}' for contract type '{contract_type}'")]
     UnknownEvent {
         /// Contract type that emitted the event.
-        contract_type: String,
+        contract_type: &'static str,
         /// CES event name.
         event_name: String,
     },

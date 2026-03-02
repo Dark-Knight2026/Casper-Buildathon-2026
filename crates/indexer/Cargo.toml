@@ -9,6 +9,7 @@ workspace = true
 
 [dependencies]
 chrono = { workspace = true }
+config = { workspace = true }
 dotenv = { workspace = true }
 futures-util = { workspace = true }
 reqwest = { workspace = true }

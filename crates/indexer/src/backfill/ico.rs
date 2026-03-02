@@ -18,10 +18,12 @@ use super::db;
 use crate::{
     config::{ContractType, IndexerConfig},
     error::{ApiErrorResponse, IndexerError, IndexerResult},
-    events::{EventRegistry, ico::TokensPurchased},
+    events::{
+        EventRegistry,
+        ico::{TokensPurchased, tokens_purchased::Currency},
+    },
     processor::{self, RawEvent},
 };
-
 // -----------------------------------------------------------------------------
 // CSPR.cloud /ft-token-actions response types (BIG transfers)
 // -----------------------------------------------------------------------------
@@ -255,7 +257,7 @@ async fn process_ico_deploy(
     // `price` is None: not available during backfill.
     let typed_event = TokensPurchased {
         amount: big_amount.clone(),
-        currency: currency_id,
+        currency: Currency::from(currency_id),
         price: None,
         cost: cost.clone(),
         timestamp: timestamp_secs,

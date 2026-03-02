@@ -6,7 +6,7 @@ pub mod transfer;
 pub use set_allowance::SetAllowance;
 pub use transfer::Transfer;
 
-use core::{fmt, str::FromStr};
+use core::str::FromStr;
 
 /// All possible CEP-18 token events (BIG, USDC, USDT).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -27,6 +27,23 @@ pub enum Cep18EventType {
     DecreaseAllowance,
 }
 
+impl Cep18EventType {
+    /// Returns the CES event name for this variant.
+    #[inline]
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Transfer => "Transfer",
+            Self::TransferFrom => "TransferFrom",
+            Self::Mint => "Mint",
+            Self::Burn => "Burn",
+            Self::SetAllowance => "SetAllowance",
+            Self::IncreaseAllowance => "IncreaseAllowance",
+            Self::DecreaseAllowance => "DecreaseAllowance",
+        }
+    }
+}
+
 impl FromStr for Cep18EventType {
     /// The unrecognized event name that failed to parse.
     type Err = String;
@@ -43,20 +60,5 @@ impl FromStr for Cep18EventType {
             "DecreaseAllowance" => Ok(Self::DecreaseAllowance),
             _ => Err(s.to_owned()),
         }
-    }
-}
-
-impl fmt::Display for Cep18EventType {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(match self {
-            Self::Transfer => "Transfer",
-            Self::TransferFrom => "TransferFrom",
-            Self::Mint => "Mint",
-            Self::Burn => "Burn",
-            Self::SetAllowance => "SetAllowance",
-            Self::IncreaseAllowance => "IncreaseAllowance",
-            Self::DecreaseAllowance => "DecreaseAllowance",
-        })
     }
 }

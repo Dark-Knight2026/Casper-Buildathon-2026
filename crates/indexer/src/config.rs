@@ -133,12 +133,12 @@ impl ContractType {
     pub fn is_cep18_token(self) -> bool {
         matches!(self, Self::Usdc | Self::Usdt | Self::Big)
     }
-}
 
-impl core::fmt::Display for ContractType {
+    /// Returns the lowercase string label for this contract type.
     #[inline]
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.write_str(match self {
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
             Self::Usdc => "usdc",
             Self::Usdt => "usdt",
             Self::Big => "big",
@@ -150,7 +150,7 @@ impl core::fmt::Display for ContractType {
             Self::Roles => "roles",
             Self::Staking => "staking",
             Self::Unknown => "unknown",
-        })
+        }
     }
 }
 

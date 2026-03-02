@@ -36,7 +36,7 @@ impl EventType {
     #[inline]
     pub fn parse(contract_type: ContractType, event_name: &str) -> IndexerResult<Self> {
         let unknown = || IndexerError::UnknownEvent {
-            contract_type: contract_type.to_string(),
+            contract_type: contract_type.as_str(),
             event_name: event_name.to_owned(),
         };
 
@@ -71,7 +71,7 @@ macro_rules! dispatch_events {
             other => {
                tracing::warn!(event_type = ?other, "Event type recognized but not implemented yet");
                 Err(IndexerError::UnknownEvent {
-                    contract_type: $ctx.contract_type.to_string(),
+                    contract_type: $ctx.contract_type.as_str(),
                     event_name: $name.to_owned(),
                 })
 

@@ -9,13 +9,65 @@ use crate::{
     events::db,
 };
 
+/// Payment currency used in an ICO purchase (deserialized from `u8` discriminant).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(from = "u8", into = "u8")]
+pub enum Currency {
+    /// Casper native token.
+    CSPR,
+    /// USD Coin stablecoin.
+    USDC,
+    /// Tether stablecoin.
+    USDT,
+    /// Unrecognised currency discriminant.
+    Unknown(u8),
+}
+
+impl From<u8> for Currency {
+    #[inline]
+    fn from(value: u8) -> Self {
+        match value {
+            0 => Self::CSPR,
+            1 => Self::USDC,
+            2 => Self::USDT,
+            other => Self::Unknown(other),
+        }
+    }
+}
+
+impl From<Currency> for u8 {
+    #[inline]
+    fn from(value: Currency) -> Self {
+        match value {
+            Currency::CSPR => 0,
+            Currency::USDC => 1,
+            Currency::USDT => 2,
+            Currency::Unknown(v) => v,
+        }
+    }
+}
+
+impl Currency {
+    /// Returns the string label for this currency.
+    #[inline]
+    #[must_use]
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::CSPR => "CSPR",
+            Self::USDC => "USDC",
+            Self::USDT => "USDT",
+            Self::Unknown(_) => "UNKNOWN",
+        }
+    }
+}
+
 /// A user purchased BIG tokens during an ICO round.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TokensPurchased {
     /// Number of BIG tokens purchased (U256 as string).
     pub amount: String,
-    /// Payment currency (0=CSPR, 1=USDC, 2=USDT).
-    pub currency: u8,
+    /// Payment currency.
+    pub currency: Currency,
     /// Token price at the time of purchase (U256 as string).
     /// `None` when reconstructed via backfill (price unavailable from node RPC).
     #[serde(default)]
@@ -24,19 +76,6 @@ pub struct TokensPurchased {
     pub cost: String,
     /// Block timestamp of the purchase.
     pub timestamp: u64,
-}
-
-impl TokensPurchased {
-    /// Convert currency discriminant to string label.
-    #[inline]
-    fn currency_str(&self) -> &'static str {
-        match self.currency {
-            0 => "CSPR",
-            1 => "USDC",
-            2 => "USDT",
-            _ => "UNKNOWN",
-        }
-    }
 }
 
 impl IndexableEvent for TokensPurchased {
@@ -52,7 +91,7 @@ impl IndexableEvent for TokensPurchased {
                 block_height: ctx.block_height.cast_signed(),
                 buyer_address: ctx.caller,
                 amount: &self.amount,
-                currency: self.currency_str(),
+                currency: self.currency.as_str(),
                 price: self.price.as_deref(),
                 cost: &self.cost,
                 event_timestamp: self.timestamp.cast_signed(),
@@ -70,7 +109,7 @@ impl IndexableEvent for TokensPurchased {
                 transaction_type: "token_purchase",
                 from_address: ctx.caller,
                 amount: Some(&self.cost),
-                currency: Some(self.currency_str()),
+                currency: Some(self.currency.as_str()),
                 metadata: &event_json,
             },
         )
@@ -89,7 +128,7 @@ impl IndexableEvent for TokensPurchased {
             deploy = %ctx.deploy_hash,
             buyer = %ctx.caller,
             amount = %self.amount,
-            currency = %self.currency_str(),
+            currency = %self.currency.as_str(),
             "ICO purchase processed, BIG balance updated"
         );
 

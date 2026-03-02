@@ -388,6 +388,6 @@ fn contract_type_display_produces_correct_labels() {
     ];
 
     for (ct, expected) in cases {
-        assert_eq!(ct.to_string(), expected, "Display mismatch for {ct:?}");
+        assert_eq!(ct.as_str(), expected, "Display mismatch for {ct:?}");
     }
 }

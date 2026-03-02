@@ -93,7 +93,7 @@ async fn print_first_deploy_blocks_for_all_contracts() {
             &client,
             &rest_url,
             &api_token,
-            &contract.contract_type.to_string(),
+            contract.contract_type.as_str(),
             contract.hash,
         )
         .await;
