@@ -55,8 +55,9 @@ vi.mock('@/hooks/ico/useWalletBalances', () => ({
   }),
 }));
 
+const mockCSPRPrice = { priceUSD: 0.02, isStale: false };
 vi.mock('@/hooks/useCSPRPrice', () => ({
-  useCSPRPrice: () => ({ priceUSD: 0.02 }),
+  useCSPRPrice: () => mockCSPRPrice,
 }));
 
 vi.mock('@/utils/logger', () => ({
@@ -85,6 +86,8 @@ describe('usePurchaseFlow', () => {
     mockPurchaseState.error = null;
     mockPurchaseState.purchaseTxHash = null;
     mockPurchaseState.tokensReceived = null;
+    mockCSPRPrice.priceUSD = 0.02;
+    mockCSPRPrice.isStale = false;
   });
 
   // --- Initial state ---
@@ -98,6 +101,24 @@ describe('usePurchaseFlow', () => {
       expect(result.current.isConnected).toBe(false);
       expect(result.current.account).toBeNull();
       expect(result.current.balances).toEqual(mockBalances);
+    });
+
+    it('should expose csprPriceUsd and csprPriceStale', () => {
+      const { result } = renderHook(() =>
+        usePurchaseFlow({ tokenPrice: 0.1, tokenSymbol: 'BIG' })
+      );
+
+      expect(result.current.csprPriceUsd).toBe(0.02);
+      expect(result.current.csprPriceStale).toBe(false);
+    });
+
+    it('should expose balanceError and balancesLoading', () => {
+      const { result } = renderHook(() =>
+        usePurchaseFlow({ tokenPrice: 0.1, tokenSymbol: 'BIG' })
+      );
+
+      expect(result.current.balanceError).toBeNull();
+      expect(result.current.balancesLoading).toBe(false);
     });
 
     it('should start with modal closed', () => {
@@ -186,6 +207,24 @@ describe('usePurchaseFlow', () => {
       expect(result.current.modalProps?.currency).toBe('USDT');
       expect(result.current.modalProps?.tokenPrice).toBe(0.1);
       expect(result.current.modalProps?.tokenSymbol).toBe('BIG');
+    });
+
+    it('should include csprPriceUsd and csprPriceStale in modalProps', () => {
+      mockWalletState.isConnected = true;
+      mockWalletState.account = { publicKey: '01abc123' };
+      mockCSPRPrice.priceUSD = 0.05;
+      mockCSPRPrice.isStale = true;
+
+      const { result } = renderHook(() =>
+        usePurchaseFlow({ tokenPrice: 0.1, tokenSymbol: 'BIG' })
+      );
+
+      act(() => {
+        result.current.handlePurchase(100, 'CSPR');
+      });
+
+      expect(result.current.modalProps?.csprPriceUsd).toBe(0.05);
+      expect(result.current.modalProps?.csprPriceStale).toBe(true);
     });
   });
 

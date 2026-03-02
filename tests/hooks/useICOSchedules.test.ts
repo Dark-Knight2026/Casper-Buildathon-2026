@@ -127,6 +127,33 @@ describe('useICOSchedules', () => {
       expect(presaleProgress.percentSold).toBe(10); // 10%
     });
 
+    it('should calculate hardCapUsd and amountRaised correctly', async () => {
+      mockGetAllSchedules.mockResolvedValue([
+        { id: 0n, schedule: mockPresaleSchedule },
+        { id: 1n, schedule: mockICOSchedule },
+      ]);
+
+      const { result } = renderHook(() => useICOSchedules(), {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      const presaleProgress = result.current.presaleProgress!;
+      // hardCapUsd = totalAllocation * priceUsd = 10M * 0.10 = 1M
+      expect(presaleProgress.hardCapUsd).toBe(1000000);
+      // amountRaised = soldAmount * price / decimals = 1M * 0.10 = 100K
+      expect(presaleProgress.amountRaised).toBe(100000);
+
+      const icoProgress = result.current.icoProgress!;
+      // hardCapUsd = 50M * 0.15 = 7.5M
+      expect(icoProgress.hardCapUsd).toBe(7500000);
+      // amountRaised = 5M * 0.15 = 750K
+      expect(icoProgress.amountRaised).toBe(750000);
+    });
+
     it('should handle only presale schedule', async () => {
       mockGetAllSchedules.mockResolvedValue([
         { id: 0n, schedule: mockPresaleSchedule },
