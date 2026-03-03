@@ -9,7 +9,8 @@ use utoipa::{
 
 use crate::{
     analytics::models as analytics_models, auth::models as auth_models,
-    health::models as health_models, tax::models as tax_models,
+    health::models as health_models, ico::models as ico_models, tax::models as tax_models,
+    transactions::models as tx_models,
 };
 
 /// `OpenAPI` documentation configuration.
@@ -45,6 +46,13 @@ use crate::{
             // Analytics models
             analytics_models::PropertyPerformanceRequest,
             analytics_models::PropertyPerformanceReport,
+            // Pagination
+            crate::common::Pagination,
+            // Transaction models
+            tx_models::TransactionDto,
+            // ICO models
+            ico_models::IcoBalanceResponse,
+            ico_models::IcoProgressResponse,
             // Common models
             crate::common::UserRole,
             crate::common::Claims,
@@ -55,7 +63,9 @@ use crate::{
         (name = "Health", description = "Health check endpoints"),
         (name = "Auth", description = "Authentication endpoints"),
         (name = "Tax", description = "Tax calculation endpoints"),
-        (name = "Analytics", description = "Property analytics endpoints")
+        (name = "Analytics", description = "Property analytics endpoints"),
+        (name = "Transactions", description = "Transaction history endpoints"),
+        (name = "ICO", description = "ICO balance and progress endpoints")
     )
 )]
 pub struct ApiDoc;

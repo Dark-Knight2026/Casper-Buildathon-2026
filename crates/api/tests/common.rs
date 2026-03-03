@@ -120,6 +120,7 @@ pub async fn setup_test_server(pool: PgPool, with_redis: bool) -> TestEnv {
         jwt_secret: SecretString::from(jwt_secret.clone()),
         port: 0,
         cors_origin: TEST_CORS_ORIGIN.to_owned(),
+        ico: None,
     };
     let state = Arc::new(AppState {
         db: pool,
