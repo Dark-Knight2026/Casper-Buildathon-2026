@@ -49,7 +49,7 @@ use crate::{
             // Pagination
             crate::common::Pagination,
             // Transaction models
-            tx_models::TransactionDto,
+            tx_models::TransactionRecord,
             // ICO models
             ico_models::IcoBalanceResponse,
             ico_models::IcoProgressResponse,

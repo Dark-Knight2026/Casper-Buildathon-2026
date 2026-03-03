@@ -17,6 +17,7 @@ use utoipa_swagger_ui::SwaggerUi;
 
 use crate::{
     ApiDoc, AppState, RedisStore, ServerConfig, ServerError, analytics, auth, health, tax,
+    transactions,
 };
 
 /// Rate limit: requests allowed per second for auth endpoints.
@@ -59,6 +60,14 @@ pub fn protected_router() -> OpenApiRouter<Arc<AppState>> {
         .routes(routes!(analytics::handlers::get_property_performance))
 }
 
+/// Creates an `OpenAPI` router for blockchain transaction endpoints (no auth required).
+#[inline]
+pub fn transactions_router() -> OpenApiRouter<Arc<AppState>> {
+    OpenApiRouter::new()
+        .routes(routes!(transactions::handlers::get_account_transactions))
+        .routes(routes!(transactions::handlers::get_big_token_transactions))
+}
+
 /// Creates the full application router combining public and protected routes.
 ///
 /// Route structure:
@@ -76,6 +85,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
     let (router, api) = OpenApiRouter::with_openapi(ApiDoc::openapi())
         .routes(routes!(health::handlers::health_check))
         .nest("/api/v1/auth", public_router())
+        .nest("/api/v1/transactions", transactions_router())
         .nest("/api/v1", protected_router())
         .with_state(state)
         .split_for_parts();

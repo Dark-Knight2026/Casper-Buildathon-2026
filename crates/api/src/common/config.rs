@@ -16,6 +16,9 @@ struct RawEnvConfig {
     port: u16,
     #[serde(default = "default_cors_origin")]
     cors_origin: String,
+    /// BIG token contract package hash (hex, no prefix). Shared with `indexer`.
+    #[serde(default)]
+    contract_big: Option<String>,
     /// ICO token price in USD (e.g. `0.50` for Private Sale).
     #[serde(default)]
     ico_price_usd: Option<f64>,
@@ -57,6 +60,8 @@ pub struct ServerConfig {
     pub port: u16,
     /// Allowed CORS origin.
     pub cors_origin: String,
+    /// BIG token contract package hash (hex, no prefix). `None` when not configured.
+    pub contract_big: Option<String>,
     /// ICO round configuration. `None` when env vars are not set.
     pub ico: Option<IcoConfig>,
 }
@@ -93,6 +98,7 @@ impl ServerConfig {
             jwt_secret: raw.supabase_jwt_secret,
             port: raw.port,
             cors_origin: raw.cors_origin,
+            contract_big: raw.contract_big,
             ico,
         };
 

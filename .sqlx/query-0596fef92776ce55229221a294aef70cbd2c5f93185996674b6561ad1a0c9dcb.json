@@ -1,0 +1,84 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT transaction_hash, block_number, block_timestamp, amount, contract_hash, from_address, from_type, to_address, to_type, transaction_type, transform_idx\n            FROM blockchain_transactions\n            WHERE contract_hash = $1\n            ORDER BY block_number DESC NULLS LAST, confirmed_at DESC\n            LIMIT $2 OFFSET $3\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "transaction_hash",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "block_number",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "block_timestamp",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 3,
+        "name": "amount",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "contract_hash",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "from_address",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "from_type",
+        "type_info": "Int2"
+      },
+      {
+        "ordinal": 7,
+        "name": "to_address",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 8,
+        "name": "to_type",
+        "type_info": "Int2"
+      },
+      {
+        "ordinal": 9,
+        "name": "transaction_type",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 10,
+        "name": "transform_idx",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      true,
+      true,
+      false,
+      true,
+      true,
+      true,
+      false,
+      true
+    ]
+  },
+  "hash": "0596fef92776ce55229221a294aef70cbd2c5f93185996674b6561ad1a0c9dcb"
+}
