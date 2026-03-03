@@ -5,7 +5,7 @@ use utoipa::ToSchema;
 
 /// A single blockchain transaction record.
 #[derive(Debug, Serialize, ToSchema)]
-pub struct TransactionRecord {
+pub struct TransactionResponse {
     /// Deploy hash identifying the transaction on-chain.
     pub deploy_hash: String,
     /// Block height where the transaction was included.

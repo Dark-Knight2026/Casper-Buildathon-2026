@@ -16,7 +16,7 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 use utoipa_swagger_ui::SwaggerUi;
 
 use crate::{
-    ApiDoc, AppState, RedisStore, ServerConfig, ServerError, analytics, auth, health, tax,
+    ApiDoc, AppState, RedisStore, ServerConfig, ServerError, analytics, auth, health, ico, tax,
     transactions,
 };
 
@@ -68,6 +68,14 @@ pub fn transactions_router() -> OpenApiRouter<Arc<AppState>> {
         .routes(routes!(transactions::handlers::get_big_token_transactions))
 }
 
+/// Creates an `OpenAPI` router for ICO endpoints (no auth required).
+#[inline]
+pub fn ico_router() -> OpenApiRouter<Arc<AppState>> {
+    OpenApiRouter::new()
+        .routes(routes!(ico::handlers::get_ico_balance))
+        .routes(routes!(ico::handlers::get_ico_progress))
+}
+
 /// Creates the full application router combining public and protected routes.
 ///
 /// Route structure:
@@ -86,6 +94,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .routes(routes!(health::handlers::health_check))
         .nest("/api/v1/auth", public_router())
         .nest("/api/v1/transactions", transactions_router())
+        .nest("/api/v1/ico", ico_router())
         .nest("/api/v1", protected_router())
         .with_state(state)
         .split_for_parts();

@@ -3,7 +3,7 @@
 use chrono::{DateTime, SecondsFormat, Utc};
 use sqlx::PgPool;
 
-use crate::transactions::models::{self, TransactionRecord};
+use crate::transactions::models::{self, TransactionResponse};
 
 /// Intermediate row fetched from `blockchain_transactions`.
 struct TransactionRow {
@@ -20,7 +20,7 @@ struct TransactionRow {
     transform_idx: Option<i32>,
 }
 
-impl From<TransactionRow> for TransactionRecord {
+impl From<TransactionRow> for TransactionResponse {
     #[inline]
     fn from(row: TransactionRow) -> Self {
         Self {
@@ -54,7 +54,7 @@ pub async fn fetch_account_transactions(
     address: &str,
     limit: i64,
     offset: i64,
-) -> Result<(Vec<TransactionRecord>, i64), sqlx::Error> {
+) -> Result<(Vec<TransactionResponse>, i64), sqlx::Error> {
     let mut tx = pool.begin().await?;
 
     let rows = sqlx::query_as!(
@@ -101,7 +101,7 @@ pub async fn fetch_token_transactions(
     contract_hash: &str,
     limit: i64,
     offset: i64,
-) -> Result<(Vec<TransactionRecord>, i64), sqlx::Error> {
+) -> Result<(Vec<TransactionResponse>, i64), sqlx::Error> {
     let mut tx = pool.begin().await?;
 
     let rows = sqlx::query_as!(

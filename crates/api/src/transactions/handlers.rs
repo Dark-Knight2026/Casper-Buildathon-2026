@@ -10,7 +10,7 @@ use axum::{
 use crate::{
     auth::AuthUser,
     common::{ApiError, ApiResult, AppState, PaginatedResponse, Pagination},
-    transactions::{db, models::TransactionRecord},
+    transactions::{db, models::TransactionResponse},
 };
 
 /// Returns paginated transaction history for a specific account.
@@ -30,7 +30,7 @@ use crate::{
         Pagination,
     ),
     responses(
-        (status = 200, description = "Paginated transaction list", body = inline(PaginatedResponse<TransactionRecord>)),
+        (status = 200, description = "Paginated transaction list", body = inline(PaginatedResponse<TransactionResponse>)),
         (status = 400, description = "Invalid address format"),
         (status = 401, description = "Unauthorized"),
         (status = 500, description = "Internal server error")
@@ -45,7 +45,7 @@ pub async fn get_account_transactions(
     _user: AuthUser,
     Path(address): Path<String>,
     Query(pagination): Query<Pagination>,
-) -> ApiResult<Json<PaginatedResponse<TransactionRecord>>> {
+) -> ApiResult<Json<PaginatedResponse<TransactionResponse>>> {
     let address = address.to_ascii_lowercase();
     if address.len() != 64 || !address.chars().all(|c| c.is_ascii_hexdigit()) {
         return Err(ApiError::BadRequest(
@@ -77,7 +77,7 @@ pub async fn get_account_transactions(
     tag = "Transactions",
     params(Pagination),
     responses(
-        (status = 200, description = "Paginated BIG token transaction list", body = inline(PaginatedResponse<TransactionRecord>)),
+        (status = 200, description = "Paginated BIG token transaction list", body = inline(PaginatedResponse<TransactionResponse>)),
         (status = 401, description = "Unauthorized"),
         (status = 500, description = "Internal server error or BIG contract not configured")
     ),
@@ -90,7 +90,7 @@ pub async fn get_big_token_transactions(
     State(state): State<Arc<AppState>>,
     _user: AuthUser,
     Query(pagination): Query<Pagination>,
-) -> ApiResult<Json<PaginatedResponse<TransactionRecord>>> {
+) -> ApiResult<Json<PaginatedResponse<TransactionResponse>>> {
     let contract_hash = state
         .config
         .contract_big
