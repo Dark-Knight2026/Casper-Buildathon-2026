@@ -10,11 +10,16 @@
 //! - **Token holdings** — current CEP-18 balances per user (`token_holdings`).
 //! - **ICO** — detailed ICO purchase log (`ico_purchases`).
 
+use std::collections::HashSet;
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use sqlx::PgTransaction;
+use sqlx::{PgPool, PgTransaction};
 
-use crate::{config::ContractType, error::IndexerResult};
+use crate::{
+    config::{ContractRegistry, ContractType},
+    error::IndexerResult,
+};
 
 // -----------------------------------------------------------------------------
 // Address type
@@ -69,6 +74,64 @@ impl HashType {
             Self::Unknown(_) => "unknown",
         }
     }
+
+    /// Convert to `Option<i16>` for storage in `blockchain_transactions`.
+    #[inline]
+    #[must_use]
+    pub fn to_db(self) -> Option<i16> {
+        Some(i16::from(u8::from(self)))
+    }
+
+    /// Determine address type by checking if the address is a known contract.
+    #[inline]
+    #[must_use]
+    pub fn lookup(address: &str, known_contracts: &HashSet<String>) -> Self {
+        if known_contracts.contains(address) {
+            Self::Contract
+        } else {
+            Self::Account
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Contract registry
+// -----------------------------------------------------------------------------
+
+/// Populate the `contract_registry` table with all active contracts from config.
+///
+/// Uses `ON CONFLICT (contract_type) DO UPDATE` so that hash changes (e.g. a
+/// redeployment) are reflected without manual DB intervention.
+///
+/// Called once at indexer startup before backfill and streaming begin.
+///
+/// # Errors
+///
+/// Returns [`IndexerError::Database`](crate::error::IndexerError::Database)
+/// on SQL failures.
+#[inline]
+pub async fn upsert_contract_registry(
+    pool: &PgPool,
+    contracts: &ContractRegistry,
+) -> IndexerResult<()> {
+    for contract in contracts.active_contracts() {
+        sqlx::query!(
+            r"
+                INSERT INTO contract_registry (contract_type, contract_hash, contract_name, is_active)
+                VALUES ($1, $2, $3, TRUE)
+                ON CONFLICT (contract_type) DO UPDATE SET
+                    contract_hash = EXCLUDED.contract_hash,
+                    contract_name = EXCLUDED.contract_name,
+                    is_active     = TRUE
+            ",
+            contract.contract_type.as_str(),
+            contract.hash,
+            contract.contract_type.as_str(),
+        )
+        .execute(pool)
+        .await?;
+    }
+    Ok(())
 }
 
 // -----------------------------------------------------------------------------

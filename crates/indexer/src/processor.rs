@@ -9,6 +9,7 @@
 
 use chrono::{DateTime, Utc};
 use sqlx::PgPool;
+use std::{collections::HashSet, hash::RandomState};
 
 use crate::{
     config::ContractType,
@@ -62,6 +63,7 @@ impl<'a> From<&'a RawEvent> for db::NewBlockchainEvent<'a> {
 pub async fn process_event(
     db_pool: &PgPool,
     registry: &EventRegistry,
+    known_hashes: &HashSet<String, RandomState>,
     raw: &RawEvent,
 ) -> IndexerResult<()> {
     let mut tx = db_pool.begin().await?;
@@ -84,6 +86,7 @@ pub async fn process_event(
         contract_type: raw.contract_type,
         block_timestamp: raw.block_timestamp,
         transform_idx: raw.transform_idx,
+        known_contract_hashes: known_hashes,
     };
 
     match registry

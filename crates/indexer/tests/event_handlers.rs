@@ -15,6 +15,8 @@
 
 mod common;
 
+use std::collections::HashSet;
+
 use serde_json::json;
 use sqlx::PgPool;
 
@@ -37,6 +39,7 @@ async fn transfer_writes_blockchain_transaction_row(pool: PgPool) {
     processor::process_event(
         &pool,
         &EventRegistry::new(),
+        &HashSet::new(),
         &RawEvent {
             contract_hash: "big_hash".to_owned(),
             deploy_hash: TRANSFER_DEPLOY_HASH.to_owned(),
@@ -80,6 +83,7 @@ async fn transfer_increases_recipient_and_clamps_unknown_sender(pool: PgPool) {
     processor::process_event(
         &pool,
         &EventRegistry::new(),
+        &HashSet::new(),
         &RawEvent {
             contract_hash: "big_hash".to_owned(),
             deploy_hash: TRANSFER_DEPLOY_HASH.to_owned(),
@@ -145,6 +149,7 @@ async fn transfer_decreases_existing_sender_balance(pool: PgPool) {
     processor::process_event(
         &pool,
         &EventRegistry::new(),
+        &HashSet::new(),
         &RawEvent {
             contract_hash: "big_hash".to_owned(),
             deploy_hash: TRANSFER_DEPLOY_HASH.to_owned(),
@@ -188,6 +193,7 @@ async fn set_allowance_writes_blockchain_transaction_row(pool: PgPool) {
     processor::process_event(
         &pool,
         &EventRegistry::new(),
+        &HashSet::new(),
         &RawEvent {
             contract_hash: "big_hash".to_owned(),
             deploy_hash: TRANSFER_DEPLOY_HASH.to_owned(),
@@ -232,6 +238,7 @@ async fn tokens_purchased_writes_ico_purchase_and_blockchain_transaction(pool: P
     processor::process_event(
         &pool,
         &EventRegistry::new(),
+        &HashSet::new(),
         &RawEvent {
             contract_hash: "ico_hash".to_owned(),
             deploy_hash: PURCHASE_DEPLOY_HASH.to_owned(),
@@ -294,6 +301,7 @@ async fn tokens_purchased_increases_buyer_big_balance(pool: PgPool) {
     processor::process_event(
         &pool,
         &EventRegistry::new(),
+        &HashSet::new(),
         &RawEvent {
             contract_hash: "ico_hash".to_owned(),
             deploy_hash: PURCHASE_DEPLOY_HASH.to_owned(),
@@ -342,6 +350,7 @@ async fn transfer_usdc_updates_usdc_token_holdings(pool: PgPool) {
     processor::process_event(
         &pool,
         &EventRegistry::new(),
+        &HashSet::new(),
         &RawEvent {
             contract_hash: "usdc_hash".to_owned(),
             deploy_hash: TRANSFER_DEPLOY_HASH.to_owned(),
@@ -395,6 +404,7 @@ async fn transfer_usdt_updates_usdt_token_holdings(pool: PgPool) {
     processor::process_event(
         &pool,
         &EventRegistry::new(),
+        &HashSet::new(),
         &RawEvent {
             contract_hash: "usdt_hash".to_owned(),
             deploy_hash: TRANSFER_DEPLOY_HASH.to_owned(),
@@ -450,6 +460,7 @@ async fn tokens_purchased_unknown_currency_stored_as_unknown_label(pool: PgPool)
     processor::process_event(
         &pool,
         &EventRegistry::new(),
+        &HashSet::new(),
         &RawEvent {
             contract_hash: "ico_hash".to_owned(),
             deploy_hash: PURCHASE_DEPLOY_HASH.to_owned(),
@@ -510,6 +521,7 @@ async fn set_allowance_does_not_modify_token_holdings(pool: PgPool) {
     processor::process_event(
         &pool,
         &EventRegistry::new(),
+        &HashSet::new(),
         &RawEvent {
             contract_hash: "big_hash".to_owned(),
             deploy_hash: TRANSFER_DEPLOY_HASH.to_owned(),

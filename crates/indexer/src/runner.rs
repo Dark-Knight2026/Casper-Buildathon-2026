@@ -11,7 +11,7 @@ use crate::{
     backfill,
     config::IndexerConfig,
     error::{IndexerError, IndexerResult},
-    events::EventRegistry,
+    events::{EventRegistry, db},
     streaming,
 };
 
@@ -49,6 +49,10 @@ pub async fn run() -> IndexerResult<()> {
         .await
         .map_err(IndexerError::Database)?;
     tracing::info!("Database connected");
+
+    // Populate contract_registry table so that it reflects the current config.
+    db::upsert_contract_registry(&db_pool, &config.contracts).await?;
+    tracing::info!("Contract registry populated");
 
     let backfill_task = {
         let config = config.clone();

@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     error::IndexerResult,
     event_trait::{EventContext, IndexableEvent},
-    events::db,
+    events::db::{self, BalanceUpdate, HashType, NewBlockchainTx},
 };
 
 /// A direct token transfer between two accounts.
@@ -24,11 +24,15 @@ impl IndexableEvent for Transfer {
 
     #[inline]
     async fn process(&self, ctx: &mut EventContext<'_>) -> IndexerResult<()> {
+        // Determine address types via contract registry lookup.
+        let from_type = HashType::lookup(&self.sender, ctx.known_contract_hashes);
+        let to_type = HashType::lookup(&self.recipient, ctx.known_contract_hashes);
+
         // Insert into blockchain_transactions
         let event_json = serde_json::to_value(self)?;
         db::insert_blockchain_transaction(
             ctx.tx,
-            &db::NewBlockchainTx {
+            &NewBlockchainTx {
                 deploy_hash: ctx.deploy_hash,
                 block_number: ctx.block_height.cast_signed(),
                 transaction_type: "token_transfer",
@@ -38,8 +42,8 @@ impl IndexableEvent for Transfer {
                 currency: None,
                 contract_hash: Some(ctx.contract_hash),
                 block_timestamp: ctx.block_timestamp,
-                from_type: None,
-                to_type: None,
+                from_type: from_type.to_db(),
+                to_type: to_type.to_db(),
                 transform_idx: ctx.transform_idx,
                 metadata: &event_json,
             },
@@ -51,14 +55,14 @@ impl IndexableEvent for Transfer {
             ctx.tx,
             &self.sender,
             ctx.contract_type,
-            db::BalanceUpdate::Decrease(&self.amount),
+            BalanceUpdate::Decrease(&self.amount),
         )
         .await?;
         db::update_token_balance(
             ctx.tx,
             &self.recipient,
             ctx.contract_type,
-            db::BalanceUpdate::Increase(&self.amount),
+            BalanceUpdate::Increase(&self.amount),
         )
         .await?;
 

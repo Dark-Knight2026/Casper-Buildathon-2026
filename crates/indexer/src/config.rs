@@ -1,5 +1,7 @@
 //! Indexer configuration loaded from environment variables via the `config` crate.
 
+use std::collections::HashSet;
+
 use config::{Config, Environment};
 use secrecy::SecretString;
 use serde::Deserialize;
@@ -274,6 +276,19 @@ impl ContractRegistry {
             .and_then(|v| u64::try_from(v).ok())
             .unwrap_or(0);
         Some(ContractEntry { hash, start_block })
+    }
+
+    /// Returns a set of all active contract package hashes for `O(1)` lookup.
+    ///
+    /// Used by event handlers to determine whether an address is a known
+    /// contract (`HashType::Contract`) or a regular account (`HashType::Account`).
+    #[inline]
+    #[must_use]
+    pub fn contract_hash_set(&self) -> HashSet<String> {
+        self.active_contracts()
+            .into_iter()
+            .map(|c| c.hash.to_owned())
+            .collect()
     }
 
     /// Returns a list of all configured (deployed) contracts with their types.

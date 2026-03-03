@@ -6,7 +6,7 @@ use crate::{
     config::ContractType,
     error::IndexerResult,
     event_trait::{EventContext, IndexableEvent},
-    events::db,
+    events::db::{self, HashType},
 };
 
 /// Payment currency used in an ICO purchase (deserialized from `u8` discriminant).
@@ -114,8 +114,8 @@ impl IndexableEvent for TokensPurchased {
                 currency: Some(self.currency.as_str()),
                 contract_hash: Some(ctx.contract_hash),
                 block_timestamp: ctx.block_timestamp,
-                from_type: Some(i16::from(u8::from(db::HashType::Account))),
-                to_type: Some(i16::from(u8::from(db::HashType::Contract))),
+                from_type: HashType::Account.to_db(),
+                to_type: HashType::Contract.to_db(),
                 transform_idx: ctx.transform_idx,
                 metadata: &event_json,
             },

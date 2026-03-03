@@ -6,13 +6,11 @@ use reqwest::Client;
 use secrecy::ExposeSecret;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use sqlx::PgPool;
 
-use super::db;
+use super::{BackfillContext, db};
 use crate::{
     config::{ContractType, IndexerConfig},
     error::{ApiErrorResponse, IndexerError, IndexerResult},
-    events::EventRegistry,
     processor::{self, RawEvent},
 };
 
@@ -169,10 +167,7 @@ pub async fn fetch_ft_token_actions_page(
 /// Returns [`IndexerError`] on HTTP, API, or database failures.
 #[inline]
 pub async fn backfill_cep18(
-    client: &Client,
-    config: &IndexerConfig,
-    db_pool: &PgPool,
-    registry: &EventRegistry,
+    ctx: &BackfillContext<'_>,
     contract_type: ContractType,
     contract_hash: &str,
     start_block: u64,
@@ -181,7 +176,7 @@ pub async fn backfill_cep18(
     let mut total_events = 0u64;
 
     // Resume from the last saved block instead of re-processing the whole history.
-    let cursor_block = db::get_cursor(db_pool, contract_hash).await?;
+    let cursor_block = db::get_cursor(ctx.db_pool, contract_hash).await?;
     let effective_start = cursor_block
         .map_or(0, |b| b.cast_unsigned().saturating_add(1))
         .max(start_block);
@@ -192,7 +187,8 @@ pub async fn backfill_cep18(
     loop {
         tracing::debug!(%contract_hash, page, "Fetching ft-token-actions page");
 
-        let page_data = fetch_ft_token_actions_page(client, config, contract_hash, page).await?;
+        let page_data =
+            fetch_ft_token_actions_page(ctx.client, ctx.config, contract_hash, page).await?;
         let page_count = page_data.page_count;
         let mut page_max_block: Option<u64> = None;
 
@@ -219,10 +215,11 @@ pub async fn backfill_cep18(
                 transform_idx: None,
             };
 
-            match processor::process_event(db_pool, registry, &raw).await {
+            match processor::process_event(ctx.db_pool, ctx.registry, ctx.known_hashes, &raw).await
+            {
                 Ok(()) => {
                     total_events += 1;
-                    // Advance cursor only on success — a transient DB error must
+                    // Advance cursor only on success - a transient DB error must
                     // not silently skip this event on the next restart.
                     page_max_block = Some(page_max_block.unwrap_or(0).max(action.block_height));
                 }
@@ -239,9 +236,9 @@ pub async fn backfill_cep18(
 
         // Persist progress so restarts resume from here instead of block 0.
         if let Some(max_block) = page_max_block {
-            db::update_cursor(db_pool, contract_hash, max_block.cast_signed()).await?;
+            db::update_cursor(ctx.db_pool, contract_hash, max_block.cast_signed()).await?;
         }
-        tokio::time::sleep(Duration::from_millis(config.backfill_rate_limit_ms)).await;
+        tokio::time::sleep(Duration::from_millis(ctx.config.backfill_rate_limit_ms)).await;
 
         if page >= page_count {
             break;

@@ -8,6 +8,7 @@
 //! existing code (Open-Closed Principle).
 
 use core::fmt::Debug;
+use std::{collections::HashSet, hash::RandomState};
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -39,6 +40,8 @@ pub struct EventContext<'a> {
     pub block_timestamp: Option<DateTime<Utc>>,
     /// Transform index within the deploy. `None` when unavailable.
     pub transform_idx: Option<i32>,
+    /// Known contract hashes for `from_type`/`to_type` address lookup.
+    pub known_contract_hashes: &'a HashSet<String, RandomState>,
 }
 
 /// Trait for blockchain events that can be indexed and processed.
@@ -63,7 +66,7 @@ pub struct EventContext<'a> {
 /// impl IndexableEvent for TokensPurchased {
 ///     const EVENT_NAME: &'static str = "TokensPurchased";
 ///
-///     async fn process(&self, ctx: &EventContext<'_>) -> IndexerResult<()> {
+///     async fn process(&self, ctx: &mut EventContext<'_>) -> IndexerResult<()> {
 ///         // Insert into ico_purchases table, etc.
 ///         Ok(())
 ///     }

@@ -13,6 +13,8 @@
 
 mod common;
 
+use std::collections::HashSet;
+
 use reqwest::Client;
 use serde_json::json;
 use sqlx::PgPool;
@@ -20,7 +22,7 @@ use wiremock::{Mock, MockServer, ResponseTemplate, matchers};
 
 use common::{MIGRATOR, PURCHASE_DEPLOY_HASH, payloads};
 use indexer::{
-    backfill::ico::{self, IcoBackfillCtx},
+    backfill::{BackfillContext, ico},
     config::ContractType,
     events::EventRegistry,
 };
@@ -267,20 +269,17 @@ async fn deploy_without_purchase_args_advances_cursor_but_writes_nothing(pool: P
         .mount(&rest)
         .await;
 
-    ico::backfill_ico(
-        &IcoBackfillCtx {
-            client: &client,
-            config: &config,
-            db_pool: &pool,
-            registry: &registry,
-            big_hash: "big_hash",
-        },
-        ContractType::Ico,
-        "ico_hash",
-        0,
-    )
-    .await
-    .unwrap();
+    let known_hashes = HashSet::new();
+    let ctx = BackfillContext {
+        client: &client,
+        config: &config,
+        db_pool: &pool,
+        registry: &registry,
+        known_hashes: &known_hashes,
+    };
+    ico::backfill_ico(&ctx, "big_hash", ContractType::Ico, "ico_hash", 0)
+        .await
+        .unwrap();
 
     let tx_count: i64 = sqlx::query_scalar!(
         r"
@@ -347,20 +346,17 @@ async fn failed_deploy_skipped_and_cursor_not_updated(pool: PgPool) {
         .mount(&rest)
         .await;
 
-    ico::backfill_ico(
-        &IcoBackfillCtx {
-            client: &client,
-            config: &config,
-            db_pool: &pool,
-            registry: &registry,
-            big_hash: "big_hash",
-        },
-        ContractType::Ico,
-        "ico_hash",
-        0,
-    )
-    .await
-    .unwrap();
+    let known_hashes = HashSet::new();
+    let ctx = BackfillContext {
+        client: &client,
+        config: &config,
+        db_pool: &pool,
+        registry: &registry,
+        known_hashes: &known_hashes,
+    };
+    ico::backfill_ico(&ctx, "big_hash", ContractType::Ico, "ico_hash", 0)
+        .await
+        .unwrap();
 
     let tx_count: i64 = sqlx::query_scalar!(r"SELECT COUNT(*) FROM blockchain_transactions")
         .fetch_one(&pool)
@@ -431,20 +427,17 @@ async fn cursor_resume_skips_already_processed_blocks(pool: PgPool) {
         .mount(&rest)
         .await;
 
-    ico::backfill_ico(
-        &IcoBackfillCtx {
-            client: &client,
-            config: &config,
-            db_pool: &pool,
-            registry: &registry,
-            big_hash: "big_hash",
-        },
-        ContractType::Ico,
-        "ico_hash",
-        0,
-    )
-    .await
-    .unwrap();
+    let known_hashes = HashSet::new();
+    let ctx = BackfillContext {
+        client: &client,
+        config: &config,
+        db_pool: &pool,
+        registry: &registry,
+        known_hashes: &known_hashes,
+    };
+    ico::backfill_ico(&ctx, "big_hash", ContractType::Ico, "ico_hash", 0)
+        .await
+        .unwrap();
 
     let cursor: Option<i64> = sqlx::query_scalar!(
         r"
@@ -497,20 +490,17 @@ async fn successful_purchase_written_to_all_tables(pool: PgPool) {
         .mount(&rest)
         .await;
 
-    ico::backfill_ico(
-        &IcoBackfillCtx {
-            client: &client,
-            config: &config,
-            db_pool: &pool,
-            registry: &registry,
-            big_hash: "big_hash",
-        },
-        ContractType::Ico,
-        "ico_hash",
-        0,
-    )
-    .await
-    .unwrap();
+    let known_hashes = HashSet::new();
+    let ctx = BackfillContext {
+        client: &client,
+        config: &config,
+        db_pool: &pool,
+        registry: &registry,
+        known_hashes: &known_hashes,
+    };
+    ico::backfill_ico(&ctx, "big_hash", ContractType::Ico, "ico_hash", 0)
+        .await
+        .unwrap();
 
     // ico_purchases must have exactly one row.
     let purchase = sqlx::query!(

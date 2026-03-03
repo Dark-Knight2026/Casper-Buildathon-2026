@@ -7,8 +7,12 @@
 pub mod db;
 
 use core::{fmt::Write as _, time::Duration};
-use std::collections::HashMap;
+use std::{
+    collections::{HashMap, HashSet},
+    hash::RandomState,
+};
 
+use chrono::DateTime;
 use futures_util::StreamExt;
 use secrecy::ExposeSecret;
 use serde::Deserialize;
@@ -19,15 +23,12 @@ use tokio_tungstenite::{
     tungstenite::{self, Message, client::IntoClientRequest},
 };
 
-use chrono::DateTime;
-
 use crate::{
     config::{ContractRegistry, ContractType, IndexerConfig},
     error::{IndexerError, IndexerResult},
     events::EventRegistry,
     processor,
 };
-
 use db::StreamType;
 
 // -----------------------------------------------------------------------------
@@ -190,8 +191,9 @@ pub(crate) async fn connect_and_stream(
         tracing::info!(last_event_id = id, "Resuming streaming from last cursor");
     }
 
-    // Build the hash (contract type lookup map) once for this connection lifetime.
+    // Build lookup maps once for this connection lifetime.
     let contract_map = build_contract_map(&config.contracts);
+    let known_hashes = config.contracts.contract_hash_set();
     let ws_stream = connect(config, last_event_id).await?;
 
     // Split into independent read/write halves.
@@ -202,7 +204,7 @@ pub(crate) async fn connect_and_stream(
     while let Some(msg) = read.next().await {
         match msg? {
             Message::Text(text) => {
-                handle_text_message(&text, &contract_map, db_pool, registry).await?;
+                handle_text_message(&text, &contract_map, &known_hashes, db_pool, registry).await?;
             }
             Message::Close(frame) => {
                 tracing::info!(?frame, "WebSocket connection closed by server");
@@ -231,15 +233,13 @@ pub(crate) async fn connect_and_stream(
 ///
 /// Returns [`IndexerError`] on JSON parse, processor, or database failures.
 #[inline]
-pub async fn handle_text_message<S>(
+pub async fn handle_text_message(
     text: &str,
-    contract_map: &HashMap<String, ContractType, S>,
+    contract_map: &HashMap<String, ContractType, RandomState>,
+    known_hashes: &HashSet<String, RandomState>,
     db_pool: &PgPool,
     registry: &EventRegistry,
-) -> IndexerResult<()>
-where
-    S: core::hash::BuildHasher,
-{
+) -> IndexerResult<()> {
     tracing::debug!(%text, "WSS message received");
 
     // CSPR.cloud sends periodic non-JSON keepalive text frames (e.g. empty strings).
@@ -277,7 +277,7 @@ where
         transform_idx,
     };
 
-    processor::process_event(db_pool, registry, &raw).await?;
+    processor::process_event(db_pool, registry, known_hashes, &raw).await?;
     db::update_cursor(db_pool, StreamType::Streaming, msg.extra.event_id).await?;
 
     Ok(())

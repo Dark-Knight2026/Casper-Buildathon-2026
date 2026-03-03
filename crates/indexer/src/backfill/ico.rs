@@ -12,16 +12,12 @@ use chrono::DateTime;
 use reqwest::Client;
 use secrecy::ExposeSecret;
 use serde::Deserialize;
-use sqlx::PgPool;
 
-use super::db;
+use super::{BackfillContext, db};
 use crate::{
     config::{ContractType, IndexerConfig},
     error::{ApiErrorResponse, IndexerError, IndexerResult},
-    events::{
-        EventRegistry,
-        ico::{TokensPurchased, tokens_purchased::Currency},
-    },
+    events::ico::{TokensPurchased, tokens_purchased::Currency},
     processor::{self, RawEvent},
 };
 // -----------------------------------------------------------------------------
@@ -78,26 +74,7 @@ pub(super) struct DeployListItem {
 }
 
 // -----------------------------------------------------------------------------
-// Shared context
-// -----------------------------------------------------------------------------
-
-/// Shared dependencies for ICO backfill operations.
-#[derive(Debug)]
-pub struct IcoBackfillCtx<'a> {
-    /// HTTP client used for CSPR.cloud API requests.
-    pub client: &'a Client,
-    /// Indexer configuration (API token, URLs, rate limit).
-    pub config: &'a IndexerConfig,
-    /// Database connection pool for reading and writing events.
-    pub db_pool: &'a PgPool,
-    /// Event registry for dispatching processed events.
-    pub registry: &'a EventRegistry,
-    /// BIG token contract package hash — used to look up purchase amounts in DB.
-    pub big_hash: &'a str,
-}
-
-// -----------------------------------------------------------------------------
-// Public-to-parent API
+// Public API
 // -----------------------------------------------------------------------------
 
 /// Backfill the ICO contract by reconstructing `TokensPurchased` events.
@@ -113,7 +90,8 @@ pub struct IcoBackfillCtx<'a> {
 /// Returns [`IndexerError`] on HTTP, API, or database failures.
 #[inline]
 pub async fn backfill_ico(
-    ctx: &IcoBackfillCtx<'_>,
+    ctx: &BackfillContext<'_>,
+    big_hash: &str,
     contract_type: ContractType,
     contract_hash: &str,
     start_block: u64,
@@ -121,8 +99,7 @@ pub async fn backfill_ico(
     // Pre-fetch all BIG transfers from CSPR.cloud once, keyed by deploy_hash.
     // ICO-initiated transfers are identified by from_hash == ICO contract package hash.
     tracing::info!(%contract_hash, "Pre-fetching BIG transfers from CSPR.cloud");
-    let big_amounts =
-        load_big_transfers(ctx.client, ctx.config, ctx.big_hash, contract_hash).await?;
+    let big_amounts = load_big_transfers(ctx.client, ctx.config, big_hash, contract_hash).await?;
     tracing::info!(count = big_amounts.len(), "BIG transfer map ready");
 
     let mut page = 1u32;
@@ -214,7 +191,7 @@ pub async fn backfill_ico(
 /// `Ok(false)` if the deploy was skipped (not a `purchase` call or BIG amount
 /// not found in pre-fetched map).
 async fn process_ico_deploy(
-    ctx: &IcoBackfillCtx<'_>,
+    ctx: &BackfillContext<'_>,
     contract_type: ContractType,
     contract_hash: &str,
     deploy_item: &DeployListItem,
@@ -280,7 +257,7 @@ async fn process_ico_deploy(
         transform_idx: None,
     };
 
-    processor::process_event(ctx.db_pool, ctx.registry, &raw).await?;
+    processor::process_event(ctx.db_pool, ctx.registry, ctx.known_hashes, &raw).await?;
 
     tracing::debug!(
         deploy = %deploy_hash,

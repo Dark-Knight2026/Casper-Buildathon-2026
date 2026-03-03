@@ -125,9 +125,9 @@ impl EventRegistry {
 }
 
 /// Helper to deserialize and process a typed event.
-async fn process_typed_event<E>(ctx: &mut EventContext<'_>, event_data: Value) -> IndexerResult<()>
-where
-    E: IndexableEvent,
-{
+async fn process_typed_event<E: IndexableEvent>(
+    ctx: &mut EventContext<'_>,
+    event_data: Value,
+) -> IndexerResult<()> {
     serde_json::from_value::<E>(event_data)?.process(ctx).await
 }

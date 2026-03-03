@@ -18,6 +18,8 @@
 
 mod common;
 
+use std::collections::HashSet;
+
 use serde_json::json;
 use sqlx::PgPool;
 
@@ -50,14 +52,14 @@ async fn duplicate_event_is_no_op(pool: PgPool) {
     };
 
     // First call — new event, handler runs, row inserted.
-    processor::process_event(&pool, &registry, &event)
+    processor::process_event(&pool, &registry, &HashSet::new(), &event)
         .await
         .expect("first process_event must succeed");
 
     // Second call — same (contract_hash, deploy_hash, event_name) triple
     // matches the UNIQUE constraint -> insert_blockchain_event returns false ->
     // process_event returns Ok(()) without calling the handler.
-    processor::process_event(&pool, &registry, &event)
+    processor::process_event(&pool, &registry, &HashSet::new(), &event)
         .await
         .expect("second process_event must succeed (idempotent)");
 
@@ -102,7 +104,7 @@ async fn handler_error_rolls_back_blockchain_events_row(pool: PgPool) {
         transform_idx: None,
     };
 
-    let result = processor::process_event(&pool, &registry, &bad_event).await;
+    let result = processor::process_event(&pool, &registry, &HashSet::new(), &bad_event).await;
     assert!(
         result.is_err(),
         "malformed event_data must cause process_event to return Err"
@@ -146,7 +148,7 @@ async fn unknown_event_is_stored_raw_without_handler(pool: PgPool) {
         transform_idx: None,
     };
 
-    processor::process_event(&pool, &registry, &unknown)
+    processor::process_event(&pool, &registry, &HashSet::new(), &unknown)
         .await
         .expect("unknown event must not fail — it should be stored as raw data");
 
@@ -225,7 +227,7 @@ async fn reprocessing_after_full_rollback_does_not_double_balance(pool: PgPool) 
     };
 
     // First call — all writes committed in one transaction.
-    processor::process_event(&pool, &registry, &event)
+    processor::process_event(&pool, &registry, &HashSet::new(), &event)
         .await
         .expect("first call must succeed");
 
@@ -252,7 +254,7 @@ async fn reprocessing_after_full_rollback_does_not_double_balance(pool: PgPool) 
         .unwrap();
 
     // Second call — starts from a clean slate, must produce the same result.
-    processor::process_event(&pool, &registry, &event)
+    processor::process_event(&pool, &registry, &HashSet::new(), &event)
         .await
         .expect("second call must succeed");
 

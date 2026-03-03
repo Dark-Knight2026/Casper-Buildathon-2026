@@ -2,7 +2,7 @@
 
 mod common;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use sqlx::PgPool;
 
@@ -127,9 +127,15 @@ async fn non_json_frame_is_silently_skipped(pool: PgPool) {
     let registry = EventRegistry::new();
     let contract_map = HashMap::new();
 
-    streaming::handle_text_message("not-json-keepalive", &contract_map, &pool, &registry)
-        .await
-        .expect("non-JSON frame must return Ok(())");
+    streaming::handle_text_message(
+        "not-json-keepalive",
+        &contract_map,
+        &HashSet::new(),
+        &pool,
+        &registry,
+    )
+    .await
+    .expect("non-JSON frame must return Ok(())");
 
     let count: i64 = sqlx::query_scalar!(r"SELECT COUNT(*) FROM blockchain_events")
         .fetch_one(&pool)
@@ -161,9 +167,15 @@ async fn message_for_unknown_contract_is_skipped(pool: PgPool) {
         1_234_567,
     );
 
-    streaming::handle_text_message(&msg.to_string(), &contract_map, &pool, &registry)
-        .await
-        .expect("message for unknown contract must return Ok(())");
+    streaming::handle_text_message(
+        &msg.to_string(),
+        &contract_map,
+        &HashSet::new(),
+        &pool,
+        &registry,
+    )
+    .await
+    .expect("message for unknown contract must return Ok(())");
 
     let count: i64 = sqlx::query_scalar!(r"SELECT COUNT(*) FROM blockchain_events")
         .fetch_one(&pool)
@@ -197,9 +209,15 @@ async fn valid_message_processes_event_and_updates_cursor(pool: PgPool) {
         500,
     );
 
-    streaming::handle_text_message(&msg.to_string(), &contract_map, &pool, &registry)
-        .await
-        .expect("valid Transfer message must succeed");
+    streaming::handle_text_message(
+        &msg.to_string(),
+        &contract_map,
+        &HashSet::new(),
+        &pool,
+        &registry,
+    )
+    .await
+    .expect("valid Transfer message must succeed");
 
     let count: i64 = sqlx::query_scalar!(r"SELECT COUNT(*) FROM blockchain_events")
         .fetch_one(&pool)
