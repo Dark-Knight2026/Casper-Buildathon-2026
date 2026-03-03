@@ -89,7 +89,7 @@ serde_json = "1"
 serial_test = "3"
 wiremock = "0.6"
 sha2 = "0.10"
-sqlx = { version = "0.8.6", features = ["runtime-tokio-rustls", "postgres", "uuid", "rust_decimal", "migrate", "json"] }
+sqlx = { version = "0.8.6", features = ["runtime-tokio-rustls", "postgres", "uuid", "rust_decimal", "migrate", "json", "chrono"] }
 strum = { version = "0.28", features = ["derive"] }
 testcontainers = "0.27.0"
 thiserror = "2.0"

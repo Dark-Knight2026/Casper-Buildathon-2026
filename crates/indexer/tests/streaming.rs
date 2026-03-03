@@ -38,11 +38,14 @@ fn deserializes_wss_message() {
     assert_eq!(msg.extra.deploy_hash, "aabbcc");
     assert_eq!(msg.extra.event_id, 42);
     assert_eq!(msg.extra.block_height, 1_234_567);
+    assert_eq!(msg.extra.transform_id, Some(0));
+    assert_eq!(msg.timestamp.as_deref(), Some("2025-01-01T12:00:00.000Z"));
 }
 
 #[test]
 fn deserializes_ignores_unknown_fields() {
-    // "timestamp", "action", "raw_data", "future_field" must not cause failure.
+    // "action", "future_field", "extra_unknown" must not cause failure.
+    // "timestamp" and "transform_id" are now deserialized (no longer ignored).
     let minimal = r#"{
         "data": { "contract_package_hash": "x", "name": "Foo", "data": {}, "extra_unknown": true },
         "action": "emitted",
@@ -52,6 +55,8 @@ fn deserializes_ignores_unknown_fields() {
     }"#;
     let msg: WssMessage = serde_json::from_str(minimal).unwrap();
     assert_eq!(msg.data.name, "Foo");
+    assert_eq!(msg.extra.transform_id, Some(0));
+    assert_eq!(msg.timestamp.as_deref(), Some("2025-01-01T00:00:00Z"));
 }
 
 #[test]

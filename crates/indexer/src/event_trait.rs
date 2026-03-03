@@ -9,6 +9,7 @@
 
 use core::fmt::Debug;
 
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::PgTransaction;
 
@@ -34,6 +35,10 @@ pub struct EventContext<'a> {
     pub caller: &'a str,
     /// Type of contract that emitted this event.
     pub contract_type: ContractType,
+    /// Block timestamp from the blockchain. `None` when unavailable (e.g. CEP-18 backfill).
+    pub block_timestamp: Option<DateTime<Utc>>,
+    /// Transform index within the deploy. `None` when unavailable.
+    pub transform_idx: Option<i32>,
 }
 
 /// Trait for blockchain events that can be indexed and processed.

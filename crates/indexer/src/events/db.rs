@@ -10,6 +10,7 @@
 //! - **Token holdings** — current CEP-18 balances per user (`token_holdings`).
 //! - **ICO** — detailed ICO purchase log (`ico_purchases`).
 
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::PgTransaction;
 
@@ -169,10 +170,22 @@ pub struct NewBlockchainTx<'a> {
     pub transaction_type: &'a str,
     /// Casper public key of the caller.
     pub from_address: &'a str,
+    /// Recipient address (account or contract hash).
+    pub to_address: Option<&'a str>,
     /// Amount involved (U256 as string), if applicable.
     pub amount: Option<&'a str>,
     /// Currency label, if applicable.
     pub currency: Option<&'a str>,
+    /// Contract package hash that emitted this event.
+    pub contract_hash: Option<&'a str>,
+    /// Block timestamp from the blockchain.
+    pub block_timestamp: Option<DateTime<Utc>>,
+    /// Address type of the sender (0=Account, 1=Contract).
+    pub from_type: Option<i16>,
+    /// Address type of the recipient (0=Account, 1=Contract).
+    pub to_type: Option<i16>,
+    /// Transform index within the deploy.
+    pub transform_idx: Option<i32>,
     /// Full event payload for the `metadata` JSONB column.
     pub metadata: &'a serde_json::Value,
 }
@@ -193,16 +206,22 @@ pub async fn insert_blockchain_transaction(
 ) -> IndexerResult<()> {
     sqlx::query!(
         r"
-            INSERT INTO blockchain_transactions (transaction_hash, deploy_hash, block_number, transaction_type, from_address, amount, currency, status, metadata, confirmed_at)
-            VALUES ($1, $1, $2, $3, $4, $5, $6, 'confirmed', $7, NOW())
+            INSERT INTO blockchain_transactions ( transaction_hash, deploy_hash, block_number, transaction_type, from_address, to_address, amount, currency, contract_hash, block_timestamp, from_type, to_type, transform_idx, status, metadata, confirmed_at )
+            VALUES ($1, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'confirmed', $13, NOW())
             ON CONFLICT (transaction_hash, transaction_type, from_address) DO NOTHING
         ",
         row.deploy_hash,
         row.block_number,
         row.transaction_type,
         row.from_address,
+        row.to_address,
         row.amount,
         row.currency,
+        row.contract_hash,
+        row.block_timestamp,
+        row.from_type,
+        row.to_type,
+        row.transform_idx,
         row.metadata,
     )
     .execute(tx.as_mut())

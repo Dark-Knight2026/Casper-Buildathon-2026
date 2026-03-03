@@ -33,8 +33,14 @@ impl IndexableEvent for Transfer {
                 block_number: ctx.block_height.cast_signed(),
                 transaction_type: "token_transfer",
                 from_address: &self.sender,
+                to_address: Some(&self.recipient),
                 amount: Some(&self.amount),
-                currency: None, // Will be inferred from contract_type
+                currency: None,
+                contract_hash: Some(ctx.contract_hash),
+                block_timestamp: ctx.block_timestamp,
+                from_type: None,
+                to_type: None,
+                transform_idx: ctx.transform_idx,
                 metadata: &event_json,
             },
         )

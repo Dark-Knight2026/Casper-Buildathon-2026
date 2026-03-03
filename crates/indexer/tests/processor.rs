@@ -45,6 +45,8 @@ async fn duplicate_event_is_no_op(pool: PgPool) {
         contract_type: ContractType::Big,
         event_name: "Transfer".to_owned(),
         event_data: json!({ "sender": "alice", "recipient": "bob", "amount": "100" }),
+        block_timestamp: None,
+        transform_idx: None,
     };
 
     // First call — new event, handler runs, row inserted.
@@ -96,6 +98,8 @@ async fn handler_error_rolls_back_blockchain_events_row(pool: PgPool) {
         contract_type: ContractType::Ico,
         event_name: "TokensPurchased".to_owned(),
         event_data: json!({}),
+        block_timestamp: None,
+        transform_idx: None,
     };
 
     let result = processor::process_event(&pool, &registry, &bad_event).await;
@@ -138,6 +142,8 @@ async fn unknown_event_is_stored_raw_without_handler(pool: PgPool) {
         contract_type: ContractType::Big,
         event_name: "NonExistentEvent".to_owned(),
         event_data: json!({ "foo": "bar" }),
+        block_timestamp: None,
+        transform_idx: None,
     };
 
     processor::process_event(&pool, &registry, &unknown)
@@ -214,6 +220,8 @@ async fn reprocessing_after_full_rollback_does_not_double_balance(pool: PgPool) 
         contract_type: ContractType::Big,
         event_name: "Transfer".to_owned(),
         event_data: json!({ "sender": "alice", "recipient": "bob", "amount": "100" }),
+        block_timestamp: None,
+        transform_idx: None,
     };
 
     // First call — all writes committed in one transaction.

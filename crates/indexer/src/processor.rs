@@ -7,6 +7,7 @@
 //!
 //! If any step fails, the transaction is rolled back.
 
+use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 
 use crate::{
@@ -33,6 +34,10 @@ pub struct RawEvent {
     pub event_name: String,
     /// Raw event data as JSON.
     pub event_data: serde_json::Value,
+    /// Block timestamp from the blockchain. `None` when unavailable.
+    pub block_timestamp: Option<DateTime<Utc>>,
+    /// Transform index within the deploy. `None` when unavailable.
+    pub transform_idx: Option<i32>,
 }
 
 impl<'a> From<&'a RawEvent> for db::NewBlockchainEvent<'a> {
@@ -77,6 +82,8 @@ pub async fn process_event(
         block_height: raw.block_height,
         caller: &raw.caller,
         contract_type: raw.contract_type,
+        block_timestamp: raw.block_timestamp,
+        transform_idx: raw.transform_idx,
     };
 
     match registry

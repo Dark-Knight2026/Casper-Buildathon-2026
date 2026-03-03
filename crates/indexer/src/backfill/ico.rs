@@ -264,6 +264,10 @@ async fn process_ico_deploy(
     };
     let event_data = serde_json::to_value(&typed_event)?;
 
+    let block_timestamp = DateTime::parse_from_rfc3339(&deploy_item.timestamp)
+        .ok()
+        .map(|dt| dt.to_utc());
+
     let raw = RawEvent {
         contract_hash: contract_hash.to_owned(),
         deploy_hash: deploy_hash.clone(),
@@ -272,6 +276,8 @@ async fn process_ico_deploy(
         contract_type,
         event_name: "TokensPurchased".to_owned(),
         event_data,
+        block_timestamp,
+        transform_idx: None,
     };
 
     processor::process_event(ctx.db_pool, ctx.registry, &raw).await?;

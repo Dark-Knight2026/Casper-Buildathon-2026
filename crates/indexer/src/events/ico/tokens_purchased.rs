@@ -100,6 +100,7 @@ impl IndexableEvent for TokensPurchased {
         .await?;
 
         // 2. Insert into blockchain_transactions
+        // Payment flow: buyer (Account) -> ICO contract (Contract).
         let event_json = serde_json::to_value(self)?;
         db::insert_blockchain_transaction(
             ctx.tx,
@@ -108,8 +109,14 @@ impl IndexableEvent for TokensPurchased {
                 block_number: ctx.block_height.cast_signed(),
                 transaction_type: "token_purchase",
                 from_address: ctx.caller,
+                to_address: Some(ctx.contract_hash),
                 amount: Some(&self.cost),
                 currency: Some(self.currency.as_str()),
+                contract_hash: Some(ctx.contract_hash),
+                block_timestamp: ctx.block_timestamp,
+                from_type: Some(i16::from(u8::from(db::HashType::Account))),
+                to_type: Some(i16::from(u8::from(db::HashType::Contract))),
+                transform_idx: ctx.transform_idx,
                 metadata: &event_json,
             },
         )

@@ -6,8 +6,7 @@
 
 pub mod db;
 
-use core::fmt::Write as _;
-use core::time::Duration;
+use core::{fmt::Write as _, time::Duration};
 use std::collections::HashMap;
 
 use futures_util::StreamExt;
@@ -19,6 +18,8 @@ use tokio_tungstenite::{
     MaybeTlsStream, WebSocketStream,
     tungstenite::{self, Message, client::IntoClientRequest},
 };
+
+use chrono::DateTime;
 
 use crate::{
     config::{ContractRegistry, ContractType, IndexerConfig},
@@ -36,13 +37,15 @@ use db::StreamType;
 /// Top-level message received from the CSPR.cloud Streaming API.
 ///
 /// Every contract-level event arrives as a JSON object of this shape.
-/// Unknown fields (e.g. `timestamp`) are ignored by serde automatically.
 #[derive(Debug, Deserialize)]
 pub struct WssMessage {
     /// CES event payload.
     pub data: WssData,
     /// Blockchain context for the event (deploy hash, block height, etc.).
     pub extra: WssExtra,
+    /// ISO 8601 block timestamp (e.g. `"2025-01-01T12:00:00.000Z"`).
+    #[serde(default)]
+    pub timestamp: Option<String>,
 }
 
 /// Payload of a single CES event inside a [`WssMessage`].
@@ -69,6 +72,9 @@ pub struct WssExtra {
     pub event_id: i64,
     /// Block height at which the event was included.
     pub block_height: u64,
+    /// Transform index within the deploy.
+    #[serde(default)]
+    pub transform_id: Option<i64>,
 }
 
 // -----------------------------------------------------------------------------
@@ -252,6 +258,13 @@ where
     };
     // Not available in streaming events; backfill fills this via REST.
     let caller = String::new();
+
+    let block_timestamp = msg
+        .timestamp
+        .as_deref()
+        .and_then(|ts| DateTime::parse_from_rfc3339(ts).ok().map(|dt| dt.to_utc()));
+    let transform_idx = msg.extra.transform_id.and_then(|id| i32::try_from(id).ok());
+
     let raw = processor::RawEvent {
         contract_hash: msg.data.contract_package_hash,
         deploy_hash: msg.extra.deploy_hash,
@@ -260,6 +273,8 @@ where
         contract_type,
         event_name: msg.data.name,
         event_data: msg.data.data,
+        block_timestamp,
+        transform_idx,
     };
 
     processor::process_event(db_pool, registry, &raw).await?;

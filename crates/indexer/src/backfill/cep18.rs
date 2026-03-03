@@ -79,9 +79,15 @@ pub struct FtTokenAction {
     pub to_hash: Option<String>,
     /// Token amount as a decimal string.
     pub amount: String,
-    /// Action type — deserialized from the numeric `ft_action_type_id` JSON field.
+    /// Action type - deserialized from the numeric `ft_action_type_id` JSON field.
     #[serde(rename = "ft_action_type_id")]
     pub ft_action_type: FtActionType,
+    /// Address type of the sender (0=Account, 1=Contract).
+    #[serde(default)]
+    pub from_type: Option<u8>,
+    /// Address type of the recipient (0=Account, 1=Contract).
+    #[serde(default)]
+    pub to_type: Option<u8>,
 }
 
 impl FtTokenAction {
@@ -103,6 +109,8 @@ impl FtTokenAction {
             to_hash: to_hash.map(Into::into),
             amount: amount.into(),
             ft_action_type,
+            from_type: None,
+            to_type: None,
         }
     }
 }
@@ -197,7 +205,8 @@ pub async fn backfill_cep18(
                 continue;
             };
 
-            // caller is not available in /ft-token-actions — same as streaming
+            // caller is not available in /ft-token-actions - same as streaming.
+            // block_timestamp and transform_idx are not available from this endpoint.
             let raw = RawEvent {
                 contract_hash: contract_hash.to_owned(),
                 deploy_hash: action.deploy_hash.clone(),
@@ -206,6 +215,8 @@ pub async fn backfill_cep18(
                 contract_type,
                 event_name: event_name.to_owned(),
                 event_data,
+                block_timestamp: None,
+                transform_idx: None,
             };
 
             match processor::process_event(db_pool, registry, &raw).await {
