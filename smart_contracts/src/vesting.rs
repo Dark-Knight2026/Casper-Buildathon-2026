@@ -3,34 +3,43 @@ use odra_modules::{access::Ownable, cep18_token::Cep18ContractRef};
 
 use crate::staking::StakingContractRef;
 
+/// Unique identifier for each vesting schedule (auto-incrementing counter).
 pub type VestingId = u64;
 
-#[odra::module(
-  errors = Error,
-  events = [ScheduleCreated, TokensClaimed],
-)]
-pub struct Vesting {
-    ownable: SubModule<Ownable>,
-    tailor_coin: External<Cep18ContractRef>, // TODO: Shoud we use Var<Address> instead?
-    staking: External<StakingContractRef>,
-    schedules: Mapping<VestingId, VestingSchedule>,
-    schedules_count: Var<VestingId>,
-    whitelisted_creators: Mapping<Address, bool>,
-}
+// =============================================================================
+// Vesting Schedule Data
+// =============================================================================
 
 #[odra::odra_type]
 pub struct VestingSchedule {
+    /// The address that can claim tokens from this schedule.
     pub beneficiary: Address,
+    /// Total number of tokens locked in this schedule.
     pub total_amount: U256,
+    /// Number of tokens already claimed by the beneficiary.
     pub claimed_amount: U256,
-    pub start_timestamp: u64,  // set to block time at creation
-    pub cliff_duration: u64,   // seconds until first unlock
-    pub vesting_duration: u64, // total seconds from start to full vest
+    /// Block timestamp when the vesting clock starts (set at creation time).
+    pub start_timestamp: u64,
+    /// Duration (in time units) before any tokens become claimable.
+    /// Must be <= vesting_duration.
+    pub cliff_duration: u64,
+    /// Total duration (in time units) from start to full vesting.
+    /// After start + vesting_duration, all tokens are claimable.
+    pub vesting_duration: u64,
 }
+
+// =============================================================================
+// Errors
+// =============================================================================
 
 #[odra::odra_error]
 pub enum Error {}
 
+// =============================================================================
+// Events
+// =============================================================================
+
+/// Emitted when a new vesting schedule is created.
 #[odra::event]
 pub struct ScheduleCreated {
     pub vesting_id: VestingId,
@@ -40,6 +49,7 @@ pub struct ScheduleCreated {
     pub vesting_duration: u64,
 }
 
+/// Emitted when a beneficiary claims vested tokens.
 #[odra::event]
 pub struct TokensClaimed {
     pub vesting_id: VestingId,
@@ -47,8 +57,46 @@ pub struct TokensClaimed {
     pub amount: U256,
 }
 
-// TODO: Don't forget to mark any functions that might be payable with the odra(payable) attribute
-// TODO: Don't forget to add odra(non_reentrant) attribute anywhere needed
+// =============================================================================
+// Contract
+// =============================================================================
+
+#[odra::module(
+    errors = Error,
+    events = [ScheduleCreated, TokensClaimed],
+)]
+pub struct Vesting {
+    /// Ownership control — only the owner can configure the contract.
+    ownable: SubModule<Ownable>,
+
+    /// Reference to the TailorCoin (BIG) CEP-18 token contract.
+    /// Used to pull tokens in (create_schedule) and transfer tokens out (claim).
+    tailor_coin: External<Cep18ContractRef>,
+
+    /// Reference to the Staking contract (for future auto-staking of vested tokens).
+    /// Currently unused — the staking contract does not yet have stake/unstake functions.
+    /// Kept here so the address can be wired during deployment, ready for when
+    /// staking integration is implemented.
+    staking: External<StakingContractRef>,
+
+    /// Stores each vesting schedule by its unique ID.
+    schedules: Mapping<VestingId, VestingSchedule>,
+
+    /// Auto-incrementing counter for generating unique schedule IDs.
+    schedules_count: Var<VestingId>,
+
+    /// Tracks which addresses are allowed to create vesting schedules.
+    /// Typically the ICO contract is whitelisted so it can create schedules
+    /// on behalf of token purchasers.
+    whitelisted_creators: Mapping<Address, bool>,
+
+    /// Maps (beneficiary, index) to schedule IDs for per-user lookup.
+    /// Use with `user_schedules_counts` to iterate a user's schedules.
+    user_schedules: Mapping<(Address, u32), VestingId>,
+
+    /// Tracks how many schedules each beneficiary has.
+    user_schedules_counts: Mapping<Address, u32>,
+}
 
 #[odra::module]
 impl Vesting {
@@ -130,9 +178,25 @@ impl Vesting {
         todo!()
     }
 
+    #[odra(non_reentrant)]
     pub fn claim(&self, vesting_id: VestingId) {
+        // Check caller
+
         // Transfer claimable tokens
-        // Emit Claimed event
+        let claimable_amt = self.get_claimable_amount(vesting_id);
+        let schedule = self.get_schedule(vesting_id);
+
+        // self.tailor_coin.transfer_from(
+        //     &self.env().self_address,
+        //     &self.env().caller(),
+        //     &claimable_amt,
+        // );
+
+        self.env().emit_native_event(TokensClaimed {
+            vesting_id,
+            beneficiary: schedule.beneficiary,
+            amount: claimable_amt,
+        });
         todo!()
     }
 
