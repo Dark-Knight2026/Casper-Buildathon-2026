@@ -4,7 +4,7 @@ use core::time::Duration;
 
 use reqwest::Client;
 use secrecy::ExposeSecret;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sqlx::PgPool;
 
@@ -29,8 +29,8 @@ pub struct FtTokenActionPage {
 }
 
 /// Type of fungible-token action as returned by CSPR.cloud `/ft-token-action-types`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
-#[serde(from = "u8")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(from = "u8", into = "u8")]
 pub enum FtActionType {
     /// New tokens created (no sender).
     Mint,
@@ -50,6 +50,18 @@ impl From<u8> for FtActionType {
             2 => Self::Transfer,
             3 => Self::Approve,
             other => Self::Unknown(other),
+        }
+    }
+}
+
+impl From<FtActionType> for u8 {
+    #[inline]
+    fn from(value: FtActionType) -> Self {
+        match value {
+            FtActionType::Mint => 1,
+            FtActionType::Transfer => 2,
+            FtActionType::Approve => 3,
+            FtActionType::Unknown(v) => v,
         }
     }
 }

@@ -10,9 +10,65 @@
 //! - **Token holdings** — current CEP-18 balances per user (`token_holdings`).
 //! - **ICO** — detailed ICO purchase log (`ico_purchases`).
 
+use serde::{Deserialize, Serialize};
 use sqlx::PgTransaction;
 
 use crate::{config::ContractType, error::IndexerResult};
+
+// -----------------------------------------------------------------------------
+// Address type
+// -----------------------------------------------------------------------------
+
+/// Address type discriminant for `blockchain_transactions.from_type` / `to_type`.
+///
+/// Matches the CSPR.cloud `/ft-token-actions` convention:
+/// - `0` = regular user account
+/// - `1` = smart contract
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(from = "u8", into = "u8")]
+pub enum HashType {
+    /// Regular user account hash.
+    Account,
+    /// Smart contract hash.
+    Contract,
+    /// Unrecognised address type discriminant.
+    Unknown(u8),
+}
+
+impl From<u8> for HashType {
+    #[inline]
+    fn from(value: u8) -> Self {
+        match value {
+            0 => Self::Account,
+            1 => Self::Contract,
+            other => Self::Unknown(other),
+        }
+    }
+}
+
+impl From<HashType> for u8 {
+    #[inline]
+    fn from(value: HashType) -> Self {
+        match value {
+            HashType::Account => 0,
+            HashType::Contract => 1,
+            HashType::Unknown(v) => v,
+        }
+    }
+}
+
+impl HashType {
+    /// Returns the string label for this address type.
+    #[inline]
+    #[must_use]
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Account => "account",
+            Self::Contract => "contract",
+            Self::Unknown(_) => "unknown",
+        }
+    }
+}
 
 // -----------------------------------------------------------------------------
 // Events
