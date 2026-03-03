@@ -13,3 +13,4 @@ pub mod roles;
 pub mod staking;
 pub mod tailor_coin;
 pub mod treasury;
+pub mod vesting;
