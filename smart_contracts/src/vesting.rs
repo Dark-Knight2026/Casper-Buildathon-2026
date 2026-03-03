@@ -3,12 +3,12 @@ use odra_modules::{access::Ownable, cep18_token::Cep18ContractRef};
 
 use crate::staking::StakingContractRef;
 
+// =============================================================================
+// Vesting Types
+// =============================================================================
+
 /// Unique identifier for each vesting schedule (auto-incrementing counter).
 pub type VestingId = u64;
-
-// =============================================================================
-// Vesting Schedule Data
-// =============================================================================
 
 #[odra::odra_type]
 pub struct VestingSchedule {
@@ -27,13 +27,6 @@ pub struct VestingSchedule {
     /// After start + vesting_duration, all tokens are claimable.
     pub vesting_duration: u64,
 }
-
-// =============================================================================
-// Errors
-// =============================================================================
-
-#[odra::odra_error]
-pub enum Error {}
 
 // =============================================================================
 // Events
@@ -56,6 +49,13 @@ pub struct TokensClaimed {
     pub beneficiary: Address,
     pub amount: U256,
 }
+
+// =============================================================================
+// Errors
+// =============================================================================
+
+#[odra::odra_error]
+pub enum Error {}
 
 // =============================================================================
 // Contract
@@ -100,9 +100,48 @@ pub struct Vesting {
 
 #[odra::module]
 impl Vesting {
+    // =========================================================================
+    // Initialization
+    // =========================================================================
+
     pub fn init(&mut self, owner: Address) {
         self.ownable.init(owner);
     }
+
+    // =========================================================================
+    // Owner-only configuration
+    // =========================================================================
+
+    /// Sets the TailorCoin (BIG) token contract address.
+    /// Must be called before any schedules can be created or claimed.
+    pub fn set_tailor_coin(&mut self, tailor_coin: Address) {
+        self.assert_owner();
+        self.tailor_coin.set(tailor_coin);
+    }
+
+    /// Sets the Staking contract address (for future auto-staking integration).
+    /// Currently unused — kept for forward compatibility.
+    pub fn set_staking(&mut self, staking: Address) {
+        self.assert_owner();
+        self.staking.set(staking);
+    }
+
+    /// Grants an address permission to create vesting schedules.
+    /// Typically used to whitelist the ICO contract.
+    pub fn add_whitelisted_creator(&mut self, creator: Address) {
+        self.assert_owner();
+        self.whitelisted_creators.set(&creator, true);
+    }
+
+    /// Revokes an address's permission to create vesting schedules.
+    pub fn remove_whitelisted_creator(&mut self, creator: Address) {
+        self.assert_owner();
+        self.whitelisted_creators.set(&creator, false);
+    }
+
+    // =========================================================================
+    // View functions
+    // =========================================================================
 
     pub fn get_schedule(&self, vesting_id: VestingId) -> VestingSchedule {
         // return the schedule data basesd on vesting id
@@ -142,31 +181,9 @@ impl Vesting {
         *self.staking.address()
     }
 
-    /// Sets the TailorCoin (BIG) token contract address by the owner
-    pub fn set_tailor_coin(&mut self, tailor_coin: Address) {
-        self.assert_owner();
-        self.tailor_coin.set(tailor_coin);
-    }
-
-    /// Sets the Staking contract address by the owner
-    pub fn set_staking(&mut self, staking: Address) {
-        self.assert_owner();
-        self.staking.set(staking);
-    }
-
-    // // Get a list of the user's positions
-    // pub fn get_user_schedules_by_key(&self, user: Address) -> List<VestingId> {
-    //     // self.user_positions.get_or_default(user);
-    //     todo!()
-    // }
-
-    pub fn add_whitelisted_creator(&self, creator: Address) {
-        todo!()
-    }
-
-    pub fn remove_whitelisted_createor(&self, creator: Address) {
-        todo!()
-    }
+    // =========================================================================
+    // Schedule creation (called by whitelisted contracts like ICO)
+    // =========================================================================
 
     pub fn create_schedule(
         &self,
@@ -177,6 +194,10 @@ impl Vesting {
     ) -> VestingId {
         todo!()
     }
+
+    // =========================================================================
+    // Token claiming (called by beneficiaries)
+    // =========================================================================
 
     #[odra(non_reentrant)]
     pub fn claim(&self, vesting_id: VestingId) {
@@ -200,6 +221,10 @@ impl Vesting {
         todo!()
     }
 
+    // =========================================================================
+    // Ownable delegation
+    // =========================================================================
+
     delegate! {
       to self.ownable {
         fn transfer_ownership(&mut self, new_owner: &Address);
@@ -208,6 +233,10 @@ impl Vesting {
       }
     }
 }
+
+// =============================================================================
+// Internal helpers
+// =============================================================================
 
 impl Vesting {
     #[inline]
