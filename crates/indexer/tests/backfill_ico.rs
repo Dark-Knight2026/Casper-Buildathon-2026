@@ -20,7 +20,7 @@ use serde_json::json;
 use sqlx::PgPool;
 use wiremock::{Mock, MockServer, ResponseTemplate, matchers};
 
-use common::{MIGRATOR, PURCHASE_DEPLOY_HASH, payloads};
+use common::{FakeAddress, MIGRATOR, PURCHASE_DEPLOY_HASH, payloads};
 use indexer::{
     backfill::{BackfillContext, ico},
     config::ContractType,
@@ -483,7 +483,7 @@ async fn successful_purchase_written_to_all_tables(pool: PgPool) {
                 "block_height": 300,
                 "error_message": null,
                 "args": payloads::purchase_args(&json!("50000000"), 1),
-                "caller_public_key": "buyer_public_key_hex",
+                "caller_public_key": FakeAddress::Buyer.as_str(),
                 "timestamp": "2024-06-01T12:00:00.000Z"
             }
         ])))
@@ -514,7 +514,7 @@ async fn successful_purchase_written_to_all_tables(pool: PgPool) {
     .await
     .expect("ico_purchases must have a row for the purchase deploy");
 
-    assert_eq!(purchase.buyer_address, "buyer_public_key_hex");
+    assert_eq!(purchase.buyer_address, FakeAddress::Buyer.as_str());
     assert_eq!(purchase.amount, "1000");
     assert_eq!(purchase.currency, "USDC");
     assert_eq!(purchase.cost, "50000000");
@@ -540,8 +540,9 @@ async fn successful_purchase_written_to_all_tables(pool: PgPool) {
     let balance: Option<String> = sqlx::query_scalar!(
         r"
             SELECT balance FROM token_holdings
-            WHERE user_address = 'buyer_public_key_hex' AND token_type = 'BIG'
-         "
+            WHERE user_address = $1 AND token_type = 'BIG'
+         ",
+        FakeAddress::Buyer.as_str(),
     )
     .fetch_optional(&pool)
     .await

@@ -203,7 +203,7 @@ async fn valid_message_processes_event_and_updates_cursor(pool: PgPool) {
     let msg = payloads::wss_message(
         "big_contract_hash",
         "Transfer",
-        serde_json::json!({ "sender": "alice", "recipient": "bob", "amount": "100" }),
+        payloads::transfer_event_data("100"),
         TRANSFER_DEPLOY_HASH,
         99,
         500,

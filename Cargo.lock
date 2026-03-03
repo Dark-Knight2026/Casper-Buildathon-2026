@@ -1945,6 +1945,7 @@ dependencies = [
 name = "indexer"
 version = "0.1.0"
 dependencies = [
+ "casper-types",
  "chrono",
  "config",
  "dotenv",

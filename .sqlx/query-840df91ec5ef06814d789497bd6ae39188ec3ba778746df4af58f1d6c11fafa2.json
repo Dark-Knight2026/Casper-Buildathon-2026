@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT balance FROM token_holdings\n            WHERE user_address = $1 AND token_type = 'BIG'\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "balance",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "840df91ec5ef06814d789497bd6ae39188ec3ba778746df4af58f1d6c11fafa2"
+}

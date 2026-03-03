@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    address,
     error::IndexerResult,
     event_trait::{EventContext, IndexableEvent},
     events::db::{self, HashType, NewBlockchainTx},
@@ -24,10 +25,15 @@ impl IndexableEvent for SetAllowance {
 
     #[inline]
     async fn process(&self, ctx: &mut EventContext<'_>) -> IndexerResult<()> {
-        // Determine address types via contract registry lookup.
-        let from_type = HashType::lookup(&self.owner, ctx.known_contract_hashes);
-        let to_type = HashType::lookup(&self.spender, ctx.known_contract_hashes);
+        // Normalize addresses to 64-char lowercase hex account hashes.
+        let owner = address::normalize_to_account_hash(&self.owner)?;
+        let spender = address::normalize_to_account_hash(&self.spender)?;
 
+        // Determine address types via contract registry lookup.
+        let from_type = HashType::lookup(&owner, ctx.known_contract_hashes);
+        let to_type = HashType::lookup(&spender, ctx.known_contract_hashes);
+
+        // event_json keeps raw event data from self.
         let event_json = serde_json::to_value(self)?;
         db::insert_blockchain_transaction(
             ctx.tx,
@@ -35,8 +41,8 @@ impl IndexableEvent for SetAllowance {
                 deploy_hash: ctx.deploy_hash,
                 block_number: ctx.block_height.cast_signed(),
                 transaction_type: "token_allowance",
-                from_address: &self.owner,
-                to_address: Some(&self.spender),
+                from_address: &owner,
+                to_address: Some(&spender),
                 amount: Some(&self.amount),
                 currency: None,
                 contract_hash: Some(ctx.contract_hash),
@@ -51,8 +57,8 @@ impl IndexableEvent for SetAllowance {
 
         tracing::debug!(
             deploy = %ctx.deploy_hash,
-            owner = %self.owner,
-            spender = %self.spender,
+            owner = %owner,
+            spender = %spender,
             amount = %self.amount,
             contract = ?ctx.contract_type,
             "Token allowance set"

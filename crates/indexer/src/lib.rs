@@ -25,6 +25,8 @@
 //! processor::process_event(&db_pool, &registry, &raw_event).await?;
 //! ```
 
+/// Address normalization (all formats -> 64-char lowercase hex account hash).
+pub mod address;
 /// REST backfill client for historical event synchronization.
 pub mod backfill;
 /// Indexer configuration and contract registry.

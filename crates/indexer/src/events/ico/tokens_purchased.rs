@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    address,
     config::ContractType,
     error::IndexerResult,
     event_trait::{EventContext, IndexableEvent},
@@ -83,13 +84,16 @@ impl IndexableEvent for TokensPurchased {
 
     #[inline]
     async fn process(&self, ctx: &mut EventContext<'_>) -> IndexerResult<()> {
+        // Normalize caller address to 64-char lowercase hex account hash.
+        let buyer = address::normalize_to_account_hash(ctx.caller)?;
+
         // 1. Insert into ico_purchases table
         db::insert_ico_purchase(
             ctx.tx,
             &db::NewIcoPurchase {
                 transaction_hash: ctx.deploy_hash,
                 block_height: ctx.block_height.cast_signed(),
-                buyer_address: ctx.caller,
+                buyer_address: &buyer,
                 amount: &self.amount,
                 currency: self.currency.as_str(),
                 price: self.price.as_deref(),
@@ -108,7 +112,7 @@ impl IndexableEvent for TokensPurchased {
                 deploy_hash: ctx.deploy_hash,
                 block_number: ctx.block_height.cast_signed(),
                 transaction_type: "token_purchase",
-                from_address: ctx.caller,
+                from_address: &buyer,
                 to_address: Some(ctx.contract_hash),
                 amount: Some(&self.cost),
                 currency: Some(self.currency.as_str()),
@@ -125,7 +129,7 @@ impl IndexableEvent for TokensPurchased {
         // Increase buyer's BIG token balance.
         db::update_token_balance(
             ctx.tx,
-            ctx.caller,
+            &buyer,
             ContractType::Big,
             db::BalanceUpdate::Increase(&self.amount),
         )
@@ -133,7 +137,7 @@ impl IndexableEvent for TokensPurchased {
 
         tracing::debug!(
             deploy = %ctx.deploy_hash,
-            buyer = %ctx.caller,
+            buyer = %buyer,
             amount = %self.amount,
             currency = %self.currency.as_str(),
             "ICO purchase processed, BIG balance updated"

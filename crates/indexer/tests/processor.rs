@@ -23,7 +23,7 @@ use std::collections::HashSet;
 use serde_json::json;
 use sqlx::PgPool;
 
-use common::{MIGRATOR, PURCHASE_DEPLOY_HASH, TRANSFER_DEPLOY_HASH};
+use common::{FakeAddress, MIGRATOR, PURCHASE_DEPLOY_HASH, TRANSFER_DEPLOY_HASH};
 use indexer::{
     config::ContractType,
     events::EventRegistry,
@@ -46,7 +46,7 @@ async fn duplicate_event_is_no_op(pool: PgPool) {
         caller: String::new(),
         contract_type: ContractType::Big,
         event_name: "Transfer".to_owned(),
-        event_data: json!({ "sender": "alice", "recipient": "bob", "amount": "100" }),
+        event_data: common::payloads::transfer_event_data("100"),
         block_timestamp: None,
         transform_idx: None,
     };
@@ -96,7 +96,7 @@ async fn handler_error_rolls_back_blockchain_events_row(pool: PgPool) {
         contract_hash: "ico_contract_hash".to_owned(),
         deploy_hash: PURCHASE_DEPLOY_HASH.to_owned(),
         block_height: 200,
-        caller: "buyer".to_owned(),
+        caller: FakeAddress::Buyer.to_string(),
         contract_type: ContractType::Ico,
         event_name: "TokensPurchased".to_owned(),
         event_data: json!({}),
@@ -221,7 +221,7 @@ async fn reprocessing_after_full_rollback_does_not_double_balance(pool: PgPool) 
         caller: String::new(),
         contract_type: ContractType::Big,
         event_name: "Transfer".to_owned(),
-        event_data: json!({ "sender": "alice", "recipient": "bob", "amount": "100" }),
+        event_data: common::payloads::transfer_event_data("100"),
         block_timestamp: None,
         transform_idx: None,
     };
@@ -248,10 +248,14 @@ async fn reprocessing_after_full_rollback_does_not_double_balance(pool: PgPool) 
     .execute(&pool)
     .await
     .unwrap();
-    sqlx::query!(r"DELETE FROM token_holdings WHERE user_address IN ('alice', 'bob')")
-        .execute(&pool)
-        .await
-        .unwrap();
+    sqlx::query!(
+        r"DELETE FROM token_holdings WHERE user_address IN ($1, $2)",
+        FakeAddress::Alice.as_str(),
+        FakeAddress::Bob.as_str(),
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
 
     // Second call — starts from a clean slate, must produce the same result.
     processor::process_event(&pool, &registry, &HashSet::new(), &event)
@@ -261,8 +265,9 @@ async fn reprocessing_after_full_rollback_does_not_double_balance(pool: PgPool) 
     let balance: Option<String> = sqlx::query_scalar!(
         r"
             SELECT balance FROM token_holdings
-            WHERE user_address = 'bob' AND token_type = 'BIG'
-        "
+            WHERE user_address = $1 AND token_type = 'BIG'
+        ",
+        FakeAddress::Bob.as_str(),
     )
     .fetch_optional(&pool)
     .await
@@ -271,7 +276,6 @@ async fn reprocessing_after_full_rollback_does_not_double_balance(pool: PgPool) 
     assert_eq!(
         balance.as_deref(),
         Some("100"),
-        "recipient balance must equal the transferred amount after re-processing \
-         a fully rolled-back event"
+        "recipient balance must equal the transferred amount after re-processing a fully rolled-back event"
     );
 }

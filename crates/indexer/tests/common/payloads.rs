@@ -6,6 +6,8 @@
 
 use serde_json::{Value, json};
 
+use super::FakeAddress;
+
 /// Build a CSPR.cloud WebSocket message with the given fields.
 ///
 /// Mirrors the `WssMessage` shape expected by `handle_text_message`.
@@ -128,6 +130,15 @@ pub fn ft_actions_single(
             }
         ],
         "page_count": page_count
+    })
+}
+
+/// Build a CEP-18 Transfer `event_data` JSON with Alice as sender and Bob as recipient.
+pub fn transfer_event_data(amount: &str) -> Value {
+    json!({
+        "sender": FakeAddress::Alice.as_str(),
+        "recipient": FakeAddress::Bob.as_str(),
+        "amount": amount
     })
 }
 

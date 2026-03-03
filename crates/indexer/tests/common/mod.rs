@@ -9,6 +9,8 @@
 // binary as "dead code". Suppress that warning for the whole module tree.
 #![allow(dead_code)]
 
+use core::fmt::{Display, Formatter, Result as FmtResult};
+
 use indexer::config::{Casper, ContractRegistry, IndexerConfig};
 use sqlx::PgPool;
 
@@ -30,6 +32,40 @@ pub const PURCHASE_DEPLOY_HASH: &str =
 /// so any test that writes a Transfer or `SetAllowance` must use a 64-char string.
 pub const TRANSFER_DEPLOY_HASH: &str =
     "0000000000000000000000000000000000000000000000000000000000005678";
+
+/// Fake 64-hex account-hash addresses for integration tests.
+///
+/// Each variant maps to a deterministic 64-char lowercase hex string that
+/// passes through `normalize_to_account_hash` unchanged (idempotent).
+#[derive(Debug, Clone, Copy)]
+pub enum FakeAddress {
+    /// Sender / token owner.
+    Alice,
+    /// Recipient.
+    Bob,
+    /// ICO buyer.
+    Buyer,
+    /// Spender contract.
+    ContractX,
+}
+
+impl FakeAddress {
+    /// 64-char lowercase hex account hash.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Alice => "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            Self::Bob => "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            Self::Buyer => "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            Self::ContractX => "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        }
+    }
+}
+
+impl Display for FakeAddress {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        f.write_str(self.as_str())
+    }
+}
 
 /// Disable Row Level Security for all indexer-owned tables.
 ///

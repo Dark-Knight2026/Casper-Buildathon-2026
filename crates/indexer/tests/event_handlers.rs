@@ -20,7 +20,7 @@ use std::collections::HashSet;
 use serde_json::json;
 use sqlx::PgPool;
 
-use common::{MIGRATOR, PURCHASE_DEPLOY_HASH, TRANSFER_DEPLOY_HASH};
+use common::{FakeAddress, MIGRATOR, PURCHASE_DEPLOY_HASH, TRANSFER_DEPLOY_HASH, payloads};
 use indexer::{
     config::ContractType,
     events::EventRegistry,
@@ -47,7 +47,7 @@ async fn transfer_writes_blockchain_transaction_row(pool: PgPool) {
             caller: String::new(),
             contract_type: ContractType::Big,
             event_name: "Transfer".to_owned(),
-            event_data: json!({ "sender": "alice", "recipient": "bob", "amount": "500" }),
+            event_data: payloads::transfer_event_data("500"),
             block_timestamp: None,
             transform_idx: None,
         },
@@ -68,7 +68,7 @@ async fn transfer_writes_blockchain_transaction_row(pool: PgPool) {
     .unwrap();
 
     assert_eq!(row.transaction_type, "token_transfer");
-    assert_eq!(row.from_address, "alice");
+    assert_eq!(row.from_address, FakeAddress::Alice.as_str());
     assert_eq!(row.amount.as_deref(), Some("500"));
 }
 
@@ -91,7 +91,7 @@ async fn transfer_increases_recipient_and_clamps_unknown_sender(pool: PgPool) {
             caller: String::new(),
             contract_type: ContractType::Big,
             event_name: "Transfer".to_owned(),
-            event_data: json!({ "sender": "alice", "recipient": "bob", "amount": "300" }),
+            event_data: payloads::transfer_event_data("300"),
             block_timestamp: None,
             transform_idx: None,
         },
@@ -102,8 +102,9 @@ async fn transfer_increases_recipient_and_clamps_unknown_sender(pool: PgPool) {
     let bob: Option<String> = sqlx::query_scalar!(
         r"
             SELECT balance FROM token_holdings
-            WHERE user_address = 'bob' AND token_type = 'BIG'
-        "
+            WHERE user_address = $1 AND token_type = 'BIG'
+        ",
+        FakeAddress::Bob.as_str(),
     )
     .fetch_optional(&pool)
     .await
@@ -117,8 +118,9 @@ async fn transfer_increases_recipient_and_clamps_unknown_sender(pool: PgPool) {
     let alice: Option<String> = sqlx::query_scalar!(
         r"
             SELECT balance FROM token_holdings
-            WHERE user_address = 'alice' AND token_type = 'BIG'
-        "
+            WHERE user_address = $1 AND token_type = 'BIG'
+        ",
+        FakeAddress::Alice.as_str(),
     )
     .fetch_optional(&pool)
     .await
@@ -139,8 +141,9 @@ async fn transfer_decreases_existing_sender_balance(pool: PgPool) {
     sqlx::query!(
         r"
             INSERT INTO token_holdings (user_address, token_type, balance, last_updated_at)
-            VALUES ('alice', 'BIG', '1000', NOW())
-        "
+            VALUES ($1, 'BIG', '1000', NOW())
+        ",
+        FakeAddress::Alice.as_str(),
     )
     .execute(&pool)
     .await
@@ -157,7 +160,7 @@ async fn transfer_decreases_existing_sender_balance(pool: PgPool) {
             caller: String::new(),
             contract_type: ContractType::Big,
             event_name: "Transfer".to_owned(),
-            event_data: json!({ "sender": "alice", "recipient": "bob", "amount": "400" }),
+            event_data: payloads::transfer_event_data("400"),
             block_timestamp: None,
             transform_idx: None,
         },
@@ -168,8 +171,9 @@ async fn transfer_decreases_existing_sender_balance(pool: PgPool) {
     let alice: Option<String> = sqlx::query_scalar!(
         r"
             SELECT balance FROM token_holdings
-            WHERE user_address = 'alice' AND token_type = 'BIG'
-        "
+            WHERE user_address = $1 AND token_type = 'BIG'
+        ",
+        FakeAddress::Alice.as_str(),
     )
     .fetch_optional(&pool)
     .await
@@ -201,7 +205,11 @@ async fn set_allowance_writes_blockchain_transaction_row(pool: PgPool) {
             caller: String::new(),
             contract_type: ContractType::Big,
             event_name: "SetAllowance".to_owned(),
-            event_data: json!({ "owner": "alice", "spender": "contract_x", "amount": "1000" }),
+            event_data: json!({
+                "owner": FakeAddress::Alice.as_str(),
+                "spender": FakeAddress::ContractX.as_str(),
+                "amount": "1000"
+            }),
             block_timestamp: None,
             transform_idx: None,
         },
@@ -222,7 +230,7 @@ async fn set_allowance_writes_blockchain_transaction_row(pool: PgPool) {
     .unwrap();
 
     assert_eq!(row.transaction_type, "token_allowance");
-    assert_eq!(row.from_address, "alice");
+    assert_eq!(row.from_address, FakeAddress::Alice.as_str());
     assert_eq!(row.amount.as_deref(), Some("1000"));
 }
 
@@ -243,7 +251,7 @@ async fn tokens_purchased_writes_ico_purchase_and_blockchain_transaction(pool: P
             contract_hash: "ico_hash".to_owned(),
             deploy_hash: PURCHASE_DEPLOY_HASH.to_owned(),
             block_height: 100,
-            caller: "buyer".to_owned(),
+            caller: FakeAddress::Buyer.to_string(),
             contract_type: ContractType::Ico,
             event_name: "TokensPurchased".to_owned(),
             event_data: json!({
@@ -271,7 +279,7 @@ async fn tokens_purchased_writes_ico_purchase_and_blockchain_transaction(pool: P
     .await
     .unwrap();
 
-    assert_eq!(purchase.buyer_address, "buyer");
+    assert_eq!(purchase.buyer_address, FakeAddress::Buyer.as_str());
     assert_eq!(purchase.amount, "1000000000");
     assert_eq!(purchase.currency, "CSPR");
 
@@ -288,7 +296,7 @@ async fn tokens_purchased_writes_ico_purchase_and_blockchain_transaction(pool: P
     .unwrap();
 
     assert_eq!(tx_row.transaction_type, "token_purchase");
-    assert_eq!(tx_row.from_address, "buyer");
+    assert_eq!(tx_row.from_address, FakeAddress::Buyer.as_str());
     assert_eq!(tx_row.amount.as_deref(), Some("500000000"));
     assert_eq!(tx_row.currency.as_deref(), Some("CSPR"));
 }
@@ -306,7 +314,7 @@ async fn tokens_purchased_increases_buyer_big_balance(pool: PgPool) {
             contract_hash: "ico_hash".to_owned(),
             deploy_hash: PURCHASE_DEPLOY_HASH.to_owned(),
             block_height: 100,
-            caller: "buyer".to_owned(),
+            caller: FakeAddress::Buyer.to_string(),
             contract_type: ContractType::Ico,
             event_name: "TokensPurchased".to_owned(),
             event_data: json!({
@@ -325,8 +333,9 @@ async fn tokens_purchased_increases_buyer_big_balance(pool: PgPool) {
     let balance: Option<String> = sqlx::query_scalar!(
         r"
             SELECT balance FROM token_holdings
-            WHERE user_address = 'buyer' AND token_type = 'BIG'
-        "
+            WHERE user_address = $1 AND token_type = 'BIG'
+        ",
+        FakeAddress::Buyer.as_str(),
     )
     .fetch_optional(&pool)
     .await
@@ -358,7 +367,7 @@ async fn transfer_usdc_updates_usdc_token_holdings(pool: PgPool) {
             caller: String::new(),
             contract_type: ContractType::Usdc,
             event_name: "Transfer".to_owned(),
-            event_data: json!({ "sender": "alice", "recipient": "bob", "amount": "250" }),
+            event_data: payloads::transfer_event_data("250"),
             block_timestamp: None,
             transform_idx: None,
         },
@@ -369,8 +378,9 @@ async fn transfer_usdc_updates_usdc_token_holdings(pool: PgPool) {
     let bob: Option<String> = sqlx::query_scalar!(
         r"
             SELECT balance FROM token_holdings
-            WHERE user_address = 'bob' AND token_type = 'USDC'
-        "
+            WHERE user_address = $1 AND token_type = 'USDC'
+        ",
+        FakeAddress::Bob.as_str(),
     )
     .fetch_optional(&pool)
     .await
@@ -412,7 +422,7 @@ async fn transfer_usdt_updates_usdt_token_holdings(pool: PgPool) {
             caller: String::new(),
             contract_type: ContractType::Usdt,
             event_name: "Transfer".to_owned(),
-            event_data: json!({ "sender": "alice", "recipient": "bob", "amount": "350" }),
+            event_data: payloads::transfer_event_data("350"),
             block_timestamp: None,
             transform_idx: None,
         },
@@ -423,8 +433,9 @@ async fn transfer_usdt_updates_usdt_token_holdings(pool: PgPool) {
     let bob: Option<String> = sqlx::query_scalar!(
         r"
             SELECT balance FROM token_holdings
-            WHERE user_address = 'bob' AND token_type = 'USDT'
-        "
+            WHERE user_address = $1 AND token_type = 'USDT'
+        ",
+        FakeAddress::Bob.as_str(),
     )
     .fetch_optional(&pool)
     .await
@@ -465,7 +476,7 @@ async fn tokens_purchased_unknown_currency_stored_as_unknown_label(pool: PgPool)
             contract_hash: "ico_hash".to_owned(),
             deploy_hash: PURCHASE_DEPLOY_HASH.to_owned(),
             block_height: 100,
-            caller: "buyer".to_owned(),
+            caller: FakeAddress::Buyer.to_string(),
             contract_type: ContractType::Ico,
             event_name: "TokensPurchased".to_owned(),
             event_data: json!({
@@ -529,7 +540,11 @@ async fn set_allowance_does_not_modify_token_holdings(pool: PgPool) {
             caller: String::new(),
             contract_type: ContractType::Big,
             event_name: "SetAllowance".to_owned(),
-            event_data: json!({ "owner": "alice", "spender": "contract_x", "amount": "1000" }),
+            event_data: json!({
+                "owner": FakeAddress::Alice.as_str(),
+                "spender": FakeAddress::ContractX.as_str(),
+                "amount": "1000"
+            }),
             block_timestamp: None,
             transform_idx: None,
         },
