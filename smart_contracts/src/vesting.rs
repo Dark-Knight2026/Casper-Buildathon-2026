@@ -32,17 +32,37 @@ pub struct VestingSchedule {
 // Events
 // =============================================================================
 
-/// Emitted when a new vesting schedule is created.
+#[odra::event]
+pub struct TailorCoinAddressSet {
+    pub tailor_coin: Address,
+}
+
+#[odra::event]
+pub struct StakingAddressSet {
+    pub staking: Address,
+}
+
+#[odra::event]
+pub struct WhitelistedCreatorAdded {
+    pub creator: Address,
+}
+
+#[odra::event]
+pub struct WhitelistedCreatorRemoved {
+    pub creator: Address,
+}
+
 #[odra::event]
 pub struct ScheduleCreated {
     pub vesting_id: VestingId,
+    pub whitelisted_creator: Address,
     pub beneficiary: Address,
     pub total_amount: U256,
+    pub start_timestamp: u64,
     pub cliff_duration: u64,
     pub vesting_duration: u64,
 }
 
-/// Emitted when a beneficiary claims vested tokens.
 #[odra::event]
 pub struct TokensClaimed {
     pub vesting_id: VestingId,
@@ -119,6 +139,9 @@ impl Vesting {
     pub fn set_tailor_coin(&mut self, tailor_coin: Address) {
         self.assert_owner();
         self.tailor_coin.set(tailor_coin);
+
+        self.env()
+            .emit_native_event(TailorCoinAddressSet { tailor_coin });
     }
 
     /// Sets the Staking contract address (for future auto-staking integration).
@@ -126,6 +149,8 @@ impl Vesting {
     pub fn set_staking(&mut self, staking: Address) {
         self.assert_owner();
         self.staking.set(staking);
+
+        self.env().emit_native_event(StakingAddressSet { staking });
     }
 
     /// Grants an address permission to create vesting schedules.
@@ -133,12 +158,18 @@ impl Vesting {
     pub fn add_whitelisted_creator(&mut self, creator: Address) {
         self.assert_owner();
         self.whitelisted_creators.set(&creator, true);
+
+        self.env()
+            .emit_native_event(WhitelistedCreatorAdded { creator });
     }
 
     /// Revokes an address's permission to create vesting schedules.
     pub fn remove_whitelisted_creator(&mut self, creator: Address) {
         self.assert_owner();
         self.whitelisted_creators.set(&creator, false);
+
+        self.env()
+            .emit_native_event(WhitelistedCreatorRemoved { creator });
     }
 
     // =========================================================================
@@ -257,8 +288,10 @@ impl Vesting {
 
         self.env().emit_native_event(ScheduleCreated {
             vesting_id,
+            whitelisted_creator: self.env().caller(),
             beneficiary,
             total_amount,
+            start_timestamp: self.env().get_block_time(),
             cliff_duration,
             vesting_duration,
         });
@@ -283,6 +316,8 @@ impl Vesting {
         //     &self.env().caller(),
         //     &claimable_amt,
         // );
+
+        // Unstaking
 
         self.env().emit_native_event(TokensClaimed {
             vesting_id,
