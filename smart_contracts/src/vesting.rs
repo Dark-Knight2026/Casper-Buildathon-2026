@@ -416,6 +416,8 @@ mod tests {
         tailor_coin: TailorCoinHostRef,
         vesting: VestingHostRef,
         users: Users,
+        cliff_duration: u64,
+        vesting_duration: u64,
     }
 
     fn setup(env: HostEnv) -> Context {
@@ -440,11 +442,17 @@ mod tests {
         vesting.set_tailor_coin(tailor_coin.address());
         vesting.add_whitelisted_creator(users.owner);
 
+        // Set duration variables
+        let cliff_duration = 6 * ONE_MONTH;
+        let vesting_duration = 12 * ONE_MONTH;
+
         Context {
             env,
             tailor_coin,
             vesting,
             users,
+            cliff_duration,
+            vesting_duration,
         }
     }
 
@@ -568,6 +576,194 @@ mod tests {
         assert!(
             !ctx.vesting.is_whitelisted_creator(&ctx.users.owner),
             "Owner should no longer be whitelisted",
+        );
+    }
+
+    // =============================================================================
+    // create_schedule()
+    // =============================================================================
+
+    #[test]
+    fn test_create_schedule_should_revert_if_not_whitelisted() {
+        let mut ctx = setup(odra_test::env());
+        ctx.env.set_caller(ctx.users.alice);
+
+        assert_eq!(
+            ctx.vesting
+                .try_create_schedule(
+                    ctx.users.alice,
+                    vesting_amount(),
+                    ctx.cliff_duration,
+                    ctx.vesting_duration
+                )
+                .unwrap_err(),
+            Error::CallerNotWhitelisted.into(),
+            "Should revert when caller is not whitelisted",
+        )
+    }
+
+    #[test]
+    fn test_create_schedule_should_revert_if_amount_is_zero() {
+        let mut ctx = setup(odra_test::env());
+
+        assert_eq!(
+            ctx.vesting
+                .try_create_schedule(
+                    ctx.users.alice,
+                    U256::zero(),
+                    ctx.cliff_duration,
+                    ctx.vesting_duration,
+                )
+                .unwrap_err(),
+            Error::InvalidAmount.into(),
+            "Should revert with zero amount"
+        )
+    }
+
+    #[test]
+    fn test_create_schedule_should_revert_if_vesting_duration_is_zero() {
+        let mut ctx = setup(odra_test::env());
+
+        assert_eq!(
+            ctx.vesting
+                .try_create_schedule(
+                    ctx.users.alice,
+                    vesting_amount(),
+                    ctx.cliff_duration,
+                    ctx.vesting_duration,
+                )
+                .unwrap_err(),
+            Error::InvalidVestingDuration.into(),
+            "Should revert with zero vesting duration"
+        )
+    }
+
+    #[test]
+    fn test_create_schedule_should_revert_if_cliff_exceeds_duration() {
+        let mut ctx = setup(odra_test::env());
+
+        let cliff_duration = ctx.vesting_duration + ONE_DAY;
+
+        assert_eq!(
+            ctx.vesting
+                .try_create_schedule(
+                    ctx.users.alice,
+                    vesting_amount(),
+                    cliff_duration,
+                    ctx.vesting_duration,
+                )
+                .unwrap_err(),
+            Error::CliffExceedsVestingDuration.into(),
+            "Should revert if cliff duration exceeds vesting duration"
+        )
+    }
+
+    #[test]
+    fn test_create_schedule_should_create_properly() {
+        let mut ctx = setup(odra_test::env());
+        let cliff = ctx.cliff_duration;
+        let vesting = ctx.vesting_duration;
+        let alice = ctx.users.alice;
+
+        let prev_owner_balance = ctx.tailor_coin.balance_of(&ctx.users.owner);
+        let prev_vesting_balance = ctx.tailor_coin.balance_of(&ctx.vesting.address());
+
+        let vesting_id = create_test_schedule(&mut ctx, alice, vesting_amount(), cliff, vesting);
+
+        // Verify schedule ID.
+        assert_eq!(vesting_id, U256::zero(), "First schedule should have ID 0");
+        assert_eq!(
+            ctx.vesting.get_schedules_count(),
+            U256::from(1),
+            "Schedules count should be 1"
+        );
+
+        // Verify Tailor coins were pulled from the owner into the vestin contract
+        let current_owner_balance = ctx.tailor_coin.balance_of(&ctx.users.owner);
+        let current_vesting_balance = ctx.tailor_coin.balance_of(&ctx.vesting.address());
+        assert_eq!(
+            current_owner_balance,
+            prev_owner_balance - vesting_amount(),
+            "Owner balance should decrease by vesting amount"
+        );
+        assert_eq!(
+            current_vesting_balance,
+            prev_vesting_balance + vesting_amount(),
+            "Vesting contract balance should increase by vesting amount"
+        );
+
+        // Verified stored data
+        let schedule = ctx.vesting.get_schedule(vesting_id).unwrap();
+        assert_eq!(schedule.beneficiary, alice, "Invalid beneficiary");
+        assert_eq!(
+            schedule.total_amount,
+            vesting_amount(),
+            "Invalid total amount"
+        );
+        assert_eq!(
+            schedule.claimed_amount,
+            U256::zero(),
+            "Claimed should be zero"
+        );
+        assert_eq!(schedule.cliff_duration, cliff, "Invalid Cliff duration");
+        assert_eq!(
+            schedule.vesting_duration, vesting,
+            "Invalid Vesting duration"
+        );
+
+        // Verify user tracking
+        assert_eq!(
+            ctx.vesting.get_user_schedules_count(alice),
+            1,
+            "Alice should have 1 schedule"
+        );
+
+        // Verify event.
+        assert!(
+            ctx.env.emitted_native_event(
+                &ctx.vesting,
+                ScheduleCreated {
+                    vesting_id,
+                    whitelisted_creator: ctx.users.owner,
+                    beneficiary: ctx.users.alice,
+                    total_amount: vesting_amount(),
+                    start_timestamp: ctx.env.block_time(),
+                    cliff_duration: cliff,
+                    vesting_duration: vesting,
+                }
+            ),
+            "ScheduleCreated event should be emitted"
+        );
+    }
+
+    #[test]
+    fn test_create_schedule_should_support_multiple_schedules_per_user() {
+        let mut ctx = setup(odra_test::env());
+        let amount = vesting_amount();
+        let cliff = ctx.cliff_duration;
+        let vesting = ctx.vesting_duration;
+        let alice = ctx.users.alice;
+
+        let id_0 = create_test_schedule(&mut ctx, alice, amount, cliff, vesting);
+        let id_1 = create_test_schedule(
+            &mut ctx,
+            alice,
+            amount,
+            cliff + 3 * ONE_MONTH,
+            vesting + 6 * ONE_MONTH,
+        );
+
+        assert_eq!(id_0, U256::zero(), "First schedule ID should be 0");
+        assert_eq!(id_1, U256::from(1), "Second schedule ID should be 1");
+        assert_eq!(
+            ctx.vesting.get_schedules_count(),
+            U256::from(2),
+            "Total schedules should be 2"
+        );
+        assert_eq!(
+            ctx.vesting.get_user_schedules_count(alice),
+            2,
+            "Alice should have 2 schedules"
         );
     }
 }
