@@ -450,4 +450,36 @@ mod tests {
             "Should start with zero schedules"
         );
     }
+
+    // =============================================================================
+    // set_tailor_coin()
+    // =============================================================================
+
+    #[test]
+    fn test_set_tailor_coin_should_revert_if_not_owner_is_calling() {
+        let mut ctx = setup(odra_test::env());
+        ctx.env.set_caller(ctx.users.alice);
+
+        assert_eq!(
+            ctx.vesting
+                .try_set_tailor_coin(ctx.users.alice)
+                .unwrap_err(),
+            AccessError::CallerNotTheOwner.into(),
+            "Should revert when is called by non-owner",
+        );
+    }
+
+    #[test]
+    fn test_set_tailor_coin_should_set_tailor_coin_properly() {
+        let mut ctx = setup(odra_test::env());
+        let new_address = ctx.users.alice;
+
+        ctx.vesting.set_tailor_coin(new_address);
+
+        assert_eq!(
+            ctx.vesting.get_tailor_coin_contract_address(),
+            new_address,
+            "Invalid TailorCoin contract address",
+        );
+    }
 }
