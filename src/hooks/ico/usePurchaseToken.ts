@@ -21,6 +21,11 @@ import {
 import { ICO_CONFIG, getCurrencyRateUsd } from '@/constants/ico';
 import type { PaymentCurrency } from '@/types/ico';
 
+// ── Constants ────────────────────────────────────────────────────────
+
+// ICSPRClickSDK.send() 4th argument is in SECONDS (not milliseconds).
+const WALLET_SIGN_TIMEOUT_SEC = 300; // 5 minutes
+
 // ── Types ───────────────────────────────────────────────────────────
 
 export type PurchaseStep =
@@ -153,7 +158,7 @@ export function usePurchaseToken(
             approvalJSON as object,
             publicKey,
             true,
-            300,
+            WALLET_SIGN_TIMEOUT_SEC,
           );
 
           if (!approvalResult || approvalResult.cancelled) {
@@ -182,7 +187,7 @@ export function usePurchaseToken(
           purchaseJSON as object,
           publicKey,
           true,
-          300,
+          WALLET_SIGN_TIMEOUT_SEC,
         );
 
         if (!purchaseResult || purchaseResult.cancelled) {
