@@ -1,11 +1,13 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   toRawAmount,
   fromRawAmount,
   validatePurchase,
   calculateTokensReceived,
   createPurchaseTransaction,
+  checkApprovalNeeded,
 } from '@/services/ico/icoPurchaseService';
+import { getAllowance } from '@/services/ico/cep18Service';
 // Schema loaded inline to avoid path alias issues in test environment
 const icoSchema = JSON.parse(
   require('fs').readFileSync(
@@ -314,5 +316,45 @@ describe('createPurchaseTransaction args match contract schema', () => {
 
     expect(capturedArgsMap).toHaveProperty('__cargo_purse');
     expect((capturedArgsMap.__cargo_purse as { type: string }).type).toBe('URef');
+  });
+});
+
+// ── checkApprovalNeeded ─────────────────────────────────────────────
+
+describe('checkApprovalNeeded', () => {
+  const mockGetAllowance = vi.mocked(getAllowance);
+
+  beforeEach(() => {
+    mockGetAllowance.mockReset();
+  });
+
+  it('returns needed: false for CSPR without querying allowance', async () => {
+    const result = await checkApprovalNeeded('account-hash-abc', '100', 'CSPR');
+    expect(result).toEqual({ needed: false, currentAllowance: 0n, requiredAmount: 0n });
+    expect(mockGetAllowance).not.toHaveBeenCalled();
+  });
+
+  it('returns needed: false for CARD without querying allowance', async () => {
+    const result = await checkApprovalNeeded('account-hash-abc', '100', 'CARD');
+    expect(result).toEqual({ needed: false, currentAllowance: 0n, requiredAmount: 0n });
+    expect(mockGetAllowance).not.toHaveBeenCalled();
+  });
+
+  it('returns needed: true when currentAllowance < requiredAmount', async () => {
+    // 50 USDT required, allowance is only 10 USDT (6 decimals)
+    mockGetAllowance.mockResolvedValue(10_000_000n);
+    const result = await checkApprovalNeeded('account-hash-abc', '50', 'USDT');
+    expect(result.needed).toBe(true);
+    expect(result.requiredAmount).toBe(50_000_000n);
+    expect(result.currentAllowance).toBe(10_000_000n);
+  });
+
+  it('returns needed: false when currentAllowance >= requiredAmount', async () => {
+    // 50 USDT required, allowance is 100 USDT (6 decimals)
+    mockGetAllowance.mockResolvedValue(100_000_000n);
+    const result = await checkApprovalNeeded('account-hash-abc', '50', 'USDT');
+    expect(result.needed).toBe(false);
+    expect(result.requiredAmount).toBe(50_000_000n);
+    expect(result.currentAllowance).toBe(100_000_000n);
   });
 });

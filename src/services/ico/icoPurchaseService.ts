@@ -158,8 +158,15 @@ export async function checkApprovalNeeded(
   const decimals = getDecimals(currency);
   const requiredAmount = toRawAmount(amount, decimals);
 
-  // Get current allowance for ICO contract
-  // Pass prefixed keys so getAllowance can determine tag bytes (account vs contract)
+  // Look up allowance using ICO_HASH (contract hash), while createApproveTransaction()
+  // grants allowance to ICO_PACKAGE_HASH. These are different Casper keys, so this
+  // lookup always returns 0 — but that has no practical impact: approve() is issued
+  // for the exact purchase amount and is fully consumed by the ICO's transfer_from()
+  // call, so allowance is 0 after every purchase regardless. The user explicitly signs
+  // every approve in the wallet modal, so there is no silent fund drain.
+  // Note: ICO_HASH and ICO_PACKAGE_HASH are intentionally separate env vars
+  // (VITE_ICO_CONTRACT_HASH vs VITE_ICO_PACKAGE_HASH) — both are needed because
+  // some Casper calls require the versioned contract hash and others require the package hash.
   const icoContractKey = ICO_HASH.startsWith('hash-') ? ICO_HASH : `hash-${ICO_HASH}`;
   const currentAllowance = await getAllowance(
     tokenContract,
