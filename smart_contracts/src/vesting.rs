@@ -328,3 +328,106 @@ impl Vesting {
         todo!()
     }
 }
+
+// =============================================================================
+// Tests
+// =============================================================================
+
+#[cfg(test)]
+mod tests {
+    use odra::{
+        casper_types::U256,
+        host::{Deployer, HostEnv, HostRef},
+    };
+    use odra_modules::access::errors::Error as AccessError;
+
+    use crate::tailor_coin::{TailorCoin, TailorCoinHostRef, TailorCoinInitArgs};
+
+    use super::*;
+
+    // =============================================================================
+    // Test Constants
+    // =============================================================================
+
+    const ONE_MINUTE: u64 = 60;
+    const ONE_HOUR: u64 = 60 * ONE_MINUTE;
+    const ONE_DAY: u64 = 24 * ONE_HOUR;
+    const ONE_MONTH: u64 = 30 * ONE_DAY;
+
+    const INITIAL_SUPPLY: u64 = 5_000_000_000;
+
+    /// Initial supply converted into wei
+    fn initial_supply() -> U256 {
+        U256::from(INITIAL_SUPPLY) * U256::from(10).pow(U256::from(18))
+    }
+
+    /// Some vesting amount for tests: 1000 tokens converted to wei
+    fn vesting_amount() -> U256 {
+        U256::from(1000u64) * U256::from(10).pow(U256::from(18))
+    }
+
+    // =============================================================================
+    // Test Context
+    // =============================================================================
+
+    struct Users {
+        owner: Address,
+        alice: Address,
+        bob: Address,
+    }
+
+    struct Context {
+        env: HostEnv,
+        tailor_coin: TailorCoinHostRef,
+        vesting: VestingHostRef,
+        users: Users,
+    }
+
+    fn setup(env: HostEnv) -> Context {
+        let users = Users {
+            owner: env.get_account(0),
+            alice: env.get_account(1),
+            bob: env.get_account(2),
+        };
+
+        let tailor_coin = TailorCoin::deploy(
+            &env,
+            TailorCoinInitArgs {
+                symbol: String::from("BIG"),
+                name: String::from("BIG"),
+                decimals: 18,
+                initial_supply: initial_supply(),
+            },
+        );
+
+        // Set up Vesting contract
+        let mut vesting = Vesting::deploy(&env, VestingInitArgs { owner: users.owner });
+        vesting.set_tailor_coin(tailor_coin.address());
+        vesting.add_whitelisted_creator(users.owner);
+
+        Context {
+            env,
+            tailor_coin,
+            vesting,
+            users,
+        }
+    }
+
+    // =============================================================================
+    // Helpers
+    // =============================================================================
+
+    fn create_test_schedule(
+        ctx: &mut Context,
+        beneficiary: Address,
+        total_amount: U256,
+        cliff_duration: u64,
+        vesting_duration: u64,
+    ) -> VestingId {
+        ctx.tailor_coin
+            .approve(&ctx.vesting.address(), &total_amount);
+        ctx.vesting
+            .create_schedule(beneficiary, total_amount, cliff_duration, vesting_duration)
+    }
+
+}
