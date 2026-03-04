@@ -80,6 +80,9 @@ pub enum Error {
     InvalidAmount = 65_002,
     InvalidVestingDuration = 65_003,
     CliffExceedsVestingDuration = 65_004,
+    ScheduleNotFound = 65_005,
+    CallerNotBeneficiary = 65_006,
+    NothingToClaim = 65_007,
 }
 
 // =============================================================================
@@ -303,29 +306,45 @@ impl Vesting {
     // Token claiming (called by beneficiaries)
     // =========================================================================
 
+    /// Claims all unclaimed-vested tokens from a specific schedule
+    ///
+    /// Calculates how many tokens vested so far minus whats already been claimed,
+    /// then transfers the difference to the beneficiary
+    ///
+    /// @dev only the schedule's beneficiary can call this
     #[odra(non_reentrant)]
-    pub fn claim(&self, vesting_id: VestingId) {
-        // Check caller
+    pub fn claim(&mut self, vesting_id: VestingId) {
+        // TODO: Need to consider unstaking
 
-        // Transfer claimable tokens
-        let claimable_amt = self.get_claimable_amount(vesting_id);
-        let schedule = self.get_schedule(vesting_id);
+        let mut schedule = self
+            .schedules
+            .get(&vesting_id)
+            .unwrap_or_revert_with(&self.env(), Error::ScheduleNotFound);
 
-        // self.tailor_coin.transfer_from(
-        //     &self.env().self_address,
-        //     &self.env().caller(),
-        //     &claimable_amt,
-        // );
+        // Only beneficiary can claim
+        if self.env().caller() != schedule.beneficiary {
+            self.env().revert(Error::CallerNotBeneficiary);
+        }
 
-        // Unstaking
+        // Calculate how much vested minus whats already been claimed
+        let vested = self.calculate_vested_amt(&schedule);
+        let claimable = vested - schedule.claimed_amount;
+
+        if claimable.is_zero() {
+            self.env().revert(Error::NothingToClaim);
+        }
+
+        // Update claimed amount before transferring
+        schedule.claimed_amount += claimable;
+        self.schedules.set(&vesting_id, schedule.clone());
+
+        self.tailor_coin.transfer(&schedule.beneficiary, &claimable);
 
         self.env().emit_native_event(TokensClaimed {
             vesting_id,
-            // TODO: Obviously need to fix this to not use unwrap()
-            beneficiary: schedule.unwrap().beneficiary,
-            amount: claimable_amt,
+            beneficiary: schedule.beneficiary,
+            amount: claimable,
         });
-        todo!()
     }
 
     // =========================================================================
@@ -359,8 +378,24 @@ impl Vesting {
         }
     }
 
+    /// @dev this returns TOTAL vested amount. It does not account for prior claims
     fn calculate_vested_amt(&self, schedule: &VestingSchedule) -> U256 {
-        todo!()
+        let now = self.env().get_block_time();
+
+        if now < schedule.start_timestamp + schedule.cliff_duration {
+            // still in the cliff period, nothing vested yet
+            U256::zero()
+        } else if now >= schedule.start_timestamp + schedule.vesting_duration {
+            // past the vesting period, everything is vested
+            schedule.total_amount
+        } else {
+            // TODO: I'm not sure if this straight linear vesting is congruent with the white paper.
+            //       This needs to be checked especially since I think different distributions have //       different vesting strategies
+            // linear vesting when between cliff and vesting periods
+            // vested = total_amount * elapsed_since_start / total_vesting_duration
+            let elapsed = now - schedule.start_timestamp;
+            schedule.total_amount * U256::from(elapsed) / U256::from(schedule.vesting_duration)
+        }
     }
 }
 
