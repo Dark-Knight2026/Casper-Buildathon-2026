@@ -53,8 +53,6 @@
     --ico-state-countdown: 214 49% 23%;    /* #1E3557 - Navy for countdown */
     --ico-state-active: 163 59% 30%;       /* #1F7A63 - Green for active state */
     --ico-state-dashboard: 214 49% 23%;    /* #1E3557 - Navy for dashboard */
-    --ico-state-completed: 163 50% 36%;    /* #2E8B6F - Green for completed */
-
     /* ICO Progress Bar */
     --ico-progress-bg: 220 14% 90%;        /* #E3E5E8 - Progress bar background */
     --ico-progress-fill: 163 59% 30%;      /* #1F7A63 - Progress bar fill (green) */
@@ -134,8 +132,6 @@
     --ico-state-countdown: 220 70% 55%;
     --ico-state-active: 142 76% 42%;
     --ico-state-dashboard: 221 83% 58%;
-    --ico-state-completed: 142 69% 63%;
-
     /* ICO Progress Bar - Dark Mode */
     --ico-progress-bg: 222 47% 18%;
     --ico-progress-fill: 142 76% 42%;
