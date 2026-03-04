@@ -32,5 +32,7 @@ pub mod tax;
 
 // Re-exports
 pub use auth::AuthUser;
-pub use common::{AppState, Claims, Config, PropertyId, RedisStore, ServerError, UserId, UserRole};
+pub use common::{
+    AppState, Claims, PropertyId, RedisStore, ServerConfig, ServerError, UserId, UserRole,
+};
 pub use openapi::ApiDoc;

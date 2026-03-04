@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO blockchain_events (event_type, contract_address, transaction_hash, block_number, event_data)\n            VALUES ($1, $2, $3, $4, $5)\n            ON CONFLICT (transaction_hash, event_type, contract_address) DO NOTHING\n            RETURNING id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Int8",
+        "Jsonb"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "6e366fae3970b37fe50385776bb87a5f9e6d25bb2c39afb4641d48893f0c6e25"
+}

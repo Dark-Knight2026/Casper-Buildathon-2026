@@ -9,7 +9,7 @@ use axum::{
 };
 use chrono::{Duration, Utc};
 use jsonwebtoken::{EncodingKey, Header};
-use rand::{Rng, distr::Alphanumeric};
+use rand::{RngExt, distr::Alphanumeric};
 use secrecy::ExposeSecret;
 use sha2::{Digest, Sha256};
 

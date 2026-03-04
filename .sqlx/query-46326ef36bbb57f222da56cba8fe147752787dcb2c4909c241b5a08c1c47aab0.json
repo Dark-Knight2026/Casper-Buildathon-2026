@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO event_cursors (stream_type, contract_hash, cursor_value, last_updated_at)\n            VALUES ('backfill', 'big_hash', 500, NOW())\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "46326ef36bbb57f222da56cba8fe147752787dcb2c4909c241b5a08c1c47aab0"
+}

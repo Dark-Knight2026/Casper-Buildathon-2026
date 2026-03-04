@@ -1,3 +1,5 @@
+SHELL := /bin/bash
+
 .PHONY:   \
  help     \
  env_up   \
@@ -26,9 +28,11 @@ env_up: ## Start Supabase and Redis
 	@echo "[*] Starting Redis..."
 	@docker compose up -d redis
 
-env_down: ## Stop Supabase and Redis
+env_down: ## Stop Supabase, Redis, and test database
 	@echo "[*] Stopping Redis..."
 	@docker compose down --volumes
+	@echo "[*] Stopping test database..."
+	@docker compose -p leasefi-test -f docker-compose.test.yml down --volumes
 	@echo "[*] Stopping Supabase..."
 	@supabase stop
 
@@ -73,11 +77,14 @@ openapi: ## Check all ToSchema types are registered in openapi.rs
 prepare: ## Generate SQLx offline query metadata for CI builds (requires bash/zsh)
 	@echo "[*] Generating SQLx offline query metadata..."
 	@test -f .env || (echo "Error: .env file not found" && exit 1)
-	@set -a && . ./.env && set +a && cargo sqlx prepare --workspace -- --all-features --tests
+	@set -eo pipefail; \
+		set -a; source ./.env; set +a; \
+		cargo sqlx prepare --workspace -- --all-features --tests 2>&1 \
+		| sed 's/^query/    query/'
 
 test: ## Run nextest (use ARGS="..." for extra arguments)
 	@echo "[*] Starting test database..."
-	@docker compose -f docker-compose.test.yml up -d --wait
+	@docker compose -p leasefi-test -f docker-compose.test.yml up -d --wait
 	@echo "[*] Running tests..."
 	@DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5433/postgres \
 		cargo nextest run --all-features --no-fail-fast $(ARGS)

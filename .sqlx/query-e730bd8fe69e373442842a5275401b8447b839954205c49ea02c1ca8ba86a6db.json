@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                    INSERT INTO token_holdings as th (user_address, token_type, balance, last_updated_at)\n                    VALUES ($1, $2, $3, NOW())\n                    ON CONFLICT (user_address, token_type) DO UPDATE SET\n                        balance         = (th.balance::NUMERIC + $3::TEXT::NUMERIC)::TEXT,\n                        last_updated_at = NOW()\n                ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e730bd8fe69e373442842a5275401b8447b839954205c49ea02c1ca8ba86a6db"
+}

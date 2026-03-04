@@ -1,8 +1,8 @@
 [package]
 name = "api"
-version.workspace = true
-edition.workspace = true
-publish.workspace = true
+version = { workspace = true }
+edition = { workspace = true }
+publish = { workspace = true }
 
 [lints]
 workspace = true
@@ -11,6 +11,7 @@ workspace = true
 axum = { workspace = true }
 casper-types = { workspace = true }
 chrono = { workspace = true }
+config = { workspace = true }
 dotenv = { workspace = true }
 hex = { workspace = true }
 jsonwebtoken = { workspace = true }

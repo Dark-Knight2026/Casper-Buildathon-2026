@@ -4,7 +4,7 @@ mod common;
 
 use axum::http::{Method, StatusCode};
 use casper_types::{AsymmetricType, PublicKey, SecretKey, crypto};
-use rand::RngCore;
+use rand::Rng;
 use redis::AsyncCommands;
 use sqlx::PgPool;
 

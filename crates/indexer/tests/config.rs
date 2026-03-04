@@ -1,0 +1,391 @@
+//! Tests for `IndexerConfig::from_env()` validation logic.
+//!
+//! All tests are `#[serial]` because `from_env()` reads process-global env vars.
+//! The `unsafe` blocks are sound: `serial_test` guarantees no concurrent access.
+
+#![allow(unsafe_code)]
+
+use secrecy::ExposeSecret;
+use serial_test::serial;
+
+use indexer::config::{ContractEntry, ContractRegistry, ContractType, IndexerConfig};
+
+/// All env var keys used by `IndexerConfig::from_env()`.
+const CONFIG_ENV_VARS: [&str; 7] = [
+    "DATABASE_URL",
+    "CSPR_CLOUD_API_TOKEN",
+    "CSPR_CLOUD_REST_URL",
+    "CSPR_CLOUD_WSS_URL",
+    "BACKFILL_RATE_LIMIT_MS",
+    "WSS_RECONNECT_DELAY_MS",
+    "RUST_LOG",
+];
+
+/// Contract hash env var keys.
+const CONTRACT_ENV_VARS: [&str; 10] = [
+    "CONTRACT_USDC",
+    "CONTRACT_USDT",
+    "CONTRACT_BIG",
+    "CONTRACT_TREASURY",
+    "CONTRACT_ICO",
+    "CONTRACT_LEASE",
+    "CONTRACT_ESCROW",
+    "CONTRACT_NFT",
+    "CONTRACT_ROLES",
+    "CONTRACT_STAKING",
+];
+
+/// Start-block env var keys (one per contract type).
+const START_BLOCK_ENV_VARS: [&str; 10] = [
+    "START_BLOCK_CONTRACT_USDC",
+    "START_BLOCK_CONTRACT_USDT",
+    "START_BLOCK_CONTRACT_BIG",
+    "START_BLOCK_CONTRACT_TREASURY",
+    "START_BLOCK_CONTRACT_ICO",
+    "START_BLOCK_CONTRACT_LEASE",
+    "START_BLOCK_CONTRACT_ESCROW",
+    "START_BLOCK_CONTRACT_NFT",
+    "START_BLOCK_CONTRACT_ROLES",
+    "START_BLOCK_CONTRACT_STAKING",
+];
+
+/// Removes all indexer-related env vars to ensure test isolation.
+///
+/// # Safety
+///
+/// Must only be called when no other threads read these env vars (ensured by `#[serial]`).
+unsafe fn clear_all_env_vars() {
+    for key in CONFIG_ENV_VARS {
+        // SAFETY: #[serial] ensures no concurrent env var access.
+        unsafe { std::env::remove_var(key) };
+    }
+    for key in CONTRACT_ENV_VARS {
+        // SAFETY: #[serial] ensures no concurrent env var access.
+        unsafe { std::env::remove_var(key) };
+    }
+    for key in START_BLOCK_ENV_VARS {
+        // SAFETY: #[serial] ensures no concurrent env var access.
+        unsafe { std::env::remove_var(key) };
+    }
+}
+
+/// Sets the required env vars with valid values.
+///
+/// # Safety
+///
+/// Must only be called when no other threads read these env vars (ensured by `#[serial]`).
+unsafe fn set_required_env_vars() {
+    // SAFETY: #[serial] ensures no concurrent env var access.
+    unsafe {
+        std::env::set_var("DATABASE_URL", "postgres://localhost/test");
+        std::env::set_var("CSPR_CLOUD_API_TOKEN", "test-token-123");
+        std::env::set_var("CSPR_CLOUD_REST_URL", "https://api.testnet.cspr.cloud");
+        std::env::set_var("CSPR_CLOUD_WSS_URL", "wss://streaming.testnet.cspr.cloud");
+    }
+}
+
+#[test]
+#[serial]
+fn from_env_succeeds_with_all_required_vars() {
+    // SAFETY: #[serial] ensures no concurrent env var access.
+    unsafe {
+        clear_all_env_vars();
+        set_required_env_vars();
+    }
+
+    let config = IndexerConfig::from_env().expect("Should succeed with all required vars");
+
+    assert_eq!(
+        config.database_url.expose_secret(),
+        "postgres://localhost/test"
+    );
+    assert_eq!(config.casper.rest_url, "https://api.testnet.cspr.cloud");
+    assert_eq!(config.casper.wss_url, "wss://streaming.testnet.cspr.cloud");
+    assert_eq!(config.backfill_rate_limit_ms, 200, "Default rate limit");
+    assert_eq!(
+        config.wss_reconnect_delay_ms, 1000,
+        "Default reconnect delay"
+    );
+}
+
+#[test]
+#[serial]
+fn from_env_fails_without_database_url() {
+    // SAFETY: #[serial] ensures no concurrent env var access.
+    unsafe {
+        clear_all_env_vars();
+        set_required_env_vars();
+        std::env::remove_var("DATABASE_URL");
+    }
+
+    let err = IndexerConfig::from_env().unwrap_err();
+    assert!(
+        err.to_string().contains("database_url"),
+        "Unexpected error: {err}"
+    );
+}
+
+#[test]
+#[serial]
+fn from_env_fails_without_api_token() {
+    // SAFETY: #[serial] ensures no concurrent env var access.
+    unsafe {
+        clear_all_env_vars();
+        set_required_env_vars();
+        std::env::remove_var("CSPR_CLOUD_API_TOKEN");
+    }
+
+    let err = IndexerConfig::from_env().unwrap_err();
+    assert!(
+        err.to_string().contains("cspr_cloud_api_token"),
+        "Unexpected error: {err}"
+    );
+}
+
+#[test]
+#[serial]
+fn from_env_fails_without_rest_url() {
+    // SAFETY: #[serial] ensures no concurrent env var access.
+    unsafe {
+        clear_all_env_vars();
+        set_required_env_vars();
+        std::env::remove_var("CSPR_CLOUD_REST_URL");
+    }
+
+    let err = IndexerConfig::from_env().unwrap_err();
+    assert!(
+        err.to_string().contains("cspr_cloud_rest_url"),
+        "Unexpected error: {err}"
+    );
+}
+
+#[test]
+#[serial]
+fn from_env_fails_with_invalid_rest_url_scheme() {
+    // SAFETY: #[serial] ensures no concurrent env var access.
+    unsafe {
+        clear_all_env_vars();
+        set_required_env_vars();
+        std::env::set_var("CSPR_CLOUD_REST_URL", "http://api.cspr.cloud");
+    }
+
+    let err = IndexerConfig::from_env().unwrap_err();
+    assert!(
+        err.to_string()
+            .contains("CSPR_CLOUD_REST_URL must start with https://"),
+        "Unexpected error: {err}"
+    );
+}
+
+#[test]
+#[serial]
+fn from_env_fails_with_invalid_wss_url_scheme() {
+    // SAFETY: #[serial] ensures no concurrent env var access.
+    unsafe {
+        clear_all_env_vars();
+        set_required_env_vars();
+        std::env::set_var("CSPR_CLOUD_WSS_URL", "ws://streaming.cspr.cloud");
+    }
+
+    let err = IndexerConfig::from_env().unwrap_err();
+    assert!(
+        err.to_string()
+            .contains("CSPR_CLOUD_WSS_URL must start with wss://"),
+        "Unexpected error: {err}"
+    );
+}
+
+#[test]
+#[serial]
+fn from_env_rejects_invalid_rate_limit() {
+    // SAFETY: #[serial] ensures no concurrent env var access.
+    unsafe {
+        clear_all_env_vars();
+        set_required_env_vars();
+        std::env::set_var("BACKFILL_RATE_LIMIT_MS", "not_a_number");
+    }
+
+    let err = IndexerConfig::from_env().unwrap_err();
+    assert!(
+        err.to_string().contains("backfill_rate_limit_ms"),
+        "Unexpected error: {err}"
+    );
+}
+
+#[test]
+#[serial]
+fn from_env_rejects_invalid_reconnect_delay() {
+    // SAFETY: #[serial] ensures no concurrent env var access.
+    unsafe {
+        clear_all_env_vars();
+        set_required_env_vars();
+        std::env::set_var("WSS_RECONNECT_DELAY_MS", "abc");
+    }
+
+    let err = IndexerConfig::from_env().unwrap_err();
+    assert!(
+        err.to_string().contains("wss_reconnect_delay_ms"),
+        "Unexpected error: {err}"
+    );
+}
+
+#[test]
+#[serial]
+fn from_env_loads_custom_rate_limit_and_reconnect_delay() {
+    // SAFETY: #[serial] ensures no concurrent env var access.
+    unsafe {
+        clear_all_env_vars();
+        set_required_env_vars();
+        std::env::set_var("BACKFILL_RATE_LIMIT_MS", "500");
+        std::env::set_var("WSS_RECONNECT_DELAY_MS", "3000");
+    }
+
+    let config = IndexerConfig::from_env().expect("Should succeed");
+    assert_eq!(config.backfill_rate_limit_ms, 500);
+    assert_eq!(config.wss_reconnect_delay_ms, 3000);
+}
+
+#[test]
+fn active_contracts_returns_empty_for_default_registry() {
+    let registry = ContractRegistry::default();
+    assert!(registry.active_contracts().is_empty());
+}
+
+#[test]
+fn active_contracts_returns_only_configured_contracts() {
+    let registry = ContractRegistry {
+        ico: Some(ContractEntry::new("abc123", 0)),
+        treasury: Some(ContractEntry::new("def456", 0)),
+        ..ContractRegistry::default()
+    };
+
+    let active = registry.active_contracts();
+    assert_eq!(active.len(), 2);
+    assert!(
+        active
+            .iter()
+            .any(|c| c.contract_type == ContractType::Ico && c.hash == "abc123")
+    );
+    assert!(
+        active
+            .iter()
+            .any(|c| c.contract_type == ContractType::Treasury && c.hash == "def456")
+    );
+}
+
+#[test]
+fn active_contracts_returns_all_when_fully_configured() {
+    let registry = ContractRegistry {
+        usdc: Some(ContractEntry::new("1", 0)),
+        usdt: Some(ContractEntry::new("2", 0)),
+        big: Some(ContractEntry::new("3", 0)),
+        treasury: Some(ContractEntry::new("4", 0)),
+        ico: Some(ContractEntry::new("5", 0)),
+        lease: Some(ContractEntry::new("6", 0)),
+        escrow: Some(ContractEntry::new("7", 0)),
+        nft: Some(ContractEntry::new("8", 0)),
+        roles: Some(ContractEntry::new("9", 0)),
+        staking: Some(ContractEntry::new("10", 0)),
+    };
+
+    assert_eq!(registry.active_contracts().len(), 10);
+}
+
+#[test]
+fn active_contracts_defaults_start_block_to_zero() {
+    let registry = ContractRegistry {
+        ico: Some(ContractEntry::new("abc", 0)),
+        ..ContractRegistry::default()
+    };
+
+    let active = registry.active_contracts();
+    assert_eq!(active[0].start_block, 0, "start_block should default to 0");
+}
+
+#[test]
+#[serial]
+fn active_contracts_reads_start_block_from_env() {
+    // SAFETY: #[serial] ensures no concurrent env var access.
+    unsafe {
+        clear_all_env_vars();
+        std::env::set_var("CONTRACT_ICO", "abc");
+        std::env::set_var("START_BLOCK_CONTRACT_ICO", "12345");
+    }
+
+    let registry = ContractRegistry::from_env();
+    let active = registry.active_contracts();
+    assert_eq!(active[0].start_block, 12_345);
+}
+
+#[test]
+#[serial]
+fn active_contracts_falls_back_to_zero_on_invalid_start_block() {
+    // SAFETY: #[serial] ensures no concurrent env var access.
+    unsafe {
+        clear_all_env_vars();
+        std::env::set_var("CONTRACT_ICO", "abc");
+        std::env::set_var("START_BLOCK_CONTRACT_ICO", "not_a_number");
+    }
+
+    let registry = ContractRegistry::from_env();
+    let active = registry.active_contracts();
+    assert_eq!(
+        active[0].start_block, 0,
+        "Invalid start_block should fall back to 0"
+    );
+}
+
+#[test]
+#[serial]
+fn active_contracts_reads_start_block_per_contract() {
+    // SAFETY: #[serial] ensures no concurrent env var access.
+    unsafe {
+        clear_all_env_vars();
+        std::env::set_var("CONTRACT_ICO", "ico_hash");
+        std::env::set_var("CONTRACT_BIG", "big_hash");
+        std::env::set_var("CONTRACT_USDC", "usdc_hash");
+        std::env::set_var("START_BLOCK_CONTRACT_ICO", "12345");
+        std::env::set_var("START_BLOCK_CONTRACT_BIG", "12000");
+        std::env::set_var("START_BLOCK_CONTRACT_USDC", "0");
+    }
+
+    let registry = ContractRegistry::from_env();
+    let active = registry.active_contracts();
+
+    let ico = active
+        .iter()
+        .find(|c| c.contract_type == ContractType::Ico)
+        .unwrap();
+    let big = active
+        .iter()
+        .find(|c| c.contract_type == ContractType::Big)
+        .unwrap();
+    let usdc = active
+        .iter()
+        .find(|c| c.contract_type == ContractType::Usdc)
+        .unwrap();
+
+    assert_eq!(ico.start_block, 12_345);
+    assert_eq!(big.start_block, 12_000);
+    assert_eq!(usdc.start_block, 0);
+}
+
+#[test]
+fn contract_type_display_produces_correct_labels() {
+    let cases = [
+        (ContractType::Usdc, "usdc"),
+        (ContractType::Usdt, "usdt"),
+        (ContractType::Big, "big"),
+        (ContractType::Treasury, "treasury"),
+        (ContractType::Ico, "ico"),
+        (ContractType::Lease, "lease"),
+        (ContractType::Escrow, "escrow"),
+        (ContractType::Nft, "nft"),
+        (ContractType::Roles, "roles"),
+        (ContractType::Staking, "staking"),
+    ];
+
+    for (ct, expected) in cases {
+        assert_eq!(ct.as_str(), expected, "Display mismatch for {ct:?}");
+    }
+}

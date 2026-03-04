@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT cursor_value FROM event_cursors\n            WHERE stream_type = 'backfill' AND contract_hash = 'ico_hash'\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "cursor_value",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "5f8a585d3eb1a3334eebf8f9b040c8c5c9be01769cf18cf7eb90dd1ad6a54957"
+}
