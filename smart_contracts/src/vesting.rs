@@ -1,14 +1,14 @@
 use odra::{casper_types::U256, prelude::*, ContractRef};
 use odra_modules::{access::Ownable, cep18_token::Cep18ContractRef};
 
-use crate::{staking::StakingContractRef, vesting};
+use crate::staking::StakingContractRef;
 
 // =============================================================================
 // Vesting Types
 // =============================================================================
 
 /// Unique identifier for each vesting schedule (auto-incrementing counter).
-pub type VestingId = u64;
+pub type VestingId = U256;
 
 #[odra::odra_type]
 pub struct VestingSchedule {
@@ -55,7 +55,12 @@ pub struct TokensClaimed {
 // =============================================================================
 
 #[odra::odra_error]
-pub enum Error {}
+pub enum Error {
+    CallerNotWhitelisted = 65_001,
+    InvalidAmount = 65_002,
+    InvalidVestingDuration = 65_003,
+    CliffExceedsVestingDuration = 65_004,
+}
 
 // =============================================================================
 // Contract
@@ -92,10 +97,7 @@ pub struct Vesting {
 
     /// Maps (beneficiary, index) to schedule IDs for per-user lookup.
     /// Use with `user_schedules_counts` to iterate a user's schedules.
-    user_schedules: Mapping<(Address, u32), VestingId>,
-
-    /// Tracks how many schedules each beneficiary has.
-    user_schedules_counts: Mapping<Address, u32>,
+    user_schedules: Mapping<Address, Vec<VestingId>>,
 }
 
 #[odra::module]
@@ -150,14 +152,14 @@ impl Vesting {
     }
 
     /// Returns total number of schedules ever created
-    pub fn get_schedules_count(&self) -> u64 {
-        // total amount of schedules created
+    pub fn get_schedules_count(&self) -> U256 {
         self.schedules_count.get_or_default()
     }
 
     /// Returns how many schedules a user has
     pub fn get_user_schedules_count(&self, user: Address) -> u32 {
-        self.user_schedules_counts.get_or_default(&user)
+        let user_schedules = self.user_schedules.get_or_default(&user);
+        user_schedules.len() as u32
     }
 
     /// Returns how many tokens are currently claimable for a given schedule
@@ -180,8 +182,8 @@ impl Vesting {
         }
     }
 
-    pub fn is_whitelisted_creator(&self, creator: Address) -> bool {
-        self.whitelisted_creators.get_or_default(&creator)
+    pub fn is_whitelisted_creator(&self, creator: &Address) -> bool {
+        self.whitelisted_creators.get_or_default(creator)
     }
 
     pub fn get_tailor_coin_contract_address(&self) -> Address {
@@ -196,14 +198,72 @@ impl Vesting {
     // Schedule creation (called by whitelisted contracts like ICO)
     // =========================================================================
 
+    /// Creates a new vesting schedule for a beneficiary
+    ///
+    /// The caller (ICO contract for example) must:
+    ///   - Be whitelisted via `add_whitelisted_creator`
+    ///   - Have approved this contract to spend `total_amount` of BIG tokens
+    ///
+    /// @dev The contract pulls tokens from the caller, locks them and
+    /// records the schedule. Beneficiary can claim them to withdraw vestedd tokens
+    /// according to the vesting model (cliff, linear, or both)
     pub fn create_schedule(
-        &self,
+        &mut self,
         beneficiary: Address,
-        amount: U256,
-        cliff: u64,
-        duration: u64,
+        total_amount: U256,
+        cliff_duration: u64,
+        vesting_duration: u64,
     ) -> VestingId {
-        todo!()
+        self.assert_whitelisted_creator();
+
+        if total_amount.is_zero() {
+            self.env().revert(Error::InvalidAmount);
+        }
+        if vesting_duration == 0 {
+            self.env().revert(Error::InvalidVestingDuration);
+        }
+        if cliff_duration > vesting_duration {
+            self.env().revert(Error::CliffExceedsVestingDuration);
+        }
+
+        // Transfer BIG tokens from the caller to this contract
+        // TODO: Pretty sure the caller must approved this contract first before transfer
+        // Need to check on that
+        let sender = self.env().caller().clone();
+        let receiver = self.env().self_address().clone();
+        self.tailor_coin
+            .transfer_from(&sender, &receiver, &total_amount);
+
+        // Assign next available ID and store the created schedule
+        let vesting_id = self.schedules_count.get_or_default();
+        let schedule = VestingSchedule {
+            beneficiary,
+            total_amount,
+            claimed_amount: U256::zero(),
+            start_timestamp: self.env().get_block_time(),
+            cliff_duration,
+            vesting_duration,
+        };
+        self.schedules.set(&vesting_id, schedule);
+        self.schedules_count.set(vesting_id + 1);
+
+        // Add this schedule ID to beneficiary list
+        let mut user_schedules = self.user_schedules.get_or_default(&beneficiary);
+        user_schedules.push(vesting_id);
+
+        // TODO: once staking contract is implemented with staking/unstaking functions, auto-stake
+        // Something like:
+        // self.staking.stake(beneficiary, total_amount)
+
+        self.env().emit_native_event(ScheduleCreated {
+            vesting_id,
+            beneficiary,
+            total_amount,
+            cliff_duration,
+            vesting_duration,
+        });
+
+        vesting_id
     }
 
     // =========================================================================
@@ -226,7 +286,8 @@ impl Vesting {
 
         self.env().emit_native_event(TokensClaimed {
             vesting_id,
-            beneficiary: schedule.beneficiary,
+            // TODO: Obviously need to fix this to not use unwrap()
+            beneficiary: schedule.unwrap().beneficiary,
             amount: claimable_amt,
         });
         todo!()
@@ -253,6 +314,14 @@ impl Vesting {
     #[inline]
     fn assert_owner(&self) {
         self.ownable.assert_owner(&self.env().caller());
+    }
+
+    #[inline]
+    fn assert_whitelisted_creator(&self) {
+        let is_whitelisted_creator = self.is_whitelisted_creator(&self.env().caller());
+        if !is_whitelisted_creator {
+            self.env().revert(Error::CallerNotWhitelisted)
+        }
     }
 
     fn calculate_vested_amt(&self, schedule: &VestingSchedule) -> U256 {
