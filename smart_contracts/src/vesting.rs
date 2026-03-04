@@ -1,7 +1,7 @@
 use odra::{casper_types::U256, prelude::*, ContractRef};
 use odra_modules::{access::Ownable, cep18_token::Cep18ContractRef};
 
-use crate::staking::StakingContractRef;
+use crate::{staking::StakingContractRef, vesting};
 
 // =============================================================================
 // Vesting Types
@@ -143,34 +143,45 @@ impl Vesting {
     // View functions
     // =========================================================================
 
-    pub fn get_schedule(&self, vesting_id: VestingId) -> VestingSchedule {
+    /// Returns schedule data for a given Vesting ID, or None if doesn't exist
+    pub fn get_schedule(&self, vesting_id: VestingId) -> Option<VestingSchedule> {
         // return the schedule data basesd on vesting id
-        todo!()
+        self.schedules.get(&vesting_id)
     }
 
+    /// Returns total number of schedules ever created
     pub fn get_schedules_count(&self) -> u64 {
         // total amount of schedules created
         self.schedules_count.get_or_default()
     }
 
-    pub fn get_user_schedules_count(&self, user: Address) -> u64 {
-        // Number of schedules a user has
-        todo!()
+    /// Returns how many schedules a user has
+    pub fn get_user_schedules_count(&self, user: Address) -> u32 {
+        self.user_schedules_counts.get_or_default(&user)
     }
 
+    /// Returns how many tokens are currently claimable for a given schedule
+    /// Total Vested - already claimed
     pub fn get_claimable_amount(&self, vesting_id: VestingId) -> U256 {
-        // Vested minus claimed
-        todo!()
+        match self.schedules.get(&vesting_id) {
+            Some(schedule) => {
+                let vested = self.calculate_vested_amt(&schedule);
+                vested - schedule.claimed_amount
+            }
+            None => U256::zero(),
+        }
     }
 
+    /// Returns total amount vested including tokens already claimed
     pub fn get_vested_amount(&self, vesting_id: VestingId) -> U256 {
-        // Total amount vested so far
-        todo!()
+        match self.schedules.get(&vesting_id) {
+            Some(schedule) => self.calculate_vested_amt(&schedule),
+            None => U256::zero(),
+        }
     }
 
     pub fn is_whitelisted_creator(&self, creator: Address) -> bool {
-        // check if this user is whitelisted
-        todo!()
+        self.whitelisted_creators.get_or_default(&creator)
     }
 
     pub fn get_tailor_coin_contract_address(&self) -> Address {
@@ -242,5 +253,9 @@ impl Vesting {
     #[inline]
     fn assert_owner(&self) {
         self.ownable.assert_owner(&self.env().caller());
+    }
+
+    fn calculate_vested_amt(&self, schedule: &VestingSchedule) -> U256 {
+        todo!()
     }
 }
