@@ -192,19 +192,9 @@ export const ICO_STATE_INFO = {
     color: 'hsl(var(--ico-state-active))',
   },
   3: {
-    name: 'ICO Countdown',
-    description: 'ICO starts soon',
+    name: 'Post-ICO Dashboard',
+    description: 'Token sale complete',
     color: 'hsl(var(--ico-state-dashboard))',
-  },
-  4: {
-    name: 'ICO Live',
-    description: 'Public ICO is active',
-    color: 'hsl(var(--ico-state-active))',
-  },
-  5: {
-    name: 'ICO Completed',
-    description: 'Token sale has ended',
-    color: 'hsl(var(--ico-state-completed))',
   },
 } as const;
 
