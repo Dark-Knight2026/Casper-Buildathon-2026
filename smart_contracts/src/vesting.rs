@@ -482,4 +482,57 @@ mod tests {
             "Invalid TailorCoin contract address",
         );
     }
+
+    // =============================================================================
+    // add/remove_whitelisted_creator()
+    // =============================================================================
+
+    #[test]
+    fn test_add_whitelisted_creator_should_revert_if_not_owner_calling() {
+        let mut ctx = setup(odra_test::env());
+        ctx.env.set_caller(ctx.users.alice);
+
+        assert_eq!(
+            ctx.vesting
+                .try_add_whitelisted_creator(ctx.users.alice)
+                .unwrap_err(),
+            AccessError::CallerNotTheOwner.into(),
+            "Should revert when is called by non-owner",
+        )
+    }
+
+    #[test]
+    fn test_add_whitelisted_creator_should_add_properly() {
+        let mut ctx = setup(odra_test::env());
+        ctx.env.set_caller(ctx.users.owner);
+
+        assert!(
+            !ctx.vesting.is_whitelisted_creator(&ctx.users.alice),
+            "Alice should not initially be whitelisted",
+        );
+
+        ctx.vesting.add_whitelisted_creator(ctx.users.alice);
+        assert!(
+            ctx.vesting.is_whitelisted_creator(&ctx.users.alice),
+            "Alice should be whitelisted",
+        );
+    }
+
+    #[test]
+    fn test_remove_whitelisted_creator_should_remove_properly() {
+        let mut ctx = setup(odra_test::env());
+        ctx.env.set_caller(ctx.users.owner);
+
+        // Owner was whitelisted in the setup
+        assert!(
+            ctx.vesting.is_whitelisted_creator(&ctx.users.owner),
+            "Owner should be whitelisted",
+        );
+
+        ctx.vesting.remove_whitelisted_creator(ctx.users.owner);
+        assert!(
+            !ctx.vesting.is_whitelisted_creator(&ctx.users.owner),
+            "Owner should no longer be whitelisted",
+        );
+    }
 }
