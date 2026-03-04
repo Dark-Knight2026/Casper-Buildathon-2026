@@ -430,4 +430,24 @@ mod tests {
             .create_schedule(beneficiary, total_amount, cliff_duration, vesting_duration)
     }
 
+    // =============================================================================
+    // init()
+    // =============================================================================
+
+    #[test]
+    fn test_init_should_initialize_contract_properly() {
+        let ctx = setup(odra_test::env());
+
+        assert_eq!(ctx.vesting.get_owner(), ctx.users.owner, "Invalid Owner");
+        assert_eq!(
+            ctx.vesting.get_tailor_coin_contract_address(),
+            ctx.tailor_coin.address(),
+            "Invalid TailorCoin contract address"
+        );
+        assert_eq!(
+            ctx.vesting.get_schedules_count(),
+            U256::zero(),
+            "Should start with zero schedules"
+        );
+    }
 }
