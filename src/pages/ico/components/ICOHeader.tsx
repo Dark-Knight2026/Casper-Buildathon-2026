@@ -24,7 +24,7 @@ export function ICOHeader() {
           <div className="flex items-center gap-3">
             <button
               onClick={handleLogoClick}
-              className="w-20 h-20 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 rounded"
+              className="w-20 h-20 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--ico-brand-primary))] rounded"
               aria-label="Return to ICO overview"
             >
               <img src="/leaseFilogo2.png" alt="" />
