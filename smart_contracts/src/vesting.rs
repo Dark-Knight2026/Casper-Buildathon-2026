@@ -1,7 +1,7 @@
 use odra::{casper_types::U256, prelude::*, ContractRef};
 use odra_modules::{access::Ownable, cep18_token::Cep18ContractRef};
 
-use crate::staking::StakingContractRef;
+use crate::{staking::StakingContractRef, vesting};
 
 // =============================================================================
 // Vesting Types
@@ -16,8 +16,10 @@ pub struct VestingSchedule {
     pub beneficiary: Address,
     /// Total number of tokens locked in this schedule.
     pub total_amount: U256,
-    /// Number of tokens already claimed by the beneficiary.
+    /// Number of tokens claimed (unstaking initiated, pending unbonding).
     pub claimed_amount: U256,
+    /// Number of tokens actually withdrawn (sent to beneficiary after unbonding).
+    pub withdrawn_amount: U256,
     /// Block timestamp when the vesting clock starts (set at creation time).
     pub start_timestamp: u64,
     /// Duration (in time units) before any tokens become claimable.
@@ -70,6 +72,13 @@ pub struct TokensClaimed {
     pub amount: U256,
 }
 
+#[odra::event]
+pub struct TokensWithdrawn {
+    pub vesting_id: VestingId,
+    pub beneficiary: Address,
+    pub amount: U256,
+}
+
 // =============================================================================
 // Errors
 // =============================================================================
@@ -83,6 +92,7 @@ pub enum Error {
     ScheduleNotFound = 65_005,
     CallerNotBeneficiary = 65_006,
     NothingToClaim = 65_007,
+    NothingToWithdraw = 65_008,
 }
 
 // =============================================================================
@@ -91,7 +101,7 @@ pub enum Error {
 
 #[odra::module(
     errors = Error,
-    events = [ScheduleCreated, TokensClaimed],
+    events = [ScheduleCreated, TokensClaimed, TokensWithdrawn],
 )]
 pub struct Vesting {
     /// Ownership control — only the owner can configure the contract.
@@ -274,6 +284,7 @@ impl Vesting {
             beneficiary,
             total_amount,
             claimed_amount: U256::zero(),
+            withdrawn_amount: U256::zero(),
             start_timestamp: self.env().get_block_time(),
             cliff_duration,
             vesting_duration,
@@ -303,25 +314,23 @@ impl Vesting {
     }
 
     // =========================================================================
-    // Token claiming (called by beneficiaries)
+    // Token claiming and Withdrawing (called by beneficiaries)
     // =========================================================================
 
     /// Claims all unclaimed-vested tokens from a specific schedule
     ///
     /// Calculates how many tokens vested so far minus whats already been claimed,
-    /// then transfers the difference to the beneficiary
+    /// then initiates unstaking. That kicks off the unbonding period, which has be
+    /// be pass by before the user can withdraw.
     ///
     /// @dev only the schedule's beneficiary can call this
     #[odra(non_reentrant)]
     pub fn claim(&mut self, vesting_id: VestingId) {
-        // TODO: Need to consider unstaking
-
         let mut schedule = self
             .schedules
             .get(&vesting_id)
             .unwrap_or_revert_with(&self.env(), Error::ScheduleNotFound);
 
-        // Only beneficiary can claim
         if self.env().caller() != schedule.beneficiary {
             self.env().revert(Error::CallerNotBeneficiary);
         }
@@ -338,12 +347,52 @@ impl Vesting {
         schedule.claimed_amount += claimable;
         self.schedules.set(&vesting_id, schedule.clone());
 
-        self.tailor_coin.transfer(&schedule.beneficiary, &claimable);
+        // TODO: Unstake the tokens from the staking contract
+        // Will probably look something like this:
+        // self.staking.unstake_for(&schedule.beneficiary);
 
         self.env().emit_native_event(TokensClaimed {
             vesting_id,
             beneficiary: schedule.beneficiary,
             amount: claimable,
+        });
+    }
+
+    /// Withdraws claimed tokens after the staking contract's unbonding period
+    /// Transfers tokens that have been claimed via `claimed()`
+    ///
+    /// @dev only the schedule's beneficiary can call this
+    #[odra(non_reentrant)]
+    pub fn withdraw(&mut self, vesting_id: VestingId) {
+        let mut schedule = self
+            .schedules
+            .get(&vesting_id)
+            .unwrap_or_revert_with(&self.env(), Error::ScheduleNotFound);
+
+        if self.env().caller() != schedule.beneficiary {
+            self.env().revert(Error::CallerNotBeneficiary);
+        }
+
+        let withdrawable = schedule.claimed_amount - schedule.withdrawn_amount;
+
+        if withdrawable.is_zero() {
+            self.env().revert(Error::NothingToWithdraw);
+        }
+
+        schedule.withdrawn_amount += withdrawable;
+        self.schedules.set(&vesting_id, schedule.clone());
+
+        // TODO: Pull tokens back from staking after unbonding period.
+        // Will probably look something like this:
+        // self.staking.withdraw_for(&schedule.beneficiary);
+        // And then can delete this transfer function:
+        self.tailor_coin
+            .transfer(&schedule.beneficiary, &withdrawable);
+
+        self.env().emit_native_event(TokensWithdrawn {
+            vesting_id,
+            beneficiary: schedule.beneficiary,
+            amount: withdrawable,
         });
     }
 
@@ -800,5 +849,14 @@ mod tests {
             2,
             "Alice should have 2 schedules"
         );
+    }
+
+    // =============================================================================
+    // claim()
+    // =============================================================================
+    
+    #[test]
+    fn test_claim_should_revert_if_schedule_not_found() {
+      
     }
 }
