@@ -440,7 +440,7 @@ impl Vesting {
 mod tests {
     use odra::{
         casper_types::U256,
-        host::{Deployer, HostEnv},
+        host::{Deployer, HostEnv, HostRef},
     };
     use odra_modules::access::errors::Error as AccessError;
 

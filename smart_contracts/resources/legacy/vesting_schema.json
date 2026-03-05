@@ -1,12 +1,33 @@
 {
-  "name": "ICO",
+  "name": "Vesting",
   "events": [
     {
-      "name": "ICOScheduleAdded",
+      "name": "ScheduleCreated",
       "args": [
         {
-          "name": "id",
-          "ty": "U128",
+          "name": "vesting_id",
+          "ty": "U256",
+          "is_ref": false,
+          "is_slice": false,
+          "is_required": true
+        },
+        {
+          "name": "whitelisted_creator",
+          "ty": "Key",
+          "is_ref": false,
+          "is_slice": false,
+          "is_required": true
+        },
+        {
+          "name": "beneficiary",
+          "ty": "Key",
+          "is_ref": false,
+          "is_slice": false,
+          "is_required": true
+        },
+        {
+          "name": "total_amount",
+          "ty": "U256",
           "is_ref": false,
           "is_slice": false,
           "is_required": true
@@ -19,97 +40,59 @@
           "is_required": true
         },
         {
-          "name": "end_timestamp",
+          "name": "cliff_duration",
           "ty": "U64",
           "is_ref": false,
           "is_slice": false,
           "is_required": true
         },
         {
-          "name": "sale_amount",
+          "name": "vesting_duration",
+          "ty": "U64",
+          "is_ref": false,
+          "is_slice": false,
+          "is_required": true
+        }
+      ]
+    },
+    {
+      "name": "TokensClaimed",
+      "args": [
+        {
+          "name": "vesting_id",
           "ty": "U256",
           "is_ref": false,
           "is_slice": false,
           "is_required": true
         },
         {
-          "name": "price",
-          "ty": "U256",
+          "name": "beneficiary",
+          "ty": "Key",
           "is_ref": false,
           "is_slice": false,
           "is_required": true
-        }
-      ]
-    },
-    {
-      "name": "CurrencyAdded",
-      "args": [
-        {
-          "name": "currency",
-          "ty": "U8",
-          "is_ref": false,
-          "is_slice": false,
-          "is_required": true
-        }
-      ]
-    },
-    {
-      "name": "CurrencyRemoved",
-      "args": [
-        {
-          "name": "currency",
-          "ty": "U8",
-          "is_ref": false,
-          "is_slice": false,
-          "is_required": true
-        }
-      ]
-    },
-    {
-      "name": "TokensPurchased",
-      "args": [
+        },
         {
           "name": "amount",
           "ty": "U256",
           "is_ref": false,
           "is_slice": false,
           "is_required": true
-        },
-        {
-          "name": "currency",
-          "ty": "U8",
-          "is_ref": false,
-          "is_slice": false,
-          "is_required": true
-        },
-        {
-          "name": "price",
-          "ty": "U256",
-          "is_ref": false,
-          "is_slice": false,
-          "is_required": true
-        },
-        {
-          "name": "cost",
-          "ty": "U256",
-          "is_ref": false,
-          "is_slice": false,
-          "is_required": true
-        },
-        {
-          "name": "timestamp",
-          "ty": "U64",
-          "is_ref": false,
-          "is_slice": false,
-          "is_required": true
         }
       ]
     },
     {
-      "name": "UnsoldTokensWithdrawn",
+      "name": "TokensWithdrawn",
       "args": [
         {
-          "name": "recipient",
+          "name": "vesting_id",
+          "ty": "U256",
+          "is_ref": false,
+          "is_slice": false,
+          "is_required": true
+        },
+        {
+          "name": "beneficiary",
           "ty": "Key",
           "is_ref": false,
           "is_slice": false,
@@ -158,13 +141,6 @@
           "is_ref": false,
           "is_slice": false,
           "is_required": true
-        },
-        {
-          "name": "styks_price_feed",
-          "ty": "Key",
-          "is_ref": false,
-          "is_slice": false,
-          "is_required": true
         }
       ],
       "is_mutable": true,
@@ -177,38 +153,6 @@
       "args": [
         {
           "name": "tailor_coin",
-          "ty": "Key",
-          "is_ref": false,
-          "is_slice": false,
-          "is_required": true
-        }
-      ],
-      "is_mutable": true,
-      "return_ty": "Unit",
-      "ty": "Public",
-      "attributes": []
-    },
-    {
-      "name": "set_treasury",
-      "args": [
-        {
-          "name": "treasury",
-          "ty": "Key",
-          "is_ref": false,
-          "is_slice": false,
-          "is_required": true
-        }
-      ],
-      "is_mutable": true,
-      "return_ty": "Unit",
-      "ty": "Public",
-      "attributes": []
-    },
-    {
-      "name": "set_vesting",
-      "args": [
-        {
-          "name": "vesting",
           "ty": "Key",
           "is_ref": false,
           "is_slice": false,
@@ -237,93 +181,10 @@
       "attributes": []
     },
     {
-      "name": "add_currency",
+      "name": "add_whitelisted_creator",
       "args": [
         {
-          "name": "currency",
-          "ty": "U8",
-          "is_ref": false,
-          "is_slice": false,
-          "is_required": true
-        },
-        {
-          "name": "address",
-          "ty": {
-            "Option": "Key"
-          },
-          "is_ref": false,
-          "is_slice": false,
-          "is_required": true
-        }
-      ],
-      "is_mutable": true,
-      "return_ty": "Unit",
-      "ty": "Public",
-      "attributes": []
-    },
-    {
-      "name": "remove_currency",
-      "args": [
-        {
-          "name": "currency",
-          "ty": "U8",
-          "is_ref": false,
-          "is_slice": false,
-          "is_required": true
-        }
-      ],
-      "is_mutable": true,
-      "return_ty": "Unit",
-      "ty": "Public",
-      "attributes": []
-    },
-    {
-      "name": "add_ico_schedule",
-      "args": [
-        {
-          "name": "ico_schedule",
-          "ty": "Any",
-          "is_ref": false,
-          "is_slice": false,
-          "is_required": true
-        }
-      ],
-      "is_mutable": true,
-      "return_ty": "U128",
-      "ty": "Public",
-      "attributes": []
-    },
-    {
-      "name": "purchase",
-      "args": [
-        {
-          "name": "amount_to_spend",
-          "ty": "U256",
-          "is_ref": false,
-          "is_slice": false,
-          "is_required": true
-        },
-        {
-          "name": "currency",
-          "ty": "U8",
-          "is_ref": false,
-          "is_slice": false,
-          "is_required": true
-        }
-      ],
-      "is_mutable": true,
-      "return_ty": "U256",
-      "ty": "Public",
-      "attributes": [
-        "Payable",
-        "NonReentrant"
-      ]
-    },
-    {
-      "name": "withdraw_unsold_tokens",
-      "args": [
-        {
-          "name": "recipient",
+          "name": "creator",
           "ty": "Key",
           "is_ref": false,
           "is_slice": false,
@@ -336,65 +197,27 @@
       "attributes": []
     },
     {
-      "name": "get_current_ico_schedule",
-      "args": [],
-      "is_mutable": false,
-      "return_ty": {
-        "Option": {
-          "Tuple2": [
-            "U128",
-            "Any"
-          ]
-        }
-      },
-      "ty": "Public",
-      "attributes": []
-    },
-    {
-      "name": "get_ico_token_price",
+      "name": "remove_whitelisted_creator",
       "args": [
         {
-          "name": "currency",
-          "ty": "U8",
+          "name": "creator",
+          "ty": "Key",
           "is_ref": false,
           "is_slice": false,
           "is_required": true
         }
       ],
-      "is_mutable": false,
-      "return_ty": "U256",
+      "is_mutable": true,
+      "return_ty": "Unit",
       "ty": "Public",
       "attributes": []
     },
     {
-      "name": "get_currency_by_key",
+      "name": "get_schedule",
       "args": [
         {
-          "name": "currency",
-          "ty": "U8",
-          "is_ref": false,
-          "is_slice": false,
-          "is_required": true
-        }
-      ],
-      "is_mutable": false,
-      "return_ty": {
-        "Tuple2": [
-          "Bool",
-          {
-            "Option": "Key"
-          }
-        ]
-      },
-      "ty": "Public",
-      "attributes": []
-    },
-    {
-      "name": "get_ico_schedule_by_id",
-      "args": [
-        {
-          "name": "ico_schedule_id",
-          "ty": "U128",
+          "name": "vesting_id",
+          "ty": "U256",
           "is_ref": false,
           "is_slice": false,
           "is_required": true
@@ -408,18 +231,74 @@
       "attributes": []
     },
     {
-      "name": "get_ico_schedules_count",
+      "name": "get_schedules_count",
       "args": [],
       "is_mutable": false,
-      "return_ty": "U128",
+      "return_ty": "U256",
       "ty": "Public",
       "attributes": []
     },
     {
-      "name": "get_styks_price_feed_contract_address",
-      "args": [],
+      "name": "get_user_schedules_count",
+      "args": [
+        {
+          "name": "user",
+          "ty": "Key",
+          "is_ref": false,
+          "is_slice": false,
+          "is_required": true
+        }
+      ],
       "is_mutable": false,
-      "return_ty": "Key",
+      "return_ty": "U32",
+      "ty": "Public",
+      "attributes": []
+    },
+    {
+      "name": "get_claimable_amount",
+      "args": [
+        {
+          "name": "vesting_id",
+          "ty": "U256",
+          "is_ref": false,
+          "is_slice": false,
+          "is_required": true
+        }
+      ],
+      "is_mutable": false,
+      "return_ty": "U256",
+      "ty": "Public",
+      "attributes": []
+    },
+    {
+      "name": "get_vested_amount",
+      "args": [
+        {
+          "name": "vesting_id",
+          "ty": "U256",
+          "is_ref": false,
+          "is_slice": false,
+          "is_required": true
+        }
+      ],
+      "is_mutable": false,
+      "return_ty": "U256",
+      "ty": "Public",
+      "attributes": []
+    },
+    {
+      "name": "is_whitelisted_creator",
+      "args": [
+        {
+          "name": "creator",
+          "ty": "Key",
+          "is_ref": false,
+          "is_slice": false,
+          "is_required": true
+        }
+      ],
+      "is_mutable": false,
+      "return_ty": "Bool",
       "ty": "Public",
       "attributes": []
     },
@@ -432,12 +311,85 @@
       "attributes": []
     },
     {
-      "name": "get_treasury_contract_address",
+      "name": "get_staking_contract_address",
       "args": [],
       "is_mutable": false,
       "return_ty": "Key",
       "ty": "Public",
       "attributes": []
+    },
+    {
+      "name": "create_schedule",
+      "args": [
+        {
+          "name": "beneficiary",
+          "ty": "Key",
+          "is_ref": false,
+          "is_slice": false,
+          "is_required": true
+        },
+        {
+          "name": "total_amount",
+          "ty": "U256",
+          "is_ref": false,
+          "is_slice": false,
+          "is_required": true
+        },
+        {
+          "name": "cliff_duration",
+          "ty": "U64",
+          "is_ref": false,
+          "is_slice": false,
+          "is_required": true
+        },
+        {
+          "name": "vesting_duration",
+          "ty": "U64",
+          "is_ref": false,
+          "is_slice": false,
+          "is_required": true
+        }
+      ],
+      "is_mutable": true,
+      "return_ty": "U256",
+      "ty": "Public",
+      "attributes": []
+    },
+    {
+      "name": "claim",
+      "args": [
+        {
+          "name": "vesting_id",
+          "ty": "U256",
+          "is_ref": false,
+          "is_slice": false,
+          "is_required": true
+        }
+      ],
+      "is_mutable": true,
+      "return_ty": "Unit",
+      "ty": "Public",
+      "attributes": [
+        "NonReentrant"
+      ]
+    },
+    {
+      "name": "withdraw",
+      "args": [
+        {
+          "name": "vesting_id",
+          "ty": "U256",
+          "is_ref": false,
+          "is_slice": false,
+          "is_required": true
+        }
+      ],
+      "is_mutable": true,
+      "return_ty": "Unit",
+      "ty": "Public",
+      "attributes": [
+        "NonReentrant"
+      ]
     },
     {
       "name": "transfer_ownership",

@@ -1,6 +1,6 @@
 {
   "casper_contract_schema_version": 1,
-  "toolchain": "rustc 1.85.0-nightly (7f75bfa1a 2024-12-30)",
+  "toolchain": "rustc 1.85.0-nightly (14ee63a3c 2024-12-29)",
   "authors": [],
   "repository": null,
   "homepage": null,
@@ -343,6 +343,38 @@
       "arguments": [
         {
           "name": "treasury",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        }
+      ],
+      "return_ty": "Unit",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "set_vesting",
+      "description": "Sets the Vesting contract addess by the owner",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "vesting",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        }
+      ],
+      "return_ty": "Unit",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "set_staking",
+      "description": "Sets the Staking contract address by the owner",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "staking",
           "description": null,
           "ty": "Key",
           "optional": false
