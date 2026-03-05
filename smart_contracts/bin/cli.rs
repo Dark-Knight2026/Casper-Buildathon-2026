@@ -17,6 +17,7 @@ use leasefi_contracts::{
     staking::Staking,
     tailor_coin::{TailorCoin, TailorCoinInitArgs},
     treasury::{Treasury, TreasuryInitArgs},
+    vesting::{Vesting, VestingInitArgs},
 };
 
 struct LeasefiDeployScript;
@@ -119,12 +120,24 @@ impl DeployScript for LeasefiDeployScript {
             container,
             400_000_000_000,
         )?;
+        let mut vesting = Vesting::load_or_deploy_with_cfg(
+            &env,
+            None,
+            VestingInitArgs {
+                owner: env.caller(),
+            },
+            InstallConfig::upgradable::<Vesting>(),
+            container,
+            400_000_000_000,
+        )?;
         let mut ico = ICO::load_or_deploy_with_cfg(
             &env,
             None,
             ICOInitArgs {
                 owner: env.caller(),
                 styks_price_feed: Address::new(
+                    // TODO: Fix typo
+                    // @dev this looks like a typo and should be "hash"
                     "hahs-2879d6e927289197aab0101cc033f532fe22e4ab4686e44b5743cb1333031acc", // testnet, 814fedbd4ae53b82ab19b1ff6698ce412445c3266271fcb639986d37dc0ae121 - mainnet
                 )
                 .unwrap(),
@@ -137,6 +150,10 @@ impl DeployScript for LeasefiDeployScript {
         // Setup Treasury
         treasury.set_tailor_coin(tailor_coin.address());
         // treasury.set_staking(staking.address());
+
+        // Setup Vesting
+        vesting.set_tailor_coin(tailor_coin.address());
+        vesting.add_whitelisted_creator(ico.address());
 
         // Setup Lease
         lease.set_roles(roles.address());
@@ -151,6 +168,7 @@ impl DeployScript for LeasefiDeployScript {
 
         ico.set_tailor_coin(tailor_coin.address());
         ico.set_treasury(treasury.address());
+        ico.set_vesting(vesting.address());
         ico.add_currency(Currency::CSPR, None);
         env.set_gas(15_000_000_000);
         ico.add_currency(
@@ -180,6 +198,7 @@ impl DeployScript for LeasefiDeployScript {
         treasury.transfer_ownership(&new_owner);
         escrow.transfer_ownership(&new_owner);
         lease.transfer_ownership(&new_owner);
+        vesting.transfer_ownership(&new_owner);
         ico.transfer_ownership(&new_owner);
 
         Ok(())
@@ -197,6 +216,7 @@ pub fn main() {
         .contract::<Escrow>()
         .contract::<Lease>()
         .contract::<Staking>()
+        .contract::<Vesting>()
         .contract::<ICO>()
         .build()
         .run();
