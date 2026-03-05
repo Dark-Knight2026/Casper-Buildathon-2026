@@ -295,6 +295,7 @@ impl Vesting {
         // Add this schedule ID to beneficiary list
         let mut user_schedules = self.user_schedules.get_or_default(&beneficiary);
         user_schedules.push(vesting_id);
+        self.user_schedules.set(&beneficiary, user_schedules);
 
         // TODO: once staking contract is implemented with staking/unstaking functions, auto-stake
         // Something like:
