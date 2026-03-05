@@ -11,3 +11,7 @@ pub const STYKS_ORACLE_CSPR_USDT_PRICE_FEED_ID: &'static str = "CSPRUSD";
 pub const SIX_MONTHS: u64 = 6 * 30 * 24 * 60 * 60;
 
 pub const TWELVE_MONTHS: u64 = 12 * 30 * 24 * 60 * 60;
+
+pub const PRIVATE_SALE_CLIFF_DURATION: u64 = SIX_MONTHS;
+
+pub const PRIVATE_SALE_VESTING_DURATION: u64 = TWELVE_MONTHS;
