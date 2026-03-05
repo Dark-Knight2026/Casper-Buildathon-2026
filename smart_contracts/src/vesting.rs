@@ -438,8 +438,6 @@ impl Vesting {
             // past the vesting period, everything is vested
             schedule.total_amount
         } else {
-            // TODO: I'm not sure if this straight linear vesting is congruent with the white paper.
-            //       This needs to be checked especially since I think different distributions have //       different vesting strategies
             // linear vesting when between cliff and vesting periods
             // vested = total_amount * elapsed_since_start / total_vesting_duration
             let elapsed = now - schedule.start_timestamp;
@@ -854,9 +852,176 @@ mod tests {
     // =============================================================================
     // claim()
     // =============================================================================
-    
+
     #[test]
     fn test_claim_should_revert_if_schedule_not_found() {
-      
+        let mut ctx = setup(odra_test::env());
+        ctx.env.set_caller(ctx.users.alice);
+
+        assert_eq!(
+            ctx.vesting.try_claim(U256::from(999)).unwrap_err(),
+            Error::ScheduleNotFound.into(),
+            "Should revert when schedule does not exist"
+        );
+    }
+
+    #[test]
+    fn test_claim_should_revert_if_caller_not_beneficiary() {
+        let mut ctx = setup(odra_test::env());
+        let cliff = ctx.cliff_duration;
+        let vesting = ctx.vesting_duration;
+        let alice = ctx.users.alice;
+
+        let vesting_id = create_test_schedule(&mut ctx, alice, vesting_amount(), cliff, vesting);
+
+        ctx.env.advance_block_time(cliff + ONE_DAY);
+
+        // Bob tries to claim Alices schedle
+        ctx.env.set_caller(ctx.users.bob);
+
+        assert_eq!(
+            ctx.vesting.try_claim(vesting_id).unwrap_err(),
+            Error::CallerNotBeneficiary.into(),
+            "Should revert when caller is not the beneficiary"
+        );
+    }
+
+    #[test]
+    fn test_claim_should_revert_if_still_in_cliff_period() {
+        let mut ctx = setup(odra_test::env());
+        let cliff = ctx.cliff_duration;
+        let vesting = ctx.vesting_duration;
+        let alice = ctx.users.alice;
+
+        let vesting_id = create_test_schedule(&mut ctx, alice, vesting_amount(), cliff, vesting);
+
+        // Advance to jsut before the cliff
+        ctx.env.advance_block_time(cliff - ONE_DAY);
+
+        ctx.env.set_caller(alice);
+
+        assert_eq!(
+            ctx.vesting.try_claim(vesting_id).unwrap_err(),
+            Error::NothingToClaim.into(),
+            "Should revert if still in the cliff period"
+        );
+    }
+
+    #[test]
+    fn test_claim_should_update_claimed_amount_after_cliff() {
+        let mut ctx = setup(odra_test::env());
+        let cliff = ctx.cliff_duration;
+        let vesting = ctx.vesting_duration;
+        let alice = ctx.users.alice;
+
+        let vesting_id = create_test_schedule(&mut ctx, alice, vesting_amount(), cliff, vesting);
+
+        // Advance to exactly the cliff, 50% vested
+        ctx.env.advance_block_time(cliff);
+        ctx.env.set_caller(alice);
+        ctx.vesting.claim(vesting_id);
+
+        let expected_claim = vesting_amount() / 2;
+
+        // Verify schedule state
+        let schedule = ctx.vesting.get_schedule(vesting_id).unwrap();
+
+        assert_eq!(
+            schedule.claimed_amount, expected_claim,
+            "Claim amount should be 50% (cliff/vesting)"
+        );
+
+        assert_eq!(
+            schedule.withdrawn_amount,
+            U256::zero(),
+            "Withdrawn amt should still be zero"
+        );
+
+        assert!(
+            ctx.env.emitted_native_event(
+                &ctx.vesting,
+                TokensClaimed {
+                    vesting_id,
+                    beneficiary: alice,
+                    amount: expected_claim,
+                }
+            ),
+            "TokensCLaimed evenet should be emitted",
+        );
+    }
+
+    #[test]
+    fn test_claim_should_claim_full_amt_after_vesting_ends() {
+        let mut ctx = setup(odra_test::env());
+        let cliff = ctx.cliff_duration;
+        let vesting = ctx.vesting_duration;
+        let alice = ctx.users.alice;
+
+        let vesting_id = create_test_schedule(&mut ctx, alice, vesting_amount(), cliff, vesting);
+
+        ctx.env.advance_block_time(vesting + ONE_DAY);
+        ctx.env.set_caller(alice);
+        ctx.vesting.claim(vesting_id);
+
+        let schedule = ctx.vesting.get_schedule(vesting_id).unwrap();
+
+        assert_eq!(
+            schedule.claimed_amount,
+            vesting_amount(),
+            "Claimed amt should equal total amount",
+        );
+
+        // Nothing left to claim
+        ctx.env.set_caller(alice);
+
+        assert_eq!(
+            ctx.vesting.try_claim(vesting_id).unwrap_err(),
+            Error::NothingToClaim.into(),
+            "Should revert when fully claimed",
+        );
+    }
+
+    #[test]
+    fn test_claim_should_allow_incremental_claims() {
+        let mut ctx = setup(odra_test::env());
+        let cliff = ctx.cliff_duration;
+        let vesting = ctx.vesting_duration;
+        let alice = ctx.users.alice;
+
+        let vesting_id = create_test_schedule(&mut ctx, alice, vesting_amount(), cliff, vesting);
+
+        // First claim at cliff
+        ctx.env.advance_block_time(cliff);
+        ctx.env.set_caller(alice);
+        ctx.vesting.claim(vesting_id);
+
+        let first_claim = vesting_amount() / 2;
+        let schedule = ctx.vesting.get_schedule(vesting_id).unwrap();
+
+        assert_eq!(
+            schedule.claimed_amount, first_claim,
+            "First claim should be 50%",
+        );
+
+        // Second claim at 9 months (75%)
+        ctx.env.advance_block_time(3 * ONE_MONTH);
+        ctx.env.set_caller(alice);
+        ctx.vesting.claim(vesting_id);
+
+        let expected_total_claim = vesting_amount() * U256::from(9) / U256::from(12);
+        let schedule = ctx.vesting.get_schedule(vesting_id).unwrap();
+
+        assert_eq!(
+            schedule.claimed_amount, expected_total_claim,
+            "Second claim should be for 75%",
+        );
+
+        //  Nothing more to claim at the same timestamp
+        ctx.env.set_caller(alice);
+        assert_eq!(
+            ctx.vesting.try_claim(vesting_id).unwrap_err(),
+            Error::NothingToClaim.into(),
+            "Should revert when nothing to claim",
+        );
     }
 }
