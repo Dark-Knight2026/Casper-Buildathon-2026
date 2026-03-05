@@ -709,12 +709,7 @@ mod tests {
 
         assert_eq!(
             ctx.vesting
-                .try_create_schedule(
-                    ctx.users.alice,
-                    vesting_amount(),
-                    ctx.cliff_duration,
-                    ctx.vesting_duration,
-                )
+                .try_create_schedule(ctx.users.alice, vesting_amount(), 0, 0)
                 .unwrap_err(),
             Error::InvalidVestingDuration.into(),
             "Should revert with zero vesting duration"
