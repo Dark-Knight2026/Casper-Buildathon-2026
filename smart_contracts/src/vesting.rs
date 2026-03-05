@@ -246,11 +246,11 @@ impl Vesting {
     ///
     /// The caller (ICO contract for example) must:
     ///   - Be whitelisted via `add_whitelisted_creator`
-    ///   - Have approved this contract to spend `total_amount` of BIG tokens
+    ///   - Have already transferred `total_amount` of BIG tokens to the Staking contract
     ///
-    /// @dev The contract pulls tokens from the caller, locks them and
-    /// records the schedule. Beneficiary can claim them to withdraw vestedd tokens
-    /// according to the vesting model (cliff, linear, or both)
+    /// @dev This contract does not hold tokens; it only records the schedule.
+    /// Tokens are held by the Staking contract. Beneficiary can claim according
+    /// to the vesting model (cliff, linear, or both) which triggers unstaking.
     pub fn create_schedule(
         &mut self,
         beneficiary: Address,
@@ -270,12 +270,6 @@ impl Vesting {
             self.env().revert(Error::CliffExceedsVestingDuration);
         }
 
-        // Transfer BIG tokens from the caller to this contract
-        let sender = self.env().caller().clone();
-        let receiver = self.env().self_address().clone();
-        self.tailor_coin
-            .transfer_from(&sender, &receiver, &total_amount);
-
         // Assign next available ID and store the created schedule
         let vesting_id = self.schedules_count.get_or_default();
         let schedule = VestingSchedule {
@@ -294,24 +288,6 @@ impl Vesting {
         let mut user_schedules = self.user_schedules.get_or_default(&beneficiary);
         user_schedules.push(vesting_id);
         self.user_schedules.set(&beneficiary, user_schedules);
-
-        // TODO: once staking contract is implemented with staking/unstaking functions, auto-stake
-        //
-        // Right now, we are sending the tokens to the vesting contract and then potentially again
-        // sending the tokens to the staking contract when calling stake function. This is a bit
-        // redundant, having to send the tokens twice. Once we have the staking function, we may
-        // think about how to create a schedule in the vesting contract and have the ICO contract
-        // send tokens directly to the staking contract.
-        //
-        // The tradeoff is that it makes the contracts more tightly coupled, the ICO would need to
-        // know about both Vesting and Staking, and coordinate the approval/transfer to Staking
-        // while telling Vesting to record the schedule without pulling tokens. Right now Vesting is
-        // self-contained: it pulls tokens in, and later releases them out. If we skip it, Vesting
-        // becomes purely a bookkeeping contract that controls when unstaking is allowed but never
-        // actually holds tokens.
-        //
-        // Something like:
-        // self.staking.stake_for(&schedule.beneficiary, total_amount)
 
         self.env().emit_native_event(ScheduleCreated {
             vesting_id,
@@ -562,8 +538,9 @@ mod tests {
         cliff_duration: u64,
         vesting_duration: u64,
     ) -> VestingId {
-        ctx.tailor_coin
-            .approve(&ctx.vesting.address(), &total_amount);
+        // Note: In production, the ICO contract transfers tokens directly to the Staking contract
+        // before calling create_schedule.
+        // For testing, we just call create_schedule.
         ctx.vesting
             .create_schedule(beneficiary, total_amount, cliff_duration, vesting_duration)
     }
@@ -768,18 +745,15 @@ mod tests {
             "Schedules count should be 1"
         );
 
-        // Verify Tailor coins were pulled from the owner into the vestin contract
         let current_owner_balance = ctx.tailor_coin.balance_of(&ctx.users.owner);
         let current_vesting_balance = ctx.tailor_coin.balance_of(&ctx.vesting.address());
         assert_eq!(
-            current_owner_balance,
-            prev_owner_balance - vesting_amount(),
-            "Owner balance should decrease by vesting amount"
+            current_owner_balance, prev_owner_balance,
+            "Owner balance should not change"
         );
         assert_eq!(
-            current_vesting_balance,
-            prev_vesting_balance + vesting_amount(),
-            "Vesting contract balance should increase by vesting amount"
+            current_vesting_balance, prev_vesting_balance,
+            "Vesting contract balance should not change"
         );
 
         // Verified stored data

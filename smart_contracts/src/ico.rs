@@ -7,7 +7,10 @@ use odra::{
 use odra_modules::{access::Ownable, cep18_token::Cep18ContractRef};
 
 use crate::{
-    constants::{SIX_MONTHS, STYKS_ORACLE_CSPR_USDT_PRICE_FEED_ID, TWELVE_MONTHS},
+    constants::{
+        PRIVATE_SALE_CLIFF_DURATION, PRIVATE_SALE_VESTING_DURATION,
+        STYKS_ORACLE_CSPR_USDT_PRICE_FEED_ID,
+    },
     ico::{
         errors::Error,
         events::{
@@ -17,6 +20,7 @@ use crate::{
         types::{Currency, ICOSchedule, ICOScheduleCreateParams},
     },
     mocks::styks_price_feed::StyksPriceFeedContractRef,
+    staking::StakingContractRef,
     treasury::TreasuryContractRef,
     vesting::VestingContractRef,
 };
@@ -35,6 +39,7 @@ pub struct ICO {
     styks_price_feed: External<StyksPriceFeedContractRef>,
     tailor_coin: External<Cep18ContractRef>,
     treasury: External<TreasuryContractRef>,
+    staking: External<StakingContractRef>,
     vesting: External<VestingContractRef>,
 }
 
@@ -62,6 +67,12 @@ impl ICO {
     pub fn set_vesting(&mut self, vesting: Address) {
         self.assert_owner();
         self.vesting.set(vesting);
+    }
+
+    /// Sets the Staking contract address by the owner
+    pub fn set_staking(&mut self, staking: Address) {
+        self.assert_owner();
+        self.staking.set(staking);
     }
 
     /// Adds a new currency by the owner. Added currency will be supported for making purchases during ICOs
@@ -180,13 +191,21 @@ impl ICO {
         self.ico_schedules
             .set(&current_ico_schedule_id, current_ico_schedule);
 
-        // Approve Vesting contract to pull the purchased tokens from ICO
+        // Transfer tokens directly to Staking contract
         self.tailor_coin
-            .approve(self.vesting.address(), &purchase_amount);
+            .transfer(&self.staking.address(), &purchase_amount);
 
-        // Whitepaper 4.3: Private Sale is 6-month cliff, 12-month vest
-        self.vesting
-            .create_schedule(*caller, purchase_amount, SIX_MONTHS, TWELVE_MONTHS);
+        // Record the vesting schedule
+        self.vesting.create_schedule(
+            *caller,
+            purchase_amount,
+            PRIVATE_SALE_CLIFF_DURATION,
+            PRIVATE_SALE_VESTING_DURATION,
+        );
+
+        // TODO: Stake the tokens for the beneficiary
+        // Contract call may look like this:
+        // self.staking.stake_for(*caller, purchase_amount);
 
         self.env().emit_native_event(TokensPurchased {
             amount: purchase_amount,
@@ -473,6 +492,7 @@ mod tests {
 
     use crate::{
         mocks::styks_price_feed::{StyksPriceFeed, StyksPriceFeedHostRef},
+        staking::{Staking, StakingHostRef, StakingInitArgs},
         tailor_coin::{TailorCoin, TailorCoinHostRef, TailorCoinInitArgs},
         treasury::{Treasury, TreasuryHostRef, TreasuryInitArgs},
         vesting::{Vesting, VestingHostRef, VestingInitArgs},
@@ -493,6 +513,7 @@ mod tests {
         usdt: TailorCoinHostRef,
         treasury: TreasuryHostRef,
         vesting: VestingHostRef,
+        staking: StakingHostRef,
         ico: ICOHostRef,
         styks_price_feed: StyksPriceFeedHostRef,
         users: Users,
@@ -1024,7 +1045,7 @@ mod tests {
         let prev_current_ico_schedule = ctx.ico.get_current_ico_schedule().unwrap();
         let prev_buyer_balance = ctx.tailor_coin.balance_of(&ctx.users.alice);
         let prev_ico_balance = ctx.tailor_coin.balance_of(&ctx.ico.address());
-        let prev_vesting_balance = ctx.tailor_coin.balance_of(&ctx.vesting.address());
+        let prev_staking_balance = ctx.tailor_coin.balance_of(&ctx.staking.address());
         let prev_treasury_balance = ctx.env.balance_of(&ctx.treasury.address());
         let prev_user_schedules_count = ctx.vesting.get_user_schedules_count(ctx.users.alice);
 
@@ -1040,7 +1061,7 @@ mod tests {
         let curr_current_ico_schedule = ctx.ico.get_current_ico_schedule().unwrap();
         let curr_buyer_balance = ctx.tailor_coin.balance_of(&ctx.users.alice);
         let curr_ico_balance = ctx.tailor_coin.balance_of(&ctx.ico.address());
-        let curr_vesting_balance = ctx.tailor_coin.balance_of(&ctx.vesting.address());
+        let curr_staking_balance = ctx.tailor_coin.balance_of(&ctx.staking.address());
         let curr_treasury_balance = ctx.env.balance_of(&ctx.treasury.address());
         let curr_user_schedules_count = ctx.vesting.get_user_schedules_count(ctx.users.alice);
 
@@ -1066,16 +1087,14 @@ mod tests {
             prev_current_ico_schedule.1.sold_amount + expected_purchase_amount,
             "Invalid current ICO schedule sold amount"
         );
-
-        // Tokens go to vesting contract, not directly to buyer
         assert_eq!(
             curr_buyer_balance, prev_buyer_balance,
-            "Buyer should not receive tokens, they go to vesting"
+            "Buyer should not receive tokens directly, they go to staking"
         );
         assert_eq!(
-            curr_vesting_balance,
-            prev_vesting_balance + expected_purchase_amount,
-            "Vesting contract should hold the purchased tokens"
+            curr_staking_balance,
+            prev_staking_balance + expected_purchase_amount,
+            "Staking contract should hold the purchased tokens"
         );
         assert_eq!(
             curr_ico_balance,
@@ -1109,7 +1128,7 @@ mod tests {
         let prev_current_ico_schedule = ctx.ico.get_current_ico_schedule().unwrap();
         let prev_buyer_balance = ctx.tailor_coin.balance_of(&ctx.users.alice);
         let prev_ico_balance = ctx.tailor_coin.balance_of(&ctx.ico.address());
-        let prev_vesting_balance = ctx.tailor_coin.balance_of(&ctx.vesting.address());
+        let prev_staking_balance = ctx.tailor_coin.balance_of(&ctx.staking.address());
         let prev_treasury_balance = ctx.usdc.balance_of(&ctx.treasury.address());
         let prev_user_schedules_count = ctx.vesting.get_user_schedules_count(ctx.users.alice);
 
@@ -1123,7 +1142,7 @@ mod tests {
         let curr_current_ico_schedule = ctx.ico.get_current_ico_schedule().unwrap();
         let curr_buyer_balance = ctx.tailor_coin.balance_of(&ctx.users.alice);
         let curr_ico_balance = ctx.tailor_coin.balance_of(&ctx.ico.address());
-        let curr_vesting_balance = ctx.tailor_coin.balance_of(&ctx.vesting.address());
+        let curr_staking_balance = ctx.tailor_coin.balance_of(&ctx.staking.address());
         let curr_treasury_balance = ctx.usdc.balance_of(&ctx.treasury.address());
         let curr_user_schedules_count = ctx.vesting.get_user_schedules_count(ctx.users.alice);
 
@@ -1149,15 +1168,14 @@ mod tests {
             prev_current_ico_schedule.1.sold_amount + expected_purchase_amount,
             "Invalid current ICO schedule sold amount"
         );
-        // Tokens go to vesting contract, not directly to buyer
         assert_eq!(
             curr_buyer_balance, prev_buyer_balance,
-            "Buyer should not receive tokens directly - they go to vesting"
+            "Buyer should not receive tokens directly, they go to staking"
         );
         assert_eq!(
-            curr_vesting_balance,
-            prev_vesting_balance + expected_purchase_amount,
-            "Vesting contract should hold the purchased tokens"
+            curr_staking_balance,
+            prev_staking_balance + expected_purchase_amount,
+            "Staking contract should hold the purchased tokens"
         );
         assert_eq!(
             curr_ico_balance,
@@ -1465,9 +1483,14 @@ mod tests {
         vesting.set_tailor_coin(tailor_coin.address());
         vesting.add_whitelisted_creator(ico.address());
 
+        // Set up Staking contract
+        let mut staking = Staking::deploy(&env, StakingInitArgs { owner: users.owner });
+        staking.set_tailor_coin(tailor_coin.address());
+
         ico.set_tailor_coin(tailor_coin.address());
         ico.set_treasury(treasury.address());
         ico.set_vesting(vesting.address());
+        ico.set_staking(staking.address());
 
         ico.add_currency(Currency::CSPR, None);
         ico.add_currency(Currency::USDC, Some(usdc.address()));
@@ -1485,6 +1508,7 @@ mod tests {
             usdt,
             treasury,
             vesting,
+            staking,
             ico,
             styks_price_feed,
             users,
