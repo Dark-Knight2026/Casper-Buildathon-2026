@@ -67,7 +67,7 @@ vi.mock('@/constants/ico', () => ({
       tokenAddress: 'hash-token',
     },
     PURCHASE_LIMITS: {
-      min: 10,
+      min: 1,
       max: 100000,
     },
     CASPER: { networkName: 'casper-test' },
@@ -186,9 +186,9 @@ describe('validatePurchase', () => {
     expect(result.error).toBe('Invalid amount');
   });
 
-  it('rejects below minimum ($10 USD)', () => {
-    // 5 USDT = $5 < $10 min
-    const result = validatePurchase('5', 'USDT', 1000);
+  it('rejects below minimum ($1 USD)', () => {
+    // 0.5 USDT = $0.50 < $1 min
+    const result = validatePurchase('0.5', 'USDT', 1000);
     expect(result.valid).toBe(false);
     expect(result.error).toContain('Minimum');
   });
@@ -206,14 +206,14 @@ describe('validatePurchase', () => {
   });
 
   it('applies CSPR exchange rate for min check', () => {
-    // 100 CSPR * 0.02 = $2 < $10 min
-    const result = validatePurchase('100', 'CSPR', 10000, 0.02);
+    // 1 CSPR * 0.02 = $0.02 < $1 min
+    const result = validatePurchase('1', 'CSPR', 10000, 0.02);
     expect(result.valid).toBe(false);
     expect(result.error).toContain('Minimum');
   });
 
   it('accepts valid CSPR purchase above minimum', () => {
-    // 1000 CSPR * 0.02 = $20 > $10 min
+    // 1000 CSPR * 0.02 = $20 > $1 min
     const result = validatePurchase('1000', 'CSPR', 10000, 0.02);
     expect(result).toEqual({ valid: true });
   });
@@ -225,8 +225,8 @@ describe('validatePurchase', () => {
   });
 
   it('accepts exact minimum amount', () => {
-    // 10 USDT = $10 = exactly min
-    const result = validatePurchase('10', 'USDT', 1000);
+    // 1 USDT = $1 = exactly min
+    const result = validatePurchase('1', 'USDT', 1000);
     expect(result).toEqual({ valid: true });
   });
 });
