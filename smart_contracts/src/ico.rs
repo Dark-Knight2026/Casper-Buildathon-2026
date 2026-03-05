@@ -7,7 +7,7 @@ use odra::{
 use odra_modules::{access::Ownable, cep18_token::Cep18ContractRef};
 
 use crate::{
-    constants::STYKS_ORACLE_CSPR_USDT_PRICE_FEED_ID,
+    constants::{SIX_MONTHS, STYKS_ORACLE_CSPR_USDT_PRICE_FEED_ID, TWELVE_MONTHS},
     ico::{
         errors::Error,
         events::{
@@ -18,6 +18,7 @@ use crate::{
     },
     mocks::styks_price_feed::StyksPriceFeedContractRef,
     treasury::TreasuryContractRef,
+    vesting::VestingContractRef,
 };
 
 pub type ICOScheduleId = U128;
@@ -34,6 +35,7 @@ pub struct ICO {
     styks_price_feed: External<StyksPriceFeedContractRef>,
     tailor_coin: External<Cep18ContractRef>,
     treasury: External<TreasuryContractRef>,
+    vesting: External<VestingContractRef>,
 }
 
 #[odra::module]
@@ -54,6 +56,12 @@ impl ICO {
     pub fn set_treasury(&mut self, treasury: Address) {
         self.assert_owner();
         self.treasury.set(treasury);
+    }
+
+    /// Sets the Vesting contract addess by the owner
+    pub fn set_vesting(&mut self, vesting: Address) {
+        self.assert_owner();
+        self.vesting.set(vesting);
     }
 
     /// Adds a new currency by the owner. Added currency will be supported for making purchases during ICOs
@@ -172,8 +180,13 @@ impl ICO {
         self.ico_schedules
             .set(&current_ico_schedule_id, current_ico_schedule);
 
-        // TODO remove direct transfer to users. Add vesting position creation + stake it to earn rewards while under vesting.
-        self.tailor_coin.transfer(&caller, &purchase_amount);
+        // Approve Vesting contract to pull the purchased tokens from ICO
+        self.tailor_coin
+            .approve(self.vesting.address(), &purchase_amount);
+
+        // Whitepaper 4.3: Private Sale is 6-month cliff, 12-month vest
+        self.vesting
+            .create_schedule(*caller, purchase_amount, SIX_MONTHS, TWELVE_MONTHS);
 
         self.env().emit_native_event(TokensPurchased {
             amount: purchase_amount,

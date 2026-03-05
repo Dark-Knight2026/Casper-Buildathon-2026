@@ -7,3 +7,7 @@ pub const INCENTIVES_REWARDS_BPS: u16 = 6_000; // 60.00%
 pub const ONE_MONTH_IN_SECONDS: u64 = 30 * 24 * 60 * 60;
 
 pub const STYKS_ORACLE_CSPR_USDT_PRICE_FEED_ID: &'static str = "CSPRUSD";
+
+pub const SIX_MONTHS: u64 = 6 * 30 * 24 * 60 * 60;
+
+pub const TWELVE_MONTHS: u64 = 12 * 30 * 24 * 60 * 60;

@@ -271,8 +271,6 @@ impl Vesting {
         }
 
         // Transfer BIG tokens from the caller to this contract
-        // TODO: Pretty sure the caller must approved this contract first before transfer
-        // Need to check on that
         let sender = self.env().caller().clone();
         let receiver = self.env().self_address().clone();
         self.tailor_coin
@@ -298,8 +296,22 @@ impl Vesting {
         self.user_schedules.set(&beneficiary, user_schedules);
 
         // TODO: once staking contract is implemented with staking/unstaking functions, auto-stake
+        //
+        // Right now, we are sending the tokens to the vesting contract and then potentially again
+        // sending the tokens to the staking contract when calling stake function. This is a bit
+        // redundant, having to send the tokens twice. Once we have the staking function, we may
+        // think about how to create a schedule in the vesting contract and have the ICO contract
+        // send tokens directly to the staking contract.
+        //
+        // The tradeoff is that it makes the contracts more tightly coupled, the ICO would need to
+        // know about both Vesting and Staking, and coordinate the approval/transfer to Staking
+        // while telling Vesting to record the schedule without pulling tokens. Right now Vesting is
+        // self-contained: it pulls tokens in, and later releases them out. If we skip it, Vesting
+        // becomes purely a bookkeeping contract that controls when unstaking is allowed but never
+        // actually holds tokens.
+        //
         // Something like:
-        // self.staking.stake(beneficiary, total_amount)
+        // self.staking.stake_for(&schedule.beneficiary, total_amount)
 
         self.env().emit_native_event(ScheduleCreated {
             vesting_id,
