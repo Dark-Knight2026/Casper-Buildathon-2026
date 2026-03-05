@@ -1,7 +1,7 @@
 use odra::{casper_types::U256, prelude::*, ContractRef};
 use odra_modules::{access::Ownable, cep18_token::Cep18ContractRef};
 
-use crate::{staking::StakingContractRef, vesting};
+use crate::staking::StakingContractRef;
 
 // =============================================================================
 // Vesting Types
@@ -374,9 +374,6 @@ impl Vesting {
         // TODO: Pull tokens back from staking after unbonding period.
         // Will probably look something like this:
         // self.staking.withdraw_for(&schedule.beneficiary);
-        // And then can delete this transfer function:
-        self.tailor_coin
-            .transfer(&schedule.beneficiary, &withdrawable);
 
         self.env().emit_native_event(TokensWithdrawn {
             vesting_id,
@@ -443,7 +440,7 @@ impl Vesting {
 mod tests {
     use odra::{
         casper_types::U256,
-        host::{Deployer, HostEnv, HostRef},
+        host::{Deployer, HostEnv},
     };
     use odra_modules::access::errors::Error as AccessError;
 
