@@ -387,7 +387,7 @@ const CONTRACT_ERROR_MAP: Record<string, string> = {
   '20004': 'Cannot renounce role for another address',
 };
 
-function parseContractError(rawMessage?: string): string {
+export function parseContractError(rawMessage?: string): string {
   if (!rawMessage) return 'Deploy failed';
 
   const match = rawMessage.match(/User error: (\d+)/);

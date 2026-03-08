@@ -8,6 +8,7 @@ interface ImportMetaEnv {
   readonly VITE_CASPER_RPC_URL: string;
   readonly VITE_CASPER_EXPLORER_URL: string;
   readonly VITE_ICO_CONTRACT_HASH: string;
+  readonly VITE_ICO_PACKAGE_HASH: string;
   readonly VITE_BIG_TOKEN_CONTRACT_HASH: string;
   readonly VITE_TREASURY_CONTRACT_HASH: string;
   readonly VITE_USDC_CONTRACT_HASH: string;

@@ -6,6 +6,7 @@ import {
   calculateTokensReceived,
   createPurchaseTransaction,
   checkApprovalNeeded,
+  parseContractError,
 } from '@/services/ico/icoPurchaseService';
 import { getAllowance } from '@/services/ico/cep18Service';
 // Schema loaded inline to avoid path alias issues in test environment
@@ -356,5 +357,33 @@ describe('checkApprovalNeeded', () => {
     expect(result.needed).toBe(false);
     expect(result.requiredAmount).toBe(50_000_000n);
     expect(result.currentAllowance).toBe(100_000_000n);
+  });
+});
+
+// ── parseContractError ────────────────────────────────────────────────
+
+describe('parseContractError', () => {
+  it('returns "Deploy failed" for undefined input', () => {
+    expect(parseContractError(undefined)).toBe('Deploy failed');
+  });
+
+  it('maps "User error: 59005" to "Invalid amount to spend"', () => {
+    expect(parseContractError('User error: 59005')).toBe('Invalid amount to spend');
+  });
+
+  it('maps "User error: 59012" to "Purchase amount below minimum"', () => {
+    expect(parseContractError('User error: 59012')).toBe('Purchase amount below minimum');
+  });
+
+  it('maps "User error: 59007" to no active ICO schedule message', () => {
+    expect(parseContractError('User error: 59007')).toBe('No active ICO schedule — sale is not currently open');
+  });
+
+  it('returns raw message for unknown error code', () => {
+    expect(parseContractError('User error: 99999')).toBe('User error: 99999');
+  });
+
+  it('returns raw message for non-matching format', () => {
+    expect(parseContractError('Something completely different')).toBe('Something completely different');
   });
 });

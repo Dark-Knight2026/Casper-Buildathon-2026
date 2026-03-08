@@ -77,6 +77,9 @@ export function PurchaseConfirmationModal({
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="purchase-modal-title"
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
       onClick={handleBackdropClick}
     >
@@ -87,7 +90,7 @@ export function PurchaseConfirmationModal({
       >
         {/* Header */}
         <div className="flex items-center justify-between w-full mb-6">
-          <h2 className="text-xl font-bold text-[hsl(var(--ico-text-primary))]">
+          <h2 id="purchase-modal-title" className="text-xl font-bold text-[hsl(var(--ico-text-primary))]">
             Confirm Purchase
           </h2>
           {!isProcessing && (
