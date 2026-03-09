@@ -25,14 +25,19 @@ use jsonwebtoken::{EncodingKey, Header, encode};
 use secrecy::SecretString;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
-use sqlx::PgPool;
+use sqlx::{PgPool, migrate::Migrator};
 use testcontainers::{
     ContainerAsync, GenericImage,
     core::{IntoContainerPort, WaitFor},
     runners::AsyncRunner,
 };
 
-use api::{AppState, Claims, ServerConfig, UserId, UserRole, common::RedisStore, server};
+use api::{
+    AppState, Claims, IcoConfig, ServerConfig, UserId, UserRole, common::RedisStore, server,
+};
+
+/// Embedded migrations for `#[sqlx::test(migrator = "common::MIGRATIONS")]`.
+pub static MIGRATIONS: Migrator = sqlx::migrate!("../../supabase/migrations");
 
 /// Test database URL for docker-compose `PostgreSQL`.
 pub const TEST_DATABASE_URL: &str = "postgres://postgres:postgres@127.0.0.1:5433/postgres";
@@ -97,12 +102,31 @@ pub struct TestEnv {
     pub redis: Option<RedisTestEnv>,
 }
 
+/// Optional overrides for test server configuration.
+#[derive(Debug, Default)]
+pub struct TestOverrides {
+    /// BIG token contract hash (enables `/transactions/token/big`).
+    pub contract_big: Option<String>,
+    /// ICO config (enables `/ico/balance` and `/ico/progress`).
+    pub ico: Option<IcoConfig>,
+}
+
 /// Creates a test server using a pool from `#[sqlx::test]`.
 ///
 /// - `PostgreSQL` pool comes from `#[sqlx::test]` (isolated per test).
 /// - Redis is optional: when `with_redis = true`, creates a dedicated container.
 #[inline]
 pub async fn setup_test_server(pool: PgPool, with_redis: bool) -> TestEnv {
+    setup_test_server_with(pool, with_redis, TestOverrides::default()).await
+}
+
+/// Creates a test server with custom config overrides.
+#[inline]
+pub async fn setup_test_server_with(
+    pool: PgPool,
+    with_redis: bool,
+    overrides: TestOverrides,
+) -> TestEnv {
     let (redis_url, redis_client, redis_env) = if with_redis {
         let env = RedisTestEnv::start().await;
         (env.url.clone(), env.client.clone(), Some(env))
@@ -120,8 +144,8 @@ pub async fn setup_test_server(pool: PgPool, with_redis: bool) -> TestEnv {
         jwt_secret: SecretString::from(jwt_secret.clone()),
         port: 0,
         cors_origin: TEST_CORS_ORIGIN.to_owned(),
-        contract_big: None,
-        ico: None,
+        contract_big: overrides.contract_big,
+        ico: overrides.ico,
     };
     let state = Arc::new(AppState {
         db: pool,

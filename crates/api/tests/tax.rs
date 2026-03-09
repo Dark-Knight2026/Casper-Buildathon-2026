@@ -27,7 +27,7 @@ fn tax_request_deserialization() {
 }
 
 /// Verifies that the tax calculation endpoint returns the expected response structure.
-#[sqlx::test(migrations = "../../supabase/migrations")]
+#[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn tax_returns_expected_structure(pool: PgPool) {
     let env = common::setup_test_server(pool, false).await;
     let token = common::create_test_jwt(UserId::default(), UserRole::Tenant, &env.jwt_secret);

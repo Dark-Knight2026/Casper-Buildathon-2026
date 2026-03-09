@@ -11,7 +11,7 @@ use api::server::AUTH_RATE_LIMIT_BURST;
 /// Verifies that auth endpoints enforce rate limiting after `burst_size` (15) requests.
 ///
 /// Configuration: `per_second(1)`, `burst_size(15)` via `GovernorLayer`.
-#[sqlx::test(migrations = "../../supabase/migrations")]
+#[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn auth_endpoint_enforces_rate_limit(pool: PgPool) {
     let env = common::setup_test_server(pool, false).await;
 
@@ -35,7 +35,7 @@ async fn auth_endpoint_enforces_rate_limit(pool: PgPool) {
 }
 
 /// Verifies that non-auth endpoints are NOT rate limited.
-#[sqlx::test(migrations = "../../supabase/migrations")]
+#[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn health_endpoint_is_not_rate_limited(pool: PgPool) {
     let env = common::setup_test_server(pool, false).await;
 
@@ -51,7 +51,7 @@ async fn health_endpoint_is_not_rate_limited(pool: PgPool) {
 }
 
 /// Verifies that the CORS layer sets `access-control-allow-origin` to the configured origin.
-#[sqlx::test(migrations = "../../supabase/migrations")]
+#[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn cors_returns_configured_origin(pool: PgPool) {
     let env = common::setup_test_server(pool, false).await;
 
@@ -70,7 +70,7 @@ async fn cors_returns_configured_origin(pool: PgPool) {
 }
 
 /// Verifies that CORS preflight returns the correct allowed methods and headers.
-#[sqlx::test(migrations = "../../supabase/migrations")]
+#[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn cors_preflight_returns_allowed_methods(pool: PgPool) {
     let env = common::setup_test_server(pool, false).await;
 
@@ -100,7 +100,7 @@ async fn cors_preflight_returns_allowed_methods(pool: PgPool) {
 /// With `AllowOrigin::exact`, the server always responds with the configured origin.
 /// Browsers enforce CORS by checking that the response origin matches the page origin,
 /// so `https://evil.com` != the configured origin causes the browser to block the response.
-#[sqlx::test(migrations = "../../supabase/migrations")]
+#[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn cors_origin_does_not_match_unauthorized_request(pool: PgPool) {
     let env = common::setup_test_server(pool, false).await;
 

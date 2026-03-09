@@ -2,8 +2,8 @@ SHELL := /bin/bash
 
 .PHONY:   \
  help     \
- env_up   \
- env_down \
+ env-up   \
+ env-down \
  migrate  \
  restart  \
  check    \
@@ -13,22 +13,22 @@ SHELL := /bin/bash
  openapi  \
  prepare  \
  test     \
- test_one \
- test_in  \
- test_not \
+ test-one \
+ test-in  \
+ test-not \
  run      \
  clean    \
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z0-9_.-]+:.*?## ' Makefile | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  make %-10s %s\n", $$1, $$2}'
 
-env_up: ## Start Supabase and Redis
+env-up: ## Start Supabase and Redis
 	@echo "[*] Starting Supabase..."
 	@supabase start
 	@echo "[*] Starting Redis..."
 	@docker compose up -d redis
 
-env_down: ## Stop Supabase, Redis, and test database
+env-down: ## Stop Supabase, Redis, and test database
 	@echo "[*] Stopping Redis..."
 	@docker compose down --volumes
 	@echo "[*] Stopping test database..."
@@ -40,7 +40,7 @@ migrate: ## Reset local database and apply all migrations
 	@echo "[*] Resetting database and applying migrations..."
 	@supabase db reset
 
-restart: env_down env_up migrate ## Restart environment and run migrations
+restart: env-down env-up migrate ## Restart environment and run migrations
 
 ci: check test ## Full CI pipeline
 
@@ -89,13 +89,13 @@ test: ## Run nextest (use ARGS="..." for extra arguments)
 	@DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5433/postgres \
 		cargo nextest run --all-features --no-fail-fast $(ARGS)
 
-test_one: ## Run single test: `make test_one <test_name>`
+test-one: ## Run single test: `make test-one <test_name>`
 	@$(MAKE) test ARGS="$(filter-out $@,$(MAKECMDGOALS))"
 
-test_in: ## Run tests in module: `make test_in <module_name>`
+test-in: ## Run tests in module: `make test-in <module_name>`
 	@$(MAKE) test ARGS="--test $(filter-out $@,$(MAKECMDGOALS))"
 
-test_not: ## Exclude tests: `make test_not <test1> <test2> ...`
+test-not: ## Exclude tests: `make test-not <test1> <test2> ...`
 	@expr=$$(echo "$(filter-out $@,$(MAKECMDGOALS))" \
 		| awk '{for(i=1;i<=NF;i++){printf "not test(%s)%s", $$i, (i<NF?" and ":"")}}'); \
 	$(MAKE) test ARGS="-E '$$expr'"

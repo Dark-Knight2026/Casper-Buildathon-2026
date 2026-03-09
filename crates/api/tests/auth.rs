@@ -18,7 +18,7 @@ fn generate_random_ed25519() -> (SecretKey, PublicKey) {
     (secret_key, public_key)
 }
 
-#[sqlx::test(migrations = "../../supabase/migrations")]
+#[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn nonce_endpoint_requires_wallet_address(pool: PgPool) {
     let env = common::setup_test_server(pool, true).await;
 
@@ -27,7 +27,7 @@ async fn nonce_endpoint_requires_wallet_address(pool: PgPool) {
     assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
 }
 
-#[sqlx::test(migrations = "../../supabase/migrations")]
+#[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn nonce_endpoint_returns_challenge(pool: PgPool) {
     let env = common::setup_test_server(pool, true).await;
 
@@ -50,7 +50,7 @@ async fn nonce_endpoint_returns_challenge(pool: PgPool) {
     assert!(message.starts_with("Sign this message to login to LeaseFi. Nonce:"));
 }
 
-#[sqlx::test(migrations = "../../supabase/migrations")]
+#[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn login_rejects_invalid_wallet_address(pool: PgPool) {
     let env = common::setup_test_server(pool, false).await;
 
@@ -66,7 +66,7 @@ async fn login_rejects_invalid_wallet_address(pool: PgPool) {
     assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
 }
 
-#[sqlx::test(migrations = "../../supabase/migrations")]
+#[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn login_rejects_invalid_signature_format(pool: PgPool) {
     let env = common::setup_test_server(pool, false).await;
 
@@ -84,7 +84,7 @@ async fn login_rejects_invalid_signature_format(pool: PgPool) {
     assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
 }
 
-#[sqlx::test(migrations = "../../supabase/migrations")]
+#[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn protected_endpoint_requires_auth(pool: PgPool) {
     let env = common::setup_test_server(pool, false).await;
 
@@ -100,7 +100,7 @@ async fn protected_endpoint_requires_auth(pool: PgPool) {
     assert_eq!(response.status_code(), StatusCode::UNAUTHORIZED);
 }
 
-#[sqlx::test(migrations = "../../supabase/migrations")]
+#[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn protected_endpoint_rejects_invalid_token(pool: PgPool) {
     let env = common::setup_test_server(pool, false).await;
 
@@ -120,7 +120,7 @@ async fn protected_endpoint_rejects_invalid_token(pool: PgPool) {
 }
 
 /// End-to-end: generate keypair -> get nonce -> sign -> login -> receive JWT.
-#[sqlx::test(migrations = "../../supabase/migrations")]
+#[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn full_auth_flow_nonce_sign_login(pool: PgPool) {
     let env = common::setup_test_server(pool, true).await;
 
@@ -170,7 +170,7 @@ async fn full_auth_flow_nonce_sign_login(pool: PgPool) {
 }
 
 /// Replay attack: nonce is deleted after successful login, second attempt must fail.
-#[sqlx::test(migrations = "../../supabase/migrations")]
+#[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn replay_attack_prevention(pool: PgPool) {
     let env = common::setup_test_server(pool, true).await;
 
@@ -216,7 +216,7 @@ async fn replay_attack_prevention(pool: PgPool) {
 }
 
 /// Requesting a new nonce overwrites the previous one; only the latest nonce is valid.
-#[sqlx::test(migrations = "../../supabase/migrations")]
+#[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn concurrent_nonce_overwrites_previous(pool: PgPool) {
     let env = common::setup_test_server(pool, true).await;
 
@@ -272,7 +272,7 @@ async fn concurrent_nonce_overwrites_previous(pool: PgPool) {
 }
 
 /// Login without requesting a nonce first must be rejected.
-#[sqlx::test(migrations = "../../supabase/migrations")]
+#[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn login_without_nonce_is_rejected(pool: PgPool) {
     let env = common::setup_test_server(pool, true).await;
 
@@ -300,7 +300,7 @@ async fn login_without_nonce_is_rejected(pool: PgPool) {
 }
 
 /// Nonce key in Redis must have TTL set (`LOGIN_NONCE_TTL` = 300s).
-#[sqlx::test(migrations = "../../supabase/migrations")]
+#[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn nonce_has_ttl_set_in_redis(pool: PgPool) {
     let env = common::setup_test_server(pool, true).await;
 
