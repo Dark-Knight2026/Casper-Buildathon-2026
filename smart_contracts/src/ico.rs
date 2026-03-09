@@ -63,7 +63,7 @@ impl ICO {
         self.treasury.set(treasury);
     }
 
-    /// Sets the Vesting contract addess by the owner
+    /// Sets the Vesting contract address by the owner
     pub fn set_vesting(&mut self, vesting: Address) {
         self.assert_owner();
         self.vesting.set(vesting);
@@ -199,12 +199,11 @@ impl ICO {
             PRIVATE_SALE_VESTING_DURATION,
         );
 
-        // Transfer tokens directly to Staking contract
         self.tailor_coin
-            .transfer(&self.staking.address(), &purchase_amount);
+            .approve(&self.staking.address(), &purchase_amount);
 
-        // TODO: Stake the tokens for the beneficiary
-        // Contract call may look like this:
+        // TODO: Call an entrypoint on the Staking contract to transfer tokens from
+        // the ICO contract and stake them for the beneficiary. Example:
         // self.staking.stake_for(*caller, purchase_amount);
 
         self.env().emit_native_event(TokensPurchased {
@@ -312,6 +311,16 @@ impl ICO {
     /// Returns the Treasury contract address
     pub fn get_treasury_contract_address(&self) -> Address {
         *self.treasury.address()
+    }
+
+    /// Returns the Staking contract address
+    pub fn get_staking_contract_address(&self) -> Address {
+        *self.staking.address()
+    }
+
+    /// Returns the Vesting contract address
+    pub fn get_vesting_contract_address(&self) -> Address {
+        *self.vesting.address()
     }
 
     delegate! {
@@ -543,6 +552,16 @@ mod tests {
             ctx.treasury.address(),
             "Invalid Treasury contract address"
         );
+        assert_eq!(
+            ctx.ico.get_staking_contract_address(),
+            ctx.staking.address(),
+            "Invalid Staking contract address"
+        );
+        assert_eq!(
+            ctx.ico.get_vesting_contract_address(),
+            ctx.vesting.address(),
+            "Invalid Vesting contract address"
+        );
     }
 
     /////////////////////////////////////////////////////////////////////////////
@@ -604,6 +623,68 @@ mod tests {
             ctx.ico.get_treasury_contract_address(),
             treasury,
             "Invalid Treasury contract address"
+        );
+    }
+
+    /////////////////////////////////////////////////////////////////////////////
+    //                              set_staking()                              //
+    /////////////////////////////////////////////////////////////////////////////
+
+    #[test]
+    fn test_set_staking_should_revert_if_not_owner_is_calling() {
+        let mut ctx = setup(odra_test::env(), false);
+
+        ctx.env.set_caller(ctx.users.alice);
+
+        assert_eq!(
+            ctx.ico.try_set_staking(ctx.staking.address()).unwrap_err(),
+            AccessError::CallerNotTheOwner.into(),
+            "Should revert when is called by not the owner"
+        );
+    }
+
+    #[test]
+    fn test_set_staking_should_set_staking_properly() {
+        let mut ctx = setup(odra_test::env(), false);
+        let staking = ctx.staking.address();
+
+        ctx.ico.set_staking(staking);
+
+        assert_eq!(
+            ctx.ico.get_staking_contract_address(),
+            staking,
+            "Invalid Staking contract address"
+        );
+    }
+
+    /////////////////////////////////////////////////////////////////////////////
+    //                              set_vesting()                              //
+    /////////////////////////////////////////////////////////////////////////////
+
+    #[test]
+    fn test_set_vesting_should_revert_if_not_owner_is_calling() {
+        let mut ctx = setup(odra_test::env(), false);
+
+        ctx.env.set_caller(ctx.users.alice);
+
+        assert_eq!(
+            ctx.ico.try_set_vesting(ctx.vesting.address()).unwrap_err(),
+            AccessError::CallerNotTheOwner.into(),
+            "Should revert when is called by not the owner"
+        );
+    }
+
+    #[test]
+    fn test_set_vesting_should_set_vesting_properly() {
+        let mut ctx = setup(odra_test::env(), false);
+        let vesting = ctx.vesting.address();
+
+        ctx.ico.set_vesting(vesting);
+
+        assert_eq!(
+            ctx.ico.get_vesting_contract_address(),
+            vesting,
+            "Invalid Vesting contract address"
         );
     }
 
@@ -1045,7 +1126,6 @@ mod tests {
         let prev_current_ico_schedule = ctx.ico.get_current_ico_schedule().unwrap();
         let prev_buyer_balance = ctx.tailor_coin.balance_of(&ctx.users.alice);
         let prev_ico_balance = ctx.tailor_coin.balance_of(&ctx.ico.address());
-        let prev_staking_balance = ctx.tailor_coin.balance_of(&ctx.staking.address());
         let prev_treasury_balance = ctx.env.balance_of(&ctx.treasury.address());
         let prev_user_schedules_count = ctx.vesting.get_user_schedules_count(ctx.users.alice);
 
@@ -1061,7 +1141,9 @@ mod tests {
         let curr_current_ico_schedule = ctx.ico.get_current_ico_schedule().unwrap();
         let curr_buyer_balance = ctx.tailor_coin.balance_of(&ctx.users.alice);
         let curr_ico_balance = ctx.tailor_coin.balance_of(&ctx.ico.address());
-        let curr_staking_balance = ctx.tailor_coin.balance_of(&ctx.staking.address());
+        let curr_staking_allowance = ctx
+            .tailor_coin
+            .allowance(&ctx.ico.address(), &ctx.staking.address());
         let curr_treasury_balance = ctx.env.balance_of(&ctx.treasury.address());
         let curr_user_schedules_count = ctx.vesting.get_user_schedules_count(ctx.users.alice);
 
@@ -1089,17 +1171,15 @@ mod tests {
         );
         assert_eq!(
             curr_buyer_balance, prev_buyer_balance,
-            "Buyer should not receive tokens directly, they go to staking"
+            "Buyer should not receive tokens directly"
         );
         assert_eq!(
-            curr_staking_balance,
-            prev_staking_balance + expected_purchase_amount,
-            "Staking contract should hold the purchased tokens"
+            curr_staking_allowance, expected_purchase_amount,
+            "Staking contract should be approved to transfer the purchased tokens"
         );
         assert_eq!(
-            curr_ico_balance,
-            prev_ico_balance - expected_purchase_amount,
-            "Invalid current ICO contract ICO token balance"
+            curr_ico_balance, prev_ico_balance,
+            "ICO contract balance should not change (tokens stay in ICO until staking pulls them)"
         );
         assert_eq!(
             curr_treasury_balance,
@@ -1128,7 +1208,6 @@ mod tests {
         let prev_current_ico_schedule = ctx.ico.get_current_ico_schedule().unwrap();
         let prev_buyer_balance = ctx.tailor_coin.balance_of(&ctx.users.alice);
         let prev_ico_balance = ctx.tailor_coin.balance_of(&ctx.ico.address());
-        let prev_staking_balance = ctx.tailor_coin.balance_of(&ctx.staking.address());
         let prev_treasury_balance = ctx.usdc.balance_of(&ctx.treasury.address());
         let prev_user_schedules_count = ctx.vesting.get_user_schedules_count(ctx.users.alice);
 
@@ -1142,7 +1221,7 @@ mod tests {
         let curr_current_ico_schedule = ctx.ico.get_current_ico_schedule().unwrap();
         let curr_buyer_balance = ctx.tailor_coin.balance_of(&ctx.users.alice);
         let curr_ico_balance = ctx.tailor_coin.balance_of(&ctx.ico.address());
-        let curr_staking_balance = ctx.tailor_coin.balance_of(&ctx.staking.address());
+        let curr_staking_allowance = ctx.tailor_coin.allowance(&ctx.ico.address(), &ctx.staking.address());
         let curr_treasury_balance = ctx.usdc.balance_of(&ctx.treasury.address());
         let curr_user_schedules_count = ctx.vesting.get_user_schedules_count(ctx.users.alice);
 
@@ -1170,17 +1249,15 @@ mod tests {
         );
         assert_eq!(
             curr_buyer_balance, prev_buyer_balance,
-            "Buyer should not receive tokens directly, they go to staking"
+            "Buyer should not receive tokens directly"
         );
         assert_eq!(
-            curr_staking_balance,
-            prev_staking_balance + expected_purchase_amount,
-            "Staking contract should hold the purchased tokens"
+            curr_staking_allowance, expected_purchase_amount,
+            "Staking contract should be approved to transfer the purchased tokens"
         );
         assert_eq!(
-            curr_ico_balance,
-            prev_ico_balance - expected_purchase_amount,
-            "Invalid current ICO contract ICO token balance"
+            curr_ico_balance, prev_ico_balance,
+            "ICO contract balance should not change (tokens stay in ICO until staking pulls them)"
         );
         assert_eq!(
             curr_treasury_balance,

@@ -138,7 +138,7 @@ impl DeployScript for LeasefiDeployScript {
                 styks_price_feed: Address::new(
                     // TODO: Fix typo
                     // @dev this looks like a typo and should be "hash"
-                    "hahs-2879d6e927289197aab0101cc033f532fe22e4ab4686e44b5743cb1333031acc", // testnet, 814fedbd4ae53b82ab19b1ff6698ce412445c3266271fcb639986d37dc0ae121 - mainnet
+                    "hash-2879d6e927289197aab0101cc033f532fe22e4ab4686e44b5743cb1333031acc", // testnet, 814fedbd4ae53b82ab19b1ff6698ce412445c3266271fcb639986d37dc0ae121 - mainnet
                 )
                 .unwrap(),
             },

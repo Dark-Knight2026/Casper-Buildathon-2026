@@ -2,6 +2,7 @@ use odra::{casper_types::U256, prelude::*, ContractRef};
 use odra_modules::{access::Ownable, cep18_token::Cep18ContractRef};
 
 use crate::staking::StakingContractRef;
+use crate::vesting::{errors::*, events::*};
 
 // =============================================================================
 // Vesting Types
@@ -32,47 +33,56 @@ pub struct VestingSchedule {
 // Events
 // =============================================================================
 
-#[odra::event]
-pub struct WhitelistedCreatorAdded {
-    pub creator: Address,
-}
+pub mod events {
+    use crate::vesting::VestingId;
+    use odra::{casper_types::U256, prelude::*};
 
-#[odra::event]
-pub struct WhitelistedCreatorRemoved {
-    pub creator: Address,
-}
+    #[odra::event]
+    pub struct WhitelistedCreatorAdded {
+        pub creator: Address,
+    }
 
-#[odra::event]
-pub struct ScheduleCreated {
-    pub vesting_id: VestingId,
-    pub whitelisted_creator: Address,
-    pub beneficiary: Address,
-    pub total_amount: U256,
-    pub start_timestamp: u64,
-    pub cliff_duration: u64,
-    pub vesting_duration: u64,
-}
+    #[odra::event]
+    pub struct WhitelistedCreatorRemoved {
+        pub creator: Address,
+    }
 
-#[odra::event]
-pub struct TokensClaimed {
-    pub vesting_id: VestingId,
-    pub beneficiary: Address,
-    pub amount: U256,
+    #[odra::event]
+    pub struct ScheduleCreated {
+        pub vesting_id: VestingId,
+        pub whitelisted_creator: Address,
+        pub beneficiary: Address,
+        pub total_amount: U256,
+        pub start_timestamp: u64,
+        pub cliff_duration: u64,
+        pub vesting_duration: u64,
+    }
+
+    #[odra::event]
+    pub struct TokensClaimed {
+        pub vesting_id: VestingId,
+        pub beneficiary: Address,
+        pub amount: U256,
+    }
 }
 
 // =============================================================================
 // Errors
 // =============================================================================
 
-#[odra::odra_error]
-pub enum Error {
-    CallerNotWhitelisted = 65_001,
-    InvalidAmount = 65_002,
-    InvalidVestingDuration = 65_003,
-    CliffExceedsVestingDuration = 65_004,
-    ScheduleNotFound = 65_005,
-    CallerNotBeneficiary = 65_006,
-    NothingToClaim = 65_007,
+pub mod errors {
+    use odra::prelude::OdraError;
+
+    #[odra::odra_error]
+    pub enum Error {
+        CallerNotWhitelisted = 65_001,
+        InvalidAmount = 65_002,
+        InvalidVestingDuration = 65_003,
+        CliffExceedsVestingDuration = 65_004,
+        ScheduleNotFound = 65_005,
+        CallerNotBeneficiary = 65_006,
+        NothingToClaim = 65_007,
+    }
 }
 
 // =============================================================================
@@ -91,6 +101,7 @@ pub struct Vesting {
     /// Used to pull tokens in (create_schedule) and transfer tokens out (claim).
     tailor_coin: External<Cep18ContractRef>,
 
+    /// TODO: Remove the next two comments when staking is implemented.
     /// Reference to the Staking contract (for future auto-staking of vested tokens).
     /// Currently unused — the staking contract does not yet have stake/unstake functions.
     /// Kept here so the address can be wired during deployment, ready for when
@@ -136,6 +147,7 @@ impl Vesting {
 
     /// Sets the Staking contract address (for future auto-staking integration).
     /// Currently unused — kept for forward compatibility.
+    /// TODO: Remove above comment when staking is implemented.
     pub fn set_staking(&mut self, staking: Address) {
         self.assert_owner();
         self.staking.set(staking);
@@ -166,7 +178,6 @@ impl Vesting {
 
     /// Returns schedule data for a given Vesting ID, or None if doesn't exist
     pub fn get_schedule(&self, vesting_id: VestingId) -> Option<VestingSchedule> {
-        // return the schedule data basesd on vesting id
         self.schedules.get(&vesting_id)
     }
 
@@ -176,6 +187,7 @@ impl Vesting {
     }
 
     /// Returns how many schedules a user has
+    // TODO: Odra contract entry points must return types that implement CLTyped and usize is not in that list.
     pub fn get_user_schedules_count(&self, user: Address) -> u32 {
         let user_schedules = self.user_schedules.get_or_default(&user);
         user_schedules.len() as u32
@@ -214,14 +226,14 @@ impl Vesting {
     }
 
     // =========================================================================
-    // Schedule creation (called by whitelisted contracts like ICO)
+    // Schedule creation (called by whitelisted EOA's or contracts like ICO)
     // =========================================================================
 
     /// Creates a new vesting schedule for a beneficiary
     ///
     /// The caller (ICO contract for example) must:
     ///   - Be whitelisted via `add_whitelisted_creator`
-    ///   - Have already transferred `total_amount` of BIG tokens to the Staking contract
+    ///   - Have already approved `total_amount` of BIG tokens to the Staking contract
     ///
     /// @dev This contract does not hold tokens; it only records the schedule.
     /// Tokens are held by the Staking contract. Beneficiary can claim according
@@ -258,7 +270,6 @@ impl Vesting {
         self.schedules.set(&vesting_id, schedule);
         self.schedules_count.set(vesting_id + 1);
 
-        // Add this schedule ID to beneficiary list
         let mut user_schedules = self.user_schedules.get_or_default(&beneficiary);
         user_schedules.push(vesting_id);
         self.user_schedules.set(&beneficiary, user_schedules);
@@ -294,7 +305,9 @@ impl Vesting {
             .get(&vesting_id)
             .unwrap_or_revert_with(&self.env(), Error::ScheduleNotFound);
 
-        if self.env().caller() != schedule.beneficiary {
+        let beneficiary = schedule.beneficiary;
+
+        if self.env().caller() != beneficiary {
             self.env().revert(Error::CallerNotBeneficiary);
         }
 
@@ -308,15 +321,15 @@ impl Vesting {
 
         // Update claimed amount before transferring
         schedule.claimed_amount += claimable;
-        self.schedules.set(&vesting_id, schedule.clone());
+        self.schedules.set(&vesting_id, schedule);
 
         // TODO: Unstake the tokens from the staking contract
         // Will probably look something like this:
-        // self.staking.unstake_for(&schedule.beneficiary);
+        // self.staking.unstake_for(beneficiary);
 
         self.env().emit_native_event(TokensClaimed {
             vesting_id,
-            beneficiary: schedule.beneficiary,
+            beneficiary,
             amount: claimable,
         });
     }
@@ -364,7 +377,6 @@ impl Vesting {
             schedule.total_amount
         } else {
             // linear vesting when between cliff and vesting periods
-            // vested = total_amount * elapsed_since_start / total_vesting_duration
             let elapsed = now - schedule.start_timestamp;
             schedule.total_amount * U256::from(elapsed) / U256::from(schedule.vesting_duration)
         }
@@ -379,10 +391,13 @@ impl Vesting {
 mod tests {
     use odra::{
         casper_types::U256,
-        host::{Deployer, HostEnv, HostRef},
+        host::{Deployer, HostEnv},
     };
     use odra_modules::access::errors::Error as AccessError;
 
+    use crate::constants::{
+        ONE_MONTH_IN_MILLISECONDS, PRIVATE_SALE_CLIFF_DURATION, PRIVATE_SALE_VESTING_DURATION,
+    };
     use crate::tailor_coin::{TailorCoin, TailorCoinHostRef, TailorCoinInitArgs};
 
     use super::*;
@@ -390,11 +405,6 @@ mod tests {
     // =============================================================================
     // Test Constants
     // =============================================================================
-
-    const ONE_MINUTE: u64 = 60;
-    const ONE_HOUR: u64 = 60 * ONE_MINUTE;
-    const ONE_DAY: u64 = 24 * ONE_HOUR;
-    const ONE_MONTH: u64 = 30 * ONE_DAY;
 
     const INITIAL_SUPPLY: u64 = 5_000_000_000;
 
@@ -449,17 +459,13 @@ mod tests {
         vesting.set_tailor_coin(tailor_coin.address());
         vesting.add_whitelisted_creator(users.owner);
 
-        // Set duration variables
-        let cliff_duration = 6 * ONE_MONTH;
-        let vesting_duration = 12 * ONE_MONTH;
-
         Context {
             env,
             tailor_coin,
             vesting,
             users,
-            cliff_duration,
-            vesting_duration,
+            cliff_duration: PRIVATE_SALE_CLIFF_DURATION,
+            vesting_duration: PRIVATE_SALE_VESTING_DURATION,
         }
     }
 
@@ -531,6 +537,36 @@ mod tests {
             ctx.vesting.get_tailor_coin_contract_address(),
             new_address,
             "Invalid TailorCoin contract address",
+        );
+    }
+
+    // =============================================================================
+    // set_staking()
+    // =============================================================================
+
+    #[test]
+    fn test_set_staking_should_revert_if_not_owner_is_calling() {
+        let mut ctx = setup(odra_test::env());
+        ctx.env.set_caller(ctx.users.alice);
+
+        assert_eq!(
+            ctx.vesting.try_set_staking(ctx.users.alice).unwrap_err(),
+            AccessError::CallerNotTheOwner.into(),
+            "Should revert when is called by non-owner",
+        );
+    }
+
+    #[test]
+    fn test_set_staking_should_set_staking_properly() {
+        let mut ctx = setup(odra_test::env());
+        let new_address = ctx.users.alice;
+
+        ctx.vesting.set_staking(new_address);
+
+        assert_eq!(
+            ctx.vesting.get_staking_contract_address(),
+            new_address,
+            "Invalid Staking contract address",
         );
     }
 
@@ -645,7 +681,7 @@ mod tests {
     fn test_create_schedule_should_revert_if_cliff_exceeds_duration() {
         let mut ctx = setup(odra_test::env());
 
-        let cliff_duration = ctx.vesting_duration + ONE_DAY;
+        let cliff_duration = ctx.vesting_duration + ONE_MONTH_IN_MILLISECONDS;
 
         assert_eq!(
             ctx.vesting
@@ -749,8 +785,8 @@ mod tests {
             &mut ctx,
             alice,
             amount,
-            cliff + 3 * ONE_MONTH,
-            vesting + 6 * ONE_MONTH,
+            cliff + 3 * ONE_MONTH_IN_MILLISECONDS,
+            vesting + 6 * ONE_MONTH_IN_MILLISECONDS,
         );
 
         assert_eq!(id_0, U256::zero(), "First schedule ID should be 0");
@@ -792,9 +828,10 @@ mod tests {
 
         let vesting_id = create_test_schedule(&mut ctx, alice, vesting_amount(), cliff, vesting);
 
-        ctx.env.advance_block_time(cliff + ONE_DAY);
+        ctx.env
+            .advance_block_time(cliff + ONE_MONTH_IN_MILLISECONDS);
 
-        // Bob tries to claim Alices schedle
+        // Bob tries to claim Alice's schedule
         ctx.env.set_caller(ctx.users.bob);
 
         assert_eq!(
@@ -813,8 +850,9 @@ mod tests {
 
         let vesting_id = create_test_schedule(&mut ctx, alice, vesting_amount(), cliff, vesting);
 
-        // Advance to jsut before the cliff
-        ctx.env.advance_block_time(cliff - ONE_DAY);
+        // Advance to just before the cliff
+        ctx.env
+            .advance_block_time(cliff - ONE_MONTH_IN_MILLISECONDS);
 
         ctx.env.set_caller(alice);
 
@@ -858,7 +896,7 @@ mod tests {
                     amount: expected_claim,
                 }
             ),
-            "TokensCLaimed evenet should be emitted",
+            "TokensCLaimed event should be emitted",
         );
     }
 
@@ -871,7 +909,8 @@ mod tests {
 
         let vesting_id = create_test_schedule(&mut ctx, alice, vesting_amount(), cliff, vesting);
 
-        ctx.env.advance_block_time(vesting + ONE_DAY);
+        ctx.env
+            .advance_block_time(vesting + ONE_MONTH_IN_MILLISECONDS);
         ctx.env.set_caller(alice);
         ctx.vesting.claim(vesting_id);
 
@@ -916,7 +955,7 @@ mod tests {
         );
 
         // Second claim at 9 months (75%)
-        ctx.env.advance_block_time(3 * ONE_MONTH);
+        ctx.env.advance_block_time(3 * ONE_MONTH_IN_MILLISECONDS);
         ctx.env.set_caller(alice);
         ctx.vesting.claim(vesting_id);
 
@@ -949,7 +988,7 @@ mod tests {
         let vesting_id = create_test_schedule(&mut ctx, alice, vesting_amount(), cliff, vesting);
 
         // Advanced to just before the cliff period ends
-        ctx.env.advance_block_time(5 * ONE_MONTH);
+        ctx.env.advance_block_time(5 * ONE_MONTH_IN_MILLISECONDS);
 
         // Try claiming before the cliff period has ended
         ctx.env.set_caller(alice);
@@ -960,7 +999,7 @@ mod tests {
         );
 
         // Advanced to exactly to the cliff end
-        ctx.env.advance_block_time(ONE_MONTH);
+        ctx.env.advance_block_time(ONE_MONTH_IN_MILLISECONDS);
         let cliff_time = start_time + cliff;
         assert_eq!(ctx.env.block_time(), cliff_time, "Should be at cliff time");
 
@@ -987,7 +1026,7 @@ mod tests {
         );
 
         // Advanced to after the cliff end
-        ctx.env.advance_block_time(3 * ONE_MONTH);
+        ctx.env.advance_block_time(3 * ONE_MONTH_IN_MILLISECONDS);
 
         // 9 months at this point so should be 75% vested
         let expected_vested_at_9mo = total_amount * U256::from(9) / U256::from(12);
@@ -1018,7 +1057,7 @@ mod tests {
         );
 
         // Advanced to the full vesting period, which is 12 months
-        ctx.env.advance_block_time(3 * ONE_MONTH);
+        ctx.env.advance_block_time(3 * ONE_MONTH_IN_MILLISECONDS);
 
         let vesting_end_time = start_time + vesting;
         assert_eq!(
@@ -1051,7 +1090,7 @@ mod tests {
         );
 
         // Advance past vesting
-        ctx.env.advance_block_time(ONE_MONTH);
+        ctx.env.advance_block_time(ONE_MONTH_IN_MILLISECONDS);
 
         // Try to to claim past the vesting period
         ctx.env.set_caller(alice);
