@@ -13,6 +13,8 @@ use crate::{
     transactions::{db, models::TransactionResponse},
 };
 
+/// `GET /api/v1/transactions/account/{address}`
+///
 /// Returns paginated transaction history for a specific account.
 ///
 /// Matches transactions where the account is either the sender (`from_address`)
@@ -64,6 +66,8 @@ pub async fn get_account_transactions(
     Ok(Json(PaginatedResponse::new(data, item_count, &pagination)))
 }
 
+/// `GET /api/v1/transactions/token/big`
+///
 /// Returns paginated transaction history for the BIG token.
 ///
 /// Filters by `contract_hash` matching the `CONTRACT_BIG` env var.

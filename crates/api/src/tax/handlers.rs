@@ -11,6 +11,8 @@ use crate::{
     tax::models::{TaxCalculationRequest, TaxCategory, TaxCategoryType, TaxReport},
 };
 
+/// `POST /api/v1/tax/calculate-liability`
+///
 /// Calculates the estimated tax liability for a given fiscal year.
 ///
 /// This handler processes a `TaxCalculationRequest`, which includes income and deduction details,

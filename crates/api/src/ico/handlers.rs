@@ -25,6 +25,8 @@ fn to_human(raw: &str) -> f64 {
     raw.parse::<f64>().unwrap_or(0.0) / TOKEN_DECIMALS
 }
 
+/// `GET /api/v1/ico/balance/{address}`
+///
 /// Returns ICO balance information for a specific account.
 ///
 /// Aggregates `ico_purchases.amount` for the given buyer and derives
@@ -81,6 +83,8 @@ pub async fn get_ico_balance(
     }))
 }
 
+/// `GET /api/v1/ico/progress`
+///
 /// Returns overall ICO sale progress.
 ///
 /// Derives all values from `SUM(ico_purchases.amount)` and the
