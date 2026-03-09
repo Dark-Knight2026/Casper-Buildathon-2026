@@ -67,37 +67,92 @@ vi.mock('@/lib/logger', () => ({
 const mockFetch = vi.fn();
 global.fetch = mockFetch;
 
+// The expected hash hardcoded in proxyCallerService.ts
+const EXPECTED_HASH = 'e19fb6e86c4a8de96769913c4922d8a340884b98b6984ec0375d63d0ce64c998';
+
+/** Convert a hex string to an ArrayBuffer (simulates crypto.subtle.digest output) */
+function hexToBuffer(hex: string): ArrayBuffer {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < bytes.length; i++) {
+    bytes[i] = parseInt(hex.substring(i * 2, i * 2 + 2), 16);
+  }
+  return bytes.buffer;
+}
+
 // Helper: dynamic import to get a fresh module (clears internal WASM cache)
 async function importFresh() {
   return await import('@/services/ico/proxyCallerService');
 }
 
 describe('loadProxyCallerWasm', () => {
+  const origSubtle = crypto.subtle;
+
   beforeEach(() => {
     vi.resetAllMocks();
     vi.resetModules();
     // Re-assign fetch mock after resetAllMocks
     global.fetch = mockFetch;
+    // Restore crypto.subtle before each test
+    Object.defineProperty(crypto, 'subtle', { value: origSubtle, configurable: true });
   });
 
-  it('fetches WASM from /proxy_caller.wasm', async () => {
-    const wasmBytes = new Uint8Array([0, 97, 115, 109]); // WASM magic bytes
+  it('fetches WASM and passes when SHA-256 matches', async () => {
+    const wasmBytes = new Uint8Array([0, 97, 115, 109]);
     mockFetch.mockResolvedValueOnce({
       ok: true,
       arrayBuffer: () => Promise.resolve(wasmBytes.buffer),
     });
 
-    // Mock crypto.subtle as undefined to skip hash verification
-    const origSubtle = crypto.subtle;
+    // Mock crypto.subtle.digest to return the expected hash
+    const mockDigest = vi.fn().mockResolvedValue(hexToBuffer(EXPECTED_HASH));
+    Object.defineProperty(crypto, 'subtle', {
+      value: { digest: mockDigest },
+      configurable: true,
+    });
+
+    const { loadProxyCallerWasm } = await importFresh();
+    const result = await loadProxyCallerWasm();
+
+    expect(result).toBeInstanceOf(Uint8Array);
+    expect(mockFetch).toHaveBeenCalledWith('/proxy_caller.wasm');
+    expect(mockDigest).toHaveBeenCalledWith('SHA-256', wasmBytes);
+  });
+
+  it('throws when SHA-256 hash does not match (tampered WASM)', async () => {
+    const wasmBytes = new Uint8Array([0, 97, 115, 109]);
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      arrayBuffer: () => Promise.resolve(wasmBytes.buffer),
+    });
+
+    // Mock crypto.subtle.digest to return a wrong hash
+    const wrongHash = 'aa'.repeat(32);
+    Object.defineProperty(crypto, 'subtle', {
+      value: { digest: vi.fn().mockResolvedValue(hexToBuffer(wrongHash)) },
+      configurable: true,
+    });
+
+    const { loadProxyCallerWasm } = await importFresh();
+    await expect(loadProxyCallerWasm()).rejects.toThrow('WASM integrity check failed');
+  });
+
+  it('throws in production when crypto.subtle is unavailable', async () => {
+    const wasmBytes = new Uint8Array([0, 97, 115, 109]);
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      arrayBuffer: () => Promise.resolve(wasmBytes.buffer),
+    });
+
     Object.defineProperty(crypto, 'subtle', { value: undefined, configurable: true });
+    // Simulate production environment
+    const origProd = import.meta.env.PROD;
+    import.meta.env.PROD = true;
 
     try {
       const { loadProxyCallerWasm } = await importFresh();
-      const result = await loadProxyCallerWasm();
-      expect(result).toBeInstanceOf(Uint8Array);
-      expect(mockFetch).toHaveBeenCalledWith('/proxy_caller.wasm');
+      await expect(loadProxyCallerWasm()).rejects.toThrow('WASM integrity check unavailable in production');
     } finally {
-      Object.defineProperty(crypto, 'subtle', { value: origSubtle, configurable: true });
+      import.meta.env.PROD = origProd;
     }
   });
 

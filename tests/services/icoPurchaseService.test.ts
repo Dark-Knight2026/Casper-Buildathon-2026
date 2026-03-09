@@ -54,7 +54,7 @@ vi.mock('@/services/ico/cep18Service', () => ({
 
 vi.mock('@/services/ico/proxyCallerService', () => ({
   loadProxyCallerWasm: vi.fn(() => Promise.resolve(new Uint8Array())),
-  createProxyCallerTransaction: vi.fn(),
+  createProxyCallerTransaction: vi.fn(() => ({ hash: { toHex: () => 'mock-hash' } })),
 }));
 
 vi.mock('@/constants/ico', () => ({
@@ -317,6 +317,22 @@ describe('createPurchaseTransaction args match contract schema', () => {
 
     expect(capturedArgsMap).toHaveProperty('__cargo_purse');
     expect((capturedArgsMap.__cargo_purse as { type: string }).type).toBe('URef');
+  });
+
+  it('encodes amount_to_spend with 6 decimals for USDT', async () => {
+    capturedArgsMap = {};
+    await createPurchaseTransaction('01abc123', '100', 'USDT', 'uref-abc-007');
+
+    // 100 USDT × 10^6 = 100_000_000
+    expect((capturedArgsMap.amount_to_spend as { value: unknown }).value).toBe(100_000_000n);
+  });
+
+  it('encodes amount_to_spend with 9 decimals for CSPR', async () => {
+    capturedArgsMap = {};
+    await createPurchaseTransaction('01abc123', '100', 'CSPR', 'uref-abc-007');
+
+    // 100 CSPR × 10^9 = 100_000_000_000
+    expect((capturedArgsMap.amount_to_spend as { value: unknown }).value).toBe(100_000_000_000n);
   });
 });
 
