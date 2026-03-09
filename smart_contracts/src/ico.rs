@@ -47,9 +47,8 @@ pub struct ICO {
 impl ICO {
     pub fn init(&mut self, owner: Address, styks_price_feed: Address) {
         self.ownable.init(owner);
+
         self.styks_price_feed.set(styks_price_feed);
-        self.staking.init(owner);
-        self.vesting.init(owner);
     }
 
     /// Sets the TailorCoin (BIG) token contract address by the owner
