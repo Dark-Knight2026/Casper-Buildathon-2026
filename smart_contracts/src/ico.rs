@@ -191,10 +191,6 @@ impl ICO {
         self.ico_schedules
             .set(&current_ico_schedule_id, current_ico_schedule);
 
-        // Transfer tokens directly to Staking contract
-        self.tailor_coin
-            .transfer(&self.staking.address(), &purchase_amount);
-
         // Record the vesting schedule
         self.vesting.create_schedule(
             *caller,
@@ -202,6 +198,10 @@ impl ICO {
             PRIVATE_SALE_CLIFF_DURATION,
             PRIVATE_SALE_VESTING_DURATION,
         );
+
+        // Transfer tokens directly to Staking contract
+        self.tailor_coin
+            .transfer(&self.staking.address(), &purchase_amount);
 
         // TODO: Stake the tokens for the beneficiary
         // Contract call may look like this:
