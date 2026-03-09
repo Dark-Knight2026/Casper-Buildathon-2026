@@ -60,7 +60,7 @@ pub fn protected_router() -> OpenApiRouter<Arc<AppState>> {
         .routes(routes!(analytics::handlers::get_property_performance))
 }
 
-/// Creates an `OpenAPI` router for blockchain transaction endpoints (no auth required).
+/// Creates an `OpenAPI` router for blockchain transaction endpoints (auth via `AuthUser` extractor).
 #[inline]
 pub fn transactions_router() -> OpenApiRouter<Arc<AppState>> {
     OpenApiRouter::new()
@@ -68,7 +68,7 @@ pub fn transactions_router() -> OpenApiRouter<Arc<AppState>> {
         .routes(routes!(transactions::handlers::get_big_token_transactions))
 }
 
-/// Creates an `OpenAPI` router for ICO endpoints (no auth required).
+/// Creates an `OpenAPI` router for ICO endpoints (auth via `AuthUser` extractor).
 #[inline]
 pub fn ico_router() -> OpenApiRouter<Arc<AppState>> {
     OpenApiRouter::new()

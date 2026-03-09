@@ -43,7 +43,7 @@ impl From<TransactionRow> for TransactionResponse {
 
 /// Fetches paginated transactions where the given address is sender or recipient.
 ///
-/// Uses a single transaction to keep the SELECT and COUNT on one connection.
+/// Uses `REPEATABLE READ` isolation so that SELECT and COUNT see the same snapshot.
 ///
 /// # Errors
 ///
@@ -56,6 +56,9 @@ pub async fn fetch_account_transactions(
     offset: i64,
 ) -> Result<(Vec<TransactionResponse>, i64), sqlx::Error> {
     let mut tx = pool.begin().await?;
+    sqlx::query!("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
+        .execute(tx.as_mut())
+        .await?;
 
     let rows = sqlx::query_as!(
         TransactionRow,
@@ -90,7 +93,7 @@ pub async fn fetch_account_transactions(
 
 /// Fetches paginated transactions for a specific token contract.
 ///
-/// Uses a single transaction to keep the SELECT and COUNT on one connection.
+/// Uses `REPEATABLE READ` isolation so that SELECT and COUNT see the same snapshot.
 ///
 /// # Errors
 ///
@@ -103,6 +106,9 @@ pub async fn fetch_token_transactions(
     offset: i64,
 ) -> Result<(Vec<TransactionResponse>, i64), sqlx::Error> {
     let mut tx = pool.begin().await?;
+    sqlx::query!("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
+        .execute(tx.as_mut())
+        .await?;
 
     let rows = sqlx::query_as!(
         TransactionRow,

@@ -98,7 +98,7 @@ impl ServerConfig {
             jwt_secret: raw.supabase_jwt_secret,
             port: raw.port,
             cors_origin: raw.cors_origin,
-            contract_big: raw.contract_big,
+            contract_big: raw.contract_big.map(|s| s.to_ascii_lowercase()),
             ico,
         };
 
