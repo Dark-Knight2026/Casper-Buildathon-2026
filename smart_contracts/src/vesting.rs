@@ -18,8 +18,6 @@ pub struct VestingSchedule {
     pub total_amount: U256,
     /// Number of tokens claimed (unstaking initiated, pending unbonding).
     pub claimed_amount: U256,
-    /// Number of tokens actually withdrawn (sent to beneficiary after unbonding).
-    pub withdrawn_amount: U256,
     /// Block timestamp when the vesting clock starts (set at creation time).
     pub start_timestamp: u64,
     /// Duration (in time units) before any tokens become claimable.
@@ -62,13 +60,6 @@ pub struct TokensClaimed {
     pub amount: U256,
 }
 
-#[odra::event]
-pub struct TokensWithdrawn {
-    pub vesting_id: VestingId,
-    pub beneficiary: Address,
-    pub amount: U256,
-}
-
 // =============================================================================
 // Errors
 // =============================================================================
@@ -82,7 +73,6 @@ pub enum Error {
     ScheduleNotFound = 65_005,
     CallerNotBeneficiary = 65_006,
     NothingToClaim = 65_007,
-    NothingToWithdraw = 65_008,
 }
 
 // =============================================================================
@@ -91,7 +81,7 @@ pub enum Error {
 
 #[odra::module(
     errors = Error,
-    events = [ScheduleCreated, TokensClaimed, TokensWithdrawn, WhitelistedCreatorAdded, WhitelistedCreatorRemoved],
+    events = [ScheduleCreated, TokensClaimed, WhitelistedCreatorAdded, WhitelistedCreatorRemoved],
 )]
 pub struct Vesting {
     /// Ownership control — only the owner can configure the contract.
@@ -261,7 +251,6 @@ impl Vesting {
             beneficiary,
             total_amount,
             claimed_amount: U256::zero(),
-            withdrawn_amount: U256::zero(),
             start_timestamp: self.env().get_block_time(),
             cliff_duration,
             vesting_duration,
@@ -288,7 +277,7 @@ impl Vesting {
     }
 
     // =========================================================================
-    // Token claiming and Withdrawing (called by beneficiaries)
+    // Token claiming (called by beneficiaries)
     // =========================================================================
 
     /// Claims all unclaimed-vested tokens from a specific schedule
@@ -329,41 +318,6 @@ impl Vesting {
             vesting_id,
             beneficiary: schedule.beneficiary,
             amount: claimable,
-        });
-    }
-
-    /// Withdraws claimed tokens after the staking contract's unbonding period
-    /// Transfers tokens that have been claimed via `claimed()`
-    ///
-    /// @dev only the schedule's beneficiary can call this
-    #[odra(non_reentrant)]
-    pub fn withdraw(&mut self, vesting_id: VestingId) {
-        let mut schedule = self
-            .schedules
-            .get(&vesting_id)
-            .unwrap_or_revert_with(&self.env(), Error::ScheduleNotFound);
-
-        if self.env().caller() != schedule.beneficiary {
-            self.env().revert(Error::CallerNotBeneficiary);
-        }
-
-        let withdrawable = schedule.claimed_amount - schedule.withdrawn_amount;
-
-        if withdrawable.is_zero() {
-            self.env().revert(Error::NothingToWithdraw);
-        }
-
-        schedule.withdrawn_amount += withdrawable;
-        self.schedules.set(&vesting_id, schedule.clone());
-
-        // TODO: Pull tokens back from staking after unbonding period.
-        // Will probably look something like this:
-        // self.staking.withdraw_for(&schedule.beneficiary);
-
-        self.env().emit_native_event(TokensWithdrawn {
-            vesting_id,
-            beneficiary: schedule.beneficiary,
-            amount: withdrawable,
         });
     }
 
@@ -895,12 +849,6 @@ mod tests {
             "Claim amount should be 50% (cliff/vesting)"
         );
 
-        assert_eq!(
-            schedule.withdrawn_amount,
-            U256::zero(),
-            "Withdrawn amt should still be zero"
-        );
-
         assert!(
             ctx.env.emitted_native_event(
                 &ctx.vesting,
@@ -987,5 +935,139 @@ mod tests {
             Error::NothingToClaim.into(),
             "Should revert when nothing to claim",
         );
+    }
+
+    #[test]
+    fn test_claim_end_to_end_lifecycle() {
+        let mut ctx = setup(odra_test::env());
+        let cliff = ctx.cliff_duration;
+        let vesting = ctx.vesting_duration;
+        let alice = ctx.users.alice;
+        let total_amount = vesting_amount();
+
+        let start_time = ctx.env.block_time();
+        let vesting_id = create_test_schedule(&mut ctx, alice, vesting_amount(), cliff, vesting);
+
+        // Advanced to just before the cliff period ends
+        ctx.env.advance_block_time(5 * ONE_MONTH);
+
+        // Try claiming before the cliff period has ended
+        ctx.env.set_caller(alice);
+        assert_eq!(
+            ctx.vesting.try_claim(vesting_id).unwrap_err(),
+            Error::NothingToClaim.into(),
+            "Should revert when claiming before cliff period has ended",
+        );
+
+        // Advanced to exactly to the cliff end
+        ctx.env.advance_block_time(ONE_MONTH);
+        let cliff_time = start_time + cliff;
+        assert_eq!(ctx.env.block_time(), cliff_time, "Should be at cliff time");
+
+        // At cliff, half should be vested and claimable
+        let expected_vested_at_cliff = total_amount / 2;
+        assert_eq!(
+            ctx.vesting.get_vested_amount(vesting_id),
+            expected_vested_at_cliff,
+            "50% should be vested at cliff",
+        );
+        assert_eq!(
+            ctx.vesting.get_claimable_amount(vesting_id),
+            expected_vested_at_cliff,
+            "50% should be claimable at cliff",
+        );
+
+        // Claim the tokens and check that none are left to claim
+        ctx.env.set_caller(alice);
+        ctx.vesting.claim(vesting_id);
+        assert_eq!(
+            ctx.vesting.get_claimable_amount(vesting_id),
+            U256::zero(),
+            "No more claim amount should be left",
+        );
+
+        // Advanced to after the cliff end
+        ctx.env.advance_block_time(3 * ONE_MONTH);
+
+        // 9 months at this point so should be 75% vested
+        let expected_vested_at_9mo = total_amount * U256::from(9) / U256::from(12);
+
+        // Expected claimable should be 25% of total amount:
+        // Expected vested at 9 months (75%) - Expected vested at cliff (50%)
+        let expected_claimable_at_9mo = expected_vested_at_9mo - expected_vested_at_cliff;
+
+        assert_eq!(
+            ctx.vesting.get_vested_amount(vesting_id),
+            expected_vested_at_9mo,
+            "Should be 75% vested at 9 months",
+        );
+
+        assert_eq!(
+            ctx.vesting.get_claimable_amount(vesting_id),
+            expected_claimable_at_9mo,
+            "Should have 25% more available to be claimed",
+        );
+
+        // Claim the tokens and see if it matches the expected 75% vested amt
+        ctx.env.set_caller(alice);
+        ctx.vesting.claim(vesting_id);
+        let schedule = ctx.vesting.get_schedule(vesting_id).unwrap();
+        assert_eq!(
+            schedule.claimed_amount, expected_vested_at_9mo,
+            "Total claimed so far should be at 75%",
+        );
+
+        // Advanced to the full vesting period, which is 12 months
+        ctx.env.advance_block_time(3 * ONE_MONTH);
+
+        let vesting_end_time = start_time + vesting;
+        assert_eq!(
+            ctx.env.block_time(),
+            vesting_end_time,
+            "Should be at the vesting end time"
+        );
+
+        assert_eq!(
+            ctx.vesting.get_vested_amount(vesting_id),
+            total_amount,
+            "Should be 100% vested at 12 months",
+        );
+
+        // Should be 25% more left to claim
+        let last_claimable = total_amount - expected_vested_at_9mo;
+        assert_eq!(
+            ctx.vesting.get_claimable_amount(vesting_id),
+            last_claimable,
+            "Should have remaining 25% left to be claimed",
+        );
+
+        // Claim the remaining tokens
+        ctx.env.set_caller(alice);
+        ctx.vesting.claim(vesting_id);
+        let schedule = ctx.vesting.get_schedule(vesting_id).unwrap();
+        assert_eq!(
+            schedule.claimed_amount, total_amount,
+            "All the tokens should be claimed",
+        );
+
+        // Advance past vesting
+        ctx.env.advance_block_time(ONE_MONTH);
+
+        // Try to to claim past the vesting period
+        ctx.env.set_caller(alice);
+        assert_eq!(
+            ctx.vesting.try_claim(vesting_id).unwrap_err(),
+            Error::NothingToClaim.into(),
+            "Should reveret when all tokens have been claimed",
+        );
+
+        // Verify the entire final state
+        let schedule = ctx.vesting.get_schedule(vesting_id).unwrap();
+        assert_eq!(schedule.beneficiary, alice);
+        assert_eq!(schedule.total_amount, total_amount);
+        assert_eq!(schedule.claimed_amount, total_amount);
+        assert_eq!(schedule.start_timestamp, start_time);
+        assert_eq!(schedule.cliff_duration, cliff);
+        assert_eq!(schedule.vesting_duration, vesting);
     }
 }
