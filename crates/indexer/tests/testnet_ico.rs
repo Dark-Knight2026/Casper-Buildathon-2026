@@ -11,34 +11,44 @@
 //! - `CSPR_CLOUD_API_TOKEN` - CSPR.cloud API token (for free RPC queries)
 //! - `CASPER_SECRET_KEY` - path to your `.pem` secret key file (for paid deploys)
 
-use std::process::Command;
-use std::sync::Once;
+use std::{process::Command, sync::Once};
 
+use serde_json::{Value, json};
+
+/// CSPR.cloud node RPC endpoint (requires API token in Authorization header).
 const CSPR_CLOUD_RPC: &str = "https://node.testnet.cspr.cloud/rpc";
+/// Public Casper testnet node (no auth required).
 const PUBLIC_NODE: &str = "http://65.109.89.219:7777";
+/// Casper testnet chain name.
 const CHAIN: &str = "casper-test";
+/// ICO contract hash (entry points: purchase, `get_current_ico_schedule`, etc.).
 const ICO_CONTRACT: &str = "hash-47a75578aca035ff390338b2fc3fe4f35cc989a00826591b387157735f1135bf";
-
+/// BIG token CEP-18 contract hash (entry points: approve, transfer, etc.).
 const BIG_CONTRACT: &str = "hash-66bde004c898228ed46fe60743d4f68638670425b71f4ab56477f17edcc4da29";
 
+/// Ensures `.env` is loaded exactly once across all tests.
 static INIT: Once = Once::new();
 
+/// Load `.env` file once, even if called multiple times.
 fn load_env() {
     INIT.call_once(|| {
         dotenv::dotenv().ok();
     });
 }
 
+/// CSPR.cloud API token from `CSPR_CLOUD_API_TOKEN` env var.
 fn api_token() -> String {
     load_env();
     std::env::var("CSPR_CLOUD_API_TOKEN").expect("Set CSPR_CLOUD_API_TOKEN in .env")
 }
 
+/// Path to `.pem` secret key from `CASPER_SECRET_KEY` env var.
 fn secret_key() -> String {
     load_env();
     std::env::var("CASPER_SECRET_KEY").expect("Set CASPER_SECRET_KEY in .env")
 }
 
+/// ICO contract package hash with `hash-` prefix, from `CONTRACT_ICO` env var.
 fn ico_package() -> String {
     load_env();
     format!(
@@ -48,8 +58,8 @@ fn ico_package() -> String {
 }
 
 /// JSON-RPC query via curl to CSPR.cloud (free, no gas).
-fn rpc_query(method: &str, params: &serde_json::Value) -> String {
-    let body = serde_json::json!({
+fn rpc_query(method: &str, params: &Value) -> String {
+    let body = json!({
         "jsonrpc": "2.0",
         "id": 1,
         "method": method,
@@ -151,7 +161,7 @@ fn contract_call(contract_hash: &str, entry_point: &str, session_args: &[&str]) 
 fn query_ico_state() {
     rpc_query(
         "query_global_state",
-        &serde_json::json!({ "key": ICO_CONTRACT, "path": ["state"] }),
+        &json!({ "key": ICO_CONTRACT, "path": ["state"] }),
     );
 }
 
@@ -160,7 +170,7 @@ fn query_ico_state() {
 fn query_ico_events_length() {
     rpc_query(
         "query_global_state",
-        &serde_json::json!({ "key": ICO_CONTRACT, "path": ["__events_length"] }),
+        &json!({ "key": ICO_CONTRACT, "path": ["__events_length"] }),
     );
 }
 
