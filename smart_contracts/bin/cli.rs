@@ -154,6 +154,7 @@ impl DeployScript for LeasefiDeployScript {
         // Setup Vesting
         vesting.set_tailor_coin(tailor_coin.address());
         vesting.add_whitelisted_creator(ico.address());
+        // vesting.set_staking(staking.address());
 
         // Setup Lease
         lease.set_roles(roles.address());
@@ -169,6 +170,7 @@ impl DeployScript for LeasefiDeployScript {
         ico.set_tailor_coin(tailor_coin.address());
         ico.set_treasury(treasury.address());
         ico.set_vesting(vesting.address());
+        // ico.set_staking(staking.address());
         ico.add_currency(Currency::CSPR, None);
         env.set_gas(15_000_000_000);
         ico.add_currency(
