@@ -87,6 +87,15 @@ impl IndexableEvent for TokensPurchased {
         // Normalize caller address to 64-char lowercase hex account hash.
         let buyer = address::normalize_to_account_hash(ctx.caller)?;
 
+        if buyer.is_empty() {
+            tracing::warn!(
+                deploy = %ctx.deploy_hash,
+                "TokensPurchased has no caller (streaming) - skipping domain writes. \
+                 Raw event saved in blockchain_events; backfill will fill buyer later."
+            );
+            return Ok(());
+        }
+
         // 1. Insert into ico_purchases table
         db::insert_ico_purchase(
             ctx.tx,
