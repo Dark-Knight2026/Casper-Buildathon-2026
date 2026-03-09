@@ -40,6 +40,11 @@ Each contract is modular, upgradeable, and interacts with others through well-de
     handled. The contract integrates with the Styks Price Feed Oracle to determine token prices in CSPR dynamically.
     Owners can also withdraw unsold tokens from finished ICO schedules and manage supported currencies.
 
+9. `Vesting` - manages time-based token vesting schedules for `TailorCoin (BIG)` tokens. The features include
+    creating vesting schedules with customizable cliff periods and vesting durations, linear vesting calculation,
+    whitelisted creator system (typically the ICO contract), per-user schedule tracking, and token claiming by
+    beneficiaries. The contract integrates with the Staking contract for auto-staking of vested tokens.
+
 ## Build
 
 ```bash
