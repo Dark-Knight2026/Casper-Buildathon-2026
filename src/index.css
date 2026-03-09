@@ -123,18 +123,18 @@
     --ico-bg-secondary: 222 47% 11%;
     --ico-bg-card: 222 47% 11%;
 
-    /* ICO Brand Colors - Dark Mode */
-    --ico-brand-primary: 217 91% 65%;
-    --ico-brand-secondary: 221 83% 58%;
-    --ico-brand-accent: 199 89% 53%;
+    /* ICO Brand Colors - Dark Mode (muted emerald/navy, lightened for dark bg contrast) */
+    --ico-brand-primary: 163 59% 50%;
+    --ico-brand-secondary: 214 49% 45%;
+    --ico-brand-accent: 163 50% 55%;
 
     /* ICO State Colors - Dark Mode */
-    --ico-state-countdown: 220 70% 55%;
-    --ico-state-active: 142 76% 42%;
-    --ico-state-dashboard: 221 83% 58%;
+    --ico-state-countdown: 214 49% 45%;
+    --ico-state-active: 163 59% 45%;
+    --ico-state-dashboard: 214 49% 45%;
     /* ICO Progress Bar - Dark Mode */
     --ico-progress-bg: 222 47% 18%;
-    --ico-progress-fill: 142 76% 42%;
+    --ico-progress-fill: 163 59% 45%;
     --ico-progress-text: 220 9% 70%;
 
     /* ICO Countdown Timer - Dark Mode */
@@ -147,26 +147,26 @@
     --ico-form-bg: 222 47% 11%;
     --ico-form-border: 222 47% 20%;
     --ico-form-input-bg: 222 47% 14%;
-    --ico-form-button: 142 76% 42%;
-    --ico-form-button-hover: 142 76% 36%;
+    --ico-form-button: 163 59% 45%;
+    --ico-form-button-hover: 163 59% 38%;
 
-    /* ICO Dashboard Cards - Dark Mode */
-    --ico-card-wallet: 199 89% 53%;
-    --ico-card-staked: 142 76% 42%;
-    --ico-card-rewards: 262 83% 63%;
-    --ico-card-total: 217 91% 65%;
+    /* ICO Dashboard Cards - Dark Mode (desaturated, matching approved palette) */
+    --ico-card-wallet: 214 49% 45%;
+    --ico-card-staked: 163 59% 45%;
+    --ico-card-rewards: 163 50% 50%;
+    --ico-card-total: 214 43% 42%;
 
     /* ICO Text Colors - Dark Mode */
     --ico-text-primary: 210 40% 98%;
     --ico-text-secondary: 220 9% 70%;
     --ico-text-muted: 220 9% 50%;
-    --ico-text-highlight: 142 76% 50%;
+    --ico-text-highlight: 163 59% 55%;
 
-    /* ICO Gradients - Dark Mode */
-    --ico-gradient-primary-start: 217 91% 65%;
-    --ico-gradient-primary-end: 199 89% 53%;
-    --ico-gradient-success-start: 142 76% 42%;
-    --ico-gradient-success-end: 142 69% 58%;
+    /* ICO Gradients - Dark Mode (desaturated, matching approved palette) */
+    --ico-gradient-primary-start: 163 59% 45%;
+    --ico-gradient-primary-end: 163 50% 50%;
+    --ico-gradient-success-start: 163 59% 42%;
+    --ico-gradient-success-end: 163 50% 52%;
   }
 }
 

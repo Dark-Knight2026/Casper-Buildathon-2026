@@ -46,6 +46,7 @@ export function ICOHeader() {
               </span>
               <button
                 onClick={disconnect}
+                aria-label="Disconnect wallet"
                 className="flex items-center gap-2 px-3 py-2 bg-[hsl(var(--ico-form-button))] text-white font-medium rounded-md transition-colors duration-200 hover:bg-[hsl(var(--ico-form-button-hover))] cursor-pointer"
               >
                 <LogOut className="w-4 h-4 sm:hidden" />
