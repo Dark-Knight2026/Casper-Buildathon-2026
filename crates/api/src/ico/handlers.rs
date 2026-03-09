@@ -6,6 +6,7 @@ use axum::{
     Json,
     extract::{Path, State},
 };
+use rust_decimal::{Decimal, prelude::ToPrimitive};
 
 use crate::{
     AuthUser,
@@ -16,13 +17,11 @@ use crate::{
     },
 };
 
-/// Number of decimal places in the BIG token (ERC-20 standard).
-const TOKEN_DECIMALS: f64 = 1e18;
-
-/// Converts a raw U256 text value (minimal units, decimals=18) to a "human" f64.
+/// Converts a raw U256 text value (minimal units, decimals=18) to a human-readable Decimal.
 #[inline]
-fn to_human(raw: &str) -> f64 {
-    raw.parse::<f64>().unwrap_or(0.0) / TOKEN_DECIMALS
+fn to_human(raw: &str) -> Decimal {
+    let decimals = Decimal::from(10u64.pow(18));
+    raw.parse::<Decimal>().unwrap_or(Decimal::ZERO) / decimals
 }
 
 /// `GET /api/v1/ico/balance/{address}`
@@ -72,7 +71,10 @@ pub async fn get_ico_balance(
     }
 
     let tokens_purchased = db::fetch_buyer_tokens(&state.db, &address).await?;
-    let usd_value = to_human(&tokens_purchased) * ico.price_usd;
+    let price = Decimal::try_from(ico.price_usd).unwrap_or(Decimal::ZERO);
+    let usd_value = (to_human(&tokens_purchased) * price)
+        .to_f64()
+        .unwrap_or(0.0);
 
     Ok(Json(IcoBalanceResponse {
         tokens_purchased,
@@ -120,13 +122,23 @@ pub async fn get_ico_progress(
     let (tokens_sold, tokens_remaining) =
         db::fetch_sale_totals(&state.db, &ico.total_allocation).await?;
 
-    let sold_f64: f64 = tokens_sold.parse().unwrap_or(0.0);
-    let alloc_f64: f64 = ico.total_allocation.parse().unwrap_or(0.0);
+    let price = Decimal::try_from(ico.price_usd).unwrap_or(Decimal::ZERO);
+    let sold_dec = tokens_sold.parse::<Decimal>().unwrap_or(Decimal::ZERO);
+    let alloc_dec = ico
+        .total_allocation
+        .parse::<Decimal>()
+        .unwrap_or(Decimal::ZERO);
+    let hundred = Decimal::from(100);
 
-    let amount_raised = to_human(&tokens_sold) * ico.price_usd;
-    let hard_cap_usd = to_human(&ico.total_allocation) * ico.price_usd;
-    let percent_sold = if alloc_f64 > 0.0 {
-        (sold_f64 / alloc_f64 * 100.0).min(100.0)
+    let amount_raised = (to_human(&tokens_sold) * price).to_f64().unwrap_or(0.0);
+    let hard_cap_usd = (to_human(&ico.total_allocation) * price)
+        .to_f64()
+        .unwrap_or(0.0);
+    let percent_sold = if alloc_dec > Decimal::ZERO {
+        (sold_dec / alloc_dec * hundred)
+            .min(hundred)
+            .to_f64()
+            .unwrap_or(0.0)
     } else {
         0.0
     };
