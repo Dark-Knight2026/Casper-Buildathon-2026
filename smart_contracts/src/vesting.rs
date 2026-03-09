@@ -35,16 +35,6 @@ pub struct VestingSchedule {
 // =============================================================================
 
 #[odra::event]
-pub struct TailorCoinAddressSet {
-    pub tailor_coin: Address,
-}
-
-#[odra::event]
-pub struct StakingAddressSet {
-    pub staking: Address,
-}
-
-#[odra::event]
 pub struct WhitelistedCreatorAdded {
     pub creator: Address,
 }
@@ -101,7 +91,7 @@ pub enum Error {
 
 #[odra::module(
     errors = Error,
-    events = [ScheduleCreated, TokensClaimed, TokensWithdrawn],
+    events = [ScheduleCreated, TokensClaimed, TokensWithdrawn, WhitelistedCreatorAdded, WhitelistedCreatorRemoved],
 )]
 pub struct Vesting {
     /// Ownership control — only the owner can configure the contract.
@@ -152,9 +142,6 @@ impl Vesting {
     pub fn set_tailor_coin(&mut self, tailor_coin: Address) {
         self.assert_owner();
         self.tailor_coin.set(tailor_coin);
-
-        self.env()
-            .emit_native_event(TailorCoinAddressSet { tailor_coin });
     }
 
     /// Sets the Staking contract address (for future auto-staking integration).
@@ -162,8 +149,6 @@ impl Vesting {
     pub fn set_staking(&mut self, staking: Address) {
         self.assert_owner();
         self.staking.set(staking);
-
-        self.env().emit_native_event(StakingAddressSet { staking });
     }
 
     /// Grants an address permission to create vesting schedules.
