@@ -17,6 +17,8 @@ pub struct SetAllowance {
     /// Spender who is being authorized.
     pub spender: String,
     /// Approved amount (U256 as string).
+    /// Some CEP-18 implementations emit this as `"allowance"` instead of `"amount"`.
+    #[serde(alias = "allowance")]
     pub amount: String,
 }
 
