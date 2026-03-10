@@ -1617,8 +1617,6 @@ mod tests {
     const ONE_HOUR: u64 = 60 * ONE_MINUTE;
     const ONE_DAY: u64 = 24 * ONE_HOUR;
     const ONE_MONTH: u64 = 30 * ONE_DAY;
-    const PUBLIC_SALE_CLIFF_DURATION: u64 = 0;
-    const PUBLIC_SALE_VESTING_DURATION: u64 = 6 * ONE_MONTH_IN_MILLISECONDS;
 
     fn setup(env: HostEnv, add_ico_schedules: bool) -> Context {
         let users = Users {
@@ -1717,8 +1715,8 @@ mod tests {
             end_timestamp: private_sale.end_timestamp + ONE_DAY + ONE_MONTH,
             sale_amount: U256::from(250_000_000_000u64) * U256::from(10).pow(U256::from(18)),
             price: U256::from(1_000_000), // 1 USD (1.0 * 1 * 10^6)
-            cliff_duration: PUBLIC_SALE_CLIFF_DURATION,
-            vesting_duration: PUBLIC_SALE_VESTING_DURATION,
+            cliff_duration: PRIVATE_SALE_CLIFF_DURATION,
+            vesting_duration: PRIVATE_SALE_VESTING_DURATION,
         };
 
         [private_sale, sale]
