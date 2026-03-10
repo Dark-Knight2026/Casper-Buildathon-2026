@@ -901,6 +901,13 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "Enable once staking/unstaking token delivery is implemented"]
+    fn test_claim_should_increase_beneficiary_balance_by_claimed_amount() {
+        // Placeholder for the future delivery-path test. Until staking exists,
+        // claim() intentionally only updates vesting accounting.
+    }
+
+    #[test]
     fn test_claim_should_claim_full_amt_after_vesting_ends() {
         let mut ctx = setup(odra_test::env());
         let cliff = ctx.cliff_duration;
@@ -1016,7 +1023,7 @@ mod tests {
             "50% should be claimable at cliff",
         );
 
-        // Claim the tokens and check that none are left to claim
+        // Claim the vested amount and check that none are left to claim at this timestamp
         ctx.env.set_caller(alice);
         ctx.vesting.claim(vesting_id);
         assert_eq!(
