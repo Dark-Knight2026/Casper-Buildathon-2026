@@ -6,6 +6,7 @@ use odra::{
 use odra_cli::{deploy::DeployScript, DeployedContractsContainer, DeployerExt, OdraCli};
 
 use leasefi_contracts::{
+    constants::{PRIVATE_SALE_CLIFF_DURATION, PRIVATE_SALE_VESTING_DURATION},
     escrow::{Escrow, EscrowInitArgs},
     ico::{
         types::{Currency, ICOScheduleCreateParams},
@@ -37,6 +38,8 @@ impl LeasefiDeployScript {
                 + (5 * Self::ONE_DAY),
             sale_amount: U256::from(500_000_000) * U256::from(10).pow(U256::from(18)),
             price: U256::from(500_000), // 0.5 USD (0.5 * 1 * 10^6)
+            cliff_duration: PRIVATE_SALE_CLIFF_DURATION,
+            vesting_duration: PRIVATE_SALE_VESTING_DURATION,
         }
     }
 }
@@ -136,8 +139,6 @@ impl DeployScript for LeasefiDeployScript {
             ICOInitArgs {
                 owner: env.caller(),
                 styks_price_feed: Address::new(
-                    // TODO: Fix typo
-                    // @dev this looks like a typo and should be "hash"
                     "hash-2879d6e927289197aab0101cc033f532fe22e4ab4686e44b5743cb1333031acc", // testnet, 814fedbd4ae53b82ab19b1ff6698ce412445c3266271fcb639986d37dc0ae121 - mainnet
                 )
                 .unwrap(),

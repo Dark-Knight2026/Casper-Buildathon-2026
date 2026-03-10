@@ -7,10 +7,7 @@ use odra::{
 use odra_modules::{access::Ownable, cep18_token::Cep18ContractRef};
 
 use crate::{
-    constants::{
-        PRIVATE_SALE_CLIFF_DURATION, PRIVATE_SALE_VESTING_DURATION,
-        STYKS_ORACLE_CSPR_USDT_PRICE_FEED_ID,
-    },
+    constants::STYKS_ORACLE_CSPR_USDT_PRICE_FEED_ID,
     ico::{
         errors::Error,
         events::{
@@ -164,6 +161,8 @@ impl ICO {
 
         let caller = &self.env().caller();
         let attached_value = self.env().attached_value();
+        let cliff_duration = current_ico_schedule.cliff_duration;
+        let vesting_duration = current_ico_schedule.vesting_duration;
 
         match currency {
             Currency::CSPR => {
@@ -191,13 +190,8 @@ impl ICO {
         self.ico_schedules
             .set(&current_ico_schedule_id, current_ico_schedule);
 
-        // Record the vesting schedule
-        self.vesting.create_schedule(
-            *caller,
-            purchase_amount,
-            PRIVATE_SALE_CLIFF_DURATION,
-            PRIVATE_SALE_VESTING_DURATION,
-        );
+        self.vesting
+            .create_schedule(*caller, purchase_amount, cliff_duration, vesting_duration);
 
         self.tailor_coin
             .approve(&self.staking.address(), &purchase_amount);
@@ -381,6 +375,15 @@ impl ICO {
         if ico_schedule.price.is_zero() {
             self.env().revert(Error::InvalidICOSchedulePrice);
         }
+
+        // Vesting terms validation
+        if ico_schedule.vesting_duration == 0 {
+            self.env().revert(Error::InvalidICOScheduleVestingDuration);
+        }
+        if ico_schedule.cliff_duration > ico_schedule.vesting_duration {
+            self.env()
+                .revert(Error::ICOScheduleCliffExceedsVestingDuration);
+        }
     }
 }
 
@@ -442,6 +445,8 @@ pub mod errors {
         InvalidAmountAttached = 59_010,
         InsufficientSellingTokensAmount = 59_011,
         InvalidPurchaseAmount = 59_012,
+        InvalidICOScheduleVestingDuration = 59_013,
+        ICOScheduleCliffExceedsVestingDuration = 59_014,
     }
 }
 
@@ -454,6 +459,8 @@ pub mod types {
         pub end_timestamp: u64,
         pub sale_amount: U256,
         pub price: U256,
+        pub cliff_duration: u64,
+        pub vesting_duration: u64,
     }
 
     #[odra::odra_type]
@@ -463,6 +470,8 @@ pub mod types {
         pub sale_amount: U256,
         pub sold_amount: U256,
         pub price: U256,
+        pub cliff_duration: u64,
+        pub vesting_duration: u64,
     }
 
     #[odra::odra_type]
@@ -489,6 +498,8 @@ pub mod types {
                 sale_amount: ico_schedule.sale_amount,
                 sold_amount: U256::zero(),
                 price: ico_schedule.price,
+                cliff_duration: ico_schedule.cliff_duration,
+                vesting_duration: ico_schedule.vesting_duration,
             }
         }
     }
@@ -500,6 +511,9 @@ mod tests {
     use odra_modules::access::errors::Error as AccessError;
 
     use crate::{
+        constants::{
+            ONE_MONTH_IN_MILLISECONDS, PRIVATE_SALE_CLIFF_DURATION, PRIVATE_SALE_VESTING_DURATION,
+        },
         mocks::styks_price_feed::{StyksPriceFeed, StyksPriceFeedHostRef},
         staking::{Staking, StakingHostRef, StakingInitArgs},
         tailor_coin::{TailorCoin, TailorCoinHostRef, TailorCoinInitArgs},
@@ -973,6 +987,38 @@ mod tests {
     }
 
     #[test]
+    fn test_add_ico_schedule_should_fail_if_ico_schedule_vesting_duration_is_zero() {
+        let mut ctx = setup(odra_test::env(), false);
+        let mut creation_params = get_ico_schedules_creation_params(&ctx.env);
+
+        creation_params[0].vesting_duration = 0;
+
+        assert_eq!(
+            ctx.ico
+                .try_add_ico_schedule(creation_params[0].clone())
+                .unwrap_err(),
+            Error::InvalidICOScheduleVestingDuration.into(),
+            "Should revert when ICO schedule vesting duration is zero"
+        );
+    }
+
+    #[test]
+    fn test_add_ico_schedule_should_fail_if_ico_schedule_cliff_exceeds_vesting_duration() {
+        let mut ctx = setup(odra_test::env(), false);
+        let mut creation_params = get_ico_schedules_creation_params(&ctx.env);
+
+        creation_params[0].cliff_duration = creation_params[0].vesting_duration + 1;
+
+        assert_eq!(
+            ctx.ico
+                .try_add_ico_schedule(creation_params[0].clone())
+                .unwrap_err(),
+            Error::ICOScheduleCliffExceedsVestingDuration.into(),
+            "Should revert when ICO schedule cliff duration exceeds vesting duration"
+        );
+    }
+
+    #[test]
     fn test_add_ico_schedule_should_add_ico_schedules_properly() {
         add_and_verify_ico_schedules(&mut setup(odra_test::env(), false));
     }
@@ -1221,7 +1267,9 @@ mod tests {
         let curr_current_ico_schedule = ctx.ico.get_current_ico_schedule().unwrap();
         let curr_buyer_balance = ctx.tailor_coin.balance_of(&ctx.users.alice);
         let curr_ico_balance = ctx.tailor_coin.balance_of(&ctx.ico.address());
-        let curr_staking_allowance = ctx.tailor_coin.allowance(&ctx.ico.address(), &ctx.staking.address());
+        let curr_staking_allowance = ctx
+            .tailor_coin
+            .allowance(&ctx.ico.address(), &ctx.staking.address());
         let curr_treasury_balance = ctx.usdc.balance_of(&ctx.treasury.address());
         let curr_user_schedules_count = ctx.vesting.get_user_schedules_count(ctx.users.alice);
 
@@ -1268,6 +1316,43 @@ mod tests {
             curr_user_schedules_count,
             prev_user_schedules_count + 1,
             "Buyer should have a new vesting schedule"
+        );
+    }
+
+    #[test]
+    fn test_purchase_should_create_vesting_schedule_with_active_ico_schedule_terms() {
+        let mut ctx = setup(odra_test::env(), true);
+        let public_sale = get_ico_schedules_creation_params(&ctx.env)[1].clone();
+        let currency = Currency::USDC;
+        let amount_to_spend = U256::from(10) * public_sale.price;
+        let expected_purchase_amount =
+            amount_to_spend * U256::from(10).pow(U256::from(18)) / public_sale.price;
+        let vesting_id = ctx.vesting.get_schedules_count();
+
+        ctx.env
+            .advance_block_time(public_sale.start_timestamp - ctx.env.block_time());
+
+        ctx.env.set_caller(ctx.users.alice);
+        ctx.usdc.approve(&ctx.ico.address(), &amount_to_spend);
+        ctx.ico.purchase(amount_to_spend, currency);
+
+        let schedule = ctx.vesting.get_schedule(vesting_id).unwrap();
+
+        assert_eq!(
+            schedule.beneficiary, ctx.users.alice,
+            "Invalid vesting beneficiary"
+        );
+        assert_eq!(
+            schedule.total_amount, expected_purchase_amount,
+            "Invalid vesting amount"
+        );
+        assert_eq!(
+            schedule.cliff_duration, public_sale.cliff_duration,
+            "Vesting schedule should use the active ICO schedule cliff duration"
+        );
+        assert_eq!(
+            schedule.vesting_duration, public_sale.vesting_duration,
+            "Vesting schedule should use the active ICO schedule vesting duration"
         );
     }
 
@@ -1532,6 +1617,8 @@ mod tests {
     const ONE_HOUR: u64 = 60 * ONE_MINUTE;
     const ONE_DAY: u64 = 24 * ONE_HOUR;
     const ONE_MONTH: u64 = 30 * ONE_DAY;
+    const PUBLIC_SALE_CLIFF_DURATION: u64 = 0;
+    const PUBLIC_SALE_VESTING_DURATION: u64 = 6 * ONE_MONTH_IN_MILLISECONDS;
 
     fn setup(env: HostEnv, add_ico_schedules: bool) -> Context {
         let users = Users {
@@ -1622,12 +1709,16 @@ mod tests {
             end_timestamp: env.block_time() + ONE_DAY + ONE_MONTH,
             sale_amount: U256::from(125_000_000_000u64) * U256::from(10).pow(U256::from(18)),
             price: U256::from(500_000), // 0.5 USD (0.5 * 1 * 10^6)
+            cliff_duration: PRIVATE_SALE_CLIFF_DURATION,
+            vesting_duration: PRIVATE_SALE_VESTING_DURATION,
         };
         let sale = ICOScheduleCreateParams {
             start_timestamp: private_sale.end_timestamp + ONE_DAY,
             end_timestamp: private_sale.end_timestamp + ONE_DAY + ONE_MONTH,
             sale_amount: U256::from(250_000_000_000u64) * U256::from(10).pow(U256::from(18)),
             price: U256::from(1_000_000), // 1 USD (1.0 * 1 * 10^6)
+            cliff_duration: PUBLIC_SALE_CLIFF_DURATION,
+            vesting_duration: PUBLIC_SALE_VESTING_DURATION,
         };
 
         [private_sale, sale]

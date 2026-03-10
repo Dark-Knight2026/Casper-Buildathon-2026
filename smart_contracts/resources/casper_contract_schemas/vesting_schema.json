@@ -97,29 +97,6 @@
     },
     {
       "struct": {
-        "name": "TokensWithdrawn",
-        "description": null,
-        "members": [
-          {
-            "name": "vesting_id",
-            "description": null,
-            "ty": "U256"
-          },
-          {
-            "name": "beneficiary",
-            "description": null,
-            "ty": "Key"
-          },
-          {
-            "name": "amount",
-            "description": null,
-            "ty": "U256"
-          }
-        ]
-      }
-    },
-    {
-      "struct": {
         "name": "VestingSchedule",
         "description": null,
         "members": [
@@ -139,11 +116,6 @@
             "ty": "U256"
           },
           {
-            "name": "withdrawn_amount",
-            "description": null,
-            "ty": "U256"
-          },
-          {
             "name": "start_timestamp",
             "description": null,
             "ty": "U64"
@@ -157,6 +129,32 @@
             "name": "vesting_duration",
             "description": null,
             "ty": "U64"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
+        "name": "WhitelistedCreatorAdded",
+        "description": null,
+        "members": [
+          {
+            "name": "creator",
+            "description": null,
+            "ty": "Key"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
+        "name": "WhitelistedCreatorRemoved",
+        "description": null,
+        "members": [
+          {
+            "name": "creator",
+            "description": null,
+            "ty": "Key"
           }
         ]
       }
@@ -207,11 +205,6 @@
       "name": "NothingToClaim",
       "description": "",
       "discriminant": 65007
-    },
-    {
-      "name": "NothingToWithdraw",
-      "description": "",
-      "discriminant": 65008
     },
     {
       "name": "OwnerNotSet",
@@ -454,22 +447,6 @@
       "access": "public"
     },
     {
-      "name": "withdraw",
-      "description": "Withdraws claimed tokens after the staking contract's unbonding period",
-      "is_mutable": true,
-      "arguments": [
-        {
-          "name": "vesting_id",
-          "description": null,
-          "ty": "U256",
-          "optional": false
-        }
-      ],
-      "return_ty": "Unit",
-      "is_contract_context": true,
-      "access": "public"
-    },
-    {
       "name": "transfer_ownership",
       "description": "Delegated. See `self.ownable.transfer_ownership()` for details.",
       "is_mutable": true,
@@ -518,8 +495,12 @@
       "ty": "TokensClaimed"
     },
     {
-      "name": "TokensWithdrawn",
-      "ty": "TokensWithdrawn"
+      "name": "WhitelistedCreatorAdded",
+      "ty": "WhitelistedCreatorAdded"
+    },
+    {
+      "name": "WhitelistedCreatorRemoved",
+      "ty": "WhitelistedCreatorRemoved"
     }
   ],
   "call": {

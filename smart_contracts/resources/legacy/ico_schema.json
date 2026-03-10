@@ -440,6 +440,22 @@
       "attributes": []
     },
     {
+      "name": "get_staking_contract_address",
+      "args": [],
+      "is_mutable": false,
+      "return_ty": "Key",
+      "ty": "Public",
+      "attributes": []
+    },
+    {
+      "name": "get_vesting_contract_address",
+      "args": [],
+      "is_mutable": false,
+      "return_ty": "Key",
+      "ty": "Public",
+      "attributes": []
+    },
+    {
       "name": "transfer_ownership",
       "args": [
         {

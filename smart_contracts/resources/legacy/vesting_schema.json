@@ -82,25 +82,23 @@
       ]
     },
     {
-      "name": "TokensWithdrawn",
+      "name": "WhitelistedCreatorAdded",
       "args": [
         {
-          "name": "vesting_id",
-          "ty": "U256",
-          "is_ref": false,
-          "is_slice": false,
-          "is_required": true
-        },
-        {
-          "name": "beneficiary",
+          "name": "creator",
           "ty": "Key",
           "is_ref": false,
           "is_slice": false,
           "is_required": true
-        },
+        }
+      ]
+    },
+    {
+      "name": "WhitelistedCreatorRemoved",
+      "args": [
         {
-          "name": "amount",
-          "ty": "U256",
+          "name": "creator",
+          "ty": "Key",
           "is_ref": false,
           "is_slice": false,
           "is_required": true
@@ -357,24 +355,6 @@
     },
     {
       "name": "claim",
-      "args": [
-        {
-          "name": "vesting_id",
-          "ty": "U256",
-          "is_ref": false,
-          "is_slice": false,
-          "is_required": true
-        }
-      ],
-      "is_mutable": true,
-      "return_ty": "Unit",
-      "ty": "Public",
-      "attributes": [
-        "NonReentrant"
-      ]
-    },
-    {
-      "name": "withdraw",
       "args": [
         {
           "name": "vesting_id",
