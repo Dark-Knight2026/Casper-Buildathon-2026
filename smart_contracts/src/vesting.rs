@@ -257,13 +257,15 @@ impl Vesting {
             self.env().revert(Error::CliffExceedsVestingDuration);
         }
 
+        let now = self.env().get_block_time();
+
         // Assign next available ID and store the created schedule
         let vesting_id = self.schedules_count.get_or_default();
         let schedule = VestingSchedule {
             beneficiary,
             total_amount,
             claimed_amount: U256::zero(),
-            start_timestamp: self.env().get_block_time(),
+            start_timestamp: now,
             cliff_duration,
             vesting_duration,
         };
@@ -279,7 +281,7 @@ impl Vesting {
             whitelisted_creator: self.env().caller(),
             beneficiary,
             total_amount,
-            start_timestamp: self.env().get_block_time(),
+            start_timestamp: now,
             cliff_duration,
             vesting_duration,
         });
