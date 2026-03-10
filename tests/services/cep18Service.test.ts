@@ -1,17 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// Mock casperClient (cep18Service depends on it for RPC)
+// Only stub RPC-calling functions; use real clValueToBigInt / clValueToString
 const mockQueryContractState = vi.fn();
 const mockQueryDictionaryItem = vi.fn();
-const mockClValueToBigInt = vi.fn();
-const mockClValueToString = vi.fn();
 
-vi.mock('@/services/ico/casperClient', () => ({
-  queryContractState: (...args: unknown[]) => mockQueryContractState(...args),
-  queryDictionaryItem: (...args: unknown[]) => mockQueryDictionaryItem(...args),
-  clValueToBigInt: (...args: unknown[]) => mockClValueToBigInt(...args),
-  clValueToString: (...args: unknown[]) => mockClValueToString(...args),
-}));
+vi.mock('@/services/ico/casperClient', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/services/ico/casperClient')>();
+  return {
+    ...actual,
+    queryContractState: (...args: unknown[]) => mockQueryContractState(...args),
+    queryDictionaryItem: (...args: unknown[]) => mockQueryDictionaryItem(...args),
+  };
+});
 
 vi.mock('@/constants/ico', () => ({
   ICO_CONFIG: {
@@ -45,7 +45,6 @@ describe('getBalance', () => {
 
   it('returns balance from dictionary lookup', async () => {
     mockQueryDictionaryItem.mockResolvedValue({ clValue: { ui256: '1000' } });
-    mockClValueToBigInt.mockReturnValue(1000n);
 
     const balance = await getBalance('hash-token', 'account-hash-abc');
     expect(balance).toBe(1000n);
@@ -76,7 +75,6 @@ describe('getAllowance', () => {
 
   it('queries allowance dictionary with blake2b hashed key', async () => {
     mockQueryDictionaryItem.mockResolvedValue({ clValue: { ui256: '500' } });
-    mockClValueToBigInt.mockReturnValue(500n);
 
     const allowance = await getAllowance('hash-token', 'account-hash-owner', 'hash-spender');
     expect(allowance).toBe(500n);
@@ -114,7 +112,6 @@ describe('getTotalSupply', () => {
 
   it('reads total_supply from contract state', async () => {
     mockQueryContractState.mockResolvedValue({ clValue: { ui256: '5000000' } });
-    mockClValueToBigInt.mockReturnValue(5000000n);
 
     const supply = await getTotalSupply('hash-token');
     expect(supply).toBe(5000000n);
@@ -139,13 +136,6 @@ describe('getTokenMetadata', () => {
       .mockResolvedValueOnce({ clValue: { ui8: '18' } })               // decimals
       .mockResolvedValueOnce({ clValue: { ui256: '5000000000' } });    // totalSupply
 
-    mockClValueToString
-      .mockReturnValueOnce('BIG Token')
-      .mockReturnValueOnce('BIG');
-    mockClValueToBigInt
-      .mockReturnValueOnce(18n)   // decimals
-      .mockReturnValueOnce(5000000000n); // totalSupply
-
     const metadata = await getTokenMetadata('hash-token');
 
     expect(metadata).toEqual({
@@ -158,8 +148,6 @@ describe('getTokenMetadata', () => {
 
   it('returns null when name and symbol are both empty', async () => {
     mockQueryContractState.mockResolvedValue(null);
-    mockClValueToString.mockReturnValue('');
-    mockClValueToBigInt.mockReturnValue(0n);
 
     const metadata = await getTokenMetadata('hash-token');
     expect(metadata).toBeNull();
@@ -171,7 +159,6 @@ describe('getBIGBalance', () => {
 
   it('delegates to getBalance with BIG token hash', async () => {
     mockQueryDictionaryItem.mockResolvedValue({ clValue: { ui256: '100' } });
-    mockClValueToBigInt.mockReturnValue(100n);
 
     const balance = await getBIGBalance('account-hash-abc');
     expect(balance).toBe(100n);

@@ -80,7 +80,7 @@
     /* ICO Text Colors */
     --ico-text-primary: 214 11% 12%;       /* #1C1F23 - Primary text (charcoal) */
     --ico-text-secondary: 220 9% 46%;      /* #6B7280 - Secondary text (muted gray) */
-    --ico-text-muted: 220 9% 64%;          /* #9CA3AF - Muted text */
+    --ico-text-muted: 220 9% 46%;          /* #6B7280 - Muted text (darkened for WCAG AA 4.5:1) */
     --ico-text-highlight: 163 59% 30%;     /* #1F7A63 - Highlighted text (green) */
 
     /* ICO Gradients - Subtle, professional (no neon or high-saturation) */
@@ -167,6 +167,10 @@
     --ico-gradient-primary-end: 163 50% 50%;
     --ico-gradient-success-start: 163 59% 42%;
     --ico-gradient-success-end: 163 50% 52%;
+
+    /* ICO Border & Hover - Dark Mode */
+    --ico-border-color: 222 47% 22%;
+    --ico-brand-secondary-hover: 214 49% 35%;
   }
 }
 

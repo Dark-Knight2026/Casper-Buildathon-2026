@@ -1,42 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// Mock all external dependencies
+// Only stub out RPC-calling functions; use real implementations for pure utilities
 const mockQueryOdraState = vi.fn();
 const mockClValueListU8ToHex = vi.fn();
 
-vi.mock('@/services/ico/casperClient', () => ({
-  queryOdraState: (...args: unknown[]) => mockQueryOdraState(...args),
-  clValueListU8ToHex: (...args: unknown[]) => mockClValueListU8ToHex(...args),
-  hexToBytes: (hex: string) => {
-    const bytes = new Uint8Array(hex.length / 2);
-    for (let i = 0; i < bytes.length; i++) {
-      bytes[i] = parseInt(hex.substring(i * 2, i * 2 + 2), 16);
-    }
-    return bytes;
-  },
-  readU64LE: (bytes: Uint8Array, offset: number): [bigint, number] => {
-    const view = new DataView(bytes.buffer, bytes.byteOffset + offset, 8);
-    return [view.getBigUint64(0, true), offset + 8];
-  },
-  readU128VarLen: (bytes: Uint8Array, offset: number): [bigint, number] => {
-    const length = bytes[offset];
-    if (length === 0) return [0n, offset + 1];
-    let value = 0n;
-    for (let i = 0; i < length; i++) {
-      value |= BigInt(bytes[offset + 1 + i]) << BigInt(i * 8);
-    }
-    return [value, offset + 1 + length];
-  },
-  readU256VarLen: (bytes: Uint8Array, offset: number): [bigint, number] => {
-    const length = bytes[offset];
-    if (length === 0) return [0n, offset + 1];
-    let value = 0n;
-    for (let i = 0; i < length; i++) {
-      value |= BigInt(bytes[offset + 1 + i]) << BigInt(i * 8);
-    }
-    return [value, offset + 1 + length];
-  },
-}));
+vi.mock('@/services/ico/casperClient', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/services/ico/casperClient')>();
+  return {
+    ...actual,
+    queryOdraState: (...args: unknown[]) => mockQueryOdraState(...args),
+    clValueListU8ToHex: (...args: unknown[]) => mockClValueListU8ToHex(...args),
+  };
+});
 
 vi.mock('@/services/ico/odraStorage', () => ({
   ICO_DICTIONARY_KEYS: {

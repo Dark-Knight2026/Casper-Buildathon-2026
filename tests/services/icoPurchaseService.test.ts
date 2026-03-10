@@ -36,13 +36,16 @@ vi.mock('casper-js-sdk', () => ({
   AccountIdentifier: vi.fn(),
 }));
 
-vi.mock('@/services/ico/casperClient', () => ({
-  createDeploy: vi.fn(),
-  createContractCallTransaction: vi.fn(),
-  stripHashPrefix: vi.fn((s: string) => s),
-  getCasperRpcClient: vi.fn(),
-  getAccountMainPurseURef: vi.fn(),
-}));
+vi.mock('@/services/ico/casperClient', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/services/ico/casperClient')>();
+  return {
+    ...actual,
+    createDeploy: vi.fn(),
+    createContractCallTransaction: vi.fn(),
+    getCasperRpcClient: vi.fn(),
+    getAccountMainPurseURef: vi.fn(),
+  };
+});
 
 vi.mock('@/services/ico/contractTypes', () => ({
   paymentCurrencyToContractCurrency: vi.fn(() => 1),

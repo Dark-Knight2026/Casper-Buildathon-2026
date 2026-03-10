@@ -40,16 +40,10 @@ vi.mock('casper-js-sdk', () => ({
   },
 }));
 
-vi.mock('@/services/ico/casperClient', () => ({
-  hexToBytes: (hex: string) => {
-    const bytes = new Uint8Array(hex.length / 2);
-    for (let i = 0; i < bytes.length; i++) {
-      bytes[i] = parseInt(hex.substring(i * 2, i * 2 + 2), 16);
-    }
-    return bytes;
-  },
-  stripHashPrefix: (hash: string) => hash.replace(/^(hash-|contract-)/, ''),
-}));
+vi.mock('@/services/ico/casperClient', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/services/ico/casperClient')>();
+  return { ...actual };
+});
 
 vi.mock('@/constants/ico', () => ({
   ICO_CONFIG: {
