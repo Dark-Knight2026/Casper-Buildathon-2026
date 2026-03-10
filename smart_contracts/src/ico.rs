@@ -511,9 +511,7 @@ mod tests {
     use odra_modules::access::errors::Error as AccessError;
 
     use crate::{
-        constants::{
-            ONE_MONTH_IN_MILLISECONDS, PRIVATE_SALE_CLIFF_DURATION, PRIVATE_SALE_VESTING_DURATION,
-        },
+        constants::{PRIVATE_SALE_CLIFF_DURATION, PRIVATE_SALE_VESTING_DURATION},
         mocks::styks_price_feed::{StyksPriceFeed, StyksPriceFeedHostRef},
         staking::{Staking, StakingHostRef, StakingInitArgs},
         tailor_coin::{TailorCoin, TailorCoinHostRef, TailorCoinInitArgs},
