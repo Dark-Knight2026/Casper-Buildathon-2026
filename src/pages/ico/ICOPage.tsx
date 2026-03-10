@@ -9,7 +9,7 @@ import { logger } from '@/utils/logger';
 
 // Lazy load state components
 const PrivateSaleCountdown = lazy(() => import('./components/states/PrivateSaleCountdown'));
-const ActivePresale = lazy(() => import('./components/states/ActivePresale'));
+const PrivateSaleActive = lazy(() => import('./components/states/ActivePresale'));
 const PostICODashboard = lazy(() => import('./components/states/PostICODashboard'));
 
 // Loading component
@@ -101,7 +101,7 @@ export function ICOPage() {
         );
       case 2:
         return (
-          <ActivePresale
+          <PrivateSaleActive
             endTimestamp={timestamps.presaleEnd}
             progress={presaleProgress}
           />

@@ -11,13 +11,13 @@ import { usePurchaseFlow } from '@/hooks/ico/usePurchaseFlow';
 import { PurchaseConfirmationModal } from '../shared/PurchaseConfirmationModal';
 import { TransactionStatusToast } from '../shared/TransactionStatusToast';
 
-interface ActivePresaleProps {
+interface PrivateSaleActiveProps {
   className?: string;
   endTimestamp: number;
   progress?: ScheduleProgress | null;
 }
 
-export function PrivateSaleActive({ className, endTimestamp, progress }: ActivePresaleProps) {
+export function PrivateSaleActive({ className, endTimestamp, progress }: PrivateSaleActiveProps) {
   const tokenPrice = progress?.priceUsd ?? 0;
 
   const {
