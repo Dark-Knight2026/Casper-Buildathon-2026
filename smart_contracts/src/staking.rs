@@ -4,9 +4,9 @@ use odra_modules::{access::Ownable, cep18_token::Cep18ContractRef};
 use crate::{
     staking::{
         errors::Error,
-        events::{RewardsClaimed, Staked, UnbondedWithdrawn, UnstakedInitiated},
+        events::{RewardsClaimed, RewardsDeposited, Staked, UnbondedWithdrawn, UnstakedInitiated},
     },
-    treasury::events::RewardsDeposited,
+    vesting::VestingContractRef,
 };
 
 // =============================================================================
@@ -81,6 +81,10 @@ pub mod errors {
     pub enum Error {
         TailorCoinContractIsNotSet = 63_000,
         InvalidAmount = 63_001,
+        CallerNotAuthorizedToUnstake = 63_002,
+        NothingStaked = 63_003,
+        InsufficientStakedAmount = 63_004,
+        UnbondingAlreadyInProgress = 63_005,
     }
 }
 
@@ -98,6 +102,9 @@ pub struct Staking {
 
     /// Reference to the TailorCoin (BIG) CEP-18 token contract.
     tailor_coin: External<Cep18ContractRef>,
+
+    /// Trusted Vesting contact allowed to intitiate unstaking on behalf of a staker
+    vesting: External<VestingContractRef>,
 
     /// All staking state for each user, keyed by wallet address
     stakers: Mapping<Address, StakerInfo>,
@@ -133,6 +140,12 @@ impl Staking {
     pub fn set_tailor_coin(&mut self, tailor_coin: Address) {
         self.assert_owner();
         self.tailor_coin.set(tailor_coin);
+    }
+
+    /// Sets the Vesting contract address by the owner
+    pub fn set_vesting(&mut self, vesting: Address) {
+        self.assert_owner();
+        self.vesting.set(vesting);
     }
 
     // =========================================================================
@@ -199,7 +212,41 @@ impl Staking {
 
     #[odra(non_reentrant)]
     pub fn unstake_for(&mut self, staker: Address, amount: U256) {
-        todo!()
+        if amount.is_zero() {
+            self.env().revert(Error::InvalidAmount);
+        }
+
+        self.assert_can_unstake_for(&staker);
+
+        let mut staker_info = self.stakers.get_or_default(&staker);
+
+        if staker_info.staked_amount.is_zero() {
+            self.env().revert(Error::NothingStaked);
+        }
+        if amount > staker_info.staked_amount {
+            self.env().revert(Error::InsufficientStakedAmount);
+        }
+        if !staker_info.unbonding_amount.is_zero() {
+            self.env().revert(Error::UnbondingAlreadyInProgress);
+        }
+
+        self.update_reward_for(&staker);
+
+        let unbonding_ends_at = self.env().get_block_time() + UNBONDING_PERIOD;
+
+        staker_info.staked_amount -= amount;
+        staker_info.unbonding_amount = amount;
+        staker_info.unbonding_ends_at = unbonding_ends_at;
+        self.stakers.set(&staker, staker_info);
+
+        let total_staked = self.total_staked.get_or_default();
+        self.total_staked.set(total_staked - amount);
+
+        self.env().emit_native_event(UnstakedInitiated {
+            staker,
+            amount,
+            unbonding_ends_at,
+        });
     }
 
     /// Allows to deposit any rewards amount in the TailorCoin (BIG) token by anyone, then distributes these rewards
@@ -241,6 +288,16 @@ impl Staking {
     #[inline]
     fn assert_owner(&self) {
         self.ownable.assert_owner(&self.env().caller());
+    }
+
+    #[inline]
+    fn assert_can_unstake_for(&self, staker: &Address) {
+        if self.env().caller() == *staker {
+            return;
+        }
+        if *self.vesting.address() != self.env().caller() {
+            self.env().revert(Error::CallerNotAuthorizedToUnstake);
+        }
     }
 
     /// Precision multiplier (1e18) for reward-per-token fixed-point math.
