@@ -178,12 +178,27 @@ impl Staking {
     // =========================================================================
 
     #[odra(non_reentrant)]
-    pub fn stake_for(&mut self, recipient: Address, amount: U256) {
-        todo!()
+    pub fn stake_for(&mut self, staker: Address, amount: U256) {
+        if amount.is_zero() {
+            self.env().revert(Error::InvalidAmount);
+        }
+
+        self.update_reward_for(&staker);
+
+        let caller = &self.env().caller();
+        let staking_contract = &self.env().self_address();
+        self.tailor_coin
+            .transfer_from(caller, staking_contract, &amount);
+
+        let mut staker_info = self.stakers.get_or_default(&staker);
+        staker_info.staked_amount += amount;
+        self.stakers.set(&staker, staker_info);
+
+        self.env().emit_native_event(Staked { staker, amount });
     }
 
     #[odra(non_reentrant)]
-    pub fn unstake_for(&mut self, recipient: Address, amount: U256) {
+    pub fn unstake_for(&mut self, staker: Address, amount: U256) {
         todo!()
     }
 
@@ -250,8 +265,3 @@ impl Staking {
         self.stakers.set(staker, staker_info);
     }
 }
-
-// =============================================================================
-// Tests
-// =============================================================================
-
