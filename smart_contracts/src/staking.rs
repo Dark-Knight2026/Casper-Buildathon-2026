@@ -85,6 +85,7 @@ pub mod errors {
         NothingStaked = 63_003,
         InsufficientStakedAmount = 63_004,
         UnbondingAlreadyInProgress = 63_005,
+        VestingContractIsNotSet = 63_006,
     }
 }
 
@@ -103,8 +104,8 @@ pub struct Staking {
     /// Reference to the TailorCoin (BIG) CEP-18 token contract.
     tailor_coin: External<Cep18ContractRef>,
 
-    /// Trusted Vesting contact allowed to intitiate unstaking on behalf of a staker
-    vesting: External<VestingContractRef>,
+    /// Trusted Vesting contract address allowed to intitiate unstaking on behalf of a staker
+    vesting: Var<Address>,
 
     /// All staking state for each user, keyed by wallet address
     stakers: Mapping<Address, StakerInfo>,
@@ -155,6 +156,12 @@ impl Staking {
     /// Returns the TailorCoin (BIG) token contract address
     pub fn get_tailor_coin_contract_address(&self) -> Address {
         *self.tailor_coin.address()
+    }
+
+    /// Returns the Vesting contract address
+    pub fn get_vesting_contract_address(&self) -> Address {
+        self.vesting
+            .get_or_revert_with(Error::VestingContractIsNotSet)
     }
 
     /// Returns total staked in contract
@@ -295,7 +302,10 @@ impl Staking {
         if self.env().caller() == *staker {
             return;
         }
-        if *self.vesting.address() != self.env().caller() {
+
+        let vesting = self.get_vesting_contract_address();
+
+        if self.env().caller() != vesting {
             self.env().revert(Error::CallerNotAuthorizedToUnstake);
         }
     }
