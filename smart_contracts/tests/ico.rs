@@ -1201,14 +1201,15 @@ fn setup(env: HostEnv, add_ico_schedules: bool) -> Context {
 
     treasury.set_tailor_coin(tailor_coin.address());
 
-    // Set up Vesting contract
     let mut vesting = Vesting::deploy(&env, VestingInitArgs { owner: users.owner });
+    let mut staking = Staking::deploy(&env, StakingInitArgs { owner: users.owner });
+
     vesting.set_tailor_coin(tailor_coin.address());
     vesting.add_whitelisted_creator(ico.address());
+    vesting.set_staking(staking.address());
 
-    // Set up Staking contract
-    let mut staking = Staking::deploy(&env, StakingInitArgs { owner: users.owner });
     staking.set_tailor_coin(tailor_coin.address());
+    staking.set_vesting(vesting.address());
 
     ico.set_tailor_coin(tailor_coin.address());
     ico.set_treasury(treasury.address());
