@@ -28,7 +28,6 @@ export function ICOPage() {
   const {
     timestamps,
     presaleProgress,
-    icoProgress,
     isLoading,
     error,
   } = useICOSchedules();
@@ -36,7 +35,6 @@ export function ICOPage() {
   logger.debug('[ICOPage] useICOSchedules result:', {
     timestamps,
     presaleProgress,
-    icoProgress,
     isLoading,
     error,
   });

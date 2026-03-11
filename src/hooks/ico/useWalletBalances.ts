@@ -92,7 +92,7 @@ interface FTBalances {
 async function fetchFTBalancesFromCloud(publicKeyHex: string): Promise<FTBalances> {
   const result: FTBalances = { usdt: 0, usdc: 0, big: 0 };
 
-  const resp = await fetch(`/api/cspr-cloud/accounts/${publicKeyHex}/ft-token-ownership`);
+  const resp = await fetch(`/api/cspr-cloud?path=accounts/${publicKeyHex}/ft-token-ownership`);
   if (!resp.ok) {
     const body = await resp.text().catch(() => '');
     throw new Error(`CSPR.Cloud FT API ${resp.status}: ${body}`);

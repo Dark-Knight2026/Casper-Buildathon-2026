@@ -11,6 +11,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { csprCloudService } from '@/lib/blockchain/csprCloudService';
+import logger from '@/lib/logger';
 
 /** Consider the price stale after 5 minutes without a successful refresh. */
 const STALE_THRESHOLD_MS = 5 * 60 * 1000;
@@ -49,7 +50,7 @@ export function useCSPRPrice() {
         lastUpdated: new Date(),
       });
     } catch (error) {
-      console.error('Failed to fetch CSPR price:', error);
+      logger.error('Failed to fetch CSPR price:', error);
       setState(prev => ({
         ...prev,
         loading: false,
