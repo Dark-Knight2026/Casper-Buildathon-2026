@@ -23,8 +23,8 @@ pub struct StakerInfo {
     pub staked_amount: U256,
     /// Rewards already accounted for, but not yet claimed.
     pub pending_rewards: U256,
-    /// Snapshot of the global reward index value already accounted for this staker.
-    pub reward_index_snapshot: U256,
+    /// Per-user snapshot of `reward_per_token_stored` at last interaction
+    pub reward_per_token_paid: U256,
     /// BIG currently in the unbonding window.
     pub unbonding_amount: U256,
     /// Block timestamp for when the current unbonding amount becomes withdrawable.
@@ -80,6 +80,7 @@ pub mod errors {
     #[odra::odra_error]
     pub enum Error {
         TailorCoinContractIsNotSet = 63_000,
+        InvalidAmount = 63_001,
     }
 }
 
@@ -101,23 +102,18 @@ pub struct Staking {
     /// All staking state for each user, keyed by wallet address
     stakers: Mapping<Address, StakerInfo>,
 
-    /// Total BIG currently activele staked and elible for rewards.
+    /// Total BIG currently actively staked and eligible for rewards.
     /// This excludes unbonding tokens as they should no longer earn rewards.
     total_staked: Var<U256>,
 
-    /// Cumulative rewards distributed per unit of active stake
-    /// This value is updated whenever newly available rewards are allocated
-    /// across all active stakers. Each staker stores the last accounted value
-    /// in their `reward_index_snapshot` field, which allows newly acrrued rewards
-    /// to be calculated without iterating over every staker.
-    reward_index: Var<U256>,
+    /// Global reward accumulator — cumulative rewards per staked token.
+    /// This value is updated whenever newly available rewards are deposited.
+    reward_per_token_stored: Var<U256>,
 
     /// Rewards received while no BIG is actively staked.
     /// These rewards stay queued until they can be distributed fairly.
     queued_rewards: Var<U256>,
 }
-
-// TODO implement all staking and rewards distribution related logic
 
 #[odra::module]
 impl Staking {
@@ -130,7 +126,7 @@ impl Staking {
     }
 
     // =========================================================================
-    // Owner-only configuration
+    // Owner-only configurationstaker
     // =========================================================================
 
     /// Sets the TailorCoin (BIG) token contract address by the owner
@@ -156,6 +152,25 @@ impl Staking {
     /// Returns staker info based on wallet address
     pub fn get_staker_info(&self, staker: Address) -> StakerInfo {
         self.stakers.get_or_default(&staker)
+    }
+
+    /// Returns pending (unclaimed) rewards for a given staker
+    pub fn get_pending_rewards(&self, staker: Address) -> U256 {
+        let staker_info = self.get_staker_info(staker);
+        let reward_per_token = self.reward_per_token_stored.get_or_default();
+
+        if staker_info.staked_amount.is_zero()
+            || reward_per_token == staker_info.reward_per_token_paid
+        {
+            return staker_info.pending_rewards;
+        }
+
+        // Measure how much the global reward has increased since staker's last interaction
+        let reward_delta = reward_per_token - staker_info.reward_per_token_paid;
+
+        let newly_accrued_rewards = staker_info.staked_amount * reward_delta / Self::precision();
+
+        staker_info.pending_rewards + newly_accrued_rewards
     }
 
     // =========================================================================
@@ -211,6 +226,28 @@ impl Staking {
     #[inline]
     fn assert_owner(&self) {
         self.ownable.assert_owner(&self.env().caller());
+    }
+
+    /// Precision multiplier (1e18) for reward-per-token fixed-point math.
+    fn precision() -> U256 {
+        U256::from_dec_str("1000000000000000000").unwrap()
+    }
+
+    /// Updates staker's stored reward state to the current global reward per token
+    /// After this, `pending_rewards` includes all rewards accrued, and
+    /// staker's `reward_per_token_paid` is advanced to the global `reward_per_token_stored`
+    fn update_reward_for(&mut self, staker: &Address) {
+        let mut staker_info = self.stakers.get_or_default(staker);
+        let reward_per_token = self.reward_per_token_stored.get_or_default();
+        let paid = staker_info.reward_per_token_paid;
+        let staked = staker_info.staked_amount;
+
+        let accrued = staked * (reward_per_token - paid) / Self::precision();
+
+        staker_info.pending_rewards += accrued;
+        staker_info.reward_per_token_paid = reward_per_token;
+
+        self.stakers.set(staker, staker_info);
     }
 }
 
