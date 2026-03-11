@@ -8,7 +8,7 @@ This document provides a comprehensive set of coding standards for the Rust back
 
 This project strictly follows the standard Rust style guide and uses `cargo fmt` as the mandatory baseline for all formatting. This rulebook serves as a supplement, defining higher-level conventions, architectural patterns, and a few critical exceptions to the standard.
 
-For all low-level formatting (braces, spacing, indentation), the configuration enforced by `cargo fmt` is the source of truth, with one major exception: **this project uses 2-space indentation instead of the default 4 spaces.**
+For all low-level formatting (braces, spacing, indentation), the configuration enforced by `cargo fmt` is the source of truth.
 
 ### Structure
 
@@ -88,10 +88,9 @@ This mandate extends beyond compilable Rust source files (`.rs`) to include:
 Here is how you can use the `run` function.
 
 ```rust
-// This example violates the codestyle.
 fn main() {
-    let result: i32 = run(5);
-    println!("{}", result);
+    let result = run(5); // missing type annotation, wildcard formatting
+    println!("{}",result);
 }
 ```
 
@@ -102,10 +101,9 @@ fn main() {
 Here is how you can use the `run` function.
 
 ```rust
-// This example correctly follows the codestyle.
 fn main() {
     let result: i32 = run(5);
-    println!("{}", result);
+    println!("{result}");
 }
 ```
 
@@ -208,24 +206,25 @@ fn use_parent() {
 
 ### Imports & Modules : Structuring: Local Entities
 
-- **Prefer High-Level Imports for External Crates**: When using items from external crates, import the top-level module or the specific type directly (e.g., `use anyhow::Result;` or `use serde::Deserialize;`) rather than importing deeply nested items if the higher-level import provides sufficient access.
+- **Prefer High-Level Imports for External Crates**: When using items from external crates, import the top-level module or the specific type directly (e.g., `use thiserror::Error;` or `use serde::Deserialize;`) rather than importing deeply nested items if the higher-level import provides sufficient access.
 - **Use Full Paths for Clarity**: Within function bodies or other code blocks, if an import is not used, refer to items using their full path (e.g., `std::collections::HashMap::new()`) for clarity, especially for less frequently used items or to avoid ambiguity.
 
 > ✅ **Good** (High-level external import)
 
 ```rust
-use anyhow::Result; // Import the common Result type
+use thiserror::Error; // Import the common Error derive macro
 
-fn my_func() -> Result<()> {
-    // ... function body ...
-    Ok(())
+#[derive(Debug, Error)]
+pub enum MyError {
+    #[error("something went wrong")]
+    Something,
 }
 ```
 
 > ❌ **Bad** (Deeply nested external import, less common)
 
 ```rust
-use anyhow::private::kind::TraitKind; // Avoid importing deep internal items unless necessary
+use serde::de::value::MapDeserializer; // Avoid importing deep internal items unless necessary
 ```
 
 > ✅ **Good** (Full path for clarity)
@@ -337,8 +336,7 @@ use unilang::{
 
 **Description:** When a `use` statement must be multi-line (as per the previous rule), it must be formatted hierarchically. This improves readability for complex imports.
 
-- The `use` keyword and common path prefix are followed by a newline.
-- An indented opening brace `{` is placed on its own line.
+- The `use` keyword and common path prefix are followed by an opening brace `{` on the same line.
 - Each imported sub-path or item is on its own indented line.
 - This nesting is applied recursively for sub-paths.
 - A closing brace `}` is placed on its own line, aligned with the `use` keyword.
@@ -474,11 +472,14 @@ Cargo's feature system is additive, which makes it difficult to manage complex o
 # my_crate/Cargo.toml
 [dependencies]
 # FORBIDDEN: Dependencies must be optional and gated by the "enabled" feature.
-serde = { workspace = true }``````rust
+serde = { workspace = true }
+```
+
+```rust
 // my_crate/src/lib.rs
 // FORBIDDEN: The crate's code is not conditionally compiled.
 pub fn my_api() -> bool {
-true
+    true
 }
 ```
 
@@ -499,7 +500,9 @@ full = ["enabled"]
 # All dependencies are optional.
 serde = { workspace = true, optional = true }
 log = { workspace = true, optional = true }
-``````rust
+```
+
+```rust
 // my_crate/src/lib.rs
 
 // This attribute prevents "unused" warnings when the feature is disabled.
@@ -508,10 +511,10 @@ log = { workspace = true, optional = true }
 // The entire module is gated by the "enabled" feature.
 #[cfg(feature = "enabled")]
 mod implementation {
-// All your crate's code and modules go here.
-pub fn my_api() -> bool {
-true
-}
+    // All your crate's code and modules go here.
+    pub fn my_api() -> bool {
+        true
+    }
 }
 
 #[cfg(feature = "enabled")]
@@ -528,9 +531,9 @@ Make sure you have no warnings from clippy with these lints enabled.
 
 ```toml
 [workspace.lints.rust]
-# Denies non-idiomatic code for Rust 2018 edition.
+# Warns on non-idiomatic code for Rust 2018 edition.
 rust_2018_idioms = { level = "warn", priority = -1 }
-# Denies using features that may break in future Rust versions.
+# Warns on features that may break in future Rust versions.
 future_incompatible = { level = "warn", priority = -1 }
 # Warns if public items lack documentation.
 missing_docs = "warn"
@@ -540,15 +543,15 @@ missing_debug_implementations = "warn"
 unsafe-code = "deny"
 
 [workspace.lints.clippy]
-# Denies pedantic lints, enforcing strict coding styles and conventions.
+# Warns on pedantic lints, enforcing strict coding styles and conventions.
 pedantic = { level = "warn", priority = -1 }
 # Denies undocumented unsafe blocks.
 undocumented_unsafe_blocks = "deny"
-# Denies to prefer `core` over `std` when available, for `no_std` compatibility.
+# Warns when `std` is used instead of `core` when available, for `no_std` compatibility.
 std_instead_of_core = "warn"
-# Denies including files in documentation unconditionally.
+# Warns on including files in documentation unconditionally.
 doc_include_without_cfg = "warn"
-# Denies missing inline in public items.
+# Warns on missing inline in public items.
 missing_inline_in_public_items = "warn"
 
 # exceptions
@@ -563,11 +566,11 @@ module_name_repetitions = "allow"
 absolute_paths = "allow"
 # Allows wildcard imports (e.g., `use std::io::*;`).
 wildcard_imports = "allow"
-# Allow to prefer `alloc` over `std` when available, for `no_std` compatibility.
+# Allows using `alloc` instead of `std` when available, for `no_std` compatibility.
 std_instead_of_alloc = "allow"
-# Allow put definitions of struct at any point in functions.
+# Allows placing struct definitions at any point in functions.
 items_after_statements = "allow"
-# Allow precission loss, for example during conversion from i64 to f64
+# Allows precision loss, for example during conversion from i64 to f64
 cast_precision_loss = "allow"
 # Allows `pub use` statements.
 pub_use = "allow"
@@ -948,12 +951,10 @@ where
 {}
 ```
 
-> ❌ **Bad**
+> ❌ **Bad** (Where clause on the same line as impl)
 
 ```rust
-impl<K, __Context, __Formed> ::Trait1 for CommandFormerDefinitionTypes<K, __Context, __Formed>
-where
-    K: core::hash::Hash + std::cmp::Eq,
+impl<K, __Context, __Formed> ::Trait1 for CommandFormerDefinitionTypes<K, __Context, __Formed> where K: core::hash::Hash + std::cmp::Eq,
 {}
 ```
 
@@ -998,10 +999,10 @@ fn info<'a>(src: &'a str) -> &'a str {
 }
 ```
 
-> ❌ **Bad**
+> ❌ **Bad** (Space between `&` and lifetime specifier)
 
 ```rust
-fn info<'a>(src: &'a str) -> &'a str {
+fn info<'a>(src: & 'a str) -> & 'a str {
     src
 }
 ```
@@ -1010,7 +1011,6 @@ fn info<'a>(src: &'a str) -> &'a str {
 
 - Avoid complex, multi-level inline nesting. Prefer splitting content across multiple lines.
 - Opt for shorter, clearer lines over long, deeply nested ones to enhance code maintainability.
-- The mandatory 2-space indentation rule helps mitigate excessive horizontal drift in nested code.
 
 ### Formatting & Whitespace : Code Length
 
@@ -1203,9 +1203,10 @@ macro_rules! hmap {
             _map
         }
     };
-}```
+}
+```
 
-> ✅ * * Good* *
+> ✅ **Good**
 
 ```rust
 macro_rules! hmap {
