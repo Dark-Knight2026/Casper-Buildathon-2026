@@ -1,11 +1,20 @@
 use odra::{casper_types::U256, prelude::*, ContractRef};
 use odra_modules::{access::Ownable, cep18_token::Cep18ContractRef};
 
-use crate::staking::errors::Error;
+use crate::{
+    staking::{
+        errors::Error,
+        events::{RewardsClaimed, Staked, UnbondedWithdrawn, UnstakedInitiated},
+    },
+    treasury::events::RewardsDeposited,
+};
 
 // =============================================================================
 // Staking Types
 // =============================================================================
+
+/// Required waiting period between unstaking and withdrawal
+pub const UNBONDING_PERIOD: u64 = 48 * 60 * 60 * 1_000; // 48 hours
 
 #[derive(Default)]
 #[odra::odra_type]
@@ -28,6 +37,37 @@ pub struct StakerInfo {
 
 pub mod events {
     use odra::{casper_types::U256, prelude::*};
+
+    #[odra::event]
+    pub struct Staked {
+        pub staker: Address,
+        pub amount: U256,
+    }
+
+    #[odra::event]
+    pub struct UnstakedInitiated {
+        pub staker: Address,
+        pub amount: U256,
+        pub unbonding_ends_at: u64,
+    }
+
+    #[odra::event]
+    pub struct UnbondedWithdrawn {
+        pub staker: Address,
+        pub amount: U256,
+    }
+
+    #[odra::event]
+    pub struct RewardsDeposited {
+        pub caller: Address,
+        pub amount: U256,
+    }
+
+    #[odra::event]
+    pub struct RewardsClaimed {
+        pub staker: Address,
+        pub amount: U256,
+    }
 }
 
 // =============================================================================
@@ -47,7 +87,10 @@ pub mod errors {
 // Contract
 // =============================================================================
 
-#[odra::module(errors = Error, events = [])]
+#[odra::module(
+  errors = Error,
+  events = [Staked, UnstakedInitiated, UnbondedWithdrawn, RewardsDeposited, RewardsClaimed]
+)]
 pub struct Staking {
     /// Ownership control — only the owner can configure the contract.
     ownable: SubModule<Ownable>,
@@ -69,7 +112,7 @@ pub struct Staking {
     /// to be calculated without iterating over every staker.
     reward_index: Var<U256>,
 
-    /// Rewards received while no BIG is actively staked. 
+    /// Rewards received while no BIG is actively staked.
     /// These rewards stay queued until they can be distributed fairly.
     queued_rewards: Var<U256>,
 }
@@ -103,6 +146,16 @@ impl Staking {
     /// Returns the TailorCoin (BIG) token contract address
     pub fn get_tailor_coin_contract_address(&self) -> Address {
         *self.tailor_coin.address()
+    }
+
+    /// Returns total staked in contract
+    pub fn get_total_staked(&self) -> U256 {
+        self.total_staked.get_or_default()
+    }
+
+    /// Returns staker info based on wallet address
+    pub fn get_staker_info(&self, staker: Address) -> StakerInfo {
+        self.stakers.get_or_default(&staker)
     }
 
     // =========================================================================
