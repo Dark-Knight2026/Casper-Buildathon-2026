@@ -24,6 +24,17 @@ vi.mock('@/services/ico/icoPurchaseService', () => ({
   preparePurchase: (...args: unknown[]) => mockPreparePurchase(...args),
   calculateTokensReceived: (...args: unknown[]) => mockCalculateTokensReceived(...args),
   fromRawAmount: (...args: unknown[]) => mockFromRawAmount(...args),
+  parseContractError: (msg?: string) => {
+    if (!msg) return 'Deploy failed';
+    const match = msg.match(/User error: (\d+)/);
+    if (match) {
+      const MAP: Record<string, string> = {
+        '59007': 'No active ICO schedule — sale is not currently open',
+      };
+      return MAP[match[1]] || msg;
+    }
+    return msg;
+  },
 }));
 
 // Mock ICO_CONFIG

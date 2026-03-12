@@ -17,6 +17,7 @@ import {
   validatePurchase,
   calculateTokensReceived,
   fromRawAmount,
+  parseContractError,
 } from '@/services/ico/icoPurchaseService';
 import { ICO_CONFIG, getCurrencyRateUsd } from '@/constants/ico';
 import type { PaymentCurrency } from '@/types/ico';
@@ -220,7 +221,8 @@ export function usePurchaseToken(
 
         onSuccess?.(purchaseTxHash, tokensReceived);
       } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : 'Purchase failed';
+        const raw = err instanceof Error ? err.message : 'Purchase failed';
+        const errorMessage = parseContractError(raw);
 
         setState((prev) => ({
           ...prev,

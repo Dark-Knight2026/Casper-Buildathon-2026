@@ -47,7 +47,7 @@ const calculateState = (timestamps: SaleTimestamps): ICOState => {
   }
 
   // State 3: After ICO
-  return 2;
+  return 3;
 };
 
 const getNextStateTimestamp = (
