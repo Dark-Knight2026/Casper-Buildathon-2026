@@ -8,6 +8,8 @@ import { WalletCard } from '../shared/WalletCard';
 import CountdownTimer from '../shared/CountdownTimer';
 import { usePurchaseFlow } from '@/hooks/ico/usePurchaseFlow';
 import { useUserTokenActions } from '@/hooks/ico/useUserTokenActions';
+import { useICOBalance } from '@/hooks/ico/useICOBalance';
+import { deriveAccountHash } from '@/lib/blockchain/accountUtils';
 import { PurchaseConfirmationModal } from '../shared/PurchaseConfirmationModal';
 import { TransactionStatusToast } from '../shared/TransactionStatusToast';
 import { UserTokenBalance } from '../shared/UserTokenBalance';
@@ -24,6 +26,7 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: ActiveP
 
   const {
     isConnected,
+    isBackendAuthenticated,
     account,
     connect,
     balances,
@@ -40,12 +43,17 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: ActiveP
   });
 
   const { transactions } = useUserTokenActions(account?.publicKey);
-
-  // Aggregate user balance from on-chain transactions
+  const accountHash = account?.publicKey ? deriveAccountHash(account.publicKey) : null;
+  const { data: icoBalance } = useICOBalance(accountHash, isBackendAuthenticated);
+  // Use backend balance when available, fallback to on-chain transactions
   const userBalance = useMemo(() => {
+    if (icoBalance) {
+      const tokensPurchased = Number(BigInt(icoBalance.tokensPurchased)) / 1e18;
+      return { tokensPurchased, totalSpentUSD: icoBalance.totalSpentUSD };
+    }
     const tokensPurchased = transactions.reduce((sum, tx) => sum + tx.tokensReceived, 0);
     return { tokensPurchased, totalSpentUSD: tokensPurchased * tokenPrice };
-  }, [transactions, tokenPrice]);
+  }, [icoBalance, transactions, tokenPrice]);
 
   return (
     <div className={cn('max-w-5xl mx-auto', className)}>

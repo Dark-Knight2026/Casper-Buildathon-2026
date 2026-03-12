@@ -142,6 +142,25 @@ export interface ICOStateResponse {
   progress: SaleProgress;
 }
 
+// Backend API response types
+export interface IcoBalanceResponse {
+  tokensPurchased: string;
+  totalSpentUSD: number;
+  tokenPrice: number;
+  tokenSymbol: string;
+  currentValue: number;
+}
+
+export interface IcoProgressResponse {
+  tokensSold: string;
+  totalAllocation: string;
+  tokensRemaining: string;
+  amountRaised: number;
+  hardCapUsd: number;
+  priceUsd: number;
+  percentSold: number;
+}
+
 // Hook return types
 export interface UseCountdownReturn {
   time: CountdownTime;

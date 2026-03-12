@@ -18,7 +18,7 @@
  * {purchaseFlow.renderToast()}
  */
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import logger from '@/lib/logger';
 import type { PaymentCurrency } from '@/types/ico';
@@ -26,6 +26,7 @@ import { useICOWallet } from './useICOWallet';
 import { useWalletBalances } from './useWalletBalances';
 import { usePurchaseToken, type PurchaseState } from './usePurchaseToken';
 import { useCSPRPrice } from '@/hooks/useCSPRPrice';
+import { useBackendAuth } from './useBackendAuth';
 
 interface PendingPurchase {
   amount: number;
@@ -42,6 +43,7 @@ interface UsePurchaseFlowOptions {
 interface UsePurchaseFlowReturn {
   // Wallet state
   isConnected: boolean;
+  isBackendAuthenticated: boolean;
   account: { publicKey: string } | null;
   connect: () => void;
   balances: {
@@ -108,6 +110,18 @@ export function usePurchaseFlow({
   const { balances, error: balanceError, isLoading: balancesLoading, refetch: refetchBalances } = useWalletBalances(account?.publicKey);
   const { priceUSD: csprPriceUsd } = useCSPRPrice();
   logger.log('usePurchaseFlow - wallet state:', { isConnected, account, balances, csprPriceUsd });
+
+  // Authenticate with backend when wallet connects
+  const { isAuthenticated: isBackendAuthenticated, login: backendLogin } = useBackendAuth(
+    clickRef ?? null,
+    account?.publicKey,
+  );
+
+  useEffect(() => {
+    if (isConnected && account?.publicKey && !isBackendAuthenticated) {
+      backendLogin();
+    }
+  }, [isConnected, account?.publicKey, isBackendAuthenticated, backendLogin]);
 
   // Modal and toast state
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -225,6 +239,7 @@ export function usePurchaseFlow({
   return {
     // Wallet state
     isConnected,
+    isBackendAuthenticated,
     account,
     connect,
     balances,

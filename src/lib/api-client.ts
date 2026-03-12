@@ -37,6 +37,7 @@ export class ApiClient {
   private maxRetries: number;
   private retryDelay: number;
   private onAuthError?: () => void;
+  private authToken: string | null = null;
 
   constructor(options: ApiClientOptions = {}) {
     this.baseUrl = options.baseUrl || '';
@@ -44,6 +45,14 @@ export class ApiClient {
     this.maxRetries = options.maxRetries || 3;
     this.retryDelay = options.retryDelay || 1000;
     this.onAuthError = options.onAuthError;
+  }
+
+  setAuthToken(token: string | null): void {
+    this.authToken = token;
+  }
+
+  getAuthToken(): string | null {
+    return this.authToken;
   }
 
   /**
@@ -130,6 +139,10 @@ export class ApiClient {
       const response = await this.fetchWithTimeout(fullUrl, {
         ...options,
         method: 'GET',
+        headers: {
+          ...(this.authToken ? { Authorization: `Bearer ${this.authToken}` } : {}),
+          ...options.headers,
+        },
       });
       return this.handleResponse<T>(response);
     };
@@ -267,6 +280,14 @@ export class ApiClient {
     return getUserFriendlyError(error);
   }
 }
+
+// LeaseFi backend API client
+export const backendClient = new ApiClient({
+  baseUrl: import.meta.env.VITE_BACKEND_URL ?? '',
+  timeout: 30000,
+  maxRetries: 3,
+  retryDelay: 1000,
+});
 
 // Create default API client instance
 export const apiClient = new ApiClient({

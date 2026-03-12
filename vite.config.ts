@@ -27,6 +27,10 @@ export default defineConfig(({ mode }) => {
           authorization: env.VITE_CSPR_CLOUD_API_KEY || '',
         },
       },
+      '/api/v1': {
+        target: env.VITE_BACKEND_URL || 'http://localhost:8080',
+        changeOrigin: true,
+      },
     },
   },
   plugins: [
