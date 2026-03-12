@@ -9,8 +9,8 @@ use leasefi_contracts::staking::{events::*, Staking, StakingHostRef, StakingInit
 use leasefi_contracts::tailor_coin::{TailorCoin, TailorCoinHostRef, TailorCoinInitArgs};
 
 use crate::{
-    staking::{self, errors::Error},
-    vesting::{Vesting, VestingInitArgs},
+    staking::{self, errors::Error, UNBONDING_PERIOD},
+    vesting::{self, Vesting, VestingInitArgs},
 };
 
 // =============================================================================
@@ -348,3 +348,141 @@ fn test_stake_for_should_checkpoint_rewards_before_updating_balance() {
     assert_eq!(ctx.staking.get_pending_rewards(alice), rewards);
     assert_eq!(ctx.staking.get_total_staked(), amount * 2);
 }
+
+// =============================================================================
+// unstaking_for()
+// =============================================================================
+
+#[test]
+fn test_unstake_for_should_revert_if_amount_is_zero() {
+    let mut ctx = setup(odra_test::env());
+    let owner = ctx.users.owner;
+    let amount = U256::zero();
+
+    ctx.env.set_caller(owner);
+    assert_eq!(
+        ctx.staking.try_unstake_for(owner, amount).unwrap_err(),
+        Error::InvalidAmount.into(),
+    );
+}
+
+#[test]
+fn test_unstake_for_should_revert_if_caller_not_authorized() {
+    let mut ctx = setup(odra_test::env());
+    let alice = ctx.users.alice;
+    let bob = ctx.users.bob;
+
+    fund_and_approve(&mut ctx, alice, staking_amount());
+    stake_for(&mut ctx, alice, staking_amount());
+
+    ctx.env.set_caller(bob);
+    assert_eq!(
+        ctx.staking
+            .try_unstake_for(alice, staking_amount())
+            .unwrap_err(),
+        Error::CallerNotAuthorizedToUnstake.into(),
+    );
+}
+
+#[test]
+fn test_unstake_for_should_revert_if_nothing_staked() {
+    let mut ctx = setup(odra_test::env());
+    let alice = ctx.users.alice;
+
+    ctx.env.set_caller(alice);
+    assert_eq!(
+        ctx.staking
+            .try_unstake_for(alice, staking_amount())
+            .unwrap_err(),
+        Error::NothingStaked.into(),
+    );
+}
+
+#[test]
+fn test_unstake_for_should_revert_if_insufficient_amount() {
+    let mut ctx = setup(odra_test::env());
+    let amount = staking_amount();
+    let alice = ctx.users.alice;
+
+    fund_and_approve(&mut ctx, alice, amount);
+    stake_for(&mut ctx, alice, amount);
+
+    ctx.env.set_caller(alice);
+    assert_eq!(
+        ctx.staking.try_unstake_for(alice, amount + 1).unwrap_err(),
+        Error::InsufficientStakedAmount.into(),
+    );
+}
+
+#[test]
+fn test_unstake_for_should_revert_if_unbonding_already_in_progress() {
+    let mut ctx = setup(odra_test::env());
+    let amount = staking_amount();
+    let alice = ctx.users.alice;
+
+    fund_and_approve(&mut ctx, alice, amount);
+    stake_for(&mut ctx, alice, amount);
+
+    ctx.env.set_caller(alice);
+    ctx.staking.unstake_for(alice, amount / 2);
+
+    assert_eq!(
+        ctx.staking.try_unstake_for(alice, amount / 2).unwrap_err(),
+        Error::UnbondingAlreadyInProgress.into()
+    );
+}
+
+#[test]
+fn test_unstake_for_should_unstake_properly() {
+    let mut ctx = setup(odra_test::env());
+    let amount = staking_amount();
+    let alice = ctx.users.alice;
+    let unbonding_ends_at = ctx.env.block_time() + UNBONDING_PERIOD;
+    let unstaked_amount = amount / 2;
+
+    fund_and_approve(&mut ctx, alice, amount);
+    stake_for(&mut ctx, alice, amount);
+
+    ctx.env.set_caller(alice);
+    ctx.staking.unstake_for(alice, unstaked_amount);
+
+    let staking_info = ctx.staking.get_staker_info(alice);
+    assert_eq!(staking_info.staked_amount, amount - unstaked_amount);
+    assert_eq!(staking_info.unbonding_amount, unstaked_amount);
+    assert_eq!(staking_info.unbonding_ends_at, unbonding_ends_at);
+    assert_eq!(ctx.staking.get_total_staked(), amount - unstaked_amount);
+
+    assert!(ctx.env.emitted_native_event(
+        &ctx.staking.address(),
+        UnstakedInitiated {
+            staker: alice,
+            amount: unstaked_amount,
+            unbonding_ends_at,
+        }
+    ));
+}
+
+#[test]
+fn test_unstake_for_vesting_can_unstake_on_behalf() {
+    let mut ctx = setup(odra_test::env());
+    let amount = staking_amount();
+    let alice = ctx.users.alice;
+    let vesting_mock = ctx.env.get_account(5);
+
+    ctx.env.set_caller(ctx.users.owner);
+    ctx.staking.set_vesting(vesting_mock);
+
+    fund_and_approve(&mut ctx, alice, amount);
+    stake_for(&mut ctx, alice, amount);
+
+    ctx.env.set_caller(vesting_mock);
+    ctx.staking.unstake_for(alice, amount);
+
+    let staking_info = ctx.staking.get_staker_info(alice);
+    assert_eq!(staking_info.unbonding_amount, amount);
+    assert_eq!(staking_info.staked_amount, U256::zero());
+}
+
+// =============================================================================
+// deposit_rewards()
+// =============================================================================
