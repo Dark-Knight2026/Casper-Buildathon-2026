@@ -2,6 +2,8 @@
 
 use odra::prelude::*;
 
+/// Test-only mock used by ICO tests to simulate the external Styks oracle.
+/// This module is gated behind `#[cfg(test)]` in `src/lib.rs` and is not deployable in production.
 #[odra::module]
 pub struct StyksPriceFeed {
     twap_price: Var<u64>,
