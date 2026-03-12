@@ -148,6 +148,36 @@ fn test_set_tailor_coin_should_set_tailor_coin_properly() {
 }
 
 // =============================================================================
+// set_vesting()
+// =============================================================================
+
+#[test]
+fn test_set_vesting_should_revert_if_not_owner_is_calling() {
+    let mut ctx = setup(odra_test::env());
+    ctx.env.set_caller(ctx.users.alice);
+
+    assert_eq!(
+        ctx.staking.try_set_vesting(ctx.users.alice).unwrap_err(),
+        AccessError::CallerNotTheOwner.into(),
+        "Should revert when is called by non-owner",
+    );
+}
+
+#[test]
+fn test_set_vesting_should_set_vesting_properly() {
+    let mut ctx = setup(odra_test::env());
+    let new_address = ctx.users.alice;
+
+    ctx.staking.set_vesting(new_address);
+
+    assert_eq!(
+        ctx.staking.get_vesting_contract_address(),
+        new_address,
+        "Invalid Staking contract address",
+    );
+}
+
+// =============================================================================
 // get_pending_rewards()
 // =============================================================================
 
@@ -182,3 +212,48 @@ fn test_get_pending_rewards_should_return_zero_after_staking_without_rewards() {
         "Pending rewards should be zero after staking when no rewards have been added deposited",
     );
 }
+
+#[test]
+fn test_get_pending_rewards_should_be_proportional_for_multiple_stakers() {
+    let mut ctx = setup(odra_test::env());
+    let alice_stake = U256::from(1000u64) * U256::from(10).pow(U256::from(18));
+    let bob_stake = U256::from(3000u64) * U256::from(10).pow(U256::from(18));
+    let rewards_amount = U256::from(400u64) * U256::from(10).pow(U256::from(18));
+
+    let alice = ctx.users.alice;
+    let bob = ctx.users.bob;
+
+    // Fund and approve both users
+    fund_and_approve(&mut ctx, alice, alice_stake);
+    fund_and_approve(&mut ctx, bob, bob_stake);
+
+    // Both stake
+    stake_for(&mut ctx, alice, alice_stake);
+    stake_for(&mut ctx, bob, bob_stake);
+
+    // Owner deposits rewards
+    ctx.env.set_caller(ctx.users.owner);
+    ctx.tailor_coin
+        .approve(&ctx.staking.address(), &rewards_amount);
+    ctx.staking.deposit_rewards(rewards_amount);
+
+    // Check rewards - alice has 25%, bob has 75%
+    let alice_rewards = ctx.staking.get_pending_rewards(ctx.users.alice);
+    let bob_rewards = ctx.staking.get_pending_rewards(ctx.users.bob);
+
+    let expected_alice_rewards = rewards_amount / 4; // 25%
+    let expected_bob_rewards = rewards_amount * 3 / 4; // 75%
+
+    assert_eq!(
+        alice_rewards, expected_alice_rewards,
+        "Alice should get 25% of rewards"
+    );
+    assert_eq!(
+        bob_rewards, expected_bob_rewards,
+        "Bob should get 75% of rewards"
+    );
+}
+
+// =============================================================================
+// staking_for()
+// =============================================================================
