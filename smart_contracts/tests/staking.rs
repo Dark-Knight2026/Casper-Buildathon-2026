@@ -5,10 +5,13 @@ use odra::{
 };
 use odra_modules::access::errors::Error as AccessError;
 
-use leasefi_contracts::staking::{Staking, StakingHostRef, StakingInitArgs};
+use leasefi_contracts::staking::{events::*, Staking, StakingHostRef, StakingInitArgs};
 use leasefi_contracts::tailor_coin::{TailorCoin, TailorCoinHostRef, TailorCoinInitArgs};
 
-use crate::vesting::{Vesting, VestingInitArgs};
+use crate::{
+    staking::{self, errors::Error},
+    vesting::{Vesting, VestingInitArgs},
+};
 
 // =============================================================================
 // Test Constants
@@ -90,6 +93,14 @@ fn fund_and_approve(ctx: &mut Context, user: Address, amount: U256) {
 fn stake_for(ctx: &mut Context, staker: Address, amount: U256) {
     ctx.env.set_caller(staker);
     ctx.staking.stake_for(staker, amount);
+}
+
+fn staking_amount() -> U256 {
+    U256::from(1000u64) * U256::from(10).pow(U256::from(18))
+}
+
+fn rewards_amount() -> U256 {
+    U256::from(400u64) * U256::from(10).pow(U256::from(18))
 }
 
 // =============================================================================
@@ -197,7 +208,7 @@ fn test_get_pending_rewards_should_return_zero_for_new_staker() {
 #[test]
 fn test_get_pending_rewards_should_return_zero_after_staking_without_rewards() {
     let mut ctx = setup(odra_test::env());
-    let stake_amount = U256::from(1000) * U256::from(10).pow(U256::from(18));
+    let stake_amount = staking_amount();
     let alice = ctx.users.alice;
 
     // Fund, approve and stake for Alice
@@ -216,9 +227,9 @@ fn test_get_pending_rewards_should_return_zero_after_staking_without_rewards() {
 #[test]
 fn test_get_pending_rewards_should_be_proportional_for_multiple_stakers() {
     let mut ctx = setup(odra_test::env());
-    let alice_stake = U256::from(1000u64) * U256::from(10).pow(U256::from(18));
-    let bob_stake = U256::from(3000u64) * U256::from(10).pow(U256::from(18));
-    let rewards_amount = U256::from(400u64) * U256::from(10).pow(U256::from(18));
+    let alice_stake = staking_amount();
+    let bob_stake = staking_amount() * 3;
+    let rewards_amount = rewards_amount();
 
     let alice = ctx.users.alice;
     let bob = ctx.users.bob;
@@ -257,3 +268,83 @@ fn test_get_pending_rewards_should_be_proportional_for_multiple_stakers() {
 // =============================================================================
 // staking_for()
 // =============================================================================
+
+#[test]
+fn test_stake_for_should_revert_if_amount_is_zero() {
+    let mut ctx = setup(odra_test::env());
+    let owner = ctx.users.owner;
+    let amount = U256::zero();
+
+    ctx.env.set_caller(owner);
+    assert_eq!(
+        ctx.staking.try_stake_for(owner, amount).unwrap_err(),
+        Error::InvalidAmount.into(),
+        "Should revert with zero amount",
+    );
+}
+
+#[test]
+fn test_stake_for_should_stake_properly() {
+    let mut ctx = setup(odra_test::env());
+    let staking_amount = staking_amount();
+    let alice = ctx.users.alice;
+
+    fund_and_approve(&mut ctx, alice, staking_amount);
+    stake_for(&mut ctx, alice, staking_amount);
+
+    let staker_info = ctx.staking.get_staker_info(alice);
+    assert_eq!(staker_info.staked_amount, staking_amount);
+    assert_eq!(ctx.staking.get_total_staked(), staking_amount);
+
+    assert!(ctx.env.emitted_native_event(
+        &ctx.staking.address(),
+        Staked {
+            staker: alice,
+            amount: staking_amount,
+        }
+    ));
+}
+
+#[test]
+fn test_stake_for_should_allow_thirdy_party_to_stake_on_behalf() {
+    let mut ctx = setup(odra_test::env());
+    let amount = staking_amount();
+    let alice = ctx.users.alice;
+    let bob = ctx.users.bob;
+
+    // Bob funds but stakes on Alice's behalf
+    fund_and_approve(&mut ctx, bob, amount);
+    ctx.env.set_caller(bob);
+    ctx.staking.stake_for(alice, amount);
+
+    // Alice has stake but Bob does not
+    assert_eq!(ctx.staking.get_staker_info(alice).staked_amount, amount);
+    assert_eq!(ctx.staking.get_staker_info(bob).staked_amount, U256::zero());
+    assert_eq!(ctx.staking.get_total_staked(), amount);
+}
+
+#[test]
+fn test_stake_for_should_checkpoint_rewards_before_updating_balance() {
+    let mut ctx = setup(odra_test::env());
+    let amount = staking_amount();
+    let rewards = rewards_amount();
+    let owner = ctx.users.owner;
+    let alice = ctx.users.alice;
+
+    // Alice stakes, then rewards are deposited
+    fund_and_approve(&mut ctx, alice, amount * 2);
+    stake_for(&mut ctx, alice, amount);
+
+    ctx.env.set_caller(owner);
+    ctx.tailor_coin.approve(&ctx.staking.address(), &rewards);
+    ctx.staking.deposit_rewards(rewards);
+
+    // Alice stakes again, rewards must be checkpointed before balances updates
+    ctx.env.set_caller(alice);
+    ctx.tailor_coin.approve(&ctx.staking.address(), &amount);
+    ctx.staking.stake_for(alice, amount);
+
+    // All rewards should be capture since Alice was the only staker
+    assert_eq!(ctx.staking.get_pending_rewards(alice), rewards);
+    assert_eq!(ctx.staking.get_total_staked(), amount * 2);
+}
