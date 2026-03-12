@@ -281,6 +281,38 @@ impl Staking {
     // Reward Flows
     // =========================================================================
 
+    /// Allows anyone to deposit BIG rewards into the staking contract
+    /// Newly deposited rewards are distributed proportionally across all active
+    /// stakers using the global reward-per-token accumulator
+    ///
+    /// @dev This function requires at least some active stake to exist. if nobody
+    /// is currently staking, the deposit is rejected.
+    #[odra(non_reentrant)]
+    pub fn deposit_rewards(&mut self, amount: U256) {
+        if amount.is_zero() {
+            self.env().revert(Error::InvalidAmount);
+        }
+
+        let total_staked = self.total_staked.get_or_default();
+
+        if total_staked.is_zero() {
+            self.env().revert(Error::NoActiveStake);
+        }
+
+        let caller = self.env().caller();
+        let staking_contract = self.env().self_address();
+        self.tailor_coin
+            .transfer_from(&caller, &staking_contract, &amount);
+
+        let current = self.reward_per_token_stored.get_or_default();
+        let increase = amount * Self::precision() / total_staked;
+
+        self.reward_per_token_stored.set(current + increase);
+
+        self.env()
+            .emit_native_event(RewardsDeposited { caller, amount });
+    }
+
     /// Claims all pending BIG token rewards accrued by the caller.
     ///
     /// Snapshots the caller's reward state first, then transfers the full
@@ -308,38 +340,6 @@ impl Staking {
             staker,
             amount: rewards,
         });
-    }
-
-    /// Allows anyont to deposit BIG rewards into the staking contract
-    /// Newly deposited rewards are distributed proportionally across all active
-    /// stakers using the global reward-per-token accumulator
-    ///
-    /// @dev This function requires at least some active stake to exist. if nobody
-    ///      is currently staking, the deposit is rejected.
-    #[odra(non_reentrant)]
-    pub fn deposit_rewards(&mut self, amount: U256) {
-        if amount.is_zero() {
-            self.env().revert(Error::InvalidAmount);
-        }
-
-        let total_staked = self.total_staked.get_or_default();
-
-        if total_staked.is_zero() {
-            self.env().revert(Error::NoActiveStake);
-        }
-
-        let caller = self.env().caller();
-        let staking_contract = self.env().self_address();
-        self.tailor_coin
-            .transfer_from(&caller, &staking_contract, &amount);
-
-        let current = self.reward_per_token_stored.get_or_default();
-        let increase = amount * Self::precision() / total_staked;
-
-        self.reward_per_token_stored.set(current + increase);
-
-        self.env()
-            .emit_native_event(RewardsDeposited { caller, amount });
     }
 
     // =========================================================================
