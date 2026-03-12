@@ -62,8 +62,8 @@ export function useCSPRPrice() {
   useEffect(() => {
     fetchPrice();
     
-    // Update price every minute
-    const interval = setInterval(fetchPrice, 60000);
+    // Update price every 5 minutes (matches STALE_THRESHOLD_MS)
+    const interval = setInterval(fetchPrice, STALE_THRESHOLD_MS);
     
     return () => clearInterval(interval);
   }, [fetchPrice]);

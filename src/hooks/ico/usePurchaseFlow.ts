@@ -110,8 +110,6 @@ export function usePurchaseFlow({
   // csprPriceUsd is display-only — used for UI estimations (token preview, USD equivalent).
   // The smart contract determines the actual exchange rate on-chain.
   const { priceUSD: csprPriceUsd, isStale: csprPriceStale } = useCSPRPrice();
-  logger.log('usePurchaseFlow - wallet state:', { isConnected, account, balances, csprPriceUsd, csprPriceStale });
-
   // Modal and toast state
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [pendingPurchase, setPendingPurchase] = useState<PendingPurchase | null>(null);

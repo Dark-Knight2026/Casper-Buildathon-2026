@@ -362,7 +362,9 @@ export class CSPRCloudService {
     currencies: string[] = ['USD']
   ): Promise<Record<string, number>> {
     const vsCurrencies = currencies.map((c) => c.toLowerCase()).join(',');
-    const url = `https://api.coingecko.com/api/v3/simple/price?ids=casper-network&vs_currencies=${vsCurrencies}`;
+    const url = import.meta.env.DEV
+      ? `/api/coingecko/simple/price?ids=casper-network&vs_currencies=${vsCurrencies}`
+      : `/api/coingecko?ids=casper-network&vs_currencies=${vsCurrencies}`;
 
     const response = await fetch(url);
     if (!response.ok) {

@@ -9,7 +9,7 @@ import { logger } from '@/utils/logger';
 
 // Lazy load state components
 const PrivateSaleCountdown = lazy(() => import('./components/states/PrivateSaleCountdown'));
-const PrivateSaleActive = lazy(() => import('./components/states/ActivePresale'));
+const PrivateSaleActive = lazy(() => import('./components/states/PrivateSaleActive'));
 const PostICODashboard = lazy(() => import('./components/states/PostICODashboard'));
 
 // Loading component

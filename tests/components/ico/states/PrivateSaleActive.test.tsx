@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
-import { PrivateSaleActive } from '@/pages/ico/components/states/ActivePresale';
+import { PrivateSaleActive } from '@/pages/ico/components/states/PrivateSaleActive';
 import { ICO_CONFIG } from '@/constants/ico';
 import type { ScheduleProgress } from '@/hooks/ico/useICOSchedules';
 
@@ -54,7 +54,17 @@ const renderWithRouter = (ui: React.ReactElement) => {
 };
 
 describe('PrivateSaleActive', () => {
-  const mockEndTimestamp = Date.now() + 14 * 24 * 60 * 60 * 1000; // 14 days from now
+  let mockEndTimestamp: number;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2025-06-01T12:00:00Z'));
+    mockEndTimestamp = Date.now() + 14 * 24 * 60 * 60 * 1000; // 14 days from fixed base
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
 
   describe('rendering', () => {
     it('should render the component with title', () => {

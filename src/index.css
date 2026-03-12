@@ -83,12 +83,6 @@
     --ico-text-muted: 220 9% 46%;          /* #6B7280 - Muted text (darkened for WCAG AA 4.5:1) */
     --ico-text-highlight: 163 59% 30%;     /* #1F7A63 - Highlighted text (green) */
 
-    /* ICO Gradients - Subtle, professional (no neon or high-saturation) */
-    --ico-gradient-primary-start: 163 59% 30%;  /* #1F7A63 */
-    --ico-gradient-primary-end: 163 50% 36%;    /* #2E8B6F */
-    --ico-gradient-success-start: 163 59% 30%;  /* #1F7A63 */
-    --ico-gradient-success-end: 163 50% 40%;    /* #36A080 */
-
     --ico-border-color: 220 13% 88%;       /* #DDDFE3 - Border color */
   }
 
@@ -161,12 +155,6 @@
     --ico-text-secondary: 220 9% 70%;
     --ico-text-muted: 220 9% 50%;
     --ico-text-highlight: 163 59% 55%;
-
-    /* ICO Gradients - Dark Mode (desaturated, matching approved palette) */
-    --ico-gradient-primary-start: 163 59% 45%;
-    --ico-gradient-primary-end: 163 50% 50%;
-    --ico-gradient-success-start: 163 59% 42%;
-    --ico-gradient-success-end: 163 50% 52%;
 
     /* ICO Border & Hover - Dark Mode */
     --ico-border-color: 222 47% 22%;

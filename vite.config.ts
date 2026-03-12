@@ -27,6 +27,11 @@ export default defineConfig(({ mode }) => {
           authorization: env.VITE_CSPR_CLOUD_API_KEY || '',
         },
       },
+      '/api/coingecko': {
+        target: 'https://api.coingecko.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/coingecko/, '/api/v3'),
+      },
     },
   },
   plugins: [

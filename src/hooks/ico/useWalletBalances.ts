@@ -92,7 +92,11 @@ interface FTBalances {
 async function fetchFTBalancesFromCloud(publicKeyHex: string): Promise<FTBalances> {
   const result: FTBalances = { usdt: 0, usdc: 0, big: 0 };
 
-  const resp = await fetch(`/api/cspr-cloud?path=accounts/${publicKeyHex}/ft-token-ownership`);
+  const accountHashHex = deriveAccountHashHex(publicKeyHex);
+  const ftUrl = import.meta.env.DEV
+    ? `/api/cspr-cloud/accounts/${accountHashHex}/ft-token-ownership`
+    : `/api/cspr-cloud?path=${encodeURIComponent(`accounts/${accountHashHex}/ft-token-ownership`)}`;
+  const resp = await fetch(ftUrl);
   if (!resp.ok) {
     const body = await resp.text().catch(() => '');
     throw new Error(`CSPR.Cloud FT API ${resp.status}: ${body}`);

@@ -23,10 +23,6 @@ export const ICO_CONFIG = {
     usdtAddress: import.meta.env.VITE_USDT_CONTRACT_HASH ?? 'hash-7c902e8a111b3116e00c7507138b92b83f96b29be98aa95247928583720e297a',
   },
 
-  // TODO: Replace with real timestamps from backend API.
-  // Use getIcoTimestamps() for fresh values — see below.
-
-
   CASPER: {
     networkName: import.meta.env.VITE_CASPER_NETWORK ?? 'casper-test',
     explorerUrl: import.meta.env.VITE_CASPER_EXPLORER_URL ?? 'https://testnet.cspr.live',
