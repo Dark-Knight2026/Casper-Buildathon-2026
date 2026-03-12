@@ -159,6 +159,7 @@
     /* ICO Border & Hover - Dark Mode */
     --ico-border-color: 222 47% 22%;
     --ico-brand-secondary-hover: 214 49% 35%;
+    --ico-brand-primary-hover: 163 59% 42%;   /* Lighter shade of primary for dark mode */
   }
 }
 

@@ -101,8 +101,6 @@ describe('useICOSchedules', () => {
 
       expect(result.current.timestamps?.presaleStart).toBe(Number(mockPresaleSchedule.startTimestamp));
       expect(result.current.timestamps?.presaleEnd).toBe(Number(mockPresaleSchedule.endTimestamp));
-      expect(result.current.timestamps?.icoStart).toBe(Number(mockICOSchedule.startTimestamp));
-      expect(result.current.timestamps?.icoEnd).toBe(Number(mockICOSchedule.endTimestamp));
     });
 
     it('should calculate progress data correctly', async () => {
@@ -169,8 +167,6 @@ describe('useICOSchedules', () => {
 
       expect(result.current.presaleProgress).not.toBeNull();
       expect(result.current.icoProgress).toBeNull();
-      expect(result.current.timestamps?.icoStart).toBe(0);
-      expect(result.current.timestamps?.icoEnd).toBe(0);
     });
 
     it('should handle only ICO schedule', async () => {

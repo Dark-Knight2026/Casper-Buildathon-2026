@@ -9,8 +9,6 @@ import type { ScheduleProgress } from '@/hooks/ico/useICOSchedules';
 const mockTimestamps: SaleTimestamps = {
   presaleStart: 1000,
   presaleEnd: 2000,
-  icoStart: 3000,
-  icoEnd: 4000,
 };
 
 const mockProgress: ScheduleProgress = {

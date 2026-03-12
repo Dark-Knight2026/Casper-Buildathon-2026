@@ -1,5 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import type { ICOState, ICOPhase, SaleTimestamps, SaleStatus } from '@/types/ico';
 
 interface UseICOStateOptions {
@@ -85,8 +84,6 @@ export function useICOState(options: UseICOStateOptions = {}): UseICOStateReturn
     return customTimestamps || {
       presaleStart: 0,
       presaleEnd: 0,
-      icoStart: 0,
-      icoEnd: 0,
     };
   }, [customTimestamps]);
 
@@ -94,20 +91,26 @@ export function useICOState(options: UseICOStateOptions = {}): UseICOStateReturn
   const [devState, setDevState] = useState<ICOState | null>(initialDevState);
   const isDevOverride = devState !== null;
 
-  const {
-    data: calculatedState,
-    isLoading,
-    error: queryError,
-    refetch: queryRefetch,
-  } = useQuery<ICOState, Error>({
-    queryKey: ['ico-state', timestamps],
-    queryFn: () => calculateState(timestamps),
-    refetchInterval: isDevOverride ? false : pollInterval,
-    staleTime: 5000,
-  });
+  const [calculatedState, setCalculatedState] = useState<ICOState>(() =>
+    calculateState(timestamps)
+  );
 
-  // Use dev override if set, otherwise use query data (with sync fallback for first render)
-  const state = devState ?? calculatedState ?? calculateState(timestamps);
+  // Re-evaluate immediately when timestamps reference changes
+  useEffect(() => {
+    setCalculatedState(calculateState(timestamps));
+  }, [timestamps]);
+
+  // Poll to catch state transitions triggered by time passing
+  useEffect(() => {
+    if (isDevOverride) return;
+    const id = setInterval(
+      () => setCalculatedState(calculateState(timestamps)),
+      pollInterval
+    );
+    return () => clearInterval(id);
+  }, [isDevOverride, pollInterval, timestamps]);
+
+  const state = devState ?? calculatedState;
 
   const phase = useMemo(() => getPhaseFromState(state), [state]);
   const nextStateTimestamp = useMemo(
@@ -123,18 +126,17 @@ export function useICOState(options: UseICOStateOptions = {}): UseICOStateReturn
     nextStateTimestamp,
   }), [state, phase, nextStateTimestamp]);
 
-  // Wrap refetch to preserve () => void signature
   const refetch = useCallback(() => {
-    queryRefetch();
-  }, [queryRefetch]);
+    setCalculatedState(calculateState(timestamps));
+  }, [timestamps]);
 
   return {
     state,
     phase,
     status,
     timestamps,
-    isLoading,
-    error: queryError ?? null,
+    isLoading: false,
+    error: null,
     nextStateTimestamp,
     refetch,
     setDevState,

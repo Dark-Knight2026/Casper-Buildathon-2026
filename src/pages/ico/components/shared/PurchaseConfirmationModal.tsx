@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { FocusScope } from '@radix-ui/react-focus-scope';
 import { cn } from '@/lib/utils';
 import { ICO_CONFIG, getCurrencyRateUsd } from '@/constants/ico';
 import { Card } from './Card';
@@ -83,11 +84,12 @@ export function PurchaseConfirmationModal({
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
       onClick={handleBackdropClick}
     >
-      <Card
-        className={cn(
-          'w-full max-w-md p-6 animate-in fade-in zoom-in-95 duration-200',
-        )}
-      >
+      <FocusScope loop trapped>
+        <Card
+          className={cn(
+            'w-full max-w-md p-6 animate-in fade-in zoom-in-95 duration-200',
+          )}
+        >
         {/* Header */}
         <div className="flex items-center justify-between w-full mb-6">
           <h2 id="purchase-modal-title" className="text-xl font-bold text-[hsl(var(--ico-text-primary))]">
@@ -230,6 +232,7 @@ export function PurchaseConfirmationModal({
                 onClick={onConfirm}
                 disabled={csprPriceError}
                 className="flex-1"
+                autoFocus
               />
             </>
           )}
@@ -263,7 +266,8 @@ export function PurchaseConfirmationModal({
         <p className="text-xs text-[hsl(var(--ico-text-secondary))] text-center mt-4 opacity-70">
           By confirming, you agree to the token purchase terms. Transactions are final and cannot be reversed.
         </p>
-      </Card>
+        </Card>
+      </FocusScope>
     </div>
   );
 }

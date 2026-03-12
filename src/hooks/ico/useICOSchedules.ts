@@ -118,8 +118,6 @@ export function useICOSchedules(): ICOScheduleData {
     const timestamps: SaleTimestamps | null = (presale || ico) ? {
       presaleStart: presale ? Number(presale.startTimestamp) : 0,
       presaleEnd: presale ? Number(presale.endTimestamp) : 0,
-      icoStart: ico ? Number(ico.startTimestamp) : 0,
-      icoEnd: ico ? Number(ico.endTimestamp) : 0,
     } : null;
 
     const presaleProgress = presale ? scheduleToProgress(presale) : null;

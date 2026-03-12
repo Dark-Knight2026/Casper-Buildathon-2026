@@ -99,24 +99,6 @@ function parseU128Count(hex: string): bigint {
 
 const ICO_HASH = ICO_CONFIG.CONTRACTS.icoAddress;
 
-// ── State cache ────────────────────────────────────────────────────
-
-// Cache for 5 minutes - schedule data rarely changes
-const CACHE_TTL_MS = 5 * 60 * 1000;
-
-let schedulesCache: {
-  data: ICOScheduleWithId[];
-  fetchedAt: number;
-} | null = null;
-
-let schedulesCountCache: {
-  count: bigint;
-  fetchedAt: number;
-} | null = null;
-
-// In-flight request promises to prevent concurrent fetches
-let inFlightSchedulesRequest: Promise<ICOScheduleWithId[]> | null = null;
-let inFlightCountRequest: Promise<bigint> | null = null;
 
 // ── CLValue Parsing for ICOSchedule ─────────────────────────────────
 
@@ -370,38 +352,18 @@ export async function diagnoseOdraKeys(): Promise<void> {
  * Reads the total count of ICO schedules from contract state.
  */
 async function readSchedulesCount(): Promise<bigint> {
-  if (schedulesCountCache && Date.now() - schedulesCountCache.fetchedAt < CACHE_TTL_MS) {
-    return schedulesCountCache.count;
-  }
-
-  if (inFlightCountRequest) {
-    return inFlightCountRequest;
-  }
-
-  inFlightCountRequest = (async () => {
-    try {
-      const stored = await queryOdraState(ICO_HASH, ICO_DICTIONARY_KEYS.icoSchedulesCount);
-
-      if (stored?.clValue) {
-        const hex = clValueListU8ToHex(stored.clValue);
-        if (hex) {
-          const count = parseU128Count(hex);
-          schedulesCountCache = { count, fetchedAt: Date.now() };
-          return count;
-        }
-      }
-    } catch (err) {
-      logger.warn('[icoService] Failed to read schedules count:', err);
-    }
-
-    return 0n;
-  })();
-
   try {
-    return await inFlightCountRequest;
-  } finally {
-    inFlightCountRequest = null;
+    const stored = await queryOdraState(ICO_HASH, ICO_DICTIONARY_KEYS.icoSchedulesCount);
+    if (stored?.clValue) {
+      const hex = clValueListU8ToHex(stored.clValue);
+      if (hex) {
+        return parseU128Count(hex);
+      }
+    }
+  } catch (err) {
+    logger.warn('[icoService] Failed to read schedules count:', err);
   }
+  return 0n;
 }
 
 /**
@@ -430,52 +392,29 @@ async function readScheduleByIndex(index: number | bigint): Promise<ICOSchedule 
 
 /**
  * Reads all ICO schedules from contract state.
- * Uses deduplication to prevent concurrent fetches.
  */
 async function readSchedules(): Promise<ICOScheduleWithId[]> {
-  // Return cached data if still valid
-  if (schedulesCache && Date.now() - schedulesCache.fetchedAt < CACHE_TTL_MS) {
-    return schedulesCache.data;
+  const count = await readSchedulesCount();
+  const schedules: ICOScheduleWithId[] = [];
+
+  const promises: Promise<ICOSchedule | null>[] = [];
+  for (let i = 0n; i < count; i++) {
+    promises.push(readScheduleByIndex(i));
   }
 
-  // If a fetch is already in progress, wait for it instead of starting a new one
-  if (inFlightSchedulesRequest) {
-    return inFlightSchedulesRequest;
-  }
+  const results = await Promise.all(promises);
 
-  // Start new fetch and store the promise
-  inFlightSchedulesRequest = (async () => {
-    try {
-      const count = await readSchedulesCount();
-      const schedules: ICOScheduleWithId[] = [];
-
-      // Read each schedule in parallel
-      const promises: Promise<ICOSchedule | null>[] = [];
-      for (let i = 0n; i < count; i++) {
-        promises.push(readScheduleByIndex(i));
-      }
-
-      const results = await Promise.all(promises);
-
-      for (let i = 0; i < results.length; i++) {
-        const schedule = results[i];
-        if (schedule) {
-          schedules.push({
-            id: BigInt(i),
-            schedule,
-          });
-        }
-      }
-
-      schedulesCache = { data: schedules, fetchedAt: Date.now() };
-      return schedules;
-    } finally {
-      // Clear in-flight request when done
-      inFlightSchedulesRequest = null;
+  for (let i = 0; i < results.length; i++) {
+    const schedule = results[i];
+    if (schedule) {
+      schedules.push({
+        id: BigInt(i),
+        schedule,
+      });
     }
-  })();
+  }
 
-  return inFlightSchedulesRequest;
+  return schedules;
 }
 
 // ── Public read methods ────────────────────────────────────────────

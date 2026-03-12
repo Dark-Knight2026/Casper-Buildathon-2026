@@ -39,15 +39,11 @@ const getNextStateTimestamp = (
 function makeTimestamps(offsets: {
   presaleStart: number;
   presaleEnd: number;
-  icoStart: number;
-  icoEnd: number;
 }): SaleTimestamps {
   const now = Date.now();
   return {
     presaleStart: now + offsets.presaleStart,
     presaleEnd: now + offsets.presaleEnd,
-    icoStart: now + offsets.icoStart,
-    icoEnd: now + offsets.icoEnd,
   };
 }
 
@@ -72,8 +68,6 @@ describe('calculateState', () => {
     const timestamps = makeTimestamps({
       presaleStart: 2 * DAY,
       presaleEnd: 9 * DAY,
-      icoStart: 12 * DAY,
-      icoEnd: 26 * DAY,
     });
     expect(calculateState(timestamps)).toBe(1);
   });
@@ -82,8 +76,6 @@ describe('calculateState', () => {
     const timestamps = makeTimestamps({
       presaleStart: -1 * DAY,
       presaleEnd: 5 * DAY,
-      icoStart: 8 * DAY,
-      icoEnd: 22 * DAY,
     });
     expect(calculateState(timestamps)).toBe(2);
   });
@@ -92,8 +84,6 @@ describe('calculateState', () => {
     const timestamps = makeTimestamps({
       presaleStart: -10 * DAY,
       presaleEnd: -2 * DAY,
-      icoStart: 3 * DAY,
-      icoEnd: 17 * DAY,
     });
     expect(calculateState(timestamps)).toBe(3);
   });
@@ -103,8 +93,6 @@ describe('calculateState', () => {
     const timestamps: SaleTimestamps = {
       presaleStart: now,
       presaleEnd: now + 7 * DAY,
-      icoStart: now + 10 * DAY,
-      icoEnd: now + 24 * DAY,
     };
     expect(calculateState(timestamps)).toBe(2);
   });
@@ -114,8 +102,6 @@ describe('calculateState', () => {
     const timestamps: SaleTimestamps = {
       presaleStart: now - 7 * DAY,
       presaleEnd: now,
-      icoStart: now + 3 * DAY,
-      icoEnd: now + 17 * DAY,
     };
     expect(calculateState(timestamps)).toBe(3);
   });
@@ -125,8 +111,6 @@ describe('getNextStateTimestamp', () => {
   const timestamps: SaleTimestamps = {
     presaleStart: 1000,
     presaleEnd: 2000,
-    icoStart: 3000,
-    icoEnd: 4000,
   };
 
   it('should return presaleStart for state 1', () => {
@@ -187,8 +171,6 @@ describe('useICOState hook', () => {
     const timestamps: SaleTimestamps = {
       presaleStart: now + 2 * DAY,
       presaleEnd: now + 9 * DAY,
-      icoStart: now + 12 * DAY,
-      icoEnd: now + 26 * DAY,
     };
 
     const { result } = renderHook(() => useICOState({ timestamps }), { wrapper });
@@ -210,8 +192,6 @@ describe('useICOState hook', () => {
     const timestamps: SaleTimestamps = {
       presaleStart: now - 1 * DAY,
       presaleEnd: now + 6 * DAY,
-      icoStart: now + 9 * DAY,
-      icoEnd: now + 23 * DAY,
     };
 
     const { result } = renderHook(() => useICOState({ timestamps }), { wrapper });
@@ -230,8 +210,6 @@ describe('useICOState hook', () => {
     const timestamps: SaleTimestamps = {
       presaleStart: now - 30 * DAY,
       presaleEnd: now - 20 * DAY,
-      icoStart: now - 15 * DAY,
-      icoEnd: now - 5 * DAY,
     };
 
     const { result } = renderHook(() => useICOState({ timestamps }), { wrapper });
@@ -253,8 +231,6 @@ describe('useICOState hook', () => {
     const timestamps: SaleTimestamps = {
       presaleStart: now - 10 * DAY,
       presaleEnd: now - 3 * DAY,
-      icoStart: now + 2 * DAY,
-      icoEnd: now + 16 * DAY,
     };
 
     const { result } = renderHook(() => useICOState({ timestamps }), { wrapper });
@@ -274,8 +250,6 @@ describe('useICOState hook', () => {
     const timestamps: SaleTimestamps = {
       presaleStart: now + 2 * DAY,
       presaleEnd: now + 9 * DAY,
-      icoStart: now + 12 * DAY,
-      icoEnd: now + 26 * DAY,
     };
 
     const { result } = renderHook(
@@ -297,8 +271,6 @@ describe('useICOState hook', () => {
     const timestamps: SaleTimestamps = {
       presaleStart: now + 2 * DAY,
       presaleEnd: now + 9 * DAY,
-      icoStart: now + 12 * DAY,
-      icoEnd: now + 26 * DAY,
     };
 
     const { result } = renderHook(() => useICOState({ timestamps }), { wrapper });
@@ -324,8 +296,6 @@ describe('useICOState hook', () => {
     const timestamps: SaleTimestamps = {
       presaleStart: now + 2 * DAY,
       presaleEnd: now + 9 * DAY,
-      icoStart: now + 12 * DAY,
-      icoEnd: now + 26 * DAY,
     };
 
     const { result } = renderHook(
@@ -347,14 +317,15 @@ describe('useICOState hook', () => {
   // --- Loading state ---
 
   describe('loading state', () => {
-    it('should start with isLoading=true when no timestamps provided', async () => {
+    it('should always return isLoading=false (synchronous computation)', async () => {
       const now = Date.now();
       vi.setSystemTime(now);
 
       const useICOState = await importHook();
       const { result } = renderHook(() => useICOState(), { wrapper });
 
-      expect(result.current.isLoading).toBe(true);
+      // Computation is synchronous — no async loading phase
+      expect(result.current.isLoading).toBe(false);
     });
 
     it('should start with isLoading=false when timestamps provided', async () => {
@@ -375,7 +346,7 @@ describe('useICOState hook', () => {
       expect(result.current.isLoading).toBe(false);
     });
 
-    it('should transition from loading to loaded when timestamps arrive', async () => {
+    it('should transition state correctly when timestamps arrive', async () => {
       const now = Date.now();
       vi.setSystemTime(now);
 
@@ -387,15 +358,16 @@ describe('useICOState hook', () => {
         icoEnd: now + 26 * DAY,
       };
 
-      // Start without timestamps — loading
+      // Start without timestamps — zero sentinel → state 3
       const { result, rerender } = renderHook(
         (props: { timestamps?: SaleTimestamps }) => useICOState(props),
         { initialProps: {}, wrapper }
       );
 
-      expect(result.current.isLoading).toBe(true);
+      expect(result.current.isLoading).toBe(false);
+      expect(result.current.state).toBe(3); // zero timestamps sentinel
 
-      // Provide timestamps — should transition to loaded
+      // Provide real timestamps — re-evaluates synchronously
       rerender({ timestamps });
       await flushQueryUpdates();
 
@@ -403,56 +375,58 @@ describe('useICOState hook', () => {
       expect(result.current.state).toBe(1);
     });
 
-    it('should use zero timestamps and not calculate state while loading', async () => {
+    it('should use zero sentinel timestamps and return state 3 when no timestamps provided', async () => {
       const now = Date.now();
       vi.setSystemTime(now);
 
       const useICOState = await importHook();
       const { result } = renderHook(() => useICOState(), { wrapper });
 
-      // Without real timestamps, timestamps are all zeros
-      // With useQuery, calculateState(zeros) returns 3 since now >= presaleEnd(0)
-      expect(result.current.isLoading).toBe(true);
+      // Without real timestamps, all zeros are the sentinel.
+      // calculateState(zeros) returns 3 because now >= presaleEnd(0).
+      expect(result.current.isLoading).toBe(false);
+      expect(result.current.state).toBe(3);
       expect(result.current.timestamps).toEqual({
         presaleStart: 0,
         presaleEnd: 0,
-        icoStart: 0,
-        icoEnd: 0,
       });
     });
 
-    it('should not run poll timer without real timestamps', async () => {
+    it('should keep state=3 across poll ticks when no real timestamps provided', async () => {
       const now = Date.now();
       vi.setSystemTime(now);
 
       const useICOState = await importHook();
       const { result } = renderHook(() => useICOState({ pollInterval: 1000 }), { wrapper });
 
-      expect(result.current.isLoading).toBe(true);
+      expect(result.current.isLoading).toBe(false);
+      expect(result.current.state).toBe(3); // zero timestamps → post-ICO sentinel
 
-      // Advance time — state should remain unchanged since no real timestamps
+      // Advance through several poll ticks — zero timestamps always produce state 3
       act(() => {
         vi.advanceTimersByTime(5000);
       });
 
-      expect(result.current.isLoading).toBe(true);
+      expect(result.current.state).toBe(3);
     });
 
-    it('refetch should be a no-op without real timestamps', async () => {
+    it('refetch with zero timestamps keeps state=3 (sentinel value unchanged)', async () => {
       const now = Date.now();
       vi.setSystemTime(now);
 
       const useICOState = await importHook();
       const { result } = renderHook(() => useICOState(), { wrapper });
 
-      expect(result.current.isLoading).toBe(true);
+      expect(result.current.isLoading).toBe(false);
+      expect(result.current.state).toBe(3);
 
       act(() => {
         result.current.refetch();
       });
 
-      // isLoading should remain true — refetch did nothing
-      expect(result.current.isLoading).toBe(true);
+      // Zero timestamps always compute to state 3 — result is stable
+      expect(result.current.isLoading).toBe(false);
+      expect(result.current.state).toBe(3);
     });
   });
 
@@ -464,8 +438,6 @@ describe('useICOState hook', () => {
     const timestamps: SaleTimestamps = {
       presaleStart: now + 2 * DAY,
       presaleEnd: now + 9 * DAY,
-      icoStart: now + 12 * DAY,
-      icoEnd: now + 26 * DAY,
     };
 
     const { result } = renderHook(() => useICOState({ timestamps }), { wrapper });
@@ -491,8 +463,6 @@ describe('useICOState hook', () => {
     const timestamps: SaleTimestamps = {
       presaleStart: now + 1000,
       presaleEnd: now + 2000,
-      icoStart: now + 3000,
-      icoEnd: now + 4000,
     };
 
     const { result } = renderHook(() => useICOState({ timestamps }), { wrapper });

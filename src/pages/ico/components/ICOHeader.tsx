@@ -49,6 +49,9 @@ export function ICOHeader() {
                 aria-label="Disconnect wallet"
                 className="flex items-center gap-2 px-3 py-2 bg-[hsl(var(--ico-form-button))] text-white font-medium rounded-md transition-colors duration-200 hover:bg-[hsl(var(--ico-form-button-hover))] cursor-pointer"
               >
+                {/* INTENTIONAL (client request): icon-only on mobile to save header space.
+                    aria-label="Disconnect wallet" above provides the accessible name.
+                    Do not add visible text on mobile without client approval. */}
                 <LogOut className="w-4 h-4 sm:hidden" />
                 <span className="hidden sm:inline">Disconnect</span>
               </button>

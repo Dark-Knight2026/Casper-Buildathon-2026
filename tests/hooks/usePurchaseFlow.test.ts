@@ -60,8 +60,8 @@ vi.mock('@/hooks/useCSPRPrice', () => ({
   useCSPRPrice: () => mockCSPRPrice,
 }));
 
-vi.mock('@/utils/logger', () => ({
-  logger: { debug: vi.fn(), error: vi.fn() },
+vi.mock('@/lib/logger', () => ({
+  default: { log: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 
 vi.mock('@/hooks/ico/usePurchaseToken', () => ({
