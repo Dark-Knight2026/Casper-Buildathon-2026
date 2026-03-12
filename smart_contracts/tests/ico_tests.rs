@@ -929,6 +929,65 @@ fn test_withdraw_unsold_tokens_should_withdraw_unsold_tokens_from_one_ico_schedu
 }
 
 #[test]
+fn test_withdraw_unsold_tokens_should_not_withdraw_same_tokens_twice() {
+    let mut ctx = setup(odra_test::env(), true);
+    let creation_params = get_ico_schedules_creation_params(&ctx.env);
+    let recipient = ctx.users.owner;
+    let first_ico_schedule_id = ICOScheduleId::from(0u8);
+
+    ctx.env
+        .advance_block_time(creation_params[0].end_timestamp + 1 - ctx.env.block_time());
+
+    let prev_recipient_balance = ctx.tailor_coin.balance_of(&recipient);
+    let prev_ico_balance = ctx.tailor_coin.balance_of(&ctx.ico.address());
+
+    ctx.ico.withdraw_unsold_tokens(recipient);
+
+    let after_first_recipient_balance = ctx.tailor_coin.balance_of(&recipient);
+    let after_first_ico_balance = ctx.tailor_coin.balance_of(&ctx.ico.address());
+    let after_first_schedule = ctx
+        .ico
+        .get_ico_schedule_by_id(&first_ico_schedule_id)
+        .unwrap();
+
+    ctx.ico.withdraw_unsold_tokens(recipient);
+
+    let after_second_recipient_balance = ctx.tailor_coin.balance_of(&recipient);
+    let after_second_ico_balance = ctx.tailor_coin.balance_of(&ctx.ico.address());
+    let after_second_schedule = ctx
+        .ico
+        .get_ico_schedule_by_id(&first_ico_schedule_id)
+        .unwrap();
+
+    assert_eq!(
+        after_first_schedule.withdrawn_amount, creation_params[0].sale_amount,
+        "First withdrawal should mark the entire unsold balance as withdrawn"
+    );
+    assert_eq!(
+        after_second_schedule.withdrawn_amount, after_first_schedule.withdrawn_amount,
+        "Second withdrawal should not change the withdrawn amount"
+    );
+    assert_eq!(
+        after_first_recipient_balance,
+        prev_recipient_balance + creation_params[0].sale_amount,
+        "First withdrawal should transfer the unsold tokens to the recipient"
+    );
+    assert_eq!(
+        after_second_recipient_balance, after_first_recipient_balance,
+        "Second withdrawal should not transfer any additional tokens"
+    );
+    assert_eq!(
+        after_first_ico_balance,
+        prev_ico_balance - creation_params[0].sale_amount,
+        "First withdrawal should reduce the ICO token balance"
+    );
+    assert_eq!(
+        after_second_ico_balance, after_first_ico_balance,
+        "Second withdrawal should leave the ICO token balance unchanged"
+    );
+}
+
+#[test]
 fn test_withdraw_unsold_tokens_should_withdraw_unsold_tokens_from_all_ico_schedules_properly() {
     let mut ctx: Context = setup(odra_test::env(), true);
     let creation_params = get_ico_schedules_creation_params(&ctx.env);

@@ -16,7 +16,7 @@ use crate::{
         },
         types::{Currency, ICOSchedule, ICOScheduleCreateParams},
     },
-    mocks::styks_price_feed::StyksPriceFeedContractRef,
+    interfaces::styks_price_feed::StyksPriceFeedOracleContractRef,
     staking::StakingContractRef,
     treasury::TreasuryContractRef,
     vesting::VestingContractRef,
@@ -33,7 +33,7 @@ pub struct ICO {
     currencies: Mapping<Currency, (bool, Option<Address>)>,
     ico_schedules: Mapping<ICOScheduleId, ICOSchedule>,
     ico_schedules_count: Var<U128>,
-    styks_price_feed: External<StyksPriceFeedContractRef>,
+    styks_price_feed: External<StyksPriceFeedOracleContractRef>,
     tailor_coin: External<Cep18ContractRef>,
     treasury: External<TreasuryContractRef>,
     staking: External<StakingContractRef>,
@@ -193,8 +193,9 @@ impl ICO {
         self.vesting
             .create_schedule(*caller, purchase_amount, cliff_duration, vesting_duration);
 
-        self.tailor_coin
-            .approve(&self.staking.address(), &purchase_amount);
+        // TODO: Uncomment out when staking is implemented
+        // self.tailor_coin
+        //     .approve(&self.staking.address(), &purchase_amount);
 
         // TODO: Call an entrypoint on the Staking contract to transfer tokens from
         // the ICO contract and stake them for the beneficiary. Example:
@@ -219,15 +220,26 @@ impl ICO {
         let mut amount = U256::zero();
 
         for i in 0..self.get_ico_schedules_count().as_u128() {
-            let ico_schedule = self
-                .get_ico_schedule_by_id(&U128::from(i))
+            let ico_schedule_id = U128::from(i);
+            let mut ico_schedule = self
+                .get_ico_schedule_by_id(&ico_schedule_id)
                 .unwrap_or_revert_with(&self.env(), Error::InvalidICOScheduleId);
 
             if self.env().get_block_time() <= ico_schedule.end_timestamp {
                 break;
             }
 
-            amount += ico_schedule.sale_amount - ico_schedule.sold_amount;
+            let withdrawable =
+                ico_schedule.sale_amount - ico_schedule.sold_amount - ico_schedule.withdrawn_amount;
+
+            if withdrawable.is_zero() {
+                continue;
+            }
+
+            ico_schedule.withdrawn_amount += withdrawable;
+            self.ico_schedules.set(&ico_schedule_id, ico_schedule);
+
+            amount += withdrawable;
         }
 
         if amount > U256::zero() {
@@ -472,6 +484,7 @@ pub mod types {
         pub price: U256,
         pub cliff_duration: u64,
         pub vesting_duration: u64,
+        pub withdrawn_amount: U256,
     }
 
     #[odra::odra_type]
@@ -497,6 +510,7 @@ pub mod types {
                 end_timestamp: ico_schedule.end_timestamp,
                 sale_amount: ico_schedule.sale_amount,
                 sold_amount: U256::zero(),
+                withdrawn_amount: U256::zero(),
                 price: ico_schedule.price,
                 cliff_duration: ico_schedule.cliff_duration,
                 vesting_duration: ico_schedule.vesting_duration,
@@ -504,4 +518,3 @@ pub mod types {
         }
     }
 }
-
