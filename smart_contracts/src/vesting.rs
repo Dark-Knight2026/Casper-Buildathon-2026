@@ -235,9 +235,11 @@ impl Vesting {
     ///   - Be whitelisted via `add_whitelisted_creator`
     ///   - Have already approved `total_amount` of BIG tokens to the Staking contract
     ///
-    /// @dev This contract does not hold tokens; it only records the schedule.
-    /// Tokens are held by the Staking contract. Beneficiary can claim according
-    /// to the vesting model (cliff, linear, or both) which triggers unstaking.
+    /// @dev This contract records vesting schedules only. No tokens are held by this contract or the Staking contract at this time. Token delivery is deferred pending Staking contract implementation.
+    // TODO: Delete the above comment and replace with the comment below when staking is implemented:
+    //  @dev This contract does not hold tokens; it only records the schedule.
+    //  Tokens are held by the Staking contract. Beneficiary can claim according
+    // to the vesting model (cliff, linear, or both) which triggers unstaking.
     pub fn create_schedule(
         &mut self,
         beneficiary: Address,
@@ -371,10 +373,20 @@ impl Vesting {
     fn calculate_vested_amt(&self, schedule: &VestingSchedule) -> U256 {
         let now = self.env().get_block_time();
 
-        if now < schedule.start_timestamp + schedule.cliff_duration {
+        let cliff_period = schedule
+            .start_timestamp
+            .checked_add(schedule.cliff_duration)
+            .unwrap_or(u64::MAX);
+
+        let vesting_period = schedule
+            .start_timestamp
+            .checked_add(schedule.vesting_duration)
+            .unwrap_or(u64::MAX);
+
+        if now < cliff_period {
             // still in the cliff period, nothing vested yet
             U256::zero()
-        } else if now >= schedule.start_timestamp + schedule.vesting_duration {
+        } else if now >= vesting_period {
             // past the vesting period, everything is vested
             schedule.total_amount
         } else {
@@ -384,4 +396,3 @@ impl Vesting {
         }
     }
 }
-
