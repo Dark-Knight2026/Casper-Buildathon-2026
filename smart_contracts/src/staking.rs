@@ -207,16 +207,18 @@ impl Staking {
 
         let caller = &self.env().caller();
         let staking_contract = &self.env().self_address();
-
-        let new_total_staked = self.total_staked.get_or_default() + amount;
-        self.total_staked.set(new_total_staked);
+        self.tailor_coin
+            .transfer_from(caller, staking_contract, &amount);
 
         let mut staker_info = self.stakers.get_or_default(&staker);
         staker_info.staked_amount += amount;
         self.stakers.set(&staker, staker_info);
 
-        self.tailor_coin
-            .transfer_from(caller, staking_contract, &amount);
+        let new_total_staked = self.total_staked.get_or_default() + amount;
+        self.total_staked.set(new_total_staked);
+
+        // if rewards were queued while nobody was staking, distribute them now
+        self.distribute_rewards(U256::zero());
 
         self.env().emit_native_event(Staked { staker, amount });
     }
@@ -317,17 +319,24 @@ impl Staking {
             .emit_native_event(UnbondedWithdrawn { staker, amount });
     }
 
-    /// Allows to deposit any rewards amount in the TailorCoin (BIG) token by anyone, then distributes these rewards
-    /// between all stakers in this contract proportionally to their shares
+    /// Allows anyont to deposit BIG rewards into the staking contract
+    /// Newly deposited rewards are distributed proportionally across all active
+    /// stakers using the global reward-per-token accumulator
     #[odra(non_reentrant)]
     pub fn deposit_rewards(&mut self, amount: U256) {
-        let mut tailor_coin =
-            Cep18ContractRef::new(self.env(), self.get_tailor_coin_contract_address());
+        if amount.is_zero() {
+            self.env().revert(Error::InvalidAmount);
+        }
 
-        tailor_coin.transfer_from(&self.env().caller(), &self.env().self_address(), &amount);
+        let caller = self.env().caller();
+        let staking_contract = self.env().self_address();
+        self.tailor_coin
+            .transfer_from(&caller, &staking_contract, &amount);
 
-        // TODO implement rewards distribution
-        todo!()
+        self.distribute_rewards(amount);
+
+        self.env()
+            .emit_native_event(RewardsDeposited { caller, amount });
     }
 
     // =========================================================================
@@ -386,5 +395,26 @@ impl Staking {
         staker_info.reward_per_token_paid = reward_per_token;
 
         self.stakers.set(staker, staker_info);
+    }
+
+    fn distribute_rewards(&mut self, amount: U256) {
+        let total_rewards = self.queued_rewards.get_or_default() + amount;
+
+        if total_rewards.is_zero() {
+            return;
+        }
+
+        let total_staked = self.total_staked.get_or_default();
+
+        if total_staked.is_zero() {
+            self.queued_rewards.set(total_rewards);
+            return;
+        }
+
+        let current = self.reward_per_token_stored.get_or_default();
+        let increase = total_rewards * Self::precision() / total_staked;
+
+        self.reward_per_token_stored.set(current + increase);
+        self.queued_rewards.set(U256::zero());
     }
 }
