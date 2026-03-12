@@ -86,6 +86,7 @@ pub mod errors {
         NoRewardsToClaim = 63_007,
         NoUnbondingInProgress = 63_008,
         UnbondingPeriodNotFinished = 63_009,
+        NoActiveStake = 63_010,
     }
 }
 
@@ -117,10 +118,6 @@ pub struct Staking {
     /// Global reward accumulator — cumulative rewards per staked token.
     /// This value is updated whenever newly available rewards are deposited.
     reward_per_token_stored: Var<U256>,
-
-    /// Rewards received while no BIG is actively staked.
-    /// These rewards stay queued until they can be distributed fairly.
-    queued_rewards: Var<U256>,
 }
 
 #[odra::module]
@@ -134,7 +131,7 @@ impl Staking {
     }
 
     // =========================================================================
-    // Owner-only configurationstaker
+    // Owner-only configuration
     // =========================================================================
 
     /// Sets the TailorCoin (BIG) token contract address by the owner
@@ -194,7 +191,7 @@ impl Staking {
     }
 
     // =========================================================================
-    // Staking/Unstaking functions
+    // Stake Management
     // =========================================================================
 
     #[odra(non_reentrant)]
@@ -216,9 +213,6 @@ impl Staking {
 
         let new_total_staked = self.total_staked.get_or_default() + amount;
         self.total_staked.set(new_total_staked);
-
-        // if rewards were queued while nobody was staking, distribute them now
-        self.distribute_rewards(U256::zero());
 
         self.env().emit_native_event(Staked { staker, amount });
     }
@@ -265,7 +259,7 @@ impl Staking {
     }
 
     // =========================================================================
-    // Claim/Withdraw/Deposit
+    // Reward Flows
     // =========================================================================
 
     /// Claims all rewards currently accrued by the caller.
@@ -293,6 +287,42 @@ impl Staking {
         });
     }
 
+    /// Allows anyont to deposit BIG rewards into the staking contract
+    /// Newly deposited rewards are distributed proportionally across all active
+    /// stakers using the global reward-per-token accumulator
+    ///
+    /// @dev This function requires at least some active stake to exist. if nobody
+    ///      is currently staking, the deposit is rejected.
+    #[odra(non_reentrant)]
+    pub fn deposit_rewards(&mut self, amount: U256) {
+        if amount.is_zero() {
+            self.env().revert(Error::InvalidAmount);
+        }
+
+        let total_staked = self.total_staked.get_or_default();
+
+        if total_staked.is_zero() {
+            self.env().revert(Error::NoActiveStake);
+        }
+
+        let caller = self.env().caller();
+        let staking_contract = self.env().self_address();
+        self.tailor_coin
+            .transfer_from(&caller, &staking_contract, &amount);
+
+        let current = self.reward_per_token_stored.get_or_default();
+        let increase = amount * Self::precision() / total_staked;
+
+        self.reward_per_token_stored.set(current + increase);
+
+        self.env()
+            .emit_native_event(RewardsDeposited { caller, amount });
+    }
+
+    // =========================================================================
+    // Unbonding Withdrawal
+    // =========================================================================
+
     /// Withdraws the caller's unbonded BIG after unbonding period has ended.
     #[odra(non_reentrant)]
     pub fn withdraw_unbonded(&mut self) {
@@ -317,26 +347,6 @@ impl Staking {
 
         self.env()
             .emit_native_event(UnbondedWithdrawn { staker, amount });
-    }
-
-    /// Allows anyont to deposit BIG rewards into the staking contract
-    /// Newly deposited rewards are distributed proportionally across all active
-    /// stakers using the global reward-per-token accumulator
-    #[odra(non_reentrant)]
-    pub fn deposit_rewards(&mut self, amount: U256) {
-        if amount.is_zero() {
-            self.env().revert(Error::InvalidAmount);
-        }
-
-        let caller = self.env().caller();
-        let staking_contract = self.env().self_address();
-        self.tailor_coin
-            .transfer_from(&caller, &staking_contract, &amount);
-
-        self.distribute_rewards(amount);
-
-        self.env()
-            .emit_native_event(RewardsDeposited { caller, amount });
     }
 
     // =========================================================================
@@ -395,26 +405,5 @@ impl Staking {
         staker_info.reward_per_token_paid = reward_per_token;
 
         self.stakers.set(staker, staker_info);
-    }
-
-    fn distribute_rewards(&mut self, amount: U256) {
-        let total_rewards = self.queued_rewards.get_or_default() + amount;
-
-        if total_rewards.is_zero() {
-            return;
-        }
-
-        let total_staked = self.total_staked.get_or_default();
-
-        if total_staked.is_zero() {
-            self.queued_rewards.set(total_rewards);
-            return;
-        }
-
-        let current = self.reward_per_token_stored.get_or_default();
-        let increase = total_rewards * Self::precision() / total_staked;
-
-        self.reward_per_token_stored.set(current + increase);
-        self.queued_rewards.set(U256::zero());
     }
 }
