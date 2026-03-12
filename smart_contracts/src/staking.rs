@@ -194,6 +194,14 @@ impl Staking {
     // Stake Management
     // =========================================================================
 
+    /// Stakes amount of BIG tokens on behalf of staker.
+    ///
+    /// Transfers tokens from the **caller** to the staking contract, but credits
+    /// the stake to `staker`. This lets approved parties (e.g. the ICO contract)
+    /// stake tokens on a user's behalf without the user interacting directly.
+    ///
+    /// @dev Updates the staker's pending rewards before modifying their balance so
+    /// that accrued rewards are not lost.
     #[odra(non_reentrant)]
     pub fn stake_for(&mut self, staker: Address, amount: U256) {
         if amount.is_zero() {
@@ -217,6 +225,17 @@ impl Staking {
         self.env().emit_native_event(Staked { staker, amount });
     }
 
+    /// Initiates an unstake of BIG tokens for staker, starting the
+    /// unbonding period.
+    ///
+    /// The caller must be either the staker themselves or the vesting
+    /// contract. Tokens are moved from the active stake into an unbonding state
+    /// and become withdrawable after [`UNBONDING_PERIOD`] has elapsed.
+    ///
+    /// Only one unbonding position may be active at a time per staker.
+    ///
+    /// @dev Updates the staker's pending rewards before modifying their balance so
+    /// that accrued rewards are not lost.
     #[odra(non_reentrant)]
     pub fn unstake_for(&mut self, staker: Address, amount: U256) {
         if amount.is_zero() {
@@ -262,7 +281,11 @@ impl Staking {
     // Reward Flows
     // =========================================================================
 
-    /// Claims all rewards currently accrued by the caller.
+    /// Claims all pending BIG token rewards accrued by the caller.
+    ///
+    /// Snapshots the caller's reward state first, then transfers the full
+    /// pending balance to the caller and resets it to zero. The caller's
+    /// active stake (if any) is unaffected.
     #[odra(non_reentrant)]
     pub fn claim_rewards(&mut self) {
         let staker = self.env().caller();
@@ -323,7 +346,12 @@ impl Staking {
     // Unbonding Withdrawal
     // =========================================================================
 
-    /// Withdraws the caller's unbonded BIG after unbonding period has ended.
+    /// Withdraws the caller's unbonded BIG tokens after the unbonding period
+    /// has fully elapsed.
+    ///
+    /// The caller must have previously initiated an unstake via [`unstake_for`]
+    /// and waited for [`UNBONDING_PERIOD`] to pass. On success, the unbonding
+    /// position is cleared and the tokens are transferred back to the caller.
     #[odra(non_reentrant)]
     pub fn withdraw_unbonded(&mut self) {
         let staker = self.env().caller();
