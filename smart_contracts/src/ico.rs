@@ -193,13 +193,10 @@ impl ICO {
         self.vesting
             .create_schedule(*caller, purchase_amount, cliff_duration, vesting_duration);
 
-        // TODO: Uncomment out when staking is implemented
-        // self.tailor_coin
-        //     .approve(&self.staking.address(), &purchase_amount);
+        self.tailor_coin
+            .approve(&self.staking.address(), &purchase_amount);
 
-        // TODO: Call an entrypoint on the Staking contract to transfer tokens from
-        // the ICO contract and stake them for the beneficiary. Example:
-        // self.staking.stake_for(*caller, purchase_amount);
+        self.staking.stake_for(*caller, purchase_amount);
 
         // TODO: Delete this guard when staking is implemented
         // Guard: staking address must be set
