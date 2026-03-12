@@ -75,6 +75,23 @@ fn setup(env: HostEnv) -> Context {
 // Helpers
 // =============================================================================
 
+/// Helper to give tokens to a user and approve staking contract to spend them
+fn fund_and_approve(ctx: &mut Context, user: Address, amount: U256) {
+    // Owner transfers tokens to user
+    ctx.env.set_caller(ctx.users.owner);
+    ctx.tailor_coin.transfer(&user, &amount);
+
+    // User approves staking contract
+    ctx.env.set_caller(user);
+    ctx.tailor_coin.approve(&ctx.staking.address(), &amount);
+}
+
+/// Helper to stake tokens for a user
+fn stake_for(ctx: &mut Context, staker: Address, amount: U256) {
+    ctx.env.set_caller(staker);
+    ctx.staking.stake_for(staker, amount);
+}
+
 // =============================================================================
 // init()
 // =============================================================================
@@ -127,5 +144,41 @@ fn test_set_tailor_coin_should_set_tailor_coin_properly() {
         ctx.staking.get_tailor_coin_contract_address(),
         tailor_coin,
         "Invalid TailorCoin contract address"
+    );
+}
+
+// =============================================================================
+// get_pending_rewards()
+// =============================================================================
+
+#[test]
+fn test_get_pending_rewards_should_return_zero_for_new_staker() {
+    let ctx = setup(odra_test::env());
+
+    let pending_rewards = ctx.staking.get_pending_rewards(ctx.users.alice);
+
+    assert_eq!(
+        pending_rewards,
+        U256::zero(),
+        "Pending rewards should be zero for a new staker"
+    );
+}
+
+#[test]
+fn test_get_pending_rewards_should_return_zero_after_staking_without_rewards() {
+    let mut ctx = setup(odra_test::env());
+    let stake_amount = U256::from(1000) * U256::from(10).pow(U256::from(18));
+    let alice = ctx.users.alice;
+
+    // Fund, approve and stake for Alice
+    fund_and_approve(&mut ctx, alice, stake_amount);
+    stake_for(&mut ctx, alice, stake_amount);
+
+    let pending_rewards = ctx.staking.get_pending_rewards(alice);
+
+    assert_eq!(
+        pending_rewards,
+        U256::zero(),
+        "Pending rewards should be zero after staking when no rewards have been added deposited",
     );
 }
