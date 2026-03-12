@@ -1,12 +1,9 @@
 use odra::{casper_types::U256, prelude::*, ContractRef};
 use odra_modules::{access::Ownable, cep18_token::Cep18ContractRef};
 
-use crate::{
-    staking::{
-        errors::Error,
-        events::{RewardsClaimed, RewardsDeposited, Staked, UnbondedWithdrawn, UnstakedInitiated},
-    },
-    vesting::VestingContractRef,
+use crate::staking::{
+    errors::Error,
+    events::{RewardsClaimed, RewardsDeposited, Staked, UnbondedWithdrawn, UnstakedInitiated},
 };
 
 // =============================================================================
@@ -210,6 +207,9 @@ impl Staking {
         self.tailor_coin
             .transfer_from(caller, staking_contract, &amount);
 
+        let new_total_staked = self.total_staked.get_or_default() + amount;
+        self.total_staked.set(new_total_staked);
+
         let mut staker_info = self.stakers.get_or_default(&staker);
         staker_info.staked_amount += amount;
         self.stakers.set(&staker, staker_info);
@@ -225,7 +225,7 @@ impl Staking {
 
         self.assert_can_unstake_for(&staker);
 
-        let mut staker_info = self.stakers.get_or_default(&staker);
+        let staker_info = self.stakers.get_or_default(&staker);
 
         if staker_info.staked_amount.is_zero() {
             self.env().revert(Error::NothingStaked);
@@ -239,15 +239,17 @@ impl Staking {
 
         self.update_reward_for(&staker);
 
+        let mut staker_info = self.stakers.get_or_default(&staker);
         let unbonding_ends_at = self.env().get_block_time() + UNBONDING_PERIOD;
 
         staker_info.staked_amount -= amount;
         staker_info.unbonding_amount = amount;
         staker_info.unbonding_ends_at = unbonding_ends_at;
+
         self.stakers.set(&staker, staker_info);
 
-        let total_staked = self.total_staked.get_or_default();
-        self.total_staked.set(total_staked - amount);
+        let new_total_staked = self.total_staked.get_or_default() - amount;
+        self.total_staked.set(new_total_staked);
 
         self.env().emit_native_event(UnstakedInitiated {
             staker,
