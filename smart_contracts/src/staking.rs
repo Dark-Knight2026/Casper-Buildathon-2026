@@ -83,6 +83,9 @@ pub mod errors {
         InsufficientStakedAmount = 63_004,
         UnbondingAlreadyInProgress = 63_005,
         VestingContractIsNotSet = 63_006,
+        NoRewardsToClaim = 63_007,
+        NoUnbondingInProgress = 63_008,
+        UnbondingPeriodNotFinished = 63_009,
     }
 }
 
@@ -204,8 +207,6 @@ impl Staking {
 
         let caller = &self.env().caller();
         let staking_contract = &self.env().self_address();
-        self.tailor_coin
-            .transfer_from(caller, staking_contract, &amount);
 
         let new_total_staked = self.total_staked.get_or_default() + amount;
         self.total_staked.set(new_total_staked);
@@ -213,6 +214,9 @@ impl Staking {
         let mut staker_info = self.stakers.get_or_default(&staker);
         staker_info.staked_amount += amount;
         self.stakers.set(&staker, staker_info);
+
+        self.tailor_coin
+            .transfer_from(caller, staking_contract, &amount);
 
         self.env().emit_native_event(Staked { staker, amount });
     }
@@ -258,6 +262,61 @@ impl Staking {
         });
     }
 
+    // =========================================================================
+    // Claim/Withdraw/Deposit
+    // =========================================================================
+
+    /// Claims all rewards currently accrued by the caller.
+    #[odra(non_reentrant)]
+    pub fn claim_rewards(&mut self) {
+        let staker = self.env().caller();
+
+        self.update_reward_for(&staker);
+
+        let mut staker_info = self.get_staker_info(staker);
+        let rewards = staker_info.pending_rewards;
+
+        if rewards.is_zero() {
+            self.env().revert(Error::NoRewardsToClaim);
+        }
+
+        staker_info.pending_rewards = U256::zero();
+        self.stakers.set(&staker, staker_info);
+
+        self.tailor_coin.transfer(&staker, &rewards);
+
+        self.env().emit_native_event(RewardsClaimed {
+            staker,
+            amount: rewards,
+        });
+    }
+
+    /// Withdraws the caller's unbonded BIG after unbonding period has ended.
+    #[odra(non_reentrant)]
+    pub fn withdraw_unbonded(&mut self) {
+        let staker = self.env().caller();
+        let mut staker_info = self.stakers.get_or_default(&staker);
+
+        let amount = staker_info.unbonding_amount;
+        let unbonding_time = staker_info.unbonding_ends_at;
+
+        if amount.is_zero() {
+            self.env().revert(Error::NoUnbondingInProgress);
+        }
+        if self.env().get_block_time() < unbonding_time {
+            self.env().revert(Error::UnbondingPeriodNotFinished);
+        }
+
+        staker_info.unbonding_amount = U256::zero();
+        staker_info.unbonding_ends_at = 0;
+        self.stakers.set(&staker, staker_info);
+
+        self.tailor_coin.transfer(&staker, &amount);
+
+        self.env()
+            .emit_native_event(UnbondedWithdrawn { staker, amount });
+    }
+
     /// Allows to deposit any rewards amount in the TailorCoin (BIG) token by anyone, then distributes these rewards
     /// between all stakers in this contract proportionally to their shares
     #[odra(non_reentrant)]
@@ -268,11 +327,6 @@ impl Staking {
         tailor_coin.transfer_from(&self.env().caller(), &self.env().self_address(), &amount);
 
         // TODO implement rewards distribution
-        todo!()
-    }
-
-    #[odra(non_reentrant)]
-    pub fn withdraw(&mut self, amount: U256) {
         todo!()
     }
 
