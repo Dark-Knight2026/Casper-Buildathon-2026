@@ -7,7 +7,7 @@
  *   - CEP-18 token payments (USDT, USDC) with approve flow
  *
  * Entry points called:
- *   - ICO contract: `purchase(purchase_amount: U256, currency: Currency, __cargo_purse: URef)`
+ *   - ICO contract: `purchase(amount_to_spend: U256, currency: Currency, __cargo_purse: URef)`
  *   - CEP-18 tokens: `approve(spender: Key, amount: U256)` before purchase
  */
 

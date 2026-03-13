@@ -64,7 +64,7 @@ export function WalletCard({
     [amount, currencyRate]
   );
   const tokensToReceive = useMemo(
-    () => amountInUsd / tokenPrice,
+    () => tokenPrice > 0 ? amountInUsd / tokenPrice : 0,
     [amountInUsd, tokenPrice]
   );
 
