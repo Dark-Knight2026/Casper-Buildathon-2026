@@ -486,3 +486,61 @@ fn test_unstake_for_vesting_can_unstake_on_behalf() {
 // =============================================================================
 // deposit_rewards()
 // =============================================================================
+
+#[test]
+fn test_deposit_rewards_should_revert_if_amount_is_zero() {
+    let mut ctx = setup(odra_test::env());
+    let owner = ctx.users.owner;
+    let amount = U256::zero();
+
+    ctx.env.set_caller(owner);
+    assert_eq!(
+        ctx.staking.try_deposit_rewards(amount).unwrap_err(),
+        Error::InvalidAmount.into(),
+    );
+}
+
+#[test]
+fn test_deposit_rewards_should_revert_if_no_active_stake() {
+    let mut ctx = setup(odra_test::env());
+    let rewards = rewards_amount();
+
+    assert_eq!(
+        ctx.staking.try_deposit_rewards(rewards).unwrap_err(),
+        Error::NoActiveStake.into(),
+    );
+}
+
+#[test]
+fn test_deposit_rewards_should_deposit_properly() {
+    let mut ctx = setup(odra_test::env());
+    let owner = ctx.users.owner;
+    let alice = ctx.users.alice;
+    let amount = staking_amount();
+    let rewards = rewards_amount();
+    let staking_contract = ctx.staking.address();
+
+    fund_and_approve(&mut ctx, alice, amount);
+    stake_for(&mut ctx, alice, amount);
+
+    let prev_staking_bal = ctx.tailor_coin.balance_of(&staking_contract);
+
+    // deposit rewards
+    ctx.env.set_caller(owner);
+    ctx.tailor_coin.approve(&staking_contract, &rewards);
+    ctx.staking.deposit_rewards(rewards);
+
+    let new_staking_bal = ctx.tailor_coin.balance_of(&staking_contract);
+
+    assert_eq!(new_staking_bal, prev_staking_bal + rewards);
+
+    assert_eq!(ctx.staking.get_pending_rewards(alice), rewards);
+
+    assert!(ctx.env.emitted_native_event(
+        &ctx.staking.address(),
+        RewardsDeposited {
+            caller: owner,
+            amount: rewards,
+        }
+    ));
+}
