@@ -99,10 +99,6 @@ pub struct Vesting {
     /// Ownership control — only the owner can configure the contract.
     ownable: SubModule<Ownable>,
 
-    /// Reference to the TailorCoin (BIG) CEP-18 token contract.
-    /// Used to pull tokens in (create_schedule) and transfer tokens out (claim).
-    tailor_coin: External<Cep18ContractRef>,
-
     /// Reference to the Staking contract.
     /// Used to unstake tokens when transfer tokens out (claim).
     staking: External<StakingContractRef>,
@@ -136,13 +132,6 @@ impl Vesting {
     // =========================================================================
     // Owner-only configuration
     // =========================================================================
-
-    /// Sets the TailorCoin (BIG) token contract address.
-    /// Must be called before any schedules can be created or claimed.
-    pub fn set_tailor_coin(&mut self, tailor_coin: Address) {
-        self.assert_owner();
-        self.tailor_coin.set(tailor_coin);
-    }
 
     /// Sets the Staking contract address (for future auto-staking integration).
     pub fn set_staking(&mut self, staking: Address) {
@@ -183,6 +172,11 @@ impl Vesting {
         self.schedules_count.get_or_default()
     }
 
+    /// Returns all of a given user's vesting schedules
+    pub fn get_user_schedules(&self, user: Address) -> Vec<VestingId> {
+        self.user_schedules.get_or_default(&user)
+    }
+
     /// Returns how many schedules a user has
     pub fn get_user_schedules_count(&self, user: Address) -> u32 {
         let user_schedules = self.user_schedules.get_or_default(&user);
@@ -211,10 +205,6 @@ impl Vesting {
 
     pub fn is_whitelisted_creator(&self, creator: &Address) -> bool {
         self.whitelisted_creators.get_or_default(creator)
-    }
-
-    pub fn get_tailor_coin_contract_address(&self) -> Address {
-        *self.tailor_coin.address()
     }
 
     pub fn get_staking_contract_address(&self) -> Address {

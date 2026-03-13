@@ -1218,7 +1218,6 @@ fn setup(env: HostEnv, add_ico_schedules: bool) -> Context {
     let mut vesting = Vesting::deploy(&env, VestingInitArgs { owner: users.owner });
     let mut staking = Staking::deploy(&env, StakingInitArgs { owner: users.owner });
 
-    vesting.set_tailor_coin(tailor_coin.address());
     vesting.add_whitelisted_creator(ico.address());
     vesting.set_staking(staking.address());
 

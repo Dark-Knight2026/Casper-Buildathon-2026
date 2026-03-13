@@ -415,7 +415,10 @@ impl Staking {
 
     /// Precision multiplier (1e18) for reward-per-token fixed-point math.
     fn precision() -> U256 {
-        U256::from_dec_str("1000000000000000000").unwrap()
+        U256::from_dec_str("1000000000000000000").expect(
+            "1e18 precision
+          constant",
+        )
     }
 
     /// Updates staker's stored reward state to the current global reward per token

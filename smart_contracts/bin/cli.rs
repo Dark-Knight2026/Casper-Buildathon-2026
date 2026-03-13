@@ -167,7 +167,6 @@ impl DeployScript for LeasefiDeployScript {
         staking.set_vesting(vesting.address());
 
         // Setup Vesting
-        vesting.set_tailor_coin(tailor_coin.address());
         vesting.add_whitelisted_creator(ico.address());
         vesting.set_staking(staking.address());
 
