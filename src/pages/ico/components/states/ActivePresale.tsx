@@ -79,10 +79,10 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: ActiveP
   const userBalance = useMemo(() => {
     if (icoBalance) {
       const tokensPurchased = Number(BigInt(icoBalance.tokensPurchased)) / 1e18;
-      return { tokensPurchased, totalSpentUSD: icoBalance.totalSpentUSD };
+      return { tokensPurchased, totalSpentUSD: icoBalance.totalSpentUSD, currentValue: icoBalance.currentValue };
     }
     const tokensPurchased = transactions.reduce((sum, tx) => sum + tx.tokensReceived, 0);
-    return { tokensPurchased, totalSpentUSD: tokensPurchased * tokenPrice };
+    return { tokensPurchased, totalSpentUSD: tokensPurchased * tokenPrice, currentValue: undefined };
   }, [icoBalance, transactions, tokenPrice]);
 
   return (
@@ -149,6 +149,7 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: ActiveP
           totalSpentUSD={userBalance.totalSpentUSD}
           tokenPrice={effectiveProgress.priceUsd}
           tokenSymbol={ICO_CONFIG.TOKEN.symbol}
+          currentValue={userBalance.currentValue}
           className="mt-8"
         />
       )}

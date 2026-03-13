@@ -6,6 +6,7 @@ interface UserTokenBalanceProps {
   totalSpentUSD: number;
   tokenPrice: number;
   tokenSymbol: string;
+  currentValue?: number;
   className?: string;
 }
 
@@ -14,9 +15,10 @@ export function UserTokenBalance({
   totalSpentUSD,
   tokenPrice,
   tokenSymbol,
+  currentValue: currentValueProp,
   className,
 }: UserTokenBalanceProps) {
-  const currentValue = tokensPurchased * tokenPrice;
+  const currentValue = currentValueProp ?? tokensPurchased * tokenPrice;
 
   return (
     <Card className={cn('p-6 w-full', className)}>
