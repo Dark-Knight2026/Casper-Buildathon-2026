@@ -30,7 +30,7 @@ impl IcoEventType {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::TokensPurchased => "TokensPurchased",
-            Self::IcoScheduleAdded => "IcoScheduleAdded",
+            Self::IcoScheduleAdded => "ICOScheduleAdded",
             Self::CurrencyAdded => "CurrencyAdded",
             Self::CurrencyRemoved => "CurrencyRemoved",
             Self::UnsoldTokensWithdrawn => "UnsoldTokensWithdrawn",
@@ -46,7 +46,7 @@ impl FromStr for IcoEventType {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "TokensPurchased" => Ok(Self::TokensPurchased),
-            "IcoScheduleAdded" => Ok(Self::IcoScheduleAdded),
+            "ICOScheduleAdded" => Ok(Self::IcoScheduleAdded),
             "CurrencyAdded" => Ok(Self::CurrencyAdded),
             "CurrencyRemoved" => Ok(Self::CurrencyRemoved),
             "UnsoldTokensWithdrawn" => Ok(Self::UnsoldTokensWithdrawn),

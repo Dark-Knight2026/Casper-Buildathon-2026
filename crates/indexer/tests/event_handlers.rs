@@ -584,7 +584,7 @@ async fn ico_schedule_added_writes_schedule_row(pool: PgPool) {
             block_height: 500,
             caller: String::new(),
             contract_type: ContractType::Ico,
-            event_name: "IcoScheduleAdded".to_owned(),
+            event_name: "ICOScheduleAdded".to_owned(),
             event_data: json!({
                 "id": "schedule-1",
                 "start_timestamp": 1_700_000_000_u64,
@@ -639,7 +639,7 @@ async fn ico_schedule_added_upsert_updates_existing_row(pool: PgPool) {
             block_height: 100,
             caller: String::new(),
             contract_type: ContractType::Ico,
-            event_name: "IcoScheduleAdded".to_owned(),
+            event_name: "ICOScheduleAdded".to_owned(),
             event_data: json!({
                 "id": "schedule-upsert",
                 "start_timestamp": 1_000_000_u64,
@@ -665,7 +665,7 @@ async fn ico_schedule_added_upsert_updates_existing_row(pool: PgPool) {
             block_height: 200,
             caller: String::new(),
             contract_type: ContractType::Ico,
-            event_name: "IcoScheduleAdded".to_owned(),
+            event_name: "ICOScheduleAdded".to_owned(),
             event_data: json!({
                 "id": "schedule-upsert",
                 "start_timestamp": 1_000_000_u64,

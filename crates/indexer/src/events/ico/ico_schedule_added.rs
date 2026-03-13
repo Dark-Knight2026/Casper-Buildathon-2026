@@ -24,7 +24,7 @@ pub struct IcoScheduleAdded {
 }
 
 impl IndexableEvent for IcoScheduleAdded {
-    const EVENT_NAME: &'static str = "IcoScheduleAdded";
+    const EVENT_NAME: &'static str = "ICOScheduleAdded";
 
     #[inline]
     async fn process(&self, ctx: &mut EventContext<'_>) -> IndexerResult<()> {

@@ -23,7 +23,7 @@ fn ico_tokens_purchased_parses_to_correct_variant() {
 #[test]
 fn ico_all_variants_parse_correctly() {
     let cases = [
-        ("IcoScheduleAdded", IcoEventType::IcoScheduleAdded),
+        ("ICOScheduleAdded", IcoEventType::IcoScheduleAdded),
         ("CurrencyAdded", IcoEventType::CurrencyAdded),
         ("CurrencyRemoved", IcoEventType::CurrencyRemoved),
         ("UnsoldTokensWithdrawn", IcoEventType::UnsoldTokensWithdrawn),
