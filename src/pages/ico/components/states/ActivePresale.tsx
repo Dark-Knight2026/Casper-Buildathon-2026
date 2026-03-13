@@ -26,7 +26,6 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: ActiveP
 
   const {
     isConnected,
-    isBackendAuthenticated,
     account,
     connect,
     balances,
@@ -44,7 +43,7 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: ActiveP
 
   const { transactions } = useUserTokenActions(account?.publicKey);
   const accountHash = account?.publicKey ? deriveAccountHash(account.publicKey) : null;
-  const { data: icoBalance } = useICOBalance(accountHash, isBackendAuthenticated);
+  const { data: icoBalance } = useICOBalance(accountHash);
   // Use backend balance when available, fallback to on-chain transactions
   const userBalance = useMemo(() => {
     if (icoBalance) {

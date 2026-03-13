@@ -11,10 +11,11 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { useContractDeploys, isICOPurchase, type FTTokenAction } from '@/hooks/ico/useContractDeploys';
+import { useTokenTransactions, type TokenTransaction } from '@/hooks/ico/useTokenTransactions';
 import { ICO_CONFIG } from '@/constants/ico';
 
 const EXPLORER_URL = ICO_CONFIG.CASPER.explorerUrl;
+const ICO_PACKAGE_HASH = ICO_CONFIG.CONTRACTS.icoPackageHash.replace(/^hash-/, '').toLowerCase();
 const PAGE_SIZE = 10;
 const BIG_DECIMALS = ICO_CONFIG.TOKEN.decimals; // 18
 
@@ -23,7 +24,8 @@ function truncateHash(hash: string, start = 6, end = 4) {
   return `${hash.slice(0, start)}...${hash.slice(-end)}`;
 }
 
-function formatRelativeTime(timestamp: string): string {
+function formatRelativeTime(timestamp: string | null): string {
+  if (!timestamp) return '—';
   const diff = Date.now() - new Date(timestamp).getTime();
   const seconds = Math.floor(diff / 1000);
   if (seconds < 60) return `${seconds}s ago`;
@@ -40,9 +42,13 @@ function formatBigAmount(raw: string): string {
   return num.toLocaleString('en-US', { maximumFractionDigits: 2 });
 }
 
-function getActionLabel(action: FTTokenAction): string {
-  if (isICOPurchase(action)) return 'Purchase';
-  switch (action.ft_action_type_id) {
+function isICOPurchase(tx: TokenTransaction): boolean {
+  return tx.from_type === 1 && tx.from_hash?.toLowerCase() === ICO_PACKAGE_HASH;
+}
+
+function getActionLabel(tx: TokenTransaction): string {
+  if (isICOPurchase(tx)) return 'Purchase';
+  switch (tx.ft_action_type_id) {
     case 1: return 'Mint';
     case 2: return 'Transfer';
     case 3: return 'Burn';
@@ -50,9 +56,9 @@ function getActionLabel(action: FTTokenAction): string {
   }
 }
 
-function getActionColor(action: FTTokenAction): string {
-  if (isICOPurchase(action)) return 'text-green-900 bg-green-400/10';
-  switch (action.ft_action_type_id) {
+function getActionColor(tx: TokenTransaction): string {
+  if (isICOPurchase(tx)) return 'text-green-900 bg-green-400/10';
+  switch (tx.ft_action_type_id) {
     case 1: return 'text-blue-900 bg-blue-400/10';
     case 3: return 'text-red-800 bg-red-400/10';
     default: return 'text-gray-800 bg-gray-400/10';
@@ -61,7 +67,7 @@ function getActionColor(action: FTTokenAction): string {
 
 export function TransactionHistoryTab() {
   const [page, setPage] = useState(1);
-  const { actions, totalPages, totalItems, isLoading, error, refetch } = useContractDeploys(page, PAGE_SIZE);
+  const { transactions, totalPages, totalItems, isLoading, error, refetch } = useTokenTransactions(page, PAGE_SIZE);
 
   return (
     <div className="space-y-6">
@@ -99,7 +105,7 @@ export function TransactionHistoryTab() {
               Try again
             </button>
           </div>
-        ) : actions.length === 0 ? (
+        ) : transactions.length === 0 ? (
           <div className="text-center py-16">
             <p className="text-sm text-[hsl(var(--ico-text-secondary))]">No transactions found</p>
           </div>
@@ -119,41 +125,41 @@ export function TransactionHistoryTab() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {actions.map((action) => (
+                  {transactions.map((tx) => (
                     <TableRow
-                      key={`${action.deploy_hash}-${action.transform_idx}`}
+                      key={`${tx.deploy_hash}-${tx.transform_idx}`}
                       className="border-b border-[hsl(var(--ico-border-color))] hover:bg-[hsl(var(--ico-bg-secondary))]"
                     >
                       <TableCell className="font-mono text-sm">
                         <a
-                          href={`${EXPLORER_URL}/deploy/${action.deploy_hash}`}
+                          href={`${EXPLORER_URL}/deploy/${tx.deploy_hash}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-[hsl(var(--ico-brand-primary))] hover:underline inline-flex items-center gap-1"
                         >
-                          {truncateHash(action.deploy_hash)}
+                          {truncateHash(tx.deploy_hash)}
                           <ExternalLink className="w-3 h-3" />
                         </a>
                       </TableCell>
                       <TableCell className="text-sm text-[hsl(var(--ico-text-secondary))]">
-                        {action.block_height.toLocaleString('en-US')}
+                        {tx.block_height.toLocaleString('en-US')}
                       </TableCell>
                       <TableCell className="text-sm text-[hsl(var(--ico-text-secondary))] whitespace-nowrap">
-                        {formatRelativeTime(action.timestamp)}
+                        {formatRelativeTime(tx.timestamp)}
                       </TableCell>
                       <TableCell>
-                        <span className={`inline-flex text-xs px-2 py-0.5 rounded-full ${getActionColor(action)}`}>
-                          {getActionLabel(action)}
+                        <span className={`inline-flex text-xs px-2 py-0.5 rounded-full ${getActionColor(tx)}`}>
+                          {getActionLabel(tx)}
                         </span>
                       </TableCell>
                       <TableCell className="font-mono text-sm text-[hsl(var(--ico-text-secondary))]">
-                        {action.from_hash ? truncateHash(action.from_hash, 6, 4) : '-'}
+                        {tx.from_hash ? truncateHash(tx.from_hash, 6, 4) : '-'}
                       </TableCell>
                       <TableCell className="font-mono text-sm text-[hsl(var(--ico-text-secondary))]">
-                        {action.to_hash ? truncateHash(action.to_hash, 6, 4) : '-'}
+                        {tx.to_hash ? truncateHash(tx.to_hash, 6, 4) : '-'}
                       </TableCell>
                       <TableCell className="text-sm text-right text-[hsl(var(--ico-text-primary))] font-medium">
-                        {formatBigAmount(action.amount)}
+                        {formatBigAmount(tx.amount)}
                       </TableCell>
                     </TableRow>
                   ))}
