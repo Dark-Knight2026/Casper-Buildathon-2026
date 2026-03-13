@@ -198,12 +198,6 @@ impl ICO {
 
         self.staking.stake_for(*caller, purchase_amount);
 
-        // TODO: Delete this guard when staking is implemented
-        // Guard: staking address must be set
-        if !self.staking.address().is_contract() {
-            self.env().revert(Error::StakingAddressNotSet);
-        }
-
         self.env().emit_native_event(TokensPurchased {
             amount: purchase_amount,
             currency,

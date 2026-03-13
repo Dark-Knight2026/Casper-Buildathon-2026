@@ -103,11 +103,8 @@ pub struct Vesting {
     /// Used to pull tokens in (create_schedule) and transfer tokens out (claim).
     tailor_coin: External<Cep18ContractRef>,
 
-    /// TODO: Remove the next two comments when staking is implemented.
-    /// Reference to the Staking contract (for future auto-staking of vested tokens).
-    /// Currently unused — the staking contract does not yet have stake/unstake functions.
-    /// Kept here so the address can be wired during deployment, ready for when
-    /// staking integration is implemented.
+    /// Reference to the Staking contract.
+    /// Used to unstake tokens when transfer tokens out (claim).
     staking: External<StakingContractRef>,
 
     /// Stores each vesting schedule by its unique ID.
@@ -148,8 +145,6 @@ impl Vesting {
     }
 
     /// Sets the Staking contract address (for future auto-staking integration).
-    /// Currently unused — kept for forward compatibility.
-    /// TODO: Remove above comment when staking is implemented.
     pub fn set_staking(&mut self, staking: Address) {
         self.assert_owner();
         self.staking.set(staking);
@@ -189,7 +184,6 @@ impl Vesting {
     }
 
     /// Returns how many schedules a user has
-    // TODO: Odra contract entry points must return types that implement CLTyped and usize is not in that list.
     pub fn get_user_schedules_count(&self, user: Address) -> u32 {
         let user_schedules = self.user_schedules.get_or_default(&user);
         user_schedules.len() as u32
@@ -237,11 +231,9 @@ impl Vesting {
     ///   - Be whitelisted via `add_whitelisted_creator`
     ///   - Have already approved `total_amount` of BIG tokens to the Staking contract
     ///
-    /// @dev This contract records vesting schedules only. No tokens are held by this contract or the Staking contract at this time. Token delivery is deferred pending Staking contract implementation.
-    // TODO: Delete the above comment and replace with the comment below when staking is implemented:
-    //  @dev This contract does not hold tokens; it only records the schedule.
-    //  Tokens are held by the Staking contract. Beneficiary can claim according
-    // to the vesting model (cliff, linear, or both) which triggers unstaking.
+    /// @dev This contract does not hold tokens; it only records the schedule.
+    /// Tokens are held by the Staking contract. Beneficiary can claim according
+    /// to the vesting model (cliff, linear, or both) which triggers unstaking.
     pub fn create_schedule(
         &mut self,
         beneficiary: Address,
@@ -334,9 +326,8 @@ impl Vesting {
         schedule.claimed_amount += claimable;
         self.schedules.set(&vesting_id, schedule);
 
-        // TODO: Unstake the tokens from the staking contract
-        // Will probably look something like this:
-        // self.staking.unstake_for(beneficiary);
+        // This only initiates the unbonding period, it does not trasnfer tokens yet.
+        self.staking.unstake_for(beneficiary, claimable);
 
         self.env().emit_native_event(TokensClaimed {
             vesting_id,
