@@ -8,7 +8,13 @@ use rand::Rng;
 use redis::AsyncCommands;
 use sqlx::PgPool;
 
-use api::server::AUTH_RATE_LIMIT_BURST;
+use api::{common::CASPER_MESSAGE_PREFIX, server::AUTH_RATE_LIMIT_BURST};
+
+/// Signs a message with the Casper Wallet prefix, matching browser extension behavior.
+fn sign_with_prefix(message: &str, secret_key: &SecretKey, public_key: &PublicKey) -> String {
+    let prefixed = format!("{CASPER_MESSAGE_PREFIX}{message}");
+    crypto::sign(prefixed.as_bytes(), secret_key, public_key).to_hex()
+}
 
 fn generate_random_ed25519() -> (SecretKey, PublicKey) {
     let mut rng = rand::rng();
@@ -144,9 +150,8 @@ async fn full_auth_flow_nonce_sign_login(pool: PgPool) {
         .as_str()
         .expect("message field required");
 
-    // 3. Sign the message with the private key
-    let signature = crypto::sign(message.as_bytes(), &secret_key, &public_key);
-    let signature_hex = signature.to_hex();
+    // 3. Sign the message with the private key (with Casper Wallet prefix)
+    let signature_hex = sign_with_prefix(message, &secret_key, &public_key);
 
     // 4. Login
     let login_response = env
@@ -188,7 +193,7 @@ async fn replay_attack_prevention(pool: PgPool) {
         .await
         .json();
     let message = nonce_body["message"].as_str().unwrap();
-    let signature_hex = crypto::sign(message.as_bytes(), &secret_key, &public_key).to_hex();
+    let signature_hex = sign_with_prefix(message, &secret_key, &public_key);
 
     // First login succeeds
     let first = env
@@ -234,7 +239,7 @@ async fn concurrent_nonce_overwrites_previous(pool: PgPool) {
         .await
         .json();
     let first_message = first_body["message"].as_str().unwrap();
-    let first_sig = crypto::sign(first_message.as_bytes(), &secret_key, &public_key).to_hex();
+    let first_sig = sign_with_prefix(first_message, &secret_key, &public_key);
 
     // Request second nonce (overwrites first in Redis)
     let second_body: serde_json::Value = env
@@ -244,7 +249,7 @@ async fn concurrent_nonce_overwrites_previous(pool: PgPool) {
         .await
         .json();
     let second_message = second_body["message"].as_str().unwrap();
-    let second_sig = crypto::sign(second_message.as_bytes(), &secret_key, &public_key).to_hex();
+    let second_sig = sign_with_prefix(second_message, &secret_key, &public_key);
 
     // Login with first (stale) nonce fails
     let stale = env
@@ -284,7 +289,7 @@ async fn login_without_nonce_is_rejected(pool: PgPool) {
 
     // Sign an arbitrary message (no nonce was ever stored)
     let fake_message = "Sign this message to login to LeaseFi. Nonce: nonexistent";
-    let signature_hex = crypto::sign(fake_message.as_bytes(), &secret_key, &public_key).to_hex();
+    let signature_hex = sign_with_prefix(fake_message, &secret_key, &public_key);
 
     let response = env
         .server
@@ -341,12 +346,8 @@ fn verify_valid_signature() {
     let (secret_key, public_key) = generate_random_ed25519();
 
     let message = "Login to LeaseFi";
-    let message_bytes = message.as_bytes();
-
-    let signature = crypto::sign(message_bytes, &secret_key, &public_key);
-
+    let sig_hex = sign_with_prefix(message, &secret_key, &public_key);
     let pk_hex = public_key.to_hex();
-    let sig_hex = signature.to_hex();
 
     let result = api::common::verify_casper_signature(&pk_hex, &sig_hex, message);
 
@@ -363,11 +364,8 @@ fn verify_invalid_message() {
     let (secret_key, public_key) = generate_random_ed25519();
 
     let message = "Original Message";
-
-    let signature = crypto::sign(message.as_bytes(), &secret_key, &public_key);
-
+    let sig_hex = sign_with_prefix(message, &secret_key, &public_key);
     let pk_hex = public_key.to_hex();
-    let sig_hex = signature.to_hex();
 
     let result = api::common::verify_casper_signature(&pk_hex, &sig_hex, "Fake Message");
 
@@ -387,11 +385,7 @@ fn generate_data_for_local_tests() {
     let wallet_address = public_key.to_hex();
 
     let message_from_server = "Sign this message to login to LeaseFi. Nonce: XJyoR9G2a4HQfjdx";
-
-    let message_bytes = message_from_server.as_bytes();
-
-    let signature = crypto::sign(message_bytes, &secret_key, &public_key);
-    let signature_hex = signature.to_hex();
+    let signature_hex = sign_with_prefix(message_from_server, &secret_key, &public_key);
 
     println!("\n============================================");
     println!("1. Wallet Address:");

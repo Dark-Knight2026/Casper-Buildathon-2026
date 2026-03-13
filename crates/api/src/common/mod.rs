@@ -16,8 +16,8 @@ pub mod redis;
 // Re-exports
 pub use config::{AppState, IcoConfig, ServerConfig};
 pub use crypto::{
-    CASPER_ED25519_PUBKEY_HEX_LEN, CASPER_SECP256K1_PUBKEY_HEX_LEN, CryptoError,
-    verify_casper_signature,
+    CASPER_ED25519_PUBKEY_HEX_LEN, CASPER_MESSAGE_PREFIX, CASPER_SECP256K1_PUBKEY_HEX_LEN,
+    CryptoError, verify_casper_signature,
 };
 pub use errors::{ApiError, ApiResult, ErrorResponse, ServerError};
 pub use models::{Claims, PropertyId, UserId, UserRole};
