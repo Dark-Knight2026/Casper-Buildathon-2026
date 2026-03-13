@@ -1,5 +1,5 @@
 use odra::{casper_types::U256, prelude::*, ContractRef};
-use odra_modules::{access::Ownable, cep18_token::Cep18ContractRef};
+use odra_modules::access::Ownable;
 
 use crate::staking::StakingContractRef;
 use crate::vesting::{errors::*, events::*};
