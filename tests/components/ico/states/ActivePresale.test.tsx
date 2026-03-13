@@ -15,6 +15,36 @@ const mockProgress: ScheduleProgress = {
   percentSold: 13.33,
 };
 
+// Mock @tanstack/react-query
+vi.mock('@tanstack/react-query', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@tanstack/react-query')>();
+  return {
+    ...actual,
+    useQueryClient: () => ({ invalidateQueries: vi.fn() }),
+    useQuery: vi.fn(() => ({ data: undefined, isLoading: false, error: null })),
+  };
+});
+
+// Mock useICOProgress
+vi.mock('@/hooks/ico/useICOProgress', () => ({
+  useICOProgress: () => ({ data: undefined }),
+}));
+
+// Mock useICOBalance
+vi.mock('@/hooks/ico/useICOBalance', () => ({
+  useICOBalance: () => ({ data: undefined }),
+}));
+
+// Mock useUserTokenActions
+vi.mock('@/hooks/ico/useUserTokenActions', () => ({
+  useUserTokenActions: () => ({ transactions: [] }),
+}));
+
+// Mock deriveAccountHash
+vi.mock('@/lib/blockchain/accountUtils', () => ({
+  deriveAccountHash: () => null,
+}));
+
 // Mock usePurchaseFlow hook to avoid csprclick-ui dependency
 vi.mock('@/hooks/ico/usePurchaseFlow', () => ({
   usePurchaseFlow: () => ({

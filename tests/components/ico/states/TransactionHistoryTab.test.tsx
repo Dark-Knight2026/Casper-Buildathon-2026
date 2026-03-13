@@ -1,14 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 
-// --- Mock useContractDeploys BEFORE component import ---
+// --- Mock useTokenTransactions BEFORE component import ---
 
 const mockRefetch = vi.fn();
-const mockUseContractDeploys = vi.fn();
+const mockUseTokenTransactions = vi.fn();
 
-vi.mock('@/hooks/ico/useContractDeploys', () => ({
-  useContractDeploys: (...args: unknown[]) => mockUseContractDeploys(...args),
-  isICOPurchase: vi.fn(() => false),
+vi.mock('@/hooks/ico/useTokenTransactions', () => ({
+  useTokenTransactions: (...args: unknown[]) => mockUseTokenTransactions(...args),
 }));
 
 vi.mock('@/constants/ico', () => ({
@@ -62,7 +61,7 @@ vi.mock('@/components/ui/table', () => ({
 import { TransactionHistoryTab } from '@/pages/ico/components/states/TransactionHistoryTab';
 
 const baseHookResult = {
-  actions: [],
+  transactions: [],
   totalPages: 0,
   totalItems: 0,
   isLoading: false,
@@ -87,7 +86,7 @@ const mockAction = {
 describe('TransactionHistoryTab', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockUseContractDeploys.mockReturnValue(baseHookResult);
+    mockUseTokenTransactions.mockReturnValue(baseHookResult);
   });
 
   // --- Header ---
@@ -99,7 +98,7 @@ describe('TransactionHistoryTab', () => {
     });
 
     it('should display total items count', () => {
-      mockUseContractDeploys.mockReturnValue({ ...baseHookResult, totalItems: 42 });
+      mockUseTokenTransactions.mockReturnValue({ ...baseHookResult, totalItems: 42 });
       render(<TransactionHistoryTab />);
       expect(screen.getByText('42 transactions')).toBeInTheDocument();
     });
@@ -109,7 +108,7 @@ describe('TransactionHistoryTab', () => {
 
   describe('loading state', () => {
     it('should render a spinning icon when isLoading is true', () => {
-      mockUseContractDeploys.mockReturnValue({ ...baseHookResult, isLoading: true });
+      mockUseTokenTransactions.mockReturnValue({ ...baseHookResult, isLoading: true });
       render(<TransactionHistoryTab />);
 
       const spinner = document.querySelector('.animate-spin');
@@ -117,7 +116,7 @@ describe('TransactionHistoryTab', () => {
     });
 
     it('should not render the table while loading', () => {
-      mockUseContractDeploys.mockReturnValue({ ...baseHookResult, isLoading: true });
+      mockUseTokenTransactions.mockReturnValue({ ...baseHookResult, isLoading: true });
       render(<TransactionHistoryTab />);
 
       expect(screen.queryByRole('table')).not.toBeInTheDocument();
@@ -128,7 +127,7 @@ describe('TransactionHistoryTab', () => {
 
   describe('error state', () => {
     it('should render error message when error is present', () => {
-      mockUseContractDeploys.mockReturnValue({
+      mockUseTokenTransactions.mockReturnValue({
         ...baseHookResult,
         error: new Error('API error'),
       });
@@ -138,7 +137,7 @@ describe('TransactionHistoryTab', () => {
     });
 
     it('should render a "Try again" button in error state', () => {
-      mockUseContractDeploys.mockReturnValue({
+      mockUseTokenTransactions.mockReturnValue({
         ...baseHookResult,
         error: new Error('API error'),
       });
@@ -148,7 +147,7 @@ describe('TransactionHistoryTab', () => {
     });
 
     it('should call refetch when "Try again" is clicked', () => {
-      mockUseContractDeploys.mockReturnValue({
+      mockUseTokenTransactions.mockReturnValue({
         ...baseHookResult,
         error: new Error('API error'),
       });
@@ -177,9 +176,9 @@ describe('TransactionHistoryTab', () => {
 
   describe('with data', () => {
     beforeEach(() => {
-      mockUseContractDeploys.mockReturnValue({
+      mockUseTokenTransactions.mockReturnValue({
         ...baseHookResult,
-        actions: [mockAction],
+        transactions: [mockAction],
         totalPages: 1,
         totalItems: 1,
       });
@@ -202,9 +201,9 @@ describe('TransactionHistoryTab', () => {
     });
 
     it('should render pagination when totalPages > 1', () => {
-      mockUseContractDeploys.mockReturnValue({
+      mockUseTokenTransactions.mockReturnValue({
         ...baseHookResult,
-        actions: [mockAction],
+        transactions: [mockAction],
         totalPages: 3,
         totalItems: 30,
       });

@@ -1,13 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { TransactionHistory, Transaction } from '@/pages/ico/components/shared/TransactionHistory';
+import { TransactionHistory, type ICOTransaction } from '@/pages/ico/components/shared/TransactionHistory';
 
-const mockTransactions: Transaction[] = [
+const mockTransactions: ICOTransaction[] = [
   {
     id: '1',
     type: 'purchase',
-    amount: 1500,
-    currency: 'USDC',
     tokensReceived: 1000000,
     tokenSymbol: 'BIG',
     status: 'completed',
@@ -17,8 +15,6 @@ const mockTransactions: Transaction[] = [
   {
     id: '2',
     type: 'purchase',
-    amount: 100,
-    currency: 'USDT',
     tokensReceived: 66666,
     tokenSymbol: 'BIG',
     status: 'pending',
@@ -28,8 +24,6 @@ const mockTransactions: Transaction[] = [
   {
     id: '3',
     type: 'claim',
-    amount: 500,
-    currency: 'USDC',
     tokensReceived: 333333,
     tokenSymbol: 'BIG',
     status: 'failed',
@@ -67,14 +61,6 @@ describe('TransactionHistory', () => {
 
       expect(screen.getAllByText('purchase')).toHaveLength(2);
       expect(screen.getByText('claim')).toBeInTheDocument();
-    });
-
-    it('should display transaction amounts', () => {
-      render(<TransactionHistory transactions={mockTransactions} />);
-
-      expect(screen.getByText('1,500.00 USDC')).toBeInTheDocument();
-      expect(screen.getByText('100.00 USDT')).toBeInTheDocument();
-      expect(screen.getByText('500.00 USDC')).toBeInTheDocument();
     });
 
     it('should display tokens received with + prefix', () => {
@@ -127,11 +113,9 @@ describe('TransactionHistory', () => {
 
   describe('status styling', () => {
     it('should render failed transaction with correct styling class', () => {
-      const failedTx: Transaction[] = [{
+      const failedTx: ICOTransaction[] = [{
         id: '1',
         type: 'purchase',
-        amount: 1500,
-        currency: 'USDC',
         tokensReceived: 1000000,
         tokenSymbol: 'BIG',
         status: 'failed',
@@ -146,11 +130,9 @@ describe('TransactionHistory', () => {
     });
 
     it('should render pending transaction with correct styling class', () => {
-      const pendingTx: Transaction[] = [{
+      const pendingTx: ICOTransaction[] = [{
         id: '2',
         type: 'purchase',
-        amount: 100,
-        currency: 'USDC',
         tokensReceived: 66666,
         tokenSymbol: 'BIG',
         status: 'pending',

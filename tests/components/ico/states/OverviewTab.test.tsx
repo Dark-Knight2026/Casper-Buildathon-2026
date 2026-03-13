@@ -3,6 +3,23 @@ import { render, screen } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
 import { OverviewTab } from '@/pages/ico/components/states/OverviewTab';
 
+// Mock wallet and transaction hooks
+vi.mock('@/hooks/ico/useICOWallet', () => ({
+  useICOWallet: () => ({ account: null, isConnected: false }),
+}));
+
+vi.mock('@/hooks/ico/useUserTokenActions', () => ({
+  useUserTokenActions: () => ({ transactions: [] }),
+}));
+
+vi.mock('@/hooks/ico/useAccountTransactions', () => ({
+  useAccountTransactions: () => ({ transactions: [], totalPages: 0, totalItems: 0, isLoading: false, error: null, refetch: vi.fn() }),
+}));
+
+vi.mock('@/lib/blockchain/accountUtils', () => ({
+  deriveAccountHash: () => null,
+}));
+
 // Mock the child components
 vi.mock('@/pages/ico/components/shared/Card', () => ({
   Card: ({ children, className }: { children: React.ReactNode; className?: string }) => (
