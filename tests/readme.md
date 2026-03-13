@@ -50,7 +50,7 @@ This directory contains all test files for the LeaseFi application, organized by
 | `components/ico/UserTokenBalance.test.tsx` | Tests for user token balance display |
 | `components/ico/VestingProgressBlock.test.tsx` | Tests for vesting schedule progress visualization |
 | `components/ico/WalletCard.test.tsx` | Tests for wallet info card (address truncation, balance) |
-| `components/ico/states/ActivePresale.test.tsx` | Tests for active presale phase UI and purchase form |
+| `components/ico/states/PrivateSaleActive.test.tsx` | Tests for active presale phase UI and purchase form |
 | `components/ico/states/OverviewTab.test.tsx` | Tests for ICO overview tab content |
 | `components/ico/states/PostICODashboard.test.tsx` | Tests for post-ICO dashboard (vesting, claims) |
 | `components/ico/states/PrivateSaleCountdown.test.tsx` | Tests for private sale countdown screen |

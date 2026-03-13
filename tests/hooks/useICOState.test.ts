@@ -336,8 +336,6 @@ describe('useICOState hook', () => {
       const timestamps: SaleTimestamps = {
         presaleStart: now + 2 * DAY,
         presaleEnd: now + 9 * DAY,
-        icoStart: now + 12 * DAY,
-        icoEnd: now + 26 * DAY,
       };
 
       const { result } = renderHook(() => useICOState({ timestamps }), { wrapper });
@@ -354,8 +352,6 @@ describe('useICOState hook', () => {
       const timestamps: SaleTimestamps = {
         presaleStart: now + 2 * DAY,
         presaleEnd: now + 9 * DAY,
-        icoStart: now + 12 * DAY,
-        icoEnd: now + 26 * DAY,
       };
 
       // Start without timestamps — zero sentinel → state 3
@@ -364,7 +360,7 @@ describe('useICOState hook', () => {
         { initialProps: {}, wrapper }
       );
 
-      expect(result.current.isLoading).toBe(false);
+      expect(result.current.isLoading).toBe(true);
       expect(result.current.state).toBe(3); // zero timestamps sentinel
 
       // Provide real timestamps — re-evaluates synchronously

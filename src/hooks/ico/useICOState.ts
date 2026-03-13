@@ -135,7 +135,7 @@ export function useICOState(options: UseICOStateOptions = {}): UseICOStateReturn
     phase,
     status,
     timestamps,
-    isLoading: false,
+    isLoading: customTimestamps === undefined,
     error: null,
     nextStateTimestamp,
     refetch,

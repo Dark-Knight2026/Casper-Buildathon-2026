@@ -4,7 +4,7 @@ Unit tests for ICO lifecycle state components.
 
 | File | Responsibility |
 |------|----------------|
-| ActivePresale.test.tsx | Tests presale countdown and progress display |
+| PrivateSaleActive.test.tsx | Tests presale countdown and progress display |
 | OverviewTab.test.tsx | Tests dashboard cards and earnings chart rendering |
 | PostICODashboard.test.tsx | Tests tab configuration and default state |
 | PrivateSaleCountdown.test.tsx | Tests countdown timer and navigation behavior |

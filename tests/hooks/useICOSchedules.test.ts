@@ -57,7 +57,6 @@ describe('useICOSchedules', () => {
       expect(result.current.isLoading).toBe(true);
       expect(result.current.timestamps).toBeNull();
       expect(result.current.presaleProgress).toBeNull();
-      expect(result.current.icoProgress).toBeNull();
       expect(result.current.error).toBeNull();
     });
   });
@@ -82,7 +81,6 @@ describe('useICOSchedules', () => {
       expect(result.current.error).toBeNull();
       expect(result.current.timestamps).not.toBeNull();
       expect(result.current.presaleProgress).not.toBeNull();
-      expect(result.current.icoProgress).not.toBeNull();
     });
 
     it('should convert timestamps correctly', async () => {
@@ -144,12 +142,6 @@ describe('useICOSchedules', () => {
       expect(presaleProgress.hardCapUsd).toBe(1000000);
       // amountRaised = soldAmount * price / decimals = 1M * 0.10 = 100K
       expect(presaleProgress.amountRaised).toBe(100000);
-
-      const icoProgress = result.current.icoProgress!;
-      // hardCapUsd = 50M * 0.15 = 7.5M
-      expect(icoProgress.hardCapUsd).toBe(7500000);
-      // amountRaised = 5M * 0.15 = 750K
-      expect(icoProgress.amountRaised).toBe(750000);
     });
 
     it('should handle only presale schedule', async () => {
@@ -166,7 +158,6 @@ describe('useICOSchedules', () => {
       });
 
       expect(result.current.presaleProgress).not.toBeNull();
-      expect(result.current.icoProgress).toBeNull();
     });
 
     it('should handle only ICO schedule', async () => {
@@ -183,7 +174,6 @@ describe('useICOSchedules', () => {
       });
 
       expect(result.current.presaleProgress).toBeNull();
-      expect(result.current.icoProgress).not.toBeNull();
       expect(result.current.timestamps?.presaleStart).toBe(0);
       expect(result.current.timestamps?.presaleEnd).toBe(0);
     });
@@ -201,7 +191,6 @@ describe('useICOSchedules', () => {
 
       expect(result.current.timestamps).toBeNull();
       expect(result.current.presaleProgress).toBeNull();
-      expect(result.current.icoProgress).toBeNull();
     });
   });
 

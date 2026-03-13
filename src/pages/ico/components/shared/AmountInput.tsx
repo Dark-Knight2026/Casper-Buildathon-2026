@@ -81,7 +81,7 @@ export function AmountInput({
               ? 'border-red-500/70'
               : 'border-[hsl(var(--ico-border-color))]',
             'bg-[hsl(var(--ico-form-input-bg))] text-[hsl(var(--ico-text-primary))]',
-            'focus:outline-none focus:ring-0 focus:border-[hsl(var(--ico-brand-primary))]',
+            'focus:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--ico-brand-primary))] focus-visible:ring-offset-1',
             'disabled:opacity-50 disabled:cursor-not-allowed'
           )}
         />
