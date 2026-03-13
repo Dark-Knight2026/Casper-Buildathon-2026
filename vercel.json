@@ -9,6 +9,10 @@
       "destination": "/api/casper-rpc"
     },
     {
+      "source": "/api/coingecko",
+      "destination": "/api/coingecko"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
