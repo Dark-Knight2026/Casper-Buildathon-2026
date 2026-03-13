@@ -1302,7 +1302,11 @@ fn add_and_verify_ico_schedules(ctx: &mut Context) {
             ctx.env.emitted_native_event(
                 &ctx.ico,
                 ICOScheduleAdded {
-                    id: expected_ico_schedule_id
+                    id: expected_ico_schedule_id,
+                    start_timestamp: params.start_timestamp,
+                    end_timestamp: params.end_timestamp,
+                    sale_amount: params.sale_amount,
+                    price: params.price,
                 }
             ),
             "ICOScheduleAdded event should be emitted"
