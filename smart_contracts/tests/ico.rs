@@ -685,10 +685,9 @@ fn test_purchase_should_purchase_with_cspr_token_properly() {
     let curr_current_ico_schedule = ctx.ico.get_current_ico_schedule().unwrap();
     let curr_buyer_balance = ctx.tailor_coin.balance_of(&ctx.users.alice);
     let curr_ico_balance = ctx.tailor_coin.balance_of(&ctx.ico.address());
-    // TODO: Uncomment this out when staking is implemented to test staking allowance
-    // let curr_staking_allowance = ctx
-    //     .tailor_coin
-    //     .allowance(&ctx.ico.address(), &ctx.staking.address());
+    let curr_staking_allowance = ctx
+        .tailor_coin
+        .allowance(&ctx.ico.address(), &ctx.staking.address());
     let curr_treasury_balance = ctx.env.balance_of(&ctx.treasury.address());
     let curr_user_schedules_count = ctx.vesting.get_user_schedules_count(ctx.users.alice);
 
@@ -718,11 +717,11 @@ fn test_purchase_should_purchase_with_cspr_token_properly() {
         curr_buyer_balance, prev_buyer_balance,
         "Buyer should not receive tokens directly"
     );
-    // TODO: Uncomment this out when staking is implemented to test staking allowance
-    // assert_eq!(
-    //     curr_staking_allowance, expected_purchase_amount,
-    //     "Staking contract should be approved to transfer the purchased tokens"
-    // );
+    assert_eq!(
+        curr_staking_allowance,
+        U256::zero(),
+        "Staking contract should not be approved until staking integration is implemented"
+    );
     assert_eq!(
         curr_ico_balance, prev_ico_balance,
         "ICO contract balance should not change (tokens stay in ICO until staking pulls them)"
@@ -767,10 +766,9 @@ fn test_purchase_should_purchase_with_cep18_token_properly() {
     let curr_current_ico_schedule = ctx.ico.get_current_ico_schedule().unwrap();
     let curr_buyer_balance = ctx.tailor_coin.balance_of(&ctx.users.alice);
     let curr_ico_balance = ctx.tailor_coin.balance_of(&ctx.ico.address());
-    // TODO: Uncomment this out when staking is implemented to test staking allowance
-    // let curr_staking_allowance = ctx
-    //     .tailor_coin
-    //     .allowance(&ctx.ico.address(), &ctx.staking.address());
+    let curr_staking_allowance = ctx
+        .tailor_coin
+        .allowance(&ctx.ico.address(), &ctx.staking.address());
     let curr_treasury_balance = ctx.usdc.balance_of(&ctx.treasury.address());
     let curr_user_schedules_count = ctx.vesting.get_user_schedules_count(ctx.users.alice);
 
@@ -800,11 +798,11 @@ fn test_purchase_should_purchase_with_cep18_token_properly() {
         curr_buyer_balance, prev_buyer_balance,
         "Buyer should not receive tokens directly"
     );
-    // TODO: Uncomment this out when staking is implemented to test staking allowance
-    // assert_eq!(
-    //     curr_staking_allowance, expected_purchase_amount,
-    //     "Staking contract should be approved to transfer the purchased tokens"
-    // );
+    assert_eq!(
+        curr_staking_allowance,
+        U256::zero(),
+        "Staking contract should not be approved until staking integration is implemented"
+    );
     assert_eq!(
         curr_ico_balance, prev_ico_balance,
         "ICO contract balance should not change (tokens stay in ICO until staking pulls them)"

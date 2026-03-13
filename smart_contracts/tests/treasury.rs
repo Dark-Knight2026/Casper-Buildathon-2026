@@ -1,7 +1,7 @@
 use odra::{
     casper_types::{U256, U512},
     host::{Deployer, HostEnv, HostRef},
-    prelude::Addressable,
+    prelude::{Address, Addressable},
     uints::ToU256,
 };
 use odra_modules::access::errors::Error as AccessError;
@@ -69,6 +69,21 @@ fn deposit_rewards(
 ) {
     tailor_coin.approve(&treasury.address(), rewards_amount);
     treasury.deposit_rewards(*rewards_amount);
+}
+
+fn create_active_stake(
+    env: &HostEnv,
+    tailor_coin: &mut TailorCoinHostRef,
+    staking: &mut StakingHostRef,
+    staker: Address,
+    amount: U256,
+) {
+    tailor_coin.transfer(&staker, &amount);
+
+    env.set_caller(staker);
+    tailor_coin.approve(&staking.address(), &amount);
+    staking.stake_for(staker, amount);
+    env.set_caller(env.get_account(0));
 }
 
 #[test]
@@ -152,9 +167,19 @@ fn test_set_tailor_coin_should_set_tailor_coin_properly() {
 #[test]
 fn test_deposit_rewards_should_deposit_rewards_properly() {
     let env = odra_test::env();
-    let (mut treasury, staking, mut tailor_coin, _) = setup(&env);
+    let (mut treasury, mut staking, mut tailor_coin, _) = setup(&env);
+    let stake_amount = U256::from_dec_str("1000000000000000000").unwrap();
     let rewards_amount = U256::from_dec_str("5000000000000000000").unwrap();
     let expected_staking_rewards = rewards_amount * STAKING_REWARDS_BPS / ONE_HUNDRED_PERCENT_BPS;
+
+    create_active_stake(
+        &env,
+        &mut tailor_coin,
+        &mut staking,
+        env.get_account(1),
+        stake_amount,
+    );
+
     let prev_user_balance = tailor_coin.balance_of(&env.caller());
     let prev_treasury_balance = tailor_coin.balance_of(&treasury.address());
     let prev_staking_balance = tailor_coin.balance_of(&staking.address());
@@ -190,6 +215,48 @@ fn test_deposit_rewards_should_deposit_rewards_properly() {
         curr_staking_balance,
         prev_staking_balance + expected_staking_rewards,
         "Invalid current Staking balance"
+    );
+}
+
+#[test]
+fn test_deposit_rewards_should_keep_all_rewards_as_reserves_if_no_active_stake() {
+    let env = odra_test::env();
+    let (mut treasury, staking, mut tailor_coin, _) = setup(&env);
+    let rewards_amount = U256::from_dec_str("5000000000000000000").unwrap();
+    let prev_user_balance = tailor_coin.balance_of(&env.caller());
+    let prev_treasury_balance = tailor_coin.balance_of(&treasury.address());
+    let prev_staking_balance = tailor_coin.balance_of(&staking.address());
+
+    deposit_rewards(&rewards_amount, &mut tailor_coin, &mut treasury);
+
+    let curr_user_balance = tailor_coin.balance_of(&env.caller());
+    let curr_treasury_balance = tailor_coin.balance_of(&treasury.address());
+    let curr_staking_balance = tailor_coin.balance_of(&staking.address());
+
+    assert!(env.emitted_native_event(
+        &treasury,
+        RewardsDeposited {
+            amount: rewards_amount
+        }
+    ));
+    assert_eq!(
+        treasury.get_reserves(),
+        rewards_amount,
+        "All rewards should remain as reserves when no stake is active"
+    );
+    assert_eq!(
+        curr_user_balance,
+        prev_user_balance - rewards_amount,
+        "Invalid current user balance"
+    );
+    assert_eq!(
+        curr_treasury_balance,
+        prev_treasury_balance + rewards_amount,
+        "Invalid current Treasury balance"
+    );
+    assert_eq!(
+        curr_staking_balance, prev_staking_balance,
+        "Staking balance should not change when no stake is active"
     );
 }
 
