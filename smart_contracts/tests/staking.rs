@@ -544,3 +544,89 @@ fn test_deposit_rewards_should_deposit_properly() {
         }
     ));
 }
+
+// =============================================================================
+// claiming_rewards()
+// =============================================================================
+
+#[test]
+fn test_claim_rewards_should_revert_if_no_rewards_to_claim() {
+    let mut ctx = setup(odra_test::env());
+    let alice = ctx.users.alice;
+    let amount = staking_amount();
+
+    fund_and_approve(&mut ctx, alice, amount);
+    stake_for(&mut ctx, alice, amount);
+
+    ctx.env.set_caller(alice);
+    assert_eq!(
+        ctx.staking.try_claim_rewards().unwrap_err(),
+        Error::NoRewardsToClaim.into(),
+    );
+}
+
+#[test]
+fn test_claim_rewards_should_claim_properly() {
+    let mut ctx = setup(odra_test::env());
+    let amount = staking_amount();
+    let rewards = rewards_amount();
+    let owner = ctx.users.owner;
+    let alice = ctx.users.alice;
+
+    fund_and_approve(&mut ctx, alice, amount);
+    stake_for(&mut ctx, alice, amount);
+
+    ctx.env.set_caller(owner);
+    ctx.tailor_coin.approve(&ctx.staking.address(), &rewards);
+    ctx.staking.deposit_rewards(rewards);
+
+    let prev_balance = ctx.tailor_coin.balance_of(&alice);
+
+    ctx.env.set_caller(alice);
+    ctx.staking.claim_rewards();
+
+    // Tokens transferred to staker
+    assert_eq!(ctx.tailor_coin.balance_of(&alice), prev_balance + rewards);
+    // Pending rewards cleared
+    assert_eq!(ctx.staking.get_pending_rewards(alice), U256::zero());
+    // Active stake unaffected
+    assert_eq!(ctx.staking.get_staker_info(alice).staked_amount, amount);
+
+    assert!(ctx.env.emitted_native_event(
+        &ctx.staking.address(),
+        RewardsClaimed {
+            staker: alice,
+            amount: rewards
+        }
+    ));
+}
+
+#[test]
+fn test_claim_rewards_should_not_accrue_already_claimed_rewards() {
+    let mut ctx = setup(odra_test::env());
+    let amount = staking_amount();
+    let rewards = rewards_amount();
+    let owner = ctx.users.owner;
+    let alice = ctx.users.alice;
+
+    fund_and_approve(&mut ctx, alice, amount);
+    stake_for(&mut ctx, alice, amount);
+
+    // First reward deposit
+    ctx.env.set_caller(owner);
+    ctx.tailor_coin.approve(&ctx.staking.address(), &rewards);
+    ctx.staking.deposit_rewards(rewards);
+
+    // First claim
+    ctx.env.set_caller(alice);
+    ctx.staking.claim_rewards();
+    assert_eq!(ctx.staking.get_pending_rewards(alice), U256::zero());
+
+    // Second reward deposit
+    ctx.env.set_caller(owner);
+    ctx.tailor_coin.approve(&ctx.staking.address(), &rewards);
+    ctx.staking.deposit_rewards(rewards);
+
+    // Only the second deposit should be pending, not both
+    assert_eq!(ctx.staking.get_pending_rewards(alice), rewards);
+}
