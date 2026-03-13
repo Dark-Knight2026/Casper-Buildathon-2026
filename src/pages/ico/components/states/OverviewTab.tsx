@@ -6,6 +6,8 @@ import { TrendingUp, Clock, Percent, Wallet } from 'lucide-react';
 import { TransactionHistory } from '../shared/TransactionHistory';
 import { useUserTokenActions } from '@/hooks/ico/useUserTokenActions';
 import { useICOWallet } from '@/hooks/ico/useICOWallet';
+import { useAccountTransactions } from '@/hooks/ico/useAccountTransactions';
+import { deriveAccountHash } from '@/lib/blockchain/accountUtils';
 import { MOCK_DASHBOARD, MOCK_STAKING_INFO, MOCK_EARNINGS_DATA, MOCK_PORTFOLIO } from '@/constants/icoMockData';
 import { formatNumber, formatUSD } from '../../utils/formatters';
 
@@ -19,6 +21,10 @@ const chartConfig = {
 export const OverviewTab = memo(function OverviewTab() {
   const { account } = useICOWallet();
   const { transactions } = useUserTokenActions(account?.publicKey);
+  const accountHash = account?.publicKey ? deriveAccountHash(account.publicKey) : null;
+  const { transactions: accountTxs } = useAccountTransactions(accountHash);
+  console.log('[useAccountTransactions] data:', accountTxs);
+  console.log('publicKey', account?.publicKey, 'accountHash', accountHash, 'transactions', transactions);
 
   const dashboardCards = useMemo(() => [
     {

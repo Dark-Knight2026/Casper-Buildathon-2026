@@ -1,8 +1,12 @@
 import { useState } from 'react';
+import { ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Card } from './Card';
 import { TablePagination } from './TablePagination';
 import { formatDateTime } from '../../utils/formatters';
+import { ICO_CONFIG } from '@/constants/ico';
+
+const EXPLORER_URL = ICO_CONFIG.CASPER.explorerUrl;
 
 export interface ICOTransaction {
   id: string;
@@ -10,7 +14,7 @@ export interface ICOTransaction {
   tokensReceived: number;
   tokenSymbol: string;
   status: 'pending' | 'completed' | 'failed';
-  timestamp: Date;
+  timestamp: Date | null;
   txHash?: string;
 }
 
@@ -81,11 +85,19 @@ export function TransactionHistory({ transactions, className }: TransactionHisto
                       </span>
                     </div>
                     <div className="flex items-center gap-2 text-xs text-[hsl(var(--ico-text-secondary))]">
-                      <span>{formatDateTime(tx.timestamp)}</span>
+                      <span>{tx.timestamp ? formatDateTime(tx.timestamp as Date) : '—'}</span>
                       {tx.txHash && (
                         <>
                           <span>•</span>
-                          <span className="font-mono">{truncateHash(tx.txHash)}</span>
+                          <a
+                            href={`${EXPLORER_URL}/transaction/${tx.txHash}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-mono text-[hsl(var(--ico-brand-primary))] hover:underline inline-flex! items-center gap-1"
+                          >
+                            {truncateHash(tx.txHash)}
+                            <ExternalLink className="w-3 h-3" />
+                          </a>
                         </>
                       )}
                     </div>
