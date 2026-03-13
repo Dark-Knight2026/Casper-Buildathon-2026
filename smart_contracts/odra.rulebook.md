@@ -1,12 +1,27 @@
+---
+lifecycle: active
+version: "1.0"
+priority: 1
+---
+
 # odra
 
 ## Rationale
 
 This document provides a comprehensive set of standards and conventions for developing smart contracts using the Odra framework on the Casper Network. Given the critical nature of smart contracts—handling financial assets, token transfers, and on-chain state—a strict and detailed rulebook is essential for ensuring correctness, security, long-term maintainability, and consistency across the development team.
 
+## Scope
+
+This rulebook governs all Odra 2.5.0 smart contract code within the `src/` directory of this crate. It applies to:
+
+- All `.rs` files that use Odra macros (`#[odra::module]`, `#[odra::event]`, `#[odra::odra_error]`, `#[odra::odra_type]`, `#[odra::external_contract]`).
+- All Rust code snippets within Markdown documentation files that demonstrate Odra patterns.
+- All test files that interact with Odra contracts via `odra_test::env()`.
+- All deployment and CLI binary scripts in the `bin/` directory.
+
 ### Governing Principles
 
-This project uses Odra 2.5.0 as the smart contract framework targeting the Casper Network. Odra abstracts blockchain-specific details, letting developers focus on contract logic using familiar Rust patterns. All rules in this document are mandatory and supplement the [codestyle rulebook](codestyle.rulebook.md), which governs general Rust formatting and conventions.
+This project uses Odra 2.5.0 as the smart contract framework targeting the Casper Network. Odra abstracts blockchain-specific details, letting developers focus on contract logic using familiar Rust patterns. All rules in this document are mandatory.
 
 ### Structure
 
@@ -47,7 +62,7 @@ Most rules in this document follow a consistent structure for clarity:
 |                                | [Default Value Access](#storage--default-value-access)                                                                                                                      | Prefer `get_or_default()` or `get_or_revert_with(error)` over raw `get()` to avoid `Option` handling at call sites.    |
 | **Events**                     | [Event Definition](#events--event-definition)                                                                                                                               | All events must use the `#[odra::event]` attribute and have `pub` fields.                                              |
 |                                | [Event Registration](#events--event-registration)                                                                                                                           | All events emitted by a module must be registered in the `#[odra::module(events = [...])]` attribute.                  |
-|                                | [Event Emission](#events--event-emission)                                                                                                                                   | Emit events via `self.env().emit_event()` for every state-changing operation that external observers need to track.     |
+|                                | [Event Emission](#events--event-emission)                                                                                                                                   | Emit events via `self.env().emit_native_event()` for every state-changing operation that external observers need to track. |
 | **Error Handling**             | [Error Definition](#error-handling--error-definition)                                                                                                                       | All errors must use `#[odra::odra_error]` with explicit, unique numeric discriminants.                                 |
 |                                | [Error Registration](#error-handling--error-registration)                                                                                                                   | All errors must be registered in the `#[odra::module(errors = ErrorEnum)]` attribute.                                  |
 |                                | [Revert Pattern](#error-handling--revert-pattern)                                                                                                                           | Use `self.env().revert(Error::Variant)` or `.get_or_revert_with()` for error handling. Never use `panic!` or `unwrap`. |
@@ -58,6 +73,9 @@ Most rules in this document follow a consistent structure for clarity:
 |                                | [External Contract Trait for Third-Party](#module-composition--external-contract-trait-for-third-party)                                                                     | Use `#[odra::external_contract]` trait definitions for interacting with non-Odra or third-party contracts.             |
 | **Security**                   | [Payable Annotation](#security--payable-annotation)                                                                                                                         | Only functions annotated with `#[odra(payable)]` may receive native tokens. Never use on constructors.                 |
 |                                | [Reentrancy Guard](#security--reentrancy-guard)                                                                                                                             | Use `#[odra(non_reentrant)]` on all functions that perform external calls or token transfers.                          |
+|                                | [Checks-Effects-Interactions](#security--checks-effects-interactions)                                                                                                       | Validate inputs first, update internal state second, make external calls last.                                         |
+|                                | [Arithmetic Safety](#security--arithmetic-safety)                                                                                                                           | Use checked or saturating arithmetic for all financial calculations involving token amounts.                            |
+|                                | [Timestamp Handling](#security--timestamp-handling)                                                                                                                         | `get_block_time()` returns milliseconds. Account for validator manipulation tolerance in deadline windows.             |
 |                                | [Access Control](#security--access-control)                                                                                                                                 | Guard privileged operations with ownership or role checks at the start of the function body.                           |
 |                                | [Address Handling](#security--address-handling)                                                                                                                              | Use `Option<Address>` instead of a zero/default address. Odra `Address` has no default value.                          |
 | **Testing**                    | [Test Environment Setup](#testing--test-environment-setup)                                                                                                                  | Use `odra_test::env()` to create the test environment and `Module::deploy()` for contract instantiation.               |
@@ -150,6 +168,15 @@ odra-cli = { version = "2.5.0", features = [], default-features = false }
 
 - **Build Pipeline:** The Odra toolchain requires these binaries to function correctly.
 - **Test Isolation:** Setting `test = false` prevents binary entry points from interfering with `cargo test`.
+
+> ❌ **Bad** (Missing binary targets or missing `test = false`)
+
+```toml
+[[bin]]
+name = "leasefi_contracts_build_contract"
+path = "bin/build_contract.rs"
+# Missing test = false — binary will be compiled during cargo test
+```
 
 > ✅ **Good** (All three binary targets defined)
 
@@ -357,7 +384,10 @@ impl Escrow {
 
   // Exposed as entry point — anyone can call this directly!
   pub fn do_release(&mut self, id: u32) {
-    self.env().transfer_tokens(&self.recipient(id), &self.amount(id));
+    self.env().transfer_tokens(
+      &self.recipient(id),
+      &self.amount(id),
+    );
   }
 }
 ```
@@ -375,7 +405,10 @@ impl Escrow {
 
 impl Escrow {
   fn do_release(&mut self, id: u32) {
-    self.env().transfer_tokens(&self.recipient(id), &self.amount(id));
+    self.env().transfer_tokens(
+      &self.recipient(id),
+      &self.amount(id),
+    );
   }
 }
 ```
@@ -508,7 +541,10 @@ pub struct Allowances {
 }
 
 impl Allowances {
-  fn allowance_key(owner: &Address, spender: &Address) -> String {
+  fn allowance_key(
+    owner: &Address,
+    spender: &Address,
+  ) -> String {
     format!("{}-{}", owner, spender)
   }
 }
@@ -523,7 +559,11 @@ pub struct Allowances {
 }
 
 impl Allowances {
-  fn get_allowance(&self, owner: &Address, spender: &Address) -> U256 {
+  fn get_allowance(
+    &self,
+    owner: &Address,
+    spender: &Address,
+  ) -> U256 {
     self.data.get_or_default(&(*owner, *spender))
   }
 }
@@ -541,7 +581,8 @@ impl Allowances {
 > ❌ **Bad** (Using `.get()` for a module-valued Mapping)
 
 ```rust
-let token = self.tokens.get(&token_name); // WRONG — modules are not plain values
+// WRONG — modules are not plain values
+let token = self.tokens.get(&token_name);
 ```
 
 > ✅ **Good** (Using `.module()` for a module-valued Mapping)
@@ -594,7 +635,8 @@ pub struct Dog {
 > ❌ **Bad** (Raw get with unwrap)
 
 ```rust
-let balance = self.balances.get(&owner).unwrap(); // panics if missing
+// panics if missing
+let balance = self.balances.get(&owner).unwrap();
 ```
 
 > ❌ **Bad** (Raw get with manual default)
@@ -615,7 +657,7 @@ let owner = self.owner.get_or_revert_with(Error::OwnerNotSet);
 
 ### Events : Event Definition
 
-**Description:** All events must be defined as structs annotated with `#[odra::event]`. Event fields must be `pub` so they can be constructed and inspected in tests. Events are emitted as part of the Casper Event Standard (CES).
+**Description:** All events must be defined as structs annotated with `#[odra::event]`. Event fields must be `pub` so they can be constructed and inspected in tests. Events are emitted as native Casper events via `emit_native_event()`.
 
 **Rationale:**
 
@@ -665,7 +707,7 @@ pub struct MyToken {
 impl MyToken {
   pub fn transfer(&mut self, to: Address, amount: U256) {
     // ... logic ...
-    self.env().emit_event(Transfer {
+    self.env().emit_native_event(Transfer {
       from: Some(self.env().caller()),
       to: Some(to),
       amount,
@@ -686,12 +728,15 @@ pub struct MyToken {
 
 ### Events : Event Emission
 
-**Description:** Emit events via `self.env().emit_event()` for every state-changing operation that external observers (dApps, indexers, block explorers) need to track. This includes token transfers, approvals, ownership changes, role grants, and any business-critical state transitions.
+**Description:** Emit events via `self.env().emit_native_event()` for every state-changing operation that external observers (dApps, indexers, block explorers) need to track. This includes token transfers, approvals, ownership changes, role grants, and any business-critical state transitions.
+
+`emit_native_event()` produces CES-compliant events indexed by the Casper Event Standard. `emit_event()` is a distinct, legacy API and **must not** be used for standard event emission — events emitted via `emit_event()` are not CES-compliant and will not be indexed by block explorers or dApps on Casper mainnet.
 
 **Rationale:**
 
 - **Observability:** Events are the primary mechanism for off-chain systems to track on-chain activity. Missing events create blind spots.
 - **Auditability:** A complete event trail is essential for financial contracts, enabling reconciliation and dispute resolution.
+- **CES Compliance:** Only `emit_native_event()` produces events compatible with the Casper Event Standard, ensuring visibility across the ecosystem.
 
 > ❌ **Bad** (State change without event emission)
 
@@ -700,20 +745,40 @@ pub fn transfer(&mut self, to: Address, amount: U256) {
   let caller = self.env().caller();
   let from_balance = self.balances.get_or_default(&caller);
   self.balances.set(&caller, from_balance - amount);
-  self.balances.set(&to, self.balances.get_or_default(&to) + amount);
+  self.balances.set(
+    &to,
+    self.balances.get_or_default(&to) + amount,
+  );
   // No event emitted — transfers are invisible to off-chain systems
 }
 ```
 
-> ✅ **Good** (Event emitted after state change)
+> ❌ **Bad** (Using legacy `emit_event()` instead of `emit_native_event()`)
+
+```rust
+pub fn transfer(&mut self, to: Address, amount: U256) {
+  // ... state changes ...
+  // WRONG: emit_event() is NOT CES-compliant
+  self.env().emit_event(Transfer {
+    from: Some(self.env().caller()),
+    to: Some(to),
+    amount,
+  });
+}
+```
+
+> ✅ **Good** (Using `emit_native_event()` after state change)
 
 ```rust
 pub fn transfer(&mut self, to: Address, amount: U256) {
   let caller = self.env().caller();
   let from_balance = self.balances.get_or_default(&caller);
   self.balances.set(&caller, from_balance - amount);
-  self.balances.set(&to, self.balances.get_or_default(&to) + amount);
-  self.env().emit_event(Transfer {
+  self.balances.set(
+    &to,
+    self.balances.get_or_default(&to) + amount,
+  );
+  self.env().emit_native_event(Transfer {
     from: Some(caller),
     to: Some(to),
     amount,
@@ -747,7 +812,8 @@ pub enum Error {
 ```rust
 #[odra::odra_error]
 pub enum Error {
-  InsufficientBalance(U256) = 1, // Data fields are NOT supported
+  // Data fields are NOT supported
+  InsufficientBalance(U256) = 1,
 }
 ```
 
@@ -803,7 +869,8 @@ pub struct MyContract {
 
 ```rust
 pub fn withdraw(&mut self, amount: U256) {
-  let balance = self.balances.get(&self.env().caller()).unwrap(); // PANIC if None
+  // PANIC if None
+  let balance = self.balances.get(&self.env().caller()).unwrap();
   if balance < amount {
     panic!("Insufficient balance"); // Opaque error
   }
@@ -839,7 +906,8 @@ pub fn withdraw(&mut self, amount: U256) {
 // escrow.rs
 #[odra::odra_error]
 pub enum EscrowError {
-  NotAuthorized = 1,  // Conflicts with TokenError::InsufficientBalance!
+  // Conflicts with TokenError::InsufficientBalance!
+  NotAuthorized = 1,
 }
 
 // token.rs
@@ -1041,6 +1109,13 @@ impl CrossContract {
 - **Interoperability:** Allows Odra contracts to call any Casper contract, not just other Odra contracts.
 - **Type Safety:** The trait definition provides compile-time guarantees on the function signatures.
 
+> ❌ **Bad** (Calling a third-party contract without a typed interface)
+
+```rust
+// No type safety — call could have wrong args, wrong return type
+// No compile-time checks at all
+```
+
 > ✅ **Good** (External contract trait definition and usage)
 
 ```rust
@@ -1052,8 +1127,13 @@ pub trait PriceFeed {
 
 // Usage in a contract:
 impl MyContract {
-  fn fetch_price(&self, feed_address: Address, asset: String) -> U256 {
-    PriceFeedContractRef::new(self.env(), feed_address).get_price(asset)
+  fn fetch_price(
+    &self,
+    feed_address: Address,
+    asset: String,
+  ) -> U256 {
+    PriceFeedContractRef::new(self.env(), feed_address)
+      .get_price(asset)
   }
 }
 ```
@@ -1093,14 +1173,17 @@ impl PublicWallet {
 
   pub fn withdraw(&mut self, amount: U512) {
     // ... verify caller ...
-    self.env().transfer_tokens(&self.env().caller(), &amount);
+    self.env().transfer_tokens(
+      &self.env().caller(),
+      &amount,
+    );
   }
 }
 ```
 
 ### Security : Reentrancy Guard
 
-**Description:** Use `#[odra(non_reentrant)]` on all functions that perform external calls (cross-contract calls, token transfers) or handle funds. This prevents reentrancy attacks by blocking recursive calls into the guarded function.
+**Description:** Use `#[odra(non_reentrant)]` on all functions that perform external calls (cross-contract calls, token transfers) or handle funds. This prevents reentrancy attacks by blocking recursive calls into the guarded function. The `#[odra(non_reentrant)]` attribute is a defence-in-depth measure and is **not** a substitute for proper Checks-Effects-Interactions ordering (see [Checks-Effects-Interactions](#security--checks-effects-interactions)).
 
 **Rationale:**
 
@@ -1115,14 +1198,13 @@ impl Vault {
   pub fn withdraw(&mut self) {
     let caller = self.env().caller();
     let balance = self.balances.get_or_default(&caller);
-    // External call BEFORE state update — classic reentrancy vector
     self.env().transfer_tokens(&caller, &balance);
     self.balances.set(&caller, U512::zero());
   }
 }
 ```
 
-> ✅ **Good** (Reentrancy guard applied)
+> ✅ **Good** (Reentrancy guard applied with CEI ordering)
 
 ```rust
 #[odra::module]
@@ -1131,9 +1213,191 @@ impl Vault {
   pub fn withdraw(&mut self) {
     let caller = self.env().caller();
     let balance = self.balances.get_or_default(&caller);
-    self.balances.set(&caller, U512::zero()); // State update first
+    // Effects: update state BEFORE external call
+    self.balances.set(&caller, U512::zero());
+    // Interactions: external call LAST
     self.env().transfer_tokens(&caller, &balance);
   }
+}
+```
+
+### Security : Checks-Effects-Interactions
+
+**Description:** All functions that perform external calls (cross-contract calls, token transfers) **must** follow the Checks-Effects-Interactions (CEI) pattern:
+
+1. **Checks:** Validate all inputs, permissions, and preconditions.
+2. **Effects:** Update all internal state (storage writes, counter increments, balance changes).
+3. **Interactions:** Make external calls (token transfers, cross-contract calls) only after all state updates are complete.
+
+This ordering ensures that if an external call triggers a reentrant callback, the contract's state is already consistent. `#[odra(non_reentrant)]` is defence-in-depth and does not replace CEI ordering — if the guard is removed during refactoring, CEI-compliant code remains safe.
+
+**Rationale:**
+
+- **Reentrancy Prevention:** The primary defence against reentrancy attacks. Even without a reentrancy guard, CEI ordering prevents state inconsistency.
+- **Correctness:** External calls can fail or behave unexpectedly. Updating state first ensures the contract's invariants hold regardless of the external call's outcome.
+- **Defence in Depth:** Combined with `#[odra(non_reentrant)]`, CEI ordering provides two independent layers of protection.
+
+> ❌ **Bad** (External call before state update — Interactions before Effects)
+
+```rust
+pub fn purchase(&mut self, schedule_id: u32) {
+  let caller = self.env().caller();
+  let amount = self.env().attached_value();
+
+  // 1. Checks — OK
+  let mut schedule = self.schedules
+    .get_or_revert_with(&schedule_id, Error::ScheduleNotFound);
+
+  let purchase_amount = self.calculate_purchase(amount);
+
+  // 2. Interactions BEFORE Effects — WRONG
+  self.treasury.with_tokens(amount).receive();
+
+  // 3. Effects AFTER Interactions — state update is too late
+  schedule.sold_amount += purchase_amount;
+  self.schedules.set(&schedule_id, schedule);
+}
+```
+
+> ✅ **Good** (CEI ordering: Checks, then Effects, then Interactions)
+
+```rust
+pub fn purchase(&mut self, schedule_id: u32) {
+  let caller = self.env().caller();
+  let amount = self.env().attached_value();
+
+  // 1. Checks
+  let mut schedule = self.schedules
+    .get_or_revert_with(&schedule_id, Error::ScheduleNotFound);
+
+  let purchase_amount = self.calculate_purchase(amount);
+
+  // 2. Effects — update state FIRST
+  schedule.sold_amount += purchase_amount;
+  self.schedules.set(&schedule_id, schedule);
+  self.env().emit_native_event(TokensPurchased {
+    buyer: caller,
+    amount: purchase_amount,
+  });
+
+  // 3. Interactions — external call LAST
+  self.treasury.with_tokens(amount).receive();
+}
+```
+
+### Security : Arithmetic Safety
+
+**Description:** All financial calculations involving token amounts, prices, or any user-controlled numeric values **must** use checked or saturating arithmetic. Unchecked arithmetic on `U256` silently wraps on overflow, producing incorrect results. Always multiply before dividing (to preserve precision), but bounds-check the multiplication operands first.
+
+Key rules:
+
+- Use `checked_mul()`, `checked_add()`, `checked_sub()` for all operations that could overflow or underflow.
+- Revert with a typed error if a checked operation returns `None`.
+- When computing `(a * b) / c`, verify that `a * b` does not overflow before performing the division.
+- `U256` division truncates toward zero — this matters for price calculations where rounding affects token amounts.
+
+**Rationale:**
+
+- **Silent Overflow:** `U256` arithmetic wraps silently on overflow. A multiplication like `amount * 10^18` will produce an incorrect result if `amount` is large enough, potentially allowing an attacker to purchase tokens at near-zero cost.
+- **Precision Loss:** Dividing before multiplying loses precision. Always multiply first, but guard the multiplication with checked arithmetic.
+- **Financial Correctness:** In a financial contract suite handling token purchases, escrow payments, and vesting schedules, arithmetic errors directly translate to lost or stolen funds.
+
+> ❌ **Bad** (Unchecked multiplication — silent overflow)
+
+```rust
+pub fn calculate_purchase(
+  &self,
+  amount_to_spend: U256,
+  token_price: U256,
+) -> U256 {
+  // If amount_to_spend is large, this multiplication wraps silently
+  amount_to_spend * U256::from(10).pow(U256::from(18)) / token_price
+}
+```
+
+> ❌ **Bad** (Dividing before multiplying — precision loss)
+
+```rust
+pub fn calculate_purchase(
+  &self,
+  amount_to_spend: U256,
+  token_price: U256,
+) -> U256 {
+  // Division first truncates toward zero, losing precision
+  (amount_to_spend / token_price) * U256::from(10).pow(U256::from(18))
+}
+```
+
+> ✅ **Good** (Checked arithmetic with proper error handling)
+
+```rust
+pub fn calculate_purchase(
+  &self,
+  amount_to_spend: U256,
+  token_price: U256,
+) -> U256 {
+  let scale = U256::from(10).pow(U256::from(18));
+  // Multiply first for precision, but check for overflow
+  let scaled = amount_to_spend
+    .checked_mul(scale)
+    .unwrap_or_revert_with(&self.env(), Error::ArithmeticOverflow);
+  // Division truncates toward zero — acceptable for purchase amounts
+  scaled / token_price
+}
+```
+
+### Security : Timestamp Handling
+
+**Description:** `self.env().get_block_time()` returns the block timestamp in **milliseconds** (not seconds, not UNIX epoch seconds). All deadline and time-based comparisons must use consistent units. When setting deadlines for financial operations, enforce a minimum deadline window to account for block time manipulation tolerance.
+
+Key rules:
+
+- All time constants and deadline parameters must be expressed in milliseconds.
+- Enforce a configurable minimum deadline window (e.g., `min_deadline`) for time-sensitive operations like escrow deadlines or vesting cliffs.
+- Never compare `get_block_time()` against values in seconds without explicit unit conversion.
+- Document the unit of every time-related storage field and function parameter.
+
+**Rationale:**
+
+- **Unit Mismatch:** A common bug is treating `get_block_time()` as seconds. On Casper, block time is in milliseconds. A deadline set to `1_000` intending "1000 seconds" would actually be "1 second" if `get_block_time()` returns milliseconds.
+- **Validator Manipulation:** Block proposers have limited control over the timestamp. While the tolerance is small, time-critical financial operations should use deadline windows large enough that minor timestamp manipulation cannot change the outcome.
+- **Consistency:** Mixing units across different modules leads to subtle bugs that are difficult to catch in testing.
+
+> ❌ **Bad** (Ambiguous time units, no minimum window)
+
+```rust
+pub fn create_invoice(
+  &mut self,
+  amount: U256,
+  deadline: u64, // Seconds? Milliseconds? Unclear!
+) {
+  // Is this comparing milliseconds to seconds?
+  if deadline < self.env().get_block_time() {
+    self.env().revert(Error::DeadlineInPast);
+  }
+  self.deadline.set(deadline);
+}
+```
+
+> ✅ **Good** (Explicit millisecond units, minimum deadline enforcement)
+
+```rust
+/// `deadline` is an absolute timestamp in **milliseconds** since epoch.
+pub fn create_invoice(
+  &mut self,
+  amount: U256,
+  deadline: u64,
+) {
+  let now = self.env().get_block_time();
+  if deadline < now {
+    self.env().revert(Error::DeadlineInPast);
+  }
+  // Enforce minimum deadline window (stored in milliseconds)
+  let min_window = self.min_deadline.get_or_default();
+  if deadline < now + min_window {
+    self.env().revert(Error::DeadlineTooSoon);
+  }
+  self.deadline.set(deadline);
 }
 ```
 
@@ -1144,13 +1408,14 @@ impl Vault {
 **Rationale:**
 
 - **Fail Fast:** Checking permissions first prevents wasted gas on operations that will ultimately fail.
-- **Defense in Depth:** Even if a function is only called internally today, adding explicit access control protects against future refactoring that may expose it.
+- **Defence in Depth:** Even if a function is only called internally today, adding explicit access control protects against future refactoring that may expose it.
 
 > ❌ **Bad** (Access check after state modification)
 
 ```rust
 pub fn set_fee(&mut self, new_fee: U256) {
-  self.fee.set(new_fee); // State modified BEFORE checking permissions!
+  // State modified BEFORE checking permissions!
+  self.fee.set(new_fee);
   self.ownable.ensure_ownership(&self.env().caller());
 }
 ```
@@ -1161,7 +1426,7 @@ pub fn set_fee(&mut self, new_fee: U256) {
 pub fn set_fee(&mut self, new_fee: U256) {
   self.ownable.ensure_ownership(&self.env().caller());
   self.fee.set(new_fee);
-  self.env().emit_event(FeeChanged { new_fee });
+  self.env().emit_native_event(FeeChanged { new_fee });
 }
 ```
 
@@ -1261,6 +1526,13 @@ fn test_transfer() {
 - **CasperVM Accuracy:** CasperVM compiles contracts to actual WASM and runs them in the real VM, catching issues that OdraVM misses.
 - **Development Speed:** OdraVM is significantly faster and supports IDE debuggers, making it ideal for rapid iteration. CasperVM should be used as a final verification step.
 
+> ❌ **Bad** (Testing only with OdraVM)
+
+```bash
+# Only running OdraVM tests — CasperVM issues will be missed
+cargo odra test
+```
+
 > ✅ **Good** (Testing against both backends)
 
 ```bash
@@ -1297,7 +1569,10 @@ fn test_unauthorized_transfer() {
 #[test]
 fn test_unauthorized_transfer() {
   let result = contract.try_transfer(bob, U256::from(100));
-  assert_eq!(result.unwrap_err(), Error::InsufficientBalance.into());
+  assert_eq!(
+    result.unwrap_err(),
+    Error::InsufficientBalance.into(),
+  );
 }
 ```
 
@@ -1343,14 +1618,43 @@ fn test_transfer() {
 
 ### Testing : Token Transfer Testing
 
-**Description:** Use `.with_tokens(amount)` to attach native CSPR tokens to a contract call in tests. Use `test_env.balance_of(&contract)` to verify the contract's balance after the operation.
+**Description:** Use `.with_tokens(amount)` to attach native CSPR tokens to a contract call in tests. Use `test_env.balance_of(&contract)` to verify the contract's balance after the operation. Always verify both the contract's balance and the caller's balance change to ensure tokens were correctly transferred.
 
 **Rationale:**
 
 - **Realistic Simulation:** Token-related functions require attached value to work correctly. `.with_tokens()` simulates this in the test environment.
 - **Balance Verification:** Always verify both the contract's balance and the caller's balance change to ensure tokens were correctly transferred.
 
-> ✅ **Good** (Testing token deposit and withdrawal)
+> ❌ **Bad** (Calling a payable function without `.with_tokens()`)
+
+```rust
+#[test]
+fn test_deposit() {
+  let test_env = odra_test::env();
+  let mut wallet = PublicWallet::deploy(&test_env, NoArgs);
+
+  // WRONG: no tokens attached — this call will have zero value
+  wallet.deposit();
+  // Balance is zero, test passes vacuously
+  assert_eq!(test_env.balance_of(&wallet), U512::zero());
+}
+```
+
+> ❌ **Bad** (Verifying only one side of the balance change)
+
+```rust
+#[test]
+fn test_deposit() {
+  let test_env = odra_test::env();
+  let mut wallet = PublicWallet::deploy(&test_env, NoArgs);
+
+  wallet.with_tokens(U512::from(1_000)).deposit();
+  // Only checking contract balance — caller's balance is not verified
+  assert_eq!(test_env.balance_of(&wallet), U512::from(1_000));
+}
+```
+
+> ✅ **Good** (Testing token deposit and withdrawal with full balance verification)
 
 ```rust
 #[test]
@@ -1360,11 +1664,18 @@ fn test_deposit_and_withdraw() {
   let depositor = test_env.get_account(0);
 
   test_env.set_caller(depositor);
+  let balance_before = test_env.balance_of(&depositor);
   wallet.with_tokens(U512::from(1_000)).deposit();
-  assert_eq!(test_env.balance_of(&wallet), U512::from(1_000));
+  assert_eq!(
+    test_env.balance_of(&wallet),
+    U512::from(1_000),
+  );
 
   wallet.withdraw(U512::from(500));
-  assert_eq!(test_env.balance_of(&wallet), U512::from(500));
+  assert_eq!(
+    test_env.balance_of(&wallet),
+    U512::from(500),
+  );
 }
 ```
 
@@ -1376,6 +1687,15 @@ fn test_deposit_and_withdraw() {
 
 - **Transaction Success:** Insufficient gas causes transaction failure. Explicit gas values prevent silent failures.
 - **Cost Management:** Overly generous gas values waste CSPR. Tuning gas values to the minimum required optimizes deployment costs.
+
+> ❌ **Bad** (No gas configuration — relies on unknown defaults)
+
+```rust
+// No gas set — deployment may fail with "out of gas" or use
+// an unpredictable default value
+let contract = MyContract::deploy(&env, init_args);
+contract.transfer(recipient, amount);
+```
 
 > ✅ **Good** (Explicit gas configuration)
 
