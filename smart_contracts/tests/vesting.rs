@@ -103,9 +103,12 @@ fn create_test_schedule(
     cliff_duration: u64,
     vesting_duration: u64,
 ) -> VestingId {
-    // Note: In production, the ICO contract transfers tokens directly to the Staking contract
-    // before calling create_schedule.
-    // For testing, we just call create_schedule.
+    // Mirror the production ICO flow: stake tokens for the beneficiary first,
+    // then create the vesting schedule.
+    ctx.env.set_caller(ctx.users.owner);
+    ctx.tailor_coin.approve(&ctx.staking.address(), &total_amount);
+    ctx.staking.stake_for(beneficiary, total_amount);
+
     ctx.vesting
         .create_schedule(beneficiary, total_amount, cliff_duration, vesting_duration)
 }
@@ -328,7 +331,7 @@ fn test_create_schedule_should_create_properly() {
     let alice = ctx.users.alice;
 
     let prev_owner_balance = ctx.tailor_coin.balance_of(&ctx.users.owner);
-    let prev_vesting_balance = ctx.tailor_coin.balance_of(&ctx.vesting.address());
+    let prev_staking_balance = ctx.tailor_coin.balance_of(&ctx.staking.address());
 
     let vesting_id = create_test_schedule(&mut ctx, alice, vesting_amount(), cliff, vesting);
 
@@ -341,14 +344,16 @@ fn test_create_schedule_should_create_properly() {
     );
 
     let current_owner_balance = ctx.tailor_coin.balance_of(&ctx.users.owner);
-    let current_vesting_balance = ctx.tailor_coin.balance_of(&ctx.vesting.address());
+    let current_staking_balance = ctx.tailor_coin.balance_of(&ctx.staking.address());
     assert_eq!(
-        current_owner_balance, prev_owner_balance,
-        "Owner balance should not change"
+        current_owner_balance,
+        prev_owner_balance - vesting_amount(),
+        "Owner should send tokens to staking on schedule creation"
     );
     assert_eq!(
-        current_vesting_balance, prev_vesting_balance,
-        "Vesting contract balance should not change"
+        current_staking_balance,
+        prev_staking_balance + vesting_amount(),
+        "Staking contract should hold the tokens"
     );
 
     // Verified stored data
@@ -582,6 +587,11 @@ fn test_claim_should_allow_incremental_claims() {
 
     // Second claim at 9 months (75%)
     ctx.env.advance_block_time(3 * ONE_MONTH_IN_MILLISECONDS);
+
+    // Unbonding period (48h) has elapsed; withdraw before next claim
+    ctx.env.set_caller(alice);
+    ctx.staking.withdraw_unbonded();
+
     ctx.env.set_caller(alice);
     ctx.vesting.claim(vesting_id);
 
@@ -654,6 +664,10 @@ fn test_claim_end_to_end_lifecycle() {
     // Advanced to after the cliff end
     ctx.env.advance_block_time(3 * ONE_MONTH_IN_MILLISECONDS);
 
+    // Unbonding period (48h) has elapsed; withdraw before next claim
+    ctx.env.set_caller(alice);
+    ctx.staking.withdraw_unbonded();
+
     // 9 months at this point so should be 75% vested
     let expected_vested_at_9mo = total_amount * U256::from(9) / U256::from(12);
 
@@ -684,6 +698,10 @@ fn test_claim_end_to_end_lifecycle() {
 
     // Advanced to the full vesting period, which is 12 months
     ctx.env.advance_block_time(3 * ONE_MONTH_IN_MILLISECONDS);
+
+    // Unbonding period (48h) has elapsed; withdraw before next claim
+    ctx.env.set_caller(alice);
+    ctx.staking.withdraw_unbonded();
 
     let vesting_end_time = start_time + vesting;
     assert_eq!(
