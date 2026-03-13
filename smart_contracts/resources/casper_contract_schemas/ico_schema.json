@@ -344,6 +344,11 @@
       "discriminant": 20004
     },
     {
+      "name": "StakingAddressNotSet",
+      "description": "",
+      "discriminant": 59015
+    },
+    {
       "name": "StyksOracleCanNotReturnTWAP",
       "description": "",
       "discriminant": 59008
