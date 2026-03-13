@@ -1,12 +1,15 @@
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import type { ScheduleProgress } from '@/hooks/ico/useICOSchedules';
+import type { IcoProgressResponse } from '@/types/ico';
 import { ICO_CONFIG } from '@/constants/ico';
 import { Title } from '../shared/Title';
 import { ProgressBar } from '../shared/ProgressBar';
 import { WalletCard } from '../shared/WalletCard';
 import CountdownTimer from '../shared/CountdownTimer';
 import { usePurchaseFlow } from '@/hooks/ico/usePurchaseFlow';
+import { useICOProgress } from '@/hooks/ico/useICOProgress';
 import { useUserTokenActions } from '@/hooks/ico/useUserTokenActions';
 import { useICOBalance } from '@/hooks/ico/useICOBalance';
 import { deriveAccountHash } from '@/lib/blockchain/accountUtils';
@@ -21,8 +24,35 @@ interface ActivePresaleProps {
   progress?: ScheduleProgress | null;
 }
 
+const DIV = BigInt('1000000000000000000'); // 10^18
+
+function mapToScheduleProgress(p: IcoProgressResponse): ScheduleProgress {
+  return {
+    tokensSold:       Number(BigInt(p.tokensSold)       / DIV),
+    totalAllocation:  Number(BigInt(p.totalAllocation)  / DIV),
+    tokensRemaining:  Number(BigInt(p.tokensRemaining)  / DIV),
+    amountRaised:     p.amountRaised,
+    hardCapUsd:       p.hardCapUsd,
+    priceUsd:         p.priceUsd,
+    percentSold:      p.percentSold,
+  };
+}
+
 export function PrivateSaleActive({ className, endTimestamp, progress }: ActivePresaleProps) {
-  const tokenPrice = progress?.priceUsd ?? 0;
+  const queryClient = useQueryClient();
+  const { data: icoProgress } = useICOProgress();
+  console.log('[useICOProgress] data:', icoProgress);
+
+  const onPurchaseSuccess = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['ico-progress'] });
+  }, [queryClient]);
+
+  const effectiveProgress = useMemo<ScheduleProgress | null>(() => {
+    if (icoProgress) return mapToScheduleProgress(icoProgress);
+    return progress ?? null;
+  }, [icoProgress, progress]);
+
+  const tokenPrice = effectiveProgress?.priceUsd ?? 0;
 
   const {
     isConnected,
@@ -39,6 +69,7 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: ActiveP
   } = usePurchaseFlow({
     tokenPrice,
     tokenSymbol: ICO_CONFIG.TOKEN.symbol,
+    onPurchaseSuccess,
   });
 
   const { transactions } = useUserTokenActions(account?.publicKey);
@@ -73,22 +104,22 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: ActiveP
           <CountdownTimer variant='compact' targetTimestamp={endTimestamp} className="py-2" />
 
           {/* Progress Bar - show only when progress data exists */}
-          {progress && (
+          {effectiveProgress && (
             <ProgressBar
-              currentValue={progress.tokensSold}
-              maxValue={progress.totalAllocation}
+              currentValue={effectiveProgress.tokensSold}
+              maxValue={effectiveProgress.totalAllocation}
               label="Progress"
-              rightLabel={`$${Math.round(progress.amountRaised).toLocaleString()} / $${Math.round(progress.hardCapUsd).toLocaleString()}`}
+              rightLabel={`$${Math.round(effectiveProgress.amountRaised).toLocaleString()} / $${Math.round(effectiveProgress.hardCapUsd).toLocaleString()}`}
               showPercentage={true}
               infoColumns={[
-                { label: 'Funds Raised', value: `$${Math.round(progress.amountRaised).toLocaleString()}` },
-                { label: 'Initial Price', value: `$${progress.priceUsd.toFixed(2)} per ${ICO_CONFIG.TOKEN.symbol}` },
+                { label: 'Funds Raised', value: `$${Math.round(effectiveProgress.amountRaised).toLocaleString()}` },
+                { label: 'Initial Price', value: `$${effectiveProgress.priceUsd.toFixed(2)} per ${ICO_CONFIG.TOKEN.symbol}` },
               ]}
               className="w-full"
             />
           )}
-          {progress && (
-            <p className='text-[hsl(var(--ico-text-secondary))] pl-2'>Hard Cap: ${Math.round(progress.hardCapUsd).toLocaleString()}</p>
+          {effectiveProgress && (
+            <p className='text-[hsl(var(--ico-text-secondary))] pl-2'>Hard Cap: ${Math.round(effectiveProgress.hardCapUsd).toLocaleString()}</p>
           )}
         </div>
 
@@ -101,7 +132,7 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: ActiveP
           balanceBIG={balances.big}
           balanceError={balanceError}
           balancesLoading={balancesLoading}
-          tokenPrice={progress?.priceUsd ?? 0}
+          tokenPrice={effectiveProgress?.priceUsd ?? 0}
           tokenSymbol={ICO_CONFIG.TOKEN.symbol}
           csprPriceUsd={csprPriceUsd}
           onConnect={connect}
@@ -112,11 +143,11 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: ActiveP
       </div>
 
       {/* User Token Balance - show when there are completed purchases */}
-      {progress && userBalance.tokensPurchased > 0 && (
+      {effectiveProgress && userBalance.tokensPurchased > 0 && (
         <UserTokenBalance
           tokensPurchased={userBalance.tokensPurchased}
           totalSpentUSD={userBalance.totalSpentUSD}
-          tokenPrice={progress.priceUsd}
+          tokenPrice={effectiveProgress.priceUsd}
           tokenSymbol={ICO_CONFIG.TOKEN.symbol}
           className="mt-8"
         />
