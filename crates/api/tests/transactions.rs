@@ -240,19 +240,11 @@ async fn big_token_transactions_empty(pool: PgPool) {
         },
     )
     .await;
-    let token = common::create_test_jwt(UserId::default(), UserRole::Tenant, &env.jwt_secret);
 
-    let (status, body): (_, Option<Value>) = common::authed_request(
-        &env.server,
-        &Method::GET,
-        "/api/v1/transactions/token/big",
-        &token,
-        &json!({}),
-    )
-    .await;
+    let response = env.server.get("/api/v1/transactions/token/big").await;
 
-    assert_eq!(status, StatusCode::OK);
-    let body = body.expect("valid JSON");
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
     assert_eq!(body["item_count"], 0);
     assert!(body["data"].as_array().unwrap().is_empty());
 }
@@ -294,19 +286,11 @@ async fn big_token_transactions_filters_by_contract(pool: PgPool) {
         },
     )
     .await;
-    let token = common::create_test_jwt(UserId::default(), UserRole::Tenant, &env.jwt_secret);
 
-    let (status, body): (_, Option<Value>) = common::authed_request(
-        &env.server,
-        &Method::GET,
-        "/api/v1/transactions/token/big",
-        &token,
-        &json!({}),
-    )
-    .await;
+    let response = env.server.get("/api/v1/transactions/token/big").await;
 
-    assert_eq!(status, StatusCode::OK);
-    let body = body.expect("valid JSON");
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
     assert_eq!(body["item_count"], 1);
     assert_eq!(body["data"][0]["deploy_hash"], "1".repeat(64));
 }
@@ -336,19 +320,11 @@ async fn big_token_transactions_returns_expected_fields(pool: PgPool) {
         },
     )
     .await;
-    let token = common::create_test_jwt(UserId::default(), UserRole::Tenant, &env.jwt_secret);
 
-    let (status, body): (_, Option<Value>) = common::authed_request(
-        &env.server,
-        &Method::GET,
-        "/api/v1/transactions/token/big",
-        &token,
-        &json!({}),
-    )
-    .await;
+    let response = env.server.get("/api/v1/transactions/token/big").await;
 
-    assert_eq!(status, StatusCode::OK);
-    let body = body.expect("valid JSON");
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
     assert_eq!(body["item_count"], 1);
     assert_eq!(body["page_count"], 1);
 
@@ -366,22 +342,13 @@ async fn big_token_transactions_returns_expected_fields(pool: PgPool) {
 async fn big_token_transactions_returns_500_without_config(pool: PgPool) {
     // Default setup has contract_big: None
     let env = common::setup_test_server(pool, false).await;
-    let token = common::create_test_jwt(UserId::default(), UserRole::Tenant, &env.jwt_secret);
 
-    let (status, _): (_, Option<Value>) = common::authed_request(
-        &env.server,
-        &Method::GET,
-        "/api/v1/transactions/token/big",
-        &token,
-        &json!({}),
-    )
-    .await;
-
-    assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+    let response = env.server.get("/api/v1/transactions/token/big").await;
+    assert_eq!(response.status_code(), StatusCode::INTERNAL_SERVER_ERROR);
 }
 
 #[sqlx::test(migrator = "common::MIGRATIONS")]
-async fn big_token_transactions_requires_auth(pool: PgPool) {
+async fn big_token_transactions_is_public(pool: PgPool) {
     let env = common::setup_test_server_with(
         pool,
         false,
@@ -393,5 +360,5 @@ async fn big_token_transactions_requires_auth(pool: PgPool) {
     .await;
 
     let response = env.server.get("/api/v1/transactions/token/big").await;
-    assert_eq!(response.status_code(), StatusCode::UNAUTHORIZED);
+    assert_eq!(response.status_code(), StatusCode::OK);
 }

@@ -7,7 +7,7 @@ SHELL := /bin/bash
  migrate  \
  restart  \
  check    \
- ci       \
+ validate \
  fmt      \
  lint     \
  openapi  \
@@ -42,7 +42,7 @@ migrate: ## Reset local database and apply all migrations
 
 restart: env-down env-up migrate ## Restart environment and run migrations
 
-ci: check test ## Full CI pipeline
+validate: check test ## Full production validation
 
 check: fmt prepare lint openapi ## Quick code quality check
 

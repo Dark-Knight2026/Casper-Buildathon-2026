@@ -77,22 +77,17 @@ pub async fn get_account_transactions(
 /// Returns `ApiError::Internal` if `CONTRACT_BIG` is not configured.
 #[utoipa::path(
     get,
-    path = "/token/big",
+    path = "/transactions/token/big",
     tag = "Transactions",
     params(Pagination),
     responses(
         (status = 200, description = "Paginated BIG token transaction list", body = inline(PaginatedResponse<TransactionResponse>)),
-        (status = 401, description = "Unauthorized"),
         (status = 500, description = "Internal server error or BIG contract not configured")
-    ),
-    security(
-        ("bearer_auth" = [])
     )
 )]
 #[inline]
 pub async fn get_big_token_transactions(
     State(state): State<Arc<AppState>>,
-    _user: AuthUser,
     Query(pagination): Query<Pagination>,
 ) -> ApiResult<Json<PaginatedResponse<TransactionResponse>>> {
     let contract_hash = state

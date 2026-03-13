@@ -415,10 +415,10 @@ async fn auth_rate_limiter_returns_429_after_burst(pool: PgPool) {
     // Send BURST + 1 requests; the last one must be rate-limited (429).
     for i in 0..=AUTH_RATE_LIMIT_BURST {
         let response = env
-          .server
-          .get("/api/v1/auth/nonce")
-          .add_query_param("wallet_address", wallet)
-          .await;
+            .server
+            .get("/api/v1/auth/nonce")
+            .add_query_param("wallet_address", wallet)
+            .await;
 
         if i < AUTH_RATE_LIMIT_BURST {
             assert_eq!(

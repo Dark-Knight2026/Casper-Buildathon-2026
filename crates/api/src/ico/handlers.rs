@@ -97,21 +97,16 @@ pub async fn get_ico_balance(
 /// Returns `ApiError::Internal` if ICO config is missing.
 #[utoipa::path(
     get,
-    path = "/progress",
+    path = "/ico/progress",
     tag = "ICO",
     responses(
         (status = 200, description = "Current ICO sale progress", body = IcoProgressResponse),
-        (status = 401, description = "Unauthorized"),
         (status = 500, description = "ICO not configured or internal error")
-    ),
-    security(
-        ("bearer_auth" = [])
     )
 )]
 #[inline]
 pub async fn get_ico_progress(
     State(state): State<Arc<AppState>>,
-    _user: AuthUser,
 ) -> ApiResult<Json<IcoProgressResponse>> {
     let ico = state
         .config

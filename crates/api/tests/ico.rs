@@ -7,7 +7,7 @@ use axum::http::{Method, StatusCode};
 use serde_json::{Value, json};
 use sqlx::PgPool;
 
-use api::{IcoConfig, UserId, UserRole};
+use api::{IcoConfig, UserId, UserRole, server::PUBLIC_DATA_RATE_LIMIT_BURST};
 use common::TestOverrides;
 
 /// 64-char hex address used as a valid account hash in tests.
@@ -173,19 +173,11 @@ async fn ico_balance_requires_auth(pool: PgPool) {
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn ico_progress_no_purchases(pool: PgPool) {
     let env = common::setup_test_server_with(pool, false, ico_overrides()).await;
-    let token = common::create_test_jwt(UserId::default(), UserRole::Tenant, &env.jwt_secret);
 
-    let (status, body): (_, Option<Value>) = common::authed_request(
-        &env.server,
-        &Method::GET,
-        "/api/v1/ico/progress",
-        &token,
-        &json!({}),
-    )
-    .await;
+    let response = env.server.get("/api/v1/ico/progress").await;
 
-    assert_eq!(status, StatusCode::OK);
-    let body = body.expect("valid JSON");
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
     assert_eq!(body["tokensSold"], "0");
     assert_eq!(body["totalAllocation"], ICO_TOTAL_ALLOCATION);
     assert_eq!(body["tokensRemaining"], ICO_TOTAL_ALLOCATION);
@@ -202,19 +194,11 @@ async fn ico_progress_with_purchases(pool: PgPool) {
     seed_ico_purchase(&pool, &"a".repeat(64), VALID_ADDRESS, ten_big).await;
 
     let env = common::setup_test_server_with(pool, false, ico_overrides()).await;
-    let token = common::create_test_jwt(UserId::default(), UserRole::Tenant, &env.jwt_secret);
 
-    let (status, body): (_, Option<Value>) = common::authed_request(
-        &env.server,
-        &Method::GET,
-        "/api/v1/ico/progress",
-        &token,
-        &json!({}),
-    )
-    .await;
+    let response = env.server.get("/api/v1/ico/progress").await;
 
-    assert_eq!(status, StatusCode::OK);
-    let body = body.expect("valid JSON");
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
     assert_eq!(body["tokensSold"], ten_big);
     // amount_raised = 10 * 0.5 = 5.0
     let raised = body["amountRaised"].as_f64().unwrap();
@@ -229,23 +213,38 @@ async fn ico_progress_with_purchases(pool: PgPool) {
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn ico_progress_returns_500_without_config(pool: PgPool) {
     let env = common::setup_test_server(pool, false).await;
-    let token = common::create_test_jwt(UserId::default(), UserRole::Tenant, &env.jwt_secret);
 
-    let (status, _): (_, Option<Value>) = common::authed_request(
-        &env.server,
-        &Method::GET,
-        "/api/v1/ico/progress",
-        &token,
-        &json!({}),
-    )
-    .await;
-    assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+    let response = env.server.get("/api/v1/ico/progress").await;
+    assert_eq!(response.status_code(), StatusCode::INTERNAL_SERVER_ERROR);
 }
 
 #[sqlx::test(migrator = "common::MIGRATIONS")]
-async fn ico_progress_requires_auth(pool: PgPool) {
+async fn ico_progress_is_public(pool: PgPool) {
     let env = common::setup_test_server_with(pool, false, ico_overrides()).await;
 
     let response = env.server.get("/api/v1/ico/progress").await;
-    assert_eq!(response.status_code(), StatusCode::UNAUTHORIZED);
+    assert_eq!(response.status_code(), StatusCode::OK);
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn ico_progress_rate_limited_after_burst(pool: PgPool) {
+    let env = common::setup_test_server_with(pool, false, ico_overrides()).await;
+
+    for i in 0..=PUBLIC_DATA_RATE_LIMIT_BURST {
+        let response = env.server.get("/api/v1/ico/progress").await;
+
+        if i < PUBLIC_DATA_RATE_LIMIT_BURST {
+            assert_eq!(
+                response.status_code(),
+                StatusCode::OK,
+                "Request {i} should succeed within burst limit"
+            );
+        } else {
+            assert_eq!(
+                response.status_code(),
+                StatusCode::TOO_MANY_REQUESTS,
+                "Request {i} should be rate-limited after burst exhausted"
+            );
+        }
+    }
 }

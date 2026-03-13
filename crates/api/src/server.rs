@@ -28,13 +28,16 @@ use crate::{
     transactions,
 };
 
+// Public router ---------------------------------------------------------------
+
 /// Rate limit: requests allowed per second for auth endpoints.
 pub const AUTH_RATE_LIMIT_PER_SECOND: u64 = 1;
 
 /// Rate limit: maximum burst size for auth endpoints.
 pub const AUTH_RATE_LIMIT_BURST: u32 = 15;
 
-/// Creates an `OpenAPI` router for public API endpoints that do not require authentication.
+/// Creates an `OpenAPI` router for public API endpoints that do not require
+/// authentication.
 ///
 /// Includes rate limiting:
 /// - Authentication endpoints (`/auth/*`)
@@ -54,61 +57,78 @@ pub fn public_router() -> OpenApiRouter<Arc<AppState>> {
         .route_layer(GovernorLayer::new(rate_limit))
 }
 
-/// Creates an `OpenAPI` router for protected endpoints that require JWT authentication.
+// Public data router ----------------------------------------------------------
+
+/// Rate limit: requests allowed per second for public data endpoints.
+pub const PUBLIC_DATA_RATE_LIMIT_PER_SECOND: u64 = 5;
+
+/// Rate limit: maximum burst size for public data endpoints.
+pub const PUBLIC_DATA_RATE_LIMIT_BURST: u32 = 30;
+
+/// Creates a rate-limited `OpenAPI` router for public data endpoints (no auth).
+///
+/// - `GET /ico/progress` - ICO sale progress
+/// - `GET /transactions/token/big` - BIG token transactions
+#[inline]
+pub fn public_data_router() -> OpenApiRouter<Arc<AppState>> {
+    let rate_limit = Arc::new(
+        GovernorConfigBuilder::default()
+            .per_second(PUBLIC_DATA_RATE_LIMIT_PER_SECOND)
+            .burst_size(PUBLIC_DATA_RATE_LIMIT_BURST)
+            .finish()
+            .unwrap_or_default(),
+    );
+
+    OpenApiRouter::new()
+        .routes(routes!(ico::handlers::get_ico_progress))
+        .routes(routes!(transactions::handlers::get_big_token_transactions))
+        .route_layer(GovernorLayer::new(rate_limit))
+}
+
+// Protected router ------------------------------------------------------------
+
+/// Creates an `OpenAPI` router for protected endpoints that require JWT
+/// authentication.
 ///
 /// Authentication is enforced via the `AuthUser` extractor in handlers.
-///
-/// Includes:
-/// - Tax endpoints (`/tax/*`)
-/// - Analytics endpoints (`/analytics/*`)
 #[inline]
 pub fn protected_router() -> OpenApiRouter<Arc<AppState>> {
     OpenApiRouter::new()
         .routes(routes!(tax::handlers::calculate_tax_liability))
         .routes(routes!(analytics::handlers::get_property_performance))
+        .nest("/transactions", transactions_router())
+        .nest("/ico", ico_router())
 }
 
-/// Creates an `OpenAPI` router for blockchain transaction endpoints (auth via `AuthUser` extractor).
+/// Creates an `OpenAPI` router for blockchain transaction endpoints
 #[inline]
 pub fn transactions_router() -> OpenApiRouter<Arc<AppState>> {
-    OpenApiRouter::new()
-        .routes(routes!(transactions::handlers::get_account_transactions))
-        .routes(routes!(transactions::handlers::get_big_token_transactions))
+    OpenApiRouter::new().routes(routes!(transactions::handlers::get_account_transactions))
 }
 
-/// Creates an `OpenAPI` router for ICO endpoints (auth via `AuthUser` extractor).
+/// Creates an `OpenAPI` router for ICO endpoints
 #[inline]
 pub fn ico_router() -> OpenApiRouter<Arc<AppState>> {
-    OpenApiRouter::new()
-        .routes(routes!(ico::handlers::get_ico_balance))
-        .routes(routes!(ico::handlers::get_ico_progress))
+    OpenApiRouter::new().routes(routes!(ico::handlers::get_ico_balance))
 }
 
+// Full router -----------------------------------------------------------------
+
 /// Creates the full application router combining public and protected routes.
-///
-/// Route structure:
-/// - `/health` - Health check (no rate limiting)
-/// - `/api/v1/auth/*` - Authentication (rate limited)
-/// - `/api/v1/*` - Protected endpoints (require JWT)
-/// - `/swagger-ui` - `OpenAPI` documentation UI
-/// - `/api-docs/openapi.json` - `OpenAPI` specification
-///
-/// # Arguments
-///
-/// * `state` - The shared application state.
 #[inline]
 pub fn create_router(state: Arc<AppState>) -> Router {
     let (router, api) = OpenApiRouter::with_openapi(ApiDoc::openapi())
         .routes(routes!(health::handlers::health_check))
         .nest("/api/v1/auth", public_router())
-        .nest("/api/v1/transactions", transactions_router())
-        .nest("/api/v1/ico", ico_router())
+        .nest("/api/v1", public_data_router())
         .nest("/api/v1", protected_router())
         .with_state(state)
         .split_for_parts();
 
     router.merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", api))
 }
+
+// Application -----------------------------------------------------------------
 
 /// Maximum request body size (1 MB).
 const REQUEST_BODY_LIMIT: usize = 1024 * 1024;
