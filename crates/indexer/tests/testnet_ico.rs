@@ -26,6 +26,8 @@ const CHAIN: &str = "casper-test";
 const ICO_CONTRACT: &str = "hash-47a75578aca035ff390338b2fc3fe4f35cc989a00826591b387157735f1135bf";
 /// BIG token CEP-18 contract hash (entry points: approve, transfer, etc.).
 const BIG_CONTRACT: &str = "hash-66bde004c898228ed46fe60743d4f68638670425b71f4ab56477f17edcc4da29";
+/// tUSDT CEP-18 contract entity hash (entry points: approve, transfer, etc.).
+const USDT_CONTRACT: &str = "hash-4d5ac65a4bd5ea133204eee9741c96fd275e747819242bf0ea8af4d76b1b6c2a";
 
 /// Ensures `.env` is loaded exactly once across all tests.
 static INIT: Once = Once::new();
@@ -257,5 +259,23 @@ fn buy_big_with_1_cspr() {
     );
     let hash = extract_tx_hash(&out).expect("failed to extract purchase tx hash");
     println!("Purchase tx: {hash}");
+    wait_for_deploy(&hash);
+}
+
+#[test]
+#[ignore = "testnet transaction - costs gas, triggers Transfer event"]
+fn transfer_usdt_to_wallet2() {
+    // Transfer 1 tUSDT (6 decimals -> 1_000_000) to wallet-2.
+    // CEP-18 transfer entry point emits a Transfer event picked up by WSS indexer.
+    let wallet2 = "account-hash-0dc850ac514bca537c2c2dceb12e02d754d9e4591a7d071ab67422573a414dda";
+    let recipient_arg = format!("recipient:key='account-hash-{}'", &wallet2["account-hash-".len()..]);
+
+    let out = contract_call(
+        USDT_CONTRACT,
+        "transfer",
+        &[&recipient_arg, "amount:u256='1000000'"],
+    );
+    let hash = extract_tx_hash(&out).expect("failed to extract transfer tx hash");
+    println!("Transfer tx: {hash}");
     wait_for_deploy(&hash);
 }
