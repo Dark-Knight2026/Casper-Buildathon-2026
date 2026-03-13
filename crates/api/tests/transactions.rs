@@ -205,6 +205,7 @@ async fn big_token_transactions_empty(pool: PgPool) {
         false,
         TestOverrides {
             contract_big: Some(BIG_CONTRACT.to_owned()),
+            ..Default::default()
         },
     )
     .await;
@@ -250,6 +251,7 @@ async fn big_token_transactions_filters_by_contract(pool: PgPool) {
         false,
         TestOverrides {
             contract_big: Some(BIG_CONTRACT.to_owned()),
+            ..Default::default()
         },
     )
     .await;
@@ -283,6 +285,7 @@ async fn big_token_transactions_returns_expected_fields(pool: PgPool) {
         false,
         TestOverrides {
             contract_big: Some(BIG_CONTRACT.to_owned()),
+            ..Default::default()
         },
     )
     .await;
@@ -320,6 +323,7 @@ async fn big_token_transactions_is_public(pool: PgPool) {
         false,
         TestOverrides {
             contract_big: Some(BIG_CONTRACT.to_owned()),
+            ..Default::default()
         },
     )
     .await;

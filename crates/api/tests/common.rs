@@ -32,7 +32,9 @@ use testcontainers::{
     runners::AsyncRunner,
 };
 
-use api::{AppState, Claims, ServerConfig, UserId, UserRole, common::RedisStore, server};
+use api::{
+    AppState, Claims, IcoFallback, ServerConfig, UserId, UserRole, common::RedisStore, server,
+};
 
 /// Embedded migrations for `#[sqlx::test(migrator = "common::MIGRATIONS")]`.
 pub static MIGRATIONS: Migrator = sqlx::migrate!("../../supabase/migrations");
@@ -105,6 +107,8 @@ pub struct TestEnv {
 pub struct TestOverrides {
     /// BIG token contract hash (enables `/transactions/token/big`).
     pub contract_big: Option<String>,
+    /// ICO fallback config (used when `ico_schedules` table is empty).
+    pub ico_fallback: Option<IcoFallback>,
 }
 
 /// Creates a test server using a pool from `#[sqlx::test]`.
@@ -141,6 +145,7 @@ pub async fn setup_test_server_with(
         port: 0,
         cors_origin: TEST_CORS_ORIGIN.to_owned(),
         contract_big: overrides.contract_big,
+        ico_fallback: overrides.ico_fallback,
     };
     let state = Arc::new(AppState {
         db: pool,

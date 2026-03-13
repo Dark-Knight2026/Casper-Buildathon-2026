@@ -19,6 +19,14 @@ struct RawEnvConfig {
     /// BIG token contract package hash (hex, no prefix). Shared with `indexer`.
     #[serde(default)]
     contract_big: Option<String>,
+    /// Fallback ICO token price in USD (e.g. `0.50`).
+    /// Used only when `ico_schedules` table is empty.
+    #[serde(default)]
+    ico_price_usd: Option<f64>,
+    /// Fallback ICO total allocation in minimal units.
+    /// Used only when `ico_schedules` table is empty.
+    #[serde(default)]
+    ico_total_allocation: Option<String>,
 }
 
 const fn default_port() -> u16 {
@@ -26,6 +34,18 @@ const fn default_port() -> u16 {
 }
 fn default_cors_origin() -> String {
     "http://localhost:8080".to_owned()
+}
+
+/// Fallback ICO configuration from `ICO_PRICE_USD` and `ICO_TOTAL_ALLOCATION` env vars.
+///
+/// Used only when the `ico_schedules` table is empty (before the indexer
+/// processes `ICOScheduleAdded` contract events).
+#[derive(Debug, Clone)]
+pub struct IcoFallback {
+    /// Price per 1 BIG token in USD (e.g. `0.50`).
+    pub price_usd: f64,
+    /// Total allocation in minimal units (U256 as string, decimals=18).
+    pub total_allocation: String,
 }
 
 /// Server application configuration loaded from environment variables.
@@ -43,6 +63,9 @@ pub struct ServerConfig {
     pub cors_origin: String,
     /// BIG token contract package hash (hex, no prefix). `None` when not configured.
     pub contract_big: Option<String>,
+    /// Fallback ICO config from env vars. Used when `ico_schedules` table is empty
+    /// (e.g. before the indexer processes `ICOScheduleAdded` events).
+    pub ico_fallback: Option<IcoFallback>,
 }
 
 impl ServerConfig {
@@ -63,6 +86,14 @@ impl ServerConfig {
             .and_then(Config::try_deserialize)
             .map_err(|e| ServerError::EnvVar(e.to_string()))?;
 
+        let ico_fallback = match (raw.ico_price_usd, raw.ico_total_allocation) {
+            (Some(price_usd), Some(total_allocation)) => Some(IcoFallback {
+                price_usd,
+                total_allocation,
+            }),
+            _ => None,
+        };
+
         let config = Self {
             database_url: raw.database_url,
             redis_url: raw.redis_url,
@@ -70,6 +101,7 @@ impl ServerConfig {
             port: raw.port,
             cors_origin: raw.cors_origin,
             contract_big: raw.contract_big.map(|s| s.to_ascii_lowercase()),
+            ico_fallback,
         };
 
         config.validate()?;

@@ -7,7 +7,8 @@ use axum::http::StatusCode;
 use serde_json::Value;
 use sqlx::PgPool;
 
-use api::server::PUBLIC_DATA_RATE_LIMIT_BURST;
+use api::{IcoFallback, server::PUBLIC_DATA_RATE_LIMIT_BURST};
+use common::TestOverrides;
 
 /// 64-char hex address used as a valid account hash in tests.
 const VALID_ADDRESS: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -128,8 +129,8 @@ async fn ico_balance_invalid_address_returns_400(pool: PgPool) {
 }
 
 #[sqlx::test(migrator = "common::MIGRATIONS")]
-async fn ico_balance_returns_500_without_schedule(pool: PgPool) {
-    // No ico_schedules seeded -> handler returns 500
+async fn ico_balance_returns_500_without_any_config(pool: PgPool) {
+    // No schedule in DB, no env fallback -> 500
     let env = common::setup_test_server(pool, false).await;
 
     let response = env
@@ -196,7 +197,8 @@ async fn ico_progress_with_purchases(pool: PgPool) {
 }
 
 #[sqlx::test(migrator = "common::MIGRATIONS")]
-async fn ico_progress_returns_500_without_schedule(pool: PgPool) {
+async fn ico_progress_returns_500_without_any_config(pool: PgPool) {
+    // No schedule in DB, no env fallback -> 500
     let env = common::setup_test_server(pool, false).await;
 
     let response = env.server.get("/api/v1/ico/progress").await;
@@ -234,4 +236,28 @@ async fn ico_progress_rate_limited_after_burst(pool: PgPool) {
             );
         }
     }
+}
+
+/// When `ico_schedules` is empty, handlers fall back to env var config.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn ico_progress_uses_env_fallback_when_no_schedule(pool: PgPool) {
+    let env = common::setup_test_server_with(
+        pool,
+        false,
+        TestOverrides {
+            ico_fallback: Some(IcoFallback {
+                price_usd: 0.5,
+                total_allocation: ICO_TOTAL_ALLOCATION.to_owned(),
+            }),
+            ..Default::default()
+        },
+    )
+    .await;
+
+    let response = env.server.get("/api/v1/ico/progress").await;
+    assert_eq!(response.status_code(), StatusCode::OK);
+
+    let body: Value = response.json();
+    assert_eq!(body["priceUsd"], 0.5);
+    assert_eq!(body["totalAllocation"], ICO_TOTAL_ALLOCATION);
 }
