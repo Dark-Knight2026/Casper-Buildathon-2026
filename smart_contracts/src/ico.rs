@@ -201,6 +201,12 @@ impl ICO {
         // the ICO contract and stake them for the beneficiary. Example:
         // self.staking.stake_for(*caller, purchase_amount);
 
+        // TODO: Delete this guard when staking is implemented
+        // Guard: staking address must be set
+        if !self.staking.address().is_contract() {
+            self.env().revert(Error::StakingAddressNotSet);
+        }
+
         self.env().emit_native_event(TokensPurchased {
             amount: purchase_amount,
             currency,
@@ -279,6 +285,10 @@ impl ICO {
                         .styks_price_feed
                         .get_twap_price(&String::from(STYKS_ORACLE_CSPR_USDT_PRICE_FEED_ID))
                         .unwrap_or_revert_with(&self.env(), Error::StyksOracleCanNotReturnTWAP);
+
+                    if cspr_price_usd == 0 {
+                        self.env().revert(Error::StyksOracleCanNotReturnTWAP);
+                    }
 
                     // Styks Oracle returns price with 8 decimals
                     current_ico_schedule.1.price * U256::from(10).pow(U256::from(8))
@@ -459,6 +469,7 @@ pub mod errors {
         InvalidPurchaseAmount = 59_012,
         InvalidICOScheduleVestingDuration = 59_013,
         ICOScheduleCliffExceedsVestingDuration = 59_014,
+        StakingAddressNotSet = 59_015,
     }
 }
 

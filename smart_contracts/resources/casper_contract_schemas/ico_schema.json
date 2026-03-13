@@ -72,6 +72,11 @@
             "name": "vesting_duration",
             "description": null,
             "ty": "U64"
+          },
+          {
+            "name": "withdrawn_amount",
+            "description": null,
+            "ty": "U256"
           }
         ]
       }
