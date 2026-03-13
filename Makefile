@@ -17,6 +17,7 @@ SHELL := /bin/bash
  test-in  \
  test-not \
  run      \
+ index    \
  clean    \
 
 help: ## Show available targets
@@ -102,6 +103,9 @@ test-not: ## Exclude tests: `make test-not <test1> <test2> ...`
 
 run: ## Run API server with .env loaded
 	@set -a && . ./.env && set +a && cargo run --bin api
+
+index: ## Run blockchain indexer with .env loaded
+	@set -a && . ./.env && set +a && cargo run --bin indexer
 
 clean: ## Clean build artifacts
 	@echo "[*] Cleaning build artifacts..."
