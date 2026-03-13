@@ -37,7 +37,8 @@ function formatRelativeTime(timestamp: string | null): string {
   return `${days}d ago`;
 }
 
-function formatBigAmount(raw: string): string {
+function formatBigAmount(raw: string | null): string {
+  if (!raw) return '—';
   const num = Number(raw) / 10 ** BIG_DECIMALS;
   return num.toLocaleString('en-US', { maximumFractionDigits: 2 });
 }

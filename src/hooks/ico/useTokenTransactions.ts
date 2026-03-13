@@ -5,8 +5,9 @@ export interface TokenTransaction {
   deploy_hash: string;
   block_height: number;
   timestamp: string | null;
-  amount: string;
-  contract_package_hash: string;
+  amount: string | null;
+  currency: string | null;
+  contract_package_hash: string | null;
   from_hash: string | null;
   from_type: number | null;
   to_hash: string | null;

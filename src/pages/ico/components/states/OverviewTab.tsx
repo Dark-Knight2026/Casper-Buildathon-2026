@@ -1,15 +1,19 @@
-import { memo, useMemo } from 'react';
+import { memo, useMemo, useState } from 'react';
 import { Card } from '../shared/Card';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { TrendingUp, Clock, Percent, Wallet } from 'lucide-react';
 import { TransactionHistory } from '../shared/TransactionHistory';
-import { useUserTokenActions } from '@/hooks/ico/useUserTokenActions';
+import type { ICOTransaction } from '../shared/TransactionHistory';
 import { useICOWallet } from '@/hooks/ico/useICOWallet';
 import { useAccountTransactions } from '@/hooks/ico/useAccountTransactions';
 import { deriveAccountHash } from '@/lib/blockchain/accountUtils';
+import { ICO_CONFIG } from '@/constants/ico';
 import { MOCK_DASHBOARD, MOCK_STAKING_INFO, MOCK_EARNINGS_DATA, MOCK_PORTFOLIO } from '@/constants/icoMockData';
 import { formatNumber, formatUSD } from '../../utils/formatters';
+
+const DIV = BigInt('1000000000000000000');
+const PAGE_SIZE = 8;
 
 const chartConfig = {
   earnings: {
@@ -20,11 +24,22 @@ const chartConfig = {
 
 export const OverviewTab = memo(function OverviewTab() {
   const { account } = useICOWallet();
-  const { transactions } = useUserTokenActions(account?.publicKey);
   const accountHash = account?.publicKey ? deriveAccountHash(account.publicKey) : null;
-  const { transactions: accountTxs } = useAccountTransactions(accountHash);
-  console.log('[useAccountTransactions] data:', accountTxs);
-  console.log('publicKey', account?.publicKey, 'accountHash', accountHash, 'transactions', transactions);
+  const [page, setPage] = useState(1);
+  const { transactions: rawTxs, totalPages } = useAccountTransactions(accountHash, page, PAGE_SIZE, 'token_transfer');
+
+  const transactions = useMemo<ICOTransaction[]>(() =>
+    rawTxs.map(tx => ({
+      id: `${tx.deploy_hash}-${tx.transform_idx ?? 0}`,
+      type: 'purchase' as const,
+      tokensReceived: tx.amount ? Number(BigInt(tx.amount) / DIV) : 0,
+      tokenSymbol: ICO_CONFIG.TOKEN.symbol,
+      status: 'completed' as const,
+      timestamp: tx.timestamp ? new Date(tx.timestamp) : null,
+      txHash: tx.deploy_hash,
+    })),
+    [rawTxs],
+  );
 
   const dashboardCards = useMemo(() => [
     {
@@ -200,7 +215,15 @@ export const OverviewTab = memo(function OverviewTab() {
         </Card>
 
         {/* Transactions Card */}
-        <TransactionHistory transactions={transactions} className="md:col-span-2 p-5" />
+        <div className="md:col-span-2">
+          <TransactionHistory
+            transactions={transactions}
+            currentPage={page}
+            totalPages={totalPages}
+            onPageChange={setPage}
+            className="p-5"
+          />
+        </div>
       </div>
     </div>
   );
