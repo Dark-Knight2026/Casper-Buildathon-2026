@@ -117,6 +117,7 @@ impl EventRegistry {
             EventType::Ico(ico::IcoEventType::TokensPurchased) => ico::TokensPurchased,
             EventType::Ico(ico::IcoEventType::IcoScheduleAdded) => ico::IcoScheduleAdded,
             EventType::Cep18(cep18::Cep18EventType::Transfer) => cep18::Transfer,
+            EventType::Cep18(cep18::Cep18EventType::Mint) => cep18::Mint,
             EventType::Cep18(cep18::Cep18EventType::SetAllowance) => cep18::SetAllowance,
         )
     }
