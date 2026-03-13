@@ -11,7 +11,8 @@
 //! - `CSPR_CLOUD_API_TOKEN` - CSPR.cloud API token (for free RPC queries)
 //! - `CASPER_SECRET_KEY` - path to your `.pem` secret key file (for paid deploys)
 
-use std::{process::Command, sync::Once, thread, time::Duration};
+use core::time::Duration;
+use std::{process::Command, sync::Once, thread};
 
 use serde_json::{Value, json};
 
@@ -25,8 +26,6 @@ const CHAIN: &str = "casper-test";
 const ICO_CONTRACT: &str = "hash-47a75578aca035ff390338b2fc3fe4f35cc989a00826591b387157735f1135bf";
 /// BIG token CEP-18 contract hash (entry points: approve, transfer, etc.).
 const BIG_CONTRACT: &str = "hash-66bde004c898228ed46fe60743d4f68638670425b71f4ab56477f17edcc4da29";
-/// tUSDT CEP-18 contract entity hash (derived from package `7c902e8a...`).
-const USDT_CONTRACT: &str = "hash-4d5ac65a4bd5ea133204eee9741c96fd275e747819242bf0ea8af4d76b1b6c2a";
 
 /// Ensures `.env` is loaded exactly once across all tests.
 static INIT: Once = Once::new();

@@ -86,6 +86,12 @@ pub struct FtTokenAction {
     /// Address type of the recipient (0=Account, 1=Contract).
     #[serde(default)]
     pub to_type: Option<u8>,
+    /// Block timestamp as ISO-8601 string (e.g. "2026-03-13T08:28:08Z").
+    #[serde(default)]
+    pub timestamp: Option<String>,
+    /// Transform index within the deploy execution.
+    #[serde(default)]
+    pub transform_idx: Option<i32>,
 }
 
 impl FtTokenAction {
@@ -109,6 +115,8 @@ impl FtTokenAction {
             ft_action_type,
             from_type: None,
             to_type: None,
+            timestamp: None,
+            transform_idx: None,
         }
     }
 }
@@ -202,7 +210,12 @@ pub async fn backfill_cep18(
             };
 
             // caller is not available in /ft-token-actions - same as streaming.
-            // block_timestamp and transform_idx are not available from this endpoint.
+            let block_timestamp = action
+                .timestamp
+                .as_deref()
+                .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+                .map(|dt| dt.with_timezone(&chrono::Utc));
+
             let raw = RawEvent {
                 contract_hash: contract_hash.to_owned(),
                 deploy_hash: action.deploy_hash.clone(),
@@ -211,8 +224,8 @@ pub async fn backfill_cep18(
                 contract_type,
                 event_name: event_name.to_owned(),
                 event_data,
-                block_timestamp: None,
-                transform_idx: None,
+                block_timestamp,
+                transform_idx: action.transform_idx,
             };
 
             match processor::process_event(ctx.db_pool, ctx.registry, ctx.known_hashes, &raw).await
