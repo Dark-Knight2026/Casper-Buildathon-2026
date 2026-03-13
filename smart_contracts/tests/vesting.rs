@@ -8,6 +8,7 @@ use odra_modules::access::errors::Error as AccessError;
 use leasefi_contracts::constants::{
     ONE_MONTH_IN_MILLISECONDS, PRIVATE_SALE_CLIFF_DURATION, PRIVATE_SALE_VESTING_DURATION,
 };
+use leasefi_contracts::staking::{Staking, StakingHostRef, StakingInitArgs};
 use leasefi_contracts::tailor_coin::{TailorCoin, TailorCoinHostRef, TailorCoinInitArgs};
 use leasefi_contracts::vesting::{
     errors::Error,
@@ -15,7 +16,7 @@ use leasefi_contracts::vesting::{
     Vesting, VestingHostRef, VestingId, VestingInitArgs,
 };
 
-use crate::staking::{Staking, StakingHostRef, StakingInitArgs};
+use crate::staking::UNBONDING_PERIOD;
 
 // =============================================================================
 // Test Constants
@@ -106,7 +107,8 @@ fn create_test_schedule(
     // Mirror the production ICO flow: stake tokens for the beneficiary first,
     // then create the vesting schedule.
     ctx.env.set_caller(ctx.users.owner);
-    ctx.tailor_coin.approve(&ctx.staking.address(), &total_amount);
+    ctx.tailor_coin
+        .approve(&ctx.staking.address(), &total_amount);
     ctx.staking.stake_for(beneficiary, total_amount);
 
     ctx.vesting
@@ -528,8 +530,62 @@ fn test_claim_should_update_claimed_amount_after_cliff() {
     );
 }
 
-// TODO: Write a test to test claim should increase beneficiary balance by claimed amount
-// when the staking function is implemented
+#[test]
+fn test_claim_should_increase_beneficiary_balance_by_claimed_amount() {
+    let mut ctx = setup(odra_test::env());
+    let cliff = ctx.cliff_duration;
+    let vesting = ctx.vesting_duration;
+    let alice = ctx.users.alice;
+
+    let vesting_id = create_test_schedule(&mut ctx, alice, vesting_amount(), cliff, vesting);
+
+    // Advance to exactly the cliff, 50% vested
+    ctx.env.advance_block_time(cliff);
+
+    let prev_alice_balance = ctx.tailor_coin.balance_of(&alice);
+    let prev_staking_balance = ctx.tailor_coin.balance_of(&ctx.staking.address());
+
+    // Claim initiates unstaking (enters unbonding period)
+    ctx.env.set_caller(alice);
+    ctx.vesting.claim(vesting_id);
+
+    let expected_claim = vesting_amount() / 2;
+
+    // Balance should not increase yet, tokens are in unbonding
+    let mid_alice_balance = ctx.tailor_coin.balance_of(&alice);
+    assert_eq!(
+        mid_alice_balance, prev_alice_balance,
+        "Balance should not increase immediately after claim, tokens are unbonding"
+    );
+
+    ctx.env.advance_block_time(UNBONDING_PERIOD + 1);
+
+    // Now withdraw the unbonded tokens
+    ctx.env.set_caller(alice);
+    ctx.staking.withdraw_unbonded();
+
+    // Verify beneficiary balance increased
+    let curr_alice_balance = ctx.tailor_coin.balance_of(&alice);
+    let curr_staking_balance = ctx.tailor_coin.balance_of(&ctx.staking.address());
+
+    assert_eq!(
+        curr_alice_balance,
+        prev_alice_balance + expected_claim,
+        "Beneficiary balance should increase by claimed amount after withdrawing unbonded"
+    );
+    assert_eq!(
+        curr_staking_balance,
+        prev_staking_balance - expected_claim,
+        "Staking contract balance should decrease by claimed amount"
+    );
+
+    // Verify schedule state
+    let schedule = ctx.vesting.get_schedule(vesting_id).unwrap();
+    assert_eq!(
+        schedule.claimed_amount, expected_claim,
+        "Claimed amount should be tracked in schedule"
+    );
+}
 
 #[test]
 fn test_claim_should_claim_full_amt_after_vesting_ends() {
