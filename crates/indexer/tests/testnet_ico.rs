@@ -268,7 +268,10 @@ fn transfer_usdt_to_wallet2() {
     // Transfer 1 tUSDT (6 decimals -> 1_000_000) to wallet-2.
     // CEP-18 transfer entry point emits a Transfer event picked up by WSS indexer.
     let wallet2 = "account-hash-0dc850ac514bca537c2c2dceb12e02d754d9e4591a7d071ab67422573a414dda";
-    let recipient_arg = format!("recipient:key='account-hash-{}'", &wallet2["account-hash-".len()..]);
+    let recipient_arg = format!(
+        "recipient:key='account-hash-{}'",
+        &wallet2["account-hash-".len()..]
+    );
 
     let out = contract_call(
         USDT_CONTRACT,

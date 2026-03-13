@@ -11,6 +11,7 @@ struct TransactionRow {
     block_number: Option<i64>,
     block_timestamp: Option<DateTime<Utc>>,
     amount: Option<String>,
+    currency: Option<String>,
     contract_hash: Option<String>,
     from_address: String,
     from_type: Option<i16>,
@@ -30,6 +31,7 @@ impl From<TransactionRow> for TransactionResponse {
                 .block_timestamp
                 .map(|ts| ts.to_rfc3339_opts(SecondsFormat::Secs, true)),
             amount: row.amount,
+            currency: row.currency,
             contract_package_hash: row.contract_hash,
             from_hash: row.from_address,
             from_type: row.from_type,
@@ -43,6 +45,8 @@ impl From<TransactionRow> for TransactionResponse {
 
 /// Fetches paginated transactions where the given address is sender or recipient.
 ///
+/// When `transaction_type` is `Some`, only transactions of that type are returned.
+///
 /// Uses `REPEATABLE READ` isolation so that SELECT and COUNT see the same snapshot.
 ///
 /// # Errors
@@ -52,6 +56,7 @@ impl From<TransactionRow> for TransactionResponse {
 pub async fn fetch_account_transactions(
     pool: &PgPool,
     address: &str,
+    transaction_type: Option<&str>,
     limit: i64,
     offset: i64,
 ) -> Result<(Vec<TransactionResponse>, i64), sqlx::Error> {
@@ -63,15 +68,17 @@ pub async fn fetch_account_transactions(
     let rows = sqlx::query_as!(
         TransactionRow,
         r"
-            SELECT transaction_hash, block_number, block_timestamp, amount, contract_hash, from_address, from_type, to_address, to_type, transaction_type, transform_idx
+            SELECT transaction_hash, block_number, block_timestamp, amount, currency, contract_hash, from_address, from_type, to_address, to_type, transaction_type, transform_idx
             FROM blockchain_transactions
-            WHERE from_address = $1 OR to_address = $1
+            WHERE (from_address = $1 OR to_address = $1)
+              AND ($4::TEXT IS NULL OR transaction_type = $4)
             ORDER BY block_number DESC NULLS LAST, confirmed_at DESC
             LIMIT $2 OFFSET $3
         ",
         address,
         limit,
         offset,
+        transaction_type,
     )
     .fetch_all(tx.as_mut())
     .await?;
@@ -79,9 +86,11 @@ pub async fn fetch_account_transactions(
     let count = sqlx::query_scalar!(
         r"
             SELECT COUNT(*) FROM blockchain_transactions
-            WHERE from_address = $1 OR to_address = $1
+            WHERE (from_address = $1 OR to_address = $1)
+              AND ($2::TEXT IS NULL OR transaction_type = $2)
         ",
         address,
+        transaction_type,
     )
     .fetch_one(tx.as_mut())
     .await?
@@ -113,7 +122,7 @@ pub async fn fetch_token_transactions(
     let rows = sqlx::query_as!(
         TransactionRow,
         r"
-            SELECT transaction_hash, block_number, block_timestamp, amount, contract_hash, from_address, from_type, to_address, to_type, transaction_type, transform_idx
+            SELECT transaction_hash, block_number, block_timestamp, amount, currency, contract_hash, from_address, from_type, to_address, to_type, transaction_type, transform_idx
             FROM blockchain_transactions
             WHERE contract_hash = $1
             ORDER BY block_number DESC NULLS LAST, confirmed_at DESC

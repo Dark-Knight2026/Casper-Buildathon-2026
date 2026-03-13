@@ -7,10 +7,40 @@ use axum::{
     extract::{Path, Query, State},
 };
 
+use serde::Deserialize;
+use utoipa::IntoParams;
+
 use crate::{
     common::{ApiError, ApiResult, AppState, PaginatedResponse, Pagination},
     transactions::{db, models::TransactionResponse},
 };
+
+/// Query parameters for account transaction listing (pagination + filter).
+///
+/// `page` and `page_size` are duplicated from [`Pagination`] because
+/// `serde_urlencoded` (used by axum's `Query`) does not support `#[serde(flatten)]`.
+#[derive(Debug, Default, Deserialize, IntoParams)]
+pub struct AccountTxQuery {
+    /// Page number (1-based, defaults to 1).
+    #[serde(default)]
+    pub page: Option<i64>,
+    /// Items per page (1-100, defaults to 25).
+    #[serde(default)]
+    pub page_size: Option<i64>,
+    /// Filter by transaction type (e.g. `token_purchase`, `token_transfer`, `token_mint`, `token_allowance`).
+    #[serde(rename = "type")]
+    pub tx_type: Option<String>,
+}
+
+impl AccountTxQuery {
+    /// Convert the embedded pagination fields into a [`Pagination`] value.
+    fn pagination(&self) -> Pagination {
+        Pagination {
+            page: self.page,
+            page_size: self.page_size,
+        }
+    }
+}
 
 /// `GET /api/v1/transactions/account/{address}`
 ///
@@ -28,6 +58,7 @@ use crate::{
     tag = "Transactions",
     params(
         ("address" = String, Path, description = "Account hash (64 hex, no prefix)"),
+        ("type" = Option<String>, Query, description = "Filter by transaction type: token_purchase, token_transfer, token_mint, token_allowance"),
         Pagination,
     ),
     responses(
@@ -40,7 +71,7 @@ use crate::{
 pub async fn get_account_transactions(
     State(state): State<Arc<AppState>>,
     Path(address): Path<String>,
-    Query(pagination): Query<Pagination>,
+    Query(query): Query<AccountTxQuery>,
 ) -> ApiResult<Json<PaginatedResponse<TransactionResponse>>> {
     let address = address.to_ascii_lowercase();
     if address.len() != 64 || !address.chars().all(|c| c.is_ascii_hexdigit()) {
@@ -49,9 +80,11 @@ pub async fn get_account_transactions(
         ));
     }
 
+    let pagination = query.pagination();
     let (data, item_count) = db::fetch_account_transactions(
         &state.db,
         &address,
+        query.tx_type.as_deref(),
         pagination.page_size(),
         pagination.offset(),
     )

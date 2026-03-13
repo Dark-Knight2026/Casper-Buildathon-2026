@@ -130,7 +130,7 @@ async fn account_transactions_matches_to_address(pool: PgPool) {
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
     assert_eq!(body["item_count"], 1);
-    assert_eq!(body["data"][0]["ft_action_type_id"], 1); // token_purchase -> 1 (Mint)
+    assert_eq!(body["data"][0]["ft_action_type_id"], 4); // token_purchase -> 4 (Purchase)
 }
 
 #[sqlx::test(migrator = "common::MIGRATIONS")]
@@ -303,7 +303,7 @@ async fn big_token_transactions_returns_expected_fields(pool: PgPool) {
     assert_eq!(item["from_hash"], VALID_ADDRESS);
     assert_eq!(item["to_hash"], to_addr);
     assert_eq!(item["contract_package_hash"], BIG_CONTRACT);
-    assert_eq!(item["ft_action_type_id"], 1); // token_purchase -> 1 (Mint)
+    assert_eq!(item["ft_action_type_id"], 4); // token_purchase -> 4 (Purchase)
     assert_eq!(item["amount"], "5000000000000000000");
 }
 

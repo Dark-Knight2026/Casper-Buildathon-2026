@@ -36,7 +36,7 @@ pub enum FtActionType {
     Transfer,
     /// Allowance approval (owner authorizes spender).
     Approve,
-    /// Any action type not explicitly handled (e.g. Burn = 4).
+    /// Any action type not explicitly handled (e.g. `Burn = 4`, `TransferFrom = 5`).
     Unknown(u8),
 }
 

@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT COUNT(*) FROM blockchain_transactions\n            WHERE (from_address = $1 OR to_address = $1)\n              AND ($2::TEXT IS NULL OR transaction_type = $2)\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "count",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "785480355e1b2a5b07a018eb10a6df9396e53cf4258d78fad33e4884b9e02c51"
+}

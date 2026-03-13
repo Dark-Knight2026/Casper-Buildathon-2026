@@ -16,6 +16,9 @@ pub struct TransactionResponse {
     /// Token amount (U256 as string in minimal units, decimals=18).
     #[schema(example = "1000000000000000000000")]
     pub amount: Option<String>,
+    /// Payment currency (e.g. `"CSPR"`, `"USDC"`, `"USDT"`). Present for purchases.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub currency: Option<String>,
     /// Contract package hash (64 hex, no prefix).
     pub contract_package_hash: Option<String>,
     /// Sender address (account hash, 64 hex, no prefix).
@@ -26,7 +29,7 @@ pub struct TransactionResponse {
     pub to_hash: Option<String>,
     /// Recipient address type (0 = Account, 1 = Contract).
     pub to_type: Option<i16>,
-    /// Fungible-token action type ID (1 = Mint, 2 = Transfer, 3 = Approve).
+    /// Fungible-token action type ID (1 = Mint, 2 = Transfer, 3 = Approve, 4 = Purchase).
     pub ft_action_type_id: u8,
     /// Transform index within the deploy.
     pub transform_idx: Option<i32>,
@@ -35,17 +38,19 @@ pub struct TransactionResponse {
 /// Converts a DB `transaction_type` text label to a numeric action type ID.
 ///
 /// Mapping (compatible with CSPR.cloud `/ft-token-action-types`):
-/// - `"token_purchase"` -> 1 (Mint - tokens allocated to buyer)
+/// - `"token_mint"`     -> 1 (Mint)
 /// - `"token_transfer"` -> 2 (Transfer)
 /// - `"token_allowance"` -> 3 (Approve)
+/// - `"token_purchase"` -> 4 (Purchase)
 /// - anything else      -> 0 (Unknown)
 #[inline]
 #[must_use]
 pub fn ft_action_type_id(transaction_type: &str) -> u8 {
     match transaction_type {
-        "token_purchase" => 1,
+        "token_mint" => 1,
         "token_transfer" => 2,
         "token_allowance" => 3,
+        "token_purchase" => 4,
         _ => 0,
     }
 }

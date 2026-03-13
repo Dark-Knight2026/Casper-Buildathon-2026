@@ -644,7 +644,7 @@ async fn mint_action_stored_raw_without_token_holdings_update(pool: PgPool) {
                 MINT_DEPLOY_HASH,
                 50,
                 None,
-                Some("initial_holder"),
+                Some(FakeAddress::Bob.as_str()),
                 "5000000000000000000000000000000",
                 1,
                 1,
@@ -680,13 +680,16 @@ async fn mint_action_stored_raw_without_token_holdings_update(pool: PgPool) {
         "Mint event must be marked processed = true in blockchain_events"
     );
 
-    // No token_holdings must be written — Mint is deployment allocation only.
+    // Mint handler updates token_holdings for the recipient.
     let holdings: i64 = sqlx::query_scalar!(r"SELECT COUNT(*) FROM token_holdings")
         .fetch_one(&pool)
         .await
         .unwrap()
         .unwrap_or(0);
-    assert_eq!(holdings, 0, "Mint must not update token_holdings");
+    assert_eq!(
+        holdings, 1,
+        "Mint must create a token_holdings entry for recipient"
+    );
 }
 
 /// When `start_block` is greater than `cursor + 1`, the effective start block
