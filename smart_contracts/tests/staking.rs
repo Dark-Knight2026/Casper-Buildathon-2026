@@ -630,3 +630,81 @@ fn test_claim_rewards_should_not_accrue_already_claimed_rewards() {
     // Only the second deposit should be pending, not both
     assert_eq!(ctx.staking.get_pending_rewards(alice), rewards);
 }
+
+// =============================================================================
+// withdraw_unbonded()
+// =============================================================================
+
+#[test]
+fn test_withdraw_unbonded_should_revert_if_no_unbonding_in_progress() {
+    let mut ctx = setup(odra_test::env());
+    let alice = ctx.users.alice;
+
+    ctx.env.set_caller(alice);
+    assert_eq!(
+        ctx.staking.try_withdraw_unbonded().unwrap_err(),
+        Error::NoUnbondingInProgress.into(),
+    )
+}
+
+#[test]
+fn test_withdraw_unbonded_should_revert_if_unbonding_period_not_finished() {
+    let mut ctx = setup(odra_test::env());
+    let alice = ctx.users.alice;
+    let amount = staking_amount();
+
+    fund_and_approve(&mut ctx, alice, amount);
+    stake_for(&mut ctx, alice, amount);
+
+    ctx.env.set_caller(alice);
+    ctx.staking.unstake_for(alice, amount);
+
+    ctx.env.set_caller(alice);
+    assert_eq!(
+        ctx.staking.try_withdraw_unbonded().unwrap_err(),
+        Error::UnbondingPeriodNotFinished.into(),
+    )
+}
+
+#[test]
+fn test_withdraw_unbonded_should_withdraw_properly() {
+    let mut ctx = setup(odra_test::env());
+    let amount = staking_amount();
+    let unstake_amount = amount / 2;
+    let alice = ctx.users.alice;
+
+    fund_and_approve(&mut ctx, alice, amount);
+    stake_for(&mut ctx, alice, amount);
+
+    ctx.env.set_caller(alice);
+    ctx.staking.unstake_for(alice, unstake_amount);
+
+    ctx.env.advance_block_time(UNBONDING_PERIOD + 1);
+
+    let prev_balance = ctx.tailor_coin.balance_of(&alice);
+
+    ctx.env.set_caller(alice);
+    ctx.staking.withdraw_unbonded();
+
+    // Tokens returned to staker
+    assert_eq!(
+        ctx.tailor_coin.balance_of(&alice),
+        prev_balance + unstake_amount
+    );
+
+    // Unbonding state cleared
+    let staker_info = ctx.staking.get_staker_info(alice);
+    assert_eq!(staker_info.unbonding_amount, U256::zero());
+    assert_eq!(staker_info.unbonding_ends_at, 0);
+
+    // Remaining active stake unaffected
+    assert_eq!(staker_info.staked_amount, amount - unstake_amount);
+
+    assert!(ctx.env.emitted_native_event(
+        &ctx.staking.address(),
+        UnbondedWithdrawn {
+            staker: alice,
+            amount: unstake_amount
+        }
+    ));
+}
