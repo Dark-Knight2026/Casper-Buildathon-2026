@@ -11,7 +11,7 @@
 //! - `CSPR_CLOUD_API_TOKEN` - CSPR.cloud API token (for free RPC queries)
 //! - `CASPER_SECRET_KEY` - path to your `.pem` secret key file (for paid deploys)
 
-use std::{process::Command, sync::Once};
+use std::{process::Command, sync::Once, thread, time::Duration};
 
 use serde_json::{Value, json};
 
@@ -25,6 +25,8 @@ const CHAIN: &str = "casper-test";
 const ICO_CONTRACT: &str = "hash-47a75578aca035ff390338b2fc3fe4f35cc989a00826591b387157735f1135bf";
 /// BIG token CEP-18 contract hash (entry points: approve, transfer, etc.).
 const BIG_CONTRACT: &str = "hash-66bde004c898228ed46fe60743d4f68638670425b71f4ab56477f17edcc4da29";
+/// tUSDT CEP-18 contract entity hash (derived from package `7c902e8a...`).
+const USDT_CONTRACT: &str = "hash-4d5ac65a4bd5ea133204eee9741c96fd275e747819242bf0ea8af4d76b1b6c2a";
 
 /// Ensures `.env` is loaded exactly once across all tests.
 static INIT: Once = Once::new();
@@ -154,7 +156,54 @@ fn contract_call(contract_hash: &str, entry_point: &str, session_args: &[&str]) 
     stdout
 }
 
-// Free queries (no gas, no secret key)
+/// Extract transaction hash from `casper-client put-transaction` JSON output.
+/// Handles both `Version1` and `Version2` transaction hash formats.
+fn extract_tx_hash(output: &str) -> Option<String> {
+    let v: Value = serde_json::from_str(output).ok()?;
+    let th = v.get("result")?.get("transaction_hash")?;
+    th.get("Version2")
+        .or_else(|| th.get("Version1"))
+        .and_then(|v| v.as_str())
+        .map(String::from)
+}
+
+/// Poll the node until deploy is executed (max ~3 min).
+fn wait_for_deploy(tx_hash: &str) {
+    let max_attempts = 18; // 18 * 10s = 3 min
+    for attempt in 1..=max_attempts {
+        println!("[{attempt}/{max_attempts}] Checking {tx_hash} ...");
+
+        let out = Command::new("casper-client")
+            .args(["get-transaction", "--node-address", PUBLIC_NODE, tx_hash])
+            .output()
+            .expect("failed to run casper-client get-transaction");
+        let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+        if let Some(result) = serde_json::from_str::<Value>(&stdout).ok().and_then(|v| {
+            v.pointer("/result/execution_info/execution_result")
+                .cloned()
+        }) {
+            // Casper 1.x format: { "Success": {...} } or { "Failure": {...} }
+            if result.get("Success").is_some() {
+                println!("Deploy succeeded!");
+                return;
+            } else if result.get("Failure").is_some() {
+                panic!("Deploy FAILED: {result}");
+            }
+            // Casper 2.x format: { "Version2": { "error_message": null|"...", ... } }
+            if let Some(v2) = result.get("Version2") {
+                if v2.get("error_message").is_some_and(Value::is_null) {
+                    println!("Deploy succeeded (v2)!");
+                    return;
+                }
+                panic!("Deploy FAILED (v2): {v2}");
+            }
+        }
+        thread::sleep(Duration::from_secs(10));
+    }
+    panic!("Deploy {tx_hash} not finalized after {max_attempts} attempts");
+}
+
+// Free queries (no gas, no secret key) ----------------------------------------
 
 #[test]
 #[ignore = "testnet RPC - free, needs network"]
@@ -184,7 +233,7 @@ fn purchase_10_cspr() {
     );
 }
 
-// Paid transactions (cost gas)
+// Paid transactions (cost gas) ------------------------------------------------
 
 #[test]
 #[ignore = "testnet transaction - costs gas, triggers SetAllowance event"]
@@ -194,4 +243,20 @@ fn approve_big_zero() {
     let ico_pkg = ico_package();
     let spender_arg = format!("spender:key='{ico_pkg}'");
     contract_call(BIG_CONTRACT, "approve", &[&spender_arg, "amount:u256='0'"]);
+}
+
+#[test]
+#[ignore = "testnet transaction - costs gas, triggers TokensPurchased"]
+fn buy_big_with_1_cspr() {
+    // Purchase BIG with 1 CSPR (1_000_000_000 motes, currency=0).
+    // No approve needed for native CSPR.
+    // ICO contract will emit TokensPurchased event, indexer picks it up via WSS.
+    // NOTE: requires an active ICO schedule on-chain (admin must call `add_ico_schedule` first).
+    let out = ico_call(
+        "purchase",
+        &["amount_to_spend:u256='1000000000'", "currency:u8='0'"],
+    );
+    let hash = extract_tx_hash(&out).expect("failed to extract purchase tx hash");
+    println!("Purchase tx: {hash}");
+    wait_for_deploy(&hash);
 }
