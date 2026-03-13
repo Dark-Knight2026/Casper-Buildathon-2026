@@ -82,6 +82,8 @@ pub mod errors {
         ScheduleNotFound = 65_005,
         CallerNotBeneficiary = 65_006,
         NothingToClaim = 65_007,
+        // TOOD: Delete this error once staking is enabled
+        ClaimingNotYetEnabled = 65_008,
     }
 }
 
@@ -304,6 +306,11 @@ impl Vesting {
     /// @dev only the schedule's beneficiary can call this
     #[odra(non_reentrant)]
     pub fn claim(&mut self, vesting_id: VestingId) {
+        // TODO: delete this check once staking is implemented
+        if !self.staking.address().is_contract() {
+            self.env().revert(Error::ClaimingNotYetEnabled);
+        }
+
         let mut schedule = self
             .schedules
             .get(&vesting_id)

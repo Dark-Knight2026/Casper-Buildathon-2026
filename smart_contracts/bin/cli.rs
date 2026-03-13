@@ -15,7 +15,7 @@ use leasefi_contracts::{
     lease::{Lease, LeaseInitArgs},
     nft::{NFTInitArgs, NFT},
     roles::{Roles, RolesInitArgs},
-    staking::Staking,
+    staking::{Staking, StakingInitArgs},
     tailor_coin::{TailorCoin, TailorCoinInitArgs},
     treasury::{Treasury, TreasuryInitArgs},
     vesting::{Vesting, VestingInitArgs},
@@ -133,6 +133,16 @@ impl DeployScript for LeasefiDeployScript {
             container,
             400_000_000_000,
         )?;
+        let mut staking = Staking::load_or_deploy_with_cfg(
+            &env,
+            None,
+            StakingInitArgs {
+                owner: env.caller(),
+            },
+            InstallConfig::upgradable::<Staking>(),
+            container,
+            400_000_000_000,
+        )?;
         let mut ico = ICO::load_or_deploy_with_cfg(
             &env,
             None,
@@ -150,12 +160,15 @@ impl DeployScript for LeasefiDeployScript {
 
         // Setup Treasury
         treasury.set_tailor_coin(tailor_coin.address());
-        // treasury.set_staking(staking.address());
+        treasury.set_staking(staking.address());
 
         // Setup Vesting
         vesting.set_tailor_coin(tailor_coin.address());
         vesting.add_whitelisted_creator(ico.address());
-        // vesting.set_staking(staking.address());
+        vesting.set_staking(staking.address());
+
+        // Setup Staking
+        staking.set_tailor_coin(tailor_coin.address());
 
         // Setup Lease
         lease.set_roles(roles.address());
@@ -171,7 +184,7 @@ impl DeployScript for LeasefiDeployScript {
         ico.set_tailor_coin(tailor_coin.address());
         ico.set_treasury(treasury.address());
         ico.set_vesting(vesting.address());
-        // ico.set_staking(staking.address());
+        ico.set_staking(staking.address());
         ico.add_currency(Currency::CSPR, None);
         env.set_gas(15_000_000_000);
         ico.add_currency(

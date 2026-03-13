@@ -369,7 +369,7 @@ fn test_add_ico_schedule_should_fail_if_invalid_ico_schedule_start_timestamp_1()
 
     let now = ctx.env.block_time();
 
-    for start_timestamp in vec![now, now - 1] {
+    for start_timestamp in [now, now - 1] {
         creation_params[0].start_timestamp = start_timestamp;
 
         assert_eq!(
@@ -393,7 +393,7 @@ fn test_add_ico_schedule_should_fail_if_invalid_ico_schedule_start_timestamp_2()
 
     let end_timestamp = creation_params[0].end_timestamp;
 
-    for start_timestamp in vec![end_timestamp, end_timestamp - 1] {
+    for start_timestamp in [end_timestamp, end_timestamp - 1] {
         creation_params[1].start_timestamp = start_timestamp;
 
         assert_eq!(
@@ -420,7 +420,7 @@ fn test_add_ico_schedule_should_fail_if_invalid_ico_schedule_start_timestamp_3()
 
     let now = ctx.env.block_time();
 
-    for start_timestamp in vec![now, now - 1] {
+    for start_timestamp in [now, now - 1] {
         creation_params[1].start_timestamp = start_timestamp;
 
         assert_eq!(
@@ -439,7 +439,7 @@ fn test_add_ico_schedule_should_fail_if_invalid_ico_schedule_end_timestamp() {
     let mut creation_params = get_ico_schedules_creation_params(&ctx.env);
     let start_timestamp = creation_params[0].start_timestamp;
 
-    for end_timestamp in vec![start_timestamp, start_timestamp - 1] {
+    for end_timestamp in [start_timestamp, start_timestamp - 1] {
         creation_params[0].end_timestamp = end_timestamp;
 
         assert_eq!(

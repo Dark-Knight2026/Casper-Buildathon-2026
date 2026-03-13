@@ -41,13 +41,13 @@ fn test_init_should_initialize_contract_properly() {
 fn test_grant_role_should_grant_roles_properly() {
     let env = odra_test::env();
     let mut roles_contract = setup(&env);
-    let roles = vec![
+    let roles = [
         roles_contract.get_landlord_role(),
         roles_contract.get_agent_role(),
         roles_contract.get_manager_role(),
     ];
-    let roles_names = vec![ROLE_LANDLORD, ROLE_AGENT, ROLE_MANAGER];
-    let roles_admins_names = vec![ROLE_LANDLORD_ADMIN, ROLE_AGENT_ADMIN, ROLE_MANAGER_ADMIN];
+    let roles_names = [ROLE_LANDLORD, ROLE_AGENT, ROLE_MANAGER];
+    let roles_admins_names = [ROLE_LANDLORD_ADMIN, ROLE_AGENT_ADMIN, ROLE_MANAGER_ADMIN];
     let admin_account = env.get_account(0);
     let roles_admin_account = env.get_account(1);
     let roles_account = env.get_account(2);
@@ -79,13 +79,13 @@ fn test_grant_role_should_grant_roles_properly() {
 fn test_revoke_role_should_revoke_roles_properly() {
     let env = odra_test::env();
     let mut roles_contract = setup(&env);
-    let roles = vec![
+    let roles = [
         roles_contract.get_landlord_role(),
         roles_contract.get_agent_role(),
         roles_contract.get_manager_role(),
     ];
-    let roles_names = vec![ROLE_LANDLORD, ROLE_AGENT, ROLE_MANAGER];
-    let roles_admins_names = vec![ROLE_LANDLORD_ADMIN, ROLE_AGENT_ADMIN, ROLE_MANAGER_ADMIN];
+    let roles_names = [ROLE_LANDLORD, ROLE_AGENT, ROLE_MANAGER];
+    let roles_admins_names = [ROLE_LANDLORD_ADMIN, ROLE_AGENT_ADMIN, ROLE_MANAGER_ADMIN];
     let admin_account = env.get_account(0);
     let roles_admin_account = env.get_account(1);
     let roles_account = env.get_account(2);
@@ -119,13 +119,13 @@ fn test_revoke_role_should_revoke_roles_properly() {
 fn test_revoke_role_should_renounce_roles_properly() {
     let env = odra_test::env();
     let mut roles_contract = setup(&env);
-    let roles = vec![
+    let roles = [
         roles_contract.get_landlord_role(),
         roles_contract.get_agent_role(),
         roles_contract.get_manager_role(),
     ];
-    let roles_names = vec![ROLE_LANDLORD, ROLE_AGENT, ROLE_MANAGER];
-    let roles_admins_names = vec![ROLE_LANDLORD_ADMIN, ROLE_AGENT_ADMIN, ROLE_MANAGER_ADMIN];
+    let roles_names = [ROLE_LANDLORD, ROLE_AGENT, ROLE_MANAGER];
+    let roles_admins_names = [ROLE_LANDLORD_ADMIN, ROLE_AGENT_ADMIN, ROLE_MANAGER_ADMIN];
     let admin_account = env.get_account(0);
     let roles_admin_account = env.get_account(1);
     let roles_account = env.get_account(2);

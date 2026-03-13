@@ -15,6 +15,8 @@ use leasefi_contracts::vesting::{
     Vesting, VestingHostRef, VestingId, VestingInitArgs,
 };
 
+use crate::staking::{Staking, StakingInitArgs};
+
 // =============================================================================
 // Test Constants
 // =============================================================================
@@ -67,9 +69,12 @@ fn setup(env: HostEnv) -> Context {
         },
     );
 
+    let staking = Staking::deploy(&env, StakingInitArgs { owner: users.owner });
+
     // Set up Vesting contract
     let mut vesting = Vesting::deploy(&env, VestingInitArgs { owner: users.owner });
     vesting.set_tailor_coin(tailor_coin.address());
+    vesting.set_staking(staking.address());
     vesting.add_whitelisted_creator(users.owner);
 
     Context {
