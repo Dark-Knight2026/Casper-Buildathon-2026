@@ -123,7 +123,7 @@ impl IndexableEvent for TokensPurchased {
                 transaction_type: "token_purchase",
                 from_address: &buyer,
                 to_address: Some(ctx.contract_hash),
-                amount: Some(&self.amount),
+                amount: Some(&self.cost),
                 currency: Some(self.currency.as_str()),
                 contract_hash: Some(ctx.contract_hash),
                 block_timestamp: ctx.block_timestamp,

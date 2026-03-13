@@ -8,6 +8,8 @@ use rand::Rng;
 use redis::AsyncCommands;
 use sqlx::PgPool;
 
+use api::server::AUTH_RATE_LIMIT_BURST;
+
 fn generate_random_ed25519() -> (SecretKey, PublicKey) {
     let mut rng = rand::rng();
     let mut bytes = [0u8; 32];
@@ -398,4 +400,38 @@ fn generate_data_for_local_tests() {
     println!("2. Signature:");
     println!("{signature_hex}");
     println!("============================================\n");
+}
+
+/// Rate limiter returns 429 after burst is exhausted.
+///
+/// Regression: `axum::serve` must use `into_make_service_with_connect_info::<SocketAddr>()`
+/// so that `GovernorLayer` can extract the peer IP via `ConnectInfo`. Without it, all
+/// rate-limited endpoints return 500.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn auth_rate_limiter_returns_429_after_burst(pool: PgPool) {
+    let env = common::setup_test_server(pool, true).await;
+    let wallet = "01a234567890abcdef01234567890abcdef01234567890abcdef01234567890abcdef";
+
+    // Send BURST + 1 requests; the last one must be rate-limited (429).
+    for i in 0..=AUTH_RATE_LIMIT_BURST {
+        let response = env
+          .server
+          .get("/api/v1/auth/nonce")
+          .add_query_param("wallet_address", wallet)
+          .await;
+
+        if i < AUTH_RATE_LIMIT_BURST {
+            assert_eq!(
+                response.status_code(),
+                StatusCode::OK,
+                "Request {i} should succeed within burst limit"
+            );
+        } else {
+            assert_eq!(
+                response.status_code(),
+                StatusCode::TOO_MANY_REQUESTS,
+                "Request {i} should be rate-limited after burst exhausted"
+            );
+        }
+    }
 }

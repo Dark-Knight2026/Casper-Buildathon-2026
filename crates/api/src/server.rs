@@ -1,6 +1,7 @@
 //! Server implementation and startup logic.
 
 use core::{net::SocketAddr, str::FromStr, time::Duration};
+use std::env;
 use std::sync::Arc;
 
 use axum::{
@@ -9,6 +10,13 @@ use axum::{
 };
 use secrecy::ExposeSecret;
 use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
+use tokio::{
+    net::TcpListener,
+    signal::{
+        self,
+        unix::{self, SignalKind},
+    },
+};
 use tower_governor::{GovernorLayer, governor::GovernorConfigBuilder};
 use tower_http::{cors::CorsLayer, limit::RequestBodyLimitLayer, trace::TraceLayer};
 use utoipa::OpenApi;
@@ -166,7 +174,7 @@ pub async fn main() -> Result<(), ServerError> {
         .await?;
 
     // Run migrations
-    if std::env::var("RUN_MIGRATIONS").unwrap_or_default() == "true" {
+    if env::var("RUN_MIGRATIONS").unwrap_or_default() == "true" {
         sqlx::migrate!("../../supabase/migrations")
             .run(&pool)
             .await?;
@@ -190,10 +198,13 @@ pub async fn main() -> Result<(), ServerError> {
     let app = create_app(state)?;
     let addr = SocketAddr::from(([0, 0, 0, 0], config.port));
     tracing::info!(address = %addr, "Server listening");
-    let listener = tokio::net::TcpListener::bind(addr).await?;
-    axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal())
-        .await?;
+    let listener = TcpListener::bind(addr).await?;
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .with_graceful_shutdown(shutdown_signal())
+    .await?;
 
     Ok(())
 }
@@ -201,14 +212,14 @@ pub async fn main() -> Result<(), ServerError> {
 /// Awaits a shutdown signal (e.g., Ctrl+C) to gracefully shut down the server.
 async fn shutdown_signal() {
     let ctrl_c = async {
-        tokio::signal::ctrl_c()
+        signal::ctrl_c()
             .await
             .expect("Failed to install Ctrl+C handler - OS may not support graceful shutdown");
     };
 
     #[cfg(unix)]
     let terminate = async {
-        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+        unix::signal(SignalKind::terminate())
             .expect("Failed to install SIGTERM handler - OS may not support graceful shutdown")
             .recv()
             .await;
