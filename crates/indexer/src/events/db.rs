@@ -438,3 +438,66 @@ pub async fn insert_ico_purchase(
 
     Ok(())
 }
+
+// -----------------------------------------------------------------------------
+// ICO schedules
+// -----------------------------------------------------------------------------
+
+/// Data required to insert a row into `ico_schedules`.
+#[derive(Debug)]
+pub struct NewIcoSchedule<'a> {
+    /// Schedule ID from the contract.
+    pub schedule_id: &'a str,
+    /// Unix timestamp: sale window start.
+    pub start_timestamp: i64,
+    /// Unix timestamp: sale window end.
+    pub end_timestamp: i64,
+    /// Total allocation for this round (U256 as string).
+    pub sale_amount: &'a str,
+    /// Token price (U256 as string, 6 decimals).
+    pub price: &'a str,
+    /// Deploy hash that emitted the event.
+    pub transaction_hash: &'a str,
+    /// Block height of the deployment.
+    pub block_height: i64,
+}
+
+/// Upsert a row into `ico_schedules` for an `ICOScheduleAdded` event.
+///
+/// Uses `ON CONFLICT (schedule_id) DO UPDATE` so re-indexing is safe and
+/// schedule updates from the contract are reflected.
+///
+/// # Errors
+///
+/// Returns [`IndexerError::Database`](crate::error::IndexerError::Database)
+/// on SQL failures.
+#[inline]
+pub async fn upsert_ico_schedule(
+    tx: &mut PgTransaction<'_>,
+    row: &NewIcoSchedule<'_>,
+) -> IndexerResult<()> {
+    sqlx::query!(
+        r"
+            INSERT INTO ico_schedules (schedule_id, start_timestamp, end_timestamp, sale_amount, price, transaction_hash, block_height)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            ON CONFLICT (schedule_id) DO UPDATE SET
+                start_timestamp  = EXCLUDED.start_timestamp,
+                end_timestamp    = EXCLUDED.end_timestamp,
+                sale_amount      = EXCLUDED.sale_amount,
+                price            = EXCLUDED.price,
+                transaction_hash = EXCLUDED.transaction_hash,
+                block_height     = EXCLUDED.block_height
+        ",
+        row.schedule_id,
+        row.start_timestamp,
+        row.end_timestamp,
+        row.sale_amount,
+        row.price,
+        row.transaction_hash,
+        row.block_height,
+    )
+      .execute(tx.as_mut())
+      .await?;
+
+    Ok(())
+}

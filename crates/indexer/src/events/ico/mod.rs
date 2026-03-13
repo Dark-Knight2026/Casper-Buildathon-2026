@@ -1,7 +1,9 @@
 //! ICO contract events.
 
+pub mod ico_schedule_added;
 pub mod tokens_purchased;
 
+pub use ico_schedule_added::IcoScheduleAdded;
 pub use tokens_purchased::TokensPurchased;
 
 use core::str::FromStr;

@@ -1,17 +1,19 @@
-//! Integration tests for CEP-18 event handlers.
+//! Integration tests for event handlers.
 //!
 //! Tests the business logic of individual event handlers by processing events
 //! through `processor::process_event` and asserting on the resulting DB state.
 //!
 //! Covered handlers:
 //!
-//! - **`Transfer`** — writes `blockchain_transactions` (`token_transfer`) and
+//! - **`Transfer`** - writes `blockchain_transactions` (`token_transfer`) and
 //!   updates two `token_holdings` rows (Decrease sender, Increase recipient).
 //!   Tested for all three CEP-18 token types (BIG, USDC, USDT).
-//! - **`SetAllowance`** — writes `blockchain_transactions` (`token_allowance`)
+//! - **`SetAllowance`** - writes `blockchain_transactions` (`token_allowance`)
 //!   only; `token_holdings` must remain unchanged.
-//! - **`TokensPurchased`** — unknown `currency` discriminant (> 2) must be
+//! - **`TokensPurchased`** - unknown `currency` discriminant (> 2) must be
 //!   stored as `"UNKNOWN"` in `ico_purchases` and `blockchain_transactions`.
+//! - **`IcoScheduleAdded`** - writes `ico_schedules` row with schedule ID,
+//!   price, and sale amount; UPSERT updates existing rows.
 
 mod common;
 
@@ -561,5 +563,153 @@ async fn set_allowance_does_not_modify_token_holdings(pool: PgPool) {
     assert_eq!(
         holdings, 0,
         "SetAllowance must not write any token_holdings rows"
+    );
+}
+
+/// `IcoScheduleAdded` must write exactly one row to `ico_schedules` with the
+/// correct schedule ID, price, and sale amount.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn ico_schedule_added_writes_schedule_row(pool: PgPool) {
+    common::disable_rls(&pool).await;
+
+    let deploy_hash = "0000000000000000000000000000000000000000000000000000000000009999";
+
+    processor::process_event(
+        &pool,
+        &EventRegistry::new(),
+        &HashSet::new(),
+        &RawEvent {
+            contract_hash: "ico_hash".to_owned(),
+            deploy_hash: deploy_hash.to_owned(),
+            block_height: 500,
+            caller: String::new(),
+            contract_type: ContractType::Ico,
+            event_name: "IcoScheduleAdded".to_owned(),
+            event_data: json!({
+                "id": "schedule-1",
+                "start_timestamp": 1_700_000_000_u64,
+                "end_timestamp": 1_710_000_000_u64,
+                "sale_amount": "500000000000000000000000000",
+                "price": "500000"
+            }),
+            block_timestamp: None,
+            transform_idx: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let row = sqlx::query!(
+        r"
+            SELECT schedule_id, start_timestamp, end_timestamp, sale_amount, price, transaction_hash, block_height
+            FROM   ico_schedules
+            WHERE  schedule_id = 'schedule-1'
+        ",
+    )
+      .fetch_one(&pool)
+      .await
+      .unwrap();
+
+    assert_eq!(row.schedule_id, "schedule-1");
+    assert_eq!(row.start_timestamp, 1_700_000_000);
+    assert_eq!(row.end_timestamp, 1_710_000_000);
+    assert_eq!(row.sale_amount, "500000000000000000000000000");
+    assert_eq!(row.price, "500000");
+    assert_eq!(row.transaction_hash, deploy_hash);
+    assert_eq!(row.block_height, 500);
+}
+
+/// Re-processing the same `IcoScheduleAdded` event must update the existing
+/// row (UPSERT), not fail or duplicate.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn ico_schedule_added_upsert_updates_existing_row(pool: PgPool) {
+    common::disable_rls(&pool).await;
+
+    let deploy_hash_1 = "0000000000000000000000000000000000000000000000000000000000009901";
+    let deploy_hash_2 = "0000000000000000000000000000000000000000000000000000000000009902";
+
+    // First event
+    processor::process_event(
+        &pool,
+        &EventRegistry::new(),
+        &HashSet::new(),
+        &RawEvent {
+            contract_hash: "ico_hash".to_owned(),
+            deploy_hash: deploy_hash_1.to_owned(),
+            block_height: 100,
+            caller: String::new(),
+            contract_type: ContractType::Ico,
+            event_name: "IcoScheduleAdded".to_owned(),
+            event_data: json!({
+                "id": "schedule-upsert",
+                "start_timestamp": 1_000_000_u64,
+                "end_timestamp": 2_000_000_u64,
+                "sale_amount": "100",
+                "price": "100000"
+            }),
+            block_timestamp: None,
+            transform_idx: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    // Second event with same schedule ID but updated price
+    processor::process_event(
+        &pool,
+        &EventRegistry::new(),
+        &HashSet::new(),
+        &RawEvent {
+            contract_hash: "ico_hash".to_owned(),
+            deploy_hash: deploy_hash_2.to_owned(),
+            block_height: 200,
+            caller: String::new(),
+            contract_type: ContractType::Ico,
+            event_name: "IcoScheduleAdded".to_owned(),
+            event_data: json!({
+                "id": "schedule-upsert",
+                "start_timestamp": 1_000_000_u64,
+                "end_timestamp": 2_000_000_u64,
+                "sale_amount": "200",
+                "price": "750000"
+            }),
+            block_timestamp: None,
+            transform_idx: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let count: i64 = sqlx::query_scalar!(
+        r"
+            SELECT COUNT(*) FROM ico_schedules
+            WHERE schedule_id = 'schedule-upsert'
+        "
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap()
+    .unwrap_or(0);
+
+    assert_eq!(count, 1, "UPSERT must not create duplicate rows");
+
+    let row = sqlx::query!(
+        r"
+            SELECT price, sale_amount, block_height FROM ico_schedules
+            WHERE schedule_id = 'schedule-upsert'
+        "
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(row.price, "750000", "price must be updated by UPSERT");
+    assert_eq!(
+        row.sale_amount, "200",
+        "sale_amount must be updated by UPSERT"
+    );
+    assert_eq!(
+        row.block_height, 200,
+        "block_height must be updated by UPSERT"
     );
 }

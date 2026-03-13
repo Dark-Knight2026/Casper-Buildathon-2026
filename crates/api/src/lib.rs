@@ -37,7 +37,7 @@ pub mod transactions;
 // Re-exports
 pub use auth::AuthUser;
 pub use common::{
-    AppState, Claims, IcoConfig, Pageable, PaginatedResponse, Pagination, PropertyId, RedisStore,
+    AppState, Claims, Pageable, PaginatedResponse, Pagination, PropertyId, RedisStore,
     ServerConfig, ServerError, UserId, UserRole,
 };
 pub use openapi::ApiDoc;

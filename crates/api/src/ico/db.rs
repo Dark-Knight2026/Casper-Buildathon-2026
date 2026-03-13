@@ -1,7 +1,44 @@
 //! Database queries for ICO endpoints.
 
 use rust_decimal::Decimal;
-use sqlx::PgPool;
+use sqlx::{FromRow, PgPool};
+
+/// ICO schedule row from `ico_schedules` table.
+#[derive(Debug, FromRow)]
+pub struct IcoScheduleRow {
+    /// Total allocation for this round (U256 as TEXT, minimal units, decimals=18).
+    pub sale_amount: String,
+    /// Token price (U256 as TEXT, 6 decimals; 500000 = $0.50).
+    pub price: String,
+}
+
+/// Returns the currently active ICO schedule (by timestamp), or the latest one.
+///
+/// Tries active schedule first (`NOW()` between start/end), falls back to the
+/// most recently created schedule.
+///
+/// # Errors
+///
+/// Returns `sqlx::Error` if the database query fails or no schedule exists.
+#[inline]
+pub async fn fetch_active_schedule(pool: &PgPool) -> Result<Option<IcoScheduleRow>, sqlx::Error> {
+    let row = sqlx::query_as!(
+        IcoScheduleRow,
+        r"
+            SELECT sale_amount, price
+            FROM ico_schedules
+            ORDER BY
+                CASE WHEN EXTRACT(EPOCH FROM NOW())::BIGINT BETWEEN start_timestamp AND end_timestamp
+                     THEN 0 ELSE 1 END,
+                created_at DESC
+            LIMIT 1
+        ",
+    )
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(row)
+}
 
 /// Returns the total tokens purchased by a specific buyer (U256 as TEXT).
 ///

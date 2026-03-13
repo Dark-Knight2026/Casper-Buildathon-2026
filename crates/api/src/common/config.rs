@@ -19,12 +19,6 @@ struct RawEnvConfig {
     /// BIG token contract package hash (hex, no prefix). Shared with `indexer`.
     #[serde(default)]
     contract_big: Option<String>,
-    /// ICO token price in USD (e.g. `0.50` for Private Sale).
-    #[serde(default)]
-    ico_price_usd: Option<f64>,
-    /// ICO total allocation in minimal units (e.g. `"500000000000000000000000000"`).
-    #[serde(default)]
-    ico_total_allocation: Option<String>,
 }
 
 const fn default_port() -> u16 {
@@ -32,19 +26,6 @@ const fn default_port() -> u16 {
 }
 fn default_cors_origin() -> String {
     "http://localhost:8080".to_owned()
-}
-
-/// ICO round configuration loaded from `ICO_PRICE_USD` and `ICO_TOTAL_ALLOCATION` env vars.
-///
-/// Both variables must be set for ICO endpoints to work. If either is missing,
-/// [`ServerConfig::ico`] will be `None` and ICO endpoints will return an error.
-#[derive(Debug, Clone)]
-pub struct IcoConfig {
-    /// Price per 1 BIG token in USD (e.g. `0.50` for Private Sale, `1.00` for Public Sale).
-    pub price_usd: f64,
-    /// Total allocation in minimal units (U256 as string, e.g. `"500000000000000000000000000"`
-    /// = 500M BIG with decimals=18). Kept as string because the value exceeds `u128`.
-    pub total_allocation: String,
 }
 
 /// Server application configuration loaded from environment variables.
@@ -62,8 +43,6 @@ pub struct ServerConfig {
     pub cors_origin: String,
     /// BIG token contract package hash (hex, no prefix). `None` when not configured.
     pub contract_big: Option<String>,
-    /// ICO round configuration. `None` when env vars are not set.
-    pub ico: Option<IcoConfig>,
 }
 
 impl ServerConfig {
@@ -84,14 +63,6 @@ impl ServerConfig {
             .and_then(Config::try_deserialize)
             .map_err(|e| ServerError::EnvVar(e.to_string()))?;
 
-        let ico = match (raw.ico_price_usd, raw.ico_total_allocation) {
-            (Some(price_usd), Some(total_allocation)) => Some(IcoConfig {
-                price_usd,
-                total_allocation,
-            }),
-            _ => None,
-        };
-
         let config = Self {
             database_url: raw.database_url,
             redis_url: raw.redis_url,
@@ -99,7 +70,6 @@ impl ServerConfig {
             port: raw.port,
             cors_origin: raw.cors_origin,
             contract_big: raw.contract_big.map(|s| s.to_ascii_lowercase()),
-            ico,
         };
 
         config.validate()?;

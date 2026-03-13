@@ -16,11 +16,33 @@ use crate::{
     },
 };
 
+/// Number of decimal places in the price U256 value (same as USDC/USDT).
+const PRICE_DECIMALS: u32 = 6;
+
+/// Number of decimal places in the token amount U256 value (BIG token).
+const TOKEN_DECIMALS: u32 = 18;
+
 /// Converts a raw U256 text value (minimal units, decimals=18) to a human-readable Decimal.
 #[inline]
 fn to_human(raw: &str) -> Decimal {
-    let decimals = Decimal::from(10u64.pow(18));
-    raw.parse::<Decimal>().unwrap_or(Decimal::ZERO) / decimals
+    let divisor = Decimal::from(10u64.pow(TOKEN_DECIMALS));
+    raw.parse::<Decimal>().unwrap_or(Decimal::ZERO) / divisor
+}
+
+/// Converts a price U256 string (6 decimals) to a human-readable f64.
+/// E.g. "500000" -> 0.5
+#[inline]
+fn price_to_f64(raw: &str) -> f64 {
+    let divisor = Decimal::from(10u64.pow(PRICE_DECIMALS));
+    let dec = raw.parse::<Decimal>().unwrap_or(Decimal::ZERO) / divisor;
+    dec.to_f64().unwrap_or(0.0)
+}
+
+/// Converts a price U256 string (6 decimals) to Decimal.
+#[inline]
+fn price_to_decimal(raw: &str) -> Decimal {
+    let divisor = Decimal::from(10u64.pow(PRICE_DECIMALS));
+    raw.parse::<Decimal>().unwrap_or(Decimal::ZERO) / divisor
 }
 
 /// `GET /api/v1/ico/balance/{address}`
@@ -28,11 +50,11 @@ fn to_human(raw: &str) -> Decimal {
 /// Returns ICO balance information for a specific account.
 ///
 /// Aggregates `ico_purchases.amount` for the given buyer and derives
-/// USD values from the `ICO_PRICE_USD` configuration.
+/// USD values from the active ICO schedule in the database.
 ///
 /// # Errors
 ///
-/// Returns `ApiError::Internal` if ICO config is missing.
+/// Returns `ApiError::Internal` if no ICO schedule exists in the database.
 #[utoipa::path(
     get,
     path = "/balance/{address}",
@@ -51,10 +73,8 @@ pub async fn get_ico_balance(
     State(state): State<Arc<AppState>>,
     Path(address): Path<String>,
 ) -> ApiResult<Json<IcoBalanceResponse>> {
-    let ico = state
-        .config
-        .ico
-        .as_ref()
+    let schedule = db::fetch_active_schedule(&state.db)
+        .await?
         .ok_or_else(|| ApiError::Internal("ICO not configured".to_owned()))?;
 
     let address = address.to_ascii_lowercase();
@@ -65,7 +85,7 @@ pub async fn get_ico_balance(
     }
 
     let tokens_purchased = db::fetch_buyer_tokens(&state.db, &address).await?;
-    let price = Decimal::try_from(ico.price_usd).unwrap_or(Decimal::ZERO);
+    let price = price_to_decimal(&schedule.price);
     let usd_value = (to_human(&tokens_purchased) * price)
         .to_f64()
         .unwrap_or(0.0);
@@ -73,7 +93,7 @@ pub async fn get_ico_balance(
     Ok(Json(IcoBalanceResponse {
         tokens_purchased,
         total_spent_usd: usd_value,
-        token_price: ico.price_usd,
+        token_price: price_to_f64(&schedule.price),
         token_symbol: "BIG".to_owned(),
         current_value: usd_value,
     }))
@@ -84,11 +104,11 @@ pub async fn get_ico_balance(
 /// Returns overall ICO sale progress.
 ///
 /// Derives all values from `SUM(ico_purchases.amount)` and the
-/// `ICO_PRICE_USD` / `ICO_TOTAL_ALLOCATION` configuration.
+/// active ICO schedule from the database.
 ///
 /// # Errors
 ///
-/// Returns `ApiError::Internal` if ICO config is missing.
+/// Returns `ApiError::Internal` if no ICO schedule exists in the database.
 #[utoipa::path(
     get,
     path = "/progress",
@@ -102,25 +122,23 @@ pub async fn get_ico_balance(
 pub async fn get_ico_progress(
     State(state): State<Arc<AppState>>,
 ) -> ApiResult<Json<IcoProgressResponse>> {
-    let ico = state
-        .config
-        .ico
-        .as_ref()
+    let schedule = db::fetch_active_schedule(&state.db)
+        .await?
         .ok_or_else(|| ApiError::Internal("ICO not configured".to_owned()))?;
 
     let (tokens_sold, tokens_remaining) =
-        db::fetch_sale_totals(&state.db, &ico.total_allocation).await?;
+        db::fetch_sale_totals(&state.db, &schedule.sale_amount).await?;
 
-    let price = Decimal::try_from(ico.price_usd).unwrap_or(Decimal::ZERO);
+    let price = price_to_decimal(&schedule.price);
     let sold_dec = tokens_sold.parse::<Decimal>().unwrap_or(Decimal::ZERO);
-    let alloc_dec = ico
-        .total_allocation
+    let alloc_dec = schedule
+        .sale_amount
         .parse::<Decimal>()
         .unwrap_or(Decimal::ZERO);
     let hundred = Decimal::from(100);
 
     let amount_raised = (to_human(&tokens_sold) * price).to_f64().unwrap_or(0.0);
-    let hard_cap_usd = (to_human(&ico.total_allocation) * price)
+    let hard_cap_usd = (to_human(&schedule.sale_amount) * price)
         .to_f64()
         .unwrap_or(0.0);
     let percent_sold = if alloc_dec > Decimal::ZERO {
@@ -134,11 +152,11 @@ pub async fn get_ico_progress(
 
     Ok(Json(IcoProgressResponse {
         tokens_sold,
-        total_allocation: ico.total_allocation.clone(),
+        total_allocation: schedule.sale_amount,
         tokens_remaining,
         amount_raised,
         hard_cap_usd,
-        price_usd: ico.price_usd,
+        price_usd: price_to_f64(&schedule.price),
         percent_sold,
     }))
 }
