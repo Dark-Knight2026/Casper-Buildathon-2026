@@ -75,6 +75,26 @@
             "name": "id",
             "description": null,
             "ty": "U128"
+          },
+          {
+            "name": "start_timestamp",
+            "description": null,
+            "ty": "U64"
+          },
+          {
+            "name": "end_timestamp",
+            "description": null,
+            "ty": "U64"
+          },
+          {
+            "name": "sale_amount",
+            "description": null,
+            "ty": "U256"
+          },
+          {
+            "name": "price",
+            "description": null,
+            "ty": "U256"
           }
         ]
       }

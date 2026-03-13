@@ -97,14 +97,19 @@ impl ICO {
         let self_address = self.env().self_address();
         let sale_amount = ico_schedule.sale_amount;
 
-        self.ico_schedules.set(&ico_id, ico_schedule.into());
+        self.ico_schedules.set(&ico_id, ico_schedule.clone().into());
         self.ico_schedules_count.set(ico_id + 1);
 
         self.tailor_coin
             .transfer_from(&owner, &self_address, &sale_amount);
 
-        self.env()
-            .emit_native_event(ICOScheduleAdded { id: ico_id });
+        self.env().emit_native_event(ICOScheduleAdded {
+            id: ico_id,
+            start_timestamp: ico_schedule.start_timestamp,
+            end_timestamp: ico_schedule.end_timestamp,
+            sale_amount: ico_schedule.sale_amount,
+            price: ico_schedule.price,
+        });
 
         ico_id
     }
@@ -356,6 +361,10 @@ pub mod events {
     #[odra::event]
     pub struct ICOScheduleAdded {
         pub id: ICOScheduleId,
+        pub start_timestamp: u64,
+        pub end_timestamp: u64,
+        pub sale_amount: U256,
+        pub price: U256,
     }
 
     #[odra::event]
@@ -1491,7 +1500,11 @@ mod tests {
                 ctx.env.emitted_native_event(
                     &ctx.ico,
                     ICOScheduleAdded {
-                        id: expected_ico_schedule_id
+                        id: expected_ico_schedule_id,
+                        start_timestamp: params.start_timestamp,
+                        end_timestamp: params.end_timestamp,
+                        sale_amount: params.sale_amount,
+                        price: params.price,
                     }
                 ),
                 "ICOScheduleAdded event should be emitted"
