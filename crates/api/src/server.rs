@@ -68,8 +68,11 @@ pub const PUBLIC_DATA_RATE_LIMIT_BURST: u32 = 30;
 /// Creates a rate-limited `OpenAPI` router for public data endpoints (no auth).
 ///
 /// - `GET /ico/progress` - ICO sale progress
+/// - `GET /ico/balance/{address}` - ICO balance for an account
 /// - `GET /transactions/token/big` - BIG token transactions
+/// - `GET /transactions/account/{address}` - account transaction history
 #[inline]
+#[must_use]
 pub fn public_data_router() -> OpenApiRouter<Arc<AppState>> {
     let rate_limit = Arc::new(
         GovernorConfigBuilder::default()
@@ -80,8 +83,8 @@ pub fn public_data_router() -> OpenApiRouter<Arc<AppState>> {
     );
 
     OpenApiRouter::new()
-        .routes(routes!(ico::handlers::get_ico_progress))
-        .routes(routes!(transactions::handlers::get_big_token_transactions))
+        .nest("/transactions", transactions_router())
+        .nest("/ico", ico_router())
         .route_layer(GovernorLayer::new(rate_limit))
 }
 
@@ -96,20 +99,22 @@ pub fn protected_router() -> OpenApiRouter<Arc<AppState>> {
     OpenApiRouter::new()
         .routes(routes!(tax::handlers::calculate_tax_liability))
         .routes(routes!(analytics::handlers::get_property_performance))
-        .nest("/transactions", transactions_router())
-        .nest("/ico", ico_router())
 }
 
 /// Creates an `OpenAPI` router for blockchain transaction endpoints
 #[inline]
 pub fn transactions_router() -> OpenApiRouter<Arc<AppState>> {
-    OpenApiRouter::new().routes(routes!(transactions::handlers::get_account_transactions))
+    OpenApiRouter::new()
+        .routes(routes!(transactions::handlers::get_account_transactions))
+        .routes(routes!(transactions::handlers::get_big_token_transactions))
 }
 
 /// Creates an `OpenAPI` router for ICO endpoints
 #[inline]
 pub fn ico_router() -> OpenApiRouter<Arc<AppState>> {
-    OpenApiRouter::new().routes(routes!(ico::handlers::get_ico_balance))
+    OpenApiRouter::new()
+        .routes(routes!(ico::handlers::get_ico_balance))
+        .routes(routes!(ico::handlers::get_ico_progress))
 }
 
 // Full router -----------------------------------------------------------------

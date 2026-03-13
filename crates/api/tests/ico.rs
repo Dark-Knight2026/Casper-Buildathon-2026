@@ -3,11 +3,11 @@
 
 mod common;
 
-use axum::http::{Method, StatusCode};
-use serde_json::{Value, json};
+use axum::http::StatusCode;
+use serde_json::Value;
 use sqlx::PgPool;
 
-use api::{IcoConfig, UserId, UserRole, server::PUBLIC_DATA_RATE_LIMIT_BURST};
+use api::{IcoConfig, server::PUBLIC_DATA_RATE_LIMIT_BURST};
 use common::TestOverrides;
 
 /// 64-char hex address used as a valid account hash in tests.
@@ -50,19 +50,14 @@ async fn seed_ico_purchase(pool: &PgPool, tx_hash: &str, buyer: &str, amount: &s
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn ico_balance_no_purchases(pool: PgPool) {
     let env = common::setup_test_server_with(pool, false, ico_overrides()).await;
-    let token = common::create_test_jwt(UserId::default(), UserRole::Tenant, &env.jwt_secret);
 
-    let (status, body): (_, Option<Value>) = common::authed_request(
-        &env.server,
-        &Method::GET,
-        &format!("/api/v1/ico/balance/{VALID_ADDRESS}"),
-        &token,
-        &json!({}),
-    )
-    .await;
+    let response = env
+        .server
+        .get(&format!("/api/v1/ico/balance/{VALID_ADDRESS}"))
+        .await;
 
-    assert_eq!(status, StatusCode::OK);
-    let body = body.expect("valid JSON");
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
     assert_eq!(body["tokensPurchased"], "0");
     assert_eq!(body["totalSpentUSD"], 0.0);
     assert_eq!(body["tokenPrice"], ICO_PRICE_USD);
@@ -77,19 +72,14 @@ async fn ico_balance_with_purchases(pool: PgPool) {
     seed_ico_purchase(&pool, &"a".repeat(64), VALID_ADDRESS, amount).await;
 
     let env = common::setup_test_server_with(pool, false, ico_overrides()).await;
-    let token = common::create_test_jwt(UserId::default(), UserRole::Tenant, &env.jwt_secret);
 
-    let (status, body): (_, Option<Value>) = common::authed_request(
-        &env.server,
-        &Method::GET,
-        &format!("/api/v1/ico/balance/{VALID_ADDRESS}"),
-        &token,
-        &json!({}),
-    )
-    .await;
+    let response = env
+        .server
+        .get(&format!("/api/v1/ico/balance/{VALID_ADDRESS}"))
+        .await;
 
-    assert_eq!(status, StatusCode::OK);
-    let body = body.expect("valid JSON");
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
     assert_eq!(body["tokensPurchased"], amount);
     // 2 BIG * $0.50 = $1.00
     let spent = body["totalSpentUSD"].as_f64().unwrap();
@@ -109,63 +99,45 @@ async fn ico_balance_aggregates_multiple_purchases(pool: PgPool) {
     seed_ico_purchase(&pool, &"b".repeat(64), VALID_ADDRESS, one_big).await;
 
     let env = common::setup_test_server_with(pool, false, ico_overrides()).await;
-    let token = common::create_test_jwt(UserId::default(), UserRole::Tenant, &env.jwt_secret);
 
-    let (status, body): (_, Option<Value>) = common::authed_request(
-        &env.server,
-        &Method::GET,
-        &format!("/api/v1/ico/balance/{VALID_ADDRESS}"),
-        &token,
-        &json!({}),
-    )
-    .await;
+    let response = env
+        .server
+        .get(&format!("/api/v1/ico/balance/{VALID_ADDRESS}"))
+        .await;
 
-    assert_eq!(status, StatusCode::OK);
-    let body = body.expect("valid JSON");
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
     assert_eq!(body["tokensPurchased"], "2000000000000000000");
 }
 
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn ico_balance_invalid_address_returns_400(pool: PgPool) {
     let env = common::setup_test_server_with(pool, false, ico_overrides()).await;
-    let token = common::create_test_jwt(UserId::default(), UserRole::Tenant, &env.jwt_secret);
 
-    let (status, _): (_, Option<Value>) = common::authed_request(
-        &env.server,
-        &Method::GET,
-        "/api/v1/ico/balance/tooshort",
-        &token,
-        &json!({}),
-    )
-    .await;
-    assert_eq!(status, StatusCode::BAD_REQUEST);
+    let response = env.server.get("/api/v1/ico/balance/tooshort").await;
+    assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
 }
 
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn ico_balance_returns_500_without_config(pool: PgPool) {
     let env = common::setup_test_server(pool, false).await;
-    let token = common::create_test_jwt(UserId::default(), UserRole::Tenant, &env.jwt_secret);
 
-    let (status, _): (_, Option<Value>) = common::authed_request(
-        &env.server,
-        &Method::GET,
-        &format!("/api/v1/ico/balance/{VALID_ADDRESS}"),
-        &token,
-        &json!({}),
-    )
-    .await;
-    assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+    let response = env
+        .server
+        .get(&format!("/api/v1/ico/balance/{VALID_ADDRESS}"))
+        .await;
+    assert_eq!(response.status_code(), StatusCode::INTERNAL_SERVER_ERROR);
 }
 
 #[sqlx::test(migrator = "common::MIGRATIONS")]
-async fn ico_balance_requires_auth(pool: PgPool) {
+async fn ico_balance_is_public(pool: PgPool) {
     let env = common::setup_test_server_with(pool, false, ico_overrides()).await;
 
     let response = env
         .server
         .get(&format!("/api/v1/ico/balance/{VALID_ADDRESS}"))
         .await;
-    assert_eq!(response.status_code(), StatusCode::UNAUTHORIZED);
+    assert_eq!(response.status_code(), StatusCode::OK);
 }
 
 // GET /api/v1/ico/progress

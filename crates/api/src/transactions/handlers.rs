@@ -8,7 +8,6 @@ use axum::{
 };
 
 use crate::{
-    auth::AuthUser,
     common::{ApiError, ApiResult, AppState, PaginatedResponse, Pagination},
     transactions::{db, models::TransactionResponse},
 };
@@ -34,17 +33,12 @@ use crate::{
     responses(
         (status = 200, description = "Paginated transaction list", body = inline(PaginatedResponse<TransactionResponse>)),
         (status = 400, description = "Invalid address format"),
-        (status = 401, description = "Unauthorized"),
         (status = 500, description = "Internal server error")
-    ),
-    security(
-        ("bearer_auth" = [])
     )
 )]
 #[inline]
 pub async fn get_account_transactions(
     State(state): State<Arc<AppState>>,
-    _user: AuthUser,
     Path(address): Path<String>,
     Query(pagination): Query<Pagination>,
 ) -> ApiResult<Json<PaginatedResponse<TransactionResponse>>> {
@@ -77,7 +71,7 @@ pub async fn get_account_transactions(
 /// Returns `ApiError::Internal` if `CONTRACT_BIG` is not configured.
 #[utoipa::path(
     get,
-    path = "/transactions/token/big",
+    path = "/token/big",
     tag = "Transactions",
     params(Pagination),
     responses(

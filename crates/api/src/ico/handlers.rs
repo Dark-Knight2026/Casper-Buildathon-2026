@@ -9,7 +9,6 @@ use axum::{
 use rust_decimal::{Decimal, prelude::ToPrimitive};
 
 use crate::{
-    AuthUser,
     common::{ApiError, ApiResult, AppState},
     ico::{
         db,
@@ -44,17 +43,12 @@ fn to_human(raw: &str) -> Decimal {
     responses(
         (status = 200, description = "ICO balance for the account", body = IcoBalanceResponse),
         (status = 400, description = "Invalid address format"),
-        (status = 401, description = "Unauthorized"),
         (status = 500, description = "ICO not configured or internal error")
-    ),
-    security(
-        ("bearer_auth" = [])
     )
 )]
 #[inline]
 pub async fn get_ico_balance(
     State(state): State<Arc<AppState>>,
-    _user: AuthUser,
     Path(address): Path<String>,
 ) -> ApiResult<Json<IcoBalanceResponse>> {
     let ico = state
@@ -97,7 +91,7 @@ pub async fn get_ico_balance(
 /// Returns `ApiError::Internal` if ICO config is missing.
 #[utoipa::path(
     get,
-    path = "/ico/progress",
+    path = "/progress",
     tag = "ICO",
     responses(
         (status = 200, description = "Current ICO sale progress", body = IcoProgressResponse),

@@ -3,11 +3,10 @@
 
 mod common;
 
-use axum::http::{Method, StatusCode};
-use serde_json::{Value, json};
+use axum::http::StatusCode;
+use serde_json::Value;
 use sqlx::PgPool;
 
-use api::{UserId, UserRole};
 use common::TestOverrides;
 
 /// 64-char hex address used as a valid account hash in tests.
@@ -50,19 +49,14 @@ async fn seed_transaction(
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn account_transactions_empty(pool: PgPool) {
     let env = common::setup_test_server(pool, false).await;
-    let token = common::create_test_jwt(UserId::default(), UserRole::Tenant, &env.jwt_secret);
 
-    let (status, body): (_, Option<Value>) = common::authed_request(
-        &env.server,
-        &Method::GET,
-        &format!("/api/v1/transactions/account/{VALID_ADDRESS}"),
-        &token,
-        &json!({}),
-    )
-    .await;
+    let response = env
+        .server
+        .get(&format!("/api/v1/transactions/account/{VALID_ADDRESS}"))
+        .await;
 
-    assert_eq!(status, StatusCode::OK);
-    let body = body.expect("valid JSON");
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
     assert_eq!(body["item_count"], 0);
     assert_eq!(body["page_count"], 0);
     assert!(body["data"].as_array().unwrap().is_empty());
@@ -85,19 +79,14 @@ async fn account_transactions_returns_expected_fields(pool: PgPool) {
     .await;
 
     let env = common::setup_test_server(pool, false).await;
-    let token = common::create_test_jwt(UserId::default(), UserRole::Tenant, &env.jwt_secret);
 
-    let (status, body): (_, Option<Value>) = common::authed_request(
-        &env.server,
-        &Method::GET,
-        &format!("/api/v1/transactions/account/{VALID_ADDRESS}"),
-        &token,
-        &json!({}),
-    )
-    .await;
+    let response = env
+        .server
+        .get(&format!("/api/v1/transactions/account/{VALID_ADDRESS}"))
+        .await;
 
-    assert_eq!(status, StatusCode::OK);
-    let body = body.expect("valid JSON");
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
     assert_eq!(body["item_count"], 1);
     assert_eq!(body["page_count"], 1);
 
@@ -132,19 +121,14 @@ async fn account_transactions_matches_to_address(pool: PgPool) {
     .await;
 
     let env = common::setup_test_server(pool, false).await;
-    let token = common::create_test_jwt(UserId::default(), UserRole::Tenant, &env.jwt_secret);
 
-    let (status, body): (_, Option<Value>) = common::authed_request(
-        &env.server,
-        &Method::GET,
-        &format!("/api/v1/transactions/account/{VALID_ADDRESS}"),
-        &token,
-        &json!({}),
-    )
-    .await;
+    let response = env
+        .server
+        .get(&format!("/api/v1/transactions/account/{VALID_ADDRESS}"))
+        .await;
 
-    assert_eq!(status, StatusCode::OK);
-    let body = body.expect("valid JSON");
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
     assert_eq!(body["item_count"], 1);
     assert_eq!(body["data"][0]["ft_action_type_id"], 1); // token_purchase -> 1 (Mint)
 }
@@ -152,34 +136,22 @@ async fn account_transactions_matches_to_address(pool: PgPool) {
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn account_transactions_invalid_address_returns_400(pool: PgPool) {
     let env = common::setup_test_server(pool, false).await;
-    let token = common::create_test_jwt(UserId::default(), UserRole::Tenant, &env.jwt_secret);
 
     // Too short
-    let (status, _): (_, Option<Value>) = common::authed_request(
-        &env.server,
-        &Method::GET,
-        "/api/v1/transactions/account/abc123",
-        &token,
-        &json!({}),
-    )
-    .await;
-    assert_eq!(status, StatusCode::BAD_REQUEST);
+    let response = env.server.get("/api/v1/transactions/account/abc123").await;
+    assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
 
     // Non-hex
     let bad_addr = "zz".repeat(32);
-    let (status, _): (_, Option<Value>) = common::authed_request(
-        &env.server,
-        &Method::GET,
-        &format!("/api/v1/transactions/account/{bad_addr}"),
-        &token,
-        &json!({}),
-    )
-    .await;
-    assert_eq!(status, StatusCode::BAD_REQUEST);
+    let response = env
+        .server
+        .get(&format!("/api/v1/transactions/account/{bad_addr}"))
+        .await;
+    assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
 }
 
 #[sqlx::test(migrator = "common::MIGRATIONS")]
-async fn account_transactions_requires_auth(pool: PgPool) {
+async fn account_transactions_is_public(pool: PgPool) {
     let env = common::setup_test_server(pool, false).await;
 
     let response = env
@@ -187,7 +159,7 @@ async fn account_transactions_requires_auth(pool: PgPool) {
         .get(&format!("/api/v1/transactions/account/{VALID_ADDRESS}"))
         .await;
 
-    assert_eq!(response.status_code(), StatusCode::UNAUTHORIZED);
+    assert_eq!(response.status_code(), StatusCode::OK);
 }
 
 #[sqlx::test(migrator = "common::MIGRATIONS")]
@@ -209,19 +181,16 @@ async fn account_transactions_pagination(pool: PgPool) {
     }
 
     let env = common::setup_test_server(pool, false).await;
-    let token = common::create_test_jwt(UserId::default(), UserRole::Tenant, &env.jwt_secret);
 
-    let (status, body): (_, Option<Value>) = common::authed_request(
-        &env.server,
-        &Method::GET,
-        &format!("/api/v1/transactions/account/{VALID_ADDRESS}?page=1&page_size=2"),
-        &token,
-        &json!({}),
-    )
-    .await;
+    let response = env
+        .server
+        .get(&format!(
+            "/api/v1/transactions/account/{VALID_ADDRESS}?page=1&page_size=2"
+        ))
+        .await;
 
-    assert_eq!(status, StatusCode::OK);
-    let body = body.expect("valid JSON");
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
     assert_eq!(body["item_count"], 3);
     assert_eq!(body["page_count"], 2);
     assert_eq!(body["data"].as_array().unwrap().len(), 2);
