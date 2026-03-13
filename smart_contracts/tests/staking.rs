@@ -9,8 +9,8 @@ use leasefi_contracts::staking::{events::*, Staking, StakingHostRef, StakingInit
 use leasefi_contracts::tailor_coin::{TailorCoin, TailorCoinHostRef, TailorCoinInitArgs};
 
 use crate::{
-    staking::{self, errors::Error, UNBONDING_PERIOD},
-    vesting::{self, Vesting, VestingInitArgs},
+    staking::{errors::Error, UNBONDING_PERIOD},
+    vesting::{Vesting, VestingInitArgs},
 };
 
 // =============================================================================
@@ -707,4 +707,82 @@ fn test_withdraw_unbonded_should_withdraw_properly() {
             amount: unstake_amount
         }
     ));
+}
+
+// =============================================================================
+// Full Staking End-to-End Lifecyce
+// =============================================================================
+
+#[test]
+fn test_staking_full_lifecycle() {
+    let mut ctx = setup(odra_test::env());
+    let alice_stake = staking_amount();
+    let bob_stake = staking_amount() * 3;
+    let rewards = rewards_amount();
+    let alice = ctx.users.alice;
+    let bob = ctx.users.bob;
+    let owner = ctx.users.owner;
+
+    // --- Stake ---
+
+    fund_and_approve(&mut ctx, alice, alice_stake);
+    fund_and_approve(&mut ctx, bob, bob_stake);
+    stake_for(&mut ctx, alice, alice_stake);
+    stake_for(&mut ctx, bob, bob_stake);
+
+    assert_eq!(ctx.staking.get_total_staked(), alice_stake + bob_stake);
+
+    // --- Deposit Rewards ---
+
+    ctx.env.set_caller(owner);
+    ctx.tailor_coin.approve(&ctx.staking.address(), &rewards);
+    ctx.staking.deposit_rewards(rewards);
+
+    // Alice 25%, Bob 75%
+    assert_eq!(ctx.staking.get_pending_rewards(alice), rewards / 4);
+    assert_eq!(ctx.staking.get_pending_rewards(bob), rewards * 3 / 4);
+
+    // --- Claim Rewards ---
+
+    ctx.env.set_caller(alice);
+    ctx.staking.claim_rewards();
+    ctx.env.set_caller(bob);
+    ctx.staking.claim_rewards();
+
+    assert_eq!(ctx.staking.get_pending_rewards(alice), U256::zero());
+    assert_eq!(ctx.staking.get_pending_rewards(bob), U256::zero());
+
+    // --- Unstake ---
+
+    ctx.env.set_caller(alice);
+    ctx.staking.unstake_for(alice, alice_stake);
+    ctx.env.set_caller(bob);
+    ctx.staking.unstake_for(bob, bob_stake);
+
+    assert_eq!(ctx.staking.get_total_staked(), U256::zero());
+
+    // --- Withdraw ---
+
+    ctx.env.advance_block_time(UNBONDING_PERIOD + 1);
+
+    let prev_alice = ctx.tailor_coin.balance_of(&alice);
+    let prev_bob = ctx.tailor_coin.balance_of(&bob);
+
+    ctx.env.set_caller(alice);
+    ctx.staking.withdraw_unbonded();
+    ctx.env.set_caller(bob);
+    ctx.staking.withdraw_unbonded();
+
+    assert_eq!(ctx.tailor_coin.balance_of(&alice), prev_alice + alice_stake);
+    assert_eq!(ctx.tailor_coin.balance_of(&bob), prev_bob + bob_stake);
+
+    // Both stakers fully cleared
+    assert_eq!(
+        ctx.staking.get_staker_info(alice).unbonding_amount,
+        U256::zero()
+    );
+    assert_eq!(
+        ctx.staking.get_staker_info(bob).unbonding_amount,
+        U256::zero()
+    );
 }
