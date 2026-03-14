@@ -322,9 +322,14 @@ describe('useICOState hook', () => {
       vi.setSystemTime(now);
 
       const useICOState = await importHook();
-      const { result } = renderHook(() => useICOState(), { wrapper });
+      const timestamps: SaleTimestamps = {
+        presaleStart: now + 2 * DAY,
+        presaleEnd: now + 9 * DAY,
+      };
 
-      // Computation is synchronous — no async loading phase
+      const { result } = renderHook(() => useICOState({ timestamps }), { wrapper });
+
+      // Computation is synchronous — no async loading phase when timestamps are provided
       expect(result.current.isLoading).toBe(false);
     });
 
@@ -376,7 +381,8 @@ describe('useICOState hook', () => {
       vi.setSystemTime(now);
 
       const useICOState = await importHook();
-      const { result } = renderHook(() => useICOState(), { wrapper });
+      const zeroTimestamps: SaleTimestamps = { presaleStart: 0, presaleEnd: 0 };
+      const { result } = renderHook(() => useICOState({ timestamps: zeroTimestamps }), { wrapper });
 
       // Without real timestamps, all zeros are the sentinel.
       // calculateState(zeros) returns 3 because now >= presaleEnd(0).
@@ -393,7 +399,11 @@ describe('useICOState hook', () => {
       vi.setSystemTime(now);
 
       const useICOState = await importHook();
-      const { result } = renderHook(() => useICOState({ pollInterval: 1000 }), { wrapper });
+      const zeroTimestamps: SaleTimestamps = { presaleStart: 0, presaleEnd: 0 };
+      const { result } = renderHook(
+        () => useICOState({ timestamps: zeroTimestamps, pollInterval: 1000 }),
+        { wrapper }
+      );
 
       expect(result.current.isLoading).toBe(false);
       expect(result.current.state).toBe(3); // zero timestamps → post-ICO sentinel
@@ -411,7 +421,8 @@ describe('useICOState hook', () => {
       vi.setSystemTime(now);
 
       const useICOState = await importHook();
-      const { result } = renderHook(() => useICOState(), { wrapper });
+      const zeroTimestamps: SaleTimestamps = { presaleStart: 0, presaleEnd: 0 };
+      const { result } = renderHook(() => useICOState({ timestamps: zeroTimestamps }), { wrapper });
 
       expect(result.current.isLoading).toBe(false);
       expect(result.current.state).toBe(3);
