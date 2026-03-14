@@ -23,7 +23,7 @@ interface UseICOStateReturn {
   isDevOverride: boolean;
 }
 
-const getPhaseFromState = (state: ICOState): ICOPhase => {
+export const getPhaseFromState = (state: ICOState): ICOPhase => {
   const phaseMap: Record<ICOState, ICOPhase> = {
     1: 'private-sale-countdown',
     2: 'private-sale-active',
@@ -32,7 +32,7 @@ const getPhaseFromState = (state: ICOState): ICOPhase => {
   return phaseMap[state];
 };
 
-const calculateState = (timestamps: SaleTimestamps): ICOState => {
+export const calculateState = (timestamps: SaleTimestamps): ICOState => {
   const now = Date.now();
 
   // State 1: Before presale starts
@@ -49,7 +49,7 @@ const calculateState = (timestamps: SaleTimestamps): ICOState => {
   return 3;
 };
 
-const getNextStateTimestamp = (
+export const getNextStateTimestamp = (
   currentState: ICOState,
   timestamps: SaleTimestamps
 ): number | null => {

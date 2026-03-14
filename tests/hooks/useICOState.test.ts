@@ -3,36 +3,7 @@ import { renderHook, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';
 import type { ICOState, ICOPhase, SaleTimestamps } from '@/types/ico';
-
-// --- Pure functions extracted from hook for unit testing ---
-
-const getPhaseFromState = (state: ICOState): ICOPhase => {
-  const phaseMap: Record<ICOState, ICOPhase> = {
-    1: 'private-sale-countdown',
-    2: 'private-sale-active',
-    3: 'post-ico-dashboard',
-  };
-  return phaseMap[state];
-};
-
-const calculateState = (timestamps: SaleTimestamps): ICOState => {
-  const now = Date.now();
-  if (now < timestamps.presaleStart) return 1;
-  if (now >= timestamps.presaleStart && now < timestamps.presaleEnd) return 2;
-  return 3;
-};
-
-const getNextStateTimestamp = (
-  currentState: ICOState,
-  timestamps: SaleTimestamps
-): number | null => {
-  switch (currentState) {
-    case 1: return timestamps.presaleStart;
-    case 2: return timestamps.presaleEnd;
-    case 3: return null;
-    default: return null;
-  }
-};
+import { calculateState, getPhaseFromState, getNextStateTimestamp } from '@/hooks/ico/useICOState';
 
 // --- Helper to create timestamps relative to "now" ---
 
