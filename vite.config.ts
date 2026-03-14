@@ -2,7 +2,35 @@ import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from "@tailwindcss/vite"
 import path from 'path';
+import fs from 'fs';
+import crypto from 'crypto';
 import { VitePWA } from 'vite-plugin-pwa';
+
+const wasmIntegrityPlugin = {
+  name: 'wasm-integrity-check',
+  buildStart() {
+    const wasmPath = path.resolve(__dirname, 'public/proxy_caller.wasm');
+    const servicePath = path.resolve(__dirname, 'src/services/ico/proxyCallerService.ts');
+
+    const serviceSource = fs.readFileSync(servicePath, 'utf-8');
+    const match = serviceSource.match(/EXPECTED_WASM_HASH\s*=\s*'([a-f0-9]{64})'/);
+    if (!match) {
+      throw new Error('wasm-integrity-check: could not find EXPECTED_WASM_HASH in proxyCallerService.ts');
+    }
+    const expectedHash = match[1];
+
+    const actualHash = crypto.createHash('sha256').update(fs.readFileSync(wasmPath)).digest('hex');
+
+    if (actualHash !== expectedHash) {
+      throw new Error(
+        `wasm-integrity-check: hash mismatch for public/proxy_caller.wasm\n` +
+        `  expected: ${expectedHash}\n` +
+        `  actual:   ${actualHash}\n` +
+        `The WASM file may have been tampered with — update EXPECTED_WASM_HASH or restore the file.`
+      );
+    }
+  },
+};
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
@@ -35,6 +63,7 @@ export default defineConfig(({ mode }) => {
     },
   },
   plugins: [
+    wasmIntegrityPlugin,
     react(),
     tailwindcss(),
     VitePWA({
