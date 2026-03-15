@@ -25,7 +25,16 @@ export interface CSPRPriceState {
   lastUpdated: Date | null;
 }
 
-export function useCSPRPrice() {
+export interface UseCSPRPriceReturn extends CSPRPriceState {
+  isStale: boolean;
+  fetchPrice: () => Promise<void>;
+  convertToUSD: (csprAmount: number) => number;
+  convertToCSPR: (usdAmount: number) => number;
+  convertToEUR: (csprAmount: number) => number;
+  convertToGBP: (csprAmount: number) => number;
+}
+
+export function useCSPRPrice(): UseCSPRPriceReturn {
   const [state, setState] = useState<CSPRPriceState>({
     priceUSD: 0,
     priceEUR: null,

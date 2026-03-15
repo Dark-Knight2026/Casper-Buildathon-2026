@@ -101,7 +101,7 @@ describe('AmountInput', () => {
       expect(onChange).toHaveBeenCalledWith('');
     });
 
-    it('should call onChange for negative values (shows error but updates input)', () => {
+    it('should strip the minus sign and call onChange with the numeric part', () => {
       const onChange = vi.fn();
       render(<AmountInput {...defaultProps} onChange={onChange} />);
 
@@ -109,12 +109,32 @@ describe('AmountInput', () => {
         target: { value: '-5' },
       });
 
-      expect(onChange).toHaveBeenCalledWith('-5');
+      // type="text" with sanitization strips '-'; onChange receives '5'
+      expect(onChange).toHaveBeenCalledWith('5');
     });
 
-    // Note: Test for non-numeric input (e.g., 'abc') is not included because
-    // type="number" inputs filter out non-numeric values at the browser level.
-    // This is already covered by the "should call onChange when input is cleared" test.
+    it('should strip non-numeric characters and call onChange with sanitized value', () => {
+      const onChange = vi.fn();
+      render(<AmountInput {...defaultProps} onChange={onChange} />);
+
+      fireEvent.change(screen.getByPlaceholderText('0.00'), {
+        target: { value: 'abc' },
+      });
+
+      expect(onChange).toHaveBeenCalledWith('');
+    });
+
+    it('should strip scientific notation and call onChange with sanitized digits', () => {
+      const onChange = vi.fn();
+      render(<AmountInput {...defaultProps} onChange={onChange} />);
+
+      fireEvent.change(screen.getByPlaceholderText('0.00'), {
+        target: { value: '1e3' },
+      });
+
+      // '1e3' → strip 'e' → '13', not 1000
+      expect(onChange).toHaveBeenCalledWith('13');
+    });
 
     it('should call onChange when value is below minimum (shows error but updates input)', () => {
       const onChange = vi.fn();
