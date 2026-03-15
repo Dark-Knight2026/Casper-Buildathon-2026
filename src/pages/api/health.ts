@@ -204,10 +204,8 @@ async function checkExternalServicesHealth(): Promise<ComponentHealth> {
       services.stripe = true;
     }
 
-    // Check Resend
-    if (import.meta.env.VITE_RESEND_API_KEY) {
-      services.resend = true;
-    }
+    // Resend API key is server-side only (RESEND_API_KEY, no VITE_ prefix) —
+    // cannot be checked from browser code.
 
     // Check Supabase Storage
     if (import.meta.env.VITE_SUPABASE_URL) {

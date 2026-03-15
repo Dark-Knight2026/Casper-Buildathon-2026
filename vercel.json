@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/api/email",
+      "destination": "/api/email"
+    },
+    {
       "source": "/api/cspr-cloud",
       "destination": "/api/cspr-cloud"
     },

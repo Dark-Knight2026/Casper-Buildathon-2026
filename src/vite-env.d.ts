@@ -16,7 +16,6 @@ interface ImportMetaEnv {
   readonly VITE_USDT_CONTRACT_HASH: string;
   readonly VITE_CSPR_NAME_CONTRACT_HASH: string;
   readonly VITE_CSPRCLICK_APP_ID: string;
-  readonly VITE_RESEND_API_KEY: string;
   readonly VITE_APP_URL: string;
   readonly VITE_APP_VERSION: string;
   readonly VITE_STRIPE_PUBLISHABLE_KEY: string;
