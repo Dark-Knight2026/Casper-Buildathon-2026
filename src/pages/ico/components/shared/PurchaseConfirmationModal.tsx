@@ -159,7 +159,7 @@ export function PurchaseConfirmationModal({
 
         {/* Status Message */}
         {isProcessing && (
-          <div className="w-full mb-6">
+          <div role="status" aria-live="polite" aria-atomic="true" className="w-full mb-6">
             <div className="flex items-center gap-3 p-4 rounded-md bg-[hsl(var(--ico-bg-secondary))] border border-[hsl(var(--ico-border-color))]">
               <div className="animate-spin rounded-full h-5 w-5 border-2 border-[hsl(var(--ico-brand-primary))] border-t-transparent" />
               <span className="text-sm text-[hsl(var(--ico-brand-primary))]">{stepMessage}</span>
