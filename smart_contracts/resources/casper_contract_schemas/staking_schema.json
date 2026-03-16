@@ -28,9 +28,147 @@
           }
         ]
       }
+    },
+    {
+      "struct": {
+        "name": "RewardsClaimed",
+        "description": null,
+        "members": [
+          {
+            "name": "staker",
+            "description": null,
+            "ty": "Key"
+          },
+          {
+            "name": "amount",
+            "description": null,
+            "ty": "U256"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
+        "name": "RewardsDeposited",
+        "description": null,
+        "members": [
+          {
+            "name": "caller",
+            "description": null,
+            "ty": "Key"
+          },
+          {
+            "name": "amount",
+            "description": null,
+            "ty": "U256"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
+        "name": "Staked",
+        "description": null,
+        "members": [
+          {
+            "name": "staker",
+            "description": null,
+            "ty": "Key"
+          },
+          {
+            "name": "amount",
+            "description": null,
+            "ty": "U256"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
+        "name": "StakerInfo",
+        "description": null,
+        "members": [
+          {
+            "name": "staked_amount",
+            "description": null,
+            "ty": "U256"
+          },
+          {
+            "name": "pending_rewards",
+            "description": null,
+            "ty": "U256"
+          },
+          {
+            "name": "reward_per_token_paid",
+            "description": null,
+            "ty": "U256"
+          },
+          {
+            "name": "unbonding_amount",
+            "description": null,
+            "ty": "U256"
+          },
+          {
+            "name": "unbonding_ends_at",
+            "description": null,
+            "ty": "U64"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
+        "name": "UnbondedWithdrawn",
+        "description": null,
+        "members": [
+          {
+            "name": "staker",
+            "description": null,
+            "ty": "Key"
+          },
+          {
+            "name": "amount",
+            "description": null,
+            "ty": "U256"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
+        "name": "UnstakedInitiated",
+        "description": null,
+        "members": [
+          {
+            "name": "staker",
+            "description": null,
+            "ty": "Key"
+          },
+          {
+            "name": "amount",
+            "description": null,
+            "ty": "U256"
+          },
+          {
+            "name": "unbonding_ends_at",
+            "description": null,
+            "ty": "U64"
+          }
+        ]
+      }
     }
   ],
   "errors": [
+    {
+      "name": "CallerNotAuthorizedToStake",
+      "description": "",
+      "discriminant": 63011
+    },
+    {
+      "name": "CallerNotAuthorizedToUnstake",
+      "description": "",
+      "discriminant": 63002
+    },
     {
       "name": "CallerNotTheNewOwner",
       "description": "The caller is not the new owner.",
@@ -42,9 +180,39 @@
       "discriminant": 20001
     },
     {
+      "name": "InsufficientStakedAmount",
+      "description": "",
+      "discriminant": 63004
+    },
+    {
+      "name": "InvalidAmount",
+      "description": "",
+      "discriminant": 63001
+    },
+    {
       "name": "MissingRole",
       "description": "The role is missing.",
       "discriminant": 20003
+    },
+    {
+      "name": "NoActiveStake",
+      "description": "",
+      "discriminant": 63010
+    },
+    {
+      "name": "NoRewardsToClaim",
+      "description": "",
+      "discriminant": 63007
+    },
+    {
+      "name": "NoUnbondingInProgress",
+      "description": "",
+      "discriminant": 63008
+    },
+    {
+      "name": "NothingStaked",
+      "description": "",
+      "discriminant": 63003
     },
     {
       "name": "OwnerNotSet",
@@ -60,6 +228,21 @@
       "name": "TailorCoinContractIsNotSet",
       "description": "",
       "discriminant": 63000
+    },
+    {
+      "name": "UnbondingAlreadyInProgress",
+      "description": "",
+      "discriminant": 63005
+    },
+    {
+      "name": "UnbondingPeriodNotFinished",
+      "description": "",
+      "discriminant": 63009
+    },
+    {
+      "name": "VestingContractIsNotSet",
+      "description": "",
+      "discriminant": 63006
     }
   ],
   "entry_points": [
@@ -80,8 +263,127 @@
       "access": "public"
     },
     {
+      "name": "set_vesting",
+      "description": "Sets the Vesting contract address by the owner",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "vesting",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        }
+      ],
+      "return_ty": "Unit",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "get_tailor_coin_contract_address",
+      "description": "Returns the TailorCoin (BIG) token contract address",
+      "is_mutable": false,
+      "arguments": [],
+      "return_ty": "Key",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "get_vesting_contract_address",
+      "description": "Returns the Vesting contract address",
+      "is_mutable": false,
+      "arguments": [],
+      "return_ty": "Key",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "get_total_staked",
+      "description": "Returns total staked in contract",
+      "is_mutable": false,
+      "arguments": [],
+      "return_ty": "U256",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "get_staker_info",
+      "description": "Returns staker info based on wallet address",
+      "is_mutable": false,
+      "arguments": [
+        {
+          "name": "staker",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        }
+      ],
+      "return_ty": "StakerInfo",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "get_pending_rewards",
+      "description": "Returns pending (unclaimed) rewards for a given staker",
+      "is_mutable": false,
+      "arguments": [
+        {
+          "name": "staker",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        }
+      ],
+      "return_ty": "U256",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "stake_for",
+      "description": "Stakes amount of BIG tokens on behalf of staker.",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "staker",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        },
+        {
+          "name": "amount",
+          "description": null,
+          "ty": "U256",
+          "optional": false
+        }
+      ],
+      "return_ty": "Unit",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "unstake_for",
+      "description": "Initiates an unstake of BIG tokens for staker, starting the",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "staker",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        },
+        {
+          "name": "amount",
+          "description": null,
+          "ty": "U256",
+          "optional": false
+        }
+      ],
+      "return_ty": "Unit",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
       "name": "deposit_rewards",
-      "description": "Allows to deposit any rewards amount in the TailorCoin (BIG) token by anyone, then distributes these rewards",
+      "description": "Allows anyone to deposit BIG rewards into the staking contract",
       "is_mutable": true,
       "arguments": [
         {
@@ -96,11 +398,20 @@
       "access": "public"
     },
     {
-      "name": "get_tailor_coin_contract_address",
-      "description": "Returns the TailorCoin (BIG) token contract address",
-      "is_mutable": false,
+      "name": "claim_rewards",
+      "description": "Claims all pending BIG token rewards accrued by the caller.",
+      "is_mutable": true,
       "arguments": [],
-      "return_ty": "Key",
+      "return_ty": "Unit",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "withdraw_unbonded",
+      "description": "Withdraws the caller's unbonded BIG tokens after the unbonding period",
+      "is_mutable": true,
+      "arguments": [],
+      "return_ty": "Unit",
       "is_contract_context": true,
       "access": "public"
     },
@@ -143,6 +454,26 @@
     {
       "name": "OwnershipTransferred",
       "ty": "OwnershipTransferred"
+    },
+    {
+      "name": "RewardsClaimed",
+      "ty": "RewardsClaimed"
+    },
+    {
+      "name": "RewardsDeposited",
+      "ty": "RewardsDeposited"
+    },
+    {
+      "name": "Staked",
+      "ty": "Staked"
+    },
+    {
+      "name": "UnbondedWithdrawn",
+      "ty": "UnbondedWithdrawn"
+    },
+    {
+      "name": "UnstakedInitiated",
+      "ty": "UnstakedInitiated"
     }
   ],
   "call": {
