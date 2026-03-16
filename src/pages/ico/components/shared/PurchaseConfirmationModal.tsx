@@ -189,8 +189,8 @@ export function PurchaseConfirmationModal({
         {/* Error Message */}
         {purchaseState.error && (
           <div className="w-full mb-6">
-            <div className="p-4 rounded-lg bg-red-900/20 border border-red-800/30">
-              <span className="text-sm text-red-400">{purchaseState.error}</span>
+            <div className="p-4 rounded-lg bg-[hsl(var(--ico-error-bg))] border border-[hsl(var(--ico-error-border))]">
+              <span className="text-sm text-[hsl(var(--ico-error-text))]">{purchaseState.error}</span>
             </div>
           </div>
         )}
@@ -198,8 +198,8 @@ export function PurchaseConfirmationModal({
         {/* CSPR Price Unavailable Warning */}
         {csprPriceError && (
           <div className="w-full mb-6">
-            <div className="p-4 rounded-lg bg-red-900/20 border border-red-800/30">
-              <span className="text-sm text-red-400">
+            <div className="p-4 rounded-lg bg-[hsl(var(--ico-error-bg))] border border-[hsl(var(--ico-error-border))]">
+              <span className="text-sm text-[hsl(var(--ico-error-text))]">
                 CSPR price unavailable — please try again later
               </span>
             </div>
@@ -209,8 +209,8 @@ export function PurchaseConfirmationModal({
         {/* Stale Price Warning (display-only — does not block purchase) */}
         {!csprPriceError && csprPriceStale && currency === 'CSPR' && (
           <div className="w-full mb-6">
-            <div className="p-3 rounded-lg bg-yellow-900/20 border border-yellow-800/30">
-              <span className="text-xs text-yellow-400">
+            <div className="p-3 rounded-lg bg-[hsl(var(--ico-warning-bg))] border border-[hsl(var(--ico-warning-border))]">
+              <span className="text-xs text-[hsl(var(--ico-warning-text))]">
                 CSPR rate may be outdated. Final amount is determined on-chain.
               </span>
             </div>

@@ -84,6 +84,14 @@
     --ico-text-highlight: 163 59% 30%;     /* #1F7A63 - Highlighted text (green) */
 
     --ico-border-color: 220 13% 88%;       /* #DDDFE3 - Border color */
+
+    /* ICO Feedback Colors - Light Mode */
+    --ico-error-bg: 0 86% 97%;             /* #FEF2F2 - red-50 */
+    --ico-error-border: 0 72% 83%;         /* #FECACA - red-200 */
+    --ico-error-text: 0 72% 35%;           /* #B91C1C - red-700 */
+    --ico-warning-bg: 48 100% 96%;         /* #FEFCE8 - yellow-50 */
+    --ico-warning-border: 48 96% 77%;      /* #FDE047 - yellow-200 */
+    --ico-warning-text: 32 81% 29%;        /* #854D0E - yellow-700 */
   }
 
   .dark {
@@ -160,6 +168,14 @@
     --ico-border-color: 222 47% 22%;
     --ico-brand-secondary-hover: 214 49% 35%;
     --ico-brand-primary-hover: 163 59% 42%;   /* Lighter shade of primary for dark mode */
+
+    /* ICO Feedback Colors - Dark Mode */
+    --ico-error-bg: 0 63% 15%;             /* ~red-900/20 on dark bg */
+    --ico-error-border: 0 55% 25%;         /* ~red-800/30 on dark bg */
+    --ico-error-text: 0 91% 71%;           /* #F87171 - red-400 */
+    --ico-warning-bg: 32 77% 14%;          /* ~yellow-900/20 on dark bg */
+    --ico-warning-border: 32 65% 22%;      /* ~yellow-800/30 on dark bg */
+    --ico-warning-text: 48 96% 53%;        /* #FACC15 - yellow-400 */
   }
 }
 
