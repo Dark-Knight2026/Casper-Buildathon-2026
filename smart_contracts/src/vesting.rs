@@ -285,6 +285,12 @@ impl Vesting {
     /// be pass by before the user can withdraw.
     ///
     /// @dev only the schedule's beneficiary can call this
+    /// @dev Requires no active unbonding position in the Staking contract for the
+    /// beneficiary. If a prior claim or direct unstake initiated unbonding, you must:
+    /// 1. Wait for the 48-hour unbonding period to complete
+    /// 2. Call `staking::withdraw_unbonded()` to clear the unbonding state
+    /// 3. Then call this function
+    /// Calling claim() while unbonding is in progress will revert with `ClaimBlock edByActiveUnbonding`.
     #[odra(non_reentrant)]
     pub fn claim(&mut self, vesting_id: VestingId) {
         let mut schedule = self
