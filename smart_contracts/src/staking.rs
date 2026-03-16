@@ -1,9 +1,12 @@
 use odra::{casper_types::U256, prelude::*, ContractRef};
 use odra_modules::{access::Ownable, cep18_token::Cep18ContractRef};
 
-use crate::staking::{
-    errors::Error,
-    events::{RewardsClaimed, RewardsDeposited, Staked, UnbondedWithdrawn, UnstakedInitiated},
+use crate::{
+    staking::{
+        errors::Error,
+        events::{RewardsClaimed, RewardsDeposited, Staked, UnbondedWithdrawn, UnstakedInitiated},
+    },
+    vesting::VestingContractRef,
 };
 
 // =============================================================================
@@ -87,6 +90,7 @@ pub mod errors {
         NoUnbondingInProgress = 63_008,
         UnbondingPeriodNotFinished = 63_009,
         NoActiveStake = 63_010,
+        CallerNotAuthorizedToStake = 63_011,
     }
 }
 
@@ -106,7 +110,7 @@ pub struct Staking {
     tailor_coin: External<Cep18ContractRef>,
 
     /// Trusted Vesting contract address allowed to intitiate unstaking on behalf of a staker
-    vesting: Var<Address>,
+    vesting: External<VestingContractRef>,
 
     /// All staking state for each user, keyed by wallet address
     stakers: Mapping<Address, StakerInfo>,
@@ -157,8 +161,7 @@ impl Staking {
 
     /// Returns the Vesting contract address
     pub fn get_vesting_contract_address(&self) -> Address {
-        self.vesting
-            .get_or_revert_with(Error::VestingContractIsNotSet)
+        *self.vesting.address()
     }
 
     /// Returns total staked in contract
@@ -207,6 +210,8 @@ impl Staking {
         if amount.is_zero() {
             self.env().revert(Error::InvalidAmount);
         }
+
+        self.assert_can_stake_for(&staker);
 
         self.update_reward_for(&staker);
 
@@ -401,14 +406,23 @@ impl Staking {
     }
 
     #[inline]
+    fn assert_can_stake_for(&self, staker: &Address) {
+        if self.env().caller() == *staker {
+            return;
+        }
+
+        if !self.vesting.is_whitelisted_creator(staker) {
+            self.env().revert(Error::CallerNotAuthorizedToStake)
+        }
+    }
+
+    #[inline]
     fn assert_can_unstake_for(&self, staker: &Address) {
         if self.env().caller() == *staker {
             return;
         }
 
-        let vesting = self.get_vesting_contract_address();
-
-        if self.env().caller() != vesting {
+        if self.env().caller() != *self.vesting.address() {
             self.env().revert(Error::CallerNotAuthorizedToUnstake);
         }
     }
