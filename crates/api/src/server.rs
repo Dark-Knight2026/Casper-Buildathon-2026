@@ -41,6 +41,10 @@ pub const AUTH_RATE_LIMIT_BURST: u32 = 15;
 ///
 /// Includes rate limiting:
 /// - Authentication endpoints (`/auth/*`)
+///
+/// # Panics
+///
+/// Panics at startup if the rate-limit configuration is invalid (e.g. zero burst size).
 #[inline]
 pub fn public_router() -> OpenApiRouter<Arc<AppState>> {
     let rate_limit = Arc::new(
@@ -48,7 +52,7 @@ pub fn public_router() -> OpenApiRouter<Arc<AppState>> {
             .per_second(AUTH_RATE_LIMIT_PER_SECOND)
             .burst_size(AUTH_RATE_LIMIT_BURST)
             .finish()
-            .unwrap_or_default(),
+            .expect("auth rate-limit config is always valid: per_second > 0 and burst_size > 0"),
     );
 
     OpenApiRouter::new()
@@ -71,6 +75,10 @@ pub const PUBLIC_DATA_RATE_LIMIT_BURST: u32 = 30;
 /// - `GET /ico/balance/{address}` - ICO balance for an account
 /// - `GET /transactions/token/big` - BIG token transactions
 /// - `GET /transactions/account/{address}` - account transaction history
+///
+/// # Panics
+///
+/// Panics at startup if the rate-limit configuration is invalid (e.g. zero burst size).
 #[inline]
 #[must_use]
 pub fn public_data_router() -> OpenApiRouter<Arc<AppState>> {
@@ -79,7 +87,7 @@ pub fn public_data_router() -> OpenApiRouter<Arc<AppState>> {
             .per_second(PUBLIC_DATA_RATE_LIMIT_PER_SECOND)
             .burst_size(PUBLIC_DATA_RATE_LIMIT_BURST)
             .finish()
-            .unwrap_or_default(),
+            .expect("public-data rate-limit config is always valid: per_second > 0 and burst_size > 0"),
     );
 
     OpenApiRouter::new()
