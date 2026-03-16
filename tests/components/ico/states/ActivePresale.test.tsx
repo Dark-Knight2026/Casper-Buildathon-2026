@@ -36,6 +36,11 @@ vi.mock('@/hooks/ico/usePurchaseFlow', () => ({
   }),
 }));
 
+// Mock useUserTokenActions to avoid QueryClientProvider dependency
+vi.mock('@/hooks/ico/useUserTokenActions', () => ({
+  useUserTokenActions: () => ({ transactions: [] }),
+}));
+
 // Mock the child components to isolate testing
 vi.mock('@/pages/ico/components/shared/CountdownTimer', () => ({
   CountdownTimer: ({ targetTimestamp }: { targetTimestamp: number }) => (
