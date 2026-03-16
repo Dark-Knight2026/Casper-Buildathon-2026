@@ -407,22 +407,24 @@ impl Staking {
 
     #[inline]
     fn assert_can_stake_for(&self, staker: &Address) {
-        if self.env().caller() == *staker {
+        let caller = self.env().caller();
+        if caller == *staker {
             return;
         }
 
-        if !self.vesting.is_whitelisted_creator(staker) {
+        if !self.vesting.is_whitelisted_creator(&caller) {
             self.env().revert(Error::CallerNotAuthorizedToStake)
         }
     }
 
     #[inline]
     fn assert_can_unstake_for(&self, staker: &Address) {
-        if self.env().caller() == *staker {
+        let caller = self.env().caller();
+        if caller == *staker {
             return;
         }
 
-        if self.env().caller() != *self.vesting.address() {
+        if caller != *self.vesting.address() {
             self.env().revert(Error::CallerNotAuthorizedToUnstake);
         }
     }

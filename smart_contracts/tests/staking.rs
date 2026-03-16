@@ -10,7 +10,7 @@ use leasefi_contracts::tailor_coin::{TailorCoin, TailorCoinHostRef, TailorCoinIn
 
 use crate::{
     staking::{errors::Error, UNBONDING_PERIOD},
-    vesting::{Vesting, VestingInitArgs},
+    vesting::{Vesting, VestingHostRef, VestingInitArgs},
 };
 
 // =============================================================================
@@ -38,7 +38,7 @@ struct Context {
     env: HostEnv,
     tailor_coin: TailorCoinHostRef,
     staking: StakingHostRef,
-    vesting: Address,
+    vesting: VestingHostRef,
     users: Users,
 }
 
@@ -69,7 +69,7 @@ fn setup(env: HostEnv) -> Context {
         env,
         tailor_coin,
         staking,
-        vesting: vesting.address(),
+        vesting,
         users,
     }
 }
@@ -119,7 +119,7 @@ fn test_init_should_initialize_contract_properly() {
     );
     assert_eq!(
         ctx.staking.get_vesting_contract_address(),
-        ctx.vesting,
+        ctx.vesting.address(),
         "Invalid Vesting contract address"
     );
 }
@@ -306,11 +306,15 @@ fn test_stake_for_should_stake_properly() {
 }
 
 #[test]
-fn test_stake_for_should_allow_thirdy_party_to_stake_on_behalf() {
+fn test_stake_for_should_allow_whitelisted_creator_to_stake_on_behalf() {
     let mut ctx = setup(odra_test::env());
     let amount = staking_amount();
     let alice = ctx.users.alice;
     let bob = ctx.users.bob;
+
+    // Whitelist Bob as a creator so he can stake on Alice's behalf
+    ctx.env.set_caller(ctx.users.owner);
+    ctx.vesting.add_whitelisted_creator(bob);
 
     // Bob funds but stakes on Alice's behalf
     fund_and_approve(&mut ctx, bob, amount);
