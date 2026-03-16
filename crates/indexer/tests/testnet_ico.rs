@@ -22,12 +22,6 @@ const CSPR_CLOUD_RPC: &str = "https://node.testnet.cspr.cloud/rpc";
 const PUBLIC_NODE: &str = "http://65.109.89.219:7777";
 /// Casper testnet chain name.
 const CHAIN: &str = "casper-test";
-/// ICO contract hash (entry points: purchase, `get_current_ico_schedule`, etc.).
-const ICO_CONTRACT: &str = "hash-47a75578aca035ff390338b2fc3fe4f35cc989a00826591b387157735f1135bf";
-/// BIG token CEP-18 contract hash (entry points: approve, transfer, etc.).
-const BIG_CONTRACT: &str = "hash-66bde004c898228ed46fe60743d4f68638670425b71f4ab56477f17edcc4da29";
-/// tUSDT CEP-18 contract entity hash (entry points: approve, transfer, etc.).
-const USDT_CONTRACT: &str = "hash-4d5ac65a4bd5ea133204eee9741c96fd275e747819242bf0ea8af4d76b1b6c2a";
 
 /// Ensures `.env` is loaded exactly once across all tests.
 static INIT: Once = Once::new();
@@ -51,13 +45,74 @@ fn secret_key() -> String {
     std::env::var("CASPER_SECRET_KEY").expect("Set CASPER_SECRET_KEY in .env")
 }
 
-/// ICO contract package hash with `hash-` prefix, from `CONTRACT_ICO` env var.
-fn ico_package() -> String {
+/// Read a `CONTRACT_*` env var and return it as `hash-{hex}` (package hash).
+fn package_hash(env_var: &str) -> String {
     load_env();
     format!(
         "hash-{}",
-        std::env::var("CONTRACT_ICO").expect("Set CONTRACT_ICO in .env")
+        std::env::var(env_var).unwrap_or_else(|_| panic!("Set {env_var} in .env"))
     )
+}
+
+/// Resolve a contract package hash to the latest entity (contract) hash via RPC.
+///
+/// `CONTRACT_*` env vars store **package hashes**, but `casper-client put-transaction
+/// invocable-entity --contract-hash` requires an **entity hash** (a specific contract
+/// version). This function queries the chain to find the latest version.
+fn resolve_entity_hash(package_hash: &str) -> String {
+    let resp = rpc_query("query_global_state", &json!({ "key": package_hash }));
+    let v: Value = serde_json::from_str(&resp).expect("invalid RPC JSON response");
+
+    // Casper 1.x: result.stored_value.ContractPackage.versions[].contract_hash
+    if let Some(versions) = v.pointer("/result/stored_value/ContractPackage/versions") {
+        let arr = versions.as_array().expect("versions is not an array");
+        let last = arr.last().expect("versions array is empty");
+        let hash = last["contract_hash"]
+            .as_str()
+            .expect("missing contract_hash in version entry");
+        // "contract-{hex}" -> "hash-{hex}"
+        return format!("hash-{}", hash.strip_prefix("contract-").unwrap_or(hash));
+    }
+
+    // Casper 2.x: result.stored_value.Package.versions[].entity_hash
+    if let Some(versions) = v.pointer("/result/stored_value/Package/versions") {
+        let arr = versions.as_array().expect("versions is not an array");
+        let last = arr.last().expect("versions array is empty");
+        let hash = last["entity_hash"]
+            .as_str()
+            .or_else(|| last["contract_hash"].as_str())
+            .expect("missing entity_hash in version entry");
+        return format!(
+            "hash-{}",
+            hash.strip_prefix("entity-contract-").unwrap_or(hash)
+        );
+    }
+
+    panic!(
+        "Cannot resolve entity hash from package {package_hash}. \
+         RPC response has no ContractPackage or Package. \
+         Full response:\n{resp}"
+    );
+}
+
+/// ICO entity hash resolved from `CONTRACT_ICO` package hash.
+fn ico_contract() -> String {
+    resolve_entity_hash(&package_hash("CONTRACT_ICO"))
+}
+
+/// ICO package hash (for `Key::Hash` references, e.g. as spender in approve).
+fn ico_package() -> String {
+    package_hash("CONTRACT_ICO")
+}
+
+/// BIG token entity hash resolved from `CONTRACT_BIG` package hash.
+fn big_contract() -> String {
+    resolve_entity_hash(&package_hash("CONTRACT_BIG"))
+}
+
+/// tUSDT entity hash resolved from `CONTRACT_USDT` package hash.
+fn usdt_contract() -> String {
+    resolve_entity_hash(&package_hash("CONTRACT_USDT"))
 }
 
 /// JSON-RPC query via curl to CSPR.cloud (free, no gas).
@@ -101,10 +156,10 @@ fn ico_call(entry_point: &str, session_args: &[&str]) -> String {
     cmd.args(["--node-address", PUBLIC_NODE]);
     cmd.args(["--chain-name", CHAIN]);
     cmd.args(["--secret-key", &key]);
-    cmd.args(["--payment-amount", "25000000000"]);
+    cmd.args(["--payment-amount", "3000000000"]);
     cmd.args(["--standard-payment", "true"]);
     cmd.args(["--gas-price-tolerance", "10"]);
-    cmd.args(["--contract-hash", ICO_CONTRACT]);
+    cmd.args(["--contract-hash", &ico_contract()]);
     cmd.args(["--session-entry-point", entry_point]);
     for arg in session_args {
         cmd.args(["--session-arg", arg]);
@@ -211,7 +266,7 @@ fn wait_for_deploy(tx_hash: &str) {
 fn query_ico_state() {
     rpc_query(
         "query_global_state",
-        &json!({ "key": ICO_CONTRACT, "path": ["state"] }),
+        &json!({ "key": ico_contract(), "path": ["state"] }),
     );
 }
 
@@ -220,7 +275,7 @@ fn query_ico_state() {
 fn query_ico_events_length() {
     rpc_query(
         "query_global_state",
-        &json!({ "key": ICO_CONTRACT, "path": ["__events_length"] }),
+        &json!({ "key": ico_contract(), "path": ["__events_length"] }),
     );
 }
 
@@ -243,19 +298,36 @@ fn approve_big_zero() {
     // spender = ICO contract package hash as Key::Hash
     let ico_pkg = ico_package();
     let spender_arg = format!("spender:key='{ico_pkg}'");
-    contract_call(BIG_CONTRACT, "approve", &[&spender_arg, "amount:u256='0'"]);
+    contract_call(
+        &big_contract(),
+        "approve",
+        &[&spender_arg, "amount:u256='0'"],
+    );
 }
 
 #[test]
 #[ignore = "testnet transaction - costs gas, triggers TokensPurchased"]
-fn buy_big_with_1_cspr() {
-    // Purchase BIG with 1 CSPR (1_000_000_000 motes, currency=0).
-    // No approve needed for native CSPR.
-    // ICO contract will emit TokensPurchased event, indexer picks it up via WSS.
+fn buy_big_with_1_usdt() {
+    // Purchase BIG with 1 tUSDT (6 decimals -> 1_000_000, currency=2).
+    // Requires approve on USDT contract first, then purchase on ICO.
     // NOTE: requires an active ICO schedule on-chain (admin must call `add_ico_schedule` first).
+
+    // Step 1: approve ICO contract to spend 1 tUSDT
+    let ico_pkg = ico_package();
+    let spender_arg = format!("spender:key='{ico_pkg}'");
+    let approve_out = contract_call(
+        &usdt_contract(),
+        "approve",
+        &[&spender_arg, "amount:u256='1000000'"],
+    );
+    let approve_hash = extract_tx_hash(&approve_out).expect("failed to extract approve tx hash");
+    println!("Approve tx: {approve_hash}");
+    wait_for_deploy(&approve_hash);
+
+    // Step 2: purchase BIG with 1 tUSDT
     let out = ico_call(
         "purchase",
-        &["amount_to_spend:u256='1000000000'", "currency:u8='0'"],
+        &["amount_to_spend:u256='1000000'", "currency:u8='2'"],
     );
     let hash = extract_tx_hash(&out).expect("failed to extract purchase tx hash");
     println!("Purchase tx: {hash}");
@@ -274,7 +346,7 @@ fn transfer_usdt_to_wallet2() {
     );
 
     let out = contract_call(
-        USDT_CONTRACT,
+        &usdt_contract(),
         "transfer",
         &[&recipient_arg, "amount:u256='1000000'"],
     );
