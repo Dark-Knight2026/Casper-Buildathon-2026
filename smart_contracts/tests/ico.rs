@@ -735,6 +735,11 @@ fn test_purchase_should_purchase_with_cspr_token_properly() {
         "Staking contract should hold the purchased tokens"
     );
     assert_eq!(
+        ctx.staking.get_staker_info(ctx.users.alice).staked_amount,
+        expected_purchase_amount,
+        "Buyer staker info should reflect staked amount after purchase"
+    );
+    assert_eq!(
         curr_treasury_balance,
         prev_treasury_balance + amount_to_spend.to_u512(),
         "Invalid current Treasury CSPR balance"
@@ -822,6 +827,11 @@ fn test_purchase_should_purchase_with_cep18_token_properly() {
         curr_staking_balance,
         prev_staking_balance + expected_purchase_amount,
         "Staking contract should hold the purchased tokens"
+    );
+    assert_eq!(
+        ctx.staking.get_staker_info(ctx.users.alice).staked_amount,
+        expected_purchase_amount,
+        "Buyer staker info should reflect staked amount after purchase"
     );
     assert_eq!(
         curr_treasury_balance,
