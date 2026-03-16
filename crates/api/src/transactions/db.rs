@@ -46,6 +46,8 @@ impl From<TransactionRow> for TransactionResponse {
 /// Fetches paginated transactions where the given address is sender or recipient.
 ///
 /// When `transaction_type` is `Some`, only transactions of that type are returned.
+/// When `from_type` is `Some`, only transactions with that sender type are returned
+/// (0 = Account, 1 = Contract).
 ///
 /// Uses `REPEATABLE READ` isolation so that SELECT and COUNT see the same snapshot.
 ///
@@ -57,6 +59,7 @@ pub async fn fetch_account_transactions(
     pool: &PgPool,
     address: &str,
     transaction_type: Option<&str>,
+    from_type: Option<i16>,
     limit: i64,
     offset: i64,
 ) -> Result<(Vec<TransactionResponse>, i64), sqlx::Error> {
@@ -72,6 +75,7 @@ pub async fn fetch_account_transactions(
             FROM blockchain_transactions
             WHERE (from_address = $1 OR to_address = $1)
               AND ($4::TEXT IS NULL OR transaction_type = $4)
+              AND ($5::SMALLINT IS NULL OR from_type = $5)
             ORDER BY block_number DESC NULLS LAST, confirmed_at DESC
             LIMIT $2 OFFSET $3
         ",
@@ -79,6 +83,7 @@ pub async fn fetch_account_transactions(
         limit,
         offset,
         transaction_type,
+        from_type,
     )
     .fetch_all(tx.as_mut())
     .await?;
@@ -88,9 +93,11 @@ pub async fn fetch_account_transactions(
             SELECT COUNT(*) FROM blockchain_transactions
             WHERE (from_address = $1 OR to_address = $1)
               AND ($2::TEXT IS NULL OR transaction_type = $2)
+              AND ($3::SMALLINT IS NULL OR from_type = $3)
         ",
         address,
         transaction_type,
+        from_type,
     )
     .fetch_one(tx.as_mut())
     .await?

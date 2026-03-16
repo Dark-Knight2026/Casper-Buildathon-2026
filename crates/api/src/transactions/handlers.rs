@@ -30,6 +30,8 @@ pub struct AccountTxQuery {
     /// Filter by transaction type (e.g. `token_purchase`, `token_transfer`, `token_mint`, `token_allowance`).
     #[serde(rename = "type")]
     pub tx_type: Option<String>,
+    /// Filter by sender address type (0 = Account, 1 = Contract).
+    pub from_type: Option<i16>,
 }
 
 impl AccountTxQuery {
@@ -59,6 +61,7 @@ impl AccountTxQuery {
     params(
         ("address" = String, Path, description = "Account hash (64 hex, no prefix)"),
         ("type" = Option<String>, Query, description = "Filter by transaction type: token_purchase, token_transfer, token_mint, token_allowance"),
+        ("from_type" = Option<i16>, Query, description = "Filter by sender address type: 0 = Account, 1 = Contract"),
         Pagination,
     ),
     responses(
@@ -85,6 +88,7 @@ pub async fn get_account_transactions(
         &state.db,
         &address,
         query.tx_type.as_deref(),
+        query.from_type,
         pagination.page_size(),
         pagination.offset(),
     )
