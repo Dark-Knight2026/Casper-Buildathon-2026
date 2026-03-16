@@ -9,12 +9,14 @@
  * determines the real exchange rate independently.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { useCallback } from 'react';
 import { csprCloudService } from '@/lib/blockchain/csprCloudService';
-import logger from '@/lib/logger';
 
 /** Consider the price stale after 5 minutes without a successful refresh. */
 const STALE_THRESHOLD_MS = 5 * 60 * 1000;
+
+export const CSPR_PRICE_QUERY_KEY = ['cspr-price'] as const;
 
 export interface CSPRPriceState {
   priceUSD: number;
@@ -35,82 +37,51 @@ export interface UseCSPRPriceReturn extends CSPRPriceState {
 }
 
 export function useCSPRPrice(): UseCSPRPriceReturn {
-  const [state, setState] = useState<CSPRPriceState>({
-    priceUSD: 0,
-    priceEUR: null,
-    priceGBP: null,
-    loading: true,
-    error: null,
-    lastUpdated: null,
+  const { data, isLoading, error, refetch, dataUpdatedAt } = useQuery({
+    queryKey: CSPR_PRICE_QUERY_KEY,
+    queryFn: () => csprCloudService.getCSPRRates(['USD', 'EUR', 'GBP']),
+    refetchInterval: STALE_THRESHOLD_MS,
+    staleTime: STALE_THRESHOLD_MS,
+    retry: 1,
   });
 
-  const fetchPrice = useCallback(async () => {
-    try {
-      setState(prev => ({ ...prev, loading: true, error: null }));
-      
-      const rates = await csprCloudService.getCSPRRates(['USD', 'EUR', 'GBP']);
-      
-      setState({
-        priceUSD: rates.cspr_usd,
-        priceEUR: rates.cspr_eur || null,
-        priceGBP: rates.cspr_gbp || null,
-        loading: false,
-        error: null,
-        lastUpdated: new Date(),
-      });
-    } catch (error) {
-      logger.error('Failed to fetch CSPR price:', error);
-      setState(prev => ({
-        ...prev,
-        loading: false,
-        error: 'Failed to fetch exchange rates',
-      }));
-    }
-  }, []);
+  const priceUSD = data?.cspr_usd ?? 0;
+  const priceEUR = data?.cspr_eur ?? null;
+  const priceGBP = data?.cspr_gbp ?? null;
+  const lastUpdated = dataUpdatedAt ? new Date(dataUpdatedAt) : null;
+  const isStale = !dataUpdatedAt || Date.now() - dataUpdatedAt > STALE_THRESHOLD_MS;
 
-  useEffect(() => {
-    fetchPrice();
-    
-    // Update price every 5 minutes (matches STALE_THRESHOLD_MS)
-    const interval = setInterval(fetchPrice, STALE_THRESHOLD_MS);
-    
-    return () => clearInterval(interval);
-  }, [fetchPrice]);
+  const fetchPrice = useCallback(async () => {
+    await refetch();
+  }, [refetch]);
 
   const convertToUSD = useCallback(
-    (csprAmount: number): number => {
-      return csprAmount * state.priceUSD;
-    },
-    [state.priceUSD]
+    (csprAmount: number): number => csprAmount * priceUSD,
+    [priceUSD],
   );
 
   const convertToCSPR = useCallback(
-    (usdAmount: number): number => {
-      return state.priceUSD > 0 ? usdAmount / state.priceUSD : 0;
-    },
-    [state.priceUSD]
+    (usdAmount: number): number => (priceUSD > 0 ? usdAmount / priceUSD : 0),
+    [priceUSD],
   );
 
   const convertToEUR = useCallback(
-    (csprAmount: number): number => {
-      return state.priceEUR ? csprAmount * state.priceEUR : 0;
-    },
-    [state.priceEUR]
+    (csprAmount: number): number => (priceEUR ? csprAmount * priceEUR : 0),
+    [priceEUR],
   );
 
   const convertToGBP = useCallback(
-    (csprAmount: number): number => {
-      return state.priceGBP ? csprAmount * state.priceGBP : 0;
-    },
-    [state.priceGBP]
+    (csprAmount: number): number => (priceGBP ? csprAmount * priceGBP : 0),
+    [priceGBP],
   );
 
-  const isStale =
-    !state.lastUpdated ||
-    Date.now() - state.lastUpdated.getTime() > STALE_THRESHOLD_MS;
-
   return {
-    ...state,
+    priceUSD,
+    priceEUR,
+    priceGBP,
+    loading: isLoading,
+    error: error ? 'Failed to fetch exchange rates' : null,
+    lastUpdated,
     isStale,
     fetchPrice,
     convertToUSD,
