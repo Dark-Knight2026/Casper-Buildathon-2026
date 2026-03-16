@@ -396,6 +396,33 @@ fn generate_data_for_local_tests() {
     println!("============================================\n");
 }
 
+/// Signature signed WITHOUT the `CASPER_MESSAGE_PREFIX` must be rejected.
+///
+/// Regression: `verify_casper_signature` prepends the prefix before verification,
+/// so a raw (unprefixed) signature must not pass.
+#[test]
+fn verify_signature_without_prefix_is_rejected() {
+    let (secret_key, public_key) = generate_random_ed25519();
+
+    let message = "Login to LeaseFi";
+    // Sign the raw message directly - without CASPER_MESSAGE_PREFIX
+    let signature = crypto::sign(message.as_bytes(), &secret_key, &public_key);
+    let sig_hex = signature.to_hex();
+    let pk_hex = public_key.to_hex();
+
+    let result = api::common::verify_casper_signature(&pk_hex, &sig_hex, message);
+
+    assert!(
+        result.is_ok(),
+        "Function returned error: {:?}",
+        result.err()
+    );
+    assert!(
+        !result.unwrap(),
+        "Signature without prefix must be rejected"
+    );
+}
+
 /// Rate limiter returns 429 after burst is exhausted.
 ///
 /// Regression: `axum::serve` must use `into_make_service_with_connect_info::<SocketAddr>()`

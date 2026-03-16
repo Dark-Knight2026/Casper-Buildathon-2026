@@ -87,7 +87,9 @@ pub fn public_data_router() -> OpenApiRouter<Arc<AppState>> {
             .per_second(PUBLIC_DATA_RATE_LIMIT_PER_SECOND)
             .burst_size(PUBLIC_DATA_RATE_LIMIT_BURST)
             .finish()
-            .expect("public-data rate-limit config is always valid: per_second > 0 and burst_size > 0"),
+            .expect(
+                "public-data rate-limit config is always valid: per_second > 0 and burst_size > 0",
+            ),
     );
 
     OpenApiRouter::new()
