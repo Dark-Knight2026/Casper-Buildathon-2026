@@ -9,8 +9,6 @@ import type { ScheduleProgress } from '@/hooks/ico/useICOSchedules';
 const mockTimestamps: SaleTimestamps = {
   presaleStart: 1000,
   presaleEnd: 2000,
-  icoStart: 3000,
-  icoEnd: 4000,
 };
 
 const mockProgress: ScheduleProgress = {
@@ -20,6 +18,7 @@ const mockProgress: ScheduleProgress = {
   amountRaised: 100000,
   priceUsd: 0.1,
   percentSold: 10,
+  hardCapUsd: 1000000,
 };
 
 const mockUseICOState = vi.fn();
@@ -42,7 +41,7 @@ vi.mock('@/pages/ico/components/states/PrivateSaleCountdown', () => ({
   ),
 }));
 
-vi.mock('@/pages/ico/components/states/ActivePresale', () => ({
+vi.mock('@/pages/ico/components/states/PrivateSaleActive', () => ({
   default: (props: { endTimestamp: number; progress?: ScheduleProgress | null }) => (
     <div data-testid="private-sale-active">PrivateSaleActive end={props.endTimestamp} progress={props.progress ? 'yes' : 'no'}</div>
   ),

@@ -4,13 +4,13 @@ import { useICOSchedules } from '@/hooks/ico/useICOSchedules';
 import { ICOHeader } from './components/ICOHeader';
 import { ICOFooter } from './components/ICOFooter';
 import { DevStateSelector } from './components/DevStateSelector';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { ICOScrollArea as ScrollArea } from './components/shared/ICOScrollArea';
 import { PageErrorBoundary } from '@/components/common/PageErrorBoundary';
 import { logger } from '@/utils/logger';
 
 // Lazy load state components
 const PrivateSaleCountdown = lazy(() => import('./components/states/PrivateSaleCountdown'));
-const ActivePresale = lazy(() => import('./components/states/ActivePresale'));
+const PrivateSaleActive = lazy(() => import('./components/states/PrivateSaleActive'));
 const PostICODashboard = lazy(() => import('./components/states/PostICODashboard'));
 
 // Loading component
@@ -29,7 +29,6 @@ export function ICOPage() {
   const {
     timestamps,
     presaleProgress,
-    icoProgress,
     isLoading,
     error,
   } = useICOSchedules();
@@ -37,7 +36,6 @@ export function ICOPage() {
   logger.debug('[ICOPage] useICOSchedules result:', {
     timestamps,
     presaleProgress,
-    icoProgress,
     isLoading,
     error,
   });
@@ -104,7 +102,7 @@ export function ICOPage() {
         );
       case 2:
         return (
-          <ActivePresale
+          <PrivateSaleActive
             endTimestamp={timestamps.presaleEnd}
             progress={presaleProgress}
           />

@@ -13,6 +13,7 @@ const mockProgress: ScheduleProgress = {
   tokensRemaining: 650000000,
   amountRaised: 100000,
   percentSold: 13.33,
+  hardCapUsd: 750000,
 };
 
 // Mock react-router-dom navigate
@@ -53,11 +54,19 @@ const renderWithRouter = (ui: React.ReactElement) => {
 };
 
 describe('PrivateSaleCountdown', () => {
-  const mockTargetTimestamp = Date.now() + 7 * 24 * 60 * 60 * 1000; // 7 days from now
-  const mockEndTimestamp = Date.now() + 30 * 24 * 60 * 60 * 1000; // 30 days from now
+  let mockTargetTimestamp: number;
+  let mockEndTimestamp: number;
 
   beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2025-06-01T12:00:00Z'));
+    mockTargetTimestamp = Date.now() + 7 * 24 * 60 * 60 * 1000; // 7 days from fixed base
+    mockEndTimestamp = Date.now() + 30 * 24 * 60 * 60 * 1000; // 30 days from fixed base
     mockNavigate.mockClear();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   describe('rendering', () => {

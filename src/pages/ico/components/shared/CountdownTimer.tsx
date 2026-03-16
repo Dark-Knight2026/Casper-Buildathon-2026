@@ -97,10 +97,13 @@ export const CountdownTimer = memo(function CountdownTimer({
   };
 
   const classes = sizeClasses[size];
+  const timerLabel = timeLeft.isExpired
+    ? 'Countdown ended'
+    : `${timeLeft.days} days ${timeLeft.hours} hours ${timeLeft.minutes} minutes ${timeLeft.seconds} seconds remaining`;
 
   if (variant === 'minimal') {
     return (
-      <span role="timer" aria-live="polite" aria-label={`${timeLeft.days} ${pluralize(timeLeft.days, 'day', 'days')} ${timeLeft.hours} ${pluralize(timeLeft.hours, 'hour', 'hours')} ${timeLeft.minutes} ${pluralize(timeLeft.minutes, 'minute', 'minutes')} ${timeLeft.seconds} ${pluralize(timeLeft.seconds, 'second', 'seconds')} remaining`} className={cn('font-mono font-semibold', className)}>
+      <span role="timer" aria-live="polite" aria-label={timerLabel} className={cn('font-mono font-semibold', className)}>
         {timeLeft.days > 0 && `${timeLeft.days}d `}
         {formatNumber(timeLeft.hours)}:{formatNumber(timeLeft.minutes)}:
         {formatNumber(timeLeft.seconds)}
@@ -111,7 +114,7 @@ export const CountdownTimer = memo(function CountdownTimer({
   if (variant === 'compact') {
     return (
       <Card className='p-4 flex justify-center items-center'>
-        <div role="timer" aria-live="polite" aria-label={`${timeLeft.days} ${pluralize(timeLeft.days, 'day', 'days')} ${timeLeft.hours} ${pluralize(timeLeft.hours, 'hour', 'hours')} ${timeLeft.minutes} ${pluralize(timeLeft.minutes, 'minute', 'minutes')} ${timeLeft.seconds} ${pluralize(timeLeft.seconds, 'second', 'seconds')} remaining`} className={cn('flex items-center justify-center gap-2 font-mono text-[hsl(var(--ico-timer-text))]', className)}>
+        <div role="timer" aria-live="polite" aria-label={timerLabel} className={cn('flex items-center justify-center gap-2 font-mono text-[hsl(var(--ico-timer-text))]', className)}>
           {timeLeft.days > 0 && (
             <>
               <span className="text-xl font-semibold">{timeLeft.days}</span>
@@ -139,9 +142,9 @@ export const CountdownTimer = memo(function CountdownTimer({
   ];
 
   return (
-    <div role="timer" aria-live="polite" aria-label={`${timeLeft.days} ${pluralize(timeLeft.days, 'day', 'days')} ${timeLeft.hours} ${pluralize(timeLeft.hours, 'hour', 'hours')} ${timeLeft.minutes} ${pluralize(timeLeft.minutes, 'minute', 'minutes')} ${timeLeft.seconds} ${pluralize(timeLeft.seconds, 'second', 'seconds')} remaining`} className={cn('flex items-center justify-center', classes.container, className)}>
-      {timeUnits.map((unit, index) => (
-        <div key={index} className="flex items-center">
+    <div role="timer" aria-live="polite" aria-label={timerLabel} className={cn('flex items-center justify-center', classes.container, className)}>
+      {timeUnits.map((unit) => (
+        <div key={unit.label} className="flex items-center">
           <Card className={classes.card}>
             <span
               className={cn(

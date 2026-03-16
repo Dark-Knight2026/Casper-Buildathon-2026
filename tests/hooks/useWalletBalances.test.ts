@@ -203,6 +203,9 @@ describe('useWalletBalances', () => {
 
       // Promise.allSettled: 404 → graceful degradation, zero FT balances, no error
       expect(result.current.error).toBeNull();
+      // 404 is a fetch failure — error is reported, FT balances fall back to 0
+      expect(result.current.error).toBe('Failed to fetch token balances');
+      expect(result.current.balances.cspr).toBe(5000);
       expect(result.current.balances.usdt).toBe(0);
       expect(result.current.balances.usdc).toBe(0);
       expect(result.current.balances.big).toBe(0);
@@ -212,7 +215,7 @@ describe('useWalletBalances', () => {
   // --- Graceful degradation (Promise.allSettled) ---
 
   describe('graceful degradation', () => {
-    it('should return zero CSPR balance when RPC fetch fails', async () => {
+    it('should return zero CSPR balance and error when RPC fetch fails', async () => {
       mockQueryLatestBalance.mockRejectedValueOnce(new Error('RPC error'));
       mockFTBalance({ data: [] });
 
@@ -224,12 +227,12 @@ describe('useWalletBalances', () => {
         expect(result.current.isLoading).toBe(false);
       });
 
-      // Promise.allSettled: partial failure → zero balance, no error
-      expect(result.current.error).toBeNull();
+      // Partial failure: CSPR falls back to 0, error is reported
+      expect(result.current.error).toBe('Failed to fetch CSPR balance');
       expect(result.current.balances.cspr).toBe(0);
     });
 
-    it('should return zero FT balances when FT fetch fails', async () => {
+    it('should return zero FT balances and error when FT fetch fails', async () => {
       mockCSPRBalance('5000000000000');
       mockFetch.mockResolvedValueOnce({
         ok: false,
@@ -245,11 +248,32 @@ describe('useWalletBalances', () => {
         expect(result.current.isLoading).toBe(false);
       });
 
-      // Promise.allSettled: partial failure → zero balances, no error
-      expect(result.current.error).toBeNull();
+      // Partial failure: FT falls back to 0, CSPR still available, error is reported
+      expect(result.current.error).toBe('Failed to fetch token balances');
       expect(result.current.balances.cspr).toBe(5000);
       expect(result.current.balances.usdt).toBe(0);
       expect(result.current.balances.usdc).toBe(0);
+    });
+
+    it('should report both errors when all fetches fail', async () => {
+      mockQueryLatestBalance.mockRejectedValueOnce(new Error('RPC error'));
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        text: () => Promise.resolve('Internal Server Error'),
+      });
+
+      const { result } = renderHook(() => useWalletBalances(mockPublicKey), {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      expect(result.current.error).toBe('Failed to fetch CSPR balance. Failed to fetch token balances');
+      expect(result.current.balances.cspr).toBe(0);
+      expect(result.current.balances.usdt).toBe(0);
     });
   });
 

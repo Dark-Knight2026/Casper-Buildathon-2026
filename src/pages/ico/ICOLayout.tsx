@@ -27,8 +27,8 @@ export function ICOLayout({ children }: { children: React.ReactNode }) {
     <ClickProvider options={clickOptions}>
       <ThemeProvider theme={theme[ThemeModeType.light]}>
         {/* ClickUI renders modals for wallet connection; top bar is hidden */}
-        <div style={{ display: 'none' }}>
-          <ClickUI topBarSettings={{}} themeMode={ThemeModeType.dark} />
+        <div className="hidden">
+          <ClickUI topBarSettings={{}} themeMode={ThemeModeType.light} />
         </div>
         {children}
       </ThemeProvider>

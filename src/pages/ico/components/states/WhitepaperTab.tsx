@@ -112,7 +112,7 @@ export function WhitepaperTab({ className }: WhitepaperTabProps) {
       <div className="hidden md:block w-64 shrink-0 rounded-md bg-[hsl(var(--ico-bg-card))] border border-[hsl(var(--ico-border-color))] overflow-hidden">
         <div className="p-4 border-b border-[hsl(var(--ico-border-color))]">
           <div className="flex items-center gap-2 text-[hsl(var(--ico-text-primary))]">
-            <FileText className="w-5 h-5 text-[#1F7A63]" />
+            <FileText className="w-5 h-5 text-[hsl(var(--ico-brand-primary))]" />
             <span className="font-semibold">WhitePaper</span>
           </div>
         </div>
@@ -134,7 +134,7 @@ export function WhitepaperTab({ className }: WhitepaperTabProps) {
                   className={cn(
                     'w-full flex items-start gap-2 px-3 py-2 rounded-lg text-sm text-start transition-colors',
                     activeSection === section.id
-                      ? 'bg-[#1F7A63]/20 text-[#1F7A63]'
+                      ? 'bg-[hsl(var(--ico-brand-primary)/0.2)] text-[hsl(var(--ico-brand-primary))]'
                       : 'text-[hsl(var(--ico-text-secondary))] hover:bg-[hsl(var(--ico-bg-secondary))] hover:text-[hsl(var(--ico-text-primary))]'
                   )}
                 >
@@ -160,7 +160,7 @@ export function WhitepaperTab({ className }: WhitepaperTabProps) {
                         className={cn(
                           'w-full flex! justify-start! text-left px-3 py-1.5 rounded-lg text-xs transition-colors',
                           activeSection === sub.id
-                            ? 'bg-[#1F7A63]/10 text-[#1F7A63]'
+                            ? 'bg-[hsl(var(--ico-brand-primary)/0.1)] text-[hsl(var(--ico-brand-primary))]'
                             : 'text-[hsl(var(--ico-text-muted))] hover:bg-[hsl(var(--ico-bg-secondary))] hover:text-[hsl(var(--ico-text-secondary))]'
                         )}
                       >

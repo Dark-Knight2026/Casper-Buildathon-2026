@@ -111,8 +111,8 @@ export function VestingProgressBlock({
                   key={entry.id}
                   className={cn(
                     'flex items-center justify-between p-3 rounded-lg',
-                    'bg-[hsl(var(--ico-card-bg))]/50',
-                    'border border-[hsl(var(--ico-border))]'
+                    'bg-[hsl(var(--ico-bg-secondary))]/50',
+                    'border border-[hsl(var(--ico-border-color))]'
                   )}
                 >
                   <div className="flex items-center gap-3">
@@ -155,7 +155,7 @@ export function VestingProgressBlock({
           </div>
 
           {/* Total locked summary */}
-          <div className="mt-4 pt-4 border-t border-[hsl(var(--ico-border))] flex items-center justify-between">
+          <div className="mt-4 pt-4 border-t border-[hsl(var(--ico-border-color))] flex items-center justify-between">
             <span className="text-sm text-[hsl(var(--ico-text-secondary))]">
               Total Locked
             </span>

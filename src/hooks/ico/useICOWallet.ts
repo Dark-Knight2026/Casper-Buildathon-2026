@@ -16,6 +16,12 @@ export interface ICOWalletState {
   error: string | null;
 }
 
+export interface UseICOWalletReturn extends ICOWalletState {
+  connect: () => void;
+  disconnect: () => void;
+  clickRef: ReturnType<typeof useClickRef>;
+}
+
 /**
  * Hook for managing Casper wallet connection via CSPR.click SDK.
  *
@@ -40,7 +46,7 @@ export interface ICOWalletState {
  *
  * return <span>Connected: {account?.publicKey}</span>;
  */
-export function useICOWallet() {
+export function useICOWallet(): UseICOWalletReturn {
   const clickRef = useClickRef();
   const [state, setState] = useState<ICOWalletState>({
     isConnected: false,

@@ -24,6 +24,18 @@ vi.mock('@/services/ico/icoPurchaseService', () => ({
   preparePurchase: (...args: unknown[]) => mockPreparePurchase(...args),
   calculateTokensReceived: (...args: unknown[]) => mockCalculateTokensReceived(...args),
   fromRawAmount: (...args: unknown[]) => mockFromRawAmount(...args),
+  getDeployStatus: vi.fn().mockResolvedValue({ status: 'executed' }),
+  parseContractError: (msg?: string) => {
+    if (!msg) return 'Deploy failed';
+    const match = msg.match(/User error: (\d+)/);
+    if (match) {
+      const MAP: Record<string, string> = {
+        '59007': 'No active ICO schedule — sale is not currently open',
+      };
+      return MAP[match[1]] || msg;
+    }
+    return msg;
+  },
 }));
 
 // Mock ICO_CONFIG
@@ -46,9 +58,14 @@ vi.mock('@/constants/ico', () => ({
       USDC: 1,
     },
   },
-  getCurrencyRateUsd: (currency: string) => {
-    const rates: Record<string, number> = { CSPR: 0.05, USDT: 1, USDC: 1 };
-    return rates[currency] ?? 1;
+  getCurrencyRateUsd: (currency: string, csprPriceUsd?: number) => {
+    if (currency === 'CSPR') {
+      if (!csprPriceUsd || csprPriceUsd <= 0) {
+        throw new Error('CSPR price unavailable - please try again later');
+      }
+      return csprPriceUsd;
+    }
+    return 1;
   },
 }));
 

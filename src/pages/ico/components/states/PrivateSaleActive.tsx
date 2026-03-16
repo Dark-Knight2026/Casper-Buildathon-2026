@@ -13,13 +13,13 @@ import { TransactionStatusToast } from '../shared/TransactionStatusToast';
 import { UserTokenBalance } from '../shared/UserTokenBalance';
 import { TransactionHistory } from '../shared/TransactionHistory';
 
-interface ActivePresaleProps {
+interface PrivateSaleActiveProps {
   className?: string;
   endTimestamp: number;
   progress?: ScheduleProgress | null;
 }
 
-export function PrivateSaleActive({ className, endTimestamp, progress }: ActivePresaleProps) {
+export function PrivateSaleActive({ className, endTimestamp, progress }: PrivateSaleActiveProps) {
   const tokenPrice = progress?.priceUsd ?? 0;
 
   const {
@@ -30,6 +30,7 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: ActiveP
     balanceError,
     balancesLoading,
     csprPriceUsd,
+    csprPriceStale,
     handlePurchase,
     modalProps,
     toastProps,
@@ -97,6 +98,7 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: ActiveP
           tokenPrice={progress?.priceUsd ?? 0}
           tokenSymbol={ICO_CONFIG.TOKEN.symbol}
           csprPriceUsd={csprPriceUsd}
+          csprPriceStale={csprPriceStale}
           onConnect={connect}
           onPurchase={handlePurchase}
           onBuyCspr={buyCspr}

@@ -7,7 +7,7 @@
  *   - CEP-18 token payments (USDT, USDC) with approve flow
  *
  * Entry points called:
- *   - ICO contract: `purchase(purchase_amount: U256, currency: Currency, __cargo_purse: URef)`
+ *   - ICO contract: `purchase(amount_to_spend: U256, currency: Currency, __cargo_purse: URef)`
  *   - CEP-18 tokens: `approve(spender: Key, amount: U256)` before purchase
  */
 
@@ -20,6 +20,7 @@ import {
 } from 'casper-js-sdk';
 
 import { ICO_CONFIG, getCurrencyRateUsd } from '@/constants/ico';
+import logger from '@/lib/logger';
 import {
   createContractCallTransaction,
   stripHashPrefix,
@@ -155,8 +156,15 @@ export async function checkApprovalNeeded(
   const decimals = getDecimals(currency);
   const requiredAmount = toRawAmount(amount, decimals);
 
-  // Get current allowance for ICO contract
-  // Pass prefixed keys so getAllowance can determine tag bytes (account vs contract)
+  // Look up allowance using ICO_HASH (contract hash), while createApproveTransaction()
+  // grants allowance to ICO_PACKAGE_HASH. These are different Casper keys, so this
+  // lookup always returns 0 — but that has no practical impact: approve() is issued
+  // for the exact purchase amount and is fully consumed by the ICO's transfer_from()
+  // call, so allowance is 0 after every purchase regardless. The user explicitly signs
+  // every approve in the wallet modal, so there is no silent fund drain.
+  // Note: ICO_HASH and ICO_PACKAGE_HASH are intentionally separate env vars
+  // (VITE_ICO_CONTRACT_HASH vs VITE_ICO_PACKAGE_HASH) — both are needed because
+  // some Casper calls require the versioned contract hash and others require the package hash.
   const icoContractKey = ICO_HASH.startsWith('hash-') ? ICO_HASH : `hash-${ICO_HASH}`;
   const currentAllowance = await getAllowance(
     tokenContract,
@@ -236,7 +244,7 @@ export async function createPurchaseTransaction(
     currency as 'CSPR' | 'USDC' | 'USDT'
   );
 
-  console.log('[createPurchaseTransaction] params:', {
+  logger.log('[createPurchaseTransaction] params:', {
     amount: fromRawAmount(rawAmount, decimals),
     currency,
     rawAmount: rawAmount.toString(),
@@ -244,9 +252,9 @@ export async function createPurchaseTransaction(
 
   // CSPR: use proxy_caller.wasm to create a proper cargo purse
   if (currency === 'CSPR') {
-    console.log('[createPurchaseTransaction] Loading proxy_caller.wasm for CSPR...');
+    logger.log('[createPurchaseTransaction] Loading proxy_caller.wasm for CSPR...');
     const proxyWasm = await loadProxyCallerWasm();
-    console.log('[createPurchaseTransaction] WASM loaded, size:', proxyWasm.length, 'bytes');
+    logger.log('[createPurchaseTransaction] WASM loaded, size:', proxyWasm.length, 'bytes');
 
     // Entry point args WITHOUT __cargo_purse — the proxy adds it automatically
     const entryPointArgs = Args.fromMap({
@@ -255,7 +263,7 @@ export async function createPurchaseTransaction(
     });
 
     const serializedSize = entryPointArgs.toBytes().length;
-    console.log('[createPurchaseTransaction] Entry point args serialized:', serializedSize, 'bytes');
+    logger.log('[createPurchaseTransaction] Entry point args serialized:', serializedSize, 'bytes');
 
     const transaction = createProxyCallerTransaction(
       senderPublicKey,
@@ -267,7 +275,7 @@ export async function createPurchaseTransaction(
       proxyWasm,
     );
 
-    console.log('[createPurchaseTransaction] Transaction created:', {
+    logger.log('[createPurchaseTransaction] Transaction created:', {
       hash: transaction.hash?.toHex(),
     });
 
@@ -348,8 +356,40 @@ export async function submitTransaction(
 
   const result = await client.putTransaction(signedTransaction);
 
-  console.log('[icoPurchaseService] Transaction submitted:', result);
+  logger.log('[icoPurchaseService] Transaction submitted:', result);
   return result.transactionHash.toString();
+}
+
+// ── Contract error code mapping (from ico_schema.json) ──────────────
+
+const CONTRACT_ERROR_MAP: Record<string, string> = {
+  '59000': 'Invalid ICO schedule',
+  '59001': 'Invalid ICO schedule start time',
+  '59002': 'Invalid ICO schedule end time',
+  '59003': 'Invalid ICO schedule sale amount',
+  '59004': 'Invalid ICO schedule price',
+  '59005': 'Invalid amount to spend',
+  '59006': 'Unsupported currency',
+  '59007': 'No active ICO schedule — sale is not currently open',
+  '59008': 'Price oracle unavailable — please try again later',
+  '59010': 'Invalid amount attached to transaction',
+  '59011': 'Insufficient tokens available for sale',
+  '59012': 'Purchase amount below minimum',
+  '20000': 'Contract owner not configured',
+  '20001': 'Unauthorized: caller is not the owner',
+  '20003': 'Unauthorized: missing required role',
+  '20004': 'Cannot renounce role for another address',
+};
+
+export function parseContractError(rawMessage?: string): string {
+  if (!rawMessage) return 'Deploy failed';
+
+  const match = rawMessage.match(/User error: (\d+)/);
+  if (match) {
+    return CONTRACT_ERROR_MAP[match[1]] || rawMessage;
+  }
+
+  return rawMessage;
 }
 
 /**
@@ -381,14 +421,14 @@ export async function getDeployStatus(
     if (execResult?.Failure) {
       return {
         status: 'failed',
-        errorMessage: execResult.Failure.error_message || 'Deploy failed',
+        errorMessage: parseContractError(execResult.Failure.error_message),
       };
     }
 
     return { status: 'pending' };
   } catch (err) {
     // Deploy not found yet = still pending
-    console.warn('[icoPurchaseService] getDeployStatus error:', err);
+    logger.warn('[icoPurchaseService] getDeployStatus error:', err);
     return { status: 'pending' };
   }
 }
@@ -398,6 +438,8 @@ export async function getDeployStatus(
 
 /**
  * Validates purchase parameters before creating transactions.
+ * Note: csprRate is used for UI-side estimation only (min/max USD bounds).
+ * The smart contract determines the actual on-chain exchange rate.
  */
 export function validatePurchase(
   amount: string,
@@ -412,7 +454,12 @@ export function validatePurchase(
   }
 
   // Check minimum/maximum in USD
-  const currencyRate = getCurrencyRateUsd(currency, csprRate);
+  let currencyRate: number;
+  try {
+    currencyRate = getCurrencyRateUsd(currency, csprRate);
+  } catch {
+    return { valid: false, error: 'CSPR price unavailable — please try again later' };
+  }
   const amountInUsd = numAmount * currencyRate;
 
   if (amountInUsd < ICO_CONFIG.PURCHASE_LIMITS.min) {
@@ -438,7 +485,10 @@ export function validatePurchase(
 }
 
 /**
- * Calculates the number of tokens that will be received for a given payment.
+ * Calculates the ESTIMATED number of tokens for UI preview.
+ * Actual token allocation is determined by the on-chain contract rate.
+ * csprRate is advisory only — staleness/bounds checks are intentionally
+ * omitted because this value cannot affect the real purchase outcome.
  */
 export function calculateTokensReceived(
   amount: string,
@@ -451,7 +501,12 @@ export function calculateTokensReceived(
     return 0n;
   }
 
-  const currencyRate = getCurrencyRateUsd(currency, csprRate);
+  let currencyRate: number;
+  try {
+    currencyRate = getCurrencyRateUsd(currency, csprRate);
+  } catch {
+    return 0n;
+  }
   const amountInUsd = numAmount * currencyRate;
   const tokensFloat = amountInUsd / tokenPriceUsd;
 

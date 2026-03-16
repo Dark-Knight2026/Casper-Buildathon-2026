@@ -9,14 +9,14 @@ import { Title } from '../shared/Title';
 import { InfoCard } from '../shared/InfoCard';
 
 
-interface PresaleCountdownProps {
+interface PrivateSaleCountdownProps {
   targetTimestamp: number;
   endTimestamp: number;
   progress?: ScheduleProgress | null;
   className?: string;
 }
 
-export function PrivateSaleCountdown({ targetTimestamp, endTimestamp, progress, className }: PresaleCountdownProps) {
+export function PrivateSaleCountdown({ targetTimestamp, endTimestamp, progress, className }: PrivateSaleCountdownProps) {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
 
