@@ -455,6 +455,54 @@ fn test_claim_should_revert_if_still_in_cliff_period() {
 }
 
 #[test]
+fn test_claim_should_revert_if_active_unbonding_from_direct_staking() {
+    let mut ctx = setup(odra_test::env());
+    let cliff = ctx.cliff_duration;
+    let vesting = ctx.vesting_duration;
+    let alice = ctx.users.alice;
+    let stake_amount = vesting_amount();
+
+    // Alice stakes directly (outside of vesting)
+    ctx.env.set_caller(ctx.users.owner);
+    ctx.tailor_coin.transfer(&alice, &stake_amount);
+    
+    ctx.env.set_caller(alice);
+    ctx.tailor_coin.approve(&ctx.staking.address(), &stake_amount);
+    ctx.staking.stake_for(alice, stake_amount);
+
+    // Alice initiates unstaking directly via staking contract
+    ctx.staking.unstake_for(alice, stake_amount / 2);
+
+    // Verify Alice has an active unbonding position
+    let staker_info = ctx.staking.get_staker_info(alice);
+    assert!(
+        !staker_info.unbonding_amount.is_zero(),
+        "Alice should have an active unbonding position"
+    );
+
+    // Create a vesting schedule for Alice
+    ctx.env.set_caller(ctx.users.owner);
+    ctx.tailor_coin
+        .approve(&ctx.staking.address(), &stake_amount);
+    ctx.staking.stake_for(alice, stake_amount);
+
+    let vesting_id = ctx
+        .vesting
+        .create_schedule(alice, stake_amount, cliff, vesting);
+
+    // Advance past cliff to make tokens claimable
+    ctx.env.advance_block_time(cliff);
+
+    // Try to claim from vesting while having active unbonding from direct staking
+    ctx.env.set_caller(alice);
+    assert_eq!(
+        ctx.vesting.try_claim(vesting_id).unwrap_err(),
+        Error::ClaimBlockedByActiveUnbonding.into(),
+        "Should revert when beneficiary has active unbonding from direct staking"
+    );
+}
+
+#[test]
 fn test_claim_should_update_unstaked_amount_after_cliff() {
     let mut ctx = setup(odra_test::env());
     let cliff = ctx.cliff_duration;
