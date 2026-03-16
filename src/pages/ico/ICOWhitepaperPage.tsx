@@ -1,6 +1,6 @@
 import { ICOHeader } from './components/ICOHeader';
 import { ICOFooter } from './components/ICOFooter';
-import { ICOScrollArea as ScrollArea } from './components/shared/ICOScrollArea';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { WhitepaperTab } from './components/states/WhitepaperTab';
 
 export function ICOWhitepaperPage() {

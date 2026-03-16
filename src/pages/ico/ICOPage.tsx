@@ -3,7 +3,7 @@ import { useICOState } from '@/hooks/ico/useICOState';
 import { useICOSchedules } from '@/hooks/ico/useICOSchedules';
 import { ICOHeader } from './components/ICOHeader';
 import { ICOFooter } from './components/ICOFooter';
-import { ICOScrollArea as ScrollArea } from './components/shared/ICOScrollArea';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { PageErrorBoundary } from '@/components/common/PageErrorBoundary';
 import { logger } from '@/utils/logger';
 
