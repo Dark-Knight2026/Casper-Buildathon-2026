@@ -2,6 +2,7 @@
 name = "leasefi_contracts"
 version = "0.1.0"
 edition = "2021"
+autotests = false
 
 [dependencies]
 odra-modules = { version="2.5.0", features = [], default-features = false }

@@ -4,121 +4,9 @@
   "authors": [],
   "repository": null,
   "homepage": null,
-  "contract_name": "Escrow",
+  "contract_name": "Vesting",
   "contract_version": "0.1.0",
   "types": [
-    {
-      "struct": {
-        "name": "CurrencyAmount",
-        "description": null,
-        "members": [
-          {
-            "name": "currency",
-            "description": null,
-            "ty": {
-              "Option": "Key"
-            }
-          },
-          {
-            "name": "amount",
-            "description": null,
-            "ty": "U256"
-          }
-        ]
-      }
-    },
-    {
-      "struct": {
-        "name": "Invoice",
-        "description": null,
-        "members": [
-          {
-            "name": "kind",
-            "description": null,
-            "ty": "InvoiceKind"
-          },
-          {
-            "name": "buyer",
-            "description": null,
-            "ty": "Key"
-          },
-          {
-            "name": "seller",
-            "description": null,
-            "ty": "Key"
-          },
-          {
-            "name": "amount_due",
-            "description": null,
-            "ty": "CurrencyAmount"
-          },
-          {
-            "name": "deadline",
-            "description": null,
-            "ty": "U64"
-          },
-          {
-            "name": "is_paid",
-            "description": null,
-            "ty": "Bool"
-          }
-        ]
-      }
-    },
-    {
-      "struct": {
-        "name": "InvoiceCreated",
-        "description": null,
-        "members": [
-          {
-            "name": "invoice_id",
-            "description": null,
-            "ty": "U256"
-          },
-          {
-            "name": "created_at",
-            "description": null,
-            "ty": "U64"
-          }
-        ]
-      }
-    },
-    {
-      "struct": {
-        "name": "InvoicePaid",
-        "description": null,
-        "members": [
-          {
-            "name": "invoice_id",
-            "description": null,
-            "ty": "U256"
-          },
-          {
-            "name": "paid_at",
-            "description": null,
-            "ty": "U64"
-          }
-        ]
-      }
-    },
-    {
-      "struct": {
-        "name": "MinDeadlineSet",
-        "description": null,
-        "members": [
-          {
-            "name": "old_min_deadline",
-            "description": null,
-            "ty": "U64"
-          },
-          {
-            "name": "new_min_deadline",
-            "description": null,
-            "ty": "U64"
-          }
-        ]
-      }
-    },
     {
       "struct": {
         "name": "OwnershipTransferred",
@@ -142,21 +30,131 @@
       }
     },
     {
-      "enum": {
-        "name": "InvoiceKind",
+      "struct": {
+        "name": "ScheduleCreated",
         "description": null,
-        "variants": [
+        "members": [
           {
-            "name": "SecurityDeposit",
+            "name": "vesting_id",
             "description": null,
-            "discriminant": 0,
-            "ty": "Unit"
+            "ty": "U256"
           },
           {
-            "name": "Lease",
+            "name": "whitelisted_creator",
             "description": null,
-            "discriminant": 1,
-            "ty": "Unit"
+            "ty": "Key"
+          },
+          {
+            "name": "beneficiary",
+            "description": null,
+            "ty": "Key"
+          },
+          {
+            "name": "total_amount",
+            "description": null,
+            "ty": "U256"
+          },
+          {
+            "name": "start_timestamp",
+            "description": null,
+            "ty": "U64"
+          },
+          {
+            "name": "cliff_duration",
+            "description": null,
+            "ty": "U64"
+          },
+          {
+            "name": "vesting_duration",
+            "description": null,
+            "ty": "U64"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
+        "name": "TokensClaimed",
+        "description": null,
+        "members": [
+          {
+            "name": "vesting_id",
+            "description": null,
+            "ty": "U256"
+          },
+          {
+            "name": "beneficiary",
+            "description": null,
+            "ty": "Key"
+          },
+          {
+            "name": "amount",
+            "description": null,
+            "ty": "U256"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
+        "name": "VestingSchedule",
+        "description": null,
+        "members": [
+          {
+            "name": "beneficiary",
+            "description": null,
+            "ty": "Key"
+          },
+          {
+            "name": "total_amount",
+            "description": null,
+            "ty": "U256"
+          },
+          {
+            "name": "claimed_amount",
+            "description": null,
+            "ty": "U256"
+          },
+          {
+            "name": "start_timestamp",
+            "description": null,
+            "ty": "U64"
+          },
+          {
+            "name": "cliff_duration",
+            "description": null,
+            "ty": "U64"
+          },
+          {
+            "name": "vesting_duration",
+            "description": null,
+            "ty": "U64"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
+        "name": "WhitelistedCreatorAdded",
+        "description": null,
+        "members": [
+          {
+            "name": "creator",
+            "description": null,
+            "ty": "Key"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
+        "name": "WhitelistedCreatorRemoved",
+        "description": null,
+        "members": [
+          {
+            "name": "creator",
+            "description": null,
+            "ty": "Key"
           }
         ]
       }
@@ -164,14 +162,9 @@
   ],
   "errors": [
     {
-      "name": "CallerIsNotBuyer",
+      "name": "CallerNotBeneficiary",
       "description": "",
-      "discriminant": 61006
-    },
-    {
-      "name": "CallerNotLeaseContract",
-      "description": "",
-      "discriminant": 61000
+      "discriminant": 65006
     },
     {
       "name": "CallerNotTheNewOwner",
@@ -184,44 +177,34 @@
       "discriminant": 20001
     },
     {
-      "name": "EqualBuyerAndSeller",
+      "name": "CallerNotWhitelisted",
       "description": "",
-      "discriminant": 61010
+      "discriminant": 65001
     },
     {
-      "name": "InvalidAmountAttached",
+      "name": "CliffExceedsVestingDuration",
       "description": "",
-      "discriminant": 61009
+      "discriminant": 65004
     },
     {
-      "name": "InvalidDeadline",
+      "name": "InvalidAmount",
       "description": "",
-      "discriminant": 61004
+      "discriminant": 65002
     },
     {
-      "name": "InvalidInvoiceId",
+      "name": "InvalidVestingDuration",
       "description": "",
-      "discriminant": 61005
-    },
-    {
-      "name": "InvoiceIsAlreadyPaid",
-      "description": "",
-      "discriminant": 61007
-    },
-    {
-      "name": "InvoiceIsExpired",
-      "description": "",
-      "discriminant": 61008
-    },
-    {
-      "name": "LeaseContractIsNotSet",
-      "description": "",
-      "discriminant": 61001
+      "discriminant": 65003
     },
     {
       "name": "MissingRole",
       "description": "The role is missing.",
       "discriminant": 20003
+    },
+    {
+      "name": "NothingToClaim",
+      "description": "",
+      "discriminant": 65007
     },
     {
       "name": "OwnerNotSet",
@@ -234,40 +217,19 @@
       "discriminant": 20004
     },
     {
-      "name": "TreasuryContractIsNotSet",
+      "name": "ScheduleNotFound",
       "description": "",
-      "discriminant": 61002
-    },
-    {
-      "name": "ZeroAmount",
-      "description": "",
-      "discriminant": 61003
+      "discriminant": 65005
     }
   ],
   "entry_points": [
     {
-      "name": "set_min_deadline",
-      "description": "Sets the minimum possible invoice deadline by the owner",
+      "name": "set_tailor_coin",
+      "description": "Sets the TailorCoin (BIG) token contract address.",
       "is_mutable": true,
       "arguments": [
         {
-          "name": "new_min_deadline",
-          "description": null,
-          "ty": "U64",
-          "optional": false
-        }
-      ],
-      "return_ty": "Unit",
-      "is_contract_context": true,
-      "access": "public"
-    },
-    {
-      "name": "set_lease",
-      "description": "Sets the Lease contract address by the owner",
-      "is_mutable": true,
-      "arguments": [
-        {
-          "name": "lease",
+          "name": "tailor_coin",
           "description": null,
           "ty": "Key",
           "optional": false
@@ -278,12 +240,12 @@
       "access": "public"
     },
     {
-      "name": "set_treasury",
-      "description": "Sets the Treasury contract address by the owner",
+      "name": "set_staking",
+      "description": "Sets the Staking contract address (for future auto-staking integration).",
       "is_mutable": true,
       "arguments": [
         {
-          "name": "treasury",
+          "name": "staking",
           "description": null,
           "ty": "Key",
           "optional": false
@@ -294,92 +256,131 @@
       "access": "public"
     },
     {
-      "name": "create_lease_invoice",
-      "description": "Allows to create a lease invoice by the Lease contract",
+      "name": "add_whitelisted_creator",
+      "description": "Grants an address permission to create vesting schedules.",
       "is_mutable": true,
       "arguments": [
         {
-          "name": "tenant",
+          "name": "creator",
           "description": null,
           "ty": "Key",
-          "optional": false
-        },
-        {
-          "name": "landlord",
-          "description": null,
-          "ty": "Key",
-          "optional": false
-        },
-        {
-          "name": "amount_due",
-          "description": null,
-          "ty": "CurrencyAmount",
-          "optional": false
-        },
-        {
-          "name": "deadline",
-          "description": null,
-          "ty": "U64",
           "optional": false
         }
       ],
-      "return_ty": "U256",
+      "return_ty": "Unit",
       "is_contract_context": true,
       "access": "public"
     },
     {
-      "name": "create_security_deposit_invoice",
-      "description": "Allows to create a security deposit invoice by the Lease contract",
+      "name": "remove_whitelisted_creator",
+      "description": "Revokes an address's permission to create vesting schedules.",
       "is_mutable": true,
       "arguments": [
         {
-          "name": "tenant",
+          "name": "creator",
           "description": null,
           "ty": "Key",
           "optional": false
-        },
-        {
-          "name": "amount_due",
-          "description": null,
-          "ty": "CurrencyAmount",
-          "optional": false
-        },
-        {
-          "name": "deadline",
-          "description": null,
-          "ty": "U64",
-          "optional": false
         }
       ],
-      "return_ty": "U256",
+      "return_ty": "Unit",
       "is_contract_context": true,
       "access": "public"
     },
     {
-      "name": "pay_invoice",
-      "description": "Allows to pay any invoice created earlier",
-      "is_mutable": true,
+      "name": "get_schedule",
+      "description": "Returns schedule data for a given Vesting ID, or None if doesn't exist",
+      "is_mutable": false,
       "arguments": [
         {
-          "name": "invoice_id",
+          "name": "vesting_id",
           "description": null,
           "ty": "U256",
           "optional": false
-        },
-        {
-          "name": "__cargo_purse",
-          "description": null,
-          "ty": "URef",
-          "optional": false
         }
       ],
-      "return_ty": "Unit",
+      "return_ty": {
+        "Option": "VestingSchedule"
+      },
       "is_contract_context": true,
       "access": "public"
     },
     {
-      "name": "get_lease_contract_address",
-      "description": "Returns the Lease contract address",
+      "name": "get_schedules_count",
+      "description": "Returns total number of schedules ever created",
+      "is_mutable": false,
+      "arguments": [],
+      "return_ty": "U256",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "get_user_schedules_count",
+      "description": "Returns how many schedules a user has",
+      "is_mutable": false,
+      "arguments": [
+        {
+          "name": "user",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        }
+      ],
+      "return_ty": "U32",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "get_claimable_amount",
+      "description": "Returns how many tokens are currently claimable for a given schedule",
+      "is_mutable": false,
+      "arguments": [
+        {
+          "name": "vesting_id",
+          "description": null,
+          "ty": "U256",
+          "optional": false
+        }
+      ],
+      "return_ty": "U256",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "get_vested_amount",
+      "description": "Returns total amount vested including tokens already claimed",
+      "is_mutable": false,
+      "arguments": [
+        {
+          "name": "vesting_id",
+          "description": null,
+          "ty": "U256",
+          "optional": false
+        }
+      ],
+      "return_ty": "U256",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "is_whitelisted_creator",
+      "description": "",
+      "is_mutable": false,
+      "arguments": [
+        {
+          "name": "creator",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        }
+      ],
+      "return_ty": "Bool",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "get_tailor_coin_contract_address",
+      "description": "",
       "is_mutable": false,
       "arguments": [],
       "return_ty": "Key",
@@ -387,8 +388,8 @@
       "access": "public"
     },
     {
-      "name": "get_treasury_contract_address",
-      "description": "Returns the Treasury contract address",
+      "name": "get_staking_contract_address",
+      "description": "",
       "is_mutable": false,
       "arguments": [],
       "return_ty": "Key",
@@ -396,36 +397,52 @@
       "access": "public"
     },
     {
-      "name": "get_invoice_by_id",
-      "description": "Returns invoice by its ID",
-      "is_mutable": false,
+      "name": "create_schedule",
+      "description": "Creates a new vesting schedule for a beneficiary",
+      "is_mutable": true,
       "arguments": [
         {
-          "name": "invoice_id",
+          "name": "beneficiary",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        },
+        {
+          "name": "total_amount",
           "description": null,
           "ty": "U256",
           "optional": false
+        },
+        {
+          "name": "cliff_duration",
+          "description": null,
+          "ty": "U64",
+          "optional": false
+        },
+        {
+          "name": "vesting_duration",
+          "description": null,
+          "ty": "U64",
+          "optional": false
         }
       ],
-      "return_ty": "Invoice",
-      "is_contract_context": true,
-      "access": "public"
-    },
-    {
-      "name": "get_invoices_count",
-      "description": "Returns number of invoices created through this contract",
-      "is_mutable": false,
-      "arguments": [],
       "return_ty": "U256",
       "is_contract_context": true,
       "access": "public"
     },
     {
-      "name": "get_min_deadline",
-      "description": "Returns the minimum invoice deadline",
-      "is_mutable": false,
-      "arguments": [],
-      "return_ty": "U64",
+      "name": "claim",
+      "description": "Claims all unclaimed-vested tokens from a specific schedule",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "vesting_id",
+          "description": null,
+          "ty": "U256",
+          "optional": false
+        }
+      ],
+      "return_ty": "Unit",
       "is_contract_context": true,
       "access": "public"
     },
@@ -466,24 +483,28 @@
   ],
   "events": [
     {
-      "name": "InvoiceCreated",
-      "ty": "InvoiceCreated"
-    },
-    {
-      "name": "InvoicePaid",
-      "ty": "InvoicePaid"
-    },
-    {
-      "name": "MinDeadlineSet",
-      "ty": "MinDeadlineSet"
-    },
-    {
       "name": "OwnershipTransferred",
       "ty": "OwnershipTransferred"
+    },
+    {
+      "name": "ScheduleCreated",
+      "ty": "ScheduleCreated"
+    },
+    {
+      "name": "TokensClaimed",
+      "ty": "TokensClaimed"
+    },
+    {
+      "name": "WhitelistedCreatorAdded",
+      "ty": "WhitelistedCreatorAdded"
+    },
+    {
+      "name": "WhitelistedCreatorRemoved",
+      "ty": "WhitelistedCreatorRemoved"
     }
   ],
   "call": {
-    "wasm_file_name": "Escrow.wasm",
+    "wasm_file_name": "Vesting.wasm",
     "description": "",
     "arguments": [
       {
@@ -514,12 +535,6 @@
         "name": "owner",
         "description": null,
         "ty": "Key",
-        "optional": false
-      },
-      {
-        "name": "min_deadline",
-        "description": null,
-        "ty": "U64",
         "optional": false
       }
     ]

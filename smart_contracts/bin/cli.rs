@@ -6,6 +6,7 @@ use odra::{
 use odra_cli::{deploy::DeployScript, DeployedContractsContainer, DeployerExt, OdraCli};
 
 use leasefi_contracts::{
+    constants::{PRIVATE_SALE_CLIFF_DURATION, PRIVATE_SALE_VESTING_DURATION},
     escrow::{Escrow, EscrowInitArgs},
     ico::{
         types::{Currency, ICOScheduleCreateParams},
@@ -14,9 +15,10 @@ use leasefi_contracts::{
     lease::{Lease, LeaseInitArgs},
     nft::{NFTInitArgs, NFT},
     roles::{Roles, RolesInitArgs},
-    staking::Staking,
+    staking::{Staking, StakingInitArgs},
     tailor_coin::{TailorCoin, TailorCoinInitArgs},
     treasury::{Treasury, TreasuryInitArgs},
+    vesting::{Vesting, VestingInitArgs},
 };
 
 struct LeasefiDeployScript;
@@ -36,6 +38,8 @@ impl LeasefiDeployScript {
                 + (5 * Self::ONE_DAY),
             sale_amount: U256::from(500_000_000) * U256::from(10).pow(U256::from(18)),
             price: U256::from(500_000), // 0.5 USD (0.5 * 1 * 10^6)
+            cliff_duration: PRIVATE_SALE_CLIFF_DURATION,
+            vesting_duration: PRIVATE_SALE_VESTING_DURATION,
         }
     }
 }
@@ -119,13 +123,33 @@ impl DeployScript for LeasefiDeployScript {
             container,
             400_000_000_000,
         )?;
+        let mut vesting = Vesting::load_or_deploy_with_cfg(
+            &env,
+            None,
+            VestingInitArgs {
+                owner: env.caller(),
+            },
+            InstallConfig::upgradable::<Vesting>(),
+            container,
+            400_000_000_000,
+        )?;
+        let mut staking = Staking::load_or_deploy_with_cfg(
+            &env,
+            None,
+            StakingInitArgs {
+                owner: env.caller(),
+            },
+            InstallConfig::upgradable::<Staking>(),
+            container,
+            400_000_000_000,
+        )?;
         let mut ico = ICO::load_or_deploy_with_cfg(
             &env,
             None,
             ICOInitArgs {
                 owner: env.caller(),
                 styks_price_feed: Address::new(
-                    "hahs-2879d6e927289197aab0101cc033f532fe22e4ab4686e44b5743cb1333031acc", // testnet, 814fedbd4ae53b82ab19b1ff6698ce412445c3266271fcb639986d37dc0ae121 - mainnet
+                    "hash-2879d6e927289197aab0101cc033f532fe22e4ab4686e44b5743cb1333031acc", // testnet, 814fedbd4ae53b82ab19b1ff6698ce412445c3266271fcb639986d37dc0ae121 - mainnet
                 )
                 .unwrap(),
             },
@@ -136,7 +160,15 @@ impl DeployScript for LeasefiDeployScript {
 
         // Setup Treasury
         treasury.set_tailor_coin(tailor_coin.address());
-        // treasury.set_staking(staking.address());
+        treasury.set_staking(staking.address());
+
+        // Setup Vesting
+        vesting.set_tailor_coin(tailor_coin.address());
+        vesting.add_whitelisted_creator(ico.address());
+        // TODO: Set this staking address when staking is implemented
+
+        // Setup Staking
+        staking.set_tailor_coin(tailor_coin.address());
 
         // Setup Lease
         lease.set_roles(roles.address());
@@ -151,6 +183,8 @@ impl DeployScript for LeasefiDeployScript {
 
         ico.set_tailor_coin(tailor_coin.address());
         ico.set_treasury(treasury.address());
+        ico.set_vesting(vesting.address());
+        ico.set_staking(staking.address());
         ico.add_currency(Currency::CSPR, None);
         env.set_gas(15_000_000_000);
         ico.add_currency(
@@ -180,6 +214,7 @@ impl DeployScript for LeasefiDeployScript {
         treasury.transfer_ownership(&new_owner);
         escrow.transfer_ownership(&new_owner);
         lease.transfer_ownership(&new_owner);
+        vesting.transfer_ownership(&new_owner);
         ico.transfer_ownership(&new_owner);
 
         Ok(())
@@ -197,6 +232,7 @@ pub fn main() {
         .contract::<Escrow>()
         .contract::<Lease>()
         .contract::<Staking>()
+        .contract::<Vesting>()
         .contract::<ICO>()
         .build()
         .run();

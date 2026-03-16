@@ -1,6 +1,6 @@
 {
   "casper_contract_schema_version": 1,
-  "toolchain": "rustc 1.85.0-nightly (7f75bfa1a 2024-12-30)",
+  "toolchain": "rustc 1.85.0-nightly (14ee63a3c 2024-12-29)",
   "authors": [],
   "repository": null,
   "homepage": null,
@@ -60,6 +60,21 @@
           },
           {
             "name": "price",
+            "description": null,
+            "ty": "U256"
+          },
+          {
+            "name": "cliff_duration",
+            "description": null,
+            "ty": "U64"
+          },
+          {
+            "name": "vesting_duration",
+            "description": null,
+            "ty": "U64"
+          },
+          {
+            "name": "withdrawn_amount",
             "description": null,
             "ty": "U256"
           }
@@ -123,6 +138,16 @@
             "name": "price",
             "description": null,
             "ty": "U256"
+          },
+          {
+            "name": "cliff_duration",
+            "description": null,
+            "ty": "U64"
+          },
+          {
+            "name": "vesting_duration",
+            "description": null,
+            "ty": "U64"
           }
         ]
       }
@@ -244,6 +269,11 @@
       "discriminant": 20001
     },
     {
+      "name": "ICOScheduleCliffExceedsVestingDuration",
+      "description": "",
+      "discriminant": 59014
+    },
+    {
       "name": "InsufficientSellingTokensAmount",
       "description": "",
       "discriminant": 59011
@@ -284,6 +314,11 @@
       "discriminant": 59001
     },
     {
+      "name": "InvalidICOScheduleVestingDuration",
+      "description": "",
+      "discriminant": 59013
+    },
+    {
       "name": "InvalidPurchaseAmount",
       "description": "",
       "discriminant": 59012
@@ -307,6 +342,11 @@
       "name": "RoleRenounceForAnotherAddress",
       "description": "The role cannot be renounced for another address.",
       "discriminant": 20004
+    },
+    {
+      "name": "StakingAddressNotSet",
+      "description": "",
+      "discriminant": 59015
     },
     {
       "name": "StyksOracleCanNotReturnTWAP",
@@ -343,6 +383,38 @@
       "arguments": [
         {
           "name": "treasury",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        }
+      ],
+      "return_ty": "Unit",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "set_vesting",
+      "description": "Sets the Vesting contract address by the owner",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "vesting",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        }
+      ],
+      "return_ty": "Unit",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "set_staking",
+      "description": "Sets the Staking contract address by the owner",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "staking",
           "description": null,
           "ty": "Key",
           "optional": false
@@ -555,6 +627,24 @@
     {
       "name": "get_treasury_contract_address",
       "description": "Returns the Treasury contract address",
+      "is_mutable": false,
+      "arguments": [],
+      "return_ty": "Key",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "get_staking_contract_address",
+      "description": "Returns the Staking contract address",
+      "is_mutable": false,
+      "arguments": [],
+      "return_ty": "Key",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "get_vesting_contract_address",
+      "description": "Returns the Vesting contract address",
       "is_mutable": false,
       "arguments": [],
       "return_ty": "Key",
