@@ -17,10 +17,10 @@ export const ICO_CONFIG = {
   CONTRACTS: {
     icoAddress: import.meta.env.VITE_ICO_CONTRACT_HASH ?? '',
     icoPackageHash: import.meta.env.VITE_ICO_PACKAGE_HASH ?? '',
-    tokenAddress: import.meta.env.VITE_BIG_TOKEN_CONTRACT_HASH ?? 'hash-f7d94fd8670fdc69aabd07c214ab8d52c3fc1fd839f0cc7713e1574cdfd899ec',
+    tokenAddress: import.meta.env.VITE_BIG_TOKEN_CONTRACT_HASH ?? '',
     treasuryAddress: import.meta.env.VITE_TREASURY_CONTRACT_HASH ?? '',
-    usdcAddress: import.meta.env.VITE_USDC_CONTRACT_HASH ?? 'hash-7f06f66426f18ca8d3b8df69f977a54554d39fda43ebe942fd22ece0d20235bd',
-    usdtAddress: import.meta.env.VITE_USDT_CONTRACT_HASH ?? 'hash-7c902e8a111b3116e00c7507138b92b83f96b29be98aa95247928583720e297a',
+    usdcAddress: import.meta.env.VITE_USDC_CONTRACT_HASH ?? '',
+    usdtAddress: import.meta.env.VITE_USDT_CONTRACT_HASH ?? '',
   },
 
   CASPER: {
@@ -41,6 +41,28 @@ export const ICO_CONFIG = {
   },
 
 };
+
+/**
+ * Validates that all required ICO contract addresses are set via environment variables.
+ * Call once at app startup (e.g. main.tsx) to catch misconfigured deployments early.
+ * Throws with a clear message listing every missing variable.
+ */
+export function validateICOConfig(): void {
+  const required: Array<[string, string]> = [
+    ['VITE_BIG_TOKEN_CONTRACT_HASH', ICO_CONFIG.CONTRACTS.tokenAddress],
+    ['VITE_USDC_CONTRACT_HASH', ICO_CONFIG.CONTRACTS.usdcAddress],
+    ['VITE_USDT_CONTRACT_HASH', ICO_CONFIG.CONTRACTS.usdtAddress],
+  ];
+
+  const missing = required.filter(([, value]) => !value).map(([key]) => key);
+
+  if (missing.length > 0) {
+    throw new Error(
+      `[ICO] Missing required environment variables:\n  ${missing.join('\n  ')}\n` +
+      'Set them in your .env file (testnet) or deployment environment (production).',
+    );
+  }
+}
 
 /**
  * Returns currency-to-USD rate.
