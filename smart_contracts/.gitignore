@@ -1,3 +1,4 @@
+resources/legacy
 .builder*
 .backend*
 /target
@@ -9,5 +10,3 @@
 Cargo.lock
 .DS_Store
 .env
-
-resources/legacy

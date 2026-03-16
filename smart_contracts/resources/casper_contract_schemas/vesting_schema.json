@@ -1,6 +1,6 @@
 {
   "casper_contract_schema_version": 1,
-  "toolchain": "rustc 1.85.0-nightly (14ee63a3c 2024-12-29)",
+  "toolchain": "rustc 1.85.0-nightly (7f75bfa1a 2024-12-30)",
   "authors": [],
   "repository": null,
   "homepage": null,
@@ -180,6 +180,11 @@
       "name": "CallerNotWhitelisted",
       "description": "",
       "discriminant": 65001
+    },
+    {
+      "name": "ClaimingNotYetEnabled",
+      "description": "",
+      "discriminant": 65008
     },
     {
       "name": "CliffExceedsVestingDuration",

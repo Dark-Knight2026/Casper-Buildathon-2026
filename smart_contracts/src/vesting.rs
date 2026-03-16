@@ -82,7 +82,7 @@ pub mod errors {
         ScheduleNotFound = 65_005,
         CallerNotBeneficiary = 65_006,
         NothingToClaim = 65_007,
-        // TOOD: Delete this error once staking is enabled
+        // TODO: Delete this error once staking is enabled
         ClaimingNotYetEnabled = 65_008,
     }
 }

@@ -376,4 +376,3 @@ pub mod types {
         pub invoice_validity_duration: u64,
     }
 }
-

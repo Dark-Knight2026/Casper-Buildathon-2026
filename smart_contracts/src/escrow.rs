@@ -293,4 +293,3 @@ pub mod types {
         pub is_paid: bool,
     }
 }
-

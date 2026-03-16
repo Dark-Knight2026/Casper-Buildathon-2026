@@ -65,4 +65,3 @@ pub mod errors {
         TailorCoinContractIsNotSet = 63_000,
     }
 }
-
