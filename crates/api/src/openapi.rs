@@ -7,11 +7,7 @@ use utoipa::{
     openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme},
 };
 
-use crate::{
-    analytics::models as analytics_models, auth::models as auth_models,
-    health::models as health_models, ico::models as ico_models, tax::models as tax_models,
-    transactions::models as tx_models,
-};
+use crate::{analytics, auth, health, ico, tax, transactions};
 
 /// `OpenAPI` documentation configuration.
 ///
@@ -30,29 +26,31 @@ use crate::{
     components(
         schemas(
             // Auth models
-            auth_models::NonceRequest,
-            auth_models::NonceResponse,
-            auth_models::LoginRequest,
-            auth_models::LoginResponse,
-            auth_models::UserInfo,
+            auth::models::NonceRequest,
+            auth::models::NonceResponse,
+            auth::models::LoginRequest,
+            auth::models::LoginResponse,
+            auth::models::UserInfo,
             // Health models
-            health_models::ConnectionStatus,
-            health_models::HealthResponse,
+            health::models::ConnectionStatus,
+            health::models::HealthResponse,
             // Tax models
-            tax_models::TaxCalculationRequest,
-            tax_models::TaxReport,
-            tax_models::TaxCategory,
-            tax_models::TaxCategoryType,
+            tax::models::TaxCalculationRequest,
+            tax::models::TaxReport,
+            tax::models::TaxCategory,
+            tax::models::TaxCategoryType,
             // Analytics models
-            analytics_models::PropertyPerformanceRequest,
-            analytics_models::PropertyPerformanceReport,
+            analytics::models::PropertyPerformanceRequest,
+            analytics::models::PropertyPerformanceReport,
             // Pagination
             crate::common::Pagination,
             // Transaction models
-            tx_models::TransactionResponse,
+            transactions::models::TransactionResponse,
+            transactions::models::TxType,
+            transactions::models::HashType,
             // ICO models
-            ico_models::IcoBalanceResponse,
-            ico_models::IcoProgressResponse,
+            ico::models::IcoBalanceResponse,
+            ico::models::IcoProgressResponse,
             // Common models
             crate::common::UserRole,
             crate::common::Claims,

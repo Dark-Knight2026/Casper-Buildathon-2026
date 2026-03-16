@@ -3,7 +3,7 @@
 use chrono::{DateTime, SecondsFormat, Utc};
 use sqlx::PgPool;
 
-use crate::transactions::models::{self, TransactionResponse};
+use crate::transactions::models::{self, HashType, TransactionResponse, TxType};
 
 /// Intermediate row fetched from `blockchain_transactions`.
 struct TransactionRow {
@@ -58,11 +58,14 @@ impl From<TransactionRow> for TransactionResponse {
 pub async fn fetch_account_transactions(
     pool: &PgPool,
     address: &str,
-    transaction_type: Option<&str>,
-    from_type: Option<i16>,
+    tx_type: Option<TxType>,
+    from_type: Option<HashType>,
     limit: i64,
     offset: i64,
 ) -> Result<(Vec<TransactionResponse>, i64), sqlx::Error> {
+    let transaction_type = tx_type.map(TxType::as_str);
+    let from_type_val = from_type.map(HashType::as_i16);
+
     let mut tx = pool.begin().await?;
     sqlx::query!("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
         .execute(tx.as_mut())
@@ -83,7 +86,7 @@ pub async fn fetch_account_transactions(
         limit,
         offset,
         transaction_type,
-        from_type,
+        from_type_val,
     )
     .fetch_all(tx.as_mut())
     .await?;
@@ -96,8 +99,8 @@ pub async fn fetch_account_transactions(
               AND ($3::SMALLINT IS NULL OR from_type = $3)
         ",
         address,
-        transaction_type,
-        from_type,
+        transaction_type as Option<&str>,
+        from_type_val,
     )
     .fetch_one(tx.as_mut())
     .await?

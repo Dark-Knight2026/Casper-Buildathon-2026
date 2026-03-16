@@ -12,7 +12,10 @@ use utoipa::IntoParams;
 
 use crate::{
     common::{ApiError, ApiResult, AppState, PaginatedResponse, Pagination},
-    transactions::{db, models::TransactionResponse},
+    transactions::{
+        db,
+        models::{HashType, TransactionResponse, TxType},
+    },
 };
 
 /// Query parameters for account transaction listing (pagination + filter).
@@ -29,9 +32,9 @@ pub struct AccountTxQuery {
     pub page_size: Option<i64>,
     /// Filter by transaction type (e.g. `token_purchase`, `token_transfer`, `token_mint`, `token_allowance`).
     #[serde(rename = "type")]
-    pub tx_type: Option<String>,
+    pub tx_type: Option<TxType>,
     /// Filter by sender address type (0 = Account, 1 = Contract).
-    pub from_type: Option<i16>,
+    pub from_type: Option<HashType>,
 }
 
 impl AccountTxQuery {
@@ -60,8 +63,8 @@ impl AccountTxQuery {
     tag = "Transactions",
     params(
         ("address" = String, Path, description = "Account hash (64 hex, no prefix)"),
-        ("type" = Option<String>, Query, description = "Filter by transaction type: token_purchase, token_transfer, token_mint, token_allowance"),
-        ("from_type" = Option<i16>, Query, description = "Filter by sender address type: 0 = Account, 1 = Contract"),
+        ("type" = Option<TxType>, Query, description = "Filter by transaction type: token_purchase, token_transfer, token_mint, token_allowance"),
+        ("from_type" = Option<HashType>, Query, description = "Filter by sender address type: 0 = Account, 1 = Contract"),
         Pagination,
     ),
     responses(
@@ -87,7 +90,7 @@ pub async fn get_account_transactions(
     let (data, item_count) = db::fetch_account_transactions(
         &state.db,
         &address,
-        query.tx_type.as_deref(),
+        query.tx_type,
         query.from_type,
         pagination.page_size(),
         pagination.offset(),

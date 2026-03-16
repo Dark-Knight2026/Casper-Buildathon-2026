@@ -1,7 +1,76 @@
 //! Request and response models for transaction history endpoints.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
+
+/// Transaction type filter for query parameters.
+///
+/// Deserializes from `snake_case` strings in query params
+/// (e.g. `?type=token_transfer`).
+#[derive(Debug, Clone, Copy, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum TxType {
+    /// ICO token purchase via CSPR/USDC/USDT.
+    TokenPurchase,
+    /// CEP-18 token transfer between accounts.
+    TokenTransfer,
+    /// CEP-18 token minting by contract.
+    TokenMint,
+    /// CEP-18 token allowance (approve).
+    TokenAllowance,
+}
+
+impl TxType {
+    /// Returns the database column value for this transaction type.
+    #[inline]
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::TokenPurchase => "token_purchase",
+            Self::TokenTransfer => "token_transfer",
+            Self::TokenMint => "token_mint",
+            Self::TokenAllowance => "token_allowance",
+        }
+    }
+}
+
+/// Address type discriminant for filtering by sender type.
+///
+/// Deserializes from integer in query params (e.g. `?from_type=1`).
+#[derive(Debug, Clone, Copy, Deserialize, ToSchema)]
+#[serde(from = "u8")]
+pub enum HashType {
+    /// Regular user account (0).
+    Account,
+    /// Smart contract (1).
+    Contract,
+    /// Unrecognised address type.
+    Unknown(u8),
+}
+
+impl From<u8> for HashType {
+    #[inline]
+    fn from(value: u8) -> Self {
+        match value {
+            0 => Self::Account,
+            1 => Self::Contract,
+            other => Self::Unknown(other),
+        }
+    }
+}
+
+impl HashType {
+    /// Returns the database `SMALLINT` value.
+    #[inline]
+    #[must_use]
+    pub fn as_i16(self) -> i16 {
+        match self {
+            Self::Account => 0,
+            Self::Contract => 1,
+            Self::Unknown(v) => i16::from(v),
+        }
+    }
+}
 
 /// A single blockchain transaction record.
 #[derive(Debug, Serialize, ToSchema)]
