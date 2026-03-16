@@ -460,7 +460,6 @@ pub mod errors {
         InvalidPurchaseAmount = 59_012,
         InvalidICOScheduleVestingDuration = 59_013,
         ICOScheduleCliffExceedsVestingDuration = 59_014,
-        StakingAddressNotSet = 59_015,
     }
 }
 
