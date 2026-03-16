@@ -18,6 +18,7 @@ import {
   calculateTokensReceived,
   fromRawAmount,
   parseContractError,
+  getDeployStatus,
 } from '@/services/ico/icoPurchaseService';
 import { ICO_CONFIG, getCurrencyRateUsd } from '@/constants/ico';
 import type { PaymentCurrency } from '@/types/ico';
@@ -26,6 +27,30 @@ import type { PaymentCurrency } from '@/types/ico';
 
 // ICSPRClickSDK.send() 4th argument is in SECONDS (not milliseconds).
 const WALLET_SIGN_TIMEOUT_SEC = 300; // 5 minutes
+
+const APPROVAL_CONFIRMATION_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+const DEPLOY_POLL_INTERVAL_MS = 10_000; // 10 seconds
+
+// ── Helpers ──────────────────────────────────────────────────────────
+
+const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/**
+ * Polls getDeployStatus until the deploy is executed, failed, or times out.
+ * Used to ensure the CEP-18 approval is on-chain before submitting the purchase.
+ */
+async function waitForDeployConfirmation(
+  deployHash: string,
+): Promise<'executed' | 'failed' | 'timed-out'> {
+  const deadline = Date.now() + APPROVAL_CONFIRMATION_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    const { status } = await getDeployStatus(deployHash);
+    if (status === 'executed') return 'executed';
+    if (status === 'failed') return 'failed';
+    await delay(DEPLOY_POLL_INTERVAL_MS);
+  }
+  return 'timed-out';
+}
 
 // ── Types ───────────────────────────────────────────────────────────
 
@@ -177,6 +202,17 @@ export function usePurchaseToken(
             step: 'approval-pending',
             approvalTxHash,
           }));
+
+          // Wait for approval to execute on-chain before submitting purchase.
+          // CEP-18 transfer_from() requires the allowance to be set first.
+          const approvalStatus = await waitForDeployConfirmation(approvalTxHash);
+          if (approvalStatus !== 'executed') {
+            throw new Error(
+              approvalStatus === 'timed-out'
+                ? 'Approval transaction timed out — please try again'
+                : 'Approval transaction failed on-chain',
+            );
+          }
         }
 
         // 4. Sign and send purchase transaction
