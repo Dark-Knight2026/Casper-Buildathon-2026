@@ -30,6 +30,83 @@ Backend service for processing high-load real estate operations, including tax c
   - **Input:** `{ "wallet_address": "...", "signature": "..." }`
   - **Response:** `{ "token": "jwt...", "user": { ... } }`
 
+### Transaction History
+
+- **GET** `/api/v1/transactions/account/{address}`
+  - **Path:** `address` - Casper account hash (64 hex chars, no prefix)
+  - **Query:** `page` (default 1), `page_size` (default 25, max 100), `type` (optional filter: `token_purchase`, `token_transfer`, `token_mint`, `token_allowance`)
+  - **Response:** `PaginatedResponse<TransactionResponse>` `{ "item_count": 42, "page_count": 2, "data": [...] }`
+  - **Auth:** Public (no JWT required)
+  - **Rate limit:** 5 req/s, burst 30
+
+- **GET** `/api/v1/transactions/token/big`
+  - **Query:** `page` (default 1), `page_size` (default 25, max 100)
+  - **Response:** `PaginatedResponse<TransactionResponse>`
+  - **Auth:** Public
+  - **Rate limit:** 5 req/s, burst 30
+
+#### TransactionResponse Schema
+```json
+{
+  "deploy_hash": "abc123...",
+  "block_height": 12345,
+  "timestamp": "2025-06-15T10:30:00Z",
+  "amount": "1000000000000000000",
+  "currency": "CSPR",
+  "contract_package_hash": "def456...",
+  "from_hash": "aaa...",
+  "from_type": 0,
+  "to_hash": "bbb...",
+  "to_type": 0,
+  "ft_action_type_id": 2,
+  "transform_idx": 0
+}
+```
+
+### ICO
+
+- **GET** `/api/v1/ico/balance/{address}`
+  - **Path:** `address` - Casper account hash (64 hex chars, no prefix)
+  - **Response:** `IcoBalanceResponse`
+  - **Auth:** Public
+  - **Rate limit:** 5 req/s, burst 30
+
+```json
+{
+  "tokensPurchased": "500000000000000000000",
+  "totalSpentUsd": 250.0,
+  "tokenPrice": 0.50,
+  "tokenSymbol": "BIG",
+  "currentValue": 250.0
+}
+```
+
+- **GET** `/api/v1/ico/progress`
+  - **Response:** `IcoProgressResponse`
+  - **Auth:** Public
+  - **Rate limit:** 5 req/s, burst 30
+
+```json
+{
+  "tokensSold": "100000000000000000000000",
+  "totalAllocation": "1000000000000000000000000",
+  "tokensRemaining": "900000000000000000000000",
+  "amountRaised": 50000.0,
+  "hardCapUsd": 500000.0,
+  "priceUsd": 0.50,
+  "percentSold": 10.0
+}
+```
+
+#### PaginatedResponse Schema
+```json
+{
+  "item_count": 100,
+  "page_count": 4,
+  "data": [ "...items..." ]
+}
+```
+
 ## 3. Security Requirements
 - **Authentication:** JWT Bearer Token (Supabase).
 - **Validation:** Signature verification using HS256.
