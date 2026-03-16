@@ -486,7 +486,8 @@ pub async fn upsert_ico_schedule(
                 sale_amount      = EXCLUDED.sale_amount,
                 price            = EXCLUDED.price,
                 transaction_hash = EXCLUDED.transaction_hash,
-                block_height     = EXCLUDED.block_height
+                block_height     = EXCLUDED.block_height,
+                updated_at       = NOW()
         ",
         row.schedule_id,
         row.start_timestamp,
