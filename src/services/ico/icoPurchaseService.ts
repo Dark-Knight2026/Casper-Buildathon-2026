@@ -23,7 +23,6 @@ import { ICO_CONFIG, getCurrencyRateUsd } from '@/constants/ico';
 import logger from '@/lib/logger';
 import {
   createContractCallTransaction,
-  stripHashPrefix,
   getCasperRpcClient,
   getAccountMainPurseURef,
 } from './casperClient';
@@ -44,7 +43,7 @@ const CSPR_DECIMALS = 9; // CSPR uses 9 decimals (motes)
 const GAS_COST = {
   APPROVE: 3_000_000_000n, // 3 CSPR for approve
   BUY_TOKENS_CSPR: 15_000_000_000n, // 15 CSPR for buy with CSPR (proxy_caller.wasm session code)
-  BUY_TOKENS_CEP18: 4_000_000_000n, // 4 CSPR for buy with tokens
+  BUY_TOKENS_CEP18: 12_000_000_000n, // 12 CSPR for buy with tokens (purchase + vesting schedule creation)
 };
 
 // ── Types ───────────────────────────────────────────────────────────
@@ -375,6 +374,9 @@ const CONTRACT_ERROR_MAP: Record<string, string> = {
   '59010': 'Invalid amount attached to transaction',
   '59011': 'Insufficient tokens available for sale',
   '59012': 'Purchase amount below minimum',
+  '59013': 'Invalid vesting duration in ICO schedule',
+  '59014': 'Vesting cliff exceeds total vesting duration',
+  '59015': 'Staking contract address not configured — contact support',
   '20000': 'Contract owner not configured',
   '20001': 'Unauthorized: caller is not the owner',
   '20003': 'Unauthorized: missing required role',

@@ -19,6 +19,7 @@ export const ICO_CONFIG = {
     icoPackageHash: import.meta.env.VITE_ICO_PACKAGE_HASH ?? '',
     tokenAddress: import.meta.env.VITE_BIG_TOKEN_CONTRACT_HASH ?? '',
     treasuryAddress: import.meta.env.VITE_TREASURY_CONTRACT_HASH ?? '',
+    vestingAddress: import.meta.env.VITE_VESTING_CONTRACT_HASH ?? '',
     usdcAddress: import.meta.env.VITE_USDC_CONTRACT_HASH ?? '',
     usdtAddress: import.meta.env.VITE_USDT_CONTRACT_HASH ?? '',
   },
