@@ -46,7 +46,7 @@ impl IndexableEvent for SetAllowance {
                 from_address: &owner,
                 to_address: Some(&spender),
                 amount: Some(&self.amount),
-                currency: None,
+                currency: ctx.contract_type.currency_symbol(),
                 contract_hash: Some(ctx.contract_hash),
                 block_timestamp: ctx.block_timestamp,
                 from_type: from_type.to_db(),

@@ -36,7 +36,7 @@ impl IndexableEvent for Mint {
                 from_address: ctx.contract_hash,
                 to_address: Some(&recipient),
                 amount: Some(&self.amount),
-                currency: None,
+                currency: ctx.contract_type.currency_symbol(),
                 contract_hash: Some(ctx.contract_hash),
                 block_timestamp: ctx.block_timestamp,
                 from_type: HashType::Contract.to_db(),

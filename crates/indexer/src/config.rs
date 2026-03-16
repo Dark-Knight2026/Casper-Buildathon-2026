@@ -160,6 +160,18 @@ impl ContractType {
         matches!(self, Self::Usdc | Self::Usdt | Self::Big)
     }
 
+    /// Returns the currency symbol for CEP-18 token contracts, `None` for others.
+    #[inline]
+    #[must_use]
+    pub fn currency_symbol(self) -> Option<&'static str> {
+        match self {
+            Self::Big => Some("BIG"),
+            Self::Usdc => Some("USDC"),
+            Self::Usdt => Some("USDT"),
+            _ => None,
+        }
+    }
+
     /// Returns the lowercase string label for this contract type.
     #[inline]
     #[must_use]
