@@ -17,8 +17,8 @@ pub struct VestingSchedule {
     pub beneficiary: Address,
     /// Total number of tokens locked in this schedule.
     pub total_amount: U256,
-    /// Number of tokens claimed (unstaking initiated, pending unbonding).
-    pub claimed_amount: U256,
+    /// Number of tokens for which unstaking has been initiated (pending unbonding).
+    pub unstaked_amount: U256,
     /// Block timestamp when the vesting clock starts (set at creation time).
     pub start_timestamp: u64,
     /// Duration (in time units) before any tokens become claimable.
@@ -82,6 +82,7 @@ pub mod errors {
         ScheduleNotFound = 65_005,
         CallerNotBeneficiary = 65_006,
         NothingToClaim = 65_007,
+        ClaimBlockedByActiveUnbonding = 65_008,
     }
 }
 
@@ -182,18 +183,18 @@ impl Vesting {
     }
 
     /// Returns how many tokens are currently claimable for a given schedule
-    /// Total Vested - already claimed
+    /// Total Vested - already unstaked (unbonding initiated)
     pub fn get_claimable_amount(&self, vesting_id: VestingId) -> U256 {
         match self.schedules.get(&vesting_id) {
             Some(schedule) => {
                 let vested = self.calculate_vested_amt(&schedule);
-                vested - schedule.claimed_amount
+                vested - schedule.unstaked_amount
             }
             None => U256::zero(),
         }
     }
 
-    /// Returns total amount vested including tokens already claimed
+    /// Returns total amount vested including tokens already unstaked
     pub fn get_vested_amount(&self, vesting_id: VestingId) -> U256 {
         match self.schedules.get(&vesting_id) {
             Some(schedule) => self.calculate_vested_amt(&schedule),
@@ -248,7 +249,7 @@ impl Vesting {
         let schedule = VestingSchedule {
             beneficiary,
             total_amount,
-            claimed_amount: U256::zero(),
+            unstaked_amount: U256::zero(),
             start_timestamp: now,
             cliff_duration,
             vesting_duration,
@@ -297,19 +298,28 @@ impl Vesting {
             self.env().revert(Error::CallerNotBeneficiary);
         }
 
-        // Calculate how much vested minus whats already been claimed
+        if !self
+            .staking
+            .get_staker_info(beneficiary)
+            .unbonding_amount
+            .is_zero()
+        {
+            self.env().revert(Error::ClaimBlockedByActiveUnbonding);
+        }
+
+        // Calculate how much vested minus whats already been unstaked
         let vested = self.calculate_vested_amt(&schedule);
-        let claimable = vested - schedule.claimed_amount;
+        let claimable = vested - schedule.unstaked_amount;
 
         if claimable.is_zero() {
             self.env().revert(Error::NothingToClaim);
         }
 
-        // Update claimed amount before transferring
-        schedule.claimed_amount += claimable;
+        // Update unstaked amount before initiating unstake
+        schedule.unstaked_amount += claimable;
         self.schedules.set(&vesting_id, schedule);
 
-        // This only initiates the unbonding period, it does not trasnfer tokens yet.
+        // This only initiates the unbonding period, it does not transfer tokens yet.
         self.staking.unstake_for(beneficiary, claimable);
 
         self.env().emit_native_event(TokensClaimed {

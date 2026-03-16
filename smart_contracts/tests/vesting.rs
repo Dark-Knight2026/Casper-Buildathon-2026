@@ -328,9 +328,9 @@ fn test_create_schedule_should_create_properly() {
         "Invalid total amount"
     );
     assert_eq!(
-        schedule.claimed_amount,
+        schedule.unstaked_amount,
         U256::zero(),
-        "Claimed should be zero"
+        "Unstaked should be zero"
     );
     assert_eq!(schedule.cliff_duration, cliff, "Invalid Cliff duration");
     assert_eq!(
@@ -455,7 +455,7 @@ fn test_claim_should_revert_if_still_in_cliff_period() {
 }
 
 #[test]
-fn test_claim_should_update_claimed_amount_after_cliff() {
+fn test_claim_should_update_unstaked_amount_after_cliff() {
     let mut ctx = setup(odra_test::env());
     let cliff = ctx.cliff_duration;
     let vesting = ctx.vesting_duration;
@@ -474,8 +474,8 @@ fn test_claim_should_update_claimed_amount_after_cliff() {
     let schedule = ctx.vesting.get_schedule(vesting_id).unwrap();
 
     assert_eq!(
-        schedule.claimed_amount, expected_claim,
-        "Claim amount should be 50% (cliff/vesting)"
+        schedule.unstaked_amount, expected_claim,
+        "Unstaked amount should be 50% (cliff/vesting)"
     );
 
     assert!(
@@ -492,7 +492,7 @@ fn test_claim_should_update_claimed_amount_after_cliff() {
 }
 
 #[test]
-fn test_claim_should_increase_beneficiary_balance_by_claimed_amount() {
+fn test_claim_should_increase_beneficiary_balance_by_unstaked_amount() {
     let mut ctx = setup(odra_test::env());
     let cliff = ctx.cliff_duration;
     let vesting = ctx.vesting_duration;
@@ -543,8 +543,8 @@ fn test_claim_should_increase_beneficiary_balance_by_claimed_amount() {
     // Verify schedule state
     let schedule = ctx.vesting.get_schedule(vesting_id).unwrap();
     assert_eq!(
-        schedule.claimed_amount, expected_claim,
-        "Claimed amount should be tracked in schedule"
+        schedule.unstaked_amount, expected_claim,
+        "Unstaked amount should be tracked in schedule"
     );
 }
 
@@ -565,9 +565,9 @@ fn test_claim_should_claim_full_amt_after_vesting_ends() {
     let schedule = ctx.vesting.get_schedule(vesting_id).unwrap();
 
     assert_eq!(
-        schedule.claimed_amount,
+        schedule.unstaked_amount,
         vesting_amount(),
-        "Claimed amt should equal total amount",
+        "Unstaked amt should equal total amount",
     );
 
     // Nothing left to claim
@@ -598,7 +598,7 @@ fn test_claim_should_allow_incremental_claims() {
     let schedule = ctx.vesting.get_schedule(vesting_id).unwrap();
 
     assert_eq!(
-        schedule.claimed_amount, first_claim,
+        schedule.unstaked_amount, first_claim,
         "First claim should be 50%",
     );
 
@@ -616,7 +616,7 @@ fn test_claim_should_allow_incremental_claims() {
     let schedule = ctx.vesting.get_schedule(vesting_id).unwrap();
 
     assert_eq!(
-        schedule.claimed_amount, expected_total_claim,
+        schedule.unstaked_amount, expected_total_claim,
         "Second claim should be for 75%",
     );
 
@@ -709,8 +709,8 @@ fn test_claim_end_to_end_lifecycle() {
     ctx.vesting.claim(vesting_id);
     let schedule = ctx.vesting.get_schedule(vesting_id).unwrap();
     assert_eq!(
-        schedule.claimed_amount, expected_vested_at_9mo,
-        "Total claimed so far should be at 75%",
+        schedule.unstaked_amount, expected_vested_at_9mo,
+        "Total unstaked so far should be at 75%",
     );
 
     // Advanced to the full vesting period, which is 12 months
@@ -746,8 +746,8 @@ fn test_claim_end_to_end_lifecycle() {
     ctx.vesting.claim(vesting_id);
     let schedule = ctx.vesting.get_schedule(vesting_id).unwrap();
     assert_eq!(
-        schedule.claimed_amount, total_amount,
-        "All the tokens should be claimed",
+        schedule.unstaked_amount, total_amount,
+        "All the tokens should be unstaked",
     );
 
     // Advance past vesting
@@ -765,7 +765,7 @@ fn test_claim_end_to_end_lifecycle() {
     let schedule = ctx.vesting.get_schedule(vesting_id).unwrap();
     assert_eq!(schedule.beneficiary, alice);
     assert_eq!(schedule.total_amount, total_amount);
-    assert_eq!(schedule.claimed_amount, total_amount);
+    assert_eq!(schedule.unstaked_amount, total_amount);
     assert_eq!(schedule.start_timestamp, start_time);
     assert_eq!(schedule.cliff_duration, cliff);
     assert_eq!(schedule.vesting_duration, vesting);
