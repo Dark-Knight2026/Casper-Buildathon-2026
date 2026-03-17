@@ -18,7 +18,7 @@ use leasefi_contracts::vesting::{
     Vesting, VestingHostRef, VestingId, VestingInitArgs,
 };
 
-use crate::staking::UNBONDING_PERIOD;
+use crate::constants::UNBONDING_PERIOD;
 
 // =============================================================================
 // Test Constants

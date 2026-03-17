@@ -2,6 +2,7 @@ use odra::{casper_types::U256, prelude::*, ContractRef};
 use odra_modules::{access::Ownable, cep18_token::Cep18ContractRef};
 
 use crate::{
+    constants::UNBONDING_PERIOD,
     staking::{
         errors::Error,
         events::{RewardsClaimed, RewardsDeposited, Staked, UnbondedWithdrawn, UnstakedInitiated},
@@ -12,9 +13,6 @@ use crate::{
 // =============================================================================
 // Staking Types
 // =============================================================================
-
-/// Required waiting period between unstaking and withdrawal
-pub const UNBONDING_PERIOD: u64 = 48 * 60 * 60 * 1_000; // 48 hours
 
 #[derive(Default)]
 #[odra::odra_type]

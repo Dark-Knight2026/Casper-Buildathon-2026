@@ -9,7 +9,8 @@ use leasefi_contracts::staking::{events::*, Staking, StakingHostRef, StakingInit
 use leasefi_contracts::tailor_coin::{TailorCoin, TailorCoinHostRef, TailorCoinInitArgs};
 
 use crate::{
-    staking::{errors::Error, UNBONDING_PERIOD},
+    constants::UNBONDING_PERIOD,
+    staking::errors::Error,
     vesting::{Vesting, VestingHostRef, VestingInitArgs},
 };
 
