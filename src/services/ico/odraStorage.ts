@@ -15,6 +15,7 @@
  */
 
 import { blake2bHex } from 'blakejs';
+import logger from '@/lib/logger';
 
 // ── Constants ───────────────────────────────────────────────────────
 
@@ -318,25 +319,25 @@ export function getCurrencyKey(currency: keyof typeof CURRENCY_DISCRIMINANT): st
  * Logs all pre-calculated keys for debugging.
  */
 export function debugLogKeys(): void {
-  console.log('[odraStorage] ICO Storage Layout (Odra indices from ico.rs):');
-  console.log('  index 1: ownable (SubModule) -> owner at', ICO_STORAGE_LAYOUT.ownable.owner);
-  console.log('  index 2: currencies (Mapping)');
-  console.log('  index 3: ico_schedules (Mapping)');
-  console.log('  index 4: ico_schedules_count (Var<U128>)');
-  console.log('  index 5: styks_price_feed (External)');
-  console.log('  index 6: tailor_coin (External)');
-  console.log('  index 7: treasury (External)');
-  console.log('');
-  console.log('[odraStorage] Pre-calculated dictionary keys:');
-  console.log('  owner (17):', ICO_DICTIONARY_KEYS.owner);
-  console.log('  pendingOwner (18):', ICO_DICTIONARY_KEYS.pendingOwner);
-  console.log('  icoSchedulesCount (4):', ICO_DICTIONARY_KEYS.icoSchedulesCount);
-  console.log('  styksPriceFeed (5):', ICO_DICTIONARY_KEYS.styksPriceFeed);
-  console.log('  tailorCoin (6):', ICO_DICTIONARY_KEYS.tailorCoin);
-  console.log('  treasury (7):', ICO_DICTIONARY_KEYS.treasury);
-  console.log('  schedule[0] (mapping 3 + key 0):', getScheduleKey(0));
-  console.log('  schedule[1] (mapping 3 + key 1):', getScheduleKey(1));
-  console.log('  currency[CSPR] (mapping 2 + key 0):', getCurrencyKey('CSPR'));
-  console.log('  currency[USDC] (mapping 2 + key 1):', getCurrencyKey('USDC'));
-  console.log('  currency[USDT] (mapping 2 + key 2):', getCurrencyKey('USDT'));
+  logger.debug('[odraStorage] ICO Storage Layout (Odra indices from ico.rs):');
+  logger.debug('  index 1: ownable (SubModule) -> owner at', ICO_STORAGE_LAYOUT.ownable.owner);
+  logger.debug('  index 2: currencies (Mapping)');
+  logger.debug('  index 3: ico_schedules (Mapping)');
+  logger.debug('  index 4: ico_schedules_count (Var<U128>)');
+  logger.debug('  index 5: styks_price_feed (External)');
+  logger.debug('  index 6: tailor_coin (External)');
+  logger.debug('  index 7: treasury (External)');
+  logger.debug('');
+  logger.debug('[odraStorage] Pre-calculated dictionary keys:');
+  logger.debug('  owner (17):', ICO_DICTIONARY_KEYS.owner);
+  logger.debug('  pendingOwner (18):', ICO_DICTIONARY_KEYS.pendingOwner);
+  logger.debug('  icoSchedulesCount (4):', ICO_DICTIONARY_KEYS.icoSchedulesCount);
+  logger.debug('  styksPriceFeed (5):', ICO_DICTIONARY_KEYS.styksPriceFeed);
+  logger.debug('  tailorCoin (6):', ICO_DICTIONARY_KEYS.tailorCoin);
+  logger.debug('  treasury (7):', ICO_DICTIONARY_KEYS.treasury);
+  logger.debug('  schedule[0] (mapping 3 + key 0):', getScheduleKey(0));
+  logger.debug('  schedule[1] (mapping 3 + key 1):', getScheduleKey(1));
+  logger.debug('  currency[CSPR] (mapping 2 + key 0):', getCurrencyKey('CSPR'));
+  logger.debug('  currency[USDC] (mapping 2 + key 1):', getCurrencyKey('USDC'));
+  logger.debug('  currency[USDT] (mapping 2 + key 2):', getCurrencyKey('USDT'));
 }

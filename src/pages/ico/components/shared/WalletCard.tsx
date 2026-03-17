@@ -5,6 +5,9 @@ import { Card } from './Card';
 import type { PaymentCurrency } from '@/types/ico';
 import { MainButton } from './MainButton';
 import { AmountInput } from './AmountInput';
+import { CurrencySelector } from './CurrencySelector';
+import { InputModeToggle } from './InputModeToggle';
+import type { InputMode } from './InputModeToggle';
 
 interface WalletCardProps {
   walletAddress?: string;
@@ -17,6 +20,7 @@ interface WalletCardProps {
   tokenPrice: number;
   tokenSymbol: string;
   csprPriceUsd?: number;
+  csprPriceStale?: boolean;
   onConnect?: () => void;
   onPurchase?: (amount: number, currency: PaymentCurrency) => void;
   onBuyCspr?: () => void;
@@ -34,12 +38,15 @@ export function WalletCard({
   tokenPrice,
   tokenSymbol,
   csprPriceUsd,
+  csprPriceStale,
   onConnect,
   onPurchase,
   onBuyCspr,
   className,
 }: WalletCardProps) {
-  const [amount, setAmount] = useState('');
+  const [inputMode, setInputMode] = useState<InputMode>('spend');
+  const [spendAmount, setSpendAmount] = useState('');
+  const [receiveAmount, setReceiveAmount] = useState('');
   const [currency, setCurrency] = useState<PaymentCurrency>('USDT');
 
   const isConnected = !!walletAddress;
@@ -49,33 +56,54 @@ export function WalletCard({
     CSPR: balanceCSPR,
   };
   const currentBalance = balances[currency];
-  const currencyRate = getCurrencyRateUsd(currency, csprPriceUsd);
-  const amountInUsd = useMemo(
-    () => (amount ? Number(amount) * currencyRate : 0),
-    [amount, currencyRate]
-  );
+
+  let currencyRate: number | null = null;
+  let csprPriceError = false;
+  try {
+    currencyRate = getCurrencyRateUsd(currency, csprPriceUsd);
+  } catch {
+    csprPriceError = true;
+  }
+
+  // spend mode: derive BIG tokens from currency amount
   const tokensToReceive = useMemo(
-    () => amountInUsd / tokenPrice,
-    [amountInUsd, tokenPrice]
+    () => (spendAmount && tokenPrice > 0 && currencyRate !== null ? (Number(spendAmount) * currencyRate) / tokenPrice : 0),
+    [spendAmount, currencyRate, tokenPrice]
   );
+
+  // receive mode: derive currency amount from BIG token amount
+  const currencyToSpend = useMemo(
+    () => (receiveAmount && currencyRate !== null && currencyRate > 0 ? (Number(receiveAmount) * tokenPrice) / currencyRate : 0),
+    [receiveAmount, tokenPrice, currencyRate]
+  );
+
+  // amount that will be passed to onPurchase — always in selected currency
+  const effectiveAmount = inputMode === 'spend' ? Number(spendAmount) : currencyToSpend;
 
   // Check if CSPR balance is too low for a minimum purchase ($1 equivalent)
   const csprBalanceUsd = balanceCSPR * (csprPriceUsd ?? 0);
   const lowCsprBalance = isConnected && csprBalanceUsd < ICO_CONFIG.PURCHASE_LIMITS.min;
 
   // Balance validation
-  const amountInCurrency = Number(amount) || 0;
-  const insufficientBalance = isConnected && amountInCurrency > currentBalance;
+  const insufficientBalance = isConnected && effectiveAmount > 0 && effectiveAmount > currentBalance;
+
+  const hasValidInput = inputMode === 'spend' ? !!spendAmount && Number(spendAmount) > 0 : !!receiveAmount && Number(receiveAmount) > 0;
 
   const truncateAddress = (address: string) => {
     return `${address.slice(0, 6)}...${address.slice(-4)}`;
   };
 
+  const handleModeChange = (mode: InputMode) => {
+    setInputMode(mode);
+    setSpendAmount('');
+    setReceiveAmount('');
+  };
+
   const handlePurchase = useCallback(() => {
-    if (amount && onPurchase && !insufficientBalance) {
-      onPurchase(Number(amount), currency);
+    if (hasValidInput && onPurchase && !insufficientBalance) {
+      onPurchase(effectiveAmount, currency);
     }
-  }, [amount, onPurchase, insufficientBalance, currency]);
+  }, [hasValidInput, onPurchase, insufficientBalance, effectiveAmount, currency]);
 
   return (
     <Card className={cn('p-6', className)}>
@@ -138,30 +166,115 @@ export function WalletCard({
         </div>
       )}
 
-      {/* Amount Input */}
-      <AmountInput
-        value={amount}
-        onChange={setAmount}
-        currency={currency}
-        onCurrencyChange={setCurrency}
-        disabled={!isConnected}
-        availableBalance={currentBalance}
-        showBalance={isConnected}
-        className="mb-4"
-      />
+      {/* Input Mode Toggle */}
+      <InputModeToggle value={inputMode} onChange={handleModeChange} className="mb-4" />
 
-      {/* Token Calculation */}
-      {amount && Number(amount) > 0 && (
-        <div className="w-full p-4 rounded-md bg-[hsl(var(--ico-bg-secondary))] border border-[hsl(var(--ico-border-color))] mb-6">
-          <div className="flex justify-between items-center">
-            <span className="text-sm text-[hsl(var(--ico-text-secondary))]">You will receive (estimate)</span>
-            <span className="text-lg font-bold text-[hsl(var(--ico-text-primary))]">
-              ≈{tokensToReceive.toLocaleString(undefined, { maximumFractionDigits: 2 })} {tokenSymbol}
+      {/* CSPR Price Unavailable Warning */}
+      {csprPriceError && currency === 'CSPR' && (
+        <div className="w-full p-4 rounded-md bg-red-900/20 border border-red-800/30 mb-4">
+          <p className="text-sm text-red-400">
+            CSPR price unavailable — please try again later
+          </p>
+        </div>
+      )}
+
+      {/* Stale Price Warning (display-only — does not block purchase) */}
+      {!csprPriceError && csprPriceStale && currency === 'CSPR' && (
+        <div className="w-full p-3 rounded-md bg-yellow-900/20 border border-yellow-800/30 mb-4">
+          <p className="text-xs text-yellow-400">
+            CSPR rate may be outdated. Final amount is determined on-chain.
+          </p>
+        </div>
+      )}
+
+      {/* Spend Mode: enter currency amount */}
+      {inputMode === 'spend' && (
+        <AmountInput
+          value={spendAmount}
+          onChange={setSpendAmount}
+          currency={currency}
+          onCurrencyChange={setCurrency}
+          disabled={!isConnected}
+          availableBalance={currentBalance}
+          showBalance={isConnected}
+          className="mb-4"
+        />
+      )}
+
+      {/* Receive Mode: enter BIG token amount + currency selector */}
+      {inputMode === 'receive' && (
+        <div className="w-full mb-4">
+          <label htmlFor="receive-amount-input" className="block text-sm text-[hsl(var(--ico-text-secondary))] mb-2">
+            Amount to Receive
+          </label>
+          <div className="relative flex items-center">
+            <input
+              id="receive-amount-input"
+              type="number"
+              value={receiveAmount}
+              onChange={(e) => setReceiveAmount(e.target.value)}
+              min={0}
+              placeholder="0.00"
+              disabled={!isConnected}
+              className={cn(
+                'w-full px-4 py-3 pr-24 rounded-md border border-[hsl(var(--ico-border-color))]',
+                'bg-[hsl(var(--ico-form-input-bg))] text-[hsl(var(--ico-text-primary))]',
+                'focus:outline-none focus:ring-0 focus:border-[hsl(var(--ico-brand-primary))]',
+                'disabled:opacity-50 disabled:cursor-not-allowed'
+              )}
+            />
+            <span className="absolute right-4 text-sm font-medium text-[hsl(var(--ico-text-primary))] pointer-events-none">
+              {tokenSymbol}
             </span>
           </div>
-          <p className="text-xs text-[hsl(var(--ico-text-highlight))] mt-1">
-            Rate: 1 {tokenSymbol} = {(tokenPrice / currencyRate).toLocaleString(undefined, { maximumFractionDigits: 6 })} {currency}
-          </p>
+
+          {/* Pay with currency selector */}
+          <div className="flex items-center justify-between mt-3">
+            <span className="text-sm text-[hsl(var(--ico-text-secondary))]">Pay with</span>
+            <CurrencySelector
+              value={currency}
+              onValueChange={setCurrency}
+              disabled={!isConnected}
+              align="right"
+            />
+          </div>
+
+          {isConnected && (
+            <p className="text-xs text-[hsl(var(--ico-text-secondary))] mt-1">
+              Available: {currentBalance.toLocaleString()} {currency}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Calculation Block */}
+      {hasValidInput && !csprPriceError && (
+        <div className="w-full p-4 rounded-md bg-[hsl(var(--ico-bg-secondary))] border border-[hsl(var(--ico-border-color))] mb-6">
+          {inputMode === 'spend' ? (
+            <>
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-[hsl(var(--ico-text-secondary))]">You will receive (estimate)</span>
+                <span className="text-lg font-bold text-[hsl(var(--ico-text-primary))]">
+                  ≈{tokensToReceive.toLocaleString(undefined, { maximumFractionDigits: 2 })} {tokenSymbol}
+                </span>
+              </div>
+              <p className="text-xs text-[hsl(var(--ico-text-highlight))] mt-1">
+                Rate: 1 {tokenSymbol} = {(tokenPrice / (currencyRate ?? 1)).toLocaleString(undefined, { maximumFractionDigits: 6 })} {currency}
+              </p>
+            </>
+          ) : (
+            <>
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-[hsl(var(--ico-text-secondary))]">You will pay (estimate)</span>
+                <span className="text-lg font-bold text-[hsl(var(--ico-text-primary))]">
+                  ≈{currencyToSpend.toLocaleString(undefined, { maximumFractionDigits: 6 })} {currency}
+                </span>
+              </div>
+              <p className="text-xs text-[hsl(var(--ico-text-highlight))] mt-1">
+                Rate: 1 {tokenSymbol} = {(tokenPrice / (currencyRate ?? 1)).toLocaleString(undefined, { maximumFractionDigits: 6 })} {currency}
+              </p>
+            </>
+          )}
           {/* Floating-point note: these are UI estimates only. Final amounts are validated
               server-side using integer arithmetic in smallest units (motes/decimals).
               BigInt is unnecessary here — the backend is the source of truth. */}
@@ -182,7 +295,7 @@ export function WalletCard({
       <MainButton
         text={isConnected ? `Purchase ${tokenSymbol}` : 'Connect Wallet'}
         onClick={isConnected ? handlePurchase : onConnect}
-        disabled={isConnected && (insufficientBalance || !amount)}
+        disabled={isConnected && (insufficientBalance || !hasValidInput || csprPriceError)}
       />
     </Card>
   );

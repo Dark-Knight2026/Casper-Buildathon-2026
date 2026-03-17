@@ -130,7 +130,7 @@ export const OverviewTab = memo(function OverviewTab() {
             </h3>
             <div className="space-y-4">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-[hsl(var(--ico-accent)/0.2)] flex items-center justify-center">
+                <div className="w-10 h-10 rounded-lg bg-[hsl(var(--ico-brand-accent)/0.2)] flex items-center justify-center">
                   <Clock className="w-5 h-5 text-[hsl(var(--ico-brand-primary))]" />
                 </div>
                 <div>
@@ -141,7 +141,7 @@ export const OverviewTab = memo(function OverviewTab() {
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-[hsl(var(--ico-success)/0.2)] flex items-center justify-center">
+                <div className="w-10 h-10 rounded-lg bg-[hsl(var(--ico-state-active)/0.2)] flex items-center justify-center">
                   <Percent className="w-5 h-5 text-[hsl(var(--ico-brand-primary))]" />
                 </div>
                 <div>
@@ -206,7 +206,7 @@ export const OverviewTab = memo(function OverviewTab() {
               <p className="text-3xl font-bold text-[hsl(var(--ico-text-primary))]">
                 {formatUSD(MOCK_PORTFOLIO.estimatedValue)}
               </p>
-              <p className="text-sm text-[hsl(var(--ico-success))]">
+              <p className="text-sm text-[hsl(var(--ico-state-active))]">
                 {MOCK_PORTFOLIO.change24h}% (24h)
               </p>
               <p className='text-[hsl(var(--ico-text-secondary))]'>Current USD value of your holdings</p>

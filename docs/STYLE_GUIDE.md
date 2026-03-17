@@ -82,6 +82,11 @@ Target visual association: **Stripe / Vanguard / BlackRock-style fintech**
 
 ## CSS Variables Reference
 
+> **Note**: This is a design reference. The actual implementation
+> in `src/index.css` uses `--ico-*` prefixed names in HSL format (shadcn/ui convention)
+> with `hsl()` wrapping — e.g. `--ico-bg-primary: 220 20% 98%` instead of `--bg-primary: #F7F8FA`.
+> The color values are identical; only the naming and format differ.
+
 ```css
 :root {
   /* Backgrounds */
@@ -113,16 +118,3 @@ Target visual association: **Stripe / Vanguard / BlackRock-style fintech**
   --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 ```
-
----
-
-## Checklist for Implementation
-
-- [ ] Update all CSS variables to match approved palette
-- [ ] Replace "PreSale" with "Private Sale" across all components
-- [ ] Remove ICO sale page
-- [ ] Remove post-presale dashboard
-- [ ] Update buttons to match new style guide
-- [ ] Ensure cards have subtle shadows and minimal border-radius
-- [ ] Verify charts use navy/green color scheme only
-- [ ] Test all pages on light background

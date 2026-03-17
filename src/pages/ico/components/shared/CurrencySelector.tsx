@@ -18,6 +18,7 @@ interface CurrencySelectorProps {
   value: PaymentCurrency;
   onValueChange: (value: PaymentCurrency) => void;
   disabled?: boolean;
+  align?: 'left' | 'right';
   className?: string;
 }
 
@@ -25,6 +26,7 @@ export function CurrencySelector({
   value,
   onValueChange,
   disabled,
+  align = 'left',
   className,
 }: CurrencySelectorProps) {
   return (
@@ -39,6 +41,7 @@ export function CurrencySelector({
           'bg-transparent text-[hsl(var(--ico-text-primary))]',
           'focus:outline-none',
           'focus-visible:ring-2 focus-visible:ring-[hsl(var(--ico-brand-primary))] focus-visible:ring-offset-1',
+          align === 'right' && '[&>span]:ml-auto',
           className
         )}
       >

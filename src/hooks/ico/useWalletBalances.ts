@@ -5,7 +5,7 @@ import { getCasperRpcClient } from '@/services/ico/casperClient';
 import { TOKEN_HASHES } from '@/services/ico/cep18Service';
 
 const MOTES_PER_CSPR = 1_000_000_000n;
-const BALANCE_POLL_MS = 30_000; // 30 seconds
+const BALANCE_POLL_MS = 60_000; // 60 seconds
 
 function isValidPublicKey(key: string): boolean {
   // Ed25519: 01 + 64 hex = 66 chars; Secp256k1: 02 + 66 hex = 68 chars
@@ -92,7 +92,11 @@ interface FTBalances {
 async function fetchFTBalancesFromCloud(publicKeyHex: string): Promise<FTBalances> {
   const result: FTBalances = { usdt: 0, usdc: 0, big: 0 };
 
-  const resp = await fetch(`/api/cspr-cloud/accounts/${publicKeyHex}/ft-token-ownership`);
+  const accountHashHex = deriveAccountHashHex(publicKeyHex);
+  const ftUrl = import.meta.env.DEV
+    ? `/api/cspr-cloud/accounts/${accountHashHex}/ft-token-ownership`
+    : `/api/cspr-cloud?path=${encodeURIComponent(`accounts/${accountHashHex}/ft-token-ownership`)}`;
+  const resp = await fetch(ftUrl);
   if (!resp.ok) {
     const body = await resp.text().catch(() => '');
     throw new Error(`CSPR.Cloud FT API ${resp.status}: ${body}`);
@@ -142,7 +146,12 @@ async function fetchFTBalancesFromCloud(publicKeyHex: string): Promise<FTBalance
 
 const EMPTY_BALANCES: WalletBalances = { cspr: 0, usdt: 0, usdc: 0, big: 0 };
 
-async function fetchAllBalances(publicKey: string): Promise<WalletBalances> {
+interface FetchAllResult {
+  balances: WalletBalances;
+  error: string | null;
+}
+
+async function fetchAllBalances(publicKey: string): Promise<FetchAllResult> {
   if (!isValidPublicKey(publicKey)) {
     throw new Error('Invalid public key format');
   }
@@ -152,16 +161,28 @@ async function fetchAllBalances(publicKey: string): Promise<WalletBalances> {
     fetchFTBalancesFromCloud(publicKey),
   ]);
 
+  const errors: string[] = [];
+
   const cspr = csprResult.status === 'fulfilled' ? csprResult.value : 0;
+  if (csprResult.status === 'rejected') {
+    errors.push('Failed to fetch CSPR balance');
+  }
+
   const ft = ftResult.status === 'fulfilled'
     ? ftResult.value
     : { usdt: 0, usdc: 0, big: 0 };
+  if (ftResult.status === 'rejected') {
+    errors.push('Failed to fetch token balances');
+  }
 
   return {
-    cspr,
-    usdt: ft.usdt,
-    usdc: ft.usdc,
-    big: ft.big,
+    balances: {
+      cspr,
+      usdt: ft.usdt,
+      usdc: ft.usdc,
+      big: ft.big,
+    },
+    error: errors.length > 0 ? errors.join('. ') : null,
   };
 }
 
@@ -173,7 +194,7 @@ export function useWalletBalances(publicKey: string | null | undefined): UseWall
     isLoading,
     error: queryError,
     refetch: queryRefetch,
-  } = useQuery<WalletBalances, Error>({
+  } = useQuery<FetchAllResult, Error>({
     queryKey: ['wallet-balances', publicKey],
     queryFn: () => fetchAllBalances(publicKey!),
     enabled: !!publicKey,
@@ -186,9 +207,9 @@ export function useWalletBalances(publicKey: string | null | undefined): UseWall
   }, [queryRefetch]);
 
   return {
-    balances: data ?? EMPTY_BALANCES,
+    balances: data?.balances ?? EMPTY_BALANCES,
     isLoading,
-    error: queryError?.message ?? null,
+    error: data?.error ?? queryError?.message ?? null,
     refetch,
   };
 }

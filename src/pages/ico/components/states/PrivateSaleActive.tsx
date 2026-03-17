@@ -18,7 +18,7 @@ import { TransactionStatusToast } from '../shared/TransactionStatusToast';
 import { UserTokenBalance } from '../shared/UserTokenBalance';
 import { TransactionHistory } from '../shared/TransactionHistory';
 
-interface ActivePresaleProps {
+interface PrivateSaleActiveProps {
   className?: string;
   endTimestamp: number;
   progress?: ScheduleProgress | null;
@@ -38,10 +38,9 @@ function mapToScheduleProgress(p: IcoProgressResponse): ScheduleProgress {
   };
 }
 
-export function PrivateSaleActive({ className, endTimestamp, progress }: ActivePresaleProps) {
+export function PrivateSaleActive({ className, endTimestamp, progress }: PrivateSaleActiveProps) {
   const queryClient = useQueryClient();
   const { data: icoProgress } = useICOProgress();
-  console.log('[useICOProgress] data:', icoProgress);
 
   const onPurchaseSuccess = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ['ico-progress'] });
@@ -62,6 +61,7 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: ActiveP
     balanceError,
     balancesLoading,
     csprPriceUsd,
+    csprPriceStale,
     handlePurchase,
     modalProps,
     toastProps,
@@ -135,6 +135,7 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: ActiveP
           tokenPrice={effectiveProgress?.priceUsd ?? 0}
           tokenSymbol={ICO_CONFIG.TOKEN.symbol}
           csprPriceUsd={csprPriceUsd}
+          csprPriceStale={csprPriceStale}
           onConnect={connect}
           onPurchase={handlePurchase}
           onBuyCspr={buyCspr}

@@ -10,3 +10,4 @@
 | usePurchaseFlow.test.ts | Test complete token purchase orchestration |
 | usePurchaseToken.test.ts | Test purchase validation and transaction creation |
 | useWalletBalances.test.ts | Test multi-currency balance fetching and caching |
+| useCSPRPrice.test.ts | Test CSPR price fetching, stale-threshold logic, and polling interval — uses `vi.useFakeTimers()` |

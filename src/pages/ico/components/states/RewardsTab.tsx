@@ -72,7 +72,7 @@ export const RewardsTab = memo(function RewardsTab() {
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-[hsl(var(--ico-accent)/0.2)] flex items-center justify-center">
+              <div className="w-10 h-10 rounded-lg bg-[hsl(var(--ico-brand-accent)/0.2)] flex items-center justify-center">
                 <Coins className="w-5 h-5 text-[hsl(var(--ico-brand-primary))]" />
               </div>
               <div>
@@ -83,7 +83,7 @@ export const RewardsTab = memo(function RewardsTab() {
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-[hsl(var(--ico-success)/0.2)] flex items-center justify-center">
+              <div className="w-10 h-10 rounded-lg bg-[hsl(var(--ico-state-active)/0.2)] flex items-center justify-center">
                 <Percent className="w-5 h-5 text-[hsl(var(--ico-brand-primary))]" />
               </div>
               <div>
@@ -94,7 +94,7 @@ export const RewardsTab = memo(function RewardsTab() {
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-[hsl(var(--ico-accent)/0.2)] flex items-center justify-center">
+              <div className="w-10 h-10 rounded-lg bg-[hsl(var(--ico-brand-accent)/0.2)] flex items-center justify-center">
                 <Clock className="w-5 h-5 text-[hsl(var(--ico-brand-primary))]" />
               </div>
               <div>
@@ -175,7 +175,7 @@ export const RewardsTab = memo(function RewardsTab() {
               const Icon = reward.icon;
               return (
                 <div key={reward.title} className="flex items-start gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-[hsl(var(--ico-accent)/0.2)] flex items-center justify-center shrink-0">
+                  <div className="w-10 h-10 rounded-lg bg-[hsl(var(--ico-brand-accent)/0.2)] flex items-center justify-center shrink-0">
                     <Icon className="w-5 h-5 text-[hsl(var(--ico-brand-primary))]" />
                   </div>
                   <div>

@@ -24,7 +24,7 @@ export function ICOHeader() {
           <div className="flex items-center gap-3">
             <button
               onClick={handleLogoClick}
-              className="w-20 h-20 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 rounded"
+              className="w-20 h-20 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--ico-brand-primary))] rounded"
               aria-label="Return to ICO overview"
             >
               <img src="/BIGLogoWB.png" alt="BIG Logo" />
@@ -46,8 +46,12 @@ export function ICOHeader() {
               </span>
               <button
                 onClick={disconnect}
+                aria-label="Disconnect wallet"
                 className="flex items-center gap-2 px-3 py-2 bg-[hsl(var(--ico-form-button))] text-white font-medium rounded-md transition-colors duration-200 hover:bg-[hsl(var(--ico-form-button-hover))] cursor-pointer"
               >
+                {/* INTENTIONAL (client request): icon-only on mobile to save header space.
+                    aria-label="Disconnect wallet" above provides the accessible name.
+                    Do not add visible text on mobile without client approval. */}
                 <LogOut className="w-4 h-4 sm:hidden" />
                 <span className="hidden sm:inline">Disconnect</span>
               </button>
@@ -57,7 +61,6 @@ export function ICOHeader() {
               text={isConnecting ? 'Connecting...' : 'Connect Wallet'}
               onClick={connect}
               disabled={isConnecting}
-              className=''
             />
           )}
         </div>

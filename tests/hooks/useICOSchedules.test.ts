@@ -57,7 +57,6 @@ describe('useICOSchedules', () => {
       expect(result.current.isLoading).toBe(true);
       expect(result.current.timestamps).toBeNull();
       expect(result.current.presaleProgress).toBeNull();
-      expect(result.current.icoProgress).toBeNull();
       expect(result.current.error).toBeNull();
     });
   });
@@ -82,7 +81,6 @@ describe('useICOSchedules', () => {
       expect(result.current.error).toBeNull();
       expect(result.current.timestamps).not.toBeNull();
       expect(result.current.presaleProgress).not.toBeNull();
-      expect(result.current.icoProgress).not.toBeNull();
     });
 
     it('should convert timestamps correctly', async () => {
@@ -101,8 +99,6 @@ describe('useICOSchedules', () => {
 
       expect(result.current.timestamps?.presaleStart).toBe(Number(mockPresaleSchedule.startTimestamp));
       expect(result.current.timestamps?.presaleEnd).toBe(Number(mockPresaleSchedule.endTimestamp));
-      expect(result.current.timestamps?.icoStart).toBe(Number(mockICOSchedule.startTimestamp));
-      expect(result.current.timestamps?.icoEnd).toBe(Number(mockICOSchedule.endTimestamp));
     });
 
     it('should calculate progress data correctly', async () => {
@@ -127,6 +123,27 @@ describe('useICOSchedules', () => {
       expect(presaleProgress.percentSold).toBe(10); // 10%
     });
 
+    it('should calculate hardCapUsd and amountRaised correctly', async () => {
+      mockGetAllSchedules.mockResolvedValue([
+        { id: 0n, schedule: mockPresaleSchedule },
+        { id: 1n, schedule: mockICOSchedule },
+      ]);
+
+      const { result } = renderHook(() => useICOSchedules(), {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      const presaleProgress = result.current.presaleProgress!;
+      // hardCapUsd = totalAllocation * priceUsd = 10M * 0.10 = 1M
+      expect(presaleProgress.hardCapUsd).toBe(1000000);
+      // amountRaised = soldAmount * price / decimals = 1M * 0.10 = 100K
+      expect(presaleProgress.amountRaised).toBe(100000);
+    });
+
     it('should handle only presale schedule', async () => {
       mockGetAllSchedules.mockResolvedValue([
         { id: 0n, schedule: mockPresaleSchedule },
@@ -141,9 +158,6 @@ describe('useICOSchedules', () => {
       });
 
       expect(result.current.presaleProgress).not.toBeNull();
-      expect(result.current.icoProgress).toBeNull();
-      expect(result.current.timestamps?.icoStart).toBe(0);
-      expect(result.current.timestamps?.icoEnd).toBe(0);
     });
 
     it('should handle only ICO schedule', async () => {
@@ -160,7 +174,6 @@ describe('useICOSchedules', () => {
       });
 
       expect(result.current.presaleProgress).toBeNull();
-      expect(result.current.icoProgress).not.toBeNull();
       expect(result.current.timestamps?.presaleStart).toBe(0);
       expect(result.current.timestamps?.presaleEnd).toBe(0);
     });
@@ -178,7 +191,6 @@ describe('useICOSchedules', () => {
 
       expect(result.current.timestamps).toBeNull();
       expect(result.current.presaleProgress).toBeNull();
-      expect(result.current.icoProgress).toBeNull();
     });
   });
 

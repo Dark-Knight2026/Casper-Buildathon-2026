@@ -1,5 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import type { ICOState, ICOPhase, SaleTimestamps, SaleStatus } from '@/types/ico';
 
 interface UseICOStateOptions {
@@ -24,7 +23,7 @@ interface UseICOStateReturn {
   isDevOverride: boolean;
 }
 
-const getPhaseFromState = (state: ICOState): ICOPhase => {
+export const getPhaseFromState = (state: ICOState): ICOPhase => {
   const phaseMap: Record<ICOState, ICOPhase> = {
     1: 'private-sale-countdown',
     2: 'private-sale-active',
@@ -33,7 +32,7 @@ const getPhaseFromState = (state: ICOState): ICOPhase => {
   return phaseMap[state];
 };
 
-const calculateState = (timestamps: SaleTimestamps): ICOState => {
+export const calculateState = (timestamps: SaleTimestamps): ICOState => {
   const now = Date.now();
 
   // State 1: Before presale starts
@@ -50,7 +49,7 @@ const calculateState = (timestamps: SaleTimestamps): ICOState => {
   return 3;
 };
 
-const getNextStateTimestamp = (
+export const getNextStateTimestamp = (
   currentState: ICOState,
   timestamps: SaleTimestamps
 ): number | null => {
@@ -73,14 +72,18 @@ export function useICOState(options: UseICOStateOptions = {}): UseICOStateReturn
     devOverrideState: initialDevState = null,
   } = options;
 
-  // Use custom timestamps only - no fallback to mock data
-  // This ensures we don't show wrong state while loading real data
+  // Zero timestamps are a sentinel for "not yet loaded".
+  // calculateState() with all-zero timestamps always returns state 3 (post-ICO)
+  // because Date.now() > 0 makes every presale condition false.
+  // This is intentionally safe: ICOPage passes `timestamps: undefined` while
+  // useICOSchedules is loading and renders a spinner before consuming `state`,
+  // so the wrong state 3 value never reaches the UI.
+  // If this hook is ever used outside ICOPage, the consumer must guard
+  // against isLoading before rendering state-dependent UI.
   const timestamps: SaleTimestamps = useMemo(() => {
     return customTimestamps || {
       presaleStart: 0,
       presaleEnd: 0,
-      icoStart: 0,
-      icoEnd: 0,
     };
   }, [customTimestamps]);
 
@@ -88,20 +91,26 @@ export function useICOState(options: UseICOStateOptions = {}): UseICOStateReturn
   const [devState, setDevState] = useState<ICOState | null>(initialDevState);
   const isDevOverride = devState !== null;
 
-  const {
-    data: calculatedState,
-    isLoading,
-    error: queryError,
-    refetch: queryRefetch,
-  } = useQuery<ICOState, Error>({
-    queryKey: ['ico-state', timestamps],
-    queryFn: () => calculateState(timestamps),
-    refetchInterval: isDevOverride ? false : pollInterval,
-    staleTime: 5000,
-  });
+  const [calculatedState, setCalculatedState] = useState<ICOState>(() =>
+    calculateState(timestamps)
+  );
 
-  // Use dev override if set, otherwise use query data (with sync fallback for first render)
-  const state = devState ?? calculatedState ?? calculateState(timestamps);
+  // Re-evaluate immediately when timestamps reference changes
+  useEffect(() => {
+    setCalculatedState(calculateState(timestamps));
+  }, [timestamps]);
+
+  // Poll to catch state transitions triggered by time passing
+  useEffect(() => {
+    if (isDevOverride) return;
+    const id = setInterval(
+      () => setCalculatedState(calculateState(timestamps)),
+      pollInterval
+    );
+    return () => clearInterval(id);
+  }, [isDevOverride, pollInterval, timestamps]);
+
+  const state = devState ?? calculatedState;
 
   const phase = useMemo(() => getPhaseFromState(state), [state]);
   const nextStateTimestamp = useMemo(
@@ -117,18 +126,17 @@ export function useICOState(options: UseICOStateOptions = {}): UseICOStateReturn
     nextStateTimestamp,
   }), [state, phase, nextStateTimestamp]);
 
-  // Wrap refetch to preserve () => void signature
   const refetch = useCallback(() => {
-    queryRefetch();
-  }, [queryRefetch]);
+    setCalculatedState(calculateState(timestamps));
+  }, [timestamps]);
 
   return {
     state,
     phase,
     status,
     timestamps,
-    isLoading,
-    error: queryError ?? null,
+    isLoading: customTimestamps === undefined,
+    error: null,
     nextStateTimestamp,
     refetch,
     setDevState,

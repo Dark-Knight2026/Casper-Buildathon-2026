@@ -284,21 +284,23 @@ export class CSPRCloudService {
         throw new Error(`Failed to fetch deploy: ${response.statusText}`);
       }
 
-      const data = await response.json();
+      const json = await response.json();
 
-      // Parse execution result
-      if (data.execution_results && data.execution_results.length > 0) {
-        const result = data.execution_results[0];
-        if (result.result?.Success) {
+      // CSPR Cloud API wraps the response in a `data` field:
+      // { "data": { "status": "processed", "error_message": null, ... } }
+      const deploy = json.data;
+
+      if (deploy) {
+        if (deploy.status === 'processed' && !deploy.error_message) {
           return {
             status: 'executed',
-            confirmations: 1,
-            block_number: result.block_height,
+            block_number: deploy.block_height,
           };
-        } else if (result.result?.Failure) {
+        }
+        if (deploy.error_message) {
           return {
             status: 'failed',
-            error_message: result.result.Failure.error_message,
+            error_message: deploy.error_message,
           };
         }
       }
@@ -362,7 +364,9 @@ export class CSPRCloudService {
     currencies: string[] = ['USD']
   ): Promise<Record<string, number>> {
     const vsCurrencies = currencies.map((c) => c.toLowerCase()).join(',');
-    const url = `https://api.coingecko.com/api/v3/simple/price?ids=casper-network&vs_currencies=${vsCurrencies}`;
+    const url = import.meta.env.DEV
+      ? `/api/coingecko/simple/price?ids=casper-network&vs_currencies=${vsCurrencies}`
+      : `/api/coingecko?ids=casper-network&vs_currencies=${vsCurrencies}`;
 
     const response = await fetch(url);
     if (!response.ok) {

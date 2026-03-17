@@ -19,7 +19,6 @@ export interface ScheduleProgress {
 export interface ICOScheduleData {
   timestamps: SaleTimestamps | null;
   presaleProgress: ScheduleProgress | null;
-  icoProgress: ScheduleProgress | null;
   isLoading: boolean;
   error: Error | null;
   refetch: () => void;
@@ -108,7 +107,6 @@ export function useICOSchedules(): ICOScheduleData {
       return {
         timestamps: null,
         presaleProgress: null,
-        icoProgress: null,
       };
     }
 
@@ -118,17 +116,13 @@ export function useICOSchedules(): ICOScheduleData {
     const timestamps: SaleTimestamps | null = (presale || ico) ? {
       presaleStart: presale ? Number(presale.startTimestamp) : 0,
       presaleEnd: presale ? Number(presale.endTimestamp) : 0,
-      icoStart: ico ? Number(ico.startTimestamp) : 0,
-      icoEnd: ico ? Number(ico.endTimestamp) : 0,
     } : null;
 
     const presaleProgress = presale ? scheduleToProgress(presale) : null;
-    const icoProgress = ico ? scheduleToProgress(ico) : null;
 
     return {
       timestamps,
       presaleProgress,
-      icoProgress,
     };
   }, [data]);
 

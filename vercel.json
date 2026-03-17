@@ -1,12 +1,20 @@
 {
   "rewrites": [
     {
+      "source": "/api/email",
+      "destination": "/api/email"
+    },
+    {
       "source": "/api/cspr-cloud/:path*",
       "destination": "/api/cspr-cloud"
     },
     {
       "source": "/api/casper-rpc",
       "destination": "/api/casper-rpc"
+    },
+    {
+      "source": "/api/coingecko",
+      "destination": "/api/coingecko"
     },
     {
       "source": "/((?!api/|docs/).*)",

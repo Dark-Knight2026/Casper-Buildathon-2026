@@ -33,13 +33,19 @@ export function AmountInput({
   const { min, max } = ICO_CONFIG.PURCHASE_LIMITS;
 
   const handleChange = (rawValue: string) => {
-    if (rawValue === '') {
+    // Strip non-numeric characters; allow digits and a single decimal point.
+    // Prevents scientific notation (e.g. 1e5) from reaching parseFloat silently.
+    const sanitized = rawValue
+      .replace(/[^\d.]/g, '')
+      .replace(/(\..*)\./g, '$1');
+
+    if (sanitized === '') {
       setError(null);
-      onChange(rawValue);
+      onChange(sanitized);
       return;
     }
 
-    const num = parseFloat(rawValue);
+    const num = parseFloat(sanitized);
 
     if (isNaN(num) || num < 0) {
       setError('Amount must be a positive number');
@@ -55,7 +61,7 @@ export function AmountInput({
       setError(null);
     }
 
-    onChange(rawValue);
+    onChange(sanitized);
   };
 
   return (
@@ -66,11 +72,10 @@ export function AmountInput({
       <div className="relative flex items-center">
         <input
           id="amount-input"
-          type="number"
+          type="text"
+          inputMode="decimal"
           value={value}
           onChange={(e) => handleChange(e.target.value)}
-          min={0}
-          max={max}
           placeholder={placeholder}
           disabled={disabled}
           aria-describedby={error ? 'amount-input-error' : undefined}
@@ -81,7 +86,7 @@ export function AmountInput({
               ? 'border-red-500/70'
               : 'border-[hsl(var(--ico-border-color))]',
             'bg-[hsl(var(--ico-form-input-bg))] text-[hsl(var(--ico-text-primary))]',
-            'focus:outline-none focus:ring-0 focus:border-[hsl(var(--ico-brand-primary))]',
+            'focus:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--ico-brand-primary))] focus-visible:ring-offset-1',
             'disabled:opacity-50 disabled:cursor-not-allowed'
           )}
         />

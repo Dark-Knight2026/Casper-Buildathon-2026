@@ -1,4 +1,5 @@
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
+import { FocusScope } from '@radix-ui/react-focus-scope';
 import { cn } from '@/lib/utils';
 import { ICO_CONFIG, getCurrencyRateUsd } from '@/constants/ico';
 import { Card } from './Card';
@@ -7,16 +8,6 @@ import { X } from 'lucide-react';
 import type { PaymentCurrency } from '@/types/ico';
 import type { PurchaseState } from '@/hooks/ico/usePurchaseToken';
 import { getStepMessage } from '@/hooks/ico/usePurchaseToken';
-
-// Selector for all interactive elements that can receive keyboard focus
-const FOCUSABLE_SELECTORS =
-  'a[href], button:not([disabled]), input:not([disabled]), ' +
-  'select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
-
-function getFocusableElements(container: HTMLElement | null): HTMLElement[] {
-  if (!container) return [];
-  return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTORS));
-}
 
 interface PurchaseConfirmationModalProps {
   isOpen: boolean;
@@ -28,6 +19,7 @@ interface PurchaseConfirmationModalProps {
   tokenSymbol: string;
   purchaseState: PurchaseState;
   csprPriceUsd?: number;
+  csprPriceStale?: boolean;
 }
 
 export function PurchaseConfirmationModal({
@@ -40,60 +32,24 @@ export function PurchaseConfirmationModal({
   tokenSymbol,
   purchaseState,
   csprPriceUsd,
+  csprPriceStale,
 }: PurchaseConfirmationModalProps) {
-  // Ref for the dialog container — used for focus trap and focus-on-open
-  const modalRef = useRef<HTMLDivElement>(null);
-  // Tracks which element had focus before the modal opened, to restore it on close
-  const previousFocusRef = useRef<HTMLElement | null>(null);
-
   // Calculate tokens to receive
-  const currencyRate = getCurrencyRateUsd(currency, csprPriceUsd);
-  const amountInUsd = amount * currencyRate;
+  let currencyRate: number | null = null;
+  let csprPriceError = false;
+  try {
+    currencyRate = getCurrencyRateUsd(currency, csprPriceUsd);
+  } catch {
+    csprPriceError = true;
+  }
+  const amountInUsd = currencyRate !== null ? amount * currencyRate : 0;
   const tokensToReceive = tokenPrice > 0 ? amountInUsd / tokenPrice : 0;
 
-  // Focus management: move focus into modal on open; restore it on close
-  useEffect(() => {
-    if (isOpen) {
-      // Save the element that triggered the modal so we can return focus to it
-      previousFocusRef.current = document.activeElement as HTMLElement;
-      // Move focus to the first focusable element inside the dialog
-      const focusable = getFocusableElements(modalRef.current);
-      focusable[0]?.focus();
-    } else {
-      // Return focus to the triggering element when the modal closes
-      previousFocusRef.current?.focus();
-      previousFocusRef.current = null;
-    }
-  }, [isOpen]);
-
-  // Escape key + focus trap (Tab / Shift+Tab)
+  // Escape key + scroll lock
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && !purchaseState.isProcessing) {
         onClose();
-        return;
-      }
-
-      if (e.key === 'Tab') {
-        const focusable = getFocusableElements(modalRef.current);
-        if (focusable.length === 0) return;
-
-        const first = focusable[0];
-        const last = focusable[focusable.length - 1];
-
-        if (e.shiftKey) {
-          // Shift+Tab on first element → wrap to last
-          if (document.activeElement === first) {
-            e.preventDefault();
-            last.focus();
-          }
-        } else {
-          // Tab on last element → wrap to first
-          if (document.activeElement === last) {
-            e.preventDefault();
-            first.focus();
-          }
-        }
       }
     };
 
@@ -122,30 +78,27 @@ export function PurchaseConfirmationModal({
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="purchase-modal-title"
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
       onClick={handleBackdropClick}
     >
-      {/* Dialog container — role="dialog" scopes the focus trap and announces to screen readers */}
-      <div
-        ref={modalRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="purchase-modal-title"
-        className="w-full max-w-md"
-      >
-        <Card className={cn('p-6 animate-in fade-in zoom-in-95 duration-200')}>
+      <FocusScope loop trapped>
+        <Card
+          className={cn(
+            'w-full max-w-md p-6 animate-in fade-in zoom-in-95 duration-200',
+          )}
+        >
           {/* Header */}
           <div className="flex items-center justify-between w-full mb-6">
-            <h2
-              id="purchase-modal-title"
-              className="text-xl font-bold text-[hsl(var(--ico-text-primary))]"
-            >
+            <h2 id="purchase-modal-title" className="text-xl font-bold text-[hsl(var(--ico-text-primary))]">
               Confirm Purchase
             </h2>
             {!isProcessing && (
               <button
                 onClick={onClose}
-                className="text-[hsl(var(--ico-text-secondary))] hover:text-[hsl(var(--ico-text-primary))] transition-colors"
+                className="text-[hsl(var(--ico-text-secondary))] hover:text-white transition-colors"
                 aria-label="Close modal"
               >
                 <X className="w-6 h-6" />
@@ -156,36 +109,28 @@ export function PurchaseConfirmationModal({
           {/* Purchase Details */}
           <div className="w-full space-y-4 mb-6">
             <div className="flex justify-between items-center py-3 border-b border-[hsl(var(--ico-border-color))]">
-              <span className="text-sm text-[hsl(var(--ico-text-secondary))]">
-                You Pay
-              </span>
+              <span className="text-sm text-[hsl(var(--ico-text-secondary))]">You Pay</span>
               <span className="text-lg font-bold text-[hsl(var(--ico-text-primary))]">
                 {amount.toLocaleString()} {currency}
               </span>
             </div>
 
             <div className="flex justify-between items-center py-3 border-b border-[hsl(var(--ico-border-color))]">
-              <span className="text-sm text-[hsl(var(--ico-text-secondary))]">
-                USD Value
-              </span>
+              <span className="text-sm text-[hsl(var(--ico-text-secondary))]">USD Value</span>
               <span className="text-lg font-medium text-[hsl(var(--ico-text-primary))]">
                 ${amountInUsd.toLocaleString(undefined, { maximumFractionDigits: 2 })}
               </span>
             </div>
 
             <div className="flex justify-between items-center py-3 border-b border-[hsl(var(--ico-border-color))]">
-              <span className="text-sm text-[hsl(var(--ico-text-secondary))]">
-                Token Price
-              </span>
+              <span className="text-sm text-[hsl(var(--ico-text-secondary))]">Token Price</span>
               <span className="text-lg font-medium text-[hsl(var(--ico-text-primary))]">
                 ${tokenPrice.toFixed(4)}
               </span>
             </div>
 
             <div className="flex justify-between items-center py-3 bg-[hsl(var(--ico-bg-secondary))] rounded-md px-4">
-              <span className="text-sm font-medium text-[hsl(var(--ico-text-highlight))]">
-                You Receive
-              </span>
+              <span className="text-sm font-medium text-[hsl(var(--ico-text-highlight))]">You Receive</span>
               <span className="text-xl font-bold text-[hsl(var(--ico-text-highlight))]">
                 {tokensToReceive.toLocaleString(undefined, { maximumFractionDigits: 2 })} {tokenSymbol}
               </span>
@@ -194,9 +139,9 @@ export function PurchaseConfirmationModal({
 
           {/* Status Message */}
           {isProcessing && (
-            <div className="w-full mb-6">
+            <div role="status" aria-live="polite" aria-atomic="true" className="w-full mb-6">
               <div className="flex items-center gap-3 p-4 rounded-md bg-[hsl(var(--ico-bg-secondary))] border border-[hsl(var(--ico-border-color))]">
-                <div className="animate-spin rounded-full h-5 min-w-5 border-2 border-[hsl(var(--ico-brand-primary))] border-t-transparent" />
+                <div className="animate-spin rounded-full h-5 w-5 border-2 border-[hsl(var(--ico-brand-primary))] border-t-transparent" />
                 <span className="text-sm text-[hsl(var(--ico-brand-primary))]">{stepMessage}</span>
               </div>
             </div>
@@ -224,8 +169,30 @@ export function PurchaseConfirmationModal({
           {/* Error Message */}
           {purchaseState.error && (
             <div className="w-full mb-6">
-              <div className="p-4 rounded-lg bg-red-900/20 border border-red-800/30">
-                <span className="text-sm text-red-400">{purchaseState.error}</span>
+              <div className="p-4 rounded-lg bg-[hsl(var(--ico-error-bg))] border border-[hsl(var(--ico-error-border))]">
+                <span className="text-sm text-[hsl(var(--ico-error-text))]">{purchaseState.error}</span>
+              </div>
+            </div>
+          )}
+
+          {/* CSPR Price Unavailable Warning */}
+          {csprPriceError && (
+            <div className="w-full mb-6">
+              <div className="p-4 rounded-lg bg-[hsl(var(--ico-error-bg))] border border-[hsl(var(--ico-error-border))]">
+                <span className="text-sm text-[hsl(var(--ico-error-text))]">
+                  CSPR price unavailable — please try again later
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Stale Price Warning (display-only — does not block purchase) */}
+          {!csprPriceError && csprPriceStale && currency === 'CSPR' && (
+            <div className="w-full mb-6">
+              <div className="p-3 rounded-lg bg-[hsl(var(--ico-warning-bg))] border border-[hsl(var(--ico-warning-border))]">
+                <span className="text-xs text-[hsl(var(--ico-warning-text))]">
+                  CSPR rate may be outdated. Final amount is determined on-chain.
+                </span>
               </div>
             </div>
           )}
@@ -241,9 +208,11 @@ export function PurchaseConfirmationModal({
                   Cancel
                 </button>
                 <MainButton
-                  text="Confirm"
+                  text="Confirm Purchase"
                   onClick={onConfirm}
+                  disabled={csprPriceError}
                   className="flex-1"
+                  autoFocus
                 />
               </>
             )}
@@ -278,7 +247,7 @@ export function PurchaseConfirmationModal({
             By confirming, you agree to the token purchase terms. Transactions are final and cannot be reversed.
           </p>
         </Card>
-      </div>
+      </FocusScope>
     </div>
   );
 }
