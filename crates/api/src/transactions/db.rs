@@ -26,7 +26,7 @@ impl From<TransactionRow> for TransactionResponse {
     fn from(row: TransactionRow) -> Self {
         Self {
             deploy_hash: row.transaction_hash,
-            block_height: row.block_number.unwrap_or(0),
+            block_height: row.block_number,
             timestamp: row
                 .block_timestamp
                 .map(|ts| ts.to_rfc3339_opts(SecondsFormat::Secs, true)),

@@ -49,7 +49,7 @@ Backend service for processing high-load real estate operations, including tax c
 ```json
 {
   "deploy_hash": "abc123...",
-  "block_height": 12345,
+  "block_height": 12345,  // null if unconfirmed
   "timestamp": "2025-06-15T10:30:00Z",
   "amount": "1000000000000000000",
   "currency": "CSPR",

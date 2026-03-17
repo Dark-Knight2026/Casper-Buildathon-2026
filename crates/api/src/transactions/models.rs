@@ -77,8 +77,8 @@ impl HashType {
 pub struct TransactionResponse {
     /// Deploy hash identifying the transaction on-chain.
     pub deploy_hash: String,
-    /// Block height where the transaction was included.
-    pub block_height: i64,
+    /// Block height where the transaction was included (`null` if unconfirmed).
+    pub block_height: Option<i64>,
     /// Block timestamp in ISO 8601 format (e.g. `"2025-06-15T10:30:00Z"`).
     #[schema(example = "2025-06-15T10:30:00Z")]
     pub timestamp: Option<String>,
