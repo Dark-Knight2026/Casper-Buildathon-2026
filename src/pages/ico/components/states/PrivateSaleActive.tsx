@@ -1,7 +1,6 @@
 import { cn } from '@/lib/utils';
 import type { ScheduleProgress } from '@/hooks/ico/useICOSchedules';
 import { ICO_CONFIG } from '@/constants/ico';
-import type { PaymentCurrency } from '@/types/ico';
 import { Title } from '../shared/Title';
 import { ProgressBar } from '../shared/ProgressBar';
 import { WalletCard } from '../shared/WalletCard';
