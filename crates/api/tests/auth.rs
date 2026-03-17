@@ -377,6 +377,7 @@ fn verify_invalid_message() {
 }
 
 #[test]
+#[ignore = "utility: run manually to regenerate test vector data"]
 fn generate_data_for_local_tests() {
     let fixed_bytes = [1u8; 32];
     let secret_key = SecretKey::ed25519_from_bytes(fixed_bytes).unwrap();
