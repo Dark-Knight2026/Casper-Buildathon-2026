@@ -215,6 +215,7 @@ impl DeployScript for LeasefiDeployScript {
         escrow.transfer_ownership(&new_owner);
         lease.transfer_ownership(&new_owner);
         vesting.transfer_ownership(&new_owner);
+        staking.transfer_ownership(&new_owner);
         ico.transfer_ownership(&new_owner);
 
         Ok(())
