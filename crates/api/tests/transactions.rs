@@ -44,6 +44,33 @@ async fn seed_transaction(
     .expect("Failed to seed transaction");
 }
 
+/// Seed a transaction row with an explicit `from_type` value.
+async fn seed_transaction_with_from_type(
+    pool: &PgPool,
+    tx_hash: &str,
+    from: &str,
+    to: Option<&str>,
+    tx_type: &str,
+    from_type: i16,
+    block_number: Option<i64>,
+) {
+    sqlx::query(
+        r"
+            INSERT INTO blockchain_transactions (transaction_hash, from_address, to_address, transaction_type, from_type, block_number, status)
+            VALUES ($1, $2, $3, $4, $5, $6, 'confirmed')
+        ",
+    )
+    .bind(tx_hash)
+    .bind(from)
+    .bind(to)
+    .bind(tx_type)
+    .bind(from_type)
+    .bind(block_number)
+    .execute(pool)
+    .await
+    .expect("Failed to seed transaction with from_type");
+}
+
 // GET /api/v1/transactions/account/{address}
 
 #[sqlx::test(migrator = "common::MIGRATIONS")]
@@ -330,4 +357,94 @@ async fn big_token_transactions_is_public(pool: PgPool) {
 
     let response = env.server.get("/api/v1/transactions/token/big").await;
     assert_eq!(response.status_code(), StatusCode::OK);
+}
+
+// from_type filter tests
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn account_transactions_from_type_filters_account_only(pool: PgPool) {
+    let account_tx = "a".repeat(64);
+    let contract_tx = "b".repeat(64);
+
+    // from_type=0 (Account)
+    seed_transaction_with_from_type(
+        &pool,
+        &account_tx,
+        VALID_ADDRESS,
+        None,
+        "token_transfer",
+        0,
+        Some(1),
+    )
+    .await;
+    // from_type=1 (Contract)
+    seed_transaction_with_from_type(
+        &pool,
+        &contract_tx,
+        VALID_ADDRESS,
+        None,
+        "token_transfer",
+        1,
+        Some(2),
+    )
+    .await;
+
+    let env = common::setup_test_server(pool, false).await;
+
+    let response = env
+        .server
+        .get(&format!(
+            "/api/v1/transactions/account/{VALID_ADDRESS}?from_type=0"
+        ))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+    assert_eq!(body["item_count"], 1);
+    assert_eq!(body["data"][0]["deploy_hash"], account_tx);
+    assert_eq!(body["data"][0]["from_type"], 0);
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn account_transactions_from_type_filters_contract_only(pool: PgPool) {
+    let account_tx = "a".repeat(64);
+    let contract_tx = "b".repeat(64);
+
+    // from_type=0 (Account)
+    seed_transaction_with_from_type(
+        &pool,
+        &account_tx,
+        VALID_ADDRESS,
+        None,
+        "token_transfer",
+        0,
+        Some(1),
+    )
+    .await;
+    // from_type=1 (Contract)
+    seed_transaction_with_from_type(
+        &pool,
+        &contract_tx,
+        VALID_ADDRESS,
+        None,
+        "token_transfer",
+        1,
+        Some(2),
+    )
+    .await;
+
+    let env = common::setup_test_server(pool, false).await;
+
+    let response = env
+        .server
+        .get(&format!(
+            "/api/v1/transactions/account/{VALID_ADDRESS}?from_type=1"
+        ))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+    assert_eq!(body["item_count"], 1);
+    assert_eq!(body["data"][0]["deploy_hash"], contract_tx);
+    assert_eq!(body["data"][0]["from_type"], 1);
 }
