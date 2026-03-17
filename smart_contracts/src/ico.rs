@@ -187,16 +187,17 @@ impl ICO {
         }
 
         current_ico_schedule.sold_amount += purchase_amount;
+
         self.ico_schedules
             .set(&current_ico_schedule_id, current_ico_schedule);
-
-        self.vesting
-            .create_schedule(*caller, purchase_amount, cliff_duration, vesting_duration);
 
         self.tailor_coin
             .approve(&self.staking.address(), &purchase_amount);
 
         self.staking.stake_for(*caller, purchase_amount);
+
+        self.vesting
+            .create_schedule(*caller, purchase_amount, cliff_duration, vesting_duration);
 
         self.env().emit_native_event(TokensPurchased {
             amount: purchase_amount,
