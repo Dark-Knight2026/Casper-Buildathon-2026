@@ -103,8 +103,6 @@ pub async fn get_ico_balance(
     State(state): State<Arc<AppState>>,
     Path(address): Path<String>,
 ) -> ApiResult<Json<IcoBalanceResponse>> {
-    let ico = resolve_ico(&state).await?;
-
     let address = address.to_ascii_lowercase();
     if address.len() != 64 || !address.chars().all(|c| c.is_ascii_hexdigit()) {
         return Err(ApiError::BadRequest(
@@ -112,6 +110,7 @@ pub async fn get_ico_balance(
         ));
     }
 
+    let ico = resolve_ico(&state).await?;
     let tokens_purchased = db::fetch_buyer_tokens(&state.db, &address).await?;
     let usd_value = (to_human(&tokens_purchased) * ico.price_decimal)
         .to_f64()
