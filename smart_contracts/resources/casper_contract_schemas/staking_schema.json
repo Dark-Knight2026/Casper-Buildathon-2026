@@ -240,6 +240,11 @@
       "discriminant": 63009
     },
     {
+      "name": "UnstakeBlockedByVestingLock",
+      "description": "",
+      "discriminant": 63
+    },
+    {
       "name": "VestingContractIsNotSet",
       "description": "",
       "discriminant": 63006
@@ -411,6 +416,50 @@
       "description": "Withdraws the caller's unbonded BIG tokens after the unbonding period",
       "is_mutable": true,
       "arguments": [],
+      "return_ty": "Unit",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "add_vesting_lock",
+      "description": "Increases the vesting-locked balance for a staker.",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "staker",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        },
+        {
+          "name": "amount",
+          "description": null,
+          "ty": "U256",
+          "optional": false
+        }
+      ],
+      "return_ty": "Unit",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "release_vesting_lock",
+      "description": "Decreases the vesting-locked balance for a staker.",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "staker",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        },
+        {
+          "name": "amount",
+          "description": null,
+          "ty": "U256",
+          "optional": false
+        }
+      ],
       "return_ty": "Unit",
       "is_contract_context": true,
       "access": "public"
