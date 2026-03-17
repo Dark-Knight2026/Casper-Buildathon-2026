@@ -62,6 +62,7 @@ impl Treasury {
     }
 
     /// Allows to withdraw any available reserves amount by the owner
+    #[odra(non_reentrant)]
     pub fn withdraw_reserves(&mut self, recipient: Address, amount: U256) {
         self.assert_owner();
 
@@ -80,6 +81,7 @@ impl Treasury {
 
     /// Allows to withdraw any token that is stored on this contract except of the TailorCoin (BIG) token which is the
     /// reserves token. Only the owner can interact with this entrypoint
+    #[odra(non_reentrant)]
     pub fn withdraw_token(&mut self, token: Option<Address>, amount: U256, recipient: Address) {
         self.assert_owner();
 
