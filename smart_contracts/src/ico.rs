@@ -182,7 +182,7 @@ impl ICO {
                     currency_address.unwrap_or_revert_with(&self.env(), Error::AddressIsRequired),
                 );
 
-                currency.transfer_from(&caller, &self.treasury.address(), &amount_to_spend);
+                currency.transfer_from(caller, self.treasury.address(), &amount_to_spend);
             }
         }
 
@@ -192,7 +192,7 @@ impl ICO {
             .set(&current_ico_schedule_id, current_ico_schedule);
 
         self.tailor_coin
-            .approve(&self.staking.address(), &purchase_amount);
+            .approve(self.staking.address(), &purchase_amount);
 
         self.staking.stake_for(*caller, purchase_amount);
 
@@ -361,18 +361,16 @@ impl ICO {
                 if ico_schedule.start_timestamp <= prev_ico_schedule.end_timestamp {
                     self.env().revert(Error::InvalidICOScheduleStartTimestamp);
                 }
-            } else {
-                if ico_schedule.start_timestamp <= self.env().get_block_time() {
-                    self.env().revert(Error::InvalidICOScheduleStartTimestamp);
-                }
+            } else if ico_schedule.start_timestamp <= self.env().get_block_time() {
+                self.env().revert(Error::InvalidICOScheduleStartTimestamp);
             }
         }
 
         // Start timestamp validation when no previous ICO schedule exists
-        if prev_ico_schedule_id.is_none() {
-            if ico_schedule.start_timestamp <= self.env().get_block_time() {
-                self.env().revert(Error::InvalidICOScheduleStartTimestamp);
-            }
+        if prev_ico_schedule_id.is_none()
+            && ico_schedule.start_timestamp <= self.env().get_block_time()
+        {
+            self.env().revert(Error::InvalidICOScheduleStartTimestamp);
         }
 
         // End timestamp validation
