@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { ICO_CONFIG } from '@/constants/ico';
-import { type FTTokenAction, isICOPurchase } from './useContractDeploys';
+import { type FTTokenAction } from './useContractDeploys';
 import type { ICOTransaction } from '@/pages/ico/components/shared/TransactionHistory';
 
 const BIG_TOKEN_PACKAGE_HASH = ICO_CONFIG.CONTRACTS.tokenAddress.replace(/^hash-/, '');
@@ -12,8 +12,8 @@ interface FTTokenActionsResponse {
   data: FTTokenAction[];
 }
 
-async function fetchUserTokenActions(publicKeyHex: string): Promise<FTTokenAction[]> {
-  const url = `/api/cspr-cloud/accounts/${publicKeyHex}/ft-token-actions?contract_package_hash=${BIG_TOKEN_PACKAGE_HASH}&page_size=100`;
+async function fetchUserTokenActions(publicKeyHex: string, page: number, pageSize: number): Promise<FTTokenActionsResponse> {
+  const url = `/api/cspr-cloud/accounts/${publicKeyHex}/ft-token-actions?contract_package_hash=${BIG_TOKEN_PACKAGE_HASH}&page=${page}&page_size=${pageSize}&type=token_transfer&from_type=1`;
 
   const res = await fetch(url, {
     headers: { accept: 'application/json' },
@@ -23,8 +23,7 @@ async function fetchUserTokenActions(publicKeyHex: string): Promise<FTTokenActio
     throw new Error(`CSPR.Cloud API error: ${res.status}`);
   }
 
-  const data: FTTokenActionsResponse = await res.json();
-  return data.data ?? [];
+  return res.json();
 }
 
 function mapToICOTransaction(action: FTTokenAction): ICOTransaction {
@@ -34,7 +33,7 @@ function mapToICOTransaction(action: FTTokenAction): ICOTransaction {
 
   return {
     id: `${action.deploy_hash}-${action.transform_idx}`,
-    type: isICOPurchase(action) ? 'purchase' : 'claim',
+    type: 'purchase',
     tokensReceived,
     tokenSymbol: ICO_CONFIG.TOKEN.symbol,
     status: 'completed',
@@ -43,17 +42,24 @@ function mapToICOTransaction(action: FTTokenAction): ICOTransaction {
   };
 }
 
-export function useUserTokenActions(publicKey: string | null | undefined) {
-  const query = useQuery<ICOTransaction[], Error>({
-    queryKey: ['user-token-actions', publicKey],
-    queryFn: () => fetchUserTokenActions(publicKey!).then(actions => actions.map(mapToICOTransaction)),
+export function useUserTokenActions(publicKey: string | null | undefined, page = 1, pageSize = 10) {
+  const query = useQuery<{ transactions: ICOTransaction[]; totalPages: number }, Error>({
+    queryKey: ['user-token-actions', publicKey, page, pageSize],
+    queryFn: async () => {
+      const data = await fetchUserTokenActions(publicKey!, page, pageSize);
+      return {
+        transactions: (data.data ?? []).map(mapToICOTransaction),
+        totalPages: data.page_count ?? 1,
+      };
+    },
     enabled: !!publicKey,
     staleTime: 120_000,
     refetchOnWindowFocus: true,
   });
 
   return {
-    transactions: query.data ?? [],
+    transactions: query.data?.transactions ?? [],
+    totalPages: query.data?.totalPages ?? 1,
     isLoading: query.isLoading,
     error: query.error,
     refetch: query.refetch,

@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import type { ScheduleProgress } from '@/hooks/ico/useICOSchedules';
@@ -72,7 +72,8 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: Private
     onPurchaseSuccess,
   });
 
-  const { transactions } = useUserTokenActions(account?.publicKey);
+  const [txPage, setTxPage] = useState(1);
+  const { transactions, totalPages } = useUserTokenActions(account?.publicKey, txPage);
   const accountHash = account?.publicKey ? deriveAccountHash(account.publicKey) : null;
   const { data: icoBalance } = useICOBalance(accountHash);
   // Use backend balance when available, fallback to on-chain transactions
@@ -158,6 +159,9 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: Private
       {/* Transaction History */}
       <TransactionHistory
         transactions={transactions}
+        currentPage={txPage}
+        totalPages={totalPages}
+        onPageChange={setTxPage}
         className="mt-8 max-w-5xl"
       />
 
