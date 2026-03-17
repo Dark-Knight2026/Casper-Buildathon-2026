@@ -9,7 +9,8 @@ const EXPLORER_URL = ICO_CONFIG.CASPER.explorerUrl;
 
 export interface ICOTransaction {
   id: string;
-  type: 'purchase' | 'claim';
+  type: 'purchase' | 'claim' | 'transfer';
+  direction?: 'in' | 'out';
   tokensReceived: number;
   tokenSymbol: string;
   status: 'pending' | 'completed' | 'failed';
@@ -103,8 +104,13 @@ export function TransactionHistory({
                     </div>
                   </div>
 
-                  <p className="text-sm font-medium text-[hsl(var(--ico-text-primary))] text-right">
-                    +{tx.tokensReceived.toLocaleString('en-US', { maximumFractionDigits: 2 })} {tx.tokenSymbol}
+                  <p className={cn(
+                    'text-sm font-medium',
+                    tx.direction === 'out'
+                      ? 'text-red-400'
+                      : 'text-[hsl(var(--ico-state-active))]'
+                  )}>
+                    {tx.direction === 'out' ? '-' : '+'}{tx.tokensReceived.toLocaleString('en-US', { maximumFractionDigits: 4 })} {tx.tokenSymbol}
                   </p>
                 </li>
               ))}

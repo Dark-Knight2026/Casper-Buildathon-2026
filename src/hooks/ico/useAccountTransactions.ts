@@ -13,10 +13,14 @@ async function fetchAccountTransactions(
   page: number,
   pageSize: number,
   type?: string,
+  fromType?: number,
+  contractPackageHash?: string,
 ): Promise<AccountTransactionsResponse> {
   const hex = address.startsWith('account-hash-') ? address.slice('account-hash-'.length) : address;
   const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
   if (type) params.set('type', type);
+  if (fromType !== undefined) params.set('from_type', String(fromType));
+  if (contractPackageHash) params.set('contract_package_hash', contractPackageHash);
   return backendClient.get<AccountTransactionsResponse>(
     `/api/v1/transactions/account/${hex}?${params.toString()}`,
   );
@@ -25,12 +29,14 @@ async function fetchAccountTransactions(
 export function useAccountTransactions(
   address: string | null | undefined,
   page = 1,
-  pageSize = 10,
+  pageSize = 8,
   type?: string,
+  fromType?: number,
+  contractPackageHash?: string,
 ) {
   const query = useQuery({
-    queryKey: ['account-transactions', address, page, pageSize, type],
-    queryFn: () => fetchAccountTransactions(address!, page, pageSize, type),
+    queryKey: ['account-transactions', address, page, pageSize, type, fromType, contractPackageHash],
+    queryFn: () => fetchAccountTransactions(address!, page, pageSize, type, fromType, contractPackageHash),
     enabled: !!address,
     staleTime: 1000 * 60 * 2,
   });

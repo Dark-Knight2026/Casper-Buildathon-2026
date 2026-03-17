@@ -10,7 +10,7 @@ import { WalletCard } from '../shared/WalletCard';
 import CountdownTimer from '../shared/CountdownTimer';
 import { usePurchaseFlow } from '@/hooks/ico/usePurchaseFlow';
 import { useICOProgress } from '@/hooks/ico/useICOProgress';
-import { useUserTokenActions } from '@/hooks/ico/useUserTokenActions';
+import { useTransactionHistory } from '@/hooks/ico/useTransactionHistory';
 import { useICOBalance } from '@/hooks/ico/useICOBalance';
 import { deriveAccountHash } from '@/lib/blockchain/accountUtils';
 import { PurchaseConfirmationModal } from '../shared/PurchaseConfirmationModal';
@@ -72,11 +72,11 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: Private
     onPurchaseSuccess,
   });
 
-  const [txPage, setTxPage] = useState(1);
-  const { transactions, totalPages } = useUserTokenActions(account?.publicKey, txPage);
   const accountHash = account?.publicKey ? deriveAccountHash(account.publicKey) : null;
+  const [txPage, setTxPage] = useState(1);
+  const { transactions, totalPages } = useTransactionHistory(accountHash, txPage);
+
   const { data: icoBalance } = useICOBalance(accountHash);
-  // Use backend balance when available, fallback to on-chain transactions
   const userBalance = useMemo(() => {
     if (icoBalance) {
       const tokensPurchased = Number(BigInt(icoBalance.tokensPurchased)) / 1e18;
