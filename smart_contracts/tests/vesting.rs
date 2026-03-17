@@ -104,15 +104,17 @@ fn create_test_schedule(
     cliff_duration: u64,
     vesting_duration: u64,
 ) -> VestingId {
-    // Mirror the production ICO flow: stake tokens for the beneficiary first,
-    // then create the vesting schedule.
     ctx.env.set_caller(ctx.users.owner);
+
+    let vesting_id =
+        ctx.vesting
+            .create_schedule(beneficiary, total_amount, cliff_duration, vesting_duration);
+
     ctx.tailor_coin
         .approve(&ctx.staking.address(), &total_amount);
     ctx.staking.stake_for(beneficiary, total_amount);
 
-    ctx.vesting
-        .create_schedule(beneficiary, total_amount, cliff_duration, vesting_duration)
+    vesting_id
 }
 
 // =============================================================================
