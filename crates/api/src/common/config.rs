@@ -91,7 +91,15 @@ impl ServerConfig {
                 price_usd,
                 total_allocation,
             }),
-            _ => None,
+            (Some(_), None) => {
+                tracing::warn!("ICO_PRICE_USD set but ICO_TOTAL_ALLOCATION missing - ICO fallback disabled");
+                None
+            }
+            (None, Some(_)) => {
+                tracing::warn!("ICO_TOTAL_ALLOCATION set but ICO_PRICE_USD missing - ICO fallback disabled");
+                None
+            }
+            (None, None) => None,
         };
 
         let config = Self {
