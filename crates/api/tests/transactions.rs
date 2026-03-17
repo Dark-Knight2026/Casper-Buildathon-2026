@@ -448,3 +448,200 @@ async fn account_transactions_from_type_filters_contract_only(pool: PgPool) {
     assert_eq!(body["data"][0]["deploy_hash"], contract_tx);
     assert_eq!(body["data"][0]["from_type"], 1);
 }
+
+// Pagination boundary tests
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn account_transactions_page_zero_clamped_to_first(pool: PgPool) {
+    seed_transaction(
+        &pool,
+        &"a".repeat(64),
+        VALID_ADDRESS,
+        None,
+        None,
+        "token_transfer",
+        None,
+        Some(1),
+    )
+    .await;
+
+    let env = common::setup_test_server(pool, false).await;
+
+    let response = env
+        .server
+        .get(&format!(
+            "/api/v1/transactions/account/{VALID_ADDRESS}?page=0"
+        ))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+    assert_eq!(body["item_count"], 1);
+    assert_eq!(body["data"].as_array().unwrap().len(), 1);
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn account_transactions_page_size_zero_clamped_to_one(pool: PgPool) {
+    for i in 0..3 {
+        let hash = format!("{:0>64}", format!("p{i}"));
+        seed_transaction(
+            &pool,
+            &hash,
+            VALID_ADDRESS,
+            None,
+            None,
+            "token_transfer",
+            None,
+            Some(i + 1),
+        )
+        .await;
+    }
+
+    let env = common::setup_test_server(pool, false).await;
+
+    // page_size=0 clamped to 1
+    let response = env
+        .server
+        .get(&format!(
+            "/api/v1/transactions/account/{VALID_ADDRESS}?page_size=0"
+        ))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+    assert_eq!(body["item_count"], 3);
+    assert_eq!(body["page_count"], 3); // 3 items / 1 per page
+    assert_eq!(body["data"].as_array().unwrap().len(), 1);
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn account_transactions_page_size_over_max_clamped_to_100(pool: PgPool) {
+    seed_transaction(
+        &pool,
+        &"a".repeat(64),
+        VALID_ADDRESS,
+        None,
+        None,
+        "token_transfer",
+        None,
+        Some(1),
+    )
+    .await;
+
+    let env = common::setup_test_server(pool, false).await;
+
+    // page_size=101 clamped to 100
+    let response = env
+        .server
+        .get(&format!(
+            "/api/v1/transactions/account/{VALID_ADDRESS}?page_size=101"
+        ))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+    assert_eq!(body["item_count"], 1);
+    assert_eq!(body["page_count"], 1);
+    assert_eq!(body["data"].as_array().unwrap().len(), 1);
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn account_transactions_page_beyond_data_returns_empty(pool: PgPool) {
+    seed_transaction(
+        &pool,
+        &"a".repeat(64),
+        VALID_ADDRESS,
+        None,
+        None,
+        "token_transfer",
+        None,
+        Some(1),
+    )
+    .await;
+
+    let env = common::setup_test_server(pool, false).await;
+
+    let response = env
+        .server
+        .get(&format!(
+            "/api/v1/transactions/account/{VALID_ADDRESS}?page=999"
+        ))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+    assert_eq!(body["item_count"], 1);
+    assert!(body["data"].as_array().unwrap().is_empty());
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn big_token_transactions_page_size_zero_clamped_to_one(pool: PgPool) {
+    seed_transaction(
+        &pool,
+        &"a".repeat(64),
+        VALID_ADDRESS,
+        None,
+        Some(BIG_CONTRACT),
+        "token_transfer",
+        None,
+        Some(1),
+    )
+    .await;
+
+    let env = common::setup_test_server_with(
+        pool,
+        false,
+        TestOverrides {
+            contract_big: Some(BIG_CONTRACT.to_owned()),
+            ..Default::default()
+        },
+    )
+    .await;
+
+    let response = env
+        .server
+        .get("/api/v1/transactions/token/big?page_size=0")
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+    assert_eq!(body["item_count"], 1);
+    assert_eq!(body["page_count"], 1);
+    assert_eq!(body["data"].as_array().unwrap().len(), 1);
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn big_token_transactions_page_size_over_max_clamped_to_100(pool: PgPool) {
+    seed_transaction(
+        &pool,
+        &"a".repeat(64),
+        VALID_ADDRESS,
+        None,
+        Some(BIG_CONTRACT),
+        "token_transfer",
+        None,
+        Some(1),
+    )
+    .await;
+
+    let env = common::setup_test_server_with(
+        pool,
+        false,
+        TestOverrides {
+            contract_big: Some(BIG_CONTRACT.to_owned()),
+            ..Default::default()
+        },
+    )
+    .await;
+
+    let response = env
+        .server
+        .get("/api/v1/transactions/token/big?page_size=101")
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+    assert_eq!(body["item_count"], 1);
+    assert_eq!(body["page_count"], 1);
+    assert_eq!(body["data"].as_array().unwrap().len(), 1);
+}
