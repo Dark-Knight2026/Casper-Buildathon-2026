@@ -68,9 +68,14 @@ async fn resolve_ico(state: &AppState) -> Result<ResolvedIco, ApiError> {
         .as_ref()
         .ok_or_else(|| ApiError::Internal("ICO not configured".to_owned()))?;
 
+    let price_decimal = fallback
+        .price_usd
+        .parse::<Decimal>()
+        .unwrap_or(Decimal::ZERO);
+
     Ok(ResolvedIco {
-        price_f64: fallback.price_usd,
-        price_decimal: Decimal::try_from(fallback.price_usd).unwrap_or(Decimal::ZERO),
+        price_f64: price_decimal.to_f64().unwrap_or(0.0),
+        price_decimal,
         total_allocation: fallback.total_allocation.clone(),
     })
 }

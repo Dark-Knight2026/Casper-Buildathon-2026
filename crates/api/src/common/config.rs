@@ -19,10 +19,10 @@ struct RawEnvConfig {
     /// BIG token contract package hash (hex, no prefix). Shared with `indexer`.
     #[serde(default)]
     contract_big: Option<String>,
-    /// Fallback ICO token price in USD (e.g. `0.50`).
+    /// Fallback ICO token price in USD (e.g. `"0.50"`).
     /// Used only when `ico_schedules` table is empty.
     #[serde(default)]
-    ico_price_usd: Option<f64>,
+    ico_price_usd: Option<String>,
     /// Fallback ICO total allocation in minimal units.
     /// Used only when `ico_schedules` table is empty.
     #[serde(default)]
@@ -42,8 +42,9 @@ fn default_cors_origin() -> String {
 /// processes `ICOScheduleAdded` contract events).
 #[derive(Debug, Clone)]
 pub struct IcoFallback {
-    /// Price per 1 BIG token in USD (e.g. `0.50`).
-    pub price_usd: f64,
+    /// Price per 1 BIG token in USD as a string (e.g. `"0.50"`).
+    /// Stored as `String` to avoid `f64` precision loss when converting to `Decimal`.
+    pub price_usd: String,
     /// Total allocation in minimal units (U256 as string, decimals=18).
     pub total_allocation: String,
 }
@@ -92,11 +93,15 @@ impl ServerConfig {
                 total_allocation,
             }),
             (Some(_), None) => {
-                tracing::warn!("ICO_PRICE_USD set but ICO_TOTAL_ALLOCATION missing - ICO fallback disabled");
+                tracing::warn!(
+                    "ICO_PRICE_USD set but ICO_TOTAL_ALLOCATION missing - ICO fallback disabled"
+                );
                 None
             }
             (None, Some(_)) => {
-                tracing::warn!("ICO_TOTAL_ALLOCATION set but ICO_PRICE_USD missing - ICO fallback disabled");
+                tracing::warn!(
+                    "ICO_TOTAL_ALLOCATION set but ICO_PRICE_USD missing - ICO fallback disabled"
+                );
                 None
             }
             (None, None) => None,
