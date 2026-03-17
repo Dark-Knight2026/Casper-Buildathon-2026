@@ -34,7 +34,7 @@ Backend service for processing high-load real estate operations, including tax c
 
 - **GET** `/api/v1/transactions/account/{address}`
   - **Path:** `address` - Casper account hash (64 hex chars, no prefix)
-  - **Query:** `page` (default 1), `page_size` (default 25, max 100), `type` (optional filter: `token_purchase`, `token_transfer`, `token_mint`, `token_allowance`)
+  - **Query:** `page` (default 1), `page_size` (default 25, max 100), `type` (optional filter: `token_purchase`, `token_transfer`, `token_mint`, `token_allowance`), `from_type` (optional filter: `0` = Account, `1` = Contract)
   - **Response:** `PaginatedResponse<TransactionResponse>` `{ "item_count": 42, "page_count": 2, "data": [...] }`
   - **Auth:** Public (no JWT required)
   - **Rate limit:** 5 req/s, burst 30
