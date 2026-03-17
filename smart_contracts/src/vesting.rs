@@ -1,7 +1,8 @@
+use odra::{casper_types::U256, prelude::*, ContractRef};
+use odra_modules::access::Ownable;
+
 use crate::staking::StakingContractRef;
 use crate::vesting::{errors::*, events::*};
-use odra::{casper_types::U256, prelude::*, ContractRef};
-use odra_modules::{access::Ownable, cep18_token::Cep18ContractRef};
 
 // =============================================================================
 // Vesting Types
@@ -63,18 +64,6 @@ pub mod events {
         pub beneficiary: Address,
         pub amount: U256,
     }
-
-    #[odra::event]
-    pub struct EmergencyModeSet {
-        pub is_enabled: bool,
-    }
-
-    #[odra::event]
-    pub struct EmergencyClaim {
-        pub vesting_id: VestingId,
-        pub beneficiary: Address,
-        pub amount: U256,
-    }
 }
 
 // =============================================================================
@@ -94,7 +83,6 @@ pub mod errors {
         CallerNotBeneficiary = 65_006,
         NothingToClaim = 65_007,
         ClaimBlockedByActiveUnbonding = 65_008,
-        NotInEmergencyMode = 65_009,
     }
 }
 
@@ -104,9 +92,7 @@ pub mod errors {
 
 #[odra::module(
     errors = Error,
-    events = [
-      ScheduleCreated, TokensClaimed, WhitelistedCreatorAdded, WhitelistedCreatorRemoved, EmergencyModeSet, EmergencyClaim
-    ],
+    events = [ScheduleCreated, TokensClaimed, WhitelistedCreatorAdded, WhitelistedCreatorRemoved],
 )]
 pub struct Vesting {
     /// Ownership control — only the owner can configure the contract.
@@ -115,10 +101,6 @@ pub struct Vesting {
     /// Reference to the Staking contract.
     /// Used to unstake tokens when transfer tokens out (claim).
     staking: External<StakingContractRef>,
-
-    /// Reference to the TailorCoin (BIG) CEP-18 token contract.
-    /// Used for emergency claims when staking is unavailable.
-    tailor_coin: External<Cep18ContractRef>,
 
     /// Stores each vesting schedule by its unique ID.
     schedules: Mapping<VestingId, VestingSchedule>,
@@ -134,9 +116,6 @@ pub struct Vesting {
     /// Maps (beneficiary, index) to schedule IDs for per-user lookup.
     /// Use with `user_schedules_counts` to iterate a user's schedules.
     user_schedules: Mapping<Address, Vec<VestingId>>,
-
-    /// Emergency mode flag. When enabled, owner can bypass staking for claims.
-    is_emergency: Var<bool>,
 }
 
 #[odra::module]
@@ -153,16 +132,10 @@ impl Vesting {
     // Owner-only configuration
     // =========================================================================
 
-    /// Sets the Staking contract address.
+    /// Sets the Staking contract address (for future auto-staking integration).
     pub fn set_staking(&mut self, staking: Address) {
         self.assert_owner();
         self.staking.set(staking);
-    }
-
-    /// Sets the TailorCoin (BIG) contract address.
-    pub fn set_tailor_coin(&mut self, tailor_coin: Address) {
-        self.assert_owner();
-        self.tailor_coin.set(tailor_coin);
     }
 
     /// Grants an address permission to create vesting schedules.
@@ -182,17 +155,6 @@ impl Vesting {
 
         self.env()
             .emit_native_event(WhitelistedCreatorRemoved { creator });
-    }
-
-    /// Enables or disables emergency mode.
-    pub fn toggle_emergency_mode(&mut self) {
-        self.assert_owner();
-        let current = self.is_emergency.get_or_default();
-        self.is_emergency.set(!current);
-
-        self.env().emit_native_event(EmergencyModeSet {
-            is_enabled: !current,
-        });
     }
 
     // =========================================================================
@@ -246,14 +208,6 @@ impl Vesting {
 
     pub fn get_staking_contract_address(&self) -> Address {
         *self.staking.address()
-    }
-
-    pub fn get_tailor_coin_contract_address(&self) -> Address {
-        *self.tailor_coin.address()
-    }
-
-    pub fn is_emergency_mode(&self) -> bool {
-        self.is_emergency.get_or_default()
     }
 
     // =========================================================================
@@ -375,53 +329,6 @@ impl Vesting {
         self.staking.unstake_for(beneficiary, claimable);
 
         self.env().emit_native_event(TokensClaimed {
-            vesting_id,
-            beneficiary,
-            amount: claimable,
-        });
-    }
-
-    // =========================================================================
-    // Emergency Claiming (called if Staking is unavailable )
-    // =========================================================================
-
-    /// Emergency claim for vested tokens, bypassing the staking contract.
-    ///
-    /// Can only be called by the owner when emergency mode is enabled.
-    /// Transfers tokens directly from the vesting contract's balance to the benificiary
-    ///
-    /// @dev This is a safety mechanism for when the staking contract is unavailable.
-    /// The owner must ensure the vesting contract has sufficient token balance
-    #[odra(non_reentrant)]
-    pub fn emergency_claim(&mut self, vesting_id: VestingId) {
-        self.assert_owner();
-
-        if !self.is_emergency.get_or_default() {
-            self.env().revert(Error::NotInEmergencyMode)
-        }
-
-        let mut schedule = self
-            .schedules
-            .get(&vesting_id)
-            .unwrap_or_revert_with(&self.env(), Error::ScheduleNotFound);
-
-        let beneficiary = schedule.beneficiary;
-
-        // Calculate how much is vested but not yet claimed
-        let vested = self.calculate_vested_amt(&schedule);
-        let claimable = vested - schedule.unstaked_amount;
-
-        if claimable.is_zero() {
-            self.env().revert(Error::NothingToClaim);
-        }
-
-        // Update unstaked amount to track the emergency claim
-        schedule.unstaked_amount += claimable;
-        self.schedules.set(&vesting_id, schedule);
-
-        self.tailor_coin.transfer(&beneficiary, &claimable);
-
-        self.env().emit_native_event(EmergencyClaim {
             vesting_id,
             beneficiary,
             amount: claimable,

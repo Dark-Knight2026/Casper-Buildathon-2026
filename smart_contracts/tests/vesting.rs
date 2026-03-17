@@ -12,7 +12,7 @@ use leasefi_contracts::staking::{Staking, StakingHostRef, StakingInitArgs};
 use leasefi_contracts::tailor_coin::{TailorCoin, TailorCoinHostRef, TailorCoinInitArgs};
 use leasefi_contracts::vesting::{
     errors::Error,
-    events::{EmergencyClaim, EmergencyModeSet, ScheduleCreated, TokensClaimed},
+    events::{ScheduleCreated, TokensClaimed},
     Vesting, VestingHostRef, VestingId, VestingInitArgs,
 };
 
@@ -76,7 +76,6 @@ fn setup(env: HostEnv) -> Context {
 
     vesting.add_whitelisted_creator(users.owner);
     vesting.set_staking(staking.address());
-    vesting.set_tailor_coin(tailor_coin.address());
 
     staking.set_tailor_coin(tailor_coin.address());
     staking.set_vesting(vesting.address());
@@ -157,79 +156,6 @@ fn test_set_staking_should_set_staking_properly() {
         ctx.vesting.get_staking_contract_address(),
         new_address,
         "Invalid Staking contract address",
-    );
-}
-
-// =============================================================================
-// set_tailor_coin()
-// =============================================================================
-
-#[test]
-fn test_set_tailor_coin_should_revert_if_not_owner_is_calling() {
-    let mut ctx = setup(odra_test::env());
-
-    ctx.env.set_caller(ctx.users.alice);
-
-    assert_eq!(
-        ctx.vesting
-            .try_set_tailor_coin(ctx.users.alice)
-            .unwrap_err(),
-        AccessError::CallerNotTheOwner.into(),
-        "Should revert when is called by not the owner"
-    );
-}
-
-#[test]
-fn test_set_tailor_coin_should_set_tailor_coin_properly() {
-    let mut ctx = setup(odra_test::env());
-
-    let tailor_coin = ctx.env.get_account(10);
-
-    ctx.vesting.set_tailor_coin(tailor_coin);
-
-    assert_eq!(
-        ctx.vesting.get_tailor_coin_contract_address(),
-        tailor_coin,
-        "Invalid TailorCoin contract address"
-    );
-}
-
-// =============================================================================
-// toggle_emergency_mode()
-// =============================================================================
-
-#[test]
-fn test_toggle_emergency_mode_should_revert_if_not_owner_is_calling() {
-    let mut ctx = setup(odra_test::env());
-
-    ctx.env.set_caller(ctx.users.alice);
-    assert_eq!(
-        ctx.vesting.try_toggle_emergency_mode().unwrap_err(),
-        AccessError::CallerNotTheOwner.into(),
-        "Should revert when is called by not the owner"
-    );
-}
-
-#[test]
-fn test_toggle_emergency_mode_should_toggle_properly() {
-    let mut ctx = setup(odra_test::env());
-
-    assert!(
-        !ctx.vesting.is_emergency_mode(),
-        "Should start in non-emergency mode"
-    );
-
-    ctx.vesting.toggle_emergency_mode();
-
-    assert!(
-        ctx.vesting.is_emergency_mode(),
-        "Should be in emergency mode"
-    );
-
-    assert!(
-        ctx.env
-            .emitted_native_event(&ctx.vesting, EmergencyModeSet { is_enabled: true }),
-        "EmergencyModeSet event should be emitted"
     );
 }
 
@@ -539,10 +465,9 @@ fn test_claim_should_revert_if_active_unbonding_from_direct_staking() {
     // Alice stakes directly (outside of vesting)
     ctx.env.set_caller(ctx.users.owner);
     ctx.tailor_coin.transfer(&alice, &stake_amount);
-
+    
     ctx.env.set_caller(alice);
-    ctx.tailor_coin
-        .approve(&ctx.staking.address(), &stake_amount);
+    ctx.tailor_coin.approve(&ctx.staking.address(), &stake_amount);
     ctx.staking.stake_for(alice, stake_amount);
 
     // Alice initiates unstaking directly via staking contract
@@ -892,97 +817,4 @@ fn test_claim_end_to_end_lifecycle() {
     assert_eq!(schedule.start_timestamp, start_time);
     assert_eq!(schedule.cliff_duration, cliff);
     assert_eq!(schedule.vesting_duration, vesting);
-}
-
-// =============================================================================
-// emergency_claim()
-// =============================================================================
-
-#[test]
-fn test_emergency_claim_should_revert_if_not_owner() {
-    let mut ctx = setup(odra_test::env());
-    let alice = ctx.users.alice;
-    let cliff = ctx.cliff_duration;
-    let vesting = ctx.vesting_duration;
-    let vesting_id = create_test_schedule(&mut ctx, alice, vesting_amount(), cliff, vesting);
-
-    ctx.vesting.toggle_emergency_mode();
-    ctx.env.set_caller(alice);
-
-    assert_eq!(
-        ctx.vesting.try_emergency_claim(vesting_id).unwrap_err(),
-        AccessError::CallerNotTheOwner.into(),
-        "Should revert when called by non-owner"
-    );
-}
-
-#[test]
-fn test_emergency_claim_should_revert_if_not_emergency_mode() {
-    let mut ctx = setup(odra_test::env());
-    let alice = ctx.users.alice;
-    let cliff = ctx.cliff_duration;
-    let vesting = ctx.vesting_duration;
-    let vesting_id = create_test_schedule(&mut ctx, alice, vesting_amount(), cliff, vesting);
-
-    assert_eq!(
-        ctx.vesting.try_emergency_claim(vesting_id).unwrap_err(),
-        Error::NotInEmergencyMode.into(),
-        "Should revert when not in emergency mode"
-    );
-}
-
-#[test]
-fn test_emergency_claim_should_transfer_tokens_directly() {
-    let mut ctx = setup(odra_test::env());
-    let cliff = ctx.cliff_duration;
-    let vesting = ctx.vesting_duration;
-    let alice = ctx.users.alice;
-
-    let vesting_id = create_test_schedule(&mut ctx, alice, vesting_amount(), cliff, vesting);
-
-    ctx.env.advance_block_time(cliff);
-
-    // Fund the vesting contract for emergency payout
-    let vested_amount = ctx.vesting.get_claimable_amount(vesting_id);
-    ctx.tailor_coin
-        .transfer(&ctx.vesting.address(), &vested_amount);
-
-    let prev_alice_balance = ctx.tailor_coin.balance_of(&alice);
-    let prev_vesting_balance = ctx.tailor_coin.balance_of(&ctx.vesting.address());
-
-    // Enable emergency mode and claim
-    ctx.vesting.toggle_emergency_mode();
-    ctx.vesting.emergency_claim(vesting_id);
-
-    // Verify tokens were transferred directly to beneficiary
-    assert_eq!(
-        ctx.tailor_coin.balance_of(&alice),
-        prev_alice_balance + vested_amount,
-        "Alice should receive the vested tokens"
-    );
-    assert_eq!(
-        ctx.tailor_coin.balance_of(&ctx.vesting.address()),
-        prev_vesting_balance - vested_amount,
-        "Vesting contract balance should decrease"
-    );
-
-    // Verify schedule state was updated
-    let schedule = ctx.vesting.get_schedule(vesting_id).unwrap();
-    assert_eq!(
-        schedule.unstaked_amount, vested_amount,
-        "Unstaked amount should track the emergency claim"
-    );
-
-    // Verify event
-    assert!(
-        ctx.env.emitted_native_event(
-            &ctx.vesting,
-            EmergencyClaim {
-                vesting_id,
-                beneficiary: alice,
-                amount: vested_amount,
-            }
-        ),
-        "EmergencyClaim event should be emitted"
-    );
 }
