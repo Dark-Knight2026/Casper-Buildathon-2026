@@ -124,7 +124,16 @@ async fn ico_balance_invalid_address_returns_400(pool: PgPool) {
     seed_ico_schedule(&pool).await;
     let env = common::setup_test_server(pool, false).await;
 
-    let response = env.server.get("/api/v1/ico/balance/tooshort").await;
+    // Too short
+    let response = env.server.get("/api/v1/ico/balance/too-short").await;
+    assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
+
+    // Non-hex 64-char address
+    let bad_addr = "zz".repeat(32);
+    let response = env
+        .server
+        .get(&format!("/api/v1/ico/balance/{bad_addr}"))
+        .await;
     assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
 }
 
