@@ -261,6 +261,8 @@ impl Vesting {
         user_schedules.push(vesting_id);
         self.user_schedules.set(&beneficiary, user_schedules);
 
+        self.staking.add_vesting_lock(beneficiary, total_amount);
+
         self.env().emit_native_event(ScheduleCreated {
             vesting_id,
             whitelisted_creator: self.env().caller(),
@@ -320,6 +322,8 @@ impl Vesting {
         if claimable.is_zero() {
             self.env().revert(Error::NothingToClaim);
         }
+
+        self.staking.release_vesting_lock(beneficiary, claimable);
 
         // Update unstaked amount before initiating unstake
         schedule.unstaked_amount += claimable;

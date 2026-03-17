@@ -8,7 +8,9 @@ use odra_modules::access::errors::Error as AccessError;
 use leasefi_contracts::constants::{
     ONE_MONTH_IN_MILLISECONDS, PRIVATE_SALE_CLIFF_DURATION, PRIVATE_SALE_VESTING_DURATION,
 };
-use leasefi_contracts::staking::{Staking, StakingHostRef, StakingInitArgs};
+use leasefi_contracts::staking::{
+    errors::Error::UnstakeBlockedByVestingLock, Staking, StakingHostRef, StakingInitArgs,
+};
 use leasefi_contracts::tailor_coin::{TailorCoin, TailorCoinHostRef, TailorCoinInitArgs};
 use leasefi_contracts::vesting::{
     errors::Error,
@@ -465,9 +467,10 @@ fn test_claim_should_revert_if_active_unbonding_from_direct_staking() {
     // Alice stakes directly (outside of vesting)
     ctx.env.set_caller(ctx.users.owner);
     ctx.tailor_coin.transfer(&alice, &stake_amount);
-    
+
     ctx.env.set_caller(alice);
-    ctx.tailor_coin.approve(&ctx.staking.address(), &stake_amount);
+    ctx.tailor_coin
+        .approve(&ctx.staking.address(), &stake_amount);
     ctx.staking.stake_for(alice, stake_amount);
 
     // Alice initiates unstaking directly via staking contract
@@ -817,4 +820,22 @@ fn test_claim_end_to_end_lifecycle() {
     assert_eq!(schedule.start_timestamp, start_time);
     assert_eq!(schedule.cliff_duration, cliff);
     assert_eq!(schedule.vesting_duration, vesting);
+}
+
+#[test]
+fn test_beneficiary_cannot_bypass_cliff_via_direct_unstake() {
+    let mut ctx = setup(odra_test::env());
+    let alice = ctx.users.alice;
+    let cliff_duration = ctx.cliff_duration;
+    let vesting_duration = ctx.vesting_duration;
+    let amt = vesting_amount();
+
+    create_test_schedule(&mut ctx, alice, amt, cliff_duration, vesting_duration);
+
+    // Alice tries to unstake thru staking contract during the cliff, but its blocked
+    ctx.env.set_caller(alice);
+    assert_eq!(
+        ctx.staking.try_unstake_for(alice, amt).unwrap_err(),
+        UnstakeBlockedByVestingLock.into(),
+    );
 }

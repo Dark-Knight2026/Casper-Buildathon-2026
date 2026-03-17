@@ -91,6 +91,7 @@ pub mod errors {
         UnbondingPeriodNotFinished = 63_009,
         NoActiveStake = 63_010,
         CallerNotAuthorizedToStake = 63_011,
+        UnstakeBlockedByVestingLock = 63,
     }
 }
 
@@ -118,6 +119,10 @@ pub struct Staking {
     /// Total BIG currently actively staked and eligible for rewards.
     /// This excludes unbonding tokens as they should no longer earn rewards.
     total_staked: Var<U256>,
+
+    /// Tracks how much of each staker's balance is locked by vesting schedules.
+    /// Only the Vesting contract can modify this.
+    vesting_locked: Mapping<Address, U256>,
 
     /// Global reward accumulator — cumulative rewards per staked token.
     /// This value is updated whenever newly available rewards are deposited.
@@ -261,6 +266,14 @@ impl Staking {
             self.env().revert(Error::UnbondingAlreadyInProgress);
         }
 
+        // Enforce the vesting lock
+        if self.env().caller() == staker {
+            let locked_amt = self.vesting_locked.get_or_default(&staker);
+            if amount > staker_info.staked_amount - locked_amt {
+                self.env().revert(Error::UnstakeBlockedByVestingLock);
+            }
+        }
+
         self.update_reward_for(&staker);
 
         let mut staker_info = self.stakers.get_or_default(&staker);
@@ -383,6 +396,26 @@ impl Staking {
     }
 
     // =========================================================================
+    // Vesting Lock (only called by the vesting contract)
+    // =========================================================================
+
+    /// Increases the vesting-locked balance for a staker.
+    /// @dev Called by the vesting contract when a new schedule is created.
+    pub fn add_vesting_lock(&mut self, staker: Address, amount: U256) {
+        self.assert_caller_is_vesting_contract();
+        let current = self.vesting_locked.get_or_default(&staker);
+        self.vesting_locked.set(&staker, current + amount);
+    }
+
+    /// Decreases the vesting-locked balance for a staker.
+    /// @dev Called by the vesting contract when tokens are claimed.
+    pub fn release_vesting_lock(&mut self, staker: Address, amount: U256) {
+        self.assert_caller_is_vesting_contract();
+        let current = self.vesting_locked.get_or_default(&staker);
+        self.vesting_locked.set(&staker, current - amount);
+    }
+
+    // =========================================================================
     // Ownable delegation
     // =========================================================================
 
@@ -425,6 +458,13 @@ impl Staking {
         }
 
         if caller != *self.vesting.address() {
+            self.env().revert(Error::CallerNotAuthorizedToUnstake);
+        }
+    }
+
+    #[inline]
+    fn assert_caller_is_vesting_contract(&self) {
+        if self.env().caller() != *self.vesting.address() {
             self.env().revert(Error::CallerNotAuthorizedToUnstake);
         }
     }

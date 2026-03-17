@@ -487,6 +487,61 @@ fn test_unstake_for_vesting_can_unstake_on_behalf() {
     assert_eq!(staking_info.staked_amount, U256::zero());
 }
 
+#[test]
+fn test_unstake_for_should_revert_if_vesting_locked() {
+    let mut ctx = setup(odra_test::env());
+    let amount = staking_amount();
+    let alice = ctx.users.alice;
+    let vesting_mock = ctx.env.get_account(5);
+
+    ctx.env.set_caller(ctx.users.owner);
+    ctx.staking.set_vesting(vesting_mock);
+
+    fund_and_approve(&mut ctx, alice, amount);
+    stake_for(&mut ctx, alice, amount);
+
+    ctx.env.set_caller(vesting_mock);
+    ctx.staking.add_vesting_lock(alice, amount);
+
+    ctx.env.set_caller(alice);
+    assert_eq!(
+        ctx.staking.try_unstake_for(alice, amount).unwrap_err(),
+        Error::UnstakeBlockedByVestingLock.into(),
+    );
+}
+
+#[test]
+fn test_unstake_for_allows_self_unstake_of_unlocked_tokens() {
+    let mut ctx = setup(odra_test::env());
+    let amount = staking_amount();
+    let alice = ctx.users.alice;
+    let vesting_mock = ctx.env.get_account(5);
+
+    ctx.env.set_caller(ctx.users.owner);
+    ctx.staking.set_vesting(vesting_mock);
+
+    // Half will be vest-locked, other half will be free to unstake
+    fund_and_approve(&mut ctx, alice, amount * 2);
+    stake_for(&mut ctx, alice, amount * 2);
+
+    ctx.env.set_caller(vesting_mock);
+    ctx.staking.add_vesting_lock(alice, amount);
+
+    // Half unlocked should unstake
+    ctx.env.set_caller(alice);
+    ctx.staking.unstake_for(alice, amount);
+
+    // Clear unbonding, then confirm half locked is still blocked
+    ctx.env.advance_block_time(UNBONDING_PERIOD + 1);
+    ctx.staking.withdraw_unbonded();
+
+    ctx.env.set_caller(alice);
+    assert_eq!(
+        ctx.staking.try_unstake_for(alice, amount).unwrap_err(),
+        Error::UnstakeBlockedByVestingLock.into(),
+    );
+}
+
 // =============================================================================
 // deposit_rewards()
 // =============================================================================
