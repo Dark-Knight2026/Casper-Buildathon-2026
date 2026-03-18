@@ -12,11 +12,13 @@ import { usePurchaseFlow } from '@/hooks/ico/usePurchaseFlow';
 import { useICOProgress } from '@/hooks/ico/useICOProgress';
 import { useTransactionHistory } from '@/hooks/ico/useTransactionHistory';
 import { useICOBalance } from '@/hooks/ico/useICOBalance';
+import { useVestingSchedules } from '@/hooks/ico/useVestingSchedules';
 import { deriveAccountHash } from '@/lib/blockchain/accountUtils';
 import { PurchaseConfirmationModal } from '../shared/PurchaseConfirmationModal';
 import { TransactionStatusToast } from '../shared/TransactionStatusToast';
 import { UserTokenBalance } from '../shared/UserTokenBalance';
 import { TransactionHistory } from '../shared/TransactionHistory';
+import { VestingProgressBlock, type VestingEntry } from '../shared/VestingProgressBlock';
 
 interface PrivateSaleActiveProps {
   className?: string;
@@ -77,6 +79,19 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: Private
   const { transactions, totalPages } = useTransactionHistory(accountHash, txPage);
 
   const { data: icoBalance } = useICOBalance(accountHash);
+  const { data: vestingSchedules } = useVestingSchedules(accountHash);
+  console.log('vestingSchedules:', vestingSchedules);
+
+  const vestingEntries = useMemo<VestingEntry[]>(() => {
+    if (!vestingSchedules?.data?.length) return [];
+    return vestingSchedules.data.map((s) => ({
+      id: s.id,
+      lockedAmount: s.lockedAmount,
+      purchaseTimestamp: s.purchaseTimestamp,
+      unlockTimestamp: s.unlockTimestamp,
+      unlockedAmount: s.unlockedAmount,
+    }));
+  }, [vestingSchedules]);
   const userBalance = useMemo(() => {
     if (icoBalance) {
       const tokensPurchased = Number(BigInt(icoBalance.tokensPurchased)) / 1e18;
@@ -164,6 +179,16 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: Private
         onPageChange={setTxPage}
         className="mt-8 max-w-5xl"
       />
+
+      {/* Vesting Progress */}
+      {vestingEntries.length > 0 && (
+        <VestingProgressBlock
+          vestingEntries={vestingEntries}
+          tokenSymbol={ICO_CONFIG.TOKEN.symbol}
+          tokenPrice={effectiveProgress?.priceUsd}
+          className="mt-8"
+        />
+      )}
 
       {/* Purchase Confirmation Modal */}
       {modalProps && (

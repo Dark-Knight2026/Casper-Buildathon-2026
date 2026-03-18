@@ -149,6 +149,29 @@ export interface IcoBalanceResponse {
   currentValue: number;
 }
 
+export interface StakingPortfolioResponse {
+  bigInWallet: number | null;
+  bigStaked: number | null;
+  change24hPercent: number | null;
+  estimatedUsdValue: number | null;
+  rewardsEarned: number | null;
+  totalBig: number | null;
+}
+
+export interface VestingSchedule {
+  id: string;
+  lockedAmount: number;
+  purchaseTimestamp: number;
+  unlockTimestamp: number;
+  unlockedAmount: number;
+}
+
+export interface VestingSchedulesResponse {
+  data: VestingSchedule[];
+  item_count: number;
+  page_count: number;
+}
+
 export interface IcoProgressResponse {
   tokensSold: string;
   totalAllocation: string;
