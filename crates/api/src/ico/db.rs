@@ -61,21 +61,51 @@ pub async fn fetch_buyer_tokens(pool: &PgPool, buyer_address: &str) -> Result<St
     Ok(value.unwrap_or_else(|| "0".to_owned()))
 }
 
-/// Returns `(tokens_sold, tokens_remaining)` as TEXT strings.
+/// Snapshot of ICO progress data fetched atomically.
+#[derive(Debug)]
+pub struct ProgressSnapshot {
+    /// Active ICO schedule, if any.
+    pub schedule: Option<IcoScheduleRow>,
+    /// Total tokens sold (U256 as TEXT).
+    pub tokens_sold: String,
+    /// Tokens remaining (U256 as TEXT, clamped to zero).
+    pub tokens_remaining: String,
+}
+
+/// Fetches ICO schedule and sale totals in a single REPEATABLE READ transaction.
 ///
-/// `tokens_remaining` is clamped to zero via `GREATEST(... , 0)`.
-/// `total_allocation` is parsed to [`Decimal`] for precise SQL arithmetic.
+/// Ensures `schedule` and `tokens_sold`/`tokens_remaining` reflect the same
+/// database snapshot, preventing inconsistencies from concurrent purchases.
 ///
 /// # Errors
 ///
 /// Returns `sqlx::Error` if the database query fails.
 #[inline]
-pub async fn fetch_sale_totals(
+pub async fn fetch_progress_snapshot(
     pool: &PgPool,
     total_allocation: &str,
-) -> Result<(String, String), sqlx::Error> {
-    let alloc: Decimal = total_allocation.parse().unwrap_or(Decimal::ZERO);
+) -> Result<ProgressSnapshot, sqlx::Error> {
+    let mut tx = pool.begin().await?;
+    sqlx::query!("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
+        .execute(tx.as_mut())
+        .await?;
 
+    let schedule = sqlx::query_as!(
+        IcoScheduleRow,
+        r"
+            SELECT sale_amount, price
+            FROM ico_schedules
+            ORDER BY
+                CASE WHEN EXTRACT(EPOCH FROM NOW())::BIGINT BETWEEN start_timestamp AND end_timestamp
+                     THEN 0 ELSE 1 END,
+                created_at DESC
+            LIMIT 1
+        ",
+    )
+    .fetch_optional(tx.as_mut())
+    .await?;
+
+    let alloc: Decimal = total_allocation.parse().unwrap_or(Decimal::ZERO);
     let row = sqlx::query!(
         r"
             SELECT
@@ -85,12 +115,16 @@ pub async fn fetch_sale_totals(
         ",
         alloc,
     )
-    .fetch_one(pool)
+    .fetch_one(tx.as_mut())
     .await?;
 
-    Ok((
-        row.tokens_sold.unwrap_or_else(|| "0".to_owned()),
-        row.tokens_remaining
+    tx.commit().await?;
+
+    Ok(ProgressSnapshot {
+        schedule,
+        tokens_sold: row.tokens_sold.unwrap_or_else(|| "0".to_owned()),
+        tokens_remaining: row
+            .tokens_remaining
             .unwrap_or_else(|| total_allocation.to_owned()),
-    ))
+    })
 }
