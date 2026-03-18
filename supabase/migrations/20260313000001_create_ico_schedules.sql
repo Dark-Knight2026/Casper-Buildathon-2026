@@ -22,6 +22,9 @@ CREATE TABLE IF NOT EXISTS ico_schedules (
     updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+ALTER TABLE ico_schedules ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Public read-only" ON ico_schedules FOR SELECT USING (true);
+
 COMMENT ON TABLE  ico_schedules IS 'ICO round schedules indexed from ICOScheduleAdded contract events';
 COMMENT ON COLUMN ico_schedules.price IS 'Token price with 6 decimals (500000 = $0.50)';
 COMMENT ON COLUMN ico_schedules.sale_amount IS 'Total allocation in minimal units (decimals=18)';
