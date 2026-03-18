@@ -1,0 +1,32 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT price, sale_amount, block_height FROM ico_schedules\n            WHERE schedule_id = 'schedule-guard'\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "price",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "sale_amount",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "block_height",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "609a8a0c3dcc92a5d830faf7e8fac5ddc912ee21bd058d1fe22f8c6793e68252"
+}

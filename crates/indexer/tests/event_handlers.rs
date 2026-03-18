@@ -792,3 +792,88 @@ async fn tokens_purchased_without_caller_defers_to_backfill(pool: PgPool) {
         "deferred event must not create blockchain_transactions row"
     );
 }
+
+/// A stale `IcoScheduleAdded` event (lower `block_height`) must NOT overwrite
+/// a newer schedule row. The `block_height` guard prevents out-of-order updates.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn ico_schedule_added_stale_event_does_not_overwrite(pool: PgPool) {
+    common::disable_rls(&pool).await;
+
+    let deploy_hash_new = "0000000000000000000000000000000000000000000000000000000000009903";
+    let deploy_hash_old = "0000000000000000000000000000000000000000000000000000000000009904";
+
+    // Newer event first (block_height=500)
+    processor::process_event(
+        &pool,
+        &EventRegistry::new(),
+        &HashSet::new(),
+        &RawEvent {
+            contract_hash: "ico_hash".to_owned(),
+            deploy_hash: deploy_hash_new.to_owned(),
+            block_height: 500,
+            caller: String::new(),
+            contract_type: ContractType::Ico,
+            event_name: "ICOScheduleAdded".to_owned(),
+            event_data: json!({
+                "id": "schedule-guard",
+                "start_timestamp": 1_000_000_u64,
+                "end_timestamp": 2_000_000_u64,
+                "sale_amount": "999",
+                "price": "750000"
+            }),
+            block_timestamp: None,
+            transform_idx: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    // Stale event arrives later (block_height=100) - must NOT overwrite
+    processor::process_event(
+        &pool,
+        &EventRegistry::new(),
+        &HashSet::new(),
+        &RawEvent {
+            contract_hash: "ico_hash".to_owned(),
+            deploy_hash: deploy_hash_old.to_owned(),
+            block_height: 100,
+            caller: String::new(),
+            contract_type: ContractType::Ico,
+            event_name: "ICOScheduleAdded".to_owned(),
+            event_data: json!({
+                "id": "schedule-guard",
+                "start_timestamp": 1_000_000_u64,
+                "end_timestamp": 2_000_000_u64,
+                "sale_amount": "50",
+                "price": "100000"
+            }),
+            block_timestamp: None,
+            transform_idx: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let row = sqlx::query!(
+        r"
+            SELECT price, sale_amount, block_height FROM ico_schedules
+            WHERE schedule_id = 'schedule-guard'
+        "
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(
+        row.price, "750000",
+        "stale event must not overwrite newer price"
+    );
+    assert_eq!(
+        row.sale_amount, "999",
+        "stale event must not overwrite newer sale_amount"
+    );
+    assert_eq!(
+        row.block_height, 500,
+        "stale event must not overwrite newer block_height"
+    );
+}
