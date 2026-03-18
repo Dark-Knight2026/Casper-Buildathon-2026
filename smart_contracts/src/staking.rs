@@ -89,7 +89,7 @@ pub mod errors {
         UnbondingPeriodNotFinished = 63_009,
         NoActiveStake = 63_010,
         CallerNotAuthorizedToStake = 63_011,
-        UnstakeBlockedByVestingLock = 63,
+        UnstakeBlockedByVestingLock = 63_012,
     }
 }
 
