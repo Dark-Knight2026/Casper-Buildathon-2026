@@ -1950,6 +1950,7 @@ dependencies = [
  "config",
  "dotenv",
  "futures-util",
+ "hex",
  "reqwest",
  "rustls",
  "secrecy",

@@ -1,4 +1,4 @@
-//! REST backfill client for historical event synchronization.
+//! Backfill client for historical event synchronization.
 //!
 //! Uses strategy-per-contract-type:
 //!
@@ -10,12 +10,17 @@
 //!   (`amount_to_spend`, `currency`) and the BIG Transfer amount fetched from
 //!   CSPR.cloud `/ft-token-actions` (filtered by `from_hash == ICO contract hash`).
 //!
-//! - **Treasury / others**: not yet implemented — rely on live WebSocket streaming.
+//! - **CES contracts** (Vesting, Staking): Casper node RPC reads the `__events`
+//!   dictionary directly via `state_get_dictionary_item`, then parses bytesrepr
+//!   binary CES events with hardcoded field schemas.
+//!
+//! - **Treasury / others**: not yet implemented - rely on live WebSocket streaming.
 //!
 //! All events are funneled through the same [`processor`] pipeline used by
 //! streaming, so balance updates and idempotency logic is shared.
 
 pub mod cep18;
+pub mod ces;
 pub mod db;
 pub mod ico;
 
@@ -112,6 +117,16 @@ pub async fn run_backfill(config: &IndexerConfig, db_pool: &PgPool) -> IndexerRe
                 } else {
                     tracing::warn!("ICO backfill skipped - BIG contract hash not configured");
                 }
+            }
+            // CES contracts: backfill by reading __events dictionary via node RPC.
+            ContractType::Vesting | ContractType::Staking => {
+                ces::backfill_ces(
+                    &context,
+                    contract.contract_type,
+                    contract.hash,
+                    contract.start_block,
+                )
+                .await?;
             }
             _ => {
                 tracing::warn!(

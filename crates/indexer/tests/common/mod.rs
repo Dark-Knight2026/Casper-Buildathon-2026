@@ -98,6 +98,7 @@ pub fn test_config(rest_url: String) -> IndexerConfig {
             api_token: "test-token".to_owned().into(),
             rest_url,
             wss_url: "wss://test".to_owned(),
+            node_rpc_url: "https://node.test/rpc".to_owned(),
         },
         contracts: ContractRegistry::default(),
         backfill_rate_limit_ms: 0,

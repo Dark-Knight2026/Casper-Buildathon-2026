@@ -59,3 +59,60 @@ pub async fn update_cursor(db: &PgPool, contract_hash: &str, last_block: i64) ->
 
     Ok(())
 }
+
+/// Retrieve the last processed CES event index for a specific contract.
+///
+/// Uses `stream_type = 'ces_backfill'` to avoid collision with block-height
+/// cursors used by CEP-18/ICO backfill.
+///
+/// Returns `None` if this contract has never been CES-backfilled.
+///
+/// # Errors
+///
+/// Returns [`IndexerError::Database`](crate::error::IndexerError::Database)
+/// if the query fails.
+#[inline]
+pub async fn get_ces_cursor(db: &PgPool, contract_hash: &str) -> IndexerResult<Option<i64>> {
+    let row = sqlx::query_scalar!(
+        r"
+            SELECT cursor_value FROM event_cursors
+            WHERE stream_type = 'ces_backfill' AND contract_hash = $1
+        ",
+        contract_hash
+    )
+    .fetch_optional(db)
+    .await?;
+
+    Ok(row)
+}
+
+/// Persist the CES backfill position for a specific contract (upsert).
+///
+/// `last_index` is the highest `__events` dictionary index processed so far.
+///
+/// # Errors
+///
+/// Returns [`IndexerError::Database`](crate::error::IndexerError::Database)
+/// if the upsert fails.
+#[inline]
+pub async fn update_ces_cursor(
+    db: &PgPool,
+    contract_hash: &str,
+    last_index: i64,
+) -> IndexerResult<()> {
+    sqlx::query!(
+        r"
+            INSERT INTO event_cursors (stream_type, contract_hash, cursor_value, last_updated_at)
+            VALUES ('ces_backfill', $1, $2, NOW())
+            ON CONFLICT (stream_type, contract_hash) DO UPDATE SET
+                cursor_value    = $2,
+                last_updated_at = NOW()
+        ",
+        contract_hash,
+        last_index,
+    )
+    .execute(db)
+    .await?;
+
+    Ok(())
+}
