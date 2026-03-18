@@ -18,7 +18,9 @@ export function UserTokenBalance({
   currentValue: currentValueProp,
   className,
 }: UserTokenBalanceProps) {
-  const currentValue = currentValueProp ?? tokensPurchased * tokenPrice;
+  const safeTokensPurchased = tokensPurchased ?? 0;
+  const safeTotalSpentUSD = totalSpentUSD ?? 0;
+  const currentValue = currentValueProp ?? safeTokensPurchased * tokenPrice;
 
   return (
     <Card className={cn('p-6 w-full', className)}>
@@ -32,7 +34,7 @@ export function UserTokenBalance({
               Tokens Purchased
             </span>
             <span className="text-2xl font-bold text-[hsl(var(--ico-text-primary))]">
-              {tokensPurchased.toLocaleString()} {tokenSymbol}
+              {safeTokensPurchased.toLocaleString()} {tokenSymbol}
             </span>
           </div>
           <div className="flex flex-col gap-1">
@@ -40,7 +42,7 @@ export function UserTokenBalance({
               Total Spent
             </span>
             <span className="text-2xl font-bold text-[hsl(var(--ico-text-primary))]">
-              ${totalSpentUSD.toLocaleString()}
+              ${safeTotalSpentUSD.toLocaleString()}
             </span>
           </div>
           <div className="flex flex-col gap-1">

@@ -80,7 +80,7 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: Private
   const userBalance = useMemo(() => {
     if (icoBalance) {
       const tokensPurchased = Number(BigInt(icoBalance.tokensPurchased)) / 1e18;
-      return { tokensPurchased, totalSpentUSD: icoBalance.totalSpentUSD, currentValue: icoBalance.currentValue };
+      return { tokensPurchased, totalSpentUSD: icoBalance.totalSpentUsd ?? 0, currentValue: icoBalance.currentValue ?? undefined };
     }
     const tokensPurchased = transactions.reduce((sum, tx) => sum + tx.tokensReceived, 0);
     return { tokensPurchased, totalSpentUSD: tokensPurchased * tokenPrice, currentValue: undefined };

@@ -143,7 +143,7 @@ export interface ICOStateResponse {
 // Backend API response types
 export interface IcoBalanceResponse {
   tokensPurchased: string;
-  totalSpentUSD: number;
+  totalSpentUsd: number;
   tokenPrice: number;
   tokenSymbol: string;
   currentValue: number;
