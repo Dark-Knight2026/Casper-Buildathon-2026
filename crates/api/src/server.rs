@@ -27,7 +27,7 @@ use utoipa_swagger_ui::SwaggerUi;
 
 use crate::{
     ApiDoc, AppState, RedisStore, ServerConfig, ServerError, analytics, auth, health, ico, tax,
-    transactions,
+    transactions, vesting,
 };
 
 // Public router ---------------------------------------------------------------
@@ -99,6 +99,7 @@ pub fn public_data_router() -> OpenApiRouter<Arc<AppState>> {
     OpenApiRouter::new()
         .nest("/transactions", transactions_router())
         .nest("/ico", ico_router())
+        .nest("/vesting", vesting_router())
         .route_layer(GovernorLayer::new(rate_limit))
 }
 
@@ -129,6 +130,15 @@ pub fn ico_router() -> OpenApiRouter<Arc<AppState>> {
     OpenApiRouter::new()
         .routes(routes!(ico::handlers::get_ico_balance))
         .routes(routes!(ico::handlers::get_ico_progress))
+}
+
+/// Creates an `OpenAPI` router for vesting endpoints
+#[inline]
+pub fn vesting_router() -> OpenApiRouter<Arc<AppState>> {
+    OpenApiRouter::new()
+        .routes(routes!(vesting::handlers::get_vesting_schedules))
+        .routes(routes!(vesting::handlers::get_token_supply))
+        .routes(routes!(vesting::handlers::get_release_schedule))
 }
 
 // Full router -----------------------------------------------------------------

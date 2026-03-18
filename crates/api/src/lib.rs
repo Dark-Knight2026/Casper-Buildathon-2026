@@ -11,6 +11,7 @@
 //! - [`tax`] - Tax calculation endpoints
 //! - [`analytics`] - Property performance analytics
 //! - [`health`] - Health check endpoint
+//! - [`vesting`] - Vesting schedule endpoints
 //! - [`common`] - Shared utilities (config, errors, crypto, models)
 //! - [`openapi`] - `OpenAPI` documentation configuration
 //! - [`server`] - Server startup logic
@@ -33,6 +34,8 @@ pub mod server;
 pub mod tax;
 /// Transaction history feature module.
 pub mod transactions;
+/// Vesting schedule feature module.
+pub mod vesting;
 
 // Re-exports
 pub use auth::AuthUser;

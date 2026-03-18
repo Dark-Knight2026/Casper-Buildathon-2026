@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT COALESCE(SUM(th.balance::NUMERIC), 0)::TEXT\n            FROM token_holdings th\n            WHERE th.token_type = 'BIG'\n              AND th.user_address NOT IN (\n                  SELECT contract_hash FROM contract_registry WHERE is_active = TRUE\n              )\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "coalesce",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "fde660c1e654ace4f254b4597ac403ed3c271ef8992584c00cdad6e978cda0ec"
+}

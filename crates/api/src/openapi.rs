@@ -7,7 +7,7 @@ use utoipa::{
     openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme},
 };
 
-use crate::{analytics, auth, health, ico, tax, transactions};
+use crate::{analytics, auth, health, ico, tax, transactions, vesting};
 
 /// `OpenAPI` documentation configuration.
 ///
@@ -25,6 +25,9 @@ use crate::{analytics, auth, health, ico, tax, transactions};
     ),
     components(
         schemas(
+            // Common models
+            crate::common::UserRole,
+            crate::common::Claims,
             // Auth models
             auth::models::NonceRequest,
             auth::models::NonceResponse,
@@ -51,9 +54,11 @@ use crate::{analytics, auth, health, ico, tax, transactions};
             // ICO models
             ico::models::IcoBalanceResponse,
             ico::models::IcoProgressResponse,
-            // Common models
-            crate::common::UserRole,
-            crate::common::Claims,
+            // Vesting models
+            vesting::models::VestingScheduleItem,
+            vesting::models::TokenSupplyResponse,
+            vesting::models::ReleaseSchedulePoint,
+            vesting::models::ReleaseScheduleResponse,
         )
     ),
     modifiers(&SecurityAddon),
@@ -63,7 +68,8 @@ use crate::{analytics, auth, health, ico, tax, transactions};
         (name = "Tax", description = "Tax calculation endpoints"),
         (name = "Analytics", description = "Property analytics endpoints"),
         (name = "Transactions", description = "Transaction history endpoints"),
-        (name = "ICO", description = "ICO balance and progress endpoints")
+        (name = "ICO", description = "ICO balance and progress endpoints"),
+        (name = "Vesting", description = "Vesting schedule and token supply endpoints")
     )
 )]
 pub struct ApiDoc;
