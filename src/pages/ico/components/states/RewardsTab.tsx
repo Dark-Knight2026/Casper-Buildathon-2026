@@ -1,31 +1,29 @@
-import { memo } from 'react';
+import { memo, useState } from 'react';
+import { useICOWallet } from '@/hooks/ico/useICOWallet';
+import { useRewardsHistory } from '@/hooks/ico/useRewardsHistory';
+import { useStakingInfo } from '@/hooks/ico/useStakingInfo';
+import { deriveAccountHash } from '@/lib/blockchain/accountUtils';
 import { Card } from '../shared/Card';
 import { SubTitle } from '../shared/SubTitle';
 import { Badge } from '@/components/ui/badge';
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent } from '@/components/ui/chart';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { Coins, Percent, Clock, ArrowRightLeft, Users, Timer, Trophy } from 'lucide-react';
-import { MOCK_STAKING} from '@/constants/icoMockData';
+import { PeriodSelector } from '../shared/PeriodSelector';
 
 const rewardsChartConfig = {
   stakingPool: { label: 'Staking Reserve Pool', color: '#1F7A63' },
   txFees: { label: 'Transaction Fees', color: '#6BB5A0' },
 };
 
-// Mock user rewards accumulation over days
-// Two sources per whitepaper section 6:
-// 1. Staking Reserve Pool — 6% annual release from 1B BIG reserve, distributed pro rata
-// 2. Transaction Fees — 2% fee on KeyChain ecosystem transactions via Dynamic Scaling Model
-const MOCK_REWARDS_DATA = [
-  { day: 1,  stakingPool: 82,   txFees: 12 },
-  { day: 10, stakingPool: 822,  txFees: 135 },
-  { day: 20, stakingPool: 1644, txFees: 310 },
-  { day: 30, stakingPool: 2466, txFees: 520 },
-  { day: 45, stakingPool: 3699, txFees: 890 },
-  { day: 60, stakingPool: 4932, txFees: 1340 },
-  { day: 75, stakingPool: 6165, txFees: 1870 },
-  { day: 90, stakingPool: 7397, txFees: 2480 },
+const PERIOD_OPTIONS: { label: string; value: number }[] = [
+  { label: '1m', value: 30 },
+  { label: '2m', value: 60 },
+  { label: '3m', value: 90 },
+  { label: '6m', value: 180 },
+  { label: '1y', value: 365 },
 ];
+
 
 const REWARDS_LIST: { title: string; description: string; icon: typeof ArrowRightLeft; badge?: string }[] = [
   {
@@ -59,6 +57,14 @@ const REWARDS_LIST: { title: string; description: string; icon: typeof ArrowRigh
 ];
 
 export const RewardsTab = memo(function RewardsTab() {
+  const { account } = useICOWallet();
+  const accountHash = account?.publicKey ? deriveAccountHash(account.publicKey) : null;
+  const [rewardsPeriod, setRewardsPeriod] = useState(90);
+  const { data: rewardsHistory } = useRewardsHistory(accountHash, rewardsPeriod);
+  console.log('rewardsHistory:', rewardsHistory);
+  const { data: stakingInfo } = useStakingInfo(accountHash);
+  console.log('stakingInfo:', stakingInfo);
+
   return (
     <div className="space-y-6">
       {/* Title */}
@@ -78,7 +84,7 @@ export const RewardsTab = memo(function RewardsTab() {
               <div>
                 <p className="text-sm text-[hsl(var(--ico-text-secondary))]">Staked Tokens</p>
                 <p className="text-lg font-semibold text-[hsl(var(--ico-text-primary))]">
-                  {MOCK_STAKING.stakedTokens} BIG
+                  {stakingInfo?.stakedTokens ?? 0} BIG
                 </p>
               </div>
             </div>
@@ -89,7 +95,7 @@ export const RewardsTab = memo(function RewardsTab() {
               <div>
                 <p className="text-sm text-[hsl(var(--ico-text-secondary))]">Current APY</p>
                 <p className="text-lg font-semibold text-[hsl(var(--ico-text-primary))]">
-                  {MOCK_STAKING.currentAPY}%
+                  {stakingInfo?.currentApy ?? 0}%
                 </p>
               </div>
             </div>
@@ -100,7 +106,7 @@ export const RewardsTab = memo(function RewardsTab() {
               <div>
                 <p className="text-sm text-[hsl(var(--ico-text-secondary))]">Next Rewards</p>
                 <p className="text-lg font-semibold text-[hsl(var(--ico-text-primary))]">
-                  {MOCK_STAKING.nextRewards}
+                  —
                 </p>
               </div>
             </div>
@@ -111,15 +117,18 @@ export const RewardsTab = memo(function RewardsTab() {
       {/* Your Rewards Chart */}
       <Card className="p-5">
         <div className="w-full">
-          <h3 className="text-lg font-semibold text-[hsl(var(--ico-text-primary))] mb-1">
-            Your Rewards
-          </h3>
+          <div className="flex items-center justify-between mb-1">
+            <h3 className="text-lg font-semibold text-[hsl(var(--ico-text-primary))]">
+              Your Rewards
+            </h3>
+            <PeriodSelector options={PERIOD_OPTIONS} selected={rewardsPeriod} onChange={setRewardsPeriod} />
+          </div>
           <p className="text-sm text-[hsl(var(--ico-text-secondary))] mb-4">
             Accumulated BIG tokens by reward source
           </p>
           <ChartContainer config={rewardsChartConfig} className="h-70 w-full aspect-auto md:aspect-video">
             <AreaChart
-              data={MOCK_REWARDS_DATA}
+              data={rewardsHistory?.data ?? []}
               margin={{ top: 10, left: 20, right: 12, bottom: 20 }}
             >
               <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="hsl(var(--ico-border-color))" />

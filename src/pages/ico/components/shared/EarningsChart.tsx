@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { Card } from './Card';
+import { PeriodSelector } from './PeriodSelector';
 import { useStakingEarnings } from '@/hooks/ico/useStakingEarnings';
 import type { EarningsPeriod } from '@/types/ico';
 
@@ -12,7 +13,13 @@ const chartConfig = {
   },
 };
 
-const PERIODS: EarningsPeriod[] = ['1m', '3m', '6m', '1y', 'all'];
+const PERIOD_OPTIONS = [
+  { label: '1m', value: '1m' as EarningsPeriod },
+  { label: '3m', value: '3m' as EarningsPeriod },
+  { label: '6m', value: '6m' as EarningsPeriod },
+  { label: '1y', value: '1y' as EarningsPeriod },
+  { label: 'all', value: 'all' as EarningsPeriod },
+];
 
 interface EarningsChartProps {
   accountHash: string | null | undefined;
@@ -30,21 +37,7 @@ export function EarningsChart({ accountHash, className }: EarningsChartProps) {
           <h3 className="text-lg font-semibold text-[hsl(var(--ico-text-primary))]">
             Earnings Overview
           </h3>
-          <div className="flex gap-1">
-            {PERIODS.map((p) => (
-              <button
-                key={p}
-                onClick={() => setPeriod(p)}
-                className={`px-2.5 py-1 text-xs rounded-md transition-colors ${
-                  period === p
-                    ? 'bg-[hsl(var(--ico-brand-primary))] text-white'
-                    : 'text-[hsl(var(--ico-text-secondary))] hover:text-[hsl(var(--ico-text-primary))]'
-                }`}
-              >
-                {p}
-              </button>
-            ))}
-          </div>
+          <PeriodSelector options={PERIOD_OPTIONS} selected={period} onChange={setPeriod} />
         </div>
         <ChartContainer config={chartConfig} className="h-[200px] w-full">
           <AreaChart data={stakingEarnings?.data ?? []} margin={{ left: 12, right: 12 }}>

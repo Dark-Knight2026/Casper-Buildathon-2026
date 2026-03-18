@@ -151,6 +151,16 @@ export interface IcoBalanceResponse {
 
 export type EarningsPeriod = '1m' | '3m' | '6m' | '1y' | 'all';
 
+export interface RewardsHistoryDataPoint {
+  day: number;
+  stakingPool: number;
+  txFees: number;
+}
+
+export interface RewardsHistoryResponse {
+  data: RewardsHistoryDataPoint[];
+}
+
 export interface EarningsDataPoint {
   month: string;
   earnings: number;
