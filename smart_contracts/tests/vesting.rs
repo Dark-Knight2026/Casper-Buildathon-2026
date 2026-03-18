@@ -8,6 +8,9 @@ use odra_modules::access::errors::Error as AccessError;
 use leasefi_contracts::constants::{
     ONE_MONTH_IN_MILLISECONDS, PRIVATE_SALE_CLIFF_DURATION, PRIVATE_SALE_VESTING_DURATION,
 };
+use leasefi_contracts::staking::{
+    errors::Error::UnstakeBlockedByVestingLock, Staking, StakingHostRef, StakingInitArgs,
+};
 use leasefi_contracts::tailor_coin::{TailorCoin, TailorCoinHostRef, TailorCoinInitArgs};
 use leasefi_contracts::vesting::{
     errors::Error,
@@ -15,7 +18,7 @@ use leasefi_contracts::vesting::{
     Vesting, VestingHostRef, VestingId, VestingInitArgs,
 };
 
-use crate::staking::{Staking, StakingInitArgs};
+use crate::constants::UNBONDING_PERIOD;
 
 // =============================================================================
 // Test Constants
@@ -47,6 +50,7 @@ struct Context {
     env: HostEnv,
     tailor_coin: TailorCoinHostRef,
     vesting: VestingHostRef,
+    staking: StakingHostRef,
     users: Users,
     cliff_duration: u64,
     vesting_duration: u64,
@@ -69,18 +73,20 @@ fn setup(env: HostEnv) -> Context {
         },
     );
 
-    let staking = Staking::deploy(&env, StakingInitArgs { owner: users.owner });
-
-    // Set up Vesting contract
     let mut vesting = Vesting::deploy(&env, VestingInitArgs { owner: users.owner });
-    vesting.set_tailor_coin(tailor_coin.address());
-    vesting.set_staking(staking.address());
+    let mut staking = Staking::deploy(&env, StakingInitArgs { owner: users.owner });
+
     vesting.add_whitelisted_creator(users.owner);
+    vesting.set_staking(staking.address());
+
+    staking.set_tailor_coin(tailor_coin.address());
+    staking.set_vesting(vesting.address());
 
     Context {
         env,
         tailor_coin,
         vesting,
+        staking,
         users,
         cliff_duration: PRIVATE_SALE_CLIFF_DURATION,
         vesting_duration: PRIVATE_SALE_VESTING_DURATION,
@@ -98,9 +104,12 @@ fn create_test_schedule(
     cliff_duration: u64,
     vesting_duration: u64,
 ) -> VestingId {
-    // Note: In production, the ICO contract transfers tokens directly to the Staking contract
-    // before calling create_schedule.
-    // For testing, we just call create_schedule.
+    ctx.env.set_caller(ctx.users.owner);
+
+    ctx.tailor_coin
+        .approve(&ctx.staking.address(), &total_amount);
+    ctx.staking.stake_for(beneficiary, total_amount);
+
     ctx.vesting
         .create_schedule(beneficiary, total_amount, cliff_duration, vesting_duration)
 }
@@ -115,46 +124,9 @@ fn test_init_should_initialize_contract_properly() {
 
     assert_eq!(ctx.vesting.get_owner(), ctx.users.owner, "Invalid Owner");
     assert_eq!(
-        ctx.vesting.get_tailor_coin_contract_address(),
-        ctx.tailor_coin.address(),
-        "Invalid TailorCoin contract address"
-    );
-    assert_eq!(
         ctx.vesting.get_schedules_count(),
         U256::zero(),
         "Should start with zero schedules"
-    );
-}
-
-// =============================================================================
-// set_tailor_coin()
-// =============================================================================
-
-#[test]
-fn test_set_tailor_coin_should_revert_if_not_owner_is_calling() {
-    let mut ctx = setup(odra_test::env());
-    ctx.env.set_caller(ctx.users.alice);
-
-    assert_eq!(
-        ctx.vesting
-            .try_set_tailor_coin(ctx.users.alice)
-            .unwrap_err(),
-        AccessError::CallerNotTheOwner.into(),
-        "Should revert when is called by non-owner",
-    );
-}
-
-#[test]
-fn test_set_tailor_coin_should_set_tailor_coin_properly() {
-    let mut ctx = setup(odra_test::env());
-    let new_address = ctx.users.alice;
-
-    ctx.vesting.set_tailor_coin(new_address);
-
-    assert_eq!(
-        ctx.vesting.get_tailor_coin_contract_address(),
-        new_address,
-        "Invalid TailorCoin contract address",
     );
 }
 
@@ -323,7 +295,7 @@ fn test_create_schedule_should_create_properly() {
     let alice = ctx.users.alice;
 
     let prev_owner_balance = ctx.tailor_coin.balance_of(&ctx.users.owner);
-    let prev_vesting_balance = ctx.tailor_coin.balance_of(&ctx.vesting.address());
+    let prev_staking_balance = ctx.tailor_coin.balance_of(&ctx.staking.address());
 
     let vesting_id = create_test_schedule(&mut ctx, alice, vesting_amount(), cliff, vesting);
 
@@ -336,14 +308,16 @@ fn test_create_schedule_should_create_properly() {
     );
 
     let current_owner_balance = ctx.tailor_coin.balance_of(&ctx.users.owner);
-    let current_vesting_balance = ctx.tailor_coin.balance_of(&ctx.vesting.address());
+    let current_staking_balance = ctx.tailor_coin.balance_of(&ctx.staking.address());
     assert_eq!(
-        current_owner_balance, prev_owner_balance,
-        "Owner balance should not change"
+        current_owner_balance,
+        prev_owner_balance - vesting_amount(),
+        "Owner should send tokens to staking on schedule creation"
     );
     assert_eq!(
-        current_vesting_balance, prev_vesting_balance,
-        "Vesting contract balance should not change"
+        current_staking_balance,
+        prev_staking_balance + vesting_amount(),
+        "Staking contract should hold the tokens"
     );
 
     // Verified stored data
@@ -355,9 +329,9 @@ fn test_create_schedule_should_create_properly() {
         "Invalid total amount"
     );
     assert_eq!(
-        schedule.claimed_amount,
+        schedule.unstaked_amount,
         U256::zero(),
-        "Claimed should be zero"
+        "Unstaked should be zero"
     );
     assert_eq!(schedule.cliff_duration, cliff, "Invalid Cliff duration");
     assert_eq!(
@@ -482,7 +456,56 @@ fn test_claim_should_revert_if_still_in_cliff_period() {
 }
 
 #[test]
-fn test_claim_should_update_claimed_amount_after_cliff() {
+fn test_claim_should_revert_if_active_unbonding_from_direct_staking() {
+    let mut ctx = setup(odra_test::env());
+    let cliff = ctx.cliff_duration;
+    let vesting = ctx.vesting_duration;
+    let alice = ctx.users.alice;
+    let stake_amount = vesting_amount();
+
+    // Alice stakes directly (outside of vesting)
+    ctx.env.set_caller(ctx.users.owner);
+    ctx.tailor_coin.transfer(&alice, &stake_amount);
+
+    ctx.env.set_caller(alice);
+    ctx.tailor_coin
+        .approve(&ctx.staking.address(), &stake_amount);
+    ctx.staking.stake_for(alice, stake_amount);
+
+    // Alice initiates unstaking directly via staking contract
+    ctx.staking.unstake_for(alice, stake_amount / 2);
+
+    // Verify Alice has an active unbonding position
+    let staker_info = ctx.staking.get_staker_info(alice);
+    assert!(
+        !staker_info.unbonding_amount.is_zero(),
+        "Alice should have an active unbonding position"
+    );
+
+    // Create a vesting schedule for Alice
+    ctx.env.set_caller(ctx.users.owner);
+    ctx.tailor_coin
+        .approve(&ctx.staking.address(), &stake_amount);
+    ctx.staking.stake_for(alice, stake_amount);
+
+    let vesting_id = ctx
+        .vesting
+        .create_schedule(alice, stake_amount, cliff, vesting);
+
+    // Advance past cliff to make tokens claimable
+    ctx.env.advance_block_time(cliff);
+
+    // Try to claim from vesting while having active unbonding from direct staking
+    ctx.env.set_caller(alice);
+    assert_eq!(
+        ctx.vesting.try_claim(vesting_id).unwrap_err(),
+        Error::ClaimBlockedByActiveUnbonding.into(),
+        "Should revert when beneficiary has active unbonding from direct staking"
+    );
+}
+
+#[test]
+fn test_claim_should_update_unstaked_amount_after_cliff() {
     let mut ctx = setup(odra_test::env());
     let cliff = ctx.cliff_duration;
     let vesting = ctx.vesting_duration;
@@ -501,8 +524,8 @@ fn test_claim_should_update_claimed_amount_after_cliff() {
     let schedule = ctx.vesting.get_schedule(vesting_id).unwrap();
 
     assert_eq!(
-        schedule.claimed_amount, expected_claim,
-        "Claim amount should be 50% (cliff/vesting)"
+        schedule.unstaked_amount, expected_claim,
+        "Unstaked amount should be 50% (cliff/vesting)"
     );
 
     assert!(
@@ -518,8 +541,62 @@ fn test_claim_should_update_claimed_amount_after_cliff() {
     );
 }
 
-// TODO: Write a test to test claim should increase beneficiary balance by claimed amount
-// when the staking function is implemented
+#[test]
+fn test_claim_should_increase_beneficiary_balance_by_unstaked_amount() {
+    let mut ctx = setup(odra_test::env());
+    let cliff = ctx.cliff_duration;
+    let vesting = ctx.vesting_duration;
+    let alice = ctx.users.alice;
+
+    let vesting_id = create_test_schedule(&mut ctx, alice, vesting_amount(), cliff, vesting);
+
+    // Advance to exactly the cliff, 50% vested
+    ctx.env.advance_block_time(cliff);
+
+    let prev_alice_balance = ctx.tailor_coin.balance_of(&alice);
+    let prev_staking_balance = ctx.tailor_coin.balance_of(&ctx.staking.address());
+
+    // Claim initiates unstaking (enters unbonding period)
+    ctx.env.set_caller(alice);
+    ctx.vesting.claim(vesting_id);
+
+    let expected_claim = vesting_amount() / 2;
+
+    // Balance should not increase yet, tokens are in unbonding
+    let mid_alice_balance = ctx.tailor_coin.balance_of(&alice);
+    assert_eq!(
+        mid_alice_balance, prev_alice_balance,
+        "Balance should not increase immediately after claim, tokens are unbonding"
+    );
+
+    ctx.env.advance_block_time(UNBONDING_PERIOD + 1);
+
+    // Now withdraw the unbonded tokens
+    ctx.env.set_caller(alice);
+    ctx.staking.withdraw_unbonded();
+
+    // Verify beneficiary balance increased
+    let curr_alice_balance = ctx.tailor_coin.balance_of(&alice);
+    let curr_staking_balance = ctx.tailor_coin.balance_of(&ctx.staking.address());
+
+    assert_eq!(
+        curr_alice_balance,
+        prev_alice_balance + expected_claim,
+        "Beneficiary balance should increase by claimed amount after withdrawing unbonded"
+    );
+    assert_eq!(
+        curr_staking_balance,
+        prev_staking_balance - expected_claim,
+        "Staking contract balance should decrease by claimed amount"
+    );
+
+    // Verify schedule state
+    let schedule = ctx.vesting.get_schedule(vesting_id).unwrap();
+    assert_eq!(
+        schedule.unstaked_amount, expected_claim,
+        "Unstaked amount should be tracked in schedule"
+    );
+}
 
 #[test]
 fn test_claim_should_claim_full_amt_after_vesting_ends() {
@@ -538,9 +615,9 @@ fn test_claim_should_claim_full_amt_after_vesting_ends() {
     let schedule = ctx.vesting.get_schedule(vesting_id).unwrap();
 
     assert_eq!(
-        schedule.claimed_amount,
+        schedule.unstaked_amount,
         vesting_amount(),
-        "Claimed amt should equal total amount",
+        "Unstaked amt should equal total amount",
     );
 
     // Nothing left to claim
@@ -571,12 +648,17 @@ fn test_claim_should_allow_incremental_claims() {
     let schedule = ctx.vesting.get_schedule(vesting_id).unwrap();
 
     assert_eq!(
-        schedule.claimed_amount, first_claim,
+        schedule.unstaked_amount, first_claim,
         "First claim should be 50%",
     );
 
     // Second claim at 9 months (75%)
     ctx.env.advance_block_time(3 * ONE_MONTH_IN_MILLISECONDS);
+
+    // Unbonding period (48h) has elapsed; withdraw before next claim
+    ctx.env.set_caller(alice);
+    ctx.staking.withdraw_unbonded();
+
     ctx.env.set_caller(alice);
     ctx.vesting.claim(vesting_id);
 
@@ -584,7 +666,7 @@ fn test_claim_should_allow_incremental_claims() {
     let schedule = ctx.vesting.get_schedule(vesting_id).unwrap();
 
     assert_eq!(
-        schedule.claimed_amount, expected_total_claim,
+        schedule.unstaked_amount, expected_total_claim,
         "Second claim should be for 75%",
     );
 
@@ -649,6 +731,10 @@ fn test_claim_end_to_end_lifecycle() {
     // Advanced to after the cliff end
     ctx.env.advance_block_time(3 * ONE_MONTH_IN_MILLISECONDS);
 
+    // Unbonding period (48h) has elapsed; withdraw before next claim
+    ctx.env.set_caller(alice);
+    ctx.staking.withdraw_unbonded();
+
     // 9 months at this point so should be 75% vested
     let expected_vested_at_9mo = total_amount * U256::from(9) / U256::from(12);
 
@@ -673,12 +759,16 @@ fn test_claim_end_to_end_lifecycle() {
     ctx.vesting.claim(vesting_id);
     let schedule = ctx.vesting.get_schedule(vesting_id).unwrap();
     assert_eq!(
-        schedule.claimed_amount, expected_vested_at_9mo,
-        "Total claimed so far should be at 75%",
+        schedule.unstaked_amount, expected_vested_at_9mo,
+        "Total unstaked so far should be at 75%",
     );
 
     // Advanced to the full vesting period, which is 12 months
     ctx.env.advance_block_time(3 * ONE_MONTH_IN_MILLISECONDS);
+
+    // Unbonding period (48h) has elapsed; withdraw before next claim
+    ctx.env.set_caller(alice);
+    ctx.staking.withdraw_unbonded();
 
     let vesting_end_time = start_time + vesting;
     assert_eq!(
@@ -706,8 +796,8 @@ fn test_claim_end_to_end_lifecycle() {
     ctx.vesting.claim(vesting_id);
     let schedule = ctx.vesting.get_schedule(vesting_id).unwrap();
     assert_eq!(
-        schedule.claimed_amount, total_amount,
-        "All the tokens should be claimed",
+        schedule.unstaked_amount, total_amount,
+        "All the tokens should be unstaked",
     );
 
     // Advance past vesting
@@ -725,8 +815,26 @@ fn test_claim_end_to_end_lifecycle() {
     let schedule = ctx.vesting.get_schedule(vesting_id).unwrap();
     assert_eq!(schedule.beneficiary, alice);
     assert_eq!(schedule.total_amount, total_amount);
-    assert_eq!(schedule.claimed_amount, total_amount);
+    assert_eq!(schedule.unstaked_amount, total_amount);
     assert_eq!(schedule.start_timestamp, start_time);
     assert_eq!(schedule.cliff_duration, cliff);
     assert_eq!(schedule.vesting_duration, vesting);
+}
+
+#[test]
+fn test_beneficiary_cannot_bypass_cliff_via_direct_unstake() {
+    let mut ctx = setup(odra_test::env());
+    let alice = ctx.users.alice;
+    let cliff_duration = ctx.cliff_duration;
+    let vesting_duration = ctx.vesting_duration;
+    let amt = vesting_amount();
+
+    create_test_schedule(&mut ctx, alice, amt, cliff_duration, vesting_duration);
+
+    // Alice tries to unstake thru staking contract during the cliff, but its blocked
+    ctx.env.set_caller(alice);
+    assert_eq!(
+        ctx.staking.try_unstake_for(alice, amt).unwrap_err(),
+        UnstakeBlockedByVestingLock.into(),
+    );
 }

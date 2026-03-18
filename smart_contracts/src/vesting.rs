@@ -1,5 +1,5 @@
 use odra::{casper_types::U256, prelude::*, ContractRef};
-use odra_modules::{access::Ownable, cep18_token::Cep18ContractRef};
+use odra_modules::access::Ownable;
 
 use crate::staking::StakingContractRef;
 use crate::vesting::{errors::*, events::*};
@@ -17,8 +17,8 @@ pub struct VestingSchedule {
     pub beneficiary: Address,
     /// Total number of tokens locked in this schedule.
     pub total_amount: U256,
-    /// Number of tokens claimed (unstaking initiated, pending unbonding).
-    pub claimed_amount: U256,
+    /// Number of tokens for which unstaking has been initiated (pending unbonding).
+    pub unstaked_amount: U256,
     /// Block timestamp when the vesting clock starts (set at creation time).
     pub start_timestamp: u64,
     /// Duration (in time units) before any tokens become claimable.
@@ -82,8 +82,7 @@ pub mod errors {
         ScheduleNotFound = 65_005,
         CallerNotBeneficiary = 65_006,
         NothingToClaim = 65_007,
-        // TODO: Delete this error once staking is enabled
-        ClaimingNotYetEnabled = 65_008,
+        ClaimBlockedByActiveUnbonding = 65_008,
     }
 }
 
@@ -99,15 +98,8 @@ pub struct Vesting {
     /// Ownership control — only the owner can configure the contract.
     ownable: SubModule<Ownable>,
 
-    /// Reference to the TailorCoin (BIG) CEP-18 token contract.
-    /// Used to pull tokens in (create_schedule) and transfer tokens out (claim).
-    tailor_coin: External<Cep18ContractRef>,
-
-    /// TODO: Remove the next two comments when staking is implemented.
-    /// Reference to the Staking contract (for future auto-staking of vested tokens).
-    /// Currently unused — the staking contract does not yet have stake/unstake functions.
-    /// Kept here so the address can be wired during deployment, ready for when
-    /// staking integration is implemented.
+    /// Reference to the Staking contract.
+    /// Used to unstake tokens when transfer tokens out (claim).
     staking: External<StakingContractRef>,
 
     /// Stores each vesting schedule by its unique ID.
@@ -140,16 +132,7 @@ impl Vesting {
     // Owner-only configuration
     // =========================================================================
 
-    /// Sets the TailorCoin (BIG) token contract address.
-    /// Must be called before any schedules can be created or claimed.
-    pub fn set_tailor_coin(&mut self, tailor_coin: Address) {
-        self.assert_owner();
-        self.tailor_coin.set(tailor_coin);
-    }
-
     /// Sets the Staking contract address (for future auto-staking integration).
-    /// Currently unused — kept for forward compatibility.
-    /// TODO: Remove above comment when staking is implemented.
     pub fn set_staking(&mut self, staking: Address) {
         self.assert_owner();
         self.staking.set(staking);
@@ -188,26 +171,30 @@ impl Vesting {
         self.schedules_count.get_or_default()
     }
 
+    /// Returns all of a given user's vesting schedules
+    pub fn get_user_schedules(&self, user: Address) -> Vec<VestingId> {
+        self.user_schedules.get_or_default(&user)
+    }
+
     /// Returns how many schedules a user has
-    // TODO: Odra contract entry points must return types that implement CLTyped and usize is not in that list.
     pub fn get_user_schedules_count(&self, user: Address) -> u32 {
         let user_schedules = self.user_schedules.get_or_default(&user);
         user_schedules.len() as u32
     }
 
     /// Returns how many tokens are currently claimable for a given schedule
-    /// Total Vested - already claimed
+    /// Total Vested - already unstaked (unbonding initiated)
     pub fn get_claimable_amount(&self, vesting_id: VestingId) -> U256 {
         match self.schedules.get(&vesting_id) {
             Some(schedule) => {
                 let vested = self.calculate_vested_amt(&schedule);
-                vested - schedule.claimed_amount
+                vested - schedule.unstaked_amount
             }
             None => U256::zero(),
         }
     }
 
-    /// Returns total amount vested including tokens already claimed
+    /// Returns total amount vested including tokens already unstaked
     pub fn get_vested_amount(&self, vesting_id: VestingId) -> U256 {
         match self.schedules.get(&vesting_id) {
             Some(schedule) => self.calculate_vested_amt(&schedule),
@@ -217,10 +204,6 @@ impl Vesting {
 
     pub fn is_whitelisted_creator(&self, creator: &Address) -> bool {
         self.whitelisted_creators.get_or_default(creator)
-    }
-
-    pub fn get_tailor_coin_contract_address(&self) -> Address {
-        *self.tailor_coin.address()
     }
 
     pub fn get_staking_contract_address(&self) -> Address {
@@ -237,11 +220,9 @@ impl Vesting {
     ///   - Be whitelisted via `add_whitelisted_creator`
     ///   - Have already approved `total_amount` of BIG tokens to the Staking contract
     ///
-    /// @dev This contract records vesting schedules only. No tokens are held by this contract or the Staking contract at this time. Token delivery is deferred pending Staking contract implementation.
-    // TODO: Delete the above comment and replace with the comment below when staking is implemented:
-    //  @dev This contract does not hold tokens; it only records the schedule.
-    //  Tokens are held by the Staking contract. Beneficiary can claim according
-    // to the vesting model (cliff, linear, or both) which triggers unstaking.
+    /// @dev This contract does not hold tokens; it only records the schedule.
+    /// Tokens are held by the Staking contract. Beneficiary can claim according
+    /// to the vesting model (cliff, linear, or both) which triggers unstaking.
     pub fn create_schedule(
         &mut self,
         beneficiary: Address,
@@ -268,7 +249,7 @@ impl Vesting {
         let schedule = VestingSchedule {
             beneficiary,
             total_amount,
-            claimed_amount: U256::zero(),
+            unstaked_amount: U256::zero(),
             start_timestamp: now,
             cliff_duration,
             vesting_duration,
@@ -279,6 +260,8 @@ impl Vesting {
         let mut user_schedules = self.user_schedules.get_or_default(&beneficiary);
         user_schedules.push(vesting_id);
         self.user_schedules.set(&beneficiary, user_schedules);
+
+        self.staking.add_vesting_lock(beneficiary, total_amount);
 
         self.env().emit_native_event(ScheduleCreated {
             vesting_id,
@@ -300,17 +283,18 @@ impl Vesting {
     /// Claims all unclaimed-vested tokens from a specific schedule
     ///
     /// Calculates how many tokens vested so far minus whats already been claimed,
-    /// then initiates unstaking. That kicks off the unbonding period, which has be
-    /// be pass by before the user can withdraw.
+    /// then initiates unstaking. That kicks off the unbonding period, which must have passed
+    /// before the user can withdraw.
     ///
     /// @dev only the schedule's beneficiary can call this
+    /// @dev Requires no active unbonding position in the Staking contract for the
+    /// beneficiary. If a prior claim or direct unstake initiated unbonding, you must:
+    /// 1. Wait for the 48-hour unbonding period to complete
+    /// 2. Call `staking::withdraw_unbonded()` to clear the unbonding state
+    /// 3. Then call this function
+    /// Calling claim() while unbonding is in progress will revert with `ClaimBlockedByActiveUnbonding`.
     #[odra(non_reentrant)]
     pub fn claim(&mut self, vesting_id: VestingId) {
-        // TODO: delete this check once staking is implemented
-        if !self.staking.address().is_contract() {
-            self.env().revert(Error::ClaimingNotYetEnabled);
-        }
-
         let mut schedule = self
             .schedules
             .get(&vesting_id)
@@ -322,21 +306,31 @@ impl Vesting {
             self.env().revert(Error::CallerNotBeneficiary);
         }
 
-        // Calculate how much vested minus whats already been claimed
+        if !self
+            .staking
+            .get_staker_info(beneficiary)
+            .unbonding_amount
+            .is_zero()
+        {
+            self.env().revert(Error::ClaimBlockedByActiveUnbonding);
+        }
+
+        // Calculate how much vested minus whats already been unstaked
         let vested = self.calculate_vested_amt(&schedule);
-        let claimable = vested - schedule.claimed_amount;
+        let claimable = vested - schedule.unstaked_amount;
 
         if claimable.is_zero() {
             self.env().revert(Error::NothingToClaim);
         }
 
-        // Update claimed amount before transferring
-        schedule.claimed_amount += claimable;
+        self.staking.release_vesting_lock(beneficiary, claimable);
+
+        // Update unstaked amount before initiating unstake
+        schedule.unstaked_amount += claimable;
         self.schedules.set(&vesting_id, schedule);
 
-        // TODO: Unstake the tokens from the staking contract
-        // Will probably look something like this:
-        // self.staking.unstake_for(beneficiary);
+        // This only initiates the unbonding period, it does not transfer tokens yet.
+        self.staking.unstake_for(beneficiary, claimable);
 
         self.env().emit_native_event(TokensClaimed {
             vesting_id,

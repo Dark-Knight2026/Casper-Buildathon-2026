@@ -111,7 +111,7 @@
             "ty": "U256"
           },
           {
-            "name": "claimed_amount",
+            "name": "unstaked_amount",
             "description": null,
             "ty": "U256"
           },
@@ -182,7 +182,7 @@
       "discriminant": 65001
     },
     {
-      "name": "ClaimingNotYetEnabled",
+      "name": "ClaimBlockedByActiveUnbonding",
       "description": "",
       "discriminant": 65008
     },
@@ -228,22 +228,6 @@
     }
   ],
   "entry_points": [
-    {
-      "name": "set_tailor_coin",
-      "description": "Sets the TailorCoin (BIG) token contract address.",
-      "is_mutable": true,
-      "arguments": [
-        {
-          "name": "tailor_coin",
-          "description": null,
-          "ty": "Key",
-          "optional": false
-        }
-      ],
-      "return_ty": "Unit",
-      "is_contract_context": true,
-      "access": "public"
-    },
     {
       "name": "set_staking",
       "description": "Sets the Staking contract address (for future auto-staking integration).",
@@ -320,6 +304,24 @@
       "access": "public"
     },
     {
+      "name": "get_user_schedules",
+      "description": "Returns all of a given user's vesting schedules",
+      "is_mutable": false,
+      "arguments": [
+        {
+          "name": "user",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        }
+      ],
+      "return_ty": {
+        "List": "U256"
+      },
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
       "name": "get_user_schedules_count",
       "description": "Returns how many schedules a user has",
       "is_mutable": false,
@@ -353,7 +355,7 @@
     },
     {
       "name": "get_vested_amount",
-      "description": "Returns total amount vested including tokens already claimed",
+      "description": "Returns total amount vested including tokens already unstaked",
       "is_mutable": false,
       "arguments": [
         {
@@ -380,15 +382,6 @@
         }
       ],
       "return_ty": "Bool",
-      "is_contract_context": true,
-      "access": "public"
-    },
-    {
-      "name": "get_tailor_coin_contract_address",
-      "description": "",
-      "is_mutable": false,
-      "arguments": [],
-      "return_ty": "Key",
       "is_contract_context": true,
       "access": "public"
     },

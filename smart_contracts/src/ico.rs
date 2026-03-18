@@ -182,30 +182,22 @@ impl ICO {
                     currency_address.unwrap_or_revert_with(&self.env(), Error::AddressIsRequired),
                 );
 
-                currency.transfer_from(&caller, &self.treasury.address(), &amount_to_spend);
+                currency.transfer_from(caller, self.treasury.address(), &amount_to_spend);
             }
         }
 
         current_ico_schedule.sold_amount += purchase_amount;
+
         self.ico_schedules
             .set(&current_ico_schedule_id, current_ico_schedule);
 
+        self.tailor_coin
+            .approve(self.staking.address(), &purchase_amount);
+
+        self.staking.stake_for(*caller, purchase_amount);
+
         self.vesting
             .create_schedule(*caller, purchase_amount, cliff_duration, vesting_duration);
-
-        // TODO: Uncomment out when staking is implemented
-        // self.tailor_coin
-        //     .approve(&self.staking.address(), &purchase_amount);
-
-        // TODO: Call an entrypoint on the Staking contract to transfer tokens from
-        // the ICO contract and stake them for the beneficiary. Example:
-        // self.staking.stake_for(*caller, purchase_amount);
-
-        // TODO: Delete this guard when staking is implemented
-        // Guard: staking address must be set
-        if !self.staking.address().is_contract() {
-            self.env().revert(Error::StakingAddressNotSet);
-        }
 
         self.env().emit_native_event(TokensPurchased {
             amount: purchase_amount,
@@ -369,18 +361,16 @@ impl ICO {
                 if ico_schedule.start_timestamp <= prev_ico_schedule.end_timestamp {
                     self.env().revert(Error::InvalidICOScheduleStartTimestamp);
                 }
-            } else {
-                if ico_schedule.start_timestamp <= self.env().get_block_time() {
-                    self.env().revert(Error::InvalidICOScheduleStartTimestamp);
-                }
+            } else if ico_schedule.start_timestamp <= self.env().get_block_time() {
+                self.env().revert(Error::InvalidICOScheduleStartTimestamp);
             }
         }
 
         // Start timestamp validation when no previous ICO schedule exists
-        if prev_ico_schedule_id.is_none() {
-            if ico_schedule.start_timestamp <= self.env().get_block_time() {
-                self.env().revert(Error::InvalidICOScheduleStartTimestamp);
-            }
+        if prev_ico_schedule_id.is_none()
+            && ico_schedule.start_timestamp <= self.env().get_block_time()
+        {
+            self.env().revert(Error::InvalidICOScheduleStartTimestamp);
         }
 
         // End timestamp validation
@@ -469,7 +459,6 @@ pub mod errors {
         InvalidPurchaseAmount = 59_012,
         InvalidICOScheduleVestingDuration = 59_013,
         ICOScheduleCliffExceedsVestingDuration = 59_014,
-        StakingAddressNotSet = 59_015,
     }
 }
 

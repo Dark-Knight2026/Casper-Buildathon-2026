@@ -162,13 +162,13 @@ impl DeployScript for LeasefiDeployScript {
         treasury.set_tailor_coin(tailor_coin.address());
         treasury.set_staking(staking.address());
 
-        // Setup Vesting
-        vesting.set_tailor_coin(tailor_coin.address());
-        vesting.add_whitelisted_creator(ico.address());
-        // TODO: Set this staking address when staking is implemented
-
         // Setup Staking
         staking.set_tailor_coin(tailor_coin.address());
+        staking.set_vesting(vesting.address());
+
+        // Setup Vesting
+        vesting.add_whitelisted_creator(ico.address());
+        vesting.set_staking(staking.address());
 
         // Setup Lease
         lease.set_roles(roles.address());
@@ -215,6 +215,7 @@ impl DeployScript for LeasefiDeployScript {
         escrow.transfer_ownership(&new_owner);
         lease.transfer_ownership(&new_owner);
         vesting.transfer_ownership(&new_owner);
+        staking.transfer_ownership(&new_owner);
         ico.transfer_ownership(&new_owner);
 
         Ok(())

@@ -38,25 +38,31 @@ impl Treasury {
     }
 
     /// Allows to deposit any rewards amount in the TailorCoin (BIG) token by anyone, then distributes these rewards
-    /// between the Staking contract and internal reserves
+    /// between the Staking contract and internal reserves.
+    ///
+    /// If there is no active stake yet, the full deposit remains in Treasury reserves instead of reverting.
     #[odra(non_reentrant)]
     pub fn deposit_rewards(&mut self, amount: U256) {
         if amount > U256::zero() {
             let mut tailor_coin =
                 Cep18ContractRef::new(self.env(), self.get_tailor_coin_contract_address());
             let staking_rewards = amount * STAKING_REWARDS_BPS / ONE_HUNDRED_PERCENT_BPS;
+            let staking_address = self.get_staking_contract_address();
+            let mut staking = StakingContractRef::new(self.env(), staking_address);
 
             tailor_coin.transfer_from(&self.env().caller(), &self.env().self_address(), &amount);
-            tailor_coin.approve(&self.get_staking_contract_address(), &staking_rewards);
 
-            StakingContractRef::new(self.env(), self.get_staking_contract_address())
-                .deposit_rewards(staking_rewards);
+            if !staking_rewards.is_zero() && !staking.get_total_staked().is_zero() {
+                tailor_coin.approve(&staking_address, &staking_rewards);
+                staking.deposit_rewards(staking_rewards);
+            }
 
             self.env().emit_native_event(RewardsDeposited { amount });
         }
     }
 
     /// Allows to withdraw any available reserves amount by the owner
+    #[odra(non_reentrant)]
     pub fn withdraw_reserves(&mut self, recipient: Address, amount: U256) {
         self.assert_owner();
 
@@ -75,6 +81,7 @@ impl Treasury {
 
     /// Allows to withdraw any token that is stored on this contract except of the TailorCoin (BIG) token which is the
     /// reserves token. Only the owner can interact with this entrypoint
+    #[odra(non_reentrant)]
     pub fn withdraw_token(&mut self, token: Option<Address>, amount: U256, recipient: Address) {
         self.assert_owner();
 
