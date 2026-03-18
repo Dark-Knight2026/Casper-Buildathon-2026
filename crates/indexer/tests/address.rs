@@ -9,16 +9,40 @@ fn empty_string_passes_through() {
 
 #[test]
 fn strips_account_hash_prefix() {
-    let input = "account-hash-aAbBcCdDeEfF00112233445566778899aAbBcCdDeEfF00112233445566";
-    let expected = "aabbccddeeff00112233445566778899aabbccddeeff00112233445566";
+    // 64 hex chars after prefix
+    let input = "account-hash-aAbBcCdDeEfF00112233445566778899aAbBcCdDeEfF00112233445566778899";
+    let expected = "aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899";
     assert_eq!(normalize_to_account_hash(input).unwrap(), expected);
 }
 
 #[test]
 fn strips_hash_prefix() {
-    let input = "hash-aAbBcCdDeEfF00112233445566778899aAbBcCdDeEfF00112233445566";
-    let expected = "aabbccddeeff00112233445566778899aabbccddeeff00112233445566";
+    // 64 hex chars after prefix
+    let input = "hash-aAbBcCdDeEfF00112233445566778899aAbBcCdDeEfF00112233445566778899";
+    let expected = "aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899";
     assert_eq!(normalize_to_account_hash(input).unwrap(), expected);
+}
+
+#[test]
+fn rejects_short_hex_after_account_hash_prefix() {
+    // 58 chars after prefix - not 64
+    assert!(
+        normalize_to_account_hash(
+            "account-hash-aabbccddeeff00112233445566778899aabbccddeeff00112233445566"
+        )
+        .is_err()
+    );
+}
+
+#[test]
+fn rejects_non_hex_after_hash_prefix() {
+    // 64 chars but not valid hex
+    assert!(
+        normalize_to_account_hash(
+            "hash-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+        )
+        .is_err()
+    );
 }
 
 #[test]

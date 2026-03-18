@@ -28,12 +28,12 @@ pub fn normalize_to_account_hash(raw: &str) -> IndexerResult<String> {
 
     // "account-hash-XXXX" prefix from CES Key::to_formatted_string()
     if let Some(hex) = raw.strip_prefix("account-hash-") {
-        return Ok(hex.to_lowercase());
+        return validate_hex64(hex, raw);
     }
 
     // "hash-XXXX" prefix (some CES contexts)
     if let Some(hex) = raw.strip_prefix("hash-") {
-        return Ok(hex.to_lowercase());
+        return validate_hex64(hex, raw);
     }
 
     let len = raw.len();
@@ -59,4 +59,18 @@ pub fn normalize_to_account_hash(raw: &str) -> IndexerResult<String> {
     Err(IndexerError::Parse(format!(
         "unrecognized address format (len={len}): '{raw}'"
     )))
+}
+
+/// Validate that `hex` is exactly 64 lowercase hex characters.
+/// Returns the lowercased hex on success, or a parse error referencing `raw_input`.
+#[inline]
+fn validate_hex64(hex: &str, raw_input: &str) -> IndexerResult<String> {
+    if hex.len() == 64 && hex.bytes().all(|b| b.is_ascii_hexdigit()) {
+        Ok(hex.to_lowercase())
+    } else {
+        Err(IndexerError::Parse(format!(
+            "invalid account hash after prefix strip (len={}, expected 64 hex): '{raw_input}'",
+            hex.len(),
+        )))
+    }
 }
