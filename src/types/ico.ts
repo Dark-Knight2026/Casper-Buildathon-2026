@@ -149,6 +149,20 @@ export interface IcoBalanceResponse {
   currentValue: number;
 }
 
+export interface TokenSupplyResponse {
+  circulatingSupply: number;
+  totalSupply: number;
+}
+
+export interface ReleaseScheduleDataPoint {
+  month: string;
+  released: number;
+}
+
+export interface ReleaseScheduleResponse {
+  data: ReleaseScheduleDataPoint[];
+}
+
 export type EarningsPeriod = '1m' | '3m' | '6m' | '1y' | 'all';
 
 export interface RewardsHistoryDataPoint {
