@@ -28,8 +28,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
 
   const token = authHeader.slice(7);
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
-  const { error: authError } = await supabase.auth.getUser(token);
-  if (authError) {
+  const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+  if (authError || !user) {
     res.status(401).json({ error: 'Unauthorized' });
     return;
   }
@@ -41,7 +41,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   }
 
   const from = process.env.EMAIL_FROM_ADDRESS ?? 'noreply@leasefi.com';
-  const { to, subject, html, text, replyTo, cc, bcc } = req.body;
+  const { to, subject, html, text, replyTo } = req.body;
+
+  // Validate recipient — must match the authenticated user's own email.
+  // Prevents authenticated relay abuse (issue #10).
+  if (!to || to !== user.email) {
+    res.status(403).json({ error: 'Forbidden: recipient must match authenticated user email' });
+    return;
+  }
 
   try {
     const resend = new Resend(apiKey);
@@ -52,8 +59,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       html,
       text,
       replyTo,
-      cc,
-      bcc,
     });
 
     if (error) {
