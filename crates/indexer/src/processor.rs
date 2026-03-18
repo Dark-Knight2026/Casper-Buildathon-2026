@@ -97,16 +97,28 @@ pub async fn process_event(
             // Event processed successfully
         }
         Err(IndexerError::UnknownEvent { .. }) => {
-            // Unknown event — store raw data only, don't fail
+            // Unknown event - store raw data only, don't fail
             tracing::warn!(
                 contract = ?raw.contract_type,
                 event = %raw.event_name,
                 deploy = %raw.deploy_hash,
-                "Unknown event — stored raw data in blockchain_events"
+                "Unknown event - stored raw data in blockchain_events"
             );
         }
+        Err(IndexerError::DeferredEvent(reason)) => {
+            // Event deferred to backfill - roll back so nothing is persisted.
+            // Backfill will later re-encounter this deploy with full context.
+            tracing::warn!(
+                deploy = %raw.deploy_hash,
+                event = %raw.event_name,
+                %reason,
+                "Event deferred - rolling back transaction"
+            );
+            tx.rollback().await?;
+            return Ok(());
+        }
         Err(e) => {
-            // Other errors — rollback transaction
+            // Other errors - rollback transaction
             return Err(e);
         }
     }

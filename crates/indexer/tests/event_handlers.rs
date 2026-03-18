@@ -713,3 +713,82 @@ async fn ico_schedule_added_upsert_updates_existing_row(pool: PgPool) {
         "block_height must be updated by UPSERT"
     );
 }
+
+// TokensPurchased handler — streaming without caller
+
+/// When `TokensPurchased` arrives via streaming with an empty caller, the
+/// processor must roll back the transaction so that nothing is persisted.
+/// Backfill will later re-process the event with the full caller address.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn tokens_purchased_without_caller_defers_to_backfill(pool: PgPool) {
+    common::disable_rls(&pool).await;
+
+    let deploy_hash = "0000000000000000000000000000000000000000000000000000000000007777";
+
+    // Empty caller simulates a streaming event.
+    let result = processor::process_event(
+        &pool,
+        &EventRegistry::new(),
+        &HashSet::new(),
+        &RawEvent {
+            contract_hash: "ico_hash".to_owned(),
+            deploy_hash: deploy_hash.to_owned(),
+            block_height: 100,
+            caller: String::new(),
+            contract_type: ContractType::Ico,
+            event_name: "TokensPurchased".to_owned(),
+            event_data: json!({
+                "amount": "1000",
+                "currency": 0,
+                "cost": "500",
+                "timestamp": 1_700_000_000_u64
+            }),
+            block_timestamp: None,
+            transform_idx: None,
+        },
+    )
+    .await;
+
+    // Must succeed (DeferredEvent is handled internally by the processor).
+    result.unwrap();
+
+    // Nothing should be persisted - transaction was rolled back.
+    let event_count: i64 = sqlx::query_scalar!(
+        r"SELECT COUNT(*) FROM blockchain_events WHERE transaction_hash = $1",
+        deploy_hash,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap()
+    .unwrap_or(0);
+    assert_eq!(
+        event_count, 0,
+        "deferred event must not be stored in blockchain_events"
+    );
+
+    let purchase_count: i64 = sqlx::query_scalar!(
+        r"SELECT COUNT(*) FROM ico_purchases WHERE transaction_hash = $1",
+        deploy_hash,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap()
+    .unwrap_or(0);
+    assert_eq!(
+        purchase_count, 0,
+        "deferred event must not create ico_purchases row"
+    );
+
+    let tx_count: i64 = sqlx::query_scalar!(
+        r"SELECT COUNT(*) FROM blockchain_transactions WHERE transaction_hash = $1",
+        deploy_hash,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap()
+    .unwrap_or(0);
+    assert_eq!(
+        tx_count, 0,
+        "deferred event must not create blockchain_transactions row"
+    );
+}

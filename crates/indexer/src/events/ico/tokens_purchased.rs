@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     address,
     config::ContractType,
-    error::IndexerResult,
+    error::{IndexerError, IndexerResult},
     event_trait::{EventContext, IndexableEvent},
     events::db::{self, HashType},
 };
@@ -88,12 +88,11 @@ impl IndexableEvent for TokensPurchased {
         let buyer = address::normalize_to_account_hash(ctx.caller)?;
 
         if buyer.is_empty() {
-            tracing::warn!(
-                deploy = %ctx.deploy_hash,
-                "TokensPurchased has no caller (streaming) - skipping domain writes. \
-                 Raw event saved in blockchain_events; backfill will fill buyer later."
-            );
-            return Ok(());
+            return Err(IndexerError::DeferredEvent(format!(
+                "TokensPurchased deploy={} has no caller (streaming) - \
+                 deferring to backfill",
+                ctx.deploy_hash,
+            )));
         }
 
         // 1. Insert into ico_purchases table
