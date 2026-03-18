@@ -173,4 +173,3 @@ export function TokenomicsTab() {
   );
 }
 
-export default TokenomicsTab;

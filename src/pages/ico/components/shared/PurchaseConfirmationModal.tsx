@@ -272,4 +272,3 @@ export function PurchaseConfirmationModal({
   );
 }
 
-export default PurchaseConfirmationModal;

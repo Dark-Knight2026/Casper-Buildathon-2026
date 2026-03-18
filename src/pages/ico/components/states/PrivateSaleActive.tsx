@@ -109,4 +109,3 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: Private
   );
 }
 
-export default PrivateSaleActive;

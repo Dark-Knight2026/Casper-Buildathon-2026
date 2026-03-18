@@ -210,4 +210,3 @@ export function WhitepaperTab({ className }: WhitepaperTabProps) {
   );
 }
 
-export default WhitepaperTab;

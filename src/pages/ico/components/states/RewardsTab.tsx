@@ -177,4 +177,3 @@ export const RewardsTab = memo(function RewardsTab() {
   );
 });
 
-export default RewardsTab;

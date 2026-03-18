@@ -196,4 +196,3 @@ export function TransactionStatusToast({
   );
 }
 
-export default TransactionStatusToast;

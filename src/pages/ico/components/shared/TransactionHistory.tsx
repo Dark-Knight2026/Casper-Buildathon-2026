@@ -99,4 +99,3 @@ export function TransactionHistory({ transactions, className }: TransactionHisto
   );
 }
 
-export default TransactionHistory;

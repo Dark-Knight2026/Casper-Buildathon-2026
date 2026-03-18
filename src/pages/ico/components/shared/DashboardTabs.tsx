@@ -180,4 +180,3 @@ export function DashboardTabs({
   );
 }
 
-export default DashboardTabs;

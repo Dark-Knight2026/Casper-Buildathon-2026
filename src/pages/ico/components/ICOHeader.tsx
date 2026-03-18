@@ -69,4 +69,3 @@ export function ICOHeader() {
   );
 }
 
-export default ICOHeader;

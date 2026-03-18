@@ -180,4 +180,3 @@ export const OverviewTab = memo(function OverviewTab() {
   );
 });
 
-export default OverviewTab;

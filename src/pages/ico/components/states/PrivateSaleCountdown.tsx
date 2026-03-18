@@ -80,4 +80,3 @@ export function PrivateSaleCountdown({ targetTimestamp, endTimestamp, progress, 
   );
 }
 
-export default PrivateSaleCountdown;
