@@ -846,3 +846,28 @@ fn test_staking_full_lifecycle() {
         U256::zero()
     );
 }
+
+#[test]
+fn test_release_vesting_lock_reverts_if_amount_exceeds_locked() {
+    let mut ctx = setup(odra_test::env());
+    let alice = ctx.users.alice;
+    let vesting_mock = ctx.env.get_account(5);
+
+    ctx.env.set_caller(ctx.users.owner);
+    ctx.staking.set_vesting(vesting_mock);
+
+    // Lock 100 tokens
+    ctx.env.set_caller(vesting_mock);
+    ctx.staking.add_vesting_lock(alice, U256::from(100));
+
+    // Attempting to release 101 should revert (underflow protection)
+    assert_eq!(
+        ctx.staking
+            .try_release_vesting_lock(alice, U256::from(101))
+            .unwrap_err(),
+        Error::InvalidAmount.into()
+    );
+
+    // Releasing exact amount (100) should succeed
+    ctx.staking.release_vesting_lock(alice, U256::from(100));
+}

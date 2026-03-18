@@ -267,7 +267,13 @@ impl Staking {
         // Enforce the vesting lock
         if self.env().caller() == staker {
             let locked_amt = self.vesting_locked.get_or_default(&staker);
-            if amount > staker_info.staked_amount - locked_amt {
+
+            let available = staker_info
+                .staked_amount
+                .checked_sub(locked_amt)
+                .unwrap_or_revert_with(&self.env(), Error::InvalidAmount);
+
+            if amount > available {
                 self.env().revert(Error::UnstakeBlockedByVestingLock);
             }
         }
@@ -409,8 +415,11 @@ impl Staking {
     /// @dev Called by the vesting contract when tokens are claimed.
     pub fn release_vesting_lock(&mut self, staker: Address, amount: U256) {
         self.assert_caller_is_vesting_contract();
-        let current = self.vesting_locked.get_or_default(&staker);
-        self.vesting_locked.set(&staker, current - amount);
+        let current_amt = self.vesting_locked.get_or_default(&staker);
+        let new_amt = current_amt
+            .checked_sub(amount)
+            .unwrap_or_revert_with(&self.env(), Error::InvalidAmount);
+        self.vesting_locked.set(&staker, new_amt);
     }
 
     // =========================================================================
