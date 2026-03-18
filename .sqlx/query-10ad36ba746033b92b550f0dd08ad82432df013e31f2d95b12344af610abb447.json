@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT\n                reward_date AS \"reward_date!\",\n                SUM(daily_total) OVER (ORDER BY reward_date)::TEXT AS \"cumulative_amount!\"\n            FROM (\n                SELECT\n                    event_timestamp::DATE AS reward_date,\n                    SUM(amount::NUMERIC) AS daily_total\n                FROM staking_events\n                WHERE staker_address = $1\n                  AND event_type = 'reward_claim'\n                  AND event_timestamp >= NOW() - make_interval(days => $2::INT)\n                GROUP BY event_timestamp::DATE\n            ) daily\n            ORDER BY reward_date\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "reward_date!",
+        "type_info": "Date"
+      },
+      {
+        "ordinal": 1,
+        "name": "cumulative_amount!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "10ad36ba746033b92b550f0dd08ad82432df013e31f2d95b12344af610abb447"
+}

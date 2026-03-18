@@ -26,8 +26,8 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 use utoipa_swagger_ui::SwaggerUi;
 
 use crate::{
-    ApiDoc, AppState, RedisStore, ServerConfig, ServerError, analytics, auth, health, ico, tax,
-    transactions, vesting,
+    ApiDoc, AppState, RedisStore, ServerConfig, ServerError, analytics, auth, health, ico, staking,
+    tax, transactions, vesting,
 };
 
 // Public router ---------------------------------------------------------------
@@ -78,6 +78,10 @@ pub const PUBLIC_DATA_RATE_LIMIT_BURST: u32 = 30;
 /// - `GET /ico/balance/{address}` - ICO balance for an account
 /// - `GET /transactions/token/big` - BIG token transactions
 /// - `GET /transactions/account/{address}` - account transaction history
+/// - `GET /staking/{accountHash}` - staking info
+/// - `GET /staking/{accountHash}/portfolio` - portfolio overview
+/// - `GET /staking/{accountHash}/earnings` - monthly earnings chart
+/// - `GET /staking/{accountHash}/rewards-history` - daily rewards history
 ///
 /// # Panics
 ///
@@ -100,6 +104,7 @@ pub fn public_data_router() -> OpenApiRouter<Arc<AppState>> {
         .nest("/transactions", transactions_router())
         .nest("/ico", ico_router())
         .nest("/vesting", vesting_router())
+        .nest("/staking", staking_router())
         .route_layer(GovernorLayer::new(rate_limit))
 }
 
@@ -139,6 +144,16 @@ pub fn vesting_router() -> OpenApiRouter<Arc<AppState>> {
         .routes(routes!(vesting::handlers::get_vesting_schedules))
         .routes(routes!(vesting::handlers::get_token_supply))
         .routes(routes!(vesting::handlers::get_release_schedule))
+}
+
+/// Creates an `OpenAPI` router for staking endpoints
+#[inline]
+pub fn staking_router() -> OpenApiRouter<Arc<AppState>> {
+    OpenApiRouter::new()
+        .routes(routes!(staking::handlers::get_staking_info))
+        .routes(routes!(staking::handlers::get_portfolio))
+        .routes(routes!(staking::handlers::get_earnings))
+        .routes(routes!(staking::handlers::get_rewards_history))
 }
 
 // Full router -----------------------------------------------------------------

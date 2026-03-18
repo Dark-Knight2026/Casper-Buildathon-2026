@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT COALESCE(SUM(amount::NUMERIC) * 365 / 30, 0)::TEXT\n            FROM staking_reward_deposits\n            WHERE event_timestamp >= NOW() - INTERVAL '30 days'\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "coalesce",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "7c242a11c071b00d72658adb40b503cbf7d60ea61653b6a631c69f98d377fb6f"
+}

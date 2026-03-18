@@ -11,6 +11,7 @@
 //! - [`tax`] - Tax calculation endpoints
 //! - [`analytics`] - Property performance analytics
 //! - [`health`] - Health check endpoint
+//! - [`staking`] - Staking endpoints
 //! - [`vesting`] - Vesting schedule endpoints
 //! - [`common`] - Shared utilities (config, errors, crypto, models)
 //! - [`openapi`] - `OpenAPI` documentation configuration
@@ -30,6 +31,8 @@ pub mod ico;
 pub mod openapi;
 /// Server implementation and startup logic.
 pub mod server;
+/// Staking feature module.
+pub mod staking;
 /// Tax calculation feature module.
 pub mod tax;
 /// Transaction history feature module.

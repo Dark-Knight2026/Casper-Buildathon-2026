@@ -7,7 +7,7 @@ use utoipa::{
     openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme},
 };
 
-use crate::{analytics, auth, health, ico, tax, transactions, vesting};
+use crate::{analytics, auth, health, ico, staking, tax, transactions, vesting};
 
 /// `OpenAPI` documentation configuration.
 ///
@@ -59,6 +59,13 @@ use crate::{analytics, auth, health, ico, tax, transactions, vesting};
             vesting::models::TokenSupplyResponse,
             vesting::models::ReleaseSchedulePoint,
             vesting::models::ReleaseScheduleResponse,
+            // Staking models
+            staking::models::StakingInfoResponse,
+            staking::models::PortfolioResponse,
+            staking::models::EarningsPoint,
+            staking::models::EarningsResponse,
+            staking::models::RewardsHistoryPoint,
+            staking::models::RewardsHistoryResponse,
         )
     ),
     modifiers(&SecurityAddon),
@@ -69,7 +76,8 @@ use crate::{analytics, auth, health, ico, tax, transactions, vesting};
         (name = "Analytics", description = "Property analytics endpoints"),
         (name = "Transactions", description = "Transaction history endpoints"),
         (name = "ICO", description = "ICO balance and progress endpoints"),
-        (name = "Vesting", description = "Vesting schedule and token supply endpoints")
+        (name = "Vesting", description = "Vesting schedule and token supply endpoints"),
+        (name = "Staking", description = "Staking, portfolio and rewards endpoints")
     )
 )]
 pub struct ApiDoc;
