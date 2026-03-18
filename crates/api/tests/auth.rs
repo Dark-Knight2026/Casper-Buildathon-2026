@@ -44,7 +44,7 @@ async fn nonce_endpoint_returns_challenge(pool: PgPool) {
         .get("/api/v1/auth/nonce")
         .add_query_param(
             "wallet_address",
-            "01a234567890abcdef01234567890abcdef01234567890abcdef01234567890abcdef",
+            "01a234567890abcdef01234567890abcdef01234567890abcdef01234567890abc",
         )
         .await;
 
@@ -78,18 +78,18 @@ async fn login_rejects_invalid_wallet_address(pool: PgPool) {
 async fn login_rejects_invalid_signature_format(pool: PgPool) {
     let env = common::setup_test_server(pool, false).await;
 
-    // Valid length wallet address but invalid Casper signature format
-    // Returns 400 (BAD_REQUEST) because signature parsing fails before nonce check
+    // Valid length wallet address but no nonce stored in Redis.
+    // Returns 401 (UNAUTHORIZED) because nonce lookup fails before signature check.
     let response = env
         .server
         .post("/api/v1/auth/login")
         .json(&serde_json::json!({
-            "wallet_address": "01a234567890abcdef01234567890abcdef01234567890abcdef01234567890abcdef",
-            "signature": "01a234567890abcdef01234567890abcdef01234567890abcdef01234567890abcdef01234567890abcdef01234567890abcdef01234567890abcdef01234567890abcdef"
+            "wallet_address": "01a234567890abcdef01234567890abcdef01234567890abcdef01234567890abc",
+            "signature": "01a234567890abcdef01234567890abcdef01234567890abcdef01234567890abc01234567890abcdef01234567890abcdef01234567890abcdef01234567890abcdef"
         }))
         .await;
 
-    assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
+    assert_eq!(response.status_code(), StatusCode::UNAUTHORIZED);
 }
 
 #[sqlx::test(migrator = "common::MIGRATIONS")]
@@ -432,7 +432,7 @@ fn verify_signature_without_prefix_is_rejected() {
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn auth_rate_limiter_returns_429_after_burst(pool: PgPool) {
     let env = common::setup_test_server(pool, true).await;
-    let wallet = "01a234567890abcdef01234567890abcdef01234567890abcdef01234567890abcdef";
+    let wallet = "01a234567890abcdef01234567890abcdef01234567890abcdef01234567890abc";
 
     // Send BURST + 1 requests; the last one must be rate-limited (429).
     for i in 0..=AUTH_RATE_LIMIT_BURST {

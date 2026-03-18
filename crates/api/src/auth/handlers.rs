@@ -50,6 +50,7 @@ use crate::{
     ),
     responses(
         (status = 200, description = "Nonce generated successfully", body = NonceResponse),
+        (status = 400, description = "Invalid wallet address length"),
         (status = 500, description = "Internal server error")
     )
 )]
@@ -58,6 +59,15 @@ pub async fn get_nonce(
     State(state): State<Arc<AppState>>,
     Query(payload): Query<NonceRequest>,
 ) -> ApiResult<Json<NonceResponse>> {
+    // Validate wallet address length before touching Redis.
+    let wallet = payload.wallet_address.to_ascii_lowercase();
+    let len = wallet.len();
+    if len != CASPER_ED25519_PUBKEY_HEX_LEN && len != CASPER_SECP256K1_PUBKEY_HEX_LEN {
+        return Err(ApiError::BadRequest(
+            "Invalid wallet address length".to_owned(),
+        ));
+    }
+
     // Generate a random string (16 characters)
     let random_string: String = rand::rng()
         .sample_iter(&Alphanumeric)
@@ -68,10 +78,10 @@ pub async fn get_nonce(
     // Create a message that the user will sign
     let message = format!("Sign this message to login to LeaseFi. Nonce: {random_string}");
 
-    // Store nonce in Redis
+    // Store nonce in Redis (key uses lowercase address for case-insensitive lookup)
     state
         .redis
-        .save_nonce(&payload.wallet_address, &message)
+        .save_nonce(&wallet, &message)
         .await
         .map_err(|e| {
             tracing::error!(error = %e, "Failed to save nonce");
@@ -80,7 +90,7 @@ pub async fn get_nonce(
 
     tracing::info!(
         event = "nonce_generated",
-        wallet_address = %payload.wallet_address,
+        wallet_address = %wallet,
         "Login nonce generated"
     );
 
@@ -131,8 +141,11 @@ pub async fn login(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<LoginRequest>,
 ) -> ApiResult<Json<LoginResponse>> {
+    // Normalize to lowercase for consistent Redis key lookup.
+    let wallet_address = payload.wallet_address.to_ascii_lowercase();
+
     // Validation: Check wallet address length (Ed25519 or Secp256k1)
-    let len = payload.wallet_address.len();
+    let len = wallet_address.len();
     if len != CASPER_ED25519_PUBKEY_HEX_LEN && len != CASPER_SECP256K1_PUBKEY_HEX_LEN {
         tracing::warn!(
             length = len,
@@ -145,10 +158,10 @@ pub async fn login(
         ));
     }
 
-    // Get stored nonce from Redis
+    // Get stored nonce from Redis (using normalized address)
     let stored_nonce = state
         .redis
-        .get_nonce(&payload.wallet_address)
+        .get_nonce(&wallet_address)
         .await
         .map_err(|e| {
             tracing::error!(error = %e, "Failed to get nonce");
@@ -158,7 +171,7 @@ pub async fn login(
             tracing::warn!(
                 event = "login_failed",
                 reason = "nonce_expired",
-                wallet_address = %payload.wallet_address,
+                wallet_address = %wallet_address,
                 "Nonce not found or expired"
             );
             ApiError::Unauthorized("Nonce not found or expired".to_owned())
@@ -166,7 +179,7 @@ pub async fn login(
 
     // Security: Verify Signature and RETURN ERROR if invalid
     let is_valid = common::verify_casper_signature(
-        &payload.wallet_address,
+        &wallet_address,
         payload.signature.expose_secret(),
         &stored_nonce,
     )
@@ -174,7 +187,7 @@ pub async fn login(
         tracing::warn!(
             event = "login_failed",
             reason = "invalid_signature_format",
-            wallet_address = %payload.wallet_address,
+            wallet_address = %wallet_address,
             error = ?e,
             "Signature verification error"
         );
@@ -185,23 +198,23 @@ pub async fn login(
         tracing::warn!(
             event = "login_failed",
             reason = "signature_mismatch",
-            wallet_address = %payload.wallet_address,
+            wallet_address = %wallet_address,
             "Signature verification failed"
         );
         return Err(ApiError::Unauthorized("Invalid signature".to_owned()));
     }
 
     // Remove nonce (protection against signature reuse)
-    let _ = state.redis.delete_nonce(&payload.wallet_address).await;
+    let _ = state.redis.delete_nonce(&wallet_address).await;
 
     // Since the users table requires an email address, we generate a unique one using a hash.
     // Using `SHA-256` hash prevents collisions that could occur with simple address truncation.
-    let hash = Sha256::digest(payload.wallet_address.as_bytes());
+    let hash = Sha256::digest(wallet_address.as_bytes());
     let placeholder_email = format!("wallet_{}@leasefi.local", hex::encode(&hash[..20]));
 
     // If a user with this wallet_address already exists, return it. If not, create a new one.
     let user_record =
-        auth::upsert_user_by_wallet(&state.db, &placeholder_email, &payload.wallet_address).await?;
+        auth::upsert_user_by_wallet(&state.db, &placeholder_email, &wallet_address).await?;
     let user_role = UserRole::from_str(&user_record.role).unwrap_or(UserRole::Unknown);
 
     let expiration = Utc::now()
@@ -235,7 +248,7 @@ pub async fn login(
     tracing::info!(
         event = "user_login",
         user_id = %user_record.id,
-        wallet_address = %payload.wallet_address,
+        wallet_address = %wallet_address,
         "User logged in successfully"
     );
 
