@@ -4,7 +4,7 @@ import { ICO_CONFIG } from '@/constants/ico';
 import { Title } from '../shared/Title';
 import { ProgressBar } from '../shared/ProgressBar';
 import { WalletCard } from '../shared/WalletCard';
-import CountdownTimer from '../shared/CountdownTimer';
+import { CountdownTimer } from '../shared/CountdownTimer';
 import { usePurchaseFlow } from '@/hooks/ico/usePurchaseFlow';
 import { PurchaseConfirmationModal } from '../shared/PurchaseConfirmationModal';
 import { TransactionStatusToast } from '../shared/TransactionStatusToast';
@@ -109,3 +109,4 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: Private
   );
 }
 
+export default PrivateSaleActive;

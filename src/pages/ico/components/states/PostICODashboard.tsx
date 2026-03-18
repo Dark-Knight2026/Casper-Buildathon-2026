@@ -60,3 +60,4 @@ export function PostICODashboard({ className }: PostICODashboardProps) {
   );
 }
 
+export default PostICODashboard;
