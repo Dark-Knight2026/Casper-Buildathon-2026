@@ -17,7 +17,9 @@ use tokio::{
         unix::{self, SignalKind},
     },
 };
-use tower_governor::{GovernorLayer, governor::GovernorConfigBuilder};
+use tower_governor::{
+    GovernorLayer, governor::GovernorConfigBuilder, key_extractor::SmartIpKeyExtractor,
+};
 use tower_http::{cors::CorsLayer, limit::RequestBodyLimitLayer, trace::TraceLayer};
 use utoipa::OpenApi;
 use utoipa_axum::{router::OpenApiRouter, routes};
@@ -49,6 +51,7 @@ pub const AUTH_RATE_LIMIT_BURST: u32 = 15;
 pub fn public_router() -> OpenApiRouter<Arc<AppState>> {
     let rate_limit = Arc::new(
         GovernorConfigBuilder::default()
+            .key_extractor(SmartIpKeyExtractor)
             .per_second(AUTH_RATE_LIMIT_PER_SECOND)
             .burst_size(AUTH_RATE_LIMIT_BURST)
             .finish()
@@ -84,6 +87,7 @@ pub const PUBLIC_DATA_RATE_LIMIT_BURST: u32 = 30;
 pub fn public_data_router() -> OpenApiRouter<Arc<AppState>> {
     let rate_limit = Arc::new(
         GovernorConfigBuilder::default()
+            .key_extractor(SmartIpKeyExtractor)
             .per_second(PUBLIC_DATA_RATE_LIMIT_PER_SECOND)
             .burst_size(PUBLIC_DATA_RATE_LIMIT_BURST)
             .finish()
