@@ -15,7 +15,6 @@ export interface EmailParams {
   subject: string;
   html: string;
   text?: string;
-  from?: string;
   replyTo?: string;
   cc?: string | string[];
   bcc?: string | string[];
@@ -34,20 +33,26 @@ interface EmailMetadata {
 }
 
 class EmailService {
-  private readonly defaultFrom = 'noreply@yourdomain.com'; // Update with your verified domain
-
   /**
    * Send a generic email via /api/email serverless function.
    * The Resend API key lives server-side only — never in the browser bundle.
    */
   async sendEmail(params: EmailParams): Promise<EmailResult> {
     try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (!token) {
+        return { success: false, error: 'Not authenticated' };
+      }
+
       const response = await fetch('/api/email', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
         body: JSON.stringify({
           to: params.to,
-          from: params.from || this.defaultFrom,
           subject: params.subject,
           html: params.html,
           text: params.text,

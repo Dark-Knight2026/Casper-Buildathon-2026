@@ -1,12 +1,36 @@
+import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { createClient } from '@supabase/supabase-js';
 import { Resend } from 'resend';
 
 /**
  * Vercel serverless function — proxies email send requests to Resend.
  * RESEND_API_KEY is read server-side only and is never exposed to the browser bundle.
+ * Requires a valid Supabase JWT in the Authorization header.
  */
-export default async function handler(req: any, res: any): Promise<void> {
+export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method Not Allowed' });
+    return;
+  }
+
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith('Bearer ')) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!supabaseUrl || !supabaseServiceKey) {
+    res.status(503).json({ error: 'Auth service not configured' });
+    return;
+  }
+
+  const token = authHeader.slice(7);
+  const supabase = createClient(supabaseUrl, supabaseServiceKey);
+  const { error: authError } = await supabase.auth.getUser(token);
+  if (authError) {
+    res.status(401).json({ error: 'Unauthorized' });
     return;
   }
 
@@ -16,17 +40,18 @@ export default async function handler(req: any, res: any): Promise<void> {
     return;
   }
 
-  const { to, from, subject, html, text, replyTo, cc, bcc } = req.body;
+  const from = process.env.EMAIL_FROM_ADDRESS ?? 'noreply@leasefi.com';
+  const { to, subject, html, text, replyTo, cc, bcc } = req.body;
 
   try {
     const resend = new Resend(apiKey);
     const { data, error } = await resend.emails.send({
-      from: from || 'noreply@yourdomain.com',
+      from,
       to,
       subject,
       html,
       text,
-      reply_to: replyTo,
+      replyTo,
       cc,
       bcc,
     });
