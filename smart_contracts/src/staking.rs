@@ -90,6 +90,7 @@ pub mod errors {
         NoActiveStake = 63_010,
         CallerNotAuthorizedToStake = 63_011,
         UnstakeBlockedByVestingLock = 63_012,
+        CallerNotAuthorizedToManageLocks = 63_013,
     }
 }
 
@@ -472,7 +473,7 @@ impl Staking {
     #[inline]
     fn assert_caller_is_vesting_contract(&self) {
         if self.env().caller() != *self.vesting.address() {
-            self.env().revert(Error::CallerNotAuthorizedToUnstake);
+            self.env().revert(Error::CallerNotAuthorizedToManageLocks);
         }
     }
 
