@@ -17,7 +17,9 @@ CREATE TABLE IF NOT EXISTS ico_schedules (
     -- Block height where the event was included.
     block_height      BIGINT      NOT NULL,
     -- Row creation timestamp.
-    created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    -- Last UPSERT timestamp (audit trail).
+    updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 COMMENT ON TABLE  ico_schedules IS 'ICO round schedules indexed from ICOScheduleAdded contract events';
