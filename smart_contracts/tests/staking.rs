@@ -61,10 +61,12 @@ fn setup(env: HostEnv) -> Context {
     );
 
     let mut staking = Staking::deploy(&env, StakingInitArgs { owner: users.owner });
-    let vesting = Vesting::deploy(&env, VestingInitArgs { owner: users.owner });
+    let mut vesting = Vesting::deploy(&env, VestingInitArgs { owner: users.owner });
 
     staking.set_tailor_coin(tailor_coin.address());
     staking.set_vesting(vesting.address());
+    vesting.set_staking(staking.address());
+    vesting.add_whitelisted_creator(users.owner);
 
     Context {
         env,
@@ -94,6 +96,25 @@ fn fund_and_approve(ctx: &mut Context, user: Address, amount: U256) {
 fn stake_for(ctx: &mut Context, staker: Address, amount: U256) {
     ctx.env.set_caller(staker);
     ctx.staking.stake_for(staker, amount);
+}
+
+/// Helper to create a vesting schedule backed by real stake in the staking contract.
+fn create_vesting_schedule(
+    ctx: &mut Context,
+    beneficiary: Address,
+    total_amount: U256,
+    cliff_duration: u64,
+    vesting_duration: u64,
+) -> U256 {
+    ctx.env.set_caller(ctx.users.owner);
+
+    ctx.tailor_coin
+        .approve(&ctx.staking.address(), &total_amount);
+
+    ctx.staking.stake_for(beneficiary, total_amount);
+
+    ctx.vesting
+        .create_schedule(beneficiary, total_amount, cliff_duration, vesting_duration)
 }
 
 fn staking_amount() -> U256 {
@@ -472,16 +493,11 @@ fn test_unstake_for_vesting_can_unstake_on_behalf() {
     let mut ctx = setup(odra_test::env());
     let amount = staking_amount();
     let alice = ctx.users.alice;
-    let vesting_mock = ctx.env.get_account(5);
+    let vesting_id = create_vesting_schedule(&mut ctx, alice, amount, 1, 1);
 
-    ctx.env.set_caller(ctx.users.owner);
-    ctx.staking.set_vesting(vesting_mock);
-
-    fund_and_approve(&mut ctx, alice, amount);
-    stake_for(&mut ctx, alice, amount);
-
-    ctx.env.set_caller(vesting_mock);
-    ctx.staking.unstake_for(alice, amount);
+    ctx.env.advance_block_time(1);
+    ctx.env.set_caller(alice);
+    ctx.vesting.claim(vesting_id);
 
     let staking_info = ctx.staking.get_staker_info(alice);
     assert_eq!(staking_info.unbonding_amount, amount);
@@ -493,16 +509,8 @@ fn test_unstake_for_should_revert_if_vesting_locked() {
     let mut ctx = setup(odra_test::env());
     let amount = staking_amount();
     let alice = ctx.users.alice;
-    let vesting_mock = ctx.env.get_account(5);
 
-    ctx.env.set_caller(ctx.users.owner);
-    ctx.staking.set_vesting(vesting_mock);
-
-    fund_and_approve(&mut ctx, alice, amount);
-    stake_for(&mut ctx, alice, amount);
-
-    ctx.env.set_caller(vesting_mock);
-    ctx.staking.add_vesting_lock(alice, amount);
+    create_vesting_schedule(&mut ctx, alice, amount, 1, 2);
 
     ctx.env.set_caller(alice);
     assert_eq!(
@@ -516,24 +524,19 @@ fn test_unstake_for_allows_self_unstake_of_unlocked_tokens() {
     let mut ctx = setup(odra_test::env());
     let amount = staking_amount();
     let alice = ctx.users.alice;
-    let vesting_mock = ctx.env.get_account(5);
 
-    ctx.env.set_caller(ctx.users.owner);
-    ctx.staking.set_vesting(vesting_mock);
+    create_vesting_schedule(&mut ctx, alice, amount, 1, 2);
 
-    // Half will be vest-locked, other half will be free to unstake
-    fund_and_approve(&mut ctx, alice, amount * 2);
-    stake_for(&mut ctx, alice, amount * 2);
+    // Half is vest-locked, the other half is regular stake that can be unstaked.
+    fund_and_approve(&mut ctx, alice, amount);
+    stake_for(&mut ctx, alice, amount);
 
-    ctx.env.set_caller(vesting_mock);
-    ctx.staking.add_vesting_lock(alice, amount);
-
-    // Half unlocked should unstake
     ctx.env.set_caller(alice);
     ctx.staking.unstake_for(alice, amount);
 
     // Clear unbonding, then confirm half locked is still blocked
     ctx.env.advance_block_time(UNBONDING_PERIOD + 1);
+    ctx.env.set_caller(alice);
     ctx.staking.withdraw_unbonded();
 
     ctx.env.set_caller(alice);
@@ -848,26 +851,28 @@ fn test_staking_full_lifecycle() {
 }
 
 #[test]
-fn test_release_vesting_lock_reverts_if_amount_exceeds_locked() {
+fn test_claim_releases_vesting_lock_for_remaining_free_stake() {
     let mut ctx = setup(odra_test::env());
     let alice = ctx.users.alice;
-    let vesting_mock = ctx.env.get_account(5);
+    let locked_amount = staking_amount();
+    let free_amount = staking_amount();
+    let vesting_id = create_vesting_schedule(&mut ctx, alice, locked_amount, 1, 1);
 
-    ctx.env.set_caller(ctx.users.owner);
-    ctx.staking.set_vesting(vesting_mock);
+    fund_and_approve(&mut ctx, alice, free_amount);
+    stake_for(&mut ctx, alice, free_amount);
 
-    // Lock 100 tokens
-    ctx.env.set_caller(vesting_mock);
-    ctx.staking.add_vesting_lock(alice, U256::from(100));
+    ctx.env.advance_block_time(1);
+    ctx.env.set_caller(alice);
+    ctx.vesting.claim(vesting_id);
 
-    // Attempting to release 101 should revert (underflow protection)
-    assert_eq!(
-        ctx.staking
-            .try_release_vesting_lock(alice, U256::from(101))
-            .unwrap_err(),
-        Error::InvalidAmount.into()
-    );
+    ctx.env.advance_block_time(UNBONDING_PERIOD + 1);
+    ctx.env.set_caller(alice);
+    ctx.staking.withdraw_unbonded();
 
-    // Releasing exact amount (100) should succeed
-    ctx.staking.release_vesting_lock(alice, U256::from(100));
+    ctx.env.set_caller(alice);
+    ctx.staking.unstake_for(alice, free_amount);
+
+    let staking_info = ctx.staking.get_staker_info(alice);
+    assert_eq!(staking_info.staked_amount, U256::zero());
+    assert_eq!(staking_info.unbonding_amount, free_amount);
 }
