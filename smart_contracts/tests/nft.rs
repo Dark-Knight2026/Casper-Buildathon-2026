@@ -72,7 +72,7 @@ fn test_add_minter_should_add_minter_properly() {
 
     assert!(test_data
         .env
-        .emitted_native_event(&test_data.nft, MinterAdded { minter }));
+        .emitted_event(&test_data.nft, MinterAdded { minter }));
     assert!(
         test_data.nft.is_minter(&minter),
         "Should have been set as minter"
@@ -105,7 +105,7 @@ fn test_remove_minter_should_remove_minter_properly() {
 
     assert!(test_data
         .env
-        .emitted_native_event(&test_data.nft, MinterRemoved { minter }));
+        .emitted_event(&test_data.nft, MinterRemoved { minter }));
     assert!(
         !test_data.nft.is_minter(&minter),
         "Should have been unset as minter"
@@ -137,7 +137,7 @@ fn test_add_burner_should_add_burner_properly() {
 
     assert!(test_data
         .env
-        .emitted_native_event(&test_data.nft, BurnerAdded { burner }));
+        .emitted_event(&test_data.nft, BurnerAdded { burner }));
     assert!(
         test_data.nft.is_burner(&burner),
         "Should have been set as burner"
@@ -170,7 +170,7 @@ fn test_remove_burner_should_remove_burner_properly() {
 
     assert!(test_data
         .env
-        .emitted_native_event(&test_data.nft, BurnerRemoved { burner }));
+        .emitted_event(&test_data.nft, BurnerRemoved { burner }));
     assert!(
         !test_data.nft.is_burner(&burner),
         "Should have been unset as burner"

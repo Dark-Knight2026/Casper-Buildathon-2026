@@ -145,7 +145,7 @@ impl Vesting {
         self.whitelisted_creators.set(&creator, true);
 
         self.env()
-            .emit_native_event(WhitelistedCreatorAdded { creator });
+            .emit_event(WhitelistedCreatorAdded { creator });
     }
 
     /// Revokes an address's permission to create vesting schedules.
@@ -154,7 +154,7 @@ impl Vesting {
         self.whitelisted_creators.set(&creator, false);
 
         self.env()
-            .emit_native_event(WhitelistedCreatorRemoved { creator });
+            .emit_event(WhitelistedCreatorRemoved { creator });
     }
 
     // =========================================================================
@@ -263,7 +263,7 @@ impl Vesting {
 
         self.staking.add_vesting_lock(beneficiary, total_amount);
 
-        self.env().emit_native_event(ScheduleCreated {
+        self.env().emit_event(ScheduleCreated {
             vesting_id,
             whitelisted_creator: self.env().caller(),
             beneficiary,
@@ -332,7 +332,7 @@ impl Vesting {
         // This only initiates the unbonding period, it does not transfer tokens yet.
         self.staking.unstake_for(beneficiary, claimable);
 
-        self.env().emit_native_event(TokensClaimed {
+        self.env().emit_event(TokensClaimed {
             vesting_id,
             beneficiary,
             amount: claimable,

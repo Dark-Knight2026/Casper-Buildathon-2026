@@ -231,7 +231,7 @@ impl Staking {
         let new_total_staked = self.total_staked.get_or_default() + amount;
         self.total_staked.set(new_total_staked);
 
-        self.env().emit_native_event(Staked { staker, amount });
+        self.env().emit_event(Staked { staker, amount });
     }
 
     /// Initiates an unstake of BIG tokens for staker, starting the
@@ -293,7 +293,7 @@ impl Staking {
         let new_total_staked = self.total_staked.get_or_default() - amount;
         self.total_staked.set(new_total_staked);
 
-        self.env().emit_native_event(UnstakedInitiated {
+        self.env().emit_event(UnstakedInitiated {
             staker,
             amount,
             unbonding_ends_at,
@@ -333,7 +333,7 @@ impl Staking {
         self.reward_per_token_stored.set(current + increase);
 
         self.env()
-            .emit_native_event(RewardsDeposited { caller, amount });
+            .emit_event(RewardsDeposited { caller, amount });
     }
 
     /// Claims all pending BIG token rewards accrued by the caller.
@@ -359,7 +359,7 @@ impl Staking {
 
         self.tailor_coin.transfer(&staker, &rewards);
 
-        self.env().emit_native_event(RewardsClaimed {
+        self.env().emit_event(RewardsClaimed {
             staker,
             amount: rewards,
         });
@@ -397,7 +397,7 @@ impl Staking {
         self.tailor_coin.transfer(&staker, &amount);
 
         self.env()
-            .emit_native_event(UnbondedWithdrawn { staker, amount });
+            .emit_event(UnbondedWithdrawn { staker, amount });
     }
 
     // =========================================================================

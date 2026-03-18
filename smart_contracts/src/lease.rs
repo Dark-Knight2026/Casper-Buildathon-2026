@@ -98,7 +98,7 @@ impl Lease {
         self.leases.set(&lease_agreement_id, lease_agreement);
         self.leases_count.set(lease_agreement_id + 1);
 
-        self.env().emit_native_event(LeaseAgreementCreated {
+        self.env().emit_event(LeaseAgreementCreated {
             lease_agreement_id,
             created_at: block_timestamp,
         });
@@ -134,7 +134,7 @@ impl Lease {
         lease_agreement.is_finished = true;
         self.leases.set(lease_agreement_id, lease_agreement);
 
-        self.env().emit_native_event(LeaseAgreementFinished {
+        self.env().emit_event(LeaseAgreementFinished {
             lease_agreement_id: *lease_agreement_id,
             finished_at: self.env().get_block_time(),
         });
@@ -187,7 +187,7 @@ impl Lease {
         lease_agreement.end = new_end;
         self.leases.set(lease_agreement_id, lease_agreement);
 
-        self.env().emit_native_event(LeaseAgreementProlonged {
+        self.env().emit_event(LeaseAgreementProlonged {
             lease_agreement_id: *lease_agreement_id,
             prolonged_at: self.env().get_block_time(),
         });

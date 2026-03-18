@@ -348,7 +348,7 @@ fn test_create_schedule_should_create_properly() {
 
     // Verify event.
     assert!(
-        ctx.env.emitted_native_event(
+        ctx.env.emitted_event(
             &ctx.vesting,
             ScheduleCreated {
                 vesting_id,
@@ -529,7 +529,7 @@ fn test_claim_should_update_unstaked_amount_after_cliff() {
     );
 
     assert!(
-        ctx.env.emitted_native_event(
+        ctx.env.emitted_event(
             &ctx.vesting,
             TokensClaimed {
                 vesting_id,

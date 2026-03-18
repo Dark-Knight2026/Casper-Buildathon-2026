@@ -237,7 +237,7 @@ fn test_add_currency_should_add_cspr_token_support_properly() {
 
     assert!(
         ctx.env
-            .emitted_native_event(&ctx.ico, CurrencyAdded { currency }),
+            .emitted_event(&ctx.ico, CurrencyAdded { currency }),
         "CurrencyAdded event should be emitted"
     );
     assert_eq!(
@@ -262,7 +262,7 @@ fn test_add_currency_should_add_cep18_token_support_properly() {
         ctx.ico.add_currency(currency.0, currency_address);
 
         assert!(
-            ctx.env.emitted_native_event(
+            ctx.env.emitted_event(
                 &ctx.ico,
                 CurrencyAdded {
                     currency: currency.0
@@ -305,7 +305,7 @@ fn test_remove_currency_should_remove_cspr_token_support_properly() {
 
     assert!(
         ctx.env
-            .emitted_native_event(&ctx.ico, CurrencyRemoved { currency }),
+            .emitted_event(&ctx.ico, CurrencyRemoved { currency }),
         "CurrencyRemoved event should be emitted"
     );
     assert_eq!(
@@ -324,7 +324,7 @@ fn test_remove_currency_should_remove_cep18_token_support_properly() {
         ctx.ico.remove_currency(currency.0);
 
         assert!(
-            ctx.env.emitted_native_event(
+            ctx.env.emitted_event(
                 &ctx.ico,
                 CurrencyRemoved {
                     currency: currency.0
@@ -694,7 +694,7 @@ fn test_purchase_should_purchase_with_cspr_token_properly() {
     let curr_user_schedules_count = ctx.vesting.get_user_schedules_count(ctx.users.alice);
 
     assert!(
-        ctx.env.emitted_native_event(
+        ctx.env.emitted_event(
             &ctx.ico,
             TokensPurchased {
                 amount: expected_purchase_amount,
@@ -788,7 +788,7 @@ fn test_purchase_should_purchase_with_cep18_token_properly() {
     let curr_user_schedules_count = ctx.vesting.get_user_schedules_count(ctx.users.alice);
 
     assert!(
-        ctx.env.emitted_native_event(
+        ctx.env.emitted_event(
             &ctx.ico,
             TokensPurchased {
                 amount: expected_purchase_amount,
@@ -906,7 +906,7 @@ fn test_withdraw_unsold_tokens_should_do_nothing_if_withdrawal_amount_is_zero() 
     let ctx = setup(odra_test::env(), false);
 
     assert!(
-        !ctx.env.emitted_native_event(
+        !ctx.env.emitted_event(
             &ctx.ico,
             UnsoldTokensWithdrawn {
                 recipient: ctx.users.owner,
@@ -935,7 +935,7 @@ fn test_withdraw_unsold_tokens_should_withdraw_unsold_tokens_from_one_ico_schedu
     let curr_ico_balance = ctx.tailor_coin.balance_of(&ctx.ico.address());
 
     assert!(
-        ctx.env.emitted_native_event(
+        ctx.env.emitted_event(
             &ctx.ico,
             UnsoldTokensWithdrawn {
                 recipient,
@@ -1036,7 +1036,7 @@ fn test_withdraw_unsold_tokens_should_withdraw_unsold_tokens_from_all_ico_schedu
     let curr_ico_balance = ctx.tailor_coin.balance_of(&ctx.ico.address());
 
     assert!(
-        ctx.env.emitted_native_event(
+        ctx.env.emitted_event(
             &ctx.ico,
             UnsoldTokensWithdrawn {
                 recipient,
@@ -1323,7 +1323,7 @@ fn add_and_verify_ico_schedules(ctx: &mut Context) {
         let curr_ico_balance = ctx.tailor_coin.balance_of(&ctx.ico.address());
 
         assert!(
-            ctx.env.emitted_native_event(
+            ctx.env.emitted_event(
                 &ctx.ico,
                 ICOScheduleAdded {
                     id: expected_ico_schedule_id,

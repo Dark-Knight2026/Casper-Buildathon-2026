@@ -190,7 +190,7 @@ fn test_deposit_rewards_should_deposit_rewards_properly() {
     let curr_treasury_balance = tailor_coin.balance_of(&treasury.address());
     let curr_staking_balance = tailor_coin.balance_of(&staking.address());
 
-    assert!(env.emitted_native_event(
+    assert!(env.emitted_event(
         &treasury,
         RewardsDeposited {
             amount: rewards_amount
@@ -233,7 +233,7 @@ fn test_deposit_rewards_should_keep_all_rewards_as_reserves_if_no_active_stake()
     let curr_treasury_balance = tailor_coin.balance_of(&treasury.address());
     let curr_staking_balance = tailor_coin.balance_of(&staking.address());
 
-    assert!(env.emitted_native_event(
+    assert!(env.emitted_event(
         &treasury,
         RewardsDeposited {
             amount: rewards_amount
@@ -312,7 +312,7 @@ fn test_withdraw_reserves_should_withdraw_part_of_reserves_properly() {
     let curr_recipient_balance = tailor_coin.balance_of(&recipient);
     let curr_treasury_balance = tailor_coin.balance_of(&treasury.address());
 
-    assert!(env.emitted_native_event(
+    assert!(env.emitted_event(
         &treasury,
         ReservesWithdrawn {
             recipient,
@@ -357,7 +357,7 @@ fn test_withdraw_reserves_should_withdraw_all_reserves_properly() {
     let curr_recipient_balance = tailor_coin.balance_of(&recipient);
     let curr_treasury_balance = tailor_coin.balance_of(&treasury.address());
 
-    assert!(env.emitted_native_event(
+    assert!(env.emitted_event(
         &treasury,
         ReservesWithdrawn {
             recipient,
@@ -471,7 +471,7 @@ fn test_withdraw_token_should_should_withdraw_cspr_token_properly() {
     let curr_treasury_balance = env.balance_of(&treasury.address());
     let curr_recipient_balance = env.balance_of(&recipient);
 
-    assert!(env.emitted_native_event(
+    assert!(env.emitted_event(
         &treasury,
         TokenWithdrawn {
             token: None,
@@ -509,7 +509,7 @@ fn test_withdraw_token_should_should_withdraw_cep18_token_properly() {
     let curr_treasury_balance = mock_cep18.balance_of(&treasury.address());
     let curr_recipient_balance = mock_cep18.balance_of(&recipient);
 
-    assert!(env.emitted_native_event(
+    assert!(env.emitted_event(
         &treasury,
         TokenWithdrawn {
             token: Some(mock_cep18.address()),

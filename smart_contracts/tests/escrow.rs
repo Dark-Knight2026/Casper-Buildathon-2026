@@ -86,7 +86,7 @@ fn test_set_min_deadline_should_update_min_deadline_properly() {
         new_min_deadline,
         "Invalid minimal invoice deadline"
     );
-    assert!(test_data.env.emitted_native_event(
+    assert!(test_data.env.emitted_event(
         &test_data.escrow,
         MinDeadlineSet {
             old_min_deadline: MIN_DEADLINE,
@@ -373,7 +373,7 @@ fn test_pay_invoice_should_pay_invoice_in_native_token_properly() {
 
     let curr_recipient_token_balance = test_data.env.balance_of(&params.landlord);
 
-    assert!(test_data.env.emitted_native_event(
+    assert!(test_data.env.emitted_event(
         &test_data.escrow,
         InvoicePaid {
             invoice_id,
@@ -408,7 +408,7 @@ fn test_pay_invoice_should_pay_invoice_in_cep18_token_properly() {
 
     let curr_recipient_token_balance = test_data.mock_cep18.balance_of(&params.landlord);
 
-    assert!(test_data.env.emitted_native_event(
+    assert!(test_data.env.emitted_event(
         &test_data.escrow,
         InvoicePaid {
             invoice_id,
@@ -477,7 +477,7 @@ fn create_lease_invoice(test_data: &mut TestData, params: &InvoiceParams) -> U25
 
     test_data.env.set_caller(test_data.env.get_account(0));
 
-    assert!(test_data.env.emitted_native_event(
+    assert!(test_data.env.emitted_event(
         &test_data.escrow,
         InvoiceCreated {
             invoice_id,

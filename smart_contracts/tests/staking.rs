@@ -361,7 +361,7 @@ fn test_stake_for_should_stake_properly() {
     assert_eq!(staker_info.staked_amount, staking_amount);
     assert_eq!(ctx.staking.get_total_staked(), staking_amount);
 
-    assert!(ctx.env.emitted_native_event(
+    assert!(ctx.env.emitted_event(
         &ctx.staking.address(),
         Staked {
             staker: alice,
@@ -521,7 +521,7 @@ fn test_unstake_for_should_unstake_properly() {
     assert_eq!(staking_info.unbonding_ends_at, unbonding_ends_at);
     assert_eq!(ctx.staking.get_total_staked(), amount - unstaked_amount);
 
-    assert!(ctx.env.emitted_native_event(
+    assert!(ctx.env.emitted_event(
         &ctx.staking.address(),
         UnstakedInitiated {
             staker: alice,
@@ -642,7 +642,7 @@ fn test_deposit_rewards_should_deposit_properly() {
 
     assert_eq!(ctx.staking.get_pending_rewards(alice), rewards);
 
-    assert!(ctx.env.emitted_native_event(
+    assert!(ctx.env.emitted_event(
         &ctx.staking.address(),
         RewardsDeposited {
             caller: owner,
@@ -698,7 +698,7 @@ fn test_claim_rewards_should_claim_properly() {
     // Active stake unaffected
     assert_eq!(ctx.staking.get_staker_info(alice).staked_amount, amount);
 
-    assert!(ctx.env.emitted_native_event(
+    assert!(ctx.env.emitted_event(
         &ctx.staking.address(),
         RewardsClaimed {
             staker: alice,
@@ -806,7 +806,7 @@ fn test_withdraw_unbonded_should_withdraw_properly() {
     // Remaining active stake unaffected
     assert_eq!(staker_info.staked_amount, amount - unstake_amount);
 
-    assert!(ctx.env.emitted_native_event(
+    assert!(ctx.env.emitted_event(
         &ctx.staking.address(),
         UnbondedWithdrawn {
             staker: alice,

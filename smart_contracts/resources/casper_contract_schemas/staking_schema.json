@@ -160,6 +160,11 @@
   ],
   "errors": [
     {
+      "name": "CallerNotAuthorizedToManageLocks",
+      "description": "",
+      "discriminant": 63013
+    },
+    {
       "name": "CallerNotAuthorizedToStake",
       "description": "",
       "discriminant": 63011
@@ -242,7 +247,7 @@
     {
       "name": "UnstakeBlockedByVestingLock",
       "description": "",
-      "discriminant": 63
+      "discriminant": 63012
     },
     {
       "name": "VestingContractIsNotSet",

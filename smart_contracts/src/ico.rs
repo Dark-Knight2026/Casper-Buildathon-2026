@@ -86,7 +86,7 @@ impl ICO {
             self.currencies.set(&currency, (true, None));
         }
 
-        self.env().emit_native_event(CurrencyAdded { currency });
+        self.env().emit_event(CurrencyAdded { currency });
     }
 
     /// Removes a currency by the owner. Removed currency will not be supported for making purchases during ICOs
@@ -94,7 +94,7 @@ impl ICO {
         self.assert_owner();
         self.currencies.set(&currency, (false, None));
 
-        self.env().emit_native_event(CurrencyRemoved { currency });
+        self.env().emit_event(CurrencyRemoved { currency });
     }
 
     /// Adds a new ICO schedule by the owner
@@ -119,7 +119,7 @@ impl ICO {
         self.tailor_coin
             .transfer_from(&owner, &self_address, &sale_amount);
 
-        self.env().emit_native_event(ICOScheduleAdded {
+        self.env().emit_event(ICOScheduleAdded {
             id: ico_id,
             start_timestamp: ico_schedule.start_timestamp,
             end_timestamp: ico_schedule.end_timestamp,
@@ -199,7 +199,7 @@ impl ICO {
         self.vesting
             .create_schedule(*caller, purchase_amount, cliff_duration, vesting_duration);
 
-        self.env().emit_native_event(TokensPurchased {
+        self.env().emit_event(TokensPurchased {
             amount: purchase_amount,
             currency,
             price: ico_token_price,
@@ -244,7 +244,7 @@ impl ICO {
             self.tailor_coin.transfer(&recipient, &amount);
 
             self.env()
-                .emit_native_event(UnsoldTokensWithdrawn { recipient, amount });
+                .emit_event(UnsoldTokensWithdrawn { recipient, amount });
         }
     }
 

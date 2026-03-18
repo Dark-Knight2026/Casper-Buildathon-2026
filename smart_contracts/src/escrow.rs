@@ -40,7 +40,7 @@ impl Escrow {
 
         self.min_deadline.set(new_min_deadline);
 
-        self.env().emit_native_event(MinDeadlineSet {
+        self.env().emit_event(MinDeadlineSet {
             old_min_deadline,
             new_min_deadline,
         });
@@ -133,7 +133,7 @@ impl Escrow {
         invoice.is_paid = true;
         self.invoices.set(&invoice_id, invoice);
 
-        self.env().emit_native_event(InvoicePaid {
+        self.env().emit_event(InvoicePaid {
             invoice_id,
             paid_at: self.env().get_block_time(),
         });
@@ -210,7 +210,7 @@ impl Escrow {
         self.invoices.set(&invoice_id, invoice);
         self.invoices_count.set(invoice_id + 1);
 
-        self.env().emit_native_event(InvoiceCreated {
+        self.env().emit_event(InvoiceCreated {
             invoice_id,
             created_at: self.env().get_block_time(),
         });

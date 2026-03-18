@@ -218,7 +218,7 @@ fn test_create_lease_agreement_should_create_lease_agreement_properly() {
         .lease
         .get_lease_agreement_by_id(&lease_agreement_id);
 
-    assert!(test_data.env.emitted_native_event(
+    assert!(test_data.env.emitted_event(
         &test_data.lease,
         LeaseAgreementCreated {
             lease_agreement_id,
@@ -388,7 +388,7 @@ fn test_finalize_lease_agreement_should_finalize_properly_when_all_invoices_paid
         lease_agreement_after.is_finished,
         "Lease should be finished"
     );
-    assert!(test_data.env.emitted_native_event(
+    assert!(test_data.env.emitted_event(
         &test_data.lease,
         LeaseAgreementFinished {
             lease_agreement_id,
@@ -545,7 +545,7 @@ fn test_prolong_lease_agreement_should_prolong_lease_agreement_and_create_new_in
         test_data.escrow.get_min_deadline(),
     );
 
-    assert!(test_data.env.emitted_native_event(
+    assert!(test_data.env.emitted_event(
         &test_data.lease,
         LeaseAgreementProlonged {
             lease_agreement_id,

@@ -54,7 +54,7 @@ impl NFT {
         self.minters.set(&minter, false);
 
         self.env()
-            .emit_native_event(MinterRemoved { minter: *minter });
+            .emit_event(MinterRemoved { minter: *minter });
     }
 
     /// Allows to add a new burner by the owner
@@ -69,7 +69,7 @@ impl NFT {
         self.burners.set(&burner, false);
 
         self.env()
-            .emit_native_event(BurnerRemoved { burner: *burner });
+            .emit_event(BurnerRemoved { burner: *burner });
     }
 
     /// Allows to mint new token and set its metadata by the minter
@@ -171,14 +171,14 @@ impl NFT {
         self.minters.set(&minter, true);
 
         self.env()
-            .emit_native_event(MinterAdded { minter: *minter });
+            .emit_event(MinterAdded { minter: *minter });
     }
 
     fn add_burner_internal(&mut self, burner: &Address) {
         self.burners.set(&burner, true);
 
         self.env()
-            .emit_native_event(BurnerAdded { burner: *burner });
+            .emit_event(BurnerAdded { burner: *burner });
     }
 }
 

@@ -57,7 +57,7 @@ impl Treasury {
                 staking.deposit_rewards(staking_rewards);
             }
 
-            self.env().emit_native_event(RewardsDeposited { amount });
+            self.env().emit_event(RewardsDeposited { amount });
         }
     }
 
@@ -75,7 +75,7 @@ impl Treasury {
                 .transfer(&recipient, &amount);
 
             self.env()
-                .emit_native_event(ReservesWithdrawn { recipient, amount });
+                .emit_event(ReservesWithdrawn { recipient, amount });
         }
     }
 
@@ -115,7 +115,7 @@ impl Treasury {
             }
         }
 
-        self.env().emit_native_event(TokenWithdrawn {
+        self.env().emit_event(TokenWithdrawn {
             token,
             amount,
             recipient,

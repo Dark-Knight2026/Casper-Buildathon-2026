@@ -35,7 +35,7 @@ impl LeasefiDeployScript {
             end_timestamp: env.block_time()
                 + Self::ONE_MINUTE
                 + (1 * Self::ONE_HOUR)
-                + (5 * Self::ONE_DAY),
+                + (20 * Self::ONE_DAY),
             sale_amount: U256::from(500_000_000) * U256::from(10).pow(U256::from(18)),
             price: U256::from(500_000), // 0.5 USD (0.5 * 1 * 10^6)
             cliff_duration: PRIVATE_SALE_CLIFF_DURATION,
