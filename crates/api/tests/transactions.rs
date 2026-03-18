@@ -645,3 +645,70 @@ async fn big_token_transactions_page_size_over_max_clamped_to_100(pool: PgPool) 
     assert_eq!(body["page_count"], 1);
     assert_eq!(body["data"].as_array().unwrap().len(), 1);
 }
+
+// type query parameter filter tests
+
+/// `?type=token_transfer` must return only `token_transfer` rows and exclude
+/// `token_purchase` rows for the same address.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn account_transactions_type_filter_returns_matching_rows(pool: PgPool) {
+    let transfer_hash = "a".repeat(64);
+    let purchase_hash = "b".repeat(64);
+
+    seed_transaction(
+        &pool,
+        &transfer_hash,
+        VALID_ADDRESS,
+        None,
+        None,
+        "token_transfer",
+        Some("100"),
+        Some(1),
+    )
+    .await;
+    seed_transaction(
+        &pool,
+        &purchase_hash,
+        VALID_ADDRESS,
+        None,
+        None,
+        "token_purchase",
+        Some("200"),
+        Some(2),
+    )
+    .await;
+
+    let env = common::setup_test_server(pool, false).await;
+
+    // Filter by type=token_transfer (ft_action_type_id = 2)
+    let response = env
+        .server
+        .get(&format!(
+            "/api/v1/transactions/account/{VALID_ADDRESS}?type=token_transfer"
+        ))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+    assert_eq!(body["item_count"], 1);
+    let data = body["data"].as_array().unwrap();
+    assert_eq!(data.len(), 1);
+    assert_eq!(data[0]["ft_action_type_id"], 2);
+    assert_eq!(data[0]["deploy_hash"], transfer_hash);
+
+    // Filter by type=token_purchase (ft_action_type_id = 4)
+    let response = env
+        .server
+        .get(&format!(
+            "/api/v1/transactions/account/{VALID_ADDRESS}?type=token_purchase"
+        ))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+    assert_eq!(body["item_count"], 1);
+    let data = body["data"].as_array().unwrap();
+    assert_eq!(data.len(), 1);
+    assert_eq!(data[0]["ft_action_type_id"], 4);
+    assert_eq!(data[0]["deploy_hash"], purchase_hash);
+}
