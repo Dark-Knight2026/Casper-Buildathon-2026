@@ -11,3 +11,9 @@ Unit tests for ICO lifecycle state components.
 | RewardsTab.test.tsx | Tests staking info and rewards list display |
 | TokenomicsTab.test.tsx | Tests tokenomics visualization and allocation rendering |
 | WhitepaperTab.test.tsx | Tests PDF viewer and sidebar navigation |
+
+## Renamed files
+
+`ActiveICO.test.tsx` → `PrivateSaleActive.test.tsx` (component renamed from `ActiveICO` to `PrivateSaleActive` to match ICO phase naming convention)
+
+`DashboardICOCountdown.test.tsx` → `PostICODashboard.test.tsx` (component renamed from `DashboardICOCountdown` to `PostICODashboard`; countdown variant coverage is included in `PrivateSaleCountdown.test.tsx`)
