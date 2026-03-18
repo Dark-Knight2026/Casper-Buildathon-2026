@@ -79,6 +79,9 @@ pub async fn disable_rls(pool: &PgPool) {
         "ico_schedules",
         "token_holdings",
         "vesting_schedules",
+        "staking_positions",
+        "staking_events",
+        "staking_reward_deposits",
     ] {
         sqlx::query(&format!(r"ALTER TABLE {table} DISABLE ROW LEVEL SECURITY"))
             .execute(pool)

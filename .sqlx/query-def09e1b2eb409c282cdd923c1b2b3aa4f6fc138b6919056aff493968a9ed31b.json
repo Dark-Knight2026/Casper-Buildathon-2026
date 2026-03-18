@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT caller_address, amount, transaction_hash\n            FROM staking_reward_deposits\n            WHERE transaction_hash = $1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "caller_address",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "amount",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "transaction_hash",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "def09e1b2eb409c282cdd923c1b2b3aa4f6fc138b6919056aff493968a9ed31b"
+}
