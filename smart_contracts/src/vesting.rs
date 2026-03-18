@@ -292,7 +292,7 @@ impl Vesting {
     /// 1. Wait for the 48-hour unbonding period to complete
     /// 2. Call `staking::withdraw_unbonded()` to clear the unbonding state
     /// 3. Then call this function
-    /// Calling claim() while unbonding is in progress will revert with `ClaimBlock edByActiveUnbonding`.
+    /// Calling claim() while unbonding is in progress will revert with `ClaimBlockedByActiveUnbonding`.
     #[odra(non_reentrant)]
     pub fn claim(&mut self, vesting_id: VestingId) {
         let mut schedule = self

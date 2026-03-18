@@ -287,6 +287,49 @@ fn test_get_pending_rewards_should_be_proportional_for_multiple_stakers() {
     );
 }
 
+#[test]
+fn test_late_joiner_does_not_earn_pre_join_rewards() {
+    let mut ctx = setup(odra_test::env());
+    let amount = staking_amount();
+    let first_rewards = rewards_amount();
+    let second_rewards = rewards_amount();
+    let owner = ctx.users.owner;
+    let alice = ctx.users.alice;
+    let bob = ctx.users.bob;
+
+    fund_and_approve(&mut ctx, alice, amount);
+    fund_and_approve(&mut ctx, bob, amount);
+
+    stake_for(&mut ctx, alice, amount);
+
+    ctx.env.set_caller(owner);
+    ctx.tailor_coin
+        .approve(&ctx.staking.address(), &(first_rewards + second_rewards));
+    ctx.staking.deposit_rewards(first_rewards);
+
+    stake_for(&mut ctx, bob, amount);
+
+    assert_eq!(
+        ctx.staking.get_pending_rewards(bob),
+        U256::zero(),
+        "Bob should not accrue rewards deposited before he staked"
+    );
+
+    ctx.env.set_caller(owner);
+    ctx.staking.deposit_rewards(second_rewards);
+
+    assert_eq!(
+        ctx.staking.get_pending_rewards(alice),
+        first_rewards + second_rewards / 2,
+        "Alice should receive all pre-join rewards and half of the post-join rewards"
+    );
+    assert_eq!(
+        ctx.staking.get_pending_rewards(bob),
+        second_rewards / 2,
+        "Bob should only receive half of the post-join rewards"
+    );
+}
+
 // =============================================================================
 // staking_for()
 // =============================================================================
@@ -773,7 +816,7 @@ fn test_withdraw_unbonded_should_withdraw_properly() {
 }
 
 // =============================================================================
-// Full Staking End-to-End Lifecyce
+// Full Staking End-to-End Lifecycle
 // =============================================================================
 
 #[test]
