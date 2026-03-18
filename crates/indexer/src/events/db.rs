@@ -10,6 +10,7 @@
 //! - **Token holdings** — current CEP-18 balances per user (`token_holdings`).
 //! - **ICO** — detailed ICO purchase log (`ico_purchases`).
 //! - **Vesting** — vesting schedule tracking (`vesting_schedules`).
+//! - **Staking** — staking positions, events and reward deposits.
 
 use std::collections::HashSet;
 
@@ -599,6 +600,227 @@ pub async fn update_vesting_claimed(
         ",
         vesting_id,
         amount,
+    )
+    .execute(tx.as_mut())
+    .await?;
+
+    Ok(())
+}
+
+// -----------------------------------------------------------------------------
+// Staking positions
+// -----------------------------------------------------------------------------
+
+/// Data required to insert a staking event into `staking_events`.
+#[derive(Debug)]
+pub struct NewStakingEvent<'a> {
+    /// Account hash of the staker (64 hex, no prefix).
+    pub staker_address: &'a str,
+    /// Event kind: `"stake"`, `"unstake"`, `"withdraw"`, `"reward_claim"`.
+    pub event_type: &'a str,
+    /// Token amount involved (U256 as string).
+    pub amount: &'a str,
+    /// Deploy hash that emitted the event.
+    pub transaction_hash: &'a str,
+    /// Block height where the event was included.
+    pub block_height: i64,
+    /// Block timestamp of the event.
+    pub event_timestamp: Option<DateTime<Utc>>,
+}
+
+/// Insert a row into `staking_events` (append-only log).
+///
+/// # Errors
+///
+/// Returns [`IndexerError::Database`](crate::error::IndexerError::Database)
+/// on SQL failures.
+#[inline]
+pub async fn insert_staking_event(
+    tx: &mut PgTransaction<'_>,
+    row: &NewStakingEvent<'_>,
+) -> IndexerResult<()> {
+    sqlx::query!(
+        r"
+            INSERT INTO staking_events (staker_address, event_type, amount, transaction_hash, block_height, event_timestamp)
+            VALUES ($1, $2, $3, $4, $5, $6)
+        ",
+        row.staker_address,
+        row.event_type,
+        row.amount,
+        row.transaction_hash,
+        row.block_height,
+        row.event_timestamp,
+    )
+    .execute(tx.as_mut())
+    .await?;
+
+    Ok(())
+}
+
+/// UPSERT `staking_positions` for a `Staked` event: increase `staked_amount`.
+///
+/// Creates the row if the staker has never staked before.
+/// Uses `::NUMERIC` arithmetic for U256-safe addition.
+///
+/// # Errors
+///
+/// Returns [`IndexerError::Database`](crate::error::IndexerError::Database)
+/// on SQL failures.
+#[inline]
+pub async fn upsert_staking_position_stake(
+    tx: &mut PgTransaction<'_>,
+    staker_address: &str,
+    amount: &str,
+) -> IndexerResult<()> {
+    sqlx::query!(
+        r"
+            INSERT INTO staking_positions (staker_address, staked_amount, last_updated_at)
+            VALUES ($1, $2, NOW())
+            ON CONFLICT (staker_address) DO UPDATE SET
+                staked_amount   = (staking_positions.staked_amount::NUMERIC + $2::TEXT::NUMERIC)::TEXT,
+                last_updated_at = NOW()
+        ",
+        staker_address,
+        amount,
+    )
+    .execute(tx.as_mut())
+    .await?;
+
+    Ok(())
+}
+
+/// UPDATE `staking_positions` for an `UnstakedInitiated` event: decrease
+/// `staked_amount`, set `unbonding_amount` and `unbonding_ends_at`.
+///
+/// # Errors
+///
+/// Returns [`IndexerError::Database`](crate::error::IndexerError::Database)
+/// on SQL failures.
+#[inline]
+pub async fn update_staking_position_unstake(
+    tx: &mut PgTransaction<'_>,
+    staker_address: &str,
+    amount: &str,
+    unbonding_ends_at: i64,
+) -> IndexerResult<()> {
+    sqlx::query!(
+        r"
+            UPDATE staking_positions
+            SET staked_amount    = GREATEST('0'::NUMERIC, staked_amount::NUMERIC - $2::TEXT::NUMERIC)::TEXT,
+                unbonding_amount = $2,
+                unbonding_ends_at = $3,
+                last_updated_at  = NOW()
+            WHERE staker_address = $1
+        ",
+        staker_address,
+        amount,
+        unbonding_ends_at,
+    )
+    .execute(tx.as_mut())
+    .await?;
+
+    Ok(())
+}
+
+/// UPDATE `staking_positions` for an `UnbondedWithdrawn` event: clear unbonding state.
+///
+/// # Errors
+///
+/// Returns [`IndexerError::Database`](crate::error::IndexerError::Database)
+/// on SQL failures.
+#[inline]
+pub async fn update_staking_position_withdraw(
+    tx: &mut PgTransaction<'_>,
+    staker_address: &str,
+) -> IndexerResult<()> {
+    sqlx::query!(
+        r"
+            UPDATE staking_positions
+            SET unbonding_amount  = '0',
+                unbonding_ends_at = 0,
+                last_updated_at   = NOW()
+            WHERE staker_address = $1
+        ",
+        staker_address,
+    )
+    .execute(tx.as_mut())
+    .await?;
+
+    Ok(())
+}
+
+/// UPDATE `staking_positions` for a `RewardsClaimed` event: increase
+/// `total_rewards_claimed`.
+///
+/// # Errors
+///
+/// Returns [`IndexerError::Database`](crate::error::IndexerError::Database)
+/// on SQL failures.
+#[inline]
+pub async fn update_staking_position_rewards(
+    tx: &mut PgTransaction<'_>,
+    staker_address: &str,
+    amount: &str,
+) -> IndexerResult<()> {
+    sqlx::query!(
+        r"
+            UPDATE staking_positions
+            SET total_rewards_claimed = (total_rewards_claimed::NUMERIC + $2::TEXT::NUMERIC)::TEXT,
+                last_updated_at       = NOW()
+            WHERE staker_address = $1
+        ",
+        staker_address,
+        amount,
+    )
+    .execute(tx.as_mut())
+    .await?;
+
+    Ok(())
+}
+
+// -----------------------------------------------------------------------------
+// Staking reward deposits
+// -----------------------------------------------------------------------------
+
+/// Data required to insert a row into `staking_reward_deposits`.
+#[derive(Debug)]
+pub struct NewStakingRewardDeposit<'a> {
+    /// Account hash of the caller who deposited rewards.
+    pub caller_address: &'a str,
+    /// Deposited amount (U256 as string).
+    pub amount: &'a str,
+    /// Deploy hash that emitted the event.
+    pub transaction_hash: &'a str,
+    /// Block height where the event was included.
+    pub block_height: i64,
+    /// Block timestamp of the event.
+    pub event_timestamp: Option<DateTime<Utc>>,
+}
+
+/// Insert a row into `staking_reward_deposits` for a `RewardsDeposited` event.
+///
+/// Uses `ON CONFLICT DO NOTHING` on `transaction_hash` so re-processing is safe.
+///
+/// # Errors
+///
+/// Returns [`IndexerError::Database`](crate::error::IndexerError::Database)
+/// on SQL failures.
+#[inline]
+pub async fn insert_staking_reward_deposit(
+    tx: &mut PgTransaction<'_>,
+    row: &NewStakingRewardDeposit<'_>,
+) -> IndexerResult<()> {
+    sqlx::query!(
+        r"
+            INSERT INTO staking_reward_deposits (caller_address, amount, transaction_hash, block_height, event_timestamp)
+            VALUES ($1, $2, $3, $4, $5)
+            ON CONFLICT (transaction_hash) DO NOTHING
+        ",
+        row.caller_address,
+        row.amount,
+        row.transaction_hash,
+        row.block_height,
+        row.event_timestamp,
     )
     .execute(tx.as_mut())
     .await?;

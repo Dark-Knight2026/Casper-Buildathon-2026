@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO staking_events (staker_address, event_type, amount, transaction_hash, block_height, event_timestamp)\n            VALUES ($1, $2, $3, $4, $5, $6)\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Int8",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "482f3d7f3061a11b60b7fb82fa3dae3e48c53b7ea46d51f1a174752dc0ef41bd"
+}

@@ -7,6 +7,7 @@
 pub mod cep18;
 pub mod db;
 pub mod ico;
+pub mod staking;
 pub mod vesting;
 
 use serde_json::Value;
@@ -27,6 +28,8 @@ pub enum EventType {
     Cep18(cep18::Cep18EventType),
     /// An event emitted by the Vesting contract.
     Vesting(vesting::VestingEventType),
+    /// An event emitted by the Staking contract.
+    Staking(staking::StakingEventType),
 }
 
 impl EventType {
@@ -57,6 +60,11 @@ impl EventType {
             ContractType::Vesting => event_name
                 .parse::<vesting::VestingEventType>()
                 .map(Self::Vesting)
+                .map_err(|_| unknown()),
+
+            ContractType::Staking => event_name
+                .parse::<staking::StakingEventType>()
+                .map(Self::Staking)
                 .map_err(|_| unknown()),
 
             _ => Err(unknown()),
@@ -129,6 +137,11 @@ impl EventRegistry {
             EventType::Cep18(cep18::Cep18EventType::SetAllowance) => cep18::SetAllowance,
             EventType::Vesting(vesting::VestingEventType::ScheduleCreated) => vesting::ScheduleCreated,
             EventType::Vesting(vesting::VestingEventType::TokensClaimed) => vesting::TokensClaimed,
+            EventType::Staking(staking::StakingEventType::Staked) => staking::Staked,
+            EventType::Staking(staking::StakingEventType::UnstakedInitiated) => staking::UnstakedInitiated,
+            EventType::Staking(staking::StakingEventType::UnbondedWithdrawn) => staking::UnbondedWithdrawn,
+            EventType::Staking(staking::StakingEventType::RewardsDeposited) => staking::RewardsDeposited,
+            EventType::Staking(staking::StakingEventType::RewardsClaimed) => staking::RewardsClaimed,
         )
     }
 }
