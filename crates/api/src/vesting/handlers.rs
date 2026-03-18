@@ -58,7 +58,8 @@ fn calculate_vested(total: &str, start: i64, cliff: i64, duration: i64, now: i64
         if dur.is_zero() {
             Decimal::ZERO
         } else {
-            total_dec * elapsed / dur
+            // Divide first to avoid overflow: (elapsed / dur) is always <= 1.0
+            total_dec * (elapsed / dur)
         }
     }
 }

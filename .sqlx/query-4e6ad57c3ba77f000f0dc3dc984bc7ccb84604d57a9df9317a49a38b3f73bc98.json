@@ -1,0 +1,74 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT vesting_id, beneficiary, whitelisted_creator, total_amount, claimed_amount, start_timestamp, cliff_duration, vesting_duration, transaction_hash, block_height\n            FROM   vesting_schedules\n            WHERE  vesting_id = '42'\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "vesting_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "beneficiary",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "whitelisted_creator",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "total_amount",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "claimed_amount",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "start_timestamp",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 6,
+        "name": "cliff_duration",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 7,
+        "name": "vesting_duration",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 8,
+        "name": "transaction_hash",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 9,
+        "name": "block_height",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "4e6ad57c3ba77f000f0dc3dc984bc7ccb84604d57a9df9317a49a38b3f73bc98"
+}
