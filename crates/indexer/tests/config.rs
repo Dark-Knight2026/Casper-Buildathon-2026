@@ -286,9 +286,10 @@ fn active_contracts_returns_all_when_fully_configured() {
         nft: Some(ContractEntry::new("8", 0)),
         roles: Some(ContractEntry::new("9", 0)),
         staking: Some(ContractEntry::new("10", 0)),
+        vesting: Some(ContractEntry::new("11", 0)),
     };
 
-    assert_eq!(registry.active_contracts().len(), 10);
+    assert_eq!(registry.active_contracts().len(), 11);
 }
 
 #[test]

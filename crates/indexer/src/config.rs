@@ -148,6 +148,8 @@ pub enum ContractType {
     Roles,
     /// Staking contract.
     Staking,
+    /// Vesting contract for token lock-up schedules.
+    Vesting,
     /// Unknown contract.
     Unknown,
 }
@@ -187,6 +189,7 @@ impl ContractType {
             Self::Nft => "nft",
             Self::Roles => "roles",
             Self::Staking => "staking",
+            Self::Vesting => "vesting",
             Self::Unknown => "unknown",
         }
     }
@@ -243,6 +246,8 @@ pub struct ContractRegistry {
     pub roles: Option<ContractEntry>,
     /// Staking contract entry.
     pub staking: Option<ContractEntry>,
+    /// Vesting contract entry.
+    pub vesting: Option<ContractEntry>,
 }
 
 impl ContractRegistry {
@@ -271,6 +276,7 @@ impl ContractRegistry {
             nft: Self::read_contract(settings, "nft"),
             roles: Self::read_contract(settings, "roles"),
             staking: Self::read_contract(settings, "staking"),
+            vesting: Self::read_contract(settings, "vesting"),
         }
     }
 
@@ -307,7 +313,7 @@ impl ContractRegistry {
     #[inline]
     #[must_use]
     pub fn active_contracts(&self) -> Vec<ActiveContract<'_>> {
-        let pairs: [(ContractType, &Option<ContractEntry>); 10] = [
+        let pairs: [(ContractType, &Option<ContractEntry>); 11] = [
             (ContractType::Usdc, &self.usdc),
             (ContractType::Usdt, &self.usdt),
             (ContractType::Big, &self.big),
@@ -318,6 +324,7 @@ impl ContractRegistry {
             (ContractType::Nft, &self.nft),
             (ContractType::Roles, &self.roles),
             (ContractType::Staking, &self.staking),
+            (ContractType::Vesting, &self.vesting),
         ];
 
         pairs

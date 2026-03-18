@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO vesting_schedules (vesting_id, beneficiary, whitelisted_creator, total_amount, start_timestamp, cliff_duration, vesting_duration, transaction_hash, block_height)\n            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)\n            ON CONFLICT (vesting_id) DO UPDATE SET\n                beneficiary         = EXCLUDED.beneficiary,\n                whitelisted_creator = EXCLUDED.whitelisted_creator,\n                total_amount        = EXCLUDED.total_amount,\n                start_timestamp     = EXCLUDED.start_timestamp,\n                cliff_duration      = EXCLUDED.cliff_duration,\n                vesting_duration    = EXCLUDED.vesting_duration,\n                transaction_hash    = EXCLUDED.transaction_hash,\n                block_height        = EXCLUDED.block_height,\n                updated_at          = NOW()\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Int8",
+        "Int8",
+        "Int8",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "73043c9d5a48303eb63bc266f7eed746cf49a16b796389438e16f4c21d1997a5"
+}

@@ -7,6 +7,7 @@
 pub mod cep18;
 pub mod db;
 pub mod ico;
+pub mod vesting;
 
 use serde_json::Value;
 
@@ -24,6 +25,8 @@ pub enum EventType {
     Ico(ico::IcoEventType),
     /// An event emitted by a CEP-18 token contract (BIG, USDC, USDT).
     Cep18(cep18::Cep18EventType),
+    /// An event emitted by the Vesting contract.
+    Vesting(vesting::VestingEventType),
 }
 
 impl EventType {
@@ -49,6 +52,11 @@ impl EventType {
             ContractType::Big | ContractType::Usdc | ContractType::Usdt => event_name
                 .parse::<cep18::Cep18EventType>()
                 .map(Self::Cep18)
+                .map_err(|_| unknown()),
+
+            ContractType::Vesting => event_name
+                .parse::<vesting::VestingEventType>()
+                .map(Self::Vesting)
                 .map_err(|_| unknown()),
 
             _ => Err(unknown()),
@@ -119,6 +127,8 @@ impl EventRegistry {
             EventType::Cep18(cep18::Cep18EventType::Transfer) => cep18::Transfer,
             EventType::Cep18(cep18::Cep18EventType::Mint) => cep18::Mint,
             EventType::Cep18(cep18::Cep18EventType::SetAllowance) => cep18::SetAllowance,
+            EventType::Vesting(vesting::VestingEventType::ScheduleCreated) => vesting::ScheduleCreated,
+            EventType::Vesting(vesting::VestingEventType::TokensClaimed) => vesting::TokensClaimed,
         )
     }
 }

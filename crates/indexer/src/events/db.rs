@@ -9,6 +9,7 @@
 //! - **Transactions** — generic blockchain transaction log (`blockchain_transactions`).
 //! - **Token holdings** — current CEP-18 balances per user (`token_holdings`).
 //! - **ICO** — detailed ICO purchase log (`ico_purchases`).
+//! - **Vesting** — vesting schedule tracking (`vesting_schedules`).
 
 use std::collections::HashSet;
 
@@ -500,6 +501,107 @@ pub async fn upsert_ico_schedule(
     )
       .execute(tx.as_mut())
       .await?;
+
+    Ok(())
+}
+
+// -----------------------------------------------------------------------------
+// Vesting schedules
+// -----------------------------------------------------------------------------
+
+/// Data required to insert a row into `vesting_schedules`.
+#[derive(Debug)]
+pub struct NewVestingSchedule<'a> {
+    /// Vesting schedule ID from the contract (U256 as string).
+    pub vesting_id: &'a str,
+    /// Account hash of the beneficiary (64 hex, no prefix).
+    pub beneficiary: &'a str,
+    /// Account hash of the whitelisted creator (e.g. ICO contract).
+    pub whitelisted_creator: &'a str,
+    /// Total number of tokens locked (U256 as string).
+    pub total_amount: &'a str,
+    /// Block timestamp when the vesting clock starts (epoch ms).
+    pub start_timestamp: i64,
+    /// Duration before any tokens become claimable (ms).
+    pub cliff_duration: i64,
+    /// Total duration from start to full vesting (ms).
+    pub vesting_duration: i64,
+    /// Deploy hash that emitted the event.
+    pub transaction_hash: &'a str,
+    /// Block height where the event was included.
+    pub block_height: i64,
+}
+
+/// Upsert a row into `vesting_schedules` for a `ScheduleCreated` event.
+///
+/// Uses `ON CONFLICT (vesting_id) DO UPDATE` so re-indexing is safe.
+///
+/// # Errors
+///
+/// Returns [`IndexerError::Database`](crate::error::IndexerError::Database)
+/// on SQL failures.
+#[inline]
+pub async fn upsert_vesting_schedule(
+    tx: &mut PgTransaction<'_>,
+    row: &NewVestingSchedule<'_>,
+) -> IndexerResult<()> {
+    sqlx::query!(
+        r"
+            INSERT INTO vesting_schedules (vesting_id, beneficiary, whitelisted_creator, total_amount, start_timestamp, cliff_duration, vesting_duration, transaction_hash, block_height)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            ON CONFLICT (vesting_id) DO UPDATE SET
+                beneficiary         = EXCLUDED.beneficiary,
+                whitelisted_creator = EXCLUDED.whitelisted_creator,
+                total_amount        = EXCLUDED.total_amount,
+                start_timestamp     = EXCLUDED.start_timestamp,
+                cliff_duration      = EXCLUDED.cliff_duration,
+                vesting_duration    = EXCLUDED.vesting_duration,
+                transaction_hash    = EXCLUDED.transaction_hash,
+                block_height        = EXCLUDED.block_height,
+                updated_at          = NOW()
+        ",
+        row.vesting_id,
+        row.beneficiary,
+        row.whitelisted_creator,
+        row.total_amount,
+        row.start_timestamp,
+        row.cliff_duration,
+        row.vesting_duration,
+        row.transaction_hash,
+        row.block_height,
+    )
+    .execute(tx.as_mut())
+    .await?;
+
+    Ok(())
+}
+
+/// Increase `claimed_amount` on a vesting schedule after a `TokensClaimed` event.
+///
+/// Uses `::NUMERIC` arithmetic so U256-scale values are handled correctly.
+///
+/// # Errors
+///
+/// Returns [`IndexerError::Database`](crate::error::IndexerError::Database)
+/// on SQL failures.
+#[inline]
+pub async fn update_vesting_claimed(
+    tx: &mut PgTransaction<'_>,
+    vesting_id: &str,
+    amount: &str,
+) -> IndexerResult<()> {
+    sqlx::query!(
+        r"
+            UPDATE vesting_schedules
+            SET claimed_amount = (claimed_amount::NUMERIC + $2::TEXT::NUMERIC)::TEXT,
+                updated_at     = NOW()
+            WHERE vesting_id = $1
+        ",
+        vesting_id,
+        amount,
+    )
+    .execute(tx.as_mut())
+    .await?;
 
     Ok(())
 }
