@@ -6,8 +6,10 @@ import { TrendingUp, Clock, Percent, Wallet } from 'lucide-react';
 import { TransactionHistory } from '../shared/TransactionHistory';
 import { useICOWallet } from '@/hooks/ico/useICOWallet';
 import { useTransactionHistory } from '@/hooks/ico/useTransactionHistory';
+import { useStakingPortfolio } from '@/hooks/ico/useStakingPortfolio';
+import { useStakingInfo } from '@/hooks/ico/useStakingInfo';
 import { deriveAccountHash } from '@/lib/blockchain/accountUtils';
-import { MOCK_DASHBOARD, MOCK_STAKING_INFO, MOCK_EARNINGS_DATA, MOCK_PORTFOLIO } from '@/constants/icoMockData';
+import { MOCK_EARNINGS_DATA } from '@/constants/icoMockData';
 import { formatNumber, formatUSD } from '../../utils/formatters';
 
 const PAGE_SIZE = 8;
@@ -24,30 +26,31 @@ export const OverviewTab = memo(function OverviewTab() {
   const accountHash = account?.publicKey ? deriveAccountHash(account.publicKey) : null;
   const [page, setPage] = useState(1);
   const { transactions, totalPages } = useTransactionHistory(accountHash, page, PAGE_SIZE);
+  const { data: stakingPortfolio } = useStakingPortfolio(accountHash);
+  console.log('stakingPortfolio:', stakingPortfolio);
+  const { data: stakingInfo } = useStakingInfo(accountHash);
+  console.log('stakingInfo:', stakingInfo);
 
   const dashboardCards = useMemo(() => [
     {
       label: 'BIG Balance',
-      value: MOCK_DASHBOARD.bigInWallet,
-      usdValue: '100.00',
+      value: stakingPortfolio?.bigInWallet ?? 0,
       icon: Wallet,
       color: 'var(--ico-card-wallet)',
     },
     {
       label: 'BIG Staked',
-      value: MOCK_DASHBOARD.bigStaked,
-      usdValue: '750.00',
+      value: stakingPortfolio?.bigStaked ?? 0,
       icon: TrendingUp,
       color: 'var(--ico-card-staked)',
     },
     {
       label: 'Rewards Earned',
-      value: MOCK_DASHBOARD.rewardsEarned,
-      usdValue: '8.25',
+      value: stakingPortfolio?.rewardsEarned ?? 0,
       icon: TrendingUp,
       color: 'var(--ico-card-rewards)',
     },
-  ], []);
+  ], [stakingPortfolio]);
 
   return (
     <div className="space-y-4">
@@ -65,10 +68,10 @@ export const OverviewTab = memo(function OverviewTab() {
           </div>
 
           <p className="text-xl font-bold text-[hsl(var(--ico-text-primary))]">
-            {formatNumber(MOCK_DASHBOARD.totalBig)}
+            {formatNumber(stakingPortfolio?.totalBig ?? 0)}
           </p>
           <p className="text-sm md:text-xl text-[hsl(var(--ico-text-muted))]">
-            {formatUSD(MOCK_DASHBOARD.estimatedUsdcValue)}
+            {formatUSD(stakingPortfolio?.estimatedUsdValue ?? 0)}
           </p>
         </div>
       </Card>
@@ -94,9 +97,6 @@ export const OverviewTab = memo(function OverviewTab() {
                   <p className="text-xl font-bold text-[hsl(var(--ico-text-primary))]">
                     {formatNumber(card.value)}
                   </p>
-                  <p className="text-sm text-[hsl(var(--ico-text-muted))]">
-                    {formatUSD(card.usdValue)}
-                  </p>
                 </div>
               </div>
             </Card>
@@ -120,7 +120,7 @@ export const OverviewTab = memo(function OverviewTab() {
                 <div>
                   <p className="text-sm text-[hsl(var(--ico-text-secondary))]">Next Rewards</p>
                   <p className="text-lg font-semibold text-[hsl(var(--ico-text-primary))]">
-                    {MOCK_STAKING_INFO.nextRewards}
+                    —
                   </p>
                 </div>
               </div>
@@ -131,7 +131,7 @@ export const OverviewTab = memo(function OverviewTab() {
                 <div>
                   <p className="text-sm text-[hsl(var(--ico-text-secondary))]">Current APY</p>
                   <p className="text-lg font-semibold text-[hsl(var(--ico-text-primary))]">
-                    {MOCK_STAKING_INFO.currentAPY}%
+                    {stakingInfo?.currentApy ?? 0}%
                   </p>
                 </div>
               </div>
@@ -188,10 +188,10 @@ export const OverviewTab = memo(function OverviewTab() {
             </h3>
             <div className="space-y-2">
               <p className="text-3xl font-bold text-[hsl(var(--ico-text-primary))]">
-                {formatUSD(MOCK_PORTFOLIO.estimatedValue)}
+                {formatUSD(stakingPortfolio?.estimatedUsdValue ?? 0)}
               </p>
               <p className="text-sm text-[hsl(var(--ico-state-active))]">
-                {MOCK_PORTFOLIO.change24h}% (24h)
+                {stakingPortfolio?.change24hPercent ?? 0}% (24h)
               </p>
               <p className='text-[hsl(var(--ico-text-secondary))]'>Current USD value of your holdings</p>
             </div>

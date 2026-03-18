@@ -149,13 +149,19 @@ export interface IcoBalanceResponse {
   currentValue: number;
 }
 
+export interface StakingInfoResponse {
+  currentApy: number;
+  stakedTokens: number;
+  totalRewardsEarned: number;
+}
+
 export interface StakingPortfolioResponse {
-  bigInWallet: number | null;
-  bigStaked: number | null;
-  change24hPercent: number | null;
-  estimatedUsdValue: number | null;
-  rewardsEarned: number | null;
-  totalBig: number | null;
+  bigInWallet: number;
+  bigStaked: number;
+  change24hPercent: number;
+  estimatedUsdValue: number;
+  rewardsEarned: number;
+  totalBig: number;
 }
 
 export interface VestingSchedule {
