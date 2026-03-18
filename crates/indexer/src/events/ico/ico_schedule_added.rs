@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     error::IndexerResult,
     event_trait::{EventContext, IndexableEvent},
-    events::db,
+    events::db::{self, HashType},
 };
 
 /// Emitted when a new ICO round schedule is added to the contract.
@@ -38,6 +38,27 @@ impl IndexableEvent for IcoScheduleAdded {
                 price: &self.price,
                 transaction_hash: ctx.deploy_hash,
                 block_height: ctx.block_height.cast_signed(),
+            },
+        )
+        .await?;
+
+        let event_json = serde_json::to_value(self)?;
+        db::insert_blockchain_transaction(
+            ctx.tx,
+            &db::NewBlockchainTx {
+                deploy_hash: ctx.deploy_hash,
+                block_number: ctx.block_height.cast_signed(),
+                transaction_type: "ico_schedule_added",
+                from_address: ctx.contract_hash,
+                to_address: None,
+                amount: None,
+                currency: None,
+                contract_hash: Some(ctx.contract_hash),
+                block_timestamp: ctx.block_timestamp,
+                from_type: HashType::Contract.to_db(),
+                to_type: HashType::Contract.to_db(),
+                transform_idx: ctx.transform_idx,
+                metadata: &event_json,
             },
         )
         .await?;

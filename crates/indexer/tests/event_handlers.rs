@@ -617,6 +617,22 @@ async fn ico_schedule_added_writes_schedule_row(pool: PgPool) {
     assert_eq!(row.price, "500000");
     assert_eq!(row.transaction_hash, deploy_hash);
     assert_eq!(row.block_height, 500);
+
+    // Must also write a blockchain_transactions audit row.
+    let tx_row = sqlx::query!(
+        r"
+            SELECT transaction_type, from_address
+            FROM   blockchain_transactions
+            WHERE  transaction_hash = $1
+        ",
+        deploy_hash,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(tx_row.transaction_type, "ico_schedule_added");
+    assert_eq!(tx_row.from_address, "ico_hash");
 }
 
 /// Re-processing the same `IcoScheduleAdded` event must update the existing
