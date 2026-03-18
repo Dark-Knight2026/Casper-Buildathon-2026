@@ -1,25 +1,16 @@
 import { memo, useMemo, useState } from 'react';
 import { Card } from '../shared/Card';
-import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { TrendingUp, Clock, Percent, Wallet } from 'lucide-react';
 import { TransactionHistory } from '../shared/TransactionHistory';
+import { EarningsChart } from '../shared/EarningsChart';
 import { useICOWallet } from '@/hooks/ico/useICOWallet';
 import { useTransactionHistory } from '@/hooks/ico/useTransactionHistory';
 import { useStakingPortfolio } from '@/hooks/ico/useStakingPortfolio';
 import { useStakingInfo } from '@/hooks/ico/useStakingInfo';
 import { deriveAccountHash } from '@/lib/blockchain/accountUtils';
-import { MOCK_EARNINGS_DATA } from '@/constants/icoMockData';
 import { formatNumber, formatUSD } from '../../utils/formatters';
 
 const PAGE_SIZE = 8;
-
-const chartConfig = {
-  earnings: {
-    label: 'Earnings',
-    color: '#1F7A63',  /* Primary green */
-  },
-};
 
 export const OverviewTab = memo(function OverviewTab() {
   const { account } = useICOWallet();
@@ -30,7 +21,6 @@ export const OverviewTab = memo(function OverviewTab() {
   console.log('stakingPortfolio:', stakingPortfolio);
   const { data: stakingInfo } = useStakingInfo(accountHash);
   console.log('stakingInfo:', stakingInfo);
-
   const dashboardCards = useMemo(() => [
     {
       label: 'BIG Balance',
@@ -139,43 +129,7 @@ export const OverviewTab = memo(function OverviewTab() {
           </div>
         </Card>
 
-        {/* Earnings Overview Chart */}
-        <Card className="p-5 md:col-span-2">
-          <div className="w-full">
-            <h3 className="text-lg font-semibold text-[hsl(var(--ico-text-primary))] mb-4">
-              Earnings Overview
-            </h3>
-            <ChartContainer config={chartConfig} className="h-[200px] w-full">
-              <AreaChart data={MOCK_EARNINGS_DATA} margin={{ left: 12, right: 12 }}>
-                <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="hsl(var(--ico-border-color))" />
-                <XAxis
-                  dataKey="month"
-                  tickLine={false}
-                  axisLine={false}
-                  tickMargin={8}
-                  tick={{ fill: 'hsl(var(--ico-text-muted))', fontSize: 12 }}
-                />
-                <YAxis
-                  tickLine={false}
-                  axisLine={false}
-                  tick={{ fill: 'hsl(var(--ico-text-muted))', fontSize: 12 }}
-                  tickFormatter={(value) => `$${value}`}
-                />
-                <ChartTooltip
-                  cursor={false}
-                  content={<ChartTooltipContent indicator="line" />}
-                />
-                <Area
-                  type="natural"
-                  dataKey="earnings"
-                  fill="var(--color-earnings)"
-                  fillOpacity={0.4}
-                  stroke="var(--color-earnings)"
-                />
-              </AreaChart>
-            </ChartContainer>
-          </div>
-        </Card>
+        <EarningsChart accountHash={accountHash} className="md:col-span-2" />
       </div>
 
       {/* Third Row: Portfolio Value + Transactions */}

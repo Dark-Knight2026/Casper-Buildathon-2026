@@ -149,6 +149,17 @@ export interface IcoBalanceResponse {
   currentValue: number;
 }
 
+export type EarningsPeriod = '1m' | '3m' | '6m' | '1y' | 'all';
+
+export interface EarningsDataPoint {
+  month: string;
+  earnings: number;
+}
+
+export interface StakingEarningsResponse {
+  data: EarningsDataPoint[];
+}
+
 export interface StakingInfoResponse {
   currentApy: number;
   stakedTokens: number;
