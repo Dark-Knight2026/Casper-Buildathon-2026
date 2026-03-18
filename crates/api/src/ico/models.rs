@@ -11,7 +11,6 @@ pub struct IcoBalanceResponse {
     #[schema(example = "1505000000000000000000000")]
     pub tokens_purchased: String,
     /// Total amount spent in USD: `(tokens_purchased / 10^18) * price_usd`.
-    #[serde(rename = "totalSpentUSD")]
     #[schema(example = 1505.0)]
     pub total_spent_usd: f64,
     /// Current token price in USD (from ICO config).
@@ -20,7 +19,7 @@ pub struct IcoBalanceResponse {
     /// Token symbol (always `"BIG"`).
     #[schema(example = "BIG")]
     pub token_symbol: String,
-    /// Current value of holdings in USD: same formula as `totalSpentUSD` while ICO is active.
+    /// Current value of holdings in USD: same formula as `totalSpentUsd` while ICO is active.
     #[schema(example = 1505.0)]
     pub current_value: f64,
 }

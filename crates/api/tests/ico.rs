@@ -65,7 +65,7 @@ async fn ico_balance_no_purchases(pool: PgPool) {
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
     assert_eq!(body["tokensPurchased"], "0");
-    assert_eq!(body["totalSpentUSD"], 0.0);
+    assert_eq!(body["totalSpentUsd"], 0.0);
     // price = 500000 / 10^6 = 0.5
     assert_eq!(body["tokenPrice"], 0.5);
     assert_eq!(body["tokenSymbol"], "BIG");
@@ -90,7 +90,7 @@ async fn ico_balance_with_purchases(pool: PgPool) {
     let body: Value = response.json();
     assert_eq!(body["tokensPurchased"], amount);
     // 2 BIG * $0.50 = $1.00
-    let spent = body["totalSpentUSD"].as_f64().unwrap();
+    let spent = body["totalSpentUsd"].as_f64().unwrap();
     assert!(
         (spent - 1.0).abs() < USD_TOLERANCE,
         "expected ~1.0, got {spent}"
