@@ -12,7 +12,7 @@ use utoipa::IntoParams;
 
 use crate::{
     common::{ApiError, ApiResult, AppState, PaginatedResponse, Pagination},
-    transactions::{
+    onchain::transactions::{
         db,
         models::{HashType, TransactionResponse, TxType},
     },

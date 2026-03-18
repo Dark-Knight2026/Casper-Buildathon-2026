@@ -6,9 +6,11 @@ use axum::{Json, extract::State};
 use rust_decimal::Decimal;
 
 use crate::{
-    auth::AuthUser,
     common::{ApiResult, AppState},
-    tax::models::{TaxCalculationRequest, TaxCategory, TaxCategoryType, TaxReport},
+    services::{
+        auth::AuthUser,
+        tax::models::{TaxCalculationRequest, TaxCategory, TaxCategoryType, TaxReport},
+    },
 };
 
 /// `POST /api/v1/tax/calculate-liability`

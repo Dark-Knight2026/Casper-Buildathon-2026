@@ -17,162 +17,26 @@ use tokio::{
         unix::{self, SignalKind},
     },
 };
-use tower_governor::{
-    GovernorLayer, governor::GovernorConfigBuilder, key_extractor::SmartIpKeyExtractor,
-};
 use tower_http::{cors::CorsLayer, limit::RequestBodyLimitLayer, trace::TraceLayer};
 use utoipa::OpenApi;
 use utoipa_axum::{router::OpenApiRouter, routes};
 use utoipa_swagger_ui::SwaggerUi;
 
-use crate::{
-    ApiDoc, AppState, RedisStore, ServerConfig, ServerError, analytics, auth, health, ico, staking,
-    tax, transactions, vesting,
-};
-
-// Public router ---------------------------------------------------------------
-
-/// Rate limit: requests allowed per second for auth endpoints.
-pub const AUTH_RATE_LIMIT_PER_SECOND: u64 = 1;
-
-/// Rate limit: maximum burst size for auth endpoints.
-pub const AUTH_RATE_LIMIT_BURST: u32 = 15;
-
-/// Creates an `OpenAPI` router for public API endpoints that do not require
-/// authentication.
-///
-/// Includes rate limiting:
-/// - Authentication endpoints (`/auth/*`)
-///
-/// # Panics
-///
-/// Panics at startup if the rate-limit configuration is invalid (e.g. zero burst size).
-#[inline]
-pub fn public_router() -> OpenApiRouter<Arc<AppState>> {
-    let rate_limit = Arc::new(
-        GovernorConfigBuilder::default()
-            .key_extractor(SmartIpKeyExtractor)
-            .per_second(AUTH_RATE_LIMIT_PER_SECOND)
-            .burst_size(AUTH_RATE_LIMIT_BURST)
-            .finish()
-            .expect("auth rate-limit config is always valid: per_second > 0 and burst_size > 0"),
-    );
-
-    OpenApiRouter::new()
-        .routes(routes!(auth::handlers::get_nonce))
-        .routes(routes!(auth::handlers::login))
-        .route_layer(GovernorLayer::new(rate_limit))
-}
-
-// Public data router ----------------------------------------------------------
-
-/// Rate limit: requests allowed per second for public data endpoints.
-pub const PUBLIC_DATA_RATE_LIMIT_PER_SECOND: u64 = 5;
-
-/// Rate limit: maximum burst size for public data endpoints.
-pub const PUBLIC_DATA_RATE_LIMIT_BURST: u32 = 30;
-
-/// Creates a rate-limited `OpenAPI` router for public data endpoints (no auth).
-///
-/// - `GET /ico/progress` - ICO sale progress
-/// - `GET /ico/balance/{address}` - ICO balance for an account
-/// - `GET /transactions/token/big` - BIG token transactions
-/// - `GET /transactions/account/{address}` - account transaction history
-/// - `GET /staking/{accountHash}` - staking info
-/// - `GET /staking/{accountHash}/portfolio` - portfolio overview
-/// - `GET /staking/{accountHash}/earnings` - monthly earnings chart
-/// - `GET /staking/{accountHash}/rewards-history` - daily rewards history
-///
-/// # Panics
-///
-/// Panics at startup if the rate-limit configuration is invalid (e.g. zero burst size).
-#[inline]
-#[must_use]
-pub fn public_data_router() -> OpenApiRouter<Arc<AppState>> {
-    let rate_limit = Arc::new(
-        GovernorConfigBuilder::default()
-            .key_extractor(SmartIpKeyExtractor)
-            .per_second(PUBLIC_DATA_RATE_LIMIT_PER_SECOND)
-            .burst_size(PUBLIC_DATA_RATE_LIMIT_BURST)
-            .finish()
-            .expect(
-                "public-data rate-limit config is always valid: per_second > 0 and burst_size > 0",
-            ),
-    );
-
-    OpenApiRouter::new()
-        .nest("/transactions", transactions_router())
-        .nest("/ico", ico_router())
-        .nest("/vesting", vesting_router())
-        .nest("/staking", staking_router())
-        .route_layer(GovernorLayer::new(rate_limit))
-}
-
-// Protected router ------------------------------------------------------------
-
-/// Creates an `OpenAPI` router for protected endpoints that require JWT
-/// authentication.
-///
-/// Authentication is enforced via the `AuthUser` extractor in handlers.
-#[inline]
-pub fn protected_router() -> OpenApiRouter<Arc<AppState>> {
-    OpenApiRouter::new()
-        .routes(routes!(tax::handlers::calculate_tax_liability))
-        .routes(routes!(analytics::handlers::get_property_performance))
-}
-
-/// Creates an `OpenAPI` router for blockchain transaction endpoints
-#[inline]
-pub fn transactions_router() -> OpenApiRouter<Arc<AppState>> {
-    OpenApiRouter::new()
-        .routes(routes!(transactions::handlers::get_account_transactions))
-        .routes(routes!(transactions::handlers::get_big_token_transactions))
-}
-
-/// Creates an `OpenAPI` router for ICO endpoints
-#[inline]
-pub fn ico_router() -> OpenApiRouter<Arc<AppState>> {
-    OpenApiRouter::new()
-        .routes(routes!(ico::handlers::get_ico_balance))
-        .routes(routes!(ico::handlers::get_ico_progress))
-}
-
-/// Creates an `OpenAPI` router for vesting endpoints
-#[inline]
-pub fn vesting_router() -> OpenApiRouter<Arc<AppState>> {
-    OpenApiRouter::new()
-        .routes(routes!(vesting::handlers::get_vesting_schedules))
-        .routes(routes!(vesting::handlers::get_token_supply))
-        .routes(routes!(vesting::handlers::get_release_schedule))
-}
-
-/// Creates an `OpenAPI` router for staking endpoints
-#[inline]
-pub fn staking_router() -> OpenApiRouter<Arc<AppState>> {
-    OpenApiRouter::new()
-        .routes(routes!(staking::handlers::get_staking_info))
-        .routes(routes!(staking::handlers::get_portfolio))
-        .routes(routes!(staking::handlers::get_earnings))
-        .routes(routes!(staking::handlers::get_rewards_history))
-}
-
-// Full router -----------------------------------------------------------------
+use crate::{ApiDoc, AppState, RedisStore, ServerConfig, ServerError, onchain, services};
 
 /// Creates the full application router combining public and protected routes.
 #[inline]
 pub fn create_router(state: Arc<AppState>) -> Router {
     let (router, api) = OpenApiRouter::with_openapi(ApiDoc::openapi())
-        .routes(routes!(health::handlers::health_check))
-        .nest("/api/v1/auth", public_router())
-        .nest("/api/v1", public_data_router())
-        .nest("/api/v1", protected_router())
+        .routes(routes!(services::health::handlers::health_check))
+        .nest("/api/v1/auth", services::public_router())
+        .nest("/api/v1", services::protected_router())
+        .nest("/api/v1", onchain::router())
         .with_state(state)
         .split_for_parts();
 
     router.merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", api))
 }
-
-// Application -----------------------------------------------------------------
 
 /// Maximum request body size (1 MB).
 const REQUEST_BODY_LIMIT: usize = 1024 * 1024;

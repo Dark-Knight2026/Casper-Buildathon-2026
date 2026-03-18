@@ -6,8 +6,10 @@ use axum::{Json, extract::State, http::StatusCode};
 
 use crate::{
     common::AppState,
-    health::db::heartbeat,
-    health::models::{ConnectionStatus, HealthResponse},
+    services::health::{
+        db::heartbeat,
+        models::{ConnectionStatus, HealthResponse},
+    },
 };
 
 /// `GET /health`

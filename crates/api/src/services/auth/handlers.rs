@@ -14,11 +14,13 @@ use secrecy::ExposeSecret;
 use sha2::{Digest, Sha256};
 
 use crate::{
-    auth,
-    auth::models::{LoginRequest, LoginResponse, NonceRequest, NonceResponse, UserInfo},
     common::{
         self, ApiError, ApiResult, AppState, CASPER_ED25519_PUBKEY_HEX_LEN,
         CASPER_SECP256K1_PUBKEY_HEX_LEN, Claims, UserRole,
+    },
+    services::auth::{
+        self,
+        models::{LoginRequest, LoginResponse, NonceRequest, NonceResponse, UserInfo},
     },
 };
 
@@ -42,13 +44,12 @@ use crate::{
 ///
 /// Returns `ApiError::Internal` if Redis operations fail.
 #[utoipa::path(
-    get,
-    path = "/nonce",
-    tag = "Auth",
-    params(
-        ("wallet_address" = String, Query, description = "The wallet address (public key)")
-    ),
-    responses(
+  get,
+  path = "/nonce",
+  tag = "Auth",
+  params(
+        ("wallet_address" = String, Query, description = "The wallet address (public key)")),
+  responses(
         (status = 200, description = "Nonce generated successfully", body = NonceResponse),
         (status = 400, description = "Invalid wallet address length"),
         (status = 500, description = "Internal server error")

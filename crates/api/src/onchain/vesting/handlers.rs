@@ -9,7 +9,7 @@ use rust_decimal::{Decimal, prelude::ToPrimitive};
 
 use crate::{
     common::{ApiError, ApiResult, AppState, PaginatedResponse, Pagination},
-    vesting::{
+    onchain::vesting::{
         db,
         models::{
             ReleaseSchedulePoint, ReleaseScheduleResponse, SchedulesQuery, TokenSupplyResponse,

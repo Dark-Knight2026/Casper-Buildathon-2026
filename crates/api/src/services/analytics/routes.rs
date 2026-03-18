@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use axum::{Router, routing::post};
 
-use crate::{analytics, common::AppState};
+use crate::{common::AppState, services::analytics};
 
 /// Creates the analytics router with performance endpoints.
 #[inline]

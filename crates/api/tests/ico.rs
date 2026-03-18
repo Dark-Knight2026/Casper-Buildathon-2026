@@ -7,7 +7,7 @@ use axum::http::StatusCode;
 use serde_json::Value;
 use sqlx::PgPool;
 
-use api::{IcoFallback, server::PUBLIC_DATA_RATE_LIMIT_BURST};
+use api::{IcoFallback, onchain::PUBLIC_DATA_RATE_LIMIT_BURST};
 use common::TestOverrides;
 
 /// 64-char hex address used as a valid account hash in tests.

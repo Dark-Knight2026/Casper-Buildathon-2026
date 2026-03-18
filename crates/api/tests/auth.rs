@@ -8,7 +8,7 @@ use rand::Rng;
 use redis::AsyncCommands;
 use sqlx::PgPool;
 
-use api::{common::CASPER_MESSAGE_PREFIX, server::AUTH_RATE_LIMIT_BURST};
+use api::{common::CASPER_MESSAGE_PREFIX, services::AUTH_RATE_LIMIT_BURST};
 
 /// Signs a message with the Casper Wallet prefix, matching browser extension behavior.
 fn sign_with_prefix(message: &str, secret_key: &SecretKey, public_key: &PublicKey) -> String {

@@ -3,17 +3,23 @@
 #![allow(clippy::needless_for_each)]
 
 use utoipa::{
-    Modify, OpenApi,
-    openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme},
+    Modify, OpenApi as OpenApiDerive,
+    openapi::{
+        OpenApi,
+        security::{HttpAuthScheme, HttpBuilder, SecurityScheme},
+    },
 };
 
-use crate::{analytics, auth, health, ico, staking, tax, transactions, vesting};
+use crate::{
+    onchain::{ico, staking, transactions, vesting},
+    services::{analytics, auth, health, tax},
+};
 
 /// `OpenAPI` documentation configuration.
 ///
 /// Note: `paths` is empty because routes are registered automatically
 /// via `OpenApiRouter` and `routes!` macro.
-#[derive(Debug, OpenApi)]
+#[derive(Debug, OpenApiDerive)]
 #[openapi(
     info(
         title = "LeaseFi API",
@@ -87,7 +93,7 @@ struct SecurityAddon;
 
 impl Modify for SecurityAddon {
     #[inline]
-    fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
+    fn modify(&self, openapi: &mut OpenApi) {
         let components = openapi.components.get_or_insert_with(Default::default);
         components.add_security_scheme(
             "bearer_auth",

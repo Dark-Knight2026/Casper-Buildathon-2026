@@ -11,7 +11,7 @@ use rust_decimal::{Decimal, prelude::ToPrimitive};
 
 use crate::{
     common::{ApiError, ApiResult, AppState},
-    staking::{
+    onchain::staking::{
         db,
         models::{
             AccountHashPath, EarningsPoint, EarningsQuery, EarningsResponse, PortfolioResponse,

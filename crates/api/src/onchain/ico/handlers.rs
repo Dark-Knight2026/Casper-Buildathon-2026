@@ -10,7 +10,7 @@ use rust_decimal::{Decimal, prelude::ToPrimitive};
 
 use crate::{
     common::{ApiError, ApiResult, AppState},
-    ico::{
+    onchain::ico::{
         db,
         models::{IcoBalanceResponse, IcoProgressResponse},
     },

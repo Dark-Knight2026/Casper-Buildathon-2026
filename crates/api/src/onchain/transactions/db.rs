@@ -3,7 +3,7 @@
 use chrono::{DateTime, SecondsFormat, Utc};
 use sqlx::PgPool;
 
-use crate::transactions::models::{self, HashType, TransactionResponse, TxType};
+use crate::onchain::transactions::models::{self, HashType, TransactionResponse, TxType};
 
 /// Intermediate row fetched from `blockchain_transactions`.
 struct TransactionRow {

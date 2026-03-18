@@ -6,9 +6,11 @@ use axum::{Json, extract::State};
 use rust_decimal::Decimal;
 
 use crate::{
-    analytics::models::{PropertyPerformanceReport, PropertyPerformanceRequest},
-    auth::AuthUser,
     common::{ApiResult, AppState},
+    services::{
+        analytics::models::{PropertyPerformanceReport, PropertyPerformanceRequest},
+        auth::AuthUser,
+    },
 };
 
 /// `POST /api/v1/analytics/property-performance`

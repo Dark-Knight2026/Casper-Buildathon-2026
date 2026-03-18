@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use axum::{Router, routing::post};
 
-use crate::{common::AppState, tax::handlers::calculate_tax_liability};
+use crate::{common::AppState, services::tax::handlers::calculate_tax_liability};
 
 /// Creates the tax router with calculation endpoints.
 #[inline]

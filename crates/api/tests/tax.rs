@@ -7,7 +7,7 @@ use serde_json::{Value, json};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use api::{UserId, UserRole, tax::TaxCalculationRequest};
+use api::{UserId, UserRole, services::tax::TaxCalculationRequest};
 
 #[test]
 fn tax_request_deserialization() {

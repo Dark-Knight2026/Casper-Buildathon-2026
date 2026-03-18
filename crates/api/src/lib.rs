@@ -5,45 +5,27 @@
 //!
 //! # Module Structure
 //!
-//! The crate is organized using a feature-based architecture:
-//!
-//! - [`auth`] - Authentication (nonce generation, login, JWT middleware)
-//! - [`tax`] - Tax calculation endpoints
-//! - [`analytics`] - Property performance analytics
-//! - [`health`] - Health check endpoint
-//! - [`staking`] - Staking endpoints
-//! - [`vesting`] - Vesting schedule endpoints
+//! - [`services`] - Business logic: auth, tax, analytics, health
+//! - [`onchain`] - On-chain data: ICO, staking, transactions, vesting
 //! - [`common`] - Shared utilities (config, errors, crypto, models)
 //! - [`openapi`] - `OpenAPI` documentation configuration
 //! - [`server`] - Server startup logic
 
-/// Property analytics feature module.
-pub mod analytics;
-/// Authentication feature module.
-pub mod auth;
 /// Common utilities shared across all feature modules.
 pub mod common;
-/// Health check feature module.
-pub mod health;
-/// ICO (Initial Coin Offering) feature module.
-pub mod ico;
+/// On-chain data modules.
+pub mod onchain;
 /// OpenAPI documentation configuration.
 pub mod openapi;
 /// Server implementation and startup logic.
 pub mod server;
-/// Staking feature module.
-pub mod staking;
-/// Tax calculation feature module.
-pub mod tax;
-/// Transaction history feature module.
-pub mod transactions;
-/// Vesting schedule feature module.
-pub mod vesting;
+/// Business logic services.
+pub mod services;
 
 // Re-exports
-pub use auth::AuthUser;
 pub use common::{
     AppState, Claims, IcoFallback, Pageable, PaginatedResponse, Pagination, PropertyId, RedisStore,
     ServerConfig, ServerError, UserId, UserRole,
 };
 pub use openapi::ApiDoc;
+pub use services::auth::AuthUser;

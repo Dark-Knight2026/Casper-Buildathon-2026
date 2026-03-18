@@ -1,7 +1,7 @@
 //! Unit tests for transaction type-conversion functions.
 //! These run without a database.
 
-use api::transactions::models::{HashType, TxType, ft_action_type_id};
+use api::onchain::transactions::models::{HashType, TxType, ft_action_type_id};
 
 #[test]
 fn tx_type_as_str() {

@@ -7,7 +7,7 @@ use chrono::NaiveDate;
 use serde_json::{Value, json};
 use sqlx::PgPool;
 
-use api::{UserId, UserRole, analytics::PropertyPerformanceRequest};
+use api::{UserId, UserRole, services::analytics::PropertyPerformanceRequest};
 
 #[test]
 fn property_performance_request_date_parsing() {
