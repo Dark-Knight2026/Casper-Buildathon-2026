@@ -283,8 +283,8 @@ impl Vesting {
     /// Claims all unclaimed-vested tokens from a specific schedule
     ///
     /// Calculates how many tokens vested so far minus whats already been claimed,
-    /// then initiates unstaking. That kicks off the unbonding period, which has be
-    /// be pass by before the user can withdraw.
+    /// then initiates unstaking. That kicks off the unbonding period, which must have passed
+    /// before the user can withdraw.
     ///
     /// @dev only the schedule's beneficiary can call this
     /// @dev Requires no active unbonding position in the Staking contract for the

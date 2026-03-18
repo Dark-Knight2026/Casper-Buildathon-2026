@@ -109,7 +109,7 @@ pub struct Staking {
     /// Reference to the TailorCoin (BIG) CEP-18 token contract.
     tailor_coin: External<Cep18ContractRef>,
 
-    /// Trusted Vesting contract address allowed to intitiate unstaking on behalf of a staker
+    /// Trusted Vesting contract address allowed to initiate unstaking on behalf of a staker
     vesting: External<VestingContractRef>,
 
     /// All staking state for each user, keyed by wallet address

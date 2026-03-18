@@ -457,7 +457,7 @@ fn test_withdraw_token_should_revert_if_withdrawal_cep18_token_amount_is_gt_avai
 fn test_withdraw_token_should_should_withdraw_cspr_token_properly() {
     let env = odra_test::env();
     let (mut treasury, _, _, _) = setup(&env);
-    let amount = U512::from(1 * 10u32.pow(9));
+    let amount = U512::from(10u32.pow(9));
     let withdrawal_amount = amount / 2;
     let recipient = env.get_account(1);
 
