@@ -8,7 +8,7 @@
 //! This approach works for any Casper contract that uses the CES library's
 //! `emit()` function (which writes to the `__events` dictionary).
 
-mod parser;
+pub mod parser;
 mod rpc;
 
 use core::time::Duration;
