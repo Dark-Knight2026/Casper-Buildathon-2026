@@ -49,9 +49,11 @@ export const ICO_CONFIG = {
  */
 export function validateICOConfig(): void {
   const required: Array<[string, string]> = [
+    ['VITE_ICO_CONTRACT_HASH',       ICO_CONFIG.CONTRACTS.icoAddress],
+    ['VITE_ICO_PACKAGE_HASH',        ICO_CONFIG.CONTRACTS.icoPackageHash],
     ['VITE_BIG_TOKEN_CONTRACT_HASH', ICO_CONFIG.CONTRACTS.tokenAddress],
-    ['VITE_USDC_CONTRACT_HASH', ICO_CONFIG.CONTRACTS.usdcAddress],
-    ['VITE_USDT_CONTRACT_HASH', ICO_CONFIG.CONTRACTS.usdtAddress],
+    ['VITE_USDC_CONTRACT_HASH',      ICO_CONFIG.CONTRACTS.usdcAddress],
+    ['VITE_USDT_CONTRACT_HASH',      ICO_CONFIG.CONTRACTS.usdtAddress],
   ];
 
   const missing = required.filter(([, value]) => !value).map(([key]) => key);
