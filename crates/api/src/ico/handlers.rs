@@ -190,11 +190,13 @@ pub async fn get_ico_progress(
 
     // Recalculate tokens_remaining using the resolved total_allocation from the
     // snapshot schedule (not the fallback used as default for the query).
-    let alloc_dec = total_allocation.parse::<Decimal>().unwrap_or(Decimal::ZERO);
+    let alloc_dec = total_allocation
+        .parse::<Decimal>()
+        .map_err(|_| ApiError::Internal("invalid ICO total_allocation data".to_owned()))?;
     let sold_dec = snapshot
         .tokens_sold
         .parse::<Decimal>()
-        .unwrap_or(Decimal::ZERO);
+        .map_err(|_| ApiError::Internal("invalid ICO tokens_sold data".to_owned()))?;
     let hundred = Decimal::from(100);
 
     let tokens_remaining_dec = (alloc_dec - sold_dec).max(Decimal::ZERO);
