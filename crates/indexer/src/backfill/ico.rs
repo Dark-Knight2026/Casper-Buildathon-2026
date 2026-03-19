@@ -1,9 +1,11 @@
 //! ICO backfill via CSPR.cloud `/deploys` endpoint.
 //!
-//! `TokensPurchased` event data is reconstructed from:
-//! - deploy session args (`amount_to_spend`, `currency`) returned inline by CSPR.cloud
-//! - BIG Transfer amount fetched directly from CSPR.cloud `/ft-token-actions`
-//!   (filtered by `from_hash = ICO contract package hash`)
+//! Reconstructs two event types from deploy session args:
+//!
+//! - `IcoScheduleAdded` from `add_schedule` deploys (args: `id`, `start_timestamp`,
+//!   `end_timestamp`, `sale_amount`, `price`)
+//! - `TokensPurchased` from `purchase` deploys (args: `amount_to_spend`, `currency`)
+//!   combined with BIG Transfer amount from CSPR.cloud `/ft-token-actions`
 
 use core::time::Duration;
 use std::collections::HashMap;
@@ -18,7 +20,7 @@ use crate::{
     address,
     config::{ContractType, IndexerConfig},
     error::{ApiErrorResponse, IndexerError, IndexerResult},
-    events::ico::{TokensPurchased, tokens_purchased::Currency},
+    events::ico::{IcoScheduleAdded, TokensPurchased, tokens_purchased::Currency},
     processor::{self, RawEvent},
 };
 
@@ -186,11 +188,14 @@ pub async fn backfill_ico(
     Ok(())
 }
 
-/// Process a single ICO deploy — parse inline args and emit event.
+/// Process a single ICO deploy - parse inline args and emit event.
 ///
-/// Returns `Ok(true)` if a `TokensPurchased` event was successfully processed,
-/// `Ok(false)` if the deploy was skipped (not a `purchase` call or BIG amount
-/// not found in pre-fetched map).
+/// Recognizes two deploy types:
+/// - `add_schedule(id, start, end, sale_amount, price)` -> `IcoScheduleAdded`
+/// - `purchase(amount_to_spend, currency)` -> `TokensPurchased`
+///
+/// Returns `Ok(true)` if an event was successfully processed,
+/// `Ok(false)` if the deploy was skipped (unrecognized call or missing data).
 async fn process_ico_deploy(
     ctx: &BackfillContext<'_>,
     contract_type: ContractType,
@@ -200,39 +205,60 @@ async fn process_ico_deploy(
 ) -> IndexerResult<bool> {
     let deploy_hash = &deploy_item.deploy_hash;
 
-    // 1. parse args (amount_to_spend, currency) from inline CSPR.cloud data
+    let block_timestamp = DateTime::parse_from_rfc3339(&deploy_item.timestamp)
+        .ok()
+        .map(|dt| dt.to_utc());
+
+    // Try IcoScheduleAdded first (add_schedule deploy)
+    if let Some(schedule) = parse_add_schedule_args(&deploy_item.args) {
+        let event_data = serde_json::to_value(&schedule)?;
+        let raw = RawEvent {
+            contract_hash: contract_hash.to_owned(),
+            deploy_hash: deploy_hash.clone(),
+            block_height: deploy_item.block_height,
+            caller: address::normalize_to_account_hash(&deploy_item.caller_public_key)?,
+            contract_type,
+            event_name: "ICOScheduleAdded".to_owned(),
+            event_data,
+            block_timestamp,
+            transform_idx: None,
+        };
+        processor::process_event(ctx.db_pool, ctx.registry, ctx.known_hashes, &raw).await?;
+        tracing::debug!(
+            deploy = %deploy_hash,
+            schedule_id = %schedule.id,
+            "ICO IcoScheduleAdded processed"
+        );
+        return Ok(true);
+    }
+
+    // Try TokensPurchased (purchase deploy)
     let Some((cost, currency_id)) = parse_purchase_args(&deploy_item.args) else {
-        // Not a `purchase` call or args are malformed — skip silently.
         return Ok(false);
     };
 
-    // 2. look up BIG transfer amount from pre-fetched map
     let Some(big_amount) = big_amounts.get(deploy_hash.as_str()) else {
         tracing::warn!(
             deploy = %deploy_hash,
-            "BIG Transfer not found in CSPR.cloud for this deploy — skipping"
+            "BIG Transfer not found in CSPR.cloud for this deploy - skipping"
         );
         return Ok(false);
     };
 
-    // 3. build and process TokensPurchased event
     let currency_name = ico_currency_name(currency_id);
-
-    // Convert ISO-8601 timestamp to Unix epoch seconds (u64).
     let timestamp_secs: u64 = DateTime::parse_from_rfc3339(&deploy_item.timestamp).map_or_else(
         |e| {
             tracing::warn!(
                 deploy = %deploy_hash,
                 raw = %deploy_item.timestamp,
                 error = %e,
-                "Failed to parse deploy timestamp — storing 0"
+                "Failed to parse deploy timestamp - storing 0"
             );
             0
         },
         |dt| dt.timestamp().max(0).cast_unsigned(),
     );
 
-    // `price` is None: not available during backfill.
     let typed_event = TokensPurchased {
         amount: big_amount.clone(),
         currency: Currency::from(currency_id),
@@ -241,10 +267,6 @@ async fn process_ico_deploy(
         timestamp: timestamp_secs,
     };
     let event_data = serde_json::to_value(&typed_event)?;
-
-    let block_timestamp = DateTime::parse_from_rfc3339(&deploy_item.timestamp)
-        .ok()
-        .map(|dt| dt.to_utc());
 
     let raw = RawEvent {
         contract_hash: contract_hash.to_owned(),
@@ -290,6 +312,37 @@ pub fn parse_purchase_args(args: &serde_json::Value) -> Option<(String, u8)> {
         .as_u64()
         .and_then(|n| u8::try_from(n).ok())?;
     Some((cost, currency_id))
+}
+
+/// Extract `IcoScheduleAdded` fields from the `add_schedule` deploy args.
+///
+/// CSPR.cloud returns args as `{ "arg_name": { "cl_type": "...", "parsed": ... } }`.
+/// Expected args: `id`, `start_timestamp`, `end_timestamp`, `sale_amount`, `price`.
+/// Returns `None` if the expected args are missing or malformed.
+#[inline]
+#[must_use]
+pub fn parse_add_schedule_args(args: &serde_json::Value) -> Option<IcoScheduleAdded> {
+    let id = args.get("id")?.get("parsed")?.as_str()?.to_owned();
+    let start_timestamp = args.get("start_timestamp")?.get("parsed")?.as_u64()?;
+    let end_timestamp = args.get("end_timestamp")?.get("parsed")?.as_u64()?;
+    let sale_amount = args.get("sale_amount")?.get("parsed").and_then(|v| {
+        v.as_str()
+            .map(ToOwned::to_owned)
+            .or_else(|| v.as_u64().map(|n| n.to_string()))
+    })?;
+    let price = args.get("price")?.get("parsed").and_then(|v| {
+        v.as_str()
+            .map(ToOwned::to_owned)
+            .or_else(|| v.as_u64().map(|n| n.to_string()))
+    })?;
+
+    Some(IcoScheduleAdded {
+        id,
+        start_timestamp,
+        end_timestamp,
+        sale_amount,
+        price,
+    })
 }
 
 /// Map the ICO `Currency` enum variant index to a human-readable string.
