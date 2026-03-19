@@ -239,7 +239,7 @@ artifact_repo_create:
 
 show_state_info:
 	@echo "Terraform states are now stored in:"
-	@for dir in gar hetzner; do \
+	@for dir in gar hetzner_dev; do \
 		echo "gs://$(BUCKET_NAME)/$$dir/default.tfstate"; \
 	done
 

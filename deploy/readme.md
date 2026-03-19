@@ -51,7 +51,7 @@ deploy/
 | `leasefi_nginx` | `nginx:alpine` | `80:80` | Reverse proxy, routes traffic to backend |
 | `leasefi_backend` | GAR `*_back:VERSION` | (internal) | REST API server on port 8080 |
 | `leasefi_indexer` | GAR `*_indexer:VERSION` | (internal) | Blockchain indexer |
-| `leasefi_redis` | `redis:7-alpine` | (internal) | Cache / message bus |
+| `leasefi_redis` | `redis:7-alpine` | (internal) | Nonce store (5-min TTL) |
 
 ## API Endpoints
 
@@ -113,10 +113,26 @@ deploy/
 |----------|-------------|
 | `DATABASE_URL` | PostgreSQL connection string (Supabase) |
 | `SUPABASE_JWT_SECRET` | Supabase JWT secret |
+| `REDIS_URL` | Redis connection string (e.g. `redis://redis:6379`) |
 | `CORS_ORIGIN` | Allowed CORS origin |
+| `RUN_MIGRATIONS` | Whether to run DB migrations on startup (`true` / `false`) |
 | `CSPR_CLOUD_API_TOKEN` | CSPR.cloud API token |
 | `CSPR_CLOUD_REST_URL` | CSPR.cloud REST URL |
 | `CSPR_CLOUD_WSS_URL` | CSPR.cloud WebSocket URL |
+| `CASPER_NODE_RPC_URL` | Casper node JSON-RPC URL |
+| `CONTRACT_USDC` | CEP-18 USDC contract package hash |
+| `CONTRACT_USDT` | CEP-18 USDT contract package hash |
+| `CONTRACT_BIG` | BIG token contract package hash |
+| `CONTRACT_TREASURY` | Treasury contract package hash |
+| `CONTRACT_ICO` | ICO contract package hash |
+| `CONTRACT_VESTING` | Vesting contract package hash |
+| `CONTRACT_STAKING` | Staking contract package hash |
+| `START_BLOCK_CONTRACT_USDC` | Indexer start block for USDC contract |
+| `START_BLOCK_CONTRACT_USDT` | Indexer start block for USDT contract |
+| `START_BLOCK_CONTRACT_BIG` | Indexer start block for BIG contract |
+| `START_BLOCK_CONTRACT_TREASURY` | Indexer start block for Treasury contract |
+| `START_BLOCK_CONTRACT_ICO` | Indexer start block for ICO contract |
+| `START_BLOCK_CONTRACT_VESTING` | Indexer start block for Vesting contract |
 
 ## Makefile Targets
 
