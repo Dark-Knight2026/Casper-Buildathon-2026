@@ -21,9 +21,8 @@ use crate::{
     events::ico::{TokensPurchased, tokens_purchased::Currency},
     processor::{self, RawEvent},
 };
-// -----------------------------------------------------------------------------
-// CSPR.cloud /ft-token-actions response types (BIG transfers)
-// -----------------------------------------------------------------------------
+
+// CSPR.cloud /ft-token-actions response types (BIG transfers) -----------------
 
 /// Top-level response from the `/ft-token-actions` endpoint.
 #[derive(Debug, Deserialize)]
@@ -44,9 +43,7 @@ struct BigTransferItem {
     amount: String,
 }
 
-// -----------------------------------------------------------------------------
-// CSPR.cloud /deploys response types
-// -----------------------------------------------------------------------------
+// CSPR.cloud /deploys response types ------------------------------------------
 
 /// Top-level response from the `/deploys` endpoint.
 #[derive(Debug, Deserialize)]
@@ -74,9 +71,7 @@ pub(super) struct DeployListItem {
     pub(super) timestamp: String,
 }
 
-// -----------------------------------------------------------------------------
-// Public API
-// -----------------------------------------------------------------------------
+// Public API ------------------------------------------------------------------
 
 /// Backfill the ICO contract by reconstructing `TokensPurchased` events.
 ///

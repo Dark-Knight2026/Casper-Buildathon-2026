@@ -45,6 +45,14 @@ pub const AUTH_RATE_LIMIT_BURST: u32 = 15;
 /// Includes rate limiting:
 /// - Authentication endpoints (`/auth/*`)
 ///
+/// # Rate limiter trust model
+///
+/// Uses `SmartIpKeyExtractor` which trusts `X-Forwarded-For` unconditionally.
+/// **Deployment constraint**: this API MUST sit behind a trusted reverse proxy
+/// (e.g. Nginx, Cloudflare, ALB) that overwrites `X-Forwarded-For` with the
+/// real client IP. Direct exposure to the internet allows clients to spoof
+/// `X-Forwarded-For` and bypass per-IP rate limits.
+///
 /// # Panics
 ///
 /// Panics at startup if the rate-limit configuration is invalid (e.g. zero burst size).
@@ -79,6 +87,8 @@ pub const PUBLIC_DATA_RATE_LIMIT_BURST: u32 = 30;
 /// - `GET /ico/balance/{address}` - ICO balance for an account
 /// - `GET /transactions/token/big` - BIG token transactions
 /// - `GET /transactions/account/{address}` - account transaction history
+///
+/// Same `SmartIpKeyExtractor` trust model as [`public_router`] - see its docs.
 ///
 /// # Panics
 ///
