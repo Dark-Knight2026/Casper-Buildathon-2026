@@ -11,40 +11,21 @@ use rust_decimal::{Decimal, prelude::ToPrimitive};
 
 use crate::{
     common::{ApiError, ApiResult, AppState},
-    onchain::staking::{
-        db,
-        models::{
-            AccountHashPath, EarningsPoint, EarningsQuery, EarningsResponse, PortfolioResponse,
-            RewardsHistoryPoint, RewardsHistoryQuery, RewardsHistoryResponse, StakingInfoResponse,
+    onchain::{
+        common,
+        staking::{
+            db,
+            models::{
+                AccountHashPath, EarningsPoint, EarningsQuery, EarningsResponse, PortfolioResponse,
+                RewardsHistoryPoint, RewardsHistoryQuery, RewardsHistoryResponse,
+                StakingInfoResponse,
+            },
         },
     },
 };
 
-/// Number of decimal places in the BIG token U256 value.
-const TOKEN_DECIMALS: u32 = 18;
-
 /// ICO price precision (6 decimals).
 const PRICE_DECIMALS: u32 = 6;
-
-/// Converts a raw U256 text value (minimal units, decimals=18) to a human-readable f64.
-#[inline]
-fn to_human_f64(raw: &str) -> f64 {
-    let divisor = Decimal::from(10u64.pow(TOKEN_DECIMALS));
-    let dec = raw.parse::<Decimal>().unwrap_or(Decimal::ZERO) / divisor;
-    dec.to_f64().unwrap_or(0.0)
-}
-
-/// Validates an account hash string (64 hex characters, no prefix).
-#[inline]
-fn validate_account(account: &str) -> Result<String, ApiError> {
-    let account = account.to_ascii_lowercase();
-    if account.len() != 64 || !account.chars().all(|c| c.is_ascii_hexdigit()) {
-        return Err(ApiError::BadRequest(
-            "Address must be 64 hex characters (account hash without prefix)".to_owned(),
-        ));
-    }
-    Ok(account)
-}
 
 /// Parse period string into number of months to look back.
 /// Supported: `1m`, `3m`, `6m`, `1y`, `all`.
@@ -85,15 +66,15 @@ pub async fn get_staking_info(
     State(state): State<Arc<AppState>>,
     Path(path): Path<AccountHashPath>,
 ) -> ApiResult<Json<StakingInfoResponse>> {
-    let account = validate_account(&path.account_hash)?;
+    let account = common::validate_account(&path.account_hash)?;
 
     let position = db::fetch_staking_position(&state.db, &account).await?;
     let apy_data = db::fetch_apy_data(&state.db).await?;
 
     let (staked_tokens, total_rewards_earned) = match position {
         Some(p) => (
-            to_human_f64(&p.staked_amount),
-            to_human_f64(&p.total_rewards_claimed),
+            common::to_human_f64(&p.staked_amount),
+            common::to_human_f64(&p.total_rewards_claimed),
         ),
         None => (0.0, 0.0),
     };
@@ -144,17 +125,17 @@ pub async fn get_portfolio(
     State(state): State<Arc<AppState>>,
     Path(path): Path<AccountHashPath>,
 ) -> ApiResult<Json<PortfolioResponse>> {
-    let account = validate_account(&path.account_hash)?;
+    let account = common::validate_account(&path.account_hash)?;
 
     let big_balance_raw = db::fetch_big_balance(&state.db, &account).await?;
     let position = db::fetch_staking_position(&state.db, &account).await?;
     let ico_price_raw = db::fetch_ico_price(&state.db).await?;
 
-    let big_in_wallet = to_human_f64(&big_balance_raw);
+    let big_in_wallet = common::to_human_f64(&big_balance_raw);
     let (big_staked, rewards_earned) = match position {
         Some(p) => (
-            to_human_f64(&p.staked_amount),
-            to_human_f64(&p.total_rewards_claimed),
+            common::to_human_f64(&p.staked_amount),
+            common::to_human_f64(&p.total_rewards_claimed),
         ),
         None => (0.0, 0.0),
     };
@@ -202,7 +183,7 @@ pub async fn get_earnings(
     Path(path): Path<AccountHashPath>,
     Query(query): Query<EarningsQuery>,
 ) -> ApiResult<Json<EarningsResponse>> {
-    let account = validate_account(&path.account_hash)?;
+    let account = common::validate_account(&path.account_hash)?;
 
     let since = match parse_period_months(&query.period)? {
         Some(months) => Utc::now()
@@ -217,7 +198,7 @@ pub async fn get_earnings(
         .into_iter()
         .map(|r| EarningsPoint {
             month: r.month,
-            earnings: to_human_f64(&r.total_amount),
+            earnings: common::to_human_f64(&r.total_amount),
         })
         .collect();
 
@@ -248,7 +229,7 @@ pub async fn get_rewards_history(
     Path(path): Path<AccountHashPath>,
     Query(query): Query<RewardsHistoryQuery>,
 ) -> ApiResult<Json<RewardsHistoryResponse>> {
-    let account = validate_account(&path.account_hash)?;
+    let account = common::validate_account(&path.account_hash)?;
     let days = query.period.clamp(1, 365);
 
     let rows = db::fetch_daily_cumulative_rewards(&state.db, &account, days).await?;
@@ -265,7 +246,7 @@ pub async fn get_rewards_history(
             let day = (r.reward_date - start_date).num_days() + 1;
             RewardsHistoryPoint {
                 day,
-                staking_pool: to_human_f64(&r.cumulative_amount),
+                staking_pool: common::to_human_f64(&r.cumulative_amount),
                 tx_fees: 0.0,
             }
         })

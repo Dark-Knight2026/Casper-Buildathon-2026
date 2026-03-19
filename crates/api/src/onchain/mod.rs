@@ -12,6 +12,8 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 
 use crate::AppState;
 
+/// Shared utilities (token conversion, address validation).
+pub mod common;
 /// ICO (Initial Coin Offering) feature module.
 pub mod ico;
 /// Staking feature module.

@@ -9,32 +9,24 @@ use rust_decimal::{Decimal, prelude::ToPrimitive};
 use tracing::warn;
 
 use crate::{
-    common::{ApiError, ApiResult, AppState, PaginatedResponse, Pagination},
-    onchain::vesting::{
-        db,
-        models::{
-            ReleaseSchedulePoint, ReleaseScheduleResponse, SchedulesQuery, TokenSupplyResponse,
-            VestingScheduleItem,
+    common::{ApiResult, AppState, PaginatedResponse, Pagination},
+    onchain::{
+        common::{self, TOKEN_DECIMALS},
+        vesting::{
+            db,
+            models::{
+                ReleaseSchedulePoint, ReleaseScheduleResponse, SchedulesQuery, TokenSupplyResponse,
+                VestingScheduleItem,
+            },
         },
     },
 };
-
-/// Number of decimal places in the BIG token U256 value.
-const TOKEN_DECIMALS: u32 = 18;
 
 /// Total BIG token supply (human-readable).
 const TOTAL_SUPPLY: f64 = 5_000_000_000.0;
 
 /// Approximate milliseconds in one month (30 days).
 const MS_PER_MONTH: i64 = 30 * 24 * 60 * 60 * 1_000;
-
-/// Converts a raw U256 text value (minimal units, decimals=18) to a human-readable f64.
-#[inline]
-fn to_human_f64(raw: &str) -> f64 {
-    let divisor = Decimal::from(10u64.pow(TOKEN_DECIMALS));
-    let dec = raw.parse::<Decimal>().unwrap_or(Decimal::ZERO) / divisor;
-    dec.to_f64().unwrap_or(0.0)
-}
 
 /// Calculates total vested amount for a schedule at a given timestamp.
 ///
@@ -65,18 +57,6 @@ fn calculate_vested(total: &str, start: i64, cliff: i64, duration: i64, now: i64
     }
 }
 
-/// Validates an account hash string (64 hex characters, no prefix).
-#[inline]
-fn validate_account(account: &str) -> Result<String, ApiError> {
-    let account = account.to_ascii_lowercase();
-    if account.len() != 64 || !account.chars().all(|c| c.is_ascii_hexdigit()) {
-        return Err(ApiError::BadRequest(
-            "Address must be 64 hex characters (account hash without prefix)".to_owned(),
-        ));
-    }
-    Ok(account)
-}
-
 // `GET /api/v1/vesting/schedules?account={accountHash}`
 //
 /// Returns paginated vesting schedules for a given beneficiary account.
@@ -104,7 +84,7 @@ pub async fn get_vesting_schedules(
     State(state): State<Arc<AppState>>,
     Query(query): Query<SchedulesQuery>,
 ) -> ApiResult<Json<PaginatedResponse<VestingScheduleItem>>> {
-    let account = validate_account(&query.account)?;
+    let account = common::validate_account(&query.account)?;
     let pagination = query.pagination();
     let (rows, item_count) = db::fetch_schedules_by_account(
         &state.db,
@@ -181,7 +161,7 @@ pub async fn get_token_supply(
 
     Ok(Json(TokenSupplyResponse {
         total_supply: TOTAL_SUPPLY,
-        circulating_supply: to_human_f64(&circulating_raw),
+        circulating_supply: common::to_human_f64(&circulating_raw),
     }))
 }
 

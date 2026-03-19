@@ -10,17 +10,17 @@ use rust_decimal::{Decimal, prelude::ToPrimitive};
 
 use crate::{
     common::{ApiError, ApiResult, AppState},
-    onchain::ico::{
-        db,
-        models::{IcoBalanceResponse, IcoProgressResponse},
+    onchain::{
+        common::TOKEN_DECIMALS,
+        ico::{
+            db,
+            models::{IcoBalanceResponse, IcoProgressResponse},
+        },
     },
 };
 
 /// Number of decimal places in the price U256 value (same as USDC/USDT).
 const PRICE_DECIMALS: u32 = 6;
-
-/// Number of decimal places in the token amount U256 value (BIG token).
-const TOKEN_DECIMALS: u32 = 18;
 
 /// Converts a raw U256 text value (minimal units, decimals=18) to a human-readable Decimal.
 #[inline]
