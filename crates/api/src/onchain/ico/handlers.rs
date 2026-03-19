@@ -77,8 +77,8 @@ async fn resolve_ico(state: &AppState) -> Result<ResolvedIco, ApiError> {
     })
 }
 
-/// `GET /api/v1/ico/balance/{address}`
-///
+// `GET /api/v1/ico/balance/{address}`
+//
 /// Returns ICO balance information for a specific account.
 ///
 /// Aggregates `ico_purchases.amount` for the given buyer and derives
@@ -127,8 +127,8 @@ pub async fn get_ico_balance(
     }))
 }
 
-/// `GET /api/v1/ico/progress`
-///
+// `GET /api/v1/ico/progress`
+//
 /// Returns overall ICO sale progress.
 ///
 /// Derives all values from `SUM(ico_purchases.amount)` and the

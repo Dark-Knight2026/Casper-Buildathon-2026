@@ -12,8 +12,8 @@ use crate::{
     },
 };
 
-/// `GET /health`
-///
+// `GET /health`
+//
 /// Checks the health status of the application and its dependencies.
 ///
 /// Verifies connectivity to:

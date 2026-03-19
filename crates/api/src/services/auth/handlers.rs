@@ -24,8 +24,8 @@ use crate::{
     },
 };
 
-/// `GET /api/v1/auth/nonce`
-///
+// `GET /api/v1/auth/nonce`
+//
 /// Generates a cryptographic nonce for login challenge-response.
 ///
 /// The nonce is securely stored in Redis with a short expiration time (5 minutes).
@@ -101,8 +101,8 @@ pub async fn get_nonce(
     }))
 }
 
-/// `GET /api/v1/auth/login`
-///
+// `GET /api/v1/auth/login`
+//
 /// Authenticates a user by verifying their signature against a stored nonce.
 ///
 /// 1. Retrieves the previously generated nonce from Redis using the wallet address.

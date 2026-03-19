@@ -13,8 +13,8 @@ use crate::{
     },
 };
 
-/// `POST /api/v1/tax/calculate-liability`
-///
+// `POST /api/v1/tax/calculate-liability`
+//
 /// Calculates the estimated tax liability for a given fiscal year.
 ///
 /// This handler processes a `TaxCalculationRequest`, which includes income and deduction details,
