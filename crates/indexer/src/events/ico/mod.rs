@@ -27,7 +27,7 @@ impl IcoEventType {
     /// Returns the CES event name for this variant.
     #[inline]
     #[must_use]
-    pub fn as_str(self) -> &'static str {
+    pub const fn as_str(self) -> &'static str {
         match self {
             Self::TokensPurchased => "TokensPurchased",
             Self::IcoScheduleAdded => "ICOScheduleAdded",

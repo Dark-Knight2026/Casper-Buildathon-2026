@@ -212,6 +212,9 @@ async fn process_event_at(
 /// admin-only and don't need indexing.
 fn is_indexable_event(contract_type: ContractType, event_name: &str) -> bool {
     match contract_type {
+        ContractType::Ico => {
+            matches!(event_name, "TokensPurchased" | "ICOScheduleAdded")
+        }
         ContractType::Vesting => {
             matches!(event_name, "ScheduleCreated" | "TokensClaimed")
         }

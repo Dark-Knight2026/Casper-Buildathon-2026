@@ -244,7 +244,7 @@ fn schemas_for_unsupported_contract_returns_empty() {
     let schemas = schemas_for(ContractType::Usdc);
     assert!(schemas.is_empty());
 
-    let schemas = schemas_for(ContractType::Ico);
+    let schemas = schemas_for(ContractType::Treasury);
     assert!(schemas.is_empty());
 }
 

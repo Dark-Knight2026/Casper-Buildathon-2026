@@ -127,7 +127,7 @@ impl FtTokenAction {
 /// total `page_count` (used by the caller to drive pagination).
 ///
 /// Exposed as `pub` so integration tests can exercise the HTTP layer directly,
-/// following the same pattern as `backfill::ico::load_big_transfers`.
+/// following the same paginated pattern as other backfill endpoints.
 ///
 /// # Errors
 ///

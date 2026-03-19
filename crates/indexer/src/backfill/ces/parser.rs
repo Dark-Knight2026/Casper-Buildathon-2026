@@ -5,11 +5,11 @@
 //! to deserialize primitives (`String`, `U256`, `u64`, `Key`, `bool`) directly,
 //! rather than hand-rolling binary parsers.
 //!
-//! Hardcoded schemas for vesting and staking events define the field order so
-//! we can decode the binary without fetching `__events_schema` from chain.
+//! Hardcoded schemas for ICO, vesting, and staking events define the field
+//! order so we can decode the binary without fetching `__events_schema` from chain.
 
 use casper_types::{
-    Key, U256,
+    Key, U128, U256,
     bytesrepr::{Error, FromBytes},
 };
 use serde_json::{Map, Value};
@@ -17,7 +17,7 @@ use serde_json::{Map, Value};
 use crate::{
     config::ContractType,
     error::{IndexerError, IndexerResult},
-    events::{staking::StakingEventType, vesting::VestingEventType},
+    events::{ico::IcoEventType, staking::StakingEventType, vesting::VestingEventType},
 };
 
 /// `Copy` subset of [`casper_types::CLType`] for use in `static` event schemas.
@@ -29,14 +29,18 @@ use crate::{
 pub enum FieldType {
     /// UTF-8 string (u32 length-prefixed).
     String,
-    /// U256 - rendered as decimal string.
-    U256,
-    /// u64 (8 bytes LE).
-    U64,
     /// Casper Key - rendered as formatted string (e.g. `account-hash-abcd...`).
     Key,
     /// Boolean (1 byte).
     Bool,
+    /// u8 (1 byte) - rendered as a JSON number.
+    U8,
+    /// u64 (8 bytes LE).
+    U64,
+    /// U128 - rendered as decimal string.
+    U128,
+    /// U256 - rendered as decimal string.
+    U256,
 }
 
 /// Schema for a single CES event: its name and ordered list of fields.
@@ -59,11 +63,35 @@ pub struct EventSchema {
 #[must_use]
 pub fn schemas_for(contract_type: ContractType) -> &'static [EventSchema] {
     match contract_type {
+        ContractType::Ico => ICO_SCHEMAS,
         ContractType::Vesting => VESTING_SCHEMAS,
         ContractType::Staking => STAKING_SCHEMAS,
         _ => &[],
     }
 }
+
+static ICO_SCHEMAS: &[EventSchema] = &[
+    EventSchema {
+        name: IcoEventType::TokensPurchased.as_str(),
+        fields: &[
+            ("amount", FieldType::U256),
+            ("currency", FieldType::U8),
+            ("price", FieldType::U256),
+            ("cost", FieldType::U256),
+            ("timestamp", FieldType::U64),
+        ],
+    },
+    EventSchema {
+        name: IcoEventType::IcoScheduleAdded.as_str(),
+        fields: &[
+            ("id", FieldType::U128),
+            ("start_timestamp", FieldType::U64),
+            ("end_timestamp", FieldType::U64),
+            ("sale_amount", FieldType::U256),
+            ("price", FieldType::U256),
+        ],
+    },
+];
 
 static VESTING_SCHEMAS: &[EventSchema] = &[
     EventSchema {
@@ -185,14 +213,6 @@ fn parse_field(bytes: &[u8], field_type: FieldType) -> IndexerResult<(Value, &[u
             let (val, rest) = String::from_bytes(bytes).map_err(bytesrepr_err)?;
             Ok((Value::String(val), rest))
         }
-        FieldType::U256 => {
-            let (val, rest) = U256::from_bytes(bytes).map_err(bytesrepr_err)?;
-            Ok((Value::String(val.to_string()), rest))
-        }
-        FieldType::U64 => {
-            let (val, rest) = u64::from_bytes(bytes).map_err(bytesrepr_err)?;
-            Ok((Value::Number(val.into()), rest))
-        }
         FieldType::Key => {
             let (val, rest) = Key::from_bytes(bytes).map_err(bytesrepr_err)?;
             Ok((Value::String(val.to_formatted_string()), rest))
@@ -200,6 +220,22 @@ fn parse_field(bytes: &[u8], field_type: FieldType) -> IndexerResult<(Value, &[u
         FieldType::Bool => {
             let (val, rest) = bool::from_bytes(bytes).map_err(bytesrepr_err)?;
             Ok((Value::Bool(val), rest))
+        }
+        FieldType::U8 => {
+            let (val, rest) = u8::from_bytes(bytes).map_err(bytesrepr_err)?;
+            Ok((Value::Number(val.into()), rest))
+        }
+        FieldType::U64 => {
+            let (val, rest) = u64::from_bytes(bytes).map_err(bytesrepr_err)?;
+            Ok((Value::Number(val.into()), rest))
+        }
+        FieldType::U128 => {
+            let (val, rest) = U128::from_bytes(bytes).map_err(bytesrepr_err)?;
+            Ok((Value::String(val.to_string()), rest))
+        }
+        FieldType::U256 => {
+            let (val, rest) = U256::from_bytes(bytes).map_err(bytesrepr_err)?;
+            Ok((Value::String(val.to_string()), rest))
         }
     }
 }

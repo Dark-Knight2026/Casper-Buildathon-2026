@@ -40,50 +40,6 @@ pub fn wss_message(
     })
 }
 
-/// One page of `/ft-token-actions` with three items having different senders.
-///
-/// Used to verify that `load_big_transfers` keeps only entries where
-/// `from_hash` matches the ICO contract:
-/// - `"deploy_ico"` — ICO-initiated transfer (must be included)
-/// - `"deploy_other"` — different sender (must be excluded)
-/// - `"deploy_mint"` — Mint with `null` `from_hash` (must be excluded)
-pub fn ft_actions_mixed_senders() -> Value {
-    json!({
-        "data": [
-            { "deploy_hash": "deploy_ico",   "from_hash": "ico_hash",   "amount": "700" },
-            { "deploy_hash": "deploy_other", "from_hash": "other_hash", "amount": "100" },
-            { "deploy_hash": "deploy_mint",  "from_hash": null,         "amount": "5000" }
-        ],
-        "item_count": 3,
-        "page_count": 1
-    })
-}
-
-/// Page 1 of 2 — 100 ICO-initiated transfers, all from `"ico_hash"`.
-///
-/// `page_count: 2` ensures the paginator requests page 2 as well.
-pub fn ft_actions_100_items_page1() -> Value {
-    json!({
-        "data": (0..100u32)
-            .map(|i| json!({ "deploy_hash": format!("d{i}"), "from_hash": "ico_hash", "amount": "1" }))
-            .collect::<Vec<_>>(),
-        "item_count": 100,
-        "page_count": 2
-    })
-}
-
-/// Page 2 of 2 — two ICO-initiated transfers that conclude the pagination test.
-pub fn ft_actions_2_items_page2() -> Value {
-    json!({
-        "data": [
-            { "deploy_hash": "d100", "from_hash": "ico_hash", "amount": "2" },
-            { "deploy_hash": "d101", "from_hash": "ico_hash", "amount": "3" }
-        ],
-        "item_count": 2,
-        "page_count": 2
-    })
-}
-
 /// One page of `/ft-token-actions` with a single CEP-18 Transfer action.
 ///
 /// Used to verify that `fetch_ft_token_actions_page` correctly deserializes
@@ -139,16 +95,5 @@ pub fn transfer_event_data(amount: &str) -> Value {
         "sender": FakeAddress::Alice.as_str(),
         "recipient": FakeAddress::Bob.as_str(),
         "amount": amount
-    })
-}
-
-/// Build a CSPR.cloud `args` object for a `purchase` deploy.
-///
-/// Used by `parse_purchase_args` unit tests and integration tests
-/// to construct the args format returned inline by CSPR.cloud `/deploys`.
-pub fn purchase_args(amount: &Value, currency: u64) -> Value {
-    json!({
-        "amount_to_spend": { "cl_type": "U256", "parsed": amount },
-        "currency":        { "cl_type": "U8",   "parsed": currency }
     })
 }

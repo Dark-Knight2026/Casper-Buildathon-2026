@@ -5,16 +5,10 @@
 //! - **CEP-18 tokens** (USDC, USDT, BIG): CSPR.cloud `/ft-token-actions` endpoint,
 //!   which returns normalized Transfer/Mint/Approve actions with full history.
 //!
-//! - **ICO**: CSPR.cloud `/deploys` endpoint returns deploy session args inline.
-//!   `TokensPurchased` event data is reconstructed from deploy args
-//!   (`amount_to_spend`, `currency`) and the BIG Transfer amount fetched from
-//!   CSPR.cloud `/ft-token-actions` (filtered by `from_hash == ICO contract hash`).
-//!
-//! - **CES contracts** (Vesting, Staking): Casper node RPC reads the `__events`
+//! - **CES contracts** (all others): Casper node RPC reads the `__events`
 //!   dictionary directly via `state_get_dictionary_item`, then parses bytesrepr
-//!   binary CES events with hardcoded field schemas.
-//!
-//! - **Treasury / others**: not yet implemented - rely on live WebSocket streaming.
+//!   binary CES events with hardcoded field schemas. Contracts without schemas
+//!   are skipped with a warning.
 //!
 //! All events are funneled through the same [`processor`] pipeline used by
 //! streaming, so balance updates and idempotency logic is shared.
@@ -22,20 +16,15 @@
 pub mod cep18;
 pub mod ces;
 pub mod db;
-pub mod ico;
 
 use std::collections::HashSet;
 
 use reqwest::Client;
 use sqlx::PgPool;
 
-use crate::{
-    config::{ContractType, IndexerConfig},
-    error::IndexerResult,
-    events::EventRegistry,
-};
+use crate::{config::IndexerConfig, error::IndexerResult, events::EventRegistry};
 
-/// Shared dependencies for backfill operations (ICO and CEP-18).
+/// Shared dependencies for backfill operations (CES and CEP-18).
 #[derive(Debug)]
 pub struct BackfillContext<'a> {
     /// HTTP client used for CSPR.cloud API requests.
@@ -71,14 +60,6 @@ pub async fn run_backfill(config: &IndexerConfig, db_pool: &PgPool) -> IndexerRe
         known_hashes: &known_hashes,
     };
 
-    // BIG contract hash is needed by the ICO backfill to fetch transfer amounts from CSPR.cloud.
-    let big_hash = config
-        .contracts
-        .active_contracts()
-        .into_iter()
-        .find(|c| c.contract_type == ContractType::Big)
-        .map(|c| c.hash.to_owned());
-
     tracing::info!("Starting backfill for all contracts");
 
     for contract in config.contracts.active_contracts() {
@@ -102,24 +83,10 @@ pub async fn run_backfill(config: &IndexerConfig, db_pool: &PgPool) -> IndexerRe
                 )
                 .await?;
             }
-            // ICO: events are reconstructed from `/deploys` (session args inline)
-            // + BIG transfer amounts from CSPR.cloud `/ft-token-actions`.
-            ContractType::Ico => {
-                if let Some(ref big) = big_hash {
-                    ico::backfill_ico(
-                        &context,
-                        big,
-                        contract.contract_type,
-                        contract.hash,
-                        contract.start_block,
-                    )
-                    .await?;
-                } else {
-                    tracing::warn!("ICO backfill skipped - BIG contract hash not configured");
-                }
-            }
-            // CES contracts: backfill by reading __events dictionary via node RPC.
-            ContractType::Vesting | ContractType::Staking => {
+            // All other contracts: backfill via CES RPC (__events dictionary).
+            // Contracts without defined schemas are skipped with a warning
+            // inside `backfill_ces`.
+            _ => {
                 ces::backfill_ces(
                     &context,
                     contract.contract_type,
@@ -127,12 +94,6 @@ pub async fn run_backfill(config: &IndexerConfig, db_pool: &PgPool) -> IndexerRe
                     contract.start_block,
                 )
                 .await?;
-            }
-            _ => {
-                tracing::warn!(
-                    contract = ?contract.contract_type,
-                    "Backfill not yet implemented for this contract type - relying on live streaming"
-                );
             }
         }
     }
