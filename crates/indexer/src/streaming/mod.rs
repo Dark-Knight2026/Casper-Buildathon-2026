@@ -374,7 +374,19 @@ pub async fn handle_text_message(
                 }
             }
         }
-        Err(e) => return Err(e),
+        // Database errors are fatal (connection lost) - propagate to reconnect.
+        Err(e @ IndexerError::Database(_)) => return Err(e),
+        // All other errors (Json, Parse, etc.) are event-specific - log and skip
+        // so that a single malformed event doesn't kill the WSS connection.
+        Err(e) => {
+            tracing::error!(
+                deploy = %raw.deploy_hash,
+                event = %raw.event_name,
+                contract = ?raw.contract_type,
+                error = %e,
+                "Event processing failed - skipping"
+            );
+        }
     }
 
     db::update_cursor(db_pool, StreamType::Streaming, msg.extra.event_id).await?;
