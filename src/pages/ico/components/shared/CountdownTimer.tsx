@@ -171,4 +171,3 @@ export const CountdownTimer = memo(function CountdownTimer({
   );
 });
 
-export default CountdownTimer;

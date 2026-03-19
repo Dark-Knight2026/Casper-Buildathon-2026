@@ -102,4 +102,3 @@ export function ProgressBar({
   return <div className={cn('w-full', className)}>{content}</div>;
 }
 
-export default ProgressBar;

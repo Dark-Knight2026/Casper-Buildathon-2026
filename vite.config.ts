@@ -37,6 +37,10 @@ export default defineConfig(({ mode }) => {
 
   return {
   server: {
+    // lvh.me is a wildcard DNS that resolves to 127.0.0.1 — required for CSPRClick
+    // wallet SDK which enforces a specific subdomain in the Host header.
+    // localhost access still works: Vite unconditionally allows loopback (127.0.0.1)
+    // connections regardless of allowedHosts.
     allowedHosts: ['lvh.me'],
     proxy: {
       '/api/cspr-cloud': {

@@ -19,4 +19,3 @@ export function InfoCard({ children, className }: InfoCardProps) {
   );
 }
 
-export default InfoCard;

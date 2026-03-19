@@ -260,4 +260,3 @@ export function VestingProgressBlock({
   );
 }
 
-export default VestingProgressBlock;

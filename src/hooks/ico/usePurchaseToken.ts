@@ -17,6 +17,7 @@ import {
   validatePurchase,
   calculateTokensReceived,
   fromRawAmount,
+  toRawAmount,
   parseContractError,
 } from '@/services/ico/icoPurchaseService';
 import { csprCloudService } from '@/lib/blockchain/csprCloudService';
@@ -187,6 +188,9 @@ export function usePurchaseToken(
 ): UsePurchaseTokenReturn {
   const [state, setState] = useState<PurchaseState>(initialState);
   const submittingRef = useRef(false);
+  // Tracks allowance from a completed approve tx so that a failed purchase
+  // doesn't force the user to re-approve (Odra CEP-18 on-chain query always fails).
+  const approvalCacheRef = useRef<{ currency: PaymentCurrency; rawAmount: bigint } | null>(null);
 
   const { onSuccess, onError, onApprovalNeeded } = options;
 
@@ -242,12 +246,19 @@ export function usePurchaseToken(
         // 2. Check approval and prepare transactions
         setState((prev) => ({ ...prev, step: 'checking-approval' }));
 
+        // Use cached allowance if we already approved this currency in the current session.
+        // The on-chain query fails for Odra CEP-18 contracts (different storage layout).
+        const cached = approvalCacheRef.current;
+        const cachedAllowance =
+          cached?.currency === currency ? cached.rawAmount : undefined;
+
         const { approvalNeeded, approvalTransaction, purchaseTransaction } =
           await preparePurchase({
             senderPublicKey: publicKey,
             senderAccountHash: accountHash,
             amount,
             currency,
+            cachedAllowance,
           });
 
         // 3. Handle approval if needed
@@ -291,6 +302,14 @@ export function usePurchaseToken(
                 : 'Approval transaction failed on-chain',
             );
           }
+
+          // Cache the approved allowance so retries don't re-ask for approve.
+          // USDT/USDC always use 6 decimals; CSPR never reaches this branch.
+          const STABLECOIN_DECIMALS = 6;
+          approvalCacheRef.current = {
+            currency,
+            rawAmount: toRawAmount(amount, STABLECOIN_DECIMALS),
+          };
         }
 
         // 4. Sign and send purchase transaction
@@ -335,7 +354,9 @@ export function usePurchaseToken(
           tokensReceived = fromRawAmount(tokensRaw, ICO_CONFIG.TOKEN.decimals);
         }
 
-        // 7. Success!
+        // 7. Success! Clear approval cache — allowance was consumed by transfer_from.
+        approvalCacheRef.current = null;
+
         setState((prev) => ({
           ...prev,
           step: 'confirmed',
@@ -369,6 +390,7 @@ export function usePurchaseToken(
   const reset = useCallback(() => {
     setState(initialState);
     submittingRef.current = false;
+    approvalCacheRef.current = null;
   }, []);
 
   /**

@@ -301,4 +301,3 @@ export function WalletCard({
   );
 }
 
-export default WalletCard;

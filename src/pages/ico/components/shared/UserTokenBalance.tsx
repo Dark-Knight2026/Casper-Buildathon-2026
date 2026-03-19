@@ -59,4 +59,3 @@ export function UserTokenBalance({
   );
 }
 
-export default UserTokenBalance;

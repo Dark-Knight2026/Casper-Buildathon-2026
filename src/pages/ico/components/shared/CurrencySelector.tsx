@@ -64,4 +64,3 @@ export function CurrencySelector({
   );
 }
 
-export default CurrencySelector;

@@ -59,6 +59,12 @@ export interface PurchaseParams {
   currency: PaymentCurrency;
   /** ICO schedule ID (optional, defaults to current) */
   scheduleId?: bigint;
+  /**
+   * Cached allowance from a prior approve tx (raw units).
+   * Bypasses the on-chain query, which fails for Odra CEP-18 contracts
+   * because they use a different storage layout than standard CEP-18.
+   */
+  cachedAllowance?: bigint;
 }
 
 export interface PurchaseResult {
@@ -155,20 +161,14 @@ export async function checkApprovalNeeded(
   const decimals = getDecimals(currency);
   const requiredAmount = toRawAmount(amount, decimals);
 
-  // Look up allowance using ICO_HASH (contract hash), while createApproveTransaction()
-  // grants allowance to ICO_PACKAGE_HASH. These are different Casper keys, so this
-  // lookup always returns 0 — but that has no practical impact: approve() is issued
-  // for the exact purchase amount and is fully consumed by the ICO's transfer_from()
-  // call, so allowance is 0 after every purchase regardless. The user explicitly signs
-  // every approve in the wallet modal, so there is no silent fund drain.
-  // Note: ICO_HASH and ICO_PACKAGE_HASH are intentionally separate env vars
-  // (VITE_ICO_CONTRACT_HASH vs VITE_ICO_PACKAGE_HASH) — both are needed because
-  // some Casper calls require the versioned contract hash and others require the package hash.
-  const icoContractKey = ICO_HASH.startsWith('hash-') ? ICO_HASH : `hash-${ICO_HASH}`;
+  // Check allowance using ICO_PACKAGE_HASH — the same key that createApproveTransaction()
+  // grants allowance to. This ensures we correctly detect existing allowances, so if a
+  // purchase fails after approve succeeds, the user doesn't need to re-approve.
+  const icoPackageKey = ICO_PACKAGE_HASH.startsWith('hash-') ? ICO_PACKAGE_HASH : `hash-${ICO_PACKAGE_HASH}`;
   const currentAllowance = await getAllowance(
     tokenContract,
     senderAccountHash,
-    icoContractKey,
+    icoPackageKey,
   );
 
   return {
@@ -306,17 +306,26 @@ export async function createPurchaseTransaction(
 export async function preparePurchase(
   params: PurchaseParams,
 ): Promise<PurchaseResult> {
-  const { senderPublicKey, senderAccountHash, amount, currency } = params;
+  const { senderPublicKey, senderAccountHash, amount, currency, cachedAllowance } = params;
 
   // Fetch account's main purse URef (needed for Odra __cargo_purse)
   const mainPurseURef = await getAccountMainPurseURef(senderPublicKey);
 
-  // Check if approval is needed (for CEP-18 tokens)
-  const approvalCheck = await checkApprovalNeeded(
-    senderAccountHash,
-    amount,
-    currency,
-  );
+  // Check if approval is needed (for CEP-18 tokens).
+  // If cachedAllowance is provided (from a prior approve in the same session),
+  // skip the on-chain query — it fails for Odra CEP-18 contracts anyway.
+  let approvalCheck: ApprovalCheckResult;
+  if (cachedAllowance !== undefined) {
+    const decimals = getDecimals(currency);
+    const requiredAmount = toRawAmount(amount, decimals);
+    approvalCheck = {
+      needed: cachedAllowance < requiredAmount,
+      currentAllowance: cachedAllowance,
+      requiredAmount,
+    };
+  } else {
+    approvalCheck = await checkApprovalNeeded(senderAccountHash, amount, currency);
+  }
 
   let approvalTransaction: Transaction | undefined;
   if (approvalCheck.needed) {
