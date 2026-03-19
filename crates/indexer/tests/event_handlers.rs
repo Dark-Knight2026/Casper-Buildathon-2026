@@ -12,6 +12,8 @@
 //!   only; `token_holdings` must remain unchanged.
 //! - **`TokensPurchased`** - unknown `currency` discriminant (> 2) must be
 //!   stored as `"UNKNOWN"` in `ico_purchases` and `blockchain_transactions`.
+//!   Deferred-event flow: streaming (empty caller) -> rollback, then backfill
+//!   (real caller) -> persists all rows.
 //! - **`IcoScheduleAdded`** - writes `ico_schedules` row with schedule ID,
 //!   price, and sale amount; UPSERT updates existing rows.
 
@@ -806,6 +808,112 @@ async fn tokens_purchased_without_caller_defers_to_backfill(pool: PgPool) {
     assert_eq!(
         tx_count, 0,
         "deferred event must not create blockchain_transactions row"
+    );
+}
+
+/// End-to-end test: streaming event defers (empty caller), then backfill
+/// re-processes the same deploy with a real caller and persists all rows.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn deferred_event_then_backfill_persists_data(pool: PgPool) {
+    common::disable_rls(&pool).await;
+
+    let deploy_hash = "0000000000000000000000000000000000000000000000000000000000008888";
+
+    // Step 1: streaming event with empty caller -> deferred, nothing persisted.
+    let result = processor::process_event(
+        &pool,
+        &EventRegistry::new(),
+        &HashSet::new(),
+        &RawEvent {
+            contract_hash: "ico_hash".to_owned(),
+            deploy_hash: deploy_hash.to_owned(),
+            block_height: 200,
+            caller: String::new(),
+            contract_type: ContractType::Ico,
+            event_name: "TokensPurchased".to_owned(),
+            event_data: json!({
+                "amount": "5000",
+                "currency": 0,
+                "cost": "2500",
+                "timestamp": 1_700_000_000_u64
+            }),
+            block_timestamp: None,
+            transform_idx: None,
+        },
+    )
+    .await;
+    result.unwrap();
+
+    // Verify nothing persisted after deferral.
+    let count: i64 = sqlx::query_scalar!(
+        "SELECT COUNT(*) FROM ico_purchases WHERE transaction_hash = $1",
+        deploy_hash,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap()
+    .unwrap_or(0);
+    assert_eq!(count, 0, "deferred event must not persist ico_purchases");
+
+    // Step 2: backfill re-processes the same deploy with a real caller.
+    let result = processor::process_event(
+        &pool,
+        &EventRegistry::new(),
+        &HashSet::new(),
+        &RawEvent {
+            contract_hash: "ico_hash".to_owned(),
+            deploy_hash: deploy_hash.to_owned(),
+            block_height: 200,
+            caller: FakeAddress::Buyer.to_string(),
+            contract_type: ContractType::Ico,
+            event_name: "TokensPurchased".to_owned(),
+            event_data: json!({
+                "amount": "5000",
+                "currency": 0,
+                "cost": "2500",
+                "timestamp": 1_700_000_000_u64
+            }),
+            block_timestamp: None,
+            transform_idx: None,
+        },
+    )
+    .await;
+    result.unwrap();
+
+    // Verify rows persisted after backfill.
+    let purchase_count: i64 = sqlx::query_scalar!(
+        "SELECT COUNT(*) FROM ico_purchases WHERE transaction_hash = $1",
+        deploy_hash,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap()
+    .unwrap_or(0);
+    assert_eq!(purchase_count, 1, "backfill must persist ico_purchases row");
+
+    let tx_count: i64 = sqlx::query_scalar!(
+        "SELECT COUNT(*) FROM blockchain_transactions WHERE transaction_hash = $1",
+        deploy_hash,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap()
+    .unwrap_or(0);
+    assert_eq!(
+        tx_count, 1,
+        "backfill must persist blockchain_transactions row"
+    );
+
+    let holding_count: i64 = sqlx::query_scalar!(
+        r#"SELECT COUNT(*) as "count!" FROM token_holdings WHERE user_address = $1"#,
+        FakeAddress::Buyer.as_str(),
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        holding_count, 1,
+        "backfill must update token_holdings for the buyer"
     );
 }
 
