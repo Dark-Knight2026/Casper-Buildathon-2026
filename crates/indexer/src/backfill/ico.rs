@@ -6,6 +6,15 @@
 //!   `end_timestamp`, `sale_amount`, `price`)
 //! - `TokensPurchased` from `purchase` deploys (args: `amount_to_spend`, `currency`)
 //!   combined with BIG Transfer amount from CSPR.cloud `/ft-token-actions`
+//!
+//! # Deferred event gap
+//!
+//! Backfill runs once at indexer startup. Streaming events deferred via
+//! `DeferredEvent` (e.g. `TokensPurchased` without caller) after backfill
+//! completes are **not re-processed** until the next restart. During this
+//! window, `GET /ico/balance` may show zero for a live purchase.
+//! Mitigation: periodic backfill re-runs or a deferred-event retry queue
+//! (not yet implemented).
 
 use core::time::Duration;
 use std::collections::HashMap;

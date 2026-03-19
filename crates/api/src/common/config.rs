@@ -42,7 +42,10 @@ fn default_cors_origin() -> String {
 /// processes `ICOScheduleAdded` contract events).
 #[derive(Debug, Clone)]
 pub struct IcoFallback {
-    /// Price per 1 BIG token in USD as a string (e.g. `"0.50"`).
+    /// Price per 1 BIG token in USD as a plain decimal string (e.g. `"0.50"` = $0.50).
+    ///
+    /// **Note:** this is NOT the same format as the DB `ico_schedules.price` column,
+    /// which stores a U256 with 6 decimals (e.g. `"500000"` = $0.50).
     /// Stored as `String` to avoid `f64` precision loss when converting to `Decimal`.
     pub price_usd: String,
     /// Total allocation in minimal units (U256 as string, decimals=18).
