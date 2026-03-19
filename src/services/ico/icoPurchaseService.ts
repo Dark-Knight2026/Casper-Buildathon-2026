@@ -23,7 +23,6 @@ import { ICO_CONFIG, getCurrencyRateUsd } from '@/constants/ico';
 import logger from '@/lib/logger';
 import {
   createContractCallTransaction,
-  stripHashPrefix,
   getCasperRpcClient,
   getAccountMainPurseURef,
 } from './casperClient';
