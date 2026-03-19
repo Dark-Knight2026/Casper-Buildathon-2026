@@ -49,14 +49,16 @@ fn validate_account(account: &str) -> Result<String, ApiError> {
 /// Parse period string into number of months to look back.
 /// Supported: `1m`, `3m`, `6m`, `1y`, `all`.
 #[inline]
-fn parse_period_months(period: &str) -> Option<u32> {
+fn parse_period_months(period: &str) -> Result<Option<u32>, ApiError> {
     match period {
-        "1m" => Some(1),
-        "3m" => Some(3),
-        "1y" => Some(12),
-        "all" => None,
-        // "6m" and any unrecognized value default to 6 months.
-        _ => Some(6),
+        "1m" => Ok(Some(1)),
+        "3m" => Ok(Some(3)),
+        "6m" => Ok(Some(6)),
+        "1y" => Ok(Some(12)),
+        "all" => Ok(None),
+        _ => Err(ApiError::BadRequest(
+            "Invalid period. Allowed: 1m, 3m, 6m, 1y, all".to_owned(),
+        )),
     }
 }
 
@@ -202,7 +204,7 @@ pub async fn get_earnings(
 ) -> ApiResult<Json<EarningsResponse>> {
     let account = validate_account(&path.account_hash)?;
 
-    let since = match parse_period_months(&query.period) {
+    let since = match parse_period_months(&query.period)? {
         Some(months) => Utc::now()
             .checked_sub_months(Months::new(months))
             .unwrap_or(Utc::now()),

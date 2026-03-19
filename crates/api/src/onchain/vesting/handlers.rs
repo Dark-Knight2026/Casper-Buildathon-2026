@@ -6,6 +6,7 @@ use std::sync::Arc;
 use axum::{Json, extract::Query, extract::State};
 use chrono::Utc;
 use rust_decimal::{Decimal, prelude::ToPrimitive};
+use tracing::warn;
 
 use crate::{
     common::{ApiError, ApiResult, AppState, PaginatedResponse, Pagination},
@@ -92,7 +93,8 @@ fn validate_account(account: &str) -> Result<String, ApiError> {
         Pagination,
     ),
     responses(
-        (status = 200, description = "Paginated vesting schedules", body = inline(PaginatedResponse<VestingScheduleItem>)),
+        (status = 200, description = "Paginated vesting schedules",
+         body = inline(PaginatedResponse<VestingScheduleItem>)),
         (status = 400, description = "Invalid account hash format"),
         (status = 500, description = "Internal error"),
     )
@@ -129,6 +131,16 @@ pub async fn get_vesting_schedules(
             );
             let unlocked_dec = vested - claimed_dec;
             let divisor = Decimal::from(10u64.pow(TOKEN_DECIMALS));
+
+            if unlocked_dec < Decimal::ZERO {
+                warn!(
+                    vesting_id = %r.vesting_id,
+                    vested = %vested,
+                    claimed = %claimed_dec,
+                    "unlocked_amount is negative - claimed exceeds vested, \
+                     possible indexer replay corruption"
+                );
+            }
 
             VestingScheduleItem {
                 id: r.vesting_id.clone(),

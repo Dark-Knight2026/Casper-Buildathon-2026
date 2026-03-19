@@ -3,6 +3,9 @@
 use chrono::{DateTime, Utc};
 use sqlx::{FromRow, PgPool};
 
+/// Number of days used to extrapolate annual rewards for APY calculation.
+const APY_WINDOW_DAYS: i32 = 30;
+
 /// Raw staking position row from `staking_positions`.
 #[derive(Debug, FromRow)]
 pub struct StakingPositionRow {
@@ -55,10 +58,13 @@ pub struct ApyData {
 pub async fn fetch_apy_data(pool: &PgPool) -> Result<ApyData, sqlx::Error> {
     let rewards_per_year = sqlx::query_scalar!(
         r"
-            SELECT COALESCE(SUM(amount::NUMERIC) * 365 / 30, 0)::TEXT
+            SELECT COALESCE(
+                SUM(amount::NUMERIC) * 365 / $1::INT, 0
+            )::TEXT
             FROM staking_reward_deposits
-            WHERE event_timestamp >= NOW() - INTERVAL '30 days'
+            WHERE event_timestamp >= NOW() - make_interval(days => $1::INT)
         ",
+        APY_WINDOW_DAYS,
     )
     .fetch_one(pool)
     .await?

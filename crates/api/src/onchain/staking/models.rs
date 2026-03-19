@@ -3,6 +3,9 @@
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 
+/// Default earnings period when the query parameter is omitted.
+pub const DEFAULT_PERIOD: &str = "6m";
+
 /// Path parameter for staking endpoints: `{accountHash}`.
 #[derive(Debug, Deserialize, IntoParams)]
 pub struct AccountHashPath {
@@ -22,7 +25,7 @@ pub struct EarningsQuery {
 }
 
 fn default_period() -> String {
-    "6m".to_owned()
+    DEFAULT_PERIOD.to_owned()
 }
 
 /// Query parameters for rewards-history endpoint.
