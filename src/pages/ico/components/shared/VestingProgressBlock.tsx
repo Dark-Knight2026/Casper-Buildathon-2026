@@ -1,8 +1,10 @@
 import { cn } from '@/lib/utils';
 import { ProgressBar } from './ProgressBar';
 import { CountdownTimer } from './CountdownTimer';
-import { Lock, Calendar } from 'lucide-react';
+import { MainButton } from './MainButton';
+import { Lock, Calendar, Unlock } from 'lucide-react';
 import { formatNumber, formatUSD, formatDate } from '../../utils/formatters';
+import type { ClaimStep } from '@/hooks/ico/useClaimTokens';
 
 export interface VestingEntry {
   /** Unique identifier for the vesting entry */
@@ -25,6 +27,12 @@ interface VestingProgressBlockProps {
   /** Token price for USD calculation */
   tokenPrice?: number;
   className?: string;
+  /** Called when user clicks Claim on an unlocked entry */
+  onClaim?: (vestingId: bigint) => void;
+  /** ID of the entry currently being claimed */
+  claimingId?: string | null;
+  /** Claim step for showing granular state on the button */
+  claimStep?: ClaimStep;
 }
 
 export function VestingProgressBlock({
@@ -32,6 +40,9 @@ export function VestingProgressBlock({
   tokenSymbol = 'BIG',
   tokenPrice,
   className,
+  onClaim,
+  claimingId,
+  claimStep,
 }: VestingProgressBlockProps) {
   const now = Date.now();
 
@@ -40,11 +51,28 @@ export function VestingProgressBlock({
     (a, b) => a.unlockTimestamp - b.unlockTimestamp
   );
 
+  // Unlocked entries that still have tokens to claim
+  const claimableEntries = sortedEntries.filter(
+    (entry) =>
+      entry.unlockTimestamp <= now &&
+      entry.lockedAmount - (entry.unlockedAmount ?? 0) > 0,
+  );
+
   // Find the first upcoming unlock
   const upcomingUnlocks = sortedEntries.filter(
     (entry) => entry.unlockTimestamp > now
   );
   const nextUnlock = upcomingUnlocks[0];
+
+  const getClaimButtonText = (entryId: string) => {
+    if (claimingId !== entryId) return 'Claim';
+    switch (claimStep) {
+      case 'signing':  return 'Sign in wallet…';
+      case 'pending':  return 'Confirming…';
+      case 'confirmed': return 'Claimed!';
+      default:         return 'Claim';
+    }
+  };
 
   // Calculate progress for the next unlock
   const calculateProgress = () => {
@@ -84,6 +112,62 @@ export function VestingProgressBlock({
           <p className="text-[hsl(var(--ico-text-primary))] font-medium">
             All tokens have been unlocked
           </p>
+        </div>
+      )}
+
+      {/* Claimable entries — unlocked and ready to claim */}
+      {claimableEntries.length > 0 && (
+        <div className="mt-6">
+          <div className="flex items-center gap-2 mb-4">
+            <Unlock className="w-4 h-4 text-emerald-500" />
+            <h4 className="text-sm font-medium text-[hsl(var(--ico-text-secondary))]">
+              Ready to Claim ({claimableEntries.length}{' '}
+              {claimableEntries.length === 1 ? 'entry' : 'entries'})
+            </h4>
+          </div>
+
+          <div className="space-y-3">
+            {claimableEntries.map((entry) => {
+              const claimable = entry.lockedAmount - (entry.unlockedAmount ?? 0);
+              const usdValue = tokenPrice ? claimable * tokenPrice : undefined;
+              const isClaiming = claimingId === entry.id && (claimStep === 'signing' || claimStep === 'pending');
+              const isClaimed = claimingId === entry.id && claimStep === 'confirmed';
+
+              return (
+                <div
+                  key={entry.id}
+                  className={cn(
+                    'flex items-center justify-between p-3 rounded-lg',
+                    'bg-emerald-500/5 border border-emerald-500/20',
+                  )}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full flex items-center justify-center bg-emerald-500/15">
+                      <Unlock className="w-4 h-4 text-emerald-500" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-[hsl(var(--ico-text-primary))]">
+                        {formatNumber(claimable)} {tokenSymbol}
+                      </p>
+                      {usdValue !== undefined && (
+                        <p className="text-xs text-[hsl(var(--ico-text-muted))]">
+                          ≈ {formatUSD(usdValue)}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  <MainButton
+                    text={getClaimButtonText(entry.id)}
+                    loading={isClaiming}
+                    disabled={isClaiming || isClaimed}
+                    onClick={() => onClaim?.(BigInt(entry.id))}
+                    className="text-sm px-4 py-2"
+                  />
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 

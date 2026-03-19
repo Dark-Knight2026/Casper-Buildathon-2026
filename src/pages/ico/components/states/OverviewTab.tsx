@@ -1,26 +1,70 @@
-import { memo, useMemo, useState } from 'react';
+import { memo, useCallback, useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Card } from '../shared/Card';
 import { TrendingUp, Clock, Percent, Wallet } from 'lucide-react';
 import { TransactionHistory } from '../shared/TransactionHistory';
 import { EarningsChart } from '../shared/EarningsChart';
+import { VestingProgressBlock, type VestingEntry } from '../shared/VestingProgressBlock';
 import { useICOWallet } from '@/hooks/ico/useICOWallet';
 import { useTransactionHistory } from '@/hooks/ico/useTransactionHistory';
 import { useStakingPortfolio } from '@/hooks/ico/useStakingPortfolio';
 import { useStakingInfo } from '@/hooks/ico/useStakingInfo';
+import { useVestingSchedules } from '@/hooks/ico/useVestingSchedules';
+import { useClaimTokens } from '@/hooks/ico/useClaimTokens';
 import { deriveAccountHash } from '@/lib/blockchain/accountUtils';
 import { formatNumber, formatUSD } from '../../utils/formatters';
+import { ICO_CONFIG } from '@/constants/ico';
+import { useToast } from '@/hooks/use-toast';
 
 const PAGE_SIZE = 8;
 
 export const OverviewTab = memo(function OverviewTab() {
-  const { account } = useICOWallet();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const { account, clickRef } = useICOWallet();
   const accountHash = account?.publicKey ? deriveAccountHash(account.publicKey) : null;
   const [page, setPage] = useState(1);
+  const [claimingId, setClaimingId] = useState<string | null>(null);
   const { transactions, totalPages } = useTransactionHistory(accountHash, page, PAGE_SIZE);
   const { data: stakingPortfolio } = useStakingPortfolio(accountHash);
   console.log('stakingPortfolio:', stakingPortfolio);
   const { data: stakingInfo } = useStakingInfo(accountHash);
   console.log('stakingInfo:', stakingInfo);
+  const { data: vestingSchedules } = useVestingSchedules(accountHash);
+
+  const vestingEntries = useMemo<VestingEntry[]>(() => {
+    if (!vestingSchedules?.data?.length) return [];
+    return vestingSchedules.data.map((s) => ({
+      id: s.id,
+      lockedAmount: s.lockedAmount,
+      purchaseTimestamp: s.purchaseTimestamp,
+      unlockTimestamp: s.unlockTimestamp,
+      unlockedAmount: s.unlockedAmount,
+    }));
+  }, [vestingSchedules]);
+
+  const { state: claimState, claim } = useClaimTokens(
+    account?.publicKey ?? null,
+    clickRef ?? null,
+    {
+      onSuccess: () => {
+        setClaimingId(null);
+        queryClient.invalidateQueries({ queryKey: ['vesting-schedules'] });
+      },
+      onError: (error) => {
+        console.error('[useClaimTokens] claim failed:', error);
+        toast({ title: 'Claim failed', description: error, variant: 'destructive' });
+      },
+    },
+  );
+
+  const handleClaim = useCallback(
+    (vestingId: bigint) => {
+      setClaimingId(vestingId.toString());
+      claim(vestingId);
+    },
+    [claim],
+  );
   const dashboardCards = useMemo(() => [
     {
       label: 'BIG Balance',
@@ -131,6 +175,19 @@ export const OverviewTab = memo(function OverviewTab() {
 
         <EarningsChart accountHash={accountHash} className="md:col-span-2" />
       </div>
+
+      {/* Vesting Progress */}
+      {vestingEntries.length > 0 && (
+        <Card className="p-5">
+          <VestingProgressBlock
+            vestingEntries={vestingEntries}
+            tokenSymbol={ICO_CONFIG.TOKEN.symbol}
+            onClaim={handleClaim}
+            claimingId={claimingId}
+            claimStep={claimState.step}
+          />
+        </Card>
+      )}
 
       {/* Third Row: Portfolio Value + Transactions */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

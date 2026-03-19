@@ -19,6 +19,8 @@ import { TransactionStatusToast } from '../shared/TransactionStatusToast';
 import { UserTokenBalance } from '../shared/UserTokenBalance';
 import { TransactionHistory } from '../shared/TransactionHistory';
 import { VestingProgressBlock, type VestingEntry } from '../shared/VestingProgressBlock';
+import { useClaimTokens } from '@/hooks/ico/useClaimTokens';
+import { useToast } from '@/hooks/use-toast';
 
 interface PrivateSaleActiveProps {
   className?: string;
@@ -26,13 +28,13 @@ interface PrivateSaleActiveProps {
   progress?: ScheduleProgress | null;
 }
 
-const DIV = BigInt('1000000000000000000'); // 10^18
+const WEI = BigInt('1000000000000000000'); // 10^18
 
 function mapToScheduleProgress(p: IcoProgressResponse): ScheduleProgress {
   return {
-    tokensSold:       Number(BigInt(p.tokensSold)       / DIV),
-    totalAllocation:  Number(BigInt(p.totalAllocation)  / DIV),
-    tokensRemaining:  Number(BigInt(p.tokensRemaining)  / DIV),
+    tokensSold:       Number(BigInt(p.tokensSold)       / WEI),
+    totalAllocation:  Number(BigInt(p.totalAllocation)  / WEI),
+    tokensRemaining:  Number(BigInt(p.tokensRemaining)  / WEI),
     amountRaised:     p.amountRaised,
     hardCapUsd:       p.hardCapUsd,
     priceUsd:         p.priceUsd,
@@ -42,11 +44,10 @@ function mapToScheduleProgress(p: IcoProgressResponse): ScheduleProgress {
 
 export function PrivateSaleActive({ className, endTimestamp, progress }: PrivateSaleActiveProps) {
   const queryClient = useQueryClient();
-  const { data: icoProgress } = useICOProgress();
+  const { toast } = useToast();
 
-  const onPurchaseSuccess = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: ['ico-progress'] });
-  }, [queryClient]);
+  // ── ICO progress ────────────────────────────────────────────────────
+  const { data: icoProgress } = useICOProgress();
 
   const effectiveProgress = useMemo<ScheduleProgress | null>(() => {
     if (icoProgress) return mapToScheduleProgress(icoProgress);
@@ -55,10 +56,16 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: Private
 
   const tokenPrice = effectiveProgress?.priceUsd ?? 0;
 
+  // ── Purchase flow ───────────────────────────────────────────────────
+  const onPurchaseSuccess = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['ico-progress'] });
+  }, [queryClient]);
+
   const {
     isConnected,
     account,
     connect,
+    clickRef,
     balances,
     balanceError,
     balancesLoading,
@@ -75,13 +82,13 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: Private
   });
 
   const accountHash = account?.publicKey ? deriveAccountHash(account.publicKey) : null;
+
+  // ── User data ───────────────────────────────────────────────────────
   const [txPage, setTxPage] = useState(1);
   const { transactions, totalPages } = useTransactionHistory(accountHash, txPage);
-
   const { data: icoBalance } = useICOBalance(accountHash);
   const { data: vestingSchedules } = useVestingSchedules(accountHash);
   console.log('vestingSchedules:', vestingSchedules);
-
   const vestingEntries = useMemo<VestingEntry[]>(() => {
     if (!vestingSchedules?.data?.length) return [];
     return vestingSchedules.data.map((s) => ({
@@ -92,14 +99,45 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: Private
       unlockedAmount: s.unlockedAmount,
     }));
   }, [vestingSchedules]);
+
   const userBalance = useMemo(() => {
     if (icoBalance) {
       const tokensPurchased = Number(BigInt(icoBalance.tokensPurchased)) / 1e18;
-      return { tokensPurchased, totalSpentUSD: icoBalance.totalSpentUsd ?? 0, currentValue: icoBalance.currentValue ?? undefined };
+      return {
+        tokensPurchased,
+        totalSpentUSD: icoBalance.totalSpentUsd ?? 0,
+        currentValue: icoBalance.currentValue ?? undefined,
+      };
     }
     const tokensPurchased = transactions.reduce((sum, tx) => sum + tx.tokensReceived, 0);
     return { tokensPurchased, totalSpentUSD: tokensPurchased * tokenPrice, currentValue: undefined };
   }, [icoBalance, transactions, tokenPrice]);
+
+  // ── Claim flow ──────────────────────────────────────────────────────
+  const [claimingId, setClaimingId] = useState<string | null>(null);
+
+  const { state: claimState, claim } = useClaimTokens(
+    account?.publicKey ?? null,
+    clickRef ?? null,
+    {
+      onSuccess: () => {
+        setClaimingId(null);
+        queryClient.invalidateQueries({ queryKey: ['vesting-schedules'] });
+      },
+      onError: (error) => {
+        console.error('[useClaimTokens] claim failed:', error);
+        toast({ title: 'Claim failed', description: error, variant: 'destructive' });
+      },
+    },
+  );
+
+  const handleClaim = useCallback(
+    (vestingId: bigint) => {
+      setClaimingId(vestingId.toString());
+      claim(vestingId);
+    },
+    [claim],
+  );
 
   return (
     <div className={cn('max-w-5xl mx-auto', className)}>
@@ -119,23 +157,24 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: Private
           <p className='text-[hsl(var(--ico-text-secondary))] pl-2'>Private Sale ends in:</p>
           <CountdownTimer variant='compact' targetTimestamp={endTimestamp} className="py-2" />
 
-          {/* Progress Bar - show only when progress data exists */}
           {effectiveProgress && (
-            <ProgressBar
-              currentValue={effectiveProgress.tokensSold}
-              maxValue={effectiveProgress.totalAllocation}
-              label="Progress"
-              rightLabel={`$${Math.round(effectiveProgress.amountRaised).toLocaleString()} / $${Math.round(effectiveProgress.hardCapUsd).toLocaleString()}`}
-              showPercentage={true}
-              infoColumns={[
-                { label: 'Funds Raised', value: `$${Math.round(effectiveProgress.amountRaised).toLocaleString()}` },
-                { label: 'Initial Price', value: `$${effectiveProgress.priceUsd.toFixed(2)} per ${ICO_CONFIG.TOKEN.symbol}` },
-              ]}
-              className="w-full"
-            />
-          )}
-          {effectiveProgress && (
-            <p className='text-[hsl(var(--ico-text-secondary))] pl-2'>Hard Cap: ${Math.round(effectiveProgress.hardCapUsd).toLocaleString()}</p>
+            <>
+              <ProgressBar
+                currentValue={effectiveProgress.tokensSold}
+                maxValue={effectiveProgress.totalAllocation}
+                label="Progress"
+                rightLabel={`$${Math.round(effectiveProgress.amountRaised).toLocaleString()} / $${Math.round(effectiveProgress.hardCapUsd).toLocaleString()}`}
+                showPercentage={true}
+                infoColumns={[
+                  { label: 'Funds Raised', value: `$${Math.round(effectiveProgress.amountRaised).toLocaleString()}` },
+                  { label: 'Initial Price', value: `$${effectiveProgress.priceUsd.toFixed(2)} per ${ICO_CONFIG.TOKEN.symbol}` },
+                ]}
+                className="w-full"
+              />
+              <p className='text-[hsl(var(--ico-text-secondary))] pl-2'>
+                Hard Cap: ${Math.round(effectiveProgress.hardCapUsd).toLocaleString()}
+              </p>
+            </>
           )}
         </div>
 
@@ -171,6 +210,19 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: Private
         />
       )}
 
+      {/* Vesting Progress */}
+      {vestingEntries.length > 0 && (
+        <VestingProgressBlock
+          vestingEntries={vestingEntries}
+          tokenSymbol={ICO_CONFIG.TOKEN.symbol}
+          tokenPrice={effectiveProgress?.priceUsd}
+          onClaim={handleClaim}
+          claimingId={claimingId}
+          claimStep={claimState.step}
+          className="mt-8"
+        />
+      )}
+
       {/* Transaction History */}
       <TransactionHistory
         transactions={transactions}
@@ -179,16 +231,6 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: Private
         onPageChange={setTxPage}
         className="mt-8 max-w-5xl"
       />
-
-      {/* Vesting Progress */}
-      {vestingEntries.length > 0 && (
-        <VestingProgressBlock
-          vestingEntries={vestingEntries}
-          tokenSymbol={ICO_CONFIG.TOKEN.symbol}
-          tokenPrice={effectiveProgress?.priceUsd}
-          className="mt-8"
-        />
-      )}
 
       {/* Purchase Confirmation Modal */}
       {modalProps && (

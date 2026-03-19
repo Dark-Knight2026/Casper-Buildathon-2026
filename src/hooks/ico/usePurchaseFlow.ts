@@ -23,6 +23,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import logger from '@/lib/logger';
 import type { PaymentCurrency } from '@/types/ico';
 import { useICOWallet } from './useICOWallet';
+import type { ICSPRClickSDK } from '@make-software/csprclick-core-types';
 import { useWalletBalances } from './useWalletBalances';
 import { usePurchaseToken, type PurchaseState } from './usePurchaseToken';
 import { useCSPRPrice } from '@/hooks/useCSPRPrice';
@@ -44,6 +45,7 @@ interface UsePurchaseFlowReturn {
   isConnected: boolean;
   account: { publicKey: string } | null;
   connect: () => void;
+  clickRef: ICSPRClickSDK | null | undefined;
   balances: {
     cspr: number;
     usdt: number;
@@ -232,6 +234,7 @@ export function usePurchaseFlow({
     isConnected,
     account,
     connect,
+    clickRef,
     balances,
     balanceError,
     balancesLoading,
