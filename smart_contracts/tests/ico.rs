@@ -236,8 +236,7 @@ fn test_add_currency_should_add_cspr_token_support_properly() {
     ctx.ico.add_currency(currency, None);
 
     assert!(
-        ctx.env
-            .emitted_event(&ctx.ico, CurrencyAdded { currency }),
+        ctx.env.emitted_event(&ctx.ico, CurrencyAdded { currency }),
         "CurrencyAdded event should be emitted"
     );
     assert_eq!(

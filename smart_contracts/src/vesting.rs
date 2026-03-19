@@ -75,14 +75,14 @@ pub mod errors {
 
     #[odra::odra_error]
     pub enum Error {
-        CallerNotWhitelisted = 65_001,
-        InvalidAmount = 65_002,
-        InvalidVestingDuration = 65_003,
-        CliffExceedsVestingDuration = 65_004,
-        ScheduleNotFound = 65_005,
-        CallerNotBeneficiary = 65_006,
-        NothingToClaim = 65_007,
-        ClaimBlockedByActiveUnbonding = 65_008,
+        CallerNotWhitelisted = 55_001,
+        InvalidAmount = 55_002,
+        InvalidVestingDuration = 55_003,
+        CliffExceedsVestingDuration = 55_004,
+        ScheduleNotFound = 55_005,
+        CallerNotBeneficiary = 55_006,
+        NothingToClaim = 55_007,
+        ClaimBlockedByActiveUnbonding = 55_008,
     }
 }
 
@@ -144,8 +144,7 @@ impl Vesting {
         self.assert_owner();
         self.whitelisted_creators.set(&creator, true);
 
-        self.env()
-            .emit_event(WhitelistedCreatorAdded { creator });
+        self.env().emit_event(WhitelistedCreatorAdded { creator });
     }
 
     /// Revokes an address's permission to create vesting schedules.
@@ -153,8 +152,7 @@ impl Vesting {
         self.assert_owner();
         self.whitelisted_creators.set(&creator, false);
 
-        self.env()
-            .emit_event(WhitelistedCreatorRemoved { creator });
+        self.env().emit_event(WhitelistedCreatorRemoved { creator });
     }
 
     // =========================================================================

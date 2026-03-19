@@ -1,4 +1,4 @@
-last_updated = "2026-03-18T16:30:51Z"
+last_updated = "2026-03-19T09:51:52Z"
 
 [[contracts]]
 name = "TailorCoin"
@@ -13,14 +13,14 @@ package_hash = "hash-257ab5d8a35c8354bcb5b699b5a6804c290096ef96c488749e0321f9087
 [[contracts]]
 name = "Vesting"
 package_name = "Vesting"
-package_hash = "hash-59a2202334c9c28ae992b6cf248ceaffc1ca9bc54e76b2f9ae6a4b12b028016b"
+package_hash = "hash-f6fb8886ebfe8166832bac2e1fec3197a610eee5869e5e06c3f2d6f0856fcdb2"
 
 [[contracts]]
 name = "Staking"
 package_name = "Staking"
-package_hash = "hash-2db547b460310e98cadc3c0754ef7a202951a26b55040fda6d0b2bf6fbd4a574"
+package_hash = "hash-c664b281e6a416cb29b4ac52a788cf24f91b35176ba55a4f033bb33caf62090d"
 
 [[contracts]]
 name = "ICO"
 package_name = "ICO"
-package_hash = "hash-eab36d463582f3a52421f788251c5196f5088762de717f253cb4f9daf1d3eff8"
+package_hash = "hash-6bb279a856bd183fa4b0acf4440d36dc95a886e56b738247d4df24b6983a562e"

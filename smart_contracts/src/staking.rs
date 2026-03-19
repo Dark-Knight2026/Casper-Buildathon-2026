@@ -332,8 +332,7 @@ impl Staking {
 
         self.reward_per_token_stored.set(current + increase);
 
-        self.env()
-            .emit_event(RewardsDeposited { caller, amount });
+        self.env().emit_event(RewardsDeposited { caller, amount });
     }
 
     /// Claims all pending BIG token rewards accrued by the caller.
@@ -396,8 +395,7 @@ impl Staking {
 
         self.tailor_coin.transfer(&staker, &amount);
 
-        self.env()
-            .emit_event(UnbondedWithdrawn { staker, amount });
+        self.env().emit_event(UnbondedWithdrawn { staker, amount });
     }
 
     // =========================================================================
