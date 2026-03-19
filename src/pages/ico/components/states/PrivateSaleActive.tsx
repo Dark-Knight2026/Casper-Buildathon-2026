@@ -5,7 +5,7 @@ import { ICO_CONFIG } from '@/constants/ico';
 import { Title } from '../shared/Title';
 import { ProgressBar } from '../shared/ProgressBar';
 import { WalletCard } from '../shared/WalletCard';
-import CountdownTimer from '../shared/CountdownTimer';
+import { CountdownTimer } from '../shared/CountdownTimer';
 import { usePurchaseFlow } from '@/hooks/ico/usePurchaseFlow';
 import { useUserTokenActions } from '@/hooks/ico/useUserTokenActions';
 import { PurchaseConfirmationModal } from '../shared/PurchaseConfirmationModal';

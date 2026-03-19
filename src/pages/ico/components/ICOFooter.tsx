@@ -77,4 +77,3 @@ export function ICOFooter() {
   );
 }
 
-export default ICOFooter;

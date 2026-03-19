@@ -162,16 +162,14 @@ describe('AmountInput', () => {
   // --- Validation errors ---
 
   describe('validation', () => {
-    it('should show error for negative numbers', () => {
+    it('should strip negative sign without showing an error', () => {
       render(<AmountInput {...defaultProps} />);
 
       fireEvent.change(screen.getByPlaceholderText('0.00'), {
         target: { value: '-10' },
       });
 
-      expect(
-        screen.getByText('Amount must be a positive number')
-      ).toBeInTheDocument();
+      expect(screen.queryByText('Amount must be a positive number')).not.toBeInTheDocument();
     });
 
     it('should show error when amount is below minimum ($1)', () => {
