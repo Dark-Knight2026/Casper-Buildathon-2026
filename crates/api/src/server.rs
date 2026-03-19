@@ -20,6 +20,7 @@ use tokio::{
 use tower_http::{cors::CorsLayer, limit::RequestBodyLimitLayer, trace::TraceLayer};
 use utoipa::OpenApi;
 use utoipa_axum::{router::OpenApiRouter, routes};
+#[cfg(debug_assertions)]
 use utoipa_swagger_ui::SwaggerUi;
 
 use crate::{ApiDoc, AppState, RedisStore, ServerConfig, ServerError, onchain, services};
@@ -35,7 +36,12 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .with_state(state)
         .split_for_parts();
 
-    router.merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", api))
+    #[cfg(debug_assertions)]
+    let router = router.merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", api));
+    #[cfg(not(debug_assertions))]
+    drop(api);
+
+    router
 }
 
 /// Maximum request body size (1 MB).
@@ -110,7 +116,7 @@ pub async fn main() -> Result<(), ServerError> {
     tracing::info!("Database connected");
 
     // Initialize Redis store
-    let redis_client = redis::Client::open(config.redis_url.clone()).map_err(|e| {
+    let redis_client = redis::Client::open(config.redis_url.expose_secret()).map_err(|e| {
         tracing::error!(error = %e, "Failed to parse REDIS_URL");
         ServerError::EnvVar("Invalid Redis URL".to_owned())
     })?;

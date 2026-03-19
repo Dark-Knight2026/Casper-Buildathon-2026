@@ -89,21 +89,31 @@ async fn account_transactions_empty(pool: PgPool) {
     assert!(body["data"].as_array().unwrap().is_empty());
 }
 
+/// Seed a transaction with all fields populated for field-level assertions.
+async fn seed_full_transaction(pool: &PgPool, tx_hash: &str, from: &str, to: &str) {
+    sqlx::query(
+        r"
+            INSERT INTO blockchain_transactions
+                (transaction_hash, from_address, to_address, contract_hash, transaction_type,
+                 amount, block_number, status, from_type, to_type, transform_idx)
+            VALUES ($1, $2, $3, $4, 'token_transfer', '1000000000000000000', 100,
+                    'confirmed', 0, 0, 5)
+        ",
+    )
+    .bind(tx_hash)
+    .bind(from)
+    .bind(to)
+    .bind(BIG_CONTRACT)
+    .execute(pool)
+    .await
+    .expect("Failed to seed full transaction");
+}
+
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn account_transactions_returns_expected_fields(pool: PgPool) {
     let tx_hash = "a".repeat(64);
     let to_addr = "cc".repeat(32);
-    seed_transaction(
-        &pool,
-        &tx_hash,
-        VALID_ADDRESS,
-        Some(&to_addr),
-        Some(BIG_CONTRACT),
-        "token_transfer",
-        Some("1000000000000000000"),
-        Some(100),
-    )
-    .await;
+    seed_full_transaction(&pool, &tx_hash, VALID_ADDRESS, &to_addr).await;
 
     let env = common::setup_test_server(pool, false).await;
 
@@ -123,12 +133,11 @@ async fn account_transactions_returns_expected_fields(pool: PgPool) {
     assert_eq!(item["from_hash"], VALID_ADDRESS);
     assert_eq!(item["to_hash"], to_addr);
     assert_eq!(item["ft_action_type_id"], 2); // token_transfer -> 2
-    assert!(item.get("amount").is_some());
-    assert!(item.get("contract_package_hash").is_some());
-    assert!(item.get("timestamp").is_some());
-    assert!(item.get("from_type").is_some());
-    assert!(item.get("to_type").is_some());
-    assert!(item.get("transform_idx").is_some());
+    assert_eq!(item["amount"], "1000000000000000000");
+    assert_eq!(item["contract_package_hash"], BIG_CONTRACT);
+    assert_eq!(item["from_type"], 0); // Account
+    assert_eq!(item["to_type"], 0); // Account
+    assert_eq!(item["transform_idx"], 5);
 }
 
 #[sqlx::test(migrator = "common::MIGRATIONS")]
@@ -711,4 +720,74 @@ async fn account_transactions_type_filter_returns_matching_rows(pool: PgPool) {
     assert_eq!(data.len(), 1);
     assert_eq!(data[0]["ft_action_type_id"], 4);
     assert_eq!(data[0]["deploy_hash"], purchase_hash);
+}
+
+/// `?type=token_mint` and `?type=token_allowance` must filter correctly.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn account_transactions_type_filter_mint_and_allowance(pool: PgPool) {
+    let mint_hash = "c".repeat(64);
+    let allowance_hash = "d".repeat(64);
+    let transfer_hash = "e".repeat(64);
+
+    seed_transaction(
+        &pool,
+        &mint_hash,
+        VALID_ADDRESS,
+        None,
+        None,
+        "token_mint",
+        Some("1000"),
+        Some(1),
+    )
+    .await;
+    seed_transaction(
+        &pool,
+        &allowance_hash,
+        VALID_ADDRESS,
+        None,
+        None,
+        "token_allowance",
+        Some("500"),
+        Some(2),
+    )
+    .await;
+    seed_transaction(
+        &pool,
+        &transfer_hash,
+        VALID_ADDRESS,
+        None,
+        None,
+        "token_transfer",
+        Some("200"),
+        Some(3),
+    )
+    .await;
+
+    let env = common::setup_test_server(pool, false).await;
+
+    // token_mint -> ft_action_type_id = 1
+    let response = env
+        .server
+        .get(&format!(
+            "/api/v1/transactions/account/{VALID_ADDRESS}?type=token_mint"
+        ))
+        .await;
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+    assert_eq!(body["item_count"], 1);
+    assert_eq!(body["data"][0]["ft_action_type_id"], 1);
+    assert_eq!(body["data"][0]["deploy_hash"], mint_hash);
+
+    // token_allowance -> ft_action_type_id = 3
+    let response = env
+        .server
+        .get(&format!(
+            "/api/v1/transactions/account/{VALID_ADDRESS}?type=token_allowance"
+        ))
+        .await;
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+    assert_eq!(body["item_count"], 1);
+    assert_eq!(body["data"][0]["ft_action_type_id"], 3);
+    assert_eq!(body["data"][0]["deploy_hash"], allowance_hash);
 }

@@ -6,9 +6,7 @@ use indexer::{
     events::{EventType, cep18::Cep18EventType, ico::IcoEventType},
 };
 
-// -----------------------------------------------------------------------------
-// ICO events
-// -----------------------------------------------------------------------------
+// ICO events ------------------------------------------------------------------
 
 /// `TokensPurchased` on the ICO contract must resolve to the correct variant.
 #[test]
@@ -44,9 +42,7 @@ fn ico_unknown_event_name_returns_error() {
     assert!(EventType::parse(ContractType::Ico, "UnknownEvent").is_err());
 }
 
-// -----------------------------------------------------------------------------
-// CEP-18 events
-// -----------------------------------------------------------------------------
+// CEP-18 events ---------------------------------------------------------------
 
 /// `Transfer` on BIG, USDC, and USDT must all resolve to
 /// `EventType::Cep18(Cep18EventType::Transfer)`.
@@ -95,9 +91,7 @@ fn cep18_unknown_event_name_returns_error() {
     assert!(EventType::parse(ContractType::Big, "UnknownEvent").is_err());
 }
 
-// -----------------------------------------------------------------------------
-// Unknown contract type
-// -----------------------------------------------------------------------------
+// Unknown contract type -------------------------------------------------------
 
 /// An unrecognized `ContractType` must return `Err` regardless of event name.
 #[test]

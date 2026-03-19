@@ -31,9 +31,7 @@ use crate::{
 };
 use db::StreamType;
 
-// -----------------------------------------------------------------------------
-// CSPR.cloud WebSocket message types
-// -----------------------------------------------------------------------------
+// CSPR.cloud WebSocket message types ------------------------------------------
 
 /// Top-level message received from the CSPR.cloud Streaming API.
 ///
@@ -78,9 +76,7 @@ pub struct WssExtra {
     pub transform_id: Option<i64>,
 }
 
-// -----------------------------------------------------------------------------
-// Contract registry helpers
-// -----------------------------------------------------------------------------
+// Contract registry helpers ---------------------------------------------------
 
 /// Build a lookup map from contract package hash to [`ContractType`].
 ///
@@ -108,9 +104,7 @@ pub fn build_hashes_csv(registry: &ContractRegistry) -> String {
         .join(",")
 }
 
-// -----------------------------------------------------------------------------
-// Connection
-// -----------------------------------------------------------------------------
+// Connection ------------------------------------------------------------------
 
 /// Establish an authenticated WebSocket connection to the CSPR.cloud
 /// Streaming API, subscribed to all configured contracts.

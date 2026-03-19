@@ -150,17 +150,7 @@ pub async fn get_ico_balance(
 pub async fn get_ico_progress(
     State(state): State<Arc<AppState>>,
 ) -> ApiResult<Json<IcoProgressResponse>> {
-    // Determine total_allocation from env fallback (used as default for the
-    // snapshot query). The snapshot itself re-reads the schedule inside the
-    // same REPEATABLE READ transaction for consistency.
-    let fallback_alloc = state
-        .config
-        .ico_fallback
-        .as_ref()
-        .map(|f| f.total_allocation.clone())
-        .unwrap_or_default();
-
-    let snapshot = db::fetch_progress_snapshot(&state.db, &fallback_alloc).await?;
+    let snapshot = db::fetch_progress_snapshot(&state.db).await?;
 
     // Resolve price and total_allocation from the snapshot schedule or env fallback.
     let (price_f64, price_decimal, total_allocation) = if let Some(ref schedule) = snapshot.schedule
@@ -190,11 +180,13 @@ pub async fn get_ico_progress(
 
     // Recalculate tokens_remaining using the resolved total_allocation from the
     // snapshot schedule (not the fallback used as default for the query).
-    let alloc_dec = total_allocation.parse::<Decimal>().unwrap_or(Decimal::ZERO);
+    let alloc_dec = total_allocation
+        .parse::<Decimal>()
+        .map_err(|_| ApiError::Internal("invalid ICO total_allocation data".to_owned()))?;
     let sold_dec = snapshot
         .tokens_sold
         .parse::<Decimal>()
-        .unwrap_or(Decimal::ZERO);
+        .map_err(|_| ApiError::Internal("invalid ICO tokens_sold data".to_owned()))?;
     let hundred = Decimal::from(100);
 
     let tokens_remaining_dec = (alloc_dec - sold_dec).max(Decimal::ZERO);

@@ -23,7 +23,9 @@ const USD_TOLERANCE: f64 = 1e-6;
 async fn seed_ico_schedule(pool: &PgPool) {
     sqlx::query(
         r"
-            INSERT INTO ico_schedules (schedule_id, start_timestamp, end_timestamp, sale_amount, price, transaction_hash, block_height)
+            INSERT INTO ico_schedules
+                (schedule_id, start_timestamp, end_timestamp,
+                 sale_amount, price, transaction_hash, block_height)
             VALUES ('test-schedule', 0, 9999999999, $1, $2, 'deadbeef', 1)
         ",
     )
@@ -38,7 +40,9 @@ async fn seed_ico_schedule(pool: &PgPool) {
 async fn seed_ico_purchase(pool: &PgPool, tx_hash: &str, buyer: &str, amount: &str) {
     sqlx::query(
         r"
-            INSERT INTO ico_purchases (transaction_hash, block_height, buyer_address, amount, currency, cost, event_timestamp)
+            INSERT INTO ico_purchases
+                (transaction_hash, block_height, buyer_address,
+                 amount, currency, cost, event_timestamp)
             VALUES ($1, 1, $2, $3, 'CSPR', '100', 1700000000)
         ",
     )
@@ -147,6 +151,12 @@ async fn ico_balance_returns_500_without_any_config(pool: PgPool) {
         .get(&format!("/api/v1/ico/balance/{VALID_ADDRESS}"))
         .await;
     assert_eq!(response.status_code(), StatusCode::INTERNAL_SERVER_ERROR);
+    let body: Value = response.json();
+    assert_eq!(
+        body["error"].as_str().unwrap(),
+        "An internal server error occurred",
+        "Expected internal error message, got: {body}"
+    );
 }
 
 #[sqlx::test(migrator = "common::MIGRATIONS")]
@@ -178,7 +188,12 @@ async fn ico_progress_no_purchases(pool: PgPool) {
     assert_eq!(body["amountRaised"], 0.0);
     assert_eq!(body["priceUsd"], 0.5);
     assert_eq!(body["percentSold"], 0.0);
-    assert!(body.get("hardCapUsd").is_some());
+    // hardCapUsd = 500_000_000 BIG * $0.50 = $250_000_000
+    let hard_cap = body["hardCapUsd"].as_f64().unwrap();
+    assert!(
+        (hard_cap - 250_000_000.0).abs() < USD_TOLERANCE,
+        "expected ~250000000.0, got {hard_cap}"
+    );
 }
 
 #[sqlx::test(migrator = "common::MIGRATIONS")]
@@ -195,6 +210,12 @@ async fn ico_progress_with_purchases(pool: PgPool) {
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
     assert_eq!(body["tokensSold"], ten_big);
+    // tokensRemaining = total_allocation - tokens_sold
+    // 500000000000000000000000000 - 10000000000000000000 = 499999990000000000000000000
+    assert_eq!(
+        body["tokensRemaining"], "499999990000000000000000000",
+        "tokensRemaining must equal total_allocation minus tokens_sold"
+    );
     // amount_raised = 10 * 0.5 = 5.0
     let raised = body["amountRaised"].as_f64().unwrap();
     assert!(
@@ -212,6 +233,12 @@ async fn ico_progress_returns_500_without_any_config(pool: PgPool) {
 
     let response = env.server.get("/api/v1/ico/progress").await;
     assert_eq!(response.status_code(), StatusCode::INTERNAL_SERVER_ERROR);
+    let body: Value = response.json();
+    assert_eq!(
+        body["error"].as_str().unwrap(),
+        "An internal server error occurred",
+        "Expected internal error message, got: {body}"
+    );
 }
 
 #[sqlx::test(migrator = "common::MIGRATIONS")]

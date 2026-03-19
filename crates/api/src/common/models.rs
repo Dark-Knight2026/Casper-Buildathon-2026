@@ -28,6 +28,11 @@ pub enum UserRole {
     Unknown,
 }
 
+/// JWT issuer claim value. Only tokens issued by our API are accepted.
+pub const JWT_ISSUER: &str = "leasefi-api";
+/// JWT audience claim value. Only tokens intended for our users are accepted.
+pub const JWT_AUDIENCE: &str = "leasefi-users";
+
 /// JWT Claims structure used for token generation and validation.
 #[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]
 pub struct Claims {
@@ -38,4 +43,8 @@ pub struct Claims {
     pub role: UserRole,
     /// Expiration time of the token (Unix timestamp).
     pub exp: usize,
+    /// Issuer of the token.
+    pub iss: String,
+    /// Intended audience of the token.
+    pub aud: String,
 }

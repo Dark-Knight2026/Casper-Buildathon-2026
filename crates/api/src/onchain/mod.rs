@@ -38,6 +38,9 @@ pub const PUBLIC_DATA_RATE_LIMIT_BURST: u32 = 30;
 /// - `GET /staking/{accountHash}/earnings` - monthly earnings chart
 /// - `GET /staking/{accountHash}/rewards-history` - daily rewards history
 ///
+///
+/// Same `SmartIpKeyExtractor` trust model as [`crate::services::public_router`] - see its docs.
+///
 /// # Panics
 ///
 /// Panics at startup if the rate-limit configuration is invalid (e.g. zero burst size).
@@ -64,6 +67,7 @@ pub fn router() -> OpenApiRouter<Arc<AppState>> {
 
 /// Creates an `OpenAPI` router for blockchain transaction endpoints.
 #[inline]
+#[must_use]
 fn transactions_router() -> OpenApiRouter<Arc<AppState>> {
     OpenApiRouter::new()
         .routes(routes!(transactions::handlers::get_account_transactions))
@@ -72,6 +76,7 @@ fn transactions_router() -> OpenApiRouter<Arc<AppState>> {
 
 /// Creates an `OpenAPI` router for ICO endpoints.
 #[inline]
+#[must_use]
 fn ico_router() -> OpenApiRouter<Arc<AppState>> {
     OpenApiRouter::new()
         .routes(routes!(ico::handlers::get_ico_balance))
@@ -80,6 +85,7 @@ fn ico_router() -> OpenApiRouter<Arc<AppState>> {
 
 /// Creates an `OpenAPI` router for vesting endpoints.
 #[inline]
+#[must_use]
 fn vesting_router() -> OpenApiRouter<Arc<AppState>> {
     OpenApiRouter::new()
         .routes(routes!(vesting::handlers::get_vesting_schedules))
@@ -89,6 +95,7 @@ fn vesting_router() -> OpenApiRouter<Arc<AppState>> {
 
 /// Creates an `OpenAPI` router for staking endpoints.
 #[inline]
+#[must_use]
 fn staking_router() -> OpenApiRouter<Arc<AppState>> {
     OpenApiRouter::new()
         .routes(routes!(staking::handlers::get_staking_info))

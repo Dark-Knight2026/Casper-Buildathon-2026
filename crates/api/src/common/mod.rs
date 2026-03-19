@@ -20,6 +20,6 @@ pub use crypto::{
     CryptoError, verify_casper_signature,
 };
 pub use errors::{ApiError, ApiResult, ErrorResponse, ServerError};
-pub use models::{Claims, PropertyId, UserId, UserRole};
+pub use models::{Claims, JWT_AUDIENCE, JWT_ISSUER, PropertyId, UserId, UserRole};
 pub use pagination::{Pageable, PaginatedResponse, Pagination};
 pub use redis::RedisStore;

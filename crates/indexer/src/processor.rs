@@ -107,7 +107,8 @@ pub async fn process_event(
         }
         Err(IndexerError::DeferredEvent(reason)) => {
             // Event deferred to backfill - roll back so nothing is persisted.
-            // Backfill will later re-encounter this deploy with full context.
+            // Backfill runs once at startup; events deferred after backfill
+            // completes will not be re-processed until the next indexer restart.
             tracing::warn!(
                 deploy = %raw.deploy_hash,
                 event = %raw.event_name,

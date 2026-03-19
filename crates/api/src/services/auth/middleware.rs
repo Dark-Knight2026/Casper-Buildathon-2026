@@ -8,12 +8,12 @@ use axum::{
     http::{StatusCode, request::Parts},
     response::{IntoResponse, Response},
 };
-use jsonwebtoken::{DecodingKey, Validation, decode};
+use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode};
 use secrecy::ExposeSecret;
 use serde_json::json;
 use thiserror::Error;
 
-use crate::common::{AppState, Claims};
+use crate::common::{AppState, Claims, JWT_AUDIENCE, JWT_ISSUER};
 
 /// Authenticated user extracted from JWT token.
 #[derive(Debug)]
@@ -37,7 +37,9 @@ impl FromRequestParts<Arc<AppState>> for AuthUser {
             return Err(AuthError::MissingCredentials);
         };
         let secret = state.config.jwt_secret.expose_secret();
-        let validation = Validation::new(jsonwebtoken::Algorithm::HS256);
+        let mut validation = Validation::new(Algorithm::HS256);
+        validation.set_issuer(&[JWT_ISSUER]);
+        validation.set_audience(&[JWT_AUDIENCE]);
         let token_data = decode::<Claims>(
             token,
             &DecodingKey::from_secret(secret.as_bytes()),

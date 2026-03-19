@@ -23,9 +23,7 @@ use crate::{
     error::IndexerResult,
 };
 
-// -----------------------------------------------------------------------------
-// Address type
-// -----------------------------------------------------------------------------
+// Address type ----------------------------------------------------------------
 
 /// Address type discriminant for `blockchain_transactions.from_type` / `to_type`.
 ///
@@ -96,9 +94,7 @@ impl HashType {
     }
 }
 
-// -----------------------------------------------------------------------------
-// Contract registry
-// -----------------------------------------------------------------------------
+// Contract registry -----------------------------------------------------------
 
 /// Populate the `contract_registry` table with all active contracts from config.
 ///
@@ -118,6 +114,7 @@ pub async fn upsert_contract_registry(
 ) -> IndexerResult<()> {
     for contract in contracts.active_contracts() {
         sqlx::query!(
+            // TODO: contract_name always equals contract_type - consider removing the column
             r"
                 INSERT INTO contract_registry (contract_type, contract_hash, contract_name, is_active)
                 VALUES ($1, $2, $3, TRUE)
@@ -136,9 +133,7 @@ pub async fn upsert_contract_registry(
     Ok(())
 }
 
-// -----------------------------------------------------------------------------
-// Events
-// -----------------------------------------------------------------------------
+// Events ----------------------------------------------------------------------
 
 /// Data required to insert a row into `blockchain_events`.
 #[derive(Debug)]
@@ -220,9 +215,7 @@ pub async fn mark_event_processed(
     Ok(())
 }
 
-// -----------------------------------------------------------------------------
-// Blockchain transactions
-// -----------------------------------------------------------------------------
+// Blockchain transactions -----------------------------------------------------
 
 /// Data required to insert a row into `blockchain_transactions`.
 #[derive(Debug)]
@@ -295,9 +288,7 @@ pub async fn insert_blockchain_transaction(
     Ok(())
 }
 
-// -----------------------------------------------------------------------------
-// Token holdings
-// -----------------------------------------------------------------------------
+// Token holdings --------------------------------------------------------------
 
 /// Direction and amount of a token balance change.
 #[derive(Debug, Clone, Copy)]
@@ -381,9 +372,7 @@ pub async fn update_token_balance(
     Ok(())
 }
 
-// -----------------------------------------------------------------------------
-// ICO purchases
-// -----------------------------------------------------------------------------
+// ICO purchases ---------------------------------------------------------------
 
 /// Data required to insert a row into `ico_purchases`.
 #[derive(Debug)]
@@ -441,9 +430,7 @@ pub async fn insert_ico_purchase(
     Ok(())
 }
 
-// -----------------------------------------------------------------------------
-// ICO schedules
-// -----------------------------------------------------------------------------
+// ICO schedules ---------------------------------------------------------------
 
 /// Data required to insert a row into `ico_schedules`.
 #[derive(Debug)]
