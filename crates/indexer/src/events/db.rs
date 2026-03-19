@@ -567,6 +567,9 @@ pub async fn upsert_vesting_schedule(
 /// Increase `claimed_amount` on a vesting schedule after a `TokensClaimed` event.
 ///
 /// Uses `::NUMERIC` arithmetic so U256-scale values are handled correctly.
+/// Idempotency is guaranteed at the processor level: `insert_blockchain_event`
+/// deduplicates by `(transaction_hash, event_type, contract_address)` and
+/// short-circuits before the handler is called on replay.
 ///
 /// # Errors
 ///
@@ -630,6 +633,7 @@ pub async fn insert_staking_event(
         r"
             INSERT INTO staking_events (staker_address, event_type, amount, transaction_hash, block_height, event_timestamp)
             VALUES ($1, $2, $3, $4, $5, $6)
+            ON CONFLICT (transaction_hash) DO NOTHING
         ",
         row.staker_address,
         row.event_type,
@@ -693,10 +697,10 @@ pub async fn update_staking_position_unstake(
     sqlx::query!(
         r"
             UPDATE staking_positions
-            SET staked_amount    = GREATEST('0'::NUMERIC, staked_amount::NUMERIC - $2::TEXT::NUMERIC)::TEXT,
-                unbonding_amount = $2,
+            SET staked_amount     = GREATEST('0'::NUMERIC, staked_amount::NUMERIC - $2::TEXT::NUMERIC)::TEXT,
+                unbonding_amount  = (unbonding_amount::NUMERIC + $2::TEXT::NUMERIC)::TEXT,
                 unbonding_ends_at = $3,
-                last_updated_at  = NOW()
+                last_updated_at   = NOW()
             WHERE staker_address = $1
         ",
         staker_address,
