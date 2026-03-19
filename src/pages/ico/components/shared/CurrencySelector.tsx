@@ -37,20 +37,20 @@ export function CurrencySelector({
         className={cn(
           'w-32 border-0',
           'bg-transparent text-[hsl(var(--ico-text-primary))]',
-          'focus:outline-none focus:ring-0 focus:ring-offset-0 focus:border-0',
-          'focus-visible:ring-0 focus-visible:bg-sky-800/30',
+          'focus:outline-none',
+          'focus-visible:ring-2 focus-visible:ring-[hsl(var(--ico-brand-primary))] focus-visible:ring-offset-1',
           className
         )}
       >
         <SelectValue placeholder="Currency" />
       </SelectTrigger>
-      <SelectContent className="bg-[hsl(var(--ico-bg-secondary))] border border-sky-800/50 p-2">
+      <SelectContent className="bg-[hsl(var(--ico-bg-card))] border border-[hsl(var(--ico-border-color))] p-2">
 
           {CURRENCY_OPTIONS.map((option) => (
             <SelectItem
               key={option.value}
               value={option.value}
-              className="text-white rounded-none cursor-pointer data-highlighted:bg-sky-800!"
+              className="text-[hsl(var(--ico-text-primary))] rounded-none cursor-pointer data-highlighted:bg-[hsl(var(--ico-bg-secondary))]!"
             >
               {option.label}
             </SelectItem>
@@ -61,4 +61,3 @@ export function CurrencySelector({
   );
 }
 
-export default CurrencySelector;

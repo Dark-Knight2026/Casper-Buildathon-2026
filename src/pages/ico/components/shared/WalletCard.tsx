@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo } from 'react';
 import { cn } from '@/lib/utils';
-import { ICO_CONFIG } from '@/constants/ico';
+import { getCurrencyRateUsd } from '@/constants/ico';
 import { Card } from './Card';
 import type { PaymentCurrency } from '@/types/ico';
 import { MainButton } from './MainButton';
@@ -12,8 +12,12 @@ interface WalletCardProps {
   balanceUSDC?: number;
   balanceCSPR?: number;
   balanceBIG?: number;
+  balanceError?: string | null;
+  balancesLoading?: boolean;
   tokenPrice: number;
   tokenSymbol: string;
+  csprPriceUsd?: number;
+  csprPriceStale?: boolean;
   onConnect?: () => void;
   onPurchase?: (amount: number, currency: PaymentCurrency) => void;
   className?: string;
@@ -25,8 +29,12 @@ export function WalletCard({
   balanceUSDC = 0,
   balanceCSPR = 0,
   balanceBIG = 0,
+  balanceError,
+  balancesLoading,
   tokenPrice,
   tokenSymbol,
+  csprPriceUsd,
+  csprPriceStale,
   onConnect,
   onPurchase,
   className,
@@ -42,21 +50,21 @@ export function WalletCard({
     CARD: 0,
   };
   const currentBalance = balances[currency];
-  // TODO: [Next PR] Replace hardcoded CURRENCY_RATES with live rate from useCSPRPrice hook.
-  // Currently uses a static CSPR rate — see src/hooks/useCSPRPrice.ts for the existing
-  // real-time price fetching implementation that should be integrated here.
-  //
-  // NOTE: These calculations are for UI estimation/display only.
-  // Authoritative token amounts must be computed on the backend using integer
-  // arithmetic in smallest units (motes for CSPR, token decimals for BIG)
-  // to avoid JavaScript floating-point precision errors.
-  const currencyRate = ICO_CONFIG.CURRENCY_RATES[currency];
+
+  let currencyRate: number | null = null;
+  let csprPriceError = false;
+  try {
+    currencyRate = getCurrencyRateUsd(currency, csprPriceUsd);
+  } catch {
+    csprPriceError = true;
+  }
+
   const amountInUsd = useMemo(
-    () => (amount ? Number(amount) * currencyRate : 0),
+    () => (amount && currencyRate !== null ? Number(amount) * currencyRate : 0),
     [amount, currencyRate]
   );
   const tokensToReceive = useMemo(
-    () => amountInUsd / tokenPrice,
+    () => tokenPrice > 0 ? amountInUsd / tokenPrice : 0,
     [amountInUsd, tokenPrice]
   );
 
@@ -82,14 +90,14 @@ export function WalletCard({
           {isConnected ? 'Connected Wallet' : 'Wallet'}
         </span>
         {isConnected ? (
-          <span className="font-mono text-sm text-[hsl(var(--ico-text-primary))] bg-sky-900/30 px-3 py-1 rounded-lg">
+          <span className="font-mono text-sm text-[hsl(var(--ico-text-primary))] bg-[hsl(var(--ico-bg-secondary))] px-3 py-1 rounded-md border border-[hsl(var(--ico-border-color))]">
             {truncateAddress(walletAddress)}
           </span>
         ) : (
           <button
             onClick={onConnect}
             aria-label="Connect your crypto wallet"
-            className="text-sm font-medium text-sky-400 hover:text-sky-300 transition-colors"
+            className="text-sm font-medium text-[hsl(var(--ico-brand-secondary))] hover:text-[hsl(var(--ico-brand-secondary-hover))] transition-colors"
           >
             Connect Wallet
           </button>
@@ -98,24 +106,31 @@ export function WalletCard({
 
       {/* Balance */}
       {isConnected && (
-        <div className="flex justify-between items-center w-full mb-6 pb-6 border-b border-sky-800/50">
+        <div className="flex justify-between items-center w-full mb-6 pb-6 border-b border-[hsl(var(--ico-border-color))]">
           <span className="text-sm text-[hsl(var(--ico-text-secondary))]">Your Balance</span>
-          <div className="text-right space-y-1">
-            {balanceBIG > 0 && (
-              <p className="text-sm font-bold text-sky-400">
-                {balanceBIG.toLocaleString(undefined, { maximumFractionDigits: 2 })} {tokenSymbol}
+          {balancesLoading ? (
+            <span className="text-sm text-[hsl(var(--ico-text-secondary))]">Loading...</span>
+          ) : (
+            <div className="text-right space-y-1">
+              {balanceError && (
+                <p className="text-xs text-red-400">{balanceError}</p>
+              )}
+              {balanceBIG > 0 && (
+                <p className="text-sm font-bold text-[hsl(var(--ico-text-highlight))]">
+                  {balanceBIG.toLocaleString(undefined, { maximumFractionDigits: 2 })} {tokenSymbol}
+                </p>
+              )}
+              <p className="text-sm font-medium text-[hsl(var(--ico-text-primary))]">
+                {balanceCSPR.toLocaleString(undefined, { maximumFractionDigits: 2 })} CSPR
               </p>
-            )}
-            <p className="text-sm font-medium text-[hsl(var(--ico-text-primary))]">
-              {balanceCSPR.toLocaleString(undefined, { maximumFractionDigits: 2 })} CSPR
-            </p>
-            <p className="text-sm font-medium text-[hsl(var(--ico-text-primary))]">
-              {balanceUSDT.toLocaleString(undefined, { maximumFractionDigits: 2 })} USDT
-            </p>
-            <p className="text-sm font-medium text-[hsl(var(--ico-text-primary))]">
-              {balanceUSDC.toLocaleString(undefined, { maximumFractionDigits: 2 })} USDC
-            </p>
-          </div>
+              <p className="text-sm font-medium text-[hsl(var(--ico-text-primary))]">
+                {balanceUSDT.toLocaleString(undefined, { maximumFractionDigits: 2 })} USDT
+              </p>
+              <p className="text-sm font-medium text-[hsl(var(--ico-text-primary))]">
+                {balanceUSDC.toLocaleString(undefined, { maximumFractionDigits: 2 })} USDC
+              </p>
+            </div>
+          )}
         </div>
       )}
 
@@ -131,17 +146,35 @@ export function WalletCard({
         className="mb-4"
       />
 
+      {/* CSPR Price Unavailable Warning */}
+      {csprPriceError && currency === 'CSPR' && (
+        <div className="w-full p-4 rounded-md bg-red-900/20 border border-red-800/30 mb-4">
+          <p className="text-sm text-red-400">
+            CSPR price unavailable — please try again later
+          </p>
+        </div>
+      )}
+
+      {/* Stale Price Warning (display-only — does not block purchase) */}
+      {!csprPriceError && csprPriceStale && currency === 'CSPR' && (
+        <div className="w-full p-3 rounded-md bg-yellow-900/20 border border-yellow-800/30 mb-4">
+          <p className="text-xs text-yellow-400">
+            CSPR rate may be outdated. Final amount is determined on-chain.
+          </p>
+        </div>
+      )}
+
       {/* Token Calculation */}
-      {amount && Number(amount) > 0 && (
-        <div className="w-full p-4 rounded-xl bg-sky-900/20 border border-sky-800/30 mb-6">
+      {amount && Number(amount) > 0 && !csprPriceError && (
+        <div className="w-full p-4 rounded-md bg-[hsl(var(--ico-bg-secondary))] border border-[hsl(var(--ico-border-color))] mb-6">
           <div className="flex justify-between items-center">
             <span className="text-sm text-[hsl(var(--ico-text-secondary))]">You will receive (estimate)</span>
             <span className="text-lg font-bold text-[hsl(var(--ico-text-primary))]">
               ≈{tokensToReceive.toLocaleString(undefined, { maximumFractionDigits: 2 })} {tokenSymbol}
             </span>
           </div>
-          <p className="text-xs text-sky-400 mt-1">
-            Rate: 1 {tokenSymbol} = {(tokenPrice / currencyRate).toLocaleString(undefined, { maximumFractionDigits: 6 })} {currency}
+          <p className="text-xs text-[hsl(var(--ico-text-highlight))] mt-1">
+            Rate: 1 {tokenSymbol} = {(tokenPrice / (currencyRate ?? 1)).toLocaleString(undefined, { maximumFractionDigits: 6 })} {currency}
           </p>
           {/* Floating-point note: these are UI estimates only. Final amounts are validated
               server-side using integer arithmetic in smallest units (motes/decimals).
@@ -163,10 +196,9 @@ export function WalletCard({
       <MainButton
         text={isConnected ? `Purchase ${tokenSymbol}` : 'Connect Wallet'}
         onClick={isConnected ? handlePurchase : onConnect}
-        disabled={isConnected && (insufficientBalance || !amount)}
+        disabled={isConnected && (insufficientBalance || !amount || csprPriceError)}
       />
     </Card>
   );
 }
 
-export default WalletCard;

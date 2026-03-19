@@ -17,9 +17,40 @@ import {
   validatePurchase,
   calculateTokensReceived,
   fromRawAmount,
+  parseContractError,
+  getDeployStatus,
 } from '@/services/ico/icoPurchaseService';
-import { ICO_CONFIG } from '@/constants/ico';
+import { ICO_CONFIG, getCurrencyRateUsd } from '@/constants/ico';
 import type { PaymentCurrency } from '@/types/ico';
+
+// ── Constants ────────────────────────────────────────────────────────
+
+// ICSPRClickSDK.send() 4th argument is in SECONDS (not milliseconds).
+const WALLET_SIGN_TIMEOUT_SEC = 300; // 5 minutes
+
+const APPROVAL_CONFIRMATION_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+const DEPLOY_POLL_INTERVAL_MS = 10_000; // 10 seconds
+
+// ── Helpers ──────────────────────────────────────────────────────────
+
+const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/**
+ * Polls getDeployStatus until the deploy is executed, failed, or times out.
+ * Used to ensure the CEP-18 approval is on-chain before submitting the purchase.
+ */
+async function waitForDeployConfirmation(
+  deployHash: string,
+): Promise<'executed' | 'failed' | 'timed-out'> {
+  const deadline = Date.now() + APPROVAL_CONFIRMATION_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    const { status } = await getDeployStatus(deployHash);
+    if (status === 'executed') return 'executed';
+    if (status === 'failed') return 'failed';
+    await delay(DEPLOY_POLL_INTERVAL_MS);
+  }
+  return 'timed-out';
+}
 
 // ── Types ───────────────────────────────────────────────────────────
 
@@ -74,6 +105,7 @@ export function usePurchaseToken(
   tokenPriceUsd: number,
   clickRef: ICSPRClickSDK | null,
   options: UsePurchaseTokenOptions = {},
+  csprPriceUsd?: number,
 ): UsePurchaseTokenReturn {
   const [state, setState] = useState<PurchaseState>(initialState);
   const submittingRef = useRef(false);
@@ -124,7 +156,7 @@ export function usePurchaseToken(
 
       try {
         // 1. Validate purchase
-        const validation = validatePurchase(amount, currency, balance);
+        const validation = validatePurchase(amount, currency, balance, csprPriceUsd);
         if (!validation.valid) {
           throw new Error(validation.error);
         }
@@ -144,14 +176,15 @@ export function usePurchaseToken(
         if (approvalNeeded && approvalTransaction) {
           onApprovalNeeded?.();
 
-          // Sign and send approval transaction using CSPR.click SDK
           setState((prev) => ({ ...prev, step: 'awaiting-approval-signature' }));
 
+          const approvalJSON = approvalTransaction.toJSON();
+
           const approvalResult = await clickRef.send(
-            approvalTransaction.toJSON() as object,
+            approvalJSON as object,
             publicKey,
-            true, // waitProcessing
-            300000, // 5 min timeout
+            true,
+            WALLET_SIGN_TIMEOUT_SEC,
           );
 
           if (!approvalResult || approvalResult.cancelled) {
@@ -169,16 +202,29 @@ export function usePurchaseToken(
             step: 'approval-pending',
             approvalTxHash,
           }));
+
+          // Wait for approval to execute on-chain before submitting purchase.
+          // CEP-18 transfer_from() requires the allowance to be set first.
+          const approvalStatus = await waitForDeployConfirmation(approvalTxHash);
+          if (approvalStatus !== 'executed') {
+            throw new Error(
+              approvalStatus === 'timed-out'
+                ? 'Approval transaction timed out — please try again'
+                : 'Approval transaction failed on-chain',
+            );
+          }
         }
 
         // 4. Sign and send purchase transaction
         setState((prev) => ({ ...prev, step: 'awaiting-purchase-signature' }));
 
+        const purchaseJSON = purchaseTransaction.toJSON();
+
         const purchaseResult = await clickRef.send(
-          purchaseTransaction.toJSON() as object,
+          purchaseJSON as object,
           publicKey,
-          true, // waitProcessing
-          300000, // 5 min timeout
+          true,
+          WALLET_SIGN_TIMEOUT_SEC,
         );
 
         if (!purchaseResult || purchaseResult.cancelled) {
@@ -198,7 +244,7 @@ export function usePurchaseToken(
         }));
 
         // 5. Calculate tokens received
-        const tokensRaw = calculateTokensReceived(amount, currency, tokenPriceUsd);
+        const tokensRaw = calculateTokensReceived(amount, currency, tokenPriceUsd, csprPriceUsd);
         const tokensReceived = fromRawAmount(tokensRaw, ICO_CONFIG.TOKEN.decimals);
 
         // 6. Success!
@@ -211,7 +257,8 @@ export function usePurchaseToken(
 
         onSuccess?.(purchaseTxHash, tokensReceived);
       } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : 'Purchase failed';
+        const raw = err instanceof Error ? err.message : 'Purchase failed';
+        const errorMessage = parseContractError(raw);
 
         setState((prev) => ({
           ...prev,
@@ -225,7 +272,7 @@ export function usePurchaseToken(
         submittingRef.current = false;
       }
     },
-    [publicKey, tokenPriceUsd, clickRef, onSuccess, onError, onApprovalNeeded],
+    [publicKey, tokenPriceUsd, clickRef, onSuccess, onError, onApprovalNeeded, csprPriceUsd],
   );
 
   /**
@@ -246,13 +293,18 @@ export function usePurchaseToken(
         return '0';
       }
 
-      const currencyRate = ICO_CONFIG.CURRENCY_RATES[currency];
+      let currencyRate: number;
+      try {
+        currencyRate = getCurrencyRateUsd(currency, csprPriceUsd);
+      } catch {
+        return '—';
+      }
       const amountInUsd = numAmount * currencyRate;
       const tokens = amountInUsd / tokenPrice;
 
       return tokens.toLocaleString(undefined, { maximumFractionDigits: 2 });
     },
-    [],
+    [csprPriceUsd],
   );
 
   return {

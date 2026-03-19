@@ -19,4 +19,3 @@ export function Title({ children, className }: TitleProps) {
   );
 }
 
-export default Title;

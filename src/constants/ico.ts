@@ -10,42 +10,17 @@ export const ICO_CONFIG = {
     name: 'BIG Token',
     symbol: 'BIG',
     decimals: 18,
-    totalSupply: '5000000000', // 5 billion
-  },
-
-  PRE_SALE: {
-    price: '0.001',           // USD per token
-    allocation: '1000000000', // 1 billion tokens (20%)
-    hardCap: '1000000',       // $1,000,000 USD
-    duration: 7 * 24 * 60 * 60 * 1000, // 7 days in ms
-    autoStake: true,          // Presale tokens auto-staked
-    fundsRaised: '500000',    // $500,000 USD raised so far
-  },
-
-  PUBLIC_ICO: {
-    price: '0.0015',          // USD per token
-    allocation: '750000000',  // 750 million tokens (15%)
-    hardCap: '1500000',       // $1,500,000 USD
-    autoStake: false,         // ICO tokens not auto-staked
   },
 
   PAYMENT_METHODS: ['USDT', 'USDC', 'CSPR', 'CARD'] as const,
 
   CONTRACTS: {
     icoAddress: import.meta.env.VITE_ICO_CONTRACT_HASH ?? '',
-    tokenAddress: import.meta.env.VITE_BIG_TOKEN_CONTRACT_HASH ?? 'hash-f7d94fd8670fdc69aabd07c214ab8d52c3fc1fd839f0cc7713e1574cdfd899ec',
+    icoPackageHash: import.meta.env.VITE_ICO_PACKAGE_HASH ?? '',
+    tokenAddress: import.meta.env.VITE_BIG_TOKEN_CONTRACT_HASH ?? '',
     treasuryAddress: import.meta.env.VITE_TREASURY_CONTRACT_HASH ?? '',
-    usdcAddress: import.meta.env.VITE_USDC_CONTRACT_HASH ?? 'hash-7f06f66426f18ca8d3b8df69f977a54554d39fda43ebe942fd22ece0d20235bd',
-    usdtAddress: import.meta.env.VITE_USDT_CONTRACT_HASH ?? 'hash-7c902e8a111b3116e00c7507138b92b83f96b29be98aa95247928583720e297a',
-  },
-
-  // TODO: Replace with real timestamps from backend API.
-  // Use getIcoTimestamps() for fresh values — see below.
-  TIMESTAMPS_OFFSETS: {
-    presaleStart: 2 * 24 * 60 * 60 * 1000, // 2 days
-    presaleEnd: 9 * 24 * 60 * 60 * 1000,   // 9 days
-    icoStart: 12 * 24 * 60 * 60 * 1000,    // 12 days
-    icoEnd: 26 * 24 * 60 * 60 * 1000,      // 26 days
+    usdcAddress: import.meta.env.VITE_USDC_CONTRACT_HASH ?? '',
+    usdtAddress: import.meta.env.VITE_USDT_CONTRACT_HASH ?? '',
   },
 
   CASPER: {
@@ -61,32 +36,49 @@ export const ICO_CONFIG = {
 
   // Minimum and maximum purchase amounts in USD
   PURCHASE_LIMITS: {
-    min: 10,      // $10 minimum
+    min: 1,      // $1 minimum
     max: 100000,  // $100,000 maximum
   },
 
-  // Currency to USD conversion rates (constant for now)
-  // TODO: [Next PR] Replace hardcoded CSPR rate with real-time price oracle.
-  // CSPR is volatile — a hardcoded rate can cause significant over/under-charging.
-  // Integration plan:
-  //   1. Use useCSPRPrice hook (src/hooks/useCSPRPrice.ts) which already fetches
-  //      live rates from csprCloudService every 60 seconds.
-  //   2. Add staleness detection — reject transactions if rate is > 5 min old.
-  //   3. USDT/USDC rates should also be fetched to handle minor de-peg scenarios.
-  //   4. Keep these hardcoded values only as fallback defaults.
-  //
-  // NOTE: These client-side rates are for UI display/estimation only.
-  // They are inherently manipulable (browser DevTools, etc.) and MUST NOT be
-  // trusted for actual financial calculations. The backend will independently
-  // compute token amounts using its own exchange rates and reject any request
-  // where client-submitted values diverge from the server-side truth.
-  CURRENCY_RATES: {
-    USDT: 1,       // 1 USDT = $1
-    USDC: 1,       // 1 USDC = $1
-    CSPR: 0.02,    // 1 CSPR = $0.02 — PLACEHOLDER, must be replaced with live rate
-    CARD: 1,       // 1 USD = $1 (fiat)
-  },
 };
+
+/**
+ * Validates that all required ICO contract addresses are set via environment variables.
+ * Call once at app startup (e.g. main.tsx) to catch misconfigured deployments early.
+ * Throws with a clear message listing every missing variable.
+ */
+export function validateICOConfig(): void {
+  const required: Array<[string, string]> = [
+    ['VITE_ICO_CONTRACT_HASH',       ICO_CONFIG.CONTRACTS.icoAddress],
+    ['VITE_ICO_PACKAGE_HASH',        ICO_CONFIG.CONTRACTS.icoPackageHash],
+    ['VITE_BIG_TOKEN_CONTRACT_HASH', ICO_CONFIG.CONTRACTS.tokenAddress],
+    ['VITE_USDC_CONTRACT_HASH',      ICO_CONFIG.CONTRACTS.usdcAddress],
+    ['VITE_USDT_CONTRACT_HASH',      ICO_CONFIG.CONTRACTS.usdtAddress],
+  ];
+
+  const missing = required.filter(([, value]) => !value).map(([key]) => key);
+
+  if (missing.length > 0) {
+    throw new Error(
+      `[ICO] Missing required environment variables:\n  ${missing.join('\n  ')}\n` +
+      'Set them in your .env file (testnet) or deployment environment (production).',
+    );
+  }
+}
+
+/**
+ * Returns currency-to-USD rate.
+ * CSPR: live rate from CoinGecko (passed as param), stablecoins/fiat: always 1.
+ */
+export function getCurrencyRateUsd(currency: PaymentCurrency, csprPriceUsd?: number): number {
+  if (currency === 'CSPR') {
+    if (!csprPriceUsd || csprPriceUsd <= 0) {
+      throw new Error('CSPR price unavailable - please try again later');
+    }
+    return csprPriceUsd;
+  }
+  return 1; // USDT, USDC, CARD are all 1:1 USD
+}
 
 // Mock transaction data - single source of truth
 // TODO: Replace with real API data
@@ -98,7 +90,7 @@ export const MOCK_TRANSACTIONS = [
     currency: 'USDC',
     tokensReceived: 1000000,
     tokenSymbol: 'BIG',
-    status: 'completed' as const,
+    status: 'failed' as const,
     timestamp: new Date('2025-01-20T10:30:00'),
     txHash: '0x1234567890abcdef1234567890abcdef12345678',
   },
@@ -109,7 +101,7 @@ export const MOCK_TRANSACTIONS = [
     currency: 'USDC',
     tokensReceived: 66666,
     tokenSymbol: 'BIG',
-    status: 'completed' as const,
+    status: 'pending' as const,
     timestamp: new Date('2025-01-15T14:20:00'),
     txHash: '0xabcdef1234567890abcdef1234567890abcdef12',
   },
@@ -125,17 +117,6 @@ export const MOCK_TRANSACTIONS = [
     txHash: '0x7890abcdef1234567890abcdef1234567890abcd',
   },
 ];
-
-/** Returns fresh mock timestamps relative to the current time. */
-export function getIcoTimestamps() {
-  const now = Date.now();
-  return {
-    presaleStart: now + ICO_CONFIG.TIMESTAMPS_OFFSETS.presaleStart,
-    presaleEnd: now + ICO_CONFIG.TIMESTAMPS_OFFSETS.presaleEnd,
-    icoStart: now + ICO_CONFIG.TIMESTAMPS_OFFSETS.icoStart,
-    icoEnd: now + ICO_CONFIG.TIMESTAMPS_OFFSETS.icoEnd,
-  };
-}
 
 // Payment currency display info
 export const PAYMENT_CURRENCY_INFO: Record<PaymentCurrency, {
@@ -168,7 +149,7 @@ export const PAYMENT_CURRENCY_INFO: Record<PaymentCurrency, {
 // Tokenomics distribution (from whitepaper)
 export const TOKENOMICS_ALLOCATION: TokenomicsAllocation[] = [
   {
-    category: 'Pre-Sale',
+    category: 'Private Sale',
     percentage: 20,
     amount: '1,000,000,000',
     vestingPeriod: 'Auto-staked',
@@ -221,29 +202,19 @@ export const TOKENOMICS_ALLOCATION: TokenomicsAllocation[] = [
 // State display info
 export const ICO_STATE_INFO = {
   1: {
-    name: 'Pre-Sale Countdown',
-    description: 'Pre-sale starts soon',
+    name: 'Private Sale Countdown',
+    description: 'Private Sale starts soon',
     color: 'hsl(var(--ico-state-countdown))',
   },
   2: {
-    name: 'Pre-Sale Live',
-    description: 'Pre-sale is active',
+    name: 'Private Sale Live',
+    description: 'Private Sale is active',
     color: 'hsl(var(--ico-state-active))',
   },
   3: {
-    name: 'ICO Countdown',
-    description: 'ICO starts soon',
+    name: 'Post-ICO Dashboard',
+    description: 'Token sale complete',
     color: 'hsl(var(--ico-state-dashboard))',
-  },
-  4: {
-    name: 'ICO Live',
-    description: 'Public ICO is active',
-    color: 'hsl(var(--ico-state-active))',
-  },
-  5: {
-    name: 'ICO Completed',
-    description: 'Token sale has ended',
-    color: 'hsl(var(--ico-state-completed))',
   },
 } as const;
 

@@ -47,7 +47,7 @@ describe('Card', () => {
     it('should have rounded corners', () => {
       const { container } = render(<Card>Content</Card>);
 
-      expect(container.firstElementChild?.className).toContain('rounded-xl');
+      expect(container.firstElementChild?.className).toContain('rounded-md');
     });
 
     it('should have border', () => {
@@ -85,23 +85,8 @@ describe('Card', () => {
       );
 
       expect(container.firstElementChild?.className).toContain('p-4');
-      expect(container.firstElementChild?.className).toContain('rounded-xl');
+      expect(container.firstElementChild?.className).toContain('rounded-md');
     });
   });
 
-  describe('gradient overlay', () => {
-    it('should have gradient overlay element', () => {
-      const { container } = render(<Card>Content</Card>);
-
-      const overlay = container.querySelector('.bg-gradient-to-tl');
-      expect(overlay).toBeInTheDocument();
-    });
-
-    it('should have pointer-events-none on overlay', () => {
-      const { container } = render(<Card>Content</Card>);
-
-      const overlay = container.querySelector('.pointer-events-none');
-      expect(overlay).toBeInTheDocument();
-    });
-  });
 });

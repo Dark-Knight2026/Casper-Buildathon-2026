@@ -22,6 +22,8 @@ vi.mock('@/components/ui/chart', () => ({
   ),
   ChartTooltip: () => <div data-testid="chart-tooltip" />,
   ChartTooltipContent: () => <div data-testid="chart-tooltip-content" />,
+  ChartLegend: () => <div data-testid="chart-legend" />,
+  ChartLegendContent: () => <div data-testid="chart-legend-content" />,
 }));
 
 vi.mock('recharts', () => ({
@@ -31,6 +33,7 @@ vi.mock('recharts', () => ({
   Area: () => <div data-testid="area" />,
   XAxis: () => <div data-testid="x-axis" />,
   YAxis: () => <div data-testid="y-axis" />,
+  CartesianGrid: () => <div data-testid="cartesian-grid" />,
 }));
 
 const renderWithRouter = (ui: React.ReactElement) => {

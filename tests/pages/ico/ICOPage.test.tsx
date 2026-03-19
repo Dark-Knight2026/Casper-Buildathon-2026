@@ -9,8 +9,6 @@ import type { ScheduleProgress } from '@/hooks/ico/useICOSchedules';
 const mockTimestamps: SaleTimestamps = {
   presaleStart: 1000,
   presaleEnd: 2000,
-  icoStart: 3000,
-  icoEnd: 4000,
 };
 
 const mockProgress: ScheduleProgress = {
@@ -20,6 +18,7 @@ const mockProgress: ScheduleProgress = {
   amountRaised: 100000,
   priceUsd: 0.1,
   percentSold: 10,
+  hardCapUsd: 1000000,
 };
 
 const mockUseICOState = vi.fn();
@@ -34,31 +33,17 @@ vi.mock('@/hooks/ico/useICOSchedules', () => ({
 }));
 
 // Mock lazy-loaded state components with sync default exports
-vi.mock('@/pages/ico/components/states/PresaleCountdown', () => ({
+vi.mock('@/pages/ico/components/states/PrivateSaleCountdown', () => ({
   default: (props: { targetTimestamp: number; endTimestamp: number; progress?: ScheduleProgress | null }) => (
-    <div data-testid="presale-countdown">
-      PresaleCountdown target={props.targetTimestamp} end={props.endTimestamp} progress={props.progress ? 'yes' : 'no'}
+    <div data-testid="private-sale-countdown">
+      PrivateSaleCountdown target={props.targetTimestamp} end={props.endTimestamp} progress={props.progress ? 'yes' : 'no'}
     </div>
   ),
 }));
 
-vi.mock('@/pages/ico/components/states/ActivePresale', () => ({
+vi.mock('@/pages/ico/components/states/PrivateSaleActive', () => ({
   default: (props: { endTimestamp: number; progress?: ScheduleProgress | null }) => (
-    <div data-testid="active-presale">ActivePresale end={props.endTimestamp} progress={props.progress ? 'yes' : 'no'}</div>
-  ),
-}));
-
-vi.mock('@/pages/ico/components/states/DashboardICOCountdown', () => ({
-  default: (props: { icoStartTimestamp: number }) => (
-    <div data-testid="dashboard-ico-countdown">
-      DashboardICOCountdown start={props.icoStartTimestamp}
-    </div>
-  ),
-}));
-
-vi.mock('@/pages/ico/components/states/ActiveICO', () => ({
-  default: (props: { endTimestamp: number; progress?: ScheduleProgress | null }) => (
-    <div data-testid="active-ico">ActiveICO end={props.endTimestamp} progress={props.progress ? 'yes' : 'no'}</div>
+    <div data-testid="private-sale-active">PrivateSaleActive end={props.endTimestamp} progress={props.progress ? 'yes' : 'no'}</div>
   ),
 }));
 
@@ -84,13 +69,11 @@ vi.mock('@/components/ui/scroll-area', () => ({
   ),
 }));
 
-function setICOState(state: 1 | 2 | 3 | 4 | 5) {
+function setICOState(state: 1 | 2 | 3) {
   const phaseMap = {
-    1: 'presale-countdown',
-    2: 'presale-active',
-    3: 'dashboard-ico-countdown',
-    4: 'ico-active',
-    5: 'post-ico',
+    1: 'private-sale-countdown',
+    2: 'private-sale-active',
+    3: 'post-ico-dashboard',
   } as const;
 
   // Mock useICOSchedules - provides timestamps and progress data
@@ -107,7 +90,7 @@ function setICOState(state: 1 | 2 | 3 | 4 | 5) {
     state,
     phase: phaseMap[state],
     timestamps: mockTimestamps,
-    nextStateTimestamp: state < 5 ? mockTimestamps.presaleStart : null,
+    nextStateTimestamp: state < 3 ? mockTimestamps.presaleStart : null,
   });
 }
 
@@ -153,45 +136,27 @@ describe('ICOPage', () => {
   // --- State routing (async - lazy components need to resolve) ---
 
   describe('state routing', () => {
-    it('should render PresaleCountdown for state 1', async () => {
+    it('should render PrivateSaleCountdown for state 1', async () => {
       setICOState(1);
       render(<ICOPage />);
 
-      const el = await screen.findByTestId('presale-countdown');
+      const el = await screen.findByTestId('private-sale-countdown');
       expect(el).toBeInTheDocument();
       expect(el.textContent).toContain(`target=${mockTimestamps.presaleStart}`);
       expect(el.textContent).toContain(`end=${mockTimestamps.presaleEnd}`);
     });
 
-    it('should render ActivePresale for state 2', async () => {
+    it('should render PrivateSaleActive for state 2', async () => {
       setICOState(2);
       render(<ICOPage />);
 
-      const el = await screen.findByTestId('active-presale');
+      const el = await screen.findByTestId('private-sale-active');
       expect(el).toBeInTheDocument();
       expect(el.textContent).toContain(`end=${mockTimestamps.presaleEnd}`);
     });
 
-    it('should render DashboardICOCountdown for state 3', async () => {
+    it('should render PostICODashboard for state 3', async () => {
       setICOState(3);
-      render(<ICOPage />);
-
-      const el = await screen.findByTestId('dashboard-ico-countdown');
-      expect(el).toBeInTheDocument();
-      expect(el.textContent).toContain(`start=${mockTimestamps.icoStart}`);
-    });
-
-    it('should render ActiveICO for state 4', async () => {
-      setICOState(4);
-      render(<ICOPage />);
-
-      const el = await screen.findByTestId('active-ico');
-      expect(el).toBeInTheDocument();
-      expect(el.textContent).toContain(`end=${mockTimestamps.icoEnd}`);
-    });
-
-    it('should render PostICODashboard for state 5', async () => {
-      setICOState(5);
       render(<ICOPage />);
 
       expect(await screen.findByTestId('post-ico-dashboard')).toBeInTheDocument();
@@ -201,37 +166,21 @@ describe('ICOPage', () => {
   // --- Correct timestamps passed ---
 
   describe('timestamp props', () => {
-    it('should pass presaleStart and presaleEnd to PresaleCountdown', async () => {
+    it('should pass presaleStart and presaleEnd to PrivateSaleCountdown', async () => {
       setICOState(1);
       render(<ICOPage />);
 
-      const el = await screen.findByTestId('presale-countdown');
+      const el = await screen.findByTestId('private-sale-countdown');
       expect(el.textContent).toContain(`target=${mockTimestamps.presaleStart}`);
       expect(el.textContent).toContain(`end=${mockTimestamps.presaleEnd}`);
     });
 
-    it('should pass presaleEnd to ActivePresale', async () => {
+    it('should pass presaleEnd to PrivateSaleActive', async () => {
       setICOState(2);
       render(<ICOPage />);
 
-      const el = await screen.findByTestId('active-presale');
+      const el = await screen.findByTestId('private-sale-active');
       expect(el.textContent).toContain(`end=${mockTimestamps.presaleEnd}`);
-    });
-
-    it('should pass icoStart to DashboardICOCountdown', async () => {
-      setICOState(3);
-      render(<ICOPage />);
-
-      const el = await screen.findByTestId('dashboard-ico-countdown');
-      expect(el.textContent).toContain(`start=${mockTimestamps.icoStart}`);
-    });
-
-    it('should pass icoEnd to ActiveICO', async () => {
-      setICOState(4);
-      render(<ICOPage />);
-
-      const el = await screen.findByTestId('active-ico');
-      expect(el.textContent).toContain(`end=${mockTimestamps.icoEnd}`);
     });
   });
 
@@ -242,18 +191,16 @@ describe('ICOPage', () => {
       setICOState(3);
       render(<ICOPage />);
 
-      expect(await screen.findByTestId('dashboard-ico-countdown')).toBeInTheDocument();
-      expect(screen.queryByTestId('presale-countdown')).not.toBeInTheDocument();
-      expect(screen.queryByTestId('active-presale')).not.toBeInTheDocument();
-      expect(screen.queryByTestId('active-ico')).not.toBeInTheDocument();
-      expect(screen.queryByTestId('post-ico-dashboard')).not.toBeInTheDocument();
+      expect(await screen.findByTestId('post-ico-dashboard')).toBeInTheDocument();
+      expect(screen.queryByTestId('private-sale-countdown')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('private-sale-active')).not.toBeInTheDocument();
     });
   });
 
-  // --- All 5 states render without crash ---
+  // --- All 3 states render without crash ---
 
   describe('stability', () => {
-    it.each([1, 2, 3, 4, 5] as const)(
+    it.each([1, 2, 3] as const)(
       'should render without errors for state %i',
       (state) => {
         setICOState(state);

@@ -97,10 +97,13 @@ export const CountdownTimer = memo(function CountdownTimer({
   };
 
   const classes = sizeClasses[size];
+  const timerLabel = timeLeft.isExpired
+    ? 'Countdown ended'
+    : `${timeLeft.days} days ${timeLeft.hours} hours ${timeLeft.minutes} minutes ${timeLeft.seconds} seconds remaining`;
 
   if (variant === 'minimal') {
     return (
-      <span role="timer" aria-live="polite" aria-label={`${timeLeft.days} days ${timeLeft.hours} hours ${timeLeft.minutes} minutes ${timeLeft.seconds} seconds remaining`} className={cn('font-mono font-semibold', className)}>
+      <span role="timer" aria-live="polite" aria-label={timerLabel} className={cn('font-mono font-semibold', className)}>
         {timeLeft.days > 0 && `${timeLeft.days}d `}
         {formatNumber(timeLeft.hours)}:{formatNumber(timeLeft.minutes)}:
         {formatNumber(timeLeft.seconds)}
@@ -111,7 +114,7 @@ export const CountdownTimer = memo(function CountdownTimer({
   if (variant === 'compact') {
     return (
       <Card className='p-4 flex justify-center items-center'>
-        <div role="timer" aria-live="polite" aria-label={`${timeLeft.days} days ${timeLeft.hours} hours ${timeLeft.minutes} minutes ${timeLeft.seconds} seconds remaining`} className={cn('flex items-center justify-center gap-2 font-mono text-white', className)}>
+        <div role="timer" aria-live="polite" aria-label={timerLabel} className={cn('flex items-center justify-center gap-2 font-mono text-[hsl(var(--ico-timer-text))]', className)}>
           {timeLeft.days > 0 && (
             <>
               <span className="text-xl font-semibold">{timeLeft.days}</span>
@@ -139,13 +142,13 @@ export const CountdownTimer = memo(function CountdownTimer({
   ];
 
   return (
-    <div role="timer" aria-live="polite" aria-label={`${timeLeft.days} days ${timeLeft.hours} hours ${timeLeft.minutes} minutes ${timeLeft.seconds} seconds remaining`} className={cn('flex items-center justify-center', classes.container, className)}>
+    <div role="timer" aria-live="polite" aria-label={timerLabel} className={cn('flex items-center justify-center', classes.container, className)}>
       {timeUnits.map((unit) => (
         <div key={unit.label} className="flex items-center">
           <Card className={classes.card}>
             <span
               className={cn(
-                'relative font-mono font-bold text-white',
+                'relative font-mono font-bold text-[hsl(var(--ico-timer-text))]',
                 classes.digit
               )}
             >
@@ -154,7 +157,7 @@ export const CountdownTimer = memo(function CountdownTimer({
             {showLabels && (
               <span
                 className={cn(
-                  'relative uppercase tracking-wider font-medium text-white/70',
+                  'relative uppercase tracking-wider font-medium text-[hsl(var(--ico-timer-label))]',
                   classes.label
                 )}
               >
@@ -168,4 +171,3 @@ export const CountdownTimer = memo(function CountdownTimer({
   );
 });
 
-export default CountdownTimer;

@@ -263,7 +263,7 @@ describe('ProgressBar', () => {
       );
 
       // Card renders with specific classes
-      expect(container.firstElementChild?.className).toContain('rounded-xl');
+      expect(container.firstElementChild?.className).toContain('rounded-md');
       expect(container.firstElementChild?.className).toContain('border');
     });
 

@@ -111,8 +111,8 @@ export function VestingProgressBlock({
                   key={entry.id}
                   className={cn(
                     'flex items-center justify-between p-3 rounded-lg',
-                    'bg-[hsl(var(--ico-card-bg))]/50',
-                    'border border-[hsl(var(--ico-border))]'
+                    'bg-[hsl(var(--ico-bg-secondary))]/50',
+                    'border border-[hsl(var(--ico-border-color))]'
                   )}
                 >
                   <div className="flex items-center gap-3">
@@ -120,7 +120,7 @@ export function VestingProgressBlock({
                       className={cn(
                         'w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold',
                         index === 0
-                          ? 'bg-sky-500/20 text-sky-400'
+                          ? 'bg-[hsl(var(--ico-brand-primary))]/20 text-[hsl(var(--ico-brand-primary))]'
                           : 'bg-amber-500/10 text-amber-500'
                       )}
                     >
@@ -146,7 +146,7 @@ export function VestingProgressBlock({
                       </span>
                     </div>
                     {index === 0 && (
-                      <p className="text-xs text-sky-400 mt-0.5">Next unlock</p>
+                      <p className="text-xs text-[hsl(var(--ico-brand-primary))] mt-0.5">Next unlock</p>
                     )}
                   </div>
                 </div>
@@ -155,7 +155,7 @@ export function VestingProgressBlock({
           </div>
 
           {/* Total locked summary */}
-          <div className="mt-4 pt-4 border-t border-[hsl(var(--ico-border))] flex items-center justify-between">
+          <div className="mt-4 pt-4 border-t border-[hsl(var(--ico-border-color))] flex items-center justify-between">
             <span className="text-sm text-[hsl(var(--ico-text-secondary))]">
               Total Locked
             </span>
@@ -176,4 +176,3 @@ export function VestingProgressBlock({
   );
 }
 
-export default VestingProgressBlock;

@@ -188,3 +188,4 @@ The system supports 31 distinct user roles. Key roles include:
 - [STATE_MANAGEMENT.md](./STATE_MANAGEMENT.md) - Context API patterns
 - [API_SERVICES.md](./API_SERVICES.md) - Complete service reference
 - [PROJECT_STATUS.md](./PROJECT_STATUS.md) - Current project state
+- [STYLE_GUIDE.md](./STYLE_GUIDE.md) - Client-approved color palette and component styling rules

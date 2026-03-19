@@ -35,6 +35,7 @@ import {
 } from 'casper-js-sdk';
 
 import { ICO_CONFIG } from '@/constants/ico';
+import logger from '@/lib/logger';
 
 
 // ── Singleton ──────────────────────────────────────────────────────
@@ -72,7 +73,38 @@ export function contractHashToEntityKey(hash: string): string {
  * Strips the `hash-` prefix from a contract hash, returning only the hex.
  */
 export function stripHashPrefix(hash: string): string {
-  return hash.replace(/^hash-/, '');
+  return hash.replace(/^(hash-|contract-)/, '');
+}
+
+// ── Account helpers ─────────────────────────────────────────────────
+
+/**
+ * Returns the account's main purse URef string (e.g. "uref-abc...def-007").
+ *
+ * Needed for Odra `#[payable]` entry points that require `__cargo_purse: URef`.
+ * The main purse URef grants the contract one-time access to transfer CSPR
+ * from the caller's purse during the deploy execution.
+ */
+export async function getAccountMainPurseURef(publicKeyHex: string): Promise<string> {
+  const client = getCasperRpcClient();
+  const pk = PublicKey.fromHex(publicKeyHex);
+  const accountHashHex = pk.accountHash().toPrefixedString().replace(/^account-hash-/, '');
+  const accountKey = `account-hash-${accountHashHex}`;
+
+  const stateResult = await client.queryLatestGlobalState(accountKey, []);
+  const mainPurse: string | undefined =
+    stateResult.rawJSON?.stored_value?.Account?.main_purse;
+  logger.log('[casperClient] queryLatestGlobalState for account main purse:', {
+    accountKey,
+    stateResult,
+  });
+  
+  if (!mainPurse) {
+    throw new Error('Could not find main purse for account');
+  }
+
+  logger.log('[casperClient] main purse URef:', mainPurse);
+  return mainPurse;
 }
 
 // ── Query helpers ──────────────────────────────────────────────────
@@ -97,7 +129,7 @@ export async function queryContractState(
     return result.storedValue;
   } catch (err) {
     // RPC returns error when path doesn't exist — treat as null
-    console.warn(
+    logger.warn(
       `[casperClient] queryContractState failed for ${entityKey} path=[${path.join(',')}]:`,
       err,
     );
@@ -135,7 +167,7 @@ export async function queryDictionaryItem(
       await client.getDictionaryItemByIdentifier(null, identifier);
     return result.storedValue;
   } catch (err) {
-    console.warn(
+    logger.warn(
       `[casperClient] queryDictionaryItem failed: dict=${dictionaryName} key=${itemKey}:`,
       err,
     );
@@ -308,7 +340,7 @@ export function clValueListU8ToHex(clValue: CLValue | undefined): string | null 
       return rawValue;
     }
   } catch (err) {
-    console.warn('[casperClient] Failed to extract List<U8>:', err);
+    logger.warn('[casperClient] Failed to extract List<U8>:', err);
   }
 
   return null;
@@ -319,11 +351,11 @@ export function clValueListU8ToHex(clValue: CLValue | undefined): string | null 
  */
 export function debugCLValue(name: string, clValue: CLValue | undefined): void {
   if (!clValue) {
-    console.log(`[debug] ${name}: null/undefined`);
+    logger.log(`[debug] ${name}: null/undefined`);
     return;
   }
 
-  console.log(`[debug] ${name}:`, {
+  logger.log(`[debug] ${name}:`, {
     type: clValue.type?.toString(),
     raw: clValue,
     keys: Object.keys(clValue),
@@ -360,16 +392,16 @@ export async function inspectContractEntity(
       const entityId = EntityIdentifier.fromEntityAddr(entityAddr);
       const result = await client.getLatestEntity(entityId);
       // const store = client.getLate
-      console.log(`[inspect] getLatestEntity OK with key="${key}":`, result);
-      console.log('[inspect] Raw JSON:', result.rawJSON);
+      logger.log(`[inspect] getLatestEntity OK with key="${key}":`, result);
+      logger.log('[inspect] Raw JSON:', result.rawJSON);
       const entity = result.entity?.addressableEntity;
       if (entity) {
-        console.log('[inspect] Named keys:', entity.namedKeys);
-        console.log('[inspect] Entry points:', entity.entryPoints);
+        logger.log('[inspect] Named keys:', entity.namedKeys);
+        logger.log('[inspect] Entry points:', entity.entryPoints);
       }
       return;
     } catch (err) {
-      console.warn(`[inspect] getLatestEntity failed for "${key}":`, (err as Error).message);
+      logger.warn(`[inspect] getLatestEntity failed for "${key}":`, (err as Error).message);
     }
   }
 
@@ -377,16 +409,16 @@ export async function inspectContractEntity(
   for (const key of keysToTry) {
     try {
       const result = await client.queryLatestGlobalState(key, []);
-      console.log(`[inspect] queryLatestGlobalState OK with key="${key}":`, result);
-      console.log('[inspect] storedValue:', result.storedValue);
-      console.log('[inspect] Raw JSON:', result.rawJSON);
+      logger.log(`[inspect] queryLatestGlobalState OK with key="${key}":`, result);
+      logger.log('[inspect] storedValue:', result.storedValue);
+      logger.log('[inspect] Raw JSON:', result.rawJSON);
       return;
     } catch (err) {
-      console.warn(`[inspect] queryLatestGlobalState failed for "${key}":`, (err as Error).message);
+      logger.warn(`[inspect] queryLatestGlobalState failed for "${key}":`, (err as Error).message);
     }
   }
 
-  console.error('[inspect] All attempts failed. Contract may not exist on this network.');
+  logger.error('[inspect] All attempts failed. Contract may not exist on this network.');
 }
 
 // ── ICO Contract Query Functions (read-only, no deploy) ─────────────
@@ -420,13 +452,13 @@ export async function queryICOData(contractHash: string): Promise<{
   try {
     // 1. Get contract named keys
     const stateResult = await client.queryLatestGlobalState(entityKey, []);
-    console.log('[queryICOData] Contract state:', stateResult.rawJSON);
+    logger.log('[queryICOData] Contract state:', stateResult.rawJSON);
 
     // 2. Find Odra storage keys
     const namedKeys = stateResult.rawJSON?.stored_value?.Contract?.named_keys ||
                       stateResult.rawJSON?.stored_value?.AddressableEntity?.named_keys || [];
 
-    console.log('[queryICOData] Named keys:', namedKeys);
+    logger.log('[queryICOData] Named keys:', namedKeys);
 
     // 3. Find schedules_count in named keys
     let schedulesCount = 0n;
@@ -437,7 +469,7 @@ export async function queryICOData(contractHash: string): Promise<{
           const countResult = await client.queryLatestGlobalState(uref, []);
           const clValue = countResult.storedValue?.clValue;
           schedulesCount = clValueToBigInt(clValue);
-          console.log('[queryICOData] schedules_count:', schedulesCount);
+          logger.log('[queryICOData] schedules_count:', schedulesCount);
         }
         break;
       }
@@ -449,7 +481,7 @@ export async function queryICOData(contractHash: string): Promise<{
       currentScheduleId: null,
     };
   } catch (err) {
-    console.error('[queryICOData] Failed:', err);
+    logger.error('[queryICOData] Failed:', err);
     return null;
   }
 }
@@ -460,10 +492,10 @@ export async function testQueryICOData(contractHash: string): Promise<unknown> {
 
   try {
     const stateResult = await client.queryLatestGlobalState(entityKey, ["get_ico_schedules_count"]);
-    console.log('[testQueryICOData] Contract state:', JSON.stringify(stateResult, null, 2));
+    logger.log('[testQueryICOData] Contract state:', JSON.stringify(stateResult, null, 2));
     return stateResult;
   } catch (err) {
-    console.error('[testQueryICOData] Failed:', err);
+    logger.error('[testQueryICOData] Failed:', err);
     return null;
   }
 }
@@ -494,7 +526,7 @@ export async function getContractInfo(contractHash: string): Promise<{
                         result.rawJSON?.stored_value?.AddressableEntity;
 
     if (!rawContract) {
-      console.warn('[getContractInfo] Contract not found');
+      logger.warn('[getContractInfo] Contract not found');
       return null;
     }
 
@@ -505,12 +537,12 @@ export async function getContractInfo(contractHash: string): Promise<{
 
     const entryPoints = (rawContract.entry_points || []).map((ep: { name: string }) => ep.name);
 
-    console.log('[getContractInfo] Named keys:', namedKeys);
-    console.log('[getContractInfo] Entry points:', entryPoints);
+    logger.log('[getContractInfo] Named keys:', namedKeys);
+    logger.log('[getContractInfo] Entry points:', entryPoints);
 
     return { namedKeys, entryPoints };
   } catch (err) {
-    console.error('[getContractInfo] Failed:', err);
+    logger.error('[getContractInfo] Failed:', err);
     return null;
   }
 }
@@ -526,6 +558,7 @@ export async function getContractInfo(contractHash: string): Promise<{
  * @param entryPoint          Entry point name
  * @param args                Args for entry point
  * @param paymentAmount       Payment amount in motes (default: 2.5 CSPR)
+ * @param isPackageHash       If true, use byPackageHash(); if false, use byHash()
  * @returns Transaction object ready for signing
  */
 export function createContractCallTransaction(
@@ -533,24 +566,30 @@ export function createContractCallTransaction(
   contractHashStr: string,
   entryPoint: string,
   args: Args = Args.fromMap({}),
-  paymentAmount: bigint = 2_500_000_000n // 2.5 CSPR
+  paymentAmount: bigint = 2_500_000_000n, // 2.5 CSPR
+  isPackageHash: boolean = false,
 ): Transaction {
   const senderPublicKey = PublicKey.fromHex(senderPublicKeyHex);
   const contractHashHex = stripHashPrefix(contractHashStr);
 
   // Using ContractCallBuilder for v5 SDK
-  const transaction = new ContractCallBuilder()
-    .from(senderPublicKey)
-    .byHash(contractHashHex)
+  const builder = new ContractCallBuilder()
+    .from(senderPublicKey);
+
+  const withTarget = isPackageHash
+    ? builder.byPackageHash(contractHashHex)
+    : builder.byHash(contractHashHex);
+
+  const transaction = withTarget
     .entryPoint(entryPoint)
     .runtimeArgs(args)
     .chainName(ICO_CONFIG.CASPER.networkName)
     .payment(Number(paymentAmount))
     .ttl(1800000) // 30 minutes
-    .buildFor1_5(); // For Casper 1.x (testnet)
+    .buildFor1_5(); // For Casper 1.x compatible deploy
 
   // Debug
-  console.log('[createContractCallTransaction] Transaction created:', {
+  logger.log('[createContractCallTransaction] Transaction created:', {
     hash: transaction.hash?.toString(),
     toJSON: transaction.toJSON(),
   });
@@ -583,7 +622,7 @@ export function createGetSchedulesCountTransaction(
 export async function submitDeploy(signedDeploy: Deploy): Promise<string> {
   const client = getCasperRpcClient();
   const result = await client.putDeploy(signedDeploy);
-  console.log('[casperClient] Deploy submitted:', result);
+  logger.log('[casperClient] Deploy submitted:', result);
   return result.deployHash.toString();
 }
 
@@ -596,7 +635,7 @@ export async function getDeployStatus(deployHash: string) {
     const result = await client.getDeploy(deployHash);
     return result;
   } catch (err) {
-    console.warn('[casperClient] getDeploy failed:', err);
+    logger.warn('[casperClient] getDeploy failed:', err);
     return null;
   }
 }
@@ -646,7 +685,7 @@ export function createDeploy(
   // Create the deploy
   const deploy = Deploy.makeDeploy(deployHeader, payment, session);
 
-  console.log('[createDeploy] Deploy created:', {
+  logger.log('[createDeploy] Deploy created:', {
     hash: deploy.hash?.toHex(),
     header: deploy.header,
   });

@@ -1,26 +1,23 @@
 import { useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ICO_CONFIG } from '@/constants/ico';
+import { PublicKey, PurseIdentifier } from 'casper-js-sdk';
+import { getCasperRpcClient } from '@/services/ico/casperClient';
+import { TOKEN_HASHES } from '@/services/ico/cep18Service';
 
-const MOTES_PER_CSPR = 1_000_000_000; // 1 CSPR = 10^9 motes
-const BALANCE_POLL_MS = 30_000; // 30 seconds
+const MOTES_PER_CSPR = 1_000_000_000n;
+const BALANCE_POLL_MS = 60_000; // 60 seconds
 
-/**
- * Validates Casper public key format.
- * Public keys are 66 hex characters starting with '01' (Ed25519) or '02' (Secp256k1).
- */
 function isValidPublicKey(key: string): boolean {
-  if (key.length !== 66) return false;
+  // Ed25519: 01 + 64 hex = 66 chars; Secp256k1: 02 + 66 hex = 68 chars
   if (!key.startsWith('01') && !key.startsWith('02')) return false;
+  if (key.startsWith('01') && key.length !== 66) return false;
+  if (key.startsWith('02') && key.length !== 68) return false;
   return /^[0-9a-fA-F]+$/.test(key);
 }
 
-interface TokenBalance {
-  balance: string;
-  contractPackageHash: string;
-  symbol?: string;
-  name?: string;
-  decimals?: number;
+function deriveAccountHashHex(publicKeyHex: string): string {
+  const pk = PublicKey.fromHex(publicKeyHex);
+  return pk.accountHash().toPrefixedString().replace(/^account-hash-/, '');
 }
 
 export interface WalletBalances {
@@ -30,126 +27,174 @@ export interface WalletBalances {
   big: number;
 }
 
-interface UseCSPRBalanceReturn {
+interface UseWalletBalancesReturn {
   balances: WalletBalances;
   isLoading: boolean;
   error: string | null;
   refetch: () => void;
 }
 
-function csprCloudUrl(path: string): string {
-  if (import.meta.env.DEV) {
-    return `/api/cspr-cloud${path}`;
-  }
-  // Production: use Vercel serverless proxy (API key stays on server)
-  return `/api/cspr-cloud?path=${encodeURIComponent(path.replace(/^\//, ''))}`;
-}
+// ── CSPR balance (via RPC) ──────────────────────────────────────────
 
-async function fetchCSPRBalance(publicKey: string): Promise<number> {
-  const res = await fetch(csprCloudUrl(`/accounts/${publicKey}`));
+async function fetchCSPRBalance(publicKeyHex: string): Promise<number> {
+  const client = getCasperRpcClient();
+  const pk = PublicKey.fromHex(publicKeyHex);
 
-  if (!res.ok) throw new Error(`CSPR balance error: ${res.status}`);
-
-  const json = await res.json();
-  const motes = json.data.balance ?? '0';
-  return Number(motes) / MOTES_PER_CSPR;
-}
-
-async function fetchFTBalances(publicKey: string): Promise<TokenBalance[]> {
-  const res = await fetch(
-    csprCloudUrl(`/accounts/${publicKey}/ft-token-ownership?includes=contract_package&page=1&page_size=50`),
-  );
-
-  if (!res.ok) {
-    // 404 means account has no FT tokens — not an error
-    if (res.status === 404) return [];
-    throw new Error(`FT balance error: ${res.status}`);
+  // Try query_balance (Casper 2.0) first, fall back to state_get_balance (1.x)
+  try {
+    const purseId = PurseIdentifier.fromPublicKey(pk);
+    const result = await client.queryLatestBalance(purseId);
+    const motes = BigInt(result.balance.toString());
+    return Number(motes / MOTES_PER_CSPR) + Number(motes % MOTES_PER_CSPR) / Number(MOTES_PER_CSPR);
+  } catch {
+    // Casper 2.0 not available, try 1.x fallback
   }
 
-  const json = await res.json();
-  const items: TokenBalance[] = (json.data ?? []).map((item: Record<string, unknown>) => {
-    const pkg = item.contract_package as Record<string, unknown> | undefined;
-    return {
-      balance: String(item.balance ?? '0'),
-      contractPackageHash: String(item.contract_package_hash ?? ''),
-      symbol: pkg?.metadata ? (pkg.metadata as Record<string, string>).symbol : undefined,
-      name: pkg?.metadata ? (pkg.metadata as Record<string, string>).name : undefined,
-      decimals: pkg?.metadata ? Number((pkg.metadata as Record<string, string>).decimals ?? 0) : undefined,
-    };
-  });
+  // Fallback: get account info → main purse URef → state_get_balance
+  const accountHashHex = deriveAccountHashHex(publicKeyHex);
+  const accountKey = `account-hash-${accountHashHex}`;
+  const stateResult = await client.queryLatestGlobalState(accountKey, []);
+  const mainPurse = stateResult.rawJSON?.stored_value?.Account?.main_purse;
+  if (!mainPurse) {
+    throw new Error('Could not find main purse for account');
+  }
 
-  return items;
+  const balanceResult = await client.getLatestBalance(mainPurse);
+  const motes = BigInt(balanceResult.balanceValue.toString());
+  return Number(motes / MOTES_PER_CSPR) + Number(motes % MOTES_PER_CSPR) / Number(MOTES_PER_CSPR);
 }
 
-/**
- * Normalize contract hash by removing 'hash-' prefix for comparison
- */
+// ── FT balances via CSPR.Cloud REST API ─────────────────────────────
+
 function normalizeHash(hash: string): string {
   return hash.replace(/^hash-/, '').toLowerCase();
 }
 
-function findTokenBalance(tokens: TokenBalance[], contractAddress: string, symbolFallback: string): number {
-  // Match by contract address first (if configured)
-  // Compare normalized hashes (without 'hash-' prefix)
-  const normalizedAddress = contractAddress ? normalizeHash(contractAddress) : '';
+const KNOWN_HASHES = {
+  usdt: normalizeHash(TOKEN_HASHES.USDT),
+  usdc: normalizeHash(TOKEN_HASHES.USDC),
+  big: normalizeHash(TOKEN_HASHES.BIG),
+};
 
-  let token = normalizedAddress
-    ? tokens.find(t => normalizeHash(t.contractPackageHash) === normalizedAddress)
-    : undefined;
+// Fallback decimals if API doesn't provide them
+const TOKEN_DECIMALS: Record<string, number> = {
+  [KNOWN_HASHES.usdt]: 6,
+  [KNOWN_HASHES.usdc]: 6,
+  [KNOWN_HASHES.big]: 18,
+};
 
-  // Fallback: match by symbol (case-insensitive, handle tUSDC/tUSDT variants)
-  if (!token) {
-    const symbolUpper = symbolFallback.toUpperCase();
-    token = tokens.find(t => {
-      const tokenSymbol = t.symbol?.toUpperCase() ?? '';
-      // Match exact or with 't' prefix (tUSDC, tUSDT for testnet)
-      return tokenSymbol === symbolUpper ||
-             tokenSymbol === `T${symbolUpper}` ||
-             tokenSymbol === symbolUpper.replace(/^T/, '');
-    });
+interface FTBalances {
+  usdt: number;
+  usdc: number;
+  big: number;
+}
+
+async function fetchFTBalancesFromCloud(publicKeyHex: string): Promise<FTBalances> {
+  const result: FTBalances = { usdt: 0, usdc: 0, big: 0 };
+
+  const accountHashHex = deriveAccountHashHex(publicKeyHex);
+  const ftUrl = import.meta.env.DEV
+    ? `/api/cspr-cloud/accounts/${accountHashHex}/ft-token-ownership`
+    : `/api/cspr-cloud?path=${encodeURIComponent(`accounts/${accountHashHex}/ft-token-ownership`)}`;
+  const resp = await fetch(ftUrl);
+  if (!resp.ok) {
+    const body = await resp.text().catch(() => '');
+    throw new Error(`CSPR.Cloud FT API ${resp.status}: ${body}`);
   }
 
-  if (!token) return 0;
+  const json = await resp.json();
 
-  const decimals = token.decimals ?? 6;
-  return Number(token.balance) / Math.pow(10, decimals);
+  const items: unknown[] = json.data ?? (Array.isArray(json) ? json : []);
+
+  for (const item of items) {
+    const entry = item as Record<string, unknown>;
+    // CSPR.Cloud returns contract_package_hash (matches our .env hashes)
+    const hash = normalizeHash(
+      String(entry.contract_package_hash ?? entry.contract_hash ?? '')
+    );
+    const rawBalance = String(entry.balance ?? '0');
+
+    // Determine decimals: from API metadata or our fallback map
+    let decimals: number;
+    const meta = entry.metadata as Record<string, unknown> | undefined;
+    if (typeof entry.decimals === 'number') {
+      decimals = entry.decimals;
+    } else if (typeof meta?.decimals === 'number') {
+      decimals = meta.decimals as number;
+    } else {
+      decimals = TOKEN_DECIMALS[hash] ?? 0;
+    }
+
+    const raw = BigInt(rawBalance);
+    if (raw === 0n) continue;
+    const divisor = 10n ** BigInt(decimals);
+    const value = Number(raw / divisor) + Number(raw % divisor) / Number(divisor);
+
+    if (hash === KNOWN_HASHES.usdt) {
+      result.usdt = value;
+    } else if (hash === KNOWN_HASHES.usdc) {
+      result.usdc = value;
+    } else if (hash === KNOWN_HASHES.big) {
+      result.big = value;
+    }
+  }
+
+  return result;
 }
+
+// ── Combined fetch ──────────────────────────────────────────────────
 
 const EMPTY_BALANCES: WalletBalances = { cspr: 0, usdt: 0, usdc: 0, big: 0 };
 
-async function fetchAllBalances(publicKey: string): Promise<WalletBalances> {
+interface FetchAllResult {
+  balances: WalletBalances;
+  error: string | null;
+}
+
+async function fetchAllBalances(publicKey: string): Promise<FetchAllResult> {
   if (!isValidPublicKey(publicKey)) {
     throw new Error('Invalid public key format');
   }
 
-  const [cspr, ftTokens] = await Promise.all([
+  const [csprResult, ftResult] = await Promise.allSettled([
     fetchCSPRBalance(publicKey),
-    fetchFTBalances(publicKey),
+    fetchFTBalancesFromCloud(publicKey),
   ]);
 
+  const errors: string[] = [];
+
+  const cspr = csprResult.status === 'fulfilled' ? csprResult.value : 0;
+  if (csprResult.status === 'rejected') {
+    errors.push('Failed to fetch CSPR balance');
+  }
+
+  const ft = ftResult.status === 'fulfilled'
+    ? ftResult.value
+    : { usdt: 0, usdc: 0, big: 0 };
+  if (ftResult.status === 'rejected') {
+    errors.push('Failed to fetch token balances');
+  }
+
   return {
-    cspr,
-    usdt: findTokenBalance(ftTokens, ICO_CONFIG.CONTRACTS.usdtAddress, 'USDT'),
-    usdc: findTokenBalance(ftTokens, ICO_CONFIG.CONTRACTS.usdcAddress, 'USDC'),
-    big: findTokenBalance(ftTokens, ICO_CONFIG.CONTRACTS.tokenAddress, 'BIG'),
+    balances: {
+      cspr,
+      usdt: ft.usdt,
+      usdc: ft.usdc,
+      big: ft.big,
+    },
+    error: errors.length > 0 ? errors.join('. ') : null,
   };
 }
 
-/**
- * Hook for fetching wallet token balances from CSPR.Cloud API.
- *
- * Fetches CSPR native balance and CEP-18 token balances (USDT, USDC, BIG)
- * with automatic 30-second refresh interval when a publicKey is provided.
- *
- * @param publicKey - Casper account public key (hex string)
- */
-export function useWalletBalances(publicKey: string | null | undefined): UseCSPRBalanceReturn {
+// ── Hook ────────────────────────────────────────────────────────────
+
+export function useWalletBalances(publicKey: string | null | undefined): UseWalletBalancesReturn {
   const {
     data,
     isLoading,
     error: queryError,
     refetch: queryRefetch,
-  } = useQuery<WalletBalances, Error>({
+  } = useQuery<FetchAllResult, Error>({
     queryKey: ['wallet-balances', publicKey],
     queryFn: () => fetchAllBalances(publicKey!),
     enabled: !!publicKey,
@@ -162,9 +207,9 @@ export function useWalletBalances(publicKey: string | null | undefined): UseCSPR
   }, [queryRefetch]);
 
   return {
-    balances: data ?? EMPTY_BALANCES,
+    balances: data?.balances ?? EMPTY_BALANCES,
     isLoading,
-    error: queryError?.message ?? null,
+    error: data?.error ?? queryError?.message ?? null,
     refetch,
   };
 }

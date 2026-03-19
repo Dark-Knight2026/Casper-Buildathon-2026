@@ -354,6 +354,33 @@ export class CSPRCloudService {
       throw err;
     }
   }
+
+  /**
+   * Fetch CSPR exchange rates from CoinGecko
+   */
+  async getCSPRRates(
+    currencies: string[] = ['USD']
+  ): Promise<Record<string, number>> {
+    const vsCurrencies = currencies.map((c) => c.toLowerCase()).join(',');
+    const url = import.meta.env.DEV
+      ? `/api/coingecko/simple/price?ids=casper-network&vs_currencies=${vsCurrencies}`
+      : `/api/coingecko?ids=casper-network&vs_currencies=${vsCurrencies}`;
+
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`CoinGecko API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const rates = data['casper-network'] || {};
+
+    // Map to cspr_xxx format expected by useCSPRPrice
+    const result: Record<string, number> = {};
+    for (const c of currencies) {
+      result[`cspr_${c.toLowerCase()}`] = rates[c.toLowerCase()] ?? 0;
+    }
+    return result;
+  }
 }
 
 // Export singleton instance

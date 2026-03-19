@@ -4,49 +4,17 @@
  * Gracefully handles missing API keys for development/testing
  */
 
-import type { Resend } from 'resend';
 import { logger } from '@/utils/logger';
 import { supabase } from '@/lib/supabase/client';
 import type { Database } from '@/types/supabase';
 
 type MessageInsert = Database['public']['Tables']['messages']['Insert'];
 
-// Check if API key is available
-const RESEND_API_KEY = import.meta.env.VITE_RESEND_API_KEY;
-
-// Lazy initialization - only load Resend when needed and configured
-let resendInstance: Resend | null = null;
-let resendInitialized = false;
-
-async function getResendClient(): Promise<Resend | null> {
-  if (resendInitialized) {
-    return resendInstance;
-  }
-
-  if (!RESEND_API_KEY) {
-    resendInitialized = true;
-    resendInstance = null;
-    return null;
-  }
-
-  try {
-    const { Resend } = await import('resend');
-    resendInstance = new Resend(RESEND_API_KEY);
-    resendInitialized = true;
-    return resendInstance;
-  } catch (error) {
-    logger.error('Failed to initialize Resend:', error);
-    resendInitialized = true;
-    return null;
-  }
-}
-
 export interface EmailParams {
   to: string | string[];
   subject: string;
   html: string;
   text?: string;
-  from?: string;
   replyTo?: string;
   cc?: string | string[];
   bcc?: string | string[];
@@ -65,78 +33,51 @@ interface EmailMetadata {
 }
 
 class EmailService {
-  private readonly defaultFrom = 'noreply@yourdomain.com'; // Update with your verified domain
-
   /**
-   * Check if email service is configured
-   */
-  private isConfigured(): boolean {
-    return !!RESEND_API_KEY;
-  }
-
-  /**
-   * Send a generic email
+   * Send a generic email via /api/email serverless function.
+   * The Resend API key lives server-side only — never in the browser bundle.
    */
   async sendEmail(params: EmailParams): Promise<EmailResult> {
-    // Check if Resend is configured
-    if (!this.isConfigured()) {
-      logger.warn('Email service not configured. Resend API key is missing.');
-      logger.debug('Email would have been sent:', {
-        to: params.to,
-        subject: params.subject,
-      });
-      
-      // Log email in messages table even if not sent
-      await this.logEmail({
-        to: Array.isArray(params.to) ? params.to[0] : params.to,
-        subject: params.subject,
-        body: params.html,
-        messageId: `mock-${Date.now()}`,
-      });
-
-      return {
-        success: false,
-        error: 'Email service not configured. Please set VITE_RESEND_API_KEY environment variable.',
-      };
-    }
-
     try {
-      const resend = await getResendClient();
-      if (!resend) {
-        throw new Error('Failed to initialize Resend client');
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (!token) {
+        return { success: false, error: 'Not authenticated' };
       }
 
-      const { data, error } = await resend.emails.send({
-        from: params.from || this.defaultFrom,
-        to: params.to,
-        subject: params.subject,
-        html: params.html,
-        text: params.text,
-        reply_to: params.replyTo,
-        cc: params.cc,
-        bcc: params.bcc,
+      const response = await fetch('/api/email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          to: params.to,
+          subject: params.subject,
+          html: params.html,
+          text: params.text,
+          replyTo: params.replyTo,
+          cc: params.cc,
+          bcc: params.bcc,
+        }),
       });
 
-      if (error) {
+      if (!response.ok) {
+        const { error } = await response.json();
         logger.error('Error sending email:', error);
-        return {
-          success: false,
-          error: error.message || 'Failed to send email',
-        };
+        return { success: false, error: error || 'Failed to send email' };
       }
 
-      // Log email in messages table
+      const { id } = await response.json();
+
       await this.logEmail({
         to: Array.isArray(params.to) ? params.to[0] : params.to,
         subject: params.subject,
         body: params.html,
-        messageId: data?.id,
+        messageId: id,
       });
 
-      return {
-        success: true,
-        messageId: data?.id,
-      };
+      return { success: true, messageId: id };
     } catch (error) {
       logger.error('Error in sendEmail:', error);
       return {

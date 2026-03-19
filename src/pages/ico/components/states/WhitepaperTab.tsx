@@ -45,36 +45,36 @@ const WHITEPAPER_SECTIONS: Section[] = [
       { id: 'pricing', title: '4.7 Pricing & Fundraising', page: 4 },
       { id: 'fundamentals', title: '4.8 Growth-Oriented Token Fundamentals', page: 4 },
       { id: 'fee', title: '4.9 Transaction Fee Allocation', page: 5 },
-      { id: 'pre-ico', title: '4.10 Pre-Initial Coin Offering Funding', page: 6 },
-      { id: 'priority-hires', title: '4.11 Priority Hires', page: 7 },
+      { id: 'pre-ico', title: '4.10 Pre-Initial Coin Offering Funding', page: 8 },
+      { id: 'priority-hires', title: '4.11 Priority Hires', page: 8 },
     ],
   },
   {
     id: 'how-it-works',
     title: '5. How It Works - KeyChain App Ecosystem',
-    page: 11,
+    page: 12,
     subsections: [
-      { id: 'real-estate', title: 'Real Estate on the Blockchain', page: 11 },
-      { id: 'architecture-overview', title: 'Architecture overview', page: 12 },
-      { id: 'iterative-development', title: 'Iterative development strategy', page: 14 },
-      { id: 'security-compliance', title: 'Security & Compliance', page: 14 },
-      { id: 'staking-rewards-model', title: 'Staking & Rewards Model', page: 15 },
+      { id: 'real-estate', title: 'Real Estate on the Blockchain', page: 12 },
+      { id: 'architecture-overview', title: 'Architecture overview', page: 13 },
+      { id: 'iterative-development', title: 'Iterative development strategy', page: 16 },
+      { id: 'architecture-diagram', title: 'Architecture diagram', page: 16 },
+      { id: 'staking-rewards-model', title: 'Staking & Rewards Model', page: 17 },
     ],
   },
   {
     id: 'career-growth-credentials',
     title: '6. Career Growth & Credentials',
-    page: 19,
+    page: 21,
   },
   {
     id: 'roadmap',
     title: '7. Roadmap',
-    page: 20,
+    page: 22,
   },
   {
     id: 'legal',
     title: '8. Legal Disclaimer',
-    page: 21,
+    page: 23,
   },
 ];
 
@@ -108,10 +108,10 @@ export function WhitepaperTab({ className }: WhitepaperTabProps) {
   return (
     <div className={cn('flex gap-6 h-175', className)}>
       {/* Sidebar */}
-      <div className="hidden md:block w-64 shrink-0 rounded-xl bg-black/40 border border-white/10 overflow-hidden">
-        <div className="p-4 border-b border-white/10">
+      <div className="hidden md:block w-64 shrink-0 rounded-md bg-[hsl(var(--ico-bg-card))] border border-[hsl(var(--ico-border-color))] overflow-hidden">
+        <div className="p-4 border-b border-[hsl(var(--ico-border-color))]">
           <div className="flex items-center gap-2 text-[hsl(var(--ico-text-primary))]">
-            <FileText className="w-5 h-5 text-[#d4a847]" />
+            <FileText className="w-5 h-5 text-[hsl(var(--ico-brand-primary))]" />
             <span className="font-semibold">WhitePaper</span>
           </div>
         </div>
@@ -133,8 +133,8 @@ export function WhitepaperTab({ className }: WhitepaperTabProps) {
                   className={cn(
                     'w-full flex items-start gap-2 px-3 py-2 rounded-lg text-sm text-start transition-colors',
                     activeSection === section.id
-                      ? 'bg-[#d4a847]/20 text-[#d4a847]'
-                      : 'text-[hsl(var(--ico-text-secondary))] hover:bg-white/5 hover:text-[hsl(var(--ico-text-primary))]'
+                      ? 'bg-[hsl(var(--ico-brand-primary)/0.2)] text-[hsl(var(--ico-brand-primary))]'
+                      : 'text-[hsl(var(--ico-text-secondary))] hover:bg-[hsl(var(--ico-bg-secondary))] hover:text-[hsl(var(--ico-text-primary))]'
                   )}
                 >
                   {section.subsections && (
@@ -149,7 +149,7 @@ export function WhitepaperTab({ className }: WhitepaperTabProps) {
                 </button>
 
                 {section.subsections && expandedSections.includes(section.id) && (
-                  <div className="ml-6 mt-1 space-y-1 border-l border-white/10 pl-3">
+                  <div className="ml-6 mt-1 space-y-1 border-l border-[hsl(var(--ico-border-color))] pl-3">
                     {section.subsections.map((sub) => (
                       <button
                         key={sub.id}
@@ -159,8 +159,8 @@ export function WhitepaperTab({ className }: WhitepaperTabProps) {
                         className={cn(
                           'w-full flex! justify-start! text-left px-3 py-1.5 rounded-lg text-xs transition-colors',
                           activeSection === sub.id
-                            ? 'bg-[#d4a847]/10 text-[#d4a847]'
-                            : 'text-[hsl(var(--ico-text-muted))] hover:bg-white/5 hover:text-[hsl(var(--ico-text-secondary))]'
+                            ? 'bg-[hsl(var(--ico-brand-primary)/0.1)] text-[hsl(var(--ico-brand-primary))]'
+                            : 'text-[hsl(var(--ico-text-muted))] hover:bg-[hsl(var(--ico-bg-secondary))] hover:text-[hsl(var(--ico-text-secondary))]'
                         )}
                       >
                         {sub.title}
@@ -173,10 +173,10 @@ export function WhitepaperTab({ className }: WhitepaperTabProps) {
           </nav>
         </div>
 
-        <div className="p-3 border-t border-white/10">
+        <div className="p-3 border-t border-[hsl(var(--ico-border-color))]">
           <button
             onClick={handleDownload}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-[#d4a847] text-black font-medium text-sm hover:bg-[#c49a3d] transition-colors"
+            className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-md bg-[hsl(var(--ico-form-button))] text-white font-medium text-sm hover:bg-[hsl(var(--ico-form-button-hover))] transition-colors"
           >
             <Download className="w-4 h-4" />
             Download PDF
@@ -185,7 +185,7 @@ export function WhitepaperTab({ className }: WhitepaperTabProps) {
       </div>
 
       {/* PDF Viewer */}
-      <div className="flex-1 rounded-xl bg-black/40 border border-white/10 overflow-hidden">
+      <div className="flex-1 rounded-md bg-[hsl(var(--ico-bg-card))] border border-[hsl(var(--ico-border-color))] overflow-hidden">
         <iframe
           key={activeSection}
           src={`/docs/BIG_WhitePaper.pdf#page=${currentPage}&view=FitH`}
@@ -198,7 +198,7 @@ export function WhitepaperTab({ className }: WhitepaperTabProps) {
             <button
               onClick={handleDownload}
               aria-label="Download BIG WhitePaper PDF"
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#d4a847] text-black font-medium text-sm hover:bg-[#c49a3d] transition-colors"
+              className="flex items-center gap-2 px-4 py-2 rounded-md bg-[hsl(var(--ico-form-button))] text-white font-medium text-sm hover:bg-[hsl(var(--ico-form-button-hover))] transition-colors"
             >
               <Download className="w-4 h-4" />
               Download PDF
@@ -210,4 +210,3 @@ export function WhitepaperTab({ className }: WhitepaperTabProps) {
   );
 }
 
-export default WhitepaperTab;

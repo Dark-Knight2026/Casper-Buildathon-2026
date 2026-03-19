@@ -19,4 +19,3 @@ export function SubTitle({ children, className }: SubTitleProps) {
   );
 }
 
-export default SubTitle;

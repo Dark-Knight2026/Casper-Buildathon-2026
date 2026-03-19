@@ -20,9 +20,9 @@ interface TransactionHistoryProps {
 }
 
 const STATUS_STYLES = {
-  pending: 'text-yellow-400 bg-yellow-400/10',
-  completed: 'text-green-400 bg-green-400/10',
-  failed: 'text-red-400 bg-red-400/10',
+  pending: 'text-yellow-800 dark:text-yellow-300 bg-yellow-400/10 dark:bg-yellow-900/30',
+  completed: 'text-green-900 dark:text-green-300 bg-green-400/10 dark:bg-green-900/30',
+  failed: 'text-red-800 dark:text-red-300 bg-red-400/10 dark:bg-red-900/30',
 };
 
 const STATUS_LABELS = {
@@ -55,7 +55,7 @@ export function TransactionHistory({ transactions, className }: TransactionHisto
             {transactions.map((tx) => (
               <li
                 key={tx.id}
-                className="flex items-center justify-between p-3 rounded-lg bg-black/30 border border-sky-800/30"
+                className="flex items-center justify-between p-3 rounded-md bg-[hsl(var(--ico-bg-secondary))] border border-[hsl(var(--ico-border-color))]"
               >
                 <div className="flex flex-col gap-1">
                   <div className="flex items-center gap-2">
@@ -99,4 +99,3 @@ export function TransactionHistory({ transactions, className }: TransactionHisto
   );
 }
 
-export default TransactionHistory;

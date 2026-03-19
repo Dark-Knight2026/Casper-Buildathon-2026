@@ -1,23 +1,21 @@
 import { cn } from '@/lib/utils';
 import type { ScheduleProgress } from '@/hooks/ico/useICOSchedules';
 import { ICO_CONFIG } from '@/constants/ico';
-import type { PaymentCurrency } from '@/types/ico';
-import { toast } from '@/lib/toast';
 import { Title } from '../shared/Title';
 import { ProgressBar } from '../shared/ProgressBar';
 import { WalletCard } from '../shared/WalletCard';
-import CountdownTimer from '../shared/CountdownTimer';
+import { CountdownTimer } from '../shared/CountdownTimer';
 import { usePurchaseFlow } from '@/hooks/ico/usePurchaseFlow';
 import { PurchaseConfirmationModal } from '../shared/PurchaseConfirmationModal';
 import { TransactionStatusToast } from '../shared/TransactionStatusToast';
 
-interface ActivePresaleProps {
+interface PrivateSaleActiveProps {
   className?: string;
   endTimestamp: number;
   progress?: ScheduleProgress | null;
 }
 
-export function ActivePresale({ className, endTimestamp, progress }: ActivePresaleProps) {
+export function PrivateSaleActive({ className, endTimestamp, progress }: PrivateSaleActiveProps) {
   const tokenPrice = progress?.priceUsd ?? 0;
 
   const {
@@ -25,6 +23,10 @@ export function ActivePresale({ className, endTimestamp, progress }: ActivePresa
     account,
     connect,
     balances,
+    balanceError,
+    balancesLoading,
+    csprPriceUsd,
+    csprPriceStale,
     handlePurchase,
     modalProps,
     toastProps,
@@ -40,16 +42,16 @@ export function ActivePresale({ className, endTimestamp, progress }: ActivePresa
       <div className="text-center mb-12">
 
         <Title className="mb-4">
-          {ICO_CONFIG.TOKEN.symbol} Token Presale
+          {ICO_CONFIG.TOKEN.symbol} Private Sale
         </Title>
 
         <p className="text-lg md:text-xl font-thin text-[hsl(var(--ico-text-secondary))] max-w-2xl mx-auto">
-          Purchase BIG Tokens at Presale Rate
+          Purchase BIG Tokens at Private Sale Rate
         </p>
       </div>
       <div className='mx-auto flex flex-col md:flex-row gap-4 items-start justify-center'>
         <div className='w-full flex flex-col gap-4'>
-          <p className='text-[hsl(var(--ico-text-secondary))] pl-2'>Presale ends in:</p>
+          <p className='text-[hsl(var(--ico-text-secondary))] pl-2'>Private Sale ends in:</p>
           <CountdownTimer variant='compact' targetTimestamp={endTimestamp} className="py-2" />
 
           {/* Progress Bar - show only when progress data exists */}
@@ -58,7 +60,7 @@ export function ActivePresale({ className, endTimestamp, progress }: ActivePresa
               currentValue={progress.tokensSold}
               maxValue={progress.totalAllocation}
               label="Progress"
-              rightLabel={`$${Math.round(progress.amountRaised).toLocaleString()} / $${Number(ICO_CONFIG.PRE_SALE.hardCap).toLocaleString()}`}
+              rightLabel={`$${Math.round(progress.amountRaised).toLocaleString()} / $${Math.round(progress.hardCapUsd).toLocaleString()}`}
               showPercentage={true}
               infoColumns={[
                 { label: 'Funds Raised', value: `$${Math.round(progress.amountRaised).toLocaleString()}` },
@@ -67,7 +69,9 @@ export function ActivePresale({ className, endTimestamp, progress }: ActivePresa
               className="w-full"
             />
           )}
-          <p className='text-[hsl(var(--ico-text-secondary))] pl-2'>Hard Cap: ${Number(ICO_CONFIG.PRE_SALE.hardCap).toLocaleString()}</p>
+          {progress && (
+            <p className='text-[hsl(var(--ico-text-secondary))] pl-2'>Hard Cap: ${Math.round(progress.hardCapUsd).toLocaleString()}</p>
+          )}
         </div>
 
         {/* Wallet Card */}
@@ -77,8 +81,12 @@ export function ActivePresale({ className, endTimestamp, progress }: ActivePresa
           balanceUSDT={balances.usdt}
           balanceUSDC={balances.usdc}
           balanceBIG={balances.big}
+          balanceError={balanceError}
+          balancesLoading={balancesLoading}
           tokenPrice={progress?.priceUsd ?? 0}
           tokenSymbol={ICO_CONFIG.TOKEN.symbol}
+          csprPriceUsd={csprPriceUsd}
+          csprPriceStale={csprPriceStale}
           onConnect={connect}
           onPurchase={handlePurchase}
           className="w-full"
@@ -101,4 +109,4 @@ export function ActivePresale({ className, endTimestamp, progress }: ActivePresa
   );
 }
 
-export default ActivePresale;
+export default PrivateSaleActive;

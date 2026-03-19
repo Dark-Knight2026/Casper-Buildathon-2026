@@ -4,6 +4,10 @@ import { usePurchaseFlow } from '@/hooks/ico/usePurchaseFlow';
 
 const mockInvalidateQueries = vi.fn();
 
+// Captures the options (onSuccess/onError) passed to usePurchaseToken mock.
+// Reset in beforeEach to prevent leaks between tests.
+let capturedPurchaseCallbacks: { onSuccess?: Function; onError?: Function } | undefined;
+
 vi.mock('@tanstack/react-query', () => ({
   useQueryClient: () => ({
     invalidateQueries: mockInvalidateQueries,
@@ -47,13 +51,26 @@ vi.mock('@/hooks/ico/useICOWallet', () => ({
 }));
 
 vi.mock('@/hooks/ico/useWalletBalances', () => ({
-  useWalletBalances: () => ({ balances: mockBalances }),
+  useWalletBalances: () => ({
+    balances: mockBalances,
+    error: null,
+    isLoading: false,
+    refetch: vi.fn(),
+  }),
+}));
+
+const mockCSPRPrice = { priceUSD: 0.02, isStale: false };
+vi.mock('@/hooks/useCSPRPrice', () => ({
+  useCSPRPrice: () => mockCSPRPrice,
+}));
+
+vi.mock('@/lib/logger', () => ({
+  default: { log: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 
 vi.mock('@/hooks/ico/usePurchaseToken', () => ({
   usePurchaseToken: (_pk: string | null, _price: number, _ref: unknown, options?: { onSuccess?: Function; onError?: Function }) => {
-    // Store callbacks for testing
-    (global as any).__purchaseCallbacks = options;
+    capturedPurchaseCallbacks = options;
     return {
       state: mockPurchaseState,
       purchase: mockPurchase,
@@ -65,6 +82,7 @@ vi.mock('@/hooks/ico/usePurchaseToken', () => ({
 describe('usePurchaseFlow', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    capturedPurchaseCallbacks = undefined;
     mockWalletState.isConnected = false;
     mockWalletState.account = null;
     mockPurchaseState.step = 'idle';
@@ -72,6 +90,8 @@ describe('usePurchaseFlow', () => {
     mockPurchaseState.error = null;
     mockPurchaseState.purchaseTxHash = null;
     mockPurchaseState.tokensReceived = null;
+    mockCSPRPrice.priceUSD = 0.02;
+    mockCSPRPrice.isStale = false;
   });
 
   // --- Initial state ---
@@ -85,6 +105,24 @@ describe('usePurchaseFlow', () => {
       expect(result.current.isConnected).toBe(false);
       expect(result.current.account).toBeNull();
       expect(result.current.balances).toEqual(mockBalances);
+    });
+
+    it('should expose csprPriceUsd and csprPriceStale', () => {
+      const { result } = renderHook(() =>
+        usePurchaseFlow({ tokenPrice: 0.1, tokenSymbol: 'BIG' })
+      );
+
+      expect(result.current.csprPriceUsd).toBe(0.02);
+      expect(result.current.csprPriceStale).toBe(false);
+    });
+
+    it('should expose balanceError and balancesLoading', () => {
+      const { result } = renderHook(() =>
+        usePurchaseFlow({ tokenPrice: 0.1, tokenSymbol: 'BIG' })
+      );
+
+      expect(result.current.balanceError).toBeNull();
+      expect(result.current.balancesLoading).toBe(false);
     });
 
     it('should start with modal closed', () => {
@@ -173,6 +211,24 @@ describe('usePurchaseFlow', () => {
       expect(result.current.modalProps?.currency).toBe('USDT');
       expect(result.current.modalProps?.tokenPrice).toBe(0.1);
       expect(result.current.modalProps?.tokenSymbol).toBe('BIG');
+    });
+
+    it('should include csprPriceUsd and csprPriceStale in modalProps', () => {
+      mockWalletState.isConnected = true;
+      mockWalletState.account = { publicKey: '01abc123' };
+      mockCSPRPrice.priceUSD = 0.05;
+      mockCSPRPrice.isStale = true;
+
+      const { result } = renderHook(() =>
+        usePurchaseFlow({ tokenPrice: 0.1, tokenSymbol: 'BIG' })
+      );
+
+      act(() => {
+        result.current.handlePurchase(100, 'CSPR');
+      });
+
+      expect(result.current.modalProps?.csprPriceUsd).toBe(0.05);
+      expect(result.current.modalProps?.csprPriceStale).toBe(true);
     });
   });
 
@@ -289,7 +345,7 @@ describe('usePurchaseFlow', () => {
       );
 
       // Simulate toast being shown (via success callback)
-      const callbacks = (global as any).__purchaseCallbacks;
+      const callbacks = capturedPurchaseCallbacks;
       act(() => {
         callbacks?.onSuccess?.('0x123', '1000');
       });
@@ -310,7 +366,7 @@ describe('usePurchaseFlow', () => {
         usePurchaseFlow({ tokenPrice: 0.1, tokenSymbol: 'BIG' })
       );
 
-      const callbacks = (global as any).__purchaseCallbacks;
+      const callbacks = capturedPurchaseCallbacks;
       act(() => {
         callbacks?.onSuccess?.('0x123', '1000');
       });
@@ -329,7 +385,7 @@ describe('usePurchaseFlow', () => {
         usePurchaseFlow({ tokenPrice: 0.1, tokenSymbol: 'BIG' })
       );
 
-      const callbacks = (global as any).__purchaseCallbacks;
+      const callbacks = capturedPurchaseCallbacks;
       act(() => {
         callbacks?.onError?.('Transaction failed');
       });
@@ -356,7 +412,7 @@ describe('usePurchaseFlow', () => {
         })
       );
 
-      const callbacks = (global as any).__purchaseCallbacks;
+      const callbacks = capturedPurchaseCallbacks;
       act(() => {
         callbacks?.onSuccess?.('0x123abc', '1000');
       });
@@ -375,7 +431,7 @@ describe('usePurchaseFlow', () => {
         })
       );
 
-      const callbacks = (global as any).__purchaseCallbacks;
+      const callbacks = capturedPurchaseCallbacks;
       act(() => {
         callbacks?.onError?.('Transaction failed');
       });
@@ -388,7 +444,7 @@ describe('usePurchaseFlow', () => {
         usePurchaseFlow({ tokenPrice: 0.1, tokenSymbol: 'BIG' })
       );
 
-      const callbacks = (global as any).__purchaseCallbacks;
+      const callbacks = capturedPurchaseCallbacks;
       act(() => {
         callbacks?.onSuccess?.('0x123', '1000');
       });
@@ -401,7 +457,7 @@ describe('usePurchaseFlow', () => {
         usePurchaseFlow({ tokenPrice: 0.1, tokenSymbol: 'BIG' })
       );
 
-      const callbacks = (global as any).__purchaseCallbacks;
+      const callbacks = capturedPurchaseCallbacks;
       act(() => {
         callbacks?.onError?.('Failed');
       });
@@ -423,7 +479,7 @@ describe('usePurchaseFlow', () => {
 
       expect(result.current.showConfirmModal).toBe(true);
 
-      const callbacks = (global as any).__purchaseCallbacks;
+      const callbacks = capturedPurchaseCallbacks;
       act(() => {
         callbacks?.onSuccess?.('0x123', '1000');
       });
@@ -445,7 +501,7 @@ describe('usePurchaseFlow', () => {
         usePurchaseFlow({ tokenPrice: 0.1, tokenSymbol: 'BIG' })
       );
 
-      const callbacks = (global as any).__purchaseCallbacks;
+      const callbacks = capturedPurchaseCallbacks;
       act(() => {
         callbacks?.onSuccess?.('0x123abc', '1000');
       });

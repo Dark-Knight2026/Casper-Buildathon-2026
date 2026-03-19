@@ -2,14 +2,14 @@ import { memo } from 'react';
 import { Card } from '../shared/Card';
 import { SubTitle } from '../shared/SubTitle';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
-import { AreaChart, Area, XAxis, YAxis, PieChart, Pie, Cell } from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, PieChart, Pie, Cell, CartesianGrid } from 'recharts';
 import { Coins } from 'lucide-react';
 import { MOCK_VESTING_SCHEDULE, MOCK_ALLOCATION_DATA } from '@/constants/icoMockData';
 
 const TOTAL_SUPPLY = '1,000,000,000';
 
 const vestingChartConfig = {
-  released: { label: 'Released Tokens', color: '#3b82f6' },
+  released: { label: 'Released Tokens', color: '#1F7A63' },  /* Primary green */
 };
 
 const allocationChartConfig = Object.fromEntries(
@@ -25,25 +25,14 @@ const VestingChart = memo(function VestingChart() {
       config={vestingChartConfig}
       className="h-62.5 w-full aspect-auto md:aspect-video"
     >
-      <AreaChart data={MOCK_VESTING_SCHEDULE}>
-        <defs>
-          <linearGradient id="fill-released" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="15%" stopColor="#3b82f6" stopOpacity={0.4} />
-            <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.05} />
-          </linearGradient>
-        </defs>
+      <AreaChart data={MOCK_VESTING_SCHEDULE} margin={{ left: 12, right: 12 }}>
+        <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="hsl(var(--ico-border-color))" />
         <XAxis
           dataKey="day"
           tickLine={false}
           axisLine={false}
+          tickMargin={8}
           tick={{ fill: 'hsl(var(--ico-text-muted))', fontSize: 12 }}
-          label={{
-            value: 'Days Since Launch',
-            position: 'insideBottom',
-            offset: -5,
-            fill: 'hsl(var(--ico-text-muted))',
-            fontSize: 12,
-          }}
         />
         <YAxis
           tickLine={false}
@@ -52,19 +41,24 @@ const VestingChart = memo(function VestingChart() {
           tickFormatter={(value) => `${(value / 1_000_000).toFixed(0)}M`}
         />
         <ChartTooltip
+          cursor={false}
           content={
             <ChartTooltipContent
-              className="text-white"
-              formatter={(value) => `${Number(value).toLocaleString()} BIG`}
+              indicator="line"
+              formatter={(value) => (
+                <span className="font-mono font-medium tabular-nums text-white">
+                  {Number(value).toLocaleString()} BIG
+                </span>
+              )}
             />
           }
         />
         <Area
-          type="monotone"
+          type="natural"
           dataKey="released"
-          stroke="#3b82f6"
-          fill="url(#fill-released)"
-          strokeWidth={2}
+          fill="var(--color-released)"
+          fillOpacity={0.4}
+          stroke="var(--color-released)"
         />
       </AreaChart>
     </ChartContainer>
@@ -119,8 +113,8 @@ export function TokenomicsTab() {
       <Card className="p-5">
         <div className="w-full">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-[hsl(var(--ico-accent)/0.2)] flex items-center justify-center">
-              <Coins className="w-5 h-5 text-sky-500" />
+            <div className="w-10 h-10 rounded-lg bg-[hsl(var(--ico-brand-accent)/0.2)] flex items-center justify-center">
+              <Coins className="w-5 h-5 text-[hsl(var(--ico-brand-primary))]" />
             </div>
             <div>
               <p className="text-sm text-[hsl(var(--ico-text-secondary))]">
@@ -133,7 +127,7 @@ export function TokenomicsTab() {
           </div>
         </div>
       </Card>
-      <div className='flex gap-4'>
+      <div className='flex flex-col lg:flex-row gap-4'>
         {/* Vesting & Release Schedule */}
         <Card className="p-5">
           <div className="w-full">
@@ -179,4 +173,3 @@ export function TokenomicsTab() {
   );
 }
 
-export default TokenomicsTab;

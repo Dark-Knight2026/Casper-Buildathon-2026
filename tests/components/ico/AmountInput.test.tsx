@@ -101,7 +101,7 @@ describe('AmountInput', () => {
       expect(onChange).toHaveBeenCalledWith('');
     });
 
-    it('should call onChange for negative values (shows error but updates input)', () => {
+    it('should strip the minus sign and call onChange with the numeric part', () => {
       const onChange = vi.fn();
       render(<AmountInput {...defaultProps} onChange={onChange} />);
 
@@ -109,12 +109,32 @@ describe('AmountInput', () => {
         target: { value: '-5' },
       });
 
-      expect(onChange).toHaveBeenCalledWith('-5');
+      // type="text" with sanitization strips '-'; onChange receives '5'
+      expect(onChange).toHaveBeenCalledWith('5');
     });
 
-    // Note: Test for non-numeric input (e.g., 'abc') is not included because
-    // type="number" inputs filter out non-numeric values at the browser level.
-    // This is already covered by the "should call onChange when input is cleared" test.
+    it('should strip non-numeric characters and call onChange with sanitized value', () => {
+      const onChange = vi.fn();
+      render(<AmountInput {...defaultProps} onChange={onChange} />);
+
+      fireEvent.change(screen.getByPlaceholderText('0.00'), {
+        target: { value: 'abc' },
+      });
+
+      expect(onChange).toHaveBeenCalledWith('');
+    });
+
+    it('should strip scientific notation and call onChange with sanitized digits', () => {
+      const onChange = vi.fn();
+      render(<AmountInput {...defaultProps} onChange={onChange} />);
+
+      fireEvent.change(screen.getByPlaceholderText('0.00'), {
+        target: { value: '1e3' },
+      });
+
+      // '1e3' → strip 'e' → '13', not 1000
+      expect(onChange).toHaveBeenCalledWith('13');
+    });
 
     it('should call onChange when value is below minimum (shows error but updates input)', () => {
       const onChange = vi.fn();
@@ -142,26 +162,24 @@ describe('AmountInput', () => {
   // --- Validation errors ---
 
   describe('validation', () => {
-    it('should show error for negative numbers', () => {
+    it('should strip negative sign without showing an error', () => {
       render(<AmountInput {...defaultProps} />);
 
       fireEvent.change(screen.getByPlaceholderText('0.00'), {
         target: { value: '-10' },
       });
 
-      expect(
-        screen.getByText('Amount must be a positive number')
-      ).toBeInTheDocument();
+      expect(screen.queryByText('Amount must be a positive number')).not.toBeInTheDocument();
     });
 
-    it('should show error when amount is below minimum ($10)', () => {
+    it('should show error when amount is below minimum ($1)', () => {
       render(<AmountInput {...defaultProps} />);
 
       fireEvent.change(screen.getByPlaceholderText('0.00'), {
-        target: { value: '5' },
+        target: { value: '0.5' },
       });
 
-      expect(screen.getByText('Minimum amount is $10')).toBeInTheDocument();
+      expect(screen.getByText('Minimum amount is $1')).toBeInTheDocument();
     });
 
     it('should show error when amount exceeds maximum ($100,000)', () => {
@@ -220,13 +238,13 @@ describe('AmountInput', () => {
       const input = screen.getByPlaceholderText('0.00');
 
       // Trigger error
-      fireEvent.change(input, { target: { value: '5' } });
-      expect(screen.getByText('Minimum amount is $10')).toBeInTheDocument();
+      fireEvent.change(input, { target: { value: '0.5' } });
+      expect(screen.getByText('Minimum amount is $1')).toBeInTheDocument();
 
       // Enter valid value
       fireEvent.change(input, { target: { value: '50' } });
       expect(
-        screen.queryByText('Minimum amount is $10')
+        screen.queryByText('Minimum amount is $1')
       ).not.toBeInTheDocument();
     });
 
@@ -301,11 +319,11 @@ describe('AmountInput', () => {
       );
 
       fireEvent.change(screen.getByPlaceholderText('0.00'), {
-        target: { value: '5' },
+        target: { value: '0.5' },
       });
 
       // Error is shown
-      expect(screen.getByText('Minimum amount is $10')).toBeInTheDocument();
+      expect(screen.getByText('Minimum amount is $1')).toBeInTheDocument();
       // Balance is hidden
       expect(screen.queryByText(/Available:/)).not.toBeInTheDocument();
     });
@@ -382,7 +400,7 @@ describe('AmountInput', () => {
       render(<AmountInput {...defaultProps} />);
       const input = screen.getByPlaceholderText('0.00');
 
-      fireEvent.change(input, { target: { value: '5' } });
+      fireEvent.change(input, { target: { value: '0.5' } });
 
       expect(input.className).toContain('border-red-500/70');
     });
@@ -393,7 +411,7 @@ describe('AmountInput', () => {
 
       fireEvent.change(input, { target: { value: '500' } });
 
-      expect(input.className).toContain('border-sky-800/50');
+      expect(input.className).toContain('border-[hsl(var(--ico-border-color))]');
       expect(input.className).not.toContain('border-red-500/70');
     });
   });

@@ -1,7 +1,7 @@
 import { memo, useMemo } from 'react';
 import { Card } from '../shared/Card';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
-import { AreaChart, Area, XAxis, YAxis } from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { TrendingUp, Clock, Percent, Wallet } from 'lucide-react';
 import { TransactionHistory } from '../shared/TransactionHistory';
 import { MOCK_TRANSACTIONS } from '@/constants/ico';
@@ -11,7 +11,7 @@ import { formatNumber, formatUSD } from '../../utils/formatters';
 const chartConfig = {
   earnings: {
     label: 'Earnings',
-    color: '#d4a847',
+    color: '#1F7A63',  /* Primary green */
   },
 };
 
@@ -89,8 +89,8 @@ export const OverviewTab = memo(function OverviewTab() {
             </h3>
             <div className="space-y-4">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-[hsl(var(--ico-accent)/0.2)] flex items-center justify-center">
-                  <Clock className="w-5 h-5 text-sky-500" />
+                <div className="w-10 h-10 rounded-lg bg-[hsl(var(--ico-brand-accent)/0.2)] flex items-center justify-center">
+                  <Clock className="w-5 h-5 text-[hsl(var(--ico-brand-primary))]" />
                 </div>
                 <div>
                   <p className="text-sm text-[hsl(var(--ico-text-secondary))]">Next Rewards</p>
@@ -100,8 +100,8 @@ export const OverviewTab = memo(function OverviewTab() {
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-[hsl(var(--ico-success)/0.2)] flex items-center justify-center">
-                  <Percent className="w-5 h-5 text-sky-500" />
+                <div className="w-10 h-10 rounded-lg bg-[hsl(var(--ico-state-active)/0.2)] flex items-center justify-center">
+                  <Percent className="w-5 h-5 text-[hsl(var(--ico-brand-primary))]" />
                 </div>
                 <div>
                   <p className="text-sm text-[hsl(var(--ico-text-secondary))]">Current APY</p>
@@ -121,17 +121,13 @@ export const OverviewTab = memo(function OverviewTab() {
               Earnings Overview
             </h3>
             <ChartContainer config={chartConfig} className="h-[200px] w-full">
-              <AreaChart data={MOCK_EARNINGS_DATA}>
-                <defs>
-                  <linearGradient id="fillEarnings" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#d4a847" stopOpacity={0.8} />
-                    <stop offset="95%" stopColor="#d4a847" stopOpacity={0.1} />
-                  </linearGradient>
-                </defs>
+              <AreaChart data={MOCK_EARNINGS_DATA} margin={{ left: 12, right: 12 }}>
+                <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="hsl(var(--ico-border-color))" />
                 <XAxis
                   dataKey="month"
                   tickLine={false}
                   axisLine={false}
+                  tickMargin={8}
                   tick={{ fill: 'hsl(var(--ico-text-muted))', fontSize: 12 }}
                 />
                 <YAxis
@@ -140,13 +136,16 @@ export const OverviewTab = memo(function OverviewTab() {
                   tick={{ fill: 'hsl(var(--ico-text-muted))', fontSize: 12 }}
                   tickFormatter={(value) => `$${value}`}
                 />
-                <ChartTooltip content={<ChartTooltipContent />} />
+                <ChartTooltip
+                  cursor={false}
+                  content={<ChartTooltipContent indicator="line" />}
+                />
                 <Area
-                  type="monotone"
+                  type="natural"
                   dataKey="earnings"
-                  stroke="#d4a847"
-                  fill="url(#fillEarnings)"
-                  strokeWidth={2}
+                  fill="var(--color-earnings)"
+                  fillOpacity={0.4}
+                  stroke="var(--color-earnings)"
                 />
               </AreaChart>
             </ChartContainer>
@@ -166,7 +165,7 @@ export const OverviewTab = memo(function OverviewTab() {
               <p className="text-3xl font-bold text-[hsl(var(--ico-text-primary))]">
                 {formatUSD(MOCK_PORTFOLIO.estimatedValue)}
               </p>
-              <p className="text-sm text-[hsl(var(--ico-success))]">
+              <p className="text-sm text-[hsl(var(--ico-state-active))]">
                 {MOCK_PORTFOLIO.change24h}% (24h)
               </p>
               <p className='text-[hsl(var(--ico-text-secondary))]'>Current USD value of your holdings</p>
@@ -181,4 +180,3 @@ export const OverviewTab = memo(function OverviewTab() {
   );
 });
 
-export default OverviewTab;

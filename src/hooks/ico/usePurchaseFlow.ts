@@ -20,11 +20,12 @@
 
 import { useState, useCallback, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { logger } from '@/utils/logger';
+import logger from '@/lib/logger';
 import type { PaymentCurrency } from '@/types/ico';
 import { useICOWallet } from './useICOWallet';
 import { useWalletBalances } from './useWalletBalances';
 import { usePurchaseToken, type PurchaseState } from './usePurchaseToken';
+import { useCSPRPrice } from '@/hooks/useCSPRPrice';
 
 interface PendingPurchase {
   amount: number;
@@ -49,6 +50,12 @@ interface UsePurchaseFlowReturn {
     usdc: number;
     big: number;
   };
+  balanceError: string | null;
+  balancesLoading: boolean;
+
+  // Live CSPR/USD rate (display-only — the smart contract determines the real rate)
+  csprPriceUsd: number;
+  csprPriceStale: boolean;
 
   // Modal state
   showConfirmModal: boolean;
@@ -76,6 +83,8 @@ interface UsePurchaseFlowReturn {
     tokenPrice: number;
     tokenSymbol: string;
     purchaseState: PurchaseState;
+    csprPriceUsd: number;
+    csprPriceStale: boolean;
   } | null;
 
   toastProps: {
@@ -97,8 +106,10 @@ export function usePurchaseFlow({
 }: UsePurchaseFlowOptions): UsePurchaseFlowReturn {
   const queryClient = useQueryClient();
   const { isConnected, account, connect, clickRef } = useICOWallet();
-  const { balances } = useWalletBalances(account?.publicKey);
-
+  const { balances, error: balanceError, isLoading: balancesLoading, refetch: refetchBalances } = useWalletBalances(account?.publicKey);
+  // csprPriceUsd is display-only — used for UI estimations (token preview, USD equivalent).
+  // The smart contract determines the actual exchange rate on-chain.
+  const { priceUSD: csprPriceUsd, isStale: csprPriceStale } = useCSPRPrice();
   // Modal and toast state
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [pendingPurchase, setPendingPurchase] = useState<PendingPurchase | null>(null);
@@ -121,13 +132,17 @@ export function usePurchaseFlow({
         setShowConfirmModal(false);
         setPendingPurchase(null);
         onPurchaseSuccess?.(txHash, tokensReceived);
+        // Refresh balances after purchase — delay to let the blockchain settle
+        refetchBalances();
+        setTimeout(() => refetchBalances(), 15_000);
       },
       onError: (error) => {
-        console.error('Purchase failed:', error);
+        logger.error('Purchase failed:', error);
         setShowToast(true);
         onPurchaseError?.(error);
       },
-    }
+    },
+    csprPriceUsd,
   );
 
   // Handle purchase button click - show confirmation modal
@@ -182,8 +197,10 @@ export function usePurchaseFlow({
       tokenPrice,
       tokenSymbol,
       purchaseState,
+      csprPriceUsd,
+      csprPriceStale,
     };
-  }, [showConfirmModal, pendingPurchase, handleCloseModal, handleConfirmPurchase, tokenPrice, tokenSymbol, purchaseState]);
+  }, [showConfirmModal, pendingPurchase, handleCloseModal, handleConfirmPurchase, tokenPrice, tokenSymbol, purchaseState, csprPriceUsd, csprPriceStale]);
 
   // Memoized props for toast component
   const toastProps = useMemo(() => {
@@ -206,6 +223,12 @@ export function usePurchaseFlow({
     account,
     connect,
     balances,
+    balanceError,
+    balancesLoading,
+
+    // Live CSPR/USD rate (display-only)
+    csprPriceUsd,
+    csprPriceStale,
 
     // Modal state
     showConfirmModal,

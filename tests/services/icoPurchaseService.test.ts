@@ -1,11 +1,14 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   toRawAmount,
   fromRawAmount,
   validatePurchase,
   calculateTokensReceived,
-  createPurchaseDeploy,
+  createPurchaseTransaction,
+  checkApprovalNeeded,
+  parseContractError,
 } from '@/services/ico/icoPurchaseService';
+import { getAllowance } from '@/services/ico/cep18Service';
 // Schema loaded inline to avoid path alias issues in test environment
 const icoSchema = JSON.parse(
   require('fs').readFileSync(
@@ -19,7 +22,7 @@ let capturedArgsMap: Record<string, unknown> = {};
 
 // Mock dependencies that icoPurchaseService imports
 vi.mock('casper-js-sdk', () => ({
-  Args: { fromMap: vi.fn((map: Record<string, unknown>) => { capturedArgsMap = map; return map; }) },
+  Args: { fromMap: vi.fn((map: Record<string, unknown>) => { capturedArgsMap = map; return { ...map, toBytes: () => new Uint8Array() }; }) },
   CLValue: {
     newCLKey: vi.fn((v: unknown) => ({ type: 'Key', value: v })),
     newCLUInt256: vi.fn((v: unknown) => ({ type: 'U256', value: v })),
@@ -33,18 +36,28 @@ vi.mock('casper-js-sdk', () => ({
   AccountIdentifier: vi.fn(),
 }));
 
-vi.mock('@/services/ico/casperClient', () => ({
-  createDeploy: vi.fn(),
-  stripHashPrefix: vi.fn((s: string) => s),
-  getCasperRpcClient: vi.fn(),
-}));
+vi.mock('@/services/ico/casperClient', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/services/ico/casperClient')>();
+  return {
+    ...actual,
+    createDeploy: vi.fn(),
+    createContractCallTransaction: vi.fn(),
+    getCasperRpcClient: vi.fn(),
+    getAccountMainPurseURef: vi.fn(),
+  };
+});
 
 vi.mock('@/services/ico/contractTypes', () => ({
-  paymentCurrencyToContractCurrency: vi.fn(),
+  paymentCurrencyToContractCurrency: vi.fn(() => 1),
 }));
 
 vi.mock('@/services/ico/cep18Service', () => ({
   getAllowance: vi.fn(),
+}));
+
+vi.mock('@/services/ico/proxyCallerService', () => ({
+  loadProxyCallerWasm: vi.fn(() => Promise.resolve(new Uint8Array())),
+  createProxyCallerTransaction: vi.fn(() => ({ hash: { toHex: () => 'mock-hash' } })),
 }));
 
 vi.mock('@/constants/ico', () => ({
@@ -52,21 +65,26 @@ vi.mock('@/constants/ico', () => ({
     TOKEN: { decimals: 18 },
     CONTRACTS: {
       icoAddress: 'hash-abc123',
+      icoPackageHash: 'hash-abc123-pkg',
       usdtAddress: 'hash-usdt',
       usdcAddress: 'hash-usdc',
       tokenAddress: 'hash-token',
     },
-    CURRENCY_RATES: {
-      USDT: 1,
-      USDC: 1,
-      CSPR: 0.02,
-      CARD: 1,
-    },
     PURCHASE_LIMITS: {
-      min: 10,
+      min: 1,
       max: 100000,
     },
     CASPER: { networkName: 'casper-test' },
+  },
+  getCurrencyRateUsd: (currency: string, csprPriceUsd?: number) => {
+    if (currency === 'CSPR') {
+      if (!csprPriceUsd || csprPriceUsd <= 0) {
+        throw new Error('CSPR price unavailable - please try again later');
+      }
+      return csprPriceUsd;
+    }
+    const rates: Record<string, number> = { USDT: 1, USDC: 1, CARD: 1 };
+    return rates[currency] ?? 1;
   },
 }));
 
@@ -172,9 +190,9 @@ describe('validatePurchase', () => {
     expect(result.error).toBe('Invalid amount');
   });
 
-  it('rejects below minimum ($10 USD)', () => {
-    // 5 USDT = $5 < $10 min
-    const result = validatePurchase('5', 'USDT', 1000);
+  it('rejects below minimum ($1 USD)', () => {
+    // 0.5 USDT = $0.50 < $1 min
+    const result = validatePurchase('0.5', 'USDT', 1000);
     expect(result.valid).toBe(false);
     expect(result.error).toContain('Minimum');
   });
@@ -192,21 +210,27 @@ describe('validatePurchase', () => {
   });
 
   it('applies CSPR exchange rate for min check', () => {
-    // 100 CSPR * 0.02 = $2 < $10 min
-    const result = validatePurchase('100', 'CSPR', 10000);
+    // 1 CSPR * 0.02 = $0.02 < $1 min
+    const result = validatePurchase('1', 'CSPR', 10000, 0.02);
     expect(result.valid).toBe(false);
     expect(result.error).toContain('Minimum');
   });
 
   it('accepts valid CSPR purchase above minimum', () => {
-    // 1000 CSPR * 0.02 = $20 > $10 min
-    const result = validatePurchase('1000', 'CSPR', 10000);
+    // 1000 CSPR * 0.02 = $20 > $1 min
+    const result = validatePurchase('1000', 'CSPR', 10000, 0.02);
     expect(result).toEqual({ valid: true });
   });
 
+  it('returns error when CSPR price is unavailable', () => {
+    const result = validatePurchase('1000', 'CSPR', 10000);
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain('CSPR price unavailable');
+  });
+
   it('accepts exact minimum amount', () => {
-    // 10 USDT = $10 = exactly min
-    const result = validatePurchase('10', 'USDT', 1000);
+    // 1 USDT = $1 = exactly min
+    const result = validatePurchase('1', 'USDT', 1000);
     expect(result).toEqual({ valid: true });
   });
 });
@@ -223,9 +247,13 @@ describe('calculateTokensReceived', () => {
 
   it('calculates tokens for CSPR', () => {
     // 1000 CSPR * $0.02 rate = $20 / $0.001 = 20,000 tokens
-    const raw = calculateTokensReceived('1000', 'CSPR', 0.001);
+    const raw = calculateTokensReceived('1000', 'CSPR', 0.001, 0.02);
     const tokens = fromRawAmount(raw, 18);
     expect(tokens).toBe('20000');
+  });
+
+  it('returns 0 when CSPR price is unavailable', () => {
+    expect(calculateTokensReceived('1000', 'CSPR', 0.001)).toBe(0n);
   });
 
   it('returns 0 for invalid amount', () => {
@@ -256,9 +284,9 @@ describe('calculateTokensReceived', () => {
   });
 });
 
-// ── Deploy args vs contract schema ──────────────────────────────────
+// ── Transaction args vs contract schema ──────────────────────────────
 
-describe('createPurchaseDeploy args match contract schema', () => {
+describe('createPurchaseTransaction args match contract schema', () => {
   // Extract required argument names from the ICO contract schema
   const purchaseEntryPoint = (icoSchema as { entry_points: Array<{ name: string; arguments: Array<{ name: string; optional: boolean }> }> })
     .entry_points.find(ep => ep.name === 'purchase');
@@ -266,12 +294,12 @@ describe('createPurchaseDeploy args match contract schema', () => {
     .filter(a => !a.optional)
     .map(a => a.name);
 
-  it('includes all required contract arguments', () => {
+  it('includes all required contract arguments', async () => {
     capturedArgsMap = {};
-    createPurchaseDeploy(
+    await createPurchaseTransaction(
       '01abc123',
       '100',
-      'CSPR',
+      'USDT',
       'uref-abc-007',
     );
 
@@ -281,9 +309,9 @@ describe('createPurchaseDeploy args match contract schema', () => {
     }
   });
 
-  it('includes __cargo_purse as URef type', () => {
+  it('includes __cargo_purse as URef type', async () => {
     capturedArgsMap = {};
-    createPurchaseDeploy(
+    await createPurchaseTransaction(
       '01abc123',
       '50',
       'USDT',
@@ -292,5 +320,89 @@ describe('createPurchaseDeploy args match contract schema', () => {
 
     expect(capturedArgsMap).toHaveProperty('__cargo_purse');
     expect((capturedArgsMap.__cargo_purse as { type: string }).type).toBe('URef');
+  });
+
+  it('encodes amount_to_spend with 6 decimals for USDT', async () => {
+    capturedArgsMap = {};
+    await createPurchaseTransaction('01abc123', '100', 'USDT', 'uref-abc-007');
+
+    // 100 USDT × 10^6 = 100_000_000
+    expect((capturedArgsMap.amount_to_spend as { value: unknown }).value).toBe(100_000_000n);
+  });
+
+  it('encodes amount_to_spend with 9 decimals for CSPR', async () => {
+    capturedArgsMap = {};
+    await createPurchaseTransaction('01abc123', '100', 'CSPR', 'uref-abc-007');
+
+    // 100 CSPR × 10^9 = 100_000_000_000
+    expect((capturedArgsMap.amount_to_spend as { value: unknown }).value).toBe(100_000_000_000n);
+  });
+});
+
+// ── checkApprovalNeeded ─────────────────────────────────────────────
+
+describe('checkApprovalNeeded', () => {
+  const mockGetAllowance = vi.mocked(getAllowance);
+
+  beforeEach(() => {
+    mockGetAllowance.mockReset();
+  });
+
+  it('returns needed: false for CSPR without querying allowance', async () => {
+    const result = await checkApprovalNeeded('account-hash-abc', '100', 'CSPR');
+    expect(result).toEqual({ needed: false, currentAllowance: 0n, requiredAmount: 0n });
+    expect(mockGetAllowance).not.toHaveBeenCalled();
+  });
+
+  it('returns needed: false for CARD without querying allowance', async () => {
+    const result = await checkApprovalNeeded('account-hash-abc', '100', 'CARD');
+    expect(result).toEqual({ needed: false, currentAllowance: 0n, requiredAmount: 0n });
+    expect(mockGetAllowance).not.toHaveBeenCalled();
+  });
+
+  it('returns needed: true when currentAllowance < requiredAmount', async () => {
+    // 50 USDT required, allowance is only 10 USDT (6 decimals)
+    mockGetAllowance.mockResolvedValue(10_000_000n);
+    const result = await checkApprovalNeeded('account-hash-abc', '50', 'USDT');
+    expect(result.needed).toBe(true);
+    expect(result.requiredAmount).toBe(50_000_000n);
+    expect(result.currentAllowance).toBe(10_000_000n);
+  });
+
+  it('returns needed: false when currentAllowance >= requiredAmount', async () => {
+    // 50 USDT required, allowance is 100 USDT (6 decimals)
+    mockGetAllowance.mockResolvedValue(100_000_000n);
+    const result = await checkApprovalNeeded('account-hash-abc', '50', 'USDT');
+    expect(result.needed).toBe(false);
+    expect(result.requiredAmount).toBe(50_000_000n);
+    expect(result.currentAllowance).toBe(100_000_000n);
+  });
+});
+
+// ── parseContractError ────────────────────────────────────────────────
+
+describe('parseContractError', () => {
+  it('returns "Deploy failed" for undefined input', () => {
+    expect(parseContractError(undefined)).toBe('Deploy failed');
+  });
+
+  it('maps "User error: 59005" to "Invalid amount to spend"', () => {
+    expect(parseContractError('User error: 59005')).toBe('Invalid amount to spend');
+  });
+
+  it('maps "User error: 59012" to "Purchase amount below minimum"', () => {
+    expect(parseContractError('User error: 59012')).toBe('Purchase amount below minimum');
+  });
+
+  it('maps "User error: 59007" to no active ICO schedule message', () => {
+    expect(parseContractError('User error: 59007')).toBe('No active ICO schedule — sale is not currently open');
+  });
+
+  it('returns raw message for unknown error code', () => {
+    expect(parseContractError('User error: 99999')).toBe('User error: 99999');
+  });
+
+  it('returns raw message for non-matching format', () => {
+    expect(parseContractError('Something completely different')).toBe('Something completely different');
   });
 });

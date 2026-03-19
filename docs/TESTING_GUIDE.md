@@ -251,6 +251,43 @@ open coverage/index.html
 
 ---
 
+## Mocking Strategy for ICO Blockchain Service Tests
+
+### When to use `importOriginal` instead of a full `vi.mock()` factory
+
+`vi.mock()` is the standard approach throughout the test suite. However, for modules that mix **pure utility functions** with **network-calling functions** (such as `@/services/ico/casperClient`), a full mock factory has a specific pitfall: re-implementing the pure functions inside the factory creates a hidden copy of the logic that diverges from the real code. If a bug is introduced in `hexToBytes` or `readU64LE`, the tests will not catch it because they run against the copied version.
+
+For these modules, use `importOriginal` to spread the real module and override **only** the functions that make network or SDK calls:
+
+```typescript
+// Use this pattern when the module mixes pure utilities with RPC calls
+vi.mock('@/services/ico/casperClient', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/services/ico/casperClient')>();
+  return {
+    ...actual,                            // real hexToBytes, readU64LE, clValueToBigInt …
+    queryOdraState: mockQueryOdraState,   // only stub what makes a network call
+    clValueListU8ToHex: mockClValueListU8ToHex,
+  };
+});
+
+// Avoid this — re-implementing real functions hides bugs
+vi.mock('@/services/ico/casperClient', () => ({
+  hexToBytes: (hex) => { /* copy of real implementation */ },
+  readU64LE: (bytes, offset) => { /* copy of real implementation */ },
+  queryOdraState: mockQueryOdraState,
+}));
+```
+
+This pattern is applied in:
+- `tests/services/icoContractService.test.ts`
+- `tests/services/cep18Service.test.ts`
+- `tests/services/proxyCallerService.test.ts`
+- `tests/services/icoPurchaseService.test.ts`
+
+All other test files — component tests, hook tests, and tests for chart-heavy views — use standard `vi.mock()` factories, which is correct for those cases (router context, recharts SVG renderers, sub-component isolation).
+
+---
+
 ## Best Practices
 
 ### General

@@ -7,17 +7,16 @@ import type { ScheduleProgress } from '@/hooks/ico/useICOSchedules';
 import { MainButton } from '../shared/MainButton';
 import { Title } from '../shared/Title';
 import { InfoCard } from '../shared/InfoCard';
-import { diagnoseOdraKeys, testReadICOData } from '@/services/ico/icoContractService';
 
 
-interface PresaleCountdownProps {
+interface PrivateSaleCountdownProps {
   targetTimestamp: number;
   endTimestamp: number;
   progress?: ScheduleProgress | null;
   className?: string;
 }
 
-export function PresaleCountdown({ targetTimestamp, endTimestamp, progress, className }: PresaleCountdownProps) {
+export function PrivateSaleCountdown({ targetTimestamp, endTimestamp, progress, className }: PrivateSaleCountdownProps) {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
 
@@ -25,19 +24,19 @@ export function PresaleCountdown({ targetTimestamp, endTimestamp, progress, clas
     <div className={cn('max-w-5xl mx-auto relative flex flex-col items-center', className)}>
 
       {/* Hero Section */}
-      <div className="text-center mb-12">
+      <div className="text-center mb-4 mt-4">
 
         <Title className="mb-4">
-          {ICO_CONFIG.TOKEN.symbol} Token Presale
+          {ICO_CONFIG.TOKEN.symbol} Private Sale
         </Title>
 
         <p className="text-lg md:text-xl font-thin text-[hsl(var(--ico-text-secondary))] max-w-2xl mx-auto">
-          Presale Sale Starts In
+          Starts In
         </p>
       </div>
 
       {/* Countdown Card */}
-      <div className="rounded-2xl shadow-lg p-6 md:p-10 mb-8">
+      <div className=" p-6 md:p-10 mb-8">
 
         <CountdownTimer
           targetTimestamp={targetTimestamp}
@@ -45,7 +44,7 @@ export function PresaleCountdown({ targetTimestamp, endTimestamp, progress, clas
           showLabels
         />
 
-        {/* Pre-sale Info - show only if progress data exists */}
+        {/* Private Sale Info - show only if progress data exists */}
         {progress && (
           <InfoCard className="mt-14">
             <div className="text-center p-4">
@@ -65,12 +64,12 @@ export function PresaleCountdown({ targetTimestamp, endTimestamp, progress, clas
             <div className="text-center p-4">
               <p className="text-sm text-[hsl(var(--ico-text-secondary))] mb-1">Hard Cap</p>
               <p className="text-lg font-bold text-[hsl(var(--ico-text-primary))]">
-                ${Number(ICO_CONFIG.PRE_SALE.hardCap).toLocaleString()}
+                ${Math.round(progress.hardCapUsd).toLocaleString()}
               </p>
             </div>
 
             <div className="text-center p-4">
-              <p className="text-sm text-[hsl(var(--ico-text-secondary))] mb-1">Presale Ends:</p>
+              <p className="text-sm text-[hsl(var(--ico-text-secondary))] mb-1">Private Sale Ends:</p>
               <p className="text-sm text-[hsl(var(--ico-text-secondary))] mb-1">{new Date(endTimestamp).toLocaleString()}</p>
             </div>
           </InfoCard>
@@ -81,4 +80,4 @@ export function PresaleCountdown({ targetTimestamp, endTimestamp, progress, clas
   );
 }
 
-export default PresaleCountdown;
+export default PrivateSaleCountdown;

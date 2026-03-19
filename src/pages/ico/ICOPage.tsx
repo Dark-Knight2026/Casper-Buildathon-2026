@@ -8,16 +8,14 @@ import { PageErrorBoundary } from '@/components/common/PageErrorBoundary';
 import { logger } from '@/utils/logger';
 
 // Lazy load state components
-const PresaleCountdown = lazy(() => import('./components/states/PresaleCountdown'));
-const ActivePresale = lazy(() => import('./components/states/ActivePresale'));
-const DashboardICOCountdown = lazy(() => import('./components/states/DashboardICOCountdown'));
-const ActiveICO = lazy(() => import('./components/states/ActiveICO'));
+const PrivateSaleCountdown = lazy(() => import('./components/states/PrivateSaleCountdown'));
+const PrivateSaleActive = lazy(() => import('./components/states/PrivateSaleActive'));
 const PostICODashboard = lazy(() => import('./components/states/PostICODashboard'));
 
 // Loading component
 function LoadingFallback() {
   return (
-    <div className="flex items-center justify-center min-h-[400px]">
+    <div className="flex items-center justify-center min-h-100">
       <div className="flex flex-col items-center gap-4">
         <div className="w-12 h-12 border-4 border-[hsl(var(--ico-brand-primary))] border-t-transparent rounded-full animate-spin" />
         <p className="text-[hsl(var(--ico-text-secondary))]">Loading ICO data...</p>
@@ -30,7 +28,6 @@ export function ICOPage() {
   const {
     timestamps,
     presaleProgress,
-    icoProgress,
     isLoading,
     error,
   } = useICOSchedules();
@@ -38,28 +35,27 @@ export function ICOPage() {
   logger.debug('[ICOPage] useICOSchedules result:', {
     timestamps,
     presaleProgress,
-    icoProgress,
     isLoading,
     error,
   });
 
+  // Show loading while fetching contract data
+  // IMPORTANT: Check this BEFORE calling useICOState to avoid flash of wrong state
+  const hasLoadedData = !isLoading && timestamps !== null;
+
   // Determine state based on timestamps from contract
   const { state } = useICOState({
-    timestamps: timestamps ?? undefined,
+    timestamps: hasLoadedData ? timestamps : undefined,
   });
 
   logger.debug('[ICOPage] useICOState result:', { state, timestamps });
 
-  // Show loading while fetching contract data
-  if (isLoading || !timestamps) {
+  // Show loading until we have real contract data
+  if (!hasLoadedData) {
     logger.debug('[ICOPage] Showing loading state because:', { isLoading, hasTimestamps: !!timestamps });
     return (
       <ScrollArea className="h-screen overflow-hidden relative bg-[hsl(var(--ico-bg-primary))]">
         <ICOHeader />
-        <div className="absolute inset-0 z-0 pointer-events-none" style={{
-          background: 'radial-gradient(ellipse 100% 60% at center, rgba(56, 189, 248, 0.25) 0%, rgba(56, 189, 248, 0.1) 30%, transparent 70%)',
-          filter: 'blur(10px)',
-        }} />
         <div className="min-h-[calc(100vh-112px)] flex flex-col justify-between">
           <main className="container h-full mx-auto px-4 py-8">
             <LoadingFallback />
@@ -95,7 +91,7 @@ export function ICOPage() {
     switch (state) {
       case 1:
         return (
-          <PresaleCountdown
+          <PrivateSaleCountdown
             targetTimestamp={timestamps.presaleStart}
             endTimestamp={timestamps.presaleEnd}
             progress={presaleProgress}
@@ -103,33 +99,16 @@ export function ICOPage() {
         );
       case 2:
         return (
-          <ActivePresale
+          <PrivateSaleActive
             endTimestamp={timestamps.presaleEnd}
             progress={presaleProgress}
           />
         );
       case 3:
-        return (
-          <DashboardICOCountdown
-            icoStartTimestamp={timestamps.icoStart}
-          />
-        );
-      case 4:
-        return (
-          <ActiveICO
-            endTimestamp={timestamps.icoEnd}
-            progress={icoProgress}
-          />
-        );
-      case 5:
         return <PostICODashboard />;
       default:
         return (
-          <PresaleCountdown
-            targetTimestamp={timestamps.presaleStart}
-            endTimestamp={timestamps.presaleEnd}
-            progress={presaleProgress}
-          />
+          <LoadingFallback />
         );
     }
   };
@@ -143,17 +122,7 @@ export function ICOPage() {
       >
         Skip to main content
       </a>
-      {/* Header */}
-      <ICOHeader/>
-      {/* Sky Glow Background */}
-      <div
-        className="absolute inset-0 z-0 pointer-events-none"
-        style={{
-          background: 'radial-gradient(ellipse 100% 60% at center, rgba(56, 189, 248, 0.25) 0%, rgba(56, 189, 248, 0.1) 30%, transparent 70%)',
-          filter: 'blur(10px)',
-        }}
-      />
-
+      <ICOHeader />
       <div className="min-h-[calc(100vh-112px)] flex flex-col justify-between">
         <main className="container h-full mx-auto px-4 py-8">
             <PageErrorBoundary pageName="ICO">

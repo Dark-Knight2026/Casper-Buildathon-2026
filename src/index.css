@@ -30,59 +30,68 @@
     --chart-4: 43 74% 66%;
     --chart-5: 27 87% 67%;
 
-    /* ICO Page Variables */
-    --ico-bg-primary: 0 0% 4%;
-    --ico-bg-secondary: 0 0% 0%;
-    --ico-bg-card: 0 0% 100%;
+    /* ============================================
+       ICO Page Variables - Light Theme for Fundraising
+       Approved Color Palette
+       ============================================ */
 
-    /* ICO Brand Colors - Key Chain Token */
-    --ico-brand-primary: 209 67% 21%;
-    --ico-brand-secondary: 221 83% 53%;
-    --ico-brand-accent: 199 89% 48%;
+    /* Background: Off-white/soft gray - reduces eye fatigue, increases trust */
+    --ico-bg-primary: 220 20% 98%;         /* #F7F8FA - Primary page background */
+    --ico-bg-secondary: 220 20% 96%;       /* #F0F2F5 - Section backgrounds */
+    --ico-bg-card: 0 0% 100%;              /* #FFFFFF - Card backgrounds */
+
+    /* ICO Brand Colors - Professional Fundraising Palette */
+    /* Primary: Muted emerald/forest green - signals financial growth, stability */
+    --ico-brand-primary: 163 59% 30%;      /* #1F7A63 - Primary CTAs, progress indicators */
+    --ico-brand-primary-hover: 163 59% 25%; /* #1A6654 - Hover state for primary */
+    /* Secondary: Desaturated navy/slate blue - reinforces trust and professionalism */
+    --ico-brand-secondary: 214 49% 23%;    /* #1E3557 - Section headers, links */
+    --ico-brand-secondary-hover: 214 49% 18%; /* #172A45 - Hover state for secondary */
+    --ico-brand-accent: 163 59% 35%;       /* #2E8B6F - Accent highlights */
 
     /* ICO State Colors */
-    --ico-state-countdown: 220 70% 50%;
-    --ico-state-active: 142 76% 36%;
-    --ico-state-dashboard: 221 83% 53%;
-    --ico-state-completed: 142 69% 58%;
-
+    --ico-state-countdown: 214 49% 23%;    /* #1E3557 - Navy for countdown */
+    --ico-state-active: 163 59% 30%;       /* #1F7A63 - Green for active state */
+    --ico-state-dashboard: 214 49% 23%;    /* #1E3557 - Navy for dashboard */
     /* ICO Progress Bar */
-    --ico-progress-bg: 220 14% 90%;
-    --ico-progress-fill: 142 76% 36%;
-    --ico-progress-text: 220 9% 46%;
+    --ico-progress-bg: 220 14% 90%;        /* #E3E5E8 - Progress bar background */
+    --ico-progress-fill: 163 59% 30%;      /* #1F7A63 - Progress bar fill (green) */
+    --ico-progress-text: 220 9% 46%;       /* #6B7280 - Progress text */
 
     /* ICO Countdown Timer */
-    --ico-timer-bg: 220 20% 97%;
-    --ico-timer-text: 220 9% 20%;
-    --ico-timer-label: 220 9% 46%;
-    --ico-timer-separator: 220 9% 70%;
+    --ico-timer-bg: 0 0% 100%;             /* #FFFFFF - Timer card background */
+    --ico-timer-text: 214 11% 12%;         /* #1C1F23 - Timer digits (charcoal) */
+    --ico-timer-label: 220 9% 46%;         /* #6B7280 - Timer labels (muted gray) */
+    --ico-timer-separator: 220 9% 70%;     /* #A8ABB3 - Timer separators */
 
     /* ICO Purchase Form */
-    --ico-form-bg: 0 0% 100%;
-    --ico-form-border: 220 13% 91%;
-    --ico-form-input-bg: 220 14% 96%;
-    --ico-form-button: 142 76% 36%;
-    --ico-form-button-hover: 142 76% 30%;
+    --ico-form-bg: 0 0% 100%;              /* #FFFFFF - Form background */
+    --ico-form-border: 220 13% 88%;        /* #DDDFE3 - Form borders */
+    --ico-form-input-bg: 220 14% 96%;      /* #F3F4F6 - Input backgrounds */
+    --ico-form-button: 163 59% 30%;        /* #1F7A63 - Button green */
+    --ico-form-button-hover: 163 59% 25%;  /* #1A6654 - Button hover */
 
     /* ICO Dashboard Cards */
-    --ico-card-wallet: 199 89% 48%;
-    --ico-card-staked: 142 76% 36%;
-    --ico-card-rewards: 262 83% 58%;
-    --ico-card-total: 217 91% 60%;
+    --ico-card-wallet: 214 49% 23%;        /* #1E3557 - Wallet card accent (navy) */
+    --ico-card-staked: 163 59% 30%;        /* #1F7A63 - Staked card accent (green) */
+    --ico-card-rewards: 163 50% 36%;       /* #2E8B6F - Rewards card accent */
+    --ico-card-total: 214 43% 25%;         /* #243B5A - Total card accent (navy) */
 
     /* ICO Text Colors */
-    --ico-text-primary: 0 9% 100%;
-    --ico-text-secondary: 220 9% 52%;
-    --ico-text-muted: 220 9% 64%;
-    --ico-text-highlight: 142 76% 36%;
+    --ico-text-primary: 214 11% 12%;       /* #1C1F23 - Primary text (charcoal) */
+    --ico-text-secondary: 220 9% 46%;      /* #6B7280 - Secondary text (muted gray) */
+    --ico-text-muted: 220 9% 46%;          /* #6B7280 - Muted text (darkened for WCAG AA 4.5:1) */
+    --ico-text-highlight: 163 59% 30%;     /* #1F7A63 - Highlighted text (green) */
 
-    /* ICO Gradients (as separate values for use in backgrounds) */
-    --ico-gradient-primary-start: 217 91% 60%;
-    --ico-gradient-primary-end: 199 89% 48%;
-    --ico-gradient-success-start: 142 76% 36%;
-    --ico-gradient-success-end: 142 69% 58%;
+    --ico-border-color: 220 13% 88%;       /* #DDDFE3 - Border color */
 
-    --ico-border-color: 0 0% 15%;
+    /* ICO Feedback Colors - Light Mode */
+    --ico-error-bg: 0 86% 97%;             /* #FEF2F2 - red-50 */
+    --ico-error-border: 0 72% 83%;         /* #FECACA - red-200 */
+    --ico-error-text: 0 72% 35%;           /* #B91C1C - red-700 */
+    --ico-warning-bg: 48 100% 96%;         /* #FEFCE8 - yellow-50 */
+    --ico-warning-border: 48 96% 77%;      /* #FDE047 - yellow-200 */
+    --ico-warning-text: 32 81% 29%;        /* #854D0E - yellow-700 */
   }
 
   .dark {
@@ -116,20 +125,18 @@
     --ico-bg-secondary: 222 47% 11%;
     --ico-bg-card: 222 47% 11%;
 
-    /* ICO Brand Colors - Dark Mode */
-    --ico-brand-primary: 217 91% 65%;
-    --ico-brand-secondary: 221 83% 58%;
-    --ico-brand-accent: 199 89% 53%;
+    /* ICO Brand Colors - Dark Mode (muted emerald/navy, lightened for dark bg contrast) */
+    --ico-brand-primary: 163 59% 50%;
+    --ico-brand-secondary: 214 49% 45%;
+    --ico-brand-accent: 163 50% 55%;
 
     /* ICO State Colors - Dark Mode */
-    --ico-state-countdown: 220 70% 55%;
-    --ico-state-active: 142 76% 42%;
-    --ico-state-dashboard: 221 83% 58%;
-    --ico-state-completed: 142 69% 63%;
-
+    --ico-state-countdown: 214 49% 45%;
+    --ico-state-active: 163 59% 45%;
+    --ico-state-dashboard: 214 49% 45%;
     /* ICO Progress Bar - Dark Mode */
     --ico-progress-bg: 222 47% 18%;
-    --ico-progress-fill: 142 76% 42%;
+    --ico-progress-fill: 163 59% 45%;
     --ico-progress-text: 220 9% 70%;
 
     /* ICO Countdown Timer - Dark Mode */
@@ -142,26 +149,33 @@
     --ico-form-bg: 222 47% 11%;
     --ico-form-border: 222 47% 20%;
     --ico-form-input-bg: 222 47% 14%;
-    --ico-form-button: 142 76% 42%;
-    --ico-form-button-hover: 142 76% 36%;
+    --ico-form-button: 163 59% 45%;
+    --ico-form-button-hover: 163 59% 38%;
 
-    /* ICO Dashboard Cards - Dark Mode */
-    --ico-card-wallet: 199 89% 53%;
-    --ico-card-staked: 142 76% 42%;
-    --ico-card-rewards: 262 83% 63%;
-    --ico-card-total: 217 91% 65%;
+    /* ICO Dashboard Cards - Dark Mode (desaturated, matching approved palette) */
+    --ico-card-wallet: 214 49% 45%;
+    --ico-card-staked: 163 59% 45%;
+    --ico-card-rewards: 163 50% 50%;
+    --ico-card-total: 214 43% 42%;
 
     /* ICO Text Colors - Dark Mode */
     --ico-text-primary: 210 40% 98%;
     --ico-text-secondary: 220 9% 70%;
     --ico-text-muted: 220 9% 50%;
-    --ico-text-highlight: 142 76% 50%;
+    --ico-text-highlight: 163 59% 55%;
 
-    /* ICO Gradients - Dark Mode */
-    --ico-gradient-primary-start: 217 91% 65%;
-    --ico-gradient-primary-end: 199 89% 53%;
-    --ico-gradient-success-start: 142 76% 42%;
-    --ico-gradient-success-end: 142 69% 58%;
+    /* ICO Border & Hover - Dark Mode */
+    --ico-border-color: 222 47% 22%;
+    --ico-brand-secondary-hover: 214 49% 35%;
+    --ico-brand-primary-hover: 163 59% 42%;   /* Lighter shade of primary for dark mode */
+
+    /* ICO Feedback Colors - Dark Mode */
+    --ico-error-bg: 0 63% 15%;             /* ~red-900/20 on dark bg */
+    --ico-error-border: 0 55% 25%;         /* ~red-800/30 on dark bg */
+    --ico-error-text: 0 91% 71%;           /* #F87171 - red-400 */
+    --ico-warning-bg: 32 77% 14%;          /* ~yellow-900/20 on dark bg */
+    --ico-warning-border: 32 65% 22%;      /* ~yellow-800/30 on dark bg */
+    --ico-warning-text: 48 96% 53%;        /* #FACC15 - yellow-400 */
   }
 }
 

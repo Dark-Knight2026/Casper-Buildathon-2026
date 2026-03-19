@@ -3,17 +3,14 @@
  * Key Chain Token (BIG) - Casper Network (CEP-18)
  */
 
-// ICO State enum (1-5 based on whitepaper)
-export type ICOState = 1 | 2 | 3 | 4 | 5;
+// ICO state: 1 = upcoming, 2 = active, 3 = ended
+export type ICOState = 1 | 2 | 3;
 
 // State phase names for readability
 export type ICOPhase =
-  | 'presale-countdown'    // State 1
-  | 'presale-active'       // State 2
-  | 'dashboard-ico-countdown' // State 3
-  | 'ico-active'           // State 4
-  | 'post-ico';            // State 5
-
+  | 'private-sale-countdown'    // State 1
+  | 'private-sale-active'       // State 2
+  | 'post-ico-dashboard';       // State 3
 // Payment currencies supported
 export type PaymentCurrency = 'USDT' | 'USDC' | 'CSPR' | 'CARD';
 
@@ -24,8 +21,6 @@ export type TokenType = 'CSPR' | 'USDC' | 'USDT' | 'BIG';
 export interface SaleTimestamps {
   presaleStart: number;
   presaleEnd: number;
-  icoStart: number;
-  icoEnd: number;
 }
 
 // Current sale status

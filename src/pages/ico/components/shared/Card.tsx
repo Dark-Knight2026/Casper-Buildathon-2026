@@ -11,16 +11,14 @@ export function Card({ children, className, ...props }: CardProps) {
     <div
       {...props}
       className={cn(
-        'relative flex flex-col gap-2 items-center justify-center rounded-xl overflow-hidden',
-        'bg-[hsl(var(--ico-bg-secondary))] border border-sky-800/70',
-        'shadow-2xl shadow-sky-500/20',
+        'relative flex flex-col gap-2 items-center justify-center rounded-md overflow-hidden',
+        'bg-[hsl(var(--ico-bg-card))] border border-[hsl(var(--ico-border-color))]',
+        'shadow-sm',
         className
       )}
     >
-      <div className="absolute inset-0 bg-gradient-to-tl from-white/15 via-transparent to-transparent pointer-events-none" />
       {children}
     </div>
   );
 }
 
-export default Card;
