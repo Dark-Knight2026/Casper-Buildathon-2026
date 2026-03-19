@@ -133,14 +133,23 @@ export function usePurchaseFlow({
       onSuccess: (txHash, tokensReceived) => {
         logger.debug('Purchase successful', { txHash, tokensReceived });
         queryClient.invalidateQueries({ queryKey: ['ico-schedules'] });
+        queryClient.invalidateQueries({ queryKey: ['ico-progress'] });
+        queryClient.invalidateQueries({ queryKey: ['ico-balance'] });
         queryClient.invalidateQueries({ queryKey: ['user-token-actions'] });
+        queryClient.invalidateQueries({ queryKey: ['vesting-schedules'] });
+        queryClient.invalidateQueries({ queryKey: ['account-transactions'] });
         setShowToast(true);
         setShowConfirmModal(false);
         setPendingPurchase(null);
         onPurchaseSuccess?.(txHash, tokensReceived);
         // Refresh balances after purchase — delay to let the blockchain settle
         refetchBalances();
-        setTimeout(() => refetchBalances(), 15_000);
+        setTimeout(() => {
+          refetchBalances();
+          queryClient.invalidateQueries({ queryKey: ['ico-balance'] });
+          queryClient.invalidateQueries({ queryKey: ['vesting-schedules'] });
+          queryClient.invalidateQueries({ queryKey: ['account-transactions'] });
+        }, 15_000);
       },
       onError: (error) => {
         logger.error('Purchase failed:', error);
