@@ -1,0 +1,55 @@
+name: Deployment CI
+
+on:
+  pull_request:
+    branches: [ "master" ]
+
+env:
+  TERRAFORM_VERSION: "1.14.4"
+
+jobs:
+  deploy-tests:
+    name: Run deploy/tests/redeploy.sh
+    runs-on: ${{ vars.GH_RUNNER_DEPLOY_CHECK }}
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Bats testing framework
+      run: |
+        if ! command -v bats >/dev/null 2>&1; then
+          sudo apt-get update
+          sudo apt-get install -y bats
+        fi
+
+    - name: Run Bats tests
+      run: |
+        bats deploy/tests/redeploy.bats
+
+  terraform-validate:
+    name: Validate deploy/${{ matrix.module }}
+    runs-on: ${{ vars.GH_RUNNER_DEPLOY_CHECK }}
+    strategy:
+      fail-fast: false
+      matrix:
+        module: [gar, hetzner_dev]
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Run Terraform validate in Docker
+      run: |
+        docker run --rm \
+          --user "$(id -u):$(id -g)" \
+          -v ${{ github.workspace }}:/workspace \
+          -w /workspace/deploy/${{ matrix.module }} \
+          hashicorp/terraform:${{ env.TERRAFORM_VERSION }} \
+          init -backend=false -input=false
+
+        docker run --rm \
+          --user "$(id -u):$(id -g)" \
+          -v ${{ github.workspace }}:/workspace \
+          -w /workspace/deploy/${{ matrix.module }} \
+          hashicorp/terraform:${{ env.TERRAFORM_VERSION }} \
+          validate

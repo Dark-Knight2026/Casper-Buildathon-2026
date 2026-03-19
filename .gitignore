@@ -37,6 +37,8 @@ CLAUDE.md
 # secret/readme.md (documentation) is tracked - no hyphen prefix
 -*
 .*
+!.github/
+!.secret/
 
 # Build artifacts
 *.o

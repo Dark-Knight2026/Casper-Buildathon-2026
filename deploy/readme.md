@@ -114,7 +114,6 @@ deploy/
 | `DATABASE_URL` | PostgreSQL connection string (Supabase) |
 | `SUPABASE_JWT_SECRET` | Supabase JWT secret |
 | `CORS_ORIGIN` | Allowed CORS origin |
-| `RUST_LOG` | Log level (e.g. `info`, `info,api=debug`) |
 | `CSPR_CLOUD_API_TOKEN` | CSPR.cloud API token |
 | `CSPR_CLOUD_REST_URL` | CSPR.cloud REST URL |
 | `CSPR_CLOUD_WSS_URL` | CSPR.cloud WebSocket URL |

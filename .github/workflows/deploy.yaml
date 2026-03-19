@@ -1,0 +1,145 @@
+name: Deploy CI
+
+on:
+  push:
+    branches: [ "master", "feat/deployment" ]
+
+  workflow_dispatch:
+    inputs:
+      environment:
+        type: choice
+        options: [dev]
+
+concurrency:
+  group: deploy-${{ inputs.environment || 'dev' }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ${{ vars.GH_RUNNER_DEPLOY }}
+    timeout-minutes: 45
+    environment: >
+      ${{
+        github.event_name == 'push'
+        && 'dev'
+        || inputs.environment
+      }}
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Decode service account credentials
+      env:
+        GCP_CREDS_B64: ${{ secrets.SECRET_GCP_CREDENTIALS }}
+      run: |
+        echo "::add-mask::${GCP_CREDS_B64}"
+        printf '%s' "${GCP_CREDS_B64}" | base64 --decode > "./.secret/gcp_creds.json"
+        if [ ! -s "./.secret/gcp_creds.json" ]; then
+          echo "ERROR: Failed to decode service account credentials"
+          exit 1
+        fi
+        chmod 600 "./.secret/gcp_creds.json"
+
+    - name: Create key files
+      env:
+        SSH_PRIVATE_KEY: ${{ secrets.SECRET_RSA_PRIVATE_KEY }}
+        SSH_PUBLIC_KEY: ${{ secrets.SECRET_RSA_PUBLIC_KEY }}
+      run: |
+        install -m 600 /dev/stdin "./.secret/ssh_key" <<EOF
+        ${SSH_PRIVATE_KEY}
+        EOF
+        install -m 644 /dev/stdin "./.secret/ssh_key.pub" <<EOF
+        ${SSH_PUBLIC_KEY}
+        EOF
+
+    - name: Create secret.sh file
+      env:
+        REDIS_URL: ${{ secrets.REDIS_URL }}
+        CORS_ORIGIN: ${{ secrets.CORS_ORIGIN }}
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        GOOGLE_APPLICATION_PROJECT_ID: ${{ secrets.GOOGLE_APPLICATION_PROJECT_ID }}
+        GOOGLE_APPLICATION_REGION: ${{ secrets.GOOGLE_APPLICATION_REGION }}
+        GOOGLE_ENCRYPTION_KEY: ${{ secrets.GOOGLE_ENCRYPTION_KEY }}
+        HOST_SERVER_NAME: ${{ secrets.HOST_SERVER_NAME }}
+        HETZNER_CLOUD_TOKEN: ${{ secrets.HETZNER_CLOUD_TOKEN }}
+        SUPABASE_JWT_SECRET: ${{ secrets.SUPABASE_JWT_SECRET }}
+        CSPR_CLOUD_API_TOKEN: ${{ secrets.CSPR_CLOUD_API_TOKEN }}
+        CSPR_CLOUD_REST_URL: ${{ secrets.CSPR_CLOUD_REST_URL }}
+        CSPR_CLOUD_WSS_URL: ${{ secrets.CSPR_CLOUD_WSS_URL }}
+        CASPER_NODE_RPC_URL: ${{ secrets.CASPER_NODE_RPC_URL }}
+        DEPLOYMENT_MODE: ${{ vars.DEPLOYMENT_MODE }}
+        PROJECT_NAME: ${{ vars.PROJECT_NAME }}
+        PROJECT_DOMAIN: ${{ vars.PROJECT_DOMAIN }}
+        RUN_MIGRATIONS: ${{ vars.RUN_MIGRATIONS }}
+        
+        CONTRACT_USDC: ${{ vars.CONTRACT_USDC }}
+        CONTRACT_USDT: ${{ vars.CONTRACT_USDT }}
+        CONTRACT_BIG: ${{ vars.CONTRACT_BIG }}
+        CONTRACT_TREASURY: ${{ vars.CONTRACT_TREASURY }}
+        CONTRACT_ICO: ${{ vars.CONTRACT_ICO }}
+        CONTRACT_VESTING: ${{ vars.CONTRACT_VESTING }}
+        CONTRACT_STAKING: ${{ vars.CONTRACT_STAKING }}
+
+        START_BLOCK_CONTRACT_USDC: ${{ vars.START_BLOCK_CONTRACT_USDC }}
+        START_BLOCK_CONTRACT_USDT: ${{ vars.START_BLOCK_CONTRACT_USDT }}
+        START_BLOCK_CONTRACT_BIG: ${{ vars.START_BLOCK_CONTRACT_BIG }}
+        START_BLOCK_CONTRACT_TREASURY: ${{ vars.START_BLOCK_CONTRACT_TREASURY }}
+        START_BLOCK_CONTRACT_ICO: ${{ vars.START_BLOCK_CONTRACT_ICO }}
+        START_BLOCK_CONTRACT_VESTING: ${{ vars.START_BLOCK_CONTRACT_VESTING }}
+        
+      run: |
+        install -m 600 /dev/stdin .secret/-secret.sh <<EOF
+        GOOGLE_APPLICATION_CREDENTIALS=./.secret/gcp_creds.json
+        GOOGLE_APPLICATION_PROJECT_ID=${GOOGLE_APPLICATION_PROJECT_ID}
+        GOOGLE_APPLICATION_REGION=${GOOGLE_APPLICATION_REGION}
+        GOOGLE_ENCRYPTION_KEY=${GOOGLE_ENCRYPTION_KEY}
+        SSH_PRIVATE_KEY_PATH=./.secret/ssh_key
+        SSH_PUBLIC_KEY_PATH=./.secret/ssh_key.pub
+        HOST_SERVER_NAME=${HOST_SERVER_NAME}
+        HETZNER_CLOUD_TOKEN=${HETZNER_CLOUD_TOKEN}
+        SUPABASE_JWT_SECRET=${SUPABASE_JWT_SECRET}
+        DEPLOYMENT_MODE=${DEPLOYMENT_MODE}
+        RUN_MIGRATIONS=${RUN_MIGRATIONS}
+        PROJECT_NAME=${PROJECT_NAME}
+        PROJECT_DOMAIN=${PROJECT_DOMAIN}
+        DATABASE_URL=${DATABASE_URL}
+        CORS_ORIGIN=${CORS_ORIGIN}
+        CSPR_CLOUD_API_TOKEN=${CSPR_CLOUD_API_TOKEN}
+        CSPR_CLOUD_REST_URL=${CSPR_CLOUD_REST_URL}
+        CSPR_CLOUD_WSS_URL=${CSPR_CLOUD_WSS_URL}
+        CASPER_NODE_RPC_URL=${CASPER_NODE_RPC_URL}
+        REDIS_URL=${REDIS_URL}
+
+        CONTRACT_USDC=${CONTRACT_USDC}
+        CONTRACT_USDT=${CONTRACT_USDT}
+        CONTRACT_BIG=${CONTRACT_BIG}
+        CONTRACT_TREASURY=${CONTRACT_TREASURY}
+        CONTRACT_ICO=${CONTRACT_ICO}
+        CONTRACT_VESTING=${CONTRACT_VESTING}
+        CONTRACT_STAKING=${CONTRACT_STAKING}
+
+        START_BLOCK_CONTRACT_USDC=${START_BLOCK_CONTRACT_USDC}
+        START_BLOCK_CONTRACT_USDT=${START_BLOCK_CONTRACT_USDT}
+        START_BLOCK_CONTRACT_BIG=${START_BLOCK_CONTRACT_BIG}
+        START_BLOCK_CONTRACT_TREASURY=${START_BLOCK_CONTRACT_TREASURY}
+        START_BLOCK_CONTRACT_ICO=${START_BLOCK_CONTRACT_ICO}
+        START_BLOCK_CONTRACT_VESTING=${START_BLOCK_CONTRACT_VESTING}
+        EOF
+
+    - name: 'Build the image, push and deploy' 
+      run: 'make deploy'
+
+    - name: Cleanup secrets
+      if: always()
+      run: |
+        if [ -f .secret/-secret.sh ]; then
+          shred -vfz -n 3 .secret/-secret.sh
+        fi
+        if [ -f "./.secret/gcp_creds.json" ]; then
+          shred -vfz -n 3 "./.secret/gcp_creds.json"
+        fi
+        if [ -f "./.secret/ssh_key" ]; then
+          shred -vfz -n 3 "./.secret/ssh_key"
+        fi
+        if [ -f "./.secret/ssh_key.pub" ]; then
+          shred -vfz -n 3 "./.secret/ssh_key.pub"
+        fi
