@@ -8,7 +8,7 @@
 use std::sync::Arc;
 
 use tower_governor::{GovernorLayer, governor::GovernorConfigBuilder};
-use utoipa_axum::{router::OpenApiRouter, routes};
+use utoipa_axum::router::OpenApiRouter;
 
 use crate::AppState;
 
@@ -60,48 +60,9 @@ pub fn router() -> OpenApiRouter<Arc<AppState>> {
     );
 
     OpenApiRouter::new()
-        .nest("/transactions", transactions_router())
-        .nest("/ico", ico_router())
-        .nest("/vesting", vesting_router())
-        .nest("/staking", staking_router())
+        .nest("/transactions", transactions::router())
+        .nest("/ico", ico::router())
+        .nest("/vesting", vesting::router())
+        .nest("/staking", staking::router())
         .route_layer(GovernorLayer::new(rate_limit))
-}
-
-/// Creates an `OpenAPI` router for blockchain transaction endpoints.
-#[inline]
-#[must_use]
-fn transactions_router() -> OpenApiRouter<Arc<AppState>> {
-    OpenApiRouter::new()
-        .routes(routes!(transactions::handlers::get_account_transactions))
-        .routes(routes!(transactions::handlers::get_big_token_transactions))
-}
-
-/// Creates an `OpenAPI` router for ICO endpoints.
-#[inline]
-#[must_use]
-fn ico_router() -> OpenApiRouter<Arc<AppState>> {
-    OpenApiRouter::new()
-        .routes(routes!(ico::handlers::get_ico_balance))
-        .routes(routes!(ico::handlers::get_ico_progress))
-}
-
-/// Creates an `OpenAPI` router for vesting endpoints.
-#[inline]
-#[must_use]
-fn vesting_router() -> OpenApiRouter<Arc<AppState>> {
-    OpenApiRouter::new()
-        .routes(routes!(vesting::handlers::get_vesting_schedules))
-        .routes(routes!(vesting::handlers::get_token_supply))
-        .routes(routes!(vesting::handlers::get_release_schedule))
-}
-
-/// Creates an `OpenAPI` router for staking endpoints.
-#[inline]
-#[must_use]
-fn staking_router() -> OpenApiRouter<Arc<AppState>> {
-    OpenApiRouter::new()
-        .routes(routes!(staking::handlers::get_staking_info))
-        .routes(routes!(staking::handlers::get_portfolio))
-        .routes(routes!(staking::handlers::get_earnings))
-        .routes(routes!(staking::handlers::get_rewards_history))
 }

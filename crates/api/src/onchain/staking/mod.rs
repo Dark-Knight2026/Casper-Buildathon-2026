@@ -6,3 +6,7 @@ pub mod db;
 pub mod handlers;
 /// Request and response models.
 pub mod models;
+/// Router configuration for staking endpoints.
+pub mod routes;
+
+pub use routes::router;
