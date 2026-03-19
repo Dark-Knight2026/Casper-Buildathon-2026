@@ -60,7 +60,7 @@ fn from_env_succeeds_with_all_required_vars() {
         config.database_url.expose_secret(),
         "postgres://localhost/test"
     );
-    assert_eq!(config.redis_url, "redis://127.0.0.1:6379");
+    assert_eq!(config.redis_url.expose_secret(), "redis://127.0.0.1:6379");
     assert_eq!(config.port, 8080, "Default port should be 8080");
     assert_eq!(
         config.cors_origin, "http://localhost:8080",

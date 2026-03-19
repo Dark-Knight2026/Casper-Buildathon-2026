@@ -1,7 +1,7 @@
 //! Application configuration and state management.
 
 use config::{Config, Environment};
-use secrecy::SecretString;
+use secrecy::{ExposeSecret, SecretString};
 use serde::Deserialize;
 
 use crate::{ServerError, common::RedisStore};
@@ -10,7 +10,7 @@ use crate::{ServerError, common::RedisStore};
 #[derive(Debug, Deserialize)]
 struct RawEnvConfig {
     database_url: SecretString,
-    redis_url: String,
+    redis_url: SecretString,
     supabase_jwt_secret: SecretString,
     #[serde(default = "default_port")]
     port: u16,
@@ -54,8 +54,8 @@ pub struct IcoFallback {
 pub struct ServerConfig {
     /// `PostgreSQL` database connection URL.
     pub database_url: SecretString,
-    /// `Redis` connection URL.
-    pub redis_url: String,
+    /// `Redis` connection URL (wrapped in `SecretString` to prevent credential leaks in logs).
+    pub redis_url: SecretString,
     /// Secret key for JWT token signing.
     pub jwt_secret: SecretString,
     /// HTTP server port.
@@ -123,7 +123,8 @@ impl ServerConfig {
 
     /// Validates business rules that serde cannot express.
     fn validate(&self) -> Result<(), ServerError> {
-        if !self.redis_url.starts_with("redis://") && !self.redis_url.starts_with("rediss://") {
+        let redis = self.redis_url.expose_secret();
+        if !redis.starts_with("redis://") && !redis.starts_with("rediss://") {
             return Err(ServerError::EnvVar(
                 "REDIS_URL must start with redis:// or rediss://".to_owned(),
             ));

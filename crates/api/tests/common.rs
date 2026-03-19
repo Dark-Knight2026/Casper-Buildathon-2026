@@ -131,12 +131,16 @@ pub async fn setup_test_server_with(
 ) -> TestEnv {
     let (redis_url, redis_client, redis_env) = if with_redis {
         let env = RedisTestEnv::start().await;
-        (env.url.clone(), env.client.clone(), Some(env))
+        (
+            SecretString::from(env.url.clone()),
+            env.client.clone(),
+            Some(env),
+        )
     } else {
         // Fake Redis URL - will fail if actually used
-        let url = "redis://127.0.0.1:6379".to_owned();
-        let client = redis::Client::open(url.clone()).expect("Invalid Redis URL");
-        (url, client, None)
+        let url = "redis://127.0.0.1:6379";
+        let client = redis::Client::open(url).expect("Invalid Redis URL");
+        (SecretString::from(url), client, None)
     };
 
     let jwt_secret = "test_jwt_secret_for_integration_tests".to_owned();
