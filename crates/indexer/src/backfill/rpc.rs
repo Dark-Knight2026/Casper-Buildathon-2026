@@ -98,14 +98,11 @@ impl<'a> CasperRpc<'a> {
         let bytes =
             hex::decode(bytes_hex).map_err(|e| IndexerError::Parse(format!("hex decode: {e}")))?;
 
-        if bytes.len() < 4 {
-            return Err(IndexerError::Parse(format!(
-                "U32 CLValue too short: {} bytes",
-                bytes.len()
-            )));
-        }
-
-        Ok(u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
+        let len = bytes.len();
+        let arr: [u8; 4] = bytes
+            .try_into()
+            .map_err(|_| IndexerError::Parse(format!("U32 CLValue expected 4 bytes, got {len}")))?;
+        Ok(u32::from_le_bytes(arr))
     }
 
     /// Fetch raw bytes of a dictionary item by seed `URef` and string key.

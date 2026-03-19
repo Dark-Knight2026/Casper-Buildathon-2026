@@ -16,6 +16,8 @@
 pub mod cep18;
 pub mod ces;
 pub mod db;
+pub mod parser;
+mod rpc;
 
 use std::collections::HashSet;
 

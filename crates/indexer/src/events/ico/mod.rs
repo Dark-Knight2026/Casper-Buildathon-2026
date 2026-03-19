@@ -8,6 +8,14 @@ pub use tokens_purchased::TokensPurchased;
 
 use core::str::FromStr;
 
+use crate::backfill::parser::{CesEvent, EventSchema};
+
+/// CES binary schemas for all indexed ICO events.
+pub static CES_SCHEMAS: &[EventSchema] = &[
+    <TokensPurchased as CesEvent>::SCHEMA,
+    <IcoScheduleAdded as CesEvent>::SCHEMA,
+];
+
 /// All possible ICO contract events.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IcoEventType {

@@ -3,6 +3,7 @@
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
+use crate::backfill::parser::{CesEvent, EventSchema, FieldType};
 use crate::{
     address,
     error::IndexerResult,
@@ -17,6 +18,13 @@ pub struct RewardsDeposited {
     pub caller: String,
     /// Number of BIG tokens deposited as rewards (U256 as string).
     pub amount: String,
+}
+
+impl CesEvent for RewardsDeposited {
+    const SCHEMA: EventSchema = EventSchema {
+        name: Self::EVENT_NAME,
+        fields: &[("caller", FieldType::Key), ("amount", FieldType::U256)],
+    };
 }
 
 impl IndexableEvent for RewardsDeposited {

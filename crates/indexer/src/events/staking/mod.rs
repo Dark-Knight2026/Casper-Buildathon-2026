@@ -14,6 +14,17 @@ pub use unstaked_initiated::UnstakedInitiated;
 
 use core::str::FromStr;
 
+use crate::backfill::parser::{CesEvent, EventSchema};
+
+/// CES binary schemas for all indexed Staking events.
+pub static CES_SCHEMAS: &[EventSchema] = &[
+    <Staked as CesEvent>::SCHEMA,
+    <UnstakedInitiated as CesEvent>::SCHEMA,
+    <UnbondedWithdrawn as CesEvent>::SCHEMA,
+    <RewardsDeposited as CesEvent>::SCHEMA,
+    <RewardsClaimed as CesEvent>::SCHEMA,
+];
+
 /// All possible Staking contract events.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StakingEventType {

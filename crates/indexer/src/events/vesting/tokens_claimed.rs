@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::backfill::parser::{CesEvent, EventSchema, FieldType};
 use crate::{
     address,
     error::IndexerResult,
@@ -18,6 +19,17 @@ pub struct TokensClaimed {
     pub beneficiary: String,
     /// Number of tokens claimed (U256 as string).
     pub amount: String,
+}
+
+impl CesEvent for TokensClaimed {
+    const SCHEMA: EventSchema = EventSchema {
+        name: Self::EVENT_NAME,
+        fields: &[
+            ("vesting_id", FieldType::U256),
+            ("beneficiary", FieldType::Key),
+            ("amount", FieldType::U256),
+        ],
+    };
 }
 
 impl IndexableEvent for TokensClaimed {

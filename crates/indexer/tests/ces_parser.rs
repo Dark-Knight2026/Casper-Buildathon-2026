@@ -6,8 +6,9 @@
 
 use casper_types::{Key, U256, account::AccountHash, bytesrepr::ToBytes};
 
+use indexer::backfill::parser;
 use indexer::{
-    backfill::ces::parser::{parse_ces_event, schemas_for},
+    backfill::ces::{self},
     config::ContractType,
 };
 
@@ -34,14 +35,14 @@ fn account_key_bytes(raw: &[u8; 32]) -> Vec<u8> {
 
 #[test]
 fn parses_staked_event() {
-    let schemas = schemas_for(ContractType::Staking);
+    let schemas = ces::schemas_for(ContractType::Staking);
 
     let mut fields = Vec::new();
     fields.extend_from_slice(&account_key_bytes(&ZERO_ACCOUNT));
     fields.extend_from_slice(&U256::from(5000).to_bytes().unwrap());
 
     let blob = ces_blob("Staked", &fields);
-    let (name, data) = parse_ces_event(&blob, schemas).unwrap();
+    let (name, data) = parser::parse_ces_event(&blob, schemas).unwrap();
 
     assert_eq!(name, "Staked");
     assert_eq!(data["amount"], "5000");
@@ -50,7 +51,7 @@ fn parses_staked_event() {
 
 #[test]
 fn parses_unstaked_initiated_event() {
-    let schemas = schemas_for(ContractType::Staking);
+    let schemas = ces::schemas_for(ContractType::Staking);
 
     let mut fields = Vec::new();
     fields.extend_from_slice(&account_key_bytes(&AA_ACCOUNT));
@@ -58,7 +59,7 @@ fn parses_unstaked_initiated_event() {
     fields.extend_from_slice(&1_700_000_000u64.to_bytes().unwrap());
 
     let blob = ces_blob("UnstakedInitiated", &fields);
-    let (name, data) = parse_ces_event(&blob, schemas).unwrap();
+    let (name, data) = parser::parse_ces_event(&blob, schemas).unwrap();
 
     assert_eq!(name, "UnstakedInitiated");
     assert_eq!(data["amount"], "3000");
@@ -68,14 +69,14 @@ fn parses_unstaked_initiated_event() {
 
 #[test]
 fn parses_unbonded_withdrawn_event() {
-    let schemas = schemas_for(ContractType::Staking);
+    let schemas = ces::schemas_for(ContractType::Staking);
 
     let mut fields = Vec::new();
     fields.extend_from_slice(&account_key_bytes(&ZERO_ACCOUNT));
     fields.extend_from_slice(&U256::from(9999).to_bytes().unwrap());
 
     let blob = ces_blob("UnbondedWithdrawn", &fields);
-    let (name, data) = parse_ces_event(&blob, schemas).unwrap();
+    let (name, data) = parser::parse_ces_event(&blob, schemas).unwrap();
 
     assert_eq!(name, "UnbondedWithdrawn");
     assert_eq!(data["amount"], "9999");
@@ -83,14 +84,14 @@ fn parses_unbonded_withdrawn_event() {
 
 #[test]
 fn parses_rewards_deposited_event() {
-    let schemas = schemas_for(ContractType::Staking);
+    let schemas = ces::schemas_for(ContractType::Staking);
 
     let mut fields = Vec::new();
     fields.extend_from_slice(&account_key_bytes(&AA_ACCOUNT));
     fields.extend_from_slice(&U256::from(100_000).to_bytes().unwrap());
 
     let blob = ces_blob("RewardsDeposited", &fields);
-    let (name, data) = parse_ces_event(&blob, schemas).unwrap();
+    let (name, data) = parser::parse_ces_event(&blob, schemas).unwrap();
 
     assert_eq!(name, "RewardsDeposited");
     assert_eq!(data["amount"], "100000");
@@ -99,14 +100,14 @@ fn parses_rewards_deposited_event() {
 
 #[test]
 fn parses_rewards_claimed_event() {
-    let schemas = schemas_for(ContractType::Staking);
+    let schemas = ces::schemas_for(ContractType::Staking);
 
     let mut fields = Vec::new();
     fields.extend_from_slice(&account_key_bytes(&ZERO_ACCOUNT));
     fields.extend_from_slice(&U256::from(500).to_bytes().unwrap());
 
     let blob = ces_blob("RewardsClaimed", &fields);
-    let (name, data) = parse_ces_event(&blob, schemas).unwrap();
+    let (name, data) = parser::parse_ces_event(&blob, schemas).unwrap();
 
     assert_eq!(name, "RewardsClaimed");
     assert_eq!(data["amount"], "500");
@@ -114,7 +115,7 @@ fn parses_rewards_claimed_event() {
 
 #[test]
 fn parses_schedule_created_event() {
-    let schemas = schemas_for(ContractType::Vesting);
+    let schemas = ces::schemas_for(ContractType::Vesting);
 
     let mut fields = Vec::new();
     fields.extend_from_slice(&U256::from(42).to_bytes().unwrap()); // vesting_id
@@ -126,7 +127,7 @@ fn parses_schedule_created_event() {
     fields.extend_from_slice(&31_104_000u64.to_bytes().unwrap()); // vesting_duration
 
     let blob = ces_blob("ScheduleCreated", &fields);
-    let (name, data) = parse_ces_event(&blob, schemas).unwrap();
+    let (name, data) = parser::parse_ces_event(&blob, schemas).unwrap();
 
     assert_eq!(name, "ScheduleCreated");
     assert_eq!(data["vesting_id"], "42");
@@ -150,7 +151,7 @@ fn parses_schedule_created_event() {
 
 #[test]
 fn parses_tokens_claimed_event() {
-    let schemas = schemas_for(ContractType::Vesting);
+    let schemas = ces::schemas_for(ContractType::Vesting);
 
     let mut fields = Vec::new();
     fields.extend_from_slice(&U256::from(7).to_bytes().unwrap()); // vesting_id
@@ -158,59 +159,32 @@ fn parses_tokens_claimed_event() {
     fields.extend_from_slice(&U256::from(1234).to_bytes().unwrap()); // amount
 
     let blob = ces_blob("TokensClaimed", &fields);
-    let (name, data) = parse_ces_event(&blob, schemas).unwrap();
+    let (name, data) = parser::parse_ces_event(&blob, schemas).unwrap();
 
     assert_eq!(name, "TokensClaimed");
     assert_eq!(data["vesting_id"], "7");
     assert_eq!(data["amount"], "1234");
 }
 
+/// Admin events (`WhitelistedCreatorAdded`, `OwnershipTransferred`) no longer
+/// have schemas - the backfill loop skips them with a warning. Verify that the
+/// parser returns an error for unknown event names.
 #[test]
-fn parses_whitelisted_creator_added_event() {
-    let schemas = schemas_for(ContractType::Vesting);
-
+fn unknown_event_name_returns_error() {
+    let schemas = ces::schemas_for(ContractType::Vesting);
     let fields = account_key_bytes(&AA_ACCOUNT);
-
     let blob = ces_blob("WhitelistedCreatorAdded", &fields);
-    let (name, data) = parse_ces_event(&blob, schemas).unwrap();
 
-    assert_eq!(name, "WhitelistedCreatorAdded");
-    assert!(data["creator"].as_str().unwrap().contains("account-hash-"));
-}
-
-#[test]
-fn parses_ownership_transferred_event() {
-    let schemas = schemas_for(ContractType::Vesting);
-
-    let mut fields = Vec::new();
-    fields.extend_from_slice(&account_key_bytes(&ZERO_ACCOUNT)); // previous_owner
-    fields.extend_from_slice(&account_key_bytes(&AA_ACCOUNT)); // new_owner
-
-    let blob = ces_blob("OwnershipTransferred", &fields);
-    let (name, data) = parse_ces_event(&blob, schemas).unwrap();
-
-    assert_eq!(name, "OwnershipTransferred");
-    assert!(
-        data["previous_owner"]
-            .as_str()
-            .unwrap()
-            .contains("account-hash-")
-    );
-    assert!(
-        data["new_owner"]
-            .as_str()
-            .unwrap()
-            .contains("account-hash-")
-    );
+    assert!(parser::parse_ces_event(&blob, schemas).is_err());
 }
 
 #[test]
 fn rejects_missing_event_prefix() {
-    let schemas = schemas_for(ContractType::Staking);
+    let schemas = ces::schemas_for(ContractType::Staking);
     // "Staked" without the "event_" prefix
     let blob = "Staked".to_string().to_bytes().unwrap();
 
-    let err = parse_ces_event(&blob, schemas).unwrap_err();
+    let err = parser::parse_ces_event(&blob, schemas).unwrap_err();
     assert!(
         err.to_string().contains("event_"),
         "Error should mention missing prefix: {err}"
@@ -219,10 +193,10 @@ fn rejects_missing_event_prefix() {
 
 #[test]
 fn rejects_unknown_event_name() {
-    let schemas = schemas_for(ContractType::Staking);
+    let schemas = ces::schemas_for(ContractType::Staking);
     let blob = ces_blob("UnknownEvent", &[]);
 
-    let err = parse_ces_event(&blob, schemas).unwrap_err();
+    let err = parser::parse_ces_event(&blob, schemas).unwrap_err();
     assert!(
         err.to_string().contains("UnknownEvent"),
         "Error should mention the unknown event: {err}"
@@ -231,26 +205,26 @@ fn rejects_unknown_event_name() {
 
 #[test]
 fn rejects_truncated_payload() {
-    let schemas = schemas_for(ContractType::Staking);
+    let schemas = ces::schemas_for(ContractType::Staking);
     // Staked expects Key + U256, but we only provide 2 bytes of garbage
     let blob = ces_blob("Staked", &[0x00, 0x01]);
 
-    let result = parse_ces_event(&blob, schemas);
+    let result = parser::parse_ces_event(&blob, schemas);
     assert!(result.is_err(), "Truncated payload must fail");
 }
 
 #[test]
 fn schemas_for_unsupported_contract_returns_empty() {
-    let schemas = schemas_for(ContractType::Usdc);
+    let schemas = ces::schemas_for(ContractType::Usdc);
     assert!(schemas.is_empty());
 
-    let schemas = schemas_for(ContractType::Treasury);
+    let schemas = ces::schemas_for(ContractType::Treasury);
     assert!(schemas.is_empty());
 }
 
 #[test]
 fn parses_large_u256_correctly() {
-    let schemas = schemas_for(ContractType::Staking);
+    let schemas = ces::schemas_for(ContractType::Staking);
 
     // 10^24 = 1_000_000_000_000_000_000_000_000
     let large_amount = U256::from_dec_str("1000000000000000000000000").unwrap();
@@ -260,21 +234,21 @@ fn parses_large_u256_correctly() {
     fields.extend_from_slice(&large_amount.to_bytes().unwrap());
 
     let blob = ces_blob("Staked", &fields);
-    let (_, data) = parse_ces_event(&blob, schemas).unwrap();
+    let (_, data) = parser::parse_ces_event(&blob, schemas).unwrap();
 
     assert_eq!(data["amount"], "1000000000000000000000000");
 }
 
 #[test]
 fn key_format_matches_casper_convention() {
-    let schemas = schemas_for(ContractType::Staking);
+    let schemas = ces::schemas_for(ContractType::Staking);
 
     let mut fields = Vec::new();
     fields.extend_from_slice(&account_key_bytes(&ZERO_ACCOUNT));
     fields.extend_from_slice(&U256::from(1).to_bytes().unwrap());
 
     let blob = ces_blob("Staked", &fields);
-    let (_, data) = parse_ces_event(&blob, schemas).unwrap();
+    let (_, data) = parser::parse_ces_event(&blob, schemas).unwrap();
 
     let staker = data["staker"].as_str().unwrap();
     assert!(

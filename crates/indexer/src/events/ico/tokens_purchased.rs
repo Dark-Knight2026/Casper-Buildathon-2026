@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::backfill::parser::{CesEvent, EventSchema, FieldType};
 use crate::{
     address,
     config::ContractType,
@@ -77,6 +78,19 @@ pub struct TokensPurchased {
     pub cost: String,
     /// Block timestamp of the purchase.
     pub timestamp: u64,
+}
+
+impl CesEvent for TokensPurchased {
+    const SCHEMA: EventSchema = EventSchema {
+        name: Self::EVENT_NAME,
+        fields: &[
+            ("amount", FieldType::U256),
+            ("currency", FieldType::U8),
+            ("price", FieldType::U256),
+            ("cost", FieldType::U256),
+            ("timestamp", FieldType::U64),
+        ],
+    };
 }
 
 impl IndexableEvent for TokensPurchased {

@@ -8,18 +8,34 @@
 //! This approach works for any Casper contract that uses the CES library's
 //! `emit()` function (which writes to the `__events` dictionary).
 
-pub mod parser;
-mod rpc;
-
 use core::time::Duration;
 
-use super::{BackfillContext, db};
+use super::{BackfillContext, db, parser};
 use crate::{
+    backfill::{parser::EventSchema, rpc::CasperRpc},
     config::ContractType,
     error::IndexerResult,
+    events,
     processor::{self, RawEvent},
 };
-use rpc::CasperRpc;
+
+/// Returns CES event schemas for the given contract type.
+///
+/// Schema lists are defined in each event module (`events::ico`, etc.)
+/// next to the event struct definitions, so adding a new event only
+/// requires updating a single module.
+///
+/// Returns an empty slice for contract types without CES schemas.
+#[inline]
+#[must_use]
+pub fn schemas_for(contract_type: ContractType) -> &'static [EventSchema] {
+    match contract_type {
+        ContractType::Ico => events::ico::CES_SCHEMAS,
+        ContractType::Vesting => events::vesting::CES_SCHEMAS,
+        ContractType::Staking => events::staking::CES_SCHEMAS,
+        _ => &[],
+    }
+}
 
 /// Per-contract context bundling shared backfill deps with contract-specific info.
 struct CesContext<'a> {
@@ -50,7 +66,7 @@ pub async fn backfill_ces(
         &ctx.config.casper.node_rpc_url,
         &ctx.config.casper.api_token,
     );
-    let schemas = parser::schemas_for(contract_type);
+    let schemas = schemas_for(contract_type);
 
     if schemas.is_empty() {
         tracing::warn!(
@@ -130,11 +146,10 @@ pub async fn backfill_ces(
         let key = idx.to_string();
 
         match process_event_at(&ces, &rpc, &state_root, events_uref, &key, schemas).await {
-            Ok(Some(event_name)) => {
+            Ok(event_name) => {
                 processed += 1;
                 tracing::debug!(index = idx, event = %event_name, "CES event processed");
             }
-            Ok(None) => {}
             Err(e) => {
                 tracing::warn!(
                     error = %e,
@@ -164,25 +179,19 @@ pub async fn backfill_ces(
 }
 
 /// Fetch, parse, and dispatch a single CES event from the `__events` dictionary.
-///
-/// Returns `Some(event_name)` if dispatched, `None` if skipped (admin-only).
 async fn process_event_at(
     ctx: &CesContext<'_>,
     rpc: &CasperRpc<'_>,
     state_root: &str,
     events_uref: &str,
     key: &str,
-    schemas: &[parser::EventSchema],
-) -> IndexerResult<Option<String>> {
+    schemas: &[EventSchema],
+) -> IndexerResult<String> {
     let bytes = rpc
         .get_dictionary_item_bytes(state_root, events_uref, key)
         .await?;
 
     let (event_name, event_data) = parser::parse_ces_event(&bytes, schemas)?;
-
-    if !is_indexable_event(ctx.contract_type, &event_name) {
-        return Ok(None);
-    }
 
     let raw = RawEvent {
         contract_hash: ctx.contract_hash.to_owned(),
@@ -203,31 +212,5 @@ async fn process_event_at(
         &raw,
     )
     .await?;
-    Ok(Some(event_name))
-}
-
-/// Returns `true` if the event should be dispatched to the processor.
-///
-/// Some CES events (like `OwnershipTransferred`, `WhitelistedCreator*`) are
-/// admin-only and don't need indexing.
-fn is_indexable_event(contract_type: ContractType, event_name: &str) -> bool {
-    match contract_type {
-        ContractType::Ico => {
-            matches!(event_name, "TokensPurchased" | "ICOScheduleAdded")
-        }
-        ContractType::Vesting => {
-            matches!(event_name, "ScheduleCreated" | "TokensClaimed")
-        }
-        ContractType::Staking => {
-            matches!(
-                event_name,
-                "Staked"
-                    | "UnstakedInitiated"
-                    | "UnbondedWithdrawn"
-                    | "RewardsDeposited"
-                    | "RewardsClaimed"
-            )
-        }
-        _ => false,
-    }
+    Ok(event_name)
 }

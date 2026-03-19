@@ -8,6 +8,14 @@ pub use tokens_claimed::TokensClaimed;
 
 use core::str::FromStr;
 
+use crate::backfill::parser::{CesEvent, EventSchema};
+
+/// CES binary schemas for all indexed Vesting events.
+pub static CES_SCHEMAS: &[EventSchema] = &[
+    <ScheduleCreated as CesEvent>::SCHEMA,
+    <TokensClaimed as CesEvent>::SCHEMA,
+];
+
 /// All possible Vesting contract events.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VestingEventType {

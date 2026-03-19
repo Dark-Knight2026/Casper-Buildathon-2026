@@ -3,6 +3,7 @@
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
+use crate::backfill::parser::{CesEvent, EventSchema, FieldType};
 use crate::{
     address,
     error::IndexerResult,
@@ -17,6 +18,13 @@ pub struct UnbondedWithdrawn {
     pub staker: String,
     /// Number of BIG tokens withdrawn (U256 as string).
     pub amount: String,
+}
+
+impl CesEvent for UnbondedWithdrawn {
+    const SCHEMA: EventSchema = EventSchema {
+        name: Self::EVENT_NAME,
+        fields: &[("staker", FieldType::Key), ("amount", FieldType::U256)],
+    };
 }
 
 impl IndexableEvent for UnbondedWithdrawn {

@@ -3,6 +3,7 @@
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
+use crate::backfill::parser::{CesEvent, EventSchema, FieldType};
 use crate::{
     address,
     error::IndexerResult,
@@ -19,6 +20,17 @@ pub struct UnstakedInitiated {
     pub amount: String,
     /// Epoch ms when the unbonding period ends.
     pub unbonding_ends_at: u64,
+}
+
+impl CesEvent for UnstakedInitiated {
+    const SCHEMA: EventSchema = EventSchema {
+        name: Self::EVENT_NAME,
+        fields: &[
+            ("staker", FieldType::Key),
+            ("amount", FieldType::U256),
+            ("unbonding_ends_at", FieldType::U64),
+        ],
+    };
 }
 
 impl IndexableEvent for UnstakedInitiated {

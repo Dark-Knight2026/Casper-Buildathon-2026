@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::backfill::parser::{CesEvent, EventSchema, FieldType};
 use crate::{
     address,
     error::IndexerResult,
@@ -26,6 +27,21 @@ pub struct ScheduleCreated {
     pub cliff_duration: u64,
     /// Total duration from start to full vesting (ms).
     pub vesting_duration: u64,
+}
+
+impl CesEvent for ScheduleCreated {
+    const SCHEMA: EventSchema = EventSchema {
+        name: Self::EVENT_NAME,
+        fields: &[
+            ("vesting_id", FieldType::U256),
+            ("whitelisted_creator", FieldType::Key),
+            ("beneficiary", FieldType::Key),
+            ("total_amount", FieldType::U256),
+            ("start_timestamp", FieldType::U64),
+            ("cliff_duration", FieldType::U64),
+            ("vesting_duration", FieldType::U64),
+        ],
+    };
 }
 
 impl IndexableEvent for ScheduleCreated {

@@ -5,8 +5,9 @@
 //! to deserialize primitives (`String`, `U256`, `u64`, `Key`, `bool`) directly,
 //! rather than hand-rolling binary parsers.
 //!
-//! Hardcoded schemas for ICO, vesting, and staking events define the field
-//! order so we can decode the binary without fetching `__events_schema` from chain.
+//! Event schemas are defined via the [`CesEvent`] trait on each event struct,
+//! co-located with the event definition. Admin-only events without handlers
+//! use raw [`EventSchema`] constants directly.
 
 use casper_types::{
     Key, U128, U256,
@@ -14,11 +15,19 @@ use casper_types::{
 };
 use serde_json::{Map, Value};
 
-use crate::{
-    config::ContractType,
-    error::{IndexerError, IndexerResult},
-    events::{ico::IcoEventType, staking::StakingEventType, vesting::VestingEventType},
-};
+use crate::error::{IndexerError, IndexerResult};
+
+/// Trait for event types that can be deserialized from CES binary format.
+///
+/// Implement this on [`IndexableEvent`] structs to co-locate the CES binary
+/// schema with the event definition. Admin-only events that don't implement
+/// [`IndexableEvent`] should use raw [`EventSchema`] constants instead.
+///
+/// [`IndexableEvent`]: crate::event_trait::IndexableEvent
+pub trait CesEvent {
+    /// CES binary field schema (field names + types in emit order).
+    const SCHEMA: EventSchema;
+}
 
 /// `Copy` subset of [`casper_types::CLType`] for use in `static` event schemas.
 ///
@@ -44,124 +53,13 @@ pub enum FieldType {
 }
 
 /// Schema for a single CES event: its name and ordered list of fields.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct EventSchema {
     /// CES event name (without the `event_` prefix).
     pub name: &'static str,
     /// Ordered field names and types (must match the contract's emit order).
     pub fields: &'static [(&'static str, FieldType)],
 }
-
-// -----------------------------------------------------------------------------
-// CES event schemas
-// -----------------------------------------------------------------------------
-
-/// Returns event schemas for the given contract type.
-///
-/// Returns an empty slice for unsupported contract types.
-#[inline]
-#[must_use]
-pub fn schemas_for(contract_type: ContractType) -> &'static [EventSchema] {
-    match contract_type {
-        ContractType::Ico => ICO_SCHEMAS,
-        ContractType::Vesting => VESTING_SCHEMAS,
-        ContractType::Staking => STAKING_SCHEMAS,
-        _ => &[],
-    }
-}
-
-static ICO_SCHEMAS: &[EventSchema] = &[
-    EventSchema {
-        name: IcoEventType::TokensPurchased.as_str(),
-        fields: &[
-            ("amount", FieldType::U256),
-            ("currency", FieldType::U8),
-            ("price", FieldType::U256),
-            ("cost", FieldType::U256),
-            ("timestamp", FieldType::U64),
-        ],
-    },
-    EventSchema {
-        name: IcoEventType::IcoScheduleAdded.as_str(),
-        fields: &[
-            ("id", FieldType::U128),
-            ("start_timestamp", FieldType::U64),
-            ("end_timestamp", FieldType::U64),
-            ("sale_amount", FieldType::U256),
-            ("price", FieldType::U256),
-        ],
-    },
-];
-
-static VESTING_SCHEMAS: &[EventSchema] = &[
-    EventSchema {
-        name: VestingEventType::ScheduleCreated.as_str(),
-        fields: &[
-            ("vesting_id", FieldType::U256),
-            ("whitelisted_creator", FieldType::Key),
-            ("beneficiary", FieldType::Key),
-            ("total_amount", FieldType::U256),
-            ("start_timestamp", FieldType::U64),
-            ("cliff_duration", FieldType::U64),
-            ("vesting_duration", FieldType::U64),
-        ],
-    },
-    EventSchema {
-        name: VestingEventType::TokensClaimed.as_str(),
-        fields: &[
-            ("vesting_id", FieldType::U256),
-            ("beneficiary", FieldType::Key),
-            ("amount", FieldType::U256),
-        ],
-    },
-    EventSchema {
-        name: VestingEventType::WhitelistedCreatorAdded.as_str(),
-        fields: &[("creator", FieldType::Key)],
-    },
-    EventSchema {
-        name: VestingEventType::WhitelistedCreatorRemoved.as_str(),
-        fields: &[("creator", FieldType::Key)],
-    },
-    // OwnershipTransferred is a generic CES event, not in VestingEventType.
-    EventSchema {
-        name: "OwnershipTransferred",
-        fields: &[
-            ("previous_owner", FieldType::Key),
-            ("new_owner", FieldType::Key),
-        ],
-    },
-];
-
-static STAKING_SCHEMAS: &[EventSchema] = &[
-    EventSchema {
-        name: StakingEventType::Staked.as_str(),
-        fields: &[("staker", FieldType::Key), ("amount", FieldType::U256)],
-    },
-    EventSchema {
-        name: StakingEventType::UnstakedInitiated.as_str(),
-        fields: &[
-            ("staker", FieldType::Key),
-            ("amount", FieldType::U256),
-            ("unbonding_ends_at", FieldType::U64),
-        ],
-    },
-    EventSchema {
-        name: StakingEventType::UnbondedWithdrawn.as_str(),
-        fields: &[("staker", FieldType::Key), ("amount", FieldType::U256)],
-    },
-    EventSchema {
-        name: StakingEventType::RewardsDeposited.as_str(),
-        fields: &[("caller", FieldType::Key), ("amount", FieldType::U256)],
-    },
-    EventSchema {
-        name: StakingEventType::RewardsClaimed.as_str(),
-        fields: &[("staker", FieldType::Key), ("amount", FieldType::U256)],
-    },
-];
-
-// -----------------------------------------------------------------------------
-// Parser
-// -----------------------------------------------------------------------------
 
 /// Parse a CES binary event blob into `(event_name, JSON object)`.
 ///

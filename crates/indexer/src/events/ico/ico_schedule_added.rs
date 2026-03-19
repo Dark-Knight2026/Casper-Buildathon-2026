@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::backfill::parser::{CesEvent, EventSchema, FieldType};
 use crate::{
     error::{IndexerError, IndexerResult},
     event_trait::{EventContext, IndexableEvent},
@@ -21,6 +22,19 @@ pub struct IcoScheduleAdded {
     pub sale_amount: String,
     /// Token price (U256 as string, 6 decimals; 500000 = $0.50).
     pub price: String,
+}
+
+impl CesEvent for IcoScheduleAdded {
+    const SCHEMA: EventSchema = EventSchema {
+        name: Self::EVENT_NAME,
+        fields: &[
+            ("id", FieldType::U128),
+            ("start_timestamp", FieldType::U64),
+            ("end_timestamp", FieldType::U64),
+            ("sale_amount", FieldType::U256),
+            ("price", FieldType::U256),
+        ],
+    };
 }
 
 impl IndexableEvent for IcoScheduleAdded {
