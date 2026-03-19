@@ -1,5 +1,6 @@
 //! Handler for the `RewardsDeposited` staking contract event.
 
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -33,7 +34,7 @@ impl IndexableEvent for RewardsDeposited {
                 amount: &self.amount,
                 transaction_hash: ctx.deploy_hash,
                 block_height: ctx.block_height.cast_signed(),
-                event_timestamp: ctx.block_timestamp,
+                event_timestamp: ctx.block_timestamp.unwrap_or_else(Utc::now),
             },
         )
         .await?;

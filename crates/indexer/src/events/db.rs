@@ -612,7 +612,7 @@ pub struct NewStakingEvent<'a> {
     /// Block height where the event was included.
     pub block_height: i64,
     /// Block timestamp of the event.
-    pub event_timestamp: Option<DateTime<Utc>>,
+    pub event_timestamp: DateTime<Utc>,
 }
 
 /// Insert a row into `staking_events` (append-only log).
@@ -781,7 +781,7 @@ pub struct NewStakingRewardDeposit<'a> {
     /// Block height where the event was included.
     pub block_height: i64,
     /// Block timestamp of the event.
-    pub event_timestamp: Option<DateTime<Utc>>,
+    pub event_timestamp: DateTime<Utc>,
 }
 
 /// Insert a row into `staking_reward_deposits` for a `RewardsDeposited` event.

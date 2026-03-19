@@ -13,6 +13,7 @@ mod common;
 
 use std::collections::HashSet;
 
+use chrono::Utc;
 use serde_json::json;
 use sqlx::PgPool;
 
@@ -38,7 +39,7 @@ fn staking_event(deploy_hash: &str, event_name: &str, data: serde_json::Value) -
         contract_type: ContractType::Staking,
         event_name: event_name.to_owned(),
         event_data: data,
-        block_timestamp: None,
+        block_timestamp: Some(Utc::now()),
         transform_idx: None,
     }
 }

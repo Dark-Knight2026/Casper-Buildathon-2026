@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS vesting_schedules (
     -- Total duration from start to full vesting (ms).
     vesting_duration    BIGINT      NOT NULL,
     -- Deploy hash that emitted the ScheduleCreated event.
-    transaction_hash    TEXT        NOT NULL,
+    transaction_hash    TEXT        NOT NULL UNIQUE,
     -- Block height where the event was included.
     block_height        BIGINT      NOT NULL,
     -- Row timestamps.
@@ -38,3 +38,7 @@ COMMENT ON COLUMN vesting_schedules.vesting_id     IS 'U256 schedule ID from the
 COMMENT ON COLUMN vesting_schedules.total_amount   IS 'Total locked BIG tokens in minimal units (decimals=18)';
 COMMENT ON COLUMN vesting_schedules.claimed_amount IS 'Cumulative claimed amount, updated by TokensClaimed events';
 COMMENT ON COLUMN vesting_schedules.cliff_duration IS 'Cliff period in milliseconds before any tokens unlock';
+
+-- Row Level Security
+ALTER TABLE vesting_schedules ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Public read-only" ON vesting_schedules FOR SELECT USING (true);

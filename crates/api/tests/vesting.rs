@@ -25,7 +25,7 @@ async fn seed_vesting_schedule(
     sqlx::query(
         r"
             INSERT INTO vesting_schedules (vesting_id, beneficiary, whitelisted_creator, total_amount, start_timestamp, cliff_duration, vesting_duration, transaction_hash, block_height)
-            VALUES ($1, $2, 'ico_contract_hash', $3, $4, $5, $6, 'deadbeef', 1)
+            VALUES ($1, $2, 'ico_contract_hash', $3, $4, $5, $6, md5(random()::text), 1)
         ",
     )
     .bind(vesting_id)
