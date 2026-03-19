@@ -106,9 +106,9 @@ pub async fn process_event(
             );
         }
         Err(IndexerError::DeferredEvent(reason)) => {
-            // Event deferred to backfill - roll back so nothing is persisted.
-            // Backfill runs once at startup; events deferred after backfill
-            // completes will not be re-processed until the next indexer restart.
+            // Event deferred - roll back so nothing is persisted.
+            // Return the error so the caller (streaming handler) can resolve
+            // the missing data (e.g. caller) via REST API and retry.
             tracing::warn!(
                 deploy = %raw.deploy_hash,
                 event = %raw.event_name,
@@ -116,7 +116,7 @@ pub async fn process_event(
                 "Event deferred - rolling back transaction"
             );
             tx.rollback().await?;
-            return Ok(());
+            return Err(IndexerError::DeferredEvent(reason));
         }
         Err(e) => {
             // Other errors - rollback transaction

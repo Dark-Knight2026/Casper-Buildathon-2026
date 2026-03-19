@@ -43,7 +43,7 @@ impl<'a> CasperRpc<'a> {
     /// Fetch the latest state root hash from the node.
     #[inline]
     pub async fn get_state_root_hash(&self) -> IndexerResult<String> {
-        let result = self.call("info_get_status", json!({})).await?;
+        let result = self.call("info_get_status", Value::Null).await?;
 
         result["last_added_block_info"]["state_root_hash"]
             .as_str()
@@ -139,13 +139,17 @@ impl<'a> CasperRpc<'a> {
     }
 
     /// Send a JSON-RPC 2.0 request and return the `result` field.
+    ///
+    /// Pass `Value::Null` for methods that take no parameters (e.g. `info_get_status`).
     async fn call(&self, method: &str, params: Value) -> IndexerResult<Value> {
-        let body = json!({
+        let mut body = json!({
             "jsonrpc": "2.0",
             "id": 1,
             "method": method,
-            "params": [params]
         });
+        if !params.is_null() {
+            body["params"] = params;
+        }
 
         let response = self
             .client

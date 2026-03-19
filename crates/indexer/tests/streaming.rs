@@ -128,6 +128,8 @@ async fn non_json_frame_is_silently_skipped(pool: PgPool) {
 
     let registry = EventRegistry::new();
     let contract_map = HashMap::new();
+    let config = common::test_config("http://unused".to_owned());
+    let client = reqwest::Client::new();
 
     streaming::handle_text_message(
         "not-json-keepalive",
@@ -135,6 +137,8 @@ async fn non_json_frame_is_silently_skipped(pool: PgPool) {
         &HashSet::new(),
         &pool,
         &registry,
+        &config,
+        &client,
     )
     .await
     .expect("non-JSON frame must return Ok(())");
@@ -160,6 +164,8 @@ async fn message_for_unknown_contract_is_skipped(pool: PgPool) {
     let registry = EventRegistry::new();
     // Empty map — "abc123" is not registered.
     let contract_map = HashMap::new();
+    let config = common::test_config("http://unused".to_owned());
+    let client = reqwest::Client::new();
     let msg = payloads::wss_message(
         "abc123",
         "TokensPurchased",
@@ -175,6 +181,8 @@ async fn message_for_unknown_contract_is_skipped(pool: PgPool) {
         &HashSet::new(),
         &pool,
         &registry,
+        &config,
+        &client,
     )
     .await
     .expect("message for unknown contract must return Ok(())");
@@ -201,6 +209,8 @@ async fn valid_message_processes_event_and_updates_cursor(pool: PgPool) {
     let registry = EventRegistry::new();
     let mut contract_map = HashMap::new();
     contract_map.insert("big_contract_hash".to_owned(), ContractType::Big);
+    let config = common::test_config("http://unused".to_owned());
+    let client = reqwest::Client::new();
 
     let msg = payloads::wss_message(
         "big_contract_hash",
@@ -217,6 +227,8 @@ async fn valid_message_processes_event_and_updates_cursor(pool: PgPool) {
         &HashSet::new(),
         &pool,
         &registry,
+        &config,
+        &client,
     )
     .await
     .expect("valid Transfer message must succeed");

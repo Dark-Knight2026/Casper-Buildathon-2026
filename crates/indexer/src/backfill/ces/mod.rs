@@ -16,7 +16,7 @@ use core::time::Duration;
 use super::{BackfillContext, db};
 use crate::{
     config::ContractType,
-    error::{IndexerError, IndexerResult},
+    error::IndexerResult,
     processor::{self, RawEvent},
 };
 use rpc::CasperRpc;
@@ -69,16 +69,24 @@ pub async fn backfill_ces(
         .get_contract_named_keys(&state_root, contract_hash)
         .await?;
 
-    let events_uref = named_keys.get("__events").ok_or_else(|| {
-        IndexerError::Parse(format!(
-            "__events URef not found in named keys for {contract_hash} - \
-             contract may not use CES emit() yet"
-        ))
-    })?;
+    let Some(events_uref) = named_keys.get("__events") else {
+        tracing::warn!(
+            contract = ?contract_type,
+            %contract_hash,
+            "CES backfill skipped - __events URef not found in named keys \
+             (contract may not have emitted any events yet)"
+        );
+        return Ok(());
+    };
 
-    let events_length_uref = named_keys.get("__events_length").ok_or_else(|| {
-        IndexerError::Parse("__events_length URef not found in named keys".into())
-    })?;
+    let Some(events_length_uref) = named_keys.get("__events_length") else {
+        tracing::warn!(
+            contract = ?contract_type,
+            %contract_hash,
+            "CES backfill skipped - __events_length URef not found in named keys"
+        );
+        return Ok(());
+    };
 
     // 3. Query total number of events.
     let total_events = rpc.query_u32(&state_root, events_length_uref).await?;

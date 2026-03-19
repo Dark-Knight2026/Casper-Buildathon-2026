@@ -29,6 +29,7 @@ use sqlx::PgPool;
 use common::{FakeAddress, MIGRATOR, PURCHASE_DEPLOY_HASH, TRANSFER_DEPLOY_HASH, payloads};
 use indexer::{
     config::ContractType,
+    error::IndexerError,
     events::EventRegistry,
     processor::{self, RawEvent},
 };
@@ -769,8 +770,11 @@ async fn tokens_purchased_without_caller_defers_to_backfill(pool: PgPool) {
     )
     .await;
 
-    // Must succeed (DeferredEvent is handled internally by the processor).
-    result.unwrap();
+    // Must return DeferredEvent error so the caller can handle retry.
+    assert!(
+        matches!(result, Err(IndexerError::DeferredEvent(_))),
+        "expected DeferredEvent error, got {result:?}"
+    );
 
     // Nothing should be persisted - transaction was rolled back.
     let event_count: i64 = sqlx::query_scalar!(
@@ -844,7 +848,10 @@ async fn deferred_event_then_backfill_persists_data(pool: PgPool) {
         },
     )
     .await;
-    result.unwrap();
+    assert!(
+        matches!(result, Err(IndexerError::DeferredEvent(_))),
+        "expected DeferredEvent error, got {result:?}"
+    );
 
     // Verify nothing persisted after deferral.
     let count: i64 = sqlx::query_scalar!(
