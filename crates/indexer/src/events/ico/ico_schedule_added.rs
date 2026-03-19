@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    error::IndexerResult,
+    error::{IndexerError, IndexerResult},
     event_trait::{EventContext, IndexableEvent},
     events::db::{self, HashType},
 };
@@ -28,6 +28,13 @@ impl IndexableEvent for IcoScheduleAdded {
 
     #[inline]
     async fn process(&self, ctx: &mut EventContext<'_>) -> IndexerResult<()> {
+        if self.id.is_empty() || self.id.len() > 128 {
+            return Err(IndexerError::Parse(format!(
+                "schedule_id must be 1-128 chars, got {}",
+                self.id.len()
+            )));
+        }
+
         db::upsert_ico_schedule(
             ctx.tx,
             &db::NewIcoSchedule {

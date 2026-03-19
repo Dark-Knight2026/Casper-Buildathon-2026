@@ -142,7 +142,7 @@ pub async fn fetch_token_transactions(
         limit,
         offset,
     )
-    .fetch_all(&mut *tx)
+    .fetch_all(tx.as_mut())
     .await?;
 
     let count = sqlx::query_scalar!(
@@ -152,7 +152,7 @@ pub async fn fetch_token_transactions(
         ",
         contract_hash,
     )
-    .fetch_one(&mut *tx)
+    .fetch_one(tx.as_mut())
     .await?
     .unwrap_or(0);
 

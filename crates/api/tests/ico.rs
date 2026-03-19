@@ -23,7 +23,9 @@ const USD_TOLERANCE: f64 = 1e-6;
 async fn seed_ico_schedule(pool: &PgPool) {
     sqlx::query(
         r"
-            INSERT INTO ico_schedules (schedule_id, start_timestamp, end_timestamp, sale_amount, price, transaction_hash, block_height)
+            INSERT INTO ico_schedules
+                (schedule_id, start_timestamp, end_timestamp,
+                 sale_amount, price, transaction_hash, block_height)
             VALUES ('test-schedule', 0, 9999999999, $1, $2, 'deadbeef', 1)
         ",
     )
@@ -38,7 +40,9 @@ async fn seed_ico_schedule(pool: &PgPool) {
 async fn seed_ico_purchase(pool: &PgPool, tx_hash: &str, buyer: &str, amount: &str) {
     sqlx::query(
         r"
-            INSERT INTO ico_purchases (transaction_hash, block_height, buyer_address, amount, currency, cost, event_timestamp)
+            INSERT INTO ico_purchases
+                (transaction_hash, block_height, buyer_address,
+                 amount, currency, cost, event_timestamp)
             VALUES ($1, 1, $2, $3, 'CSPR', '100', 1700000000)
         ",
     )

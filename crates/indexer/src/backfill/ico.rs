@@ -14,6 +14,7 @@ use chrono::DateTime;
 use reqwest::Client;
 use secrecy::ExposeSecret;
 use serde::Deserialize;
+use tokio::time;
 
 use super::{BackfillContext, db};
 use crate::{
@@ -165,7 +166,6 @@ pub async fn backfill_ico(
                     );
                 }
             }
-            tokio::time::sleep(Duration::from_millis(ctx.config.backfill_rate_limit_ms)).await;
         }
 
         // Persist progress so restarts resume from here instead of block 0.
@@ -177,6 +177,7 @@ pub async fn backfill_ico(
             break;
         }
         page += 1;
+        time::sleep(Duration::from_millis(ctx.config.backfill_rate_limit_ms)).await;
     }
 
     tracing::info!(
@@ -412,12 +413,11 @@ pub async fn load_big_transfers(
             }
         }
 
-        tokio::time::sleep(Duration::from_millis(config.backfill_rate_limit_ms)).await;
-
         if page >= page_count {
             break;
         }
         page += 1;
+        time::sleep(Duration::from_millis(config.backfill_rate_limit_ms)).await;
     }
 
     Ok(map)

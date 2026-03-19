@@ -57,6 +57,7 @@ pub const AUTH_RATE_LIMIT_BURST: u32 = 15;
 ///
 /// Panics at startup if the rate-limit configuration is invalid (e.g. zero burst size).
 #[inline]
+#[must_use]
 pub fn public_router() -> OpenApiRouter<Arc<AppState>> {
     let rate_limit = Arc::new(
         GovernorConfigBuilder::default()
@@ -120,6 +121,7 @@ pub fn public_data_router() -> OpenApiRouter<Arc<AppState>> {
 ///
 /// Authentication is enforced via the `AuthUser` extractor in handlers.
 #[inline]
+#[must_use]
 pub fn protected_router() -> OpenApiRouter<Arc<AppState>> {
     OpenApiRouter::new()
         .routes(routes!(tax::handlers::calculate_tax_liability))
@@ -128,6 +130,7 @@ pub fn protected_router() -> OpenApiRouter<Arc<AppState>> {
 
 /// Creates an `OpenAPI` router for blockchain transaction endpoints
 #[inline]
+#[must_use]
 pub fn transactions_router() -> OpenApiRouter<Arc<AppState>> {
     OpenApiRouter::new()
         .routes(routes!(transactions::handlers::get_account_transactions))
@@ -136,6 +139,7 @@ pub fn transactions_router() -> OpenApiRouter<Arc<AppState>> {
 
 /// Creates an `OpenAPI` router for ICO endpoints
 #[inline]
+#[must_use]
 pub fn ico_router() -> OpenApiRouter<Arc<AppState>> {
     OpenApiRouter::new()
         .routes(routes!(ico::handlers::get_ico_balance))
