@@ -17,6 +17,8 @@
 //! - **`IcoScheduleAdded`** - writes `ico_schedules` row with schedule ID,
 //!   price, and sale amount; UPSERT updates existing rows.
 
+#![cfg(feature = "integration")]
+
 mod common;
 
 use std::collections::HashSet;

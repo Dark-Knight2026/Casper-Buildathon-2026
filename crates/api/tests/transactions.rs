@@ -1,6 +1,8 @@
 //! Tests for transaction history endpoints: response structure, pagination,
 //! address validation, and BIG token contract filtering.
 
+#![cfg(feature = "integration")]
+
 mod common;
 
 use axum::http::StatusCode;

@@ -4,8 +4,7 @@ use std::sync::Arc;
 
 use utoipa_axum::{router::OpenApiRouter, routes};
 
-use crate::common::AppState;
-use crate::onchain::transactions::handlers;
+use crate::{common::AppState, onchain::transactions::handlers};
 
 /// Creates an `OpenAPI` router for blockchain transaction endpoints.
 #[inline]

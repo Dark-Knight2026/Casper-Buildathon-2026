@@ -4,8 +4,7 @@ use std::sync::Arc;
 
 use utoipa_axum::{router::OpenApiRouter, routes};
 
-use crate::common::AppState;
-use crate::onchain::vesting::handlers;
+use crate::{common::AppState, onchain::vesting::handlers};
 
 /// Creates an `OpenAPI` router for vesting endpoints.
 #[inline]

@@ -1,5 +1,7 @@
 //! Integration tests for authentication endpoints.
 
+#![cfg(feature = "integration")]
+
 mod common;
 
 use axum::http::{Method, StatusCode};

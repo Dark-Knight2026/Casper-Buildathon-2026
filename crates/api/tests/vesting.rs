@@ -1,9 +1,12 @@
 //! Tests for vesting endpoints: schedules listing with pagination,
 //! token supply, release schedule, and address validation.
 
+#![cfg(feature = "integration")]
+
 mod common;
 
 use axum::http::StatusCode;
+use chrono::Utc;
 use serde_json::Value;
 use sqlx::PgPool;
 
@@ -52,6 +55,16 @@ async fn seed_token_holding(pool: &PgPool, address: &str, balance: &str) {
     .execute(pool)
     .await
     .expect("Failed to seed token holding");
+}
+
+/// Update `claimed_amount` on an existing vesting schedule.
+async fn set_claimed_amount(pool: &PgPool, vesting_id: &str, claimed: &str) {
+    sqlx::query(r"UPDATE vesting_schedules SET claimed_amount = $2 WHERE vesting_id = $1")
+        .bind(vesting_id)
+        .bind(claimed)
+        .execute(pool)
+        .await
+        .expect("Failed to set claimed_amount");
 }
 
 /// Seed a contract registry entry.
@@ -278,5 +291,135 @@ async fn release_schedule_with_schedules(pool: PgPool) {
     assert!(
         (released - 1000.0).abs() < 0.01,
         "expected ~1000.0 at end, got {released}"
+    );
+}
+
+// Vesting calculation correctness tests
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn vesting_before_cliff_unlocked_is_zero(pool: PgPool) {
+    let now_ms = Utc::now().timestamp_millis();
+    let amount = "1000000000000000000000"; // 1000 BIG
+    // Start now, cliff in 1 year -> we're before the cliff
+    let cliff_ms: i64 = 365 * 24 * 60 * 60 * 1000;
+    let vesting_ms: i64 = 2 * cliff_ms;
+    seed_vesting_schedule(
+        &pool,
+        "0",
+        VALID_ADDRESS,
+        amount,
+        now_ms,
+        cliff_ms,
+        vesting_ms,
+    )
+    .await;
+
+    let env = common::setup_test_server(pool, false).await;
+
+    let response = env
+        .server
+        .get(&format!(
+            "/api/v1/vesting/schedules?account={VALID_ADDRESS}"
+        ))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+    let schedule = &body["data"][0];
+    let unlocked = schedule["unlockedAmount"].as_f64().unwrap();
+    assert!(
+        unlocked.abs() < 0.01,
+        "before cliff, unlocked should be 0, got {unlocked}"
+    );
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn vesting_after_end_unlocked_is_total(pool: PgPool) {
+    let now_ms = Utc::now().timestamp_millis();
+    let amount = "1000000000000000000000"; // 1000 BIG
+    // Started 2 years ago, vesting 1 year -> fully vested
+    let year_ms: i64 = 365 * 24 * 60 * 60 * 1000;
+    let start = now_ms - 2 * year_ms;
+    let cliff_ms: i64 = 30 * 24 * 60 * 60 * 1000; // 30 days cliff
+    seed_vesting_schedule(&pool, "0", VALID_ADDRESS, amount, start, cliff_ms, year_ms).await;
+
+    let env = common::setup_test_server(pool, false).await;
+
+    let response = env
+        .server
+        .get(&format!(
+            "/api/v1/vesting/schedules?account={VALID_ADDRESS}"
+        ))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+    let schedule = &body["data"][0];
+    let unlocked = schedule["unlockedAmount"].as_f64().unwrap();
+    assert!(
+        (unlocked - 1000.0).abs() < 0.01,
+        "after vesting end, unlocked should be ~1000, got {unlocked}"
+    );
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn vesting_midway_unlocked_is_proportional(pool: PgPool) {
+    let now_ms = Utc::now().timestamp_millis();
+    let amount = "1000000000000000000000"; // 1000 BIG
+    // Vesting: 100 days, no cliff, started 50 days ago -> ~50% vested
+    let day_ms: i64 = 24 * 60 * 60 * 1000;
+    let start = now_ms - 50 * day_ms;
+    let vesting_ms = 100 * day_ms;
+    seed_vesting_schedule(&pool, "0", VALID_ADDRESS, amount, start, 0, vesting_ms).await;
+
+    let env = common::setup_test_server(pool, false).await;
+
+    let response = env
+        .server
+        .get(&format!(
+            "/api/v1/vesting/schedules?account={VALID_ADDRESS}"
+        ))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+    let schedule = &body["data"][0];
+    let unlocked = schedule["unlockedAmount"].as_f64().unwrap();
+    // Should be approximately 500 (50% of 1000)
+    assert!(
+        (unlocked - 500.0).abs() < 10.0,
+        "at 50% vesting, unlocked should be ~500, got {unlocked}"
+    );
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn vesting_with_claimed_reduces_unlocked(pool: PgPool) {
+    let now_ms = Utc::now().timestamp_millis();
+    let total = "1000000000000000000000"; // 1000 BIG
+    // Fully vested (started 2 years ago, vesting 1 year)
+    let year_ms: i64 = 365 * 24 * 60 * 60 * 1000;
+    let start = now_ms - 2 * year_ms;
+    let cliff_ms: i64 = 30 * 24 * 60 * 60 * 1000;
+    seed_vesting_schedule(&pool, "0", VALID_ADDRESS, total, start, cliff_ms, year_ms).await;
+    // 200 BIG claimed
+    set_claimed_amount(&pool, "0", "200000000000000000000").await;
+
+    let env = common::setup_test_server(pool, false).await;
+
+    let response = env
+        .server
+        .get(&format!(
+            "/api/v1/vesting/schedules?account={VALID_ADDRESS}"
+        ))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+    let schedule = &body["data"][0];
+    let unlocked = schedule["unlockedAmount"].as_f64().unwrap();
+    // vested = 1000 (fully), unlocked = 1000 - 200 = 800
+    assert!(
+        (unlocked - 800.0).abs() < 0.01,
+        "unlocked should be vested - claimed = 800, got {unlocked}"
     );
 }

@@ -1,5 +1,7 @@
 //! Tests for analytics module: request deserialization and endpoint response structure.
 
+#![cfg(feature = "integration")]
+
 mod common;
 
 use axum::http::{Method, StatusCode};

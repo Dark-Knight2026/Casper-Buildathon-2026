@@ -7,6 +7,10 @@ publish = { workspace = true }
 [lints]
 workspace = true
 
+[features]
+default = ["integration"]
+integration = []
+
 [dependencies]
 casper-types = { workspace = true }
 chrono = { workspace = true }

@@ -4,8 +4,7 @@ use std::sync::Arc;
 
 use utoipa_axum::{router::OpenApiRouter, routes};
 
-use crate::common::AppState;
-use crate::onchain::staking::handlers;
+use crate::{common::AppState, onchain::staking::handlers};
 
 /// Creates an `OpenAPI` router for staking endpoints.
 #[inline]

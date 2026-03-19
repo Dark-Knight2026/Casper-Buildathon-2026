@@ -1,5 +1,7 @@
 //! Integration tests for server configuration: rate limiting, CORS.
 
+#![cfg(feature = "integration")]
+
 mod common;
 
 use axum::http::{Method, StatusCode};

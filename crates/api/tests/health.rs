@@ -1,5 +1,7 @@
 //! Integration tests for health check endpoint.
 
+#![cfg(feature = "integration")]
+
 mod common;
 
 use axum::http::StatusCode;

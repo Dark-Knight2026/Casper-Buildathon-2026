@@ -16,6 +16,8 @@
 //!    committed, re-processing the same event must not double domain writes
 //!    (e.g. `token_holdings` balance must not be incremented twice).
 
+#![cfg(feature = "integration")]
+
 mod common;
 
 use std::collections::HashSet;

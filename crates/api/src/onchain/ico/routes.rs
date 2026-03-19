@@ -4,8 +4,7 @@ use std::sync::Arc;
 
 use utoipa_axum::{router::OpenApiRouter, routes};
 
-use crate::common::AppState;
-use crate::onchain::ico::handlers;
+use crate::{common::AppState, onchain::ico::handlers};
 
 /// Creates an `OpenAPI` router for ICO endpoints.
 #[inline]

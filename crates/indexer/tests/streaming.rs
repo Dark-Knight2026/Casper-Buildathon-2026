@@ -1,5 +1,7 @@
 //! Integration tests for WebSocket message deserialization and contract helpers.
 
+#![cfg(feature = "integration")]
+
 mod common;
 
 use std::collections::{HashMap, HashSet};

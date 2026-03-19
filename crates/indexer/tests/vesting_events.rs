@@ -6,6 +6,8 @@
 //!   UPSERT updates existing rows on re-indexing.
 //! - **`TokensClaimed`** - increases `claimed_amount` on an existing schedule.
 
+#![cfg(feature = "integration")]
+
 mod common;
 
 use std::collections::HashSet;

@@ -9,6 +9,8 @@
 //! - **`RewardsDeposited`** - INSERT `staking_reward_deposits`.
 //! - **`RewardsClaimed`** - INSERT `staking_events` + UPDATE `total_rewards_claimed`.
 
+#![cfg(feature = "integration")]
+
 mod common;
 
 use std::collections::HashSet;

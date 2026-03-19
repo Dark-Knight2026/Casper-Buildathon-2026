@@ -11,6 +11,8 @@
 //!    purchase writes to `ico_purchases`, `blockchain_transactions`, and
 //!    `token_holdings`.
 
+#![cfg(feature = "integration")]
+
 mod common;
 
 use std::collections::HashSet;

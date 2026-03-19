@@ -1,6 +1,8 @@
 //! Tests for ICO endpoints: balance lookup, progress reporting,
 //! address validation, and missing-config error handling.
 
+#![cfg(feature = "integration")]
+
 mod common;
 
 use axum::http::StatusCode;

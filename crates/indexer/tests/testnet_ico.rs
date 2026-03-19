@@ -11,6 +11,8 @@
 //! - `CSPR_CLOUD_API_TOKEN` - CSPR.cloud API token (for free RPC queries)
 //! - `CASPER_SECRET_KEY` - path to your `.pem` secret key file (for paid deploys)
 
+#![cfg(feature = "integration")]
+
 use core::time::Duration;
 use std::{process::Command, sync::Once, thread};
 
