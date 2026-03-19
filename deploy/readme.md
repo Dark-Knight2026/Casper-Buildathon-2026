@@ -1,0 +1,232 @@
+# Deploy Directory
+
+This directory contains infrastructure-as-code and deployment automation for the project using **Docker Compose** for container orchestration on a **Hetzner Cloud** server, with **Cloudflare** handling DNS and SSL termination.
+
+## Directory Structure
+
+```
+deploy/
+├── Dockerfile.deploy      # Container image with deployment tools (gcloud, terraform, hcloud)
+├── Makefile.deploy        # Main deployment orchestration (entry point)
+├── cloud-init.yml         # Server initialization script (installs Docker, ufw, fail2ban)
+├── redeploy.sh            # Deployment script executed on the target server
+├── nginx/
+│   └── nginx.conf         # Nginx reverse proxy config (template with project_domain)
+├── gar/                   # Google Artifact Registry Terraform module
+├── hetzner_dev/           # Hetzner server provisioning + service deployment Terraform module
+└── tests/
+    └── redeploy.bats      # Bats tests for redeploy.sh
+```
+
+## Architecture
+
+```
+            Client (HTTPS)
+                  │
+                  ▼
+         Cloudflare (DNS + SSL)
+                  │ HTTP (Flexible mode)
+                  ▼
+        Hetzner Server :80
+                  │
+                  ▼
+         nginx (leasefi_nginx)
+                  │ proxy_pass backend:8080
+                  ▼
+         backend (leasefi_backend)
+                  │
+           ┌──────┴──────┐
+           ▼             ▼
+     Redis (leasefi_redis)   Supabase PostgreSQL
+
+    indexer (leasefi_indexer)
+           │
+     Redis + Supabase PostgreSQL
+```
+
+### Docker Compose Services
+
+| Container | Image | Port | Description |
+|-----------|-------|------|-------------|
+| `leasefi_nginx` | `nginx:alpine` | `80:80` | Reverse proxy, routes traffic to backend |
+| `leasefi_backend` | GAR `*_back:VERSION` | (internal) | REST API server on port 8080 |
+| `leasefi_indexer` | GAR `*_indexer:VERSION` | (internal) | Blockchain indexer |
+| `leasefi_redis` | `redis:7-alpine` | (internal) | Cache / message bus |
+
+## API Endpoints
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /health` | Health check (status, redis, database) |
+| `GET /swagger-ui` | Swagger UI documentation |
+| `GET /api-docs/openapi.json` | OpenAPI specification (JSON) |
+
+## Deployment Flow
+
+1. **`make -f deploy/Makefile.deploy deploy`** — builds a deployment container and runs the orchestration inside it:
+   - Builds `backend` and `indexer` Docker images
+   - Authenticates with GCP, creates GCS bucket for Terraform state (if needed)
+   - Creates GAR repository via Terraform (`gar/`)
+   - Pushes both images to GAR
+   - Runs `deploy_dev` → Terraform `hetzner_dev/`:
+     - Creates Hetzner server or reuses existing
+     - Copies `nginx.conf`, `redeploy.sh`, `docker-compose.dev.yml`, `.env` to server via SSH
+     - Runs `redeploy.sh` on server
+
+2. **`redeploy.sh`** runs on the target server:
+   - Loads env from `/opt/itinerary_service/deploy/.env`
+   - Verifies both images exist in GAR registry
+   - Pulls images
+   - `docker compose down --remove-orphans`
+   - `docker compose up -d`
+   - Prunes unused images
+
+## Environment Variables
+
+### Required Secrets (`-secret.sh`)
+
+| Variable | Description |
+|----------|-------------|
+| `GOOGLE_APPLICATION_CREDENTIALS` | Path to GCP service account JSON |
+| `GOOGLE_APPLICATION_PROJECT_ID` | GCP project ID |
+| `GOOGLE_ENCRYPTION_KEY` | Key for Terraform state encryption in GCS |
+| `SSH_PRIVATE_KEY_PATH` | Path to SSH private key for server access |
+| `SSH_PUBLIC_KEY_PATH` | Path to SSH public key for server access |
+| `HOST_SERVER_NAME` | Hetzner server hostname |
+| `PROJECT_NAME` | Service identifier (no dashes), e.g. `anthony_leasefi_testing` |
+| `PROJECT_DOMAIN` | Domain served by nginx and Cloudflare |
+| `DEPLOYMENT_MODE` | `dev` \| `staging` \| `production` |
+
+### Optional Secrets (`-secret.sh`)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `GOOGLE_APPLICATION_REGION` | `europe-central2` | GCP region for GAR |
+| `HOST_SERVER_LOCATION` | `hel1` | Hetzner datacenter |
+| `HOST_SERVER_IMAGE` | `ubuntu-24.04` | Server OS image |
+| `HOST_SERVER_TYPE` | `cx23` | Server hardware type |
+| `HETZNER_CLOUD_TOKEN` | — | Hetzner API token (required when creating a new server) |
+
+### Required Project Variables (`-secret.sh`)
+
+| Variable | Description |
+|----------|-------------|
+| `DATABASE_URL` | PostgreSQL connection string (Supabase) |
+| `SUPABASE_JWT_SECRET` | Supabase JWT secret |
+| `CORS_ORIGIN` | Allowed CORS origin |
+| `RUST_LOG` | Log level (e.g. `info`, `info,api=debug`) |
+| `CSPR_CLOUD_API_TOKEN` | CSPR.cloud API token |
+| `CSPR_CLOUD_REST_URL` | CSPR.cloud REST URL |
+| `CSPR_CLOUD_WSS_URL` | CSPR.cloud WebSocket URL |
+
+## Makefile Targets
+
+| Target | Description |
+|--------|-------------|
+| `deploy` | Full deployment from host machine (wraps everything in a container) |
+| `deployment_orchestration` | Runs inside deploy container; calls build → gc_setup → artifact_repo_create → push → deploy_dev |
+| `build_image` | Builds `backend` and `indexer` Docker images |
+| `push_image` | Pushes both images to GAR |
+| `gc_setup` | Authenticates gcloud, creates GCS bucket, configures Docker for GAR |
+| `artifact_repo_create` | Creates GAR repo via Terraform (`gar/`) |
+| `deploy_dev` | Generates `.tfvars`, runs Terraform `hetzner_dev/` |
+| `show_state_info` | Prints GCS paths for Terraform states |
+
+```bash
+# Full deployment
+make -f deploy/Makefile.deploy deploy
+
+# View all configured variables
+make -f deploy/Makefile.deploy all
+
+# Show Terraform state storage paths
+make -f deploy/Makefile.deploy show_state_info
+```
+
+## Components
+
+### Dockerfile.deploy
+
+Container with all deployment tools:
+- Google Cloud SDK (`gcloud`, `gsutil`)
+- Terraform 1.14.4
+- Hetzner CLI (`hcloud`)
+- Docker CLI
+- `make`, `jq`, `curl`
+
+### cloud-init.yml
+
+Server initialization script executed on first boot:
+- Disables password SSH auth (key-only)
+- Installs `ufw` firewall (allows 22, 80, 443)
+- Installs `fail2ban` (SSH brute-force protection)
+- Installs Docker CE + Docker Compose plugin
+- Authenticates Docker with GAR using the GCP service account
+
+### nginx/nginx.conf
+
+Nginx reverse proxy template rendered by Terraform (`templatefile`):
+- Listens on port 80
+- `server_name` set to `PROJECT_DOMAIN`
+- Proxies all requests to `backend:8080` (Docker Compose service name)
+- Uses `resolver 127.0.0.11` (Docker DNS) with a variable-based `proxy_pass` so nginx starts even if the backend container isn't ready yet
+- Reads real client IP from `CF-Connecting-IP` header (Cloudflare)
+
+### docker-compose.dev.yml
+
+Defines four services on a shared `leasefi_net` bridge network with IPv6 support:
+- All service logs are capped at 10 MB × 3 files
+- `backend` and `indexer` load env from `.env` file at `/opt/itinerary_service/deploy/.env`
+- Redis data is persisted in a named volume
+
+### hetzner_dev/
+
+Terraform module that handles both server provisioning and service deployment:
+- Creates static IPv4, SSH key, and Hetzner server if needed
+- Copies files to server via SSH (`file` provisioner): `nginx.conf`, `redeploy.sh`, `docker-compose.dev.yml`, `.env`
+- Runs `redeploy.sh` on every `terraform apply` (`triggers_replace = timestamp()`)
+
+### gar/
+
+Terraform module that creates the Google Artifact Registry Docker repository.
+State stored remotely in GCS: `gs://bucket-{REPO_NAME}/{DEPLOYMENT_MODE}/gar/`.
+
+## Terraform State
+
+| Module | Backend | Reason |
+|--------|---------|--------|
+| `gar/` | GCS (remote) | Needs to track repository existence across runs |
+| `hetzner_dev/` | GCS (remote) | Tracks server resources; prevents duplicate server creation |
+
+States are encrypted with `GOOGLE_ENCRYPTION_KEY`.
+
+## Server Access
+
+```bash
+# SSH to server
+ssh root@<SERVER_IP>
+
+# View running containers
+docker ps
+
+# Follow backend logs
+docker logs -f leasefi_backend
+
+# Follow nginx logs
+docker logs -f leasefi_nginx
+
+# Restart all services
+docker compose --project-directory /opt/itinerary_service/deploy \
+  -f /opt/itinerary_service/deploy/docker-compose.yml restart
+
+# Manual redeploy (after updating .env or pulling new image)
+bash /opt/itinerary_service/deploy/redeploy.sh
+```
+
+## SSL / HTTPS
+
+Cloudflare handles SSL termination in **Flexible** mode:
+- Client ↔ Cloudflare: HTTPS (TLS)
+- Cloudflare ↔ Origin server: HTTP (port 80)
+
+No SSL certificate is required on the server. To enable end-to-end encryption, switch Cloudflare to **Full (Strict)** mode and configure a Cloudflare Origin Certificate in nginx (port 443).

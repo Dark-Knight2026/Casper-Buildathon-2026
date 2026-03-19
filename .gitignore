@@ -31,3 +31,37 @@ logs
 .claude/
 CLAUDE.md
 .mcp.json
+
+# Secrets directory: hyphenated files contain sensitive credentials
+# Files like secret/-iron.sh, secret/-api_keys.sh are gitignored via -* pattern
+# secret/readme.md (documentation) is tracked - no hyphen prefix
+-*
+.*
+
+# Build artifacts
+*.o
+*.a
+*.dylib
+*.dll
+*.exe
+
+# Ignore Terraform state files
+**/.terraform/
+**/.terraform.lock.hcl
+**/*.tfstate
+**/*.tfstate.backup
+
+# Database backups (NEVER commit)
+backups/
+*_backup*.db
+*.db.backup
+*.bak
+*.orig
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
