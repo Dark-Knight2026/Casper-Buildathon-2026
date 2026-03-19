@@ -56,7 +56,7 @@ impl IndexableEvent for IcoScheduleAdded {
                 contract_hash: Some(ctx.contract_hash),
                 block_timestamp: ctx.block_timestamp,
                 from_type: HashType::Contract.to_db(),
-                to_type: HashType::Contract.to_db(),
+                to_type: None,
                 transform_idx: ctx.transform_idx,
                 metadata: &event_json,
             },

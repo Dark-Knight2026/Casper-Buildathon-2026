@@ -150,17 +150,7 @@ pub async fn get_ico_balance(
 pub async fn get_ico_progress(
     State(state): State<Arc<AppState>>,
 ) -> ApiResult<Json<IcoProgressResponse>> {
-    // Determine total_allocation from env fallback (used as default for the
-    // snapshot query). The snapshot itself re-reads the schedule inside the
-    // same REPEATABLE READ transaction for consistency.
-    let fallback_alloc = state
-        .config
-        .ico_fallback
-        .as_ref()
-        .map(|f| f.total_allocation.clone())
-        .unwrap_or_default();
-
-    let snapshot = db::fetch_progress_snapshot(&state.db, &fallback_alloc).await?;
+    let snapshot = db::fetch_progress_snapshot(&state.db).await?;
 
     // Resolve price and total_allocation from the snapshot schedule or env fallback.
     let (price_f64, price_decimal, total_allocation) = if let Some(ref schedule) = snapshot.schedule
