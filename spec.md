@@ -107,6 +107,123 @@ Backend service for processing high-load real estate operations, including tax c
 }
 ```
 
+### Vesting
+
+- **GET** `/api/v1/vesting/schedules?account={accountHash}`
+  - **Query:** `account` (64 hex chars, no prefix), `page` (default 1), `page_size` (default 25, max 100)
+  - **Response:** `PaginatedResponse<VestingScheduleItem>`
+  - **Auth:** Public
+  - **Rate limit:** 5 req/s, burst 30
+  - **Business rules:** Vesting uses cliff + linear formula. Before cliff end (`start + cliff_duration`), `unlockedAmount = 0`. After full vesting (`start + vesting_duration`), `unlockedAmount = total - claimed`. Between: linear interpolation `unlockedAmount = total * (elapsed / duration) - claimed`.
+
+```json
+{
+  "id": "0",
+  "lockedAmount": 800.0,
+  "purchaseTimestamp": 1700000000000,
+  "unlockTimestamp": 1702592000000,
+  "unlockedAmount": 200.0
+}
+```
+
+- **GET** `/api/v1/vesting/token-supply`
+  - **Response:** `TokenSupplyResponse`
+  - **Auth:** Public
+  - **Rate limit:** 5 req/s, burst 30
+  - **Business rules:** `totalSupply` is fixed at 5,000,000,000 BIG. `circulatingSupply` is the sum of all BIG balances in `token_holdings` excluding addresses registered as contracts in `contract_registry`.
+
+```json
+{
+  "totalSupply": 5000000000.0,
+  "circulatingSupply": 1234567.89
+}
+```
+
+- **GET** `/api/v1/vesting/release-schedule`
+  - **Response:** `ReleaseScheduleResponse`
+  - **Auth:** Public
+  - **Rate limit:** 5 req/s, burst 30
+  - **Business rules:** Aggregates all vesting schedules into a monthly timeline. Each point shows cumulative tokens released across all schedules at that month offset from the earliest schedule start.
+
+```json
+{
+  "data": [
+    { "month": "0", "released": 0.0 },
+    { "month": "6", "released": 500.0 },
+    { "month": "12", "released": 1000.0 }
+  ]
+}
+```
+
+### Staking
+
+- **GET** `/api/v1/staking/{accountHash}`
+  - **Path:** `accountHash` - 64 hex chars, no prefix
+  - **Response:** `StakingInfoResponse`
+  - **Auth:** Public
+  - **Rate limit:** 5 req/s, burst 30
+  - **Business rules:** APY = `(rewards_deposited_last_30_days * 365 / 30) / total_staked * 100`. Returns 0 if `total_staked` is zero.
+
+```json
+{
+  "stakedTokens": 100000.0,
+  "currentApy": 12.5,
+  "totalRewardsEarned": 5000.0
+}
+```
+
+- **GET** `/api/v1/staking/{accountHash}/portfolio`
+  - **Path:** `accountHash` - 64 hex chars, no prefix
+  - **Response:** `PortfolioResponse`
+  - **Auth:** Public
+  - **Rate limit:** 5 req/s, burst 30
+  - **Business rules:** `totalBig = bigInWallet + bigStaked + rewardsEarned`. USD value estimated from latest ICO schedule price (6 decimals).
+
+```json
+{
+  "bigInWallet": 50000.0,
+  "bigStaked": 100000.0,
+  "rewardsEarned": 5000.0,
+  "totalBig": 155000.0,
+  "estimatedUsdValue": 77500.0,
+  "change24hPercent": 0.0
+}
+```
+
+- **GET** `/api/v1/staking/{accountHash}/earnings?period={period}`
+  - **Path:** `accountHash` - 64 hex chars, no prefix
+  - **Query:** `period` - one of `1m`, `3m`, `6m` (default), `1y`, `all`. Invalid values return 400.
+  - **Response:** `EarningsResponse`
+  - **Auth:** Public
+  - **Rate limit:** 5 req/s, burst 30
+  - **Business rules:** Groups `reward_claim` events by month within the period window.
+
+```json
+{
+  "data": [
+    { "month": "2026-01", "earnings": 1200.0 },
+    { "month": "2026-02", "earnings": 800.0 }
+  ]
+}
+```
+
+- **GET** `/api/v1/staking/{accountHash}/rewards-history?period={days}`
+  - **Path:** `accountHash` - 64 hex chars, no prefix
+  - **Query:** `period` - number of days to look back (default 90, clamped 1-365)
+  - **Response:** `RewardsHistoryResponse`
+  - **Auth:** Public
+  - **Rate limit:** 5 req/s, burst 30
+  - **Business rules:** Daily cumulative `reward_claim` events. `txFees` is always 0 (contract does not distinguish fee component).
+
+```json
+{
+  "data": [
+    { "day": 1, "stakingPool": 500.0, "txFees": 0.0 },
+    { "day": 2, "stakingPool": 750.0, "txFees": 0.0 }
+  ]
+}
+```
+
 ## 3. Security Requirements
 - **Authentication:** JWT Bearer Token (Supabase).
 - **Validation:** Signature verification using HS256.
