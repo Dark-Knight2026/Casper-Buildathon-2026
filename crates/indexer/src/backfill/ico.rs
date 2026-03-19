@@ -95,7 +95,8 @@ pub async fn backfill_ico(
     // Pre-fetch all BIG transfers from CSPR.cloud once, keyed by deploy_hash.
     // ICO-initiated transfers are identified by from_hash == ICO contract package hash.
     tracing::info!(%contract_hash, "Pre-fetching BIG transfers from CSPR.cloud");
-    let big_amounts = load_big_transfers(ctx.client, ctx.config, big_hash, contract_hash).await?;
+    let big_amounts =
+        load_big_transfers(ctx.client, ctx.config, big_hash, contract_hash, start_block).await?;
     tracing::info!(count = big_amounts.len(), "BIG transfer map ready");
 
     let mut page = 1u32;
@@ -146,18 +147,22 @@ pub async fn backfill_ico(
             match process_ico_deploy(ctx, contract_type, contract_hash, deploy_item, &big_amounts)
                 .await
             {
-                Ok(true) => total_events += 1,
-                Ok(false) => {}
+                Ok(success) => {
+                    if success {
+                        total_events += 1;
+                    }
+                    page_max_block =
+                        Some(page_max_block.unwrap_or(0).max(deploy_item.block_height));
+                }
                 Err(e) => {
                     tracing::warn!(
                         error = %e,
                         deploy = %deploy_item.deploy_hash,
-                        "Failed to process ICO deploy, skipping"
+                        block = deploy_item.block_height,
+                        "Failed to process ICO deploy - cursor NOT advanced"
                     );
                 }
             }
-
-            page_max_block = Some(page_max_block.unwrap_or(0).max(deploy_item.block_height));
             tokio::time::sleep(Duration::from_millis(ctx.config.backfill_rate_limit_ms)).await;
         }
 
@@ -317,13 +322,14 @@ pub async fn load_big_transfers(
     config: &IndexerConfig,
     big_hash: &str,
     ico_hash: &str,
+    start_block: u64,
 ) -> IndexerResult<HashMap<String, String>> {
     let mut map = HashMap::new();
     let mut page = 1u32;
 
     loop {
         let url = format!(
-            "{}/ft-token-actions?contract_package_hash={big_hash}&page={page}&page_size=100&order_by=block_height&order_direction=ASC",
+            "{}/ft-token-actions?contract_package_hash={big_hash}&page={page}&page_size=100&order_by=block_height&order_direction=ASC&block_height[gte]={start_block}",
             config.casper.rest_url,
         );
         tracing::debug!(%url, "Fetching BIG ft-token-actions page {page}");

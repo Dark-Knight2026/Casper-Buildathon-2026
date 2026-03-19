@@ -45,6 +45,7 @@ async fn filters_only_ico_initiated_transfers() {
         &common::test_config(server.uri()),
         "big_hash",
         "ico_hash",
+        0,
     )
     .await
     .unwrap();
@@ -84,6 +85,7 @@ async fn paginates_all_pages_using_page_count_from_response() {
         &common::test_config(server.uri()),
         "big_hash",
         "ico_hash",
+        0,
     )
     .await
     .unwrap();
@@ -115,6 +117,7 @@ async fn returns_empty_map_when_no_ico_transfers_exist() {
         &common::test_config(server.uri()),
         "big_hash",
         "ico_hash",
+        0,
     )
     .await
     .unwrap();
@@ -137,6 +140,7 @@ async fn load_big_transfers_returns_error_on_5xx_response() {
         &common::test_config(server.uri()),
         "big_hash",
         "ico_hash",
+        0,
     )
     .await;
 
@@ -160,6 +164,7 @@ async fn load_big_transfers_returns_error_on_4xx_response() {
         &common::test_config(server.uri()),
         "big_hash",
         "ico_hash",
+        0,
     )
     .await;
 
