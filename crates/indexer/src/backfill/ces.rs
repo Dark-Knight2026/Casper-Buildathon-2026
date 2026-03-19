@@ -197,7 +197,6 @@ async fn process_event_at(
         contract_hash: ctx.contract_hash.to_owned(),
         deploy_hash: format!("ces-backfill-{}-{key}", ctx.contract_hash),
         block_height: 0,
-        caller: String::new(),
         contract_type: ctx.contract_type,
         event_name: event_name.clone(),
         event_data,

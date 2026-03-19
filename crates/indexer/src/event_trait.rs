@@ -32,8 +32,6 @@ pub struct EventContext<'a> {
     pub deploy_hash: &'a str,
     /// Block height where this event was included.
     pub block_height: u64,
-    /// Public key of the account that submitted the deployment.
-    pub caller: &'a str,
     /// Type of contract that emitted this event.
     pub contract_type: ContractType,
     /// Block timestamp from the blockchain. `None` when unavailable (e.g. CEP-18 backfill).

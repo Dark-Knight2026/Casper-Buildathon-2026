@@ -37,7 +37,6 @@ fn staking_event(deploy_hash: &str, event_name: &str, data: serde_json::Value) -
         contract_hash: "staking_contract_hash".to_owned(),
         deploy_hash: deploy_hash.to_owned(),
         block_height: 500,
-        caller: FakeAddress::Alice.to_string(),
         contract_type: ContractType::Staking,
         event_name: event_name.to_owned(),
         event_data: data,

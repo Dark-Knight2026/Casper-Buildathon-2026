@@ -46,7 +46,7 @@ async fn schedule_created_writes_vesting_schedule_row(pool: PgPool) {
             contract_hash: "vesting_hash".to_owned(),
             deploy_hash: VESTING_DEPLOY_HASH.to_owned(),
             block_height: 300,
-            caller: FakeAddress::Alice.to_string(),
+
             contract_type: ContractType::Vesting,
             event_name: "ScheduleCreated".to_owned(),
             event_data: json!({
@@ -103,7 +103,7 @@ async fn schedule_created_upsert_updates_existing_row(pool: PgPool) {
             contract_hash: "vesting_hash".to_owned(),
             deploy_hash: VESTING_DEPLOY_HASH.to_owned(),
             block_height: 100,
-            caller: FakeAddress::Alice.to_string(),
+
             contract_type: ContractType::Vesting,
             event_name: "ScheduleCreated".to_owned(),
             event_data: json!({
@@ -131,7 +131,7 @@ async fn schedule_created_upsert_updates_existing_row(pool: PgPool) {
             contract_hash: "vesting_hash".to_owned(),
             deploy_hash: VESTING_DEPLOY_HASH_2.to_owned(),
             block_height: 200,
-            caller: FakeAddress::Alice.to_string(),
+
             contract_type: ContractType::Vesting,
             event_name: "ScheduleCreated".to_owned(),
             event_data: json!({
@@ -192,7 +192,7 @@ async fn tokens_claimed_increases_claimed_amount(pool: PgPool) {
             contract_hash: "vesting_hash".to_owned(),
             deploy_hash: VESTING_DEPLOY_HASH.to_owned(),
             block_height: 100,
-            caller: FakeAddress::Alice.to_string(),
+
             contract_type: ContractType::Vesting,
             event_name: "ScheduleCreated".to_owned(),
             event_data: json!({
@@ -220,7 +220,7 @@ async fn tokens_claimed_increases_claimed_amount(pool: PgPool) {
             contract_hash: "vesting_hash".to_owned(),
             deploy_hash: VESTING_DEPLOY_HASH_2.to_owned(),
             block_height: 200,
-            caller: FakeAddress::Buyer.to_string(),
+
             contract_type: ContractType::Vesting,
             event_name: "TokensClaimed".to_owned(),
             event_data: json!({
@@ -279,7 +279,7 @@ async fn tokens_claimed_accumulates(pool: PgPool) {
             contract_hash: "vesting_hash".to_owned(),
             deploy_hash: deploy_1.to_owned(),
             block_height: 200,
-            caller: FakeAddress::Buyer.to_string(),
+
             contract_type: ContractType::Vesting,
             event_name: "TokensClaimed".to_owned(),
             event_data: json!({
@@ -303,7 +303,7 @@ async fn tokens_claimed_accumulates(pool: PgPool) {
             contract_hash: "vesting_hash".to_owned(),
             deploy_hash: deploy_2.to_owned(),
             block_height: 300,
-            caller: FakeAddress::Buyer.to_string(),
+
             contract_type: ContractType::Vesting,
             event_name: "TokensClaimed".to_owned(),
             event_data: json!({

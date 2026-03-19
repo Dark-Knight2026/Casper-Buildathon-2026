@@ -2,8 +2,8 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::backfill::parser::{CesEvent, EventSchema, FieldType};
 use crate::{
+    backfill::parser::{CesEvent, EventSchema, FieldType},
     error::{IndexerError, IndexerResult},
     event_trait::{EventContext, IndexableEvent},
     events::db::{self, HashType},

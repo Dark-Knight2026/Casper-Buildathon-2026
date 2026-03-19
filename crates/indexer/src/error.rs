@@ -52,13 +52,6 @@ pub enum IndexerError {
         /// CES event name.
         event_name: String,
     },
-
-    /// Event processing deferred to backfill (e.g. streaming event without caller).
-    ///
-    /// The processor rolls back the transaction so that nothing is persisted.
-    /// The streaming client must still advance the cursor past this event.
-    #[error("Deferred event: {0}")]
-    DeferredEvent(String),
 }
 
 /// Shorthand for `Result<T, IndexerError>` used throughout the indexer crate.

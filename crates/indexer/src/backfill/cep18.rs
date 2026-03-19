@@ -220,7 +220,6 @@ pub async fn backfill_cep18(
                 contract_hash: contract_hash.to_owned(),
                 deploy_hash: action.deploy_hash.clone(),
                 block_height: action.block_height,
-                caller: String::new(),
                 contract_type,
                 event_name: event_name.to_owned(),
                 event_data,

@@ -24,53 +24,12 @@ use tokio_tungstenite::{
 };
 
 use crate::{
-    address,
     config::{ContractRegistry, ContractType, IndexerConfig},
     error::{IndexerError, IndexerResult},
     events::EventRegistry,
     processor,
 };
 use db::StreamType;
-
-/// REST API response for a single deploy lookup.
-#[derive(Debug, Deserialize)]
-struct DeployResponse {
-    data: DeployData,
-}
-
-/// Deploy data from the CSPR.cloud REST API.
-#[derive(Debug, Deserialize)]
-struct DeployData {
-    caller_public_key: String,
-}
-
-/// Fetch the caller (initiator) of a deployment via the CSPR.cloud REST API.
-///
-/// WSS streaming events don't include `caller`, so this function provides a
-/// fallback: given a deployment hash, it queries the REST API and returns the
-/// caller's account hash (normalized from the public key).
-///
-/// # Errors
-///
-/// Returns [`IndexerError::Http`] on network failure, [`IndexerError::Parse`]
-/// if the public key cannot be normalized.
-async fn fetch_deploy_caller(
-    client: &reqwest::Client,
-    config: &IndexerConfig,
-    deploy_hash: &str,
-) -> IndexerResult<String> {
-    let url = format!("{}/deploys/{deploy_hash}", config.casper.rest_url);
-
-    let response = client
-        .get(&url)
-        .header("authorization", config.casper.api_token.expose_secret())
-        .timeout(Duration::from_secs(30))
-        .send()
-        .await?;
-
-    let deploy = response.json::<DeployResponse>().await?;
-    address::normalize_to_account_hash(&deploy.data.caller_public_key)
-}
 
 // CSPR.cloud WebSocket message types ------------------------------------------
 
@@ -229,7 +188,6 @@ pub(crate) async fn connect_and_stream(
     // Build lookup maps once for this connection lifetime.
     let contract_map = build_contract_map(&config.contracts);
     let known_hashes = config.contracts.contract_hash_set();
-    let client = reqwest::Client::new();
     let ws_stream = connect(config, last_event_id).await?;
 
     // Split into independent read/write halves.
@@ -240,16 +198,7 @@ pub(crate) async fn connect_and_stream(
     while let Some(msg) = read.next().await {
         match msg? {
             Message::Text(text) => {
-                handle_text_message(
-                    &text,
-                    &contract_map,
-                    &known_hashes,
-                    db_pool,
-                    registry,
-                    config,
-                    &client,
-                )
-                .await?;
+                handle_text_message(&text, &contract_map, &known_hashes, db_pool, registry).await?;
             }
             Message::Close(frame) => {
                 tracing::info!(?frame, "WebSocket connection closed by server");
@@ -274,9 +223,6 @@ pub(crate) async fn connect_and_stream(
 /// Skips events from unregistered contracts with a warning. Updates the
 /// streaming cursor in [`db`] after each successfully processed event.
 ///
-/// When the processor defers an event (e.g. missing caller), this function
-/// resolves the missing data via the `CSPR.cloud` REST API and retries once.
-///
 /// # Errors
 ///
 /// Returns [`IndexerError`] on JSON parse, processor, or database failures.
@@ -287,8 +233,6 @@ pub async fn handle_text_message(
     known_hashes: &HashSet<String, RandomState>,
     db_pool: &PgPool,
     registry: &EventRegistry,
-    config: &IndexerConfig,
-    client: &reqwest::Client,
 ) -> IndexerResult<()> {
     tracing::debug!(%text, "WSS message received");
 
@@ -306,9 +250,6 @@ pub async fn handle_text_message(
         );
         return Ok(());
     };
-    // Not available in streaming events; resolved via REST on demand.
-    let caller = String::new();
-
     let block_timestamp = msg
         .timestamp
         .as_deref()
@@ -319,7 +260,6 @@ pub async fn handle_text_message(
         contract_hash: msg.data.contract_package_hash,
         deploy_hash: msg.extra.deploy_hash,
         block_height: msg.extra.block_height,
-        caller,
         contract_type,
         event_name: msg.data.name,
         event_data: msg.data.data,
@@ -329,51 +269,6 @@ pub async fn handle_text_message(
 
     match processor::process_event(db_pool, registry, known_hashes, &raw).await {
         Ok(()) => {}
-        Err(IndexerError::DeferredEvent(reason)) => {
-            // Event was deferred (e.g. missing caller). Resolve via REST API
-            // and retry processing once.
-            tracing::info!(
-                deploy = %raw.deploy_hash,
-                event = %raw.event_name,
-                %reason,
-                "Event deferred - resolving caller via REST API"
-            );
-
-            // WSS events arrive faster than REST API indexes deploys.
-            // A small delay lets the REST API catch up.
-            tokio::time::sleep(Duration::from_secs(2)).await;
-
-            match fetch_deploy_caller(client, config, &raw.deploy_hash).await {
-                Ok(caller) => {
-                    let mut retry_raw = raw.clone();
-                    retry_raw.caller = caller;
-
-                    if let Err(e) =
-                        processor::process_event(db_pool, registry, known_hashes, &retry_raw).await
-                    {
-                        tracing::error!(
-                            deploy = %retry_raw.deploy_hash,
-                            event = %retry_raw.event_name,
-                            error = %e,
-                            "Retry with resolved caller failed - skipping event"
-                        );
-                    } else {
-                        tracing::info!(
-                            deploy = %retry_raw.deploy_hash,
-                            event = %retry_raw.event_name,
-                            "Retried deferred event with resolved caller - success"
-                        );
-                    }
-                }
-                Err(e) => {
-                    tracing::error!(
-                        deploy = %raw.deploy_hash,
-                        error = %e,
-                        "Failed to fetch caller from REST API - skipping event"
-                    );
-                }
-            }
-        }
         // Database errors are fatal (connection lost) - propagate to reconnect.
         Err(e @ IndexerError::Database(_)) => return Err(e),
         // All other errors (Json, Parse, etc.) are event-specific - log and skip

@@ -12,8 +12,6 @@
 //!   only; `token_holdings` must remain unchanged.
 //! - **`TokensPurchased`** - unknown `currency` discriminant (> 2) must be
 //!   stored as `"UNKNOWN"` in `ico_purchases` and `blockchain_transactions`.
-//!   Deferred-event flow: streaming (empty caller) -> rollback, then backfill
-//!   (real caller) -> persists all rows.
 //! - **`IcoScheduleAdded`** - writes `ico_schedules` row with schedule ID,
 //!   price, and sale amount; UPSERT updates existing rows.
 
@@ -29,7 +27,6 @@ use sqlx::PgPool;
 use common::{FakeAddress, MIGRATOR, PURCHASE_DEPLOY_HASH, TRANSFER_DEPLOY_HASH, payloads};
 use indexer::{
     config::ContractType,
-    error::IndexerError,
     events::EventRegistry,
     processor::{self, RawEvent},
 };
@@ -51,7 +48,6 @@ async fn transfer_writes_blockchain_transaction_row(pool: PgPool) {
             contract_hash: "big_hash".to_owned(),
             deploy_hash: TRANSFER_DEPLOY_HASH.to_owned(),
             block_height: 100,
-            caller: String::new(),
             contract_type: ContractType::Big,
             event_name: "Transfer".to_owned(),
             event_data: payloads::transfer_event_data("500"),
@@ -95,7 +91,6 @@ async fn transfer_increases_recipient_and_clamps_unknown_sender(pool: PgPool) {
             contract_hash: "big_hash".to_owned(),
             deploy_hash: TRANSFER_DEPLOY_HASH.to_owned(),
             block_height: 100,
-            caller: String::new(),
             contract_type: ContractType::Big,
             event_name: "Transfer".to_owned(),
             event_data: payloads::transfer_event_data("300"),
@@ -164,7 +159,6 @@ async fn transfer_decreases_existing_sender_balance(pool: PgPool) {
             contract_hash: "big_hash".to_owned(),
             deploy_hash: TRANSFER_DEPLOY_HASH.to_owned(),
             block_height: 100,
-            caller: String::new(),
             contract_type: ContractType::Big,
             event_name: "Transfer".to_owned(),
             event_data: payloads::transfer_event_data("400"),
@@ -209,7 +203,6 @@ async fn set_allowance_writes_blockchain_transaction_row(pool: PgPool) {
             contract_hash: "big_hash".to_owned(),
             deploy_hash: TRANSFER_DEPLOY_HASH.to_owned(),
             block_height: 200,
-            caller: String::new(),
             contract_type: ContractType::Big,
             event_name: "SetAllowance".to_owned(),
             event_data: json!({
@@ -258,10 +251,10 @@ async fn tokens_purchased_writes_ico_purchase_and_blockchain_transaction(pool: P
             contract_hash: "ico_hash".to_owned(),
             deploy_hash: PURCHASE_DEPLOY_HASH.to_owned(),
             block_height: 100,
-            caller: FakeAddress::Buyer.to_string(),
             contract_type: ContractType::Ico,
             event_name: "TokensPurchased".to_owned(),
             event_data: json!({
+                "buyer": FakeAddress::Buyer.as_str(),
                 "amount": "1000000000",
                 "currency": 0,
                 "cost": "500000000",
@@ -321,10 +314,10 @@ async fn tokens_purchased_increases_buyer_big_balance(pool: PgPool) {
             contract_hash: "ico_hash".to_owned(),
             deploy_hash: PURCHASE_DEPLOY_HASH.to_owned(),
             block_height: 100,
-            caller: FakeAddress::Buyer.to_string(),
             contract_type: ContractType::Ico,
             event_name: "TokensPurchased".to_owned(),
             event_data: json!({
+                "buyer": FakeAddress::Buyer.as_str(),
                 "amount": "750",
                 "currency": 1,
                 "cost": "100",
@@ -371,7 +364,6 @@ async fn transfer_usdc_updates_usdc_token_holdings(pool: PgPool) {
             contract_hash: "usdc_hash".to_owned(),
             deploy_hash: TRANSFER_DEPLOY_HASH.to_owned(),
             block_height: 100,
-            caller: String::new(),
             contract_type: ContractType::Usdc,
             event_name: "Transfer".to_owned(),
             event_data: payloads::transfer_event_data("250"),
@@ -426,7 +418,6 @@ async fn transfer_usdt_updates_usdt_token_holdings(pool: PgPool) {
             contract_hash: "usdt_hash".to_owned(),
             deploy_hash: TRANSFER_DEPLOY_HASH.to_owned(),
             block_height: 100,
-            caller: String::new(),
             contract_type: ContractType::Usdt,
             event_name: "Transfer".to_owned(),
             event_data: payloads::transfer_event_data("350"),
@@ -483,10 +474,10 @@ async fn tokens_purchased_unknown_currency_stored_as_unknown_label(pool: PgPool)
             contract_hash: "ico_hash".to_owned(),
             deploy_hash: PURCHASE_DEPLOY_HASH.to_owned(),
             block_height: 100,
-            caller: FakeAddress::Buyer.to_string(),
             contract_type: ContractType::Ico,
             event_name: "TokensPurchased".to_owned(),
             event_data: json!({
+                "buyer": FakeAddress::Buyer.as_str(),
                 "amount": "500",
                 "currency": 99u8,
                 "cost": "200",
@@ -544,7 +535,6 @@ async fn set_allowance_does_not_modify_token_holdings(pool: PgPool) {
             contract_hash: "big_hash".to_owned(),
             deploy_hash: TRANSFER_DEPLOY_HASH.to_owned(),
             block_height: 200,
-            caller: String::new(),
             contract_type: ContractType::Big,
             event_name: "SetAllowance".to_owned(),
             event_data: json!({
@@ -587,7 +577,6 @@ async fn ico_schedule_added_writes_schedule_row(pool: PgPool) {
             contract_hash: "ico_hash".to_owned(),
             deploy_hash: deploy_hash.to_owned(),
             block_height: 500,
-            caller: String::new(),
             contract_type: ContractType::Ico,
             event_name: "ICOScheduleAdded".to_owned(),
             event_data: json!({
@@ -658,7 +647,6 @@ async fn ico_schedule_added_upsert_updates_existing_row(pool: PgPool) {
             contract_hash: "ico_hash".to_owned(),
             deploy_hash: deploy_hash_1.to_owned(),
             block_height: 100,
-            caller: String::new(),
             contract_type: ContractType::Ico,
             event_name: "ICOScheduleAdded".to_owned(),
             event_data: json!({
@@ -684,7 +672,6 @@ async fn ico_schedule_added_upsert_updates_existing_row(pool: PgPool) {
             contract_hash: "ico_hash".to_owned(),
             deploy_hash: deploy_hash_2.to_owned(),
             block_height: 200,
-            caller: String::new(),
             contract_type: ContractType::Ico,
             event_name: "ICOScheduleAdded".to_owned(),
             event_data: json!({
@@ -735,197 +722,6 @@ async fn ico_schedule_added_upsert_updates_existing_row(pool: PgPool) {
     );
 }
 
-// TokensPurchased handler — streaming without caller
-
-/// When `TokensPurchased` arrives via streaming with an empty caller, the
-/// processor must roll back the transaction so that nothing is persisted.
-/// Backfill will later re-process the event with the full caller address.
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn tokens_purchased_without_caller_defers_to_backfill(pool: PgPool) {
-    common::disable_rls(&pool).await;
-
-    let deploy_hash = "0000000000000000000000000000000000000000000000000000000000007777";
-
-    // Empty caller simulates a streaming event.
-    let result = processor::process_event(
-        &pool,
-        &EventRegistry::new(),
-        &HashSet::new(),
-        &RawEvent {
-            contract_hash: "ico_hash".to_owned(),
-            deploy_hash: deploy_hash.to_owned(),
-            block_height: 100,
-            caller: String::new(),
-            contract_type: ContractType::Ico,
-            event_name: "TokensPurchased".to_owned(),
-            event_data: json!({
-                "amount": "1000",
-                "currency": 0,
-                "cost": "500",
-                "timestamp": 1_700_000_000_u64
-            }),
-            block_timestamp: None,
-            transform_idx: None,
-        },
-    )
-    .await;
-
-    // Must return DeferredEvent error so the caller can handle retry.
-    assert!(
-        matches!(result, Err(IndexerError::DeferredEvent(_))),
-        "expected DeferredEvent error, got {result:?}"
-    );
-
-    // Nothing should be persisted - transaction was rolled back.
-    let event_count: i64 = sqlx::query_scalar!(
-        r"SELECT COUNT(*) FROM blockchain_events WHERE transaction_hash = $1",
-        deploy_hash,
-    )
-    .fetch_one(&pool)
-    .await
-    .unwrap()
-    .unwrap_or(0);
-    assert_eq!(
-        event_count, 0,
-        "deferred event must not be stored in blockchain_events"
-    );
-
-    let purchase_count: i64 = sqlx::query_scalar!(
-        r"SELECT COUNT(*) FROM ico_purchases WHERE transaction_hash = $1",
-        deploy_hash,
-    )
-    .fetch_one(&pool)
-    .await
-    .unwrap()
-    .unwrap_or(0);
-    assert_eq!(
-        purchase_count, 0,
-        "deferred event must not create ico_purchases row"
-    );
-
-    let tx_count: i64 = sqlx::query_scalar!(
-        r"SELECT COUNT(*) FROM blockchain_transactions WHERE transaction_hash = $1",
-        deploy_hash,
-    )
-    .fetch_one(&pool)
-    .await
-    .unwrap()
-    .unwrap_or(0);
-    assert_eq!(
-        tx_count, 0,
-        "deferred event must not create blockchain_transactions row"
-    );
-}
-
-/// End-to-end test: streaming event defers (empty caller), then backfill
-/// re-processes the same deploy with a real caller and persists all rows.
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn deferred_event_then_backfill_persists_data(pool: PgPool) {
-    common::disable_rls(&pool).await;
-
-    let deploy_hash = "0000000000000000000000000000000000000000000000000000000000008888";
-
-    // Step 1: streaming event with empty caller -> deferred, nothing persisted.
-    let result = processor::process_event(
-        &pool,
-        &EventRegistry::new(),
-        &HashSet::new(),
-        &RawEvent {
-            contract_hash: "ico_hash".to_owned(),
-            deploy_hash: deploy_hash.to_owned(),
-            block_height: 200,
-            caller: String::new(),
-            contract_type: ContractType::Ico,
-            event_name: "TokensPurchased".to_owned(),
-            event_data: json!({
-                "amount": "5000",
-                "currency": 0,
-                "cost": "2500",
-                "timestamp": 1_700_000_000_u64
-            }),
-            block_timestamp: None,
-            transform_idx: None,
-        },
-    )
-    .await;
-    assert!(
-        matches!(result, Err(IndexerError::DeferredEvent(_))),
-        "expected DeferredEvent error, got {result:?}"
-    );
-
-    // Verify nothing persisted after deferral.
-    let count: i64 = sqlx::query_scalar!(
-        "SELECT COUNT(*) FROM ico_purchases WHERE transaction_hash = $1",
-        deploy_hash,
-    )
-    .fetch_one(&pool)
-    .await
-    .unwrap()
-    .unwrap_or(0);
-    assert_eq!(count, 0, "deferred event must not persist ico_purchases");
-
-    // Step 2: backfill re-processes the same deploy with a real caller.
-    let result = processor::process_event(
-        &pool,
-        &EventRegistry::new(),
-        &HashSet::new(),
-        &RawEvent {
-            contract_hash: "ico_hash".to_owned(),
-            deploy_hash: deploy_hash.to_owned(),
-            block_height: 200,
-            caller: FakeAddress::Buyer.to_string(),
-            contract_type: ContractType::Ico,
-            event_name: "TokensPurchased".to_owned(),
-            event_data: json!({
-                "amount": "5000",
-                "currency": 0,
-                "cost": "2500",
-                "timestamp": 1_700_000_000_u64
-            }),
-            block_timestamp: None,
-            transform_idx: None,
-        },
-    )
-    .await;
-    result.unwrap();
-
-    // Verify rows persisted after backfill.
-    let purchase_count: i64 = sqlx::query_scalar!(
-        "SELECT COUNT(*) FROM ico_purchases WHERE transaction_hash = $1",
-        deploy_hash,
-    )
-    .fetch_one(&pool)
-    .await
-    .unwrap()
-    .unwrap_or(0);
-    assert_eq!(purchase_count, 1, "backfill must persist ico_purchases row");
-
-    let tx_count: i64 = sqlx::query_scalar!(
-        "SELECT COUNT(*) FROM blockchain_transactions WHERE transaction_hash = $1",
-        deploy_hash,
-    )
-    .fetch_one(&pool)
-    .await
-    .unwrap()
-    .unwrap_or(0);
-    assert_eq!(
-        tx_count, 1,
-        "backfill must persist blockchain_transactions row"
-    );
-
-    let holding_count: i64 = sqlx::query_scalar!(
-        r#"SELECT COUNT(*) as "count!" FROM token_holdings WHERE user_address = $1"#,
-        FakeAddress::Buyer.as_str(),
-    )
-    .fetch_one(&pool)
-    .await
-    .unwrap();
-    assert_eq!(
-        holding_count, 1,
-        "backfill must update token_holdings for the buyer"
-    );
-}
-
 /// A stale `IcoScheduleAdded` event (lower `block_height`) must NOT overwrite
 /// a newer schedule row. The `block_height` guard prevents out-of-order updates.
 #[sqlx::test(migrator = "MIGRATOR")]
@@ -944,7 +740,6 @@ async fn ico_schedule_added_stale_event_does_not_overwrite(pool: PgPool) {
             contract_hash: "ico_hash".to_owned(),
             deploy_hash: deploy_hash_new.to_owned(),
             block_height: 500,
-            caller: String::new(),
             contract_type: ContractType::Ico,
             event_name: "ICOScheduleAdded".to_owned(),
             event_data: json!({
@@ -970,7 +765,6 @@ async fn ico_schedule_added_stale_event_does_not_overwrite(pool: PgPool) {
             contract_hash: "ico_hash".to_owned(),
             deploy_hash: deploy_hash_old.to_owned(),
             block_height: 100,
-            caller: String::new(),
             contract_type: ContractType::Ico,
             event_name: "ICOScheduleAdded".to_owned(),
             event_data: json!({

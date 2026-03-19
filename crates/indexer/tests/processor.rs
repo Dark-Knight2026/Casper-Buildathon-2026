@@ -45,7 +45,7 @@ async fn duplicate_event_is_no_op(pool: PgPool) {
         contract_hash: "big_contract_hash".to_owned(),
         deploy_hash: TRANSFER_DEPLOY_HASH.to_owned(),
         block_height: 100,
-        caller: String::new(),
+
         contract_type: ContractType::Big,
         event_name: "Transfer".to_owned(),
         event_data: common::payloads::transfer_event_data("100"),
@@ -98,7 +98,7 @@ async fn handler_error_rolls_back_blockchain_events_row(pool: PgPool) {
         contract_hash: "ico_contract_hash".to_owned(),
         deploy_hash: PURCHASE_DEPLOY_HASH.to_owned(),
         block_height: 200,
-        caller: FakeAddress::Buyer.to_string(),
+
         contract_type: ContractType::Ico,
         event_name: "TokensPurchased".to_owned(),
         event_data: json!({}),
@@ -142,7 +142,7 @@ async fn unknown_event_is_stored_raw_without_handler(pool: PgPool) {
         contract_hash: "big_contract_hash".to_owned(),
         deploy_hash: TRANSFER_DEPLOY_HASH.to_owned(),
         block_height: 300,
-        caller: String::new(),
+
         contract_type: ContractType::Big,
         event_name: "NonExistentEvent".to_owned(),
         event_data: json!({ "foo": "bar" }),
@@ -220,7 +220,7 @@ async fn reprocessing_after_full_rollback_does_not_double_balance(pool: PgPool) 
         contract_hash: "big_contract_hash".to_owned(),
         deploy_hash: TRANSFER_DEPLOY_HASH.to_owned(),
         block_height: 100,
-        caller: String::new(),
+
         contract_type: ContractType::Big,
         event_name: "Transfer".to_owned(),
         event_data: common::payloads::transfer_event_data("100"),

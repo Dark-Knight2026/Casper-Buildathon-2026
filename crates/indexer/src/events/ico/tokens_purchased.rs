@@ -2,11 +2,11 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::backfill::parser::{CesEvent, EventSchema, FieldType};
 use crate::{
     address,
+    backfill::parser::{CesEvent, EventSchema, FieldType},
     config::ContractType,
-    error::{IndexerError, IndexerResult},
+    error::IndexerResult,
     event_trait::{EventContext, IndexableEvent},
     events::db::{self, HashType},
 };
@@ -66,6 +66,8 @@ impl Currency {
 /// A user purchased BIG tokens during an ICO round.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TokensPurchased {
+    /// Account hash of the buyer (hex, no prefix).
+    pub buyer: String,
     /// Number of BIG tokens purchased (U256 as string).
     pub amount: String,
     /// Payment currency.
@@ -84,6 +86,7 @@ impl CesEvent for TokensPurchased {
     const SCHEMA: EventSchema = EventSchema {
         name: Self::EVENT_NAME,
         fields: &[
+            ("buyer", FieldType::Key),
             ("amount", FieldType::U256),
             ("currency", FieldType::U8),
             ("price", FieldType::U256),
@@ -98,16 +101,8 @@ impl IndexableEvent for TokensPurchased {
 
     #[inline]
     async fn process(&self, ctx: &mut EventContext<'_>) -> IndexerResult<()> {
-        // Normalize caller address to 64-char lowercase hex account hash.
-        let buyer = address::normalize_to_account_hash(ctx.caller)?;
-
-        if buyer.is_empty() {
-            return Err(IndexerError::DeferredEvent(format!(
-                "TokensPurchased deploy={} has no caller (streaming) - \
-                 deferring to backfill",
-                ctx.deploy_hash,
-            )));
-        }
+        // Normalize buyer address to 64-char lowercase hex account hash.
+        let buyer = address::normalize_to_account_hash(&self.buyer)?;
 
         // 1. Insert into ico_purchases table
         db::insert_ico_purchase(
