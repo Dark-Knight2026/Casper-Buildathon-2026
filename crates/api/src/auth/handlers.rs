@@ -18,7 +18,7 @@ use crate::{
     auth::models::{LoginRequest, LoginResponse, NonceRequest, NonceResponse, UserInfo},
     common::{
         self, ApiError, ApiResult, AppState, CASPER_ED25519_PUBKEY_HEX_LEN,
-        CASPER_SECP256K1_PUBKEY_HEX_LEN, Claims, UserRole,
+        CASPER_SECP256K1_PUBKEY_HEX_LEN, Claims, JWT_AUDIENCE, JWT_ISSUER, UserRole,
     },
 };
 
@@ -59,13 +59,13 @@ pub async fn get_nonce(
     State(state): State<Arc<AppState>>,
     Query(payload): Query<NonceRequest>,
 ) -> ApiResult<Json<NonceResponse>> {
-    // Validate wallet address length before touching Redis.
+    // Validate wallet address length and hex content before touching Redis.
     let wallet = payload.wallet_address.to_ascii_lowercase();
     let len = wallet.len();
-    if len != CASPER_ED25519_PUBKEY_HEX_LEN && len != CASPER_SECP256K1_PUBKEY_HEX_LEN {
-        return Err(ApiError::BadRequest(
-            "Invalid wallet address length".to_owned(),
-        ));
+    if (len != CASPER_ED25519_PUBKEY_HEX_LEN && len != CASPER_SECP256K1_PUBKEY_HEX_LEN)
+        || !wallet.chars().all(|c| c.is_ascii_hexdigit())
+    {
+        return Err(ApiError::BadRequest("Invalid wallet address".to_owned()));
     }
 
     // Generate a random string (16 characters)
@@ -177,6 +177,12 @@ pub async fn login(
             ApiError::Unauthorized("Nonce not found or expired".to_owned())
         })?;
 
+    // Consume nonce before verification (one-time use).
+    // This prevents brute-force attacks within the nonce TTL window.
+    if let Err(e) = state.redis.delete_nonce(&wallet_address).await {
+        tracing::error!(error = %e, "Failed to delete nonce from Redis");
+    }
+
     // Security: Verify Signature and RETURN ERROR if invalid
     let is_valid = common::verify_casper_signature(
         &wallet_address,
@@ -203,9 +209,6 @@ pub async fn login(
         );
         return Err(ApiError::Unauthorized("Invalid signature".to_owned()));
     }
-
-    // Remove nonce (protection against signature reuse)
-    let _ = state.redis.delete_nonce(&wallet_address).await;
 
     // Since the users table requires an email address, we generate a unique one using a hash.
     // Using `SHA-256` hash prevents collisions that could occur with simple address truncation.
@@ -234,6 +237,8 @@ pub async fn login(
         sub: user_record.id,
         role: user_role.clone(),
         exp,
+        iss: JWT_ISSUER.to_owned(),
+        aud: JWT_AUDIENCE.to_owned(),
     };
 
     let secret = state.config.jwt_secret.expose_secret();

@@ -232,14 +232,12 @@ async fn concurrent_nonce_overwrites_previous(pool: PgPool) {
     let wallet_address = public_key.to_hex();
 
     // Request first nonce
-    let first_body: serde_json::Value = env
+    let _first_body: serde_json::Value = env
         .server
         .get("/api/v1/auth/nonce")
         .add_query_param("wallet_address", &wallet_address)
         .await
         .json();
-    let first_message = first_body["message"].as_str().unwrap();
-    let first_sig = sign_with_prefix(first_message, &secret_key, &public_key);
 
     // Request second nonce (overwrites first in Redis)
     let second_body: serde_json::Value = env
@@ -251,22 +249,7 @@ async fn concurrent_nonce_overwrites_previous(pool: PgPool) {
     let second_message = second_body["message"].as_str().unwrap();
     let second_sig = sign_with_prefix(second_message, &secret_key, &public_key);
 
-    // Login with first (stale) nonce fails
-    let stale = env
-        .server
-        .post("/api/v1/auth/login")
-        .json(&serde_json::json!({
-            "wallet_address": wallet_address,
-            "signature": first_sig
-        }))
-        .await;
-    assert_eq!(
-        stale.status_code(),
-        StatusCode::UNAUTHORIZED,
-        "Stale nonce signature must be rejected"
-    );
-
-    // Login with latest nonce succeeds
+    // Login with latest nonce succeeds (first nonce was overwritten)
     let fresh = env
         .server
         .post("/api/v1/auth/login")
@@ -276,6 +259,58 @@ async fn concurrent_nonce_overwrites_previous(pool: PgPool) {
         }))
         .await;
     assert_eq!(fresh.status_code(), StatusCode::OK);
+}
+
+/// A failed login attempt consumes the nonce (consume-on-first-use).
+///
+/// This prevents brute-force attacks within the nonce TTL window.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn failed_login_consumes_nonce(pool: PgPool) {
+    let env = common::setup_test_server(pool, true).await;
+
+    let secret_key = SecretKey::ed25519_from_bytes([6u8; 32]).unwrap();
+    let public_key = PublicKey::from(&secret_key);
+    let wallet_address = public_key.to_hex();
+
+    // Get nonce and sign the correct message
+    let nonce_body: serde_json::Value = env
+        .server
+        .get("/api/v1/auth/nonce")
+        .add_query_param("wallet_address", &wallet_address)
+        .await
+        .json();
+    let message = nonce_body["message"].as_str().unwrap();
+    let correct_sig = sign_with_prefix(message, &secret_key, &public_key);
+
+    // First attempt with a wrong signature consumes the nonce
+    let bad = env
+        .server
+        .post("/api/v1/auth/login")
+        .json(&serde_json::json!({
+            "wallet_address": wallet_address,
+            "signature": "01".repeat(64)
+        }))
+        .await;
+    assert_eq!(
+        bad.status_code(),
+        StatusCode::BAD_REQUEST,
+        "Bad signature format should return 400"
+    );
+
+    // Second attempt with the correct signature fails (nonce already consumed)
+    let retry = env
+        .server
+        .post("/api/v1/auth/login")
+        .json(&serde_json::json!({
+            "wallet_address": wallet_address,
+            "signature": correct_sig
+        }))
+        .await;
+    assert_eq!(
+        retry.status_code(),
+        StatusCode::UNAUTHORIZED,
+        "Nonce must be consumed after first login attempt"
+    );
 }
 
 /// Login without requesting a nonce first must be rejected.

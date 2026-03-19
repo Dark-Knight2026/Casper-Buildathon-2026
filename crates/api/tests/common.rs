@@ -33,7 +33,9 @@ use testcontainers::{
 };
 
 use api::{
-    AppState, Claims, IcoFallback, ServerConfig, UserId, UserRole, common::RedisStore, server,
+    AppState, Claims, IcoFallback, ServerConfig, UserId, UserRole,
+    common::{JWT_AUDIENCE, JWT_ISSUER, RedisStore},
+    server,
 };
 
 /// Embedded migrations for `#[sqlx::test(migrator = "common::MIGRATIONS")]`.
@@ -182,6 +184,8 @@ pub fn create_test_jwt(user_id: UserId, role: UserRole, secret: &str) -> String 
         sub: user_id,
         role,
         exp,
+        iss: JWT_ISSUER.to_owned(),
+        aud: JWT_AUDIENCE.to_owned(),
     };
     encode(
         &Header::default(),
