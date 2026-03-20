@@ -99,7 +99,8 @@ Error codes are allocated in blocks of 100 per contract:
 | 600-699 | Staking  | Staking, unstaking, and rewards          |
 | 700-799 | Vesting  | Vesting schedule creation and claims     |
 
-When adding new contracts or error codes, use the next available block of 100 codes and follow the existing namingconventions.
+When adding new contracts or error codes, use the next available block of 100 codes and follow the existing naming
+conventions.
 
 ## Build
 

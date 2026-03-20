@@ -250,17 +250,17 @@
     {
       "name": "CallerNotBurner",
       "description": "",
-      "discriminant": 62001
+      "discriminant": 101
     },
     {
       "name": "CallerNotMinter",
       "description": "",
-      "discriminant": 62000
+      "discriminant": 100
     },
     {
       "name": "CallerNotMinterNorBurner",
       "description": "",
-      "discriminant": 62002
+      "discriminant": 102
     },
     {
       "name": "CallerNotTheNewOwner",

@@ -164,7 +164,7 @@
     {
       "name": "CallerNotBeneficiary",
       "description": "",
-      "discriminant": 65006
+      "discriminant": 706
     },
     {
       "name": "CallerNotTheNewOwner",
@@ -179,27 +179,27 @@
     {
       "name": "CallerNotWhitelisted",
       "description": "",
-      "discriminant": 65001
+      "discriminant": 701
     },
     {
       "name": "ClaimBlockedByActiveUnbonding",
       "description": "",
-      "discriminant": 65008
+      "discriminant": 708
     },
     {
       "name": "CliffExceedsVestingDuration",
       "description": "",
-      "discriminant": 65004
+      "discriminant": 704
     },
     {
       "name": "InvalidAmount",
       "description": "",
-      "discriminant": 65002
+      "discriminant": 702
     },
     {
       "name": "InvalidVestingDuration",
       "description": "",
-      "discriminant": 65003
+      "discriminant": 703
     },
     {
       "name": "MissingRole",
@@ -209,7 +209,7 @@
     {
       "name": "NothingToClaim",
       "description": "",
-      "discriminant": 65007
+      "discriminant": 707
     },
     {
       "name": "OwnerNotSet",
@@ -224,7 +224,7 @@
     {
       "name": "ScheduleNotFound",
       "description": "",
-      "discriminant": 65005
+      "discriminant": 705
     }
   ],
   "entry_points": [

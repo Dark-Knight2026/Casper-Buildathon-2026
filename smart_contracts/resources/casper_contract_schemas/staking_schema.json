@@ -162,17 +162,17 @@
     {
       "name": "CallerNotAuthorizedToManageLocks",
       "description": "",
-      "discriminant": 63013
+      "discriminant": 614
     },
     {
       "name": "CallerNotAuthorizedToStake",
       "description": "",
-      "discriminant": 63011
+      "discriminant": 612
     },
     {
       "name": "CallerNotAuthorizedToUnstake",
       "description": "",
-      "discriminant": 63002
+      "discriminant": 603
     },
     {
       "name": "CallerNotTheNewOwner",
@@ -187,12 +187,12 @@
     {
       "name": "InsufficientStakedAmount",
       "description": "",
-      "discriminant": 63004
+      "discriminant": 605
     },
     {
       "name": "InvalidAmount",
       "description": "",
-      "discriminant": 63001
+      "discriminant": 602
     },
     {
       "name": "MissingRole",
@@ -202,22 +202,22 @@
     {
       "name": "NoActiveStake",
       "description": "",
-      "discriminant": 63010
+      "discriminant": 611
     },
     {
       "name": "NoRewardsToClaim",
       "description": "",
-      "discriminant": 63007
+      "discriminant": 608
     },
     {
       "name": "NoUnbondingInProgress",
       "description": "",
-      "discriminant": 63008
+      "discriminant": 609
     },
     {
       "name": "NothingStaked",
       "description": "",
-      "discriminant": 63003
+      "discriminant": 604
     },
     {
       "name": "OwnerNotSet",
@@ -232,27 +232,27 @@
     {
       "name": "TailorCoinContractIsNotSet",
       "description": "",
-      "discriminant": 63000
+      "discriminant": 601
     },
     {
       "name": "UnbondingAlreadyInProgress",
       "description": "",
-      "discriminant": 63005
+      "discriminant": 606
     },
     {
       "name": "UnbondingPeriodNotFinished",
       "description": "",
-      "discriminant": 63009
+      "discriminant": 610
     },
     {
       "name": "UnstakeBlockedByVestingLock",
       "description": "",
-      "discriminant": 63012
+      "discriminant": 613
     },
     {
       "name": "VestingContractIsNotSet",
       "description": "",
-      "discriminant": 63006
+      "discriminant": 607
     }
   ],
   "entry_points": [
