@@ -8,36 +8,65 @@ publish = { workspace = true }
 workspace = true
 
 [features]
-default = ["integration"]
+default = ["enabled", "integration"]
+enabled = [
+    "dep:axum",
+    "dep:casper-types",
+    "dep:chrono",
+    "dep:config",
+    "dep:dotenv",
+    "dep:hex",
+    "dep:jsonwebtoken",
+    "dep:rand",
+    "dep:redis",
+    "dep:rust_decimal",
+    "dep:secrecy",
+    "dep:serde",
+    "dep:serde_json",
+    "dep:sha2",
+    "dep:sqlx",
+    "dep:strum",
+    "dep:thiserror",
+    "dep:tokio",
+    "dep:tower-http",
+    "dep:tower_governor",
+    "dep:tracing",
+    "dep:tracing-subscriber",
+    "dep:utoipa",
+    "dep:utoipa-axum",
+    "dep:utoipa-swagger-ui",
+    "dep:uuid",
+]
+full = ["enabled"]
 integration = []
 
 [dependencies]
-axum = { workspace = true }
-casper-types = { workspace = true }
-chrono = { workspace = true }
-config = { workspace = true }
-dotenv = { workspace = true }
-hex = { workspace = true }
-jsonwebtoken = { workspace = true }
-rand = { workspace = true }
-redis = { workspace = true }
-rust_decimal = { workspace = true }
-secrecy = { workspace = true }
-serde = { workspace = true }
-serde_json = { workspace = true }
-sha2 = { workspace = true }
-sqlx = { workspace = true }
-strum = { workspace = true }
-thiserror = { workspace = true }
-tokio = { workspace = true }
-tower-http = { workspace = true }
-tower_governor = { workspace = true }
-tracing = { workspace = true }
-tracing-subscriber = { workspace = true }
-utoipa = { workspace = true }
-utoipa-axum = { workspace = true }
-utoipa-swagger-ui = { workspace = true }
-uuid = { workspace = true }
+axum = { workspace = true, optional = true }
+casper-types = { workspace = true, optional = true }
+chrono = { workspace = true, optional = true }
+config = { workspace = true, optional = true }
+dotenv = { workspace = true, optional = true }
+hex = { workspace = true, optional = true }
+jsonwebtoken = { workspace = true, optional = true }
+rand = { workspace = true, optional = true }
+redis = { workspace = true, optional = true }
+rust_decimal = { workspace = true, optional = true }
+secrecy = { workspace = true, optional = true }
+serde = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
+sha2 = { workspace = true, optional = true }
+sqlx = { workspace = true, optional = true }
+strum = { workspace = true, optional = true }
+thiserror = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true }
+tower-http = { workspace = true, optional = true }
+tower_governor = { workspace = true, optional = true }
+tracing = { workspace = true, optional = true }
+tracing-subscriber = { workspace = true, optional = true }
+utoipa = { workspace = true, optional = true }
+utoipa-axum = { workspace = true, optional = true }
+utoipa-swagger-ui = { workspace = true, optional = true }
+uuid = { workspace = true, optional = true }
 
 [dev-dependencies]
 axum-test = { workspace = true }
