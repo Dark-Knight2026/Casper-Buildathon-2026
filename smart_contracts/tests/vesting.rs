@@ -620,9 +620,13 @@ fn test_claim_should_claim_full_amt_after_vesting_ends() {
         "Unstaked amt should equal total amount",
     );
 
+    // Withdraw unbonded tokens
+    ctx.env.advance_block_time(UNBONDING_PERIOD + 1);
+    ctx.env.set_caller(alice);
+    ctx.staking.withdraw_unbonded();
+
     // Nothing left to claim
     ctx.env.set_caller(alice);
-
     assert_eq!(
         ctx.vesting.try_claim(vesting_id).unwrap_err(),
         Error::NothingToClaim.into(),
@@ -639,38 +643,53 @@ fn test_claim_should_allow_incremental_claims() {
 
     let vesting_id = create_test_schedule(&mut ctx, alice, vesting_amount(), cliff, vesting);
 
-    // First claim at cliff
+    // First claim at cliff (50% vested)
     ctx.env.advance_block_time(cliff);
     ctx.env.set_caller(alice);
     ctx.vesting.claim(vesting_id);
 
     let first_claim = vesting_amount() / 2;
     let schedule = ctx.vesting.get_schedule(vesting_id).unwrap();
-
     assert_eq!(
         schedule.unstaked_amount, first_claim,
         "First claim should be 50%",
     );
 
-    // Second claim at 9 months (75%)
-    ctx.env.advance_block_time(3 * ONE_MONTH_IN_MILLISECONDS);
-
-    // Unbonding period (48h) has elapsed; withdraw before next claim
+    // Withdraw and make second claim at 9 months (75% vested)
     ctx.env.set_caller(alice);
     ctx.staking.withdraw_unbonded();
-
+    ctx.env.advance_block_time(3 * ONE_MONTH_IN_MILLISECONDS);
     ctx.env.set_caller(alice);
     ctx.vesting.claim(vesting_id);
 
     let expected_total_claim = vesting_amount() * U256::from(9) / U256::from(12);
     let schedule = ctx.vesting.get_schedule(vesting_id).unwrap();
-
     assert_eq!(
         schedule.unstaked_amount, expected_total_claim,
         "Second claim should be for 75%",
     );
 
-    //  Nothing more to claim at the same timestamp
+    // Advance to end of vesting and claim remainder
+    ctx.env.advance_block_time(3 * ONE_MONTH_IN_MILLISECONDS);
+    ctx.env.set_caller(alice);
+    ctx.staking.withdraw_unbonded();
+    ctx.env.set_caller(alice);
+    ctx.vesting.claim(vesting_id);
+
+    assert_eq!(
+        ctx.vesting
+            .get_schedule(vesting_id)
+            .unwrap()
+            .unstaked_amount,
+        vesting_amount(),
+        "All tokens should be claimed"
+    );
+
+    // Withdraw final unbonded tokens, then verify NothingToClaim
+    ctx.env.advance_block_time(UNBONDING_PERIOD + 1);
+    ctx.env.set_caller(alice);
+    ctx.staking.withdraw_unbonded();
+
     ctx.env.set_caller(alice);
     assert_eq!(
         ctx.vesting.try_claim(vesting_id).unwrap_err(),
@@ -800,15 +819,20 @@ fn test_claim_end_to_end_lifecycle() {
         "All the tokens should be unstaked",
     );
 
-    // Advance past vesting
-    ctx.env.advance_block_time(ONE_MONTH_IN_MILLISECONDS);
+    // Advance past vesting and unbonding period
+    ctx.env
+        .advance_block_time(ONE_MONTH_IN_MILLISECONDS + UNBONDING_PERIOD + 1);
 
-    // Try to to claim past the vesting period
+    // Withdraw unbonded tokens from the final claim
+    ctx.env.set_caller(alice);
+    ctx.staking.withdraw_unbonded();
+
+    // Try to claim past the vesting period
     ctx.env.set_caller(alice);
     assert_eq!(
         ctx.vesting.try_claim(vesting_id).unwrap_err(),
         Error::NothingToClaim.into(),
-        "Should reveret when all tokens have been claimed",
+        "Should revert when all tokens have been claimed",
     );
 
     // Verify the entire final state
