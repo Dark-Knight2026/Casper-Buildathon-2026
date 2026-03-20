@@ -618,6 +618,10 @@ pub struct NewStakingEvent<'a> {
 
 /// Insert a row into `staking_events` (append-only log).
 ///
+/// Returns `true` if a new row was inserted, `false` if the event was already
+/// recorded (duplicate `transaction_hash`). Callers should skip arithmetic
+/// position mutations when this returns `false` to stay idempotent.
+///
 /// # Errors
 ///
 /// Returns [`IndexerError::Database`](crate::error::IndexerError::Database)
@@ -626,8 +630,8 @@ pub struct NewStakingEvent<'a> {
 pub async fn insert_staking_event(
     tx: &mut PgTransaction<'_>,
     row: &NewStakingEvent<'_>,
-) -> IndexerResult<()> {
-    sqlx::query!(
+) -> IndexerResult<bool> {
+    let result = sqlx::query!(
         r"
             INSERT INTO staking_events (staker_address, event_type, amount, transaction_hash, block_height, event_timestamp)
             VALUES ($1, $2, $3, $4, $5, $6)
@@ -643,7 +647,7 @@ pub async fn insert_staking_event(
     .execute(tx.as_mut())
     .await?;
 
-    Ok(())
+    Ok(result.rows_affected() > 0)
 }
 
 /// UPSERT `staking_positions` for a `Staked` event: increase `staked_amount`.

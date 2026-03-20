@@ -34,11 +34,8 @@ impl IndexableEvent for UnbondedWithdrawn {
     async fn process(&self, ctx: &mut EventContext<'_>) -> IndexerResult<()> {
         let staker = address::normalize_to_account_hash(&self.staker)?;
 
-        // 1. UPDATE staking_positions: clear unbonding state.
-        db::update_staking_position_withdraw(ctx.tx, &staker).await?;
-
-        // 2. Insert staking event log.
-        db::insert_staking_event(
+        // 1. Insert staking event log (deduplicates via ON CONFLICT DO NOTHING).
+        let _is_new = db::insert_staking_event(
             ctx.tx,
             &db::NewStakingEvent {
                 staker_address: &staker,
@@ -50,6 +47,10 @@ impl IndexableEvent for UnbondedWithdrawn {
             },
         )
         .await?;
+
+        // 2. UPDATE staking_positions: clear unbonding state.
+        // This is idempotent (sets to zero), so no guard needed.
+        db::update_staking_position_withdraw(ctx.tx, &staker).await?;
 
         // 3. Record in blockchain_transactions.
         let event_json = serde_json::to_value(self)?;

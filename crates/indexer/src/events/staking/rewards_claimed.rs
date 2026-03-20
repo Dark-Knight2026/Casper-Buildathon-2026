@@ -34,8 +34,8 @@ impl IndexableEvent for RewardsClaimed {
     async fn process(&self, ctx: &mut EventContext<'_>) -> IndexerResult<()> {
         let staker = address::normalize_to_account_hash(&self.staker)?;
 
-        // 1. Insert staking event log (reward_claim).
-        db::insert_staking_event(
+        // 1. Insert staking event log (returns false if already processed).
+        let is_new = db::insert_staking_event(
             ctx.tx,
             &db::NewStakingEvent {
                 staker_address: &staker,
@@ -48,8 +48,12 @@ impl IndexableEvent for RewardsClaimed {
         )
         .await?;
 
-        // 2. UPDATE staking_positions: increase total_rewards_claimed.
-        db::update_staking_position_rewards(ctx.tx, &staker, &self.amount).await?;
+        // 2. UPDATE staking_positions only if this is a new event.
+        // Skipping on duplicates prevents double-adding rewards during
+        // replays or backfills.
+        if is_new {
+            db::update_staking_position_rewards(ctx.tx, &staker, &self.amount).await?;
+        }
 
         // 3. Record in blockchain_transactions.
         let event_json = serde_json::to_value(self)?;

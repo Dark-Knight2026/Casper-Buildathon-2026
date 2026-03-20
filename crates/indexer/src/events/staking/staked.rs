@@ -34,11 +34,8 @@ impl IndexableEvent for Staked {
     async fn process(&self, ctx: &mut EventContext<'_>) -> IndexerResult<()> {
         let staker = address::normalize_to_account_hash(&self.staker)?;
 
-        // 1. UPSERT staking_positions: increase staked_amount.
-        db::upsert_staking_position_stake(ctx.tx, &staker, &self.amount).await?;
-
-        // 2. Insert staking event log.
-        db::insert_staking_event(
+        // 1. Insert staking event log (returns false if already processed).
+        let is_new = db::insert_staking_event(
             ctx.tx,
             &db::NewStakingEvent {
                 staker_address: &staker,
@@ -50,6 +47,13 @@ impl IndexableEvent for Staked {
             },
         )
         .await?;
+
+        // 2. UPSERT staking_positions only if this is a new event.
+        // Skipping on duplicates prevents double-adding staked_amount
+        // during replays or backfills.
+        if is_new {
+            db::upsert_staking_position_stake(ctx.tx, &staker, &self.amount).await?;
+        }
 
         // 3. Record in blockchain_transactions.
         let event_json = serde_json::to_value(self)?;
