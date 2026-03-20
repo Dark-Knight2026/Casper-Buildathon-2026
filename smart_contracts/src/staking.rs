@@ -77,20 +77,20 @@ pub mod errors {
 
     #[odra::odra_error]
     pub enum Error {
-        TailorCoinContractIsNotSet = 63_000,
-        InvalidAmount = 63_001,
-        CallerNotAuthorizedToUnstake = 63_002,
-        NothingStaked = 63_003,
-        InsufficientStakedAmount = 63_004,
-        UnbondingAlreadyInProgress = 63_005,
-        VestingContractIsNotSet = 63_006,
-        NoRewardsToClaim = 63_007,
-        NoUnbondingInProgress = 63_008,
-        UnbondingPeriodNotFinished = 63_009,
-        NoActiveStake = 63_010,
-        CallerNotAuthorizedToStake = 63_011,
-        UnstakeBlockedByVestingLock = 63_012,
-        CallerNotAuthorizedToManageLocks = 63_013,
+        TailorCoinContractIsNotSet = 601,
+        InvalidAmount = 602,
+        CallerNotAuthorizedToUnstake = 603,
+        NothingStaked = 604,
+        InsufficientStakedAmount = 605,
+        UnbondingAlreadyInProgress = 606,
+        VestingContractIsNotSet = 607,
+        NoRewardsToClaim = 608,
+        NoUnbondingInProgress = 609,
+        UnbondingPeriodNotFinished = 610,
+        NoActiveStake = 611,
+        CallerNotAuthorizedToStake = 612,
+        UnstakeBlockedByVestingLock = 613,
+        CallerNotAuthorizedToManageLocks = 614,
     }
 }
 
