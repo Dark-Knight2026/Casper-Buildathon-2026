@@ -126,5 +126,5 @@ openssl rand -base64 32
 During deployment, variables from `-secret.sh` are:
 
 1. **Exported as `TF_VAR_*`** — passed to Terraform for infrastructure provisioning
-2. **Written to `/opt/itinerary_service/deploy/.env`** on the server via Terraform `file` provisioner
+2. **Written to `/opt/<PROJECT_NAME>/deploy/.env`** on the server via Terraform `file` provisioner
 3. **Loaded by Docker Compose** — `backend` and `indexer` containers read from `.env` at startup

@@ -51,13 +51,16 @@ resource "hcloud_server" "host_server" {
 
   # Startup cloud-init script for the instance
   user_data = templatefile("${path.module}/../cloud-init.yml", {
-    ssh_public_key=data.local_sensitive_file.ssh_public_key.content,
-    google_application_region="${var.GOOGLE_APPLICATION_REGION}",
-    service_account_creds_b64    = filebase64(var.GOOGLE_APPLICATION_CREDENTIALS)
+    ssh_public_key             = data.local_sensitive_file.ssh_public_key.content,
+    google_application_region  = var.GOOGLE_APPLICATION_REGION,
+    service_account_creds_b64  = filebase64(var.GOOGLE_APPLICATION_CREDENTIALS),
+    project_name               = var.PROJECT_NAME
   })
 }
 
 resource "terraform_data" "redeploy_sh" {
+  depends_on = [hcloud_server.host_server]
+
   triggers_replace = {
     always = timestamp()
   }
@@ -65,7 +68,7 @@ resource "terraform_data" "redeploy_sh" {
   # Connect to host server
   connection {
     type        = "ssh"
-    user        = "root"
+    user        = "deploy"
     private_key = data.local_sensitive_file.ssh_private_key.content
     host        = hcloud_primary_ip.primary_ip.ip_address
     timeout     = "3m"
@@ -84,31 +87,34 @@ resource "terraform_data" "redeploy_sh" {
 
   # Project folder create
   provisioner "remote-exec" {
-    inline = [ 
-      "mkdir -p /opt/itinerary_service/deploy",
-      "mkdir -p /opt/itinerary_service/nginx",
+    inline = [
+      "mkdir -p /opt/${var.PROJECT_NAME}/deploy",
+      "mkdir -p /opt/${var.PROJECT_NAME}/nginx",
     ]
   }
 
-  # nginx
+  # nginx static config
   provisioner "file" {
-    content = templatefile("${path.module}/../nginx/nginx.conf", {
-      project_domain = "${var.PROJECT_DOMAIN}"
-    })
+    source      = "${path.module}/../nginx/nginx.conf"
+    destination = "/opt/${var.PROJECT_NAME}/nginx/nginx.conf"
+  }
 
-    destination = "/opt/itinerary_service/nginx/nginx.conf"
+  # nginx HTTPS template — expanded by envsubst in redeploy.sh
+  provisioner "file" {
+    source      = "${path.module}/../nginx/https.conf.template"
+    destination = "/opt/${var.PROJECT_NAME}/nginx/https.conf.template"
   }
 
   # redeploy.sh
   provisioner "file" {  
     source      = "${path.module}/../redeploy.sh"
-    destination = "/opt/itinerary_service/deploy/redeploy.sh"
+    destination = "/opt/${var.PROJECT_NAME}/deploy/redeploy.sh"
   }
 
   # docker-compose.yml
   provisioner "file" {  
     source      = "${path.module}/../../docker-compose.dev.yml"
-    destination = "/opt/itinerary_service/deploy/docker-compose.yml"
+    destination = "/opt/${var.PROJECT_NAME}/deploy/docker-compose.yml"
   }
 
   # env generate
@@ -120,19 +126,23 @@ resource "terraform_data" "redeploy_sh" {
       ]
     ))
 
-    destination = "/opt/itinerary_service/deploy/.env"
+    destination = "/opt/${var.PROJECT_NAME}/deploy/.env"
   }
 
-  # redeploy.sh start 
+  # redeploy.sh start
   provisioner "file" {
     source      = var.GOOGLE_APPLICATION_CREDENTIALS
-    destination = "/root/.sa.json"
+    destination = "/home/deploy/.sa.json"
   }
 
   provisioner "remote-exec" {
     inline = [
       "set -e",
-      "bash /opt/itinerary_service/deploy/redeploy.sh < /root/.sa.json",
+      "bash /opt/${var.PROJECT_NAME}/deploy/redeploy.sh",
     ]
+  }
+
+  provisioner "remote-exec" {
+    inline = ["shred -u /home/deploy/.sa.json"]
   }
 }

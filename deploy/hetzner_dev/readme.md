@@ -1,5 +1,7 @@
 # hetzner_dev
 
+> **Dev environment only.** This module is not hardened for production. Do not use with production credentials or data.
+
 Terraform module that provisions a Hetzner Cloud server and deploys all services to it via SSH.
 
 ## Responsibility Table
@@ -21,12 +23,12 @@ This module serves two purposes in a single `terraform apply`:
 
 **2. Service deployment** (runs on every `terraform apply`):
 - Waits for cloud-init to finish
-- Creates `/opt/itinerary_service/deploy` and `/opt/itinerary_service/nginx` directories
+- Creates `/opt/<PROJECT_NAME>/deploy` and `/opt/<PROJECT_NAME>/nginx` directories
 - Copies files to the server:
-  - `nginx/nginx.conf` → `/opt/itinerary_service/nginx/nginx.conf` (rendered with `project_domain`)
-  - `redeploy.sh` → `/opt/itinerary_service/deploy/redeploy.sh`
-  - `docker-compose.dev.yml` → `/opt/itinerary_service/deploy/docker-compose.yml`
-  - Generated `.env` → `/opt/itinerary_service/deploy/.env`
+  - `nginx/nginx.conf` → `/opt/<PROJECT_NAME>/nginx/nginx.conf` (rendered with `project_domain`)
+  - `redeploy.sh` → `/opt/<PROJECT_NAME>/deploy/redeploy.sh`
+  - `docker-compose.dev.yml` → `/opt/<PROJECT_NAME>/deploy/docker-compose.yml`
+  - Generated `.env` → `/opt/<PROJECT_NAME>/deploy/.env`
   - GCP service account JSON → `/root/.sa.json`
 - Runs `redeploy.sh` on the server
 
@@ -60,7 +62,7 @@ State is kept so Terraform can track existing Hetzner resources (server, IP, SSH
 
 ```bash
 # SSH to server
-ssh root@<SERVER_IP>
+ssh deploy@<SERVER_IP>
 
 # View running containers
 docker ps
@@ -70,10 +72,10 @@ docker logs -f leasefi_backend
 
 # Follow all logs
 docker compose \
-  --project-directory /opt/itinerary_service/deploy \
-  -f /opt/itinerary_service/deploy/docker-compose.yml \
+  --project-directory /opt/<PROJECT_NAME>/deploy \
+  -f /opt/<PROJECT_NAME>/deploy/docker-compose.yml \
   logs -f
 
 # Manual redeploy (re-runs redeploy.sh with current .env)
-bash /opt/itinerary_service/deploy/redeploy.sh
+bash /opt/<PROJECT_NAME>/deploy/redeploy.sh
 ```

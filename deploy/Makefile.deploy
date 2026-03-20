@@ -1,7 +1,18 @@
 .PHONY: \
 	deploy \
 	server_deploy \
-	build_image
+	build_image \
+	deployment_orchestration \
+	gc_setup \
+	state_storage_init \
+	artifact_repo_create \
+	push_image \
+	init_tfvars \
+	generate_tfvars \
+	deploy_dev \
+	deploy_staging \
+	deploy_production \
+	show_state_info
 
 ## --------------------------------------------------------------------------------------
 ## READ variables from .secret/-secret.sh
@@ -13,7 +24,7 @@ ifneq ("$(wildcard $(LOCAL_SECRETS_FILE))","")
 include $(LOCAL_SECRETS_FILE)
 endif
 
-strip_quotes = $(subst ",,$(1))
+strip_quotes = $(patsubst %",%,$(patsubst "%,%,$(1)))
 
 ## --------------------------------------------------------------------------------------
 ## Required Parameters
@@ -101,7 +112,6 @@ TAG := $(GOOGLE_APPLICATION_REGION)-docker.pkg.dev/$(GOOGLE_APPLICATION_PROJECT_
 # Automatically export TF_VAR_* from existing Make variables
 # ------------------------------------------------------------
 
-# !!!!!! NEW PROJECT VARS ADD HERE
 PROJECT_ENV_VARS := \
 	ARTIFACT_REPO_NAME \
 	GOOGLE_APPLICATION_REGION \
@@ -131,7 +141,8 @@ PROJECT_ENV_VARS := \
 	START_BLOCK_CONTRACT_BIG \
 	START_BLOCK_CONTRACT_TREASURY \
 	START_BLOCK_CONTRACT_ICO \
-	START_BLOCK_CONTRACT_VESTING
+	START_BLOCK_CONTRACT_VESTING \
+	START_BLOCK_CONTRACT_STAKING
 
 # !!!!!! NEW PROJECT VARS ADD HERE
 
@@ -177,7 +188,7 @@ deployment_orchestration:
 	@$(MAKE) --no-print-directory -f $(DEPLOYMENT_DIR)/Makefile.deploy gc_setup
 	@echo "[INFO] Set up GAR"
 	@$(MAKE) --no-print-directory -f $(DEPLOYMENT_DIR)/Makefile.deploy artifact_repo_create
-	@$(MAKE) --no-print-directory -f $(DEPLOYMENT_DIR)/Makefile.deploy push_image || { echo "Image pushed failed"; exit 1; }
+	@$(MAKE) --no-print-directory -f $(DEPLOYMENT_DIR)/Makefile.deploy push_image || { echo "Image push failed"; exit 1; }
 	
 	@echo "[START] Start deployment"
 
@@ -253,29 +264,24 @@ init_tfvars:
 
 generate_tfvars:
 	@echo "📝 Generating $(TFVARS_FILENAME)"
-	@echo 'PROJECT_MAP_VARIABLES = {' >> $(TFVARS_FILENAME)
-	@$(foreach v,$(PROJECT_ENV_VARS), \
-		echo '  $(v) = "$(call strip_quotes,$($(v)))"' >> $(TFVARS_FILENAME); \
-	)
-	@echo '}' >> $(TFVARS_FILENAME)
+	$(file >>$(TFVARS_FILENAME),PROJECT_MAP_VARIABLES = {)
+	$(foreach v,$(PROJECT_ENV_VARS),$(file >>$(TFVARS_FILENAME),  $(v) = "$(call strip_quotes,$($(v)))"))
+	$(file >>$(TFVARS_FILENAME),})
 
 deploy_dev: init_tfvars generate_tfvars
-	@echo "🟢 DEV deploy";
 	@$(MAKE) -f $(DEPLOYMENT_DIR)/Makefile.deploy tf_init_hetzner_dev || { echo "Initialization failed"; exit 1; }
 	terraform -chdir=$(DEPLOYMENT_DIR)/hetzner_dev apply \
 		-auto-approve \
 		-input=false \
 		-var-file=$(TFVARS_FILENAME) \
 		|| { echo "Deployment failed"; exit 1; }
+	@echo "[SUCCESS] DEV deploy complete"
 
-	@echo "🟢 DEV deploy"
+deploy_staging:
+	$(error deploy_staging is not yet implemented)
 
-# deploy_staging: init_tfvars generate_tfvars
-# 	@echo "🟡 STAGING deploy"
-
-
-# deploy_production: init_tfvars generate_tfvars
-# 	@echo "🔴 PRODUCTION deploy"
+deploy_production:
+	$(error deploy_production is not yet implemented)
 
 # ============================================================================================================================
 # Terrafrom init

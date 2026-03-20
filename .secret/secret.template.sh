@@ -16,9 +16,9 @@ GOOGLE_ENCRYPTION_KEY="<generated-encryption-key>"
 
 
 # SSH KEYS
-## Generate with: ssh-keygen -t ed25519 -f .secret/-iron_site_sdk -C "deploy_key"
-SSH_PRIVATE_KEY_PATH=".secret/-iron_site_sdk"
-SSH_PUBLIC_KEY_PATH=".secret/-iron_site_sdk.pub"
+## Generate with: ssh-keygen -t ed25519 -f .secret/-anthony_leasefi_dev -C "anthony_leasefi_dev"
+SSH_PRIVATE_KEY_PATH=".secret/-anthony_leasefi_dev"
+SSH_PUBLIC_KEY_PATH=".secret/-anthony_leasefi_dev.pub"
 
 
 # HETZNER

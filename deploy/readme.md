@@ -74,7 +74,7 @@ deploy/
      - Runs `redeploy.sh` on server
 
 2. **`redeploy.sh`** runs on the target server:
-   - Loads env from `/opt/itinerary_service/deploy/.env`
+   - Loads env from `/opt/<PROJECT_NAME>/deploy/.env`
    - Verifies both images exist in GAR registry
    - Pulls images
    - `docker compose down --remove-orphans`
@@ -133,6 +133,7 @@ deploy/
 | `START_BLOCK_CONTRACT_TREASURY` | Indexer start block for Treasury contract |
 | `START_BLOCK_CONTRACT_ICO` | Indexer start block for ICO contract |
 | `START_BLOCK_CONTRACT_VESTING` | Indexer start block for Vesting contract |
+| `START_BLOCK_CONTRACT_STAKING` | Indexer start block for Staking contract |
 
 ## Makefile Targets
 
@@ -191,7 +192,7 @@ Nginx reverse proxy template rendered by Terraform (`templatefile`):
 
 Defines four services on a shared `leasefi_net` bridge network with IPv6 support:
 - All service logs are capped at 10 MB × 3 files
-- `backend` and `indexer` load env from `.env` file at `/opt/itinerary_service/deploy/.env`
+- `backend` and `indexer` load env from `.env` file at `/opt/<PROJECT_NAME>/deploy/.env`
 - Redis data is persisted in a named volume
 
 ### hetzner_dev/
@@ -231,17 +232,37 @@ docker logs -f leasefi_backend
 docker logs -f leasefi_nginx
 
 # Restart all services
-docker compose --project-directory /opt/itinerary_service/deploy \
-  -f /opt/itinerary_service/deploy/docker-compose.yml restart
+docker compose --project-directory /opt/<PROJECT_NAME>/deploy \
+  -f /opt/<PROJECT_NAME>/deploy/docker-compose.yml restart
 
 # Manual redeploy (after updating .env or pulling new image)
-bash /opt/itinerary_service/deploy/redeploy.sh
+bash /opt/<PROJECT_NAME>/deploy/redeploy.sh
 ```
 
 ## SSL / HTTPS
 
-Cloudflare handles SSL termination in **Flexible** mode:
+Cloudflare is set to **Full (Strict)** mode:
 - Client ↔ Cloudflare: HTTPS (TLS)
-- Cloudflare ↔ Origin server: HTTP (port 80)
+- Cloudflare ↔ Origin server: HTTPS (TLS, port 443) — Let's Encrypt certificate
 
-No SSL certificate is required on the server. To enable end-to-end encryption, switch Cloudflare to **Full (Strict)** mode and configure a Cloudflare Origin Certificate in nginx (port 443).
+nginx redirects port 80 → 443. The HTTPS server block is generated from `nginx/https.conf.template` via `envsubst` on every deploy.
+
+### Certificate lifecycle
+
+| Step | What happens |
+|------|-------------|
+| First `terraform apply` | `redeploy.sh` generates a self-signed cert → nginx starts → certbot obtains a real Let's Encrypt cert via Cloudflare DNS-01 → nginx reloads |
+| Every 60 days (auto) | System cron (`0 0,12 * * *`) runs `certbot renew`; deploy hook reloads nginx on success |
+| First of every month (auto) | Cron upgrades certbot itself via pip |
+
+### Required `.env` variables
+
+| Variable | Description |
+|----------|-------------|
+| `SERVER_DOMAIN` | The domain nginx serves (e.g. `api.leasefi.com`) |
+| `CF_DNS_API_TOKEN` | Cloudflare API token with `Zone:DNS:Edit` permission — used by certbot for DNS-01 challenge |
+| `CERTBOT_EMAIL` | Email for Let's Encrypt account registration and expiry notices |
+
+### Certbot failure / retry
+
+If certbot fails (DNS propagation timeout, wrong token), the self-signed cert stays in place and nginx keeps serving. The sentinel file `deploy/.self-signed` is preserved. Re-running `redeploy.sh` (or the next `terraform apply`) retries certbot automatically.

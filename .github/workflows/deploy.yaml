@@ -2,7 +2,7 @@ name: Deploy CI
 
 on:
   push:
-    branches: [ "master", "feat/deployment" ]
+    branches: [ "master" ]
 
   workflow_dispatch:
     inputs:
@@ -44,12 +44,8 @@ jobs:
         SSH_PRIVATE_KEY: ${{ secrets.SECRET_RSA_PRIVATE_KEY }}
         SSH_PUBLIC_KEY: ${{ secrets.SECRET_RSA_PUBLIC_KEY }}
       run: |
-        install -m 600 /dev/stdin "./.secret/ssh_key" <<EOF
-        ${SSH_PRIVATE_KEY}
-        EOF
-        install -m 644 /dev/stdin "./.secret/ssh_key.pub" <<EOF
-        ${SSH_PUBLIC_KEY}
-        EOF
+        printf '%s\n' "${SSH_PRIVATE_KEY}" | install -m 600 /dev/stdin "./.secret/ssh_key"
+        printf '%s\n' "${SSH_PUBLIC_KEY}" | install -m 644 /dev/stdin "./.secret/ssh_key.pub"
 
     - name: Create secret.sh file
       env:
@@ -85,6 +81,7 @@ jobs:
         START_BLOCK_CONTRACT_TREASURY: ${{ vars.START_BLOCK_CONTRACT_TREASURY }}
         START_BLOCK_CONTRACT_ICO: ${{ vars.START_BLOCK_CONTRACT_ICO }}
         START_BLOCK_CONTRACT_VESTING: ${{ vars.START_BLOCK_CONTRACT_VESTING }}
+        START_BLOCK_CONTRACT_STAKING: ${{ vars.START_BLOCK_CONTRACT_STAKING }}
         
       run: |
         install -m 600 /dev/stdin .secret/-secret.sh <<EOF
@@ -94,6 +91,8 @@ jobs:
         GOOGLE_ENCRYPTION_KEY=${GOOGLE_ENCRYPTION_KEY}
         SSH_PRIVATE_KEY_PATH=./.secret/ssh_key
         SSH_PUBLIC_KEY_PATH=./.secret/ssh_key.pub
+        ORIGIN_CERT_PATH=./.secret/origin.crt
+        ORIGIN_KEY_PATH=./.secret/origin.key
         HOST_SERVER_NAME=${HOST_SERVER_NAME}
         HETZNER_CLOUD_TOKEN=${HETZNER_CLOUD_TOKEN}
         SUPABASE_JWT_SECRET=${SUPABASE_JWT_SECRET}
@@ -123,6 +122,7 @@ jobs:
         START_BLOCK_CONTRACT_TREASURY=${START_BLOCK_CONTRACT_TREASURY}
         START_BLOCK_CONTRACT_ICO=${START_BLOCK_CONTRACT_ICO}
         START_BLOCK_CONTRACT_VESTING=${START_BLOCK_CONTRACT_VESTING}
+        START_BLOCK_CONTRACT_STAKING=${START_BLOCK_CONTRACT_STAKING}
         EOF
 
     - name: 'Build the image, push and deploy' 
@@ -142,4 +142,10 @@ jobs:
         fi
         if [ -f "./.secret/ssh_key.pub" ]; then
           shred -vfz -n 3 "./.secret/ssh_key.pub"
+        fi
+        if [ -f "./.secret/origin.key" ]; then
+          shred -vfz -n 3 "./.secret/origin.key"
+        fi
+        if [ -f "./.secret/origin.crt" ]; then
+          rm -f "./.secret/origin.crt"
         fi
