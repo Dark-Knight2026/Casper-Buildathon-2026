@@ -54,7 +54,6 @@ pub async fn backfill_ces(
     ctx: &BackfillContext<'_>,
     contract_type: ContractType,
     contract_hash: &str,
-    _start_block: u64,
 ) -> IndexerResult<()> {
     let ces = CesContext {
         backfill: ctx,
@@ -148,19 +147,20 @@ pub async fn backfill_ces(
         match process_event_at(&ces, &rpc, &state_root, events_uref, &key, schemas).await {
             Ok(event_name) => {
                 processed += 1;
+                db::update_ces_cursor(ces.backfill.db_pool, contract_hash, i64::from(idx))
+                    .await?;
                 tracing::debug!(index = idx, event = %event_name, "CES event processed");
             }
             Err(e) => {
-                tracing::warn!(
+                tracing::error!(
                     error = %e,
                     index = idx,
                     contract = ?contract_type,
-                    "Failed to process CES event, skipping"
+                    "Failed to process CES event - stopping backfill to avoid data loss"
                 );
+                return Err(e);
             }
         }
-
-        db::update_ces_cursor(ces.backfill.db_pool, contract_hash, i64::from(idx)).await?;
 
         tokio::time::sleep(Duration::from_millis(
             ces.backfill.config.backfill_rate_limit_ms,

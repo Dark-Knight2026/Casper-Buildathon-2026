@@ -93,7 +93,6 @@ pub async fn run_backfill(config: &IndexerConfig, db_pool: &PgPool) -> IndexerRe
                     &context,
                     contract.contract_type,
                     contract.hash,
-                    contract.start_block,
                 )
                 .await?;
             }
