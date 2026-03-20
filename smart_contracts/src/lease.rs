@@ -337,15 +337,15 @@ pub mod errors {
 
     #[odra::odra_error]
     pub enum Error {
-        CallerNotLandlord = 60_000,
-        InvalidLeaseAgreementId = 60_001,
-        EqualTenantAndLandlord = 60_002,
-        InvalidTimeframes = 60_003,
-        ZeroAmount = 60_004,
-        InvalidLandlord = 60_005,
-        LeaseAgreementHasNotFinishedYet = 60_006,
-        NotAllInvoicesArePaid = 60_007,
-        SecurityDepositChargeIsTooHigh = 60_008,
+        CallerNotLandlord = 400,
+        InvalidLeaseAgreementId = 401,
+        EqualTenantAndLandlord = 402,
+        InvalidTimeframes = 403,
+        ZeroAmount = 404,
+        InvalidLandlord = 405,
+        LeaseAgreementHasNotFinishedYet = 406,
+        NotAllInvoicesArePaid = 407,
+        SecurityDepositChargeIsTooHigh = 408,
     }
 }
 
