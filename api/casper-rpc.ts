@@ -39,22 +39,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     ? 'https://node.cspr.cloud/rpc'
     : 'https://node.testnet.cspr.cloud/rpc';
 
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10_000);
+
+  let response: Response;
   try {
-    const response = await fetch(rpcUrl, {
+    response = await fetch(rpcUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'authorization': API_KEY,
       },
       body: JSON.stringify(req.body),
+      signal: controller.signal,
     });
-
-    const data = await response.text();
-
-    res.setHeader('Content-Type', response.headers.get('content-type') || 'application/json');
-    return res.status(response.status).send(data);
   } catch (err) {
     console.error('[casper-rpc proxy] Error:', err);
     return res.status(502).json({ error: 'RPC proxy request failed' });
+  } finally {
+    clearTimeout(timeoutId);
   }
+
+  const data = await response.text();
+  res.setHeader('Content-Type', response.headers.get('content-type') || 'application/json');
+  return res.status(response.status).send(data);
 }
