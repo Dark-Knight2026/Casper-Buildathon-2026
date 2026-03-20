@@ -73,10 +73,10 @@ pub async fn fetch_circulating_supply(pool: &PgPool) -> Result<String, sqlx::Err
         r"
             SELECT COALESCE(SUM(th.balance::NUMERIC), 0)::TEXT
             FROM token_holdings th
+            LEFT JOIN contract_registry cr
+                ON th.user_address = cr.contract_hash AND cr.is_active = TRUE
             WHERE th.token_type = 'BIG'
-              AND th.user_address NOT IN (
-                  SELECT contract_hash FROM contract_registry WHERE is_active = TRUE
-              )
+              AND cr.contract_hash IS NULL
         ",
     )
     .fetch_one(pool)
