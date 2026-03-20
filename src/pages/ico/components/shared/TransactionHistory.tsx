@@ -3,16 +3,7 @@ import { cn } from '@/lib/utils';
 import { Card } from './Card';
 import { TablePagination } from './TablePagination';
 import { formatDateTime } from '../../utils/formatters';
-
-export interface ICOTransaction {
-  id: string;
-  type: 'purchase' | 'claim';
-  tokensReceived: number;
-  tokenSymbol: string;
-  status: 'pending' | 'completed' | 'failed';
-  timestamp: Date;
-  txHash?: string;
-}
+import type { ICOTransaction } from '@/types/ico';
 
 interface TransactionHistoryProps {
   transactions: ICOTransaction[];

@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { ICO_CONFIG } from '@/constants/ico';
 import { type FTTokenAction, isICOPurchase } from './useContractDeploys';
-import type { ICOTransaction } from '@/pages/ico/components/shared/TransactionHistory';
+import type { ICOTransaction } from '@/types/ico';
 
 const BIG_TOKEN_PACKAGE_HASH = ICO_CONFIG.CONTRACTS.tokenAddress.replace(/^hash-/, '');
 const BIG_DECIMALS = ICO_CONFIG.TOKEN.decimals; // 18
