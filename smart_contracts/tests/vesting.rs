@@ -656,9 +656,9 @@ fn test_claim_should_allow_incremental_claims() {
     );
 
     // Withdraw and make second claim at 9 months (75% vested)
+    ctx.env.advance_block_time(3 * ONE_MONTH_IN_MILLISECONDS);
     ctx.env.set_caller(alice);
     ctx.staking.withdraw_unbonded();
-    ctx.env.advance_block_time(3 * ONE_MONTH_IN_MILLISECONDS);
     ctx.env.set_caller(alice);
     ctx.vesting.claim(vesting_id);
 
