@@ -52,6 +52,7 @@ export function TablePagination({ currentPage, totalPages, onPageChange, classNa
                   : 'text-[hsl(var(--ico-text-secondary))] hover:text-[hsl(var(--ico-text-primary))]',
               )}
               data-active={p === currentPage ? '' : undefined}
+              aria-current={p === currentPage ? 'page' : undefined}
             >
               {p}
             </button>
