@@ -63,6 +63,7 @@ export function useContractDeploys(page = 1, pageSize = 10) {
     totalPages: query.data?.page_count ?? 0,
     totalItems: query.data?.item_count ?? 0,
     isLoading: query.isLoading,
+    isFetching: query.isFetching,
     error: query.error,
     refetch: query.refetch,
   };
