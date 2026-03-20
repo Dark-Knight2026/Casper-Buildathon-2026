@@ -45,7 +45,6 @@ async function fetchBigTokenActions(page: number, pageSize: number): Promise<FTT
     throw new Error(`CSPR.cloud API error: ${res.status}`);
   }
   const data = await res.json();
-  console.log(`[useContractDeploys] Fetched page ${page} of ft-token-actions for BIG token:`, data);
   return data;
 }
 
