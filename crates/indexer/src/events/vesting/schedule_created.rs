@@ -7,7 +7,7 @@ use crate::{
     backfill::parser::{CesEvent, EventSchema, FieldType},
     error::IndexerResult,
     event_trait::{EventContext, IndexableEvent},
-    events::db,
+    events::db::{self, HashType},
 };
 
 /// Emitted when a new vesting schedule is created (typically by the ICO contract).
@@ -64,6 +64,28 @@ impl IndexableEvent for ScheduleCreated {
                 vesting_duration: self.vesting_duration.cast_signed(),
                 transaction_hash: ctx.deploy_hash,
                 block_height: ctx.block_height.cast_signed(),
+            },
+        )
+        .await?;
+
+        // Record in blockchain_transactions for unified transaction history.
+        let event_json = serde_json::to_value(self)?;
+        db::insert_blockchain_transaction(
+            ctx.tx,
+            &db::NewBlockchainTx {
+                deploy_hash: ctx.deploy_hash,
+                block_number: ctx.block_height.cast_signed(),
+                transaction_type: "vesting_schedule_created",
+                from_address: &creator,
+                to_address: Some(&beneficiary),
+                amount: Some(&self.total_amount),
+                currency: Some("BIG"),
+                contract_hash: Some(ctx.contract_hash),
+                block_timestamp: ctx.block_timestamp,
+                from_type: HashType::Contract.to_db(),
+                to_type: HashType::Account.to_db(),
+                transform_idx: ctx.transform_idx,
+                metadata: &event_json,
             },
         )
         .await?;

@@ -7,7 +7,7 @@ use crate::{
     backfill::parser::{CesEvent, EventSchema, FieldType},
     error::IndexerResult,
     event_trait::{EventContext, IndexableEvent},
-    events::db,
+    events::db::{self, HashType},
 };
 
 /// Emitted when a beneficiary claims vested tokens from a schedule.
@@ -40,6 +40,28 @@ impl IndexableEvent for TokensClaimed {
         let beneficiary = address::normalize_to_account_hash(&self.beneficiary)?;
 
         db::update_vesting_claimed(ctx.tx, &self.vesting_id, &self.amount).await?;
+
+        // Record in blockchain_transactions for unified transaction history.
+        let event_json = serde_json::to_value(self)?;
+        db::insert_blockchain_transaction(
+            ctx.tx,
+            &db::NewBlockchainTx {
+                deploy_hash: ctx.deploy_hash,
+                block_number: ctx.block_height.cast_signed(),
+                transaction_type: "vesting_tokens_claimed",
+                from_address: &beneficiary,
+                to_address: None,
+                amount: Some(&self.amount),
+                currency: Some("BIG"),
+                contract_hash: Some(ctx.contract_hash),
+                block_timestamp: ctx.block_timestamp,
+                from_type: HashType::Account.to_db(),
+                to_type: None,
+                transform_idx: ctx.transform_idx,
+                metadata: &event_json,
+            },
+        )
+        .await?;
 
         tracing::info!(
             vesting_id = %self.vesting_id,
