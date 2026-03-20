@@ -29,15 +29,22 @@ interface FTTokenActionsResponse {
 async function fetchBigTokenActions(page: number, pageSize: number): Promise<FTTokenActionsResponse> {
   const url = `/api/cspr-cloud/contract-packages/${BIG_TOKEN_PACKAGE_HASH}/ft-token-actions?page=${page}&page_size=${pageSize}`;
 
-  const res = await fetch(url, {
-    headers: { accept: 'application/json' },
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15_000);
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      headers: { accept: 'application/json' },
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   if (!res.ok) {
     throw new Error(`CSPR.cloud API error: ${res.status}`);
   }
   const data = await res.json();
-  console.log(`[useContractDeploys] Fetched page ${page} of ft-token-actions for BIG token:`, data);
   return data;
 }
 
@@ -55,6 +62,7 @@ export function useContractDeploys(page = 1, pageSize = 10) {
     totalPages: query.data?.page_count ?? 0,
     totalItems: query.data?.item_count ?? 0,
     isLoading: query.isLoading,
+    isFetching: query.isFetching,
     error: query.error,
     refetch: query.refetch,
   };

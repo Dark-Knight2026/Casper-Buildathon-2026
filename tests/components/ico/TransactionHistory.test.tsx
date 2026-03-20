@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { TransactionHistory, type ICOTransaction } from '@/pages/ico/components/shared/TransactionHistory';
+import { TransactionHistory } from '@/pages/ico/components/shared/TransactionHistory';
+import type { ICOTransaction } from '@/types/ico';
 
 const mockTransactions: ICOTransaction[] = [
   {

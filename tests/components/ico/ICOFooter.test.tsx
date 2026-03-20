@@ -17,6 +17,11 @@ describe('ICOFooter', () => {
       expect(screen.getByText('Powered by Casper Network')).toBeInTheDocument();
     });
 
+    it('should display BIG Whitepaper link', () => {
+      render(<ICOFooter />);
+
+      expect(screen.getByText('BIG Whitepaper')).toBeInTheDocument();
+    });
   });
 
   describe('block explorer link', () => {

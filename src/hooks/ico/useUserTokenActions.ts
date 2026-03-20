@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { ICO_CONFIG } from '@/constants/ico';
 import { type FTTokenAction } from './useContractDeploys';
-import type { ICOTransaction } from '@/pages/ico/components/shared/TransactionHistory';
+import type { ICOTransaction } from '@/types/ico';
 
 const BIG_TOKEN_PACKAGE_HASH = ICO_CONFIG.CONTRACTS.tokenAddress.replace(/^hash-/, '');
 const BIG_DECIMALS = ICO_CONFIG.TOKEN.decimals; // 18
@@ -12,11 +12,13 @@ interface FTTokenActionsResponse {
   data: FTTokenAction[];
 }
 
-async function fetchUserTokenActions(publicKeyHex: string, page: number, pageSize: number): Promise<FTTokenActionsResponse> {
+async function fetchUserTokenActions(publicKeyHex: string, page: number, pageSize: number, signal?: AbortSignal): Promise<FTTokenActionsResponse> {
   const url = `/api/cspr-cloud/accounts/${publicKeyHex}/ft-token-actions?contract_package_hash=${BIG_TOKEN_PACKAGE_HASH}&page=${page}&page_size=${pageSize}&type=token_transfer&from_type=1`;
 
+  const timeout = AbortSignal.timeout(15_000);
   const res = await fetch(url, {
     headers: { accept: 'application/json' },
+    signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
   });
 
   if (!res.ok) {
@@ -45,8 +47,8 @@ function mapToICOTransaction(action: FTTokenAction): ICOTransaction {
 export function useUserTokenActions(publicKey: string | null | undefined, page = 1, pageSize = 10) {
   const query = useQuery<{ transactions: ICOTransaction[]; totalPages: number }, Error>({
     queryKey: ['user-token-actions', publicKey, page, pageSize],
-    queryFn: async () => {
-      const data = await fetchUserTokenActions(publicKey!, page, pageSize);
+    queryFn: async ({ signal }) => {
+      const data = await fetchUserTokenActions(publicKey!, page, pageSize, signal);
       return {
         transactions: (data.data ?? []).map(mapToICOTransaction),
         totalPages: data.page_count ?? 1,

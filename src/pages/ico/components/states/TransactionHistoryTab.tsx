@@ -68,7 +68,7 @@ function getActionColor(tx: TokenTransaction): string {
 
 export function TransactionHistoryTab() {
   const [page, setPage] = useState(1);
-  const { transactions, totalPages, totalItems, isLoading, error, refetch } = useTokenTransactions(page, PAGE_SIZE);
+  const { transactions, totalPages, totalItems, isLoading, isFetching, error, refetch } = useTokenTransactions(page, PAGE_SIZE);
 
   return (
     <div className="space-y-6">
@@ -84,7 +84,7 @@ export function TransactionHistoryTab() {
             className="p-1.5 rounded-md text-[hsl(var(--ico-text-secondary))] hover:text-[hsl(var(--ico-text-primary))] hover:bg-[hsl(var(--ico-bg-secondary))] transition-colors cursor-pointer"
             title="Refresh"
           >
-            <RefreshCw className="w-4 h-4" />
+            <RefreshCw className={`w-4 h-4${isFetching ? ' animate-spin' : ''}`} />
           </button>
         </div>
       </div>

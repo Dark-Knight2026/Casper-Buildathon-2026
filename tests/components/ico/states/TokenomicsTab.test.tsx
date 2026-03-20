@@ -1,7 +1,12 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { TokenomicsTab } from '@/pages/ico/components/states/TokenomicsTab';
+
+vi.mock('@/hooks/ico/useReleaseSchedule', () => ({
+  useReleaseSchedule: () => ({ data: null, isLoading: false }),
+}));
 
 // Mock the child components
 vi.mock('@/pages/ico/components/shared/Card', () => ({
@@ -42,7 +47,12 @@ vi.mock('recharts', () => ({
 }));
 
 const renderWithRouter = (ui: React.ReactElement) => {
-  return render(<BrowserRouter>{ui}</BrowserRouter>);
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter>{ui}</BrowserRouter>
+    </QueryClientProvider>
+  );
 };
 
 describe('TokenomicsTab', () => {

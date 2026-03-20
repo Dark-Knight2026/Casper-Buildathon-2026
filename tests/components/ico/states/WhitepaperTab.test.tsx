@@ -23,10 +23,10 @@ describe('WhitepaperTab', () => {
     });
 
     it('should render the PDF viewer', () => {
-      const { container } = renderWithRouter(<WhitepaperTab />);
+      renderWithRouter(<WhitepaperTab />);
 
-      const pdfViewer = container.querySelector('object');
-      expect(pdfViewer).toBeInTheDocument();
+      const viewer = screen.getByLabelText('BIG WhitePaper');
+      expect(viewer).toBeInTheDocument();
     });
   });
 
@@ -160,18 +160,19 @@ describe('WhitepaperTab', () => {
   });
 
   describe('PDF viewer', () => {
-    it('should render the object element with aria-label', () => {
-      const { container } = renderWithRouter(<WhitepaperTab />);
+    it('should render PDF viewer with correct label', () => {
+      renderWithRouter(<WhitepaperTab />);
 
-      const pdfViewer = container.querySelector('object[aria-label="BIG WhitePaper"]');
-      expect(pdfViewer).toBeInTheDocument();
+      const viewer = screen.getByLabelText('BIG WhitePaper');
+      expect(viewer).toBeInTheDocument();
     });
 
-    it('should set object data to PDF path', () => {
-      const { container } = renderWithRouter(<WhitepaperTab />);
+    it('should set PDF viewer data to PDF path', () => {
+      renderWithRouter(<WhitepaperTab />);
 
-      const pdfViewer = container.querySelector('object');
-      expect(pdfViewer?.getAttribute('data')).toContain('BIG_WhitePaper.pdf');
+      const viewer = screen.getByLabelText('BIG WhitePaper') as HTMLObjectElement;
+      expect(viewer.tagName.toLowerCase()).toBe('object');
+      expect(viewer.getAttribute('data')).toContain('BIG_WhitePaper.pdf');
     });
   });
 

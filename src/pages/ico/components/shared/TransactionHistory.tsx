@@ -4,19 +4,9 @@ import { Card } from './Card';
 import { TablePagination } from './TablePagination';
 import { formatDateTime } from '../../utils/formatters';
 import { ICO_CONFIG } from '@/constants/ico';
+import type { ICOTransaction } from '@/types/ico';
 
 const EXPLORER_URL = ICO_CONFIG.CASPER.explorerUrl;
-
-export interface ICOTransaction {
-  id: string;
-  type: 'purchase' | 'claim' | 'transfer';
-  direction?: 'in' | 'out';
-  tokensReceived: number;
-  tokenSymbol: string;
-  status: 'pending' | 'completed' | 'failed';
-  timestamp: Date | null;
-  txHash?: string;
-}
 
 interface TransactionHistoryProps {
   transactions: ICOTransaction[];

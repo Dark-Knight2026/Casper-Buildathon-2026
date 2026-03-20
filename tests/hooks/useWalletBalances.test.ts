@@ -201,8 +201,6 @@ describe('useWalletBalances', () => {
         expect(result.current.isLoading).toBe(false);
       });
 
-      // Promise.allSettled: 404 → graceful degradation, zero FT balances, no error
-      expect(result.current.error).toBeNull();
       // 404 is a fetch failure — error is reported, FT balances fall back to 0
       expect(result.current.error).toBe('Failed to fetch token balances');
       expect(result.current.balances.cspr).toBe(5000);

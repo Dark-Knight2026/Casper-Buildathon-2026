@@ -33,7 +33,6 @@ import type { PaymentCurrency } from '@/types/ico';
 
 // ── Constants ───────────────────────────────────────────────────────
 
-const ICO_HASH = ICO_CONFIG.CONTRACTS.icoAddress;
 const ICO_PACKAGE_HASH = ICO_CONFIG.CONTRACTS.icoPackageHash;
 const TOKEN_DECIMALS = ICO_CONFIG.TOKEN.decimals; // 18
 const STABLECOIN_DECIMALS = 6; // USDT/USDC typically use 6 decimals
@@ -460,7 +459,7 @@ export function validatePurchase(
 ): { valid: boolean; error?: string } {
   const numAmount = parseFloat(amount);
 
-  if (isNaN(numAmount) || numAmount <= 0) {
+  if (isNaN(numAmount) || !isFinite(numAmount) || numAmount <= 0) {
     return { valid: false, error: 'Invalid amount' };
   }
 
@@ -508,7 +507,7 @@ export function calculateTokensReceived(
   csprRate?: number,
 ): bigint {
   const numAmount = parseFloat(amount);
-  if (isNaN(numAmount) || numAmount <= 0 || tokenPriceUsd <= 0) {
+  if (isNaN(numAmount) || !isFinite(numAmount) || numAmount <= 0 || tokenPriceUsd <= 0) {
     return 0n;
   }
 

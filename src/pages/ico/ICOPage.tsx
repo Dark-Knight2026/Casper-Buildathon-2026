@@ -76,7 +76,7 @@ export function ICOPage() {
         <DevStateSelector currentState={state} onStateChange={setDevState} isDevOverride={isDevOverride} />
         <div className="min-h-[calc(100vh-112px)] flex flex-col justify-between">
           <main className="container h-full mx-auto px-4 py-8">
-            <div className="flex items-center justify-center min-h-[400px]">
+            <div className="flex items-center justify-center min-h-100">
               <div className="text-center">
                 <p className="text-red-500 mb-2">Failed to load ICO data</p>
                 <p className="text-[hsl(var(--ico-text-secondary))] text-sm">{error.message}</p>

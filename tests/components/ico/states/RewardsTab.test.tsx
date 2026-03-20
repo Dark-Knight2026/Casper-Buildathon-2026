@@ -1,7 +1,16 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RewardsTab } from '@/pages/ico/components/states/RewardsTab';
+
+vi.mock('@/hooks/ico/useRewardsHistory', () => ({
+  useRewardsHistory: () => ({ data: null, isLoading: false }),
+}));
+
+vi.mock('@/hooks/ico/useStakingInfo', () => ({
+  useStakingInfo: () => ({ data: null, isLoading: false }),
+}));
 
 // Mock the child components
 vi.mock('@/pages/ico/components/shared/Card', () => ({
@@ -37,7 +46,12 @@ vi.mock('recharts', () => ({
 }));
 
 const renderWithRouter = (ui: React.ReactElement) => {
-  return render(<BrowserRouter>{ui}</BrowserRouter>);
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter>{ui}</BrowserRouter>
+    </QueryClientProvider>
+  );
 };
 
 describe('RewardsTab', () => {

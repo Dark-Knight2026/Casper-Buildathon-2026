@@ -13,6 +13,7 @@ export function InputModeToggle({ value, onChange, className }: InputModeToggleP
     <div className={cn('flex w-full rounded-md overflow-hidden border-0', className)}>
       <button
         type="button"
+        aria-pressed={value === 'spend'}
         onClick={() => onChange('spend')}
         className={cn(
           'flex-1 py-2 text-sm transition-colors',
@@ -25,6 +26,7 @@ export function InputModeToggle({ value, onChange, className }: InputModeToggleP
       </button>
       <button
         type="button"
+        aria-pressed={value === 'receive'}
         onClick={() => onChange('receive')}
         className={cn(
           'flex-1 py-2 text-sm transition-colors',
