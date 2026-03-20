@@ -33,7 +33,6 @@ import type { PaymentCurrency } from '@/types/ico';
 
 // ── Constants ───────────────────────────────────────────────────────
 
-const ICO_HASH = ICO_CONFIG.CONTRACTS.icoAddress;
 const ICO_PACKAGE_HASH = ICO_CONFIG.CONTRACTS.icoPackageHash;
 const TOKEN_DECIMALS = ICO_CONFIG.TOKEN.decimals; // 18
 const STABLECOIN_DECIMALS = 6; // USDT/USDC typically use 6 decimals

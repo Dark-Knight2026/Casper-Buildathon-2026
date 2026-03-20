@@ -28,7 +28,7 @@ interface DevStateSelectorProps {
  */
 export function DevStateSelector({ currentState, onStateChange, isDevOverride }: DevStateSelectorProps) {
   return (
-    <div className="fixed right-4 top-28 z-[100]">
+    <div className="fixed right-4 top-28 z-100">
       <DropdownMenu>
         <DropdownMenuTrigger className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-amber-500/50 bg-amber-500/10 text-amber-400 text-xs font-medium cursor-pointer hover:bg-amber-500/20 transition-colors backdrop-blur-sm shadow-lg">
           <SlidersHorizontal className="w-4 h-4" />
