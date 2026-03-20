@@ -390,3 +390,195 @@ async fn rewards_history_excludes_outside_window(pool: PgPool) {
         "expected ~100.0 (only recent event), got {cumulative}"
     );
 }
+
+// Earnings period filtering: 3m, 6m, 1y
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn earnings_3m_filters_correctly(pool: PgPool) {
+    let now = Utc::now();
+    let within = (now - Duration::days(60)).to_rfc3339();
+    let outside = (now - Duration::days(120)).to_rfc3339();
+
+    seed_reward_claim_event(&pool, VALID_ADDRESS, "1000", &within).await;
+    seed_reward_claim_event(&pool, VALID_ADDRESS, "2000", &outside).await;
+
+    let env = common::setup_test_server(pool, false).await;
+
+    let response = env
+        .server
+        .get(&format!(
+            "/api/v1/staking/{VALID_ADDRESS}/earnings?period=3m"
+        ))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+    let data = body["data"].as_array().unwrap();
+    assert_eq!(data.len(), 1, "3m period should exclude 120-day old event");
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn earnings_6m_filters_correctly(pool: PgPool) {
+    let now = Utc::now();
+    let within = (now - Duration::days(150)).to_rfc3339();
+    let outside = (now - Duration::days(200)).to_rfc3339();
+
+    seed_reward_claim_event(&pool, VALID_ADDRESS, "1000", &within).await;
+    seed_reward_claim_event(&pool, VALID_ADDRESS, "2000", &outside).await;
+
+    let env = common::setup_test_server(pool, false).await;
+
+    let response = env
+        .server
+        .get(&format!(
+            "/api/v1/staking/{VALID_ADDRESS}/earnings?period=6m"
+        ))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+    let data = body["data"].as_array().unwrap();
+    assert_eq!(data.len(), 1, "6m period should exclude 200-day old event");
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn earnings_1y_filters_correctly(pool: PgPool) {
+    let now = Utc::now();
+    let within = (now - Duration::days(300)).to_rfc3339();
+    let outside = (now - Duration::days(400)).to_rfc3339();
+
+    seed_reward_claim_event(&pool, VALID_ADDRESS, "1000", &within).await;
+    seed_reward_claim_event(&pool, VALID_ADDRESS, "2000", &outside).await;
+
+    let env = common::setup_test_server(pool, false).await;
+
+    let response = env
+        .server
+        .get(&format!(
+            "/api/v1/staking/{VALID_ADDRESS}/earnings?period=1y"
+        ))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+    let data = body["data"].as_array().unwrap();
+    assert_eq!(data.len(), 1, "1y period should exclude 400-day old event");
+}
+
+// Earnings default period (6m when omitted)
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn earnings_default_period_is_6m(pool: PgPool) {
+    let now = Utc::now();
+    let within = (now - Duration::days(150)).to_rfc3339();
+    let outside = (now - Duration::days(200)).to_rfc3339();
+
+    seed_reward_claim_event(&pool, VALID_ADDRESS, "1000", &within).await;
+    seed_reward_claim_event(&pool, VALID_ADDRESS, "2000", &outside).await;
+
+    let env = common::setup_test_server(pool, false).await;
+
+    // No period parameter -> should default to 6m
+    let response = env
+        .server
+        .get(&format!("/api/v1/staking/{VALID_ADDRESS}/earnings"))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+    let data = body["data"].as_array().unwrap();
+    assert_eq!(
+        data.len(),
+        1,
+        "default period (6m) should exclude 200-day old event"
+    );
+}
+
+// Rewards-history period clamping
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn rewards_history_period_zero_clamps_to_1(pool: PgPool) {
+    let now = Utc::now();
+    let today = (now - Duration::hours(1)).to_rfc3339();
+
+    seed_reward_claim_event(&pool, VALID_ADDRESS, "100000000000000000000", &today).await;
+
+    let env = common::setup_test_server(pool, false).await;
+
+    let response = env
+        .server
+        .get(&format!(
+            "/api/v1/staking/{VALID_ADDRESS}/rewards-history?period=0"
+        ))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+    let data = body["data"].as_array().unwrap();
+    // period=0 clamps to 1 day, today's event should still appear
+    assert_eq!(data.len(), 1, "period=0 clamped to 1 should include today");
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn rewards_history_period_negative_clamps_to_1(pool: PgPool) {
+    let now = Utc::now();
+    let today = (now - Duration::hours(1)).to_rfc3339();
+
+    seed_reward_claim_event(&pool, VALID_ADDRESS, "100000000000000000000", &today).await;
+
+    let env = common::setup_test_server(pool, false).await;
+
+    let response = env
+        .server
+        .get(&format!(
+            "/api/v1/staking/{VALID_ADDRESS}/rewards-history?period=-1"
+        ))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+    let data = body["data"].as_array().unwrap();
+    assert_eq!(data.len(), 1, "period=-1 clamped to 1 should include today");
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn rewards_history_period_overflow_clamps_to_365(pool: PgPool) {
+    let env = common::setup_test_server(pool, false).await;
+
+    // period=366 should clamp to 365 and return 200 OK (not error)
+    let response = env
+        .server
+        .get(&format!(
+            "/api/v1/staking/{VALID_ADDRESS}/rewards-history?period=366"
+        ))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn rewards_history_default_period_is_90(pool: PgPool) {
+    let now = Utc::now();
+    let within = (now - Duration::days(80)).to_rfc3339();
+    let outside = (now - Duration::days(100)).to_rfc3339();
+
+    seed_reward_claim_event(&pool, VALID_ADDRESS, "100000000000000000000", &within).await;
+    seed_reward_claim_event(&pool, VALID_ADDRESS, "200000000000000000000", &outside).await;
+
+    let env = common::setup_test_server(pool, false).await;
+
+    // No period parameter -> should default to 90
+    let response = env
+        .server
+        .get(&format!("/api/v1/staking/{VALID_ADDRESS}/rewards-history"))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+    let data = body["data"].as_array().unwrap();
+    assert_eq!(
+        data.len(),
+        1,
+        "default period (90 days) should exclude 100-day old event"
+    );
+}
