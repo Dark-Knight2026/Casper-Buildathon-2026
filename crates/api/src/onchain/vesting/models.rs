@@ -41,7 +41,9 @@ pub struct VestingScheduleItem {
     /// Vesting schedule ID from the contract.
     #[schema(example = "0")]
     pub id: String,
-    /// Tokens still locked: `total_amount - claimed_amount` (human-readable f64).
+    /// Remaining tokens: `total_amount - claimed_amount` (human-readable f64).
+    /// Includes both time-locked and vested-but-unclaimed tokens.
+    /// True time-locked amount would be `total - vested`.
     #[schema(example = 50000.0)]
     pub locked_amount: f64,
     /// Block timestamp when the vesting clock started (epoch ms).
