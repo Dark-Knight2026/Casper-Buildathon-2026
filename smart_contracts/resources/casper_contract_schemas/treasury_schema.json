@@ -100,17 +100,17 @@
     {
       "name": "DirectReservesTokenWithdrawalIsNotAllowed",
       "description": "",
-      "discriminant": 64004
+      "discriminant": 204
     },
     {
       "name": "InsufficientWithdrawalTokenAmount",
       "description": "",
-      "discriminant": 64005
+      "discriminant": 205
     },
     {
       "name": "InvalidWithdrawalAmount",
       "description": "",
-      "discriminant": 64003
+      "discriminant": 203
     },
     {
       "name": "MissingRole",
@@ -120,7 +120,7 @@
     {
       "name": "NotEnoughReserves",
       "description": "",
-      "discriminant": 64002
+      "discriminant": 202
     },
     {
       "name": "OwnerNotSet",
@@ -135,12 +135,12 @@
     {
       "name": "StakingContractIsNotSet",
       "description": "",
-      "discriminant": 64001
+      "discriminant": 201
     },
     {
       "name": "TailorCoinContractIsNotSet",
       "description": "",
-      "discriminant": 64000
+      "discriminant": 200
     }
   ],
   "entry_points": [

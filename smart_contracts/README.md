@@ -35,15 +35,72 @@ Each contract is modular, upgradeable, and interacts with others through well-de
    contract for rewards funding. Designed to incentivize long-term participation in the ecosystem.
 
 8. `ICO` - allows the owner to manage the `TailorCoin (BIG)` token sales in multiple currencies, including CSPR, USDC,
-    and USDT. It supports creating multiple ICO schedules with configurable start/end times, sale amounts, and token
-    prices. Users can purchase `TailorCoin (BIG)` tokens during active ICO schedules, with payments automatically
-    handled. The contract integrates with the Styks Price Feed Oracle to determine token prices in CSPR dynamically.
-    Owners can also withdraw unsold tokens from finished ICO schedules and manage supported currencies.
+   and USDT. It supports creating multiple ICO schedules with configurable start/end times, sale amounts, and token
+   prices. Users can purchase `TailorCoin (BIG)` tokens during active ICO schedules, with payments automatically
+   handled. The contract integrates with the Styks Price Feed Oracle to determine token prices in CSPR dynamically.
+   Owners can also withdraw unsold tokens from finished ICO schedules and manage supported currencies.
 
 9. `Vesting` - manages time-based token vesting schedules for `TailorCoin (BIG)` tokens. The features include
-    creating vesting schedules with customizable cliff periods and vesting durations, linear vesting calculation,
-    whitelisted creator system (typically the ICO contract), per-user schedule tracking, and token claiming by
-    beneficiaries. The contract integrates with the Staking contract for auto-staking of vested tokens.
+   creating vesting schedules with customizable cliff periods and vesting durations, linear vesting calculation,
+   whitelisted creator system (typically the ICO contract), per-user schedule tracking, and token claiming by
+   beneficiaries. The contract integrates with the Staking contract for auto-staking of vested tokens.
+
+## Error Code Conventions
+
+All contracts in this project use custom error codes to provide meaningful feedback when transactions revert. Due to a
+limitation in the Odra framework, error codes **must be in the range 0-32767** (i.e., valid `u16` values). Error codes
+outside this range will be rejected by the framework and replaced with error code `64536` (`UserErrorTooHigh`).
+
+### Odra Framework Limitation
+
+This constraint is defined in the `odra-core` crate in the `ExecutionError` enum:
+
+```rust
+// File: odra/core/src/error.rs (in the Odra framework source)
+
+/// An error that can occur during smart contract execution
+///
+/// It is represented by an error code and a human-readable message.
+///
+/// Errors codes 0..32767 are available for the user to define custom error
+/// in smart contracts.
+/// 32768 code is a special code representing a violation of the custom error code space.
+///
+/// The rest of codes 32769..[u16::MAX](u16::MAX), are used internally by the framework.
+#[repr(u16)]
+#[derive(Clone, Debug, PartialEq)]
+pub enum ExecutionError {
+    // ... other error variants ...
+    /// Maximum code for user errors
+    MaxUserError = 64535,
+    /// User error too high. The code should be in range 0..32767.
+    UserErrorTooHigh = 64536,
+    /// User error
+    User(u16),
+}
+```
+
+When a contract attempts to revert with an error code >= 32768, the Odra framework intercepts it and returns
+`UserErrorTooHigh (64536)` instead. Always make sure your error codes are within the valid
+range.
+
+### Error Code Allocation Strategy
+
+Error codes are allocated in blocks of 100 per contract:
+
+| Range   | Contract | Purpose                                  |
+| ------- | -------- | ---------------------------------------- |
+| 0-99    | Reserved | Used for any Protocol-wide errors        |
+| 100-199 | NFT      | CEP-95 token operations                  |
+| 200-299 | Treasury | Reserve management and token withdrawals |
+| 300-399 | Escrow   | Invoice creation and payment handling    |
+| 400-499 | Lease    | Lease agreement lifecycle management     |
+| 500-599 | ICO      | Token sale schedules and purchases       |
+| 600-699 | Staking  | Staking, unstaking, and rewards          |
+| 700-799 | Vesting  | Vesting schedule creation and claims     |
+
+When adding new contracts or error codes, use the next available block of 100 codes and follow the existing naming
+conventions.
 
 ## Build
 

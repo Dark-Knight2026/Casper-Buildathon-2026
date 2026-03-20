@@ -444,21 +444,21 @@ pub mod errors {
 
     #[odra::odra_error]
     pub enum Error {
-        InvalidICOScheduleId = 59_000,
-        InvalidICOScheduleStartTimestamp = 59_001,
-        InvalidICOScheduleEndTimestamp = 59_002,
-        InvalidICOScheduleSaleAmount = 59_003,
-        InvalidICOSchedulePrice = 59_004,
-        InvalidAmountToSpend = 59_005,
-        UnsupportedCurrency = 59_006,
-        NoActiveIcoSchedule = 59_007,
-        StyksOracleCanNotReturnTWAP = 59_008,
-        AddressIsRequired = 59_009,
-        InvalidAmountAttached = 59_010,
-        InsufficientSellingTokensAmount = 59_011,
-        InvalidPurchaseAmount = 59_012,
-        InvalidICOScheduleVestingDuration = 59_013,
-        ICOScheduleCliffExceedsVestingDuration = 59_014,
+        InvalidICOScheduleId = 500,
+        InvalidICOScheduleStartTimestamp = 501,
+        InvalidICOScheduleEndTimestamp = 502,
+        InvalidICOScheduleSaleAmount = 503,
+        InvalidICOSchedulePrice = 504,
+        InvalidAmountToSpend = 505,
+        UnsupportedCurrency = 506,
+        NoActiveIcoSchedule = 507,
+        StyksOracleCanNotReturnTWAP = 508,
+        AddressIsRequired = 509,
+        InvalidAmountAttached = 510,
+        InsufficientSellingTokensAmount = 511,
+        InvalidPurchaseAmount = 512,
+        InvalidICOScheduleVestingDuration = 513,
+        ICOScheduleCliffExceedsVestingDuration = 514,
     }
 }
 

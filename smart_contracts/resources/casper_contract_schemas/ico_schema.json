@@ -256,7 +256,7 @@
     {
       "name": "AddressIsRequired",
       "description": "",
-      "discriminant": 59009
+      "discriminant": 509
     },
     {
       "name": "CallerNotTheNewOwner",
@@ -271,57 +271,57 @@
     {
       "name": "ICOScheduleCliffExceedsVestingDuration",
       "description": "",
-      "discriminant": 59014
+      "discriminant": 514
     },
     {
       "name": "InsufficientSellingTokensAmount",
       "description": "",
-      "discriminant": 59011
+      "discriminant": 511
     },
     {
       "name": "InvalidAmountAttached",
       "description": "",
-      "discriminant": 59010
+      "discriminant": 510
     },
     {
       "name": "InvalidAmountToSpend",
       "description": "",
-      "discriminant": 59005
+      "discriminant": 505
     },
     {
       "name": "InvalidICOScheduleEndTimestamp",
       "description": "",
-      "discriminant": 59002
+      "discriminant": 502
     },
     {
       "name": "InvalidICOScheduleId",
       "description": "",
-      "discriminant": 59000
+      "discriminant": 500
     },
     {
       "name": "InvalidICOSchedulePrice",
       "description": "",
-      "discriminant": 59004
+      "discriminant": 504
     },
     {
       "name": "InvalidICOScheduleSaleAmount",
       "description": "",
-      "discriminant": 59003
+      "discriminant": 503
     },
     {
       "name": "InvalidICOScheduleStartTimestamp",
       "description": "",
-      "discriminant": 59001
+      "discriminant": 501
     },
     {
       "name": "InvalidICOScheduleVestingDuration",
       "description": "",
-      "discriminant": 59013
+      "discriminant": 513
     },
     {
       "name": "InvalidPurchaseAmount",
       "description": "",
-      "discriminant": 59012
+      "discriminant": 512
     },
     {
       "name": "MissingRole",
@@ -331,7 +331,7 @@
     {
       "name": "NoActiveIcoSchedule",
       "description": "",
-      "discriminant": 59007
+      "discriminant": 507
     },
     {
       "name": "OwnerNotSet",
@@ -346,12 +346,12 @@
     {
       "name": "StyksOracleCanNotReturnTWAP",
       "description": "",
-      "discriminant": 59008
+      "discriminant": 508
     },
     {
       "name": "UnsupportedCurrency",
       "description": "",
-      "discriminant": 59006
+      "discriminant": 506
     }
   ],
   "entry_points": [

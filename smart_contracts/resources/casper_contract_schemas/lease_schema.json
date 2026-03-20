@@ -196,7 +196,7 @@
     {
       "name": "CallerNotLandlord",
       "description": "",
-      "discriminant": 60000
+      "discriminant": 400
     },
     {
       "name": "CallerNotTheNewOwner",
@@ -211,27 +211,27 @@
     {
       "name": "EqualTenantAndLandlord",
       "description": "",
-      "discriminant": 60002
+      "discriminant": 402
     },
     {
       "name": "InvalidLandlord",
       "description": "",
-      "discriminant": 60005
+      "discriminant": 405
     },
     {
       "name": "InvalidLeaseAgreementId",
       "description": "",
-      "discriminant": 60001
+      "discriminant": 401
     },
     {
       "name": "InvalidTimeframes",
       "description": "",
-      "discriminant": 60003
+      "discriminant": 403
     },
     {
       "name": "LeaseAgreementHasNotFinishedYet",
       "description": "",
-      "discriminant": 60006
+      "discriminant": 406
     },
     {
       "name": "MissingRole",
@@ -241,7 +241,7 @@
     {
       "name": "NotAllInvoicesArePaid",
       "description": "",
-      "discriminant": 60007
+      "discriminant": 407
     },
     {
       "name": "OwnerNotSet",
@@ -256,12 +256,12 @@
     {
       "name": "SecurityDepositChargeIsTooHigh",
       "description": "",
-      "discriminant": 60008
+      "discriminant": 408
     },
     {
       "name": "ZeroAmount",
       "description": "",
-      "discriminant": 60004
+      "discriminant": 404
     }
   ],
   "entry_points": [

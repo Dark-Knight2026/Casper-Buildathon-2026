@@ -183,11 +183,11 @@ pub mod errors {
 
     #[odra::odra_error]
     pub enum Error {
-        TailorCoinContractIsNotSet = 64_000,
-        StakingContractIsNotSet = 64_001,
-        NotEnoughReserves = 64_002,
-        InvalidWithdrawalAmount = 64_003,
-        DirectReservesTokenWithdrawalIsNotAllowed = 64_004,
-        InsufficientWithdrawalTokenAmount = 64_005,
+        TailorCoinContractIsNotSet = 200,
+        StakingContractIsNotSet = 201,
+        NotEnoughReserves = 202,
+        InvalidWithdrawalAmount = 203,
+        DirectReservesTokenWithdrawalIsNotAllowed = 204,
+        InsufficientWithdrawalTokenAmount = 205,
     }
 }
