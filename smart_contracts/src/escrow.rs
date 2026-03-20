@@ -258,17 +258,17 @@ pub mod errors {
 
     #[odra::odra_error]
     pub enum Error {
-        CallerNotLeaseContract = 61_000,
-        LeaseContractIsNotSet = 61_001,
-        TreasuryContractIsNotSet = 61_002,
-        ZeroAmount = 61_003,
-        InvalidDeadline = 61_004,
-        InvalidInvoiceId = 61_005,
-        CallerIsNotBuyer = 61_006,
-        InvoiceIsAlreadyPaid = 61_007,
-        InvoiceIsExpired = 61_008,
-        InvalidAmountAttached = 61_009,
-        EqualBuyerAndSeller = 61_010,
+        CallerNotLeaseContract = 300,
+        LeaseContractIsNotSet = 301,
+        TreasuryContractIsNotSet = 302,
+        ZeroAmount = 303,
+        InvalidDeadline = 304,
+        InvalidInvoiceId = 305,
+        CallerIsNotBuyer = 306,
+        InvoiceIsAlreadyPaid = 307,
+        InvoiceIsExpired = 308,
+        InvalidAmountAttached = 309,
+        EqualBuyerAndSeller = 310,
     }
 }
 
