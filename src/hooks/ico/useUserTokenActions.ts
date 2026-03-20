@@ -12,11 +12,13 @@ interface FTTokenActionsResponse {
   data: FTTokenAction[];
 }
 
-async function fetchUserTokenActions(publicKeyHex: string): Promise<FTTokenAction[]> {
+async function fetchUserTokenActions(publicKeyHex: string, signal?: AbortSignal): Promise<FTTokenAction[]> {
   const url = `/api/cspr-cloud/accounts/${publicKeyHex}/ft-token-actions?contract_package_hash=${BIG_TOKEN_PACKAGE_HASH}&page_size=100`;
 
+  const timeout = AbortSignal.timeout(15_000);
   const res = await fetch(url, {
     headers: { accept: 'application/json' },
+    signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
   });
 
   if (!res.ok) {
@@ -46,7 +48,7 @@ function mapToICOTransaction(action: FTTokenAction): ICOTransaction {
 export function useUserTokenActions(publicKey: string | null | undefined) {
   const query = useQuery<ICOTransaction[], Error>({
     queryKey: ['user-token-actions', publicKey],
-    queryFn: () => fetchUserTokenActions(publicKey!).then(actions => actions.map(mapToICOTransaction)),
+    queryFn: ({ signal }) => fetchUserTokenActions(publicKey!, signal).then(actions => actions.map(mapToICOTransaction)),
     enabled: !!publicKey,
     staleTime: 120_000,
     refetchOnWindowFocus: true,
