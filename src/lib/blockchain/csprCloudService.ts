@@ -274,7 +274,14 @@ export class CSPRCloudService {
       : `/api/cspr-cloud?path=${encodeURIComponent(`deploys/${deployHash}`)}`;
 
     try {
-      const response = await fetch(proxyUrl);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15_000);
+      let response: Response;
+      try {
+        response = await fetch(proxyUrl, { signal: controller.signal });
+      } finally {
+        clearTimeout(timeoutId);
+      }
 
       if (!response.ok) {
         if (response.status === 404) {
@@ -323,20 +330,24 @@ export class CSPRCloudService {
 
     try {
       // Submit via JSON-RPC
-      const response = await fetch(rpcUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: 1,
-          method: 'account_put_deploy',
-          params: {
-            deploy: signedDeploy.deploy,
-          },
-        }),
-      });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30_000);
+      let response: Response;
+      try {
+        response = await fetch(rpcUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal: controller.signal,
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            method: 'account_put_deploy',
+            params: { deploy: signedDeploy.deploy },
+          }),
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
 
       if (!response.ok) {
         throw new Error(`RPC request failed: ${response.statusText}`);
@@ -368,7 +379,14 @@ export class CSPRCloudService {
       ? `/api/coingecko/simple/price?ids=casper-network&vs_currencies=${vsCurrencies}`
       : `/api/coingecko?ids=casper-network&vs_currencies=${vsCurrencies}`;
 
-    const response = await fetch(url);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10_000);
+    let response: Response;
+    try {
+      response = await fetch(url, { signal: controller.signal });
+    } finally {
+      clearTimeout(timeoutId);
+    }
     if (!response.ok) {
       throw new Error(`CoinGecko API error: ${response.status}`);
     }
