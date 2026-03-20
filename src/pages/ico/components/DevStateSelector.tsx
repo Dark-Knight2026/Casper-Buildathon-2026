@@ -19,6 +19,13 @@ interface DevStateSelectorProps {
   isDevOverride: boolean;
 }
 
+/**
+ * ICO State Selector — intentionally visible in production.
+ * Allows the client (and all users) to manually switch between ICO states
+ * (Countdown / Active Sale / Dashboard) for preview and demo purposes.
+ * Do NOT guard with import.meta.env.DEV — removal is deferred until the
+ * ICO lifecycle is finalized and manual state overrides are no longer needed.
+ */
 export function DevStateSelector({ currentState, onStateChange, isDevOverride }: DevStateSelectorProps) {
   return (
     <div className="fixed right-4 top-28 z-[100]">
