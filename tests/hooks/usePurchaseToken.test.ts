@@ -13,17 +13,26 @@ vi.mock('casper-js-sdk', () => ({
   },
 }));
 
+// Mock csprCloudService (used in waitForDeployConfirmation)
+vi.mock('@/lib/blockchain/csprCloudService', () => ({
+  csprCloudService: {
+    getDeploy: vi.fn().mockResolvedValue({ status: 'executed' }),
+  },
+}));
+
 // Mock purchase service
 const mockValidatePurchase = vi.fn();
 const mockPreparePurchase = vi.fn();
 const mockCalculateTokensReceived = vi.fn();
 const mockFromRawAmount = vi.fn();
+const mockToRawAmount = vi.fn();
 
 vi.mock('@/services/ico/icoPurchaseService', () => ({
   validatePurchase: (...args: unknown[]) => mockValidatePurchase(...args),
   preparePurchase: (...args: unknown[]) => mockPreparePurchase(...args),
   calculateTokensReceived: (...args: unknown[]) => mockCalculateTokensReceived(...args),
   fromRawAmount: (...args: unknown[]) => mockFromRawAmount(...args),
+  toRawAmount: (...args: unknown[]) => mockToRawAmount(...args),
   getDeployStatus: vi.fn().mockResolvedValue({ status: 'executed' }),
   parseContractError: (msg?: string) => {
     if (!msg) return 'Deploy failed';
@@ -108,6 +117,7 @@ describe('usePurchaseToken', () => {
     });
     mockCalculateTokensReceived.mockReturnValue(1000n);
     mockFromRawAmount.mockReturnValue('1000');
+    mockToRawAmount.mockReturnValue(100000000n); // 100 * 10^6
     mockClickRef.send.mockResolvedValue({
       deployHash: '0x123abc',
       cancelled: false,

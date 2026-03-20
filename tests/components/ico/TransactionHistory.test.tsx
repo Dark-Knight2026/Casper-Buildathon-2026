@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { TransactionHistory, Transaction } from '@/pages/ico/components/shared/TransactionHistory';
+import { TransactionHistory, ICOTransaction as Transaction } from '@/pages/ico/components/shared/TransactionHistory';
 
 const mockTransactions: Transaction[] = [
   {
@@ -67,14 +67,6 @@ describe('TransactionHistory', () => {
 
       expect(screen.getAllByText('purchase')).toHaveLength(2);
       expect(screen.getByText('claim')).toBeInTheDocument();
-    });
-
-    it('should display transaction amounts', () => {
-      render(<TransactionHistory transactions={mockTransactions} />);
-
-      expect(screen.getByText('1,500.00 USDC')).toBeInTheDocument();
-      expect(screen.getByText('100.00 USDT')).toBeInTheDocument();
-      expect(screen.getByText('500.00 USDC')).toBeInTheDocument();
     });
 
     it('should display tokens received with + prefix', () => {

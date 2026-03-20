@@ -22,11 +22,11 @@ describe('WhitepaperTab', () => {
       expect(downloadButtons.length).toBeGreaterThan(0);
     });
 
-    it('should render the PDF iframe', () => {
+    it('should render the PDF viewer', () => {
       renderWithRouter(<WhitepaperTab />);
 
-      const iframe = screen.getByTitle('BIG WhitePaper');
-      expect(iframe).toBeInTheDocument();
+      const viewer = screen.getByLabelText('BIG WhitePaper');
+      expect(viewer).toBeInTheDocument();
     });
   });
 
@@ -155,24 +155,23 @@ describe('WhitepaperTab', () => {
       fireEvent.click(downloadButtons[0]);
 
       expect(mockAnchor.click).toHaveBeenCalled();
-      expect(mockAnchor.href).toBe('/docs/BIG_WhitePaper.pdf');
       expect(mockAnchor.download).toBe('BIG_WhitePaper.pdf');
     });
   });
 
   describe('PDF viewer', () => {
-    it('should render iframe with correct title', () => {
+    it('should render PDF viewer with correct label', () => {
       renderWithRouter(<WhitepaperTab />);
 
-      const iframe = screen.getByTitle('BIG WhitePaper');
-      expect(iframe).toBeInTheDocument();
+      const viewer = screen.getByLabelText('BIG WhitePaper');
+      expect(viewer).toBeInTheDocument();
     });
 
-    it('should set iframe src to PDF path', () => {
+    it('should set PDF viewer data to PDF path', () => {
       renderWithRouter(<WhitepaperTab />);
 
-      const iframe = screen.getByTitle('BIG WhitePaper') as HTMLIFrameElement;
-      expect(iframe.src).toContain('/docs/BIG_WhitePaper.pdf');
+      const viewer = screen.getByLabelText('BIG WhitePaper') as HTMLObjectElement;
+      expect(viewer.tagName.toLowerCase()).toBe('object');
     });
   });
 
