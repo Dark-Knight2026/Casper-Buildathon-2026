@@ -147,8 +147,7 @@ pub async fn backfill_ces(
         match process_event_at(&ces, &rpc, &state_root, events_uref, &key, schemas).await {
             Ok(event_name) => {
                 processed += 1;
-                db::update_ces_cursor(ces.backfill.db_pool, contract_hash, i64::from(idx))
-                    .await?;
+                db::update_ces_cursor(ces.backfill.db_pool, contract_hash, i64::from(idx)).await?;
                 tracing::debug!(index = idx, event = %event_name, "CES event processed");
             }
             Err(e) => {

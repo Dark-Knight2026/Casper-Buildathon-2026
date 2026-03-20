@@ -89,12 +89,7 @@ pub async fn run_backfill(config: &IndexerConfig, db_pool: &PgPool) -> IndexerRe
             // Contracts without defined schemas are skipped with a warning
             // inside `backfill_ces`.
             _ => {
-                ces::backfill_ces(
-                    &context,
-                    contract.contract_type,
-                    contract.hash,
-                )
-                .await?;
+                ces::backfill_ces(&context, contract.contract_type, contract.hash).await?;
             }
         }
     }

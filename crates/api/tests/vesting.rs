@@ -71,8 +71,8 @@ async fn set_claimed_amount(pool: &PgPool, vesting_id: &str, claimed: &str) {
 async fn seed_contract_registry(pool: &PgPool, contract_hash: &str, contract_type: &str) {
     sqlx::query(
         r"
-            INSERT INTO contract_registry (contract_type, contract_hash, contract_name, is_active)
-            VALUES ($1, $2, $1, TRUE)
+            INSERT INTO contract_registry (contract_type, contract_hash, is_active)
+            VALUES ($1, $2, TRUE)
         ",
     )
     .bind(contract_type)
