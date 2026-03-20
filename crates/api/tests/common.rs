@@ -34,7 +34,7 @@ use testcontainers::{
 
 use api::{
     AppState, Claims, IcoFallback, ServerConfig, UserId, UserRole,
-    common::{JWT_AUDIENCE, JWT_ISSUER, RedisStore},
+    common::{JWT_AUDIENCE, JWT_ISSUER, RedisStore, TOTAL_SUPPLY},
     server,
 };
 
@@ -152,6 +152,7 @@ pub async fn setup_test_server_with(
         cors_origin: TEST_CORS_ORIGIN.to_owned(),
         contract_big: overrides.contract_big,
         ico_fallback: overrides.ico_fallback,
+        total_supply: TOTAL_SUPPLY,
     };
     let state = Arc::new(AppState {
         db: pool,

@@ -22,9 +22,6 @@ use crate::{
     },
 };
 
-/// Total BIG token supply (human-readable).
-const TOTAL_SUPPLY: f64 = 5_000_000_000.0;
-
 /// Approximate milliseconds in one month (30 days).
 const MS_PER_MONTH: i64 = 30 * 24 * 60 * 60 * 1_000;
 
@@ -160,7 +157,7 @@ pub async fn get_token_supply(
     let circulating_raw = db::fetch_circulating_supply(&state.db).await?;
 
     Ok(Json(TokenSupplyResponse {
-        total_supply: TOTAL_SUPPLY,
+        total_supply: state.config.total_supply,
         circulating_supply: common::to_human_f64(&circulating_raw),
     }))
 }
