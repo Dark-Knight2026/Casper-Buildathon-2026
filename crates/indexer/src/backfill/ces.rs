@@ -145,10 +145,13 @@ pub async fn backfill_ces(
         let key = idx.to_string();
 
         match process_event_at(&ces, &rpc, &state_root, events_uref, &key, schemas).await {
-            Ok(event_name) => {
+            Ok(Some(event_name)) => {
                 processed += 1;
                 db::update_ces_cursor(ces.backfill.db_pool, contract_hash, i64::from(idx)).await?;
                 tracing::debug!(index = idx, event = %event_name, "CES event processed");
+            }
+            Ok(None) => {
+                db::update_ces_cursor(ces.backfill.db_pool, contract_hash, i64::from(idx)).await?;
             }
             Err(e) => {
                 tracing::error!(
@@ -178,6 +181,9 @@ pub async fn backfill_ces(
 }
 
 /// Fetch, parse, and dispatch a single CES event from the `__events` dictionary.
+///
+/// Returns `Ok(None)` for admin/framework events (e.g. `OwnershipTransferred`)
+/// that have no schema and don't need indexing.
 async fn process_event_at(
     ctx: &CesContext<'_>,
     rpc: &CasperRpc<'_>,
@@ -185,12 +191,24 @@ async fn process_event_at(
     events_uref: &str,
     key: &str,
     schemas: &[EventSchema],
-) -> IndexerResult<String> {
+) -> IndexerResult<Option<String>> {
     let bytes = rpc
         .get_dictionary_item_bytes(state_root, events_uref, key)
         .await?;
 
-    let (event_name, event_data) = parser::parse_ces_event(&bytes, schemas)?;
+    let (event_name, remainder) = parser::parse_event_name(&bytes)?;
+
+    let Some(schema) = schemas.iter().find(|s| s.name == event_name) else {
+        tracing::warn!(
+            event = %event_name,
+            index = %key,
+            contract = ?ctx.contract_type,
+            "Skipping unindexed CES event"
+        );
+        return Ok(None);
+    };
+
+    let event_data = parser::parse_event_fields(remainder, schema)?;
 
     let raw = RawEvent {
         contract_hash: ctx.contract_hash.to_owned(),
@@ -210,5 +228,5 @@ async fn process_event_at(
         &raw,
     )
     .await?;
-    Ok(event_name)
+    Ok(Some(event_name))
 }

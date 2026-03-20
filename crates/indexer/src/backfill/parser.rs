@@ -64,17 +64,17 @@ pub struct EventSchema {
     pub fields: &'static [(&'static str, FieldType)],
 }
 
-/// Parse a CES binary event blob into `(event_name, JSON object)`.
+/// Extract the CES event name from a binary blob.
 ///
-/// The event name is returned without the `event_` prefix (e.g. `"ScheduleCreated"`).
+/// Returns the event name (without the `event_` prefix) and the remaining
+/// unparsed bytes that contain the event fields.
 ///
 /// # Errors
 ///
-/// Returns [`IndexerError::Parse`] if the bytes are malformed or no matching
-/// schema is found.
+/// Returns [`IndexerError::Parse`] if the bytes are malformed or the name
+/// is missing the `event_` prefix.
 #[inline]
-pub fn parse_ces_event(bytes: &[u8], schemas: &[EventSchema]) -> IndexerResult<(String, Value)> {
-    // 1. Parse the event name string (prefixed with "event_").
+pub fn parse_event_name(bytes: &[u8]) -> IndexerResult<(String, &[u8])> {
     let (full_name, remainder) = String::from_bytes(bytes).map_err(bytesrepr_err)?;
 
     let event_name = full_name
@@ -86,13 +86,16 @@ pub fn parse_ces_event(bytes: &[u8], schemas: &[EventSchema]) -> IndexerResult<(
         })?
         .to_owned();
 
-    // 2. Find matching schema.
-    let schema = schemas
-        .iter()
-        .find(|s| s.name == event_name)
-        .ok_or_else(|| IndexerError::Parse(format!("No CES schema for event: {event_name}")))?;
+    Ok((event_name, remainder))
+}
 
-    // 3. Parse fields according to the schema.
+/// Parse CES event fields from the remaining bytes using the given schema.
+///
+/// # Errors
+///
+/// Returns [`IndexerError::Parse`] if the binary data doesn't match the schema.
+#[inline]
+pub fn parse_event_fields(remainder: &[u8], schema: &EventSchema) -> IndexerResult<Value> {
     let mut remaining = remainder;
     let mut map = Map::with_capacity(schema.fields.len());
 
@@ -102,7 +105,29 @@ pub fn parse_ces_event(bytes: &[u8], schemas: &[EventSchema]) -> IndexerResult<(
         remaining = rest;
     }
 
-    Ok((event_name, Value::Object(map)))
+    Ok(Value::Object(map))
+}
+
+/// Parse a CES binary event blob into `(event_name, JSON object)`.
+///
+/// The event name is returned without the `event_` prefix (e.g. `"ScheduleCreated"`).
+///
+/// # Errors
+///
+/// Returns [`IndexerError::Parse`] if the bytes are malformed or no matching
+/// schema is found.
+#[inline]
+pub fn parse_ces_event(bytes: &[u8], schemas: &[EventSchema]) -> IndexerResult<(String, Value)> {
+    let (event_name, remainder) = parse_event_name(bytes)?;
+
+    let schema = schemas
+        .iter()
+        .find(|s| s.name == event_name)
+        .ok_or_else(|| IndexerError::Parse(format!("No CES schema for event: {event_name}")))?;
+
+    let event_data = parse_event_fields(remainder, schema)?;
+
+    Ok((event_name, event_data))
 }
 
 /// Parse a single field using `casper_types::bytesrepr::FromBytes`.
