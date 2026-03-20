@@ -75,14 +75,14 @@ pub mod errors {
 
     #[odra::odra_error]
     pub enum Error {
-        CallerNotWhitelisted = 55_001,
-        InvalidAmount = 55_002,
-        InvalidVestingDuration = 55_003,
-        CliffExceedsVestingDuration = 55_004,
-        ScheduleNotFound = 55_005,
-        CallerNotBeneficiary = 55_006,
-        NothingToClaim = 55_007,
-        ClaimBlockedByActiveUnbonding = 55_008,
+        CallerNotWhitelisted = 701,
+        InvalidAmount = 702,
+        InvalidVestingDuration = 703,
+        CliffExceedsVestingDuration = 704,
+        ScheduleNotFound = 705,
+        CallerNotBeneficiary = 706,
+        NothingToClaim = 707,
+        ClaimBlockedByActiveUnbonding = 708,
     }
 }
 
