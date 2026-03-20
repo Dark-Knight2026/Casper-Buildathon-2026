@@ -87,6 +87,9 @@ pub async fn fetch_circulating_supply(pool: &PgPool) -> Result<String, sqlx::Err
 
 /// Returns all vesting schedules globally (for release schedule calculation).
 ///
+/// Hard-capped at 10 000 rows to bound memory and CPU usage on this
+/// unauthenticated endpoint.
+///
 /// # Errors
 ///
 /// Returns `sqlx::Error` if the database query fails.
@@ -98,6 +101,7 @@ pub async fn fetch_all_schedules(pool: &PgPool) -> Result<Vec<VestingScheduleRow
             SELECT vesting_id, total_amount, claimed_amount, start_timestamp, cliff_duration, vesting_duration
             FROM vesting_schedules
             ORDER BY start_timestamp
+            LIMIT 10000
         ",
     )
     .fetch_all(pool)
