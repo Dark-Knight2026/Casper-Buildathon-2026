@@ -34,13 +34,16 @@ pub trait CesEvent {
 /// `CLType` itself contains `Box`-based variants (`Option`, `List`, etc.),
 /// making it neither `Copy` nor `const`-constructible in `static` arrays.
 #[derive(Debug, Clone, Copy)]
-#[allow(dead_code)]
 pub enum FieldType {
     /// UTF-8 string (u32 length-prefixed).
+    /// Not used by current event schemas but needed for future CES contracts.
+    #[allow(dead_code)]
     String,
     /// Casper Key - rendered as formatted string (e.g. `account-hash-abcd...`).
     Key,
     /// Boolean (1 byte).
+    /// Not used by current event schemas but needed for future CES contracts.
+    #[allow(dead_code)]
     Bool,
     /// u8 (1 byte) - rendered as a JSON number.
     U8,
