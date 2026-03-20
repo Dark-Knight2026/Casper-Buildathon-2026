@@ -183,9 +183,9 @@ pub mod errors {
 
     #[odra::odra_error]
     pub enum Error {
-        CallerNotMinter = 62_000,
-        CallerNotBurner = 62_001,
-        CallerNotMinterNorBurner = 62_002,
+        CallerNotMinter = 100,
+        CallerNotBurner = 101,
+        CallerNotMinterNorBurner = 102,
     }
 }
 
