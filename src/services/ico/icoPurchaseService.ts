@@ -460,7 +460,7 @@ export function validatePurchase(
 ): { valid: boolean; error?: string } {
   const numAmount = parseFloat(amount);
 
-  if (isNaN(numAmount) || numAmount <= 0) {
+  if (isNaN(numAmount) || !isFinite(numAmount) || numAmount <= 0) {
     return { valid: false, error: 'Invalid amount' };
   }
 
@@ -508,7 +508,7 @@ export function calculateTokensReceived(
   csprRate?: number,
 ): bigint {
   const numAmount = parseFloat(amount);
-  if (isNaN(numAmount) || numAmount <= 0 || tokenPriceUsd <= 0) {
+  if (isNaN(numAmount) || !isFinite(numAmount) || numAmount <= 0 || tokenPriceUsd <= 0) {
     return 0n;
   }
 
