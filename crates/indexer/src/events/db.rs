@@ -112,18 +112,15 @@ pub async fn upsert_contract_registry(
 ) -> IndexerResult<()> {
     for contract in contracts.active_contracts() {
         sqlx::query!(
-            // TODO: contract_name always equals contract_type - consider removing the column
             r"
-                INSERT INTO contract_registry (contract_type, contract_hash, contract_name, is_active)
-                VALUES ($1, $2, $3, TRUE)
+                INSERT INTO contract_registry (contract_type, contract_hash, is_active)
+                VALUES ($1, $2, TRUE)
                 ON CONFLICT (contract_type) DO UPDATE SET
                     contract_hash = EXCLUDED.contract_hash,
-                    contract_name = EXCLUDED.contract_name,
                     is_active     = TRUE
             ",
             contract.contract_type.as_str(),
             contract.hash,
-            contract.contract_type.as_str(),
         )
         .execute(pool)
         .await?;
