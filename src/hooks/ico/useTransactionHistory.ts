@@ -20,7 +20,12 @@ export function useTransactionHistory(
       const isBig = tx.contract_package_hash?.toLowerCase() === BIG_TOKEN_HASH;
       const isTransfer = !isBig && tx.to_type === 0;
       const decimals = isBig ? 18 : 6;
-      const amount = tx.amount ? Number(BigInt(tx.amount)) / 10 ** decimals : 0;
+      let amount = 0;
+      if (tx.amount && /^\d+$/.test(String(tx.amount))) {
+        const raw = BigInt(tx.amount);
+        const divisor = 10n ** BigInt(decimals);
+        amount = Number(raw / divisor) + Number(raw % divisor) / Number(divisor);
+      }
       const isIncoming = tx.to_hash?.toLowerCase() === accountHex;
 
       return {
