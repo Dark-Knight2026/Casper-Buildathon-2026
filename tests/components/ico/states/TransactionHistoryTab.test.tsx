@@ -1,13 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
-// --- Mock useTokenTransactions BEFORE component import ---
+// --- Mock at the API layer so useTokenTransactions runs for real ---
 
-const mockRefetch = vi.fn();
-const mockUseTokenTransactions = vi.fn();
-
-vi.mock('@/hooks/ico/useTokenTransactions', () => ({
-  useTokenTransactions: (...args: unknown[]) => mockUseTokenTransactions(...args),
+vi.mock('@/lib/api-client', () => ({
+  backendClient: {
+    get: vi.fn(),
+  },
 }));
 
 vi.mock('@/constants/ico', () => ({
@@ -58,16 +58,12 @@ vi.mock('@/components/ui/table', () => ({
   ),
 }));
 
+import { backendClient } from '@/lib/api-client';
 import { TransactionHistoryTab } from '@/pages/ico/components/states/TransactionHistoryTab';
 
-const baseHookResult = {
-  transactions: [],
-  totalPages: 0,
-  totalItems: 0,
-  isLoading: false,
-  error: null,
-  refetch: mockRefetch,
-};
+const mockGet = vi.mocked(backendClient.get);
+
+const emptyResponse = { item_count: 0, page_count: 0, data: [] };
 
 const mockAction = {
   deploy_hash: 'abc123def456abc123def456abc12345',
@@ -83,42 +79,48 @@ const mockAction = {
   transform_idx: 0,
 };
 
+function renderWithQuery(ui: React.ReactElement) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>,
+  );
+}
+
 describe('TransactionHistoryTab', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockUseTokenTransactions.mockReturnValue(baseHookResult);
+    mockGet.mockResolvedValue(emptyResponse);
   });
 
   // --- Header ---
 
   describe('header', () => {
     it('should render Transaction History title', () => {
-      render(<TransactionHistoryTab />);
+      renderWithQuery(<TransactionHistoryTab />);
       expect(screen.getByText('Transaction History')).toBeInTheDocument();
     });
 
-    it('should display total items count', () => {
-      mockUseTokenTransactions.mockReturnValue({ ...baseHookResult, totalItems: 42 });
-      render(<TransactionHistoryTab />);
-      expect(screen.getByText('42 transactions')).toBeInTheDocument();
+    it('should display total items count', async () => {
+      mockGet.mockResolvedValue({ item_count: 42, page_count: 5, data: [] });
+      renderWithQuery(<TransactionHistoryTab />);
+      await waitFor(() => expect(screen.getByText('42 transactions')).toBeInTheDocument());
     });
   });
 
   // --- Loading state ---
 
   describe('loading state', () => {
-    it('should render a spinning icon when isLoading is true', () => {
-      mockUseTokenTransactions.mockReturnValue({ ...baseHookResult, isLoading: true });
-      render(<TransactionHistoryTab />);
-
-      const spinner = document.querySelector('.animate-spin');
-      expect(spinner).toBeInTheDocument();
+    it('should render a spinning icon while loading', () => {
+      mockGet.mockReturnValue(new Promise(() => {})); // never resolves
+      renderWithQuery(<TransactionHistoryTab />);
+      expect(document.querySelector('.animate-spin')).toBeInTheDocument();
     });
 
     it('should not render the table while loading', () => {
-      mockUseTokenTransactions.mockReturnValue({ ...baseHookResult, isLoading: true });
-      render(<TransactionHistoryTab />);
-
+      mockGet.mockReturnValue(new Promise(() => {}));
+      renderWithQuery(<TransactionHistoryTab />);
       expect(screen.queryByRole('table')).not.toBeInTheDocument();
     });
   });
@@ -126,49 +128,42 @@ describe('TransactionHistoryTab', () => {
   // --- Error state ---
 
   describe('error state', () => {
-    it('should render error message when error is present', () => {
-      mockUseTokenTransactions.mockReturnValue({
-        ...baseHookResult,
-        error: new Error('API error'),
-      });
-      render(<TransactionHistoryTab />);
-
-      expect(screen.getByText('Failed to load transactions')).toBeInTheDocument();
+    it('should render error message when request fails', async () => {
+      mockGet.mockRejectedValue(new Error('API error'));
+      renderWithQuery(<TransactionHistoryTab />);
+      await waitFor(() =>
+        expect(screen.getByText('Failed to load transactions')).toBeInTheDocument(),
+      );
     });
 
-    it('should render a "Try again" button in error state', () => {
-      mockUseTokenTransactions.mockReturnValue({
-        ...baseHookResult,
-        error: new Error('API error'),
-      });
-      render(<TransactionHistoryTab />);
-
-      expect(screen.getByText('Try again')).toBeInTheDocument();
+    it('should render a "Try again" button in error state', async () => {
+      mockGet.mockRejectedValue(new Error('API error'));
+      renderWithQuery(<TransactionHistoryTab />);
+      await waitFor(() => expect(screen.getByText('Try again')).toBeInTheDocument());
     });
 
-    it('should call refetch when "Try again" is clicked', () => {
-      mockUseTokenTransactions.mockReturnValue({
-        ...baseHookResult,
-        error: new Error('API error'),
-      });
-      render(<TransactionHistoryTab />);
-
+    it('should call the API again when "Try again" is clicked', async () => {
+      mockGet.mockRejectedValue(new Error('API error'));
+      renderWithQuery(<TransactionHistoryTab />);
+      await waitFor(() => expect(screen.getByText('Try again')).toBeInTheDocument());
       fireEvent.click(screen.getByText('Try again'));
-      expect(mockRefetch).toHaveBeenCalledTimes(1);
+      await waitFor(() => expect(mockGet).toHaveBeenCalledTimes(2));
     });
   });
 
   // --- Empty state ---
 
   describe('empty state', () => {
-    it('should render "No transactions found" when actions is empty', () => {
-      render(<TransactionHistoryTab />);
-      expect(screen.getByText('No transactions found')).toBeInTheDocument();
+    it('should render "No transactions found" when data is empty', async () => {
+      renderWithQuery(<TransactionHistoryTab />);
+      await waitFor(() =>
+        expect(screen.getByText('No transactions found')).toBeInTheDocument(),
+      );
     });
 
-    it('should not render table headers in empty state', () => {
-      render(<TransactionHistoryTab />);
-      expect(screen.queryByText('Tx Hash')).not.toBeInTheDocument();
+    it('should not render table headers in empty state', async () => {
+      renderWithQuery(<TransactionHistoryTab />);
+      await waitFor(() => expect(screen.queryByText('Tx Hash')).not.toBeInTheDocument());
     });
   });
 
@@ -176,18 +171,12 @@ describe('TransactionHistoryTab', () => {
 
   describe('with data', () => {
     beforeEach(() => {
-      mockUseTokenTransactions.mockReturnValue({
-        ...baseHookResult,
-        transactions: [mockAction],
-        totalPages: 1,
-        totalItems: 1,
-      });
+      mockGet.mockResolvedValue({ item_count: 1, page_count: 1, data: [mockAction] });
     });
 
-    it('should render table column headers', () => {
-      render(<TransactionHistoryTab />);
-
-      expect(screen.getByText('Tx Hash')).toBeInTheDocument();
+    it('should render table column headers', async () => {
+      renderWithQuery(<TransactionHistoryTab />);
+      await waitFor(() => expect(screen.getByText('Tx Hash')).toBeInTheDocument());
       expect(screen.getByText('Block')).toBeInTheDocument();
       expect(screen.getByText('Age')).toBeInTheDocument();
       expect(screen.getByText('Type')).toBeInTheDocument();
@@ -195,30 +184,27 @@ describe('TransactionHistoryTab', () => {
       expect(screen.getByText('To')).toBeInTheDocument();
     });
 
-    it('should not render pagination when totalPages is 1', () => {
-      render(<TransactionHistoryTab />);
+    it('should not render pagination when totalPages is 1', async () => {
+      renderWithQuery(<TransactionHistoryTab />);
+      await waitFor(() => expect(screen.getByText('Tx Hash')).toBeInTheDocument());
       expect(screen.queryByTestId('table-pagination')).not.toBeInTheDocument();
     });
 
-    it('should render pagination when totalPages > 1', () => {
-      mockUseTokenTransactions.mockReturnValue({
-        ...baseHookResult,
-        transactions: [mockAction],
-        totalPages: 3,
-        totalItems: 30,
-      });
-      render(<TransactionHistoryTab />);
-      expect(screen.getByTestId('table-pagination')).toBeInTheDocument();
+    it('should render pagination when totalPages > 1', async () => {
+      mockGet.mockResolvedValue({ item_count: 30, page_count: 3, data: [mockAction] });
+      renderWithQuery(<TransactionHistoryTab />);
+      await waitFor(() => expect(screen.getByTestId('table-pagination')).toBeInTheDocument());
     });
   });
 
   // --- Refresh button ---
 
   describe('refresh button', () => {
-    it('should call refetch when refresh button is clicked', () => {
-      render(<TransactionHistoryTab />);
+    it('should call the API again when refresh button is clicked', async () => {
+      renderWithQuery(<TransactionHistoryTab />);
+      await waitFor(() => expect(mockGet).toHaveBeenCalledTimes(1));
       fireEvent.click(screen.getByTitle('Refresh'));
-      expect(mockRefetch).toHaveBeenCalledTimes(1);
+      await waitFor(() => expect(mockGet).toHaveBeenCalledTimes(2));
     });
   });
 });

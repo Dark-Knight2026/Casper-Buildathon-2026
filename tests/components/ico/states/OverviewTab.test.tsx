@@ -8,6 +8,18 @@ vi.mock('@/hooks/ico/useStakingPortfolio', () => ({
   useStakingPortfolio: () => ({ data: null, isLoading: false }),
 }));
 
+vi.mock('@/hooks/ico/useStakingEarnings', () => ({
+  useStakingEarnings: () => ({
+    data: {
+      earnings: [
+        { date: '2024-01-01', amount: 10 },
+        { date: '2024-01-02', amount: 20 },
+      ],
+    },
+    isLoading: false,
+  }),
+}));
+
 vi.mock('@/hooks/ico/useStakingInfo', () => ({
   useStakingInfo: () => ({ data: null, isLoading: false }),
 }));
@@ -47,6 +59,14 @@ vi.mock('@/components/ui/chart', () => ({
   ),
   ChartTooltip: () => <div data-testid="chart-tooltip" />,
   ChartTooltipContent: () => <div data-testid="chart-tooltip-content" />,
+}));
+
+vi.mock('@/pages/ico/components/shared/EarningsChart', () => ({
+  EarningsChart: ({ className }: { className?: string }) => (
+    <div data-testid="chart-container" className={className}>
+      <h3>Earnings Overview</h3>
+    </div>
+  ),
 }));
 
 vi.mock('@/hooks/ico/useICOWallet', () => ({
