@@ -66,6 +66,7 @@ const baseHookResult = {
   totalPages: 0,
   totalItems: 0,
   isLoading: false,
+  isFetching: false,
   error: null,
   refetch: mockRefetch,
 };
@@ -218,7 +219,7 @@ describe('TransactionHistoryTab', () => {
   describe('refresh button', () => {
     it('should call refetch when refresh button is clicked', () => {
       render(<TransactionHistoryTab />);
-      fireEvent.click(screen.getByTitle('Refresh'));
+      fireEvent.click(screen.getByRole('button', { name: 'Refresh transactions' }));
       expect(mockRefetch).toHaveBeenCalledTimes(1);
     });
   });
