@@ -8,6 +8,12 @@ vi.mock('@/hooks/ico/useReleaseSchedule', () => ({
   useReleaseSchedule: () => ({ data: null, isLoading: false }),
 }));
 
+vi.mock('@/hooks/ico/useTokenSupply', () => ({
+  useTokenSupply: () => ({
+    data: { totalSupply: 5_000_000_000, circulatingSupply: 1_000_000_000 },
+  }),
+}));
+
 // Mock the child components
 vi.mock('@/pages/ico/components/shared/Card', () => ({
   Card: ({ children, className }: { children: React.ReactNode; className?: string }) => (
@@ -75,14 +81,14 @@ describe('TokenomicsTab', () => {
       renderWithRouter(<TokenomicsTab />);
 
       expect(screen.getByText('Total Supply')).toBeInTheDocument();
-      expect(screen.getByText('5 000 000 000 BIG')).toBeInTheDocument();
+      expect(screen.getByText(`${(5_000_000_000).toLocaleString()} BIG`)).toBeInTheDocument();
     });
 
     it('should display Circulating Supply', () => {
       renderWithRouter(<TokenomicsTab />);
 
       expect(screen.getByText('Circulating Supply')).toBeInTheDocument();
-      expect(screen.getByText('1 000 000 000 BIG')).toBeInTheDocument();
+      expect(screen.getByText(`${(1_000_000_000).toLocaleString()} BIG`)).toBeInTheDocument();
     });
   });
 

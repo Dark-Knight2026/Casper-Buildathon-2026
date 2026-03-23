@@ -2,7 +2,6 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
 import { PrivateSaleActive } from '@/pages/ico/components/states/PrivateSaleActive';
-import { ICO_CONFIG } from '@/constants/ico';
 import type { ScheduleProgress } from '@/hooks/ico/useICOSchedules';
 
 // Mock progress data for tests that need it
@@ -65,11 +64,6 @@ vi.mock('@/hooks/ico/usePurchaseFlow', () => ({
     handleCloseToast: vi.fn(),
     csprPriceUsd: 0,
   }),
-}));
-
-// Mock useUserTokenActions to avoid QueryClientProvider dependency
-vi.mock('@/hooks/ico/useUserTokenActions', () => ({
-  useUserTokenActions: () => ({ transactions: [] }),
 }));
 
 // Mock the child components to isolate testing

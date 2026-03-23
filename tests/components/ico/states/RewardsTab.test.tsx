@@ -9,7 +9,18 @@ vi.mock('@/hooks/ico/useRewardsHistory', () => ({
 }));
 
 vi.mock('@/hooks/ico/useStakingInfo', () => ({
-  useStakingInfo: () => ({ data: null, isLoading: false }),
+  useStakingInfo: () => ({
+    data: { stakedTokens: 500000, currentApy: 12.5, totalRewardsEarned: 0 },
+    isLoading: false,
+  }),
+}));
+
+vi.mock('@/hooks/ico/useICOWallet', () => ({
+  useICOWallet: () => ({ account: null, isConnected: false }),
+}));
+
+vi.mock('@/lib/blockchain/accountUtils', () => ({
+  deriveAccountHash: () => null,
 }));
 
 // Mock the child components
@@ -81,21 +92,21 @@ describe('RewardsTab', () => {
       renderWithRouter(<RewardsTab />);
 
       expect(screen.getByText('Staked Tokens')).toBeInTheDocument();
-      expect(screen.getByText('500,000 BIG')).toBeInTheDocument();
+      expect(screen.getByText('500000 BIG')).toBeInTheDocument();
     });
 
     it('should display Current APY', () => {
       renderWithRouter(<RewardsTab />);
 
       expect(screen.getByText('Current APY')).toBeInTheDocument();
-      expect(screen.getByText('12.5%')).toBeInTheDocument();
+      expect(screen.getByText('12.5%')).toBeInTheDocument(); // from mock data
     });
 
     it('should display Next Rewards', () => {
       renderWithRouter(<RewardsTab />);
 
       expect(screen.getByText('Next Rewards')).toBeInTheDocument();
-      expect(screen.getByText('2d 14h 32m')).toBeInTheDocument();
+      expect(screen.getByText('—')).toBeInTheDocument();
     });
   });
 

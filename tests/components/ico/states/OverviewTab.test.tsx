@@ -132,14 +132,14 @@ describe('OverviewTab', () => {
       renderWithRouter(<OverviewTab />);
 
       expect(screen.getByText('Next Rewards')).toBeInTheDocument();
-      expect(screen.getByText('2d 14h 32m')).toBeInTheDocument();
+      expect(screen.getByText('—')).toBeInTheDocument();
     });
 
     it('should display Current APY', () => {
       renderWithRouter(<OverviewTab />);
 
       expect(screen.getByText('Current APY')).toBeInTheDocument();
-      expect(screen.getByText('12.5%')).toBeInTheDocument();
+      expect(screen.getByText('0%')).toBeInTheDocument();
     });
   });
 
@@ -167,15 +167,15 @@ describe('OverviewTab', () => {
     it('should display portfolio value', () => {
       renderWithRouter(<OverviewTab />);
 
-      // $858.25 appears multiple times (portfolio value and BIG Value card)
-      const values = screen.getAllByText('$858.25');
+      // $0.00 when no portfolio data
+      const values = screen.getAllByText('$0.00');
       expect(values.length).toBeGreaterThan(0);
     });
 
     it('should display 24h change', () => {
       renderWithRouter(<OverviewTab />);
 
-      expect(screen.getByText('+2.4% (24h)')).toBeInTheDocument();
+      expect(screen.getByText('0% (24h)')).toBeInTheDocument();
     });
 
     it('should display portfolio description', () => {
