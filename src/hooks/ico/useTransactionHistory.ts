@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { ICO_CONFIG } from '@/constants/ico';
 import { useAccountTransactions } from './useAccountTransactions';
-import type { ICOTransaction } from '@/pages/ico/components/shared/TransactionHistory';
+import type { ICOTransaction } from '@/types/ico';
 
 const BIG_TOKEN_HASH = ICO_CONFIG.CONTRACTS.tokenAddress.replace(/^hash-/, '').toLowerCase();
 
