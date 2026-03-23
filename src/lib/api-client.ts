@@ -297,6 +297,11 @@ export const backendClient = new ApiClient({
   timeout: 30000,
   maxRetries: 3,
   retryDelay: 1000,
+  onAuthError: () => {
+    if (typeof window !== 'undefined') {
+      window.location.href = '/';
+    }
+  },
 });
 
 // Create default API client instance
