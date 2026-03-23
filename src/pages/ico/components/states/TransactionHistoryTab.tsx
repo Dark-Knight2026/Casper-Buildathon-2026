@@ -11,7 +11,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { useContractDeploys, isICOPurchase, type FTTokenAction } from '@/hooks/ico/useContractDeploys';
+import { useContractDeploys, isICOPurchase } from '@/hooks/ico/useContractDeploys';
+import type { FTTokenAction } from '@/types/csprCloud';
 import { ICO_CONFIG } from '@/constants/ico';
 
 const EXPLORER_URL = ICO_CONFIG.CASPER.explorerUrl;

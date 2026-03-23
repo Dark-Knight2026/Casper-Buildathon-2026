@@ -1,16 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 import { ICO_CONFIG } from '@/constants/ico';
-import { type FTTokenAction, isICOPurchase } from './useContractDeploys';
+import { isICOPurchase } from './useContractDeploys';
+import type { FTTokenAction, FTTokenActionsResponse } from '@/types/csprCloud';
 import type { ICOTransaction } from '@/types/ico';
 
 const BIG_TOKEN_PACKAGE_HASH = ICO_CONFIG.CONTRACTS.tokenAddress.replace(/^hash-/, '');
 const BIG_DECIMALS = ICO_CONFIG.TOKEN.decimals; // 18
-
-interface FTTokenActionsResponse {
-  item_count: number;
-  page_count: number;
-  data: FTTokenAction[];
-}
 
 async function fetchUserTokenActions(publicKeyHex: string, signal?: AbortSignal): Promise<FTTokenAction[]> {
   const url = `/api/cspr-cloud/accounts/${publicKeyHex}/ft-token-actions?contract_package_hash=${BIG_TOKEN_PACKAGE_HASH}&page_size=100`;
