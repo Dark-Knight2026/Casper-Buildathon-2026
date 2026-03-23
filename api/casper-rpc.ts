@@ -31,7 +31,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const rpcMethod = req.body?.method;
   if (typeof rpcMethod !== 'string' || !ALLOWED_RPC_METHODS.has(rpcMethod)) {
-    return res.status(403).json({ error: `RPC method not allowed: ${rpcMethod}` });
+    console.warn('[casper-rpc proxy] Blocked method:', rpcMethod);
+    return res.status(403).json({ error: 'RPC method not allowed' });
   }
 
   const network = process.env.VITE_CASPER_NETWORK || 'casper-test';
