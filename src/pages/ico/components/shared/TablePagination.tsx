@@ -31,7 +31,7 @@ export function TablePagination({ currentPage, totalPages, onPageChange, classNa
           <PaginationLink
             onClick={() => onPageChange(Math.max(1, currentPage - 1))}
             className={cn(
-              'cursor-pointer min-h-0 min-w-0 text-[hsl(var(--ico-text-secondary))] hover:text-[hsl(var(--ico-text-primary))]',
+              'cursor-pointer min-h-0 min-w-0 text-[hsl(var(--ico-text-secondary))]! hover:text-[hsl(var(--ico-text-primary))]!',
               currentPage === 1 && 'pointer-events-none opacity-50',
             )}
             aria-label="Go to previous page"
@@ -48,8 +48,8 @@ export function TablePagination({ currentPage, totalPages, onPageChange, classNa
               className={cn(
                 'inline-flex items-center justify-center size-8 min-h-0 min-w-0 text-sm font-medium cursor-pointer rounded-full transition-colors',
                 p === currentPage
-                  ? 'text-[hsl(var(--ico-brand-primary))] border border-[hsl(var(--ico-border-color))]'
-                  : 'text-[hsl(var(--ico-text-secondary))] hover:text-[hsl(var(--ico-text-primary))]',
+                  ? 'text-[hsl(var(--ico-brand-primary))]! border border-[hsl(var(--ico-border-color))]!'
+                  : 'text-[hsl(var(--ico-text-secondary))]! hover:text-[hsl(var(--ico-text-primary))]!',
               )}
               data-active={p === currentPage ? '' : undefined}
               aria-current={p === currentPage ? 'page' : undefined}
@@ -63,7 +63,7 @@ export function TablePagination({ currentPage, totalPages, onPageChange, classNa
           <PaginationLink
             onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
             className={cn(
-              'cursor-pointer min-h-0 min-w-0 text-[hsl(var(--ico-text-secondary))] hover:text-[hsl(var(--ico-text-primary))]',
+              'cursor-pointer min-h-0 min-w-0 text-[hsl(var(--ico-text-secondary))]! hover:text-[hsl(var(--ico-text-primary))]!',
               currentPage === totalPages && 'pointer-events-none opacity-50',
             )}
             aria-label="Go to next page"

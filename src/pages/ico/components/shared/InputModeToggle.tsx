@@ -18,7 +18,7 @@ export function InputModeToggle({ value, onChange, className }: InputModeToggleP
         className={cn(
           'flex-1 py-2 text-sm transition-colors',
           value === 'spend'
-            ? 'bg-[hsl(var(--ico-brand-primary))] text-white'
+            ? 'bg-[hsl(var(--ico-brand-primary))]! text-white'
             : 'bg-[hsl(var(--ico-bg-secondary))] text-[hsl(var(--ico-text-secondary))] hover:text-[hsl(var(--ico-text-primary))]'
         )}
       >
@@ -31,7 +31,7 @@ export function InputModeToggle({ value, onChange, className }: InputModeToggleP
         className={cn(
           'flex-1 py-2 text-sm transition-colors',
           value === 'receive'
-            ? 'bg-[hsl(var(--ico-brand-primary))] text-white'
+            ? 'bg-[hsl(var(--ico-brand-primary))]! text-white'
             : 'bg-[hsl(var(--ico-bg-secondary))] text-[hsl(var(--ico-text-secondary))] hover:text-[hsl(var(--ico-text-primary))]'
         )}
       >
