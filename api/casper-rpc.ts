@@ -42,9 +42,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 10_000);
 
-  let response: Response;
   try {
-    response = await fetch(rpcUrl, {
+    const response = await fetch(rpcUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -53,14 +52,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       body: JSON.stringify(req.body),
       signal: controller.signal,
     });
+    const data = await response.text();
+    res.setHeader('Content-Type', response.headers.get('content-type') || 'application/json');
+    return res.status(response.status).send(data);
   } catch (err) {
     console.error('[casper-rpc proxy] Error:', err);
     return res.status(502).json({ error: 'RPC proxy request failed' });
   } finally {
     clearTimeout(timeoutId);
   }
-
-  const data = await response.text();
-  res.setHeader('Content-Type', response.headers.get('content-type') || 'application/json');
-  return res.status(response.status).send(data);
 }
