@@ -7,12 +7,14 @@ async function fetchICOProgress(): Promise<IcoProgressResponse> {
 }
 
 const REFETCH_INTERVAL = 1000 * 60 * 5; // 5 min
+const STALE_TIME = 1000 * 60; // 1 min
 
 export function useICOProgress() {
   return useQuery({
     queryKey: ['ico-progress'],
     queryFn: fetchICOProgress,
-    staleTime: REFETCH_INTERVAL,
+    staleTime: STALE_TIME,
     refetchInterval: REFETCH_INTERVAL,
+    refetchIntervalInBackground: false,
   });
 }
