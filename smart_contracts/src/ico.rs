@@ -196,8 +196,12 @@ impl ICO {
 
         self.staking.stake_for(*caller, purchase_amount);
 
-        self.vesting
-            .create_schedule(*caller, purchase_amount, cliff_duration, vesting_duration);
+        let vesting_id = self.vesting.create_schedule(
+            *caller,
+            purchase_amount,
+            cliff_duration,
+            vesting_duration,
+        );
 
         self.env().emit_event(TokensPurchased {
             amount: purchase_amount,
@@ -205,6 +209,8 @@ impl ICO {
             price: ico_token_price,
             cost: amount_to_spend,
             timestamp: self.env().get_block_time(),
+            buyer: *caller,
+            vesting_id,
         });
 
         purchase_amount
@@ -430,6 +436,8 @@ pub mod events {
         pub price: U256,
         pub cost: U256,
         pub timestamp: u64,
+        pub buyer: Address,
+        pub vesting_id: U256,
     }
 
     #[odra::event]

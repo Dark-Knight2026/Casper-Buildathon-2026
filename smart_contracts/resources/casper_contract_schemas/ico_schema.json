@@ -203,6 +203,16 @@
             "name": "timestamp",
             "description": null,
             "ty": "U64"
+          },
+          {
+            "name": "buyer",
+            "description": null,
+            "ty": "Key"
+          },
+          {
+            "name": "vesting_id",
+            "description": null,
+            "ty": "U256"
           }
         ]
       }

@@ -701,6 +701,8 @@ fn test_purchase_should_purchase_with_cspr_token_properly() {
                 price,
                 cost: amount_to_spend,
                 timestamp: ctx.env.block_time(),
+                buyer: ctx.users.alice,
+                vesting_id: U256::from(prev_user_schedules_count),
             }
         ),
         "TokensPurchased event should be emitted"
@@ -795,6 +797,8 @@ fn test_purchase_should_purchase_with_cep18_token_properly() {
                 price,
                 cost: amount_to_spend,
                 timestamp: ctx.env.block_time(),
+                buyer: ctx.users.alice,
+                vesting_id: U256::from(prev_user_schedules_count),
             }
         ),
         "TokensPurchased event should be emitted"
