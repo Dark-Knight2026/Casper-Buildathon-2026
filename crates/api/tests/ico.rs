@@ -282,7 +282,7 @@ async fn ico_progress_uses_env_fallback_when_no_schedule(pool: PgPool) {
         false,
         TestOverrides {
             ico_fallback: Some(IcoFallback {
-                price_usd: "0.5".to_owned(),
+                price_usd: "0.5".parse().unwrap(),
                 total_allocation: ICO_TOTAL_ALLOCATION.to_owned(),
             }),
             ..Default::default()
