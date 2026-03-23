@@ -11,10 +11,12 @@ interface PeriodSelectorProps<T> {
 
 export function PeriodSelector<T>({ options, selected, onChange }: PeriodSelectorProps<T>) {
   return (
-    <div className="flex gap-1">
+    <div role="group" aria-label="Select time period" className="flex gap-1">
       {options.map((option) => (
         <button
           key={String(option.value)}
+          type="button"
+          aria-pressed={selected === option.value}
           onClick={() => onChange(option.value)}
           className={`px-2.5 py-1 text-xs rounded-md transition-colors ${
             selected === option.value
