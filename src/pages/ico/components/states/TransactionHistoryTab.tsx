@@ -75,7 +75,7 @@ export function TransactionHistoryTab() {
             type="button"
             onClick={() => refetch()}
             className="p-1.5 rounded-md text-[hsl(var(--ico-text-secondary))] hover:text-[hsl(var(--ico-text-primary))] hover:bg-[hsl(var(--ico-bg-secondary))] transition-colors cursor-pointer"
-            title="Refresh"
+            aria-label="Refresh transactions"
           >
             <RefreshCw className={`w-4 h-4${isFetching ? ' animate-spin' : ''}`} />
           </button>
