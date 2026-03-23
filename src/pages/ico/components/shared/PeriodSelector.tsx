@@ -20,7 +20,7 @@ export function PeriodSelector<T>({ options, selected, onChange }: PeriodSelecto
           onClick={() => onChange(option.value)}
           className={`px-2.5 py-1 text-xs rounded-md transition-colors ${
             selected === option.value
-              ? 'bg-[hsl(var(--ico-brand-primary))] text-white'
+              ? 'bg-[hsl(var(--ico-brand-primary))]! text-white'
               : 'text-[hsl(var(--ico-text-secondary))] hover:text-[hsl(var(--ico-text-primary))]'
           }`}
         >
