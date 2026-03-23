@@ -28,7 +28,9 @@ interface EarningsChartProps {
 
 export function EarningsChart({ accountHash, className }: EarningsChartProps) {
   const [period, setPeriod] = useState<EarningsPeriod>('6m');
-  const { data: stakingEarnings } = useStakingEarnings(accountHash, period);
+  const { data: stakingEarnings, isLoading, error } = useStakingEarnings(accountHash, period);
+
+  const chartData = stakingEarnings?.data ?? [];
 
   return (
     <Card className={className}>
@@ -39,35 +41,59 @@ export function EarningsChart({ accountHash, className }: EarningsChartProps) {
           </h3>
           <PeriodSelector options={PERIOD_OPTIONS} selected={period} onChange={setPeriod} />
         </div>
-        <ChartContainer config={chartConfig} className="h-[200px] w-full">
-          <AreaChart data={stakingEarnings?.data ?? []} margin={{ left: 12, right: 12 }}>
-            <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="hsl(var(--ico-border-color))" />
-            <XAxis
-              dataKey="month"
-              tickLine={false}
-              axisLine={false}
-              tickMargin={8}
-              tick={{ fill: 'hsl(var(--ico-text-muted))', fontSize: 12 }}
-            />
-            <YAxis
-              tickLine={false}
-              axisLine={false}
-              tick={{ fill: 'hsl(var(--ico-text-muted))', fontSize: 12 }}
-              tickFormatter={(value) => `$${value}`}
-            />
-            <ChartTooltip
-              cursor={false}
-              content={<ChartTooltipContent indicator="line" />}
-            />
-            <Area
-              type="natural"
-              dataKey="earnings"
-              fill="var(--color-earnings)"
-              fillOpacity={0.4}
-              stroke="var(--color-earnings)"
-            />
-          </AreaChart>
-        </ChartContainer>
+
+        {isLoading && (
+          <div className="h-[200px] w-full animate-pulse rounded-md bg-[hsl(var(--ico-bg-secondary))]" aria-label="Loading earnings chart" />
+        )}
+
+        {!isLoading && error && (
+          <div className="h-[200px] w-full flex items-center justify-center text-sm text-[hsl(var(--ico-text-secondary))]" role="alert">
+            Failed to load earnings data
+          </div>
+        )}
+
+        {!isLoading && !error && chartData.length === 0 && (
+          <div className="h-[200px] w-full flex items-center justify-center text-sm text-[hsl(var(--ico-text-secondary))]">
+            No earnings data available
+          </div>
+        )}
+
+        {!isLoading && !error && chartData.length > 0 && (
+          <ChartContainer
+            config={chartConfig}
+            className="h-[200px] w-full"
+            role="img"
+            aria-label="Staking earnings overview chart"
+          >
+            <AreaChart data={chartData} margin={{ left: 12, right: 12 }}>
+              <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="hsl(var(--ico-border-color))" />
+              <XAxis
+                dataKey="month"
+                tickLine={false}
+                axisLine={false}
+                tickMargin={8}
+                tick={{ fill: 'hsl(var(--ico-text-muted))', fontSize: 12 }}
+              />
+              <YAxis
+                tickLine={false}
+                axisLine={false}
+                tick={{ fill: 'hsl(var(--ico-text-muted))', fontSize: 12 }}
+                tickFormatter={(value) => `$${value}`}
+              />
+              <ChartTooltip
+                cursor={false}
+                content={<ChartTooltipContent indicator="line" />}
+              />
+              <Area
+                type="natural"
+                dataKey="earnings"
+                fill="var(--color-earnings)"
+                fillOpacity={0.4}
+                stroke="var(--color-earnings)"
+              />
+            </AreaChart>
+          </ChartContainer>
+        )}
       </div>
     </Card>
   );
