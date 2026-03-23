@@ -43,7 +43,7 @@ pub async fn fetch_progress_snapshot(pool: &PgPool) -> Result<ProgressSnapshot, 
             ORDER BY
                 CASE WHEN EXTRACT(EPOCH FROM NOW())::BIGINT BETWEEN start_timestamp AND end_timestamp
                      THEN 0 ELSE 1 END,
-                created_at DESC
+                block_height DESC, created_at DESC
             LIMIT 1
         ",
     )
@@ -98,7 +98,7 @@ pub async fn fetch_balance_snapshot(
             ORDER BY
                 CASE WHEN EXTRACT(EPOCH FROM NOW())::BIGINT BETWEEN start_timestamp AND end_timestamp
                      THEN 0 ELSE 1 END,
-                created_at DESC
+                block_height DESC, created_at DESC
             LIMIT 1
         ",
     )

@@ -2,4 +2,4 @@
 -- contract_name has always been identical to contract_type and carries no
 -- distinct information (see review finding D-3).
 
-ALTER TABLE contract_registry DROP COLUMN contract_name;
+ALTER TABLE contract_registry DROP COLUMN IF EXISTS contract_name;
