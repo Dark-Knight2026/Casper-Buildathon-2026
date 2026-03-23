@@ -1,14 +1,13 @@
 import { useQuery } from '@tanstack/react-query';
 import { backendClient } from '@/lib/api-client';
+import { stripAccountHashPrefix } from '@/lib/blockchain/accountUtils';
 import type { EarningsPeriod, StakingEarningsResponse } from '@/types/ico';
 
 async function fetchStakingEarnings(
   accountHash: string,
   period: EarningsPeriod,
 ): Promise<StakingEarningsResponse> {
-  const hex = accountHash.startsWith('account-hash-')
-    ? accountHash.slice('account-hash-'.length)
-    : accountHash;
+  const hex = stripAccountHashPrefix(accountHash);
   return backendClient.get<StakingEarningsResponse>(
     `/api/v1/staking/${hex}/earnings?period=${period}`,
   );

@@ -1,11 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { backendClient } from '@/lib/api-client';
+import { stripAccountHashPrefix } from '@/lib/blockchain/accountUtils';
 import type { StakingPortfolioResponse } from '@/types/ico';
 
 async function fetchStakingPortfolio(accountHash: string): Promise<StakingPortfolioResponse> {
-  const hex = accountHash.startsWith('account-hash-')
-    ? accountHash.slice('account-hash-'.length)
-    : accountHash;
+  const hex = stripAccountHashPrefix(accountHash);
   return backendClient.get<StakingPortfolioResponse>(`/api/v1/staking/${hex}/portfolio`);
 }
 

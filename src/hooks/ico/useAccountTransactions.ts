@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { backendClient } from '@/lib/api-client';
+import { stripAccountHashPrefix } from '@/lib/blockchain/accountUtils';
 import type { TokenTransaction } from './useTokenTransactions';
 
 interface AccountTransactionsResponse {
@@ -16,7 +17,7 @@ async function fetchAccountTransactions(
   fromType?: number,
   contractPackageHash?: string,
 ): Promise<AccountTransactionsResponse> {
-  const hex = address.startsWith('account-hash-') ? address.slice('account-hash-'.length) : address;
+  const hex = stripAccountHashPrefix(address);
   const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
   if (type) params.set('type', type);
   if (fromType !== undefined) params.set('from_type', String(fromType));

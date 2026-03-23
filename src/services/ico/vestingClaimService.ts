@@ -54,7 +54,7 @@ export function createClaimTransaction(
     vesting_id: CLValue.newCLUInt256(vestingId),
   });
 
-  logger.log('[createClaimTransaction] vestingId:', vestingId.toString());
+  logger.debug('[createClaimTransaction] vestingId:', vestingId.toString());
 
   return createContractCallTransaction(
     senderPublicKey,
