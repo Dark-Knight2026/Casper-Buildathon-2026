@@ -55,6 +55,10 @@ export class ApiClient {
     return this.authToken;
   }
 
+  private buildAuthHeaders(): Record<string, string> {
+    return this.authToken ? { Authorization: `Bearer ${this.authToken}` } : {};
+  }
+
   /**
    * Make HTTP request with timeout and retry logic
    */
@@ -140,7 +144,7 @@ export class ApiClient {
         ...options,
         method: 'GET',
         headers: {
-          ...(this.authToken ? { Authorization: `Bearer ${this.authToken}` } : {}),
+          ...this.buildAuthHeaders(),
           ...options.headers,
         },
       });
@@ -175,6 +179,7 @@ export class ApiClient {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...this.buildAuthHeaders(),
           ...options.headers,
         },
         body: data ? JSON.stringify(data) : undefined,
@@ -210,6 +215,7 @@ export class ApiClient {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
+          ...this.buildAuthHeaders(),
           ...options.headers,
         },
         body: data ? JSON.stringify(data) : undefined,
@@ -243,6 +249,10 @@ export class ApiClient {
       const response = await this.fetchWithTimeout(fullUrl, {
         ...options,
         method: 'DELETE',
+        headers: {
+          ...this.buildAuthHeaders(),
+          ...options.headers,
+        },
       });
       return this.handleResponse<T>(response);
     };
