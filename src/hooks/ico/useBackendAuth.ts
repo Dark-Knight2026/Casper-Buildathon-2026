@@ -7,7 +7,20 @@ const TOKEN_KEY = 'leasefi_jwt';
 
 function loadStoredToken(): string | null {
   const token = localStorage.getItem(TOKEN_KEY);
-  if (token) applyToken(token);
+  if (!token) return null;
+
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    if (Date.now() / 1000 > payload.exp) {
+      localStorage.removeItem(TOKEN_KEY);
+      return null;
+    }
+  } catch {
+    localStorage.removeItem(TOKEN_KEY);
+    return null;
+  }
+
+  applyToken(token);
   return token;
 }
 
@@ -31,7 +44,7 @@ export function useBackendAuth(
 
       // 2. Sign message with Casper wallet
       const result = await clickRef.signMessage(message, publicKey);
-      console.log('Signature result:', result);
+      logger.debug('[useBackendAuth] Signature received');
 
       if (!result || result.cancelled || !result.signatureHex) {
         throw new Error('Message signing was cancelled');
