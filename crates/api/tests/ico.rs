@@ -297,3 +297,30 @@ async fn ico_progress_uses_env_fallback_when_no_schedule(pool: PgPool) {
     assert_eq!(body["priceUsd"], 0.5);
     assert_eq!(body["totalAllocation"], ICO_TOTAL_ALLOCATION);
 }
+
+/// When `ico_schedules` is empty, `/ico/balance/{address}` falls back to env var config.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn ico_balance_uses_env_fallback_when_no_schedule(pool: PgPool) {
+    let env = common::setup_test_server_with(
+        pool,
+        false,
+        TestOverrides {
+            ico_fallback: Some(IcoFallback {
+                price_usd: "0.5".parse().unwrap(),
+                total_allocation: ICO_TOTAL_ALLOCATION.to_owned(),
+            }),
+            ..Default::default()
+        },
+    )
+    .await;
+
+    let response = env
+        .server
+        .get(&format!("/api/v1/ico/balance/{VALID_ADDRESS}"))
+        .await;
+    assert_eq!(response.status_code(), StatusCode::OK);
+
+    let body: Value = response.json();
+    assert_eq!(body["tokenPrice"], 0.5);
+    assert_eq!(body["tokenSymbol"], "BIG");
+}
