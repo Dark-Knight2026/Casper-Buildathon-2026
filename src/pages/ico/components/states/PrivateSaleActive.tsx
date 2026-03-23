@@ -31,11 +31,15 @@ interface PrivateSaleActiveProps {
 
 const WEI = BigInt('1000000000000000000'); // 10^18
 
+function safeBigInt(s: string | null | undefined): bigint {
+  return s && /^\d+$/.test(s) ? BigInt(s) : 0n;
+}
+
 function mapToScheduleProgress(p: IcoProgressResponse): ScheduleProgress {
   return {
-    tokensSold:       Number(BigInt(p.tokensSold)       / WEI),
-    totalAllocation:  Number(BigInt(p.totalAllocation)  / WEI),
-    tokensRemaining:  Number(BigInt(p.tokensRemaining)  / WEI),
+    tokensSold:       Number(safeBigInt(p.tokensSold)       / WEI),
+    totalAllocation:  Number(safeBigInt(p.totalAllocation)  / WEI),
+    tokensRemaining:  Number(safeBigInt(p.tokensRemaining)  / WEI),
     amountRaised:     p.amountRaised,
     hardCapUsd:       p.hardCapUsd,
     priceUsd:         p.priceUsd,
