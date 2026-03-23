@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-const API_KEY = process.env.VITE_CSPR_CLOUD_API_KEY || process.env.CSPR_CLOUD_API_KEY || '';
+const API_KEY = process.env.CSPR_CLOUD_API_KEY || process.env.VITE_CSPR_CLOUD_API_KEY || '';
 const ALLOWED_BASE_URLS = [
   'https://api.testnet.cspr.cloud',
   'https://api.cspr.cloud',
