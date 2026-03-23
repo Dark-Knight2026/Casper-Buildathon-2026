@@ -64,10 +64,10 @@ impl Currency {
 }
 
 /// A user purchased BIG tokens during an ICO round.
+///
+/// Field order matches the on-chain CES schema emitted by the ICO contract.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TokensPurchased {
-    /// Account hash of the buyer (hex, no prefix).
-    pub buyer: String,
     /// Number of BIG tokens purchased (U256 as string).
     pub amount: String,
     /// Payment currency.
@@ -80,18 +80,24 @@ pub struct TokensPurchased {
     pub cost: String,
     /// Block timestamp of the purchase.
     pub timestamp: u64,
+    /// Account hash of the buyer (hex, no prefix).
+    pub buyer: String,
+    /// Vesting schedule ID assigned to this purchase (U256 as string).
+    #[serde(default)]
+    pub vesting_id: Option<String>,
 }
 
 impl CesEvent for TokensPurchased {
     const SCHEMA: EventSchema = EventSchema {
         name: Self::EVENT_NAME,
         fields: &[
-            ("buyer", FieldType::Key),
             ("amount", FieldType::U256),
             ("currency", FieldType::U8),
             ("price", FieldType::U256),
             ("cost", FieldType::U256),
             ("timestamp", FieldType::U64),
+            ("buyer", FieldType::Key),
+            ("vesting_id", FieldType::U256),
         ],
     };
 }
