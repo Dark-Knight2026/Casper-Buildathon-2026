@@ -39,7 +39,9 @@ function formatRelativeTime(timestamp: string | null): string {
 
 function formatBigAmount(raw: string | null): string {
   if (!raw) return '—';
-  const num = Number(raw) / 10 ** BIG_DECIMALS;
+  const divisor = 10n ** BigInt(BIG_DECIMALS);
+  const big = BigInt(raw);
+  const num = Number(big / divisor) + Number(big % divisor) / Number(divisor);
   return num.toLocaleString('en-US', { maximumFractionDigits: 2 });
 }
 

@@ -81,7 +81,7 @@ export function TransactionHistory({
                         <>
                           <span>•</span>
                           <a
-                            href={`${EXPLORER_URL}/transaction/${tx.txHash}`}
+                            href={`${EXPLORER_URL}/deploy/${tx.txHash}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="font-mono text-[hsl(var(--ico-brand-primary))] hover:underline inline-flex! items-center gap-1"

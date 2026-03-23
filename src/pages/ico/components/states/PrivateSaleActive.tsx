@@ -35,11 +35,15 @@ function safeBigInt(s: string | null | undefined): bigint {
   return s && /^\d+$/.test(s) ? BigInt(s) : 0n;
 }
 
+function bigIntToNumber(raw: bigint): number {
+  return Number(raw / WEI) + Number(raw % WEI) / Number(WEI);
+}
+
 function mapToScheduleProgress(p: IcoProgressResponse): ScheduleProgress {
   return {
-    tokensSold:       Number(safeBigInt(p.tokensSold)       / WEI),
-    totalAllocation:  Number(safeBigInt(p.totalAllocation)  / WEI),
-    tokensRemaining:  Number(safeBigInt(p.tokensRemaining)  / WEI),
+    tokensSold:       bigIntToNumber(safeBigInt(p.tokensSold)),
+    totalAllocation:  bigIntToNumber(safeBigInt(p.totalAllocation)),
+    tokensRemaining:  bigIntToNumber(safeBigInt(p.tokensRemaining)),
     amountRaised:     p.amountRaised,
     hardCapUsd:       p.hardCapUsd,
     priceUsd:         p.priceUsd,
@@ -106,7 +110,7 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: Private
 
   const userBalance = useMemo(() => {
     if (icoBalance) {
-      const tokensPurchased = Number(BigInt(icoBalance.tokensPurchased)) / 1e18;
+      const tokensPurchased = bigIntToNumber(safeBigInt(icoBalance.tokensPurchased));
       return {
         tokensPurchased,
         totalSpentUSD: icoBalance.totalSpentUsd ?? 0,
