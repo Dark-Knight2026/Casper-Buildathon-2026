@@ -77,7 +77,7 @@ async function fetchActualTokensReceived(
       const url = `/api/cspr-cloud/ft-token-actions?deploy_hash=${deployHash}`;
       console.log(LOG_PREFIX, `[fetchTokens] Fetching: ${url} (attempt ${attempt})`);
 
-      const resp = await fetch(url);
+      const resp = await fetch(url, { signal: AbortSignal.timeout(15_000) });
       if (!resp.ok) {
         console.warn(LOG_PREFIX, `[fetchTokens] HTTP ${resp.status}`);
         continue;
@@ -333,6 +333,7 @@ export function usePurchaseToken(
         }
 
         const purchaseTxHash = purchaseResult.deployHash || purchaseResult.transactionHash || '';
+        if (!purchaseTxHash) throw new Error('Wallet did not return a transaction hash');
 
         setState((prev) => ({
           ...prev,
