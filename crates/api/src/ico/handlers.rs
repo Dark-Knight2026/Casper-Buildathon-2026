@@ -9,7 +9,7 @@ use axum::{
 use rust_decimal::{Decimal, prelude::ToPrimitive};
 
 use crate::{
-    common::{ApiError, ApiResult, AppState},
+    common::{self, ApiError, ApiResult, AppState},
     ico::{
         db,
         models::{IcoBalanceResponse, IcoProgressResponse},
@@ -73,12 +73,7 @@ pub async fn get_ico_balance(
     State(state): State<Arc<AppState>>,
     Path(address): Path<String>,
 ) -> ApiResult<Json<IcoBalanceResponse>> {
-    let address = address.to_ascii_lowercase();
-    if address.len() != 64 || !address.chars().all(|c| c.is_ascii_hexdigit()) {
-        return Err(ApiError::BadRequest(
-            "Address must be 64 hex characters (account hash without prefix)".to_owned(),
-        ));
-    }
+    let address = common::validate_account(&address)?;
 
     let snapshot = db::fetch_balance_snapshot(&state.db, &address).await?;
 
