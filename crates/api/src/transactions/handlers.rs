@@ -86,6 +86,12 @@ pub async fn get_account_transactions(
         ));
     }
 
+    if let Some(HashType::Unknown(v)) = query.from_type {
+        return Err(ApiError::BadRequest(format!(
+            "Invalid from_type: {v}. Expected 0 (Account) or 1 (Contract)"
+        )));
+    }
+
     let pagination = query.pagination();
     let (data, item_count) = db::fetch_account_transactions(
         &state.db,
