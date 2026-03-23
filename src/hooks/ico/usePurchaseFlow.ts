@@ -187,9 +187,11 @@ export function usePurchaseFlow({
     if (!purchaseState.isProcessing) {
       setShowConfirmModal(false);
       setPendingPurchase(null);
-      resetPurchase();
+      if (!showToast) {
+        resetPurchase();
+      }
     }
-  }, [purchaseState.isProcessing, resetPurchase]);
+  }, [purchaseState.isProcessing, showToast, resetPurchase]);
 
   // Open fiat on-ramp to buy CSPR with card
   const buyCspr = useCallback(() => {
