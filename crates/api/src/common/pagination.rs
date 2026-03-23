@@ -64,7 +64,9 @@ impl Pagination {
     #[must_use]
     #[inline]
     pub fn offset(&self) -> i64 {
-        self.page().saturating_sub(1) * self.page_size()
+        self.page()
+            .saturating_sub(1)
+            .saturating_mul(self.page_size())
     }
 }
 

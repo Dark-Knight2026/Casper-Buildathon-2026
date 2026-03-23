@@ -77,7 +77,7 @@ async fn login_rejects_invalid_wallet_address(pool: PgPool) {
 }
 
 #[sqlx::test(migrator = "common::MIGRATIONS")]
-async fn login_rejects_invalid_signature_format(pool: PgPool) {
+async fn login_without_nonce_returns_401(pool: PgPool) {
     let env = common::setup_test_server(pool, false).await;
 
     // Valid length wallet address but no nonce stored in Redis.

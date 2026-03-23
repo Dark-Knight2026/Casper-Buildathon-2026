@@ -23,3 +23,19 @@ pub use errors::{ApiError, ApiResult, ErrorResponse, ServerError};
 pub use models::{Claims, JWT_AUDIENCE, JWT_ISSUER, PropertyId, UserId, UserRole};
 pub use pagination::{Pageable, PaginatedResponse, Pagination};
 pub use redis::RedisStore;
+
+/// Validates and normalizes a Casper account hash (64 hex characters, no prefix).
+///
+/// # Errors
+///
+/// Returns `ApiError::BadRequest` if the address is not exactly 64 hex characters.
+#[inline]
+pub fn validate_account(account: &str) -> Result<String, errors::ApiError> {
+    let account = account.to_ascii_lowercase();
+    if account.len() != 64 || !account.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err(errors::ApiError::BadRequest(
+            "Address must be 64 hex characters (account hash without prefix)".to_owned(),
+        ));
+    }
+    Ok(account)
+}

@@ -485,7 +485,16 @@ pub async fn upsert_ico_schedule(
         row.block_height,
     )
       .execute(tx.as_mut())
-      .await?;
+      .await
+      .map(|r| {
+          if r.rows_affected() == 0 {
+              tracing::warn!(
+                  schedule_id = row.schedule_id,
+                  block_height = row.block_height,
+                  "upsert_ico_schedule no-op: same or older block_height"
+              );
+          }
+      })?;
 
     Ok(())
 }

@@ -1,6 +1,5 @@
--- Remove the transaction_type CHECK constraint entirely.
--- Valid transaction types are enforced at the application level (Rust handlers),
--- so the DB-level constraint only adds migration overhead for each new event type.
+-- Replace the original transaction_type CHECK constraint with an updated one
+-- that includes all current event types (adds 'ico_schedule_added').
 
 DO $$
 BEGIN
@@ -13,3 +12,14 @@ BEGIN
     END IF;
 END
 $$;
+
+-- Re-add with the full set of known transaction types.
+ALTER TABLE blockchain_transactions
+    ADD CONSTRAINT blockchain_transactions_transaction_type_check
+    CHECK (transaction_type IN (
+        'token_transfer',
+        'token_mint',
+        'token_allowance',
+        'token_purchase',
+        'ico_schedule_added'
+    ));

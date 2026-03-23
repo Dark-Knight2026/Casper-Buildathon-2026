@@ -11,7 +11,7 @@ use serde::Deserialize;
 use utoipa::IntoParams;
 
 use crate::{
-    common::{ApiError, ApiResult, AppState, PaginatedResponse, Pagination},
+    common::{self, ApiError, ApiResult, AppState, PaginatedResponse, Pagination},
     onchain::transactions::{
         db,
         models::{HashType, TransactionResponse, TxType},
@@ -79,11 +79,12 @@ pub async fn get_account_transactions(
     Path(address): Path<String>,
     Query(query): Query<AccountTxQuery>,
 ) -> ApiResult<Json<PaginatedResponse<TransactionResponse>>> {
-    let address = address.to_ascii_lowercase();
-    if address.len() != 64 || !address.chars().all(|c| c.is_ascii_hexdigit()) {
-        return Err(ApiError::BadRequest(
-            "Address must be 64 hex characters (account hash without prefix)".to_owned(),
-        ));
+    let address = common::validate_account(&address)?;
+
+    if let Some(HashType::Unknown(v)) = query.from_type {
+        return Err(ApiError::BadRequest(format!(
+            "Invalid from_type: {v}. Expected 0 (Account) or 1 (Contract)"
+        )));
     }
 
     let pagination = query.pagination();

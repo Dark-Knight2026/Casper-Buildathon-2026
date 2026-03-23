@@ -1,6 +1,7 @@
 //! Application configuration and state management.
 
 use config::{Config, Environment};
+use rust_decimal::Decimal;
 use secrecy::{ExposeSecret, SecretString};
 use serde::Deserialize;
 
@@ -49,12 +50,12 @@ fn default_cors_origin() -> String {
 /// processes `ICOScheduleAdded` contract events).
 #[derive(Debug, Clone)]
 pub struct IcoFallback {
-    /// Price per 1 BIG token in USD as a plain decimal string (e.g. `"0.50"` = $0.50).
+    /// Price per 1 BIG token in USD (e.g. `0.50` = $0.50).
     ///
     /// **Note:** this is NOT the same format as the DB `ico_schedules.price` column,
     /// which stores a U256 with 6 decimals (e.g. `"500000"` = $0.50).
-    /// Stored as `String` to avoid `f64` precision loss when converting to `Decimal`.
-    pub price_usd: String,
+    /// Parsed from `ICO_PRICE_USD` at startup to fail fast on misconfiguration.
+    pub price_usd: Decimal,
     /// Total allocation in minimal units (U256 as string, decimals=18).
     pub total_allocation: String,
 }
@@ -100,10 +101,17 @@ impl ServerConfig {
             .map_err(|e| ServerError::EnvVar(e.to_string()))?;
 
         let ico_fallback = match (raw.ico_price_usd, raw.ico_total_allocation) {
-            (Some(price_usd), Some(total_allocation)) => Some(IcoFallback {
-                price_usd,
-                total_allocation,
-            }),
+            (Some(price_str), Some(total_allocation)) => {
+                let price_usd: Decimal = price_str.parse().map_err(|_| {
+                    ServerError::EnvVar(format!(
+                        "ICO_PRICE_USD must be a valid decimal, got \"{price_str}\""
+                    ))
+                })?;
+                Some(IcoFallback {
+                    price_usd,
+                    total_allocation,
+                })
+            }
             (Some(_), None) => {
                 tracing::warn!(
                     "ICO_PRICE_USD set but ICO_TOTAL_ALLOCATION missing - ICO fallback disabled"
@@ -149,6 +157,12 @@ impl ServerConfig {
             return Err(ServerError::EnvVar(
                 "CORS_ORIGIN must start with http:// or https://".to_owned(),
             ));
+        }
+        let secret_len = self.jwt_secret.expose_secret().len();
+        if secret_len < 32 {
+            return Err(ServerError::EnvVar(format!(
+                "SUPABASE_JWT_SECRET must be at least 32 bytes, got {secret_len}"
+            )));
         }
         Ok(())
     }

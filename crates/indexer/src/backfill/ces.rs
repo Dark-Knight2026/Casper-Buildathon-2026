@@ -212,7 +212,11 @@ async fn process_event_at(
 
     let raw = RawEvent {
         contract_hash: ctx.contract_hash.to_owned(),
-        deploy_hash: format!("ces-backfill-{}-{key}", ctx.contract_hash),
+        deploy_hash: format!(
+            "ces-backfill-{:.34}-{:016x}",
+            ctx.contract_hash,
+            key.parse::<u64>().unwrap_or(0),
+        ),
         block_height: 0,
         contract_type: ctx.contract_type,
         event_name: event_name.clone(),

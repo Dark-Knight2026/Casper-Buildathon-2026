@@ -11,7 +11,7 @@ use rust_decimal::{Decimal, prelude::ToPrimitive};
 use crate::{
     common::{ApiError, ApiResult, AppState},
     onchain::{
-        common::TOKEN_DECIMALS,
+        common::{self, TOKEN_DECIMALS},
         ico::{
             db,
             models::{IcoBalanceResponse, IcoProgressResponse},
@@ -45,38 +45,6 @@ fn price_to_decimal(raw: &str) -> Decimal {
     raw.parse::<Decimal>().unwrap_or(Decimal::ZERO) / divisor
 }
 
-/// Resolved ICO config: price as f64 and as Decimal.
-struct ResolvedIco {
-    price_f64: f64,
-    price_decimal: Decimal,
-}
-
-/// Resolve ICO config: try `ico_schedules` table first, fall back to env vars.
-async fn resolve_ico(state: &AppState) -> Result<ResolvedIco, ApiError> {
-    if let Some(schedule) = db::fetch_active_schedule(&state.db).await? {
-        return Ok(ResolvedIco {
-            price_f64: price_to_f64(&schedule.price),
-            price_decimal: price_to_decimal(&schedule.price),
-        });
-    }
-
-    let fallback = state
-        .config
-        .ico_fallback
-        .as_ref()
-        .ok_or_else(|| ApiError::Internal("ICO not configured".to_owned()))?;
-
-    let price_decimal = fallback
-        .price_usd
-        .parse::<Decimal>()
-        .unwrap_or(Decimal::ZERO);
-
-    Ok(ResolvedIco {
-        price_f64: price_decimal.to_f64().unwrap_or(0.0),
-        price_decimal,
-    })
-}
-
 // `GET /api/v1/ico/balance/{address}`
 //
 /// Returns ICO balance information for a specific account.
@@ -105,23 +73,35 @@ pub async fn get_ico_balance(
     State(state): State<Arc<AppState>>,
     Path(address): Path<String>,
 ) -> ApiResult<Json<IcoBalanceResponse>> {
-    let address = address.to_ascii_lowercase();
-    if address.len() != 64 || !address.chars().all(|c| c.is_ascii_hexdigit()) {
-        return Err(ApiError::BadRequest(
-            "Address must be 64 hex characters (account hash without prefix)".to_owned(),
-        ));
-    }
+    let address = common::validate_account(&address)?;
 
-    let ico = resolve_ico(&state).await?;
-    let tokens_purchased = db::fetch_buyer_tokens(&state.db, &address).await?;
-    let usd_value = (to_human(&tokens_purchased) * ico.price_decimal)
+    let snapshot = db::fetch_balance_snapshot(&state.db, &address).await?;
+
+    let (price_f64, price_decimal) = if let Some(ref schedule) = snapshot.schedule {
+        (
+            price_to_f64(&schedule.price),
+            price_to_decimal(&schedule.price),
+        )
+    } else {
+        let fallback = state
+            .config
+            .ico_fallback
+            .as_ref()
+            .ok_or_else(|| ApiError::Internal("ICO not configured".to_owned()))?;
+        (
+            fallback.price_usd.to_f64().unwrap_or(0.0),
+            fallback.price_usd,
+        )
+    };
+
+    let usd_value = (to_human(&snapshot.tokens_purchased) * price_decimal)
         .to_f64()
         .unwrap_or(0.0);
 
     Ok(Json(IcoBalanceResponse {
-        tokens_purchased,
+        tokens_purchased: snapshot.tokens_purchased,
         total_spent_usd: usd_value,
-        token_price: ico.price_f64,
+        token_price: price_f64,
         token_symbol: "BIG".to_owned(),
         current_value: usd_value,
     }))
@@ -167,13 +147,9 @@ pub async fn get_ico_progress(
             .as_ref()
             .ok_or_else(|| ApiError::Internal("ICO not configured".to_owned()))?;
 
-        let pd = fallback
-            .price_usd
-            .parse::<Decimal>()
-            .unwrap_or(Decimal::ZERO);
         (
-            pd.to_f64().unwrap_or(0.0),
-            pd,
+            fallback.price_usd.to_f64().unwrap_or(0.0),
+            fallback.price_usd,
             fallback.total_allocation.clone(),
         )
     };
