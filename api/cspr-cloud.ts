@@ -8,7 +8,7 @@ const ALLOWED_BASE_URLS = [
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // CORS headers
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Origin', process.env.ALLOWED_ORIGIN || '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
