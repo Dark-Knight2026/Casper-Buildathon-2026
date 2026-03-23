@@ -30,7 +30,12 @@ async function fetchUserTokenActions(publicKeyHex: string, signal?: AbortSignal)
 }
 
 function mapToICOTransaction(action: FTTokenAction): ICOTransaction {
-  const raw = BigInt(action.amount);
+  let raw: bigint;
+  try {
+    raw = BigInt(action.amount);
+  } catch {
+    raw = 0n;
+  }
   const divisor = 10n ** BigInt(BIG_DECIMALS);
   const tokensReceived = Number(raw / divisor) + Number(raw % divisor) / Number(divisor);
 
