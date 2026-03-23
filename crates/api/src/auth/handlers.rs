@@ -8,7 +8,7 @@ use axum::{
     extract::{Query, State},
 };
 use chrono::{Duration, Utc};
-use jsonwebtoken::{EncodingKey, Header};
+use jsonwebtoken::{Algorithm, EncodingKey, Header};
 use rand::{RngExt, distr::Alphanumeric};
 use secrecy::ExposeSecret;
 use sha2::{Digest, Sha256};
@@ -137,6 +137,7 @@ pub async fn get_nonce(
     )
 )]
 #[inline]
+#[allow(clippy::too_many_lines)]
 pub async fn login(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<LoginRequest>,
@@ -144,18 +145,18 @@ pub async fn login(
     // Normalize to lowercase for consistent Redis key lookup.
     let wallet_address = payload.wallet_address.to_ascii_lowercase();
 
-    // Validation: Check wallet address length (Ed25519 or Secp256k1)
+    // Validation: Check wallet address length (Ed25519 or Secp256k1) and hex content.
     let len = wallet_address.len();
-    if len != CASPER_ED25519_PUBKEY_HEX_LEN && len != CASPER_SECP256K1_PUBKEY_HEX_LEN {
+    if (len != CASPER_ED25519_PUBKEY_HEX_LEN && len != CASPER_SECP256K1_PUBKEY_HEX_LEN)
+        || !wallet_address.chars().all(|c| c.is_ascii_hexdigit())
+    {
         tracing::warn!(
             length = len,
             expected_ed25519 = CASPER_ED25519_PUBKEY_HEX_LEN,
             expected_secp256k1 = CASPER_SECP256K1_PUBKEY_HEX_LEN,
-            "Invalid wallet address length"
+            "Invalid wallet address"
         );
-        return Err(ApiError::BadRequest(
-            "Invalid wallet address length".to_owned(),
-        ));
+        return Err(ApiError::BadRequest("Invalid wallet address".to_owned()));
     }
 
     // Get stored nonce from Redis (using normalized address)
@@ -178,10 +179,13 @@ pub async fn login(
         })?;
 
     // Consume nonce before verification (one-time use).
-    // This prevents brute-force attacks within the nonce TTL window.
-    if let Err(e) = state.redis.delete_nonce(&wallet_address).await {
-        tracing::error!(error = %e, "Failed to delete nonce from Redis");
-    }
+    // This prevents replay attacks within the nonce TTL window.
+    // Must hard-fail: if Redis is down the nonce survives, allowing a second login.
+    state
+        .redis
+        .delete_nonce(&wallet_address)
+        .await
+        .map_err(|e| ApiError::Internal(format!("Failed to delete nonce: {e}")))?;
 
     // Security: Verify Signature and RETURN ERROR if invalid
     let is_valid = common::verify_casper_signature(
@@ -244,7 +248,7 @@ pub async fn login(
     let secret = state.config.jwt_secret.expose_secret();
 
     let token = jsonwebtoken::encode(
-        &Header::default(),
+        &Header::new(Algorithm::HS256),
         &claims,
         &EncodingKey::from_secret(secret.as_bytes()),
     )

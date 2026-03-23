@@ -41,7 +41,10 @@ unsafe fn set_required_env_vars() {
     unsafe {
         std::env::set_var("DATABASE_URL", "postgres://localhost/test");
         std::env::set_var("REDIS_URL", "redis://127.0.0.1:6379");
-        std::env::set_var("SUPABASE_JWT_SECRET", "test_secret");
+        std::env::set_var(
+            "SUPABASE_JWT_SECRET",
+            "test-secret-that-is-at-least-32-bytes!",
+        );
     }
 }
 
@@ -75,7 +78,10 @@ fn from_env_fails_without_database_url() {
     unsafe {
         clear_all_config_env_vars();
         std::env::set_var("REDIS_URL", "redis://127.0.0.1:6379");
-        std::env::set_var("SUPABASE_JWT_SECRET", "secret");
+        std::env::set_var(
+            "SUPABASE_JWT_SECRET",
+            "test-secret-that-is-at-least-32-bytes!",
+        );
     }
 
     let err = ServerConfig::from_env().unwrap_err();
@@ -92,7 +98,10 @@ fn from_env_fails_without_redis_url() {
     unsafe {
         clear_all_config_env_vars();
         std::env::set_var("DATABASE_URL", "postgres://localhost/test");
-        std::env::set_var("SUPABASE_JWT_SECRET", "secret");
+        std::env::set_var(
+            "SUPABASE_JWT_SECRET",
+            "test-secret-that-is-at-least-32-bytes!",
+        );
     }
 
     let err = ServerConfig::from_env().unwrap_err();
@@ -151,6 +160,24 @@ fn from_env_rejects_port_zero() {
     let err = ServerConfig::from_env().unwrap_err();
     assert!(
         err.to_string().contains("PORT cannot be 0"),
+        "Unexpected error: {err}"
+    );
+}
+
+#[test]
+#[serial]
+fn from_env_rejects_short_jwt_secret() {
+    // SAFETY: #[serial] ensures no concurrent env var access.
+    unsafe {
+        clear_all_config_env_vars();
+        set_required_env_vars();
+        std::env::set_var("SUPABASE_JWT_SECRET", "too-short");
+    }
+
+    let err = ServerConfig::from_env().unwrap_err();
+    assert!(
+        err.to_string()
+            .contains("SUPABASE_JWT_SECRET must be at least 32 bytes"),
         "Unexpected error: {err}"
     );
 }
