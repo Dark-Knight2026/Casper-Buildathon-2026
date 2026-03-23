@@ -84,7 +84,7 @@ export function TransactionHistoryTab() {
 
       <Card className="p-0 overflow-hidden">
         {isLoading ? (
-          <div className="flex items-center justify-center py-16">
+          <div role="status" aria-label="Loading transactions" className="flex items-center justify-center py-16">
             <RefreshCw className="w-5 h-5 animate-spin text-[hsl(var(--ico-text-muted))]" />
           </div>
         ) : error ? (
