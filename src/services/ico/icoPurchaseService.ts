@@ -124,7 +124,8 @@ function getDecimals(currency: PaymentCurrency): number {
 }
 
 /**
- * Gets the contract hash for a CEP-18 currency.
+ * Gets the package hash for a CEP-18 currency.
+ * Used for approve() transactions — Odra contracts are called via package hash.
  */
 function getCurrencyContractHash(currency: PaymentCurrency): string | null {
   switch (currency) {
@@ -132,6 +133,21 @@ function getCurrencyContractHash(currency: PaymentCurrency): string | null {
       return ICO_CONFIG.CONTRACTS.usdtAddress;
     case 'USDC':
       return ICO_CONFIG.CONTRACTS.usdcAddress;
+    default:
+      return null;
+  }
+}
+
+/**
+ * Gets the contract instance hash for a CEP-18 currency.
+ * Used for state queries (allowance, balance) — Odra state dict lives on the instance.
+ */
+function getCurrencyInstanceHash(currency: PaymentCurrency): string | null {
+  switch (currency) {
+    case 'USDT':
+      return ICO_CONFIG.CONTRACTS.usdtInstanceHash;
+    case 'USDC':
+      return ICO_CONFIG.CONTRACTS.usdcInstanceHash;
     default:
       return null;
   }
@@ -159,16 +175,16 @@ export async function checkApprovalNeeded(
 
   const decimals = getDecimals(currency);
   const requiredAmount = toRawAmount(amount, decimals);
-
-  // Check allowance using ICO_PACKAGE_HASH — the same key that createApproveTransaction()
-  // grants allowance to. This ensures we correctly detect existing allowances, so if a
-  // purchase fails after approve succeeds, the user doesn't need to re-approve.
   const icoPackageKey = ICO_PACKAGE_HASH.startsWith('hash-') ? ICO_PACKAGE_HASH : `hash-${ICO_PACKAGE_HASH}`;
-  const currentAllowance = await getAllowance(
-    tokenContract,
-    senderAccountHash,
-    icoPackageKey,
-  );
+
+  // For state queries, use the contract instance hash (not the package hash).
+  // Odra state dictionary lives on the contract instance, not the package.
+  const instanceHash = getCurrencyInstanceHash(currency) ?? tokenContract;
+
+  // Read allowance from the "allowances" named dictionary (standard CEP-18 layout).
+  // Key = blake2b(owner_bytes + spender_bytes).
+  // Requires the contract instance hash, not the package hash.
+  const currentAllowance = await getAllowance(instanceHash, senderAccountHash, icoPackageKey);
 
   return {
     needed: currentAllowance < requiredAmount,

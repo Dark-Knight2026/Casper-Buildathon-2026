@@ -20,8 +20,13 @@ export const ICO_CONFIG = {
     tokenAddress: import.meta.env.VITE_BIG_TOKEN_CONTRACT_HASH ?? '',
     treasuryAddress: import.meta.env.VITE_TREASURY_CONTRACT_HASH ?? '',
     vestingPackageHash: import.meta.env.VITE_VESTING_PACKAGE_HASH ?? '',
+    // Package hashes — used for approve() transactions
     usdcAddress: import.meta.env.VITE_USDC_CONTRACT_HASH ?? '',
     usdtAddress: import.meta.env.VITE_USDT_CONTRACT_HASH ?? '',
+    // Contract instance hashes — used for state queries (allowance check, balance)
+    // Falls back to package hash if not set (for non-Odra contracts where package == contract)
+    usdcInstanceHash: import.meta.env.VITE_USDC_CONTRACT_INSTANCE_HASH || '',
+    usdtInstanceHash: import.meta.env.VITE_USDT_CONTRACT_INSTANCE_HASH || '',
   },
 
   CASPER: {
