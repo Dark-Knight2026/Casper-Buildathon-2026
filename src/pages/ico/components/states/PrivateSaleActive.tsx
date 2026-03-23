@@ -21,6 +21,7 @@ import { TransactionHistory } from '../shared/TransactionHistory';
 import { VestingProgressBlock, type VestingEntry } from '../shared/VestingProgressBlock';
 import { useClaimTokens } from '@/hooks/ico/useClaimTokens';
 import { useToast } from '@/hooks/use-toast';
+import logger from '@/lib/logger';
 
 interface PrivateSaleActiveProps {
   className?: string;
@@ -88,7 +89,6 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: Private
   const { transactions, totalPages } = useTransactionHistory(accountHash, txPage);
   const { data: icoBalance } = useICOBalance(accountHash);
   const { data: vestingSchedules } = useVestingSchedules(accountHash);
-  console.log('vestingSchedules:', vestingSchedules);
   const vestingEntries = useMemo<VestingEntry[]>(() => {
     if (!vestingSchedules?.data?.length) return [];
     return vestingSchedules.data.map((s) => ({
@@ -114,7 +114,7 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: Private
   }, [icoBalance, transactions, tokenPrice]);
 
   // ── Claim flow ──────────────────────────────────────────────────────
-  const [claimingId, setClaimingId] = useState<string | null>(null);
+  const [claimingId, setClaimingId] = useState<number | null>(null);
 
   const { state: claimState, claim } = useClaimTokens(
     account?.publicKey ?? null,
@@ -125,7 +125,7 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: Private
         queryClient.invalidateQueries({ queryKey: ['vesting-schedules'] });
       },
       onError: (error) => {
-        console.error('[useClaimTokens] claim failed:', error);
+        logger.error('[useClaimTokens] claim failed', new Error(error));
         toast({ title: 'Claim failed', description: error, variant: 'destructive' });
       },
     },
@@ -133,7 +133,7 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: Private
 
   const handleClaim = useCallback(
     (vestingId: bigint) => {
-      setClaimingId(vestingId.toString());
+      setClaimingId(Number(vestingId));
       claim(vestingId);
     },
     [claim],

@@ -118,7 +118,6 @@ export function useClaimTokens(
 
       try {
         const transaction = createClaimTransaction(publicKey, vestingId);
-        console.log('[useClaimTokens] transaction built, sending to wallet...');
 
         const result = await clickRef.send(
           transaction.toJSON() as object,
@@ -126,7 +125,6 @@ export function useClaimTokens(
           true,
           WALLET_SIGN_TIMEOUT_SEC,
         );
-        console.log('[useClaimTokens] wallet send result:', result);
 
         if (!result || result.cancelled) {
           throw new Error('Claim transaction was cancelled');

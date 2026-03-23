@@ -8,7 +8,7 @@ import type { ClaimStep } from '@/hooks/ico/useClaimTokens';
 
 export interface VestingEntry {
   /** Unique identifier for the vesting entry */
-  id: string;
+  id: number;
   /** Amount of tokens locked */
   lockedAmount: number;
   /** Timestamp when tokens will be unlocked */
@@ -30,7 +30,7 @@ interface VestingProgressBlockProps {
   /** Called when user clicks Claim on an unlocked entry */
   onClaim?: (vestingId: bigint) => void;
   /** ID of the entry currently being claimed */
-  claimingId?: string | null;
+  claimingId?: number | null;
   /** Claim step for showing granular state on the button */
   claimStep?: ClaimStep;
 }
@@ -64,7 +64,7 @@ export function VestingProgressBlock({
   );
   const nextUnlock = upcomingUnlocks[0];
 
-  const getClaimButtonText = (entryId: string) => {
+  const getClaimButtonText = (entryId: number) => {
     if (claimingId !== entryId) return 'Claim';
     switch (claimStep) {
       case 'signing':  return 'Sign in wallet…';

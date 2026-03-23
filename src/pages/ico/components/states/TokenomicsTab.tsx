@@ -135,9 +135,7 @@ const AllocationChart = memo(function AllocationChart() {
 
 export function TokenomicsTab() {
   const { data: releaseSchedule } = useReleaseSchedule();
-  console.log('releaseSchedule:', releaseSchedule);
   const { data: tokenSupply } = useTokenSupply();
-  console.log('tokenSupply:', tokenSupply);
 
   return (
     <div className="space-y-6">

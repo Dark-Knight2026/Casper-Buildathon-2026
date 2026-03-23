@@ -15,6 +15,7 @@ import { deriveAccountHash } from '@/lib/blockchain/accountUtils';
 import { formatNumber, formatUSD } from '../../utils/formatters';
 import { ICO_CONFIG } from '@/constants/ico';
 import { useToast } from '@/hooks/use-toast';
+import logger from '@/lib/logger';
 
 const PAGE_SIZE = 8;
 
@@ -24,12 +25,10 @@ export const OverviewTab = memo(function OverviewTab() {
   const { account, clickRef } = useICOWallet();
   const accountHash = account?.publicKey ? deriveAccountHash(account.publicKey) : null;
   const [page, setPage] = useState(1);
-  const [claimingId, setClaimingId] = useState<string | null>(null);
+  const [claimingId, setClaimingId] = useState<number | null>(null);
   const { transactions, totalPages } = useTransactionHistory(accountHash, page, PAGE_SIZE);
   const { data: stakingPortfolio } = useStakingPortfolio(accountHash);
-  console.log('stakingPortfolio:', stakingPortfolio);
   const { data: stakingInfo } = useStakingInfo(accountHash);
-  console.log('stakingInfo:', stakingInfo);
   const { data: vestingSchedules } = useVestingSchedules(accountHash);
 
   const vestingEntries = useMemo<VestingEntry[]>(() => {
@@ -52,7 +51,7 @@ export const OverviewTab = memo(function OverviewTab() {
         queryClient.invalidateQueries({ queryKey: ['vesting-schedules'] });
       },
       onError: (error) => {
-        console.error('[useClaimTokens] claim failed:', error);
+        logger.error('[useClaimTokens] claim failed', new Error(error));
         toast({ title: 'Claim failed', description: error, variant: 'destructive' });
       },
     },
@@ -60,7 +59,7 @@ export const OverviewTab = memo(function OverviewTab() {
 
   const handleClaim = useCallback(
     (vestingId: bigint) => {
-      setClaimingId(vestingId.toString());
+      setClaimingId(Number(vestingId));
       claim(vestingId);
     },
     [claim],

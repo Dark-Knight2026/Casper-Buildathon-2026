@@ -61,9 +61,7 @@ export const RewardsTab = memo(function RewardsTab() {
   const accountHash = account?.publicKey ? deriveAccountHash(account.publicKey) : null;
   const [rewardsPeriod, setRewardsPeriod] = useState(90);
   const { data: rewardsHistory } = useRewardsHistory(accountHash, rewardsPeriod);
-  console.log('rewardsHistory:', rewardsHistory);
   const { data: stakingInfo } = useStakingInfo(accountHash);
-  console.log('stakingInfo:', stakingInfo);
 
   return (
     <div className="space-y-6">
