@@ -84,8 +84,8 @@ async fn account_transactions_empty(pool: PgPool) {
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    assert_eq!(body["item_count"], 0);
-    assert_eq!(body["page_count"], 0);
+    assert_eq!(body["itemCount"], 0);
+    assert_eq!(body["pageCount"], 0);
     assert!(body["data"].as_array().unwrap().is_empty());
 }
 
@@ -124,8 +124,8 @@ async fn account_transactions_returns_expected_fields(pool: PgPool) {
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    assert_eq!(body["item_count"], 1);
-    assert_eq!(body["page_count"], 1);
+    assert_eq!(body["itemCount"], 1);
+    assert_eq!(body["pageCount"], 1);
 
     let item = &body["data"][0];
     assert_eq!(item["deploy_hash"], tx_hash);
@@ -165,7 +165,7 @@ async fn account_transactions_matches_to_address(pool: PgPool) {
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    assert_eq!(body["item_count"], 1);
+    assert_eq!(body["itemCount"], 1);
     assert_eq!(body["data"][0]["ft_action_type_id"], 4); // token_purchase -> 4 (Purchase)
 }
 
@@ -227,8 +227,8 @@ async fn account_transactions_pagination(pool: PgPool) {
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    assert_eq!(body["item_count"], 3);
-    assert_eq!(body["page_count"], 2);
+    assert_eq!(body["itemCount"], 3);
+    assert_eq!(body["pageCount"], 2);
     assert_eq!(body["data"].as_array().unwrap().len(), 2);
 }
 
@@ -250,7 +250,7 @@ async fn big_token_transactions_empty(pool: PgPool) {
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    assert_eq!(body["item_count"], 0);
+    assert_eq!(body["itemCount"], 0);
     assert!(body["data"].as_array().unwrap().is_empty());
 }
 
@@ -296,7 +296,7 @@ async fn big_token_transactions_filters_by_contract(pool: PgPool) {
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    assert_eq!(body["item_count"], 1);
+    assert_eq!(body["itemCount"], 1);
     assert_eq!(body["data"][0]["deploy_hash"], "1".repeat(64));
 }
 
@@ -330,8 +330,8 @@ async fn big_token_transactions_returns_expected_fields(pool: PgPool) {
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    assert_eq!(body["item_count"], 1);
-    assert_eq!(body["page_count"], 1);
+    assert_eq!(body["itemCount"], 1);
+    assert_eq!(body["pageCount"], 1);
 
     let item = &body["data"][0];
     assert_eq!(item["deploy_hash"], tx_hash);
@@ -409,7 +409,7 @@ async fn account_transactions_from_type_filters_account_only(pool: PgPool) {
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    assert_eq!(body["item_count"], 1);
+    assert_eq!(body["itemCount"], 1);
     assert_eq!(body["data"][0]["deploy_hash"], account_tx);
     assert_eq!(body["data"][0]["from_type"], 0);
 }
@@ -453,7 +453,7 @@ async fn account_transactions_from_type_filters_contract_only(pool: PgPool) {
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    assert_eq!(body["item_count"], 1);
+    assert_eq!(body["itemCount"], 1);
     assert_eq!(body["data"][0]["deploy_hash"], contract_tx);
     assert_eq!(body["data"][0]["from_type"], 1);
 }
@@ -485,7 +485,7 @@ async fn account_transactions_page_zero_clamped_to_first(pool: PgPool) {
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    assert_eq!(body["item_count"], 1);
+    assert_eq!(body["itemCount"], 1);
     assert_eq!(body["data"].as_array().unwrap().len(), 1);
 }
 
@@ -518,8 +518,8 @@ async fn account_transactions_page_size_zero_clamped_to_one(pool: PgPool) {
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    assert_eq!(body["item_count"], 3);
-    assert_eq!(body["page_count"], 3); // 3 items / 1 per page
+    assert_eq!(body["itemCount"], 3);
+    assert_eq!(body["pageCount"], 3); // 3 items / 1 per page
     assert_eq!(body["data"].as_array().unwrap().len(), 1);
 }
 
@@ -549,8 +549,8 @@ async fn account_transactions_page_size_over_max_clamped_to_100(pool: PgPool) {
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    assert_eq!(body["item_count"], 1);
-    assert_eq!(body["page_count"], 1);
+    assert_eq!(body["itemCount"], 1);
+    assert_eq!(body["pageCount"], 1);
     assert_eq!(body["data"].as_array().unwrap().len(), 1);
 }
 
@@ -579,7 +579,7 @@ async fn account_transactions_page_beyond_data_returns_empty(pool: PgPool) {
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    assert_eq!(body["item_count"], 1);
+    assert_eq!(body["itemCount"], 1);
     assert!(body["data"].as_array().unwrap().is_empty());
 }
 
@@ -614,8 +614,8 @@ async fn big_token_transactions_page_size_zero_clamped_to_one(pool: PgPool) {
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    assert_eq!(body["item_count"], 1);
-    assert_eq!(body["page_count"], 1);
+    assert_eq!(body["itemCount"], 1);
+    assert_eq!(body["pageCount"], 1);
     assert_eq!(body["data"].as_array().unwrap().len(), 1);
 }
 
@@ -650,8 +650,8 @@ async fn big_token_transactions_page_size_over_max_clamped_to_100(pool: PgPool) 
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    assert_eq!(body["item_count"], 1);
-    assert_eq!(body["page_count"], 1);
+    assert_eq!(body["itemCount"], 1);
+    assert_eq!(body["pageCount"], 1);
     assert_eq!(body["data"].as_array().unwrap().len(), 1);
 }
 
@@ -699,7 +699,7 @@ async fn account_transactions_type_filter_returns_matching_rows(pool: PgPool) {
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    assert_eq!(body["item_count"], 1);
+    assert_eq!(body["itemCount"], 1);
     let data = body["data"].as_array().unwrap();
     assert_eq!(data.len(), 1);
     assert_eq!(data[0]["ft_action_type_id"], 2);
@@ -715,7 +715,7 @@ async fn account_transactions_type_filter_returns_matching_rows(pool: PgPool) {
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    assert_eq!(body["item_count"], 1);
+    assert_eq!(body["itemCount"], 1);
     let data = body["data"].as_array().unwrap();
     assert_eq!(data.len(), 1);
     assert_eq!(data[0]["ft_action_type_id"], 4);
@@ -774,7 +774,7 @@ async fn account_transactions_type_filter_mint_and_allowance(pool: PgPool) {
         .await;
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    assert_eq!(body["item_count"], 1);
+    assert_eq!(body["itemCount"], 1);
     assert_eq!(body["data"][0]["ft_action_type_id"], 1);
     assert_eq!(body["data"][0]["deploy_hash"], mint_hash);
 
@@ -787,7 +787,7 @@ async fn account_transactions_type_filter_mint_and_allowance(pool: PgPool) {
         .await;
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    assert_eq!(body["item_count"], 1);
+    assert_eq!(body["itemCount"], 1);
     assert_eq!(body["data"][0]["ft_action_type_id"], 3);
     assert_eq!(body["data"][0]["deploy_hash"], allowance_hash);
 }

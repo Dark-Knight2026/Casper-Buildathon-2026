@@ -4,11 +4,19 @@ mod common;
 
 use axum::http::{Method, StatusCode};
 use casper_types::{AsymmetricType, PublicKey, SecretKey, crypto};
+use chrono::{Duration, Utc};
+use jsonwebtoken::{EncodingKey, Header};
 use rand::Rng;
 use redis::AsyncCommands;
+use serde_json::Value;
 use sqlx::PgPool;
+use uuid::Uuid;
 
-use api::{common::CASPER_MESSAGE_PREFIX, server::AUTH_RATE_LIMIT_BURST};
+use api::{
+    Claims, UserRole,
+    common::{CASPER_MESSAGE_PREFIX, JWT_AUDIENCE, JWT_ISSUER},
+    server::AUTH_RATE_LIMIT_BURST,
+};
 
 /// Signs a message with the Casper Wallet prefix, matching browser extension behavior.
 fn sign_with_prefix(message: &str, secret_key: &SecretKey, public_key: &PublicKey) -> String {
@@ -50,7 +58,7 @@ async fn nonce_endpoint_returns_challenge(pool: PgPool) {
 
     assert_eq!(response.status_code(), StatusCode::OK);
 
-    let body: serde_json::Value = response.json();
+    let body: Value = response.json();
     assert!(body.get("nonce").is_some());
     assert!(body.get("message").is_some());
 
@@ -112,7 +120,7 @@ async fn protected_endpoint_requires_auth(pool: PgPool) {
 async fn protected_endpoint_rejects_invalid_token(pool: PgPool) {
     let env = common::setup_test_server(pool, false).await;
 
-    let (status, _): (StatusCode, Option<serde_json::Value>) = common::authed_request(
+    let (status, _): (StatusCode, Option<Value>) = common::authed_request(
         &env.server,
         &Method::POST,
         "/api/v1/tax/calculate-liability",
@@ -145,7 +153,7 @@ async fn full_auth_flow_nonce_sign_login(pool: PgPool) {
         .await;
     assert_eq!(nonce_response.status_code(), StatusCode::OK);
 
-    let nonce_body: serde_json::Value = nonce_response.json();
+    let nonce_body: Value = nonce_response.json();
     let message = nonce_body["message"]
         .as_str()
         .expect("message field required");
@@ -165,7 +173,7 @@ async fn full_auth_flow_nonce_sign_login(pool: PgPool) {
 
     // 5. Verify success
     assert_eq!(login_response.status_code(), StatusCode::OK);
-    let login_body: serde_json::Value = login_response.json();
+    let login_body: Value = login_response.json();
     assert!(
         login_body.get("token").is_some(),
         "Response must contain token"
@@ -186,7 +194,7 @@ async fn replay_attack_prevention(pool: PgPool) {
     let wallet_address = public_key.to_hex();
 
     // Get nonce and sign
-    let nonce_body: serde_json::Value = env
+    let nonce_body: Value = env
         .server
         .get("/api/v1/auth/nonce")
         .add_query_param("wallet_address", &wallet_address)
@@ -232,7 +240,7 @@ async fn concurrent_nonce_overwrites_previous(pool: PgPool) {
     let wallet_address = public_key.to_hex();
 
     // Request first nonce
-    let _first_body: serde_json::Value = env
+    let _first_body: Value = env
         .server
         .get("/api/v1/auth/nonce")
         .add_query_param("wallet_address", &wallet_address)
@@ -240,7 +248,7 @@ async fn concurrent_nonce_overwrites_previous(pool: PgPool) {
         .json();
 
     // Request second nonce (overwrites first in Redis)
-    let second_body: serde_json::Value = env
+    let second_body: Value = env
         .server
         .get("/api/v1/auth/nonce")
         .add_query_param("wallet_address", &wallet_address)
@@ -273,7 +281,7 @@ async fn failed_login_consumes_nonce(pool: PgPool) {
     let wallet_address = public_key.to_hex();
 
     // Get nonce and sign the correct message
-    let nonce_body: serde_json::Value = env
+    let nonce_body: Value = env
         .server
         .get("/api/v1/auth/nonce")
         .add_query_param("wallet_address", &wallet_address)
@@ -491,4 +499,138 @@ async fn auth_rate_limiter_returns_429_after_burst(pool: PgPool) {
             );
         }
     }
+}
+
+// Secp256k1 auth flow ---------------------------------------------------------
+
+/// End-to-end auth flow with a Secp256k1 key pair (02-prefixed, 68 hex chars).
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn full_auth_flow_secp256k1(pool: PgPool) {
+    let env = common::setup_test_server(pool, true).await;
+
+    let secret_key = SecretKey::secp256k1_from_bytes([10u8; 32]).unwrap();
+    let public_key = PublicKey::from(&secret_key);
+    let wallet_address = public_key.to_hex();
+
+    // Sanity: secp256k1 public key must be 68 hex chars (02 + 33 bytes).
+    assert_eq!(wallet_address.len(), 68, "secp256k1 pubkey must be 68 hex");
+    assert!(
+        wallet_address.starts_with("02"),
+        "secp256k1 pubkey must start with 02"
+    );
+
+    // Get nonce
+    let nonce_response = env
+        .server
+        .get("/api/v1/auth/nonce")
+        .add_query_param("wallet_address", &wallet_address)
+        .await;
+    assert_eq!(nonce_response.status_code(), StatusCode::OK);
+
+    let nonce_body: Value = nonce_response.json();
+    let message = nonce_body["message"]
+        .as_str()
+        .expect("message field required");
+
+    // Sign with Casper Wallet prefix
+    let signature_hex = sign_with_prefix(message, &secret_key, &public_key);
+
+    // Login
+    let login_response = env
+        .server
+        .post("/api/v1/auth/login")
+        .json(&serde_json::json!({
+            "wallet_address": wallet_address,
+            "signature": signature_hex
+        }))
+        .await;
+
+    assert_eq!(login_response.status_code(), StatusCode::OK);
+    let login_body: Value = login_response.json();
+    assert!(
+        login_body.get("token").is_some(),
+        "Response must contain token"
+    );
+    assert!(
+        login_body.get("user").is_some(),
+        "Response must contain user info"
+    );
+}
+
+// JWT claim rejection tests ---------------------------------------------------
+
+/// A JWT with wrong issuer must be rejected by the auth middleware.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn jwt_wrong_issuer_rejected(pool: PgPool) {
+    let env = common::setup_test_server(pool, false).await;
+
+    let exp = usize::try_from((Utc::now() + Duration::hours(1)).timestamp().max(0)).unwrap();
+
+    let claims = Claims {
+        sub: Uuid::new_v4(),
+        role: UserRole::Tenant,
+        exp,
+        iss: "wrong-issuer".to_owned(),
+        aud: JWT_AUDIENCE.to_owned(),
+    };
+
+    let token = jsonwebtoken::encode(
+        &Header::default(),
+        &claims,
+        &EncodingKey::from_secret(env.jwt_secret.as_bytes()),
+    )
+    .unwrap();
+
+    let (status, _): (StatusCode, Option<Value>) = common::authed_request(
+        &env.server,
+        &Method::POST,
+        "/api/v1/tax/calculate-liability",
+        &token,
+        &serde_json::json!({ "fiscal_year": 2024, "property_ids": [] }),
+    )
+    .await;
+
+    assert_eq!(
+        status,
+        StatusCode::UNAUTHORIZED,
+        "JWT with wrong issuer must be rejected"
+    );
+}
+
+/// A JWT with wrong audience must be rejected by the auth middleware.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn jwt_wrong_audience_rejected(pool: PgPool) {
+    let env = common::setup_test_server(pool, false).await;
+
+    let exp = usize::try_from((Utc::now() + Duration::hours(1)).timestamp().max(0)).unwrap();
+
+    let claims = Claims {
+        sub: Uuid::new_v4(),
+        role: UserRole::Tenant,
+        exp,
+        iss: JWT_ISSUER.to_owned(),
+        aud: "wrong-audience".to_owned(),
+    };
+
+    let token = jsonwebtoken::encode(
+        &Header::default(),
+        &claims,
+        &EncodingKey::from_secret(env.jwt_secret.as_bytes()),
+    )
+    .unwrap();
+
+    let (status, _): (StatusCode, Option<Value>) = common::authed_request(
+        &env.server,
+        &Method::POST,
+        "/api/v1/tax/calculate-liability",
+        &token,
+        &serde_json::json!({ "fiscal_year": 2024, "property_ids": [] }),
+    )
+    .await;
+
+    assert_eq!(
+        status,
+        StatusCode::UNAUTHORIZED,
+        "JWT with wrong audience must be rejected"
+    );
 }
