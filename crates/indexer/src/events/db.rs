@@ -486,7 +486,7 @@ pub async fn upsert_ico_schedule(
                 transaction_hash = EXCLUDED.transaction_hash,
                 block_height     = EXCLUDED.block_height,
                 updated_at       = NOW()
-            WHERE ico_schedules.block_height < EXCLUDED.block_height
+            WHERE ico_schedules.block_height <= EXCLUDED.block_height
         ",
         row.schedule_id,
         row.start_timestamp,
@@ -503,7 +503,7 @@ pub async fn upsert_ico_schedule(
               tracing::warn!(
                   schedule_id = row.schedule_id,
                   block_height = row.block_height,
-                  "upsert_ico_schedule no-op: same or older block_height"
+                  "upsert_ico_schedule no-op: older block_height"
               );
           }
       })?;
