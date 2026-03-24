@@ -80,10 +80,19 @@ impl HashType {
         Some(i16::from(u8::from(self)))
     }
 
-    /// Determine address type by checking if the address is a known contract.
+    /// Determine address type from an API-provided value, or fall back to
+    /// checking if the address is a known contract.
+    ///
+    /// `api_type` is preferred when present (e.g. from CSPR.cloud
+    /// `from_type`/`to_type`). The `known_contracts` fallback uses package
+    /// hashes which live in a different hash domain than the normalized
+    /// account hashes passed as `address`, so it is best-effort only.
     #[inline]
     #[must_use]
-    pub fn lookup(address: &str, known_contracts: &HashSet<String>) -> Self {
+    pub fn lookup(address: &str, known_contracts: &HashSet<String>, api_type: Option<u8>) -> Self {
+        if let Some(t) = api_type {
+            return Self::from(t);
+        }
         if known_contracts.contains(address) {
             Self::Contract
         } else {

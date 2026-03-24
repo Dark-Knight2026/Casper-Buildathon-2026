@@ -232,6 +232,8 @@ async fn process_ico_deploy(
             event_data,
             block_timestamp,
             transform_idx: None,
+            api_from_type: None,
+            api_to_type: None,
         };
         processor::process_event(ctx.db_pool, ctx.registry, ctx.known_hashes, &raw).await?;
         tracing::debug!(
@@ -288,6 +290,8 @@ async fn process_ico_deploy(
         event_data,
         block_timestamp,
         transform_idx: None,
+        api_from_type: None,
+        api_to_type: None,
     };
 
     processor::process_event(ctx.db_pool, ctx.registry, ctx.known_hashes, &raw).await?;

@@ -42,6 +42,12 @@ pub struct EventContext<'a> {
     pub transform_idx: Option<i32>,
     /// Known contract hashes for `from_type`/`to_type` address lookup.
     pub known_contract_hashes: &'a HashSet<String, RandomState>,
+    /// Sender address type from CSPR.cloud API (0=Account, 1=Contract).
+    /// Preferred over `HashType::lookup` when present.
+    pub api_from_type: Option<u8>,
+    /// Recipient address type from CSPR.cloud API (0=Account, 1=Contract).
+    /// Preferred over `HashType::lookup` when present.
+    pub api_to_type: Option<u8>,
 }
 
 /// Trait for blockchain events that can be indexed and processed.

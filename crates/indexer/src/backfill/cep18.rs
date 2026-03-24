@@ -226,6 +226,8 @@ pub async fn backfill_cep18(
                 event_data,
                 block_timestamp,
                 transform_idx: action.transform_idx,
+                api_from_type: action.from_type,
+                api_to_type: action.to_type,
             };
 
             match processor::process_event(ctx.db_pool, ctx.registry, ctx.known_hashes, &raw).await

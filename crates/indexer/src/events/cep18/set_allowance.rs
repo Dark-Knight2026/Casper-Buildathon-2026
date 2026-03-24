@@ -31,11 +31,11 @@ impl IndexableEvent for SetAllowance {
         let owner = address::normalize_to_account_hash(&self.owner)?;
         let spender = address::normalize_to_account_hash(&self.spender)?;
 
-        // Determine address types via contract registry lookup.
-        let from_type = HashType::lookup(&owner, ctx.known_contract_hashes);
-        let to_type = HashType::lookup(&spender, ctx.known_contract_hashes);
+        // Determine address types: prefer CSPR.cloud API values, fall back to registry lookup.
+        let from_type = HashType::lookup(&owner, ctx.known_contract_hashes, ctx.api_from_type);
+        let to_type = HashType::lookup(&spender, ctx.known_contract_hashes, ctx.api_to_type);
 
-        // event_json keeps raw event data from self.
+        // `event_json` keeps raw event data from self.
         let event_json = serde_json::to_value(self)?;
         db::insert_blockchain_transaction(
             ctx.tx,

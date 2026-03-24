@@ -29,9 +29,9 @@ impl IndexableEvent for Transfer {
         let sender = address::normalize_to_account_hash(&self.sender)?;
         let recipient = address::normalize_to_account_hash(&self.recipient)?;
 
-        // Determine address types via contract registry lookup.
-        let from_type = HashType::lookup(&sender, ctx.known_contract_hashes);
-        let to_type = HashType::lookup(&recipient, ctx.known_contract_hashes);
+        // Determine address types: prefer CSPR.cloud API values, fall back to registry lookup.
+        let from_type = HashType::lookup(&sender, ctx.known_contract_hashes, ctx.api_from_type);
+        let to_type = HashType::lookup(&recipient, ctx.known_contract_hashes, ctx.api_to_type);
 
         // Insert into blockchain_transactions (event_json keeps raw event data).
         let event_json = serde_json::to_value(self)?;

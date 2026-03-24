@@ -49,6 +49,8 @@ async fn duplicate_event_is_no_op(pool: PgPool) {
         event_data: common::payloads::transfer_event_data("100"),
         block_timestamp: None,
         transform_idx: None,
+        api_from_type: None,
+        api_to_type: None,
     };
 
     // First call — new event, handler runs, row inserted.
@@ -102,6 +104,8 @@ async fn handler_error_rolls_back_blockchain_events_row(pool: PgPool) {
         event_data: json!({}),
         block_timestamp: None,
         transform_idx: None,
+        api_from_type: None,
+        api_to_type: None,
     };
 
     let result = processor::process_event(&pool, &registry, &HashSet::new(), &bad_event).await;
@@ -146,6 +150,8 @@ async fn unknown_event_is_stored_raw_without_handler(pool: PgPool) {
         event_data: json!({ "foo": "bar" }),
         block_timestamp: None,
         transform_idx: None,
+        api_from_type: None,
+        api_to_type: None,
     };
 
     processor::process_event(&pool, &registry, &HashSet::new(), &unknown)
@@ -224,6 +230,8 @@ async fn reprocessing_after_full_rollback_does_not_double_balance(pool: PgPool) 
         event_data: common::payloads::transfer_event_data("100"),
         block_timestamp: None,
         transform_idx: None,
+        api_from_type: None,
+        api_to_type: None,
     };
 
     // First call — all writes committed in one transaction.

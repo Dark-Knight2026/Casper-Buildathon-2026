@@ -39,6 +39,12 @@ pub struct RawEvent {
     pub block_timestamp: Option<DateTime<Utc>>,
     /// Transform index within the deploy. `None` when unavailable.
     pub transform_idx: Option<i32>,
+    /// Sender address type from CSPR.cloud (0=Account, 1=Contract).
+    /// `None` during streaming or when the API field is absent.
+    pub api_from_type: Option<u8>,
+    /// Recipient address type from CSPR.cloud (0=Account, 1=Contract).
+    /// `None` during streaming or when the API field is absent.
+    pub api_to_type: Option<u8>,
 }
 
 impl<'a> From<&'a RawEvent> for db::NewBlockchainEvent<'a> {
@@ -87,6 +93,8 @@ pub async fn process_event(
         block_timestamp: raw.block_timestamp,
         transform_idx: raw.transform_idx,
         known_contract_hashes: known_hashes,
+        api_from_type: raw.api_from_type,
+        api_to_type: raw.api_to_type,
     };
 
     match registry
