@@ -116,6 +116,56 @@ async fn staked_creates_position_and_event(pool: PgPool) {
     );
 }
 
+/// Replaying a `Staked` event with the same deploy hash must be idempotent:
+/// `staked_amount` equals the single-event amount (not doubled) and only one
+/// `staking_events` row exists.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn staked_idempotent(pool: PgPool) {
+    common::disable_rls(&pool).await;
+
+    let event = staking_event(
+        STAKING_DEPLOY_1,
+        "Staked",
+        json!({
+            "staker": FakeAddress::Buyer.as_str(),
+            "amount": "5000"
+        }),
+    );
+
+    for _ in 0..2 {
+        processor::process_event(&pool, &EventRegistry::new(), &HashSet::new(), &event)
+            .await
+            .unwrap();
+    }
+
+    let staked: String = sqlx::query_scalar!(
+        r"SELECT staked_amount FROM staking_positions WHERE staker_address = $1",
+        FakeAddress::Buyer.as_str(),
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(
+        staked, "5000",
+        "duplicate Staked must not double staked_amount"
+    );
+
+    let event_count: i64 = sqlx::query_scalar!(
+        r"SELECT COUNT(*) FROM staking_events WHERE transaction_hash = $1",
+        STAKING_DEPLOY_1,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap()
+    .unwrap_or(0);
+
+    assert_eq!(
+        event_count, 1,
+        "duplicate Staked must not create second staking_events row"
+    );
+}
+
 /// Multiple `Staked` events accumulate in `staked_amount`.
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn staked_accumulates(pool: PgPool) {
