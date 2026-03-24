@@ -397,7 +397,15 @@ export async function retryAsync<T>(
       return await fn();
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
-      
+
+      // Do not retry permanent client errors — retrying 401/403/404/422 wastes
+      // quota and risks duplicate mutations on POST/PUT. 408 (timeout) and 5xx
+      // are intentionally excluded and remain retryable.
+      const NON_RETRYABLE_STATUSES = new Set([400, 401, 403, 404, 409, 410, 422]);
+      if ('statusCode' in lastError && NON_RETRYABLE_STATUSES.has((lastError as { statusCode: number }).statusCode)) {
+        throw lastError;
+      }
+
       if (attempt === maxAttempts) {
         throw lastError;
       }
