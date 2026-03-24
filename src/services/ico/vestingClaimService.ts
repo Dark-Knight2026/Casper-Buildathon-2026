@@ -20,10 +20,19 @@ const GAS_CLAIM = 3_000_000_000n;
 // ── Error code mapping (from vesting_schema.json) ───────────────────
 
 const VESTING_ERROR_MAP: Record<string, string> = {
-  '65005': 'Vesting schedule not found',
-  '65006': 'Only the beneficiary can claim these tokens',
-  '65007': 'Nothing to claim — tokens are not yet unlocked',
-  '65008': 'Claim blocked by active unbonding',
+  '701': 'Not whitelisted for this vesting schedule',
+  '702': 'Invalid amount',
+  '703': 'Invalid vesting duration',
+  '704': 'Cliff period exceeds vesting duration',
+  '705': 'Vesting schedule not found',
+  '706': 'Only the beneficiary can claim these tokens',
+  '707': 'Nothing to claim — tokens are not yet unlocked',
+  '708': 'Claim blocked — complete the active unbonding withdrawal first',
+  '20000': 'Owner not set',
+  '20001': 'Not authorized: caller is not the owner',
+  '20002': 'Not authorized: caller is not the new owner',
+  '20003': 'Missing required role',
+  '20004': 'Cannot renounce role for another address',
 };
 
 export function parseVestingError(rawMessage?: string): string {

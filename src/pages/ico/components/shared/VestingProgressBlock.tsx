@@ -2,13 +2,13 @@ import { cn } from '@/lib/utils';
 import { ProgressBar } from './ProgressBar';
 import { CountdownTimer } from './CountdownTimer';
 import { MainButton } from './MainButton';
-import { Lock, Calendar, Unlock } from 'lucide-react';
+import { Lock, Calendar, Unlock, Info } from 'lucide-react';
 import { formatNumber, formatUSD, formatDate } from '../../utils/formatters';
 import type { ClaimStep } from '@/hooks/ico/useClaimTokens';
 
 export interface VestingEntry {
   /** Unique identifier for the vesting entry */
-  id: number;
+  id: string;
   /** Amount of tokens locked */
   lockedAmount: number;
   /** Timestamp when tokens will be unlocked */
@@ -30,13 +30,16 @@ interface VestingProgressBlockProps {
   /** Called when user clicks Claim on an unlocked entry */
   onClaim?: (vestingId: bigint) => void;
   /** ID of the entry currently being claimed */
-  claimingId?: number | null;
+  claimingId?: string | null;
   /** Claim step for showing granular state on the button */
   claimStep?: ClaimStep;
+  /** When true, claiming is blocked due to active unbonding — shows warning and disables claim buttons */
+  hasActiveUnbonding?: boolean;
 }
 
 export function VestingProgressBlock({
   vestingEntries,
+  hasActiveUnbonding = false,
   tokenSymbol = 'BIG',
   tokenPrice,
   className,
@@ -55,7 +58,7 @@ export function VestingProgressBlock({
   const claimableEntries = sortedEntries.filter(
     (entry) =>
       entry.unlockTimestamp <= now &&
-      entry.lockedAmount - (entry.unlockedAmount ?? 0) > 0,
+      (entry.unlockedAmount ?? 0) > 0,
   );
 
   // Find the first upcoming unlock
@@ -64,7 +67,7 @@ export function VestingProgressBlock({
   );
   const nextUnlock = upcomingUnlocks[0];
 
-  const getClaimButtonText = (entryId: number) => {
+  const getClaimButtonText = (entryId: string) => {
     if (claimingId !== entryId) return 'Claim';
     switch (claimStep) {
       case 'signing':  return 'Sign in wallet…';
@@ -85,7 +88,7 @@ export function VestingProgressBlock({
 
   // Calculate total locked
   const totalLocked = sortedEntries.reduce(
-    (sum, entry) => sum + entry.lockedAmount - (entry.unlockedAmount || 0),
+    (sum, entry) => sum + entry.lockedAmount,
     0
   );
 
@@ -126,9 +129,28 @@ export function VestingProgressBlock({
             </h4>
           </div>
 
+          {hasActiveUnbonding ? (
+            <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-500/5 border border-amber-500/30 mb-3">
+              <Info className="w-3.5 h-3.5 text-amber-400 mt-0.5 shrink-0" />
+              <p className="text-xs text-[hsl(var(--ico-text-secondary))] leading-relaxed">
+                Claiming is <span className="text-amber-400 font-medium">temporarily blocked</span> — you have an active unbonding position.
+                Complete the withdrawal above first, then you can claim again.
+              </p>
+            </div>
+          ) : (
+            <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-blue-500/5 border border-blue-500/20 mb-3">
+              <Info className="w-3.5 h-3.5 text-blue-400 mt-0.5 shrink-0" />
+              <p className="text-xs text-[hsl(var(--ico-text-secondary))] leading-relaxed">
+                Tokens unlock <span className="text-[hsl(var(--ico-text-primary))]">linearly</span> over the vesting period.
+                After claiming, tokens enter a <span className="text-[hsl(var(--ico-text-primary))]">48-hour unbonding period</span> before they arrive in your wallet.
+              </p>
+            </div>
+          )}
+
           <div className="space-y-3">
             {claimableEntries.map((entry) => {
-              const claimable = entry.lockedAmount - (entry.unlockedAmount ?? 0);
+              const claimable = entry.unlockedAmount ?? 0;
+              const stillLocked = entry.lockedAmount;
               const usdValue = tokenPrice ? claimable * tokenPrice : undefined;
               const isClaiming = claimingId === entry.id && (claimStep === 'signing' || claimStep === 'pending');
               const isClaimed = claimingId === entry.id && claimStep === 'confirmed';
@@ -138,7 +160,9 @@ export function VestingProgressBlock({
                   key={entry.id}
                   className={cn(
                     'flex items-center justify-between p-3 rounded-lg',
-                    'bg-emerald-500/5 border border-emerald-500/20',
+                    hasActiveUnbonding
+                      ? 'bg-[hsl(var(--ico-bg-secondary))]/50 border border-[hsl(var(--ico-border-color))] opacity-60'
+                      : 'bg-emerald-500/5 border border-emerald-500/20',
                   )}
                 >
                   <div className="flex items-center gap-3">
@@ -154,13 +178,18 @@ export function VestingProgressBlock({
                           ≈ {formatUSD(usdValue)}
                         </p>
                       )}
+                      {stillLocked > 0 && (
+                        <p className="text-xs text-amber-500 mt-0.5">
+                          {formatNumber(stillLocked)} {tokenSymbol} still vesting
+                        </p>
+                      )}
                     </div>
                   </div>
 
                   <MainButton
-                    text={getClaimButtonText(entry.id)}
+                    text={hasActiveUnbonding ? 'Unbonding…' : getClaimButtonText(entry.id)}
                     loading={isClaiming}
-                    disabled={isClaiming || isClaimed}
+                    disabled={isClaiming || isClaimed || hasActiveUnbonding}
                     onClick={() => onClaim?.(BigInt(entry.id))}
                     className="text-sm px-4 py-2"
                   />
@@ -184,8 +213,7 @@ export function VestingProgressBlock({
 
           <div className="space-y-3">
             {upcomingUnlocks.map((entry, index) => {
-              const remainingLocked =
-                entry.lockedAmount - (entry.unlockedAmount || 0);
+              const remainingLocked = entry.lockedAmount;
               const usdValue = tokenPrice
                 ? remainingLocked * tokenPrice
                 : undefined;

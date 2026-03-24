@@ -212,7 +212,7 @@ export interface StakingPortfolioResponse {
 }
 
 export interface VestingSchedule {
-  id: number;
+  id: string;
   lockedAmount: number;
   purchaseTimestamp: number;
   unlockTimestamp: number;

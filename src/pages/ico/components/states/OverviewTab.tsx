@@ -5,12 +5,16 @@ import { TrendingUp, Clock, Percent, Wallet } from 'lucide-react';
 import { TransactionHistory } from '../shared/TransactionHistory';
 import { EarningsChart } from '../shared/EarningsChart';
 import { VestingProgressBlock, type VestingEntry } from '../shared/VestingProgressBlock';
+import { UnbondingStatusBlock } from '../shared/UnbondingStatusBlock';
+import { TransactionStatusToast } from '../shared/TransactionStatusToast';
 import { useICOWallet } from '@/hooks/ico/useICOWallet';
 import { useTransactionHistory } from '@/hooks/ico/useTransactionHistory';
 import { useStakingPortfolio } from '@/hooks/ico/useStakingPortfolio';
 import { useStakingInfo } from '@/hooks/ico/useStakingInfo';
 import { useVestingSchedules } from '@/hooks/ico/useVestingSchedules';
 import { useClaimTokens } from '@/hooks/ico/useClaimTokens';
+import { useUnbondingStatus } from '@/hooks/ico/useUnbondingStatus';
+import { useWithdrawUnbonded } from '@/hooks/ico/useWithdrawUnbonded';
 import { deriveAccountHash } from '@/lib/blockchain/accountUtils';
 import { formatNumber, formatUSD } from '../../utils/formatters';
 import { ICO_CONFIG } from '@/constants/ico';
@@ -25,7 +29,8 @@ export const OverviewTab = memo(function OverviewTab() {
   const { account, clickRef } = useICOWallet();
   const accountHash = account?.publicKey ? deriveAccountHash(account.publicKey) : null;
   const [page, setPage] = useState(1);
-  const [claimingId, setClaimingId] = useState<number | null>(null);
+  const [claimingId, setClaimingId] = useState<string | null>(null);
+  const [claimToastVisible, setClaimToastVisible] = useState(false);
   const { transactions, totalPages } = useTransactionHistory(accountHash, page, PAGE_SIZE);
   const { data: stakingPortfolio } = useStakingPortfolio(accountHash);
   const { data: stakingInfo } = useStakingInfo(accountHash);
@@ -48,21 +53,39 @@ export const OverviewTab = memo(function OverviewTab() {
     {
       onSuccess: () => {
         setClaimingId(null);
+        setClaimToastVisible(true);
         queryClient.invalidateQueries({ queryKey: ['vesting-schedules'] });
       },
       onError: (error) => {
         logger.error('[useClaimTokens] claim failed', new Error(error));
-        toast({ title: 'Claim failed', description: error, variant: 'destructive' });
+        setClaimToastVisible(true);
       },
     },
   );
 
   const handleClaim = useCallback(
     (vestingId: bigint) => {
-      setClaimingId(Number(vestingId));
+      setClaimingId(String(vestingId));
       claim(vestingId);
     },
     [claim],
+  );
+
+  const { data: unbondingStatus } = useUnbondingStatus(accountHash ?? null);
+
+  const { state: withdrawState, withdraw } = useWithdrawUnbonded(
+    account?.publicKey ?? null,
+    clickRef ?? null,
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ['staking-info'] });
+        toast({ title: 'Withdraw successful', description: 'Tokens have arrived in your wallet.' });
+      },
+      onError: (error) => {
+        logger.error('[useWithdrawUnbonded] withdraw failed', new Error(error));
+        toast({ title: 'Withdraw failed', description: error, variant: 'destructive' });
+      },
+    },
   );
   const dashboardCards = useMemo(() => [
     {
@@ -175,6 +198,26 @@ export const OverviewTab = memo(function OverviewTab() {
         <EarningsChart accountHash={accountHash} className="md:col-span-2" />
       </div>
 
+      {/* Unbonding Status */}
+      {unbondingStatus.length > 0 && (
+        <Card className="p-5">
+          <h3 className="text-lg font-semibold text-[hsl(var(--ico-text-primary))] mb-4">
+            Unbonding
+          </h3>
+          <div className="space-y-3 w-full">
+            {unbondingStatus.map((item) => (
+              <UnbondingStatusBlock
+                key={item.id}
+                unbonding={item}
+                tokenSymbol={ICO_CONFIG.TOKEN.symbol}
+                onWithdraw={withdraw}
+                withdrawStep={withdrawState.step}
+              />
+            ))}
+          </div>
+        </Card>
+      )}
+
       {/* Vesting Progress */}
       {vestingEntries.length > 0 && (
         <Card className="p-5">
@@ -184,6 +227,7 @@ export const OverviewTab = memo(function OverviewTab() {
             onClaim={handleClaim}
             claimingId={claimingId}
             claimStep={claimState.step}
+            hasActiveUnbonding={unbondingStatus.some((u) => !u.isReady)}
           />
         </Card>
       )}
@@ -219,6 +263,20 @@ export const OverviewTab = memo(function OverviewTab() {
           />
         </div>
       </div>
+
+      {/* Claim Transaction Toast */}
+      <TransactionStatusToast
+        isVisible={claimToastVisible}
+        onClose={() => setClaimToastVisible(false)}
+        step={claimState.step}
+        txHash={claimState.txHash}
+        tokensReceived={null}
+        error={claimState.error}
+        tokenSymbol={ICO_CONFIG.TOKEN.symbol}
+        successTitle="Claim Successful!"
+        errorTitle="Claim Failed"
+        pendingTitle="Claiming tokens..."
+      />
     </div>
   );
 });

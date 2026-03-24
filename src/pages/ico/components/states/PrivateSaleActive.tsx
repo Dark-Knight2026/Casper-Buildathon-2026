@@ -20,7 +20,6 @@ import { UserTokenBalance } from '../shared/UserTokenBalance';
 import { TransactionHistory } from '../shared/TransactionHistory';
 import { VestingProgressBlock, type VestingEntry } from '../shared/VestingProgressBlock';
 import { useClaimTokens } from '@/hooks/ico/useClaimTokens';
-import { useToast } from '@/hooks/use-toast';
 import logger from '@/lib/logger';
 
 interface PrivateSaleActiveProps {
@@ -53,7 +52,6 @@ function mapToScheduleProgress(p: IcoProgressResponse): ScheduleProgress {
 
 export function PrivateSaleActive({ className, endTimestamp, progress }: PrivateSaleActiveProps) {
   const queryClient = useQueryClient();
-  const { toast } = useToast();
 
   // ── ICO progress ────────────────────────────────────────────────────
   const { data: icoProgress } = useICOProgress();
@@ -122,7 +120,8 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: Private
   }, [icoBalance, transactions, tokenPrice]);
 
   // ── Claim flow ──────────────────────────────────────────────────────
-  const [claimingId, setClaimingId] = useState<number | null>(null);
+  const [claimingId, setClaimingId] = useState<string | null>(null);
+  const [claimToastVisible, setClaimToastVisible] = useState(false);
 
   const { state: claimState, claim } = useClaimTokens(
     account?.publicKey ?? null,
@@ -130,18 +129,19 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: Private
     {
       onSuccess: () => {
         setClaimingId(null);
+        setClaimToastVisible(true);
         queryClient.invalidateQueries({ queryKey: ['vesting-schedules'] });
       },
       onError: (error) => {
         logger.error('[useClaimTokens] claim failed', new Error(error));
-        toast({ title: 'Claim failed', description: error, variant: 'destructive' });
+        setClaimToastVisible(true);
       },
     },
   );
 
   const handleClaim = useCallback(
     (vestingId: bigint) => {
-      setClaimingId(Number(vestingId));
+      setClaimingId(String(vestingId));
       claim(vestingId);
     },
     [claim],
@@ -245,10 +245,24 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: Private
         <PurchaseConfirmationModal {...modalProps} />
       )}
 
-      {/* Transaction Status Toast */}
+      {/* Purchase Transaction Status Toast */}
       {toastProps && (
         <TransactionStatusToast {...toastProps} />
       )}
+
+      {/* Claim Transaction Status Toast */}
+      <TransactionStatusToast
+        isVisible={claimToastVisible}
+        onClose={() => setClaimToastVisible(false)}
+        step={claimState.step}
+        txHash={claimState.txHash}
+        tokensReceived={null}
+        error={claimState.error}
+        tokenSymbol={ICO_CONFIG.TOKEN.symbol}
+        successTitle="Claim Successful!"
+        errorTitle="Claim Failed"
+        pendingTitle="Claiming tokens..."
+      />
     </div>
   );
 }
