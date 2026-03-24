@@ -97,7 +97,6 @@ pub async fn get_vesting_schedules(
         .map(|r| {
             let total_dec = r.total_amount.parse::<Decimal>().unwrap_or(Decimal::ZERO);
             let claimed_dec = r.claimed_amount.parse::<Decimal>().unwrap_or(Decimal::ZERO);
-            let locked_dec = total_dec - claimed_dec;
 
             let vested = calculate_vested(
                 &r.total_amount,
@@ -106,6 +105,8 @@ pub async fn get_vesting_schedules(
                 r.vesting_duration,
                 now,
             );
+            // locked = tokens not yet released by the vesting schedule
+            let locked_dec = total_dec - vested;
             let unlocked_dec = vested - claimed_dec;
             let divisor = Decimal::from(10u64.pow(TOKEN_DECIMALS));
 
