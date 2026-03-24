@@ -16,6 +16,7 @@ DEPLOYMENT_MODE=dev
 TAG=registry.example.com/myapp
 VERSION=1.0.0
 PROJECT_DOMAIN=test.example.com
+DATABASE_URL=postgres://postgres:postgres@localhost:54322/postgres
 EOF
 
   # https.conf.template — required by pre-flight check; must be non-empty so envsubst
