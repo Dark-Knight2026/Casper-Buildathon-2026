@@ -23,4 +23,4 @@ package_hash = "hash-5b70882737f85c60c95f72ce0c9fcfb58b674efdcb25c5f45110e8428a3
 [[contracts]]
 name = "ICO"
 package_name = "ICO"
-package_hash = "hash-2d5d7df7b33dc6ac95287d6238fb5c3e9b8a8f386ee289968fb05739c88de8e7"
+package_hash = "hash-1f8153b67dc83f9ba23ad5d80a6842437368350e2a5bae081c76e008f874425b"
