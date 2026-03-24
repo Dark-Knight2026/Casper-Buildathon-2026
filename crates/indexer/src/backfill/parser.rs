@@ -36,14 +36,12 @@ pub trait CesEvent {
 #[derive(Debug, Clone, Copy)]
 pub enum FieldType {
     /// UTF-8 string (u32 length-prefixed).
-    /// Not used by current event schemas but needed for future CES contracts.
-    #[allow(dead_code)]
+    /// Required by the CES binary parser for `CLType::String` fields.
     String,
     /// Casper Key - rendered as formatted string (e.g. `account-hash-abcd...`).
     Key,
     /// Boolean (1 byte).
-    /// Not used by current event schemas but needed for future CES contracts.
-    #[allow(dead_code)]
+    /// Required by the CES binary parser for `CLType::Bool` fields.
     Bool,
     /// u8 (1 byte) - rendered as a JSON number.
     U8,
