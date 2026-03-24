@@ -52,7 +52,9 @@ variable "HOST_SERVER_LOCATION" {
     condition = contains([
       "hel1",
       "fsn1",
-      "nbg1"
+      "nbg1",
+      "ash",
+      "hil"
     ], var.HOST_SERVER_LOCATION)
 
     error_message = "Invalid Hetzner location"
@@ -120,10 +122,10 @@ variable "PROJECT_DOMAIN" {
   type        = string
   validation {
     condition = can(regex(
-      "^[a-z0-9_][a-z0-9_-]{0,61}[a-z0-9_](\\.[a-z0-9-]{1,63})+$",
+      "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$",
       var.PROJECT_DOMAIN
     ))
-    error_message = "PROJECT_DOMAIN must be a valid domain like dashboard_demo.obox.systems"
+    error_message = "PROJECT_DOMAIN must be a valid RFC-1123 domain (no underscores) like dashboard-demo.obox.systems"
   }
 }
 
@@ -199,12 +201,6 @@ variable "SSH_PRIVATE_KEY_PATH" {
     condition     = fileexists(var.SSH_PRIVATE_KEY_PATH)
     error_message = "SSH private key file not found"
   }
-}
-
-# =================================================================================================
-# GOOGLE CREDS
-data "local_sensitive_file" "service_account_creds" {
-  filename = var.GOOGLE_APPLICATION_CREDENTIALS
 }
 
 data "local_sensitive_file" "ssh_private_key" {

@@ -19,6 +19,7 @@ jobs:
     - name: Set up Bats testing framework (v1.11.0)
       run: |
         curl -Lo /tmp/bats.tar.gz https://github.com/bats-core/bats-core/archive/refs/tags/v1.11.0.tar.gz
+        echo "aeff09fdc8b0c88b3087c99de00cf549356d7a2f6a69e3fcec5e0e861d2f9063  /tmp/bats.tar.gz" | sha256sum -c -
         tar -xf /tmp/bats.tar.gz -C /tmp
         sudo /tmp/bats-core-1.11.0/install.sh /usr/local
 

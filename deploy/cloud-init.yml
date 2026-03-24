@@ -37,7 +37,42 @@ packages:
   - make
 
 write_files:
-  - path: /etc/ssh/sshd_config.d/99-no-password.conf
+  - path: /etc/sudoers.d/deploy
+    permissions: '0440'
+    owner: root:root
+    content: |
+      deploy ALL=(ALL) SETENV: NOPASSWD: /bin/bash /opt/${project_name}/deploy/redeploy.sh
+
+  - path: /etc/fail2ban/jail.local
+    permissions: '0644'
+    owner: root:root
+    content: |
+      [sshd]
+      enabled  = true
+      port     = ssh
+      filter   = sshd
+      logpath  = /var/log/auth.log
+      maxretry = 5
+      bantime  = 3600
+      findtime = 600
+
+  - path: /etc/docker/daemon.json
+    permissions: '0644'
+    owner: root:root
+    content: |
+      {
+        "ipv6": true,
+        "fixed-cidr-v6": "fd00:dead:beef::/48"
+      }
+
+  - path: /etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh
+    permissions: '0755'
+    owner: root:root
+    content: |
+      #!/bin/bash
+      docker exec leasefi_nginx nginx -s reload
+
+  - path: /etc/ssh/sshd_config.d/99-hardened-sshd.conf
     content: |
       PasswordAuthentication no
       PermitRootLogin no
@@ -72,16 +107,7 @@ write_files:
       # ===========================================================================================
       ## Fail2ban install
       apt install -y fail2ban
-      cat > /etc/fail2ban/jail.local <<'JAIL'
-      [sshd]
-      enabled  = true
-      port     = ssh
-      filter   = sshd
-      logpath  = /var/log/auth.log
-      maxretry = 5
-      bantime  = 3600
-      findtime = 600
-      JAIL
+      # jail.local written by write_files above
       systemctl enable fail2ban
       systemctl restart fail2ban
 
@@ -91,17 +117,11 @@ write_files:
       mkdir -p /etc/apt/keyrings
       curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
       chmod a+r /etc/apt/keyrings/docker.gpg
-      echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo $VERSION_CODENAME) stable" > /etc/apt/sources.list.d/docker.list
+      echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" > /etc/apt/sources.list.d/docker.list
       apt update
       apt install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
       systemctl enable docker
-      mkdir -p /etc/docker
-      cat > /etc/docker/daemon.json <<'DAEMON'
-      {
-        "ipv6": true,
-        "fixed-cidr-v6": "fd00:dead:beef::/48"
-      }
-      DAEMON
+      # daemon.json written by write_files above
       systemctl start docker
 
       # ===========================================================================================
@@ -113,6 +133,7 @@ write_files:
       chown -R deploy:deploy /home/deploy/.docker
       chmod 600 /home/deploy/.docker/config.json
       shred -u /root/service_account.json.b64 /root/service_account.json
+      rm -rf /root/.docker
 
       # ===========================================================================================
       ## Certbot install (Python venv — https://certbot.eff.org/instructions?ws=other&os=pip)
@@ -124,18 +145,12 @@ write_files:
       ln -sf /opt/certbot/bin/certbot /usr/local/bin/certbot
 
       # Renewal: twice daily with random delay to avoid LE rate-limit spikes
-      echo "0 0,12 * * * root /opt/certbot/bin/python -c 'import random; import time; time.sleep(random.random() * 3600)' && certbot renew -q" >> /etc/crontab
+      echo "0 0,12 * * * root /opt/certbot/bin/python -c 'import random; import time; time.sleep(random.random() * 3600)' ; certbot renew -q" >> /etc/crontab
 
       # Monthly certbot upgrade (first day of month at 03:00)
       echo "0 3 1 * * root /opt/certbot/bin/pip install --upgrade certbot certbot-dns-cloudflare -q" >> /etc/crontab
 
-      # nginx reload hook — runs after every successful certbot renewal
-      mkdir -p /etc/letsencrypt/renewal-hooks/deploy
-      cat > /etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh <<'HOOK'
-      #!/bin/bash
-      docker exec leasefi_nginx nginx -s reload
-      HOOK
-      chmod +x /etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh
+      # nginx reload hook written by write_files above
 
       echo "Instance init completed."
 

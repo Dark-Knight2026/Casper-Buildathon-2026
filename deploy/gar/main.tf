@@ -1,14 +1,20 @@
+terraform {
+  required_version = ">= 1.0"
+  required_providers {
+    google = {
+      source  = "hashicorp/google"
+      version = "~> 7.0"
+    }
+  }
+  backend "gcs" {}
+  # State locking enabled automatically via GCS object metadata
+  # Do not run concurrent terraform apply operations
+}
+
 # Provider for resource creation
 provider "google" {
   project     = var.GOOGLE_APPLICATION_PROJECT_ID
   region      = var.GOOGLE_APPLICATION_REGION
-}
-
-terraform {
-  required_version = ">= 1.0"
-  backend "gcs" {}
-  # State locking enabled automatically via GCS object metadata
-  # Do not run concurrent terraform apply operations
 }
 
 # Artifact Registry block

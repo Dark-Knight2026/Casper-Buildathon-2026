@@ -47,6 +47,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 OPT_DIR="$(dirname "${SCRIPT_DIR}")"
 export OPT_DIR
 
+# Ensure docker commands use the deploy user's credentials even when
+# this script runs as root (via sudo -E bash). Without this, Docker
+# would fall back to /root/.docker/config.json which may not have
+# valid GAR credentials.
+DEPLOY_HOME="$(getent passwd deploy 2>/dev/null | cut -d: -f6)" || DEPLOY_HOME="/home/deploy"
+export DOCKER_CONFIG="${DEPLOY_HOME}/.docker"
+
 set -a
 . "${OPT_DIR}/deploy/.env"
 set +a
@@ -73,13 +80,13 @@ if [[ ! "${VERSION}" =~ ^[a-zA-Z0-9._-]+$ ]]; then
   exit 1
 fi
 
-if [[ -z "${SERVER_DOMAIN:-}" ]]; then
-  __msg_error "SERVER_DOMAIN is not set in .env"
+if [[ -z "${PROJECT_DOMAIN:-}" ]]; then
+  __msg_error "PROJECT_DOMAIN is not set in .env"
   exit 1
 fi
 # RFC 1123: no underscores in domain labels
-if [[ ! "${SERVER_DOMAIN}" =~ ^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$ ]]; then
-  __msg_error "SERVER_DOMAIN '${SERVER_DOMAIN}' is not a valid FQDN"
+if [[ ! "${PROJECT_DOMAIN}" =~ ^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$ ]]; then
+  __msg_error "PROJECT_DOMAIN '${PROJECT_DOMAIN}' is not a valid FQDN"
   exit 1
 fi
 
@@ -89,10 +96,10 @@ if [[ ! -f "${OPT_DIR}/nginx/https.conf.template" ]]; then
 fi
 
 # Generate nginx https.conf from template.
-# CRITICAL: single-quoted variable list restricts envsubst to SERVER_DOMAIN only —
+# CRITICAL: single-quoted variable list restricts envsubst to PROJECT_DOMAIN only —
 # nginx runtime vars ($host, $uri, $scheme, etc.) are NOT substituted.
-__msg_info "Generating nginx https.conf (SERVER_DOMAIN=${SERVER_DOMAIN})"
-envsubst '${SERVER_DOMAIN}' \
+__msg_info "Generating nginx https.conf (PROJECT_DOMAIN=${PROJECT_DOMAIN})"
+envsubst '${PROJECT_DOMAIN}' \
   < "${OPT_DIR}/nginx/https.conf.template" \
   > "${OPT_DIR}/nginx/https.conf" \
   || { __msg_error "envsubst failed"; exit 1; }
@@ -101,7 +108,7 @@ envsubst '${SERVER_DOMAIN}' \
 
 # Generate self-signed bootstrap cert if no cert exists yet.
 # certbot will replace it after nginx starts up.
-CERT_LIVE="${LETSENCRYPT_DIR:-/etc/letsencrypt}/live/${SERVER_DOMAIN}"
+CERT_LIVE="${LETSENCRYPT_DIR:-/etc/letsencrypt}/live/${PROJECT_DOMAIN}"
 CERT_SENTINEL="${OPT_DIR}/deploy/.self-signed"
 if [[ ! -f "${CERT_LIVE}/fullchain.pem" ]]; then
   __msg_info "No certificate found — generating self-signed bootstrap cert"
@@ -109,7 +116,7 @@ if [[ ! -f "${CERT_LIVE}/fullchain.pem" ]]; then
   openssl req -x509 -nodes -days 30 -newkey rsa:2048 \
     -keyout "${CERT_LIVE}/privkey.pem" \
     -out    "${CERT_LIVE}/fullchain.pem" \
-    -subj   "/CN=${SERVER_DOMAIN}" 2>/dev/null
+    -subj   "/CN=${PROJECT_DOMAIN}" 2>/dev/null
   # chain.pem (intermediate chain) is a copy of fullchain for bootstrap only.
   # certbot replaces it with the correct intermediate-only file on first issuance.
   cp "${CERT_LIVE}/fullchain.pem" "${CERT_LIVE}/chain.pem"
@@ -158,11 +165,14 @@ ${COMPOSE} down --remove-orphans || __msg_info "Nothing to remove"
 # ---- deployment section ----
 ${COMPOSE} up -d
 
-# Health check: poll GET /health for up to 30 seconds
-__msg_info "Polling /health (30s timeout)..."
+# Health check: poll GET /health for up to 60 seconds
+# (migrations can take longer than 30s on first deploy)
+__msg_info "Polling /health (60s timeout)..."
 HEALTH_OK=0
-for i in $(seq 1 30); do
-  HTTP_STATUS=$(curl -sLk -o /dev/null -w "%{http_code}" https://localhost/health 2>/dev/null || true)
+# Always use -k: health check connects via IP (127.0.0.1), so the SSL cert —
+# issued for the domain — never matches the IP regardless of cert type.
+for i in $(seq 1 60); do
+  HTTP_STATUS=$(curl -sLk -o /dev/null -w "%{http_code}" https://127.0.0.1/health 2>/dev/null || true)
   if [[ "${HTTP_STATUS}" == "200" ]]; then
     HEALTH_OK=1
     break
@@ -171,7 +181,7 @@ for i in $(seq 1 30); do
 done
 
 if [[ "${HEALTH_OK}" == "0" ]]; then
-  __msg_error "Health check failed after 30s"
+  __msg_error "Health check failed after 60s"
 
   ${COMPOSE} down --remove-orphans || true
 
@@ -192,6 +202,10 @@ fi
 
 __msg_success "Health check passed"
 
+# Rotate rollback state: remove after successful deploy so a future failure
+# cannot roll back to a version older than the previous one (N-2 problem)
+rm -f "${OPT_DIR}/deploy/.env.rollback"
+
 # ---- certbot section ----
 # Run only when nginx started with the self-signed bootstrap cert.
 # Moves the bootstrap dir aside (certbot refuses to overwrite non-symlink files),
@@ -202,7 +216,7 @@ if [[ -f "${CERT_SENTINEL}" ]]; then
   elif [[ -z "${CERTBOT_EMAIL:-}" ]]; then
     __msg_error "CERTBOT_EMAIL is not set — skipping certbot (re-deploy after setting it in .env)"
   else
-    __msg_info "Obtaining Let's Encrypt certificate for ${SERVER_DOMAIN}..."
+    __msg_info "Obtaining Let's Encrypt certificate for ${PROJECT_DOMAIN}..."
     CF_CREDS=$(mktemp)
     printf 'dns_cloudflare_api_token = %s\n' "${CF_DNS_API_TOKEN}" > "${CF_CREDS}"
     chmod 600 "${CF_CREDS}"
@@ -217,7 +231,7 @@ if [[ -f "${CERT_SENTINEL}" ]]; then
         --non-interactive \
         --agree-tos \
         --email "${CERTBOT_EMAIL}" \
-        -d "${SERVER_DOMAIN}"; then
+        -d "${PROJECT_DOMAIN}"; then
       shred -u "${CF_CREDS}"
       rm -rf "${CERT_LIVE}.bootstrap"
       rm -f "${CERT_SENTINEL}"

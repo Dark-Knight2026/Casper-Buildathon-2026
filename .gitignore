@@ -2,6 +2,13 @@
 target/
 **/*.rs.bk
 
+# Build artifacts
+*.o
+*.a
+*.dylib
+*.dll
+*.exe
+
 # Secrets
 .secrets/
 .env
@@ -18,6 +25,9 @@ target/
 *.njsproj
 *.sln
 *.sw?
+*.swp
+*.swo
+*~
 
 # OS
 .DS_Store
@@ -36,18 +46,13 @@ CLAUDE.md
 # Files like secret/-iron.sh, secret/-api_keys.sh are gitignored via -* pattern
 # secret/readme.md (documentation) is tracked - no hyphen prefix
 -*
+
+# Catch-all for dot-files/dirs not explicitly allowed above (subsumes .DS_Store, .idea/, .vscode/ etc.)
 .*
 !.github/
 !.secret/
 
-# Build artifacts
-*.o
-*.a
-*.dylib
-*.dll
-*.exe
-
-# Ignore Terraform state files
+# Terraform
 **/.terraform/
 **/.terraform.lock.hcl
 **/*.tfstate
@@ -59,11 +64,3 @@ backups/
 *.db.backup
 *.bak
 *.orig
-
-# IDEs
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-.DS_Store

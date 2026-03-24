@@ -113,7 +113,7 @@ clean: ## Clean build artifacts
 
 ## Deploys using tools from the container
 deploy:
-	@echo "[START] Redirect to <./deployment/Makefile.deploy>"
+	@echo "[START] Redirect to <./deploy/Makefile.deploy>"
 	@$(MAKE) --no-print-directory -f ./deploy/Makefile.deploy deploy
 
 # Prevent "No rule to make target" error for arguments

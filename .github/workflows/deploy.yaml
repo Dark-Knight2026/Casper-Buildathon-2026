@@ -50,8 +50,11 @@ jobs:
     - name: Create secret.sh file
       env:
         REDIS_URL: ${{ secrets.REDIS_URL }}
+        REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
         CORS_ORIGIN: ${{ secrets.CORS_ORIGIN }}
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        CERTBOT_EMAIL: ${{ secrets.CERTBOT_EMAIL }}
+        CF_DNS_API_TOKEN: ${{ secrets.CF_DNS_API_TOKEN }}
         GOOGLE_APPLICATION_PROJECT_ID: ${{ secrets.GOOGLE_APPLICATION_PROJECT_ID }}
         GOOGLE_APPLICATION_REGION: ${{ secrets.GOOGLE_APPLICATION_REGION }}
         GOOGLE_ENCRYPTION_KEY: ${{ secrets.GOOGLE_ENCRYPTION_KEY }}
@@ -84,45 +87,46 @@ jobs:
         START_BLOCK_CONTRACT_STAKING: ${{ vars.START_BLOCK_CONTRACT_STAKING }}
         
       run: |
-        install -m 600 /dev/stdin .secret/-secret.sh <<EOF
-        GOOGLE_APPLICATION_CREDENTIALS=./.secret/gcp_creds.json
-        GOOGLE_APPLICATION_PROJECT_ID=${GOOGLE_APPLICATION_PROJECT_ID}
-        GOOGLE_APPLICATION_REGION=${GOOGLE_APPLICATION_REGION}
-        GOOGLE_ENCRYPTION_KEY=${GOOGLE_ENCRYPTION_KEY}
-        SSH_PRIVATE_KEY_PATH=./.secret/ssh_key
-        SSH_PUBLIC_KEY_PATH=./.secret/ssh_key.pub
-        ORIGIN_CERT_PATH=./.secret/origin.crt
-        ORIGIN_KEY_PATH=./.secret/origin.key
-        HOST_SERVER_NAME=${HOST_SERVER_NAME}
-        HETZNER_CLOUD_TOKEN=${HETZNER_CLOUD_TOKEN}
-        SUPABASE_JWT_SECRET=${SUPABASE_JWT_SECRET}
-        DEPLOYMENT_MODE=${DEPLOYMENT_MODE}
-        RUN_MIGRATIONS=${RUN_MIGRATIONS}
-        PROJECT_NAME=${PROJECT_NAME}
-        PROJECT_DOMAIN=${PROJECT_DOMAIN}
-        DATABASE_URL=${DATABASE_URL}
-        CORS_ORIGIN=${CORS_ORIGIN}
-        CSPR_CLOUD_API_TOKEN=${CSPR_CLOUD_API_TOKEN}
-        CSPR_CLOUD_REST_URL=${CSPR_CLOUD_REST_URL}
-        CSPR_CLOUD_WSS_URL=${CSPR_CLOUD_WSS_URL}
-        CASPER_NODE_RPC_URL=${CASPER_NODE_RPC_URL}
-        REDIS_URL=${REDIS_URL}
+        install -m 600 /dev/stdin .secret/-secret.sh <<-EOF
+        GOOGLE_APPLICATION_CREDENTIALS='./.secret/gcp_creds.json'
+        GOOGLE_APPLICATION_PROJECT_ID='${GOOGLE_APPLICATION_PROJECT_ID}'
+        GOOGLE_APPLICATION_REGION='${GOOGLE_APPLICATION_REGION}'
+        GOOGLE_ENCRYPTION_KEY='${GOOGLE_ENCRYPTION_KEY}'
+        SSH_PRIVATE_KEY_PATH='./.secret/ssh_key'
+        SSH_PUBLIC_KEY_PATH='./.secret/ssh_key.pub'
+        HOST_SERVER_NAME='${HOST_SERVER_NAME}'
+        HETZNER_CLOUD_TOKEN='${HETZNER_CLOUD_TOKEN}'
+        SUPABASE_JWT_SECRET='${SUPABASE_JWT_SECRET}'
+        DEPLOYMENT_MODE='${DEPLOYMENT_MODE}'
+        RUN_MIGRATIONS='${RUN_MIGRATIONS}'
+        PROJECT_NAME='${PROJECT_NAME}'
+        PROJECT_DOMAIN='${PROJECT_DOMAIN}'
+        DATABASE_URL='${DATABASE_URL}'
+        CORS_ORIGIN='${CORS_ORIGIN}'
+        CSPR_CLOUD_API_TOKEN='${CSPR_CLOUD_API_TOKEN}'
+        CSPR_CLOUD_REST_URL='${CSPR_CLOUD_REST_URL}'
+        CSPR_CLOUD_WSS_URL='${CSPR_CLOUD_WSS_URL}'
+        CASPER_NODE_RPC_URL='${CASPER_NODE_RPC_URL}'
+        REDIS_URL='${REDIS_URL}'
+        REDIS_PASSWORD='${REDIS_PASSWORD}'
+        CERTBOT_EMAIL='${CERTBOT_EMAIL}'
+        CF_DNS_API_TOKEN='${CF_DNS_API_TOKEN}'
+        
+        CONTRACT_USDC='${CONTRACT_USDC}'
+        CONTRACT_USDT='${CONTRACT_USDT}'
+        CONTRACT_BIG='${CONTRACT_BIG}'
+        CONTRACT_TREASURY='${CONTRACT_TREASURY}'
+        CONTRACT_ICO='${CONTRACT_ICO}'
+        CONTRACT_VESTING='${CONTRACT_VESTING}'
+        CONTRACT_STAKING='${CONTRACT_STAKING}'
 
-        CONTRACT_USDC=${CONTRACT_USDC}
-        CONTRACT_USDT=${CONTRACT_USDT}
-        CONTRACT_BIG=${CONTRACT_BIG}
-        CONTRACT_TREASURY=${CONTRACT_TREASURY}
-        CONTRACT_ICO=${CONTRACT_ICO}
-        CONTRACT_VESTING=${CONTRACT_VESTING}
-        CONTRACT_STAKING=${CONTRACT_STAKING}
-
-        START_BLOCK_CONTRACT_USDC=${START_BLOCK_CONTRACT_USDC}
-        START_BLOCK_CONTRACT_USDT=${START_BLOCK_CONTRACT_USDT}
-        START_BLOCK_CONTRACT_BIG=${START_BLOCK_CONTRACT_BIG}
-        START_BLOCK_CONTRACT_TREASURY=${START_BLOCK_CONTRACT_TREASURY}
-        START_BLOCK_CONTRACT_ICO=${START_BLOCK_CONTRACT_ICO}
-        START_BLOCK_CONTRACT_VESTING=${START_BLOCK_CONTRACT_VESTING}
-        START_BLOCK_CONTRACT_STAKING=${START_BLOCK_CONTRACT_STAKING}
+        START_BLOCK_CONTRACT_USDC='${START_BLOCK_CONTRACT_USDC}'
+        START_BLOCK_CONTRACT_USDT='${START_BLOCK_CONTRACT_USDT}'
+        START_BLOCK_CONTRACT_BIG='${START_BLOCK_CONTRACT_BIG}'
+        START_BLOCK_CONTRACT_TREASURY='${START_BLOCK_CONTRACT_TREASURY}'
+        START_BLOCK_CONTRACT_ICO='${START_BLOCK_CONTRACT_ICO}'
+        START_BLOCK_CONTRACT_VESTING='${START_BLOCK_CONTRACT_VESTING}'
+        START_BLOCK_CONTRACT_STAKING='${START_BLOCK_CONTRACT_STAKING}'
         EOF
 
     - name: 'Build the image, push and deploy' 
@@ -132,20 +136,17 @@ jobs:
       if: always()
       run: |
         if [ -f .secret/-secret.sh ]; then
-          shred -vfz -n 3 .secret/-secret.sh
+          shred -fz -n 3 .secret/-secret.sh
         fi
         if [ -f "./.secret/gcp_creds.json" ]; then
-          shred -vfz -n 3 "./.secret/gcp_creds.json"
+          shred -fz -n 3 "./.secret/gcp_creds.json"
         fi
         if [ -f "./.secret/ssh_key" ]; then
-          shred -vfz -n 3 "./.secret/ssh_key"
+          shred -fz -n 3 "./.secret/ssh_key"
         fi
         if [ -f "./.secret/ssh_key.pub" ]; then
-          shred -vfz -n 3 "./.secret/ssh_key.pub"
+          shred -fz -n 3 "./.secret/ssh_key.pub"
         fi
-        if [ -f "./.secret/origin.key" ]; then
-          shred -vfz -n 3 "./.secret/origin.key"
-        fi
-        if [ -f "./.secret/origin.crt" ]; then
-          rm -f "./.secret/origin.crt"
-        fi
+        for f in .secret/env.*.tfvars; do
+          [ -f "$f" ] && shred -fz -n 3 "$f"
+        done

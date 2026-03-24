@@ -1,5 +1,3 @@
-version: "3.9"
-
 x-logging: &default-logging
   driver: "json-file"
   options:
@@ -10,6 +8,7 @@ services:
   nginx:
     image: nginx:alpine
     container_name: leasefi_nginx
+    restart: unless-stopped
     ports:
       - "80:80"
       - "443:443"
@@ -18,18 +17,26 @@ services:
       - ${OPT_DIR}/nginx/https.conf:/etc/nginx/conf.d/https.conf:ro
       - /etc/letsencrypt:/etc/letsencrypt:ro
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     networks:
       - leasefi_net
     logging: *default-logging
 
   backend:
-    image: ${TAG}_back:${VERSION}
+    image: ${BACK_IMAGE:-${TAG}_back:${VERSION}}
     container_name: leasefi_backend
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
     env_file:
       - .env
     environment:
+      RUST_LOG: ${RUST_LOG:-info}
       RUN_MIGRATIONS: ${RUN_MIGRATIONS:?RUN_MIGRATIONS is required}
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
       SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET:?SUPABASE_JWT_SECRET is required}
@@ -41,12 +48,13 @@ services:
     logging: *default-logging
 
   indexer:
-    image: ${TAG}_indexer:${VERSION}
+    image: ${INDEXER_IMAGE:-${TAG}_indexer:${VERSION}}
     container_name: leasefi_indexer
     restart: unless-stopped
     env_file:
       - .env
     environment:
+      RUST_LOG: ${RUST_LOG:-info}
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
       CSPR_CLOUD_API_TOKEN: ${CSPR_CLOUD_API_TOKEN:?CSPR_CLOUD_API_TOKEN is required}
       CSPR_CLOUD_REST_URL: ${CSPR_CLOUD_REST_URL:?CSPR_CLOUD_REST_URL is required}
@@ -77,6 +85,7 @@ services:
     image: redis:7-alpine
     container_name: leasefi_redis
     restart: unless-stopped
+    command: redis-server --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
     volumes:
       - redis_data:/data
     networks:
@@ -94,4 +103,4 @@ networks:
       driver: default
       config:
         - subnet: 172.20.0.0/16
-        - subnet: fd00:dead:beef:1::/64
+        - subnet: fd00:c0ff:ee00::/64

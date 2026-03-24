@@ -96,6 +96,20 @@ source .secret/-secret.sh
 | `HOST_SERVER_IMAGE` | `ubuntu-24.04` | Server OS image |
 | `HOST_SERVER_TYPE` | `cx23` | Server hardware type |
 
+### Cloudflare Origin Certificate (not active)
+
+The deployment currently uses **Let's Encrypt via certbot** (DNS-01 challenge through Cloudflare) to obtain TLS certificates. An older approach used a **Cloudflare Origin CA certificate** instead. The variables below are not wired into the CI or `redeploy.sh` at this time, but are documented here in case you want to switch back.
+
+| Variable | Description |
+|----------|-------------|
+| `ORIGIN_CERT_PATH` | Path to the Cloudflare Origin CA certificate (`.pem` / `.crt`) |
+| `ORIGIN_KEY_PATH` | Path to the matching private key |
+
+To issue an Origin CA certificate: Cloudflare Dashboard -> **SSL/TLS** -> **Origin Server** -> **Create Certificate**.
+Save the files to `.secret/` (they will be git-ignored by the `-*` rule) and set the paths above.
+
+> If you re-enable this flow, add `ORIGIN_CERT_PATH` and `ORIGIN_KEY_PATH` to the CI `env:` block in `deploy.yaml`, pass them into the heredoc, and mount the files in `redeploy.sh` before nginx starts.
+
 ---
 
 ## Retrieving Keys
@@ -104,7 +118,7 @@ source .secret/-secret.sh
 
 1. Open: <https://console.cloud.google.com/iam-admin/serviceaccounts>
 2. Choose or create a Service Account with roles: `Artifact Registry Administrator`, `Storage Admin`
-3. Go to **Keys** → **Add Key** → **Create new key** → **JSON**
+3. Go to **Keys** -> **Add Key** -> **Create new key** -> **JSON**
 4. Save as `.secret/-service_account.json`
 
 ### `GOOGLE_ENCRYPTION_KEY`
@@ -116,7 +130,7 @@ openssl rand -base64 32
 ### `HETZNER_CLOUD_TOKEN`
 
 1. Open Hetzner Cloud Console
-2. Go to **Security** → **API Tokens** → **Generate API Token**
+2. Go to **Security** -> **API Tokens** -> **Generate API Token**
 3. Select **Read & Write** access
 
 ---

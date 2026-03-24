@@ -25,9 +25,9 @@ deploy/
                   │
                   ▼
          Cloudflare (DNS + SSL)
-                  │ HTTP (Flexible mode)
+                  │ HTTPS (Full Strict)
                   ▼
-        Hetzner Server :80
+        Hetzner Server :443
                   │
                   ▼
          nginx (leasefi_nginx)
@@ -68,7 +68,7 @@ deploy/
    - Authenticates with GCP, creates GCS bucket for Terraform state (if needed)
    - Creates GAR repository via Terraform (`gar/`)
    - Pushes both images to GAR
-   - Runs `deploy_dev` → Terraform `hetzner_dev/`:
+   - Runs `deploy_dev` -> Terraform `hetzner_dev/`:
      - Creates Hetzner server or reuses existing
      - Copies `nginx.conf`, `redeploy.sh`, `docker-compose.dev.yml`, `.env` to server via SSH
      - Runs `redeploy.sh` on server
@@ -113,7 +113,8 @@ deploy/
 |----------|-------------|
 | `DATABASE_URL` | PostgreSQL connection string (Supabase) |
 | `SUPABASE_JWT_SECRET` | Supabase JWT secret |
-| `REDIS_URL` | Redis connection string (e.g. `redis://redis:6379`) |
+| `REDIS_URL` | Redis connection string — include password if set (e.g. `redis://:password@redis:6379` for local, or an external URL) |
+| `REDIS_PASSWORD` | Redis authentication password — used by the local redis container's `--requirepass`; must match the password in `REDIS_URL` |
 | `CORS_ORIGIN` | Allowed CORS origin |
 | `RUN_MIGRATIONS` | Whether to run DB migrations on startup (`true` / `false`) |
 | `CSPR_CLOUD_API_TOKEN` | CSPR.cloud API token |
@@ -140,7 +141,7 @@ deploy/
 | Target | Description |
 |--------|-------------|
 | `deploy` | Full deployment from host machine (wraps everything in a container) |
-| `deployment_orchestration` | Runs inside deploy container; calls build → gc_setup → artifact_repo_create → push → deploy_dev |
+| `deployment_orchestration` | Runs inside deploy container; calls build -> gc_setup -> artifact_repo_create -> push -> deploy_dev |
 | `build_image` | Builds `backend` and `indexer` Docker images |
 | `push_image` | Pushes both images to GAR |
 | `gc_setup` | Authenticates gcloud, creates GCS bucket, configures Docker for GAR |
@@ -245,13 +246,13 @@ Cloudflare is set to **Full (Strict)** mode:
 - Client ↔ Cloudflare: HTTPS (TLS)
 - Cloudflare ↔ Origin server: HTTPS (TLS, port 443) — Let's Encrypt certificate
 
-nginx redirects port 80 → 443. The HTTPS server block is generated from `nginx/https.conf.template` via `envsubst` on every deploy.
+nginx redirects port 80 -> 443. The HTTPS server block is generated from `nginx/https.conf.template` via `envsubst` on every deploy.
 
 ### Certificate lifecycle
 
 | Step | What happens |
 |------|-------------|
-| First `terraform apply` | `redeploy.sh` generates a self-signed cert → nginx starts → certbot obtains a real Let's Encrypt cert via Cloudflare DNS-01 → nginx reloads |
+| First `terraform apply` | `redeploy.sh` generates a self-signed cert -> nginx starts -> certbot obtains a real Let's Encrypt cert via Cloudflare DNS-01 -> nginx reloads |
 | Every 60 days (auto) | System cron (`0 0,12 * * *`) runs `certbot renew`; deploy hook reloads nginx on success |
 | First of every month (auto) | Cron upgrades certbot itself via pip |
 
@@ -259,7 +260,7 @@ nginx redirects port 80 → 443. The HTTPS server block is generated from `nginx
 
 | Variable | Description |
 |----------|-------------|
-| `SERVER_DOMAIN` | The domain nginx serves (e.g. `api.leasefi.com`) |
+| `PROJECT_DOMAIN` | The domain nginx serves (e.g. `api.leasefi.com`) |
 | `CF_DNS_API_TOKEN` | Cloudflare API token with `Zone:DNS:Edit` permission — used by certbot for DNS-01 challenge |
 | `CERTBOT_EMAIL` | Email for Let's Encrypt account registration and expiry notices |
 

@@ -62,7 +62,11 @@ resource "terraform_data" "redeploy_sh" {
   depends_on = [hcloud_server.host_server]
 
   triggers_replace = {
-    always = timestamp()
+    redeploy_sh    = filesha256("${path.module}/../redeploy.sh")
+    compose        = filesha256("${path.module}/../../docker-compose.dev.yml")
+    nginx_conf     = filesha256("${path.module}/../nginx/nginx.conf")
+    https_template = filesha256("${path.module}/../nginx/https.conf.template")
+    env            = sha256(join("\n", [for k, v in var.PROJECT_MAP_VARIABLES : "${k}='${replace(v, "'", "'\\''")}'"]))
   }
 
   # Connect to host server
@@ -71,7 +75,7 @@ resource "terraform_data" "redeploy_sh" {
     user        = "deploy"
     private_key = data.local_sensitive_file.ssh_private_key.content
     host        = hcloud_primary_ip.primary_ip.ip_address
-    timeout     = "3m"
+    timeout     = "10m"
   }
 
   # Cloud-init wait
@@ -122,27 +126,23 @@ resource "terraform_data" "redeploy_sh" {
     content = join("\n", concat(
       [
         for k, v in var.PROJECT_MAP_VARIABLES :
-        "${k}=${v}"
+        "${k}='${replace(v, "'", "'\\''")}'"
       ]
     ))
 
     destination = "/opt/${var.PROJECT_NAME}/deploy/.env"
   }
 
-  # redeploy.sh start
-  provisioner "file" {
-    source      = var.GOOGLE_APPLICATION_CREDENTIALS
-    destination = "/home/deploy/.sa.json"
+  provisioner "remote-exec" {
+    inline = [
+      "chmod 600 /opt/${var.PROJECT_NAME}/deploy/.env",
+    ]
   }
 
   provisioner "remote-exec" {
     inline = [
       "set -e",
-      "bash /opt/${var.PROJECT_NAME}/deploy/redeploy.sh",
+      "sudo -E bash /opt/${var.PROJECT_NAME}/deploy/redeploy.sh",
     ]
-  }
-
-  provisioner "remote-exec" {
-    inline = ["shred -u /home/deploy/.sa.json"]
   }
 }

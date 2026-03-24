@@ -1,19 +1,27 @@
 server {
   listen 443 ssl;
-  server_name ${SERVER_DOMAIN};
+  server_name ${PROJECT_DOMAIN};
 
-  ssl_certificate     /etc/letsencrypt/live/${SERVER_DOMAIN}/fullchain.pem;
-  ssl_certificate_key /etc/letsencrypt/live/${SERVER_DOMAIN}/privkey.pem;
-  ssl_trusted_certificate /etc/letsencrypt/live/${SERVER_DOMAIN}/chain.pem;
+  ssl_certificate     /etc/letsencrypt/live/${PROJECT_DOMAIN}/fullchain.pem;
+  ssl_certificate_key /etc/letsencrypt/live/${PROJECT_DOMAIN}/privkey.pem;
+  ssl_trusted_certificate /etc/letsencrypt/live/${PROJECT_DOMAIN}/chain.pem;
   ssl_protocols       TLSv1.2 TLSv1.3;
   ssl_ciphers         HIGH:!aNULL:!MD5;
+  ssl_session_cache   shared:SSL:10m;
+  ssl_session_timeout 10m;
+  add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+  add_header X-Content-Type-Options    nosniff                               always;
+  add_header X-Frame-Options           DENY                                  always;
 
   location / {
     set $backend "backend:8080";
     proxy_pass http://$backend;
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
 
     proxy_set_header Host $host;
-    # Cloudflare IPv4 ranges — https://www.cloudflare.com/ips/
+    # Cloudflare IP ranges — last verified 2026-03-25 — update from https://www.cloudflare.com/ips/
+    # Cloudflare IPv4 ranges
     set_real_ip_from 103.21.244.0/22;
     set_real_ip_from 103.22.200.0/22;
     set_real_ip_from 103.31.4.0/22;

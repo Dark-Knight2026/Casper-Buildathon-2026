@@ -24,7 +24,14 @@ ifneq ("$(wildcard $(LOCAL_SECRETS_FILE))","")
 include $(LOCAL_SECRETS_FILE)
 endif
 
-strip_quotes = $(patsubst %",%,$(patsubst "%,%,$(1)))
+# Strip outer single or double quotes written by secret.template.sh / CI heredoc.
+strip_quotes = $(patsubst %',%,$(patsubst '%,%,$(patsubst %",%,$(patsubst "%,%,$(1)))))
+
+# Escape a value for an HCL double-quoted string literal.
+# Only backslash needs escaping: values arrive without inner quotes by construction
+# (strip_quotes already removed the outer delimiter, and Make-include would break
+# before this point if the inner content contained an unescaped quote).
+hcl_escape = $(subst \,\\,$(1))
 
 ## --------------------------------------------------------------------------------------
 ## Required Parameters
@@ -105,12 +112,17 @@ BUCKET_NAME := bucket-$(REPO_NAME)
 ARTIFACT_REPO_NAME := $(REPO_NAME)-$(DEPLOYMENT_MODE)
 # VERSION := $(shell git rev-parse --short HEAD) # git hash
 VERSION ?= $(shell printf "%s" "$$(date +%Y%m%d-%H%M%S)")# date
-export VERSION 
+export VERSION
 TAG := $(GOOGLE_APPLICATION_REGION)-docker.pkg.dev/$(GOOGLE_APPLICATION_PROJECT_ID)/$(ARTIFACT_REPO_NAME)/$(PROJECT_NAME)
 
 # ------------------------------------------------------------
 # Automatically export TF_VAR_* from existing Make variables
 # ------------------------------------------------------------
+# CERTBOT_EMAIL and CF_DNS_API_TOKEN are required here so they land in the
+# server's .env file. redeploy.sh reads them from .env and uses them only
+# on the first deploy (certbot DNS-01 challenge). On re-deploys where a
+# Let's Encrypt cert already exists the certbot block is skipped, but the
+# values must still be present in .env for future cert renewals.
 
 PROJECT_ENV_VARS := \
 	ARTIFACT_REPO_NAME \
@@ -118,12 +130,15 @@ PROJECT_ENV_VARS := \
 	DEPLOYMENT_MODE \
 	PROJECT_NAME \
 	PROJECT_DOMAIN \
+	CERTBOT_EMAIL \
+	CF_DNS_API_TOKEN \
 	TAG \
 	VERSION \
 	DATABASE_URL \
 	CORS_ORIGIN \
 	RUN_MIGRATIONS \
 	REDIS_URL \
+	REDIS_PASSWORD \
 	SUPABASE_JWT_SECRET \
 	CSPR_CLOUD_API_TOKEN \
 	CSPR_CLOUD_REST_URL \
@@ -176,7 +191,7 @@ deploy:
 		-v /var/run/docker.sock:/var/run/docker.sock \
 		-v $(CURDIR):/app \
 		-e HOME=/tmp \
-		--user $(shell id -u):$(shell stat -c '%g' /var/run/docker.sock) \
+		--user $(shell id -u):$(shell stat -c '%g' /var/run/docker.sock 2>/dev/null || stat -f '%g' /var/run/docker.sock) \
 		-e ACTION=deployment_orchestration \
 		deploy-$(PROJECT_NAME)
 
@@ -265,7 +280,7 @@ init_tfvars:
 generate_tfvars:
 	@echo "📝 Generating $(TFVARS_FILENAME)"
 	$(file >>$(TFVARS_FILENAME),PROJECT_MAP_VARIABLES = {)
-	$(foreach v,$(PROJECT_ENV_VARS),$(file >>$(TFVARS_FILENAME),  $(v) = "$(call strip_quotes,$($(v)))"))
+	$(foreach v,$(PROJECT_ENV_VARS),$(file >>$(TFVARS_FILENAME),  $(v) = "$(call hcl_escape,$(call strip_quotes,$($(v))))"))
 	$(file >>$(TFVARS_FILENAME),})
 
 deploy_dev: init_tfvars generate_tfvars

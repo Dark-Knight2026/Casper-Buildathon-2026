@@ -15,12 +15,12 @@ setup() {
 DEPLOYMENT_MODE=dev
 TAG=registry.example.com/myapp
 VERSION=1.0.0
-SERVER_DOMAIN=test.example.com
+PROJECT_DOMAIN=test.example.com
 EOF
 
   # https.conf.template — required by pre-flight check; must be non-empty so envsubst
   # produces a non-empty https.conf
-  echo 'server { server_name ${SERVER_DOMAIN}; }' > "$BASE/nginx/https.conf.template"
+  echo 'server { server_name ${PROJECT_DOMAIN}; }' > "$BASE/nginx/https.conf.template"
 
   # Redirect LETSENCRYPT_DIR to a writable temp path so the cert bootstrap does not
   # require root. Pre-populate the cert files so the self-signed path is skipped
@@ -33,11 +33,15 @@ EOF
   echo "FAKE_KEY"   > "$LETSENCRYPT_DIR/live/test.example.com/privkey.pem"
   echo "FAKE_CHAIN" > "$LETSENCRYPT_DIR/live/test.example.com/chain.pem"
 
-  # Default docker stub: succeeds for every sub-command, logs calls + RUST_LOG
+  # Default docker stub: succeeds for every sub-command, logs calls.
+  # Captures RUST_LOG on compose up so tests can assert the value forwarded
+  # to the container matches the DEPLOYMENT_MODE — not just the host shell value.
   cat > "$BASE/bin/docker" <<'STUB'
 #!/bin/bash
 echo "docker $*" >> "$BASE/docker.log"
-echo "RUST_LOG=$RUST_LOG" >> "$BASE/env.log"
+if [[ "$*" == *"compose"*"up"* ]]; then
+  echo "RUST_LOG=${RUST_LOG}" >> "$BASE/compose_up_env.log"
+fi
 exit 0
 STUB
   chmod +x "$BASE/bin/docker"
@@ -66,6 +70,62 @@ run_deploy() {
 }
 
 # -------------------------------------------------
+@test "exits with error for invalid VERSION format" {
+  cat > "$BASE/deploy/.env" <<EOF
+DEPLOYMENT_MODE=dev
+TAG=registry.example.com/myapp
+VERSION=1.0@invalid
+PROJECT_DOMAIN=test.example.com
+EOF
+
+  run run_deploy
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"Invalid VERSION format"* ]]
+}
+
+# -------------------------------------------------
+@test "exits with error when PROJECT_DOMAIN is missing" {
+  cat > "$BASE/deploy/.env" <<EOF
+DEPLOYMENT_MODE=dev
+TAG=registry.example.com/myapp
+VERSION=1.0.0
+EOF
+
+  run run_deploy
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"PROJECT_DOMAIN is not set"* ]]
+}
+
+# -------------------------------------------------
+@test "exits with error for invalid PROJECT_DOMAIN (underscore)" {
+  cat > "$BASE/deploy/.env" <<EOF
+DEPLOYMENT_MODE=dev
+TAG=registry.example.com/myapp
+VERSION=1.0.0
+PROJECT_DOMAIN=invalid_domain.example.com
+EOF
+
+  run run_deploy
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"is not a valid FQDN"* ]]
+}
+
+# -------------------------------------------------
+@test "removes .env.rollback after successful deploy" {
+  echo "BACK_IMAGE=old INDEXER_IMAGE=old" > "$BASE/deploy/.env.rollback"
+
+  run -0 run_deploy
+  [ ! -f "$BASE/deploy/.env.rollback" ]
+}
+
+# -------------------------------------------------
+@test "generates non-empty https.conf after successful deploy" {
+  run -0 run_deploy
+  [ -f "$BASE/nginx/https.conf" ]
+  [ -s "$BASE/nginx/https.conf" ]
+}
+
+# -------------------------------------------------
 @test "exits with error for invalid DEPLOYMENT_MODE" {
   cat > "$BASE/deploy/.env" <<EOF
 DEPLOYMENT_MODE=invalid
@@ -81,7 +141,7 @@ EOF
 # -------------------------------------------------
 @test "sets RUST_LOG to info,api=debug for dev mode" {
   run -0 run_deploy
-  grep -q "RUST_LOG=info,api=debug" "$BASE/env.log"
+  grep -q "RUST_LOG=info,api=debug" "$BASE/compose_up_env.log"
 }
 
 # -------------------------------------------------
@@ -90,10 +150,11 @@ EOF
 DEPLOYMENT_MODE=staging
 TAG=registry.example.com/myapp
 VERSION=1.0.0
+PROJECT_DOMAIN=test.example.com
 EOF
 
   run -0 run_deploy
-  grep -q "RUST_LOG=info,api=debug" "$BASE/env.log"
+  grep -q "RUST_LOG=info,api=debug" "$BASE/compose_up_env.log"
 }
 
 # -------------------------------------------------
@@ -102,10 +163,11 @@ EOF
 DEPLOYMENT_MODE=production
 TAG=registry.example.com/myapp
 VERSION=1.0.0
+PROJECT_DOMAIN=test.example.com
 EOF
 
   run -0 run_deploy
-  grep -q "RUST_LOG=error,api=error" "$BASE/env.log"
+  grep -q "RUST_LOG=error,api=error" "$BASE/compose_up_env.log"
 }
 
 # -------------------------------------------------
@@ -183,7 +245,9 @@ STUB
 
 # -------------------------------------------------
 @test "rolls back to previous images when health check fails" {
-  # docker inspect returns a running image for each service so .env.rollback is written
+  # docker inspect returns a running image for each service so .env.rollback is written.
+  # Each compose up invocation logs its BACK_IMAGE/INDEXER_IMAGE env vars to compose_up_env.log
+  # so the rollback assertion can verify the correct images were used.
   cat > "$BASE/bin/docker" <<'STUB'
 #!/bin/bash
 echo "docker $*" >> "$BASE/docker.log"
@@ -191,11 +255,14 @@ if [[ "$1" == "inspect" ]]; then
   if [[ "$*" == *"leasefi_backend"* ]];  then echo "registry.example.com/myapp_back:0.9.0";    exit 0; fi
   if [[ "$*" == *"leasefi_indexer"* ]];  then echo "registry.example.com/myapp_indexer:0.9.0"; exit 0; fi
 fi
+if [[ "$*" == *"compose"*"up"* ]]; then
+  echo "BACK_IMAGE=${BACK_IMAGE} INDEXER_IMAGE=${INDEXER_IMAGE}" >> "$BASE/compose_up_env.log"
+fi
 exit 0
 STUB
   chmod +x "$BASE/bin/docker"
 
-  # curl always returns non-200 → health-check loop exhausts all 30 iterations
+  # curl always returns non-200 -> health-check loop exhausts all 30 iterations
   cat > "$BASE/bin/curl" <<'STUB'
 #!/bin/bash
 echo "503"
@@ -208,12 +275,19 @@ STUB
   # First compose up = deployment; second compose up = rollback
   UP_COUNT=$(grep -c "compose.*up" "$BASE/docker.log")
   [ "$UP_COUNT" -ge 2 ]
+
+  # The rollback compose up (second entry) must have received the captured previous image tags,
+  # not the new images from .env. This assertion would have caught the CORRECTNESS bug where
+  # BACK_IMAGE/INDEXER_IMAGE were passed but not consumed by the compose file.
+  ROLLBACK_ENV=$(sed -n '2p' "$BASE/compose_up_env.log")
+  [[ "$ROLLBACK_ENV" == *"BACK_IMAGE=registry.example.com/myapp_back:0.9.0"* ]]
+  [[ "$ROLLBACK_ENV" == *"INDEXER_IMAGE=registry.example.com/myapp_indexer:0.9.0"* ]]
 }
 
 # -------------------------------------------------
 @test "reports no rollback state when no previous containers exist" {
-  # docker inspect exits 1 (containers not running) → PREV_*_IMAGE stays empty →
-  # .env.rollback is never written → rollback branch hits "No rollback state found"
+  # docker inspect exits 1 (containers not running) -> PREV_*_IMAGE stays empty ->
+  # .env.rollback is never written -> rollback branch hits "No rollback state found"
   cat > "$BASE/bin/docker" <<'STUB'
 #!/bin/bash
 echo "docker $*" >> "$BASE/docker.log"
@@ -231,4 +305,59 @@ STUB
   run run_deploy
   [ "$status" -ne 0 ]
   [[ "$output" == *"No rollback state found"* ]]
+}
+
+# -------------------------------------------------
+@test "generates self-signed cert and writes sentinel when no cert exists" {
+  # Remove pre-populated certs so the bootstrap path is taken
+  rm -rf "$LETSENCRYPT_DIR/live/test.example.com"
+
+  # openssl stub: creates the expected output files
+  cat > "$BASE/bin/openssl" <<'STUB'
+#!/bin/bash
+# Parse -keyout and -out flags to create the expected files
+key_out=""
+cert_out=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -keyout) key_out="$2"; shift 2 ;;
+    -out)    cert_out="$2"; shift 2 ;;
+    *)       shift ;;
+  esac
+done
+[[ -n "$key_out"  ]] && mkdir -p "$(dirname "$key_out")"  && echo "FAKE_KEY"  > "$key_out"
+[[ -n "$cert_out" ]] && mkdir -p "$(dirname "$cert_out")" && echo "FAKE_CERT" > "$cert_out"
+exit 0
+STUB
+  chmod +x "$BASE/bin/openssl"
+
+  run -0 run_deploy
+  [ -f "$LETSENCRYPT_DIR/live/test.example.com/fullchain.pem" ]
+  [ -f "$BASE/deploy/.self-signed" ]
+}
+
+# -------------------------------------------------
+@test "calls certbot when sentinel exists and credentials are set" {
+  # Sentinel present — certbot path should be taken
+  touch "$BASE/deploy/.self-signed"
+
+  # Add certbot creds to .env
+  cat >> "$BASE/deploy/.env" <<EOF
+CF_DNS_API_TOKEN=fake-cf-token
+CERTBOT_EMAIL=test@example.com
+EOF
+
+  # certbot stub: succeeds and logs the call
+  cat > "$BASE/bin/certbot" <<'STUB'
+#!/bin/bash
+echo "certbot $*" >> "$BASE/certbot.log"
+exit 0
+STUB
+  chmod +x "$BASE/bin/certbot"
+
+  run -0 run_deploy
+  [ -f "$BASE/certbot.log" ]
+  grep -q "certonly" "$BASE/certbot.log"
+  # Sentinel removed after successful certbot run
+  [ ! -f "$BASE/deploy/.self-signed" ]
 }

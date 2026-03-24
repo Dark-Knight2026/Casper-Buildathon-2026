@@ -19,17 +19,21 @@ This module serves two purposes in a single `terraform apply`:
 **1. Server provisioning**:
 - Allocates a static IPv4 address
 - Uploads the SSH public key
-- Creates an Ubuntu 24.04 server with `cloud-init.yml` for first-boot setup (Docker, ufw, fail2ban)
+- Creates an Ubuntu 24.04 server with `cloud-init.yml` for first-boot setup:
+  - Installs Docker, ufw, fail2ban, certbot (with `certbot-dns-cloudflare`)
+  - Decodes the GCP service account from base64 (embedded in cloud-init), logs into Artifact Registry, then shreds the credentials
+  - Configures cron jobs for certbot renewal (twice daily) and monthly certbot upgrades
+  - Creates `/opt/<PROJECT_NAME>/deploy`, `/opt/<PROJECT_NAME>/nginx`, `/opt/<PROJECT_NAME>/logs`
 
 **2. Service deployment** (runs on every `terraform apply`):
 - Waits for cloud-init to finish
 - Creates `/opt/<PROJECT_NAME>/deploy` and `/opt/<PROJECT_NAME>/nginx` directories
 - Copies files to the server:
-  - `nginx/nginx.conf` → `/opt/<PROJECT_NAME>/nginx/nginx.conf` (rendered with `project_domain`)
-  - `redeploy.sh` → `/opt/<PROJECT_NAME>/deploy/redeploy.sh`
-  - `docker-compose.dev.yml` → `/opt/<PROJECT_NAME>/deploy/docker-compose.yml`
-  - Generated `.env` → `/opt/<PROJECT_NAME>/deploy/.env`
-  - GCP service account JSON → `/root/.sa.json`
+  - `nginx/nginx.conf` -> `/opt/<PROJECT_NAME>/nginx/nginx.conf`
+  - `nginx/https.conf.template` -> `/opt/<PROJECT_NAME>/nginx/https.conf.template` (expanded by `envsubst` in `redeploy.sh`)
+  - `redeploy.sh` -> `/opt/<PROJECT_NAME>/deploy/redeploy.sh`
+  - `docker-compose.dev.yml` -> `/opt/<PROJECT_NAME>/deploy/docker-compose.yml`
+  - Generated `.env` -> `/opt/<PROJECT_NAME>/deploy/.env`
 - Runs `redeploy.sh` on the server
 
 The `terraform_data.redeploy_sh` resource uses `triggers_replace = timestamp()`, so it re-runs on every apply regardless of changes.
@@ -46,8 +50,12 @@ The `terraform_data.redeploy_sh` resource uses `triggers_replace = timestamp()`,
 | `SSH_PRIVATE_KEY_PATH` | Path to SSH private key file | — |
 | `SSH_PUBLIC_KEY_PATH` | Path to SSH public key file | — |
 | `GOOGLE_APPLICATION_REGION` | GCP region (used in cloud-init for Docker login) | — |
-| `GOOGLE_APPLICATION_CREDENTIALS` | Path to GCP service account JSON | — |
+| `GOOGLE_APPLICATION_CREDENTIALS` | Path to GCP service account JSON (embedded as base64 in cloud-init) | — |
+| `PROJECT_NAME` | Project name (lowercase snake-case, 3–40 chars) | — |
+| `DEPLOYMENT_MODE` | Deployment mode (`dev` \| `staging` \| `production`) | — |
 | `PROJECT_DOMAIN` | Domain for nginx `server_name` | — |
+| `TAG` | Docker image base tag (`registry/repo/name`) | — |
+| `VERSION` | Docker image version/tag | — |
 | `PROJECT_MAP_VARIABLES` | Map of all project env vars written to `.env` | — |
 
 ## Terraform State
@@ -68,7 +76,7 @@ ssh deploy@<SERVER_IP>
 docker ps
 
 # Follow backend logs
-docker logs -f leasefi_backend
+docker logs -f <PROJECT_NAME>_backend
 
 # Follow all logs
 docker compose \
@@ -77,5 +85,5 @@ docker compose \
   logs -f
 
 # Manual redeploy (re-runs redeploy.sh with current .env)
-bash /opt/<PROJECT_NAME>/deploy/redeploy.sh
+sudo -E bash /opt/<PROJECT_NAME>/deploy/redeploy.sh
 ```
