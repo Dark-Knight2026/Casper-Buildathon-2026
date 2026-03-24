@@ -94,7 +94,7 @@ async fn staking_info_no_position_returns_zeros(pool: PgPool) {
     let body: Value = response.json();
     assert_eq!(body["stakedTokens"], 0.0);
     assert_eq!(body["currentApy"], 0.0);
-    assert_eq!(body["totalRewardsEarned"], 0.0);
+    assert_eq!(body["totalRewardsClaimed"], 0.0);
 }
 
 #[sqlx::test(migrator = "common::MIGRATIONS")]
@@ -122,7 +122,7 @@ async fn staking_info_with_position(pool: PgPool) {
         (staked - 1000.0).abs() < 0.01,
         "expected ~1000.0, got {staked}"
     );
-    let rewards = body["totalRewardsEarned"].as_f64().unwrap();
+    let rewards = body["totalRewardsClaimed"].as_f64().unwrap();
     assert!(
         (rewards - 50.0).abs() < 0.01,
         "expected ~50.0, got {rewards}"

@@ -52,10 +52,8 @@ pub struct StakingInfoResponse {
     #[schema(example = 12.5)]
     pub current_apy: f64,
     /// Total rewards claimed by this staker (human-readable f64).
-    /// Currently, returns only explicitly claimed rewards; will include
-    /// accrued-but-unclaimed rewards when a real-time calculation is available.
     #[schema(example = 5_000.0)]
-    pub total_rewards_earned: f64,
+    pub total_rewards_claimed: f64,
 }
 
 /// Response for `GET /staking/{accountHash}/portfolio`.
