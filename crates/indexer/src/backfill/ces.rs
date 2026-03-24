@@ -138,26 +138,50 @@ pub async fn backfill_ces(
         "Starting CES backfill from event index {start_index}"
     );
 
+    process_event_range(
+        &ces,
+        &rpc,
+        &state_root,
+        events_uref,
+        schemas,
+        start_index,
+        total_events,
+    )
+    .await
+}
+
+/// Iterate through CES events in `[start_index, total_events)`, processing
+/// each one and advancing the cursor on success.
+async fn process_event_range(
+    ces: &CesContext<'_>,
+    rpc: &CasperRpc<'_>,
+    state_root: &str,
+    events_uref: &str,
+    schemas: &[EventSchema],
+    start_index: u32,
+    total_events: u32,
+) -> IndexerResult<()> {
     let mut processed = 0u64;
 
-    // 5. Iterate through each event by index.
     for idx in start_index..total_events {
         let key = idx.to_string();
 
-        match process_event_at(&ces, &rpc, &state_root, events_uref, &key, schemas).await {
+        match process_event_at(ces, rpc, state_root, events_uref, &key, schemas).await {
             Ok(Some(event_name)) => {
                 processed += 1;
-                db::update_ces_cursor(ces.backfill.db_pool, contract_hash, i64::from(idx)).await?;
+                db::update_ces_cursor(ces.backfill.db_pool, ces.contract_hash, i64::from(idx))
+                    .await?;
                 tracing::debug!(index = idx, event = %event_name, "CES event processed");
             }
             Ok(None) => {
-                db::update_ces_cursor(ces.backfill.db_pool, contract_hash, i64::from(idx)).await?;
+                db::update_ces_cursor(ces.backfill.db_pool, ces.contract_hash, i64::from(idx))
+                    .await?;
             }
             Err(e) => {
                 tracing::error!(
                     error = %e,
                     index = idx,
-                    contract = ?contract_type,
+                    contract = ?ces.contract_type,
                     "Failed to process CES event - stopping backfill to avoid data loss"
                 );
                 return Err(e);
@@ -171,7 +195,7 @@ pub async fn backfill_ces(
     }
 
     tracing::info!(
-        contract = ?contract_type,
+        contract = ?ces.contract_type,
         processed,
         total_events,
         "CES backfill complete"
