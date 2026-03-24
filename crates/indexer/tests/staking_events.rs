@@ -99,6 +99,21 @@ async fn staked_creates_position_and_event(pool: PgPool) {
     .unwrap_or(0);
 
     assert_eq!(event_count, 1);
+
+    // Verify blockchain_transactions row was written.
+    let tx_count: i64 = sqlx::query_scalar!(
+        r"SELECT COUNT(*) FROM blockchain_transactions WHERE transaction_hash = $1",
+        STAKING_DEPLOY_1,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap()
+    .unwrap_or(0);
+
+    assert_eq!(
+        tx_count, 1,
+        "Staked handler must write a blockchain_transactions row"
+    );
 }
 
 /// Multiple `Staked` events accumulate in `staked_amount`.
@@ -416,6 +431,21 @@ async fn rewards_claimed_updates_position(pool: PgPool) {
     .unwrap_or(0);
 
     assert_eq!(event_count, 1);
+
+    // Verify blockchain_transactions row was written.
+    let tx_count: i64 = sqlx::query_scalar!(
+        r"SELECT COUNT(*) FROM blockchain_transactions WHERE transaction_hash = $1",
+        STAKING_DEPLOY_5,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap()
+    .unwrap_or(0);
+
+    assert_eq!(
+        tx_count, 1,
+        "RewardsClaimed handler must write a blockchain_transactions row"
+    );
 }
 
 /// Multiple `RewardsClaimed` events accumulate in `total_rewards_claimed`.
