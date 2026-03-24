@@ -167,6 +167,12 @@ pnpm run test:integration
 
 This frontend application integrates with backend services through API calls.
 
+### Vercel Deployment & Backend URL
+
+The `/api/v1/*` rewrite in `vercel.json` points to `leasefi.testingservernginx.win` — this is the **production backend**. The "testing" in the hostname is a legacy naming convention; this server is used across all Vercel environments (preview and production).
+
+> Note: `vercel.json` does not support environment variable substitution, so the URL is hardcoded intentionally. To change the backend target, update `vercel.json` directly.
+
 ### API Documentation
 See [docs/api/rust_service.md](docs/api/rust_service.md) for backend API endpoint documentation.
 

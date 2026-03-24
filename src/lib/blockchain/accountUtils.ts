@@ -1,4 +1,5 @@
 import { PublicKey } from 'casper-js-sdk';
+import { logger } from '@/utils/logger';
 
 /**
  * Derives account hash from public key hex string.
@@ -10,7 +11,7 @@ export function stripAccountHashPrefix(address: string): string {
 
 export function deriveAccountHash(publicKeyHex: string): string {
   if (!publicKeyHex) {
-    console.warn('[accountUtils] Empty public key provided');
+    logger.warn('[accountUtils] Empty public key provided');
     return '';
   }
 
@@ -19,7 +20,7 @@ export function deriveAccountHash(publicKeyHex: string): string {
     const accountHash = pk.accountHash();
     return accountHash.toPrefixedString();
   } catch (err) {
-    console.warn('[accountUtils] Failed to derive account hash:', err);
+    logger.error('[accountUtils] Failed to derive account hash', err);
     return '';
   }
 }
