@@ -28,6 +28,13 @@ const STATUS_LABELS = {
   failed: 'Failed',
 };
 
+const TYPE_LABELS: Record<string, string> = {
+  purchase: 'Purchase',
+  transfer: 'Transfer',
+  claim: 'Claim',
+  stake: 'Vesting / Lock',
+};
+
 export function TransactionHistory({
   transactions,
   currentPage = 1,
@@ -63,8 +70,8 @@ export function TransactionHistory({
                 >
                   <div className="flex flex-col gap-1">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-[hsl(var(--ico-text-primary))] capitalize">
-                        {tx.type}
+                      <span className="text-sm font-medium text-[hsl(var(--ico-text-primary))]">
+                        {TYPE_LABELS[tx.type] ?? tx.type}
                       </span>
                       <span
                         className={cn(

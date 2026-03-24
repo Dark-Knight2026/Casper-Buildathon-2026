@@ -17,7 +17,7 @@ export type PaymentCurrency = 'USDT' | 'USDC' | 'CSPR';
 // Token transaction recorded in transaction history
 export interface ICOTransaction {
   id: string;
-  type: 'purchase' | 'claim' | 'transfer';
+  type: 'purchase' | 'claim' | 'transfer' | 'stake';
   direction?: 'in' | 'out';
   tokensReceived: number;
   tokenSymbol: string;
