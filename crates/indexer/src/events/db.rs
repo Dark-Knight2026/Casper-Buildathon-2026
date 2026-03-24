@@ -243,10 +243,17 @@ pub struct NewBlockchainTx<'a> {
     pub metadata: &'a serde_json::Value,
 }
 
-/// Insert a row into `blockchain_transactions`.
+/// Insert or backfill a row into `blockchain_transactions`.
 ///
-/// Uses `ON CONFLICT DO NOTHING` on `transaction_hash` so re-processing the
-/// same deploy is safe.
+/// Uses an expression-based unique index on
+/// `(transaction_hash, transaction_type, from_address, COALESCE(transform_idx, 0))`
+/// so that multiple events of the same type from the same sender within a
+/// single deploy are correctly distinguished by their transform index.
+///
+/// On conflict the `DO UPDATE SET ... COALESCE` clause fills in columns that
+/// were `NULL` in pre-existing rows (e.g. rows inserted before the
+/// `to_address`, `contract_hash`, `block_timestamp`, `from_type`, `to_type`,
+/// `transform_idx` columns were added), making re-indexing safe.
 ///
 /// # Errors
 ///
@@ -261,7 +268,14 @@ pub async fn insert_blockchain_transaction(
         r"
             INSERT INTO blockchain_transactions ( transaction_hash, deploy_hash, block_number, transaction_type, from_address, to_address, amount, currency, contract_hash, block_timestamp, from_type, to_type, transform_idx, status, metadata, confirmed_at )
             VALUES ($1, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'confirmed', $13, NOW())
-            ON CONFLICT (transaction_hash, transaction_type, from_address) DO NOTHING
+            ON CONFLICT (transaction_hash, transaction_type, from_address, COALESCE(transform_idx, 0))
+            DO UPDATE SET
+                to_address      = COALESCE(blockchain_transactions.to_address,      EXCLUDED.to_address),
+                contract_hash   = COALESCE(blockchain_transactions.contract_hash,    EXCLUDED.contract_hash),
+                block_timestamp = COALESCE(blockchain_transactions.block_timestamp,  EXCLUDED.block_timestamp),
+                from_type       = COALESCE(blockchain_transactions.from_type,        EXCLUDED.from_type),
+                to_type         = COALESCE(blockchain_transactions.to_type,          EXCLUDED.to_type),
+                transform_idx   = COALESCE(blockchain_transactions.transform_idx,    EXCLUDED.transform_idx)
         ",
         row.deploy_hash,
         row.block_number,
