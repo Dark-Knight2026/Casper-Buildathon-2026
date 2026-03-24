@@ -1,16 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { ICO_CONFIG } from '@/constants/ico';
-import { type FTTokenAction } from './useContractDeploys';
+import type { FTTokenAction, FTTokenActionsResponse } from '@/types/csprCloud';
 import type { ICOTransaction } from '@/types/ico';
 
 const BIG_TOKEN_PACKAGE_HASH = ICO_CONFIG.CONTRACTS.tokenAddress.replace(/^hash-/, '');
 const BIG_DECIMALS = ICO_CONFIG.TOKEN.decimals; // 18
-
-interface FTTokenActionsResponse {
-  item_count: number;
-  page_count: number;
-  data: FTTokenAction[];
-}
 
 async function fetchUserTokenActions(publicKeyHex: string, page: number, pageSize: number, signal?: AbortSignal): Promise<FTTokenActionsResponse> {
   const url = `/api/cspr-cloud/accounts/${publicKeyHex}/ft-token-actions?contract_package_hash=${BIG_TOKEN_PACKAGE_HASH}&page=${page}&page_size=${pageSize}&type=token_transfer&from_type=1`;
@@ -29,7 +23,12 @@ async function fetchUserTokenActions(publicKeyHex: string, page: number, pageSiz
 }
 
 function mapToICOTransaction(action: FTTokenAction): ICOTransaction {
-  const raw = BigInt(action.amount);
+  let raw: bigint;
+  try {
+    raw = BigInt(action.amount);
+  } catch {
+    raw = 0n;
+  }
   const divisor = 10n ** BigInt(BIG_DECIMALS);
   const tokensReceived = Number(raw / divisor) + Number(raw % divisor) / Number(divisor);
 
@@ -56,7 +55,7 @@ export function useUserTokenActions(publicKey: string | null | undefined, page =
     },
     enabled: !!publicKey,
     staleTime: 120_000,
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: true, // intentional: user expects updated balance after switching tabs during a pending purchase
   });
 
   return {

@@ -1,30 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 import { ICO_CONFIG } from '@/constants/ico';
+import type { FTTokenAction, FTTokenActionsResponse } from '@/types/csprCloud';
 
 const BIG_TOKEN_PACKAGE_HASH = ICO_CONFIG.CONTRACTS.tokenAddress.replace(/^hash-/, '');
 const ICO_PACKAGE_HASH = ICO_CONFIG.CONTRACTS.icoPackageHash.replace(/^hash-/, '').toLowerCase();
 
 const STALE_TIME = 30 * 60 * 1000; // 30 minutes
-
-export interface FTTokenAction {
-  deploy_hash: string;
-  block_height: number;
-  timestamp: string;
-  amount: string;
-  contract_package_hash: string;
-  from_hash: string | null;
-  from_type: number | null; // 0 = account, 1 = contract package
-  to_hash: string | null;
-  to_type: number | null;
-  ft_action_type_id: number;
-  transform_idx: number;
-}
-
-interface FTTokenActionsResponse {
-  item_count: number;
-  page_count: number;
-  data: FTTokenAction[];
-}
 
 async function fetchBigTokenActions(page: number, pageSize: number): Promise<FTTokenActionsResponse> {
   const url = `/api/cspr-cloud/contract-packages/${BIG_TOKEN_PACKAGE_HASH}/ft-token-actions?page=${page}&page_size=${pageSize}`;

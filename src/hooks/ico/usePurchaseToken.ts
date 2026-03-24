@@ -26,8 +26,6 @@ import type { PaymentCurrency } from '@/types/ico';
 
 // ── Constants ────────────────────────────────────────────────────────
 
-const LOG_PREFIX = '[usePurchaseToken]';
-
 /** Normalized BIG token hash for matching CSPR.Cloud responses */
 const BIG_TOKEN_HASH = ICO_CONFIG.CONTRACTS.tokenAddress.replace(/^hash-/, '').toLowerCase();
 
@@ -69,46 +67,31 @@ async function fetchActualTokensReceived(
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       // Wait before querying — the indexer needs time to process the deploy
-      if (attempt > 1) {
-        console.log(LOG_PREFIX, `[fetchTokens] Retry ${attempt}/${maxRetries}, waiting ${retryDelayMs}ms...`);
-      }
       await delay(attempt === 1 ? 3000 : retryDelayMs);
 
       const url = `/api/cspr-cloud/ft-token-actions?deploy_hash=${deployHash}`;
-      console.log(LOG_PREFIX, `[fetchTokens] Fetching: ${url} (attempt ${attempt})`);
-
-      const resp = await fetch(url);
-      if (!resp.ok) {
-        console.warn(LOG_PREFIX, `[fetchTokens] HTTP ${resp.status}`);
-        continue;
-      }
+      const resp = await fetch(url, { signal: AbortSignal.timeout(15_000) });
+      if (!resp.ok) continue;
 
       const json = await resp.json();
-      console.log(LOG_PREFIX, '[fetchTokens] Response:', json);
 
       // CSPR.Cloud returns { data: [...] } with paginated results
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const items: any[] = json.data ?? (Array.isArray(json) ? json : []);
 
-      if (items.length === 0) {
-        console.log(LOG_PREFIX, '[fetchTokens] No token actions found yet');
-        continue;
-      }
+      if (items.length === 0) continue;
 
       // Find the BIG token transfer action
       for (const item of items) {
         const contractHash = String(item.contract_package_hash ?? item.contract_hash ?? '').toLowerCase();
         if (contractHash === BIG_TOKEN_HASH) {
           const rawAmount = String(item.amount ?? '');
-          console.log(LOG_PREFIX, '[fetchTokens] Found BIG transfer:', rawAmount);
           const value = safeBigInt(rawAmount);
           if (value !== null && value > 0n) return value;
         }
       }
-
-      console.log(LOG_PREFIX, '[fetchTokens] BIG token action not found in results');
-    } catch (err) {
-      console.warn(LOG_PREFIX, `[fetchTokens] Error on attempt ${attempt}:`, err);
+    } catch {
+      // ignore — retry on next attempt
     }
   }
 
@@ -285,6 +268,7 @@ export function usePurchaseToken(
           }
 
           const approvalTxHash = approvalResult.deployHash || approvalResult.transactionHash || '';
+          if (!approvalTxHash) throw new Error('Wallet did not return an approval transaction hash');
 
           setState((prev) => ({
             ...prev,
@@ -333,6 +317,7 @@ export function usePurchaseToken(
         }
 
         const purchaseTxHash = purchaseResult.deployHash || purchaseResult.transactionHash || '';
+        if (!purchaseTxHash) throw new Error('Wallet did not return a transaction hash');
 
         setState((prev) => ({
           ...prev,
@@ -346,10 +331,8 @@ export function usePurchaseToken(
 
         if (actualTokens !== null && actualTokens > 0n) {
           tokensReceived = fromRawAmount(actualTokens, ICO_CONFIG.TOKEN.decimals);
-          console.log(LOG_PREFIX, '[Step 5] Actual tokens from CSPR.Cloud:', tokensReceived);
         } else {
           // Fallback to local estimate if CSPR.Cloud indexer hasn't processed yet
-          console.warn(LOG_PREFIX, '[Step 5] Could not fetch tokens from CSPR.Cloud, using estimate');
           const tokensRaw = calculateTokensReceived(amount, currency, tokenPriceUsd, csprPriceUsd);
           tokensReceived = fromRawAmount(tokensRaw, ICO_CONFIG.TOKEN.decimals);
         }

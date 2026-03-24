@@ -20,3 +20,4 @@ Unit tests for ICO shared components.
 | PurchaseConfirmationModal.test.tsx | Tests modal states, buttons, and escape handling |
 | TransactionStatusToast.test.tsx | Tests toast success, failure, and auto-close |
 | WalletCard.test.tsx | Tests connected and disconnected wallet states |
+| TablePagination.test.tsx | Tests page number display, navigation, and boundary clamping |

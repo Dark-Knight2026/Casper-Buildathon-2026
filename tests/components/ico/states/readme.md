@@ -11,6 +11,7 @@ Unit tests for ICO lifecycle state components.
 | RewardsTab.test.tsx | Tests staking info and rewards list display |
 | TokenomicsTab.test.tsx | Tests tokenomics visualization and allocation rendering |
 | WhitepaperTab.test.tsx | Tests PDF viewer and sidebar navigation |
+| TransactionHistoryTab.test.tsx | Tests transaction table rendering, loading/error/empty states, and pagination |
 
 ## Renamed files
 

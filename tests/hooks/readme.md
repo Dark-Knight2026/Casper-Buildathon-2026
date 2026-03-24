@@ -12,3 +12,4 @@
 | useWalletBalances.test.ts | Test multi-currency balance fetching and caching |
 | useCSPRPrice.test.ts | Test CSPR price fetching, stale-threshold logic, and polling interval — uses `vi.useFakeTimers()` |
 | useContractDeploys.test.ts | Test BIG token FT-action fetching and pagination from CSPR Cloud |
+| useUserTokenActions.test.ts | Test BigInt token amount math, non-integer input handling, disabled state for empty publicKey, and API error surfacing |

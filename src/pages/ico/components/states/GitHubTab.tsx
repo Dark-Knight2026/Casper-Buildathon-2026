@@ -18,6 +18,7 @@ export function GitHubTab({ className }: GitHubTabProps) {
 
   useEffect(() => {
     const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10_000);
 
     fetch(GITHUB_API_URL, { signal: controller.signal })
       .then((res) => {
@@ -35,7 +36,10 @@ export function GitHubTab({ className }: GitHubTabProps) {
         }
       });
 
-    return () => controller.abort();
+    return () => {
+      clearTimeout(timeoutId);
+      controller.abort();
+    };
   }, []);
 
   return (

@@ -84,7 +84,7 @@ export function TransactionHistoryTab() {
             type="button"
             onClick={() => refetch()}
             className="p-1.5 rounded-md text-[hsl(var(--ico-text-secondary))] hover:text-[hsl(var(--ico-text-primary))] hover:bg-[hsl(var(--ico-bg-secondary))] transition-colors cursor-pointer"
-            title="Refresh"
+            aria-label="Refresh transactions"
           >
             <RefreshCw className={`w-4 h-4${isFetching ? ' animate-spin' : ''}`} />
           </button>
@@ -93,7 +93,7 @@ export function TransactionHistoryTab() {
 
       <Card className="p-0 overflow-hidden">
         {isLoading ? (
-          <div className="flex items-center justify-center py-16">
+          <div role="status" aria-label="Loading transactions" className="flex items-center justify-center py-16">
             <RefreshCw className="w-5 h-5 animate-spin text-[hsl(var(--ico-text-muted))]" />
           </div>
         ) : error ? (
