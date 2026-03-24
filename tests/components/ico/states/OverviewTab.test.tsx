@@ -4,44 +4,49 @@ import { BrowserRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { OverviewTab } from '@/pages/ico/components/states/OverviewTab';
 
-vi.mock('@/hooks/ico/useStakingPortfolio', () => ({
-  useStakingPortfolio: () => ({ data: null, isLoading: false }),
+// ── External HTTP boundary ────────────────────────────────────────────────────
+// Only the HTTP client is mocked — not the hooks that call it.
+// All React Query hooks (useStakingPortfolio, useStakingInfo, useTransactionHistory,
+// useVestingSchedules) run their real logic: with account=null their queries are
+// disabled (enabled: !!accountHash), so backendClient.get is never actually called.
+// mockGet is a safety net in case a future change removes the enabled guard.
+const mockGet = vi.fn().mockResolvedValue(null);
+vi.mock('@/lib/api-client', () => ({
+  backendClient: { get: (...args: unknown[]) => mockGet(...args) },
 }));
 
-vi.mock('@/hooks/ico/useStakingEarnings', () => ({
-  useStakingEarnings: () => ({
-    data: {
-      earnings: [
-        { date: '2024-01-01', amount: 10 },
-        { date: '2024-01-02', amount: 20 },
-      ],
-    },
-    isLoading: false,
+// ── useICOWallet: cannot integrate ───────────────────────────────────────────
+// Depends on useClickRef() from @make-software/csprclick-ui, which is a
+// browser-extension event-emitter with no jsdom equivalent. Any attempt to
+// run the real hook will throw "useClickRef must be used inside CsprClickProvider".
+vi.mock('@/hooks/ico/useICOWallet', () => ({
+  useICOWallet: () => ({
+    isConnected: false,
+    account: null,
+    isConnecting: false,
+    connect: vi.fn(),
+    disconnect: vi.fn(),
+    error: null,
+    clickRef: null,
   }),
 }));
 
-vi.mock('@/hooks/ico/useStakingInfo', () => ({
-  useStakingInfo: () => ({ data: null, isLoading: false }),
+// ── recharts: cannot integrate ───────────────────────────────────────────────
+// recharts uses SVG measurement APIs (getBoundingClientRect, ResizeObserver)
+// that are unavailable in jsdom and cause "width/height is 0" errors at runtime.
+vi.mock('recharts', () => ({
+  AreaChart: ({ children }: { children: React.ReactNode }) => (
+    <div data-testid="area-chart">{children}</div>
+  ),
+  Area: () => <div data-testid="area" />,
+  XAxis: () => <div data-testid="x-axis" />,
+  YAxis: () => <div data-testid="y-axis" />,
+  CartesianGrid: () => <div data-testid="cartesian-grid" />,
 }));
 
-// Mock wallet and transaction hooks
-vi.mock('@/hooks/ico/useICOWallet', () => ({
-  useICOWallet: () => ({ account: null, isConnected: false }),
-}));
-
-vi.mock('@/hooks/ico/useUserTokenActions', () => ({
-  useUserTokenActions: () => ({ transactions: [] }),
-}));
-
-vi.mock('@/hooks/ico/useAccountTransactions', () => ({
-  useAccountTransactions: () => ({ transactions: [], totalPages: 0, totalItems: 0, isLoading: false, error: null, refetch: vi.fn() }),
-}));
-
-vi.mock('@/lib/blockchain/accountUtils', () => ({
-  deriveAccountHash: () => null,
-}));
-
-// Mock the child components
+// ── Child UI components ───────────────────────────────────────────────────────
+// Mocked to keep these tests focused on OverviewTab layout logic.
+// Each child component has its own test suite.
 vi.mock('@/pages/ico/components/shared/Card', () => ({
   Card: ({ children, className }: { children: React.ReactNode; className?: string }) => (
     <div data-testid="card" className={className}>{children}</div>
@@ -69,33 +74,7 @@ vi.mock('@/pages/ico/components/shared/EarningsChart', () => ({
   ),
 }));
 
-vi.mock('@/hooks/ico/useICOWallet', () => ({
-  useICOWallet: () => ({
-    isConnected: false,
-    account: null,
-    isConnecting: false,
-    connect: vi.fn(),
-    disconnect: vi.fn(),
-    error: null,
-    clickRef: null,
-  }),
-}));
-
-vi.mock('@/hooks/ico/useUserTokenActions', () => ({
-  useUserTokenActions: () => ({
-    transactions: [],
-  }),
-}));
-
-vi.mock('recharts', () => ({
-  AreaChart: ({ children }: { children: React.ReactNode }) => (
-    <div data-testid="area-chart">{children}</div>
-  ),
-  Area: () => <div data-testid="area" />,
-  XAxis: () => <div data-testid="x-axis" />,
-  YAxis: () => <div data-testid="y-axis" />,
-  CartesianGrid: () => <div data-testid="cartesian-grid" />,
-}));
+// ─────────────────────────────────────────────────────────────────────────────
 
 const renderWithRouter = (ui: React.ReactElement) => {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
