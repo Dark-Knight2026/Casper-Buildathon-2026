@@ -191,6 +191,16 @@ async fn get_user(
 - Log full error details server-side with `tracing::error!`
 - Return generic messages to clients (e.g., "Internal error" instead of SQL error text)
 
+### Deployment: Reverse Proxy Requirement
+
+The API rate limiter uses `SmartIpKeyExtractor` which trusts the
+`X-Forwarded-For` header unconditionally. **This API MUST be deployed
+behind a trusted reverse proxy** (e.g. Nginx, Cloudflare, ALB) that
+overwrites `X-Forwarded-For` with the real client IP.
+
+Direct exposure to the internet without a trusted proxy allows clients to
+spoof `X-Forwarded-For` and bypass all per-IP rate limits.
+
 ## 5. Performance Goals
 
 - Docker container size < 150MB.
