@@ -105,8 +105,13 @@ impl HashType {
 
 /// Populate the `contract_registry` table with all active contracts from config.
 ///
-/// Uses `ON CONFLICT (contract_type) DO UPDATE` so that hash changes (e.g. a
-/// redeployment) are reflected without manual DB intervention.
+/// Runs inside a single transaction:
+/// 1. Mark all existing rows as inactive.
+/// 2. Upsert each configured contract, setting `is_active = TRUE`.
+///
+/// Contracts removed from the config will remain in the table with
+/// `is_active = FALSE`, preserving historical data while reflecting the
+/// current deployment state.
 ///
 /// Called once at indexer startup before backfill and streaming begin.
 ///
@@ -119,6 +124,13 @@ pub async fn upsert_contract_registry(
     pool: &PgPool,
     contracts: &ContractRegistry,
 ) -> IndexerResult<()> {
+    let mut tx = pool.begin().await?;
+
+    // Deactivate all contracts first; active ones will be re-enabled below.
+    sqlx::query!("UPDATE contract_registry SET is_active = FALSE")
+        .execute(tx.as_mut())
+        .await?;
+
     for contract in contracts.active_contracts() {
         sqlx::query!(
             r"
@@ -131,9 +143,11 @@ pub async fn upsert_contract_registry(
             contract.contract_type.as_str(),
             contract.hash,
         )
-        .execute(pool)
+        .execute(tx.as_mut())
         .await?;
     }
+
+    tx.commit().await?;
     Ok(())
 }
 
