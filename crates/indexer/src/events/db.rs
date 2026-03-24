@@ -681,7 +681,7 @@ pub async fn insert_staking_event(
         r"
             INSERT INTO staking_events (staker_address, event_type, amount, transaction_hash, block_height, event_timestamp)
             VALUES ($1, $2, $3, $4, $5, $6)
-            ON CONFLICT (transaction_hash) DO NOTHING
+            ON CONFLICT (transaction_hash, event_type) DO NOTHING
         ",
         row.staker_address,
         row.event_type,
