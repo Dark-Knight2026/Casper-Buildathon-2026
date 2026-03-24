@@ -54,6 +54,13 @@ export function useBackendAuth(
       const { token } = await loginWithSignature(publicKey, result.signatureHex);
 
       // 4. Store and apply token
+      // SECURITY RISK (accepted, planned remediation): JWT is stored in localStorage,
+      // which is readable by any JavaScript on the page (XSS, browser extensions).
+      // The expiry check in loadStoredToken() limits the exposure window but does not
+      // eliminate the risk. Planned fix: migrate to HttpOnly + Secure + SameSite=Strict
+      // cookies set by the backend (/api/v1/auth/login) and remove the token from the
+      // JSON response body. Target date: Q2 2026.
+      // Tracked in: [link to ticket/issue when created]
       localStorage.setItem(TOKEN_KEY, token);
       applyToken(token);
       setIsAuthenticated(true);
