@@ -51,7 +51,7 @@ export function useUserTokenActions(publicKey: string | null | undefined) {
     queryFn: ({ signal }) => fetchUserTokenActions(publicKey!, signal).then(actions => actions.map(mapToICOTransaction)),
     enabled: !!publicKey,
     staleTime: 120_000,
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: true, // intentional: user expects updated balance after switching tabs during a pending purchase
   });
 
   return {

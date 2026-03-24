@@ -268,6 +268,7 @@ export function usePurchaseToken(
           }
 
           const approvalTxHash = approvalResult.deployHash || approvalResult.transactionHash || '';
+          if (!approvalTxHash) throw new Error('Wallet did not return an approval transaction hash');
 
           setState((prev) => ({
             ...prev,
