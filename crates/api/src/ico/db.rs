@@ -9,6 +9,10 @@ pub struct IcoScheduleRow {
     pub sale_amount: String,
     /// Token price (U256 as TEXT, 6 decimals; 500000 = $0.50).
     pub price: String,
+    /// Whether `NOW()` falls between `start_timestamp` and `end_timestamp`.
+    /// sqlx infers `Option<bool>` for computed expressions; callers use
+    /// `.unwrap_or(false)`.
+    pub is_active: Option<bool>,
 }
 
 /// Snapshot of ICO progress data fetched atomically.
@@ -38,7 +42,8 @@ pub async fn fetch_progress_snapshot(pool: &PgPool) -> Result<ProgressSnapshot, 
     let schedule = sqlx::query_as!(
         IcoScheduleRow,
         r"
-            SELECT sale_amount, price
+            SELECT sale_amount, price,
+                   (EXTRACT(EPOCH FROM NOW())::BIGINT BETWEEN start_timestamp AND end_timestamp) AS is_active
             FROM ico_schedules
             ORDER BY
                 CASE WHEN EXTRACT(EPOCH FROM NOW())::BIGINT BETWEEN start_timestamp AND end_timestamp
@@ -93,7 +98,8 @@ pub async fn fetch_balance_snapshot(
     let schedule = sqlx::query_as!(
         IcoScheduleRow,
         r"
-            SELECT sale_amount, price
+            SELECT sale_amount, price,
+                   (EXTRACT(EPOCH FROM NOW())::BIGINT BETWEEN start_timestamp AND end_timestamp) AS is_active
             FROM ico_schedules
             ORDER BY
                 CASE WHEN EXTRACT(EPOCH FROM NOW())::BIGINT BETWEEN start_timestamp AND end_timestamp
