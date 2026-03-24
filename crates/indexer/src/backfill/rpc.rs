@@ -125,14 +125,26 @@ impl<'a> CasperRpc<'a> {
         });
 
         let result = self.call("query_global_state", params).await?;
-        let named_keys = &result["stored_value"]["Contract"]["named_keys"];
+        let stored = &result["stored_value"];
+
+        // Casper 1.x stores contracts under "Contract", while Casper 2.x
+        // uses "AddressableEntity". Try both paths.
+        let named_keys = stored["Contract"]["named_keys"]
+            .as_array()
+            .or_else(|| stored["AddressableEntity"]["named_keys"].as_array());
+
+        let Some(arr) = named_keys else {
+            tracing::error!(
+                contract = %contract_hash,
+                "named_keys not found in stored_value (neither Contract nor AddressableEntity)"
+            );
+            return Ok(HashMap::new());
+        };
 
         let mut map = HashMap::new();
-        if let Some(arr) = named_keys.as_array() {
-            for entry in arr {
-                if let (Some(name), Some(key)) = (entry["name"].as_str(), entry["key"].as_str()) {
-                    map.insert(name.to_owned(), key.to_owned());
-                }
+        for entry in arr {
+            if let (Some(name), Some(key)) = (entry["name"].as_str(), entry["key"].as_str()) {
+                map.insert(name.to_owned(), key.to_owned());
             }
         }
 
