@@ -79,7 +79,7 @@ pub async fn fetch_account_transactions(
             WHERE (from_address = $1 OR to_address = $1)
               AND ($4::TEXT IS NULL OR transaction_type = $4)
               AND ($5::SMALLINT IS NULL OR from_type = $5)
-            ORDER BY block_number DESC NULLS LAST, transform_idx DESC NULLS LAST
+            ORDER BY block_number DESC NULLS LAST, transform_idx NULLS LAST
             LIMIT $2 OFFSET $3
         ",
         address,
@@ -135,7 +135,7 @@ pub async fn fetch_token_transactions(
             SELECT transaction_hash, block_number, block_timestamp, amount, currency, contract_hash, from_address, from_type, to_address, to_type, transaction_type, transform_idx
             FROM blockchain_transactions
             WHERE contract_hash = $1
-            ORDER BY block_number DESC NULLS LAST, transform_idx DESC NULLS LAST
+            ORDER BY block_number DESC NULLS LAST, transform_idx NULLS LAST
             LIMIT $2 OFFSET $3
         ",
         contract_hash,
