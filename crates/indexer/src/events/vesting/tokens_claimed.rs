@@ -39,6 +39,16 @@ impl IndexableEvent for TokensClaimed {
     async fn process(&self, ctx: &mut EventContext<'_>) -> IndexerResult<()> {
         let beneficiary = address::normalize_to_account_hash(&self.beneficiary)?;
 
+        // Guard: skip if this deployment was already processed (replay/backfill).
+        // Without this check, replayed events would double-count claimed_amount.
+        if db::is_vesting_claim_processed(ctx.tx, ctx.deploy_hash).await? {
+            tracing::debug!(
+                deploy_hash = %ctx.deploy_hash,
+                "TokensClaimed already processed, skipping"
+            );
+            return Ok(());
+        }
+
         db::update_vesting_claimed(ctx.tx, &self.vesting_id, &self.amount).await?;
 
         // Record in blockchain_transactions for unified transaction history.

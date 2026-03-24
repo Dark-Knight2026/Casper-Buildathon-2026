@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT EXISTS(\n                SELECT 1 FROM blockchain_transactions\n                WHERE transaction_hash = $1\n                  AND transaction_type = 'vesting_tokens_claimed'\n        )",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "exists",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "8053472e981c9ed738808d2090e279c23005ec444f136c6f7798fb1d2716b0e1"
+}

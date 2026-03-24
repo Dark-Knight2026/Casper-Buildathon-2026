@@ -641,6 +641,35 @@ pub async fn update_vesting_claimed(
     Ok(())
 }
 
+/// Check whether a `TokensClaimed` deploy has already been recorded in
+/// `blockchain_transactions`. Used as an idempotency guard to prevent
+/// double-counting `claimed_amount` on replays or backfills.
+///
+/// # Errors
+///
+/// Returns [`IndexerError::Database`](crate::error::IndexerError::Database)
+/// on SQL failures.
+#[inline]
+pub async fn is_vesting_claim_processed(
+    tx: &mut PgTransaction<'_>,
+    deploy_hash: &str,
+) -> IndexerResult<bool> {
+    let exists: bool = sqlx::query_scalar!(
+        r"
+            SELECT EXISTS(
+                SELECT 1 FROM blockchain_transactions
+                WHERE transaction_hash = $1
+                  AND transaction_type = 'vesting_tokens_claimed'
+        )",
+        deploy_hash,
+    )
+    .fetch_one(tx.as_mut())
+    .await?
+    .unwrap_or(false);
+
+    Ok(exists)
+}
+
 // -----------------------------------------------------------------------------
 // Staking positions
 // -----------------------------------------------------------------------------

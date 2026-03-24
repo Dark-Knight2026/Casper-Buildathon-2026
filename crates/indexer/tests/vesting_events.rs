@@ -455,3 +455,61 @@ async fn tokens_claimed_accumulates(pool: PgPool) {
         "claimed_amount must accumulate: 1000 + 2500 = 3500"
     );
 }
+
+/// Replaying the same `TokensClaimed` deploy must NOT double-count `claimed_amount`.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn tokens_claimed_idempotent(pool: PgPool) {
+    common::disable_rls(&pool).await;
+
+    // Seed schedule directly.
+    sqlx::query!(
+        r"
+            INSERT INTO vesting_schedules (vesting_id, beneficiary, whitelisted_creator, total_amount, start_timestamp, cliff_duration, vesting_duration, transaction_hash, block_height)
+            VALUES ('20', $1, $2, '50000', 100, 50, 100, $3, 100)
+        ",
+        FakeAddress::Buyer.as_str(),
+        FakeAddress::ContractX.as_str(),
+        VESTING_DEPLOY_HASH,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let claim_deploy = "0000000000000000000000000000000000000000000000000000000000009901";
+
+    let claim_event = RawEvent {
+        contract_hash: "vesting_hash".to_owned(),
+        deploy_hash: claim_deploy.to_owned(),
+        block_height: 200,
+        contract_type: ContractType::Vesting,
+        event_name: "TokensClaimed".to_owned(),
+        event_data: json!({
+            "vesting_id": "20",
+            "beneficiary": FakeAddress::Buyer.as_str(),
+            "amount": "4000"
+        }),
+        block_timestamp: None,
+        transform_idx: None,
+        api_from_type: None,
+        api_to_type: None,
+    };
+
+    // Process twice with the same deploy_hash.
+    for _ in 0..2 {
+        processor::process_event(&pool, &EventRegistry::new(), &HashSet::new(), &claim_event)
+            .await
+            .unwrap();
+    }
+
+    let claimed: String = sqlx::query_scalar!(
+        r"SELECT claimed_amount FROM vesting_schedules WHERE vesting_id = '20'"
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(
+        claimed, "4000",
+        "duplicate TokensClaimed must not double claimed_amount"
+    );
+}
