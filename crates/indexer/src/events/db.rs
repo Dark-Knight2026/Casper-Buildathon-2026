@@ -742,7 +742,7 @@ pub async fn update_staking_position_unstake(
     amount: &str,
     unbonding_ends_at: i64,
 ) -> IndexerResult<()> {
-    sqlx::query!(
+    let result = sqlx::query!(
         r"
             UPDATE staking_positions
             SET staked_amount     = GREATEST('0'::NUMERIC, staked_amount::NUMERIC - $2::TEXT::NUMERIC)::TEXT,
@@ -758,6 +758,14 @@ pub async fn update_staking_position_unstake(
     .execute(tx.as_mut())
     .await?;
 
+    if result.rows_affected() == 0 {
+        tracing::warn!(
+            staker = staker_address,
+            amount,
+            "unstake update matched no staking position - event arrived before Staked?"
+        );
+    }
+
     Ok(())
 }
 
@@ -772,7 +780,7 @@ pub async fn update_staking_position_withdraw(
     tx: &mut PgTransaction<'_>,
     staker_address: &str,
 ) -> IndexerResult<()> {
-    sqlx::query!(
+    let result = sqlx::query!(
         r"
             UPDATE staking_positions
             SET unbonding_amount  = '0',
@@ -784,6 +792,13 @@ pub async fn update_staking_position_withdraw(
     )
     .execute(tx.as_mut())
     .await?;
+
+    if result.rows_affected() == 0 {
+        tracing::warn!(
+            staker = staker_address,
+            "withdraw update matched no staking position - event arrived before Staked?"
+        );
+    }
 
     Ok(())
 }
@@ -801,7 +816,7 @@ pub async fn update_staking_position_rewards(
     staker_address: &str,
     amount: &str,
 ) -> IndexerResult<()> {
-    sqlx::query!(
+    let result = sqlx::query!(
         r"
             UPDATE staking_positions
             SET total_rewards_claimed = (total_rewards_claimed::NUMERIC + $2::TEXT::NUMERIC)::TEXT,
@@ -813,6 +828,14 @@ pub async fn update_staking_position_rewards(
     )
     .execute(tx.as_mut())
     .await?;
+
+    if result.rows_affected() == 0 {
+        tracing::warn!(
+            staker = staker_address,
+            amount,
+            "rewards update matched no staking position - event arrived before Staked?"
+        );
+    }
 
     Ok(())
 }
