@@ -3,7 +3,7 @@ import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';
 import { useUserTokenActions } from '@/hooks/ico/useUserTokenActions';
-import type { FTTokenAction } from '@/hooks/ico/useContractDeploys';
+import type { FTTokenAction } from '@/types/csprCloud';
 
 const mockFetch = vi.fn();
 global.fetch = mockFetch;
