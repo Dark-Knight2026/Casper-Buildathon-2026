@@ -15,6 +15,7 @@ VALUES (
 ON CONFLICT (id) DO NOTHING;
 
 -- RLS Policies for lease-documents
+DROP POLICY IF EXISTS "Users can upload their lease documents" ON storage.objects;
 CREATE POLICY "Users can upload their lease documents"
   ON storage.objects
   FOR INSERT
@@ -23,6 +24,7 @@ CREATE POLICY "Users can upload their lease documents"
     AND auth.uid()::text = (storage.foldername(name))[1]
   );
 
+DROP POLICY IF EXISTS "Users can view their lease documents" ON storage.objects;
 CREATE POLICY "Users can view their lease documents"
   ON storage.objects
   FOR SELECT
@@ -31,6 +33,7 @@ CREATE POLICY "Users can view their lease documents"
     AND auth.uid()::text = (storage.foldername(name))[1]
   );
 
+DROP POLICY IF EXISTS "Users can update their lease documents" ON storage.objects;
 CREATE POLICY "Users can update their lease documents"
   ON storage.objects
   FOR UPDATE
@@ -39,6 +42,7 @@ CREATE POLICY "Users can update their lease documents"
     AND auth.uid()::text = (storage.foldername(name))[1]
   );
 
+DROP POLICY IF EXISTS "Users can delete their lease documents" ON storage.objects;
 CREATE POLICY "Users can delete their lease documents"
   ON storage.objects
   FOR DELETE
@@ -62,6 +66,7 @@ VALUES (
 ON CONFLICT (id) DO NOTHING;
 
 -- RLS Policies for maintenance-photos
+DROP POLICY IF EXISTS "Users can upload maintenance photos" ON storage.objects;
 CREATE POLICY "Users can upload maintenance photos"
   ON storage.objects
   FOR INSERT
@@ -80,12 +85,12 @@ CREATE POLICY "Users can upload maintenance photos"
         SELECT 1 FROM maintenance_requests mr
         JOIN properties p ON mr.property_id = p.id
         WHERE mr.id::text = (storage.foldername(name))[2]
-        -- FIX: owner_id -> landlord_id, agent_id -> property_manager_id
         AND (p.landlord_id = auth.uid() OR p.property_manager_id = auth.uid())
       )
     )
   );
 
+DROP POLICY IF EXISTS "Users can view maintenance photos for their requests" ON storage.objects;
 CREATE POLICY "Users can view maintenance photos for their requests"
   ON storage.objects
   FOR SELECT
@@ -107,6 +112,7 @@ CREATE POLICY "Users can view maintenance photos for their requests"
     )
   );
 
+DROP POLICY IF EXISTS "Users can delete their maintenance photos" ON storage.objects;
 CREATE POLICY "Users can delete their maintenance photos"
   ON storage.objects
   FOR DELETE
@@ -143,11 +149,13 @@ VALUES (
 ON CONFLICT (id) DO NOTHING;
 
 -- RLS Policies for payment-receipts
+DROP POLICY IF EXISTS "System can upload payment receipts" ON storage.objects;
 CREATE POLICY "System can upload payment receipts"
   ON storage.objects
   FOR INSERT
   WITH CHECK (bucket_id = 'payment-receipts');
 
+DROP POLICY IF EXISTS "Users can view their payment receipts" ON storage.objects;
 CREATE POLICY "Users can view their payment receipts"
   ON storage.objects
   FOR SELECT
@@ -171,11 +179,13 @@ VALUES (
 ON CONFLICT (id) DO NOTHING;
 
 -- RLS Policies for property-images
+DROP POLICY IF EXISTS "Anyone can view property images" ON storage.objects;
 CREATE POLICY "Anyone can view property images"
   ON storage.objects
   FOR SELECT
   USING (bucket_id = 'property-images');
 
+DROP POLICY IF EXISTS "Property owners can upload images" ON storage.objects;
 CREATE POLICY "Property owners can upload images"
   ON storage.objects
   FOR INSERT
@@ -184,11 +194,11 @@ CREATE POLICY "Property owners can upload images"
     AND EXISTS (
       SELECT 1 FROM properties p
       WHERE p.id::text = (storage.foldername(name))[1]
-      -- FIX: owner_id -> landlord_id
       AND (p.landlord_id = auth.uid() OR p.property_manager_id = auth.uid())
     )
   );
 
+DROP POLICY IF EXISTS "Property owners can delete images" ON storage.objects;
 CREATE POLICY "Property owners can delete images"
   ON storage.objects
   FOR DELETE

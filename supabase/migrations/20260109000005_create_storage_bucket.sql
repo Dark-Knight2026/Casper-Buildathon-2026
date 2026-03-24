@@ -10,11 +10,13 @@ VALUES (
 ON CONFLICT (id) DO NOTHING;
 
 -- Set up RLS policies for listing photos storage
+DROP POLICY IF EXISTS "Public can view listing photos" ON storage.objects;
 CREATE POLICY "Public can view listing photos"
   ON storage.objects FOR SELECT
   TO public
   USING (bucket_id = 'listing-photos');
 
+DROP POLICY IF EXISTS "Authenticated users can upload listing photos" ON storage.objects;
 CREATE POLICY "Authenticated users can upload listing photos"
   ON storage.objects FOR INSERT
   TO authenticated
@@ -23,6 +25,7 @@ CREATE POLICY "Authenticated users can upload listing photos"
     (storage.foldername(name))[1] = auth.uid()::text
   );
 
+DROP POLICY IF EXISTS "Users can update their own listing photos" ON storage.objects;
 CREATE POLICY "Users can update their own listing photos"
   ON storage.objects FOR UPDATE
   TO authenticated
@@ -31,6 +34,7 @@ CREATE POLICY "Users can update their own listing photos"
     (storage.foldername(name))[1] = auth.uid()::text
   );
 
+DROP POLICY IF EXISTS "Users can delete their own listing photos" ON storage.objects;
 CREATE POLICY "Users can delete their own listing photos"
   ON storage.objects FOR DELETE
   TO authenticated
@@ -59,6 +63,7 @@ VALUES (
 ON CONFLICT (id) DO NOTHING;
 
 -- RLS policies for listing documents
+DROP POLICY IF EXISTS "Users can view their own listing documents" ON storage.objects;
 CREATE POLICY "Users can view their own listing documents"
   ON storage.objects FOR SELECT
   TO authenticated
@@ -67,6 +72,7 @@ CREATE POLICY "Users can view their own listing documents"
     (storage.foldername(name))[1] = auth.uid()::text
   );
 
+DROP POLICY IF EXISTS "Users can upload their own listing documents" ON storage.objects;
 CREATE POLICY "Users can upload their own listing documents"
   ON storage.objects FOR INSERT
   TO authenticated
@@ -75,6 +81,7 @@ CREATE POLICY "Users can upload their own listing documents"
     (storage.foldername(name))[1] = auth.uid()::text
   );
 
+DROP POLICY IF EXISTS "Users can update their own listing documents" ON storage.objects;
 CREATE POLICY "Users can update their own listing documents"
   ON storage.objects FOR UPDATE
   TO authenticated
@@ -83,6 +90,7 @@ CREATE POLICY "Users can update their own listing documents"
     (storage.foldername(name))[1] = auth.uid()::text
   );
 
+DROP POLICY IF EXISTS "Users can delete their own listing documents" ON storage.objects;
 CREATE POLICY "Users can delete their own listing documents"
   ON storage.objects FOR DELETE
   TO authenticated
