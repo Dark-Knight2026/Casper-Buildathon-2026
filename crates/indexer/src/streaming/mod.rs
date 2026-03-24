@@ -27,7 +27,7 @@ use crate::{
     config::{ContractRegistry, ContractType, IndexerConfig},
     error::{IndexerError, IndexerResult},
     events::EventRegistry,
-    processor,
+    processor::{self, RawEvent},
 };
 use db::StreamType;
 
@@ -256,7 +256,7 @@ pub async fn handle_text_message(
         .and_then(|ts| DateTime::parse_from_rfc3339(ts).ok().map(|dt| dt.to_utc()));
     let transform_idx = msg.extra.transform_id.and_then(|id| i32::try_from(id).ok());
 
-    let raw = processor::RawEvent {
+    let raw = RawEvent {
         contract_hash: msg.data.contract_package_hash,
         deploy_hash: msg.extra.deploy_hash,
         block_height: msg.extra.block_height,
@@ -265,6 +265,8 @@ pub async fn handle_text_message(
         event_data: msg.data.data,
         block_timestamp,
         transform_idx,
+        api_from_type: None,
+        api_to_type: None,
     };
 
     match processor::process_event(db_pool, registry, known_hashes, &raw).await {

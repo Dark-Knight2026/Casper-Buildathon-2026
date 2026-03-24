@@ -42,6 +42,8 @@ fn staking_event(deploy_hash: &str, event_name: &str, data: serde_json::Value) -
         event_data: data,
         block_timestamp: Some(Utc::now()),
         transform_idx: None,
+        api_from_type: None,
+        api_to_type: None,
     }
 }
 

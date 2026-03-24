@@ -13,6 +13,8 @@ use crate::error::{IndexerError, IndexerResult};
 /// - Empty string -> returned as-is (streaming caller placeholder)
 /// - `account-hash-XXXX` -> strip prefix, lowercase
 /// - `hash-XXXX` -> strip prefix, lowercase
+/// - `contract-package-wasmXXXX` -> strip prefix, lowercase
+/// - `contract-XXXX` -> strip prefix, lowercase
 /// - 64 hex chars -> lowercase (already an account hash)
 /// - 66/68 hex chars -> public key -> blake2b -> account hash
 ///
@@ -33,6 +35,17 @@ pub fn normalize_to_account_hash(raw: &str) -> IndexerResult<String> {
 
     // "hash-XXXX" prefix (some CES contexts)
     if let Some(hex) = raw.strip_prefix("hash-") {
+        return validate_hex64(hex, raw);
+    }
+
+    // "contract-package-wasmXXXX" prefix (contract package addresses in CES events).
+    // Must be checked before "contract-" to avoid partial match.
+    if let Some(hex) = raw.strip_prefix("contract-package-wasm") {
+        return validate_hex64(hex, raw);
+    }
+
+    // "contract-XXXX" prefix (contract instance addresses in CES events)
+    if let Some(hex) = raw.strip_prefix("contract-") {
         return validate_hex64(hex, raw);
     }
 

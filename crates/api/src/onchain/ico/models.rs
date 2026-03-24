@@ -22,6 +22,9 @@ pub struct IcoBalanceResponse {
     /// Current value of holdings in USD: same formula as `totalSpentUsd` while ICO is active.
     #[schema(example = 1505.0)]
     pub current_value: f64,
+    /// Whether the ICO schedule is currently active (NOW between start and end timestamps).
+    /// `false` when the returned data comes from an expired schedule or env var fallback.
+    pub is_active: bool,
 }
 
 /// ICO sale progress information.
@@ -49,4 +52,7 @@ pub struct IcoProgressResponse {
     /// Percentage of tokens sold (0.0 - 100.0).
     #[schema(example = 30.0)]
     pub percent_sold: f64,
+    /// Whether the ICO schedule is currently active (NOW between start and end timestamps).
+    /// `false` when the returned data comes from an expired schedule or env var fallback.
+    pub is_active: bool,
 }

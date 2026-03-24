@@ -77,10 +77,11 @@ pub async fn get_ico_balance(
 
     let snapshot = db::fetch_balance_snapshot(&state.db, &address).await?;
 
-    let (price_f64, price_decimal) = if let Some(ref schedule) = snapshot.schedule {
+    let (price_f64, price_decimal, is_active) = if let Some(ref schedule) = snapshot.schedule {
         (
             price_to_f64(&schedule.price),
             price_to_decimal(&schedule.price),
+            schedule.is_active.unwrap_or(false),
         )
     } else {
         let fallback = state
@@ -91,6 +92,7 @@ pub async fn get_ico_balance(
         (
             fallback.price_usd.to_f64().unwrap_or(0.0),
             fallback.price_usd,
+            false,
         )
     };
 
@@ -104,6 +106,7 @@ pub async fn get_ico_balance(
         token_price: price_f64,
         token_symbol: "BIG".to_owned(),
         current_value: usd_value,
+        is_active,
     }))
 }
 
@@ -133,26 +136,28 @@ pub async fn get_ico_progress(
     let snapshot = db::fetch_progress_snapshot(&state.db).await?;
 
     // Resolve price and total_allocation from the snapshot schedule or env fallback.
-    let (price_f64, price_decimal, total_allocation) = if let Some(ref schedule) = snapshot.schedule
-    {
-        (
-            price_to_f64(&schedule.price),
-            price_to_decimal(&schedule.price),
-            schedule.sale_amount.clone(),
-        )
-    } else {
-        let fallback = state
-            .config
-            .ico_fallback
-            .as_ref()
-            .ok_or_else(|| ApiError::Internal("ICO not configured".to_owned()))?;
+    let (price_f64, price_decimal, total_allocation, is_active) =
+        if let Some(ref schedule) = snapshot.schedule {
+            (
+                price_to_f64(&schedule.price),
+                price_to_decimal(&schedule.price),
+                schedule.sale_amount.clone(),
+                schedule.is_active.unwrap_or(false),
+            )
+        } else {
+            let fallback = state
+                .config
+                .ico_fallback
+                .as_ref()
+                .ok_or_else(|| ApiError::Internal("ICO not configured".to_owned()))?;
 
-        (
-            fallback.price_usd.to_f64().unwrap_or(0.0),
-            fallback.price_usd,
-            fallback.total_allocation.clone(),
-        )
-    };
+            (
+                fallback.price_usd.to_f64().unwrap_or(0.0),
+                fallback.price_usd,
+                fallback.total_allocation.clone(),
+                false,
+            )
+        };
 
     // Recalculate tokens_remaining using the resolved total_allocation from the
     // snapshot schedule (not the fallback used as default for the query).
@@ -191,5 +196,6 @@ pub async fn get_ico_progress(
         hard_cap_usd,
         price_usd: price_f64,
         percent_sold,
+        is_active,
     }))
 }

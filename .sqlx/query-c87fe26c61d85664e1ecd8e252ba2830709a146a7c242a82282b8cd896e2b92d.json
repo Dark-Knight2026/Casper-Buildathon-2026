@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE contract_registry SET is_active = FALSE",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "c87fe26c61d85664e1ecd8e252ba2830709a146a7c242a82282b8cd896e2b92d"
+}

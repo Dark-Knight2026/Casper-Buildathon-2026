@@ -86,9 +86,8 @@ impl Pageable for Pagination {
 }
 
 /// A generic container for paginated API responses.
-///
-/// Field names match the frontend contract (`item_count`, `page_count`, `data`).
 #[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct PaginatedResponse<T> {
     /// Total number of items across all pages.
     pub item_count: i64,

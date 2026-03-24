@@ -82,10 +82,19 @@ impl HashType {
         Some(i16::from(u8::from(self)))
     }
 
-    /// Determine address type by checking if the address is a known contract.
+    /// Determine address type from an API-provided value, or fall back to
+    /// checking if the address is a known contract.
+    ///
+    /// `api_type` is preferred when present (e.g. from CSPR.cloud
+    /// `from_type`/`to_type`). The `known_contracts` fallback uses package
+    /// hashes which live in a different hash domain than the normalized
+    /// account hashes passed as `address`, so it is best-effort only.
     #[inline]
     #[must_use]
-    pub fn lookup(address: &str, known_contracts: &HashSet<String>) -> Self {
+    pub fn lookup(address: &str, known_contracts: &HashSet<String>, api_type: Option<u8>) -> Self {
+        if let Some(t) = api_type {
+            return Self::from(t);
+        }
         if known_contracts.contains(address) {
             Self::Contract
         } else {
@@ -98,8 +107,13 @@ impl HashType {
 
 /// Populate the `contract_registry` table with all active contracts from config.
 ///
-/// Uses `ON CONFLICT (contract_type) DO UPDATE` so that hash changes (e.g. a
-/// redeployment) are reflected without manual DB intervention.
+/// Runs inside a single transaction:
+/// 1. Mark all existing rows as inactive.
+/// 2. Upsert each configured contract, setting `is_active = TRUE`.
+///
+/// Contracts removed from the config will remain in the table with
+/// `is_active = FALSE`, preserving historical data while reflecting the
+/// current deployment state.
 ///
 /// Called once at indexer startup before backfill and streaming begin.
 ///
@@ -112,6 +126,13 @@ pub async fn upsert_contract_registry(
     pool: &PgPool,
     contracts: &ContractRegistry,
 ) -> IndexerResult<()> {
+    let mut tx = pool.begin().await?;
+
+    // Deactivate all contracts first; active ones will be re-enabled below.
+    sqlx::query!("UPDATE contract_registry SET is_active = FALSE")
+        .execute(tx.as_mut())
+        .await?;
+
     for contract in contracts.active_contracts() {
         sqlx::query!(
             r"
@@ -124,9 +145,11 @@ pub async fn upsert_contract_registry(
             contract.contract_type.as_str(),
             contract.hash,
         )
-        .execute(pool)
+        .execute(tx.as_mut())
         .await?;
     }
+
+    tx.commit().await?;
     Ok(())
 }
 
@@ -245,10 +268,17 @@ pub struct NewBlockchainTx<'a> {
     pub metadata: &'a serde_json::Value,
 }
 
-/// Insert a row into `blockchain_transactions`.
+/// Insert or backfill a row into `blockchain_transactions`.
 ///
-/// Uses `ON CONFLICT DO NOTHING` on `transaction_hash` so re-processing the
-/// same deploy is safe.
+/// Uses an expression-based unique index on
+/// `(transaction_hash, transaction_type, from_address, COALESCE(transform_idx, 0))`
+/// so that multiple events of the same type from the same sender within a
+/// single deploy are correctly distinguished by their transform index.
+///
+/// On conflict the `DO UPDATE SET ... COALESCE` clause fills in columns that
+/// were `NULL` in pre-existing rows (e.g. rows inserted before the
+/// `to_address`, `contract_hash`, `block_timestamp`, `from_type`, `to_type`,
+/// `transform_idx` columns were added), making re-indexing safe.
 ///
 /// # Errors
 ///
@@ -263,7 +293,14 @@ pub async fn insert_blockchain_transaction(
         r"
             INSERT INTO blockchain_transactions ( transaction_hash, deploy_hash, block_number, transaction_type, from_address, to_address, amount, currency, contract_hash, block_timestamp, from_type, to_type, transform_idx, status, metadata, confirmed_at )
             VALUES ($1, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'confirmed', $13, NOW())
-            ON CONFLICT (transaction_hash, transaction_type, from_address) DO NOTHING
+            ON CONFLICT (transaction_hash, transaction_type, from_address, COALESCE(transform_idx, 0))
+            DO UPDATE SET
+                to_address      = COALESCE(blockchain_transactions.to_address,      EXCLUDED.to_address),
+                contract_hash   = COALESCE(blockchain_transactions.contract_hash,    EXCLUDED.contract_hash),
+                block_timestamp = COALESCE(blockchain_transactions.block_timestamp,  EXCLUDED.block_timestamp),
+                from_type       = COALESCE(blockchain_transactions.from_type,        EXCLUDED.from_type),
+                to_type         = COALESCE(blockchain_transactions.to_type,          EXCLUDED.to_type),
+                transform_idx   = COALESCE(blockchain_transactions.transform_idx,    EXCLUDED.transform_idx)
         ",
         row.deploy_hash,
         row.block_number,
@@ -474,7 +511,7 @@ pub async fn upsert_ico_schedule(
                 transaction_hash = EXCLUDED.transaction_hash,
                 block_height     = EXCLUDED.block_height,
                 updated_at       = NOW()
-            WHERE ico_schedules.block_height < EXCLUDED.block_height
+            WHERE ico_schedules.block_height <= EXCLUDED.block_height
         ",
         row.schedule_id,
         row.start_timestamp,
@@ -491,7 +528,7 @@ pub async fn upsert_ico_schedule(
               tracing::warn!(
                   schedule_id = row.schedule_id,
                   block_height = row.block_height,
-                  "upsert_ico_schedule no-op: same or older block_height"
+                  "upsert_ico_schedule no-op: older block_height"
               );
           }
       })?;

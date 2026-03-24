@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO blockchain_transactions ( transaction_hash, deploy_hash, block_number, transaction_type, from_address, to_address, amount, currency, contract_hash, block_timestamp, from_type, to_type, transform_idx, status, metadata, confirmed_at )\n            VALUES ($1, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'confirmed', $13, NOW())\n            ON CONFLICT (transaction_hash, transaction_type, from_address, COALESCE(transform_idx, 0))\n            DO UPDATE SET\n                to_address      = COALESCE(blockchain_transactions.to_address,      EXCLUDED.to_address),\n                contract_hash   = COALESCE(blockchain_transactions.contract_hash,    EXCLUDED.contract_hash),\n                block_timestamp = COALESCE(blockchain_transactions.block_timestamp,  EXCLUDED.block_timestamp),\n                from_type       = COALESCE(blockchain_transactions.from_type,        EXCLUDED.from_type),\n                to_type         = COALESCE(blockchain_transactions.to_type,          EXCLUDED.to_type),\n                transform_idx   = COALESCE(blockchain_transactions.transform_idx,    EXCLUDED.transform_idx)\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int8",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Timestamptz",
+        "Int2",
+        "Int2",
+        "Int4",
+        "Jsonb"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8d0b911b39bf57956ccc0b421421a7a849e3bdd451d5e6238221baf4bd5c1e04"
+}

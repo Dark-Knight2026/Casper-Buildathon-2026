@@ -60,6 +60,8 @@ async fn schedule_created_writes_vesting_schedule_row(pool: PgPool) {
             }),
             block_timestamp: None,
             transform_idx: None,
+            api_from_type: None,
+            api_to_type: None,
         },
     )
     .await
@@ -117,6 +119,8 @@ async fn schedule_created_upsert_updates_existing_row(pool: PgPool) {
             }),
             block_timestamp: None,
             transform_idx: None,
+            api_from_type: None,
+            api_to_type: None,
         },
     )
     .await
@@ -145,6 +149,8 @@ async fn schedule_created_upsert_updates_existing_row(pool: PgPool) {
             }),
             block_timestamp: None,
             transform_idx: None,
+            api_from_type: None,
+            api_to_type: None,
         },
     )
     .await
@@ -206,6 +212,8 @@ async fn tokens_claimed_increases_claimed_amount(pool: PgPool) {
             }),
             block_timestamp: None,
             transform_idx: None,
+            api_from_type: None,
+            api_to_type: None,
         },
     )
     .await
@@ -230,6 +238,8 @@ async fn tokens_claimed_increases_claimed_amount(pool: PgPool) {
             }),
             block_timestamp: None,
             transform_idx: None,
+            api_from_type: None,
+            api_to_type: None,
         },
     )
     .await
@@ -289,6 +299,8 @@ async fn tokens_claimed_accumulates(pool: PgPool) {
             }),
             block_timestamp: None,
             transform_idx: None,
+            api_from_type: None,
+            api_to_type: None,
         },
     )
     .await
@@ -313,6 +325,8 @@ async fn tokens_claimed_accumulates(pool: PgPool) {
             }),
             block_timestamp: None,
             transform_idx: None,
+            api_from_type: None,
+            api_to_type: None,
         },
     )
     .await

@@ -61,7 +61,8 @@ impl IndexableEvent for RewardsDeposited {
                 currency: Some("BIG"),
                 contract_hash: Some(ctx.contract_hash),
                 block_timestamp: ctx.block_timestamp,
-                from_type: HashType::lookup(&caller, ctx.known_contract_hashes).to_db(),
+                from_type: HashType::lookup(&caller, ctx.known_contract_hashes, ctx.api_from_type)
+                    .to_db(),
                 to_type: HashType::Contract.to_db(),
                 transform_idx: ctx.transform_idx,
                 metadata: &event_json,

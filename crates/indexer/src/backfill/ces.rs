@@ -223,6 +223,8 @@ async fn process_event_at(
         event_data,
         block_timestamp: None,
         transform_idx: None,
+        api_from_type: None,
+        api_to_type: None,
     };
 
     processor::process_event(

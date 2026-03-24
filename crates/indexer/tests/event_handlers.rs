@@ -53,6 +53,8 @@ async fn transfer_writes_blockchain_transaction_row(pool: PgPool) {
             event_data: payloads::transfer_event_data("500"),
             block_timestamp: None,
             transform_idx: None,
+            api_from_type: None,
+            api_to_type: None,
         },
     )
     .await
@@ -96,6 +98,8 @@ async fn transfer_increases_recipient_and_clamps_unknown_sender(pool: PgPool) {
             event_data: payloads::transfer_event_data("300"),
             block_timestamp: None,
             transform_idx: None,
+            api_from_type: None,
+            api_to_type: None,
         },
     )
     .await
@@ -164,6 +168,8 @@ async fn transfer_decreases_existing_sender_balance(pool: PgPool) {
             event_data: payloads::transfer_event_data("400"),
             block_timestamp: None,
             transform_idx: None,
+            api_from_type: None,
+            api_to_type: None,
         },
     )
     .await
@@ -212,6 +218,8 @@ async fn set_allowance_writes_blockchain_transaction_row(pool: PgPool) {
             }),
             block_timestamp: None,
             transform_idx: None,
+            api_from_type: None,
+            api_to_type: None,
         },
     )
     .await
@@ -262,6 +270,8 @@ async fn tokens_purchased_writes_ico_purchase_and_blockchain_transaction(pool: P
             }),
             block_timestamp: None,
             transform_idx: None,
+            api_from_type: None,
+            api_to_type: None,
         },
     )
     .await
@@ -325,6 +335,8 @@ async fn tokens_purchased_increases_buyer_big_balance(pool: PgPool) {
             }),
             block_timestamp: None,
             transform_idx: None,
+            api_from_type: None,
+            api_to_type: None,
         },
     )
     .await
@@ -369,6 +381,8 @@ async fn transfer_usdc_updates_usdc_token_holdings(pool: PgPool) {
             event_data: payloads::transfer_event_data("250"),
             block_timestamp: None,
             transform_idx: None,
+            api_from_type: None,
+            api_to_type: None,
         },
     )
     .await
@@ -423,6 +437,8 @@ async fn transfer_usdt_updates_usdt_token_holdings(pool: PgPool) {
             event_data: payloads::transfer_event_data("350"),
             block_timestamp: None,
             transform_idx: None,
+            api_from_type: None,
+            api_to_type: None,
         },
     )
     .await
@@ -485,6 +501,8 @@ async fn tokens_purchased_unknown_currency_stored_as_unknown_label(pool: PgPool)
             }),
             block_timestamp: None,
             transform_idx: None,
+            api_from_type: None,
+            api_to_type: None,
         },
     )
     .await
@@ -544,6 +562,8 @@ async fn set_allowance_does_not_modify_token_holdings(pool: PgPool) {
             }),
             block_timestamp: None,
             transform_idx: None,
+            api_from_type: None,
+            api_to_type: None,
         },
     )
     .await
@@ -588,6 +608,8 @@ async fn ico_schedule_added_writes_schedule_row(pool: PgPool) {
             }),
             block_timestamp: None,
             transform_idx: None,
+            api_from_type: None,
+            api_to_type: None,
         },
     )
     .await
@@ -658,6 +680,8 @@ async fn ico_schedule_added_upsert_updates_existing_row(pool: PgPool) {
             }),
             block_timestamp: None,
             transform_idx: None,
+            api_from_type: None,
+            api_to_type: None,
         },
     )
     .await
@@ -683,6 +707,8 @@ async fn ico_schedule_added_upsert_updates_existing_row(pool: PgPool) {
             }),
             block_timestamp: None,
             transform_idx: None,
+            api_from_type: None,
+            api_to_type: None,
         },
     )
     .await
@@ -751,6 +777,8 @@ async fn ico_schedule_added_stale_event_does_not_overwrite(pool: PgPool) {
             }),
             block_timestamp: None,
             transform_idx: None,
+            api_from_type: None,
+            api_to_type: None,
         },
     )
     .await
@@ -776,6 +804,8 @@ async fn ico_schedule_added_stale_event_does_not_overwrite(pool: PgPool) {
             }),
             block_timestamp: None,
             transform_idx: None,
+            api_from_type: None,
+            api_to_type: None,
         },
     )
     .await

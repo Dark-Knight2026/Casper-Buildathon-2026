@@ -97,8 +97,8 @@ async fn vesting_schedules_empty(pool: PgPool) {
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    assert_eq!(body["item_count"], 0);
-    assert_eq!(body["page_count"], 0);
+    assert_eq!(body["itemCount"], 0);
+    assert_eq!(body["pageCount"], 0);
     assert!(body["data"].as_array().unwrap().is_empty());
 }
 
@@ -120,7 +120,7 @@ async fn vesting_schedules_returns_schedule(pool: PgPool) {
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    assert_eq!(body["item_count"], 1);
+    assert_eq!(body["itemCount"], 1);
     let schedule = &body["data"][0];
     assert_eq!(schedule["id"], "0");
     assert_eq!(schedule["purchaseTimestamp"], 1000);
@@ -144,7 +144,7 @@ async fn vesting_schedules_filters_by_account(pool: PgPool) {
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    assert_eq!(body["item_count"], 1);
+    assert_eq!(body["itemCount"], 1);
     assert_eq!(body["data"][0]["id"], "0");
 }
 
@@ -176,8 +176,8 @@ async fn vesting_schedules_pagination(pool: PgPool) {
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    assert_eq!(body["item_count"], 5);
-    assert_eq!(body["page_count"], 3);
+    assert_eq!(body["itemCount"], 5);
+    assert_eq!(body["pageCount"], 3);
     assert_eq!(body["data"].as_array().unwrap().len(), 2);
 
     // Page 3, page_size=2 (last page, 1 item)
