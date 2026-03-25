@@ -66,7 +66,7 @@ export function TransactionStatusToast({
           <div className="flex items-center gap-3">
             {/* Icon */}
             {isSuccess && (
-              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center">
+              <div className="shrink-0 w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center">
                 <svg
                   className="w-5 h-5 text-green-400"
                   fill="none"
@@ -83,7 +83,7 @@ export function TransactionStatusToast({
               </div>
             )}
             {isError && (
-              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-red-500/20 flex items-center justify-center">
+              <div className="shrink-0 w-8 h-8 rounded-full bg-red-500/20 flex items-center justify-center">
                 <svg
                   className="w-5 h-5 text-red-400"
                   fill="none"
@@ -120,7 +120,7 @@ export function TransactionStatusToast({
           {/* Close button */}
           <button
             onClick={onClose}
-            className="flex-shrink-0 text-white/50 hover:text-white transition-colors"
+            className="shrink-0 text-white/50 hover:text-white transition-colors"
             aria-label="Close notification"
           >
             <svg
