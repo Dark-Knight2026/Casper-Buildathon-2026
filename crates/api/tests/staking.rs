@@ -63,6 +63,50 @@ async fn seed_ico_schedule(pool: &PgPool, price: &str) {
     .expect("Failed to seed ICO schedule");
 }
 
+/// Seed a staking position with unbonding fields.
+async fn seed_unbonding_position(
+    pool: &PgPool,
+    staker: &str,
+    unbonding_amount: &str,
+    unbonding_ends_at: i64,
+) {
+    sqlx::query(
+        r"
+            INSERT INTO staking_positions (staker_address, staked_amount, total_rewards_claimed, unbonding_amount, unbonding_ends_at, last_updated_at)
+            VALUES ($1, '0', '0', $2, $3, NOW())
+        ",
+    )
+    .bind(staker)
+    .bind(unbonding_amount)
+    .bind(unbonding_ends_at)
+    .execute(pool)
+    .await
+    .expect("Failed to seed unbonding position");
+}
+
+/// Seed a staking event (unstake or withdraw) with a specific timestamp.
+async fn seed_staking_event(
+    pool: &PgPool,
+    staker: &str,
+    event_type: &str,
+    amount: &str,
+    timestamp: &str,
+) {
+    sqlx::query(
+        r"
+            INSERT INTO staking_events (staker_address, event_type, amount, transaction_hash, block_height, event_timestamp)
+            VALUES ($1, $2, $3, md5(random()::text), 1, $4::TIMESTAMPTZ)
+        ",
+    )
+    .bind(staker)
+    .bind(event_type)
+    .bind(amount)
+    .bind(timestamp)
+    .execute(pool)
+    .await
+    .expect("Failed to seed staking event");
+}
+
 /// Seed a staking event (`reward_claim`) with a specific timestamp.
 async fn seed_reward_claim_event(pool: &PgPool, staker: &str, amount: &str, timestamp: &str) {
     sqlx::query(
@@ -581,4 +625,135 @@ async fn rewards_history_default_period_is_90(pool: PgPool) {
         1,
         "default period (90 days) should exclude 100-day old event"
     );
+}
+
+// GET /api/v1/staking/{accountHash}/unbonding
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn unbonding_no_position_returns_zeros(pool: PgPool) {
+    let env = common::setup_test_server(pool, false).await;
+
+    let response = env
+        .server
+        .get(&format!("/api/v1/staking/{VALID_ADDRESS}/unbonding"))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+    assert_eq!(body["unbondingAmount"], 0.0);
+    assert_eq!(body["unbondingEndsAt"], 0);
+    assert_eq!(body["isWithdrawable"], false);
+    assert_eq!(body["timeRemainingMs"], 0);
+    assert!(body["history"].as_array().unwrap().is_empty());
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn unbonding_active_returns_not_withdrawable(pool: PgPool) {
+    let now_ms = Utc::now().timestamp_millis();
+    // Unbonding ends 7 days from now
+    let ends_at = now_ms + 7 * 24 * 60 * 60 * 1000;
+    // 500 BIG unbonding
+    seed_unbonding_position(&pool, VALID_ADDRESS, "500000000000000000000", ends_at).await;
+
+    let env = common::setup_test_server(pool, false).await;
+
+    let response = env
+        .server
+        .get(&format!("/api/v1/staking/{VALID_ADDRESS}/unbonding"))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+    let amount = body["unbondingAmount"].as_f64().unwrap();
+    assert!(
+        (amount - 500.0).abs() < 0.01,
+        "expected ~500.0, got {amount}"
+    );
+    assert_eq!(body["isWithdrawable"], false);
+    let remaining = body["timeRemainingMs"].as_i64().unwrap();
+    assert!(remaining > 0, "time_remaining_ms should be positive");
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn unbonding_expired_is_withdrawable(pool: PgPool) {
+    let now_ms = Utc::now().timestamp_millis();
+    // Unbonding ended 1 hour ago
+    let ends_at = now_ms - 60 * 60 * 1000;
+    seed_unbonding_position(&pool, VALID_ADDRESS, "500000000000000000000", ends_at).await;
+
+    let env = common::setup_test_server(pool, false).await;
+
+    let response = env
+        .server
+        .get(&format!("/api/v1/staking/{VALID_ADDRESS}/unbonding"))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+    assert_eq!(body["isWithdrawable"], true);
+    assert_eq!(body["timeRemainingMs"], 0);
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn unbonding_history_returns_chronologically(pool: PgPool) {
+    let now = Utc::now();
+    let day_10 = (now - Duration::days(10)).to_rfc3339();
+    let day_5 = (now - Duration::days(5)).to_rfc3339();
+    let day_2 = (now - Duration::days(2)).to_rfc3339();
+
+    // unstake 500 BIG, then another unstake 300 BIG, then withdraw 500 BIG
+    seed_staking_event(
+        &pool,
+        VALID_ADDRESS,
+        "unstake",
+        "500000000000000000000",
+        &day_10,
+    )
+    .await;
+    seed_staking_event(
+        &pool,
+        VALID_ADDRESS,
+        "unstake",
+        "300000000000000000000",
+        &day_5,
+    )
+    .await;
+    seed_staking_event(
+        &pool,
+        VALID_ADDRESS,
+        "withdraw",
+        "500000000000000000000",
+        &day_2,
+    )
+    .await;
+
+    let env = common::setup_test_server(pool, false).await;
+
+    let response = env
+        .server
+        .get(&format!("/api/v1/staking/{VALID_ADDRESS}/unbonding"))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+    let history = body["history"].as_array().unwrap();
+    assert_eq!(history.len(), 3, "should have 3 events");
+
+    // Verify chronological order
+    assert_eq!(history[0]["eventType"], "unstake");
+    let amount_0 = history[0]["amount"].as_f64().unwrap();
+    assert!((amount_0 - 500.0).abs() < 0.01);
+
+    assert_eq!(history[1]["eventType"], "unstake");
+    let amount_1 = history[1]["amount"].as_f64().unwrap();
+    assert!((amount_1 - 300.0).abs() < 0.01);
+
+    assert_eq!(history[2]["eventType"], "withdraw");
+    let amount_2 = history[2]["amount"].as_f64().unwrap();
+    assert!((amount_2 - 500.0).abs() < 0.01);
+
+    // Verify timestamps are ISO 8601 and ascending
+    let ts_0 = history[0]["timestamp"].as_str().unwrap();
+    let ts_2 = history[2]["timestamp"].as_str().unwrap();
+    assert!(ts_0 < ts_2, "events should be in chronological order");
 }
