@@ -35,7 +35,7 @@ Backend service for processing high-load real estate operations, including tax c
 - **GET** `/api/v1/transactions/account/{address}`
   - **Path:** `address` - Casper account hash (64 hex chars, no prefix)
   - **Query:** `page` (default 1), `page_size` (default 25, max 100), `type` (optional filter: `token_purchase`, `token_transfer`, `token_mint`, `token_allowance`), `from_type` (optional filter: `0` = Account, `1` = Contract)
-  - **Response:** `PaginatedResponse<TransactionResponse>` `{ "item_count": 42, "page_count": 2, "data": [...] }`
+  - **Response:** `PaginatedResponse<TransactionResponse>` `{ "itemCount": 42, "pageCount": 2, "data": [...] }`
   - **Auth:** Public (no JWT required)
   - **Rate limit:** 5 req/s, burst 30
 
@@ -77,7 +77,8 @@ Backend service for processing high-load real estate operations, including tax c
   "totalSpentUsd": 250.0,
   "tokenPrice": 0.50,
   "tokenSymbol": "BIG",
-  "currentValue": 250.0
+  "currentValue": 250.0,
+  "isActive": true
 }
 ```
 
@@ -94,15 +95,16 @@ Backend service for processing high-load real estate operations, including tax c
   "amountRaised": 50000.0,
   "hardCapUsd": 500000.0,
   "priceUsd": 0.50,
-  "percentSold": 10.0
+  "percentSold": 10.0,
+  "isActive": true
 }
 ```
 
 #### PaginatedResponse Schema
 ```json
 {
-  "item_count": 100,
-  "page_count": 4,
+  "itemCount": 100,
+  "pageCount": 4,
   "data": [ "...items..." ]
 }
 ```
