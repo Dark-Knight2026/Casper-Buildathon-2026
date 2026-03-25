@@ -166,6 +166,8 @@ pub struct NewBlockchainEvent<'a> {
     pub block_number: i64,
     /// Raw event payload as JSON.
     pub event_data: &'a serde_json::Value,
+    /// Transform index within the deploy. `None` when unavailable.
+    pub transform_idx: Option<i32>,
 }
 
 /// Insert a raw event into `blockchain_events` (idempotent).
@@ -184,9 +186,9 @@ pub async fn insert_blockchain_event(
 ) -> IndexerResult<bool> {
     let result = sqlx::query!(
         r"
-            INSERT INTO blockchain_events (event_type, contract_address, transaction_hash, block_number, event_data)
-            VALUES ($1, $2, $3, $4, $5)
-            ON CONFLICT (transaction_hash, event_type, contract_address) DO NOTHING
+            INSERT INTO blockchain_events (event_type, contract_address, transaction_hash, block_number, event_data, transform_idx)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            ON CONFLICT (transaction_hash, event_type, contract_address, COALESCE(transform_idx, 0)) DO NOTHING
             RETURNING id
         ",
         row.event_type,
@@ -194,6 +196,7 @@ pub async fn insert_blockchain_event(
         row.transaction_hash,
         row.block_number,
         row.event_data,
+        row.transform_idx,
     )
     .fetch_optional(tx.as_mut())
     .await?;
