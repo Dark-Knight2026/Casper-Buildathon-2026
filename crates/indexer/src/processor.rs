@@ -54,6 +54,7 @@ impl<'a> From<&'a RawEvent> for db::NewBlockchainEvent<'a> {
             transaction_hash: &raw.deploy_hash,
             block_number: raw.block_height.cast_signed(),
             event_data: &raw.event_data,
+            transform_idx: raw.transform_idx,
         }
     }
 }

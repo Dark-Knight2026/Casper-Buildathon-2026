@@ -160,10 +160,12 @@ pub async fn login(
         return Err(ApiError::BadRequest("Invalid wallet address".to_owned()));
     }
 
-    // Get stored nonce from Redis (using normalized address)
+    // Atomically consume nonce from Redis (one-time use via GETDEL).
+    // This prevents replay attacks and eliminates the TOCTOU race window
+    // that existed with separate GET + DEL commands.
     let stored_nonce = state
         .redis
-        .get_nonce(&wallet_address)
+        .take_nonce(&wallet_address)
         .await
         .map_err(|e| {
             tracing::error!(error = %e, "Failed to get nonce");
@@ -178,15 +180,6 @@ pub async fn login(
             );
             ApiError::Unauthorized("Nonce not found or expired".to_owned())
         })?;
-
-    // Consume nonce before verification (one-time use).
-    // This prevents replay attacks within the nonce TTL window.
-    // Must hard-fail: if Redis is down the nonce survives, allowing a second login.
-    state
-        .redis
-        .delete_nonce(&wallet_address)
-        .await
-        .map_err(|e| ApiError::Internal(format!("Failed to delete nonce: {e}")))?;
 
     // Security: Verify Signature and RETURN ERROR if invalid
     let is_valid = common::verify_casper_signature(

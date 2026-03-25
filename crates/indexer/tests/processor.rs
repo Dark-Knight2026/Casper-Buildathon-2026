@@ -60,8 +60,8 @@ async fn duplicate_event_is_no_op(pool: PgPool) {
         .await
         .expect("first process_event must succeed");
 
-    // Second call — same (contract_hash, deploy_hash, event_name) triple
-    // matches the UNIQUE constraint -> insert_blockchain_event returns false ->
+    // Second call — same (transaction_hash, event_type, contract_address, transform_idx) tuple
+    // matches the UNIQUE index -> insert_blockchain_event returns false ->
     // process_event returns Ok(()) without calling the handler.
     processor::process_event(&pool, &registry, &HashSet::new(), &event)
         .await

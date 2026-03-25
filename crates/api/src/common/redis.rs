@@ -40,7 +40,10 @@ impl RedisStore {
         connection.set_ex(&key, message, LOGIN_NONCE_TTL).await
     }
 
-    /// Retrieves the nonce message for the given wallet address.
+    /// Atomically retrieves and deletes the nonce for the given wallet address.
+    ///
+    /// Uses Redis `GETDEL` (6.2+) to eliminate the TOCTOU race window that
+    /// exists with separate GET + DEL commands.
     ///
     /// Returns `None` if the nonce doesn't exist or has expired.
     ///
@@ -48,24 +51,13 @@ impl RedisStore {
     ///
     /// Returns `RedisError` if the connection fails.
     #[inline]
-    pub async fn get_nonce(&self, wallet_address: &str) -> RedisResult<Option<String>> {
+    pub async fn take_nonce(&self, wallet_address: &str) -> RedisResult<Option<String>> {
         let mut connection = self.client.get_multiplexed_async_connection().await?;
         let key = Self::nonce_key(wallet_address);
-        connection.get(&key).await
-    }
-
-    /// Deletes the nonce for the given wallet address.
-    ///
-    /// Used after successful login to prevent replay attacks.
-    ///
-    /// # Errors
-    ///
-    /// Returns `RedisError` if the connection fails.
-    #[inline]
-    pub async fn delete_nonce(&self, wallet_address: &str) -> RedisResult<()> {
-        let mut connection = self.client.get_multiplexed_async_connection().await?;
-        let key = Self::nonce_key(wallet_address);
-        connection.del(&key).await
+        redis::cmd("GETDEL")
+            .arg(&key)
+            .query_async(&mut connection)
+            .await
     }
 
     /// Checks if Redis is reachable.
