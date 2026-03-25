@@ -423,3 +423,44 @@ async fn vesting_with_claimed_reduces_unlocked(pool: PgPool) {
         "unlocked should be vested - claimed = 800, got {unlocked}"
     );
 }
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn vesting_midway_with_cliff_unlocked_is_proportional(pool: PgPool) {
+    let now_ms = Utc::now().timestamp_millis();
+    let amount = "1000000000000000000000"; // 1000 BIG
+    // cliff = 30 days, duration = 90 days, started 60 days ago
+    // now is 30 days into the 60-day post-cliff window -> ~50% vested -> ~500 BIG
+    let day_ms: i64 = 24 * 60 * 60 * 1000;
+    let start = now_ms - 60 * day_ms;
+    let cliff_ms = 30 * day_ms;
+    let vesting_ms = 90 * day_ms;
+    seed_vesting_schedule(
+        &pool,
+        "0",
+        VALID_ADDRESS,
+        amount,
+        start,
+        cliff_ms,
+        vesting_ms,
+    )
+    .await;
+
+    let env = common::setup_test_server(pool, false).await;
+
+    let response = env
+        .server
+        .get(&format!(
+            "/api/v1/vesting/schedules?account={VALID_ADDRESS}"
+        ))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+    let schedule = &body["data"][0];
+    let unlocked = schedule["unlockedAmount"].as_f64().unwrap();
+    // Post-cliff elapsed: 30 days, post-cliff duration: 60 days -> ~50% of 1000
+    assert!(
+        (unlocked - 500.0).abs() < 10.0,
+        "at 50% post-cliff vesting, unlocked should be ~500, got {unlocked}"
+    );
+}
