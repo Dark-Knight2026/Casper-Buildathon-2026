@@ -1,6 +1,6 @@
 //! Database queries for ICO endpoints.
 
-use sqlx::{FromRow, PgPool};
+use sqlx::{FromRow, PgPool, postgres::PgConnection};
 
 /// ICO schedule row from `ico_schedules` table.
 #[derive(Debug, FromRow)]
@@ -13,6 +13,34 @@ pub struct IcoScheduleRow {
     /// sqlx infers `Option<bool>` for computed expressions; callers use
     /// `.unwrap_or(false)`.
     pub is_active: Option<bool>,
+}
+
+/// Fetches the current (or most recent) ICO schedule.
+///
+/// Prefers the active schedule (where `NOW()` is between start and end
+/// timestamps). Falls back to the latest by `block_height` and `created_at`.
+///
+/// # Errors
+///
+/// Returns `sqlx::Error` if the database query fails.
+async fn fetch_current_schedule(
+    conn: &mut PgConnection,
+) -> Result<Option<IcoScheduleRow>, sqlx::Error> {
+    sqlx::query_as!(
+        IcoScheduleRow,
+        r"
+            SELECT sale_amount, price,
+                   (EXTRACT(EPOCH FROM NOW())::BIGINT BETWEEN start_timestamp AND end_timestamp) AS is_active
+            FROM ico_schedules
+            ORDER BY
+                CASE WHEN EXTRACT(EPOCH FROM NOW())::BIGINT BETWEEN start_timestamp AND end_timestamp
+                     THEN 0 ELSE 1 END,
+                block_height DESC, created_at DESC
+            LIMIT 1
+        ",
+    )
+    .fetch_optional(conn)
+    .await
 }
 
 /// Snapshot of ICO progress data fetched atomically.
@@ -39,21 +67,7 @@ pub async fn fetch_progress_snapshot(pool: &PgPool) -> Result<ProgressSnapshot, 
         .execute(tx.as_mut())
         .await?;
 
-    let schedule = sqlx::query_as!(
-        IcoScheduleRow,
-        r"
-            SELECT sale_amount, price,
-                   (EXTRACT(EPOCH FROM NOW())::BIGINT BETWEEN start_timestamp AND end_timestamp) AS is_active
-            FROM ico_schedules
-            ORDER BY
-                CASE WHEN EXTRACT(EPOCH FROM NOW())::BIGINT BETWEEN start_timestamp AND end_timestamp
-                     THEN 0 ELSE 1 END,
-                block_height DESC, created_at DESC
-            LIMIT 1
-        ",
-    )
-    .fetch_optional(tx.as_mut())
-    .await?;
+    let schedule = fetch_current_schedule(tx.as_mut()).await?;
 
     let row =
         sqlx::query_scalar!(r"SELECT COALESCE(SUM(amount::NUMERIC), 0)::TEXT FROM ico_purchases",)
@@ -95,21 +109,7 @@ pub async fn fetch_balance_snapshot(
         .execute(tx.as_mut())
         .await?;
 
-    let schedule = sqlx::query_as!(
-        IcoScheduleRow,
-        r"
-            SELECT sale_amount, price,
-                   (EXTRACT(EPOCH FROM NOW())::BIGINT BETWEEN start_timestamp AND end_timestamp) AS is_active
-            FROM ico_schedules
-            ORDER BY
-                CASE WHEN EXTRACT(EPOCH FROM NOW())::BIGINT BETWEEN start_timestamp AND end_timestamp
-                     THEN 0 ELSE 1 END,
-                block_height DESC, created_at DESC
-            LIMIT 1
-        ",
-    )
-      .fetch_optional(tx.as_mut())
-      .await?;
+    let schedule = fetch_current_schedule(tx.as_mut()).await?;
 
     let value = sqlx::query_scalar!(
         r"
