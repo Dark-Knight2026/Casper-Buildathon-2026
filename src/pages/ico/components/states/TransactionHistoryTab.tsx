@@ -108,7 +108,7 @@ export function TransactionHistoryTab() {
         ) : (
           <>
             <div className="overflow-x-auto">
-              <Table>
+              <Table aria-label="BIG token transactions">
                 <TableHeader>
                   <TableRow className="border-b border-[hsl(var(--ico-border-color))]">
                     <TableHead className="text-[hsl(var(--ico-text-muted))] text-xs font-medium">Tx Hash</TableHead>
@@ -131,10 +131,11 @@ export function TransactionHistoryTab() {
                           href={`${EXPLORER_URL}/deploy/${action.deploy_hash}`}
                           target="_blank"
                           rel="noopener noreferrer"
+                          aria-label={`View deploy ${action.deploy_hash} on Casper explorer (opens in new tab)`}
                           className="text-[hsl(var(--ico-brand-primary))] hover:underline inline-flex items-center gap-1"
                         >
                           {truncateHash(action.deploy_hash)}
-                          <ExternalLink className="w-3 h-3" />
+                          <ExternalLink className="w-3 h-3" aria-hidden="true" />
                         </a>
                       </TableCell>
                       <TableCell className="text-sm text-[hsl(var(--ico-text-secondary))]">
