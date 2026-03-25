@@ -64,13 +64,17 @@ async function fetchActualTokensReceived(
   maxRetries = 3,
   retryDelayMs = 5000,
 ): Promise<bigint | null> {
+  const outerSignal = AbortSignal.timeout(30_000);
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    if (outerSignal.aborted) return null;
     try {
       // Wait before querying — the indexer needs time to process the deploy
       await delay(attempt === 1 ? 3000 : retryDelayMs);
 
       const url = `/api/cspr-cloud/ft-token-actions?deploy_hash=${deployHash}`;
-      const resp = await fetch(url, { signal: AbortSignal.timeout(15_000) });
+      const resp = await fetch(url, {
+        signal: AbortSignal.any([outerSignal, AbortSignal.timeout(15_000)]),
+      });
       if (!resp.ok) continue;
 
       const json = await resp.json();
