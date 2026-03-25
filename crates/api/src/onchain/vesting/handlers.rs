@@ -54,13 +54,13 @@ fn calculate_vested(total: &str, start: i64, cliff: i64, duration: i64, now: i64
     } else if now >= vesting_end {
         total_dec
     } else {
-        let elapsed = Decimal::from(now - start);
-        let dur = Decimal::from(duration);
-        if dur.is_zero() {
-            Decimal::ZERO
+        let post_cliff_elapsed = Decimal::from(now - cliff_end);
+        let post_cliff_dur = Decimal::from(duration - cliff);
+        if post_cliff_dur.is_zero() {
+            total_dec
         } else {
-            // Divide first to avoid overflow: (elapsed / dur) is always <= 1.0
-            total_dec * (elapsed / dur)
+            // Divide first to avoid overflow: ratio is always <= 1.0
+            total_dec * (post_cliff_elapsed / post_cliff_dur)
         }
     }
 }
@@ -244,14 +244,16 @@ pub async fn get_release_schedule(
             continue;
         }
 
-        let dur_dec = Decimal::from(r.vesting_duration);
+        let post_cliff_dur = r.vesting_duration - r.cliff_duration;
+        let dur_dec = Decimal::from(post_cliff_dur);
         // Divide first to keep values within Decimal's 28-digit precision
         // (total_dec can be a raw U256 amount with 20+ digits).
         let slope = (total_dec / dur_dec) * Decimal::from(MS_PER_MONTH);
 
-        // Value at cliff_month via the linear formula.
+        // Value at cliff_month via the post-cliff linear formula.
         let cliff_ts = origin + i64::try_from(cliff_m).unwrap_or(0) * MS_PER_MONTH;
-        let cliff_value = (total_dec / dur_dec) * Decimal::from(cliff_ts - r.start_timestamp);
+        let post_cliff_at_m = (cliff_ts - cliff_end_ts).max(0);
+        let cliff_value = (total_dec / dur_dec) * Decimal::from(post_cliff_at_m);
 
         base_delta[cliff_m] += cliff_value;
         slope_delta[cliff_m] += slope;
