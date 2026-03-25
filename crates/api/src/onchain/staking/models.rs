@@ -119,3 +119,41 @@ pub struct RewardsHistoryResponse {
     /// Rewards history data points by day.
     pub data: Vec<RewardsHistoryPoint>,
 }
+
+/// Response for `GET /staking/{accountHash}/unbonding`.
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct UnbondingResponse {
+    /// Tokens currently in the unbonding cooldown period (human-readable f64).
+    #[schema(example = 5_000.0)]
+    pub unbonding_amount: f64,
+    /// Epoch ms when the unbonding period ends (0 = no active unbonding).
+    #[schema(example = 1_719_849_600_000i64)]
+    pub unbonding_ends_at: i64,
+    /// Whether the unbonding period has elapsed and `withdraw()` can be called.
+    #[schema(example = false)]
+    pub is_withdrawable: bool,
+    /// Milliseconds remaining until withdraw is possible (0 if already withdrawable).
+    #[schema(example = 604_800_000i64)]
+    pub time_remaining_ms: i64,
+    /// Chronological history of unstake/withdraw events.
+    pub history: Vec<UnbondingEvent>,
+}
+
+/// A single unstake or withdraw event in the unbonding history.
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct UnbondingEvent {
+    /// Event type: "unstake" or "withdraw".
+    #[schema(example = "unstake")]
+    pub event_type: String,
+    /// Token amount (human-readable f64).
+    #[schema(example = 5_000.0)]
+    pub amount: f64,
+    /// Event timestamp (ISO 8601).
+    #[schema(example = "2026-03-20T12:00:00Z")]
+    pub timestamp: String,
+    /// Deploy hash of the transaction.
+    #[schema(example = "abc123...")]
+    pub transaction_hash: String,
+}

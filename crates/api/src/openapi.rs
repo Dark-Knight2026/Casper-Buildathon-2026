@@ -72,6 +72,8 @@ use crate::{
             staking::models::EarningsResponse,
             staking::models::RewardsHistoryPoint,
             staking::models::RewardsHistoryResponse,
+            staking::models::UnbondingResponse,
+            staking::models::UnbondingEvent,
         )
     ),
     modifiers(&SecurityAddon),

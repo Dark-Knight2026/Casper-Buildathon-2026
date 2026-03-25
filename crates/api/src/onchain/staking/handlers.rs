@@ -18,7 +18,7 @@ use crate::{
             models::{
                 AccountHashPath, EarningsPoint, EarningsQuery, EarningsResponse, PortfolioResponse,
                 RewardsHistoryPoint, RewardsHistoryQuery, RewardsHistoryResponse,
-                StakingInfoResponse,
+                StakingInfoResponse, UnbondingEvent, UnbondingResponse,
             },
         },
     },
@@ -253,4 +253,68 @@ pub async fn get_rewards_history(
         .collect();
 
     Ok(Json(RewardsHistoryResponse { data }))
+}
+
+// `GET /api/v1/staking/{accountHash}/unbonding`
+//
+/// Returns unbonding status and unstake/withdraw event history for a staker.
+///
+/// # Errors
+///
+/// Returns `ApiError::BadRequest` if the account hash is not 64 hex characters.
+#[utoipa::path(
+    get,
+    path = "/{accountHash}/unbonding",
+    tag = "Staking",
+    params(AccountHashPath),
+    responses(
+        (status = 200, description = "Unbonding status and history", body = UnbondingResponse),
+        (status = 400, description = "Invalid account hash format"),
+        (status = 500, description = "Internal error"),
+    )
+)]
+#[inline]
+pub async fn get_unbonding(
+    State(state): State<Arc<AppState>>,
+    Path(path): Path<AccountHashPath>,
+) -> ApiResult<Json<UnbondingResponse>> {
+    let account = common::validate_account(&path.account_hash)?;
+
+    let position = db::fetch_unbonding_position(&state.db, &account).await?;
+    let events = db::fetch_unbonding_events(&state.db, &account).await?;
+
+    let now_ms = Utc::now().timestamp_millis();
+
+    let (unbonding_amount, unbonding_ends_at) = match &position {
+        Some(p) => (
+            common::to_human_f64(&p.unbonding_amount),
+            p.unbonding_ends_at,
+        ),
+        None => (0.0, 0),
+    };
+
+    let is_withdrawable = unbonding_ends_at > 0 && unbonding_ends_at <= now_ms;
+    let time_remaining_ms = if unbonding_ends_at > now_ms {
+        unbonding_ends_at - now_ms
+    } else {
+        0
+    };
+
+    let history = events
+        .into_iter()
+        .map(|e| UnbondingEvent {
+            event_type: e.event_type,
+            amount: common::to_human_f64(&e.amount),
+            timestamp: e.event_timestamp.to_rfc3339(),
+            transaction_hash: e.transaction_hash,
+        })
+        .collect();
+
+    Ok(Json(UnbondingResponse {
+        unbonding_amount,
+        unbonding_ends_at,
+        is_withdrawable,
+        time_remaining_ms,
+        history,
+    }))
 }

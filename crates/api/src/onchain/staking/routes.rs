@@ -15,4 +15,5 @@ pub fn router() -> OpenApiRouter<Arc<AppState>> {
         .routes(routes!(handlers::get_portfolio))
         .routes(routes!(handlers::get_earnings))
         .routes(routes!(handlers::get_rewards_history))
+        .routes(routes!(handlers::get_unbonding))
 }

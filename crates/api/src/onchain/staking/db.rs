@@ -1,7 +1,7 @@
 //! Database queries for staking endpoints.
 
 use chrono::{DateTime, Utc};
-use sqlx::{FromRow, PgPool};
+use sqlx::{Error, FromRow, PgPool};
 
 /// Number of days used to extrapolate annual rewards for APY calculation.
 const APY_WINDOW_DAYS: i32 = 30;
@@ -26,7 +26,7 @@ pub struct StakingPositionRow {
 pub async fn fetch_staking_position(
     pool: &PgPool,
     staker_address: &str,
-) -> Result<Option<StakingPositionRow>, sqlx::Error> {
+) -> Result<Option<StakingPositionRow>, Error> {
     sqlx::query_as!(
         StakingPositionRow,
         r"
@@ -55,7 +55,7 @@ pub struct ApyData {
 ///
 /// Returns `sqlx::Error` if the database query fails.
 #[inline]
-pub async fn fetch_apy_data(pool: &PgPool) -> Result<ApyData, sqlx::Error> {
+pub async fn fetch_apy_data(pool: &PgPool) -> Result<ApyData, Error> {
     let rewards_per_year = sqlx::query_scalar!(
         r"
             SELECT COALESCE(
@@ -94,7 +94,7 @@ pub async fn fetch_apy_data(pool: &PgPool) -> Result<ApyData, sqlx::Error> {
 ///
 /// Returns `sqlx::Error` if the database query fails.
 #[inline]
-pub async fn fetch_big_balance(pool: &PgPool, user_address: &str) -> Result<String, sqlx::Error> {
+pub async fn fetch_big_balance(pool: &PgPool, user_address: &str) -> Result<String, Error> {
     let value = sqlx::query_scalar!(
         r"
             SELECT balance
@@ -117,7 +117,7 @@ pub async fn fetch_big_balance(pool: &PgPool, user_address: &str) -> Result<Stri
 ///
 /// Returns `sqlx::Error` if the database query fails.
 #[inline]
-pub async fn fetch_ico_price(pool: &PgPool) -> Result<String, sqlx::Error> {
+pub async fn fetch_ico_price(pool: &PgPool) -> Result<String, Error> {
     let value = sqlx::query_scalar!(
         r"
             SELECT price
@@ -151,7 +151,7 @@ pub async fn fetch_monthly_earnings(
     pool: &PgPool,
     staker_address: &str,
     since: DateTime<Utc>,
-) -> Result<Vec<MonthlyEarningsRow>, sqlx::Error> {
+) -> Result<Vec<MonthlyEarningsRow>, Error> {
     sqlx::query_as!(
         MonthlyEarningsRow,
         r#"
@@ -191,7 +191,7 @@ pub async fn fetch_daily_cumulative_rewards(
     pool: &PgPool,
     staker_address: &str,
     days: i32,
-) -> Result<Vec<DailyRewardRow>, sqlx::Error> {
+) -> Result<Vec<DailyRewardRow>, Error> {
     sqlx::query_as!(
         DailyRewardRow,
         r#"
@@ -212,6 +212,80 @@ pub async fn fetch_daily_cumulative_rewards(
         "#,
         staker_address,
         days,
+    )
+    .fetch_all(pool)
+    .await
+}
+
+/// Unbonding position data from `staking_positions`.
+#[derive(Debug, FromRow)]
+pub struct UnbondingPositionRow {
+    /// Tokens in unbonding cooldown (U256 as TEXT).
+    pub unbonding_amount: String,
+    /// Epoch ms when unbonding ends (0 = none).
+    pub unbonding_ends_at: i64,
+}
+
+/// Fetch unbonding position for a given staker.
+///
+/// # Errors
+///
+/// Returns `sqlx::Error` if the database query fails.
+#[inline]
+pub async fn fetch_unbonding_position(
+    pool: &PgPool,
+    staker_address: &str,
+) -> Result<Option<UnbondingPositionRow>, Error> {
+    sqlx::query_as!(
+        UnbondingPositionRow,
+        r"
+            SELECT unbonding_amount, unbonding_ends_at
+            FROM staking_positions
+            WHERE staker_address = $1
+        ",
+        staker_address,
+    )
+    .fetch_optional(pool)
+    .await
+}
+
+/// A single unstake/withdraw event row from `staking_events`.
+#[derive(Debug, FromRow)]
+pub struct UnbondingEventRow {
+    /// Event type: "unstake" or "withdraw".
+    pub event_type: String,
+    /// Token amount (U256 as TEXT).
+    pub amount: String,
+    /// Event timestamp.
+    pub event_timestamp: DateTime<Utc>,
+    /// Deploy hash.
+    pub transaction_hash: String,
+}
+
+/// Fetch unstake/withdraw events for a staker, ordered chronologically.
+///
+/// # Errors
+///
+/// Returns `sqlx::Error` if the database query fails.
+#[inline]
+pub async fn fetch_unbonding_events(
+    pool: &PgPool,
+    staker_address: &str,
+) -> Result<Vec<UnbondingEventRow>, Error> {
+    sqlx::query_as!(
+        UnbondingEventRow,
+        r#"
+            SELECT
+                event_type AS "event_type!",
+                amount AS "amount!",
+                event_timestamp AS "event_timestamp!",
+                transaction_hash AS "transaction_hash!"
+            FROM staking_events
+            WHERE staker_address = $1
+              AND event_type IN ('unstake', 'withdraw')
+            ORDER BY event_timestamp
+        "#,
+        staker_address,
     )
     .fetch_all(pool)
     .await

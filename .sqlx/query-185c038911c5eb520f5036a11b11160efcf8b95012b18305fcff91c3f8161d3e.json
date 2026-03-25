@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT\n                event_type AS \"event_type!\",\n                amount AS \"amount!\",\n                event_timestamp AS \"event_timestamp!\",\n                transaction_hash AS \"transaction_hash!\"\n            FROM staking_events\n            WHERE staker_address = $1\n              AND event_type IN ('unstake', 'withdraw')\n            ORDER BY event_timestamp\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "event_type!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "amount!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "event_timestamp!",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 3,
+        "name": "transaction_hash!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "185c038911c5eb520f5036a11b11160efcf8b95012b18305fcff91c3f8161d3e"
+}
