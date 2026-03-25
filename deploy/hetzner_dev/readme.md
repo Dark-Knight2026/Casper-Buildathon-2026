@@ -36,7 +36,7 @@ This module serves two purposes in a single `terraform apply`:
   - Generated `.env` -> `/opt/<PROJECT_NAME>/deploy/.env`
 - Runs `redeploy.sh` on the server
 
-The `terraform_data.redeploy_sh` resource uses `triggers_replace = timestamp()`, so it re-runs on every apply regardless of changes.
+The `terraform_data.redeploy_sh` resource uses `triggers_replace` with `filesha256(...)` hashes of all deployed files and a hash of the `.env` contents, so it re-runs only when those inputs change.
 
 ## Variables
 

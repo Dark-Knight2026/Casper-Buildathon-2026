@@ -44,6 +44,8 @@ jobs:
         SSH_PRIVATE_KEY: ${{ secrets.SECRET_RSA_PRIVATE_KEY }}
         SSH_PUBLIC_KEY: ${{ secrets.SECRET_RSA_PUBLIC_KEY }}
       run: |
+        echo "::add-mask::${SSH_PRIVATE_KEY}"
+        echo "::add-mask::${SSH_PUBLIC_KEY}"
         printf '%s\n' "${SSH_PRIVATE_KEY}" | install -m 600 /dev/stdin "./.secret/ssh_key"
         printf '%s\n' "${SSH_PUBLIC_KEY}" | install -m 644 /dev/stdin "./.secret/ssh_key.pub"
 
@@ -87,47 +89,53 @@ jobs:
         START_BLOCK_CONTRACT_STAKING: ${{ vars.START_BLOCK_CONTRACT_STAKING }}
         
       run: |
-        install -m 600 /dev/stdin .secret/-secret.sh <<-EOF
-        GOOGLE_APPLICATION_CREDENTIALS='./.secret/gcp_creds.json'
-        GOOGLE_APPLICATION_PROJECT_ID='${GOOGLE_APPLICATION_PROJECT_ID}'
-        GOOGLE_APPLICATION_REGION='${GOOGLE_APPLICATION_REGION}'
-        GOOGLE_ENCRYPTION_KEY='${GOOGLE_ENCRYPTION_KEY}'
-        SSH_PRIVATE_KEY_PATH='./.secret/ssh_key'
-        SSH_PUBLIC_KEY_PATH='./.secret/ssh_key.pub'
-        HOST_SERVER_NAME='${HOST_SERVER_NAME}'
-        HETZNER_CLOUD_TOKEN='${HETZNER_CLOUD_TOKEN}'
-        SUPABASE_JWT_SECRET='${SUPABASE_JWT_SECRET}'
-        DEPLOYMENT_MODE='${DEPLOYMENT_MODE}'
-        RUN_MIGRATIONS='${RUN_MIGRATIONS}'
-        PROJECT_NAME='${PROJECT_NAME}'
-        PROJECT_DOMAIN='${PROJECT_DOMAIN}'
-        DATABASE_URL='${DATABASE_URL}'
-        CORS_ORIGIN='${CORS_ORIGIN}'
-        CSPR_CLOUD_API_TOKEN='${CSPR_CLOUD_API_TOKEN}'
-        CSPR_CLOUD_REST_URL='${CSPR_CLOUD_REST_URL}'
-        CSPR_CLOUD_WSS_URL='${CSPR_CLOUD_WSS_URL}'
-        CASPER_NODE_RPC_URL='${CASPER_NODE_RPC_URL}'
-        REDIS_URL='${REDIS_URL}'
-        REDIS_PASSWORD='${REDIS_PASSWORD}'
-        CERTBOT_EMAIL='${CERTBOT_EMAIL}'
-        CF_DNS_API_TOKEN='${CF_DNS_API_TOKEN}'
-        
-        CONTRACT_USDC='${CONTRACT_USDC}'
-        CONTRACT_USDT='${CONTRACT_USDT}'
-        CONTRACT_BIG='${CONTRACT_BIG}'
-        CONTRACT_TREASURY='${CONTRACT_TREASURY}'
-        CONTRACT_ICO='${CONTRACT_ICO}'
-        CONTRACT_VESTING='${CONTRACT_VESTING}'
-        CONTRACT_STAKING='${CONTRACT_STAKING}'
-
-        START_BLOCK_CONTRACT_USDC='${START_BLOCK_CONTRACT_USDC}'
-        START_BLOCK_CONTRACT_USDT='${START_BLOCK_CONTRACT_USDT}'
-        START_BLOCK_CONTRACT_BIG='${START_BLOCK_CONTRACT_BIG}'
-        START_BLOCK_CONTRACT_TREASURY='${START_BLOCK_CONTRACT_TREASURY}'
-        START_BLOCK_CONTRACT_ICO='${START_BLOCK_CONTRACT_ICO}'
-        START_BLOCK_CONTRACT_VESTING='${START_BLOCK_CONTRACT_VESTING}'
-        START_BLOCK_CONTRACT_STAKING='${START_BLOCK_CONTRACT_STAKING}'
-        EOF
+        for v in "$REDIS_URL" "$REDIS_PASSWORD" "$CORS_ORIGIN" "$DATABASE_URL" "$CERTBOT_EMAIL" \
+                  "$CF_DNS_API_TOKEN" "$GOOGLE_APPLICATION_PROJECT_ID" "$GOOGLE_APPLICATION_REGION" \
+                  "$GOOGLE_ENCRYPTION_KEY" "$HOST_SERVER_NAME" "$HETZNER_CLOUD_TOKEN" \
+                  "$SUPABASE_JWT_SECRET" "$CSPR_CLOUD_API_TOKEN" "$CSPR_CLOUD_REST_URL" \
+                  "$CSPR_CLOUD_WSS_URL" "$CASPER_NODE_RPC_URL"; do
+          echo "::add-mask::$v"
+        done
+        install -m 600 /dev/null .secret/-secret.sh
+        {
+          printf 'GOOGLE_APPLICATION_CREDENTIALS=%s\n' './.secret/gcp_creds.json'
+          printf 'GOOGLE_APPLICATION_PROJECT_ID=%s\n'  "$GOOGLE_APPLICATION_PROJECT_ID"
+          printf 'GOOGLE_APPLICATION_REGION=%s\n'      "$GOOGLE_APPLICATION_REGION"
+          printf 'GOOGLE_ENCRYPTION_KEY=%s\n'          "$GOOGLE_ENCRYPTION_KEY"
+          printf 'SSH_PRIVATE_KEY_PATH=%s\n'           './.secret/ssh_key'
+          printf 'SSH_PUBLIC_KEY_PATH=%s\n'            './.secret/ssh_key.pub'
+          printf 'HOST_SERVER_NAME=%s\n'               "$HOST_SERVER_NAME"
+          printf 'HETZNER_CLOUD_TOKEN=%s\n'            "$HETZNER_CLOUD_TOKEN"
+          printf 'SUPABASE_JWT_SECRET=%s\n'            "$SUPABASE_JWT_SECRET"
+          printf 'DEPLOYMENT_MODE=%s\n'                "$DEPLOYMENT_MODE"
+          printf 'RUN_MIGRATIONS=%s\n'                 "$RUN_MIGRATIONS"
+          printf 'PROJECT_NAME=%s\n'                   "$PROJECT_NAME"
+          printf 'PROJECT_DOMAIN=%s\n'                 "$PROJECT_DOMAIN"
+          printf 'DATABASE_URL=%s\n'                   "$DATABASE_URL"
+          printf 'CORS_ORIGIN=%s\n'                    "$CORS_ORIGIN"
+          printf 'CSPR_CLOUD_API_TOKEN=%s\n'           "$CSPR_CLOUD_API_TOKEN"
+          printf 'CSPR_CLOUD_REST_URL=%s\n'            "$CSPR_CLOUD_REST_URL"
+          printf 'CSPR_CLOUD_WSS_URL=%s\n'             "$CSPR_CLOUD_WSS_URL"
+          printf 'CASPER_NODE_RPC_URL=%s\n'            "$CASPER_NODE_RPC_URL"
+          printf 'REDIS_URL=%s\n'                      "$REDIS_URL"
+          printf 'REDIS_PASSWORD=%s\n'                 "$REDIS_PASSWORD"
+          printf 'CERTBOT_EMAIL=%s\n'                  "$CERTBOT_EMAIL"
+          printf 'CF_DNS_API_TOKEN=%s\n'               "$CF_DNS_API_TOKEN"
+          printf 'CONTRACT_USDC=%s\n'                  "$CONTRACT_USDC"
+          printf 'CONTRACT_USDT=%s\n'                  "$CONTRACT_USDT"
+          printf 'CONTRACT_BIG=%s\n'                   "$CONTRACT_BIG"
+          printf 'CONTRACT_TREASURY=%s\n'              "$CONTRACT_TREASURY"
+          printf 'CONTRACT_ICO=%s\n'                   "$CONTRACT_ICO"
+          printf 'CONTRACT_VESTING=%s\n'               "$CONTRACT_VESTING"
+          printf 'CONTRACT_STAKING=%s\n'               "$CONTRACT_STAKING"
+          printf 'START_BLOCK_CONTRACT_USDC=%s\n'      "$START_BLOCK_CONTRACT_USDC"
+          printf 'START_BLOCK_CONTRACT_USDT=%s\n'      "$START_BLOCK_CONTRACT_USDT"
+          printf 'START_BLOCK_CONTRACT_BIG=%s\n'       "$START_BLOCK_CONTRACT_BIG"
+          printf 'START_BLOCK_CONTRACT_TREASURY=%s\n'  "$START_BLOCK_CONTRACT_TREASURY"
+          printf 'START_BLOCK_CONTRACT_ICO=%s\n'       "$START_BLOCK_CONTRACT_ICO"
+          printf 'START_BLOCK_CONTRACT_VESTING=%s\n'   "$START_BLOCK_CONTRACT_VESTING"
+          printf 'START_BLOCK_CONTRACT_STAKING=%s\n'   "$START_BLOCK_CONTRACT_STAKING"
+        } >> .secret/-secret.sh
 
     - name: 'Build the image, push and deploy' 
       run: 'make deploy'

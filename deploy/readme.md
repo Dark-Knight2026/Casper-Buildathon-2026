@@ -221,7 +221,7 @@ States are encrypted with `GOOGLE_ENCRYPTION_KEY`.
 
 ```bash
 # SSH to server
-ssh root@<SERVER_IP>
+ssh deploy@<SERVER_IP>
 
 # View running containers
 docker ps

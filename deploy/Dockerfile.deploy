@@ -42,4 +42,4 @@ RUN mkdir -p /usr/lib/terraform/${TF_VERSION} \
 WORKDIR /app
 
 ENTRYPOINT ["/bin/bash", "-c"]
-CMD ["make -f ./deploy/Makefile.deploy ${ACTION}"]
+CMD ["make -f ./deploy/Makefile.deploy ${ACTION:?ACTION variable is required}"]

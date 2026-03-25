@@ -42,6 +42,15 @@ function __msg_success() {
 
 __msg_info "Starting redeploy.sh script"
 
+# Prevent concurrent runs (e.g. simultaneous CI + manual trigger).
+# flock acquires an exclusive lock on fd 9; -n fails immediately if already held.
+LOCK_FILE="/var/lock/redeploy.lock"
+exec 9>"${LOCK_FILE}"
+if ! flock -n 9; then
+  __msg_error "Another redeploy is already running (lock: ${LOCK_FILE}). Aborting."
+  exit 1
+fi
+
 # Derive OPT_DIR from the script's own location (/opt/<project>/deploy/redeploy.sh)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 OPT_DIR="$(dirname "${SCRIPT_DIR}")"
@@ -95,6 +104,11 @@ if [[ ! -f "${OPT_DIR}/nginx/https.conf.template" ]]; then
   exit 1
 fi
 
+if [[ ! -f "${OPT_DIR}/deploy/redis.conf.template" ]]; then
+  __msg_error "File ${OPT_DIR}/deploy/redis.conf.template not found"
+  exit 1
+fi
+
 # Generate nginx https.conf from template.
 # CRITICAL: single-quoted variable list restricts envsubst to PROJECT_DOMAIN only —
 # nginx runtime vars ($host, $uri, $scheme, etc.) are NOT substituted.
@@ -105,6 +119,21 @@ envsubst '${PROJECT_DOMAIN}' \
   || { __msg_error "envsubst failed"; exit 1; }
 [[ -s "${OPT_DIR}/nginx/https.conf" ]] \
   || { __msg_error "Generated https.conf is empty"; exit 1; }
+
+# Generate Redis config from template.
+# Mounting a config file keeps REDIS_PASSWORD out of the process argument list
+# and Docker metadata (docker inspect / docker ps --no-trunc would otherwise
+# expose the password in plaintext).
+# CRITICAL: single-quoted variable list restricts envsubst to REDIS_PASSWORD only.
+__msg_info "Generating redis.conf"
+envsubst '${REDIS_PASSWORD}' \
+  < "${OPT_DIR}/deploy/redis.conf.template" \
+  > "${OPT_DIR}/deploy/redis.conf" \
+  || { __msg_error "envsubst for redis.conf failed"; exit 1; }
+[[ -s "${OPT_DIR}/deploy/redis.conf" ]] \
+  || { __msg_error "Generated redis.conf is empty"; exit 1; }
+# 644 so the redis user inside the container (UID 999) can read the bind-mounted file.
+chmod 644 "${OPT_DIR}/deploy/redis.conf"
 
 # Generate self-signed bootstrap cert if no cert exists yet.
 # certbot will replace it after nginx starts up.
@@ -165,13 +194,15 @@ ${COMPOSE} down --remove-orphans || __msg_info "Nothing to remove"
 # ---- deployment section ----
 ${COMPOSE} up -d
 
-# Health check: poll GET /health for up to 60 seconds
-# (migrations can take longer than 30s on first deploy)
-__msg_info "Polling /health (60s timeout)..."
+# Health check: poll GET /health for up to 120 seconds.
+# The 120s ceiling must exceed docker-compose start_period (60s) plus the
+# maximum expected migration time on cold-start deploys — otherwise the
+# script declares failure and triggers a rollback before the service is up.
+__msg_info "Polling /health (120s timeout)..."
 HEALTH_OK=0
 # Always use -k: health check connects via IP (127.0.0.1), so the SSL cert —
 # issued for the domain — never matches the IP regardless of cert type.
-for i in $(seq 1 60); do
+for i in $(seq 1 120); do
   HTTP_STATUS=$(curl -sLk -o /dev/null -w "%{http_code}" https://127.0.0.1/health 2>/dev/null || true)
   if [[ "${HTTP_STATUS}" == "200" ]]; then
     HEALTH_OK=1
@@ -181,7 +212,7 @@ for i in $(seq 1 60); do
 done
 
 if [[ "${HEALTH_OK}" == "0" ]]; then
-  __msg_error "Health check failed after 60s"
+  __msg_error "Health check failed after 120s"
 
   ${COMPOSE} down --remove-orphans || true
 

@@ -26,4 +26,8 @@ resource "google_artifact_registry_repository" "container-images-repo" {
   description   = "Docker image registry for the deployments"
   # Format of the repository. Using Docker.
   format = "DOCKER"
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }

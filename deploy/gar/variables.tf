@@ -2,6 +2,7 @@
 variable "GOOGLE_APPLICATION_REGION" {
   description = "GOOGLE APPLICATION REGION of the resources"
   type        = string
+  sensitive   = true
 
   validation {
     condition     = can(regex("^[a-z]+-[a-z]+[0-9]+$", var.GOOGLE_APPLICATION_REGION))
@@ -13,6 +14,7 @@ variable "GOOGLE_APPLICATION_REGION" {
 variable "GOOGLE_APPLICATION_PROJECT_ID" {
   description = "PROJECT APPLICATION ID for the resources"
   type        = string
+  sensitive   = true
 
   validation {
     condition     = can(regex("^[a-z0-9-]{6,30}$", var.GOOGLE_APPLICATION_PROJECT_ID))

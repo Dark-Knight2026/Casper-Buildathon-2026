@@ -184,6 +184,7 @@ $(foreach v,$(TF_EXPORT_VARS),\
 deploy:
 	@echo "[START] Start Dockerfile.deploy container building"
 	@docker build . \
+		--platform linux/amd64 \
 		-t deploy-$(PROJECT_NAME) \
 		-f $(DEPLOYMENT_DIR)/Dockerfile.deploy
 	@echo "[INFO] Run Dockerfile.deploy container. Command <server_deploy>"
@@ -218,10 +219,12 @@ build_image: ## Builds backend and indexer images
 	@echo "[INFO]: Start to build images"
 
 	docker build .\
+		--platform linux/amd64 \
 		-f ./Dockerfile \
 		-t $(TAG)_back:$(VERSION)
 
 	docker build .\
+		--platform linux/amd64 \
 		-f ./Dockerfile.indexer \
 		-t $(TAG)_indexer:$(VERSION)
 

@@ -31,6 +31,10 @@ resource "hcloud_primary_ip" "primary_ip" {
   type          = "ipv4"
   assignee_type = "server"
   auto_delete   = false
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 # =================================================================================================
@@ -66,6 +70,7 @@ resource "terraform_data" "redeploy_sh" {
     compose        = filesha256("${path.module}/../../docker-compose.dev.yml")
     nginx_conf     = filesha256("${path.module}/../nginx/nginx.conf")
     https_template = filesha256("${path.module}/../nginx/https.conf.template")
+    redis_template = filesha256("${path.module}/../redis.conf.template")
     env            = sha256(join("\n", [for k, v in var.PROJECT_MAP_VARIABLES : "${k}='${replace(v, "'", "'\\''")}'"]))
   }
 
@@ -75,7 +80,7 @@ resource "terraform_data" "redeploy_sh" {
     user        = "deploy"
     private_key = data.local_sensitive_file.ssh_private_key.content
     host        = hcloud_primary_ip.primary_ip.ip_address
-    timeout     = "10m"
+    timeout     = "15m"
   }
 
   # Cloud-init wait
@@ -107,6 +112,12 @@ resource "terraform_data" "redeploy_sh" {
   provisioner "file" {
     source      = "${path.module}/../nginx/https.conf.template"
     destination = "/opt/${var.PROJECT_NAME}/nginx/https.conf.template"
+  }
+
+  # Redis config template — expanded by envsubst in redeploy.sh
+  provisioner "file" {
+    source      = "${path.module}/../redis.conf.template"
+    destination = "/opt/${var.PROJECT_NAME}/deploy/redis.conf.template"
   }
 
   # redeploy.sh

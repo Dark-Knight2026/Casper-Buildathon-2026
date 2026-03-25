@@ -22,6 +22,10 @@ EOF
   # produces a non-empty https.conf
   echo 'server { server_name ${PROJECT_DOMAIN}; }' > "$BASE/nginx/https.conf.template"
 
+  # redis.conf.template — required by pre-flight check; must be non-empty so envsubst
+  # produces a non-empty redis.conf
+  echo 'requirepass ${REDIS_PASSWORD}' > "$BASE/deploy/redis.conf.template"
+
   # Redirect LETSENCRYPT_DIR to a writable temp path so the cert bootstrap does not
   # require root. Pre-populate the cert files so the self-signed path is skipped
   # entirely and the .self-signed sentinel is never created.
