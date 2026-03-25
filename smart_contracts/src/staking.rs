@@ -5,7 +5,10 @@ use crate::{
     constants::UNBONDING_PERIOD,
     staking::{
         errors::Error,
-        events::{RewardsClaimed, RewardsDeposited, Staked, UnbondedWithdrawn, UnstakedInitiated},
+        events::{
+            RewardsClaimed, RewardsDeposited, Staked, StakerSnapshot, UnbondedWithdrawn,
+            UnstakedInitiated,
+        },
     },
     vesting::VestingContractRef,
 };
@@ -59,12 +62,21 @@ pub mod events {
     pub struct RewardsDeposited {
         pub caller: Address,
         pub amount: U256,
+        pub reward_per_token_stored: U256,
     }
 
     #[odra::event]
     pub struct RewardsClaimed {
         pub staker: Address,
         pub amount: U256,
+    }
+
+    #[odra::event]
+    pub struct StakerSnapshot {
+        pub staker: Address,
+        pub staked_amount: U256,
+        pub pending_rewards: U256,
+        pub reward_per_token_paid: U256,
     }
 }
 
@@ -100,7 +112,14 @@ pub mod errors {
 
 #[odra::module(
   errors = Error,
-  events = [Staked, UnstakedInitiated, UnbondedWithdrawn, RewardsDeposited, RewardsClaimed]
+  events = [
+    Staked,
+    UnstakedInitiated,
+    UnbondedWithdrawn,
+    RewardsDeposited,
+    RewardsClaimed,
+    StakerSnapshot
+  ]
 )]
 pub struct Staking {
     /// Ownership control — only the owner can configure the contract.
@@ -232,6 +251,7 @@ impl Staking {
         self.total_staked.set(new_total_staked);
 
         self.env().emit_event(Staked { staker, amount });
+        self.emit_staker_snapshot(staker);
     }
 
     /// Initiates an unstake of BIG tokens for staker, starting the
@@ -298,6 +318,7 @@ impl Staking {
             amount,
             unbonding_ends_at,
         });
+        self.emit_staker_snapshot(staker);
     }
 
     // =========================================================================
@@ -332,7 +353,11 @@ impl Staking {
 
         self.reward_per_token_stored.set(current + increase);
 
-        self.env().emit_event(RewardsDeposited { caller, amount });
+        self.env().emit_event(RewardsDeposited {
+            caller,
+            amount,
+            reward_per_token_stored: self.reward_per_token_stored.get_or_default(),
+        });
     }
 
     /// Claims all pending BIG token rewards accrued by the caller.
@@ -362,6 +387,7 @@ impl Staking {
             staker,
             amount: rewards,
         });
+        self.emit_staker_snapshot(staker);
     }
 
     // =========================================================================
@@ -495,5 +521,17 @@ impl Staking {
         staker_info.reward_per_token_paid = reward_per_token;
 
         self.stakers.set(staker, staker_info);
+    }
+
+    /// Emits a post-update snapshot of the staker's reward state.
+    fn emit_staker_snapshot(&self, staker: Address) {
+        let info = self.stakers.get_or_default(&staker);
+
+        self.env().emit_event(StakerSnapshot {
+            staker,
+            staked_amount: info.staked_amount,
+            pending_rewards: info.pending_rewards,
+            reward_per_token_paid: info.reward_per_token_paid,
+        });
     }
 }

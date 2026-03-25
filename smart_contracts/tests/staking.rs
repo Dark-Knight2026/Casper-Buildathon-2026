@@ -625,6 +625,7 @@ fn test_deposit_rewards_should_deposit_properly() {
     let amount = staking_amount();
     let rewards = rewards_amount();
     let staking_contract = ctx.staking.address();
+    let precision = U256::from(10).pow(U256::from(18));
 
     fund_and_approve(&mut ctx, alice, amount);
     stake_for(&mut ctx, alice, amount);
@@ -647,6 +648,7 @@ fn test_deposit_rewards_should_deposit_properly() {
         RewardsDeposited {
             caller: owner,
             amount: rewards,
+            reward_per_token_stored: rewards * precision / amount,
         }
     ));
 }

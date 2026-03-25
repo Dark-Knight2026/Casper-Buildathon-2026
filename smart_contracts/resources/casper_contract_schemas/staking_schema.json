@@ -61,6 +61,11 @@
             "name": "amount",
             "description": null,
             "ty": "U256"
+          },
+          {
+            "name": "reward_per_token_stored",
+            "description": null,
+            "ty": "U256"
           }
         ]
       }
@@ -112,6 +117,34 @@
             "name": "unbonding_ends_at",
             "description": null,
             "ty": "U64"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
+        "name": "StakerSnapshot",
+        "description": null,
+        "members": [
+          {
+            "name": "staker",
+            "description": null,
+            "ty": "Key"
+          },
+          {
+            "name": "staked_amount",
+            "description": null,
+            "ty": "U256"
+          },
+          {
+            "name": "pending_rewards",
+            "description": null,
+            "ty": "U256"
+          },
+          {
+            "name": "reward_per_token_paid",
+            "description": null,
+            "ty": "U256"
           }
         ]
       }
@@ -520,6 +553,10 @@
     {
       "name": "Staked",
       "ty": "Staked"
+    },
+    {
+      "name": "StakerSnapshot",
+      "ty": "StakerSnapshot"
     },
     {
       "name": "UnbondedWithdrawn",
