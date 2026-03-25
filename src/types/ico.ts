@@ -217,12 +217,13 @@ export interface VestingSchedule {
   purchaseTimestamp: number;
   unlockTimestamp: number;
   unlockedAmount: number;
+  vestingEndTimestamp: number;
 }
 
 export interface VestingSchedulesResponse {
   data: VestingSchedule[];
-  item_count: number;
-  page_count: number;
+  itemCount: number;
+  pageCount: number;
 }
 
 export interface IcoProgressResponse {

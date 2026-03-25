@@ -11,10 +11,12 @@ export interface VestingEntry {
   id: string;
   /** Amount of tokens locked */
   lockedAmount: number;
-  /** Timestamp when tokens will be unlocked */
+  /** Timestamp when first unlock (cliff) occurs */
   unlockTimestamp: number;
   /** Purchase date timestamp */
   purchaseTimestamp: number;
+  /** Timestamp when all tokens are fully vested */
+  vestingEndTimestamp: number;
   /** Optional: Amount already unlocked from this entry */
   unlockedAmount?: number;
 }
@@ -77,13 +79,13 @@ export function VestingProgressBlock({
     }
   };
 
-  // Calculate progress for the next unlock
+  // Calculate progress toward full vesting end
   const calculateProgress = () => {
     if (!nextUnlock) return 100;
 
-    const vestingDuration = nextUnlock.unlockTimestamp - nextUnlock.purchaseTimestamp;
+    const vestingDuration = nextUnlock.vestingEndTimestamp - nextUnlock.purchaseTimestamp;
     const elapsed = now - nextUnlock.purchaseTimestamp;
-    return Math.min((elapsed / vestingDuration) * 100, 100);
+    return Math.min(Math.max((elapsed / vestingDuration) * 100, 0), 100);
   };
 
   // Calculate total locked
@@ -110,13 +112,7 @@ export function VestingProgressBlock({
             />
           }
         />
-      ) : (
-        <div className="text-center py-4">
-          <p className="text-[hsl(var(--ico-text-primary))] font-medium">
-            All tokens have been unlocked
-          </p>
-        </div>
-      )}
+      ) : null}
 
       {/* Claimable entries — unlocked and ready to claim */}
       {claimableEntries.length > 0 && (
@@ -260,6 +256,9 @@ export function VestingProgressBlock({
                     {index === 0 && (
                       <p className="text-xs text-[hsl(var(--ico-brand-primary))] mt-0.5">Next unlock</p>
                     )}
+                    <p className="text-xs text-[hsl(var(--ico-text-muted))] mt-0.5">
+                      Fully unlocked {formatDate(entry.vestingEndTimestamp)}
+                    </p>
                   </div>
                 </div>
               );
