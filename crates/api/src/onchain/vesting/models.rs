@@ -52,6 +52,9 @@ pub struct VestingScheduleItem {
     /// Timestamp when cliff ends and first tokens unlock (epoch ms).
     #[schema(example = 1_746_057_600_000_i64)]
     pub unlock_timestamp: i64,
+    /// Timestamp when vesting ends and all tokens become claimable (epoch ms).
+    #[schema(example = 1_793_548_800_000_i64)]
+    pub vesting_end_timestamp: i64,
     /// Tokens already unlocked/claimed (human-readable f64).
     #[schema(example = 0.0)]
     pub unlocked_amount: f64,

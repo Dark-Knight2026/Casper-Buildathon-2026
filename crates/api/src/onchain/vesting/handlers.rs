@@ -111,23 +111,23 @@ pub async fn get_vesting_schedules(
 
     let data = rows
         .iter()
-        .map(|r| {
-            let total_dec = r.total_amount.parse::<Decimal>().unwrap_or_else(|_| {
-                warn!(vesting_id = %r.vesting_id, raw = %r.total_amount,
+        .map(|row| {
+            let total_dec = row.total_amount.parse::<Decimal>().unwrap_or_else(|_| {
+                warn!(vesting_id = %row.vesting_id, raw = %row.total_amount,
                     "failed to parse total_amount");
                 Decimal::ZERO
             });
-            let claimed_dec = r.claimed_amount.parse::<Decimal>().unwrap_or_else(|_| {
-                warn!(vesting_id = %r.vesting_id, raw = %r.claimed_amount,
+            let claimed_dec = row.claimed_amount.parse::<Decimal>().unwrap_or_else(|_| {
+                warn!(vesting_id = %row.vesting_id, raw = %row.claimed_amount,
                     "failed to parse claimed_amount");
                 Decimal::ZERO
             });
 
             let vested = calculate_vested(
-                &r.total_amount,
-                r.start_timestamp,
-                r.cliff_duration,
-                r.vesting_duration,
+                &row.total_amount,
+                row.start_timestamp,
+                row.cliff_duration,
+                row.vesting_duration,
                 now,
             );
             // locked = tokens not yet released by the vesting schedule
@@ -137,7 +137,7 @@ pub async fn get_vesting_schedules(
 
             if unlocked_dec < Decimal::ZERO {
                 warn!(
-                    vesting_id = %r.vesting_id,
+                    vesting_id = %row.vesting_id,
                     vested = %vested,
                     claimed = %claimed_dec,
                     "unlocked_amount is negative - claimed exceeds vested, \
@@ -146,10 +146,11 @@ pub async fn get_vesting_schedules(
             }
 
             VestingScheduleItem {
-                id: r.vesting_id.clone(),
+                id: row.vesting_id.clone(),
                 locked_amount: (locked_dec / divisor).to_f64().unwrap_or(0.0),
-                purchase_timestamp: r.start_timestamp,
-                unlock_timestamp: r.start_timestamp.saturating_add(r.cliff_duration),
+                purchase_timestamp: row.start_timestamp,
+                unlock_timestamp: row.start_timestamp.saturating_add(row.cliff_duration),
+                vesting_end_timestamp: row.start_timestamp.saturating_add(row.vesting_duration),
                 unlocked_amount: (unlocked_dec.max(Decimal::ZERO) / divisor)
                     .to_f64()
                     .unwrap_or(0.0),

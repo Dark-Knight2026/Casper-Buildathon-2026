@@ -363,6 +363,52 @@ async fn vesting_after_end_unlocked_is_total(pool: PgPool) {
 }
 
 #[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn vesting_schedule_includes_timestamps(pool: PgPool) {
+    let now_ms = Utc::now().timestamp_millis();
+    let amount = "1000000000000000000000"; // 1000 BIG
+    let day_ms: i64 = 24 * 60 * 60 * 1000;
+    let start = now_ms - 10 * day_ms;
+    let cliff_ms = 30 * day_ms;
+    let vesting_ms = 90 * day_ms;
+    seed_vesting_schedule(
+        &pool,
+        "0",
+        VALID_ADDRESS,
+        amount,
+        start,
+        cliff_ms,
+        vesting_ms,
+    )
+    .await;
+
+    let env = common::setup_test_server(pool, false).await;
+
+    let response = env
+        .server
+        .get(&format!(
+            "/api/v1/vesting/schedules?account={VALID_ADDRESS}"
+        ))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+    let schedule = &body["data"][0];
+
+    let purchase = schedule["purchaseTimestamp"].as_i64().unwrap();
+    let unlock = schedule["unlockTimestamp"].as_i64().unwrap();
+    let vesting_end = schedule["vestingEndTimestamp"].as_i64().unwrap();
+
+    assert_eq!(purchase, start);
+    assert_eq!(unlock, start + cliff_ms, "unlockTimestamp = start + cliff");
+    assert_eq!(
+        vesting_end,
+        start + vesting_ms,
+        "vestingEndTimestamp = start + duration"
+    );
+    assert!(unlock < vesting_end, "unlock should be before vesting end");
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn vesting_midway_unlocked_is_proportional(pool: PgPool) {
     let now_ms = Utc::now().timestamp_millis();
     let amount = "1000000000000000000000"; // 1000 BIG
