@@ -14,6 +14,7 @@ import {
 import { useContractDeploys, isICOPurchase } from '@/hooks/ico/useContractDeploys';
 import type { FTTokenAction } from '@/types/csprCloud';
 import { ICO_CONFIG } from '@/constants/ico';
+import { rawTokenToNumber } from '@/lib/tokenAmount';
 
 const EXPLORER_URL = ICO_CONFIG.CASPER.explorerUrl;
 const PAGE_SIZE = 10;
@@ -37,7 +38,7 @@ function formatRelativeTime(timestamp: string): string {
 }
 
 function formatBigAmount(raw: string): string {
-  const num = Number(raw) / 10 ** BIG_DECIMALS;
+  const num = rawTokenToNumber(raw, BIG_DECIMALS);
   return num.toLocaleString('en-US', { maximumFractionDigits: 2 });
 }
 
