@@ -13,12 +13,15 @@ import { useICOProgress } from '@/hooks/ico/useICOProgress';
 import { useTransactionHistory } from '@/hooks/ico/useTransactionHistory';
 import { useICOBalance } from '@/hooks/ico/useICOBalance';
 import { useVestingSchedules } from '@/hooks/ico/useVestingSchedules';
+import { useUnbondingStatus } from '@/hooks/ico/useUnbondingStatus';
+import { useWithdrawUnbonded } from '@/hooks/ico/useWithdrawUnbonded';
 import { deriveAccountHash } from '@/lib/blockchain/accountUtils';
 import { PurchaseConfirmationModal } from '../shared/PurchaseConfirmationModal';
 import { TransactionStatusToast } from '../shared/TransactionStatusToast';
 import { UserTokenBalance } from '../shared/UserTokenBalance';
 import { TransactionHistory } from '../shared/TransactionHistory';
 import { VestingProgressBlock, type VestingEntry } from '../shared/VestingProgressBlock';
+import { UnbondingStatusBlock } from '../shared/UnbondingStatusBlock';
 import { useClaimTokens } from '@/hooks/ico/useClaimTokens';
 import logger from '@/lib/logger';
 
@@ -103,6 +106,7 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: Private
       purchaseTimestamp: s.purchaseTimestamp,
       unlockTimestamp: s.unlockTimestamp,
       unlockedAmount: s.unlockedAmount,
+      vestingEndTimestamp: s.vestingEndTimestamp,
     }));
   }, [vestingSchedules]);
 
@@ -131,6 +135,7 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: Private
         setClaimingId(null);
         setClaimToastVisible(true);
         queryClient.invalidateQueries({ queryKey: ['vesting-schedules'] });
+        queryClient.invalidateQueries({ queryKey: ['unbonding-status'] });
       },
       onError: (error) => {
         logger.error('[useClaimTokens] claim failed', new Error(error));
@@ -145,6 +150,26 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: Private
       claim(vestingId);
     },
     [claim],
+  );
+
+  // ── Withdraw flow ───────────────────────────────────────────────────
+  const [withdrawToastVisible, setWithdrawToastVisible] = useState(false);
+  const { data: unbondingData } = useUnbondingStatus(accountHash);
+
+  const { state: withdrawState, withdraw } = useWithdrawUnbonded(
+    account?.publicKey ?? null,
+    clickRef ?? null,
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ['staking-info'] });
+        queryClient.invalidateQueries({ queryKey: ['vesting-schedules'] });
+        setWithdrawToastVisible(true);
+      },
+      onError: (error) => {
+        logger.error('[useWithdrawUnbonded] withdraw failed', new Error(error));
+        setWithdrawToastVisible(true);
+      },
+    },
   );
 
   return (
@@ -218,6 +243,15 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: Private
         />
       )}
 
+      {/* Unbonding Status */}
+      <UnbondingStatusBlock
+        accountHash={accountHash}
+        tokenSymbol={ICO_CONFIG.TOKEN.symbol}
+        onWithdraw={withdraw}
+        withdrawStep={withdrawState.step}
+        className="mt-8"
+      />
+
       {/* Vesting Progress */}
       {vestingEntries.length > 0 && (
         <VestingProgressBlock
@@ -227,6 +261,7 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: Private
           onClaim={handleClaim}
           claimingId={claimingId}
           claimStep={claimState.step}
+          hasActiveUnbonding={!!(unbondingData?.unbondingAmount && !unbondingData.isWithdrawable)}
           className="mt-8"
         />
       )}
@@ -262,6 +297,20 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: Private
         successTitle="Claim Successful!"
         errorTitle="Claim Failed"
         pendingTitle="Claiming tokens..."
+      />
+
+      {/* Withdraw Transaction Toast */}
+      <TransactionStatusToast
+        isVisible={withdrawToastVisible}
+        onClose={() => setWithdrawToastVisible(false)}
+        step={withdrawState.step}
+        txHash={withdrawState.txHash}
+        tokensReceived={null}
+        error={withdrawState.error}
+        tokenSymbol={ICO_CONFIG.TOKEN.symbol}
+        successTitle="Withdraw Successful!"
+        errorTitle="Withdraw Failed"
+        pendingTitle="Withdrawing tokens..."
       />
     </div>
   );

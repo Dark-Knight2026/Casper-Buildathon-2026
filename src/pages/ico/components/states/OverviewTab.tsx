@@ -18,19 +18,18 @@ import { useWithdrawUnbonded } from '@/hooks/ico/useWithdrawUnbonded';
 import { deriveAccountHash } from '@/lib/blockchain/accountUtils';
 import { formatNumber, formatUSD } from '../../utils/formatters';
 import { ICO_CONFIG } from '@/constants/ico';
-import { useToast } from '@/hooks/use-toast';
 import logger from '@/lib/logger';
 
 const PAGE_SIZE = 8;
 
 export const OverviewTab = memo(function OverviewTab() {
   const queryClient = useQueryClient();
-  const { toast } = useToast();
   const { account, clickRef } = useICOWallet();
   const accountHash = account?.publicKey ? deriveAccountHash(account.publicKey) : null;
   const [page, setPage] = useState(1);
   const [claimingId, setClaimingId] = useState<string | null>(null);
   const [claimToastVisible, setClaimToastVisible] = useState(false);
+  const [withdrawToastVisible, setWithdrawToastVisible] = useState(false);
   const { transactions, totalPages } = useTransactionHistory(accountHash, page, PAGE_SIZE);
   const { data: stakingPortfolio } = useStakingPortfolio(accountHash);
   const { data: stakingInfo } = useStakingInfo(accountHash);
@@ -44,6 +43,7 @@ export const OverviewTab = memo(function OverviewTab() {
       purchaseTimestamp: s.purchaseTimestamp,
       unlockTimestamp: s.unlockTimestamp,
       unlockedAmount: s.unlockedAmount,
+      vestingEndTimestamp: s.vestingEndTimestamp,
     }));
   }, [vestingSchedules]);
 
@@ -55,6 +55,7 @@ export const OverviewTab = memo(function OverviewTab() {
         setClaimingId(null);
         setClaimToastVisible(true);
         queryClient.invalidateQueries({ queryKey: ['vesting-schedules'] });
+        queryClient.invalidateQueries({ queryKey: ['unbonding-status'] });
       },
       onError: (error) => {
         logger.error('[useClaimTokens] claim failed', new Error(error));
@@ -71,7 +72,7 @@ export const OverviewTab = memo(function OverviewTab() {
     [claim],
   );
 
-  const { data: unbondingStatus } = useUnbondingStatus(accountHash ?? null);
+  const { data: unbondingData } = useUnbondingStatus(accountHash ?? null);
 
   const { state: withdrawState, withdraw } = useWithdrawUnbonded(
     account?.publicKey ?? null,
@@ -79,11 +80,12 @@ export const OverviewTab = memo(function OverviewTab() {
     {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: ['staking-info'] });
-        toast({ title: 'Withdraw successful', description: 'Tokens have arrived in your wallet.' });
+        queryClient.invalidateQueries({ queryKey: ['vesting-schedules'] });
+        setWithdrawToastVisible(true);
       },
       onError: (error) => {
         logger.error('[useWithdrawUnbonded] withdraw failed', new Error(error));
-        toast({ title: 'Withdraw failed', description: error, variant: 'destructive' });
+        setWithdrawToastVisible(true);
       },
     },
   );
@@ -199,24 +201,12 @@ export const OverviewTab = memo(function OverviewTab() {
       </div>
 
       {/* Unbonding Status */}
-      {unbondingStatus.length > 0 && (
-        <Card className="p-5">
-          <h3 className="text-lg font-semibold text-[hsl(var(--ico-text-primary))] mb-4">
-            Unbonding
-          </h3>
-          <div className="space-y-3 w-full">
-            {unbondingStatus.map((item) => (
-              <UnbondingStatusBlock
-                key={item.id}
-                unbonding={item}
-                tokenSymbol={ICO_CONFIG.TOKEN.symbol}
-                onWithdraw={withdraw}
-                withdrawStep={withdrawState.step}
-              />
-            ))}
-          </div>
-        </Card>
-      )}
+      <UnbondingStatusBlock
+        accountHash={accountHash}
+        tokenSymbol={ICO_CONFIG.TOKEN.symbol}
+        onWithdraw={withdraw}
+        withdrawStep={withdrawState.step}
+      />
 
       {/* Vesting Progress */}
       {vestingEntries.length > 0 && (
@@ -227,7 +217,7 @@ export const OverviewTab = memo(function OverviewTab() {
             onClaim={handleClaim}
             claimingId={claimingId}
             claimStep={claimState.step}
-            hasActiveUnbonding={unbondingStatus.some((u) => !u.isReady)}
+            hasActiveUnbonding={!!(unbondingData?.unbondingAmount && !unbondingData.isWithdrawable)}
           />
         </Card>
       )}
@@ -276,6 +266,20 @@ export const OverviewTab = memo(function OverviewTab() {
         successTitle="Claim Successful!"
         errorTitle="Claim Failed"
         pendingTitle="Claiming tokens..."
+      />
+
+      {/* Withdraw Transaction Toast */}
+      <TransactionStatusToast
+        isVisible={withdrawToastVisible}
+        onClose={() => setWithdrawToastVisible(false)}
+        step={withdrawState.step}
+        txHash={withdrawState.txHash}
+        tokensReceived={null}
+        error={withdrawState.error}
+        tokenSymbol={ICO_CONFIG.TOKEN.symbol}
+        successTitle="Withdraw Successful!"
+        errorTitle="Withdraw Failed"
+        pendingTitle="Withdrawing tokens..."
       />
     </div>
   );
