@@ -47,7 +47,10 @@ fn month_index_ceil(ts: i64, origin: i64, max_len: usize) -> usize {
 /// - Between: linear interpolation
 #[inline]
 fn calculate_vested(total: &str, start: i64, cliff: i64, duration: i64, now: i64) -> Decimal {
-    let total_dec = total.parse::<Decimal>().unwrap_or(Decimal::ZERO);
+    let total_dec = total.parse::<Decimal>().unwrap_or_else(|_| {
+        warn!(raw = %total, "calculate_vested: failed to parse total_amount");
+        Decimal::ZERO
+    });
 
     let cliff_end = start.saturating_add(cliff);
     let vesting_end = start.saturating_add(duration);
@@ -109,8 +112,16 @@ pub async fn get_vesting_schedules(
     let data = rows
         .iter()
         .map(|r| {
-            let total_dec = r.total_amount.parse::<Decimal>().unwrap_or(Decimal::ZERO);
-            let claimed_dec = r.claimed_amount.parse::<Decimal>().unwrap_or(Decimal::ZERO);
+            let total_dec = r.total_amount.parse::<Decimal>().unwrap_or_else(|_| {
+                warn!(vesting_id = %r.vesting_id, raw = %r.total_amount,
+                    "failed to parse total_amount");
+                Decimal::ZERO
+            });
+            let claimed_dec = r.claimed_amount.parse::<Decimal>().unwrap_or_else(|_| {
+                warn!(vesting_id = %r.vesting_id, raw = %r.claimed_amount,
+                    "failed to parse claimed_amount");
+                Decimal::ZERO
+            });
 
             let vested = calculate_vested(
                 &r.total_amount,
@@ -227,7 +238,11 @@ pub async fn get_release_schedule(
     let mut slope_delta = vec![Decimal::ZERO; len + 1];
 
     for r in &rows {
-        let total_dec = r.total_amount.parse::<Decimal>().unwrap_or(Decimal::ZERO);
+        let total_dec = r.total_amount.parse::<Decimal>().unwrap_or_else(|_| {
+            warn!(vesting_id = %r.vesting_id, raw = %r.total_amount,
+                "release_schedule: failed to parse total_amount");
+            Decimal::ZERO
+        });
         if total_dec.is_zero() {
             continue;
         }
