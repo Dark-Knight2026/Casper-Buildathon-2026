@@ -24,6 +24,9 @@ use crate::{
 /// Approximate milliseconds in one month (30 days).
 const MS_PER_MONTH: i64 = 30 * 24 * 60 * 60 * 1_000;
 
+/// Maximum number of months for release-schedule allocation (100 years).
+const MAX_SCHEDULE_MONTHS: usize = 1_200;
+
 /// Returns the smallest month index `m` such that `origin + m * MS_PER_MONTH >= ts`.
 /// Clamped to `[0, max_len]`.
 #[inline]
@@ -212,7 +215,9 @@ pub async fn get_release_schedule(
         .unwrap_or(0);
 
     let total_months = ((max_end - origin) / MS_PER_MONTH) + 1;
-    let len = usize::try_from(total_months + 1).unwrap_or(usize::MAX);
+    let len = usize::try_from(total_months + 1)
+        .unwrap_or(MAX_SCHEDULE_MONTHS)
+        .min(MAX_SCHEDULE_MONTHS);
     let divisor = Decimal::from(10u64.pow(TOKEN_DECIMALS));
 
     // Sweep-line O(N + M): encode each schedule's linear vesting ramp as
