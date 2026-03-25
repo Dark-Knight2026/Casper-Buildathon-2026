@@ -1,22 +1,22 @@
 /**
  * UnbondingStatusBlock
  *
- * Shows tokens currently in the 48-hour unbonding window after a vesting claim.
+ * Shows tokens currently in the unbonding window after an unstake.
  * - While waiting: displays amount + countdown timer
  * - When ready: shows Withdraw button to call withdraw_unbonded()
  */
 
 import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
-import { Clock, Wallet } from 'lucide-react';
+import { Clock, Wallet, ArrowDownCircle, CheckCircle2 } from 'lucide-react';
 import { CountdownTimer } from './CountdownTimer';
 import { MainButton } from './MainButton';
-import { formatNumber, formatUSD } from '../../utils/formatters';
-import type { UnbondingStatus } from '@/hooks/ico/useUnbondingStatus';
+import { formatNumber, formatUSD, formatDateTime } from '../../utils/formatters';
+import { useUnbondingStatus } from '@/hooks/ico/useUnbondingStatus';
 import type { WithdrawStep } from '@/hooks/ico/useWithdrawUnbonded';
 
 interface UnbondingStatusBlockProps {
-  unbonding: UnbondingStatus;
+  accountHash: string | null | undefined;
   tokenSymbol?: string;
   tokenPrice?: number;
   className?: string;
@@ -25,32 +25,40 @@ interface UnbondingStatusBlockProps {
 }
 
 export function UnbondingStatusBlock({
-  unbonding,
+  accountHash,
   tokenSymbol = 'BIG',
   tokenPrice,
   className,
   onWithdraw,
   withdrawStep,
 }: UnbondingStatusBlockProps) {
-  const [isReady, setIsReady] = useState(unbonding.isReady);
+  const { data, isLoading } = useUnbondingStatus(accountHash);
 
-  // Flip to ready when timer expires
   useEffect(() => {
-    setIsReady(unbonding.isReady);
-  }, [unbonding.isReady]);
+    if (data !== undefined) {
+      console.log('[UnbondingStatusBlock] response:', data);
+    }
+  }, [data]);
 
-  const usdValue = tokenPrice ? unbonding.unbondingAmount * tokenPrice : undefined;
+  const [isReady, setIsReady] = useState(data?.isWithdrawable ?? false);
 
-  const isProcessing =
-    withdrawStep === 'signing' || withdrawStep === 'pending';
+  useEffect(() => {
+    setIsReady(data?.isWithdrawable ?? false);
+  }, [data?.isWithdrawable]);
+
+  if (isLoading || !data || data.unbondingAmount === 0) return null;
+
+  const usdValue = tokenPrice ? data.unbondingAmount * tokenPrice : undefined;
+
+  const isProcessing = withdrawStep === 'signing' || withdrawStep === 'pending';
   const isConfirmed = withdrawStep === 'confirmed';
 
   const getButtonText = () => {
     switch (withdrawStep) {
-      case 'signing':  return 'Sign in wallet…';
-      case 'pending':  return 'Confirming…';
+      case 'signing':   return 'Sign in wallet…';
+      case 'pending':   return 'Confirming…';
       case 'confirmed': return 'Withdrawn!';
-      default:         return 'Withdraw';
+      default:          return 'Withdraw';
     }
   };
 
@@ -95,7 +103,7 @@ export function UnbondingStatusBlock({
           </div>
           <div>
             <p className="font-medium text-[hsl(var(--ico-text-primary))]">
-              {formatNumber(unbonding.unbondingAmount)} {tokenSymbol}
+              {formatNumber(data.unbondingAmount)} {tokenSymbol}
             </p>
             {usdValue !== undefined && (
               <p className="text-xs text-[hsl(var(--ico-text-muted))]">
@@ -120,7 +128,7 @@ export function UnbondingStatusBlock({
               Available in
             </p>
             <CountdownTimer
-              targetTimestamp={unbonding.unbondingEndsAt}
+              targetTimestamp={data.unbondingEndsAt}
               variant="minimal"
               className="text-sm font-semibold text-amber-400"
               updateInterval={1000}
@@ -133,10 +141,48 @@ export function UnbondingStatusBlock({
       {/* Explanatory note */}
       {!isReady && (
         <p className="mt-3 text-xs text-[hsl(var(--ico-text-muted))] leading-relaxed">
-          Your tokens are unbonding. Once the 48-hour period ends, click{' '}
+          Your tokens are unbonding. Once the period ends, click{' '}
           <span className="text-[hsl(var(--ico-text-secondary))]">Withdraw</span>{' '}
           to transfer them to your wallet.
         </p>
+      )}
+
+      {/* History */}
+      {data.history.length > 0 && (
+        <div className="mt-4 border-t border-white/5 pt-3 space-y-2">
+          <p className="text-xs text-[hsl(var(--ico-text-muted))] mb-2">History</p>
+          {data.history.map((entry) => {
+            const isWithdraw = entry.eventType === 'withdraw';
+            return (
+              <div
+                key={entry.transactionHash}
+                className="flex items-center justify-between gap-3"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  {isWithdraw ? (
+                    <CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-emerald-500" />
+                  ) : (
+                    <ArrowDownCircle className="w-3.5 h-3.5 shrink-0 text-amber-400" />
+                  )}
+                  <span
+                    className={cn(
+                      'text-xs font-medium capitalize',
+                      isWithdraw ? 'text-emerald-400' : 'text-amber-400',
+                    )}
+                  >
+                    {entry.eventType}
+                  </span>
+                  <span className="text-xs text-[hsl(var(--ico-text-muted))] truncate">
+                    {formatDateTime(new Date(entry.timestamp))}
+                  </span>
+                </div>
+                <span className="text-xs font-medium text-[hsl(var(--ico-text-primary))] shrink-0">
+                  {formatNumber(entry.amount)} {tokenSymbol}
+                </span>
+              </div>
+            );
+          })}
+        </div>
       )}
     </div>
   );
