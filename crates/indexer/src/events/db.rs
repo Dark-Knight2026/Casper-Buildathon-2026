@@ -628,7 +628,7 @@ pub async fn update_vesting_claimed(
     vesting_id: &str,
     amount: &str,
 ) -> IndexerResult<()> {
-    sqlx::query!(
+    let result = sqlx::query!(
         r"
             UPDATE vesting_schedules
             SET claimed_amount = (claimed_amount::NUMERIC + $2::TEXT::NUMERIC)::TEXT,
@@ -640,6 +640,10 @@ pub async fn update_vesting_claimed(
     )
     .execute(tx.as_mut())
     .await?;
+
+    if result.rows_affected() == 0 {
+        tracing::warn!(vesting_id, "update_vesting_claimed: vesting_id not found");
+    }
 
     Ok(())
 }
