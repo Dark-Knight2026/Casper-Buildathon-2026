@@ -31,8 +31,7 @@ Backend service for processing high-load real estate operations, including tax c
   - **Response:** `{ "token": "jwt...", "user": { ... } }`
 
 ## 3. Security Requirements
-- **Authentication:** JWT Bearer Token (Supabase).
-- **Validation:** Signature verification using HS256.
+- **Authentication:** JWT Bearer Token — issued locally via HS256 using `SUPABASE_JWT_SECRET`. Login uses Casper Wallet signature challenge-response (Ed25519 / Secp256k1). No Supabase Auth service call at validation time. Sign message format: `"Sign this message to login to LeaseFi. Nonce: <nonce>"`. JWT expiry: 24 h. Nonce TTL: 5 min (Redis).
 - **Database:** No direct SQL injection (checked via SQLx).
 
 ## 4. Error Handling Architecture
