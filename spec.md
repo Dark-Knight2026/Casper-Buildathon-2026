@@ -124,9 +124,12 @@ Backend service for processing high-load real estate operations, including tax c
   "lockedAmount": 800.0,
   "purchaseTimestamp": 1700000000000,
   "unlockTimestamp": 1702592000000,
+  "vestingEndTimestamp": 1793548800000,
   "unlockedAmount": 200.0
 }
 ```
+
+  - `vestingEndTimestamp` (epoch ms): end of the full vesting period, computed as `start_timestamp + vesting_duration`.
 
 - **GET** `/api/v1/vesting/token-supply`
   - **Response:** `TokenSupplyResponse`
