@@ -23,14 +23,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  // Extract path: Vercel rewrite /:path* passes segments as req.query.path (array)
+  // Extract the CSPR.Cloud API sub-path from the incoming request.
+  //
+  // vercel.json routes "/api/cspr-cloud/:path*" → "/api/cspr-cloud" (destination
+  // intentionally omits :path* to keep routing pointed at this single file).
+  // Because :path* is absent from the destination, Vercel does NOT inject
+  // req.query.path — the array/string branches below are defensive guards in case
+  // the routing config ever changes to "?path=:path*".
+  //
+  // Primary path: the req.url fallback. In Vercel serverless functions req.url
+  // holds the original pre-rewrite URL (standard Node.js/Vercel behaviour), so
+  // "/api/cspr-cloud/accounts/abc/ft-token-actions?foo=bar" arrives intact and
+  // stripping the prefix gives the correct sub-path. This is the branch that
+  // fires today in production.
   let path = '';
   if (Array.isArray(req.query.path)) {
     path = req.query.path.join('/');
   } else if (typeof req.query.path === 'string') {
     path = req.query.path;
   } else {
-    // Fallback: extract from URL directly
+    // Active branch: req.url contains the original pre-rewrite path.
     path = (req.url?.split('?')[0] ?? '').replace(/^\/api\/cspr-cloud\/?/, '');
   }
 
