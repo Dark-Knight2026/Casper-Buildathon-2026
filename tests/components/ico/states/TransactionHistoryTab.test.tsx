@@ -1,10 +1,9 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';
 
 const mockFetch = vi.fn();
-global.fetch = mockFetch;
 
 vi.mock('@/constants/ico', () => ({
   ICO_CONFIG: {
@@ -91,7 +90,12 @@ const mockAction = {
 
 describe('TransactionHistoryTab', () => {
   beforeEach(() => {
+    vi.stubGlobal('fetch', mockFetch);
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   // --- Header ---
