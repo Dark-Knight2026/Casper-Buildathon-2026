@@ -9,6 +9,8 @@ const BIG_TOKEN_PACKAGE_HASH = ICO_CONFIG.CONTRACTS.tokenAddress.replace(/^hash-
 const BIG_DECIMALS = ICO_CONFIG.TOKEN.decimals; // 18
 
 async function fetchUserTokenActions(publicKeyHex: string, signal?: AbortSignal): Promise<FTTokenAction[]> {
+  // page_size=100 is intentional: this hook is a temporary direct CSPR.Cloud integration
+  // that will be replaced by the backend API (which handles pagination server-side).
   const url = `/api/cspr-cloud/accounts/${publicKeyHex}/ft-token-actions?contract_package_hash=${BIG_TOKEN_PACKAGE_HASH}&page_size=100`;
 
   const timeout = AbortSignal.timeout(15_000);
