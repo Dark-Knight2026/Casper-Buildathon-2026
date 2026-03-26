@@ -222,8 +222,8 @@ pub async fn fetch_daily_cumulative_rewards(
 pub struct UnbondingPositionRow {
     /// Tokens in unbonding cooldown (U256 as TEXT).
     pub unbonding_amount: String,
-    /// Epoch ms when unbonding ends (0 = none).
-    pub unbonding_ends_at: i64,
+    /// Timestamp when unbonding ends (None = no active unbonding).
+    pub unbonding_ends_at: Option<DateTime<Utc>>,
 }
 
 /// Fetch unbonding position for a given staker.

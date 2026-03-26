@@ -11,7 +11,7 @@
       {
         "ordinal": 1,
         "name": "unbonding_ends_at",
-        "type_info": "Int8"
+        "type_info": "Timestamptz"
       }
     ],
     "parameters": {
@@ -21,7 +21,7 @@
     },
     "nullable": [
       false,
-      false
+      true
     ]
   },
   "hash": "d6a7e68f23682fd78b176ea708df023883d365ebd30a1e6ac717607f2f275fa2"

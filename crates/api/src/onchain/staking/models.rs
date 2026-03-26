@@ -128,6 +128,7 @@ pub struct UnbondingResponse {
     #[schema(example = 5_000.0)]
     pub unbonding_amount: f64,
     /// Epoch ms when the unbonding period ends (0 = no active unbonding).
+    /// Stored as TIMESTAMPTZ in DB, converted to epoch ms for the API response.
     #[schema(example = 1_719_849_600_000i64)]
     pub unbonding_ends_at: i64,
     /// Whether the unbonding period has elapsed and `withdraw()` can be called.

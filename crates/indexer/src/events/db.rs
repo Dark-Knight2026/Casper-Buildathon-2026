@@ -779,7 +779,7 @@ pub async fn update_staking_position_unstake(
     tx: &mut PgTransaction<'_>,
     staker_address: &str,
     amount: &str,
-    unbonding_ends_at: i64,
+    unbonding_ends_at: Option<DateTime<Utc>>,
 ) -> IndexerResult<()> {
     let result = sqlx::query!(
         r"
@@ -823,7 +823,7 @@ pub async fn update_staking_position_withdraw(
         r"
             UPDATE staking_positions
             SET unbonding_amount  = '0',
-                unbonding_ends_at = 0,
+                unbonding_ends_at = NULL,
                 last_updated_at   = NOW()
             WHERE staker_address = $1
         ",

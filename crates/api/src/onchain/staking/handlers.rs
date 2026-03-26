@@ -285,17 +285,17 @@ pub async fn get_unbonding(
 
     let now_ms = Utc::now().timestamp_millis();
 
-    let (unbonding_amount, unbonding_ends_at) = match &position {
+    let (unbonding_amount, unbonding_ends_at_ms) = match &position {
         Some(p) => (
             common::to_human_f64(&p.unbonding_amount),
-            p.unbonding_ends_at,
+            p.unbonding_ends_at.map_or(0, |dt| dt.timestamp_millis()),
         ),
         None => (0.0, 0),
     };
 
-    let is_withdrawable = unbonding_ends_at > 0 && unbonding_ends_at <= now_ms;
-    let time_remaining_ms = if unbonding_ends_at > now_ms {
-        unbonding_ends_at - now_ms
+    let is_withdrawable = unbonding_ends_at_ms > 0 && unbonding_ends_at_ms <= now_ms;
+    let time_remaining_ms = if unbonding_ends_at_ms > now_ms {
+        unbonding_ends_at_ms - now_ms
     } else {
         0
     };
@@ -312,7 +312,7 @@ pub async fn get_unbonding(
 
     Ok(Json(UnbondingResponse {
         unbonding_amount,
-        unbonding_ends_at,
+        unbonding_ends_at: unbonding_ends_at_ms,
         is_withdrawable,
         time_remaining_ms,
         history,

@@ -1,6 +1,6 @@
 //! Handler for the `UnstakedInitiated` staking contract event.
 
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -62,7 +62,7 @@ impl IndexableEvent for UnstakedInitiated {
                 ctx.tx,
                 &staker,
                 &self.amount,
-                self.unbonding_ends_at.cast_signed(),
+                DateTime::from_timestamp_millis(self.unbonding_ends_at.cast_signed()),
             )
             .await?;
         }

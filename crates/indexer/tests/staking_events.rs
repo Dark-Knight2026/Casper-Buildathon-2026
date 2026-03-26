@@ -263,7 +263,8 @@ async fn unstaked_initiated_sets_unbonding(pool: PgPool) {
 
     assert_eq!(pos.staked_amount, "6000", "10000 - 4000 = 6000");
     assert_eq!(pos.unbonding_amount, "4000");
-    assert_eq!(pos.unbonding_ends_at, 1_700_172_800_000);
+    let expected_ts = chrono::DateTime::from_timestamp_millis(1_700_172_800_000);
+    assert_eq!(pos.unbonding_ends_at, expected_ts);
 }
 
 // UnbondedWithdrawn handler ---------------------------------------------------
@@ -330,7 +331,7 @@ async fn unbonded_withdrawn_clears_unbonding(pool: PgPool) {
     .unwrap();
 
     assert_eq!(pos.unbonding_amount, "0");
-    assert_eq!(pos.unbonding_ends_at, 0);
+    assert_eq!(pos.unbonding_ends_at, None);
 }
 
 // RewardsDeposited handler ----------------------------------------------------

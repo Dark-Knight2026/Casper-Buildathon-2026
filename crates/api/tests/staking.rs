@@ -64,12 +64,14 @@ async fn seed_ico_schedule(pool: &PgPool, price: &str) {
 }
 
 /// Seed a staking position with unbonding fields.
+/// `unbonding_ends_at_ms` is epoch ms; converted to TIMESTAMPTZ (NULL when 0).
 async fn seed_unbonding_position(
     pool: &PgPool,
     staker: &str,
     unbonding_amount: &str,
-    unbonding_ends_at: i64,
+    unbonding_ends_at_ms: i64,
 ) {
+    let ts = chrono::DateTime::from_timestamp_millis(unbonding_ends_at_ms);
     sqlx::query(
         r"
             INSERT INTO staking_positions (staker_address, staked_amount, total_rewards_claimed, unbonding_amount, unbonding_ends_at, last_updated_at)
@@ -78,7 +80,7 @@ async fn seed_unbonding_position(
     )
     .bind(staker)
     .bind(unbonding_amount)
-    .bind(unbonding_ends_at)
+    .bind(ts)
     .execute(pool)
     .await
     .expect("Failed to seed unbonding position");
