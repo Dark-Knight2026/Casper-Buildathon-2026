@@ -1,13 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { TransactionHistory, ICOTransaction as Transaction } from '@/pages/ico/components/shared/TransactionHistory';
+import { TransactionHistory } from '@/pages/ico/components/shared/TransactionHistory';
+import type { ICOTransaction as Transaction } from '@/types/ico';
 
 const mockTransactions: Transaction[] = [
   {
     id: '1',
     type: 'purchase',
-    amount: 1500,
-    currency: 'USDC',
     tokensReceived: 1000000,
     tokenSymbol: 'BIG',
     status: 'completed',
@@ -17,8 +16,6 @@ const mockTransactions: Transaction[] = [
   {
     id: '2',
     type: 'purchase',
-    amount: 100,
-    currency: 'USDT',
     tokensReceived: 66666,
     tokenSymbol: 'BIG',
     status: 'pending',
@@ -28,8 +25,6 @@ const mockTransactions: Transaction[] = [
   {
     id: '3',
     type: 'claim',
-    amount: 500,
-    currency: 'USDC',
     tokensReceived: 333333,
     tokenSymbol: 'BIG',
     status: 'failed',
@@ -122,8 +117,6 @@ describe('TransactionHistory', () => {
       const failedTx: Transaction[] = [{
         id: '1',
         type: 'purchase',
-        amount: 1500,
-        currency: 'USDC',
         tokensReceived: 1000000,
         tokenSymbol: 'BIG',
         status: 'failed',
@@ -141,8 +134,6 @@ describe('TransactionHistory', () => {
       const pendingTx: Transaction[] = [{
         id: '2',
         type: 'purchase',
-        amount: 100,
-        currency: 'USDC',
         tokensReceived: 66666,
         tokenSymbol: 'BIG',
         status: 'pending',
