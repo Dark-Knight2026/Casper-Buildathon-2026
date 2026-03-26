@@ -189,7 +189,7 @@ export const OverviewTab = memo(function OverviewTab() {
                 <div>
                   <p className="text-sm text-[hsl(var(--ico-text-secondary))]">Current APY</p>
                   <p className="text-lg font-semibold text-[hsl(var(--ico-text-primary))]">
-                    {stakingInfo?.currentApy ?? 0}%
+                    {formatNumber(stakingInfo?.currentApy ?? 0)}%
                   </p>
                 </div>
               </div>

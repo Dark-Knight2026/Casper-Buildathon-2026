@@ -10,6 +10,7 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLe
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { Coins, Percent, Clock, ArrowRightLeft, Users, Timer, Trophy } from 'lucide-react';
 import { PeriodSelector } from '../shared/PeriodSelector';
+import { formatNumber } from '../../utils/formatters';
 
 const rewardsChartConfig = {
   stakingPool: { label: 'Staking Reserve Pool', color: '#1F7A63' },
@@ -74,7 +75,7 @@ export const RewardsTab = memo(function RewardsTab() {
           <h3 className="text-lg font-semibold text-[hsl(var(--ico-text-primary))] mb-4">
             Staking
           </h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-lg bg-[hsl(var(--ico-brand-accent)/0.2)] flex items-center justify-center">
                 <Coins className="w-5 h-5 text-[hsl(var(--ico-brand-primary))]" />
@@ -91,9 +92,20 @@ export const RewardsTab = memo(function RewardsTab() {
                 <Percent className="w-5 h-5 text-[hsl(var(--ico-brand-primary))]" />
               </div>
               <div>
+                <p className="text-sm text-[hsl(var(--ico-text-secondary))]">Pending Rewards</p>
+                <p className="text-lg font-semibold text-[hsl(var(--ico-text-primary))]">
+                  {stakingInfo?.pendingRewards ?? 0}%
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-[hsl(var(--ico-state-active)/0.2)] flex items-center justify-center">
+                <Percent className="w-5 h-5 text-[hsl(var(--ico-brand-primary))]" />
+              </div>
+              <div>
                 <p className="text-sm text-[hsl(var(--ico-text-secondary))]">Current APY</p>
                 <p className="text-lg font-semibold text-[hsl(var(--ico-text-primary))]">
-                  {stakingInfo?.currentApy ?? 0}%
+                  {formatNumber(stakingInfo?.currentApy ?? 0)}%
                 </p>
               </div>
             </div>
