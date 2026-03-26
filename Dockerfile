@@ -1,5 +1,5 @@
 
-FROM lukemathwalker/cargo-chef:0.1.68-rust-1.92.0 AS chef
+FROM lukemathwalker/cargo-chef:latest-rust-1.92.0 AS chef
 WORKDIR /app
 
 
@@ -29,6 +29,6 @@ RUN apt-get update -y \
 COPY --from=builder /app/target/release/api app
 
 ENV RUST_LOG=info
-RUN adduser --disabled-password --no-create-home appuser
+RUN adduser --disabled-password --no-create-home --gecos "" appuser
 USER appuser
 ENTRYPOINT ["./app"]

@@ -21,7 +21,6 @@ This module serves two purposes in a single `terraform apply`:
 - Uploads the SSH public key
 - Creates an Ubuntu 24.04 server with `cloud-init.yml` for first-boot setup:
   - Installs Docker, ufw, fail2ban, certbot (with `certbot-dns-cloudflare`)
-  - Decodes the GCP service account from base64 (embedded in cloud-init), logs into Artifact Registry, then shreds the credentials
   - Configures cron jobs for certbot renewal (twice daily) and monthly certbot upgrades
   - Creates `/opt/<PROJECT_NAME>/deploy`, `/opt/<PROJECT_NAME>/nginx`, `/opt/<PROJECT_NAME>/logs`
 
@@ -34,7 +33,7 @@ This module serves two purposes in a single `terraform apply`:
   - `redeploy.sh` -> `/opt/<PROJECT_NAME>/deploy/redeploy.sh`
   - `docker-compose.dev.yml` -> `/opt/<PROJECT_NAME>/deploy/docker-compose.yml`
   - Generated `.env` -> `/opt/<PROJECT_NAME>/deploy/.env`
-- Runs `redeploy.sh` on the server
+- Runs `redeploy.sh` on the server (decodes GCP service account credentials from the copied `.env`, logs into Artifact Registry, then shreds the credentials)
 
 The `terraform_data.redeploy_sh` resource uses `triggers_replace` with `filesha256(...)` hashes of all deployed files and a hash of the `.env` contents, so it re-runs only when those inputs change.
 
@@ -49,8 +48,8 @@ The `terraform_data.redeploy_sh` resource uses `triggers_replace` with `filesha2
 | `HOST_SERVER_LOCATION` | Hetzner datacenter | `hel1` |
 | `SSH_PRIVATE_KEY_PATH` | Path to SSH private key file | — |
 | `SSH_PUBLIC_KEY_PATH` | Path to SSH public key file | — |
-| `GOOGLE_APPLICATION_REGION` | GCP region (used in cloud-init for Docker login) | — |
-| `GOOGLE_APPLICATION_CREDENTIALS` | Path to GCP service account JSON (embedded as base64 in cloud-init) | — |
+| `GOOGLE_APPLICATION_REGION` | GCP region (used in `redeploy.sh` for Artifact Registry Docker login) | — |
+| `GOOGLE_APPLICATION_CREDENTIALS` | Path to GCP service account JSON (passed via SSH provisioner in `.env`) | — |
 | `PROJECT_NAME` | Project name (lowercase snake-case, 3–40 chars) | — |
 | `DEPLOYMENT_MODE` | Deployment mode (`dev` \| `staging` \| `production`) | — |
 | `PROJECT_DOMAIN` | Domain for nginx `server_name` | — |

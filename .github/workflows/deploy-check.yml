@@ -9,7 +9,7 @@ env:
 
 jobs:
   deploy-tests:
-    name: Run deploy/tests/redeploy.sh
+    name: Run deploy/tests/redeploy.bats
     runs-on: ${{ vars.GH_RUNNER_DEPLOY_CHECK }}
 
     steps:

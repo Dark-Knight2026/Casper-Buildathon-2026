@@ -41,7 +41,7 @@ write_files:
     permissions: '0440'
     owner: root:root
     content: |
-      deploy ALL=(ALL) SETENV: NOPASSWD: /bin/bash /opt/${project_name}/deploy/redeploy.sh
+      deploy ALL=(ALL) NOPASSWD: /bin/bash /opt/${project_name}/deploy/redeploy.sh
 
   - path: /etc/fail2ban/jail.local
     permissions: '0644'
@@ -77,22 +77,12 @@ write_files:
       PasswordAuthentication no
       PermitRootLogin no
 
-  - path: /root/service_account.json.b64
-    permissions: '0600'
-    owner: root:root
-    content: |
-      ${service_account_creds_b64}
-
   - path: /root/init.sh
     permissions: '0700'
     owner: root:root
     content: |
       #!/bin/bash
       set -euo pipefail
-
-      # decode service account creds
-      base64 -d /root/service_account.json.b64 > /root/service_account.json
-      chmod 600 /root/service_account.json
 
       # ===========================================================================================
       ## Firewall (ufw) install
@@ -125,17 +115,6 @@ write_files:
       systemctl start docker
 
       # ===========================================================================================
-      ## Docker login
-      echo "[INFO] Docker login..."
-      cat /root/service_account.json | docker login -u _json_key --password-stdin https://${google_application_region}-docker.pkg.dev
-      mkdir -p /home/deploy/.docker
-      cp /root/.docker/config.json /home/deploy/.docker/config.json
-      chown -R deploy:deploy /home/deploy/.docker
-      chmod 600 /home/deploy/.docker/config.json
-      shred -u /root/service_account.json.b64 /root/service_account.json
-      rm -rf /root/.docker
-
-      # ===========================================================================================
       ## Certbot install (Python venv — https://certbot.eff.org/instructions?ws=other&os=pip)
       echo "[INFO] Installing certbot..."
       apt install -y python3 python3-dev python3-venv libaugeas-dev gcc
@@ -145,10 +124,10 @@ write_files:
       ln -sf /opt/certbot/bin/certbot /usr/local/bin/certbot
 
       # Renewal: twice daily with random delay to avoid LE rate-limit spikes
-      echo "0 0,12 * * * root /opt/certbot/bin/python -c 'import random; import time; time.sleep(random.random() * 3600)' ; certbot renew -q" >> /etc/crontab
+      echo "0 0,12 * * * root /opt/certbot/bin/python -c 'import random; import time; time.sleep(random.random() * 3600)' ; certbot renew -q" >> /etc/cron.d/certbot
 
       # Monthly certbot upgrade (first day of month at 03:00)
-      echo "0 3 1 * * root /opt/certbot/bin/pip install --upgrade certbot certbot-dns-cloudflare -q" >> /etc/crontab
+      echo "0 3 1 * * root /opt/certbot/bin/pip install --upgrade certbot certbot-dns-cloudflare -q" >> /etc/cron.d/certbot
 
       # nginx reload hook written by write_files above
 

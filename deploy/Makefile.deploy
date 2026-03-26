@@ -31,6 +31,11 @@ strip_quotes = $(patsubst %',%,$(patsubst '%,%,$(patsubst %",%,$(patsubst "%,%,$
 # Only backslash needs escaping: values arrive without inner quotes by construction
 # (strip_quotes already removed the outer delimiter, and Make-include would break
 # before this point if the inner content contained an unescaped quote).
+# NOTE:
+# Values are sourced from secret.sh where:
+# - double quotes (") are not allowed inside values
+# - ${...} sequences are not expected
+# Therefore only backslashes are escaped here. If input sources change, this function must be extended.
 hcl_escape = $(subst \,\\,$(1))
 
 ## --------------------------------------------------------------------------------------
@@ -157,7 +162,8 @@ PROJECT_ENV_VARS := \
 	START_BLOCK_CONTRACT_TREASURY \
 	START_BLOCK_CONTRACT_ICO \
 	START_BLOCK_CONTRACT_VESTING \
-	START_BLOCK_CONTRACT_STAKING
+	START_BLOCK_CONTRACT_STAKING \
+	ALLOW_DB_RESET
 
 # !!!!!! NEW PROJECT VARS ADD HERE
 
@@ -188,6 +194,7 @@ deploy:
 		-t deploy-$(PROJECT_NAME) \
 		-f $(DEPLOYMENT_DIR)/Dockerfile.deploy
 	@echo "[INFO] Run Dockerfile.deploy container. Command <server_deploy>"
+	# SECURITY: mounting docker.sock gives the container equivalent of root on the host — only run in trusted CI/CD environments
 	@docker run --rm \
 		-v /var/run/docker.sock:/var/run/docker.sock \
 		-v $(CURDIR):/app \
@@ -228,7 +235,7 @@ build_image: ## Builds backend and indexer images
 		-f ./Dockerfile.indexer \
 		-t $(TAG)_indexer:$(VERSION)
 
-	@echo "[INFO]: Images built successfuly"
+	@echo "[INFO]: Images built successfully"
 
 
 push_image: ## Pushes backend and indexer images to the private repository via gar
@@ -302,7 +309,7 @@ deploy_production:
 	$(error deploy_production is not yet implemented)
 
 # ============================================================================================================================
-# Terrafrom init
+# Terraform init
 
 tf_init_%: ## Initializes terraform project. Calls terraform init.
 	@echo "🔧 Terraform init for module: $*"

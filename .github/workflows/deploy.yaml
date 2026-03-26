@@ -88,6 +88,7 @@ jobs:
         START_BLOCK_CONTRACT_VESTING: ${{ vars.START_BLOCK_CONTRACT_VESTING }}
         START_BLOCK_CONTRACT_STAKING: ${{ vars.START_BLOCK_CONTRACT_STAKING }}
         
+        ALLOW_DB_RESET: ${{ vars.ALLOW_DB_RESET }}
       run: |
         for v in "$REDIS_URL" "$REDIS_PASSWORD" "$CORS_ORIGIN" "$DATABASE_URL" "$CERTBOT_EMAIL" \
                   "$CF_DNS_API_TOKEN" "$GOOGLE_APPLICATION_PROJECT_ID" "$GOOGLE_APPLICATION_REGION" \
@@ -135,6 +136,7 @@ jobs:
           printf 'START_BLOCK_CONTRACT_ICO=%s\n'       "$START_BLOCK_CONTRACT_ICO"
           printf 'START_BLOCK_CONTRACT_VESTING=%s\n'   "$START_BLOCK_CONTRACT_VESTING"
           printf 'START_BLOCK_CONTRACT_STAKING=%s\n'   "$START_BLOCK_CONTRACT_STAKING"
+          printf 'ALLOW_DB_RESET=%s\n'                  "$ALLOW_DB_RESET"
         } >> .secret/-secret.sh
 
     - name: 'Build the image, push and deploy' 

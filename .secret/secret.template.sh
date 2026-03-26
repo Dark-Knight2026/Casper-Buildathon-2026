@@ -75,6 +75,7 @@ SUPABASE_JWT_SECRET="<your-supabase-jwt-secret>"
 CORS_ORIGIN="https://<your-frontend-domain>"
 
 RUN_MIGRATIONS="false"
+ALLOW_DB_RESET="false"
 ## Redis password for the local Redis container (--requirepass). Must match the password in REDIS_URL.
 ## For an external Redis service, set REDIS_URL to the full connection string provided by that service.
 REDIS_PASSWORD="<your-redis-password>"

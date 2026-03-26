@@ -17,6 +17,8 @@ TAG=registry.example.com/myapp
 VERSION=1.0.0
 PROJECT_DOMAIN=test.example.com
 DATABASE_URL=postgres://postgres:postgres@localhost:54322/postgres
+ALLOW_DB_RESET=true
+REDIS_PASSWORD=testpass123
 EOF
 
   # https.conf.template — required by pre-flight check; must be non-empty so envsubst
@@ -128,6 +130,23 @@ EOF
   run -0 run_deploy
   [ -f "$BASE/nginx/https.conf" ]
   [ -s "$BASE/nginx/https.conf" ]
+}
+
+# -------------------------------------------------
+@test "generates non-empty redis.conf after successful deploy" {
+  run -0 run_deploy
+  [ -f "$BASE/deploy/redis.conf" ]
+  [ -s "$BASE/deploy/redis.conf" ]
+  grep -q "testpass123" "$BASE/deploy/redis.conf"
+}
+
+# -------------------------------------------------
+@test "exits when redis.conf.template is missing" {
+  rm "$BASE/deploy/redis.conf.template"
+
+  run run_deploy
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"redis.conf.template not found"* ]]
 }
 
 # -------------------------------------------------
@@ -339,6 +358,41 @@ STUB
   run -0 run_deploy
   [ -f "$LETSENCRYPT_DIR/live/test.example.com/fullchain.pem" ]
   [ -f "$BASE/deploy/.self-signed" ]
+}
+
+# -------------------------------------------------
+@test "database reset executes when DEPLOYMENT_MODE is dev" {
+  # Default .env has DEPLOYMENT_MODE=dev — the DROP SCHEMA block must run.
+  run -0 run_deploy
+  grep -q "DROP SCHEMA" "$BASE/docker.log"
+}
+
+# -------------------------------------------------
+@test "database reset is skipped when DEPLOYMENT_MODE is staging" {
+  cat > "$BASE/deploy/.env" <<EOF
+DEPLOYMENT_MODE=staging
+TAG=registry.example.com/myapp
+VERSION=1.0.0
+PROJECT_DOMAIN=test.example.com
+EOF
+
+  run -0 run_deploy
+  run grep -q "DROP SCHEMA" "$BASE/docker.log"
+  [ "$status" -ne 0 ]
+}
+
+# -------------------------------------------------
+@test "database reset is skipped when DEPLOYMENT_MODE is production" {
+  cat > "$BASE/deploy/.env" <<EOF
+DEPLOYMENT_MODE=production
+TAG=registry.example.com/myapp
+VERSION=1.0.0
+PROJECT_DOMAIN=test.example.com
+EOF
+
+  run -0 run_deploy
+  run grep -q "DROP SCHEMA" "$BASE/docker.log"
+  [ "$status" -ne 0 ]
 }
 
 # -------------------------------------------------

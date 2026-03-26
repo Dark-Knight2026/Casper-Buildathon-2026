@@ -55,10 +55,8 @@ resource "hcloud_server" "host_server" {
 
   # Startup cloud-init script for the instance
   user_data = templatefile("${path.module}/../cloud-init.yml", {
-    ssh_public_key             = data.local_sensitive_file.ssh_public_key.content,
-    google_application_region  = var.GOOGLE_APPLICATION_REGION,
-    service_account_creds_b64  = filebase64(var.GOOGLE_APPLICATION_CREDENTIALS),
-    project_name               = var.PROJECT_NAME
+    ssh_public_key = data.local_sensitive_file.ssh_public_key.content,
+    project_name   = var.PROJECT_NAME
   })
 }
 
@@ -87,7 +85,7 @@ resource "terraform_data" "redeploy_sh" {
   provisioner "remote-exec" {
     inline = [
       # Wait cloud-init to finish
-      "bash -lc 'command -v cloud-init >/dev/null 2>&1 && timeout 30m cloud-init status --wait || true'", 
+      "bash -lc 'if command -v cloud-init >/dev/null 2>&1; then timeout 30m cloud-init status --wait; fi'",
     ]
   }
 
@@ -150,10 +148,25 @@ resource "terraform_data" "redeploy_sh" {
     ]
   }
 
+  # GCP credentials — transferred over SSH so the key never enters Terraform state
+  # or Hetzner user-data. The file is shredded from /tmp immediately after docker login.
+  provisioner "file" {
+    source      = var.GOOGLE_APPLICATION_CREDENTIALS
+    destination = "/tmp/gcp_creds.json"
+  }
+
+  provisioner "remote-exec" {
+    inline = [
+      "chmod 600 /tmp/gcp_creds.json",
+      "cat /tmp/gcp_creds.json | docker login -u _json_key --password-stdin https://${var.GOOGLE_APPLICATION_REGION}-docker.pkg.dev",
+      "shred -u /tmp/gcp_creds.json",
+    ]
+  }
+
   provisioner "remote-exec" {
     inline = [
       "set -e",
-      "sudo -E bash /opt/${var.PROJECT_NAME}/deploy/redeploy.sh",
+      "sudo bash /opt/${var.PROJECT_NAME}/deploy/redeploy.sh",
     ]
   }
 }

@@ -28,7 +28,8 @@ RUN curl -fsSL https://github.com/hetznercloud/cli/releases/download/v${HCLOUD_V
 # Install docker CLI (not daemon)
 RUN curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg && \
     echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/debian $(lsb_release -cs) stable" > /etc/apt/sources.list.d/docker.list && \
-    apt-get update && apt-get install -y --no-install-recommends docker-ce-cli
+    apt-get update && apt-get install -y --no-install-recommends docker-ce-cli \
+    && rm -rf /var/lib/apt/lists/*
 
 # Install Terraform
 RUN mkdir -p /usr/lib/terraform/${TF_VERSION} \
@@ -41,5 +42,8 @@ RUN mkdir -p /usr/lib/terraform/${TF_VERSION} \
 
 WORKDIR /app
 
+# Intentionally runs as root: needs write access to /tmp for gcloud auth cache
+# and must be able to bind-mount /var/run/docker.sock at the same UID as the host
+# caller (enforced via --user in Makefile.deploy).
 ENTRYPOINT ["/bin/bash", "-c"]
 CMD ["make -f ./deploy/Makefile.deploy ${ACTION:?ACTION variable is required}"]

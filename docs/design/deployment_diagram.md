@@ -15,7 +15,7 @@ graph TB
     CLIENT["Frontend<br/>(SPA)"]
 
     subgraph "Hetzner (Docker Compose)"
-        NGINX["Nginx<br/>(reverse proxy)<br/>:443 TLS · :80 → 301 redirect<br/>HSTS enabled"]
+        NGINX["Nginx<br/>(reverse proxy)<br/>:443 TLS · :80 -> 301 redirect<br/>HSTS enabled"]
         subgraph "Docker: API Server"
             API["API Server<br/>(Rust/Axum)<br/>Dockerfile<br/>:8080 internal"]
         end
@@ -54,7 +54,7 @@ graph TB
     API -->|"SQLx pool"| PG
     API -->|"Nonce store (5-min TTL)"| REDIS
     %% JWT validation is local HS256 (SUPABASE_JWT_SECRET) — no network call to Supabase Auth
-    %% Auth flow: nonce → Casper Wallet Ed25519/Secp256k1 signature → local verify → issue JWT
+    %% Auth flow: nonce -> Casper Wallet Ed25519/Secp256k1 signature -> local verify -> issue JWT
 
     IDX -->|"SQLx pool"| PG
     BACKFILL -->|"HTTP GET<br/>/ft-token-actions (CEP-18), /deploys (ICO)"| REST
@@ -72,7 +72,7 @@ flowchart TD
     subgraph "Deploy container (Dockerfile.deploy)"
         BUILD["docker build<br/>(Dockerfile + Dockerfile.indexer)"]
         GCPAUTH["gcloud auth<br/>GAR setup (Terraform)"]
-        PUSH["docker push<br/>→ Google Artifact Registry"]
+        PUSH["docker push<br/>-> Google Artifact Registry"]
     end
 
     subgraph "Terraform: hetzner_dev"
@@ -89,7 +89,7 @@ flowchart TD
         ROLLBACK_SAVE["Save rollback state<br/>(.env.rollback)"]
         DOWN["docker compose down"]
         UP["docker compose up -d"]
-        HEALTHCHECK["Poll /health (90s)<br/>start_period 60s + migration time"]
+        HEALTHCHECK["Poll /health (120s)<br/>start_period 60s + migration time"]
         CERTBOT["certbot DNS-01<br/>obtain Let's Encrypt cert<br/>(first deploy only)"]
         PRUNE["docker image prune"]
     end
@@ -121,15 +121,15 @@ flowchart TD
 
 | Service | Tier | Cost/mo | Notes |
 |---|---|---|---|
-| **Vercel** | Free → Pro | $0 → ~$20 | Free: 100 GB bandwidth, custom domain, no SLA; Pro adds team + SLA |
-| **Supabase** | Free → Pro | $0 → ~$25 | Free: 500 MB DB, 1 GB storage (500 MB cap is the binding constraint — indexer continuous writes prevent inactivity pause); Pro: 8 GB DB, daily backups |
+| **Vercel** | Free -> Pro | $0 -> ~$20 | Free: 100 GB bandwidth, custom domain, no SLA; Pro adds team + SLA |
+| **Supabase** | Free -> Pro | $0 -> ~$25 | Free: 500 MB DB, 1 GB storage (500 MB cap is the binding constraint — indexer continuous writes prevent inactivity pause); Pro: 8 GB DB, daily backups |
 | **Hetzner** (API + Redis + Indexer) | CX23 · 2 vCPU / 4 GB / 40 GB SSD | $4.09 | Docker Compose on a single server; IPv4 $0.60/mo already included in $4.09 total |
 | **Stripe** | Pay-per-use | 2.9% + $0.30/tx | **Planned — not yet integrated.** No monthly base fee; test mode is free |
-| **Resend** | Free → Pro | $0 → ~$20 | **Planned — not yet integrated.** Free: 3 000 emails/mo, 100/day; Pro: 50 000/mo |
+| **Resend** | Free -> Pro | $0 -> ~$20 | **Planned — not yet integrated.** Free: 3 000 emails/mo, 100/day; Pro: 50 000/mo |
 | **Cloudflare** | Free | $0 | DNS, reverse proxy, DDoS protection. Full / Full (Strict) SSL — Cloudflare validates the Let's Encrypt cert; both legs are TLS |
 | **CSPR.cloud** | Pay-per-use | ~$0–50 | Free: 100 000 API req/mo budget; daily cap 6 000/day (two independent limits — first reached applies), 3 simultaneous streaming connections; cost scales above those limits |
 | **Google Artifact Registry** | Pay-per-use | ~$0–2 | Storage ~$0.10/GB/mo; egress billed on pulls. Terraform managed; used by the deployment pipeline |
 | **Google Cloud Storage** | Pay-per-use | ~$0 | Terraform remote state backend. Standard storage ~$0.02/GB/mo; negligible for state files |
 | **Domain + SSL** | — | ~$1.25 | ~$15/yr billed annually; TLS terminated by Nginx (Let's Encrypt) and Vercel (frontend) |
 
-**Estimated total: ~$5.35/mo** on free tiers (dev/MVP) → **~$70–120/mo** production (paid plans)
+**Estimated total: ~$5.35/mo** on free tiers (dev/MVP) -> **~$70–120/mo** production (paid plans)

@@ -193,6 +193,10 @@ ${COMPOSE} down --remove-orphans || __msg_info "Nothing to remove"
 
 # ---- database reset section (dev only) ----
 if [[ "${DEPLOYMENT_MODE}" == "dev" ]]; then
+  if [[ "${ALLOW_DB_RESET:-}" != "true" ]]; then
+    __msg_error "DB reset requires ALLOW_DB_RESET=true — aborting to prevent accidental data loss"
+    exit 1
+  fi
   __msg_info "Resetting Supabase database (dev mode)"
   docker run --rm \
     --network host \
