@@ -1,6 +1,9 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-const API_KEY = process.env.CSPR_CLOUD_API_KEY || process.env.VITE_CSPR_CLOUD_API_KEY || '';
+const API_KEY = process.env.CSPR_CLOUD_API_KEY ?? '';
+if (process.env.NODE_ENV === 'production' && !API_KEY) {
+  console.error('[security] CSPR_CLOUD_API_KEY is not set — proxy requests will be rejected');
+}
 const ALLOWED_BASE_URLS = [
   'https://api.testnet.cspr.cloud',
   'https://api.cspr.cloud',
@@ -17,6 +20,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (req.method === 'OPTIONS') {
     return res.status(204).end();
+  }
+
+  if (!API_KEY) {
+    return res.status(500).json({ error: 'Proxy not configured' });
   }
 
   if (req.method !== 'GET') {
