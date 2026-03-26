@@ -51,9 +51,12 @@ pub struct StakingInfoResponse {
     /// Estimated annual percentage yield (%).
     #[schema(example = 12.5)]
     pub current_apy: f64,
-    /// Total rewards earned by this staker (human-readable f64).
+    /// Total rewards earned by this staker: claimed + pending (human-readable f64).
     #[schema(example = 5_000.0)]
     pub total_rewards_earned: f64,
+    /// Currently pending (unclaimed) rewards computed off-chain (human-readable f64).
+    #[schema(example = 1_200.0)]
+    pub pending_rewards: f64,
 }
 
 /// Response for `GET /staking/{accountHash}/portfolio`.

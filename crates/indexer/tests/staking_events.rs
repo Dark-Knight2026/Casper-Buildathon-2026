@@ -400,7 +400,8 @@ async fn rewards_deposited_inserts_deposit(pool: PgPool) {
             "RewardsDeposited",
             json!({
                 "caller": FakeAddress::ContractX.as_str(),
-                "amount": "100000"
+                "amount": "100000",
+                "reward_per_token_stored": "2000000000000000000"
             }),
         ),
     )
@@ -409,7 +410,7 @@ async fn rewards_deposited_inserts_deposit(pool: PgPool) {
 
     let deposit = sqlx::query!(
         r"
-            SELECT caller_address, amount, transaction_hash
+            SELECT caller_address, amount, reward_per_token_stored, transaction_hash
             FROM staking_reward_deposits
             WHERE transaction_hash = $1
         ",
@@ -421,7 +422,18 @@ async fn rewards_deposited_inserts_deposit(pool: PgPool) {
 
     assert_eq!(deposit.caller_address, FakeAddress::ContractX.as_str());
     assert_eq!(deposit.amount, "100000");
+    assert_eq!(deposit.reward_per_token_stored, "2000000000000000000");
     assert_eq!(deposit.transaction_hash, STAKING_DEPLOY_4);
+
+    // Verify global reward state was updated.
+    let global_reward_per_token: String = sqlx::query_scalar!(
+        r"SELECT reward_per_token_stored FROM staking_reward_state WHERE id = 1"
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(global_reward_per_token, "2000000000000000000");
 }
 
 /// Duplicate `RewardsDeposited` with same deploy hash is idempotent.
@@ -439,7 +451,8 @@ async fn rewards_deposited_idempotent(pool: PgPool) {
                 "RewardsDeposited",
                 json!({
                     "caller": FakeAddress::ContractX.as_str(),
-                    "amount": "100000"
+                    "amount": "100000",
+                    "reward_per_token_stored": "2000000000000000000"
                 }),
             ),
         )
@@ -603,4 +616,139 @@ async fn rewards_claimed_accumulates(pool: PgPool) {
         total, "1000",
         "total_rewards_claimed must accumulate: 300 + 700 = 1000"
     );
+}
+
+// StakerSnapshot handler ------------------------------------------------------
+
+const STAKING_DEPLOY_6: &str = "0000000000000000000000000000000000000000000000000000000000009006";
+
+/// `StakerSnapshot` must update `pending_rewards` and `reward_per_token_paid`
+/// on an existing staking position.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn staker_snapshot_updates_position(pool: PgPool) {
+    common::disable_rls(&pool).await;
+
+    // Create position via Staked event first.
+    processor::process_event(
+        &pool,
+        &EventRegistry::new(),
+        &HashSet::new(),
+        &staking_event(
+            STAKING_DEPLOY_1,
+            "Staked",
+            json!({ "staker": FakeAddress::Buyer.as_str(), "amount": "10000" }),
+        ),
+    )
+    .await
+    .unwrap();
+
+    // Process StakerSnapshot.
+    processor::process_event(
+        &pool,
+        &EventRegistry::new(),
+        &HashSet::new(),
+        &staking_event(
+            STAKING_DEPLOY_6,
+            "StakerSnapshot",
+            json!({
+                "staker": FakeAddress::Buyer.as_str(),
+                "staked_amount": "10000",
+                "pending_rewards": "500000000000000000000",
+                "reward_per_token_paid": "3000000000000000000"
+            }),
+        ),
+    )
+    .await
+    .unwrap();
+
+    let pos = sqlx::query!(
+        r"
+            SELECT pending_rewards, reward_per_token_paid
+            FROM staking_positions
+            WHERE staker_address = $1
+        ",
+        FakeAddress::Buyer.as_str(),
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(pos.pending_rewards, "500000000000000000000");
+    assert_eq!(pos.reward_per_token_paid, "3000000000000000000");
+}
+
+/// A second `StakerSnapshot` overwrites (not accumulates) the reward fields.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn staker_snapshot_overwrites_on_update(pool: PgPool) {
+    common::disable_rls(&pool).await;
+
+    // Create position.
+    processor::process_event(
+        &pool,
+        &EventRegistry::new(),
+        &HashSet::new(),
+        &staking_event(
+            STAKING_DEPLOY_1,
+            "Staked",
+            json!({ "staker": FakeAddress::Buyer.as_str(), "amount": "10000" }),
+        ),
+    )
+    .await
+    .unwrap();
+
+    // First snapshot.
+    processor::process_event(
+        &pool,
+        &EventRegistry::new(),
+        &HashSet::new(),
+        &staking_event(
+            STAKING_DEPLOY_5,
+            "StakerSnapshot",
+            json!({
+                "staker": FakeAddress::Buyer.as_str(),
+                "staked_amount": "10000",
+                "pending_rewards": "100",
+                "reward_per_token_paid": "1000000000000000000"
+            }),
+        ),
+    )
+    .await
+    .unwrap();
+
+    // Second snapshot with different values.
+    processor::process_event(
+        &pool,
+        &EventRegistry::new(),
+        &HashSet::new(),
+        &staking_event(
+            STAKING_DEPLOY_6,
+            "StakerSnapshot",
+            json!({
+                "staker": FakeAddress::Buyer.as_str(),
+                "staked_amount": "10000",
+                "pending_rewards": "999",
+                "reward_per_token_paid": "5000000000000000000"
+            }),
+        ),
+    )
+    .await
+    .unwrap();
+
+    let pos = sqlx::query!(
+        r"
+            SELECT pending_rewards, reward_per_token_paid
+            FROM staking_positions
+            WHERE staker_address = $1
+        ",
+        FakeAddress::Buyer.as_str(),
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(
+        pos.pending_rewards, "999",
+        "snapshot must overwrite, not accumulate"
+    );
+    assert_eq!(pos.reward_per_token_paid, "5000000000000000000");
 }

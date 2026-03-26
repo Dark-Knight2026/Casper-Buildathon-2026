@@ -13,6 +13,10 @@ pub struct StakingPositionRow {
     pub staked_amount: String,
     /// Cumulative rewards claimed (U256 as TEXT).
     pub total_rewards_claimed: String,
+    /// Last-known pending rewards from `StakerSnapshot` (U256 as TEXT).
+    pub pending_rewards: String,
+    /// Last-known `reward_per_token_paid` from `StakerSnapshot` (U256 as TEXT).
+    pub reward_per_token_paid: String,
 }
 
 /// Fetch the staking position for a given account.
@@ -30,7 +34,7 @@ pub async fn fetch_staking_position(
     sqlx::query_as!(
         StakingPositionRow,
         r"
-            SELECT staked_amount, total_rewards_claimed
+            SELECT staked_amount, total_rewards_claimed, pending_rewards, reward_per_token_paid
             FROM staking_positions
             WHERE staker_address = $1
         ",
@@ -38,6 +42,64 @@ pub async fn fetch_staking_position(
     )
     .fetch_optional(pool)
     .await
+}
+
+/// Fetch the latest global `reward_per_token_stored` from the singleton state.
+///
+/// Returns "0" if the row is missing (should not happen after migration).
+///
+/// # Errors
+///
+/// Returns `sqlx::Error` if the database query fails.
+#[inline]
+pub async fn fetch_global_reward_per_token_stored(pool: &PgPool) -> Result<String, Error> {
+    let value = sqlx::query_scalar!(
+        r"
+            SELECT reward_per_token_stored
+            FROM staking_reward_state
+            WHERE id = 1
+        ",
+    )
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(value.unwrap_or_else(|| "0".to_owned()))
+}
+
+/// Compute current pending rewards using SQL NUMERIC arithmetic.
+///
+/// Formula: `pending_rewards + (staked_amount * (global_reward_per_token - reward_per_token_paid)) / 1e18`
+///
+/// Uses `PostgreSQL` `::NUMERIC` for arbitrary-precision arithmetic (up to 131072 digits),
+/// avoiding overflow issues with Rust's `Decimal` (28-29 digits).
+///
+/// # Errors
+///
+/// Returns `sqlx::Error` if the database query fails.
+#[inline]
+pub async fn compute_pending_rewards(
+    pool: &PgPool,
+    pending_rewards: &str,
+    staked_amount: &str,
+    global_reward_per_token: &str,
+    reward_per_token_paid: &str,
+) -> Result<String, Error> {
+    let value = sqlx::query_scalar!(
+        r#"
+            SELECT (
+                $1::TEXT::NUMERIC + ($2::TEXT::NUMERIC * ($3::TEXT::NUMERIC - $4::TEXT::NUMERIC))
+                    / 1000000000000000000
+            )::TEXT AS "result!"
+        "#,
+        pending_rewards,
+        staked_amount,
+        global_reward_per_token,
+        reward_per_token_paid,
+    )
+    .fetch_one(pool)
+    .await?;
+
+    Ok(value)
 }
 
 /// APY components returned from the database.

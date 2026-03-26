@@ -86,6 +86,46 @@ async fn seed_unbonding_position(
     .expect("Failed to seed unbonding position");
 }
 
+/// Seed a staking position with reward tracking fields.
+async fn seed_staking_position_with_rewards(
+    pool: &PgPool,
+    staker: &str,
+    staked_amount: &str,
+    total_rewards_claimed: &str,
+    pending_rewards: &str,
+    reward_per_token_paid: &str,
+) {
+    sqlx::query(
+        r"
+            INSERT INTO staking_positions (staker_address, staked_amount, total_rewards_claimed, pending_rewards, reward_per_token_paid, last_updated_at)
+            VALUES ($1, $2, $3, $4, $5, NOW())
+        ",
+    )
+    .bind(staker)
+    .bind(staked_amount)
+    .bind(total_rewards_claimed)
+    .bind(pending_rewards)
+    .bind(reward_per_token_paid)
+    .execute(pool)
+    .await
+    .expect("Failed to seed staking position with rewards");
+}
+
+/// Seed the global reward state singleton.
+async fn seed_reward_state(pool: &PgPool, reward_per_token_stored: &str) {
+    sqlx::query(
+        r"
+            UPDATE staking_reward_state
+            SET reward_per_token_stored = $1, last_updated_at = NOW()
+            WHERE id = 1
+        ",
+    )
+    .bind(reward_per_token_stored)
+    .execute(pool)
+    .await
+    .expect("Failed to seed reward state");
+}
+
 /// Seed a staking event (unstake or withdraw) with a specific timestamp.
 async fn seed_staking_event(
     pool: &PgPool,
@@ -796,4 +836,104 @@ async fn unbonding_history_returns_chronologically(pool: PgPool) {
     let ts_0 = history[0]["timestamp"].as_str().unwrap();
     let ts_2 = history[2]["timestamp"].as_str().unwrap();
     assert!(ts_0 < ts_2, "events should be in chronological order");
+}
+
+// GET /api/v1/staking/{accountHash} - pending rewards
+
+/// Pending rewards are computed off-chain:
+/// `pending_rewards + (staked_amount * (global_reward_per_token - reward_per_token_paid)) / 1e18`
+///
+/// Setup: `staked = 100_000 BIG`, `pending = 50 BIG`, `global_reward_per_token = 2e18`,
+/// `reward_per_token_paid = 1e18`
+/// Expected: `50 + (100_000 * (2e18 - 1e18)) / 1e18 = 50 + 100_000 = 100_050 BIG`
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn staking_info_includes_pending_rewards(pool: PgPool) {
+    seed_staking_position_with_rewards(
+        &pool,
+        VALID_ADDRESS,
+        "100000000000000000000000", // 100_000 BIG (18 decimals)
+        "200000000000000000000",    // 200 BIG claimed
+        "50000000000000000000",     // 50 BIG pending
+        "1000000000000000000",      // reward_per_token_paid = 1e18
+    )
+    .await;
+
+    seed_reward_state(&pool, "2000000000000000000").await; // global = 2e18
+
+    let env = common::setup_test_server(pool, false).await;
+
+    let response = env
+        .server
+        .get(&format!("/api/v1/staking/{VALID_ADDRESS}"))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+
+    // pending_rewards = 50 + (100_000 * (2e18 - 1e18)) / 1e18 = 100_050
+    let pending = body["pendingRewards"].as_f64().unwrap();
+    assert!(
+        (pending - 100_050.0).abs() < 0.01,
+        "expected ~100050.0, got {pending}"
+    );
+
+    // totalRewardsEarned = claimed (200) + pending (100_050) = 100_250
+    let total = body["totalRewardsEarned"].as_f64().unwrap();
+    assert!(
+        (total - 100_250.0).abs() < 0.01,
+        "expected ~100250.0, got {total}"
+    );
+}
+
+/// When no rewards have been deposited yet, pending should be 0.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn staking_info_pending_rewards_zero_when_no_deposits(pool: PgPool) {
+    seed_staking_position(&pool, VALID_ADDRESS, "1000000000000000000000", "0").await;
+
+    let env = common::setup_test_server(pool, false).await;
+
+    let response = env
+        .server
+        .get(&format!("/api/v1/staking/{VALID_ADDRESS}"))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+    let pending = body["pendingRewards"].as_f64().unwrap();
+    assert!(pending.abs() < 0.01, "expected ~0.0, got {pending}");
+}
+
+/// Portfolio endpoint should include pending rewards in `rewards_earned`.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn portfolio_includes_pending_rewards(pool: PgPool) {
+    seed_staking_position_with_rewards(
+        &pool,
+        VALID_ADDRESS,
+        "10000000000000000000000", // 10_000 BIG staked
+        "100000000000000000000",   // 100 BIG claimed
+        "50000000000000000000",    // 50 BIG pending
+        "1000000000000000000",     // reward_per_token_paid = 1e18
+    )
+    .await;
+    seed_reward_state(&pool, "2000000000000000000").await; // global = 2e18
+    seed_token_holding(&pool, VALID_ADDRESS, "5000000000000000000000").await; // 5000 BIG in wallet
+    seed_ico_schedule(&pool, "500000").await; // $0.50
+
+    let env = common::setup_test_server(pool, false).await;
+
+    let response = env
+        .server
+        .get(&format!("/api/v1/staking/{VALID_ADDRESS}/portfolio"))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+
+    // pending = 50 + (10_000 * 1e18) / 1e18 = 10_050
+    // rewards_earned = claimed (100) + pending (10_050) = 10_150
+    let rewards = body["rewardsEarned"].as_f64().unwrap();
+    assert!(
+        (rewards - 10_150.0).abs() < 0.01,
+        "expected ~10150.0, got {rewards}"
+    );
 }

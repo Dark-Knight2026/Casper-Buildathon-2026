@@ -18,12 +18,18 @@ pub struct RewardsDeposited {
     pub caller: String,
     /// Number of BIG tokens deposited as rewards (U256 as string).
     pub amount: String,
+    /// Global reward accumulator snapshot after this deposit (U256 as string).
+    pub reward_per_token_stored: String,
 }
 
 impl CesEvent for RewardsDeposited {
     const SCHEMA: EventSchema = EventSchema {
         name: Self::EVENT_NAME,
-        fields: &[("caller", FieldType::Key), ("amount", FieldType::U256)],
+        fields: &[
+            ("caller", FieldType::Key),
+            ("amount", FieldType::U256),
+            ("reward_per_token_stored", FieldType::U256),
+        ],
     };
 }
 
@@ -34,12 +40,13 @@ impl IndexableEvent for RewardsDeposited {
     async fn process(&self, ctx: &mut EventContext<'_>) -> IndexerResult<()> {
         let caller = address::normalize_to_account_hash(&self.caller)?;
 
-        // 1. INSERT into staking_reward_deposits.
+        // INSERT into staking_reward_deposits.
         db::insert_staking_reward_deposit(
             ctx.tx,
             &db::NewStakingRewardDeposit {
                 caller_address: &caller,
                 amount: &self.amount,
+                reward_per_token_stored: &self.reward_per_token_stored,
                 transaction_hash: ctx.deploy_hash,
                 block_height: ctx.block_height.cast_signed(),
                 event_timestamp: ctx.block_timestamp.unwrap_or_else(Utc::now),
@@ -47,7 +54,10 @@ impl IndexableEvent for RewardsDeposited {
         )
         .await?;
 
-        // 2. Record in blockchain_transactions.
+        // Update global reward state singleton.
+        db::update_global_reward_state(ctx.tx, &self.reward_per_token_stored).await?;
+
+        // Record in blockchain_transactions.
         let event_json = serde_json::to_value(self)?;
         db::insert_blockchain_transaction(
             ctx.tx,
@@ -74,6 +84,7 @@ impl IndexableEvent for RewardsDeposited {
             deploy = %ctx.deploy_hash,
             caller = %caller,
             amount = %self.amount,
+            reward_per_token_stored = %self.reward_per_token_stored,
             "Staking rewards deposited"
         );
 

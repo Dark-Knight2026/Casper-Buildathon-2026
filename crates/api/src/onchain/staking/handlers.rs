@@ -70,14 +70,28 @@ pub async fn get_staking_info(
 
     let position = db::fetch_staking_position(&state.db, &account).await?;
     let apy_data = db::fetch_apy_data(&state.db).await?;
+    let global_reward_per_token = db::fetch_global_reward_per_token_stored(&state.db).await?;
 
-    let (staked_tokens, total_rewards_earned) = match position {
-        Some(p) => (
-            common::to_human_f64(&p.staked_amount),
-            common::to_human_f64(&p.total_rewards_claimed),
-        ),
-        None => (0.0, 0.0),
+    let (staked_tokens, total_rewards_claimed, pending_rewards) = match &position {
+        Some(p) => {
+            let computed = db::compute_pending_rewards(
+                &state.db,
+                &p.pending_rewards,
+                &p.staked_amount,
+                &global_reward_per_token,
+                &p.reward_per_token_paid,
+            )
+            .await?;
+            (
+                common::to_human_f64(&p.staked_amount),
+                common::to_human_f64(&p.total_rewards_claimed),
+                common::to_human_f64(&computed),
+            )
+        }
+        None => (0.0, 0.0, 0.0),
     };
+
+    let total_rewards_earned = total_rewards_claimed + pending_rewards;
 
     let rewards_per_year = apy_data
         .rewards_per_year
@@ -99,6 +113,7 @@ pub async fn get_staking_info(
         staked_tokens,
         current_apy,
         total_rewards_earned,
+        pending_rewards,
     }))
 }
 
@@ -132,11 +147,23 @@ pub async fn get_portfolio(
     let ico_price_raw = db::fetch_ico_price(&state.db).await?;
 
     let big_in_wallet = common::to_human_f64(&big_balance_raw);
-    let (big_staked, rewards_earned) = match position {
-        Some(p) => (
-            common::to_human_f64(&p.staked_amount),
-            common::to_human_f64(&p.total_rewards_claimed),
-        ),
+    let global_reward_per_token = db::fetch_global_reward_per_token_stored(&state.db).await?;
+    let (big_staked, rewards_earned) = match &position {
+        Some(p) => {
+            let computed = db::compute_pending_rewards(
+                &state.db,
+                &p.pending_rewards,
+                &p.staked_amount,
+                &global_reward_per_token,
+                &p.reward_per_token_paid,
+            )
+            .await?;
+            let pending = common::to_human_f64(&computed);
+            (
+                common::to_human_f64(&p.staked_amount),
+                common::to_human_f64(&p.total_rewards_claimed) + pending,
+            )
+        }
         None => (0.0, 0.0),
     };
     let total_big = big_in_wallet + big_staked + rewards_earned;

@@ -86,15 +86,19 @@ fn parses_unbonded_withdrawn_event() {
 fn parses_rewards_deposited_event() {
     let schemas = ces::schemas_for(ContractType::Staking);
 
+    let reward_per_token = U256::from(2_000_000_000_000_000_000u64); // 2e18
+
     let mut fields = Vec::new();
     fields.extend_from_slice(&account_key_bytes(&AA_ACCOUNT));
     fields.extend_from_slice(&U256::from(100_000).to_bytes().unwrap());
+    fields.extend_from_slice(&reward_per_token.to_bytes().unwrap());
 
     let blob = ces_blob("RewardsDeposited", &fields);
     let (name, data) = parser::parse_ces_event(&blob, schemas).unwrap();
 
     assert_eq!(name, "RewardsDeposited");
     assert_eq!(data["amount"], "100000");
+    assert_eq!(data["reward_per_token_stored"], "2000000000000000000");
     assert!(data["caller"].as_str().unwrap().contains("account-hash-"));
 }
 
@@ -111,6 +115,26 @@ fn parses_rewards_claimed_event() {
 
     assert_eq!(name, "RewardsClaimed");
     assert_eq!(data["amount"], "500");
+}
+
+#[test]
+fn parses_staker_snapshot_event() {
+    let schemas = ces::schemas_for(ContractType::Staking);
+
+    let mut fields = Vec::new();
+    fields.extend_from_slice(&account_key_bytes(&AA_ACCOUNT));
+    fields.extend_from_slice(&U256::from(10_000).to_bytes().unwrap()); // staked_amount
+    fields.extend_from_slice(&U256::from(500).to_bytes().unwrap()); // pending_rewards
+    fields.extend_from_slice(&U256::from(1_000_000_000_000_000_000u64).to_bytes().unwrap()); // reward_per_token_paid
+
+    let blob = ces_blob("StakerSnapshot", &fields);
+    let (name, data) = parser::parse_ces_event(&blob, schemas).unwrap();
+
+    assert_eq!(name, "StakerSnapshot");
+    assert_eq!(data["staked_amount"], "10000");
+    assert_eq!(data["pending_rewards"], "500");
+    assert_eq!(data["reward_per_token_paid"], "1000000000000000000");
+    assert!(data["staker"].as_str().unwrap().contains("account-hash-"));
 }
 
 #[test]

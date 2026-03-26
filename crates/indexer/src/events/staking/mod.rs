@@ -3,12 +3,14 @@
 pub mod rewards_claimed;
 pub mod rewards_deposited;
 pub mod staked;
+pub mod staker_snapshot;
 pub mod unbonded_withdrawn;
 pub mod unstaked_initiated;
 
 pub use rewards_claimed::RewardsClaimed;
 pub use rewards_deposited::RewardsDeposited;
 pub use staked::Staked;
+pub use staker_snapshot::StakerSnapshot;
 pub use unbonded_withdrawn::UnbondedWithdrawn;
 pub use unstaked_initiated::UnstakedInitiated;
 
@@ -23,6 +25,7 @@ pub static CES_SCHEMAS: &[EventSchema] = &[
     <UnbondedWithdrawn as CesEvent>::SCHEMA,
     <RewardsDeposited as CesEvent>::SCHEMA,
     <RewardsClaimed as CesEvent>::SCHEMA,
+    <StakerSnapshot as CesEvent>::SCHEMA,
 ];
 
 /// All possible Staking contract events.
@@ -38,6 +41,8 @@ pub enum StakingEventType {
     RewardsDeposited,
     /// Emitted when a staker claims accumulated rewards.
     RewardsClaimed,
+    /// Emitted after stake/unstake/claim with the staker's updated reward state.
+    StakerSnapshot,
 }
 
 impl StakingEventType {
@@ -51,6 +56,7 @@ impl StakingEventType {
             Self::UnbondedWithdrawn => "UnbondedWithdrawn",
             Self::RewardsDeposited => "RewardsDeposited",
             Self::RewardsClaimed => "RewardsClaimed",
+            Self::StakerSnapshot => "StakerSnapshot",
         }
     }
 }
@@ -67,6 +73,7 @@ impl FromStr for StakingEventType {
             "UnbondedWithdrawn" => Ok(Self::UnbondedWithdrawn),
             "RewardsDeposited" => Ok(Self::RewardsDeposited),
             "RewardsClaimed" => Ok(Self::RewardsClaimed),
+            "StakerSnapshot" => Ok(Self::StakerSnapshot),
             _ => Err(s.to_owned()),
         }
     }

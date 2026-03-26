@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT reward_per_token_stored FROM staking_reward_state WHERE id = 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "reward_per_token_stored",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "3b3b57c2037b73bf72c2f6cfac3cd0da38644d08c13e3e88ae856de0c70d1bd9"
+}

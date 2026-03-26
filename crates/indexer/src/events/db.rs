@@ -542,9 +542,7 @@ pub async fn upsert_ico_schedule(
     Ok(())
 }
 
-// -----------------------------------------------------------------------------
-// Vesting schedules
-// -----------------------------------------------------------------------------
+// Vesting schedules -----------------------------------------------------------
 
 /// Data required to insert a row into `vesting_schedules`.
 #[derive(Debug)]
@@ -680,9 +678,7 @@ pub async fn is_vesting_claim_processed(
     Ok(exists)
 }
 
-// -----------------------------------------------------------------------------
-// Staking positions
-// -----------------------------------------------------------------------------
+// Staking positions -----------------------------------------------------------
 
 /// Data required to insert a staking event into `staking_events`.
 #[derive(Debug)]
@@ -879,9 +875,7 @@ pub async fn update_staking_position_rewards(
     Ok(())
 }
 
-// -----------------------------------------------------------------------------
-// Staking reward deposits
-// -----------------------------------------------------------------------------
+// Staking reward deposits -----------------------------------------------------
 
 /// Data required to insert a row into `staking_reward_deposits`.
 #[derive(Debug)]
@@ -890,6 +884,8 @@ pub struct NewStakingRewardDeposit<'a> {
     pub caller_address: &'a str,
     /// Deposited amount (U256 as string).
     pub amount: &'a str,
+    /// Global `reward_per_token_stored` snapshot at deposit time (U256 as string).
+    pub reward_per_token_stored: &'a str,
     /// Deploy hash that emitted the event.
     pub transaction_hash: &'a str,
     /// Block height where the event was included.
@@ -913,18 +909,91 @@ pub async fn insert_staking_reward_deposit(
 ) -> IndexerResult<()> {
     sqlx::query!(
         r"
-            INSERT INTO staking_reward_deposits (caller_address, amount, transaction_hash, block_height, event_timestamp)
-            VALUES ($1, $2, $3, $4, $5)
+            INSERT INTO staking_reward_deposits (caller_address, amount, reward_per_token_stored, transaction_hash, block_height, event_timestamp)
+            VALUES ($1, $2, $3, $4, $5, $6)
             ON CONFLICT (transaction_hash) DO NOTHING
         ",
         row.caller_address,
         row.amount,
+        row.reward_per_token_stored,
         row.transaction_hash,
         row.block_height,
         row.event_timestamp,
     )
     .execute(tx.as_mut())
     .await?;
+
+    Ok(())
+}
+
+// Global reward state ---------------------------------------------------------
+
+/// Update the singleton `staking_reward_state` row with the latest
+/// `reward_per_token_stored` from a `RewardsDeposited` event.
+///
+/// # Errors
+///
+/// Returns [`IndexerError::Database`](crate::error::IndexerError::Database)
+/// on SQL failures.
+#[inline]
+pub async fn update_global_reward_state(
+    tx: &mut PgTransaction<'_>,
+    reward_per_token_stored: &str,
+) -> IndexerResult<()> {
+    sqlx::query!(
+        r"
+            UPDATE staking_reward_state
+            SET reward_per_token_stored = $1, last_updated_at = NOW()
+            WHERE id = 1
+        ",
+        reward_per_token_stored,
+    )
+    .execute(tx.as_mut())
+    .await?;
+
+    Ok(())
+}
+
+// Staker reward snapshot ------------------------------------------------------
+
+/// Update per-user reward tracking columns from a `StakerSnapshot` event.
+///
+/// Overwrites `pending_rewards` and `reward_per_token_paid` on the existing
+/// `staking_positions` row. The position row must already exist (created by
+/// the `Staked` event that fires before the snapshot).
+///
+/// # Errors
+///
+/// Returns [`IndexerError::Database`](crate::error::IndexerError::Database)
+/// on SQL failures.
+#[inline]
+pub async fn update_staker_reward_snapshot(
+    tx: &mut PgTransaction<'_>,
+    staker_address: &str,
+    pending_rewards: &str,
+    reward_per_token_paid: &str,
+) -> IndexerResult<()> {
+    let result = sqlx::query!(
+        r"
+            UPDATE staking_positions
+            SET pending_rewards = $2,
+                reward_per_token_paid = $3,
+                last_updated_at = NOW()
+            WHERE staker_address = $1
+        ",
+        staker_address,
+        pending_rewards,
+        reward_per_token_paid,
+    )
+    .execute(tx.as_mut())
+    .await?;
+
+    if result.rows_affected() == 0 {
+        tracing::warn!(
+            staker = %staker_address,
+            "StakerSnapshot: no staking_positions row to update"
+        );
+    }
 
     Ok(())
 }

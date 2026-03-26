@@ -16,6 +16,10 @@ use crate::{
     config::ContractType,
     error::{IndexerError, IndexerResult},
     event_trait::{EventContext, IndexableEvent},
+    events::{
+        cep18::Cep18EventType, ico::IcoEventType, staking::StakingEventType,
+        vesting::VestingEventType,
+    },
 };
 
 /// A typed event from any known contract — the single source of truth for
@@ -23,13 +27,13 @@ use crate::{
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EventType {
     /// An event emitted by the ICO contract.
-    Ico(ico::IcoEventType),
+    Ico(IcoEventType),
     /// An event emitted by a CEP-18 token contract (BIG, USDC, USDT).
-    Cep18(cep18::Cep18EventType),
+    Cep18(Cep18EventType),
     /// An event emitted by the Vesting contract.
-    Vesting(vesting::VestingEventType),
+    Vesting(VestingEventType),
     /// An event emitted by the Staking contract.
-    Staking(staking::StakingEventType),
+    Staking(StakingEventType),
 }
 
 impl EventType {
@@ -130,18 +134,19 @@ impl EventRegistry {
         // without updating derived tables.
         dispatch_events!(
             event_type, ctx, event_data, event_name;
-            EventType::Ico(ico::IcoEventType::TokensPurchased) => ico::TokensPurchased,
-            EventType::Ico(ico::IcoEventType::IcoScheduleAdded) => ico::IcoScheduleAdded,
-            EventType::Cep18(cep18::Cep18EventType::Transfer) => cep18::Transfer,
-            EventType::Cep18(cep18::Cep18EventType::Mint) => cep18::Mint,
-            EventType::Cep18(cep18::Cep18EventType::SetAllowance) => cep18::SetAllowance,
-            EventType::Vesting(vesting::VestingEventType::ScheduleCreated) => vesting::ScheduleCreated,
-            EventType::Vesting(vesting::VestingEventType::TokensClaimed) => vesting::TokensClaimed,
-            EventType::Staking(staking::StakingEventType::Staked) => staking::Staked,
-            EventType::Staking(staking::StakingEventType::UnstakedInitiated) => staking::UnstakedInitiated,
-            EventType::Staking(staking::StakingEventType::UnbondedWithdrawn) => staking::UnbondedWithdrawn,
-            EventType::Staking(staking::StakingEventType::RewardsDeposited) => staking::RewardsDeposited,
-            EventType::Staking(staking::StakingEventType::RewardsClaimed) => staking::RewardsClaimed,
+            EventType::Ico(IcoEventType::TokensPurchased) => ico::TokensPurchased,
+            EventType::Ico(IcoEventType::IcoScheduleAdded) => ico::IcoScheduleAdded,
+            EventType::Cep18(Cep18EventType::Transfer) => cep18::Transfer,
+            EventType::Cep18(Cep18EventType::Mint) => cep18::Mint,
+            EventType::Cep18(Cep18EventType::SetAllowance) => cep18::SetAllowance,
+            EventType::Vesting(VestingEventType::ScheduleCreated) => vesting::ScheduleCreated,
+            EventType::Vesting(VestingEventType::TokensClaimed) => vesting::TokensClaimed,
+            EventType::Staking(StakingEventType::Staked) => staking::Staked,
+            EventType::Staking(StakingEventType::UnstakedInitiated) => staking::UnstakedInitiated,
+            EventType::Staking(StakingEventType::UnbondedWithdrawn) => staking::UnbondedWithdrawn,
+            EventType::Staking(StakingEventType::RewardsDeposited) => staking::RewardsDeposited,
+            EventType::Staking(StakingEventType::RewardsClaimed) => staking::RewardsClaimed,
+            EventType::Staking(StakingEventType::StakerSnapshot) => staking::StakerSnapshot,
         )
     }
 }
