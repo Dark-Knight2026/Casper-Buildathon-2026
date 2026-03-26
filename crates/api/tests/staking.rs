@@ -176,6 +176,44 @@ async fn staking_info_with_position(pool: PgPool) {
 }
 
 #[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn staking_info_apy_with_reward_deposits(pool: PgPool) {
+    // 10 000 BIG staked total (18 decimals)
+    seed_staking_position(&pool, VALID_ADDRESS, "10000000000000000000000", "0").await;
+
+    // Deposit 1000 BIG rewards within last 30 days
+    let recent = (Utc::now() - Duration::days(10)).to_rfc3339();
+    sqlx::query(
+        r"
+            INSERT INTO staking_reward_deposits
+                (caller_address, amount, transaction_hash, block_height, event_timestamp)
+            VALUES ($1, $2, 'apy_test_tx_hash_0001', 1, $3::TIMESTAMPTZ)
+        ",
+    )
+    .bind(VALID_ADDRESS)
+    .bind("1000000000000000000000") // 1000 BIG
+    .bind(&recent)
+    .execute(&pool)
+    .await
+    .expect("Failed to seed reward deposit");
+
+    let env = common::setup_test_server(pool, false).await;
+
+    let response = env
+        .server
+        .get(&format!("/api/v1/staking/{VALID_ADDRESS}"))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+    let apy = body["currentApy"].as_f64().unwrap();
+    // Expected: (1000 * 365 / 30) / 10000 * 100 = 121.67%
+    assert!(
+        apy > 100.0 && apy < 150.0,
+        "expected APY ~121.67%, got {apy}"
+    );
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn staking_info_invalid_address_returns_400(pool: PgPool) {
     let env = common::setup_test_server(pool, false).await;
 
