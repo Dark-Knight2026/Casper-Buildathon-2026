@@ -216,6 +216,7 @@ pub async fn mark_event_processed(
     transaction_hash: &str,
     event_type: &str,
     contract_address: &str,
+    transform_idx: Option<i32>,
 ) -> IndexerResult<()> {
     sqlx::query!(
         r"
@@ -225,10 +226,12 @@ pub async fn mark_event_processed(
             WHERE  transaction_hash = $1
               AND  event_type       = $2
               AND  contract_address = $3
+              AND  COALESCE(transform_idx, 0) = COALESCE($4, 0)
         ",
         transaction_hash,
         event_type,
         contract_address,
+        transform_idx,
     )
     .execute(tx.as_mut())
     .await?;
