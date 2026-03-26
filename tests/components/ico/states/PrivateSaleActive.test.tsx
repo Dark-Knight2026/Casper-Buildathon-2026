@@ -1,6 +1,8 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import React from 'react';
 import { PrivateSaleActive } from '@/pages/ico/components/states/PrivateSaleActive';
 import { ICO_CONFIG } from '@/constants/ico';
 import type { ScheduleProgress } from '@/hooks/ico/useICOSchedules';
@@ -37,11 +39,6 @@ vi.mock('@/hooks/ico/usePurchaseFlow', () => ({
   }),
 }));
 
-// Mock useUserTokenActions to avoid QueryClientProvider dependency
-vi.mock('@/hooks/ico/useUserTokenActions', () => ({
-  useUserTokenActions: () => ({ transactions: [] }),
-}));
-
 // Mock the child components to isolate testing
 vi.mock('@/pages/ico/components/shared/CountdownTimer', () => ({
   CountdownTimer: ({ targetTimestamp }: { targetTimestamp: number }) => (
@@ -71,7 +68,12 @@ vi.mock('@/pages/ico/components/shared/UserTokenBalance', () => ({
 }));
 
 const renderWithRouter = (ui: React.ReactElement) => {
-  return render(<BrowserRouter>{ui}</BrowserRouter>);
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={qc}>
+      <BrowserRouter>{ui}</BrowserRouter>
+    </QueryClientProvider>
+  );
 };
 
 describe('PrivateSaleActive', () => {
@@ -81,6 +83,10 @@ describe('PrivateSaleActive', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2025-06-01T12:00:00Z'));
     mockEndTimestamp = Date.now() + 14 * 24 * 60 * 60 * 1000; // 14 days from fixed base
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [] }),
+    } as Response);
   });
 
   afterEach(() => {
