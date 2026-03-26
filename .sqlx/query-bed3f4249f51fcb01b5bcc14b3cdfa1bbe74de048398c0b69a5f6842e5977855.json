@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT transaction_hash, block_number, block_timestamp, amount, currency, contract_hash, from_address, from_type, to_address, to_type, transaction_type, transform_idx\n            FROM blockchain_transactions\n            WHERE contract_hash = $1\n            ORDER BY block_number DESC NULLS LAST, transform_idx DESC NULLS LAST\n            LIMIT $2 OFFSET $3\n        ",
+  "query": "\n            SELECT transaction_hash, block_number, block_timestamp, amount, currency, contract_hash, from_address, from_type, to_address, to_type, transaction_type, transform_idx\n            FROM blockchain_transactions\n            WHERE (from_address = $1 OR to_address = $1)\n              AND ($4::TEXT IS NULL OR transaction_type = $4)\n              AND ($5::SMALLINT IS NULL OR from_type = $5)\n            ORDER BY block_number DESC NULLS LAST, transform_idx DESC NULLS LAST, transaction_hash DESC\n            LIMIT $2 OFFSET $3\n        ",
   "describe": {
     "columns": [
       {
@@ -68,7 +68,9 @@
       "Left": [
         "Text",
         "Int8",
-        "Int8"
+        "Int8",
+        "Text",
+        "Int2"
       ]
     },
     "nullable": [
@@ -86,5 +88,5 @@
       true
     ]
   },
-  "hash": "a5a054dfee860016b64b0b35395b72448d023aed8f38e360fe72036b06871e23"
+  "hash": "bed3f4249f51fcb01b5bcc14b3cdfa1bbe74de048398c0b69a5f6842e5977855"
 }
