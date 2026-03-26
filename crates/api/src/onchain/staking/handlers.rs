@@ -71,7 +71,7 @@ pub async fn get_staking_info(
     let position = db::fetch_staking_position(&state.db, &account).await?;
     let apy_data = db::fetch_apy_data(&state.db).await?;
 
-    let (staked_tokens, total_rewards_claimed) = match position {
+    let (staked_tokens, total_rewards_earned) = match position {
         Some(p) => (
             common::to_human_f64(&p.staked_amount),
             common::to_human_f64(&p.total_rewards_claimed),
@@ -98,7 +98,7 @@ pub async fn get_staking_info(
     Ok(Json(StakingInfoResponse {
         staked_tokens,
         current_apy,
-        total_rewards_claimed,
+        total_rewards_earned,
     }))
 }
 
