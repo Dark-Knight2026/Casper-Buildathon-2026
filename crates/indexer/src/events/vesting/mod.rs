@@ -8,7 +8,10 @@ pub use tokens_claimed::TokensClaimed;
 
 use core::str::FromStr;
 
-use crate::backfill::parser::{CesEvent, EventSchema};
+use crate::{
+    backfill::parser::{CesEvent, EventSchema},
+    error::{IndexerError, IndexerResult},
+};
 
 /// CES binary schemas for all indexed Vesting events.
 pub static CES_SCHEMAS: &[EventSchema] = &[
@@ -44,17 +47,16 @@ impl VestingEventType {
 }
 
 impl FromStr for VestingEventType {
-    /// The unrecognized event name that failed to parse.
-    type Err = String;
+    type Err = IndexerError;
 
     #[inline]
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    fn from_str(s: &str) -> IndexerResult<Self> {
         match s {
             "ScheduleCreated" => Ok(Self::ScheduleCreated),
             "TokensClaimed" => Ok(Self::TokensClaimed),
             "WhitelistedCreatorAdded" => Ok(Self::WhitelistedCreatorAdded),
             "WhitelistedCreatorRemoved" => Ok(Self::WhitelistedCreatorRemoved),
-            _ => Err(s.to_owned()),
+            _ => Err(IndexerError::InvalidEventName(s.to_owned())),
         }
     }
 }

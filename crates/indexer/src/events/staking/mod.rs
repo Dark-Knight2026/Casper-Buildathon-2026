@@ -16,7 +16,10 @@ pub use unstaked_initiated::UnstakedInitiated;
 
 use core::str::FromStr;
 
-use crate::backfill::parser::{CesEvent, EventSchema};
+use crate::{
+    backfill::parser::{CesEvent, EventSchema},
+    error::{IndexerError, IndexerResult},
+};
 
 /// CES binary schemas for all indexed Staking events.
 pub static CES_SCHEMAS: &[EventSchema] = &[
@@ -62,11 +65,10 @@ impl StakingEventType {
 }
 
 impl FromStr for StakingEventType {
-    /// The unrecognized event name that failed to parse.
-    type Err = String;
+    type Err = IndexerError;
 
     #[inline]
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    fn from_str(s: &str) -> IndexerResult<Self> {
         match s {
             "Staked" => Ok(Self::Staked),
             "UnstakedInitiated" => Ok(Self::UnstakedInitiated),
@@ -74,7 +76,7 @@ impl FromStr for StakingEventType {
             "RewardsDeposited" => Ok(Self::RewardsDeposited),
             "RewardsClaimed" => Ok(Self::RewardsClaimed),
             "StakerSnapshot" => Ok(Self::StakerSnapshot),
-            _ => Err(s.to_owned()),
+            _ => Err(IndexerError::InvalidEventName(s.to_owned())),
         }
     }
 }

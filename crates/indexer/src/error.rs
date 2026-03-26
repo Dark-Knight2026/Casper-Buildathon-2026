@@ -52,6 +52,10 @@ pub enum IndexerError {
         /// CES event name.
         event_name: String,
     },
+
+    /// Event name not recognized by a contract event type's `FromStr` parser.
+    #[error("Invalid event name: '{0}'")]
+    InvalidEventName(String),
 }
 
 /// Shorthand for `Result<T, IndexerError>` used throughout the indexer crate.

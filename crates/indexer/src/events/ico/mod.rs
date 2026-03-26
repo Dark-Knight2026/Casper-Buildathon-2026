@@ -8,7 +8,10 @@ pub use tokens_purchased::TokensPurchased;
 
 use core::str::FromStr;
 
-use crate::backfill::parser::{CesEvent, EventSchema};
+use crate::{
+    backfill::parser::{CesEvent, EventSchema},
+    error::{IndexerError, IndexerResult},
+};
 
 /// CES binary schemas for all indexed ICO events.
 pub static CES_SCHEMAS: &[EventSchema] = &[
@@ -47,18 +50,17 @@ impl IcoEventType {
 }
 
 impl FromStr for IcoEventType {
-    /// The unrecognized event name that failed to parse.
-    type Err = String;
+    type Err = IndexerError;
 
     #[inline]
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    fn from_str(s: &str) -> IndexerResult<Self> {
         match s {
             "TokensPurchased" => Ok(Self::TokensPurchased),
             "ICOScheduleAdded" => Ok(Self::IcoScheduleAdded),
             "CurrencyAdded" => Ok(Self::CurrencyAdded),
             "CurrencyRemoved" => Ok(Self::CurrencyRemoved),
             "UnsoldTokensWithdrawn" => Ok(Self::UnsoldTokensWithdrawn),
-            _ => Err(s.to_owned()),
+            _ => Err(IndexerError::InvalidEventName(s.to_owned())),
         }
     }
 }
