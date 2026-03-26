@@ -123,6 +123,7 @@ pub async fn process_event(
         &raw.deploy_hash,
         &raw.event_name,
         &raw.contract_hash,
+        raw.transform_idx,
     )
     .await?;
 

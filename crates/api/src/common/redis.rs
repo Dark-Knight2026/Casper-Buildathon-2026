@@ -1,6 +1,6 @@
 //! Redis client wrapper with typed operations.
 
-use redis::{AsyncCommands, RedisError};
+use redis::{AsyncCommands, Client, RedisError, aio::ConnectionManager};
 
 /// Time-to-live for login nonce in Redis (5 minutes).
 const LOGIN_NONCE_TTL: u64 = 300;
@@ -8,18 +8,22 @@ const LOGIN_NONCE_TTL: u64 = 300;
 /// A convenience type alias for `Result` returned from Redis client.
 pub type RedisResult<T> = Result<T, RedisError>;
 
-/// Wrapper around Redis client for nonce operations.
+/// Wrapper around a shared Redis connection for nonce operations.
 #[derive(Debug, Clone)]
 pub struct RedisStore {
-    client: redis::Client,
+    conn: ConnectionManager,
 }
 
 impl RedisStore {
-    /// Creates a new `NonceStore` from a Redis client.
+    /// Creates a new `RedisStore` with a shared, auto-reconnecting connection.
+    ///
+    /// # Errors
+    ///
+    /// Returns `RedisError` if the initial connection fails.
     #[inline]
-    #[must_use]
-    pub const fn new(client: redis::Client) -> Self {
-        Self { client }
+    pub async fn new(client: Client) -> RedisResult<Self> {
+        let conn = client.get_connection_manager().await?;
+        Ok(Self { conn })
     }
 
     /// Saves a nonce message for the given wallet address.
@@ -35,9 +39,9 @@ impl RedisStore {
     /// Returns `RedisError` if the connection fails or the operation fails.
     #[inline]
     pub async fn save_nonce(&self, wallet_address: &str, message: &str) -> RedisResult<()> {
-        let mut connection = self.client.get_multiplexed_async_connection().await?;
+        let mut conn = self.conn.clone();
         let key = Self::nonce_key(wallet_address);
-        connection.set_ex(&key, message, LOGIN_NONCE_TTL).await
+        conn.set_ex(&key, message, LOGIN_NONCE_TTL).await
     }
 
     /// Atomically retrieves and deletes the nonce for the given wallet address.
@@ -52,12 +56,9 @@ impl RedisStore {
     /// Returns `RedisError` if the connection fails.
     #[inline]
     pub async fn take_nonce(&self, wallet_address: &str) -> RedisResult<Option<String>> {
-        let mut connection = self.client.get_multiplexed_async_connection().await?;
+        let mut conn = self.conn.clone();
         let key = Self::nonce_key(wallet_address);
-        redis::cmd("GETDEL")
-            .arg(&key)
-            .query_async(&mut connection)
-            .await
+        redis::cmd("GETDEL").arg(&key).query_async(&mut conn).await
     }
 
     /// Checks if Redis is reachable.
@@ -67,8 +68,8 @@ impl RedisStore {
     /// Returns `RedisError` if the connection or ping fails.
     #[inline]
     pub async fn ping(&self) -> RedisResult<()> {
-        let mut connection = self.client.get_multiplexed_async_connection().await?;
-        redis::cmd("PING").query_async::<()>(&mut connection).await
+        let mut conn = self.conn.clone();
+        redis::cmd("PING").query_async::<()>(&mut conn).await
     }
 
     /// Generates the Redis key for a wallet address.

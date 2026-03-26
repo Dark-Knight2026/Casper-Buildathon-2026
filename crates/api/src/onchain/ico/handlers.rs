@@ -24,25 +24,30 @@ const PRICE_DECIMALS: u32 = 6;
 
 /// Converts a raw U256 text value (minimal units, decimals=18) to a human-readable Decimal.
 #[inline]
-fn to_human(raw: &str) -> Decimal {
+fn to_human(raw: &str) -> ApiResult<Decimal> {
     let divisor = Decimal::from(10u64.pow(TOKEN_DECIMALS));
-    raw.parse::<Decimal>().unwrap_or(Decimal::ZERO) / divisor
+    let val = raw
+        .parse::<Decimal>()
+        .map_err(|_| ApiError::Internal(format!("invalid token amount: {raw}")))?;
+    Ok(val / divisor)
 }
 
 /// Converts a price U256 string (6 decimals) to a human-readable f64.
 /// E.g. "500000" -> 0.5
 #[inline]
-fn price_to_f64(raw: &str) -> f64 {
-    let divisor = Decimal::from(10u64.pow(PRICE_DECIMALS));
-    let dec = raw.parse::<Decimal>().unwrap_or(Decimal::ZERO) / divisor;
-    dec.to_f64().unwrap_or(0.0)
+fn price_to_f64(raw: &str) -> ApiResult<f64> {
+    let dec = price_to_decimal(raw)?;
+    Ok(dec.to_f64().unwrap_or(0.0))
 }
 
 /// Converts a price U256 string (6 decimals) to Decimal.
 #[inline]
-fn price_to_decimal(raw: &str) -> Decimal {
+fn price_to_decimal(raw: &str) -> ApiResult<Decimal> {
     let divisor = Decimal::from(10u64.pow(PRICE_DECIMALS));
-    raw.parse::<Decimal>().unwrap_or(Decimal::ZERO) / divisor
+    let val = raw
+        .parse::<Decimal>()
+        .map_err(|_| ApiError::Internal(format!("invalid price data: {raw}")))?;
+    Ok(val / divisor)
 }
 
 // `GET /api/v1/ico/balance/{address}`
@@ -79,8 +84,8 @@ pub async fn get_ico_balance(
 
     let (price_f64, price_decimal, is_active) = if let Some(ref schedule) = snapshot.schedule {
         (
-            price_to_f64(&schedule.price),
-            price_to_decimal(&schedule.price),
+            price_to_f64(&schedule.price)?,
+            price_to_decimal(&schedule.price)?,
             schedule.is_active.unwrap_or(false),
         )
     } else {
@@ -96,7 +101,7 @@ pub async fn get_ico_balance(
         )
     };
 
-    let usd_value = (to_human(&snapshot.tokens_purchased) * price_decimal)
+    let usd_value = (to_human(&snapshot.tokens_purchased)? * price_decimal)
         .to_f64()
         .unwrap_or(0.0);
 
@@ -139,8 +144,8 @@ pub async fn get_ico_progress(
     let (price_f64, price_decimal, total_allocation, is_active) =
         if let Some(ref schedule) = snapshot.schedule {
             (
-                price_to_f64(&schedule.price),
-                price_to_decimal(&schedule.price),
+                price_to_f64(&schedule.price)?,
+                price_to_decimal(&schedule.price)?,
                 schedule.sale_amount.clone(),
                 schedule.is_active.unwrap_or(false),
             )
@@ -173,10 +178,10 @@ pub async fn get_ico_progress(
     let tokens_remaining_dec = (alloc_dec - sold_dec).max(Decimal::ZERO);
     let tokens_remaining = tokens_remaining_dec.to_string();
 
-    let amount_raised = (to_human(&snapshot.tokens_sold) * price_decimal)
+    let amount_raised = (to_human(&snapshot.tokens_sold)? * price_decimal)
         .to_f64()
         .unwrap_or(0.0);
-    let hard_cap_usd = (to_human(&total_allocation) * price_decimal)
+    let hard_cap_usd = (to_human(&total_allocation)? * price_decimal)
         .to_f64()
         .unwrap_or(0.0);
     let percent_sold = if alloc_dec > Decimal::ZERO {

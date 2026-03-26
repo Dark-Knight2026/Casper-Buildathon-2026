@@ -460,6 +460,20 @@ async fn account_transactions_from_type_filters_contract_only(pool: PgPool) {
     assert_eq!(body["data"][0]["from_type"], 1);
 }
 
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn account_transactions_invalid_from_type_returns_400(pool: PgPool) {
+    let env = common::setup_test_server(pool, false).await;
+
+    let response = env
+        .server
+        .get(&format!(
+            "/api/v1/transactions/account/{VALID_ADDRESS}?from_type=2"
+        ))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
+}
+
 // Pagination boundary tests
 
 #[sqlx::test(migrator = "common::MIGRATIONS")]

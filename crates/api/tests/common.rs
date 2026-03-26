@@ -156,7 +156,9 @@ pub async fn setup_test_server_with(
     };
     let state = Arc::new(AppState {
         db: pool,
-        redis: RedisStore::new(redis_client),
+        redis: RedisStore::new(redis_client)
+            .await
+            .expect("Failed to connect to Redis"),
         config,
     });
 
