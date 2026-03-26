@@ -267,6 +267,56 @@ async fn unstaked_initiated_sets_unbonding(pool: PgPool) {
     assert_eq!(pos.unbonding_ends_at, expected_ts);
 }
 
+/// `UnstakedInitiated` without a prior `Staked` event must not panic.
+/// The handler logs a warning and updates zero rows.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn unstaked_initiated_without_prior_staked(pool: PgPool) {
+    common::disable_rls(&pool).await;
+
+    // Dispatch UnstakedInitiated with no matching staking_positions row
+    processor::process_event(
+        &pool,
+        &EventRegistry::new(),
+        &HashSet::new(),
+        &staking_event(
+            STAKING_DEPLOY_1,
+            "UnstakedInitiated",
+            json!({
+                "staker": FakeAddress::Buyer.as_str(),
+                "amount": "5000",
+                "unbonding_ends_at": 1_700_172_800_000_u64
+            }),
+        ),
+    )
+    .await
+    .unwrap();
+
+    // staking_events row should still be inserted (event log is append-only)
+    let event_count: i64 = sqlx::query_scalar!(
+        r"SELECT COUNT(*) FROM staking_events WHERE staker_address = $1 AND event_type = 'unstake'",
+        FakeAddress::Buyer.as_str(),
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap()
+    .unwrap_or(0);
+    assert_eq!(event_count, 1, "event log should record the unstake");
+
+    // No staking_positions row should exist (update matched zero rows)
+    let pos_count: i64 = sqlx::query_scalar!(
+        r"SELECT COUNT(*) FROM staking_positions WHERE staker_address = $1",
+        FakeAddress::Buyer.as_str(),
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap()
+    .unwrap_or(0);
+    assert_eq!(
+        pos_count, 0,
+        "no position should be created by unstake alone"
+    );
+}
+
 // UnbondedWithdrawn handler ---------------------------------------------------
 
 /// `UnbondedWithdrawn` must clear the unbonding state.
