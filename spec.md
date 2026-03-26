@@ -229,6 +229,30 @@ Backend service for processing high-load real estate operations, including tax c
 }
 ```
 
+- **GET** `/api/v1/staking/{accountHash}/unbonding`
+  - **Path:** `accountHash` - 64 hex chars, no prefix
+  - **Response:** `UnbondingResponse`
+  - **Auth:** Public
+  - **Rate limit:** 5 req/s, burst 30
+  - **Business rules:** Returns the current unbonding state and a chronological history of unstake/withdraw events. `isWithdrawable` is `true` when `unbondingEndsAt > 0 && unbondingEndsAt <= now`. `timeRemainingMs` is the milliseconds until withdraw is possible (0 if already withdrawable or no active unbonding).
+
+```json
+{
+  "unbondingAmount": 5000.0,
+  "unbondingEndsAt": 1719849600000,
+  "isWithdrawable": false,
+  "timeRemainingMs": 604800000,
+  "history": [
+    {
+      "eventType": "unstake",
+      "amount": 5000.0,
+      "timestamp": "2026-03-20T12:00:00Z",
+      "transactionHash": "abc123..."
+    }
+  ]
+}
+```
+
 ## 3. Security Requirements
 - **Authentication:** JWT Bearer Token (Supabase).
 - **Validation:** Signature verification using HS256.
