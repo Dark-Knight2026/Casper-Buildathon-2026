@@ -6,6 +6,7 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { AuthProvider } from '@/contexts/AuthContext';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import SkipNavigation from '@/components/layout/SkipNavigation';
+import { AuthWalletLayout } from '@/components/auth/AuthWalletLayout';
 
 // Eagerly load auth pages (critical for initial load)
 import { Login } from '@/pages/auth/Login';
@@ -170,8 +171,8 @@ function App() {
                 AUTHENTICATION ROUTES
                 Sign up and login pages
               */}
-              <Route path="/auth/login" element={<Login />} />
-              <Route path="/auth/register" element={<Register />} />
+              <Route path="/auth/login" element={<AuthWalletLayout><Login /></AuthWalletLayout>} />
+              <Route path="/auth/register" element={<AuthWalletLayout><Register /></AuthWalletLayout>} />
               <Route path="/auth/forgot-password" element={<ForgotPassword />} />
               <Route path="/auth/reset-password" element={<ResetPassword />} />
               <Route path="/auth/mfa-setup" element={<MFASetup />} />

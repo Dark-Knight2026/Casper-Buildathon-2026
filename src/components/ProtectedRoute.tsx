@@ -9,15 +9,15 @@ interface ProtectedRouteProps {
 }
 
 export default function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {
-  const { user, profile, loading, isAuthenticated } = useAuth();
+  const { profile, loading, isAuthenticated } = useAuth();
 
   // Show loading spinner while checking authentication
   if (loading) {
     return <LoadingSpinner fullScreen />;
   }
 
-  // Redirect to login if not authenticated
-  if (!isAuthenticated || !user || !profile) {
+  // Redirect to login if not authenticated (Supabase session or wallet JWT)
+  if (!isAuthenticated || !profile) {
     return <Navigate to="/auth/login" replace />;
   }
 
