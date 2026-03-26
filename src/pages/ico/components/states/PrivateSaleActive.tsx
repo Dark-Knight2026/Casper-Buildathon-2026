@@ -42,11 +42,13 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: Private
 
   const { transactions } = useUserTokenActions(account?.publicKey);
 
-  // Aggregate user balance from on-chain transactions
+  // Aggregate user balance from on-chain transactions (purchases only; claims are vesting unlocks)
   const userBalance = useMemo(() => {
-    const tokensPurchased = transactions.reduce((sum, tx) => sum + tx.tokensReceived, 0);
-    return { tokensPurchased, totalSpentUSD: tokensPurchased * tokenPrice };
-  }, [transactions, tokenPrice]);
+    const tokensPurchased = transactions
+      .filter(tx => tx.type === 'purchase')
+      .reduce((sum, tx) => sum + tx.tokensReceived, 0);
+    return { tokensPurchased };
+  }, [transactions]);
 
   return (
     <div className={cn('max-w-5xl mx-auto', className)}>
@@ -110,7 +112,6 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: Private
       {progress && userBalance.tokensPurchased > 0 && (
         <UserTokenBalance
           tokensPurchased={userBalance.tokensPurchased}
-          totalSpentUSD={userBalance.totalSpentUSD}
           tokenPrice={progress.priceUsd}
           tokenSymbol={ICO_CONFIG.TOKEN.symbol}
           className="mt-8"
