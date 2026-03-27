@@ -380,6 +380,35 @@ pub async fn fetch_unbonding_events(
     .await
 }
 
+/// Fetch the sum of locked (not yet claimed) vesting tokens for an account.
+///
+/// Formula: `SUM(total_amount - claimed_amount)` across all vesting schedules.
+/// Returns "0" if the account has no vesting schedules.
+///
+/// # Errors
+///
+/// Returns `sqlx::Error` if the database query fails.
+#[inline]
+pub async fn fetch_vesting_locked_amount(
+    executor: impl PgExecutor<'_>,
+    beneficiary: &str,
+) -> Result<String, Error> {
+    let value = sqlx::query_scalar!(
+        r"
+            SELECT COALESCE(
+                SUM(total_amount::NUMERIC - claimed_amount::NUMERIC), 0
+            )::TEXT
+            FROM vesting_schedules
+            WHERE beneficiary = $1
+        ",
+        beneficiary,
+    )
+    .fetch_one(executor)
+    .await?;
+
+    Ok(value.unwrap_or_else(|| "0".to_owned()))
+}
+
 // Transactional snapshots -----------------------------------------------------
 
 /// Components needed by `get_staking_info`, read under a single snapshot.
@@ -391,6 +420,8 @@ pub struct StakingInfoSnapshot {
     pub apy_data: ApyData,
     /// Computed pending rewards (U256 as TEXT), `None` if no position.
     pub pending_rewards_computed: Option<String>,
+    /// Sum of locked vesting tokens (U256 as TEXT) - fallback when no staking position.
+    pub vesting_locked: String,
 }
 
 /// Fetch all data for `get_staking_info` in a single `REPEATABLE READ` transaction.
@@ -410,6 +441,7 @@ pub async fn fetch_staking_info_snapshot(
 
     let position = fetch_staking_position(tx.as_mut(), staker_address).await?;
     let global_rpt = fetch_global_reward_per_token_stored(tx.as_mut()).await?;
+    let vesting_locked = fetch_vesting_locked_amount(tx.as_mut(), staker_address).await?;
 
     let pending_rewards_computed = if let Some(ref p) = position {
         Some(
@@ -436,6 +468,7 @@ pub async fn fetch_staking_info_snapshot(
             total_staked,
         },
         pending_rewards_computed,
+        vesting_locked,
     })
 }
 
@@ -450,6 +483,8 @@ pub struct PortfolioSnapshot {
     pub ico_price: String,
     /// Computed pending rewards (U256 as TEXT), `None` if no position.
     pub pending_rewards_computed: Option<String>,
+    /// Sum of locked vesting tokens (U256 as TEXT) - fallback when no staking position.
+    pub vesting_locked: String,
 }
 
 /// Fetch all data for `get_portfolio` in a single `REPEATABLE READ` transaction.
@@ -471,6 +506,7 @@ pub async fn fetch_portfolio_snapshot(
     let position = fetch_staking_position(tx.as_mut(), staker_address).await?;
     let ico_price = fetch_ico_price(tx.as_mut()).await?;
     let global_rpt = fetch_global_reward_per_token_stored(tx.as_mut()).await?;
+    let vesting_locked = fetch_vesting_locked_amount(tx.as_mut(), staker_address).await?;
 
     let pending_rewards_computed = if let Some(ref p) = position {
         Some(
@@ -492,5 +528,6 @@ pub async fn fetch_portfolio_snapshot(
         big_balance,
         ico_price,
         pending_rewards_computed,
+        vesting_locked,
     })
 }

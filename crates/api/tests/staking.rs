@@ -937,3 +937,199 @@ async fn portfolio_includes_pending_rewards(pool: PgPool) {
         "expected ~10150.0, got {rewards}"
     );
 }
+
+// Vesting fallback for staked tokens -----------------------------------------
+
+/// Seed a vesting schedule for a beneficiary.
+async fn seed_vesting_schedule(
+    pool: &PgPool,
+    vesting_id: &str,
+    beneficiary: &str,
+    total_amount: &str,
+    claimed_amount: &str,
+) {
+    sqlx::query(
+        r"
+            INSERT INTO vesting_schedules (vesting_id, beneficiary, whitelisted_creator, total_amount, claimed_amount, start_timestamp, cliff_duration, vesting_duration, transaction_hash, block_height)
+            VALUES ($1, $2, 'ico_contract_hash', $3, $4, 1000, 500, 1000, md5(random()::text), 1)
+        ",
+    )
+    .bind(vesting_id)
+    .bind(beneficiary)
+    .bind(total_amount)
+    .bind(claimed_amount)
+    .execute(pool)
+    .await
+    .expect("Failed to seed vesting schedule");
+}
+
+/// No staking position, but has vesting schedule -> stakedTokens = vesting locked.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn staking_info_falls_back_to_vesting_locked(pool: PgPool) {
+    // 5000 BIG locked via vesting, 0 claimed
+    seed_vesting_schedule(
+        &pool,
+        "0",
+        VALID_ADDRESS,
+        "5000000000000000000000", // 5000 BIG total
+        "0",                      // 0 claimed
+    )
+    .await;
+
+    let env = common::setup_test_server(pool, false).await;
+
+    let response = env
+        .server
+        .get(&format!("/api/v1/staking/{VALID_ADDRESS}"))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+    let staked = body["stakedTokens"].as_f64().unwrap();
+    assert!(
+        (staked - 5000.0).abs() < 0.01,
+        "expected ~5000.0 from vesting fallback, got {staked}"
+    );
+}
+
+/// Vesting locked = total - claimed when some tokens are already claimed.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn staking_info_vesting_fallback_subtracts_claimed(pool: PgPool) {
+    // 5000 BIG total, 2000 claimed -> 3000 locked
+    seed_vesting_schedule(
+        &pool,
+        "0",
+        VALID_ADDRESS,
+        "5000000000000000000000", // 5000 BIG
+        "2000000000000000000000", // 2000 BIG claimed
+    )
+    .await;
+
+    let env = common::setup_test_server(pool, false).await;
+
+    let response = env
+        .server
+        .get(&format!("/api/v1/staking/{VALID_ADDRESS}"))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+    let staked = body["stakedTokens"].as_f64().unwrap();
+    assert!(
+        (staked - 3000.0).abs() < 0.01,
+        "expected ~3000.0 (5000 - 2000), got {staked}"
+    );
+}
+
+/// Staking position with `staked_amount = 0`, but vesting exists -> fallback.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn staking_info_zero_staked_falls_back_to_vesting(pool: PgPool) {
+    // Staking position exists but with 0 staked (e.g. fully unstaked)
+    seed_staking_position(&pool, VALID_ADDRESS, "0", "0").await;
+    // Vesting schedule with 4000 BIG locked
+    seed_vesting_schedule(&pool, "0", VALID_ADDRESS, "4000000000000000000000", "0").await;
+
+    let env = common::setup_test_server(pool, false).await;
+
+    let response = env
+        .server
+        .get(&format!("/api/v1/staking/{VALID_ADDRESS}"))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+    let staked = body["stakedTokens"].as_f64().unwrap();
+    assert!(
+        (staked - 4000.0).abs() < 0.01,
+        "expected ~4000.0 from vesting fallback, got {staked}"
+    );
+}
+
+/// Staking position with staked > 0 takes priority over vesting (no double counting).
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn staking_info_prefers_staked_over_vesting(pool: PgPool) {
+    // 1000 BIG in staking position
+    seed_staking_position(&pool, VALID_ADDRESS, "1000000000000000000000", "0").await;
+    // 5000 BIG locked in vesting (same tokens, should not add up)
+    seed_vesting_schedule(&pool, "0", VALID_ADDRESS, "5000000000000000000000", "0").await;
+
+    let env = common::setup_test_server(pool, false).await;
+
+    let response = env
+        .server
+        .get(&format!("/api/v1/staking/{VALID_ADDRESS}"))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+    let staked = body["stakedTokens"].as_f64().unwrap();
+    assert!(
+        (staked - 1000.0).abs() < 0.01,
+        "expected ~1000.0 from staking (not vesting), got {staked}"
+    );
+}
+
+/// Portfolio endpoint also falls back to vesting locked tokens.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn portfolio_falls_back_to_vesting_locked(pool: PgPool) {
+    seed_token_holding(&pool, VALID_ADDRESS, "500000000000000000000").await; // 500 BIG wallet
+    seed_vesting_schedule(
+        &pool,
+        "0",
+        VALID_ADDRESS,
+        "3000000000000000000000", // 3000 BIG locked
+        "0",
+    )
+    .await;
+
+    let env = common::setup_test_server(pool, false).await;
+
+    let response = env
+        .server
+        .get(&format!("/api/v1/staking/{VALID_ADDRESS}/portfolio"))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+    let staked = body["bigStaked"].as_f64().unwrap();
+    assert!(
+        (staked - 3000.0).abs() < 0.01,
+        "expected ~3000.0 from vesting fallback, got {staked}"
+    );
+    let total = body["totalBig"].as_f64().unwrap();
+    assert!(
+        (total - 3500.0).abs() < 0.01,
+        "totalBig should be 500 + 3000 = 3500, got {total}"
+    );
+}
+
+/// Multiple vesting schedules sum up correctly.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn staking_info_vesting_fallback_sums_multiple_schedules(pool: PgPool) {
+    // Two vesting schedules for the same beneficiary
+    seed_vesting_schedule(&pool, "0", VALID_ADDRESS, "2000000000000000000000", "0").await;
+    seed_vesting_schedule(
+        &pool,
+        "1",
+        VALID_ADDRESS,
+        "3000000000000000000000",
+        "1000000000000000000000", // 1000 claimed
+    )
+    .await;
+
+    let env = common::setup_test_server(pool, false).await;
+
+    let response = env
+        .server
+        .get(&format!("/api/v1/staking/{VALID_ADDRESS}"))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+    let staked = body["stakedTokens"].as_f64().unwrap();
+    // (2000 - 0) + (3000 - 1000) = 4000
+    assert!(
+        (staked - 4000.0).abs() < 0.01,
+        "expected ~4000.0 (2000 + 2000), got {staked}"
+    );
+}
