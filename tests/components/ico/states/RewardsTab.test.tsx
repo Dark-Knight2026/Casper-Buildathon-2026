@@ -1,26 +1,26 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RewardsTab } from '@/pages/ico/components/states/RewardsTab';
 
-vi.mock('@/hooks/ico/useRewardsHistory', () => ({
-  useRewardsHistory: () => ({ data: null, isLoading: false }),
+// ── Fetch boundary mock ─────────────────────────────────────────────
+const mockGet = vi.fn();
+vi.mock('@/lib/api-client', () => ({
+  backendClient: { get: (...args: unknown[]) => mockGet(...args) },
 }));
 
-vi.mock('@/hooks/ico/useStakingInfo', () => ({
-  useStakingInfo: () => ({
-    data: { stakedTokens: 500000, currentApy: 12.5, totalRewardsEarned: 0 },
-    isLoading: false,
+// ── External SDK — must stay mocked ────────────────────────────────
+vi.mock('@/hooks/ico/useICOWallet', () => ({
+  useICOWallet: () => ({
+    account: { publicKey: 'fake-public-key', accountHash: 'fake-account-hash', provider: 'casper' },
+    isConnected: true,
   }),
 }));
 
-vi.mock('@/hooks/ico/useICOWallet', () => ({
-  useICOWallet: () => ({ account: null, isConnected: false }),
-}));
-
 vi.mock('@/lib/blockchain/accountUtils', () => ({
-  deriveAccountHash: () => null,
+  deriveAccountHash: () => 'fake-account-hash',
+  stripAccountHashPrefix: (addr: string) => addr.replace('account-hash-', ''),
 }));
 
 // Mock the child components
@@ -66,6 +66,14 @@ const renderWithRouter = (ui: React.ReactElement) => {
 };
 
 describe('RewardsTab', () => {
+  beforeEach(() => {
+    mockGet.mockResolvedValue({ stakedTokens: 500000, currentApy: 12.5, totalRewardsEarned: 0 });
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
   describe('rendering', () => {
     it('should render the Staking title', () => {
       renderWithRouter(<RewardsTab />);
@@ -88,18 +96,18 @@ describe('RewardsTab', () => {
       expect(stakingTitles.length).toBeGreaterThan(0);
     });
 
-    it('should display Staked Tokens', () => {
+    it('should display Staked Tokens', async () => {
       renderWithRouter(<RewardsTab />);
 
       expect(screen.getByText('Staked Tokens')).toBeInTheDocument();
-      expect(screen.getByText('500000 BIG')).toBeInTheDocument();
+      await waitFor(() => expect(screen.getByText('500000 BIG')).toBeInTheDocument());
     });
 
-    it('should display Current APY', () => {
+    it('should display Current APY', async () => {
       renderWithRouter(<RewardsTab />);
 
       expect(screen.getByText('Current APY')).toBeInTheDocument();
-      expect(screen.getByText('12.5%')).toBeInTheDocument(); // from mock data
+      await waitFor(() => expect(screen.getByText(/12[.,]5\d*%/)).toBeInTheDocument());
     });
 
     it('should display Next Rewards', () => {

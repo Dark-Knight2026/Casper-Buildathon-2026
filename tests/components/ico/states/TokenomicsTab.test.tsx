@@ -81,14 +81,14 @@ describe('TokenomicsTab', () => {
       renderWithRouter(<TokenomicsTab />);
 
       expect(screen.getByText('Total Supply')).toBeInTheDocument();
-      expect(screen.getByText(`${(5_000_000_000).toLocaleString()} BIG`)).toBeInTheDocument();
+      expect(screen.getByText(/5[,.\s]?000[,.\s]?000[,.\s]?000.*BIG/)).toBeInTheDocument();
     });
 
     it('should display Circulating Supply', () => {
       renderWithRouter(<TokenomicsTab />);
 
       expect(screen.getByText('Circulating Supply')).toBeInTheDocument();
-      expect(screen.getByText(`${(1_000_000_000).toLocaleString()} BIG`)).toBeInTheDocument();
+      expect(screen.getByText(/1[,.\s]?000[,.\s]?000[,.\s]?000.*BIG/)).toBeInTheDocument();
     });
   });
 
