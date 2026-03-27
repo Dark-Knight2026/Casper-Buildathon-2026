@@ -83,14 +83,15 @@ describe('PrivateSaleActive', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2025-06-01T12:00:00Z'));
     mockEndTimestamp = Date.now() + 14 * 24 * 60 * 60 * 1000; // 14 days from fixed base
-    global.fetch = vi.fn().mockResolvedValue({
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ data: [] }),
-    } as Response);
+    } as Response));
   });
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.unstubAllGlobals();
   });
 
   describe('rendering', () => {

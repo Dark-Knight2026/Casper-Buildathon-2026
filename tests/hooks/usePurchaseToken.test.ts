@@ -128,6 +128,7 @@ describe('usePurchaseToken', () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   // --- Initial state ---
