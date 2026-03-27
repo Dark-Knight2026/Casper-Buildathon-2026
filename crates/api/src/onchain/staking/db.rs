@@ -1,7 +1,7 @@
 //! Database queries for staking endpoints.
 
 use chrono::{DateTime, Utc};
-use sqlx::{Error, FromRow, PgPool};
+use sqlx::{Error, FromRow, PgExecutor, PgPool};
 
 /// Number of days used to extrapolate annual rewards for APY calculation.
 const APY_WINDOW_DAYS: i32 = 30;
@@ -28,7 +28,7 @@ pub struct StakingPositionRow {
 /// Returns `sqlx::Error` if the database query fails.
 #[inline]
 pub async fn fetch_staking_position(
-    pool: &PgPool,
+    executor: impl PgExecutor<'_>,
     staker_address: &str,
 ) -> Result<Option<StakingPositionRow>, Error> {
     sqlx::query_as!(
@@ -40,7 +40,7 @@ pub async fn fetch_staking_position(
         ",
         staker_address,
     )
-    .fetch_optional(pool)
+    .fetch_optional(executor)
     .await
 }
 
@@ -52,7 +52,9 @@ pub async fn fetch_staking_position(
 ///
 /// Returns `sqlx::Error` if the database query fails.
 #[inline]
-pub async fn fetch_global_reward_per_token_stored(pool: &PgPool) -> Result<String, Error> {
+pub async fn fetch_global_reward_per_token_stored(
+    executor: impl PgExecutor<'_>,
+) -> Result<String, Error> {
     let value = sqlx::query_scalar!(
         r"
             SELECT reward_per_token_stored
@@ -60,7 +62,7 @@ pub async fn fetch_global_reward_per_token_stored(pool: &PgPool) -> Result<Strin
             WHERE id = 1
         ",
     )
-    .fetch_optional(pool)
+    .fetch_optional(executor)
     .await?;
 
     Ok(value.unwrap_or_else(|| "0".to_owned()))
@@ -78,7 +80,7 @@ pub async fn fetch_global_reward_per_token_stored(pool: &PgPool) -> Result<Strin
 /// Returns `sqlx::Error` if the database query fails.
 #[inline]
 pub async fn compute_pending_rewards(
-    pool: &PgPool,
+    executor: impl PgExecutor<'_>,
     pending_rewards: &str,
     staked_amount: &str,
     global_reward_per_token: &str,
@@ -97,7 +99,7 @@ pub async fn compute_pending_rewards(
         global_reward_per_token,
         reward_per_token_paid,
     )
-    .fetch_one(pool)
+    .fetch_one(executor)
     .await?;
 
     Ok(value)
@@ -112,14 +114,14 @@ pub struct ApyData {
     pub total_staked: String,
 }
 
-/// Fetch data needed to calculate APY: 30-day extrapolated rewards and total staked.
+/// Fetch 30-day extrapolated annual rewards (U256 as TEXT).
 ///
 /// # Errors
 ///
 /// Returns `sqlx::Error` if the database query fails.
 #[inline]
-pub async fn fetch_apy_data(pool: &PgPool) -> Result<ApyData, Error> {
-    let rewards_per_year = sqlx::query_scalar!(
+pub async fn fetch_rewards_per_year(executor: impl PgExecutor<'_>) -> Result<String, Error> {
+    let value = sqlx::query_scalar!(
         r"
             SELECT COALESCE(
                 SUM(amount::NUMERIC) * 365 / $1::INT, 0
@@ -129,20 +131,40 @@ pub async fn fetch_apy_data(pool: &PgPool) -> Result<ApyData, Error> {
         ",
         APY_WINDOW_DAYS,
     )
-    .fetch_one(pool)
-    .await?
-    .unwrap_or_else(|| "0".to_owned());
+    .fetch_one(executor)
+    .await?;
 
-    let total_staked = sqlx::query_scalar!(
+    Ok(value.unwrap_or_else(|| "0".to_owned()))
+}
+
+/// Fetch total staked across all stakers (U256 as TEXT).
+///
+/// # Errors
+///
+/// Returns `sqlx::Error` if the database query fails.
+#[inline]
+pub async fn fetch_total_staked(executor: impl PgExecutor<'_>) -> Result<String, Error> {
+    let value = sqlx::query_scalar!(
         r"
             SELECT COALESCE(SUM(staked_amount::NUMERIC), 0)::TEXT
             FROM staking_positions
         ",
     )
-    .fetch_one(pool)
-    .await?
-    .unwrap_or_else(|| "0".to_owned());
+    .fetch_one(executor)
+    .await?;
 
+    Ok(value.unwrap_or_else(|| "0".to_owned()))
+}
+
+/// Fetch data needed to calculate APY: 30-day extrapolated rewards and total staked.
+///
+/// # Errors
+///
+/// Returns `sqlx::Error` if the database query fails.
+#[inline]
+pub async fn fetch_apy_data(pool: &PgPool) -> Result<ApyData, Error> {
+    let rewards_per_year = fetch_rewards_per_year(pool).await?;
+    let total_staked = fetch_total_staked(pool).await?;
     Ok(ApyData {
         rewards_per_year,
         total_staked,
@@ -157,7 +179,10 @@ pub async fn fetch_apy_data(pool: &PgPool) -> Result<ApyData, Error> {
 ///
 /// Returns `sqlx::Error` if the database query fails.
 #[inline]
-pub async fn fetch_big_balance(pool: &PgPool, user_address: &str) -> Result<String, Error> {
+pub async fn fetch_big_balance(
+    executor: impl PgExecutor<'_>,
+    user_address: &str,
+) -> Result<String, Error> {
     let value = sqlx::query_scalar!(
         r"
             SELECT balance
@@ -166,7 +191,7 @@ pub async fn fetch_big_balance(pool: &PgPool, user_address: &str) -> Result<Stri
         ",
         user_address,
     )
-    .fetch_optional(pool)
+    .fetch_optional(executor)
     .await?;
 
     Ok(value.unwrap_or_else(|| "0".to_owned()))
@@ -180,7 +205,7 @@ pub async fn fetch_big_balance(pool: &PgPool, user_address: &str) -> Result<Stri
 ///
 /// Returns `sqlx::Error` if the database query fails.
 #[inline]
-pub async fn fetch_ico_price(pool: &PgPool) -> Result<String, Error> {
+pub async fn fetch_ico_price(executor: impl PgExecutor<'_>) -> Result<String, Error> {
     let value = sqlx::query_scalar!(
         r"
             SELECT price
@@ -189,7 +214,7 @@ pub async fn fetch_ico_price(pool: &PgPool) -> Result<String, Error> {
             LIMIT 1
         ",
     )
-    .fetch_optional(pool)
+    .fetch_optional(executor)
     .await?;
 
     Ok(value.unwrap_or_else(|| "0".to_owned()))
@@ -353,4 +378,119 @@ pub async fn fetch_unbonding_events(
     )
     .fetch_all(pool)
     .await
+}
+
+// Transactional snapshots -----------------------------------------------------
+
+/// Components needed by `get_staking_info`, read under a single snapshot.
+#[derive(Debug)]
+pub struct StakingInfoSnapshot {
+    /// Staking position for the account, if any.
+    pub position: Option<StakingPositionRow>,
+    /// APY calculation inputs.
+    pub apy_data: ApyData,
+    /// Computed pending rewards (U256 as TEXT), `None` if no position.
+    pub pending_rewards_computed: Option<String>,
+}
+
+/// Fetch all data for `get_staking_info` in a single `REPEATABLE READ` transaction.
+///
+/// # Errors
+///
+/// Returns `sqlx::Error` if any database query fails.
+#[inline]
+pub async fn fetch_staking_info_snapshot(
+    pool: &PgPool,
+    staker_address: &str,
+) -> Result<StakingInfoSnapshot, Error> {
+    let mut tx = pool.begin().await?;
+    sqlx::query!("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
+        .execute(tx.as_mut())
+        .await?;
+
+    let position = fetch_staking_position(tx.as_mut(), staker_address).await?;
+    let global_rpt = fetch_global_reward_per_token_stored(tx.as_mut()).await?;
+
+    let pending_rewards_computed = if let Some(ref p) = position {
+        Some(
+            compute_pending_rewards(
+                tx.as_mut(),
+                &p.pending_rewards,
+                &p.staked_amount,
+                &global_rpt,
+                &p.reward_per_token_paid,
+            )
+            .await?,
+        )
+    } else {
+        None
+    };
+
+    let rewards_per_year = fetch_rewards_per_year(tx.as_mut()).await?;
+    let total_staked = fetch_total_staked(tx.as_mut()).await?;
+
+    Ok(StakingInfoSnapshot {
+        position,
+        apy_data: ApyData {
+            rewards_per_year,
+            total_staked,
+        },
+        pending_rewards_computed,
+    })
+}
+
+/// Components needed by `get_portfolio`, read under a single snapshot.
+#[derive(Debug)]
+pub struct PortfolioSnapshot {
+    /// Staking position for the account, if any.
+    pub position: Option<StakingPositionRow>,
+    /// BIG wallet balance (U256 as TEXT).
+    pub big_balance: String,
+    /// Latest ICO price (U256 as TEXT, 6 decimals).
+    pub ico_price: String,
+    /// Computed pending rewards (U256 as TEXT), `None` if no position.
+    pub pending_rewards_computed: Option<String>,
+}
+
+/// Fetch all data for `get_portfolio` in a single `REPEATABLE READ` transaction.
+///
+/// # Errors
+///
+/// Returns `sqlx::Error` if any database query fails.
+#[inline]
+pub async fn fetch_portfolio_snapshot(
+    pool: &PgPool,
+    staker_address: &str,
+) -> Result<PortfolioSnapshot, Error> {
+    let mut tx = pool.begin().await?;
+    sqlx::query!("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
+        .execute(tx.as_mut())
+        .await?;
+
+    let big_balance = fetch_big_balance(tx.as_mut(), staker_address).await?;
+    let position = fetch_staking_position(tx.as_mut(), staker_address).await?;
+    let ico_price = fetch_ico_price(tx.as_mut()).await?;
+    let global_rpt = fetch_global_reward_per_token_stored(tx.as_mut()).await?;
+
+    let pending_rewards_computed = if let Some(ref p) = position {
+        Some(
+            compute_pending_rewards(
+                tx.as_mut(),
+                &p.pending_rewards,
+                &p.staked_amount,
+                &global_rpt,
+                &p.reward_per_token_paid,
+            )
+            .await?,
+        )
+    } else {
+        None
+    };
+
+    Ok(PortfolioSnapshot {
+        position,
+        big_balance,
+        ico_price,
+        pending_rewards_computed,
+    })
 }

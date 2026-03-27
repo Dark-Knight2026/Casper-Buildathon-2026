@@ -68,36 +68,28 @@ pub async fn get_staking_info(
 ) -> ApiResult<Json<StakingInfoResponse>> {
     let account = common::validate_account(&path.account_hash)?;
 
-    let position = db::fetch_staking_position(&state.db, &account).await?;
-    let apy_data = db::fetch_apy_data(&state.db).await?;
-    let global_reward_per_token = db::fetch_global_reward_per_token_stored(&state.db).await?;
+    let snap = db::fetch_staking_info_snapshot(&state.db, &account).await?;
 
-    let (staked_tokens, total_rewards_claimed, pending_rewards) = match &position {
-        Some(p) => {
-            let computed = db::compute_pending_rewards(
-                &state.db,
-                &p.pending_rewards,
-                &p.staked_amount,
-                &global_reward_per_token,
-                &p.reward_per_token_paid,
-            )
-            .await?;
-            (
-                common::to_human_f64(&p.staked_amount),
-                common::to_human_f64(&p.total_rewards_claimed),
-                common::to_human_f64(&computed),
-            )
-        }
+    let (staked_tokens, total_rewards_claimed, pending_rewards) = match &snap.position {
+        Some(p) => (
+            common::to_human_f64(&p.staked_amount),
+            common::to_human_f64(&p.total_rewards_claimed),
+            snap.pending_rewards_computed
+                .as_deref()
+                .map_or(0.0, common::to_human_f64),
+        ),
         None => (0.0, 0.0, 0.0),
     };
 
     let total_rewards_earned = total_rewards_claimed + pending_rewards;
 
-    let rewards_per_year = apy_data
+    let rewards_per_year = snap
+        .apy_data
         .rewards_per_year
         .parse::<Decimal>()
         .unwrap_or(Decimal::ZERO);
-    let total_staked = apy_data
+    let total_staked = snap
+        .apy_data
         .total_staked
         .parse::<Decimal>()
         .unwrap_or(Decimal::ZERO);
@@ -142,23 +134,15 @@ pub async fn get_portfolio(
 ) -> ApiResult<Json<PortfolioResponse>> {
     let account = common::validate_account(&path.account_hash)?;
 
-    let big_balance_raw = db::fetch_big_balance(&state.db, &account).await?;
-    let position = db::fetch_staking_position(&state.db, &account).await?;
-    let ico_price_raw = db::fetch_ico_price(&state.db).await?;
+    let snap = db::fetch_portfolio_snapshot(&state.db, &account).await?;
 
-    let big_in_wallet = common::to_human_f64(&big_balance_raw);
-    let global_reward_per_token = db::fetch_global_reward_per_token_stored(&state.db).await?;
-    let (big_staked, rewards_earned) = match &position {
+    let big_in_wallet = common::to_human_f64(&snap.big_balance);
+    let (big_staked, rewards_earned) = match &snap.position {
         Some(p) => {
-            let computed = db::compute_pending_rewards(
-                &state.db,
-                &p.pending_rewards,
-                &p.staked_amount,
-                &global_reward_per_token,
-                &p.reward_per_token_paid,
-            )
-            .await?;
-            let pending = common::to_human_f64(&computed);
+            let pending = snap
+                .pending_rewards_computed
+                .as_deref()
+                .map_or(0.0, common::to_human_f64);
             (
                 common::to_human_f64(&p.staked_amount),
                 common::to_human_f64(&p.total_rewards_claimed) + pending,
@@ -170,7 +154,8 @@ pub async fn get_portfolio(
 
     // Convert ICO price (U256, 6 decimals) to human-readable USD price per token.
     let price_divisor = Decimal::from(10u64.pow(PRICE_DECIMALS));
-    let price_per_token = ico_price_raw.parse::<Decimal>().unwrap_or(Decimal::ZERO) / price_divisor;
+    let price_per_token =
+        snap.ico_price.parse::<Decimal>().unwrap_or(Decimal::ZERO) / price_divisor;
     let estimated_usd_value = (Decimal::try_from(total_big).unwrap_or(Decimal::ZERO)
         * price_per_token)
         .to_f64()
