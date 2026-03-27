@@ -368,6 +368,22 @@ STUB
 }
 
 # -------------------------------------------------
+@test "database reset is skipped in dev mode when ALLOW_DB_RESET is not true" {
+  cat > "$BASE/deploy/.env" <<EOF
+DEPLOYMENT_MODE=dev
+TAG=registry.example.com/myapp
+VERSION=1.0.0
+PROJECT_DOMAIN=test.example.com
+DATABASE_URL=postgres://postgres:postgres@localhost:54322/postgres
+REDIS_PASSWORD=testpass123
+EOF
+
+  run -0 run_deploy
+  run grep -q "DROP SCHEMA" "$BASE/docker.log"
+  [ "$status" -ne 0 ]
+}
+
+# -------------------------------------------------
 @test "database reset is skipped when DEPLOYMENT_MODE is staging" {
   cat > "$BASE/deploy/.env" <<EOF
 DEPLOYMENT_MODE=staging

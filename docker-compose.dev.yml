@@ -52,7 +52,8 @@ services:
       SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET:?SUPABASE_JWT_SECRET is required}
       REDIS_URL: ${REDIS_URL:?REDIS_URL is required}
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
     networks:
       - leasefi_net
     logging: *default-logging

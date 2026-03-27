@@ -157,6 +157,7 @@ resource "terraform_data" "redeploy_sh" {
 
   provisioner "remote-exec" {
     inline = [
+      "trap 'shred -u /tmp/gcp_creds.json 2>/dev/null || rm -f /tmp/gcp_creds.json' EXIT",
       "chmod 600 /tmp/gcp_creds.json",
       "cat /tmp/gcp_creds.json | docker login -u _json_key --password-stdin https://${var.GOOGLE_APPLICATION_REGION}-docker.pkg.dev",
       "shred -u /tmp/gcp_creds.json",

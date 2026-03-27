@@ -11,6 +11,7 @@ jobs:
   deploy-tests:
     name: Run deploy/tests/redeploy.bats
     runs-on: ${{ vars.GH_RUNNER_DEPLOY_CHECK }}
+    timeout-minutes: 10
 
     steps:
     - name: Checkout code
@@ -30,6 +31,7 @@ jobs:
   terraform-validate:
     name: Validate deploy/${{ matrix.module }}
     runs-on: ${{ vars.GH_RUNNER_DEPLOY_CHECK }}
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:

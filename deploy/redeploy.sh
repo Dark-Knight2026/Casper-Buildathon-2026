@@ -194,18 +194,18 @@ ${COMPOSE} down --remove-orphans || __msg_info "Nothing to remove"
 # ---- database reset section (dev only) ----
 if [[ "${DEPLOYMENT_MODE}" == "dev" ]]; then
   if [[ "${ALLOW_DB_RESET:-}" != "true" ]]; then
-    __msg_error "DB reset requires ALLOW_DB_RESET=true — aborting to prevent accidental data loss"
-    exit 1
+    __msg_info "DB reset skipped (ALLOW_DB_RESET != true)"
+  else
+    __msg_info "Resetting Supabase database (dev mode)"
+    docker run --rm \
+      --network host \
+      postgres:17-alpine \
+      psql "${DATABASE_URL}" \
+      -v ON_ERROR_STOP=1 \
+      -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;" \
+      || { __msg_error "Failed to reset database"; exit 1; }
+    __msg_success "Database reset complete"
   fi
-  __msg_info "Resetting Supabase database (dev mode)"
-  docker run --rm \
-    --network host \
-    postgres:17-alpine \
-    psql "${DATABASE_URL}" \
-    -v ON_ERROR_STOP=1 \
-    -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;" \
-    || { __msg_error "Failed to reset database"; exit 1; }
-  __msg_success "Database reset complete"
 fi
 
 # ---- deployment section ----
