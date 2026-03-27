@@ -900,6 +900,8 @@ pub struct NewStakingRewardDeposit<'a> {
 /// Insert a row into `staking_reward_deposits` for a `RewardsDeposited` event.
 ///
 /// Uses `ON CONFLICT DO NOTHING` on `transaction_hash` so re-processing is safe.
+/// Returns `true` when a new row was inserted, `false` on duplicate. Callers
+/// should skip global state mutations when this returns `false`.
 ///
 /// # Errors
 ///
@@ -909,8 +911,8 @@ pub struct NewStakingRewardDeposit<'a> {
 pub async fn insert_staking_reward_deposit(
     tx: &mut PgTransaction<'_>,
     row: &NewStakingRewardDeposit<'_>,
-) -> IndexerResult<()> {
-    sqlx::query!(
+) -> IndexerResult<bool> {
+    let result = sqlx::query!(
         r"
             INSERT INTO staking_reward_deposits (caller_address, amount, reward_per_token_stored, transaction_hash, block_height, event_timestamp)
             VALUES ($1, $2, $3, $4, $5, $6)
@@ -926,7 +928,7 @@ pub async fn insert_staking_reward_deposit(
     .execute(tx.as_mut())
     .await?;
 
-    Ok(())
+    Ok(result.rows_affected() > 0)
 }
 
 // Global reward state ---------------------------------------------------------

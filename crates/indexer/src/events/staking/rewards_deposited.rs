@@ -41,7 +41,7 @@ impl IndexableEvent for RewardsDeposited {
         let caller = address::normalize_to_account_hash(&self.caller)?;
 
         // INSERT into staking_reward_deposits.
-        db::insert_staking_reward_deposit(
+        let is_new = db::insert_staking_reward_deposit(
             ctx.tx,
             &db::NewStakingRewardDeposit {
                 caller_address: &caller,
@@ -54,8 +54,10 @@ impl IndexableEvent for RewardsDeposited {
         )
         .await?;
 
-        // Update global reward state singleton.
-        db::update_global_reward_state(ctx.tx, &self.reward_per_token_stored).await?;
+        // Update global reward state singleton only for new deposits.
+        if is_new {
+            db::update_global_reward_state(ctx.tx, &self.reward_per_token_stored).await?;
+        }
 
         // Record in blockchain_transactions.
         let event_json = serde_json::to_value(self)?;
