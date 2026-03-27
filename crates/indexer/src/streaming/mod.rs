@@ -27,7 +27,7 @@ use crate::{
     config::{ContractRegistry, ContractType, IndexerConfig},
     error::{IndexerError, IndexerResult},
     events::EventRegistry,
-    processor::{self, RawEvent},
+    processor::{self, ProcessResult, RawEvent},
 };
 use db::StreamType;
 
@@ -273,8 +273,11 @@ pub async fn handle_text_message(
         api_to_type: None,
     };
 
-    processor::process_event(db_pool, registry, known_hashes, &raw).await?;
-    db::update_cursor(db_pool, StreamType::Streaming, msg.extra.event_id).await?;
+    let result = processor::process_event(db_pool, registry, known_hashes, &raw).await?;
+
+    if result == ProcessResult::Processed {
+        db::update_cursor(db_pool, StreamType::Streaming, msg.extra.event_id).await?;
+    }
 
     Ok(())
 }

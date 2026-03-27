@@ -28,7 +28,7 @@ use common::{FakeAddress, MIGRATOR, PURCHASE_DEPLOY_HASH, TRANSFER_DEPLOY_HASH, 
 use indexer::{
     config::ContractType,
     events::EventRegistry,
-    processor::{self, RawEvent},
+    processor::{self, ProcessResult, RawEvent},
 };
 
 // Transfer handler — blockchain_transactions
@@ -795,8 +795,8 @@ async fn tokens_purchased_without_caller_defers_to_backfill(pool: PgPool) {
     )
     .await;
 
-    // Must succeed (DeferredEvent is handled internally by the processor).
-    result.unwrap();
+    // Must succeed and report Deferred (no caller in streaming mode).
+    assert_eq!(result.unwrap(), ProcessResult::Deferred);
 
     // Nothing should be persisted - transaction was rolled back.
     let event_count: i64 = sqlx::query_scalar!(
@@ -872,7 +872,7 @@ async fn deferred_event_then_backfill_persists_data(pool: PgPool) {
         },
     )
     .await;
-    result.unwrap();
+    assert_eq!(result.unwrap(), ProcessResult::Deferred);
 
     // Verify nothing persisted after deferral.
     let count: i64 = sqlx::query_scalar!(

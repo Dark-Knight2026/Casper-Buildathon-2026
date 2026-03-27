@@ -235,7 +235,7 @@ async fn process_ico_deploy(
             api_from_type: None,
             api_to_type: None,
         };
-        processor::process_event(ctx.db_pool, ctx.registry, ctx.known_hashes, &raw).await?;
+        let _ = processor::process_event(ctx.db_pool, ctx.registry, ctx.known_hashes, &raw).await?;
         tracing::debug!(
             deploy = %deploy_hash,
             schedule_id = %schedule.id,
@@ -294,7 +294,7 @@ async fn process_ico_deploy(
         api_to_type: None,
     };
 
-    processor::process_event(ctx.db_pool, ctx.registry, ctx.known_hashes, &raw).await?;
+    let _ = processor::process_event(ctx.db_pool, ctx.registry, ctx.known_hashes, &raw).await?;
 
     tracing::debug!(
         deploy = %deploy_hash,
