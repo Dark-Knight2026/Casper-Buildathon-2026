@@ -41,8 +41,9 @@ function formatBigAmount(raw: string | null): string {
   if (!raw) return '—';
   const divisor = 10n ** BigInt(BIG_DECIMALS);
   const big = BigInt(raw);
-  const num = Number(big / divisor) + Number(big % divisor) / Number(divisor);
-  return num.toLocaleString('en-US', { maximumFractionDigits: 2 });
+  const intPart = (big / divisor).toString();
+  const fracPart = (big % divisor).toString().padStart(BIG_DECIMALS, '0').slice(0, 2);
+  return Number(`${intPart}.${fracPart}`).toLocaleString('en-US', { maximumFractionDigits: 2 });
 }
 
 function isICOPurchase(tx: TokenTransaction): boolean {
