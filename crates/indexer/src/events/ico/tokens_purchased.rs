@@ -122,6 +122,7 @@ impl IndexableEvent for TokensPurchased {
                 price: self.price.as_deref(),
                 cost: &self.cost,
                 event_timestamp: self.timestamp.cast_signed(),
+                transform_idx: ctx.transform_idx,
             },
         )
         .await?;

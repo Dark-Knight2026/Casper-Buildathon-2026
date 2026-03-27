@@ -59,6 +59,15 @@ impl<'a> From<&'a RawEvent> for db::NewBlockchainEvent<'a> {
     }
 }
 
+/// Outcome of [`process_event`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProcessResult {
+    /// Event was fully processed and committed.
+    Processed,
+    /// Event was deferred (e.g. missing caller) - nothing was persisted.
+    Deferred,
+}
+
 /// Process a single event using the trait-based architecture.
 ///
 /// # Errors
@@ -70,13 +79,13 @@ pub async fn process_event(
     registry: &EventRegistry,
     known_hashes: &HashSet<String, RandomState>,
     raw: &RawEvent,
-) -> IndexerResult<()> {
+) -> IndexerResult<ProcessResult> {
     let mut tx = db_pool.begin().await?;
 
     // 1. Store raw event (idempotent via UNIQUE constraint)
     if !db::insert_blockchain_event(&mut tx, db::NewBlockchainEvent::from(raw)).await? {
         // Duplicate — already processed, nothing to do
-        return Ok(());
+        return Ok(ProcessResult::Processed);
     }
 
     // 2. Dispatch to event handler via registry.
@@ -136,5 +145,5 @@ pub async fn process_event(
         "Event processed"
     );
 
-    Ok(())
+    Ok(ProcessResult::Processed)
 }

@@ -231,7 +231,7 @@ pub async fn backfill_cep18(
 
             match processor::process_event(ctx.db_pool, ctx.registry, ctx.known_hashes, &raw).await
             {
-                Ok(()) => {
+                Ok(_) => {
                     total_events += 1;
                     // Advance cursor only on success - a transient DB error must
                     // not silently skip this event on the next restart.

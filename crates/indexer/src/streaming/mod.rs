@@ -27,7 +27,7 @@ use crate::{
     config::{ContractRegistry, ContractType, IndexerConfig},
     error::{IndexerError, IndexerResult},
     events::EventRegistry,
-    processor::{self, RawEvent},
+    processor::{self, ProcessResult, RawEvent},
 };
 use db::StreamType;
 
@@ -269,12 +269,14 @@ pub async fn handle_text_message(
         api_to_type: None,
     };
 
-    match processor::process_event(db_pool, registry, known_hashes, &raw).await {
-        Ok(()) => {}
-        // Database errors are fatal (connection lost) - propagate to reconnect.
+    let advance_cursor = match processor::process_event(db_pool, registry, known_hashes, &raw).await
+    {
+        Ok(ProcessResult::Processed) => true,
+        Ok(ProcessResult::Deferred) => false,
+        // Database errors are fatal (connection lost, etc.)
         Err(e @ IndexerError::Database(_)) => return Err(e),
-        // All other errors (Json, Parse, etc.) are event-specific - log and skip
-        // so that a single malformed event doesn't kill the WSS connection.
+        // All other errors (Json, Parse, etc.) are logged and skipped.
+        // Cursor still advances - a malformed event won't become valid on retry.
         Err(e) => {
             tracing::error!(
                 deploy = %raw.deploy_hash,
@@ -283,10 +285,13 @@ pub async fn handle_text_message(
                 error = %e,
                 "Event processing failed - skipping"
             );
+            true
         }
-    }
+    };
 
-    db::update_cursor(db_pool, StreamType::Streaming, msg.extra.event_id).await?;
+    if advance_cursor {
+        db::update_cursor(db_pool, StreamType::Streaming, msg.extra.event_id).await?;
+    }
 
     Ok(())
 }
