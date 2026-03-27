@@ -57,6 +57,7 @@ CLAUDE.md
 **/.terraform.lock.hcl
 **/*.tfstate
 **/*.tfstate.backup
+**/*.tfvars
 
 # Database backups (NEVER commit)
 backups/

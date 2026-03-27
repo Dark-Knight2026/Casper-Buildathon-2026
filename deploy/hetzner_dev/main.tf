@@ -78,7 +78,7 @@ resource "terraform_data" "redeploy_sh" {
     user        = "deploy"
     private_key = data.local_sensitive_file.ssh_private_key.content
     host        = hcloud_primary_ip.primary_ip.ip_address
-    timeout     = "15m"
+    timeout     = "35m"
   }
 
   # Cloud-init wait

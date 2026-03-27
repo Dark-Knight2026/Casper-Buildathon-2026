@@ -9,11 +9,11 @@ RUN cargo chef prepare --recipe-path recipe.json
 
 
 FROM chef AS builder
+ENV SQLX_OFFLINE=true
 COPY --from=planner /app/recipe.json recipe.json
 RUN cargo chef cook --release --package api --recipe-path recipe.json
 
 COPY . .
-ENV SQLX_OFFLINE=true
 RUN cargo build --release --package api
 
 
