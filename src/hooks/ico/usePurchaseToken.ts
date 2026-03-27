@@ -329,7 +329,17 @@ export function usePurchaseToken(
           purchaseTxHash,
         }));
 
-        // 5. Fetch actual tokens received via CSPR.Cloud REST API
+        // 5. Verify purchase deploy executed on-chain before fetching tokens
+        const purchaseStatus = await waitForDeployConfirmation(purchaseTxHash);
+        if (purchaseStatus !== 'executed') {
+          throw new Error(
+            purchaseStatus === 'timed-out'
+              ? 'Purchase transaction timed out — please try again'
+              : 'Purchase transaction failed on-chain',
+          );
+        }
+
+        // 6. Fetch actual tokens received via CSPR.Cloud REST API
         let tokensReceived: string;
         const actualTokens = await fetchActualTokensReceived(purchaseTxHash);
 
@@ -341,7 +351,7 @@ export function usePurchaseToken(
           tokensReceived = fromRawAmount(tokensRaw, ICO_CONFIG.TOKEN.decimals);
         }
 
-        // 7. Success! Clear approval cache — allowance was consumed by transfer_from.
+        // 7. Success — clear approval cache; allowance was consumed by transfer_from.
         approvalCacheRef.current = null;
 
         setState((prev) => ({
