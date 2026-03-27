@@ -86,9 +86,10 @@ pub async fn compute_pending_rewards(
 ) -> Result<String, Error> {
     let value = sqlx::query_scalar!(
         r#"
-            SELECT (
+            SELECT GREATEST(
                 $1::TEXT::NUMERIC + ($2::TEXT::NUMERIC * ($3::TEXT::NUMERIC - $4::TEXT::NUMERIC))
-                    / 1000000000000000000
+                    / 1000000000000000000,
+                0
             )::TEXT AS "result!"
         "#,
         pending_rewards,
