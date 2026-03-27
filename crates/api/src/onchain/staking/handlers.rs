@@ -72,11 +72,12 @@ pub async fn get_staking_info(
 
     let (staked_tokens, total_rewards_claimed, pending_rewards) = match &snap.position {
         Some(p) => (
-            common::to_human_f64(&p.staked_amount),
-            common::to_human_f64(&p.total_rewards_claimed),
-            snap.pending_rewards_computed
-                .as_deref()
-                .map_or(0.0, common::to_human_f64),
+            common::to_human_f64(&p.staked_amount)?,
+            common::to_human_f64(&p.total_rewards_claimed)?,
+            match snap.pending_rewards_computed.as_deref() {
+                Some(v) => common::to_human_f64(v)?,
+                None => 0.0,
+            },
         ),
         None => (0.0, 0.0, 0.0),
     };
@@ -136,16 +137,16 @@ pub async fn get_portfolio(
 
     let snap = db::fetch_portfolio_snapshot(&state.db, &account).await?;
 
-    let big_in_wallet = common::to_human_f64(&snap.big_balance);
+    let big_in_wallet = common::to_human_f64(&snap.big_balance)?;
     let (big_staked, rewards_earned) = match &snap.position {
         Some(p) => {
-            let pending = snap
-                .pending_rewards_computed
-                .as_deref()
-                .map_or(0.0, common::to_human_f64);
+            let pending = match snap.pending_rewards_computed.as_deref() {
+                Some(v) => common::to_human_f64(v)?,
+                None => 0.0,
+            };
             (
-                common::to_human_f64(&p.staked_amount),
-                common::to_human_f64(&p.total_rewards_claimed) + pending,
+                common::to_human_f64(&p.staked_amount)?,
+                common::to_human_f64(&p.total_rewards_claimed)? + pending,
             )
         }
         None => (0.0, 0.0),
@@ -208,11 +209,13 @@ pub async fn get_earnings(
 
     let data = rows
         .into_iter()
-        .map(|r| EarningsPoint {
-            month: r.month,
-            earnings: common::to_human_f64(&r.total_amount),
+        .map(|r| {
+            Ok(EarningsPoint {
+                month: r.month,
+                earnings: common::to_human_f64(&r.total_amount)?,
+            })
         })
-        .collect();
+        .collect::<ApiResult<Vec<_>>>()?;
 
     Ok(Json(EarningsResponse { data }))
 }
@@ -256,13 +259,13 @@ pub async fn get_rewards_history(
         .into_iter()
         .map(|r| {
             let day = (r.reward_date - start_date).num_days() + 1;
-            RewardsHistoryPoint {
+            Ok(RewardsHistoryPoint {
                 day,
-                staking_pool: common::to_human_f64(&r.cumulative_amount),
+                staking_pool: common::to_human_f64(&r.cumulative_amount)?,
                 tx_fees: 0.0,
-            }
+            })
         })
-        .collect();
+        .collect::<ApiResult<Vec<_>>>()?;
 
     Ok(Json(RewardsHistoryResponse { data }))
 }
@@ -299,7 +302,7 @@ pub async fn get_unbonding(
 
     let (unbonding_amount, unbonding_ends_at_ms) = match &position {
         Some(p) => (
-            common::to_human_f64(&p.unbonding_amount),
+            common::to_human_f64(&p.unbonding_amount)?,
             p.unbonding_ends_at.map_or(0, |dt| dt.timestamp_millis()),
         ),
         None => (0.0, 0),
@@ -314,13 +317,15 @@ pub async fn get_unbonding(
 
     let history = events
         .into_iter()
-        .map(|e| UnbondingEvent {
-            event_type: e.event_type,
-            amount: common::to_human_f64(&e.amount),
-            timestamp: e.event_timestamp.to_rfc3339(),
-            transaction_hash: e.transaction_hash,
+        .map(|e| {
+            Ok(UnbondingEvent {
+                event_type: e.event_type,
+                amount: common::to_human_f64(&e.amount)?,
+                timestamp: e.event_timestamp.to_rfc3339(),
+                transaction_hash: e.transaction_hash,
+            })
         })
-        .collect();
+        .collect::<ApiResult<Vec<_>>>()?;
 
     Ok(Json(UnbondingResponse {
         unbonding_amount,

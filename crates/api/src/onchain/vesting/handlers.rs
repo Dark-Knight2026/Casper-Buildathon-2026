@@ -185,7 +185,7 @@ pub async fn get_token_supply(
 
     Ok(Json(TokenSupplyResponse {
         total_supply: state.config.total_supply,
-        circulating_supply: common::to_human_f64(&circulating_raw),
+        circulating_supply: common::to_human_f64(&circulating_raw)?,
     }))
 }
 
