@@ -347,6 +347,7 @@ pub async fn fetch_unbonding_events(
             WHERE staker_address = $1
               AND event_type IN ('unstake', 'withdraw')
             ORDER BY event_timestamp
+            LIMIT 200
         "#,
         staker_address,
     )
