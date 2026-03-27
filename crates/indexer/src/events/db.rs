@@ -432,6 +432,8 @@ pub struct NewIcoPurchase<'a> {
     pub cost: &'a str,
     /// Block timestamp (epoch seconds).
     pub event_timestamp: i64,
+    /// Intra-deploy event index (distinguishes multiple events per deploy).
+    pub transform_idx: Option<i32>,
 }
 
 /// Insert a row into `ico_purchases` for a `TokensPurchased` event.
@@ -449,9 +451,9 @@ pub async fn insert_ico_purchase(
 ) -> IndexerResult<()> {
     sqlx::query!(
         r"
-            INSERT INTO ico_purchases (transaction_hash, block_height, buyer_address, amount, currency, price, cost, event_timestamp)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-            ON CONFLICT (transaction_hash) DO NOTHING
+            INSERT INTO ico_purchases (transaction_hash, block_height, buyer_address, amount, currency, price, cost, event_timestamp, transform_idx)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            ON CONFLICT (transaction_hash, COALESCE(transform_idx, 0)) DO NOTHING
         ",
         row.transaction_hash,
         row.block_height,
@@ -461,6 +463,7 @@ pub async fn insert_ico_purchase(
         row.price,
         row.cost,
         row.event_timestamp,
+        row.transform_idx,
     )
     .execute(tx.as_mut())
     .await?;
