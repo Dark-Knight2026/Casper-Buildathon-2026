@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Track SessionBuilder method calls via these mock fns
 const mockSessionBuilderCalls = {
@@ -57,9 +57,7 @@ vi.mock('@/lib/logger', () => ({
   default: { log: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 
-// Mock fetch globally
 const mockFetch = vi.fn();
-global.fetch = mockFetch;
 
 // The expected hash hardcoded in proxyCallerService.ts
 const EXPECTED_HASH = 'e19fb6e86c4a8de96769913c4922d8a340884b98b6984ec0375d63d0ce64c998';
@@ -84,10 +82,13 @@ describe('loadProxyCallerWasm', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.resetModules();
-    // Re-assign fetch mock after resetAllMocks
-    global.fetch = mockFetch;
+    vi.stubGlobal('fetch', mockFetch);
     // Restore crypto.subtle before each test
     Object.defineProperty(crypto, 'subtle', { value: origSubtle, configurable: true });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it('fetches WASM and passes when SHA-256 matches', async () => {
