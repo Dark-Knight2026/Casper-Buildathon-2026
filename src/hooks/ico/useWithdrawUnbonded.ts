@@ -135,7 +135,8 @@ export function useWithdrawUnbonded(
         throw new Error(result.error);
       }
 
-      const txHash: string = result.deployHash || result.transactionHash || '';
+      const txHash = result.deployHash || result.transactionHash;
+      if (!txHash) throw new Error('Wallet did not return a transaction hash');
       setState((prev) => ({ ...prev, step: 'pending', txHash }));
 
       const status = await waitForConfirmation(txHash, abortController.signal);

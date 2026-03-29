@@ -103,16 +103,18 @@ describe('useWithdrawUnbonded', () => {
     expect(result.current.state.txHash).toBe('tx-hash-xyz');
   });
 
-  // ── Empty txHash path (correctness finding) ───────────────────────────
-  // When the wallet result contains neither deployHash nor transactionHash,
-  // txHash resolves to '' (line 138: result.deployHash || result.transactionHash || '').
-  // getDeploy is called with an empty string — the polling will always 404.
+  // ── Missing txHash guard ──────────────────────────────────────────────
+  // When the wallet SDK returns neither deployHash nor transactionHash,
+  // the hook throws immediately instead of entering the 5-minute polling loop.
 
-  it('calls getDeploy with empty string when neither deployHash nor transactionHash is present', async () => {
+  it('transitions to failed immediately when neither deployHash nor transactionHash is present', async () => {
     mockSend.mockResolvedValue({ cancelled: false, error: null });
-    const { result } = renderHook(() => useWithdrawUnbonded(PUBLIC_KEY, clickRef));
+    const onError = vi.fn();
+    const { result } = renderHook(() => useWithdrawUnbonded(PUBLIC_KEY, clickRef, { onError }));
     await act(async () => { await result.current.withdraw(); });
-    expect(mockGetDeploy).toHaveBeenCalledWith('');
+    expect(result.current.state.step).toBe('failed');
+    expect(mockGetDeploy).not.toHaveBeenCalled();
+    expect(onError).toHaveBeenCalled();
   });
 
   // ── Wallet signing failures ────────────────────────────────────────────
