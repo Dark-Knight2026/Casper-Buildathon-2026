@@ -99,6 +99,10 @@ describe('usePurchaseToken', () => {
     vi.useFakeTimers();
     vi.clearAllMocks();
 
+    // vi.clearAllMocks() clears call history but NOT implementations — restore defaults explicitly.
+    // waitForDeployConfirmation calls getDeploy for both approval and purchase txs (R17-1 fix).
+    vi.mocked(csprCloudService.getDeploy).mockResolvedValue({ status: 'executed' });
+
     // Mock global.fetch for fetchActualTokensReceived (called after purchase tx)
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
