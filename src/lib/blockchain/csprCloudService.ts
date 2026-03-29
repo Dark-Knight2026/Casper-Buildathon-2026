@@ -321,20 +321,19 @@ export class CSPRCloudService {
 
   /**
    * Submit a signed deploy to the blockchain
-   * Uses CSPR.cloud REST API or direct RPC
+   * Routes through /api/casper-rpc proxy (Vite dev proxy → Vercel serverless in prod)
+   * to keep auth and RPC method allowlist enforcement consistent with all other RPC calls.
    */
   async submitDeploy(signedDeploy: { deploy: Record<string, unknown>; signature: string }): Promise<{
     deploy_hash: string;
   }> {
-    const rpcUrl = import.meta.env.VITE_CASPER_RPC_URL || 'https://node.testnet.casper.network/rpc';
-
     try {
       // Submit via JSON-RPC
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 30_000);
       let response: Response;
       try {
-        response = await fetch(rpcUrl, {
+        response = await fetch('/api/casper-rpc', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           signal: controller.signal,
