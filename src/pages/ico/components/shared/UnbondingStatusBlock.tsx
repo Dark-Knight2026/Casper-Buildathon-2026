@@ -34,12 +34,6 @@ export function UnbondingStatusBlock({
 }: UnbondingStatusBlockProps) {
   const { data, isLoading } = useUnbondingStatus(accountHash);
 
-  useEffect(() => {
-    if (data !== undefined) {
-      console.log('[UnbondingStatusBlock] response:', data);
-    }
-  }, [data]);
-
   const [isReady, setIsReady] = useState(data?.isWithdrawable ?? false);
 
   useEffect(() => {
