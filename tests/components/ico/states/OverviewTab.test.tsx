@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import React from 'react';
 import { OverviewTab } from '@/pages/ico/components/states/OverviewTab';
 
 // ── External HTTP boundary ────────────────────────────────────────────────────

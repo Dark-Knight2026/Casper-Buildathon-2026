@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';
@@ -6,7 +6,6 @@ import { useUserTokenActions } from '@/hooks/ico/useUserTokenActions';
 import type { FTTokenAction } from '@/types/csprCloud';
 
 const mockFetch = vi.fn();
-global.fetch = mockFetch;
 
 vi.mock('@/constants/ico', () => ({
   ICO_CONFIG: {
@@ -54,7 +53,12 @@ function mockOk(data: FTTokenAction[]) {
 }
 
 beforeEach(() => {
+  vi.stubGlobal('fetch', mockFetch);
   mockFetch.mockReset();
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
 });
 
 describe('useUserTokenActions', () => {

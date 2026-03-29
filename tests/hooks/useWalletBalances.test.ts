@@ -1,12 +1,10 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';
 import { useWalletBalances } from '@/hooks/ico/useWalletBalances';
 
-// Mock fetch (used only for FT balance via CSPR.Cloud REST API)
 const mockFetch = vi.fn();
-global.fetch = mockFetch;
 
 // Mock casper-js-sdk (PublicKey used for account hash derivation,
 // PurseIdentifier used for CSPR balance query)
@@ -92,6 +90,7 @@ function mockFTBalance(response = mockFTBalanceResponse) {
 
 describe('useWalletBalances', () => {
   beforeEach(() => {
+    vi.stubGlobal('fetch', mockFetch);
     vi.clearAllMocks();
 
     // Default: CSPR RPC returns 5000 CSPR (in motes)
@@ -106,6 +105,10 @@ describe('useWalletBalances', () => {
       ok: true,
       json: () => Promise.resolve({ data: [] }),
     });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   // --- Initial state ---
