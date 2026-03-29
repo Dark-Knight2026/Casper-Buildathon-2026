@@ -5,7 +5,7 @@
 
 export interface FTTokenAction {
   deploy_hash: string;
-  block_height: number;
+  block_height: number | null;
   timestamp: string;
   amount: string;
   contract_package_hash: string;

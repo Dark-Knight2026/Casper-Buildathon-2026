@@ -146,7 +146,7 @@ export function TransactionHistoryTab() {
                         </a>
                       </TableCell>
                       <TableCell className="text-sm text-[hsl(var(--ico-text-secondary))]">
-                        {tx.block_height.toLocaleString('en-US')}
+                        {tx.block_height != null ? tx.block_height.toLocaleString('en-US') : '—'}
                       </TableCell>
                       <TableCell className="text-sm text-[hsl(var(--ico-text-secondary))] whitespace-nowrap">
                         {formatRelativeTime(tx.timestamp)}

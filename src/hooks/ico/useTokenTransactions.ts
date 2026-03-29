@@ -3,7 +3,7 @@ import { backendClient } from '@/lib/api-client';
 
 export interface TokenTransaction {
   deploy_hash: string;
-  block_height: number;
+  block_height: number | null;
   timestamp: string | null;
   amount: string | null;
   currency: string | null;
