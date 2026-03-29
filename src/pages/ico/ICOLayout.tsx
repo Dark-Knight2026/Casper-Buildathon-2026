@@ -10,7 +10,7 @@ import { ThemeProvider } from 'styled-components';
 
 const theme = buildTheme(DefaultThemes.csprclick);
 
-const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+const isMobile = typeof navigator !== 'undefined' && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
 // POPUP mode is broken in csprclick-sdk-1.12: opens /signin.html which returns 404 on accounts.cspr.click.
 // IFRAME uses /v1.12/index.html which works correctly. Switch back to POPUP when cspr.click fixes their CDN.
