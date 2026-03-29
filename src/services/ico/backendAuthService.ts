@@ -21,8 +21,12 @@ export async function loginWithSignature(
   walletAddress: string,
   signatureHex: string,
 ): Promise<LoginResponse> {
-  // casper_types::Signature::from_hex expects algorithm prefix byte:
-  // 01 = Ed25519, 02 = Secp256k1
+  // casper_types::Signature::from_hex expects a 1-byte algorithm prefix:
+  //   01 = Ed25519, 02 = Secp256k1
+  // Per the Casper account-key format spec, account addresses are derived from
+  // the public key with the same prefix byte prepended — so the address prefix
+  // reliably identifies the signing algorithm. Reference:
+  // https://docs.casper.network/concepts/accounts-and-keys/#account-keys
   const prefix = walletAddress.startsWith('02') ? '02' : '01';
   const signature = signatureHex.startsWith(prefix) ? signatureHex : `${prefix}${signatureHex}`;
 
