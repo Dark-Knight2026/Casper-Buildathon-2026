@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { usePurchaseToken, getStepMessage } from '@/hooks/ico/usePurchaseToken';
+import { csprCloudService } from '@/lib/blockchain/csprCloudService';
 
 // Mock casper-js-sdk
 vi.mock('casper-js-sdk', () => ({
@@ -287,6 +288,52 @@ describe('usePurchaseToken', () => {
 
       expect(result.current.state.step).toBe('failed');
       expect(result.current.state.error).toBe('Approval transaction was cancelled');
+    });
+
+    it('should fail if approval deploy fails on-chain', async () => {
+      vi.mocked(csprCloudService.getDeploy).mockResolvedValue({ status: 'failed' });
+      mockPreparePurchase.mockResolvedValue({
+        approvalNeeded: true,
+        approvalTransaction: mockApprovalTransaction,
+        purchaseTransaction: mockPurchaseTransaction,
+      });
+      mockClickRef.send.mockResolvedValueOnce({ deployHash: '0xapproval', cancelled: false });
+
+      const { result } = renderHook(() =>
+        usePurchaseToken(mockPublicKey, mockTokenPrice, mockClickRef as any)
+      );
+
+      await act(async () => {
+        const promise = result.current.purchase('100', 'USDT', 1000);
+        await vi.runAllTimersAsync();
+        await promise;
+      });
+
+      expect(result.current.state.step).toBe('failed');
+      expect(result.current.state.error).toBe('Approval transaction failed on-chain');
+    });
+
+    it('should fail if approval deploy times out waiting for on-chain confirmation', async () => {
+      vi.mocked(csprCloudService.getDeploy).mockResolvedValue({ status: 'pending' as any });
+      mockPreparePurchase.mockResolvedValue({
+        approvalNeeded: true,
+        approvalTransaction: mockApprovalTransaction,
+        purchaseTransaction: mockPurchaseTransaction,
+      });
+      mockClickRef.send.mockResolvedValueOnce({ deployHash: '0xapproval', cancelled: false });
+
+      const { result } = renderHook(() =>
+        usePurchaseToken(mockPublicKey, mockTokenPrice, mockClickRef as any)
+      );
+
+      await act(async () => {
+        const promise = result.current.purchase('100', 'USDT', 1000);
+        await vi.runAllTimersAsync();
+        await promise;
+      });
+
+      expect(result.current.state.step).toBe('failed');
+      expect(result.current.state.error).toBe('Approval transaction timed out — please try again');
     });
   });
 
