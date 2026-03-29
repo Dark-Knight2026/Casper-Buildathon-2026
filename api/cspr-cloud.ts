@@ -61,7 +61,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'Invalid path' });
   }
 
-  // Pick base URL based on network env var
+  // VITE_CASPER_NETWORK is intentionally used here (not a separate CASPER_NETWORK var).
+  // Vercel injects all dashboard env vars into process.env at serverless runtime,
+  // regardless of the VITE_ prefix — so this works correctly in production.
+  // The VITE_ prefix also makes Vite inject the same value into the browser bundle,
+  // keeping frontend and serverless in sync with a single variable.
   const network = process.env.VITE_CASPER_NETWORK || 'casper-test';
   const baseUrl = network === 'casper'
     ? 'https://api.cspr.cloud'
