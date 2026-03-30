@@ -34,8 +34,8 @@ impl IndexableEvent for UnbondedWithdrawn {
     async fn process(&self, ctx: &mut EventContext<'_>) -> IndexerResult<()> {
         let staker = address::normalize_casper_address(&self.staker)?;
 
-        // 1. Insert staking event log (deduplicates via ON CONFLICT DO NOTHING).
-        let _is_new = db::insert_staking_event(
+        // Insert staking event log (deduplicates via ON CONFLICT DO NOTHING).
+        let is_new = db::insert_staking_event(
             ctx.tx,
             &db::NewStakingEvent {
                 staker_address: &staker,
@@ -48,11 +48,13 @@ impl IndexableEvent for UnbondedWithdrawn {
         )
         .await?;
 
-        // 2. UPDATE staking_positions: clear unbonding state.
-        // This is idempotent (sets to zero), so no guard needed.
-        db::update_staking_position_withdraw(ctx.tx, &staker).await?;
+        // UPDATE staking_positions: clear unbonding state.
+        // Guard prevents replay from wiping a subsequent unbonding cycle.
+        if is_new {
+            db::update_staking_position_withdraw(ctx.tx, &staker).await?;
+        }
 
-        // 3. Record in blockchain_transactions.
+        // Record in blockchain_transactions.
         let event_json = serde_json::to_value(self)?;
         db::insert_blockchain_transaction(
             ctx.tx,
