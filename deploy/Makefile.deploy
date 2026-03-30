@@ -313,8 +313,11 @@ deploy_production:
 
 tf_init_%: ## Initializes terraform project. Calls terraform init.
 	@echo "🔧 Terraform init for module: $*"
+	@TF_BACKEND_CFG=$$(mktemp /tmp/.tf-backend-XXXXXX.hcl) && \
+	chmod 600 "$${TF_BACKEND_CFG}" && \
+	printf 'bucket         = "%s"\nencryption_key = "%s"\nprefix         = "%s"\n' \
+		"$(BUCKET_NAME)" "$(GOOGLE_ENCRYPTION_KEY)" "$(DEPLOYMENT_MODE)/$*" > "$${TF_BACKEND_CFG}" && \
 	terraform -chdir=$(DEPLOYMENT_DIR)/$* init \
 		-reconfigure \
-		-backend-config="bucket=$(BUCKET_NAME)" \
-		-backend-config="encryption_key=$(GOOGLE_ENCRYPTION_KEY)" \
-		-backend-config="prefix=$(DEPLOYMENT_MODE)/$*"
+		-backend-config="$${TF_BACKEND_CFG}"; \
+	shred -u "$${TF_BACKEND_CFG}"

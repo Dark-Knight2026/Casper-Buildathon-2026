@@ -10,8 +10,10 @@ deploy/
 ├── Makefile.deploy        # Main deployment orchestration (entry point)
 ├── cloud-init.yml         # Server initialization script (installs Docker, ufw, fail2ban)
 ├── redeploy.sh            # Deployment script executed on the target server
+├── redis.conf.template    # Redis configuration template (rendered via envsubst on deploy)
 ├── nginx/
-│   └── nginx.conf         # Nginx reverse proxy config (template with project_domain)
+│   ├── nginx.conf             # Nginx HTTP config (port 80 → redirects to HTTPS)
+│   └── https.conf.template    # Nginx HTTPS server block (rendered via envsubst on deploy)
 ├── gar/                   # Google Artifact Registry Terraform module
 ├── hetzner_dev/           # Hetzner server provisioning + service deployment Terraform module
 └── tests/
@@ -48,7 +50,7 @@ deploy/
 
 | Container | Image | Port | Description |
 |-----------|-------|------|-------------|
-| `leasefi_nginx` | `nginx:alpine` | `80:80` | Reverse proxy, routes traffic to backend |
+| `leasefi_nginx` | `nginx:alpine` | `80:80`, `443:443` | Reverse proxy, routes traffic to backend |
 | `leasefi_backend` | GAR `*_back:VERSION` | (internal) | REST API server on port 8080 |
 | `leasefi_indexer` | GAR `*_indexer:VERSION` | (internal) | Blockchain indexer |
 | `leasefi_redis` | `redis:7-alpine` | (internal) | Nonce store (5-min TTL) |
@@ -201,7 +203,7 @@ Defines four services on a shared `leasefi_net` bridge network with IPv6 support
 Terraform module that handles both server provisioning and service deployment:
 - Creates static IPv4, SSH key, and Hetzner server if needed
 - Copies files to server via SSH (`file` provisioner): `nginx.conf`, `redeploy.sh`, `docker-compose.dev.yml`, `.env`
-- Runs `redeploy.sh` on every `terraform apply` (`triggers_replace = timestamp()`)
+- Runs `redeploy.sh` on every `terraform apply` when `redeploy.sh`, `docker-compose.dev.yml`, or `nginx.conf` change (tracked via `filesha256()` content hashes)
 
 ### gar/
 

@@ -17,9 +17,13 @@ variable "HOST_SERVER_TYPE" {
   type        = string
   default     = "cx23"
 
+  # Valid types verified via: hcloud server-type list
+  # NOTE: cx22/cx32/cx42/cx52 do NOT exist in Hetzner's lineup — the correct shared-x86 cx series is cx23/cx33/cx43/cx53
   validation {
     condition = contains([
-      "cx23","cx33","cx43","cx53","cpx22","cpx32","cpx42","cpx52"
+      "cx23", "cx33", "cx43", "cx53",
+      "cpx11", "cpx21", "cpx31", "cpx41", "cpx51",
+      "cpx12", "cpx22", "cpx32", "cpx42", "cpx52", "cpx62"
     ], var.HOST_SERVER_TYPE)
 
     error_message = "Invalid Hetzner server type"

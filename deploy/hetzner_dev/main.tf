@@ -1,5 +1,5 @@
 terraform {
-  required_version = ">= 1.0"
+  required_version = ">= 1.14, < 2.0"
   # Specifies terraform API provider to use for `hcloud`
   required_providers {
     hcloud = {
@@ -49,6 +49,11 @@ resource "hcloud_server" "host_server" {
     ipv4_enabled = true
     ipv4         = hcloud_primary_ip.primary_ip.id
     ipv6_enabled = true
+  }
+
+  lifecycle {
+    prevent_destroy = true
+    ignore_changes  = [user_data]
   }
 
   ssh_keys = [hcloud_ssh_key.redeploy.name]
