@@ -67,9 +67,10 @@ export const RewardsTab = memo(function RewardsTab() {
       {/* Staking Info */}
       <Card className="p-5">
         <div className="w-full">
-          <h3 className="text-lg font-semibold text-[hsl(var(--ico-text-primary))] mb-4">
-            Staking
-          </h3>
+          <div className="flex items-center gap-2 mb-4">
+            <h3 className="text-lg font-semibold text-[hsl(var(--ico-text-primary))]">Staking</h3>
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 whitespace-nowrap text-[hsl(var(--ico-text-muted))]">Demo Data</Badge>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-lg bg-[hsl(var(--ico-brand-accent)/0.2)] flex items-center justify-center">
@@ -111,9 +112,10 @@ export const RewardsTab = memo(function RewardsTab() {
       {/* Your Rewards Chart */}
       <Card className="p-5">
         <div className="w-full">
-          <h3 className="text-lg font-semibold text-[hsl(var(--ico-text-primary))] mb-1">
-            Your Rewards
-          </h3>
+          <div className="flex items-center gap-2 mb-1">
+            <h3 className="text-lg font-semibold text-[hsl(var(--ico-text-primary))]">Your Rewards</h3>
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 whitespace-nowrap text-[hsl(var(--ico-text-muted))]">Demo Data</Badge>
+          </div>
           <p className="text-sm text-[hsl(var(--ico-text-secondary))] mb-4">
             Accumulated BIG tokens by reward source
           </p>
