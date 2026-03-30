@@ -342,6 +342,44 @@ describe('usePurchaseToken', () => {
     });
   });
 
+  // --- Purchase deploy on-chain failure paths ---
+
+  describe('purchase deploy on-chain failures', () => {
+    it('should fail with "failed on-chain" when purchase deploy status is failed', async () => {
+      vi.mocked(csprCloudService.getDeploy).mockResolvedValue({ status: 'failed' });
+
+      const { result } = renderHook(() =>
+        usePurchaseToken(mockPublicKey, mockTokenPrice, mockClickRef as any)
+      );
+
+      await act(async () => {
+        const promise = result.current.purchase('100', 'USDT', 1000);
+        await vi.runAllTimersAsync();
+        await promise;
+      });
+
+      expect(result.current.state.step).toBe('failed');
+      expect(result.current.state.error).toBe('Purchase transaction failed on-chain');
+    });
+
+    it('should fail with "timed out" when purchase deploy never confirms', async () => {
+      vi.mocked(csprCloudService.getDeploy).mockResolvedValue({ status: 'pending' as any });
+
+      const { result } = renderHook(() =>
+        usePurchaseToken(mockPublicKey, mockTokenPrice, mockClickRef as any)
+      );
+
+      await act(async () => {
+        const promise = result.current.purchase('100', 'USDT', 1000);
+        await vi.runAllTimersAsync();
+        await promise;
+      });
+
+      expect(result.current.state.step).toBe('failed');
+      expect(result.current.state.error).toBe('Purchase transaction timed out — please try again');
+    });
+  });
+
   // --- Transaction errors ---
 
   describe('transaction errors', () => {
