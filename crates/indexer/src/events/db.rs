@@ -698,6 +698,8 @@ pub struct NewStakingEvent<'a> {
     pub block_height: i64,
     /// Block timestamp of the event.
     pub event_timestamp: DateTime<Utc>,
+    /// Transform index within the deploy (distinguishes batch events).
+    pub transform_idx: Option<i32>,
 }
 
 /// Insert a row into `staking_events` (append-only log).
@@ -717,9 +719,9 @@ pub async fn insert_staking_event(
 ) -> IndexerResult<bool> {
     let result = sqlx::query!(
         r"
-            INSERT INTO staking_events (staker_address, event_type, amount, transaction_hash, block_height, event_timestamp)
-            VALUES ($1, $2, $3, $4, $5, $6)
-            ON CONFLICT (transaction_hash, event_type) DO NOTHING
+            INSERT INTO staking_events (staker_address, event_type, amount, transaction_hash, block_height, event_timestamp, transform_idx)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            ON CONFLICT (transaction_hash, event_type, COALESCE(transform_idx, 0)) DO NOTHING
         ",
         row.staker_address,
         row.event_type,
@@ -727,6 +729,7 @@ pub async fn insert_staking_event(
         row.transaction_hash,
         row.block_height,
         row.event_timestamp,
+        row.transform_idx,
     )
     .execute(tx.as_mut())
     .await?;

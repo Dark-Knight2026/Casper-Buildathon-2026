@@ -50,6 +50,7 @@ impl IndexableEvent for UnstakedInitiated {
                 transaction_hash: ctx.deploy_hash,
                 block_height: ctx.block_height.cast_signed(),
                 event_timestamp: ctx.block_timestamp.unwrap_or_else(Utc::now),
+                transform_idx: ctx.transform_idx,
             },
         )
         .await?;
