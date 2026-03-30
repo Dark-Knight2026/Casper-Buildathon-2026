@@ -203,3 +203,91 @@ describe('CSPRCloudService.submitDeploy', () => {
     await expect(service.submitDeploy(mockSignedDeploy)).rejects.toThrow('fetch failed');
   });
 });
+
+describe('CSPRCloudService URL routing', () => {
+  let service: CSPRCloudService;
+
+  beforeEach(() => {
+    vi.stubGlobal('fetch', mockFetch);
+    mockFetch.mockReset();
+    service = new CSPRCloudService();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  describe('getDeploy', () => {
+    it('uses path format in DEV (/api/cspr-cloud/deploys/:hash)', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ data: { status: 'processed', error_message: null, block_height: 100 } }),
+      });
+
+      await service.getDeploy('abc123');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/api/cspr-cloud/deploys/abc123',
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      );
+    });
+
+    it('uses query format in PROD (/api/cspr-cloud?path=deploys%2F:hash)', async () => {
+      const origDev = import.meta.env.DEV;
+      (import.meta.env as Record<string, unknown>).DEV = false;
+
+      try {
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ data: { status: 'processed', error_message: null, block_height: 100 } }),
+        });
+
+        await service.getDeploy('abc123');
+
+        expect(mockFetch).toHaveBeenCalledWith(
+          '/api/cspr-cloud?path=deploys%2Fabc123',
+          expect.objectContaining({ signal: expect.any(AbortSignal) }),
+        );
+      } finally {
+        (import.meta.env as Record<string, unknown>).DEV = origDev;
+      }
+    });
+  });
+
+  describe('getCSPRRates', () => {
+    it('uses path format in DEV (/api/coingecko/simple/price?...)', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ 'casper-network': { usd: 0.05 } }),
+      });
+
+      await service.getCSPRRates(['USD']);
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/api/coingecko/simple/price?ids=casper-network&vs_currencies=usd',
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      );
+    });
+
+    it('uses query format in PROD (/api/coingecko?ids=...&vs_currencies=...)', async () => {
+      const origDev = import.meta.env.DEV;
+      (import.meta.env as Record<string, unknown>).DEV = false;
+
+      try {
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ 'casper-network': { usd: 0.05 } }),
+        });
+
+        await service.getCSPRRates(['USD']);
+
+        expect(mockFetch).toHaveBeenCalledWith(
+          '/api/coingecko?ids=casper-network&vs_currencies=usd',
+          expect.objectContaining({ signal: expect.any(AbortSignal) }),
+        );
+      } finally {
+        (import.meta.env as Record<string, unknown>).DEV = origDev;
+      }
+    });
+  });
+});
