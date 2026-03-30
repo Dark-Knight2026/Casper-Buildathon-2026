@@ -14,6 +14,7 @@ use crate::error::{IndexerError, IndexerResult};
 /// - `account-hash-XXXX` -> strip prefix, lowercase
 /// - `hash-XXXX` -> strip prefix, lowercase
 /// - `contract-package-wasmXXXX` -> strip prefix, lowercase
+/// - `contract-package-XXXX` -> strip prefix, lowercase
 /// - `contract-XXXX` -> strip prefix, lowercase
 /// - 64 hex chars -> lowercase (already an account hash)
 /// - 66/68 hex chars -> public key -> blake2b -> account hash
@@ -39,8 +40,14 @@ pub fn normalize_casper_address(raw: &str) -> IndexerResult<String> {
     }
 
     // "contract-package-wasmXXXX" prefix (contract package addresses in CES events).
-    // Must be checked before "contract-" to avoid partial match.
+    // Must be checked before "contract-package-" and "contract-" to avoid partial match.
     if let Some(hex) = raw.strip_prefix("contract-package-wasm") {
+        return validate_hex64(hex, raw);
+    }
+
+    // "contract-package-XXXX" prefix (contract package addresses without wasm infix).
+    // Must be checked before "contract-" to avoid leaving "package-" residue.
+    if let Some(hex) = raw.strip_prefix("contract-package-") {
         return validate_hex64(hex, raw);
     }
 
