@@ -40,7 +40,7 @@ impl IndexableEvent for UnstakedInitiated {
     async fn process(&self, ctx: &mut EventContext<'_>) -> IndexerResult<()> {
         let staker = address::normalize_casper_address(&self.staker)?;
 
-        // 1. Insert staking event log (returns false if already processed).
+        // Insert staking event log (returns false if already processed).
         let is_new = db::insert_staking_event(
             ctx.tx,
             &db::NewStakingEvent {
@@ -55,20 +55,24 @@ impl IndexableEvent for UnstakedInitiated {
         )
         .await?;
 
-        // 2. UPDATE staking_positions only if this is a new event.
+        // UPDATE staking_positions only if this is a new event.
         // Skipping on duplicates prevents double-subtracting staked_amount
         // during replays or backfills.
         if is_new {
-            db::update_staking_position_unstake(
-                ctx.tx,
-                &staker,
-                &self.amount,
-                DateTime::from_timestamp_millis(self.unbonding_ends_at.cast_signed()),
-            )
-            .await?;
+            let unbonding_ends_at_ms = i64::try_from(self.unbonding_ends_at).ok();
+            if unbonding_ends_at_ms.is_none() {
+                tracing::warn!(
+                    value = self.unbonding_ends_at,
+                    "unbonding_ends_at overflows i64 - storing NULL"
+                );
+            }
+            let unbonding_ends_at = unbonding_ends_at_ms.and_then(DateTime::from_timestamp_millis);
+
+            db::update_staking_position_unstake(ctx.tx, &staker, &self.amount, unbonding_ends_at)
+                .await?;
         }
 
-        // 3. Record in blockchain_transactions.
+        // Record in blockchain_transactions.
         let event_json = serde_json::to_value(self)?;
         db::insert_blockchain_transaction(
             ctx.tx,
