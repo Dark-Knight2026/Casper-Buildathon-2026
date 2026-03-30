@@ -597,7 +597,7 @@ pub async fn upsert_vesting_schedule(
                 transaction_hash    = EXCLUDED.transaction_hash,
                 block_height        = EXCLUDED.block_height,
                 updated_at          = NOW()
-            WHERE vesting_schedules.block_height < EXCLUDED.block_height
+            WHERE vesting_schedules.block_height <= EXCLUDED.block_height
         ",
         row.vesting_id,
         row.beneficiary,
