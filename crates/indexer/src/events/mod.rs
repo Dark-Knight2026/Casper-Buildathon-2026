@@ -128,6 +128,17 @@ impl EventRegistry {
         // Parse raw string into typed event (single validation point).
         let event_type = EventType::parse(ctx.contract_type, event_name)?;
 
+        // Admin-only events that are parsed but require no indexing.
+        if matches!(
+            event_type,
+            EventType::Vesting(
+                VestingEventType::WhitelistedCreatorAdded
+                    | VestingEventType::WhitelistedCreatorRemoved
+            )
+        ) {
+            return Ok(());
+        }
+
         // Type-safe dispatch - compiler enforces exhaustiveness.
         // Add new event handlers here. Unhandled event types fall through to
         // the wildcard arm and are stored as raw data in `blockchain_events`
