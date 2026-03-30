@@ -1,4 +1,4 @@
-last_updated = "2026-03-27T12:40:22Z"
+last_updated = "2026-03-30T14:13:39Z"
 
 [[contracts]]
 name = "TailorCoin"
@@ -24,3 +24,23 @@ package_hash = "hash-feeeeb470f037dff2e39db77c0c329018355c85da63db753fd59d1bdfc5
 name = "ICO"
 package_name = "ICO"
 package_hash = "hash-1f8153b67dc83f9ba23ad5d80a6842437368350e2a5bae081c76e008f874425b"
+
+[[contracts]]
+name = "Roles"
+package_name = "Roles"
+package_hash = "hash-37a0253a37f16dbea63dbc6b46f5874215a42b55a3e5920d14a48e2a4604a565"
+
+[[contracts]]
+name = "NFT"
+package_name = "NFT"
+package_hash = "hash-d17f419ab36bb85453b671530f067cdb3b2506eacd10097bb2210b165e6f24a7"
+
+[[contracts]]
+name = "Escrow"
+package_name = "Escrow"
+package_hash = "hash-808b01027b18351ed58b43b5f9ead3e6948deb8caffc4c2208d007a3d5af1aee"
+
+[[contracts]]
+name = "Lease"
+package_name = "Lease"
+package_hash = "hash-c103202b74094a5e16c2b318668e361f7398817add74a2c86e16f685dbcac3f8"
