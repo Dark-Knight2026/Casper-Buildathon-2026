@@ -10,6 +10,7 @@
 | config.rs       | Tests Config::from_env() validation: required vars, schemes, port, defaults                        |
 | health.rs       | Tests health check endpoint response structure                                                     |
 | ico.rs          | Tests ICO endpoints: balance lookup, progress reporting, address validation                        |
+| models.rs       | Unit tests for transaction models: TxType, HashType, ft_action_type_id                             |
 | server.rs       | Tests server configuration: rate limiting (SC-005), CORS (SC-007)                                  |
 | tax.rs          | Tests tax module: request deserialization, endpoint response structure                             |
 | transactions.rs | Tests transaction history: response structure, pagination, address validation, BIG token filtering |
