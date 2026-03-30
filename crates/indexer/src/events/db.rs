@@ -20,7 +20,7 @@ use sqlx::{PgPool, PgTransaction};
 
 use crate::{
     config::{ContractRegistry, ContractType},
-    error::IndexerResult,
+    error::{IndexerError, IndexerResult},
 };
 
 // Address type ----------------------------------------------------------------
@@ -936,25 +936,51 @@ pub async fn insert_staking_reward_deposit(
 /// Update the singleton `staking_reward_state` row with the latest
 /// `reward_per_token_stored` from a `RewardsDeposited` event.
 ///
+/// The monotonicity guard (`reward_per_token_stored < $1`) ensures
+/// out-of-order events cannot regress the accumulator.  If the
+/// singleton row is missing the function returns an error - this
+/// indicates a broken migration.
+///
 /// # Errors
 ///
 /// Returns [`IndexerError::Database`](crate::error::IndexerError::Database)
-/// on SQL failures.
+/// on SQL failures, or [`IndexerError::Startup`](crate::error::IndexerError::Startup)
+/// if the singleton row does not exist.
 #[inline]
 pub async fn update_global_reward_state(
     tx: &mut PgTransaction<'_>,
     reward_per_token_stored: &str,
 ) -> IndexerResult<()> {
-    sqlx::query!(
+    let result = sqlx::query!(
         r"
             UPDATE staking_reward_state
             SET reward_per_token_stored = $1, last_updated_at = NOW()
             WHERE id = 1
+              AND reward_per_token_stored::NUMERIC < ($1::TEXT)::NUMERIC
         ",
         reward_per_token_stored,
     )
     .execute(tx.as_mut())
     .await?;
+
+    if result.rows_affected() == 0 {
+        // Distinguish "singleton missing" from "monotonicity skip".
+        let exists =
+            sqlx::query_scalar!("SELECT EXISTS(SELECT 1 FROM staking_reward_state WHERE id = 1)")
+                .fetch_one(tx.as_mut())
+                .await?;
+
+        if exists == Some(false) {
+            return Err(IndexerError::Startup(
+                "staking_reward_state singleton row (id=1) is missing - check migrations".into(),
+            ));
+        }
+
+        tracing::debug!(
+            reward_per_token_stored,
+            "update_global_reward_state: skipped - current value >= new value (monotonicity guard)"
+        );
+    }
 
     Ok(())
 }

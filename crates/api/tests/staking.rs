@@ -938,7 +938,7 @@ async fn portfolio_includes_pending_rewards(pool: PgPool) {
     );
 }
 
-// Vesting fallback for staked tokens -----------------------------------------
+// Vesting fallback for staked tokens ------------------------------------------
 
 /// Seed a vesting schedule for a beneficiary.
 async fn seed_vesting_schedule(
