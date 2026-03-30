@@ -23,7 +23,7 @@ impl IndexableEvent for Mint {
 
     #[inline]
     async fn process(&self, ctx: &mut EventContext<'_>) -> IndexerResult<()> {
-        let recipient = address::normalize_to_account_hash(&self.recipient)?;
+        let recipient = address::normalize_casper_address(&self.recipient)?;
         let to_type = HashType::lookup(&recipient, ctx.known_contract_hashes, ctx.api_to_type);
 
         let event_json = serde_json::to_value(self)?;

@@ -26,8 +26,8 @@ impl IndexableEvent for Transfer {
     #[inline]
     async fn process(&self, ctx: &mut EventContext<'_>) -> IndexerResult<()> {
         // Normalize addresses to 64-char lowercase hex account hashes.
-        let sender = address::normalize_to_account_hash(&self.sender)?;
-        let recipient = address::normalize_to_account_hash(&self.recipient)?;
+        let sender = address::normalize_casper_address(&self.sender)?;
+        let recipient = address::normalize_casper_address(&self.recipient)?;
 
         // Determine address types: prefer CSPR.cloud API values, fall back to registry lookup.
         let from_type = HashType::lookup(&sender, ctx.known_contract_hashes, ctx.api_from_type);

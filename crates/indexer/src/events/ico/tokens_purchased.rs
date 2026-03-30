@@ -85,7 +85,7 @@ impl IndexableEvent for TokensPurchased {
     #[inline]
     async fn process(&self, ctx: &mut EventContext<'_>) -> IndexerResult<()> {
         // Normalize caller address to 64-char lowercase hex account hash.
-        let buyer = address::normalize_to_account_hash(ctx.caller)?;
+        let buyer = address::normalize_casper_address(ctx.caller)?;
 
         if buyer.is_empty() {
             return Err(IndexerError::DeferredEvent(format!(

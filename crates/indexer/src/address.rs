@@ -22,7 +22,7 @@ use crate::error::{IndexerError, IndexerResult};
 ///
 /// Returns [`IndexerError::Parse`] if the input does not match any known format.
 #[inline]
-pub fn normalize_to_account_hash(raw: &str) -> IndexerResult<String> {
+pub fn normalize_casper_address(raw: &str) -> IndexerResult<String> {
     // Empty string: streaming caller placeholder, pass through.
     if raw.is_empty() {
         return Ok(String::new());
