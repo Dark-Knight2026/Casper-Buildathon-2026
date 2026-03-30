@@ -64,7 +64,7 @@ async function fetchActualTokensReceived(
   maxRetries = 3,
   retryDelayMs = 5000,
 ): Promise<bigint | null> {
-  const outerSignal = AbortSignal.timeout(30_000);
+  const outerSignal = AbortSignal.timeout(60_000);
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     if (outerSignal.aborted) return null;
     try {
