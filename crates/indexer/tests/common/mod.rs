@@ -36,7 +36,7 @@ pub const TRANSFER_DEPLOY_HASH: &str =
 /// Fake 64-hex account-hash addresses for integration tests.
 ///
 /// Each variant maps to a deterministic 64-char lowercase hex string that
-/// passes through `normalize_to_account_hash` unchanged (idempotent).
+/// passes through `normalize_casper_address` unchanged (idempotent).
 #[derive(Debug, Clone, Copy)]
 pub enum FakeAddress {
     /// Sender / token owner.

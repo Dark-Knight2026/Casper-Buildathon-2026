@@ -1,4 +1,4 @@
-//! Tests for `normalize_to_account_hash` — all address format branches.
+//! Tests for `normalize_casper_address` - all address format branches.
 
 use indexer::address::normalize_casper_address;
 
@@ -99,4 +99,26 @@ fn rejects_wrong_length_hex() {
         normalize_casper_address("aabbccddeeff00112233445566778899aabbccddeeff001122334455")
             .is_err()
     );
+}
+
+#[test]
+fn strips_contract_package_wasm_prefix() {
+    let input =
+        "contract-package-wasmaAbBcCdDeEfF00112233445566778899aAbBcCdDeEfF00112233445566778899";
+    let expected = "aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899";
+    assert_eq!(normalize_casper_address(input).unwrap(), expected);
+}
+
+#[test]
+fn strips_contract_prefix() {
+    let input = "contract-aAbBcCdDeEfF00112233445566778899aAbBcCdDeEfF00112233445566778899";
+    let expected = "aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899";
+    assert_eq!(normalize_casper_address(input).unwrap(), expected);
+}
+
+#[test]
+fn strips_contract_package_prefix() {
+    let input = "contract-package-aAbBcCdDeEfF00112233445566778899aAbBcCdDeEfF00112233445566778899";
+    let expected = "aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899";
+    assert_eq!(normalize_casper_address(input).unwrap(), expected);
 }
