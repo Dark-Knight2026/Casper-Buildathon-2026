@@ -28,8 +28,8 @@ impl IndexableEvent for SetAllowance {
     #[inline]
     async fn process(&self, ctx: &mut EventContext<'_>) -> IndexerResult<()> {
         // Normalize addresses to 64-char lowercase hex account hashes.
-        let owner = address::normalize_to_account_hash(&self.owner)?;
-        let spender = address::normalize_to_account_hash(&self.spender)?;
+        let owner = address::normalize_casper_address(&self.owner)?;
+        let spender = address::normalize_casper_address(&self.spender)?;
 
         // Determine address types: prefer CSPR.cloud API values, fall back to registry lookup.
         let from_type = HashType::lookup(&owner, ctx.known_contract_hashes, ctx.api_from_type);

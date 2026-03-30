@@ -38,7 +38,7 @@ impl IndexableEvent for RewardsDeposited {
 
     #[inline]
     async fn process(&self, ctx: &mut EventContext<'_>) -> IndexerResult<()> {
-        let caller = address::normalize_to_account_hash(&self.caller)?;
+        let caller = address::normalize_casper_address(&self.caller)?;
 
         // INSERT into staking_reward_deposits.
         let is_new = db::insert_staking_reward_deposit(

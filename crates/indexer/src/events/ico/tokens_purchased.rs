@@ -108,7 +108,7 @@ impl IndexableEvent for TokensPurchased {
     #[inline]
     async fn process(&self, ctx: &mut EventContext<'_>) -> IndexerResult<()> {
         // Normalize buyer address to 64-char lowercase hex account hash.
-        let buyer = address::normalize_to_account_hash(&self.buyer)?;
+        let buyer = address::normalize_casper_address(&self.buyer)?;
 
         // 1. Insert into ico_purchases table
         db::insert_ico_purchase(

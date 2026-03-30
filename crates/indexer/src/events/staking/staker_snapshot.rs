@@ -45,7 +45,7 @@ impl IndexableEvent for StakerSnapshot {
 
     #[inline]
     async fn process(&self, ctx: &mut EventContext<'_>) -> IndexerResult<()> {
-        let staker = address::normalize_to_account_hash(&self.staker)?;
+        let staker = address::normalize_casper_address(&self.staker)?;
 
         db::update_staker_reward_snapshot(
             ctx.tx,

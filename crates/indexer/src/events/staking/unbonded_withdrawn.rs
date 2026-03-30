@@ -32,7 +32,7 @@ impl IndexableEvent for UnbondedWithdrawn {
 
     #[inline]
     async fn process(&self, ctx: &mut EventContext<'_>) -> IndexerResult<()> {
-        let staker = address::normalize_to_account_hash(&self.staker)?;
+        let staker = address::normalize_casper_address(&self.staker)?;
 
         // 1. Insert staking event log (deduplicates via ON CONFLICT DO NOTHING).
         let _is_new = db::insert_staking_event(

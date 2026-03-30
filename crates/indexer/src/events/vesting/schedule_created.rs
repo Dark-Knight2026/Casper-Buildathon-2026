@@ -49,8 +49,8 @@ impl IndexableEvent for ScheduleCreated {
 
     #[inline]
     async fn process(&self, ctx: &mut EventContext<'_>) -> IndexerResult<()> {
-        let beneficiary = address::normalize_to_account_hash(&self.beneficiary)?;
-        let creator = address::normalize_to_account_hash(&self.whitelisted_creator)?;
+        let beneficiary = address::normalize_casper_address(&self.beneficiary)?;
+        let creator = address::normalize_casper_address(&self.whitelisted_creator)?;
 
         db::upsert_vesting_schedule(
             ctx.tx,

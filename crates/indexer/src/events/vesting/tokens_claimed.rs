@@ -37,7 +37,7 @@ impl IndexableEvent for TokensClaimed {
 
     #[inline]
     async fn process(&self, ctx: &mut EventContext<'_>) -> IndexerResult<()> {
-        let beneficiary = address::normalize_to_account_hash(&self.beneficiary)?;
+        let beneficiary = address::normalize_casper_address(&self.beneficiary)?;
 
         // Guard: skip if this deployment was already processed (replay/backfill).
         // Without this check, replayed events would double-count claimed_amount.
