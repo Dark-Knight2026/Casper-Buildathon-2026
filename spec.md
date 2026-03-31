@@ -116,7 +116,7 @@ Backend service for processing high-load real estate operations, including tax c
   - **Response:** `PaginatedResponse<VestingScheduleItem>`
   - **Auth:** Public
   - **Rate limit:** 5 req/s, burst 30
-  - **Business rules:** Vesting uses cliff + linear formula. Before cliff end (`start + cliff_duration`), `unlockedAmount = 0`. After full vesting (`start + vesting_duration`), `unlockedAmount = total - claimed`. Between: linear interpolation `unlockedAmount = total * (elapsed / duration) - claimed`.
+  - **Business rules:** Vesting uses cliff + post-cliff linear formula. Before cliff end (`start + cliff_duration`), `unlockedAmount = 0`. After full vesting (`start + vesting_duration`), `unlockedAmount = total - claimed`. Between: post-cliff linear interpolation `unlockedAmount = total * ((now - cliff_end) / (vesting_duration - cliff_duration)) - claimed`, where `cliff_end = start + cliff_duration`. Linear growth begins at `cliff_end`, not at `start`.
 
 ```json
 {
