@@ -234,6 +234,12 @@ async fn process_event_at(
 
     let event_data = parser::parse_event_fields(remainder, schema)?;
 
+    // CES dictionary items (`state_get_dictionary_item`) contain only the
+    // binary event payload - the block height that produced the event is not
+    // available.  We use `0` as a sentinel so that monotonicity guards
+    // (e.g. `snapshot_block_height`) let streaming events (real height > 0)
+    // always take precedence over backfill, while repeated backfill runs are
+    // idempotently rejected (0 < 0 = false).
     let raw = RawEvent {
         contract_hash: ctx.contract_hash.to_owned(),
         deploy_hash: format!(
