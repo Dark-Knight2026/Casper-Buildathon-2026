@@ -210,6 +210,7 @@ pub async fn fetch_ico_price(executor: impl PgExecutor<'_>) -> Result<String, Er
         r"
             SELECT price
             FROM ico_schedules
+            WHERE start_timestamp <= EXTRACT(EPOCH FROM NOW())::BIGINT * 1000
             ORDER BY start_timestamp DESC
             LIMIT 1
         ",
