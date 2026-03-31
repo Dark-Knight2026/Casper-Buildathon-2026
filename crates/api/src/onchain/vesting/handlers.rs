@@ -292,8 +292,8 @@ pub async fn get_release_schedule(
     let mut data = Vec::with_capacity(len);
 
     for m in 0..len {
-        running_value += running_slope + base_delta[m];
         running_slope += slope_delta[m];
+        running_value += running_slope + base_delta[m];
 
         let released = (running_value / divisor).to_f64().unwrap_or(0.0);
         data.push(ReleaseSchedulePoint {
