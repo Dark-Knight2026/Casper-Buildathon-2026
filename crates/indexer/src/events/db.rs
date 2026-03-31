@@ -1006,18 +1006,22 @@ pub async fn update_staker_reward_snapshot(
     staker_address: &str,
     pending_rewards: &str,
     reward_per_token_paid: &str,
+    block_height: i64,
 ) -> IndexerResult<()> {
     let result = sqlx::query!(
         r"
             UPDATE staking_positions
             SET pending_rewards = $2,
                 reward_per_token_paid = $3,
+                snapshot_block_height = $4,
                 last_updated_at = NOW()
             WHERE staker_address = $1
+              AND (snapshot_block_height IS NULL OR snapshot_block_height < $4)
         ",
         staker_address,
         pending_rewards,
         reward_per_token_paid,
+        block_height,
     )
     .execute(tx.as_mut())
     .await?;
@@ -1025,7 +1029,8 @@ pub async fn update_staker_reward_snapshot(
     if result.rows_affected() == 0 {
         tracing::warn!(
             staker = %staker_address,
-            "StakerSnapshot: no staking_positions row to update"
+            block_height = block_height,
+            "StakerSnapshot: skipped - no row or monotonicity guard"
         );
     }
 

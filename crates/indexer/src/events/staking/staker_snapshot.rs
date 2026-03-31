@@ -52,6 +52,7 @@ impl IndexableEvent for StakerSnapshot {
             &staker,
             &self.pending_rewards,
             &self.reward_per_token_paid,
+            ctx.block_height.cast_signed(),
         )
         .await?;
 
