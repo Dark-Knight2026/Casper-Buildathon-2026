@@ -362,9 +362,28 @@ async fn earnings_groups_by_month(pool: PgPool) {
     let two_months_ago_b = (now - Duration::days(55)).to_rfc3339();
     let one_month_ago = (now - Duration::days(20)).to_rfc3339();
 
-    seed_reward_claim_event(&pool, VALID_ADDRESS, "1000", &two_months_ago).await;
-    seed_reward_claim_event(&pool, VALID_ADDRESS, "2000", &two_months_ago_b).await;
-    seed_reward_claim_event(&pool, VALID_ADDRESS, "500", &one_month_ago).await;
+    // 1000 tokens, 2000 tokens (same month), 500 tokens (different month)
+    seed_reward_claim_event(
+        &pool,
+        VALID_ADDRESS,
+        "1000000000000000000000",
+        &two_months_ago,
+    )
+    .await;
+    seed_reward_claim_event(
+        &pool,
+        VALID_ADDRESS,
+        "2000000000000000000000",
+        &two_months_ago_b,
+    )
+    .await;
+    seed_reward_claim_event(
+        &pool,
+        VALID_ADDRESS,
+        "500000000000000000000",
+        &one_month_ago,
+    )
+    .await;
 
     let env = common::setup_test_server(pool, false).await;
 
@@ -382,6 +401,13 @@ async fn earnings_groups_by_month(pool: PgPool) {
         data.len() >= 2,
         "should have at least 2 months, got {}",
         data.len()
+    );
+    // Verify the recent month has 500 tokens
+    let last = &data[data.len() - 1];
+    let earnings = last["earnings"].as_f64().unwrap();
+    assert!(
+        (earnings - 500.0).abs() < 0.01,
+        "expected ~500.0 earnings for recent month, got {earnings}"
     );
 }
 
@@ -462,8 +488,9 @@ async fn earnings_1m_excludes_old_events(pool: PgPool) {
     let recent = (now - Duration::days(10)).to_rfc3339();
     let old = (now - Duration::days(60)).to_rfc3339();
 
-    seed_reward_claim_event(&pool, VALID_ADDRESS, "1000", &recent).await;
-    seed_reward_claim_event(&pool, VALID_ADDRESS, "2000", &old).await;
+    // 1000 tokens = 1000 * 10^18
+    seed_reward_claim_event(&pool, VALID_ADDRESS, "1000000000000000000000", &recent).await;
+    seed_reward_claim_event(&pool, VALID_ADDRESS, "2000000000000000000000", &old).await;
 
     let env = common::setup_test_server(pool, false).await;
 
@@ -479,6 +506,11 @@ async fn earnings_1m_excludes_old_events(pool: PgPool) {
     let data = body["data"].as_array().unwrap();
     // Only the recent event should appear (within 1 month)
     assert_eq!(data.len(), 1, "1m period should exclude 60-day old event");
+    let earnings = data[0]["earnings"].as_f64().unwrap();
+    assert!(
+        (earnings - 1000.0).abs() < 0.01,
+        "expected ~1000.0 earnings, got {earnings}"
+    );
 }
 
 #[sqlx::test(migrator = "common::MIGRATIONS")]
@@ -523,8 +555,8 @@ async fn earnings_3m_filters_correctly(pool: PgPool) {
     let within = (now - Duration::days(60)).to_rfc3339();
     let outside = (now - Duration::days(120)).to_rfc3339();
 
-    seed_reward_claim_event(&pool, VALID_ADDRESS, "1000", &within).await;
-    seed_reward_claim_event(&pool, VALID_ADDRESS, "2000", &outside).await;
+    seed_reward_claim_event(&pool, VALID_ADDRESS, "500000000000000000000", &within).await;
+    seed_reward_claim_event(&pool, VALID_ADDRESS, "2000000000000000000000", &outside).await;
 
     let env = common::setup_test_server(pool, false).await;
 
@@ -539,6 +571,11 @@ async fn earnings_3m_filters_correctly(pool: PgPool) {
     let body: Value = response.json();
     let data = body["data"].as_array().unwrap();
     assert_eq!(data.len(), 1, "3m period should exclude 120-day old event");
+    let earnings = data[0]["earnings"].as_f64().unwrap();
+    assert!(
+        (earnings - 500.0).abs() < 0.01,
+        "expected ~500.0 earnings, got {earnings}"
+    );
 }
 
 #[sqlx::test(migrator = "common::MIGRATIONS")]
@@ -547,8 +584,8 @@ async fn earnings_6m_filters_correctly(pool: PgPool) {
     let within = (now - Duration::days(150)).to_rfc3339();
     let outside = (now - Duration::days(200)).to_rfc3339();
 
-    seed_reward_claim_event(&pool, VALID_ADDRESS, "1000", &within).await;
-    seed_reward_claim_event(&pool, VALID_ADDRESS, "2000", &outside).await;
+    seed_reward_claim_event(&pool, VALID_ADDRESS, "750000000000000000000", &within).await;
+    seed_reward_claim_event(&pool, VALID_ADDRESS, "2000000000000000000000", &outside).await;
 
     let env = common::setup_test_server(pool, false).await;
 
@@ -563,6 +600,11 @@ async fn earnings_6m_filters_correctly(pool: PgPool) {
     let body: Value = response.json();
     let data = body["data"].as_array().unwrap();
     assert_eq!(data.len(), 1, "6m period should exclude 200-day old event");
+    let earnings = data[0]["earnings"].as_f64().unwrap();
+    assert!(
+        (earnings - 750.0).abs() < 0.01,
+        "expected ~750.0 earnings, got {earnings}"
+    );
 }
 
 #[sqlx::test(migrator = "common::MIGRATIONS")]
@@ -571,8 +613,8 @@ async fn earnings_1y_filters_correctly(pool: PgPool) {
     let within = (now - Duration::days(300)).to_rfc3339();
     let outside = (now - Duration::days(400)).to_rfc3339();
 
-    seed_reward_claim_event(&pool, VALID_ADDRESS, "1000", &within).await;
-    seed_reward_claim_event(&pool, VALID_ADDRESS, "2000", &outside).await;
+    seed_reward_claim_event(&pool, VALID_ADDRESS, "250000000000000000000", &within).await;
+    seed_reward_claim_event(&pool, VALID_ADDRESS, "2000000000000000000000", &outside).await;
 
     let env = common::setup_test_server(pool, false).await;
 
@@ -587,6 +629,11 @@ async fn earnings_1y_filters_correctly(pool: PgPool) {
     let body: Value = response.json();
     let data = body["data"].as_array().unwrap();
     assert_eq!(data.len(), 1, "1y period should exclude 400-day old event");
+    let earnings = data[0]["earnings"].as_f64().unwrap();
+    assert!(
+        (earnings - 250.0).abs() < 0.01,
+        "expected ~250.0 earnings, got {earnings}"
+    );
 }
 
 // Earnings default period (6m when omitted)
