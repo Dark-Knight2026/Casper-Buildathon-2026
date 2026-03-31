@@ -762,3 +762,162 @@ async fn staker_snapshot_overwrites_on_update(pool: PgPool) {
     );
     assert_eq!(pos.reward_per_token_paid, "5000000000000000000");
 }
+
+const STAKING_DEPLOY_7: &str = "0000000000000000000000000000000000000000000000000000000000009007";
+
+// Idempotency: UnstakedInitiated ----------------------------------------------
+
+/// Replaying an `UnstakedInitiated` event with the same deploy hash must be
+/// idempotent: `staked_amount`, `unbonding_amount`, and `unbonding_ends_at`
+/// must have the same values after both replays as after the first.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn unstaked_initiated_idempotent(pool: PgPool) {
+    common::disable_rls(&pool).await;
+
+    // Seed a staked position first.
+    processor::process_event(
+        &pool,
+        &EventRegistry::new(),
+        &HashSet::new(),
+        &staking_event(
+            STAKING_DEPLOY_1,
+            "Staked",
+            json!({
+                "staker": FakeAddress::Buyer.as_str(),
+                "amount": "10000"
+            }),
+        ),
+    )
+    .await
+    .unwrap();
+
+    let unstake_event = staking_event(
+        STAKING_DEPLOY_7,
+        "UnstakedInitiated",
+        json!({
+            "staker": FakeAddress::Buyer.as_str(),
+            "amount": "4000",
+            "unbonding_ends_at": 1_700_172_800_000_u64
+        }),
+    );
+
+    // Process the same event twice.
+    for _ in 0..2 {
+        processor::process_event(
+            &pool,
+            &EventRegistry::new(),
+            &HashSet::new(),
+            &unstake_event,
+        )
+        .await
+        .unwrap();
+    }
+
+    let pos = sqlx::query!(
+        r"
+            SELECT staked_amount, unbonding_amount, unbonding_ends_at
+            FROM staking_positions
+            WHERE staker_address = $1
+        ",
+        FakeAddress::Buyer.as_str(),
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(
+        pos.staked_amount, "6000",
+        "duplicate UnstakedInitiated must not double-decrement staked_amount"
+    );
+    assert_eq!(
+        pos.unbonding_amount, "4000",
+        "duplicate UnstakedInitiated must not double-increment unbonding_amount"
+    );
+    let expected_ts = chrono::DateTime::from_timestamp_millis(1_700_172_800_000);
+    assert_eq!(pos.unbonding_ends_at, expected_ts);
+
+    let event_count: i64 = sqlx::query_scalar!(
+        r"SELECT COUNT(*) FROM staking_events WHERE transaction_hash = $1",
+        STAKING_DEPLOY_7,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap()
+    .unwrap_or(0);
+
+    assert_eq!(
+        event_count, 1,
+        "duplicate UnstakedInitiated must not create second staking_events row"
+    );
+}
+
+// Idempotency: StakerSnapshot -------------------------------------------------
+
+/// Replaying a `StakerSnapshot` event with the same deploy hash and block
+/// height must be idempotent: `pending_rewards` and `reward_per_token_paid`
+/// must not change on the second replay.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn staker_snapshot_idempotent(pool: PgPool) {
+    common::disable_rls(&pool).await;
+
+    // Seed a staked position first.
+    processor::process_event(
+        &pool,
+        &EventRegistry::new(),
+        &HashSet::new(),
+        &staking_event(
+            STAKING_DEPLOY_1,
+            "Staked",
+            json!({
+                "staker": FakeAddress::Buyer.as_str(),
+                "amount": "5000"
+            }),
+        ),
+    )
+    .await
+    .unwrap();
+
+    let snapshot_event = staking_event(
+        STAKING_DEPLOY_7,
+        "StakerSnapshot",
+        json!({
+            "staker": FakeAddress::Buyer.as_str(),
+            "staked_amount": "5000",
+            "pending_rewards": "200",
+            "reward_per_token_paid": "3000000000000000000"
+        }),
+    );
+
+    // Process the same event twice.
+    for _ in 0..2 {
+        processor::process_event(
+            &pool,
+            &EventRegistry::new(),
+            &HashSet::new(),
+            &snapshot_event,
+        )
+        .await
+        .unwrap();
+    }
+
+    let pos = sqlx::query!(
+        r"
+            SELECT pending_rewards, reward_per_token_paid
+            FROM staking_positions
+            WHERE staker_address = $1
+        ",
+        FakeAddress::Buyer.as_str(),
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(
+        pos.pending_rewards, "200",
+        "duplicate StakerSnapshot must not change pending_rewards"
+    );
+    assert_eq!(
+        pos.reward_per_token_paid, "3000000000000000000",
+        "duplicate StakerSnapshot must not change reward_per_token_paid"
+    );
+}
