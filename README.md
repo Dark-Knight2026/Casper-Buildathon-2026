@@ -122,22 +122,6 @@ pnpm run test:ui
 pnpm run test:coverage
 ```
 
-### End-to-End Tests
-
-```bash
-# Run E2E tests
-pnpm run test:e2e
-
-# Run E2E tests with UI
-pnpm run test:e2e:ui
-
-# Run E2E tests in headed mode
-pnpm run test:e2e:headed
-
-# Debug E2E tests
-pnpm run test:e2e:debug
-```
-
 ### Integration Tests
 
 ```bash
