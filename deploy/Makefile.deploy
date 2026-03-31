@@ -28,15 +28,13 @@ endif
 strip_quotes = $(patsubst %',%,$(patsubst '%,%,$(patsubst %",%,$(patsubst "%,%,$(1)))))
 
 # Escape a value for an HCL double-quoted string literal.
-# Only backslash needs escaping: values arrive without inner quotes by construction
-# (strip_quotes already removed the outer delimiter, and Make-include would break
-# before this point if the inner content contained an unescaped quote).
-# NOTE:
-# Values are sourced from secret.sh where:
-# - double quotes (") are not allowed inside values
-# - ${...} sequences are not expected
-# Therefore only backslashes are escaped here. If input sources change, this function must be extended.
-hcl_escape = $(subst \,\\,$(1))
+# Backslash and ${ must be escaped:
+#   \  → \\    (HCL string escape)
+#   ${ → $${   (HCL2 treats ${...} as template interpolation; $$ is the literal-dollar escape)
+# Values arrive without inner double-quotes by construction (strip_quotes removed the outer
+# delimiter, and Make-include would break before this point on an unescaped inner quote).
+# Make syntax note: $$ expands to $, so $${=literal "${" (from) and $$$${ = literal "$${" (to).
+hcl_escape = $(subst $${,$$$${,$(subst \,\\,$(1)))
 
 ## --------------------------------------------------------------------------------------
 ## Required Parameters
@@ -73,7 +71,6 @@ SSH_PRIVATE_KEY_PATH 	:= $(abspath $(SSH_PRIVATE_KEY_PATH))
 SSH_PUBLIC_KEY_PATH  	:= $(abspath $(SSH_PUBLIC_KEY_PATH))
 GOOGLE_APPLICATION_CREDENTIALS 	:= $(abspath $(GOOGLE_APPLICATION_CREDENTIALS))
 export GOOGLE_APPLICATION_CREDENTIALS
-export GOOGLE_ENCRYPTION_KEY
 
 REQUIRED_SECRET_FILES := \
 	$(GOOGLE_APPLICATION_CREDENTIALS) \
@@ -101,10 +98,10 @@ OPTIONAL_SECRET_VARIABLES:= \
 	HETZNER_CLOUD_TOKEN \
 
 ## Location for deployed resources | Can be set in secret/-secret.sh
-GOOGLE_APPLICATION_REGION := $(or $(call strip_quotes,$(GOOGLE_APPLICATION_REGION)),"europe-central2")
-HOST_SERVER_LOCATION := $(or $(call strip_quotes,$(HOST_SERVER_LOCATION)),"hel1")
-HOST_SERVER_IMAGE := $(or $(call strip_quotes,$(HOST_SERVER_IMAGE)),"ubuntu-24.04")
-HOST_SERVER_TYPE := $(or $(call strip_quotes,$(HOST_SERVER_TYPE)),"cx23")
+GOOGLE_APPLICATION_REGION := $(or $(call strip_quotes,$(GOOGLE_APPLICATION_REGION)),europe-central2)
+HOST_SERVER_LOCATION := $(or $(call strip_quotes,$(HOST_SERVER_LOCATION)),hel1)
+HOST_SERVER_IMAGE := $(or $(call strip_quotes,$(HOST_SERVER_IMAGE)),ubuntu-24.04)
+HOST_SERVER_TYPE := $(or $(call strip_quotes,$(HOST_SERVER_TYPE)),cx23)
 
 # ----------------------------------------------------------------------------------------------------------------------------
 ## DEFAULT VARIABLES
@@ -115,8 +112,7 @@ REPO_NAME := $(subst _,-,$(PROJECT_NAME))
 BUCKET_NAME := bucket-$(REPO_NAME)
 ## Helper var for tagging local image
 ARTIFACT_REPO_NAME := $(REPO_NAME)-$(DEPLOYMENT_MODE)
-# VERSION := $(shell git rev-parse --short HEAD) # git hash
-VERSION ?= $(shell printf "%s" "$$(date +%Y%m%d-%H%M%S)")# date
+VERSION ?= $(shell printf '%s-%s' "$$(git rev-parse --short HEAD 2>/dev/null || echo local)" "$$(date +%Y%m%d)")
 export VERSION
 TAG := $(GOOGLE_APPLICATION_REGION)-docker.pkg.dev/$(GOOGLE_APPLICATION_PROJECT_ID)/$(ARTIFACT_REPO_NAME)/$(PROJECT_NAME)
 
@@ -271,7 +267,7 @@ state_storage_init:
 artifact_repo_create:	
 	@echo "[INFO] Artifact repo create"
 	@$(MAKE) --no-print-directory -f $(DEPLOYMENT_DIR)/Makefile.deploy tf_init_gar
-	@terraform -chdir=$(DEPLOYMENT_DIR)/gar apply -auto-approve -input=false
+	@terraform -chdir=$(DEPLOYMENT_DIR)/gar apply -auto-approve -input=false || { echo "GAR provisioning failed"; exit 1; }
 
 show_state_info:
 	@echo "Terraform states are now stored in:"

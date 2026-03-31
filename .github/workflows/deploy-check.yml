@@ -3,6 +3,12 @@ name: Deployment CI
 on:
   pull_request:
     branches: [ "master" ]
+    paths:
+      - 'deploy/**'
+      - 'Dockerfile'
+      - 'Dockerfile.indexer'
+      - 'docker-compose.dev.yml'
+      - '.github/workflows/deploy-check.yml'
 
 env:
   TERRAFORM_VERSION: "1.14.4"
@@ -48,6 +54,13 @@ jobs:
           -w /workspace/deploy/${{ matrix.module }} \
           hashicorp/terraform:${{ env.TERRAFORM_VERSION }} \
           init -backend=false -input=false
+
+        docker run --rm \
+          --user "$(id -u):$(id -g)" \
+          -v ${{ github.workspace }}:/workspace \
+          -w /workspace/deploy/${{ matrix.module }} \
+          hashicorp/terraform:${{ env.TERRAFORM_VERSION }} \
+          fmt -check -recursive
 
         docker run --rm \
           --user "$(id -u):$(id -g)" \

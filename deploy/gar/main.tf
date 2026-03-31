@@ -13,8 +13,8 @@ terraform {
 
 # Provider for resource creation
 provider "google" {
-  project     = var.GOOGLE_APPLICATION_PROJECT_ID
-  region      = var.GOOGLE_APPLICATION_REGION
+  project = var.GOOGLE_APPLICATION_PROJECT_ID
+  region  = var.GOOGLE_APPLICATION_REGION
 }
 
 # Artifact Registry block

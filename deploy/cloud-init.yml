@@ -124,7 +124,7 @@ write_files:
       ln -sf /opt/certbot/bin/certbot /usr/local/bin/certbot
 
       # Renewal: twice daily with random delay to avoid LE rate-limit spikes
-      echo "0 0,12 * * * root /opt/certbot/bin/python -c 'import random; import time; time.sleep(random.random() * 3600)' ; certbot renew -q" >> /etc/cron.d/certbot
+      echo "0 0,12 * * * root /opt/certbot/bin/python -c 'import random; import time; time.sleep(random.random() * 3600)' ; /opt/certbot/bin/certbot renew -q" >> /etc/cron.d/certbot
 
       # Monthly certbot upgrade (first day of month at 03:00)
       echo "0 3 1 * * root /opt/certbot/bin/pip install --upgrade certbot certbot-dns-cloudflare -q" >> /etc/cron.d/certbot

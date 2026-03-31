@@ -59,6 +59,10 @@ CLAUDE.md
 **/*.tfstate.backup
 **/*.tfvars
 
+# Generated deploy configs (rendered from templates at deploy time)
+deploy/redis.conf
+deploy/nginx/https.conf
+
 # Database backups (NEVER commit)
 backups/
 *_backup*.db

@@ -220,8 +220,12 @@ HEALTH_OK=0
 # Always use -k: health check connects via IP (127.0.0.1), so the SSL cert —
 # issued for the domain — never matches the IP regardless of cert type.
 for i in $(seq 1 120); do
-  HTTP_STATUS=$(curl -sLk -o /dev/null -w "%{http_code}" https://127.0.0.1/health 2>/dev/null || true)
-  if [[ "${HTTP_STATUS}" == "200" ]]; then
+  HEALTH_RESPONSE=$(curl -sLk -w "\n%{http_code}" https://127.0.0.1/health 2>/dev/null || true)
+  HTTP_STATUS=$(tail -n1 <<< "${HEALTH_RESPONSE}")
+  HEALTH_BODY=$(head -n -1 <<< "${HEALTH_RESPONSE}")
+  if [[ "${HTTP_STATUS}" == "200" ]] \
+    && [[ "${HEALTH_BODY}" == *'"redis":"connected"'* ]] \
+    && [[ "${HEALTH_BODY}" == *'"database":"connected"'* ]]; then
     HEALTH_OK=1
     break
   fi
@@ -269,7 +273,10 @@ if [[ -f "${CERT_SENTINEL}" ]]; then
     printf 'dns_cloudflare_api_token = %s\n' "${CF_DNS_API_TOKEN}" > "${CF_CREDS}"
     chmod 600 "${CF_CREDS}"
 
-    # Move bootstrap cert aside so certbot can create its standard symlink structure
+    # Move bootstrap cert aside so certbot can create its standard symlink structure.
+    # Set a trap before the mv so any interruption (SIGINT, SIGTERM, OOM, SSH disconnect)
+    # between the mv and the certbot block restores the cert directory and keeps nginx alive.
+    trap '[[ ! -d "${CERT_LIVE}" ]] && [[ -d "${CERT_LIVE}.bootstrap" ]] && mv "${CERT_LIVE}.bootstrap" "${CERT_LIVE}"; [[ -n "${CF_CREDS:-}" ]] && [[ -f "${CF_CREDS:-}" ]] && shred -u "${CF_CREDS}"' EXIT INT TERM
     mv "${CERT_LIVE}" "${CERT_LIVE}.bootstrap"
 
     if certbot certonly \
@@ -280,12 +287,14 @@ if [[ -f "${CERT_SENTINEL}" ]]; then
         --agree-tos \
         --email "${CERTBOT_EMAIL}" \
         -d "${PROJECT_DOMAIN}"; then
+      trap - EXIT INT TERM
       shred -u "${CF_CREDS}"
       rm -rf "${CERT_LIVE}.bootstrap"
       rm -f "${CERT_SENTINEL}"
       docker exec leasefi_nginx nginx -s reload
       __msg_success "Let's Encrypt certificate obtained and nginx reloaded"
     else
+      trap - EXIT INT TERM
       shred -u "${CF_CREDS}"
       # Restore bootstrap cert so nginx survives until next re-deploy
       [[ ! -d "${CERT_LIVE}" ]] && mv "${CERT_LIVE}.bootstrap" "${CERT_LIVE}"

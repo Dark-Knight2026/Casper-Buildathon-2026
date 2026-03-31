@@ -19,11 +19,11 @@ variable "HOST_SERVER_TYPE" {
 
   # Valid types verified via: hcloud server-type list
   # NOTE: cx22/cx32/cx42/cx52 do NOT exist in Hetzner's lineup — the correct shared-x86 cx series is cx23/cx33/cx43/cx53
+  # NOTE: cpx12/cpx22/.../cpx62 do NOT exist — the correct AMD-x86 cpx series is cpx11/cpx21/cpx31/cpx41/cpx51
   validation {
     condition = contains([
       "cx23", "cx33", "cx43", "cx53",
-      "cpx11", "cpx21", "cpx31", "cpx41", "cpx51",
-      "cpx12", "cpx22", "cpx32", "cpx42", "cpx52", "cpx62"
+      "cpx11", "cpx21", "cpx31", "cpx41", "cpx51"
     ], var.HOST_SERVER_TYPE)
 
     error_message = "Invalid Hetzner server type"
@@ -79,7 +79,7 @@ variable "SSH_PUBLIC_KEY_PATH" {
 }
 
 data "local_sensitive_file" "ssh_public_key" {
-  filename = "${var.SSH_PUBLIC_KEY_PATH}"
+  filename = var.SSH_PUBLIC_KEY_PATH
 }
 
 # =================================================================================================
@@ -165,7 +165,7 @@ variable "VERSION" {
 
   validation {
     # allow: timestamp OR git sha
-    condition = can(regex("^[a-zA-Z0-9._-]{3,50}$", var.VERSION))
+    condition     = can(regex("^[a-zA-Z0-9._-]{3,50}$", var.VERSION))
     error_message = "VERSION must be a valid docker tag"
   }
 }

@@ -153,6 +153,7 @@ DROP POLICY IF EXISTS "System can upload payment receipts" ON storage.objects;
 CREATE POLICY "System can upload payment receipts"
   ON storage.objects
   FOR INSERT
+  TO service_role
   WITH CHECK (bucket_id = 'payment-receipts');
 
 DROP POLICY IF EXISTS "Users can view their payment receipts" ON storage.objects;

@@ -19,10 +19,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Install hcloud CLI
 # https://github.com/hetznercloud/cli/releases
 ENV HCLOUD_VERSION=1.47.0
+ENV HCLOUD_SHA256=cfd6c4dfb2391fcaed461bb75358b57867892703bcc2c7d4fb52b3d49ba0cbda
 RUN curl -fsSL https://github.com/hetznercloud/cli/releases/download/v${HCLOUD_VERSION}/hcloud-linux-amd64.tar.gz \
-    | tar -xz \
+    -o hcloud-linux-amd64.tar.gz \
+    && echo "${HCLOUD_SHA256}  hcloud-linux-amd64.tar.gz" | sha256sum -c - \
+    && tar -xz -f hcloud-linux-amd64.tar.gz hcloud \
     && mv hcloud /usr/local/bin/hcloud \
-    && chmod +x /usr/local/bin/hcloud
+    && chmod +x /usr/local/bin/hcloud \
+    && rm hcloud-linux-amd64.tar.gz
 
 
 # Install docker CLI (not daemon)

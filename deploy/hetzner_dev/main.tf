@@ -21,6 +21,10 @@ provider "hcloud" {
 resource "hcloud_ssh_key" "redeploy" {
   name       = "${var.HOST_SERVER_NAME}-redeploy-key"
   public_key = data.local_sensitive_file.ssh_public_key.content
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 # =================================================================================================
@@ -56,7 +60,7 @@ resource "hcloud_server" "host_server" {
     ignore_changes  = [user_data]
   }
 
-  ssh_keys = [hcloud_ssh_key.redeploy.name]
+  ssh_keys = [hcloud_ssh_key.redeploy.id]
 
   # Startup cloud-init script for the instance
   user_data = templatefile("${path.module}/../cloud-init.yml", {
@@ -124,13 +128,13 @@ resource "terraform_data" "redeploy_sh" {
   }
 
   # redeploy.sh
-  provisioner "file" {  
+  provisioner "file" {
     source      = "${path.module}/../redeploy.sh"
     destination = "/opt/${var.PROJECT_NAME}/deploy/redeploy.sh"
   }
 
   # docker-compose.yml
-  provisioner "file" {  
+  provisioner "file" {
     source      = "${path.module}/../../docker-compose.dev.yml"
     destination = "/opt/${var.PROJECT_NAME}/deploy/docker-compose.yml"
   }

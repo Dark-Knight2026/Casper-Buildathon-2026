@@ -53,10 +53,11 @@ exit 0
 STUB
   chmod +x "$BASE/bin/docker"
 
-  # curl stub: returns 200 so the health-check poll passes immediately
+  # curl stub: returns 200 with a health body so the health-check poll passes immediately.
+  # The script uses -w "\n%{http_code}" so output must be "<body>\n<status>".
   cat > "$BASE/bin/curl" <<'STUB'
 #!/bin/bash
-echo "200"
+printf '{"redis":"connected","database":"connected"}\n200'
 STUB
   chmod +x "$BASE/bin/curl"
 

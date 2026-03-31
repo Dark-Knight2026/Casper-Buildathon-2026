@@ -17,7 +17,7 @@ concurrency:
 jobs:
   deploy:
     runs-on: ${{ vars.GH_RUNNER_DEPLOY }}
-    timeout-minutes: 45
+    timeout-minutes: 120
     environment: >
       ${{
         github.event_name == 'push'
@@ -25,6 +25,18 @@ jobs:
         || inputs.environment
       }}
     steps:
+    - name: Mask SSH credentials
+      env:
+        SSH_PRIVATE_KEY: ${{ secrets.SECRET_RSA_PRIVATE_KEY }}
+        SSH_PUBLIC_KEY: ${{ secrets.SECRET_RSA_PUBLIC_KEY }}
+      run: |
+        while IFS= read -r line; do
+          [ -n "$line" ] && echo "::add-mask::$line"
+        done <<< "${SSH_PRIVATE_KEY}"
+        while IFS= read -r line; do
+          [ -n "$line" ] && echo "::add-mask::$line"
+        done <<< "${SSH_PUBLIC_KEY}"
+
     - uses: actions/checkout@v4
 
     - name: Decode service account credentials
@@ -38,18 +50,6 @@ jobs:
           exit 1
         fi
         chmod 600 "./.secret/gcp_creds.json"
-
-    - name: Mask SSH credentials
-      env:
-        SSH_PRIVATE_KEY: ${{ secrets.SECRET_RSA_PRIVATE_KEY }}
-        SSH_PUBLIC_KEY: ${{ secrets.SECRET_RSA_PUBLIC_KEY }}
-      run: |
-        while IFS= read -r line; do
-          [ -n "$line" ] && echo "::add-mask::$line"
-        done <<< "${SSH_PRIVATE_KEY}"
-        while IFS= read -r line; do
-          [ -n "$line" ] && echo "::add-mask::$line"
-        done <<< "${SSH_PUBLIC_KEY}"
 
     - name: Create key files
       env:
@@ -167,6 +167,6 @@ jobs:
         if [ -f "./.secret/ssh_key.pub" ]; then
           shred -fz -n 3 "./.secret/ssh_key.pub"
         fi
-        for f in .secret/env.*.tfvars; do
+        for f in "$GITHUB_WORKSPACE"/.secret/env.*.tfvars; do
           [ -f "$f" ] && shred -fz -n 3 "$f"
         done
