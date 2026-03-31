@@ -750,6 +750,7 @@ async fn unbonding_active_returns_not_withdrawable(pool: PgPool) {
         "expected ~500.0, got {amount}"
     );
     assert_eq!(body["isWithdrawable"], false);
+    assert_eq!(body["unbondingEndsAt"].as_i64().unwrap(), ends_at);
     let remaining = body["timeRemainingMs"].as_i64().unwrap();
     assert!(remaining > 0, "time_remaining_ms should be positive");
 }
@@ -771,6 +772,7 @@ async fn unbonding_expired_is_withdrawable(pool: PgPool) {
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
     assert_eq!(body["isWithdrawable"], true);
+    assert_eq!(body["unbondingEndsAt"].as_i64().unwrap(), ends_at);
     assert_eq!(body["timeRemainingMs"], 0);
 }
 
