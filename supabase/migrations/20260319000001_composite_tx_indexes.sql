@@ -1,3 +1,9 @@
+-- WARNING: This migration acquires blocking locks on blockchain_transactions
+-- during index rebuild (AccessExclusiveLock on DROP, ShareLock on CREATE).
+-- On a live database with continuous INSERT's this will stall reads and writes.
+-- Apply scripts/rebuild_tx_indexes_concurrently.sh on live databases instead
+-- of running this migration directly.
+--
 -- Replace single-column indexes with composite indexes that include
 -- block_number DESC for index-ordered pagination.
 --
