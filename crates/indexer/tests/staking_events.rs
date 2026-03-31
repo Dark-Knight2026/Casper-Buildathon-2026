@@ -33,10 +33,19 @@ const STAKING_DEPLOY_4: &str = "000000000000000000000000000000000000000000000000
 const STAKING_DEPLOY_5: &str = "0000000000000000000000000000000000000000000000000000000000009005";
 
 fn staking_event(deploy_hash: &str, event_name: &str, data: serde_json::Value) -> RawEvent {
+    staking_event_at(deploy_hash, event_name, data, 500)
+}
+
+fn staking_event_at(
+    deploy_hash: &str,
+    event_name: &str,
+    data: serde_json::Value,
+    block_height: u64,
+) -> RawEvent {
     RawEvent {
         contract_hash: "staking_contract_hash".to_owned(),
         deploy_hash: deploy_hash.to_owned(),
-        block_height: 500,
+        block_height,
         contract_type: ContractType::Staking,
         event_name: event_name.to_owned(),
         event_data: data,
@@ -715,12 +724,12 @@ async fn staker_snapshot_overwrites_on_update(pool: PgPool) {
     .await
     .unwrap();
 
-    // Second snapshot with different values.
+    // Second snapshot with different values at a higher block height.
     processor::process_event(
         &pool,
         &EventRegistry::new(),
         &HashSet::new(),
-        &staking_event(
+        &staking_event_at(
             STAKING_DEPLOY_6,
             "StakerSnapshot",
             json!({
@@ -729,6 +738,7 @@ async fn staker_snapshot_overwrites_on_update(pool: PgPool) {
                 "pending_rewards": "999",
                 "reward_per_token_paid": "5000000000000000000"
             }),
+            501,
         ),
     )
     .await

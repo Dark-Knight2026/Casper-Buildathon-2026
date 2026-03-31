@@ -248,7 +248,7 @@ async fn staking_info_apy_with_reward_deposits(pool: PgPool) {
     let apy = body["currentApy"].as_f64().unwrap();
     // Expected: (1000 * 365 / 30) / 10000 * 100 = 121.67%
     assert!(
-        apy > 100.0 && apy < 150.0,
+        (apy - 121.67).abs() < 0.5,
         "expected APY ~121.67%, got {apy}"
     );
 }
