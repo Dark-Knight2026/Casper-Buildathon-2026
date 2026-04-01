@@ -228,6 +228,53 @@ async fn ico_progress_with_purchases(pool: PgPool) {
     assert!(pct > 0.0 && pct < 1.0, "expected small percent, got {pct}");
 }
 
+/// When total purchased equals the allocation, percent must cap at 100
+/// and remaining tokens must be zero.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn ico_progress_full_allocation_sold(pool: PgPool) {
+    seed_ico_schedule(&pool).await;
+    seed_ico_purchase(&pool, &"a".repeat(64), VALID_ADDRESS, ICO_TOTAL_ALLOCATION).await;
+
+    let env = common::setup_test_server(pool, false).await;
+    let response = env.server.get("/api/v1/ico/progress").await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+    assert_eq!(body["tokensSold"], ICO_TOTAL_ALLOCATION);
+    assert_eq!(body["tokensRemaining"], "0");
+    let pct = body["percentSold"].as_f64().unwrap();
+    assert!(
+        (pct - 100.0).abs() < f64::EPSILON,
+        "expected percentSold == 100.0, got {pct}"
+    );
+}
+
+/// When purchases exceed the allocation, percent must still cap at 100
+/// and remaining tokens must clamp to zero (not go negative).
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn ico_progress_oversold(pool: PgPool) {
+    seed_ico_schedule(&pool).await;
+    // Seed two purchases that together exceed the total allocation
+    seed_ico_purchase(&pool, &"a".repeat(64), VALID_ADDRESS, ICO_TOTAL_ALLOCATION).await;
+    let extra = "1000000000000000000"; // 1 BIG over the limit
+    seed_ico_purchase(&pool, &"b".repeat(64), VALID_ADDRESS, extra).await;
+
+    let env = common::setup_test_server(pool, false).await;
+    let response = env.server.get("/api/v1/ico/progress").await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+    assert_eq!(
+        body["tokensRemaining"], "0",
+        "tokensRemaining must clamp to zero when oversold"
+    );
+    let pct = body["percentSold"].as_f64().unwrap();
+    assert!(
+        (pct - 100.0).abs() < f64::EPSILON,
+        "expected percentSold == 100.0 when oversold, got {pct}"
+    );
+}
+
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn ico_progress_returns_500_without_any_config(pool: PgPool) {
     // No schedule in DB, no env fallback -> 500

@@ -6,6 +6,8 @@
 
 use secrecy::ExposeSecret;
 use sqlx::postgres::PgPoolOptions;
+use tokio::signal::unix::{self, SignalKind};
+use tracing_subscriber::EnvFilter;
 
 use crate::{
     backfill,
@@ -39,7 +41,7 @@ pub async fn run() -> IndexerResult<()> {
     tracing_subscriber::fmt()
         .with_target(false)
         .with_level(true)
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .with_env_filter(EnvFilter::from_default_env())
         .init();
 
     let config = IndexerConfig::from_env()?;
@@ -99,7 +101,7 @@ pub(crate) async fn shutdown_signal() {
 
     #[cfg(unix)]
     let terminate = async {
-        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+        unix::signal(SignalKind::terminate())
             .expect("failed to install SIGTERM handler")
             .recv()
             .await;

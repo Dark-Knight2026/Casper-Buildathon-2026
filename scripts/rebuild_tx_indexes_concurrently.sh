@@ -39,4 +39,4 @@ psql "$DATABASE_URL" -c "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_blockchain_
 psql "$DATABASE_URL" -c "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_blockchain_tx_contract_hash
     ON blockchain_transactions (contract_hash, block_number DESC NULLS LAST);"
 
-echo "Done. Verify with: psql $DATABASE_URL -c '\\di blockchain_transactions'"
+echo "Done. Verify with: psql <DATABASE_URL> -c '\\di blockchain_transactions'"
