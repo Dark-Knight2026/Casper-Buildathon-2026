@@ -17,7 +17,8 @@
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest run --coverage",
-    "type-check": "tsc --noEmit"
+    "test:integration": "vitest run tests/",
+"type-check": "tsc --noEmit"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

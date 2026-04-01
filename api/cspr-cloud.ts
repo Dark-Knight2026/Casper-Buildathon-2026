@@ -32,24 +32,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // Extract the CSPR.Cloud API sub-path from the incoming request.
   //
-  // vercel.json routes "/api/cspr-cloud/:path*" → "/api/cspr-cloud" (destination
-  // intentionally omits :path* to keep routing pointed at this single file).
-  // Because :path* is absent from the destination, Vercel does NOT inject
-  // req.query.path — the array/string branches below are defensive guards in case
-  // the routing config ever changes to "?path=:path*".
+  // Production path: csprCloudService.ts sends requests as
+  // /api/cspr-cloud?path=deploys/${deployHash}, so req.query.path is always a
+  // string in production. The typeof req.query.path === 'string' branch below
+  // is the active production path.
   //
-  // Primary path: the req.url fallback. In Vercel serverless functions req.url
-  // holds the original pre-rewrite URL (standard Node.js/Vercel behaviour), so
-  // "/api/cspr-cloud/accounts/abc/ft-token-actions?foo=bar" arrives intact and
-  // stripping the prefix gives the correct sub-path. This is the branch that
-  // fires today in production.
+  // The vercel.json path-rewrite ("/api/cspr-cloud/:path*" → "/api/cspr-cloud")
+  // was removed. The req.url fallback at the end of the if/else chain is now an
+  // unused defensive guard retained in case routing ever changes back to the
+  // path-segment style.
   let path = '';
   if (Array.isArray(req.query.path)) {
     path = req.query.path.join('/');
   } else if (typeof req.query.path === 'string') {
+    // Active production path: ?path=<sub-path> query parameter.
     path = req.query.path;
   } else {
-    // Active branch: req.url contains the original pre-rewrite path.
+    // Defensive fallback: extract sub-path from req.url if no query param present.
     path = (req.url?.split('?')[0] ?? '').replace(/^\/api\/cspr-cloud\/?/, '');
   }
 
