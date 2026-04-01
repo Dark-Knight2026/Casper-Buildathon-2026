@@ -1,0 +1,53 @@
+FROM google/cloud-sdk:548.0.0-slim
+
+# https://releases.hashicorp.com/terraform/
+ENV TF_VERSION=1.14.4
+WORKDIR /
+
+# Install system deps
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    wget \
+    unzip \
+    python3 \
+    python3-pip \
+    make \
+    jq \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install hcloud CLI
+# https://github.com/hetznercloud/cli/releases
+ENV HCLOUD_VERSION=1.47.0
+ENV HCLOUD_SHA256=cfd6c4dfb2391fcaed461bb75358b57867892703bcc2c7d4fb52b3d49ba0cbda
+RUN curl -fsSL https://github.com/hetznercloud/cli/releases/download/v${HCLOUD_VERSION}/hcloud-linux-amd64.tar.gz \
+    -o hcloud-linux-amd64.tar.gz \
+    && echo "${HCLOUD_SHA256}  hcloud-linux-amd64.tar.gz" | sha256sum -c - \
+    && tar -xz -f hcloud-linux-amd64.tar.gz hcloud \
+    && mv hcloud /usr/local/bin/hcloud \
+    && chmod +x /usr/local/bin/hcloud \
+    && rm hcloud-linux-amd64.tar.gz
+
+
+# Install docker CLI (not daemon)
+RUN curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg && \
+    echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/debian $(lsb_release -cs) stable" > /etc/apt/sources.list.d/docker.list && \
+    apt-get update && apt-get install -y --no-install-recommends docker-ce-cli \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Terraform
+RUN mkdir -p /usr/lib/terraform/${TF_VERSION} \
+    && cd /usr/lib/terraform/${TF_VERSION} \
+    && wget https://releases.hashicorp.com/terraform/${TF_VERSION}/terraform_${TF_VERSION}_linux_amd64.zip \
+    && echo "4a24b18865d9419ba7882567cb7429dd1525b3e2029a9e38f612d476ba8c3dea  terraform_${TF_VERSION}_linux_amd64.zip" | sha256sum -c - \
+    && unzip terraform_${TF_VERSION}_linux_amd64.zip \
+    && chmod 755 terraform \
+    && ln -s /usr/lib/terraform/${TF_VERSION}/terraform /usr/bin/terraform
+
+WORKDIR /app
+
+# Intentionally runs as root: needs write access to /tmp for gcloud auth cache
+# and must be able to bind-mount /var/run/docker.sock at the same UID as the host
+# caller (enforced via --user in Makefile.deploy).
+ENTRYPOINT ["/bin/bash", "-c"]
+CMD ["make -f ./deploy/Makefile.deploy ${ACTION:?ACTION variable is required}"]

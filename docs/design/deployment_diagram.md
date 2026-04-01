@@ -2,13 +2,9 @@
 
 ## Overview
 
-This document describes the container topology and estimated monthly infrastructure costs for the LeaseFi platform (Rust API, Blockchain Indexer, and supporting services including frontend). Deployment CI is managed externally (not yet implemented) — it builds Docker images, pushes to GAR, and deploys to Hetzner via SSH. Build/test CI (lint, fmt, unit/integration tests) is not yet configured as a GitHub Actions workflow.
+This document describes the container topology and estimated monthly infrastructure costs for the LeaseFi platform (Rust API, Blockchain Indexer, and supporting services including frontend).
 
-> **Note:** This document reflects the **planned** deployment architecture. Nothing has been deployed to production yet. Some details (e.g. GAR configuration, workflow execution order) may change during implementation.
-
----
-
-> **Security note:** Cloudflare **Flexible** SSL is configured — Cloudflare terminates TLS with the browser; traffic from Cloudflare to the Hetzner origin is plain HTTP on port 80. **Upgrade path:** switch to Full (Strict) by adding `listen 443 ssl;` to Nginx with a valid origin certificate (Let's Encrypt / certbot) and mapping port `443:443` in Compose.
+Deployment is fully automated: `make -f deploy/Makefile.deploy deploy` builds Docker images, pushes them to Google Artifact Registry, provisions the Hetzner server via Terraform, and runs `redeploy.sh` over SSH. Build/test CI (lint, fmt, unit/integration tests) is not yet configured as a GitHub Actions workflow; it currently runs locally via `make ci`.
 
 ---
 
@@ -19,11 +15,11 @@ graph TB
     CLIENT["Frontend<br/>(SPA)"]
 
     subgraph "Hetzner (Docker Compose)"
-        NGINX["Nginx<br/>(reverse proxy)<br/>:80 host-bound"]
+        NGINX["Nginx<br/>(reverse proxy)<br/>:443 TLS · :80 -> 301 redirect<br/>HSTS enabled"]
         subgraph "Docker: API Server"
-            API["API Server<br/>(Rust/Axum)<br/>Dockerfile<br/>:8080 host-exposed"]
+            API["API Server<br/>(Rust/Axum)<br/>Dockerfile<br/>:8080 internal"]
         end
-        REDIS["Redis 7-alpine<br/>Nonce Store<br/>:6379"]
+        REDIS["Redis 7-alpine<br/>Nonce Store<br/>password via redis.conf"]
         subgraph "Docker: Indexer"
             IDX["Blockchain Indexer<br/>(Rust/Tokio)<br/>Dockerfile.indexer"]
             %% BACKFILL and STREAM are concurrent Tokio tasks within one binary — not separate processes
@@ -44,21 +40,79 @@ graph TB
         WSS["WSS Streaming<br/>(CSPR_CLOUD_WSS_URL)"]
     end
 
-    %% TLS: browser->CF = HTTPS (Cloudflare terminates), CF->Nginx = HTTP :80 (Flexible mode)
-    CF["Cloudflare Proxy<br/>(Flexible SSL)"]
+    LE["Let's Encrypt<br/>(certbot DNS-01<br/>via Cloudflare API)"]
+
+    %% Full (Strict): Cloudflare validates the Let's Encrypt cert chain
+    CF["Cloudflare Proxy<br/>(Full / Full Strict)"]
 
     CLIENT -->|"HTTPS :443"| CF
-    CF -->|"HTTP :80"| NGINX
-    NGINX -->|"internal :8080<br/>/health, /api/v1/*, /swagger-ui, /api-docs/*"| API
+    CF -->|"HTTPS :443<br/>(TLS — Let's Encrypt cert)"| NGINX
+    NGINX -->|"HTTP :8080 internal<br/>/health, /api/v1/*, /swagger-ui, /api-docs/*"| API
+
+    LE -.->|"cert issued on first deploy<br/>renewed by cron"| NGINX
 
     API -->|"SQLx pool"| PG
     API -->|"Nonce store (5-min TTL)"| REDIS
-    %% JWT validation is local HS256 (SUPABASE_JWT_SECRET) - no network call to Supabase Auth
+    %% JWT validation is local HS256 (SUPABASE_JWT_SECRET) — no network call to Supabase Auth
     %% Auth flow: nonce -> Casper Wallet Ed25519/Secp256k1 signature -> local verify -> issue JWT
 
     IDX -->|"SQLx pool"| PG
     BACKFILL -->|"HTTP GET<br/>/ft-token-actions (CEP-18), /deploys (ICO)"| REST
     STREAM -->|"WebSocket<br/>contract-events"| WSS
+```
+
+---
+
+## CI/CD Flow
+
+```mermaid
+flowchart TD
+    DEV["Developer<br/>make -f deploy/Makefile.deploy deploy"]
+
+    subgraph "Deploy container (Dockerfile.deploy)"
+        BUILD["docker build<br/>(Dockerfile + Dockerfile.indexer)"]
+        GCPAUTH["gcloud auth<br/>GAR setup (Terraform)"]
+        PUSH["docker push<br/>-> Google Artifact Registry"]
+    end
+
+    subgraph "Terraform: hetzner_dev"
+        TF_SERVER["Provision Hetzner server<br/>(cloud-init on first deploy)"]
+        TF_FILES["Copy files via SSH<br/>redeploy.sh · docker-compose.yml<br/>nginx.conf · https.conf.template<br/>redis.conf.template · .env"]
+        TF_RUN["ssh: sudo -E bash redeploy.sh"]
+    end
+
+    subgraph "redeploy.sh (on server)"
+        PREFLIGHT["Pre-flight validation<br/>(VERSION, PROJECT_DOMAIN, images in GAR)"]
+        GENCONF["Generate configs via envsubst<br/>nginx https.conf · redis.conf"]
+        CERT["Bootstrap self-signed cert<br/>(first deploy only)"]
+        PULL["docker pull images from GAR"]
+        ROLLBACK_SAVE["Save rollback state<br/>(.env.rollback)"]
+        DOWN["docker compose down"]
+        UP["docker compose up -d"]
+        HEALTHCHECK["Poll /health (120s)<br/>start_period 60s + migration time"]
+        CERTBOT["certbot DNS-01<br/>obtain Let's Encrypt cert<br/>(first deploy only)"]
+        PRUNE["docker image prune"]
+    end
+
+    ROLLBACK["Rollback:<br/>pull previous images<br/>docker compose up -d"]
+
+    DEV --> BUILD
+    BUILD --> GCPAUTH
+    GCPAUTH --> PUSH
+    PUSH --> TF_SERVER
+    TF_SERVER --> TF_FILES
+    TF_FILES --> TF_RUN
+    TF_RUN --> PREFLIGHT
+    PREFLIGHT --> GENCONF
+    GENCONF --> CERT
+    CERT --> PULL
+    PULL --> ROLLBACK_SAVE
+    ROLLBACK_SAVE --> DOWN
+    DOWN --> UP
+    UP --> HEALTHCHECK
+    HEALTHCHECK -->|"HTTP 200"| CERTBOT
+    HEALTHCHECK -->|"timeout"| ROLLBACK
+    CERTBOT --> PRUNE
 ```
 
 ---
@@ -72,20 +126,10 @@ graph TB
 | **Hetzner** (API + Redis + Indexer) | CX23 · 2 vCPU / 4 GB / 40 GB SSD | $4.09 | Docker Compose on a single server; IPv4 $0.60/mo already included in $4.09 total |
 | **Stripe** | Pay-per-use | 2.9% + $0.30/tx | **Planned — not yet integrated.** No monthly base fee; test mode is free |
 | **Resend** | Free -> Pro | $0 -> ~$20 | **Planned — not yet integrated.** Free: 3 000 emails/mo, 100/day; Pro: 50 000/mo |
-| **Cloudflare** | Free | $0 | DNS, reverse proxy, DDoS protection, Flexible SSL termination (browser->CF = HTTPS; CF->Hetzner = HTTP :80) |
+| **Cloudflare** | Free | $0 | DNS, reverse proxy, DDoS protection. Full / Full (Strict) SSL — Cloudflare validates the Let's Encrypt cert; both legs are TLS |
 | **CSPR.cloud** | Pay-per-use | ~$0–50 | Free: 100 000 API req/mo budget; daily cap 6 000/day (two independent limits — first reached applies), 3 simultaneous streaming connections; cost scales above those limits |
-| **Google Artifact Registry** | Pay-per-use | ~$0–2 | Storage ~$0.10/GB/mo; egress billed on pulls. Terraform managed (not yet implemented); used by the external deployment CI workflow |
-| **Google Cloud Storage** | Pay-per-use | ~$0 | Terraform remote state backend (not yet implemented). Standard storage ~$0.02/GB/mo; negligible for state files |
-| **Domain + SSL** | — | ~$1.25 | ~$15/yr billed annually; SSL terminated by Cloudflare (backend) and Vercel (frontend) |
+| **Google Artifact Registry** | Pay-per-use | ~$0–2 | Storage ~$0.10/GB/mo; egress billed on pulls. Terraform managed; used by the deployment pipeline |
+| **Google Cloud Storage** | Pay-per-use | ~$0 | Terraform remote state backend. Standard storage ~$0.02/GB/mo; negligible for state files |
+| **Domain + SSL** | — | ~$1.25 | ~$15/yr billed annually; TLS terminated by Nginx (Let's Encrypt) and Vercel (frontend) |
 
 **Estimated total: ~$5.35/mo** on free tiers (dev/MVP) -> **~$70–120/mo** production (paid plans)
-
----
-
-## CI/CD Flow
-
-**Deployment CI** is managed externally (not yet implemented) — it authenticates to GCP, builds Docker images, pushes them to Google Artifact Registry, and deploys to the Hetzner server via SSH.
-
-**Build/test CI** (lint, fmt, unit/integration tests) is not yet configured as a GitHub Actions workflow. Currently runs locally via `make ci` (check -> fmt + prepare + lint + openapi; then test).
-
-> **TBD:** CI/CD pipeline diagram — to be added once build/test and deployment workflows are implemented.

@@ -9,24 +9,26 @@ RUN cargo chef prepare --recipe-path recipe.json
 
 
 FROM chef AS builder
+ENV SQLX_OFFLINE=true
 COPY --from=planner /app/recipe.json recipe.json
-RUN cargo chef cook --release --recipe-path recipe.json
+RUN cargo chef cook --release --package api --recipe-path recipe.json
 
 COPY . .
-ENV SQLX_OFFLINE=true
-RUN cargo build --release
+RUN cargo build --release --package api
 
 
 FROM debian:bookworm-slim AS runtime
 WORKDIR /app
 
 RUN apt-get update -y \
-    && apt-get install -y --no-install-recommends openssl ca-certificates \
+    && apt-get install -y --no-install-recommends openssl ca-certificates curl \
     && apt-get autoremove -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /app/target/release/rust-service app
+COPY --from=builder /app/target/release/api app
 
-ENV RUST_LOG=debug
+ENV RUST_LOG=info
+RUN adduser --disabled-password --no-create-home --gecos "" appuser
+USER appuser
 ENTRYPOINT ["./app"]

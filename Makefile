@@ -18,6 +18,7 @@ SHELL := /bin/bash
  test_not \
  run      \
  clean    \
+ deploy   \
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z0-9_.-]+:.*?## ' Makefile | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  make %-10s %s\n", $$1, $$2}'
@@ -106,6 +107,14 @@ run: ## Run API server with .env loaded
 clean: ## Clean build artifacts
 	@echo "[*] Cleaning build artifacts..."
 	@cargo clean
+
+# =====================================================================================================
+# Deployment
+
+## Deploys using tools from the container
+deploy:
+	@echo "[START] Redirect to <./deploy/Makefile.deploy>"
+	@$(MAKE) --no-print-directory -f ./deploy/Makefile.deploy deploy
 
 # Prevent "No rule to make target" error for arguments
 #   %: — catch-all target, matches any unknown target (e.g. arguments like "test_name")

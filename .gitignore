@@ -2,6 +2,13 @@
 target/
 **/*.rs.bk
 
+# Build artifacts
+*.o
+*.a
+*.dylib
+*.dll
+*.exe
+
 # Secrets
 .secrets/
 .env
@@ -18,6 +25,9 @@ target/
 *.njsproj
 *.sln
 *.sw?
+*.swp
+*.swo
+*~
 
 # OS
 .DS_Store
@@ -31,3 +41,31 @@ logs
 .claude/
 CLAUDE.md
 .mcp.json
+
+# Secrets directory: hyphenated files contain sensitive credentials
+# Files like secret/-iron.sh, secret/-api_keys.sh are gitignored via -* pattern
+# secret/readme.md (documentation) is tracked - no hyphen prefix
+-*
+
+# Catch-all for dot-files/dirs not explicitly allowed above (subsumes .DS_Store, .idea/, .vscode/ etc.)
+.*
+!.github/
+!.secret/
+
+# Terraform
+**/.terraform/
+**/.terraform.lock.hcl
+**/*.tfstate
+**/*.tfstate.backup
+**/*.tfvars
+
+# Generated deploy configs (rendered from templates at deploy time)
+deploy/redis.conf
+deploy/nginx/https.conf
+
+# Database backups (NEVER commit)
+backups/
+*_backup*.db
+*.db.backup
+*.bak
+*.orig

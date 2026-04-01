@@ -2,7 +2,7 @@
 
 | Document | Responsibility |
 |----------|----------------|
-| `casper_system_design.md` | Casper blockchain integration system design |
-| `database_schema_design.md` | Database schema with RLS policies and entity relationships |
-| `rust_microservice_design.md` | Rust microservice architecture overview |
-| `deployment_diagram.md` | Deployment topology diagram, infrastructure cost reference, and CI/CD flow overview |
+| `casper_system_design.md` | System architecture for hybrid Web2/Web3 integration |
+| `database_schema_design.md` | Detailed database schema, RLS policies, and relationship diagrams |
+| `rust_microservice_design.md` | Architecture of the Rust backend service (Axum + SQLx) |
+| `deployment_diagram.md` | Deployment topology, infrastructure costs, and CI/CD flow |
