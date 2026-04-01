@@ -1,9 +1,11 @@
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';
 import { OverviewTab } from '@/pages/ico/components/states/OverviewTab';
+import { useICOWallet } from '@/hooks/ico/useICOWallet';
+import { deriveAccountHash } from '@/lib/blockchain/accountUtils';
 
 // ── External HTTP boundary ────────────────────────────────────────────────────
 // Only the HTTP client is mocked — not the hooks that call it.
@@ -20,16 +22,15 @@ vi.mock('@/lib/api-client', () => ({
 // Depends on useClickRef() from @make-software/csprclick-ui, which is a
 // browser-extension event-emitter with no jsdom equivalent. Any attempt to
 // run the real hook will throw "useClickRef must be used inside CsprClickProvider".
+// vi.fn() allows per-test overrides via vi.mocked(useICOWallet).mockReturnValue(...)
 vi.mock('@/hooks/ico/useICOWallet', () => ({
-  useICOWallet: () => ({
-    isConnected: false,
-    account: null,
-    isConnecting: false,
-    connect: vi.fn(),
-    disconnect: vi.fn(),
-    error: null,
-    clickRef: null,
-  }),
+  useICOWallet: vi.fn(),
+}));
+
+// ── blockchain utils ─────────────────────────────────────────────────────────
+vi.mock('@/lib/blockchain/accountUtils', () => ({
+  deriveAccountHash: vi.fn(() => null),
+  stripAccountHashPrefix: (addr: string) => addr.replace('account-hash-', ''),
 }));
 
 // ── recharts: cannot integrate ───────────────────────────────────────────────
@@ -75,6 +76,12 @@ vi.mock('@/pages/ico/components/shared/EarningsChart', () => ({
   ),
 }));
 
+// UnbondingStatusBlock uses hooks that require CsprClick provider context.
+// Mocked to keep OverviewTab tests isolated from this dependency.
+vi.mock('@/pages/ico/components/shared/UnbondingStatusBlock', () => ({
+  UnbondingStatusBlock: () => <div data-testid="unbonding-status-block" />,
+}));
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 const renderWithRouter = (ui: React.ReactElement) => {
@@ -86,7 +93,26 @@ const renderWithRouter = (ui: React.ReactElement) => {
   );
 };
 
+const disconnectedWallet = {
+  isConnected: false,
+  account: null,
+  isConnecting: false,
+  connect: vi.fn(),
+  disconnect: vi.fn(),
+  error: null,
+  clickRef: null as never,
+};
+
 describe('OverviewTab', () => {
+  beforeEach(() => {
+    vi.mocked(useICOWallet).mockReturnValue(disconnectedWallet);
+    mockGet.mockResolvedValue(null);
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
   describe('rendering', () => {
     it('should render the component', () => {
       renderWithRouter(<OverviewTab />);
@@ -139,7 +165,7 @@ describe('OverviewTab', () => {
       renderWithRouter(<OverviewTab />);
 
       expect(screen.getByText('Current APY')).toBeInTheDocument();
-      expect(screen.getByText('0%')).toBeInTheDocument();
+      expect(screen.getByText('0.00%')).toBeInTheDocument();
     });
   });
 
@@ -190,6 +216,70 @@ describe('OverviewTab', () => {
       renderWithRouter(<OverviewTab />);
 
       expect(screen.getByTestId('transaction-history')).toBeInTheDocument();
+    });
+  });
+
+  describe('with connected wallet', () => {
+    const mockPortfolio = {
+      totalBig: 1000,
+      bigInWallet: 500,
+      bigStaked: 300,
+      rewardsEarned: 200,
+      estimatedUsdValue: 1500,
+      change24hPercent: 2.5,
+    };
+    const mockStakingInfo = {
+      currentApy: 8,
+      pendingRewards: 0,
+      stakedTokens: 300,
+      totalRewardsEarned: 200,
+    };
+
+    beforeEach(() => {
+      vi.mocked(useICOWallet).mockReturnValue({
+        isConnected: true,
+        account: { publicKey: 'fake-public-key' } as never,
+        isConnecting: false,
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+        error: null,
+        clickRef: null as never,
+      });
+      vi.mocked(deriveAccountHash).mockReturnValue('fake-account-hash');
+
+      mockGet.mockImplementation((path: string) => {
+        if (path.includes('/portfolio')) return Promise.resolve(mockPortfolio);
+        if (/\/staking\/[^/]+$/.test(path)) return Promise.resolve(mockStakingInfo);
+        return Promise.resolve({ item_count: 0, page_count: 0, data: [] });
+      });
+    });
+
+    it('displays total BIG value from backend', async () => {
+      renderWithRouter(<OverviewTab />);
+      await waitFor(() =>
+        expect(screen.getByText(/1[,.]000[.,]00/)).toBeInTheDocument(),
+      );
+    });
+
+    it('displays estimated USD value from backend', async () => {
+      renderWithRouter(<OverviewTab />);
+      await waitFor(() =>
+        expect(screen.getAllByText(/\$1[,.]500[.,]00/).length).toBeGreaterThan(0),
+      );
+    });
+
+    it('displays current APY from backend', async () => {
+      renderWithRouter(<OverviewTab />);
+      await waitFor(() =>
+        expect(screen.getByText(/8[.,]00%/)).toBeInTheDocument(),
+      );
+    });
+
+    it('displays 24h portfolio change from backend', async () => {
+      renderWithRouter(<OverviewTab />);
+      await waitFor(() =>
+        expect(screen.getByText('2.5% (24h)')).toBeInTheDocument(),
+      );
     });
   });
 });

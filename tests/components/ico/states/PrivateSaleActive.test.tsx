@@ -17,15 +17,14 @@ const mockProgress: ScheduleProgress = {
   percentSold: 13.33,
 };
 
-// Mock @tanstack/react-query
-vi.mock('@tanstack/react-query', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@tanstack/react-query')>();
-  return {
-    ...actual,
-    useQueryClient: () => ({ invalidateQueries: vi.fn() }),
-    useQuery: vi.fn(() => ({ data: undefined, isLoading: false, error: null })),
-  };
-});
+// ── HTTP boundary mock ────────────────────────────────────────────────────────
+// Mocking at the fetch client level keeps react-query and all hooks running
+// their real logic. With accountHash=null all guarded queries are disabled
+// (enabled: !!accountHash) so mockGet is a safety net only.
+const mockGet = vi.fn().mockResolvedValue(null);
+vi.mock('@/lib/api-client', () => ({
+  backendClient: { get: (...args: unknown[]) => mockGet(...args) },
+}));
 
 // Mock useICOProgress
 vi.mock('@/hooks/ico/useICOProgress', () => ({
