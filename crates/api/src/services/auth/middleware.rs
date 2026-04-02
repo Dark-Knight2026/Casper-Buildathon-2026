@@ -4,8 +4,10 @@ use std::sync::Arc;
 
 use axum::{
     Json,
-    extract::FromRequestParts,
-    http::{StatusCode, request::Parts},
+    body::Body,
+    extract::{FromRequestParts, State},
+    http::{Request, StatusCode, request::Parts},
+    middleware::Next,
     response::{IntoResponse, Response},
 };
 use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode};
@@ -48,6 +50,26 @@ impl FromRequestParts<Arc<AppState>> for AuthUser {
 
         Ok(AuthUser(token_data.claims))
     }
+}
+
+/// Router-level auth middleware that rejects unauthenticated requests before
+/// they reach any handler. Reuses [`AuthUser`] validation logic so the JWT
+/// rules stay in one place.
+///
+/// # Errors
+///
+/// Returns [`AuthError::MissingCredentials`] when the `Authorization` header is
+/// absent or malformed, and [`AuthError::InvalidToken`] when JWT decoding or
+/// validation fails.
+#[inline]
+pub async fn require_auth(
+    State(state): State<Arc<AppState>>,
+    request: Request<Body>,
+    next: Next,
+) -> Result<Response, AuthError> {
+    let (mut parts, body) = request.into_parts();
+    let _user = AuthUser::from_request_parts(&mut parts, &state).await?;
+    Ok(next.run(Request::from_parts(parts, body)).await)
 }
 
 /// Authentication errors.

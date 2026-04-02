@@ -31,7 +31,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
     let (router, api) = OpenApiRouter::with_openapi(ApiDoc::openapi())
         .routes(routes!(services::health::handlers::health_check))
         .nest("/api/v1/auth", services::public_router())
-        .nest("/api/v1", services::protected_router())
+        .nest("/api/v1", services::protected_router(state.clone()))
         .nest("/api/v1", onchain::router())
         .with_state(state)
         .split_for_parts();

@@ -63,11 +63,17 @@ pub fn public_router() -> OpenApiRouter<Arc<AppState>> {
 /// Creates an `OpenAPI` router for protected endpoints that require JWT
 /// authentication.
 ///
-/// Authentication is enforced via the `AuthUser` extractor in handlers.
+/// Authentication is enforced structurally via a router-level middleware
+/// (`require_auth`), so every current and future handler on this router is
+/// protected regardless of whether it includes the `AuthUser` extractor.
 #[inline]
 #[must_use]
-pub fn protected_router() -> OpenApiRouter<Arc<AppState>> {
+pub fn protected_router(state: Arc<AppState>) -> OpenApiRouter<Arc<AppState>> {
     OpenApiRouter::new()
         .routes(routes!(tax::handlers::calculate_tax_liability))
         .routes(routes!(analytics::handlers::get_property_performance))
+        .route_layer(axum::middleware::from_fn_with_state(
+            state,
+            auth::middleware::require_auth,
+        ))
 }

@@ -63,6 +63,11 @@ Backend service for processing high-load real estate operations, including tax c
 }
 ```
 
+> **`amount` semantics for `token_purchase` rows:** `amount` contains the
+> payment cost in the purchase currency (CSPR or USDC), not the quantity of
+> BIG tokens received. The BIG token amount is stored in `ico_purchases.amount`
+> and can be found in the transaction `metadata` JSON.
+
 ### ICO
 
 - **GET** `/api/v1/ico/balance/{address}`
