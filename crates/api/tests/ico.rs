@@ -36,6 +36,21 @@ async fn seed_ico_schedule(pool: &PgPool) {
     .expect("Failed to seed ICO schedule");
 }
 
+/// Seed an expired ICO schedule (`end_timestamp` in the past).
+async fn seed_expired_ico_schedule(pool: &PgPool) {
+    sqlx::query(
+        r"
+            INSERT INTO ico_schedules (schedule_id, start_timestamp, end_timestamp, sale_amount, price, transaction_hash, block_height)
+            VALUES ('expired-schedule', 0, 1, $1, $2, 'deadbeef', 1)
+        ",
+    )
+    .bind(ICO_TOTAL_ALLOCATION)
+    .bind(ICO_PRICE)
+    .execute(pool)
+    .await
+    .expect("Failed to seed expired ICO schedule");
+}
+
 /// Seed an ICO purchase row.
 async fn seed_ico_purchase(pool: &PgPool, tx_hash: &str, buyer: &str, amount: &str) {
     sqlx::query(
@@ -74,6 +89,7 @@ async fn ico_balance_no_purchases(pool: PgPool) {
     assert_eq!(body["tokenPrice"], 0.5);
     assert_eq!(body["tokenSymbol"], "BIG");
     assert_eq!(body["currentValue"], 0.0);
+    assert_eq!(body["isActive"], true);
 }
 
 #[sqlx::test(migrator = "common::MIGRATIONS")]
@@ -101,6 +117,7 @@ async fn ico_balance_with_purchases(pool: PgPool) {
     );
     assert_eq!(body["tokenPrice"], 0.5);
     assert_eq!(body["tokenSymbol"], "BIG");
+    assert_eq!(body["isActive"], true);
 }
 
 #[sqlx::test(migrator = "common::MIGRATIONS")]
@@ -188,6 +205,7 @@ async fn ico_progress_no_purchases(pool: PgPool) {
     assert_eq!(body["amountRaised"], 0.0);
     assert_eq!(body["priceUsd"], 0.5);
     assert_eq!(body["percentSold"], 0.0);
+    assert_eq!(body["isActive"], true);
     // hardCapUsd = 500_000_000 BIG * $0.50 = $250_000_000
     let hard_cap = body["hardCapUsd"].as_f64().unwrap();
     assert!(
@@ -224,6 +242,7 @@ async fn ico_progress_with_purchases(pool: PgPool) {
     );
     let pct = body["percentSold"].as_f64().unwrap();
     assert!(pct > 0.0 && pct < 1.0, "expected small percent, got {pct}");
+    assert_eq!(body["isActive"], true);
 }
 
 /// When total purchased equals the allocation, percent must cap at 100
@@ -245,6 +264,7 @@ async fn ico_progress_full_allocation_sold(pool: PgPool) {
         (pct - 100.0).abs() < f64::EPSILON,
         "expected percentSold == 100.0, got {pct}"
     );
+    assert_eq!(body["isActive"], true);
 }
 
 /// When purchases exceed the allocation, percent must still cap at 100
@@ -271,6 +291,7 @@ async fn ico_progress_oversold(pool: PgPool) {
         (pct - 100.0).abs() < f64::EPSILON,
         "expected percentSold == 100.0 when oversold, got {pct}"
     );
+    assert_eq!(body["isActive"], true);
 }
 
 #[sqlx::test(migrator = "common::MIGRATIONS")]
@@ -343,6 +364,7 @@ async fn ico_progress_uses_env_fallback_when_no_schedule(pool: PgPool) {
     let body: Value = response.json();
     assert_eq!(body["priceUsd"], 0.5);
     assert_eq!(body["totalAllocation"], ICO_TOTAL_ALLOCATION);
+    assert_eq!(body["isActive"], false);
 }
 
 /// When `ico_schedules` is empty, `/ico/balance/{address}` falls back to env var config.
@@ -370,4 +392,34 @@ async fn ico_balance_uses_env_fallback_when_no_schedule(pool: PgPool) {
     let body: Value = response.json();
     assert_eq!(body["tokenPrice"], 0.5);
     assert_eq!(body["tokenSymbol"], "BIG");
+    assert_eq!(body["isActive"], false);
+}
+
+/// An expired schedule (`end_timestamp=1`, i.e. 1970) must report `isActive=false`.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn ico_balance_expired_schedule_is_inactive(pool: PgPool) {
+    seed_expired_ico_schedule(&pool).await;
+    let env = common::setup_test_server(pool, false).await;
+
+    let response = env
+        .server
+        .get(&format!("/api/v1/ico/balance/{VALID_ADDRESS}"))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+    assert_eq!(body["isActive"], false);
+}
+
+/// An expired schedule (`end_timestamp=1`, i.e. 1970) must report `isActive=false`.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn ico_progress_expired_schedule_is_inactive(pool: PgPool) {
+    seed_expired_ico_schedule(&pool).await;
+    let env = common::setup_test_server(pool, false).await;
+
+    let response = env.server.get("/api/v1/ico/progress").await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+    assert_eq!(body["isActive"], false);
 }
