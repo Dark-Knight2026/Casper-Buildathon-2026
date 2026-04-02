@@ -114,6 +114,8 @@ impl IndexableEvent for TokensPurchased {
 
         // 2. Insert into blockchain_transactions
         // Payment flow: buyer (Account) -> ICO contract (Contract).
+        // `amount` stores the payment cost (CSPR/USDC), not the BIG tokens
+        // received. BIG token quantity lives in `ico_purchases.amount`.
         let event_json = serde_json::to_value(self)?;
         db::insert_blockchain_transaction(
             ctx.tx,
