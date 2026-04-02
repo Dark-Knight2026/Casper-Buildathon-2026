@@ -28,7 +28,7 @@ Most rules in this document follow a consistent structure for clarity:
 - **Rule:** An individual guideline within this rulebook, designed to ensure consistency, readability, and maintainability.
 - **Task Markers:** Specially formatted comment tags (e.g., `xxx:`, `qqq:`, `aaa:`) used to track tasks, questions, and resolutions directly within the source code.
 
-### Quick Reference Summary
+### Rules Index
 
 | Group                       | Rule                                                                                                                                                         | Description                                                                                                      |
 |-----------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------|
