@@ -172,13 +172,14 @@ Backend service for processing high-load real estate operations, including tax c
   - **Response:** `StakingInfoResponse`
   - **Auth:** Public
   - **Rate limit:** 5 req/s, burst 30
-  - **Business rules:** APY = `(rewards_deposited_last_30_days * 365 / 30) / total_staked * 100`. Returns 0 if `total_staked` is zero.
+  - **Business rules:** APY = `(rewards_deposited_last_30_days * 365 / 30) / total_staked * 100`. Returns 0 if `total_staked` is zero. `pendingRewards` is computed off-chain: `pending_rewards + (staked * (global_rpt - user_rpt)) / 1e18`.
 
 ```json
 {
   "stakedTokens": 100000.0,
   "currentApy": 12.5,
-  "totalRewardsEarned": 5000.0
+  "totalRewardsEarned": 5000.0,
+  "pendingRewards": 1200.0
 }
 ```
 
