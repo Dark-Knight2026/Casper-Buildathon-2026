@@ -21,6 +21,8 @@ COMMENT ON COLUMN staking_reward_state.reward_per_token_stored IS 'U256 as TEXT,
 
 ALTER TABLE staking_reward_state ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Public read-only" ON staking_reward_state FOR SELECT USING (true);
+-- No INSERT/UPDATE policy needed: the indexer connects via the Supabase
+-- service-role key, which bypasses RLS entirely.
 
 -- 2. Add reward_per_token_stored snapshot to each reward deposit record.
 ALTER TABLE staking_reward_deposits
