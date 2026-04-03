@@ -33,6 +33,11 @@ pub async fn fetch_schedules_by_account(
     limit: i64,
     offset: i64,
 ) -> Result<(Vec<VestingScheduleRow>, i64), sqlx::Error> {
+    let mut tx = pool.begin().await?;
+    sqlx::query!("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
+        .execute(tx.as_mut())
+        .await?;
+
     let rows = sqlx::query_as!(
         VestingScheduleRow,
         r"
@@ -46,16 +51,18 @@ pub async fn fetch_schedules_by_account(
         limit,
         offset,
     )
-    .fetch_all(pool)
+    .fetch_all(tx.as_mut())
     .await?;
 
     let count = sqlx::query_scalar!(
         r"SELECT COUNT(*) FROM vesting_schedules WHERE beneficiary = $1",
         account,
     )
-    .fetch_one(pool)
+    .fetch_one(tx.as_mut())
     .await?
     .unwrap_or(0);
+
+    tx.commit().await?;
 
     Ok((rows, count))
 }
