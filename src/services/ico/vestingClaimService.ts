@@ -11,6 +11,7 @@ import type { Transaction } from 'casper-js-sdk';
 import { ICO_CONFIG } from '@/constants/ico';
 import logger from '@/lib/logger';
 import { createContractCallTransaction } from './casperClient';
+import { STAKING_ERROR_MAP } from './stakingErrors';
 
 const VESTING_PACKAGE_HASH = ICO_CONFIG.CONTRACTS.vestingPackageHash;
 
@@ -23,21 +24,11 @@ const GAS_CLAIM = 3_000_000_000n;
 // internally calls release_vesting_lock() on the Staking contract.
 
 const VESTING_ERROR_MAP: Record<string, string> = {
-  // Staking contract errors (staking_schema.json discriminants 601-614)
-  '601': '[Staking] TailorCoin contract is not set',
-  '602': '[Staking] InvalidAmount — amount passed to staking is zero or exceeds staked balance',
-  '603': '[Staking] Caller not authorized to unstake',
-  '604': '[Staking] Nothing staked',
-  '605': '[Staking] Insufficient staked amount',
-  '606': '[Staking] Unbonding already in progress',
-  '607': '[Staking] Vesting contract is not set',
-  '608': '[Staking] No rewards to claim',
-  '609': '[Staking] No unbonding in progress',
-  '610': '[Staking] Unbonding period not finished yet — please wait',
-  '611': '[Staking] No active stake',
-  '612': '[Staking] Caller not authorized to stake',
-  '613': '[Staking] Unstake blocked by active vesting lock',
-  '614': '[Staking] Caller not authorized to manage locks',
+  // Staking contract errors — sourced from shared stakingErrors.ts, prefixed for clarity
+  // since these bubble up indirectly through the Vesting contract.
+  ...Object.fromEntries(
+    Object.entries(STAKING_ERROR_MAP).map(([code, msg]) => [code, `[Staking] ${msg}`]),
+  ),
   // Vesting contract errors (vesting_schema.json discriminants 701-708)
   '701': '[Vesting] Not whitelisted for this vesting schedule',
   '702': '[Vesting] Invalid amount',

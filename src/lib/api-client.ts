@@ -170,7 +170,8 @@ export class ApiClient {
    */
   async post<T>(url: string, data?: unknown, options: RequestOptions = {}): Promise<T> {
     const fullUrl = `${this.baseUrl}${url}`;
-    const shouldRetry = options.retry !== false;
+    // POST is non-idempotent: retry only when explicitly requested to avoid duplicate mutations.
+    const shouldRetry = options.retry === true;
     const maxRetries = options.maxRetries || this.maxRetries;
 
     const makeRequest = async () => {
@@ -206,7 +207,8 @@ export class ApiClient {
    */
   async put<T>(url: string, data?: unknown, options: RequestOptions = {}): Promise<T> {
     const fullUrl = `${this.baseUrl}${url}`;
-    const shouldRetry = options.retry !== false;
+    // PUT is non-idempotent in practice here: retry only when explicitly requested.
+    const shouldRetry = options.retry === true;
     const maxRetries = options.maxRetries || this.maxRetries;
 
     const makeRequest = async () => {
