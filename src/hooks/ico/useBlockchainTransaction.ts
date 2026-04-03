@@ -36,9 +36,13 @@ async function waitForConfirmation(
   while (Date.now() < deadline) {
     if (signal.aborted) return 'timed-out';
 
-    const { status } = await csprCloudService.getDeploy(txHash);
-    if (status === 'executed') return 'executed';
-    if (status === 'failed') return 'failed';
+    try {
+      const { status } = await csprCloudService.getDeploy(txHash);
+      if (status === 'executed') return 'executed';
+      if (status === 'failed') return 'failed';
+    } catch {
+      // Transient network error — continue polling until deadline
+    }
 
     await delay(POLL_INTERVAL_MS);
   }
