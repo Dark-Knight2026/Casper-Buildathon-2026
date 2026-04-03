@@ -386,16 +386,16 @@ describe('parseContractError', () => {
     expect(parseContractError(undefined)).toBe('Deploy failed');
   });
 
-  it('maps "User error: 59005" to "Invalid amount to spend"', () => {
-    expect(parseContractError('User error: 59005')).toBe('Invalid amount to spend');
+  it('maps "User error: 505" to "Invalid amount to spend"', () => {
+    expect(parseContractError('User error: 505')).toBe('Invalid amount to spend');
   });
 
-  it('maps "User error: 59012" to "Purchase amount below minimum"', () => {
-    expect(parseContractError('User error: 59012')).toBe('Purchase amount below minimum');
+  it('maps "User error: 512" to "Invalid purchase amount"', () => {
+    expect(parseContractError('User error: 512')).toBe('Invalid purchase amount');
   });
 
-  it('maps "User error: 59007" to no active ICO schedule message', () => {
-    expect(parseContractError('User error: 59007')).toBe('No active ICO schedule — sale is not currently open');
+  it('maps "User error: 507" to no active ICO schedule message', () => {
+    expect(parseContractError('User error: 507')).toBe('No active ICO schedule — sale is not currently open');
   });
 
   it('returns raw message for unknown error code', () => {

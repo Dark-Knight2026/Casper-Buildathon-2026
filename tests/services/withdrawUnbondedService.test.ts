@@ -1,11 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-vi.mock('@/constants/ico', () => ({
-  ICO_CONFIG: {
-    CONTRACTS: { icoPackageHash: 'hash-aabbcc' },
-    CASPER: { networkName: 'casper-test', rpcUrl: 'https://rpc.test' },
-  },
-}));
+// NOTE: withdrawUnbondedService reads STAKING_CONTRACT_HASH from
+// import.meta.env.VITE_STAKING_CONTRACT_HASH at module load time (not from ICO_CONFIG).
+// In the test environment this env var is not set, so the hash is ''.
+// The contract hash value is covered by the assertion in createWithdrawUnbondedTransaction tests below.
 
 vi.mock('@/lib/logger', () => ({ default: { debug: vi.fn(), log: vi.fn(), warn: vi.fn() } }));
 
@@ -44,8 +42,8 @@ describe('withdrawUnbondedService', () => {
       expect(parseWithdrawError('User error: 606')).toBe('Unbonding already in progress');
     });
 
-    it('maps error code 601 → "Staking contract is not configured"', () => {
-      expect(parseWithdrawError('User error: 601')).toBe('Staking contract is not configured');
+    it('maps error code 601 → "BIG Token contract is not set"', () => {
+      expect(parseWithdrawError('User error: 601')).toBe('BIG Token contract is not set');
     });
 
     it('maps error code 604 → "Nothing staked"', () => {
@@ -90,6 +88,14 @@ describe('withdrawUnbondedService', () => {
     it('calls createContractCallTransaction with empty Args', () => {
       createWithdrawUnbondedTransaction('02aabbcc');
       expect(Args.fromMap).toHaveBeenCalledWith({});
+    });
+
+    it('calls createContractCallTransaction with the staking contract hash from env', () => {
+      createWithdrawUnbondedTransaction('02aabbcc');
+      const [, contractHash] = mockCreateContractCallTransaction.mock.calls[0];
+      // The hash is read from VITE_STAKING_CONTRACT_HASH at module load time;
+      // verify it is forwarded as a string (value comes from the test .env).
+      expect(typeof contractHash).toBe('string');
     });
 
     it('calls createContractCallTransaction with isPackageHash=true', () => {

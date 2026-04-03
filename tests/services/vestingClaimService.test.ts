@@ -35,20 +35,20 @@ describe('vestingClaimService', () => {
       expect(parseVestingError(undefined)).toBe('Claim failed');
     });
 
-    it('maps error code 65005 → "Vesting schedule not found"', () => {
-      expect(parseVestingError('User error: 65005')).toBe('Vesting schedule not found');
+    it('maps error code 705 → "[Vesting] Vesting schedule not found"', () => {
+      expect(parseVestingError('User error: 705')).toBe('[Vesting] Vesting schedule not found');
     });
 
-    it('maps error code 65006 → "Only the beneficiary can claim these tokens"', () => {
-      expect(parseVestingError('User error: 65006')).toBe('Only the beneficiary can claim these tokens');
+    it('maps error code 706 → "[Vesting] Only the beneficiary can claim these tokens"', () => {
+      expect(parseVestingError('User error: 706')).toBe('[Vesting] Only the beneficiary can claim these tokens');
     });
 
-    it('maps error code 65007 → "Nothing to claim — tokens are not yet unlocked"', () => {
-      expect(parseVestingError('User error: 65007')).toBe('Nothing to claim — tokens are not yet unlocked');
+    it('maps error code 707 → "[Vesting] Nothing to claim — tokens are not yet unlocked"', () => {
+      expect(parseVestingError('User error: 707')).toBe('[Vesting] Nothing to claim — tokens are not yet unlocked');
     });
 
-    it('maps error code 65008 → "Claim blocked by active unbonding"', () => {
-      expect(parseVestingError('User error: 65008')).toBe('Claim blocked by active unbonding');
+    it('maps error code 708 → "[Vesting] Claim blocked — complete the active unbonding withdrawal first"', () => {
+      expect(parseVestingError('User error: 708')).toBe('[Vesting] Claim blocked — complete the active unbonding withdrawal first');
     });
 
     it('returns the raw message for unknown User error codes', () => {

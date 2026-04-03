@@ -19,15 +19,18 @@ const BIG_TOKEN_HASH = 'bigtoken000aabbcc'; // tokenAddress stripped of 'hash-'
 const ACCOUNT_HASH = 'account-hash-deadbeef0011';
 const ACCOUNT_HEX = 'deadbeef0011'; // stripped version
 
+// Hook uses tx.currency === 'BIG' (not contract_package_hash) to detect BIG tokens.
+// BIG tokens use 18 decimals; other tokens use 6 decimals.
+// from_type: 1 = sent from a contract → classified as 'purchase' (BIG received from ICO).
 const baseTx = {
   deploy_hash: 'txhash001',
   block_height: 100,
   timestamp: '2024-01-01T00:00:00Z',
-  amount: '1000000000000000000', // 1 token (18 decimals)
-  currency: null,
+  amount: '1000000000000000000', // 1 BIG token (18 decimals)
+  currency: 'BIG',
   contract_package_hash: BIG_TOKEN_HASH,
   from_hash: 'fromhash',
-  from_type: 0,
+  from_type: 1, // sent from contract → isBigReceived = true → type = 'purchase'
   to_hash: ACCOUNT_HEX,
   to_type: 0,
   ft_action_type_id: 2,
@@ -48,10 +51,10 @@ describe('useTransactionHistory', () => {
 
   // ── forwarded args ────────────────────────────────────────────────────
 
-  it('passes accountHash, page, pageSize and token_transfer type to useAccountTransactions', () => {
+  it('passes accountHash, page and pageSize to useAccountTransactions', () => {
     renderHook(() => useTransactionHistory(ACCOUNT_HASH, 2, 5));
     expect(mockUseAccountTransactions).toHaveBeenCalledWith(
-      ACCOUNT_HASH, 2, 5, 'token_transfer',
+      ACCOUNT_HASH, 2, 5,
     );
   });
 
@@ -136,7 +139,7 @@ describe('useTransactionHistory', () => {
   it('sets type "transfer" for non-BIG token_transfer transactions', () => {
     mockUseAccountTransactions.mockReturnValue({
       ...baseHookResult,
-      transactions: [{ ...baseTx, contract_package_hash: 'other_token', to_type: 0 }],
+      transactions: [{ ...baseTx, currency: null, contract_package_hash: 'other_token', from_type: 0, to_type: 0 }],
     });
     const { result } = renderHook(() => useTransactionHistory(ACCOUNT_HASH, 1));
     expect(result.current.transactions[0].type).toBe('transfer');

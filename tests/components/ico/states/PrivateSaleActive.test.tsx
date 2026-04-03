@@ -1,10 +1,15 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';
 import { PrivateSaleActive } from '@/pages/ico/components/states/PrivateSaleActive';
 import type { ScheduleProgress } from '@/hooks/ico/useICOSchedules';
+import { usePurchaseFlow } from '@/hooks/ico/usePurchaseFlow';
+import { deriveAccountHash } from '@/lib/blockchain/accountUtils';
+import { useICOProgress } from '@/hooks/ico/useICOProgress';
+import { useICOBalance } from '@/hooks/ico/useICOBalance';
+import { useVestingSchedules } from '@/hooks/ico/useVestingSchedules';
 
 // Mock progress data for tests that need it
 const mockProgress: ScheduleProgress = {
@@ -26,14 +31,17 @@ vi.mock('@/lib/api-client', () => ({
   backendClient: { get: (...args: unknown[]) => mockGet(...args) },
 }));
 
-// Mock useICOProgress
+// useICOProgress, useICOBalance, useVestingSchedules — vi.fn() so withData
+// tests can inject fixture data synchronously without async React Query fetches.
+// This avoids interactions between vi.useFakeTimers() and waitFor().
 vi.mock('@/hooks/ico/useICOProgress', () => ({
-  useICOProgress: () => ({ data: undefined }),
+  useICOProgress: vi.fn(() => ({ data: undefined })),
 }));
-
-// Mock useICOBalance
 vi.mock('@/hooks/ico/useICOBalance', () => ({
-  useICOBalance: () => ({ data: undefined }),
+  useICOBalance: vi.fn(() => ({ data: undefined })),
+}));
+vi.mock('@/hooks/ico/useVestingSchedules', () => ({
+  useVestingSchedules: vi.fn(() => ({ data: undefined })),
 }));
 
 // Mock useUserTokenActions
@@ -41,30 +49,17 @@ vi.mock('@/hooks/ico/useUserTokenActions', () => ({
   useUserTokenActions: () => ({ transactions: [] }),
 }));
 
-// Mock deriveAccountHash
+// blockchain utils — vi.fn() so withData tests can inject a real accountHash
 vi.mock('@/lib/blockchain/accountUtils', () => ({
-  deriveAccountHash: () => null,
+  deriveAccountHash: vi.fn(() => null),
+  stripAccountHashPrefix: (addr: string) => addr.replace(/^account-hash-/, ''),
 }));
 
-// Mock usePurchaseFlow hook to avoid csprclick-ui dependency
+// usePurchaseFlow — vi.fn() so withData tests can simulate a connected wallet.
+// Cannot use the real implementation: it depends on useClickRef() from
+// @make-software/csprclick-ui which throws outside CsprClickProvider.
 vi.mock('@/hooks/ico/usePurchaseFlow', () => ({
-  usePurchaseFlow: () => ({
-    isConnected: false,
-    account: null,
-    connect: vi.fn(),
-    balances: { cspr: 0, usdt: 0, usdc: 0, big: 0 },
-    handlePurchase: vi.fn(),
-    modalProps: null,
-    toastProps: null,
-    purchaseState: { step: 'idle', isProcessing: false, purchaseTxHash: null, tokensReceived: null, error: null },
-    pendingPurchase: null,
-    buyCspr: vi.fn(),
-    showConfirmModal: false,
-    showToast: false,
-    handleCloseModal: vi.fn(),
-    handleCloseToast: vi.fn(),
-    csprPriceUsd: 0,
-  }),
+  usePurchaseFlow: vi.fn(),
 }));
 
 // Mock the child components to isolate testing
@@ -104,22 +99,46 @@ const renderWithRouter = (ui: React.ReactElement) => {
   );
 };
 
+const disconnectedPurchaseFlow = {
+  isConnected: false,
+  account: null,
+  connect: vi.fn(),
+  clickRef: null as never,
+  balances: { cspr: 0, usdt: 0, usdc: 0, big: 0 },
+  balanceError: null,
+  balancesLoading: false,
+  csprPriceUsd: 0,
+  csprPriceStale: false,
+  handlePurchase: vi.fn(),
+  modalProps: null,
+  toastProps: null,
+  buyCspr: vi.fn(),
+};
+
 describe('PrivateSaleActive', () => {
   let mockEndTimestamp: number;
 
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2025-06-01T12:00:00Z'));
-    mockEndTimestamp = Date.now() + 14 * 24 * 60 * 60 * 1000; // 14 days from fixed base
+    mockEndTimestamp = Date.now() + 14 * 24 * 60 * 60 * 1000;
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ data: [] }),
     } as Response));
+    // Defaults for vi.fn() mocks — overridden per-test in withData describe
+    vi.mocked(usePurchaseFlow).mockReturnValue(disconnectedPurchaseFlow as never);
+    vi.mocked(useICOProgress).mockReturnValue({ data: undefined } as never);
+    vi.mocked(useICOBalance).mockReturnValue({ data: undefined } as never);
+    vi.mocked(useVestingSchedules).mockReturnValue({ data: undefined } as never);
+    vi.mocked(deriveAccountHash).mockReturnValue(null as never);
+    mockGet.mockResolvedValue(null);
   });
 
   afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
+    vi.clearAllMocks();
   });
 
   describe('rendering', () => {
@@ -193,6 +212,89 @@ describe('PrivateSaleActive', () => {
       );
 
       expect(container.firstChild).toHaveClass('custom-class');
+    });
+  });
+
+  describe('with connected wallet and data', () => {
+    const ACCOUNT_HASH = 'account-hash-deadbeef0011';
+    const now = new Date('2025-06-01T12:00:00Z').getTime();
+    const futureUnlock = now + 30 * 24 * 60 * 60 * 1000;
+    const vestingEnd = now + 90 * 24 * 60 * 60 * 1000;
+
+    beforeEach(() => {
+      // Keep fake timers active (set to 2025-06-01 by outer beforeEach) so that
+      // VestingProgressBlock treats futureUnlock (2025-07-01) as a future date.
+      vi.mocked(usePurchaseFlow).mockReturnValue({
+        isConnected: true,
+        account: { publicKey: '02deadbeef0011' } as never,
+        connect: vi.fn(),
+        clickRef: null as never,
+        balances: { cspr: 100, usdt: 500, usdc: 0, big: 0 },
+        balanceError: null,
+        balancesLoading: false,
+        csprPriceUsd: 0.05,
+        csprPriceStale: false,
+        handlePurchase: vi.fn(),
+        modalProps: null,
+        toastProps: null,
+        buyCspr: vi.fn(),
+      } as never);
+
+      vi.mocked(deriveAccountHash).mockReturnValue(ACCOUNT_HASH as never);
+
+      vi.mocked(useICOProgress).mockReturnValue({
+        data: {
+          tokensSold: '100000000000000000000000000',
+          totalAllocation: '750000000000000000000000000',
+          tokensRemaining: '650000000000000000000000000',
+          amountRaised: 100000,
+          hardCapUsd: 750000,
+          priceUsd: 0.001,
+          percentSold: 13.33,
+        },
+      } as never);
+
+      // Inject balance and vesting data synchronously so fake timers don't interfere
+      vi.mocked(useICOBalance).mockReturnValue({
+        data: {
+          tokensPurchased: '10000000000000000000000',
+          currentValue: 10,
+        },
+      } as never);
+
+      vi.mocked(useVestingSchedules).mockReturnValue({
+        data: {
+          data: [{
+            id: '1',
+            lockedAmount: 10000,
+            purchaseTimestamp: now - 10 * 24 * 60 * 60 * 1000,
+            unlockTimestamp: futureUnlock,
+            unlockedAmount: 0,
+            vestingEndTimestamp: vestingEnd,
+          }],
+        },
+      } as never);
+    });
+
+    it('shows UserTokenBalance when icoBalance has purchased tokens', () => {
+      renderWithRouter(
+        <PrivateSaleActive endTimestamp={mockEndTimestamp} />,
+      );
+      expect(screen.getByTestId('user-token-balance')).toBeInTheDocument();
+    });
+
+    it('shows VestingProgressBlock locked entry when vesting schedules exist', () => {
+      renderWithRouter(
+        <PrivateSaleActive endTimestamp={mockEndTimestamp} />,
+      );
+      expect(screen.getByText('Locked Tokens (1 entry)')).toBeInTheDocument();
+    });
+
+    it('shows progress bar from live ICO progress data', () => {
+      renderWithRouter(
+        <PrivateSaleActive endTimestamp={mockEndTimestamp} />,
+      );
+      expect(screen.getAllByTestId('progress-bar').length).toBeGreaterThan(0);
     });
   });
 });
