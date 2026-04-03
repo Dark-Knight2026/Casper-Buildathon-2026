@@ -462,6 +462,8 @@ pub async fn fetch_staking_info_snapshot(
     let rewards_per_year = fetch_rewards_per_year(tx.as_mut()).await?;
     let total_staked = fetch_total_staked(tx.as_mut()).await?;
 
+    tx.commit().await?;
+
     Ok(StakingInfoSnapshot {
         position,
         apy_data: ApyData {
@@ -523,6 +525,8 @@ pub async fn fetch_portfolio_snapshot(
     } else {
         None
     };
+
+    tx.commit().await?;
 
     Ok(PortfolioSnapshot {
         position,
