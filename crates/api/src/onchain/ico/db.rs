@@ -30,10 +30,10 @@ async fn fetch_current_schedule(
         IcoScheduleRow,
         r"
             SELECT sale_amount, price,
-                   (EXTRACT(EPOCH FROM NOW())::BIGINT BETWEEN start_timestamp AND end_timestamp) AS is_active
+                   (EXTRACT(EPOCH FROM NOW())::BIGINT * 1000 BETWEEN start_timestamp AND end_timestamp) AS is_active
             FROM ico_schedules
             ORDER BY
-                CASE WHEN EXTRACT(EPOCH FROM NOW())::BIGINT BETWEEN start_timestamp AND end_timestamp
+                CASE WHEN EXTRACT(EPOCH FROM NOW())::BIGINT * 1000 BETWEEN start_timestamp AND end_timestamp
                      THEN 0 ELSE 1 END,
                 block_height DESC, created_at DESC
             LIMIT 1
