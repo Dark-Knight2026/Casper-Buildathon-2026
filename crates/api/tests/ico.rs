@@ -28,7 +28,7 @@ async fn seed_ico_schedule(pool: &PgPool) {
             INSERT INTO ico_schedules
                 (schedule_id, start_timestamp, end_timestamp,
                  sale_amount, price, transaction_hash, block_height)
-            VALUES ('test-schedule', 0, 9999999999, $1, $2, 'deadbeef', 1)
+            VALUES ('test-schedule', 0, 9999999999000, $1, $2, 'deadbeef', 1)
         ",
     )
     .bind(ICO_TOTAL_ALLOCATION)
