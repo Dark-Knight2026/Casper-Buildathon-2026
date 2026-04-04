@@ -11,13 +11,11 @@
 import { Args } from 'casper-js-sdk';
 import type { Transaction } from 'casper-js-sdk';
 import logger from '@/lib/logger';
+import { ICO_CONFIG } from '@/constants/ico';
 import { createContractCallTransaction } from './casperClient';
 import { STAKING_ERROR_MAP } from './stakingErrors';
 
-// NOTE: Despite the name "CONTRACT_HASH", this env var must contain the
-// PACKAGE hash (not the contract instance hash), because isPackageHash=true
-// below tells the builder to call via byPackageHash(). Verify your .env.
-const STAKING_CONTRACT_HASH = import.meta.env.VITE_STAKING_CONTRACT_HASH ?? '';
+const STAKING_CONTRACT_HASH = ICO_CONFIG.CONTRACTS.stakingPackageHash;
 
 /** Gas estimate for withdraw_unbonded (2.5 CSPR in motes). */
 const GAS_WITHDRAW = 2_500_000_000n;

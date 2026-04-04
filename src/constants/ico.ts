@@ -20,7 +20,7 @@ export const ICO_CONFIG = {
     tokenAddress: import.meta.env.VITE_BIG_TOKEN_CONTRACT_HASH ?? '',
     treasuryAddress: import.meta.env.VITE_TREASURY_CONTRACT_HASH ?? '',
     vestingPackageHash: import.meta.env.VITE_VESTING_PACKAGE_HASH ?? '',
-    stakingPackageHash: import.meta.env.VITE_STAKING_PACKAGE_HASH ?? '',
+    stakingPackageHash: import.meta.env.VITE_STAKING_CONTRACT_HASH ?? '',
     // Package hashes — used for approve() transactions
     usdcAddress: import.meta.env.VITE_USDC_CONTRACT_HASH ?? '',
     usdtAddress: import.meta.env.VITE_USDT_CONTRACT_HASH ?? '',
