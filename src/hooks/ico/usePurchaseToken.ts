@@ -17,13 +17,17 @@ import {
   validatePurchase,
   calculateTokensReceived,
   fromRawAmount,
+  toRawAmount,
   parseContractError,
-  getDeployStatus,
 } from '@/services/ico/icoPurchaseService';
+import { csprCloudService } from '@/lib/blockchain/csprCloudService';
 import { ICO_CONFIG, getCurrencyRateUsd } from '@/constants/ico';
 import type { PaymentCurrency } from '@/types/ico';
 
 // ── Constants ────────────────────────────────────────────────────────
+
+/** Normalized BIG token hash for matching CSPR.Cloud responses */
+const BIG_TOKEN_HASH = ICO_CONFIG.CONTRACTS.tokenAddress.replace(/^hash-/, '').toLowerCase();
 
 // ICSPRClickSDK.send() 4th argument is in SECONDS (not milliseconds).
 const WALLET_SIGN_TIMEOUT_SEC = 300; // 5 minutes
@@ -36,6 +40,69 @@ const DEPLOY_POLL_INTERVAL_MS = 10_000; // 10 seconds
 const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 /**
+ * Safe BigInt parsing — returns null instead of throwing on invalid input.
+ * Handles: non-numeric strings, decimals ("1.5"), scientific notation ("1e18"), empty strings.
+ */
+function safeBigInt(raw: string): bigint | null {
+  // BigInt only accepts integer strings — strip any decimal part defensively
+  const intPart = raw.split('.')[0];
+  if (!intPart || !/^\d+$/.test(intPart)) return null;
+  try {
+    return BigInt(intPart);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Fetches BIG token transfer amount from CSPR.Cloud REST API.
+ * Uses `/ft-token-actions?deploy_hash={hash}` via Vite proxy.
+ * Retries up to `maxRetries` times with a delay to account for indexer lag.
+ */
+async function fetchActualTokensReceived(
+  deployHash: string,
+  maxRetries = 3,
+  retryDelayMs = 5000,
+): Promise<bigint | null> {
+  const outerSignal = AbortSignal.timeout(60_000);
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    if (outerSignal.aborted) return null;
+    try {
+      // Wait before querying — the indexer needs time to process the deploy
+      await delay(attempt === 1 ? 3000 : retryDelayMs);
+
+      const url = `/api/cspr-cloud/ft-token-actions?deploy_hash=${deployHash}`;
+      const resp = await fetch(url, {
+        signal: AbortSignal.any([outerSignal, AbortSignal.timeout(15_000)]),
+      });
+      if (!resp.ok) continue;
+
+      const json = await resp.json();
+
+      // CSPR.Cloud returns { data: [...] } with paginated results
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const items: any[] = json.data ?? (Array.isArray(json) ? json : []);
+
+      if (items.length === 0) continue;
+
+      // Find the BIG token transfer action
+      for (const item of items) {
+        const contractHash = String(item.contract_package_hash ?? item.contract_hash ?? '').toLowerCase();
+        if (contractHash === BIG_TOKEN_HASH) {
+          const rawAmount = String(item.amount ?? '');
+          const value = safeBigInt(rawAmount);
+          if (value !== null && value > 0n) return value;
+        }
+      }
+    } catch {
+      // ignore — retry on next attempt
+    }
+  }
+
+  return null;
+}
+
+/**
  * Polls getDeployStatus until the deploy is executed, failed, or times out.
  * Used to ensure the CEP-18 approval is on-chain before submitting the purchase.
  */
@@ -44,14 +111,13 @@ async function waitForDeployConfirmation(
 ): Promise<'executed' | 'failed' | 'timed-out'> {
   const deadline = Date.now() + APPROVAL_CONFIRMATION_TIMEOUT_MS;
   while (Date.now() < deadline) {
-    const { status } = await getDeployStatus(deployHash);
+    const { status } = await csprCloudService.getDeploy(deployHash);
     if (status === 'executed') return 'executed';
     if (status === 'failed') return 'failed';
     await delay(DEPLOY_POLL_INTERVAL_MS);
   }
   return 'timed-out';
 }
-
 // ── Types ───────────────────────────────────────────────────────────
 
 export type PurchaseStep =
@@ -109,6 +175,9 @@ export function usePurchaseToken(
 ): UsePurchaseTokenReturn {
   const [state, setState] = useState<PurchaseState>(initialState);
   const submittingRef = useRef(false);
+  // Tracks allowance from a completed approve tx so that a failed purchase
+  // doesn't force the user to re-approve (Odra CEP-18 on-chain query always fails).
+  const approvalCacheRef = useRef<{ currency: PaymentCurrency; rawAmount: bigint } | null>(null);
 
   const { onSuccess, onError, onApprovalNeeded } = options;
 
@@ -164,12 +233,19 @@ export function usePurchaseToken(
         // 2. Check approval and prepare transactions
         setState((prev) => ({ ...prev, step: 'checking-approval' }));
 
+        // Use cached allowance if we already approved this currency in the current session.
+        // The on-chain query fails for Odra CEP-18 contracts (different storage layout).
+        const cached = approvalCacheRef.current;
+        const cachedAllowance =
+          cached?.currency === currency ? cached.rawAmount : undefined;
+
         const { approvalNeeded, approvalTransaction, purchaseTransaction } =
           await preparePurchase({
             senderPublicKey: publicKey,
             senderAccountHash: accountHash,
             amount,
             currency,
+            cachedAllowance,
           });
 
         // 3. Handle approval if needed
@@ -196,6 +272,7 @@ export function usePurchaseToken(
           }
 
           const approvalTxHash = approvalResult.deployHash || approvalResult.transactionHash || '';
+          if (!approvalTxHash) throw new Error('Wallet did not return an approval transaction hash');
 
           setState((prev) => ({
             ...prev,
@@ -213,6 +290,14 @@ export function usePurchaseToken(
                 : 'Approval transaction failed on-chain',
             );
           }
+
+          // Cache the approved allowance so retries don't re-ask for approve.
+          // USDT/USDC always use 6 decimals; CSPR never reaches this branch.
+          const STABLECOIN_DECIMALS = 6;
+          approvalCacheRef.current = {
+            currency,
+            rawAmount: toRawAmount(amount, STABLECOIN_DECIMALS),
+          };
         }
 
         // 4. Sign and send purchase transaction
@@ -236,6 +321,7 @@ export function usePurchaseToken(
         }
 
         const purchaseTxHash = purchaseResult.deployHash || purchaseResult.transactionHash || '';
+        if (!purchaseTxHash) throw new Error('Wallet did not return a transaction hash');
 
         setState((prev) => ({
           ...prev,
@@ -243,11 +329,31 @@ export function usePurchaseToken(
           purchaseTxHash,
         }));
 
-        // 5. Calculate tokens received
-        const tokensRaw = calculateTokensReceived(amount, currency, tokenPriceUsd, csprPriceUsd);
-        const tokensReceived = fromRawAmount(tokensRaw, ICO_CONFIG.TOKEN.decimals);
+        // 5. Verify purchase deploy executed on-chain before fetching tokens
+        const purchaseStatus = await waitForDeployConfirmation(purchaseTxHash);
+        if (purchaseStatus !== 'executed') {
+          throw new Error(
+            purchaseStatus === 'timed-out'
+              ? 'Purchase transaction timed out — please try again'
+              : 'Purchase transaction failed on-chain',
+          );
+        }
 
-        // 6. Success!
+        // 6. Fetch actual tokens received via CSPR.Cloud REST API
+        let tokensReceived: string;
+        const actualTokens = await fetchActualTokensReceived(purchaseTxHash);
+
+        if (actualTokens !== null && actualTokens > 0n) {
+          tokensReceived = fromRawAmount(actualTokens, ICO_CONFIG.TOKEN.decimals);
+        } else {
+          // Fallback to local estimate if CSPR.Cloud indexer hasn't processed yet
+          const tokensRaw = calculateTokensReceived(amount, currency, tokenPriceUsd, csprPriceUsd);
+          tokensReceived = fromRawAmount(tokensRaw, ICO_CONFIG.TOKEN.decimals);
+        }
+
+        // 7. Success — clear approval cache; allowance was consumed by transfer_from.
+        approvalCacheRef.current = null;
+
         setState((prev) => ({
           ...prev,
           step: 'confirmed',
@@ -281,6 +387,7 @@ export function usePurchaseToken(
   const reset = useCallback(() => {
     setState(initialState);
     submittingRef.current = false;
+    approvalCacheRef.current = null;
   }, []);
 
   /**

@@ -1,13 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { TransactionHistory, Transaction } from '@/pages/ico/components/shared/TransactionHistory';
+import { TransactionHistory } from '@/pages/ico/components/shared/TransactionHistory';
+import type { ICOTransaction as Transaction } from '@/types/ico';
 
 const mockTransactions: Transaction[] = [
   {
     id: '1',
     type: 'purchase',
-    amount: 1500,
-    currency: 'USDC',
     tokensReceived: 1000000,
     tokenSymbol: 'BIG',
     status: 'completed',
@@ -17,8 +16,6 @@ const mockTransactions: Transaction[] = [
   {
     id: '2',
     type: 'purchase',
-    amount: 100,
-    currency: 'USDT',
     tokensReceived: 66666,
     tokenSymbol: 'BIG',
     status: 'pending',
@@ -28,8 +25,6 @@ const mockTransactions: Transaction[] = [
   {
     id: '3',
     type: 'claim',
-    amount: 500,
-    currency: 'USDC',
     tokensReceived: 333333,
     tokenSymbol: 'BIG',
     status: 'failed',
@@ -67,14 +62,6 @@ describe('TransactionHistory', () => {
 
       expect(screen.getAllByText('purchase')).toHaveLength(2);
       expect(screen.getByText('claim')).toBeInTheDocument();
-    });
-
-    it('should display transaction amounts', () => {
-      render(<TransactionHistory transactions={mockTransactions} />);
-
-      expect(screen.getByText('1,500 USDC')).toBeInTheDocument();
-      expect(screen.getByText('100 USDT')).toBeInTheDocument();
-      expect(screen.getByText('500 USDC')).toBeInTheDocument();
     });
 
     it('should display tokens received with + prefix', () => {
@@ -125,27 +112,11 @@ describe('TransactionHistory', () => {
     });
   });
 
-  describe('integration with MOCK_TRANSACTIONS', () => {
-    it('should render all statuses from MOCK_TRANSACTIONS', async () => {
-      const { MOCK_TRANSACTIONS } = await import('@/constants/ico');
-      const transactions: Transaction[] = MOCK_TRANSACTIONS.map(tx => ({
-        ...tx,
-        timestamp: new Date(tx.timestamp),
-      }));
-
-      render(<TransactionHistory transactions={transactions} />);
-
-      expect(screen.getByText('Failed')).toBeInTheDocument();
-      expect(screen.getByText('Pending')).toBeInTheDocument();
-      expect(screen.getByText('Completed')).toBeInTheDocument();
-    });
-
+  describe('status styling', () => {
     it('should render failed transaction with correct styling class', () => {
       const failedTx: Transaction[] = [{
         id: '1',
         type: 'purchase',
-        amount: 1500,
-        currency: 'USDC',
         tokensReceived: 1000000,
         tokenSymbol: 'BIG',
         status: 'failed',
@@ -163,8 +134,6 @@ describe('TransactionHistory', () => {
       const pendingTx: Transaction[] = [{
         id: '2',
         type: 'purchase',
-        amount: 100,
-        currency: 'USDC',
         tokensReceived: 66666,
         tokenSymbol: 'BIG',
         status: 'pending',

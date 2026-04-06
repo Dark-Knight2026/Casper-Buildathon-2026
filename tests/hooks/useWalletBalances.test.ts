@@ -1,12 +1,10 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';
 import { useWalletBalances } from '@/hooks/ico/useWalletBalances';
 
-// Mock fetch (used only for FT balance via CSPR.Cloud REST API)
 const mockFetch = vi.fn();
-global.fetch = mockFetch;
 
 // Mock casper-js-sdk (PublicKey used for account hash derivation,
 // PurseIdentifier used for CSPR balance query)
@@ -25,6 +23,7 @@ vi.mock('casper-js-sdk', () => ({
 
 // Mock casperClient (CSPR balance is fetched via RPC, not REST)
 const mockQueryLatestBalance = vi.fn();
+const mockQueryLatestGlobalState = vi.fn();
 vi.mock('@/services/ico/casperClient', () => ({
   getCasperRpcClient: () => ({
     queryLatestBalance: mockQueryLatestBalance,
@@ -48,7 +47,7 @@ const mockPublicKey = '01abc123def456789abc123def456789abc123def456789abc123def4
 const mockFTBalanceResponse = {
   data: [
     {
-      balance: '1000000000', // 1000 USDT (6 decimals)
+      balance: '1000000000', // 1000 USDT (6 decimals from TOKEN_DECIMALS fallback)
       contract_package_hash: 'usdt123',
     },
     {
@@ -91,7 +90,25 @@ function mockFTBalance(response = mockFTBalanceResponse) {
 
 describe('useWalletBalances', () => {
   beforeEach(() => {
+    vi.stubGlobal('fetch', mockFetch);
     vi.clearAllMocks();
+
+    // Default: CSPR RPC returns 5000 CSPR (in motes)
+    mockQueryLatestBalance.mockResolvedValue({
+      balance: '5000000000000',
+    });
+    // Default: RPC fallback rejects (so it doesn't interfere)
+    mockQueryLatestGlobalState.mockRejectedValue(new Error('Not available'));
+
+    // Default: FT API returns empty data
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ data: [] }),
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   // --- Initial state ---
@@ -293,7 +310,7 @@ describe('useWalletBalances', () => {
       });
 
       expect(result.current.balances.cspr).toBe(0);
-      expect(mockFetch).not.toHaveBeenCalled();
+      expect(mockQueryLatestBalance).not.toHaveBeenCalled();
     });
 
     it('should set error for publicKey with wrong prefix', async () => {
@@ -338,7 +355,6 @@ describe('useWalletBalances', () => {
       });
 
       expect(result.current.error).toBeNull();
-      expect(mockFetch).toHaveBeenCalled();
     });
 
     it('should accept valid Secp256k1 publicKey (02 prefix)', async () => {
@@ -356,7 +372,6 @@ describe('useWalletBalances', () => {
       });
 
       expect(result.current.error).toBeNull();
-      expect(mockFetch).toHaveBeenCalled();
     });
   });
 

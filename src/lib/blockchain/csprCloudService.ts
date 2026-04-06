@@ -268,13 +268,22 @@ export class CSPRCloudService {
     block_number?: number;
     error_message?: string;
   }> {
-    // Use proxy in both dev and prod (Vite proxy in dev, Vercel serverless in prod)
+    // Dev uses path format (/api/cspr-cloud/deploys/:hash) — handled by Vite proxy rewrite.
+    // Prod uses query format (/api/cspr-cloud?path=...) — Vercel routes to the serverless
+    // function directly; no /:path* rewrite needed in vercel.json for production.
     const proxyUrl = import.meta.env.DEV
       ? `/api/cspr-cloud/deploys/${deployHash}`
       : `/api/cspr-cloud?path=${encodeURIComponent(`deploys/${deployHash}`)}`;
 
     try {
-      const response = await fetch(proxyUrl);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15_000);
+      let response: Response;
+      try {
+        response = await fetch(proxyUrl, { signal: controller.signal });
+      } finally {
+        clearTimeout(timeoutId);
+      }
 
       if (!response.ok) {
         if (response.status === 404) {
@@ -284,21 +293,23 @@ export class CSPRCloudService {
         throw new Error(`Failed to fetch deploy: ${response.statusText}`);
       }
 
-      const data = await response.json();
+      const json = await response.json();
 
-      // Parse execution result
-      if (data.execution_results && data.execution_results.length > 0) {
-        const result = data.execution_results[0];
-        if (result.result?.Success) {
+      // CSPR Cloud API wraps the response in a `data` field:
+      // { "data": { "status": "processed", "error_message": null, ... } }
+      const deploy = json.data;
+
+      if (deploy) {
+        if (deploy.status === 'processed' && !deploy.error_message) {
           return {
             status: 'executed',
-            confirmations: 1,
-            block_number: result.block_height,
+            block_number: deploy.block_height,
           };
-        } else if (result.result?.Failure) {
+        }
+        if (deploy.error_message) {
           return {
             status: 'failed',
-            error_message: result.result.Failure.error_message,
+            error_message: deploy.error_message,
           };
         }
       }
@@ -312,29 +323,32 @@ export class CSPRCloudService {
 
   /**
    * Submit a signed deploy to the blockchain
-   * Uses CSPR.cloud REST API or direct RPC
+   * Routes through /api/casper-rpc proxy (Vite dev proxy → Vercel serverless in prod)
+   * to keep auth and RPC method allowlist enforcement consistent with all other RPC calls.
    */
   async submitDeploy(signedDeploy: { deploy: Record<string, unknown>; signature: string }): Promise<{
     deploy_hash: string;
   }> {
-    const rpcUrl = import.meta.env.VITE_CASPER_RPC_URL || 'https://node.testnet.casper.network/rpc';
-
     try {
       // Submit via JSON-RPC
-      const response = await fetch(rpcUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: 1,
-          method: 'account_put_deploy',
-          params: {
-            deploy: signedDeploy.deploy,
-          },
-        }),
-      });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30_000);
+      let response: Response;
+      try {
+        response = await fetch('/api/casper-rpc', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal: controller.signal,
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            method: 'account_put_deploy',
+            params: { deploy: signedDeploy.deploy },
+          }),
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
 
       if (!response.ok) {
         throw new Error(`RPC request failed: ${response.statusText}`);
@@ -366,7 +380,14 @@ export class CSPRCloudService {
       ? `/api/coingecko/simple/price?ids=casper-network&vs_currencies=${vsCurrencies}`
       : `/api/coingecko?ids=casper-network&vs_currencies=${vsCurrencies}`;
 
-    const response = await fetch(url);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10_000);
+    let response: Response;
+    try {
+      response = await fetch(url, { signal: controller.signal });
+    } finally {
+      clearTimeout(timeoutId);
+    }
     if (!response.ok) {
       throw new Error(`CoinGecko API error: ${response.status}`);
     }

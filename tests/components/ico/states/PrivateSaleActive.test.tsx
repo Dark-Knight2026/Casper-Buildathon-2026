@@ -1,6 +1,8 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import React from 'react';
 import { PrivateSaleActive } from '@/pages/ico/components/states/PrivateSaleActive';
 import { ICO_CONFIG } from '@/constants/ico';
 import type { ScheduleProgress } from '@/hooks/ico/useICOSchedules';
@@ -12,8 +14,8 @@ const mockProgress: ScheduleProgress = {
   tokensSold: 100000000,
   tokensRemaining: 650000000,
   amountRaised: 100000,
-  percentSold: 13.33,
   hardCapUsd: 750000,
+  percentSold: 13.33,
 };
 
 // Mock usePurchaseFlow hook to avoid csprclick-ui dependency
@@ -26,6 +28,14 @@ vi.mock('@/hooks/ico/usePurchaseFlow', () => ({
     handlePurchase: vi.fn(),
     modalProps: null,
     toastProps: null,
+    purchaseState: { step: 'idle', isProcessing: false, purchaseTxHash: null, tokensReceived: null, error: null },
+    pendingPurchase: null,
+    buyCspr: vi.fn(),
+    showConfirmModal: false,
+    showToast: false,
+    handleCloseModal: vi.fn(),
+    handleCloseToast: vi.fn(),
+    csprPriceUsd: 0,
   }),
 }));
 
@@ -49,8 +59,21 @@ vi.mock('@/pages/ico/components/shared/WalletCard', () => ({
   WalletCard: () => <div data-testid="wallet-card">Wallet Card</div>,
 }));
 
+vi.mock('@/pages/ico/components/shared/TransactionHistory', () => ({
+  TransactionHistory: () => <div data-testid="transaction-history">Transaction History</div>,
+}));
+
+vi.mock('@/pages/ico/components/shared/UserTokenBalance', () => ({
+  UserTokenBalance: () => <div data-testid="user-token-balance">User Token Balance</div>,
+}));
+
 const renderWithRouter = (ui: React.ReactElement) => {
-  return render(<BrowserRouter>{ui}</BrowserRouter>);
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={qc}>
+      <BrowserRouter>{ui}</BrowserRouter>
+    </QueryClientProvider>
+  );
 };
 
 describe('PrivateSaleActive', () => {
@@ -60,17 +83,22 @@ describe('PrivateSaleActive', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2025-06-01T12:00:00Z'));
     mockEndTimestamp = Date.now() + 14 * 24 * 60 * 60 * 1000; // 14 days from fixed base
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [] }),
+    } as Response));
   });
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.unstubAllGlobals();
   });
 
   describe('rendering', () => {
     it('should render the component with title', () => {
       renderWithRouter(<PrivateSaleActive endTimestamp={mockEndTimestamp} />);
 
-      expect(screen.getByText(`${ICO_CONFIG.TOKEN.symbol} Private Sale`)).toBeInTheDocument();
+      expect(screen.getByText('BIG Private Sale')).toBeInTheDocument();
     });
 
     it('should render the subtitle', () => {
@@ -109,6 +137,17 @@ describe('PrivateSaleActive', () => {
       expect(screen.getByTestId('wallet-card')).toBeInTheDocument();
     });
 
+    it('should not render user token balance when no completed purchases', () => {
+      renderWithRouter(<PrivateSaleActive endTimestamp={mockEndTimestamp} progress={mockProgress} />);
+
+      expect(screen.queryByTestId('user-token-balance')).not.toBeInTheDocument();
+    });
+
+    it('should render the transaction history', () => {
+      renderWithRouter(<PrivateSaleActive endTimestamp={mockEndTimestamp} />);
+
+      expect(screen.getByTestId('transaction-history')).toBeInTheDocument();
+    });
   });
 
   describe('private sale info display', () => {

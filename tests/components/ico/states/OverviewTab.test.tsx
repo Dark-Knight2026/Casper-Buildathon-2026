@@ -1,6 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import React from 'react';
 import { OverviewTab } from '@/pages/ico/components/states/OverviewTab';
 
 // Mock the child components
@@ -12,7 +14,7 @@ vi.mock('@/pages/ico/components/shared/Card', () => ({
 
 vi.mock('@/pages/ico/components/shared/TransactionHistory', () => ({
   TransactionHistory: () => <div data-testid="transaction-history">Transaction History</div>,
-  Transaction: {},
+  ICOTransaction: {},
 }));
 
 vi.mock('@/components/ui/chart', () => ({
@@ -21,6 +23,18 @@ vi.mock('@/components/ui/chart', () => ({
   ),
   ChartTooltip: () => <div data-testid="chart-tooltip" />,
   ChartTooltipContent: () => <div data-testid="chart-tooltip-content" />,
+}));
+
+vi.mock('@/hooks/ico/useICOWallet', () => ({
+  useICOWallet: () => ({
+    isConnected: false,
+    account: null,
+    isConnecting: false,
+    connect: vi.fn(),
+    disconnect: vi.fn(),
+    error: null,
+    clickRef: null,
+  }),
 }));
 
 vi.mock('recharts', () => ({
@@ -34,7 +48,12 @@ vi.mock('recharts', () => ({
 }));
 
 const renderWithRouter = (ui: React.ReactElement) => {
-  return render(<BrowserRouter>{ui}</BrowserRouter>);
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={qc}>
+      <BrowserRouter>{ui}</BrowserRouter>
+    </QueryClientProvider>
+  );
 };
 
 describe('OverviewTab', () => {

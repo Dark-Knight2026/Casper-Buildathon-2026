@@ -3,6 +3,7 @@ import { useICOState } from '@/hooks/ico/useICOState';
 import { useICOSchedules } from '@/hooks/ico/useICOSchedules';
 import { ICOHeader } from './components/ICOHeader';
 import { ICOFooter } from './components/ICOFooter';
+import { DevStateSelector } from './components/DevStateSelector';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { PageErrorBoundary } from '@/components/common/PageErrorBoundary';
 import { logger } from '@/utils/logger';
@@ -44,7 +45,7 @@ export function ICOPage() {
   const hasLoadedData = !isLoading && timestamps !== null;
 
   // Determine state based on timestamps from contract
-  const { state } = useICOState({
+  const { state, setDevState, isDevOverride } = useICOState({
     timestamps: hasLoadedData ? timestamps : undefined,
   });
 
@@ -56,6 +57,7 @@ export function ICOPage() {
     return (
       <ScrollArea className="h-screen overflow-hidden relative bg-[hsl(var(--ico-bg-primary))]">
         <ICOHeader />
+        <DevStateSelector currentState={state} onStateChange={setDevState} isDevOverride={isDevOverride} />
         <div className="min-h-[calc(100vh-112px)] flex flex-col justify-between">
           <main className="container h-full mx-auto px-4 py-8">
             <LoadingFallback />
@@ -71,9 +73,10 @@ export function ICOPage() {
     return (
       <ScrollArea className="h-screen overflow-hidden relative bg-[hsl(var(--ico-bg-primary))]">
         <ICOHeader />
+        <DevStateSelector currentState={state} onStateChange={setDevState} isDevOverride={isDevOverride} />
         <div className="min-h-[calc(100vh-112px)] flex flex-col justify-between">
           <main className="container h-full mx-auto px-4 py-8">
-            <div className="flex items-center justify-center min-h-[400px]">
+            <div className="flex items-center justify-center min-h-100">
               <div className="text-center">
                 <p className="text-red-500 mb-2">Failed to load ICO data</p>
                 <p className="text-[hsl(var(--ico-text-secondary))] text-sm">{error.message}</p>
@@ -123,6 +126,7 @@ export function ICOPage() {
         Skip to main content
       </a>
       <ICOHeader />
+      <DevStateSelector currentState={state} onStateChange={setDevState} isDevOverride={isDevOverride} />
       <div className="min-h-[calc(100vh-112px)] flex flex-col justify-between">
         <main className="container h-full mx-auto px-4 py-8">
             <PageErrorBoundary pageName="ICO">

@@ -23,7 +23,6 @@ import { ICO_CONFIG, getCurrencyRateUsd } from '@/constants/ico';
 import logger from '@/lib/logger';
 import {
   createContractCallTransaction,
-  getCasperRpcClient,
   getAccountMainPurseURef,
 } from './casperClient';
 import { loadProxyCallerWasm, createProxyCallerTransaction } from './proxyCallerService';
@@ -33,7 +32,6 @@ import type { PaymentCurrency } from '@/types/ico';
 
 // ── Constants ───────────────────────────────────────────────────────
 
-const ICO_HASH = ICO_CONFIG.CONTRACTS.icoAddress;
 const ICO_PACKAGE_HASH = ICO_CONFIG.CONTRACTS.icoPackageHash;
 const TOKEN_DECIMALS = ICO_CONFIG.TOKEN.decimals; // 18
 const STABLECOIN_DECIMALS = 6; // USDT/USDC typically use 6 decimals
@@ -43,7 +41,7 @@ const CSPR_DECIMALS = 9; // CSPR uses 9 decimals (motes)
 const GAS_COST = {
   APPROVE: 3_000_000_000n, // 3 CSPR for approve
   BUY_TOKENS_CSPR: 15_000_000_000n, // 15 CSPR for buy with CSPR (proxy_caller.wasm session code)
-  BUY_TOKENS_CEP18: 4_000_000_000n, // 4 CSPR for buy with tokens
+  BUY_TOKENS_CEP18: 12_000_000_000n, // 12 CSPR for buy with tokens (purchase + vesting schedule creation)
 };
 
 // ── Types ───────────────────────────────────────────────────────────
@@ -59,6 +57,12 @@ export interface PurchaseParams {
   currency: PaymentCurrency;
   /** ICO schedule ID (optional, defaults to current) */
   scheduleId?: bigint;
+  /**
+   * Cached allowance from a prior approve tx (raw units).
+   * Bypasses the on-chain query, which fails for Odra CEP-18 contracts
+   * because they use a different storage layout than standard CEP-18.
+   */
+  cachedAllowance?: bigint;
 }
 
 export interface PurchaseResult {
@@ -113,8 +117,6 @@ function getDecimals(currency: PaymentCurrency): number {
     case 'USDT':
     case 'USDC':
       return STABLECOIN_DECIMALS;
-    case 'CARD':
-      return 2; // Fiat cents
     default:
       return 18;
   }
@@ -144,8 +146,8 @@ export async function checkApprovalNeeded(
   amount: string,
   currency: PaymentCurrency,
 ): Promise<ApprovalCheckResult> {
-  // CSPR and CARD don't need approval
-  if (currency === 'CSPR' || currency === 'CARD') {
+  // CSPR doesn't need approval
+  if (currency === 'CSPR') {
     return { needed: false, currentAllowance: 0n, requiredAmount: 0n };
   }
 
@@ -157,20 +159,14 @@ export async function checkApprovalNeeded(
   const decimals = getDecimals(currency);
   const requiredAmount = toRawAmount(amount, decimals);
 
-  // Look up allowance using ICO_HASH (contract hash), while createApproveTransaction()
-  // grants allowance to ICO_PACKAGE_HASH. These are different Casper keys, so this
-  // lookup always returns 0 — but that has no practical impact: approve() is issued
-  // for the exact purchase amount and is fully consumed by the ICO's transfer_from()
-  // call, so allowance is 0 after every purchase regardless. The user explicitly signs
-  // every approve in the wallet modal, so there is no silent fund drain.
-  // Note: ICO_HASH and ICO_PACKAGE_HASH are intentionally separate env vars
-  // (VITE_ICO_CONTRACT_HASH vs VITE_ICO_PACKAGE_HASH) — both are needed because
-  // some Casper calls require the versioned contract hash and others require the package hash.
-  const icoContractKey = ICO_HASH.startsWith('hash-') ? ICO_HASH : `hash-${ICO_HASH}`;
+  // Check allowance using ICO_PACKAGE_HASH — the same key that createApproveTransaction()
+  // grants allowance to. This ensures we correctly detect existing allowances, so if a
+  // purchase fails after approve succeeds, the user doesn't need to re-approve.
+  const icoPackageKey = ICO_PACKAGE_HASH.startsWith('hash-') ? ICO_PACKAGE_HASH : `hash-${ICO_PACKAGE_HASH}`;
   const currentAllowance = await getAllowance(
     tokenContract,
     senderAccountHash,
-    icoContractKey,
+    icoPackageKey,
   );
 
   return {
@@ -239,10 +235,6 @@ export async function createPurchaseTransaction(
   currency: PaymentCurrency,
   mainPurseURef: string,
 ): Promise<Transaction> {
-  if (currency === 'CARD') {
-    throw new Error('CARD payments are handled via fiat on-ramp, not blockchain transaction');
-  }
-
   const decimals = getDecimals(currency);
   const rawAmount = toRawAmount(amount, decimals);
   const contractCurrency = paymentCurrencyToContractCurrency(
@@ -312,17 +304,26 @@ export async function createPurchaseTransaction(
 export async function preparePurchase(
   params: PurchaseParams,
 ): Promise<PurchaseResult> {
-  const { senderPublicKey, senderAccountHash, amount, currency } = params;
+  const { senderPublicKey, senderAccountHash, amount, currency, cachedAllowance } = params;
 
   // Fetch account's main purse URef (needed for Odra __cargo_purse)
   const mainPurseURef = await getAccountMainPurseURef(senderPublicKey);
 
-  // Check if approval is needed (for CEP-18 tokens)
-  const approvalCheck = await checkApprovalNeeded(
-    senderAccountHash,
-    amount,
-    currency,
-  );
+  // Check if approval is needed (for CEP-18 tokens).
+  // If cachedAllowance is provided (from a prior approve in the same session),
+  // skip the on-chain query — it fails for Odra CEP-18 contracts anyway.
+  let approvalCheck: ApprovalCheckResult;
+  if (cachedAllowance !== undefined) {
+    const decimals = getDecimals(currency);
+    const requiredAmount = toRawAmount(amount, decimals);
+    approvalCheck = {
+      needed: cachedAllowance < requiredAmount,
+      currentAllowance: cachedAllowance,
+      requiredAmount,
+    };
+  } else {
+    approvalCheck = await checkApprovalNeeded(senderAccountHash, amount, currency);
+  }
 
   let approvalTransaction: Transaction | undefined;
   if (approvalCheck.needed) {
@@ -350,21 +351,6 @@ export async function preparePurchase(
 
 // ── Transaction submission ───────────────────────────────────────────
 
-/**
- * Submits a signed transaction to the blockchain.
- * Returns the transaction hash.
- */
-export async function submitTransaction(
-  signedTransaction: Transaction,
-): Promise<string> {
-  const client = getCasperRpcClient();
-
-  const result = await client.putTransaction(signedTransaction);
-
-  logger.log('[icoPurchaseService] Transaction submitted:', result);
-  return result.transactionHash.toString();
-}
-
 // ── Contract error code mapping (from ico_schema.json) ──────────────
 
 const CONTRACT_ERROR_MAP: Record<string, string> = {
@@ -380,6 +366,9 @@ const CONTRACT_ERROR_MAP: Record<string, string> = {
   '59010': 'Invalid amount attached to transaction',
   '59011': 'Insufficient tokens available for sale',
   '59012': 'Purchase amount below minimum',
+  '59013': 'Invalid vesting duration in ICO schedule',
+  '59014': 'Vesting cliff exceeds total vesting duration',
+  '59015': 'Staking contract address not configured — contact support',
   '20000': 'Contract owner not configured',
   '20001': 'Unauthorized: caller is not the owner',
   '20003': 'Unauthorized: missing required role',
@@ -397,48 +386,6 @@ export function parseContractError(rawMessage?: string): string {
   return rawMessage;
 }
 
-/**
- * Gets the status of a submitted deploy.
- */
-export async function getDeployStatus(
-  deployHash: string,
-): Promise<{
-  status: 'pending' | 'executed' | 'failed';
-  errorMessage?: string;
-}> {
-  const client = getCasperRpcClient();
-
-  try {
-    const result = await client.getDeploy(deployHash);
-
-    // Check execution results from the raw JSON response
-    const execResults = result.rawJSON?.execution_results;
-    if (!execResults || execResults.length === 0) {
-      return { status: 'pending' };
-    }
-
-    // Check if execution was successful
-    const execResult = execResults[0]?.result;
-    if (execResult?.Success) {
-      return { status: 'executed' };
-    }
-
-    if (execResult?.Failure) {
-      return {
-        status: 'failed',
-        errorMessage: parseContractError(execResult.Failure.error_message),
-      };
-    }
-
-    return { status: 'pending' };
-  } catch (err) {
-    // Deploy not found yet = still pending
-    logger.warn('[icoPurchaseService] getDeployStatus error:', err);
-    return { status: 'pending' };
-  }
-}
-
-
 // ── Validation ──────────────────────────────────────────────────────
 
 /**
@@ -454,7 +401,7 @@ export function validatePurchase(
 ): { valid: boolean; error?: string } {
   const numAmount = parseFloat(amount);
 
-  if (isNaN(numAmount) || numAmount <= 0) {
+  if (isNaN(numAmount) || !isFinite(numAmount) || numAmount <= 0) {
     return { valid: false, error: 'Invalid amount' };
   }
 
@@ -502,7 +449,7 @@ export function calculateTokensReceived(
   csprRate?: number,
 ): bigint {
   const numAmount = parseFloat(amount);
-  if (isNaN(numAmount) || numAmount <= 0 || tokenPriceUsd <= 0) {
+  if (isNaN(numAmount) || !isFinite(numAmount) || numAmount <= 0 || tokenPriceUsd <= 0) {
     return 0n;
   }
 

@@ -3,7 +3,6 @@ import { Card } from './Card';
 
 interface UserTokenBalanceProps {
   tokensPurchased: number;
-  totalSpentUSD: number;
   tokenPrice: number;
   tokenSymbol: string;
   className?: string;
@@ -11,7 +10,6 @@ interface UserTokenBalanceProps {
 
 export function UserTokenBalance({
   tokensPurchased,
-  totalSpentUSD,
   tokenPrice,
   tokenSymbol,
   className,
@@ -31,14 +29,6 @@ export function UserTokenBalance({
             </span>
             <span className="text-2xl font-bold text-[hsl(var(--ico-text-primary))]">
               {tokensPurchased.toLocaleString()} {tokenSymbol}
-            </span>
-          </div>
-          <div className="flex flex-col gap-1">
-            <span className="text-sm text-[hsl(var(--ico-text-secondary))]">
-              Total Spent
-            </span>
-            <span className="text-2xl font-bold text-[hsl(var(--ico-text-primary))]">
-              ${totalSpentUSD.toLocaleString()}
             </span>
           </div>
           <div className="flex flex-col gap-1">

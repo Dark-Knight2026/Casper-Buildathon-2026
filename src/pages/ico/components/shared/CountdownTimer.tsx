@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, memo } from 'react';
-import { cn } from '@/lib/utils';
+import { cn, pluralize } from '@/lib/utils';
 import type { CountdownTime } from '@/types/ico';
 import { Card } from './Card';
 
@@ -118,7 +118,7 @@ export const CountdownTimer = memo(function CountdownTimer({
           {timeLeft.days > 0 && (
             <>
               <span className="text-xl font-semibold">{timeLeft.days}</span>
-              <span className="text-[hsl(var(--ico-timer-label))]">Days</span>
+              <span className="text-[hsl(var(--ico-timer-label))]">{pluralize(timeLeft.days, 'Day', 'Days')}</span>
             </>
           )}
           <div className='text-xl flex gap-1'>
@@ -135,10 +135,10 @@ export const CountdownTimer = memo(function CountdownTimer({
 
   // Default variant
   const timeUnits = [
-    { value: timeLeft.days, label: 'Days' },
-    { value: timeLeft.hours, label: 'Hours' },
-    { value: timeLeft.minutes, label: 'Minutes' },
-    { value: timeLeft.seconds, label: 'Seconds' },
+    { value: timeLeft.days, label: pluralize(timeLeft.days, 'Day', 'Days') },
+    { value: timeLeft.hours, label: pluralize(timeLeft.hours, 'Hour', 'Hours') },
+    { value: timeLeft.minutes, label: pluralize(timeLeft.minutes, 'Minute', 'Minutes') },
+    { value: timeLeft.seconds, label: pluralize(timeLeft.seconds, 'Second', 'Seconds') },
   ];
 
   return (

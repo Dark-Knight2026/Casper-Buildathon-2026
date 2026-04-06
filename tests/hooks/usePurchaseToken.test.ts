@@ -1,6 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderHook, act, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { renderHook, act } from '@testing-library/react';
 import { usePurchaseToken, getStepMessage } from '@/hooks/ico/usePurchaseToken';
+import { csprCloudService } from '@/lib/blockchain/csprCloudService';
 
 // Mock casper-js-sdk
 vi.mock('casper-js-sdk', () => ({
@@ -13,17 +14,26 @@ vi.mock('casper-js-sdk', () => ({
   },
 }));
 
+// Mock csprCloudService (used in waitForDeployConfirmation)
+vi.mock('@/lib/blockchain/csprCloudService', () => ({
+  csprCloudService: {
+    getDeploy: vi.fn().mockResolvedValue({ status: 'executed' }),
+  },
+}));
+
 // Mock purchase service
 const mockValidatePurchase = vi.fn();
 const mockPreparePurchase = vi.fn();
 const mockCalculateTokensReceived = vi.fn();
 const mockFromRawAmount = vi.fn();
+const mockToRawAmount = vi.fn();
 
 vi.mock('@/services/ico/icoPurchaseService', () => ({
   validatePurchase: (...args: unknown[]) => mockValidatePurchase(...args),
   preparePurchase: (...args: unknown[]) => mockPreparePurchase(...args),
   calculateTokensReceived: (...args: unknown[]) => mockCalculateTokensReceived(...args),
   fromRawAmount: (...args: unknown[]) => mockFromRawAmount(...args),
+  toRawAmount: (...args: unknown[]) => mockToRawAmount(...args),
   getDeployStatus: vi.fn().mockResolvedValue({ status: 'executed' }),
   parseContractError: (msg?: string) => {
     if (!msg) return 'Deploy failed';
@@ -43,6 +53,19 @@ vi.mock('@/constants/ico', () => ({
   ICO_CONFIG: {
     TOKEN: {
       decimals: 18,
+    },
+    CONTRACTS: {
+      tokenAddress: 'hash-f7d94fd8670fdc69aabd07c214ab8d52c3fc1fd839f0cc7713e1574cdfd899ec',
+      icoAddress: '',
+      icoPackageHash: '',
+      treasuryAddress: '',
+      usdcAddress: '',
+      usdtAddress: '',
+    },
+    CURRENCY_RATES: {
+      CSPR: 0.05,
+      USDT: 1,
+      USDC: 1,
     },
   },
   getCurrencyRateUsd: (currency: string, csprPriceUsd?: number) => {
@@ -73,7 +96,24 @@ const mockApprovalTransaction = {
 
 describe('usePurchaseToken', () => {
   beforeEach(() => {
+    vi.useFakeTimers();
     vi.clearAllMocks();
+
+    // vi.clearAllMocks() clears call history but NOT implementations — restore defaults explicitly.
+    // waitForDeployConfirmation calls getDeploy for both approval and purchase txs (R17-1 fix).
+    vi.mocked(csprCloudService.getDeploy).mockResolvedValue({ status: 'executed' });
+
+    // Mock global.fetch for fetchActualTokensReceived (called after purchase tx)
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({
+        data: [{
+          contract_package_hash: 'f7d94fd8670fdc69aabd07c214ab8d52c3fc1fd839f0cc7713e1574cdfd899ec',
+          amount: '1000000000000000000000',
+        }],
+      }),
+    }));
+
     mockValidatePurchase.mockReturnValue({ valid: true });
     mockPreparePurchase.mockResolvedValue({
       approvalNeeded: false,
@@ -82,11 +122,18 @@ describe('usePurchaseToken', () => {
     });
     mockCalculateTokensReceived.mockReturnValue(1000n);
     mockFromRawAmount.mockReturnValue('1000');
+    mockToRawAmount.mockReturnValue(100000000n); // 100 * 10^6
     mockClickRef.send.mockResolvedValue({
       deployHash: '0x123abc',
       cancelled: false,
       error: null,
     });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   // --- Initial state ---
@@ -166,7 +213,9 @@ describe('usePurchaseToken', () => {
       );
 
       await act(async () => {
-        await result.current.purchase('100', 'USDT', 1000);
+        const promise = result.current.purchase('100', 'USDT', 1000);
+        await vi.runAllTimersAsync();
+        await promise;
       });
 
       expect(result.current.state.step).toBe('confirmed');
@@ -182,7 +231,9 @@ describe('usePurchaseToken', () => {
       );
 
       await act(async () => {
-        await result.current.purchase('100', 'USDC', 1000);
+        const promise = result.current.purchase('100', 'USDC', 1000);
+        await vi.runAllTimersAsync();
+        await promise;
       });
 
       expect(mockPreparePurchase).toHaveBeenCalledWith({
@@ -213,7 +264,9 @@ describe('usePurchaseToken', () => {
       );
 
       await act(async () => {
-        await result.current.purchase('100', 'USDT', 1000);
+        const promise = result.current.purchase('100', 'USDT', 1000);
+        await vi.runAllTimersAsync();
+        await promise;
       });
 
       expect(onApprovalNeeded).toHaveBeenCalled();
@@ -240,6 +293,90 @@ describe('usePurchaseToken', () => {
 
       expect(result.current.state.step).toBe('failed');
       expect(result.current.state.error).toBe('Approval transaction was cancelled');
+    });
+
+    it('should fail if approval deploy fails on-chain', async () => {
+      vi.mocked(csprCloudService.getDeploy).mockResolvedValue({ status: 'failed' });
+      mockPreparePurchase.mockResolvedValue({
+        approvalNeeded: true,
+        approvalTransaction: mockApprovalTransaction,
+        purchaseTransaction: mockPurchaseTransaction,
+      });
+      mockClickRef.send.mockResolvedValueOnce({ deployHash: '0xapproval', cancelled: false });
+
+      const { result } = renderHook(() =>
+        usePurchaseToken(mockPublicKey, mockTokenPrice, mockClickRef as any)
+      );
+
+      await act(async () => {
+        const promise = result.current.purchase('100', 'USDT', 1000);
+        await vi.runAllTimersAsync();
+        await promise;
+      });
+
+      expect(result.current.state.step).toBe('failed');
+      expect(result.current.state.error).toBe('Approval transaction failed on-chain');
+    });
+
+    it('should fail if approval deploy times out waiting for on-chain confirmation', async () => {
+      vi.mocked(csprCloudService.getDeploy).mockResolvedValue({ status: 'pending' as any });
+      mockPreparePurchase.mockResolvedValue({
+        approvalNeeded: true,
+        approvalTransaction: mockApprovalTransaction,
+        purchaseTransaction: mockPurchaseTransaction,
+      });
+      mockClickRef.send.mockResolvedValueOnce({ deployHash: '0xapproval', cancelled: false });
+
+      const { result } = renderHook(() =>
+        usePurchaseToken(mockPublicKey, mockTokenPrice, mockClickRef as any)
+      );
+
+      await act(async () => {
+        const promise = result.current.purchase('100', 'USDT', 1000);
+        await vi.runAllTimersAsync();
+        await promise;
+      });
+
+      expect(result.current.state.step).toBe('failed');
+      expect(result.current.state.error).toBe('Approval transaction timed out — please try again');
+    });
+  });
+
+  // --- Purchase deploy on-chain failure paths ---
+
+  describe('purchase deploy on-chain failures', () => {
+    it('should fail with "failed on-chain" when purchase deploy status is failed', async () => {
+      vi.mocked(csprCloudService.getDeploy).mockResolvedValue({ status: 'failed' });
+
+      const { result } = renderHook(() =>
+        usePurchaseToken(mockPublicKey, mockTokenPrice, mockClickRef as any)
+      );
+
+      await act(async () => {
+        const promise = result.current.purchase('100', 'USDT', 1000);
+        await vi.runAllTimersAsync();
+        await promise;
+      });
+
+      expect(result.current.state.step).toBe('failed');
+      expect(result.current.state.error).toBe('Purchase transaction failed on-chain');
+    });
+
+    it('should fail with "timed out" when purchase deploy never confirms', async () => {
+      vi.mocked(csprCloudService.getDeploy).mockResolvedValue({ status: 'pending' as any });
+
+      const { result } = renderHook(() =>
+        usePurchaseToken(mockPublicKey, mockTokenPrice, mockClickRef as any)
+      );
+
+      await act(async () => {
+        const promise = result.current.purchase('100', 'USDT', 1000);
+        await vi.runAllTimersAsync();
+        await promise;
+      });
+
+      expect(result.current.state.step).toBe('failed');
+      expect(result.current.state.error).toBe('Purchase transaction timed out — please try again');
     });
   });
 
@@ -300,7 +437,9 @@ describe('usePurchaseToken', () => {
       );
 
       await act(async () => {
-        await result.current.purchase('100', 'USDT', 1000);
+        const promise = result.current.purchase('100', 'USDT', 1000);
+        await vi.runAllTimersAsync();
+        await promise;
       });
 
       expect(result.current.state.step).toBe('confirmed');

@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import type { ScheduleProgress } from '@/hooks/ico/useICOSchedules';
 import { ICO_CONFIG } from '@/constants/ico';
@@ -6,8 +7,11 @@ import { ProgressBar } from '../shared/ProgressBar';
 import { WalletCard } from '../shared/WalletCard';
 import { CountdownTimer } from '../shared/CountdownTimer';
 import { usePurchaseFlow } from '@/hooks/ico/usePurchaseFlow';
+import { useUserTokenActions } from '@/hooks/ico/useUserTokenActions';
 import { PurchaseConfirmationModal } from '../shared/PurchaseConfirmationModal';
 import { TransactionStatusToast } from '../shared/TransactionStatusToast';
+import { UserTokenBalance } from '../shared/UserTokenBalance';
+import { TransactionHistory } from '../shared/TransactionHistory';
 
 interface PrivateSaleActiveProps {
   className?: string;
@@ -30,11 +34,21 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: Private
     handlePurchase,
     modalProps,
     toastProps,
+    buyCspr,
   } = usePurchaseFlow({
     tokenPrice,
     tokenSymbol: ICO_CONFIG.TOKEN.symbol,
   });
 
+  const { transactions } = useUserTokenActions(account?.publicKey);
+
+  // Aggregate user balance from on-chain transactions (purchases only; claims are vesting unlocks)
+  const userBalance = useMemo(() => {
+    const tokensPurchased = transactions
+      .filter(tx => tx.type === 'purchase')
+      .reduce((sum, tx) => sum + tx.tokensReceived, 0);
+    return { tokensPurchased };
+  }, [transactions]);
 
   return (
     <div className={cn('max-w-5xl mx-auto', className)}>
@@ -89,12 +103,26 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: Private
           csprPriceStale={csprPriceStale}
           onConnect={connect}
           onPurchase={handlePurchase}
+          onBuyCspr={buyCspr}
           className="w-full"
         />
       </div>
 
-      {/* TODO: [Next PR] Wire UserTokenBalance to real per-user contract data */}
-      {/* TODO: [Next PR] Wire TransactionHistory to real on-chain transaction data */}
+      {/* User Token Balance - show when there are completed purchases */}
+      {progress && userBalance.tokensPurchased > 0 && (
+        <UserTokenBalance
+          tokensPurchased={userBalance.tokensPurchased}
+          tokenPrice={progress.priceUsd}
+          tokenSymbol={ICO_CONFIG.TOKEN.symbol}
+          className="mt-8"
+        />
+      )}
+
+      {/* Transaction History */}
+      <TransactionHistory
+        transactions={transactions}
+        className="mt-8 max-w-5xl"
+      />
 
       {/* Purchase Confirmation Modal */}
       {modalProps && (

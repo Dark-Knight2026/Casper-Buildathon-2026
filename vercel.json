@@ -5,10 +5,6 @@
       "destination": "/api/email"
     },
     {
-      "source": "/api/cspr-cloud",
-      "destination": "/api/cspr-cloud"
-    },
-    {
       "source": "/api/casper-rpc",
       "destination": "/api/casper-rpc"
     },
@@ -17,7 +13,7 @@
       "destination": "/api/coingecko"
     },
     {
-      "source": "/(.*)",
+      "source": "/((?!api/|docs/).*)",
       "destination": "/index.html"
     }
   ]

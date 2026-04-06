@@ -19,6 +19,7 @@ const mockConnect = vi.fn();
 const mockDisconnect = vi.fn();
 const mockPurchase = vi.fn();
 const mockResetPurchase = vi.fn();
+const mockRefetchBalances = vi.fn();
 
 const mockWalletState = {
   isConnected: false,
@@ -53,9 +54,9 @@ vi.mock('@/hooks/ico/useICOWallet', () => ({
 vi.mock('@/hooks/ico/useWalletBalances', () => ({
   useWalletBalances: () => ({
     balances: mockBalances,
-    error: null,
     isLoading: false,
-    refetch: vi.fn(),
+    error: null,
+    refetch: mockRefetchBalances,
   }),
 }));
 

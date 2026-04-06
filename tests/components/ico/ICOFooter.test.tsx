@@ -17,10 +17,10 @@ describe('ICOFooter', () => {
       expect(screen.getByText('Powered by Casper Network')).toBeInTheDocument();
     });
 
-    it('should display "CEP-18 Token Standard"', () => {
+    it('should display BIG Whitepaper link', () => {
       render(<ICOFooter />);
 
-      expect(screen.getByText('CEP-18 Token Standard')).toBeInTheDocument();
+      expect(screen.getByText('BIG Whitepaper')).toBeInTheDocument();
     });
   });
 

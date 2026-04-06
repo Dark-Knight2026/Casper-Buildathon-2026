@@ -1,10 +1,12 @@
 import { memo, useMemo } from 'react';
 import { Card } from '../shared/Card';
+import { Badge } from '@/components/ui/badge';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { TrendingUp, Clock, Percent, Wallet } from 'lucide-react';
 import { TransactionHistory } from '../shared/TransactionHistory';
-import { MOCK_TRANSACTIONS } from '@/constants/ico';
+import { useUserTokenActions } from '@/hooks/ico/useUserTokenActions';
+import { useICOWallet } from '@/hooks/ico/useICOWallet';
 import { MOCK_DASHBOARD, MOCK_STAKING_INFO, MOCK_EARNINGS_DATA, MOCK_PORTFOLIO } from '@/constants/icoMockData';
 import { formatNumber, formatUSD } from '../../utils/formatters';
 
@@ -16,6 +18,9 @@ const chartConfig = {
 };
 
 export const OverviewTab = memo(function OverviewTab() {
+  const { account } = useICOWallet();
+  const { transactions } = useUserTokenActions(account?.publicKey);
+
   const dashboardCards = useMemo(() => [
     {
       label: 'BIG Balance',
@@ -38,18 +43,37 @@ export const OverviewTab = memo(function OverviewTab() {
       icon: TrendingUp,
       color: 'var(--ico-card-rewards)',
     },
-    {
-      label: 'BIG Value',
-      value: MOCK_DASHBOARD.totalBig,
-      usdValue: MOCK_DASHBOARD.estimatedUsdcValue,
-      icon: TrendingUp,
-      color: 'var(--ico-card-total)',
-    },
   ], []);
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
+      {/* BIG Value */}
+      <Card className="p-5">
+        <div className="w-full flex flex-col md:flex-row md:items-center justify-between gap-3 md:gap-6">
+          <div className='flex flex-col md:flex-row gap-3 md:gap-6 md:items-center'>
+            <div
+              className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
+              style={{ backgroundColor: 'hsl(var(--ico-card-total) / 0.1)' }}
+            >
+              <TrendingUp className="w-5 h-5" style={{ color: 'hsl(var(--ico-card-total))' }} />
+            </div>
+            <div className="flex items-center gap-2">
+              <p className="text-sm md:text-xl text-[hsl(var(--ico-text-secondary))]">BIG Value</p>
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 whitespace-nowrap text-[hsl(var(--ico-text-muted))]">Demo Data</Badge>
+            </div>
+          </div>
+
+          <p className="text-xl font-bold text-[hsl(var(--ico-text-primary))]">
+            {formatNumber(MOCK_DASHBOARD.totalBig)}
+          </p>
+          <p className="text-sm md:text-xl text-[hsl(var(--ico-text-muted))]">
+            {formatUSD(MOCK_DASHBOARD.estimatedUsdcValue)}
+          </p>
+        </div>
+      </Card>
+
       {/* Main Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {dashboardCards.map((card) => {
           const Icon = card.icon;
           return (
@@ -65,7 +89,10 @@ export const OverviewTab = memo(function OverviewTab() {
                   />
                 </div>
                 <div>
-                  <p className="text-sm text-[hsl(var(--ico-text-secondary))] mb-1">{card.label}</p>
+                  <div className="flex items-center gap-2 mb-1">
+                    <p className="text-sm text-[hsl(var(--ico-text-secondary))]">{card.label}</p>
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 whitespace-nowrap text-[hsl(var(--ico-text-muted))]">Demo Data</Badge>
+                  </div>
                   <p className="text-xl font-bold text-[hsl(var(--ico-text-primary))]">
                     {formatNumber(card.value)}
                   </p>
@@ -84,9 +111,10 @@ export const OverviewTab = memo(function OverviewTab() {
         {/* Staking Info Card */}
         <Card className="p-5">
           <div className="w-full">
-            <h3 className="text-lg font-semibold text-[hsl(var(--ico-text-primary))] mb-4">
-              Staking Info
-            </h3>
+            <div className="flex items-center gap-2 mb-4">
+              <h3 className="text-lg font-semibold text-[hsl(var(--ico-text-primary))]">Staking Info</h3>
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 whitespace-nowrap text-[hsl(var(--ico-text-muted))]">Demo Data</Badge>
+            </div>
             <div className="space-y-4">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-lg bg-[hsl(var(--ico-brand-accent)/0.2)] flex items-center justify-center">
@@ -117,9 +145,10 @@ export const OverviewTab = memo(function OverviewTab() {
         {/* Earnings Overview Chart */}
         <Card className="p-5 md:col-span-2">
           <div className="w-full">
-            <h3 className="text-lg font-semibold text-[hsl(var(--ico-text-primary))] mb-4">
-              Earnings Overview
-            </h3>
+            <div className="flex items-center gap-2 mb-4">
+              <h3 className="text-lg font-semibold text-[hsl(var(--ico-text-primary))]">Earnings Overview</h3>
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 whitespace-nowrap text-[hsl(var(--ico-text-muted))]">Demo Data</Badge>
+            </div>
             <ChartContainer config={chartConfig} className="h-[200px] w-full">
               <AreaChart data={MOCK_EARNINGS_DATA} margin={{ left: 12, right: 12 }}>
                 <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="hsl(var(--ico-border-color))" />
@@ -158,9 +187,10 @@ export const OverviewTab = memo(function OverviewTab() {
         {/* Estimated Portfolio Value */}
         <Card className="p-5">
           <div className="w-full">
-            <h3 className="text-lg font-semibold text-[hsl(var(--ico-text-primary))] mb-4">
-              Estimated Portfolio Value
-            </h3>
+            <div className="flex items-center gap-2 mb-4">
+              <h3 className="text-lg font-semibold text-[hsl(var(--ico-text-primary))]">Estimated Portfolio Value</h3>
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 whitespace-nowrap text-[hsl(var(--ico-text-muted))]">Demo Data</Badge>
+            </div>
             <div className="space-y-2">
               <p className="text-3xl font-bold text-[hsl(var(--ico-text-primary))]">
                 {formatUSD(MOCK_PORTFOLIO.estimatedValue)}
@@ -174,7 +204,7 @@ export const OverviewTab = memo(function OverviewTab() {
         </Card>
 
         {/* Transactions Card */}
-        <TransactionHistory transactions={MOCK_TRANSACTIONS} className="md:col-span-2 p-5" />
+        <TransactionHistory transactions={transactions} className="md:col-span-2 p-5" />
       </div>
     </div>
   );

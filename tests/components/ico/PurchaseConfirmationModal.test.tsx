@@ -13,7 +13,7 @@ const idleState: PurchaseState = {
 };
 
 const processingState: PurchaseState = {
-  step: 'submitting-purchase',
+  step: 'purchase-pending',
   approvalTxHash: null,
   purchaseTxHash: null,
   tokensReceived: null,

@@ -86,7 +86,7 @@ export function DashboardTabs({
         className="flex flex-col w-full"
       >
         {/* Mobile: Dropdown Menu */}
-        <div className="md:hidden w-full pb-3 border-b border-[hsl(var(--ico-border-color))]">
+        <div className="lg:hidden w-full pb-3 border-b border-[hsl(var(--ico-border-color))]">
           <DropdownMenu>
             <DropdownMenuTrigger aria-label="Open tab menu" className="flex items-center justify-between w-full px-3 py-2 rounded-md bg-[hsl(var(--ico-bg-card))] border border-[hsl(var(--ico-border-color))] text-[hsl(var(--ico-text-primary))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ico-brand-primary))]/50">
               <span className="flex items-center gap-2">
@@ -122,7 +122,7 @@ export function DashboardTabs({
         </div>
 
         {/* Desktop: Original Tabs */}
-        <TabsList className="hidden md:block w-full">
+        <TabsList className="hidden lg:block w-full">
           <div
             ref={containerRef}
             className={cn('relative flex w-full pb-3', positionClasses[tabsPosition])}

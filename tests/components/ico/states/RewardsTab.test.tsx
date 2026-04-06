@@ -85,13 +85,11 @@ describe('RewardsTab', () => {
     });
   });
 
-  describe('transaction fee rewards chart', () => {
-    it('should render Transaction Fee Rewards section', () => {
+  describe('rewards chart', () => {
+    it('should render Your Rewards section', () => {
       renderWithRouter(<RewardsTab />);
 
-      // "Transaction Fee Rewards" appears multiple times
-      const elements = screen.getAllByText('Transaction Fee Rewards');
-      expect(elements.length).toBeGreaterThan(0);
+      expect(screen.getByText('Your Rewards')).toBeInTheDocument();
     });
 
     it('should render the chart container', () => {
@@ -114,34 +112,34 @@ describe('RewardsTab', () => {
       expect(screen.getByText('Rewards')).toBeInTheDocument();
     });
 
-    it('should display Transaction Fee Rewards item', () => {
+    it('should display Transaction Fee Distribution item', () => {
       renderWithRouter(<RewardsTab />);
 
-      // "Transaction Fee Rewards" appears multiple times (as section title and list item)
-      const transactionFeeRewards = screen.getAllByText('Transaction Fee Rewards');
-      expect(transactionFeeRewards.length).toBeGreaterThan(0);
-      expect(screen.getByText('Earn a share of 2% of LeaseFi transaction volume')).toBeInTheDocument();
+      expect(screen.getByText('Transaction Fee Distribution')).toBeInTheDocument();
     });
 
-    it('should display Referral Bonuses item', () => {
+    it('should display Staking Reserve Pool item', () => {
       renderWithRouter(<RewardsTab />);
 
-      expect(screen.getByText('Referral Bonuses')).toBeInTheDocument();
-      expect(screen.getByText('Earn rewards for referring new users to the platform')).toBeInTheDocument();
+      expect(screen.getByText('Staking Reserve Pool')).toBeInTheDocument();
     });
 
-    it('should display Long-Term Holder Bonuses item', () => {
+    it('should display Early Adopter Rewards item', () => {
       renderWithRouter(<RewardsTab />);
 
-      expect(screen.getByText('Long-Term Holder Bonuses')).toBeInTheDocument();
-      expect(screen.getByText('Unlock additional rewards by holding BIG tokens long term')).toBeInTheDocument();
+      expect(screen.getByText('Early Adopter Rewards')).toBeInTheDocument();
     });
 
-    it('should display Partner Rewards item', () => {
+    it('should display Realtor Performance Rewards item', () => {
       renderWithRouter(<RewardsTab />);
 
-      expect(screen.getByText('Partner Rewards')).toBeInTheDocument();
-      expect(screen.getByText('Earn from bringing new partners or businesses to LeaseFi')).toBeInTheDocument();
+      expect(screen.getByText('Realtor Performance Rewards')).toBeInTheDocument();
+    });
+
+    it('should display Referral & Community Rewards item', () => {
+      renderWithRouter(<RewardsTab />);
+
+      expect(screen.getByText('Referral & Community Rewards')).toBeInTheDocument();
     });
   });
 });

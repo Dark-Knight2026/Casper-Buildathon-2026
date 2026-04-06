@@ -1,23 +1,16 @@
+import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Card } from './Card';
+import { TablePagination } from './TablePagination';
 import { formatDateTime } from '../../utils/formatters';
-
-export interface ICOTransaction {
-  id: string;
-  type: 'purchase' | 'claim';
-  amount: number;
-  currency: string;
-  tokensReceived: number;
-  tokenSymbol: string;
-  status: 'pending' | 'completed' | 'failed';
-  timestamp: Date;
-  txHash?: string;
-}
+import type { ICOTransaction } from '@/types/ico';
 
 interface TransactionHistoryProps {
   transactions: ICOTransaction[];
   className?: string;
 }
+
+const PAGE_SIZE = 8;
 
 const STATUS_STYLES = {
   pending: 'text-yellow-800 dark:text-yellow-300 bg-yellow-400/10 dark:bg-yellow-900/30',
@@ -32,6 +25,12 @@ const STATUS_LABELS = {
 };
 
 export function TransactionHistory({ transactions, className }: TransactionHistoryProps) {
+  const [page, setPage] = useState(1);
+
+  const totalPages = Math.max(1, Math.ceil(transactions.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const paginatedTx = transactions.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
   const truncateHash = (hash: string) => {
     return `${hash.slice(0, 6)}...${hash.slice(-4)}`;
   };
@@ -50,49 +49,53 @@ export function TransactionHistory({ transactions, className }: TransactionHisto
             </p>
           </div>
         ) : (
-          // Semantic list structure for a11y (WCAG 1.3.1) — card-based layout uses ul/li instead of table
-          <ul aria-label="Transaction history" className="space-y-3 max-h-80 overflow-y-auto list-none p-0 m-0">
-            {transactions.map((tx) => (
-              <li
-                key={tx.id}
-                className="flex items-center justify-between p-3 rounded-md bg-[hsl(var(--ico-bg-secondary))] border border-[hsl(var(--ico-border-color))]"
-              >
-                <div className="flex flex-col gap-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-[hsl(var(--ico-text-primary))] capitalize">
-                      {tx.type}
-                    </span>
-                    <span
-                      className={cn(
-                        'text-xs px-2 py-0.5 rounded-full',
-                        STATUS_STYLES[tx.status]
+          <>
+            {/* Semantic list structure for a11y (WCAG 1.3.1) */}
+            <ul aria-label="Transaction history" className="space-y-3 list-none p-0 m-0">
+              {paginatedTx.map((tx) => (
+                <li
+                  key={tx.id}
+                  className="flex items-center justify-between p-3 rounded-md bg-[hsl(var(--ico-bg-secondary))] border border-[hsl(var(--ico-border-color))]"
+                >
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-[hsl(var(--ico-text-primary))] capitalize">
+                        {tx.type}
+                      </span>
+                      <span
+                        className={cn(
+                          'text-xs px-2 py-0.5 rounded-full',
+                          STATUS_STYLES[tx.status]
+                        )}
+                      >
+                        {STATUS_LABELS[tx.status]}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-[hsl(var(--ico-text-secondary))]">
+                      <span>{formatDateTime(tx.timestamp)}</span>
+                      {tx.txHash && (
+                        <>
+                          <span>•</span>
+                          <span className="font-mono">{truncateHash(tx.txHash)}</span>
+                        </>
                       )}
-                    >
-                      {STATUS_LABELS[tx.status]}
-                    </span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2 text-xs text-[hsl(var(--ico-text-secondary))]">
-                    <span>{formatDateTime(tx.timestamp)}</span>
-                    {tx.txHash && (
-                      <>
-                        <span>•</span>
-                        <span className="font-mono">{truncateHash(tx.txHash)}</span>
-                      </>
-                    )}
-                  </div>
-                </div>
 
-                <div className="text-right">
-                  <p className="text-sm font-medium text-[hsl(var(--ico-text-primary))]">
-                    +{tx.tokensReceived.toLocaleString()} {tx.tokenSymbol}
+                  <p className="text-sm font-medium text-[hsl(var(--ico-text-primary))] text-right">
+                    +{tx.tokensReceived.toLocaleString('en-US', { maximumFractionDigits: 2 })} {tx.tokenSymbol}
                   </p>
-                  <p className="text-xs text-[hsl(var(--ico-text-secondary))]">
-                    {tx.amount.toLocaleString()} {tx.currency}
-                  </p>
-                </div>
-              </li>
-            ))}
-          </ul>
+                </li>
+              ))}
+            </ul>
+
+            <TablePagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={setPage}
+              className="mt-4"
+            />
+          </>
         )}
       </div>
     </Card>

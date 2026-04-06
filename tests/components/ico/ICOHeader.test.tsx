@@ -54,7 +54,7 @@ describe('ICOHeader', () => {
       const logo = screen.getByRole('button', { name: 'Return to ICO overview' });
       const img = logo.querySelector('img');
       expect(img).toBeInTheDocument();
-      expect(img).toHaveAttribute('src', '/leaseFilogo2.png');
+      expect(img).toHaveAttribute('src', '/BIGLogoWB.png');
     });
   });
 
