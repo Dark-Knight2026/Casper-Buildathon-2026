@@ -119,7 +119,7 @@ impl HashType {
 ///
 /// # Errors
 ///
-/// Returns [`IndexerError::Database`](crate::error::IndexerError::Database)
+/// Returns [`IndexerError::Database`](IndexerError::Database)
 /// on SQL failures.
 #[inline]
 pub async fn upsert_contract_registry(
@@ -179,7 +179,7 @@ pub struct NewBlockchainEvent<'a> {
 ///
 /// # Errors
 ///
-/// Returns [`IndexerError::Database`](crate::error::IndexerError::Database)
+/// Returns [`IndexerError::Database`](IndexerError::Database)
 /// on SQL failures.
 #[inline]
 pub async fn insert_blockchain_event(
@@ -210,7 +210,7 @@ pub async fn insert_blockchain_event(
 ///
 /// # Errors
 ///
-/// Returns [`IndexerError::Database`](crate::error::IndexerError::Database)
+/// Returns [`IndexerError::Database`](IndexerError::Database)
 /// on SQL failures.
 #[inline]
 pub async fn mark_event_processed(
@@ -288,7 +288,7 @@ pub struct NewBlockchainTx<'a> {
 ///
 /// # Errors
 ///
-/// Returns [`IndexerError::Database`](crate::error::IndexerError::Database)
+/// Returns [`IndexerError::Database`](IndexerError::Database)
 /// on SQL failures.
 #[inline]
 pub async fn insert_blockchain_transaction(
@@ -351,7 +351,7 @@ pub enum BalanceUpdate<'a> {
 ///
 /// # Errors
 ///
-/// Returns [`IndexerError::Database`](crate::error::IndexerError::Database)
+/// Returns [`IndexerError::Database`](IndexerError::Database)
 /// if `amount` is not a valid decimal string or if the SQL fails.
 #[inline]
 pub async fn update_token_balance(
@@ -444,7 +444,7 @@ pub struct NewIcoPurchase<'a> {
 ///
 /// # Errors
 ///
-/// Returns [`IndexerError::Database`](crate::error::IndexerError::Database)
+/// Returns [`IndexerError::Database`](IndexerError::Database)
 /// on SQL failures.
 #[inline]
 pub async fn insert_ico_purchase(
@@ -501,7 +501,7 @@ pub struct NewIcoSchedule<'a> {
 ///
 /// # Errors
 ///
-/// Returns [`IndexerError::Database`](crate::error::IndexerError::Database)
+/// Returns [`IndexerError::Database`](IndexerError::Database)
 /// on SQL failures.
 #[inline]
 pub async fn upsert_ico_schedule(
@@ -576,7 +576,7 @@ pub struct NewVestingSchedule<'a> {
 ///
 /// # Errors
 ///
-/// Returns [`IndexerError::Database`](crate::error::IndexerError::Database)
+/// Returns [`IndexerError::Database`](IndexerError::Database)
 /// on SQL failures.
 #[inline]
 pub async fn upsert_vesting_schedule(
@@ -624,7 +624,7 @@ pub async fn upsert_vesting_schedule(
 ///
 /// # Errors
 ///
-/// Returns [`IndexerError::Database`](crate::error::IndexerError::Database)
+/// Returns [`IndexerError::Database`](IndexerError::Database)
 /// on SQL failures.
 #[inline]
 pub async fn update_vesting_claimed(
@@ -658,7 +658,7 @@ pub async fn update_vesting_claimed(
 ///
 /// # Errors
 ///
-/// Returns [`IndexerError::Database`](crate::error::IndexerError::Database)
+/// Returns [`IndexerError::Database`](IndexerError::Database)
 /// on SQL failures.
 #[inline]
 pub async fn is_vesting_claim_processed(
@@ -710,7 +710,7 @@ pub struct NewStakingEvent<'a> {
 ///
 /// # Errors
 ///
-/// Returns [`IndexerError::Database`](crate::error::IndexerError::Database)
+/// Returns [`IndexerError::Database`](IndexerError::Database)
 /// on SQL failures.
 #[inline]
 pub async fn insert_staking_event(
@@ -744,7 +744,7 @@ pub async fn insert_staking_event(
 ///
 /// # Errors
 ///
-/// Returns [`IndexerError::Database`](crate::error::IndexerError::Database)
+/// Returns [`IndexerError::Database`](IndexerError::Database)
 /// on SQL failures.
 #[inline]
 pub async fn upsert_staking_position_stake(
@@ -774,7 +774,7 @@ pub async fn upsert_staking_position_stake(
 ///
 /// # Errors
 ///
-/// Returns [`IndexerError::Database`](crate::error::IndexerError::Database)
+/// Returns [`IndexerError::Database`](IndexerError::Database)
 /// on SQL failures.
 #[inline]
 pub async fn update_staking_position_unstake(
@@ -814,7 +814,7 @@ pub async fn update_staking_position_unstake(
 ///
 /// # Errors
 ///
-/// Returns [`IndexerError::Database`](crate::error::IndexerError::Database)
+/// Returns [`IndexerError::Database`](IndexerError::Database)
 /// on SQL failures.
 #[inline]
 pub async fn update_staking_position_withdraw(
@@ -849,7 +849,7 @@ pub async fn update_staking_position_withdraw(
 ///
 /// # Errors
 ///
-/// Returns [`IndexerError::Database`](crate::error::IndexerError::Database)
+/// Returns [`IndexerError::Database`](IndexerError::Database)
 /// on SQL failures.
 #[inline]
 pub async fn update_staking_position_rewards(
@@ -908,7 +908,7 @@ pub struct NewStakingRewardDeposit<'a> {
 ///
 /// # Errors
 ///
-/// Returns [`IndexerError::Database`](crate::error::IndexerError::Database)
+/// Returns [`IndexerError::Database`](IndexerError::Database)
 /// on SQL failures.
 #[inline]
 pub async fn insert_staking_reward_deposit(
@@ -946,8 +946,8 @@ pub async fn insert_staking_reward_deposit(
 ///
 /// # Errors
 ///
-/// Returns [`IndexerError::Database`](crate::error::IndexerError::Database)
-/// on SQL failures, or [`IndexerError::Startup`](crate::error::IndexerError::Startup)
+/// Returns [`IndexerError::Database`](IndexerError::Database)
+/// on SQL failures, or [`IndexerError::Startup`](IndexerError::Startup)
 /// if the singleton row does not exist.
 #[inline]
 pub async fn update_global_reward_state(
@@ -998,7 +998,7 @@ pub async fn update_global_reward_state(
 ///
 /// # Errors
 ///
-/// Returns [`IndexerError::Database`](crate::error::IndexerError::Database)
+/// Returns [`IndexerError::Database`](IndexerError::Database)
 /// on SQL failures.
 #[inline]
 pub async fn update_staker_reward_snapshot(
