@@ -921,3 +921,91 @@ async fn staker_snapshot_idempotent(pool: PgPool) {
         "duplicate StakerSnapshot must not change reward_per_token_paid"
     );
 }
+
+const STAKING_DEPLOY_8: &str = "0000000000000000000000000000000000000000000000000000000000009008";
+const STAKING_DEPLOY_9: &str = "0000000000000000000000000000000000000000000000000000000000009009";
+
+// Same-block StakerSnapshot ---------------------------------------------------
+
+/// Two different `StakerSnapshot` deploys in the same block for the same staker
+/// must both be applied. The second snapshot carries the final state and must
+/// overwrite the first.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn staker_snapshot_same_block_different_deploy(pool: PgPool) {
+    common::disable_rls(&pool).await;
+
+    // Seed a staked position.
+    processor::process_event(
+        &pool,
+        &EventRegistry::new(),
+        &HashSet::new(),
+        &staking_event(
+            STAKING_DEPLOY_1,
+            "Staked",
+            json!({ "staker": FakeAddress::Buyer.as_str(), "amount": "10000" }),
+        ),
+    )
+    .await
+    .unwrap();
+
+    // First snapshot at block 500.
+    processor::process_event(
+        &pool,
+        &EventRegistry::new(),
+        &HashSet::new(),
+        &staking_event_at(
+            STAKING_DEPLOY_8,
+            "StakerSnapshot",
+            json!({
+                "staker": FakeAddress::Buyer.as_str(),
+                "staked_amount": "10000",
+                "pending_rewards": "100",
+                "reward_per_token_paid": "1000000000000000000"
+            }),
+            500,
+        ),
+    )
+    .await
+    .unwrap();
+
+    // Second snapshot at the SAME block 500 but different deploy.
+    processor::process_event(
+        &pool,
+        &EventRegistry::new(),
+        &HashSet::new(),
+        &staking_event_at(
+            STAKING_DEPLOY_9,
+            "StakerSnapshot",
+            json!({
+                "staker": FakeAddress::Buyer.as_str(),
+                "staked_amount": "10000",
+                "pending_rewards": "999",
+                "reward_per_token_paid": "5000000000000000000"
+            }),
+            500,
+        ),
+    )
+    .await
+    .unwrap();
+
+    let pos = sqlx::query!(
+        r"
+            SELECT pending_rewards, reward_per_token_paid
+            FROM staking_positions
+            WHERE staker_address = $1
+        ",
+        FakeAddress::Buyer.as_str(),
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(
+        pos.pending_rewards, "999",
+        "second same-block snapshot must overwrite the first"
+    );
+    assert_eq!(
+        pos.reward_per_token_paid, "5000000000000000000",
+        "second same-block snapshot must overwrite reward_per_token_paid"
+    );
+}

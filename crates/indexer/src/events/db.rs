@@ -1016,7 +1016,7 @@ pub async fn update_staker_reward_snapshot(
                 snapshot_block_height = $4,
                 last_updated_at = NOW()
             WHERE staker_address = $1
-              AND (snapshot_block_height IS NULL OR snapshot_block_height < $4)
+              AND (snapshot_block_height IS NULL OR snapshot_block_height <= $4)
         ",
         staker_address,
         pending_rewards,
