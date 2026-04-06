@@ -60,7 +60,7 @@ export function useBackendAuth(
       // eliminate the risk. Planned fix: migrate to HttpOnly + Secure + SameSite=Strict
       // cookies set by the backend (/api/v1/auth/login) and remove the token from the
       // JSON response body. Target date: Q2 2026.
-      // Tracked in: create a GitHub issue and replace this placeholder before merging to production
+      // Tracked in: https://github.com/obox-systems/2025_anthony_leasefi_frontend/issues/13
       localStorage.setItem(TOKEN_KEY, token);
       applyToken(token);
       setIsAuthenticated(true);
