@@ -94,7 +94,7 @@ export const RewardsTab = memo(function RewardsTab() {
               <div>
                 <p className="text-sm text-[hsl(var(--ico-text-secondary))]">Pending Rewards</p>
                 <p className="text-lg font-semibold text-[hsl(var(--ico-text-primary))]">
-                  {stakingInfo?.pendingRewards ?? 0}%
+                  {formatNumber(stakingInfo?.pendingRewards ?? 0)} BIG
                 </p>
               </div>
             </div>

@@ -15,6 +15,7 @@ export const MainButton = React.forwardRef<HTMLButtonElement, MainButtonProps>(
     return (
       <button
         ref={ref}
+        type={type}
         disabled={disabled || loading}
         className={cn(
           'relative px-6 py-3 bg-[hsl(var(--ico-form-button))]',
