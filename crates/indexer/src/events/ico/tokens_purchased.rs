@@ -140,6 +140,7 @@ impl IndexableEvent for TokensPurchased {
                 transaction_type: "token_purchase",
                 from_address: &buyer,
                 to_address: Some(ctx.contract_hash),
+                // Stores payment cost (CSPR/USDC), not BIG tokens received.
                 amount: Some(&self.cost),
                 currency: Some(self.currency.as_str()),
                 contract_hash: Some(ctx.contract_hash),
