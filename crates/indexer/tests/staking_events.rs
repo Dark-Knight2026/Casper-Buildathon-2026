@@ -488,6 +488,98 @@ async fn rewards_deposited_idempotent(pool: PgPool) {
     );
 }
 
+/// A single deploy emitting two `RewardsDeposited` events (distinct `transform_idx`)
+/// must insert **both** rows into `staking_reward_deposits` and update global
+/// reward state for each. The dedup key must include `transform_idx`.
+const STAKING_DEPLOY_10: &str =
+    "0000000000000000000000000000000000000000000000000000000000009010";
+
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn rewards_deposited_batch_deploy_both_recorded(pool: PgPool) {
+    common::disable_rls(&pool).await;
+
+    // First RewardsDeposited in the deploy (transform_idx = 0).
+    processor::process_event(
+        &pool,
+        &EventRegistry::new(),
+        &HashSet::new(),
+        &RawEvent {
+            contract_hash: "staking_contract_hash".to_owned(),
+            deploy_hash: STAKING_DEPLOY_10.to_owned(),
+            block_height: 500,
+            contract_type: ContractType::Staking,
+            event_name: "RewardsDeposited".to_owned(),
+            event_data: json!({
+                "caller": FakeAddress::ContractX.as_str(),
+                "amount": "50000",
+                "reward_per_token_stored": "1000000000000000000"
+            }),
+            block_timestamp: Some(Utc::now()),
+            transform_idx: Some(0),
+            api_from_type: None,
+            api_to_type: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    // Second RewardsDeposited in the SAME deploy (transform_idx = 1).
+    processor::process_event(
+        &pool,
+        &EventRegistry::new(),
+        &HashSet::new(),
+        &RawEvent {
+            contract_hash: "staking_contract_hash".to_owned(),
+            deploy_hash: STAKING_DEPLOY_10.to_owned(),
+            block_height: 500,
+            contract_type: ContractType::Staking,
+            event_name: "RewardsDeposited".to_owned(),
+            event_data: json!({
+                "caller": FakeAddress::ContractX.as_str(),
+                "amount": "75000",
+                "reward_per_token_stored": "3000000000000000000"
+            }),
+            block_timestamp: Some(Utc::now()),
+            transform_idx: Some(1),
+            api_from_type: None,
+            api_to_type: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let count: i64 = sqlx::query_scalar!(
+        r"
+            SELECT COUNT(*)
+            FROM staking_reward_deposits
+            WHERE transaction_hash = $1
+        ",
+        STAKING_DEPLOY_10,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap()
+    .unwrap_or(0);
+
+    assert_eq!(
+        count, 2,
+        "batch deploy with two RewardsDeposited must create two rows"
+    );
+
+    // Global reward state must reflect the latest (highest) value.
+    let global_reward_per_token: String = sqlx::query_scalar!(
+        r"SELECT reward_per_token_stored FROM staking_reward_state WHERE id = 1"
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(
+        global_reward_per_token, "3000000000000000000",
+        "global reward state must reflect the second deposit"
+    );
+}
+
 // RewardsClaimed handler ------------------------------------------------------
 
 /// `RewardsClaimed` must insert a staking event and update `total_rewards_claimed`.
