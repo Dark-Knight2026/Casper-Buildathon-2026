@@ -60,17 +60,19 @@ export default function PropertyLanding() {
   return (
     <div className="min-h-screen bg-secondary">
       {/* Hero Section */}
-      <section className="relative overflow-hidden pt-20 pb-32 bg-background border-b border-border">
+      <section className="relative overflow-hidden pt-20 pb-32 border-b border-border">
+        <div className="absolute inset-0" style={{ backgroundImage: "url('/images/ModernApartment.jpg')", backgroundRepeat: "no-repeat", backgroundSize: "cover", backgroundPosition: "30% center" }} />
+        <div className="absolute inset-0 bg-primary/75" />
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className={`text-center transition-all duration-1000 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}`}>
-            <Badge className="mb-4 bg-secondary text-secondary-foreground border-border">
+            <Badge className="mb-4 bg-white/20 text-white border-white/30">
               New Enhanced Features Available
             </Badge>
-            <h1 className="text-5xl md:text-7xl font-bold text-foreground mb-6 leading-tight">
+            <h1 className="text-5xl md:text-7xl font-bold text-white mb-6 leading-tight">
               Find Your{' '}
-              <span className="text-primary">Dream Home</span>
+              <span className="text-white/80">Dream Home</span>
             </h1>
-            <p className="text-xl md:text-2xl text-muted-foreground mb-8 max-w-3xl mx-auto leading-relaxed">
+            <p className="text-xl md:text-2xl text-white/70 mb-8 max-w-3xl mx-auto leading-relaxed">
               Discover the perfect property with our AI-powered platform. From cozy apartments to luxury estates,
               we make finding your next home effortless and exciting.
             </p>
@@ -80,7 +82,7 @@ export default function PropertyLanding() {
               <Button
                 onClick={() => navigate('/listings')}
                 size="lg"
-                className="px-8 py-4 bg-accent text-accent-foreground text-lg font-semibold rounded-md"
+                className="px-8 py-4 bg-white text-primary hover:bg-white/90 text-lg font-semibold rounded-md shadow-sm"
               >
                 <Search className="mr-2 h-5 w-5" />
                 Explore Properties
@@ -89,7 +91,7 @@ export default function PropertyLanding() {
               <Button
                 variant="outline"
                 size="lg"
-                className="px-8 py-4 bg-background text-foreground text-lg font-semibold rounded-md"
+                className="px-8 py-4 bg-transparent border-white text-white hover:bg-white/10 hover:text-white text-lg font-semibold rounded-md"
               >
                 <Play className="mr-2 h-5 w-5" />
                 Watch Demo
@@ -103,11 +105,11 @@ export default function PropertyLanding() {
                   key={index}
                   className={`text-center transition-all duration-700 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-5'}`}
                 >
-                  <div className="flex items-center justify-center mb-2 text-primary">
+                  <div className="flex items-center justify-center mb-2 text-white/80">
                     {stat.icon}
                   </div>
-                  <div className="text-3xl font-bold text-foreground mb-1">{stat.number}</div>
-                  <div className="text-muted-foreground font-medium">{stat.label}</div>
+                  <div className="text-3xl font-bold text-white mb-1">{stat.number}</div>
+                  <div className="text-white/60 font-medium">{stat.label}</div>
                 </div>
               ))}
             </div>
