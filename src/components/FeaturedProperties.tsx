@@ -125,7 +125,7 @@ export default function FeaturedProperties() {
         <Card
           key={property.id}
           className="group overflow-hidden hover:shadow-md transition-shadow duration-200 border border-border bg-card cursor-pointer rounded-md"
-          onClick={() => navigate(`/property/${property.id}`)}
+          onClick={() => navigate(`/properties/${property.id}`)}
         >
           <div className="relative overflow-hidden">
             <img
