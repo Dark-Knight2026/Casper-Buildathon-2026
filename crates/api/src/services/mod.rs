@@ -34,11 +34,11 @@ pub const AUTH_RATE_LIMIT_BURST: u32 = 15;
 ///
 /// # Rate limiter trust model
 ///
-/// Uses `SmartIpKeyExtractor` which trusts `X-Forwarded-For` unconditionally.
-/// **Deployment constraint**: this API MUST sit behind a trusted reverse proxy
-/// (e.g. Nginx, Cloudflare, ALB) that overwrites `X-Forwarded-For` with the
-/// real client IP. Direct exposure to the internet allows clients to spoof
-/// `X-Forwarded-For` and bypass per-IP rate limits.
+/// Uses the default `PeerIpKeyExtractor` which keys on the TCP peer address.
+/// Behind a reverse proxy all requests share the proxy's peer IP, collapsing
+/// all clients into a single rate-limit bucket. If per-client limiting is
+/// needed behind a proxy, switch to `SmartIpKeyExtractor` and ensure the proxy
+/// overwrites `X-Forwarded-For` with the real client IP.
 ///
 /// # Panics
 ///

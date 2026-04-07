@@ -491,8 +491,7 @@ async fn rewards_deposited_idempotent(pool: PgPool) {
 /// A single deploy emitting two `RewardsDeposited` events (distinct `transform_idx`)
 /// must insert **both** rows into `staking_reward_deposits` and update global
 /// reward state for each. The dedup key must include `transform_idx`.
-const STAKING_DEPLOY_10: &str =
-    "0000000000000000000000000000000000000000000000000000000000009010";
+const STAKING_DEPLOY_10: &str = "0000000000000000000000000000000000000000000000000000000000009010";
 
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn rewards_deposited_batch_deploy_both_recorded(pool: PgPool) {

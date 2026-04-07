@@ -345,13 +345,12 @@ async fn get_user(
 
 ### Deployment: Reverse Proxy Requirement
 
-The API rate limiter uses `SmartIpKeyExtractor` which trusts the
-`X-Forwarded-For` header unconditionally. **This API MUST be deployed
-behind a trusted reverse proxy** (e.g. Nginx, Cloudflare, ALB) that
-overwrites `X-Forwarded-For` with the real client IP.
-
-Direct exposure to the internet without a trusted proxy allows clients to
-spoof `X-Forwarded-For` and bypass all per-IP rate limits.
+The API rate limiter uses the default `PeerIpKeyExtractor` which keys on
+the TCP peer address. Behind a reverse proxy all requests share the proxy's
+peer IP, collapsing all clients into a single rate-limit bucket. If
+per-client limiting is needed behind a proxy, switch to
+`SmartIpKeyExtractor` and ensure the proxy overwrites `X-Forwarded-For`
+with the real client IP.
 
 ## 5. Performance Goals
 

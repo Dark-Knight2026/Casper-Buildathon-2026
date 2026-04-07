@@ -41,7 +41,7 @@ pub const PUBLIC_DATA_RATE_LIMIT_BURST: u32 = 30;
 /// - `GET /staking/{accountHash}/rewards-history` - daily rewards history
 ///
 ///
-/// Same `SmartIpKeyExtractor` trust model as [`crate::services::public_router`] - see its docs.
+/// Same `PeerIpKeyExtractor` trust model as [`crate::services::public_router`] - see its docs.
 ///
 /// # Panics
 ///
