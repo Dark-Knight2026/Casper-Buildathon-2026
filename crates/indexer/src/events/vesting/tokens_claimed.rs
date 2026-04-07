@@ -39,9 +39,11 @@ impl IndexableEvent for TokensClaimed {
     async fn process(&self, ctx: &mut EventContext<'_>) -> IndexerResult<()> {
         let beneficiary = address::normalize_casper_address(&self.beneficiary)?;
 
-        // Guard: skip if this deployment was already processed (replay/backfill).
+        // Guard: skip if this specific event was already processed (replay/backfill).
         // Without this check, replayed events would double-count claimed_amount.
-        if db::is_vesting_claim_processed(ctx.tx, ctx.deploy_hash).await? {
+        // Includes transform_idx so batch deploys with multiple TokensClaimed are
+        // distinguished correctly.
+        if db::is_vesting_claim_processed(ctx.tx, ctx.deploy_hash, ctx.transform_idx).await? {
             tracing::debug!(
                 deploy_hash = %ctx.deploy_hash,
                 "TokensClaimed already processed, skipping"

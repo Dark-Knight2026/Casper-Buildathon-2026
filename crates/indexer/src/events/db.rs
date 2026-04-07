@@ -652,9 +652,13 @@ pub async fn update_vesting_claimed(
     Ok(())
 }
 
-/// Check whether a `TokensClaimed` deploy has already been recorded in
+/// Check whether a `TokensClaimed` event has already been recorded in
 /// `blockchain_transactions`. Used as an idempotency guard to prevent
 /// double-counting `claimed_amount` on replays or backfills.
+///
+/// The check includes `transform_idx` so that batch deploys emitting
+/// `TokensClaimed` for multiple vesting schedules are distinguished
+/// correctly (matching the `blockchain_transactions` conflict target).
 ///
 /// # Errors
 ///
@@ -664,6 +668,7 @@ pub async fn update_vesting_claimed(
 pub async fn is_vesting_claim_processed(
     tx: &mut PgTransaction<'_>,
     deploy_hash: &str,
+    transform_idx: Option<i32>,
 ) -> IndexerResult<bool> {
     let exists: bool = sqlx::query_scalar!(
         r"
@@ -671,8 +676,10 @@ pub async fn is_vesting_claim_processed(
                 SELECT 1 FROM blockchain_transactions
                 WHERE transaction_hash = $1
                   AND transaction_type = 'vesting_tokens_claimed'
+                  AND COALESCE(transform_idx, 0) = COALESCE($2, 0)
         )",
         deploy_hash,
+        transform_idx,
     )
     .fetch_one(tx.as_mut())
     .await?
