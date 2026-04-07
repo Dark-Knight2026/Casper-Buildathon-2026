@@ -31,12 +31,12 @@ psql "$DATABASE_URL" -c "DROP INDEX CONCURRENTLY IF EXISTS idx_blockchain_tx_con
 echo "Creating composite indexes concurrently..."
 
 psql "$DATABASE_URL" -c "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_blockchain_tx_from_address
-    ON blockchain_transactions (from_address, block_number DESC NULLS LAST);"
+    ON blockchain_transactions (from_address, block_number DESC NULLS LAST, transform_idx DESC NULLS LAST);"
 
 psql "$DATABASE_URL" -c "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_blockchain_tx_to_address
-    ON blockchain_transactions (to_address, block_number DESC NULLS LAST);"
+    ON blockchain_transactions (to_address, block_number DESC NULLS LAST, transform_idx DESC NULLS LAST);"
 
 psql "$DATABASE_URL" -c "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_blockchain_tx_contract_hash
-    ON blockchain_transactions (contract_hash, block_number DESC NULLS LAST);"
+    ON blockchain_transactions (contract_hash, block_number DESC NULLS LAST, transform_idx DESC NULLS LAST);"
 
 echo "Done. Verify with: psql <DATABASE_URL> -c '\\di blockchain_transactions'"
