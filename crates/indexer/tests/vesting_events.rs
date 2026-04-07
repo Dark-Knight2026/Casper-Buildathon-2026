@@ -513,3 +513,102 @@ async fn tokens_claimed_idempotent(pool: PgPool) {
         "duplicate TokensClaimed must not double claimed_amount"
     );
 }
+
+/// A single deploy emitting `TokensClaimed` for two different vesting schedules
+/// (distinct `transform_idx`) must update **both** schedules. The dedup guard
+/// `is_vesting_claim_processed` must distinguish events by `transform_idx`, not
+/// just by deploy hash.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn tokens_claimed_batch_deploy_different_schedules(pool: PgPool) {
+    common::disable_rls(&pool).await;
+
+    // Seed two vesting schedules.
+    sqlx::query!(
+        r"
+            INSERT INTO vesting_schedules (vesting_id, beneficiary, whitelisted_creator, total_amount, start_timestamp, cliff_duration, vesting_duration, transaction_hash, block_height)
+            VALUES ('30', $1, $2, '50000', 100, 50, 100, $3, 100),
+                   ('31', $1, $2, '80000', 100, 50, 100, $3, 100)
+        ",
+        FakeAddress::Buyer.as_str(),
+        FakeAddress::ContractX.as_str(),
+        VESTING_DEPLOY_HASH,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let batch_deploy = "0000000000000000000000000000000000000000000000000000000000009902";
+
+    // First TokensClaimed in the deploy (transform_idx = 0) for schedule 30.
+    processor::process_event(
+        &pool,
+        &EventRegistry::new(),
+        &HashSet::new(),
+        &RawEvent {
+            contract_hash: "vesting_hash".to_owned(),
+            deploy_hash: batch_deploy.to_owned(),
+            block_height: 200,
+            contract_type: ContractType::Vesting,
+            event_name: "TokensClaimed".to_owned(),
+            event_data: json!({
+                "vesting_id": "30",
+                "beneficiary": FakeAddress::Buyer.as_str(),
+                "amount": "1000"
+            }),
+            block_timestamp: None,
+            transform_idx: Some(0),
+            api_from_type: None,
+            api_to_type: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    // Second TokensClaimed in the SAME deploy (transform_idx = 1) for schedule 31.
+    processor::process_event(
+        &pool,
+        &EventRegistry::new(),
+        &HashSet::new(),
+        &RawEvent {
+            contract_hash: "vesting_hash".to_owned(),
+            deploy_hash: batch_deploy.to_owned(),
+            block_height: 200,
+            contract_type: ContractType::Vesting,
+            event_name: "TokensClaimed".to_owned(),
+            event_data: json!({
+                "vesting_id": "31",
+                "beneficiary": FakeAddress::Buyer.as_str(),
+                "amount": "2000"
+            }),
+            block_timestamp: None,
+            transform_idx: Some(1),
+            api_from_type: None,
+            api_to_type: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let claimed_30: String = sqlx::query_scalar!(
+        r"SELECT claimed_amount FROM vesting_schedules WHERE vesting_id = '30'"
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    let claimed_31: String = sqlx::query_scalar!(
+        r"SELECT claimed_amount FROM vesting_schedules WHERE vesting_id = '31'"
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(
+        claimed_30, "1000",
+        "first schedule must have claimed_amount updated"
+    );
+    assert_eq!(
+        claimed_31, "2000",
+        "second schedule in the same deploy must also have claimed_amount updated"
+    );
+}
