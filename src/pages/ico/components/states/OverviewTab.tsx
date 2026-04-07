@@ -15,6 +15,7 @@ import { useVestingSchedules } from '@/hooks/ico/useVestingSchedules';
 import { useClaimTokens } from '@/hooks/ico/useClaimTokens';
 import { useUnbondingStatus } from '@/hooks/ico/useUnbondingStatus';
 import { useWithdrawUnbonded } from '@/hooks/ico/useWithdrawUnbonded';
+import { useICOProgress } from '@/hooks/ico/useICOProgress';
 import { deriveAccountHash } from '@/lib/blockchain/accountUtils';
 import { formatNumber, formatUSD } from '../../utils/formatters';
 import { ICO_CONFIG } from '@/constants/ico';
@@ -34,6 +35,7 @@ export const OverviewTab = memo(function OverviewTab() {
   const { data: stakingPortfolio } = useStakingPortfolio(accountHash);
   const { data: stakingInfo } = useStakingInfo(accountHash);
   const { data: vestingSchedules } = useVestingSchedules(accountHash);
+  const { data: icoProgress } = useICOProgress();
 
   const vestingEntries = useMemo<VestingEntry[]>(() => {
     if (!vestingSchedules?.data?.length) return [];
@@ -216,6 +218,7 @@ export const OverviewTab = memo(function OverviewTab() {
             claimingId={claimingId}
             claimStep={claimState.step}
             hasActiveUnbonding={!!(unbondingData?.unbondingAmount && !unbondingData.isWithdrawable)}
+            tokenPrice={icoProgress?.priceUsd}
           />
         </Card>
       )}
