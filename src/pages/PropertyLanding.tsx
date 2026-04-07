@@ -4,13 +4,12 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useNavigate } from 'react-router-dom';
 import FeaturedProperties from '@/components/FeaturedProperties';
-import { 
-  Search, 
-  MapPin, 
-  Home, 
-  TrendingUp, 
-  Shield, 
-  Users, 
+import {
+  Search,
+  Home,
+  TrendingUp,
+  Shield,
+  Users,
   Star,
   ChevronRight,
   Play,
@@ -30,28 +29,24 @@ export default function PropertyLanding() {
 
   const features = [
     {
-      icon: <Search className="h-8 w-8 text-blue-600" />,
+      icon: <Search className="h-8 w-8 text-primary" />,
       title: "Smart Property Search",
       description: "AI-powered search that understands your preferences and finds your perfect match.",
-      gradient: "from-blue-500 to-cyan-500"
     },
     {
-      icon: <Shield className="h-8 w-8 text-green-600" />,
+      icon: <Shield className="h-8 w-8 text-primary" />,
       title: "Secure Transactions",
       description: "Bank-level security with encrypted communications and verified listings.",
-      gradient: "from-green-500 to-emerald-500"
     },
     {
-      icon: <Users className="h-8 w-8 text-purple-600" />,
+      icon: <Users className="h-8 w-8 text-primary" />,
       title: "Expert Guidance",
       description: "Connect with top-rated agents and get professional advice every step of the way.",
-      gradient: "from-purple-500 to-pink-500"
     },
     {
-      icon: <TrendingUp className="h-8 w-8 text-orange-600" />,
+      icon: <TrendingUp className="h-8 w-8 text-primary" />,
       title: "Market Insights",
       description: "Real-time market data and analytics to make informed decisions.",
-      gradient: "from-orange-500 to-red-500"
     }
   ];
 
@@ -63,39 +58,38 @@ export default function PropertyLanding() {
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
+    <div className="min-h-screen bg-secondary">
       {/* Hero Section */}
-      <section className="relative overflow-hidden pt-20 pb-32">
-        <div className="absolute inset-0 bg-gradient-to-r from-blue-600/10 to-purple-600/10"></div>
+      <section className="relative overflow-hidden pt-20 pb-32 bg-background border-b border-border">
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className={`text-center transition-all duration-1000 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}`}>
-            <Badge className="mb-4 bg-blue-100 text-blue-800 border-blue-200 hover:bg-blue-200 transition-colors">
-              🎉 New Enhanced Features Available
+            <Badge className="mb-4 bg-secondary text-secondary-foreground border-border">
+              New Enhanced Features Available
             </Badge>
-            <h1 className="text-5xl md:text-7xl font-bold text-gray-900 mb-6 leading-tight">
-              Find Your
-              <span className="bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent"> Dream Home</span>
+            <h1 className="text-5xl md:text-7xl font-bold text-foreground mb-6 leading-tight">
+              Find Your{' '}
+              <span className="text-primary">Dream Home</span>
             </h1>
-            <p className="text-xl md:text-2xl text-gray-600 mb-8 max-w-3xl mx-auto leading-relaxed">
-              Discover the perfect property with our AI-powered platform. From cozy apartments to luxury estates, 
+            <p className="text-xl md:text-2xl text-muted-foreground mb-8 max-w-3xl mx-auto leading-relaxed">
+              Discover the perfect property with our AI-powered platform. From cozy apartments to luxury estates,
               we make finding your next home effortless and exciting.
             </p>
-            
+
             {/* CTA Buttons */}
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-12">
-              <Button 
+              <Button
                 onClick={() => navigate('/listings')}
                 size="lg"
-                className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white px-8 py-4 text-lg font-semibold rounded-xl shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200"
+                className="px-8 py-4 bg-accent text-accent-foreground text-lg font-semibold rounded-md"
               >
                 <Search className="mr-2 h-5 w-5" />
                 Explore Properties
                 <ArrowRight className="ml-2 h-5 w-5" />
               </Button>
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 size="lg"
-                className="border-2 border-gray-300 hover:border-blue-500 px-8 py-4 text-lg font-semibold rounded-xl hover:bg-blue-50 transition-all duration-200"
+                className="px-8 py-4 bg-background text-foreground text-lg font-semibold rounded-md"
               >
                 <Play className="mr-2 h-5 w-5" />
                 Watch Demo
@@ -105,15 +99,15 @@ export default function PropertyLanding() {
             {/* Stats */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-8 max-w-4xl mx-auto">
               {stats.map((stat, index) => (
-                <div 
-                  key={index} 
-                  className={`text-center transition-all duration-700 delay-${index * 100} ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-5'}`}
+                <div
+                  key={index}
+                  className={`text-center transition-all duration-700 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-5'}`}
                 >
-                  <div className="flex items-center justify-center mb-2 text-blue-600">
+                  <div className="flex items-center justify-center mb-2 text-primary">
                     {stat.icon}
                   </div>
-                  <div className="text-3xl font-bold text-gray-900 mb-1">{stat.number}</div>
-                  <div className="text-gray-600 font-medium">{stat.label}</div>
+                  <div className="text-3xl font-bold text-foreground mb-1">{stat.number}</div>
+                  <div className="text-muted-foreground font-medium">{stat.label}</div>
                 </div>
               ))}
             </div>
@@ -121,18 +115,18 @@ export default function PropertyLanding() {
         </div>
       </section>
 
-      {/* Featured Properties Section - MOVED ABOVE */}
-      <section className="py-20 bg-white">
+      {/* Featured Properties Section */}
+      <section className="py-20 bg-background border-b border-border">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
-            <Badge className="mb-4 bg-green-100 text-green-800 border-green-200">
-              ✨ Featured Listings
+            <Badge className="mb-4 bg-secondary text-secondary-foreground border-border">
+              Featured Listings
             </Badge>
-            <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-6">
-              Discover Amazing
-              <span className="bg-gradient-to-r from-green-600 to-blue-600 bg-clip-text text-transparent"> Properties</span>
+            <h2 className="text-4xl md:text-5xl font-bold text-foreground mb-6">
+              Discover Amazing{' '}
+              <span className="text-primary">Properties</span>
             </h2>
-            <p className="text-xl text-gray-600 max-w-3xl mx-auto">
+            <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
               Handpicked properties from our premium collection. Each listing is verified and comes with detailed insights.
             </p>
           </div>
@@ -140,36 +134,36 @@ export default function PropertyLanding() {
         </div>
       </section>
 
-      {/* Why Choose Our Platform Section - MOVED BELOW */}
-      <section className="py-20 bg-gradient-to-br from-gray-50 to-blue-50">
+      {/* Why Choose Our Platform Section */}
+      <section className="py-20 bg-secondary">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
-            <Badge className="mb-4 bg-purple-100 text-purple-800 border-purple-200">
-              🚀 Why Choose Us
+            <Badge className="mb-4 bg-background text-secondary-foreground border-border">
+              Why Choose Us
             </Badge>
-            <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-6">
-              Built for Modern
-              <span className="bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent"> Home Buyers</span>
+            <h2 className="text-4xl md:text-5xl font-bold text-foreground mb-6">
+              Built for Modern{' '}
+              <span className="text-primary">Home Buyers</span>
             </h2>
-            <p className="text-xl text-gray-600 max-w-3xl mx-auto">
+            <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
               Experience the future of real estate with cutting-edge technology and personalized service.
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
             {features.map((feature, index) => (
-              <Card 
-                key={index} 
-                className="group hover:shadow-2xl transition-all duration-300 border-0 bg-white/80 backdrop-blur-sm hover:bg-white hover:scale-105"
+              <Card
+                key={index}
+                className="bg-background border border-border rounded-md hover:shadow-md transition-shadow duration-200"
               >
                 <CardContent className="p-8 text-center">
-                  <div className={`w-16 h-16 mx-auto mb-6 rounded-2xl bg-gradient-to-r ${feature.gradient} flex items-center justify-center shadow-lg group-hover:shadow-xl transition-shadow duration-300`}>
+                  <div className="w-14 h-14 mx-auto mb-6 rounded-md bg-secondary flex items-center justify-center">
                     {feature.icon}
                   </div>
-                  <h3 className="text-xl font-bold text-gray-900 mb-4 group-hover:text-blue-600 transition-colors">
+                  <h3 className="text-lg font-semibold text-foreground mb-3">
                     {feature.title}
                   </h3>
-                  <p className="text-gray-600 leading-relaxed">
+                  <p className="text-sm text-muted-foreground leading-relaxed">
                     {feature.description}
                   </p>
                 </CardContent>
@@ -180,17 +174,17 @@ export default function PropertyLanding() {
       </section>
 
       {/* How It Works Section */}
-      <section className="py-20 bg-white">
+      <section className="py-20 bg-background border-t border-border">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
-            <Badge className="mb-4 bg-orange-100 text-orange-800 border-orange-200">
-              📋 Simple Process
+            <Badge className="mb-4 bg-secondary text-secondary-foreground border-border">
+              Simple Process
             </Badge>
-            <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-6">
-              How It
-              <span className="bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent"> Works</span>
+            <h2 className="text-4xl md:text-5xl font-bold text-foreground mb-6">
+              How It{' '}
+              <span className="text-primary">Works</span>
             </h2>
-            <p className="text-xl text-gray-600 max-w-3xl mx-auto">
+            <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
               Finding your dream home has never been easier. Follow these simple steps to get started.
             </p>
           </div>
@@ -201,30 +195,30 @@ export default function PropertyLanding() {
                 step: "01",
                 title: "Search & Discover",
                 description: "Use our advanced filters to find properties that match your criteria perfectly.",
-                icon: <Search className="h-8 w-8 text-blue-600" />
+                icon: <Search className="h-8 w-8 text-primary" />
               },
               {
-                step: "02", 
+                step: "02",
                 title: "Connect & Explore",
                 description: "Schedule viewings and connect with verified agents for expert guidance.",
-                icon: <Users className="h-8 w-8 text-green-600" />
+                icon: <Users className="h-8 w-8 text-primary" />
               },
               {
                 step: "03",
                 title: "Secure & Move",
                 description: "Complete secure transactions and get the keys to your new home.",
-                icon: <CheckCircle className="h-8 w-8 text-purple-600" />
+                icon: <CheckCircle className="h-8 w-8 text-primary" />
               }
             ].map((item, index) => (
               <div key={index} className="text-center relative">
-                <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-gradient-to-r from-blue-100 to-purple-100 flex items-center justify-center shadow-lg">
+                <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-secondary flex items-center justify-center">
                   {item.icon}
                 </div>
-                <div className="text-sm font-bold text-blue-600 mb-2">STEP {item.step}</div>
-                <h3 className="text-2xl font-bold text-gray-900 mb-4">{item.title}</h3>
-                <p className="text-gray-600 leading-relaxed">{item.description}</p>
+                <div className="text-sm font-bold text-primary mb-2">STEP {item.step}</div>
+                <h3 className="text-2xl font-bold text-foreground mb-4">{item.title}</h3>
+                <p className="text-muted-foreground leading-relaxed">{item.description}</p>
                 {index < 2 && (
-                  <ChevronRight className="hidden md:block absolute top-10 -right-4 h-8 w-8 text-gray-300" />
+                  <ChevronRight className="hidden md:block absolute top-10 -right-4 h-8 w-8 text-border" />
                 )}
               </div>
             ))}
@@ -233,27 +227,28 @@ export default function PropertyLanding() {
       </section>
 
       {/* CTA Section */}
-      <section className="py-20 bg-gradient-to-r from-blue-600 to-purple-600 text-white">
+      <section className="py-20 bg-primary text-primary-foreground">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h2 className="text-4xl md:text-5xl font-bold mb-6">
             Ready to Find Your Dream Home?
           </h2>
-          <p className="text-xl mb-8 opacity-90">
+          <p className="text-xl mb-8 opacity-80">
             Join thousands of satisfied customers who found their perfect property with us.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button 
+            <Button
               onClick={() => navigate('/listings')}
               size="lg"
-              className="bg-white text-blue-600 hover:bg-gray-100 px-8 py-4 text-lg font-semibold rounded-xl shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200"
+              variant="secondary"
+              className="px-8 py-4 text-lg font-semibold rounded-md"
             >
               <Search className="mr-2 h-5 w-5" />
               Start Your Search
             </Button>
-            <Button 
+            <Button
               variant="outline"
-              size="lg" 
-              className="border-2 border-white text-white hover:bg-white hover:text-blue-600 px-8 py-4 text-lg font-semibold rounded-xl transition-all duration-200"
+              size="lg"
+              className="px-8 py-4 text-lg font-semibold rounded-md border-primary-foreground/50 text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground"
             >
               <Clock className="mr-2 h-5 w-5" />
               Schedule Consultation
