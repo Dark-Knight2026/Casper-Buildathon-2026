@@ -69,11 +69,12 @@ export class ApiClient {
     const timeout = options.timeout || this.timeout;
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);
+    const signals = [controller.signal, options.signal].filter(Boolean) as AbortSignal[];
 
     try {
       const response = await fetch(url, {
         ...options,
-        signal: controller.signal,
+        signal: AbortSignal.any(signals),
       });
       clearTimeout(timeoutId);
       return response;
