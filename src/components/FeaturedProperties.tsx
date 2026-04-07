@@ -3,11 +3,11 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useNavigate } from 'react-router-dom';
-import { 
-  MapPin, 
-  Bed, 
-  Bath, 
-  Square, 
+import {
+  MapPin,
+  Bed,
+  Bath,
+  Square,
   Heart,
   Camera,
   TrendingUp,
@@ -19,8 +19,8 @@ export default function FeaturedProperties() {
   const [favorites, setFavorites] = useState<number[]>([]);
 
   const toggleFavorite = (id: number) => {
-    setFavorites(prev => 
-      prev.includes(id) 
+    setFavorites(prev =>
+      prev.includes(id)
         ? prev.filter(fav => fav !== id)
         : [...prev, id]
     );
@@ -120,100 +120,94 @@ export default function FeaturedProperties() {
   ];
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-      {featuredProperties.map((property, index) => (
-        <Card 
-          key={property.id} 
-          className="group overflow-hidden hover:shadow-2xl transition-all duration-300 border-0 bg-white hover:scale-105 cursor-pointer"
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      {featuredProperties.map((property) => (
+        <Card
+          key={property.id}
+          className="group overflow-hidden hover:shadow-md transition-shadow duration-200 border border-border bg-card cursor-pointer rounded-md"
           onClick={() => navigate(`/property/${property.id}`)}
         >
           <div className="relative overflow-hidden">
-            <img 
-              src={property.image} 
+            <img
+              src={property.image}
               alt={property.title}
-              className="w-full h-64 object-cover group-hover:scale-110 transition-transform duration-300"
+              className="w-full h-56 object-cover"
             />
-            
+
             {/* Status Badge */}
-            <Badge className="absolute top-3 left-3 bg-green-600 text-white shadow-lg">
+            <Badge variant="success" className="absolute top-3 left-3 shadow-sm">
               {property.status}
             </Badge>
-            
-            {/* Price Change Indicator */}
-            <Badge className="absolute top-3 right-3 bg-blue-600 text-white shadow-lg flex items-center">
-              <TrendingUp className="h-3 w-3 mr-1" />
+
+            {/* Price Change */}
+            <Badge variant="info" className="absolute top-3 right-3 shadow-sm flex items-center gap-1">
+              <TrendingUp className="h-3 w-3" />
               {property.priceChange}
             </Badge>
-            
+
             {/* Photo Count */}
-            <div className="absolute bottom-3 left-3 bg-black/70 text-white px-2 py-1 rounded-md text-xs flex items-center">
-              <Camera className="h-3 w-3 mr-1" />
+            <div className="absolute bottom-3 left-3 bg-black/60 text-white px-2 py-1 rounded text-xs flex items-center gap-1">
+              <Camera className="h-3 w-3" />
               {property.photos}
             </div>
-            
+
             {/* Favorite Button */}
             <Button
               variant="ghost"
               size="sm"
-              className="absolute bottom-3 right-3 bg-white/90 hover:bg-white p-2 rounded-full shadow-lg"
+              className="absolute bottom-3 right-3 bg-card/90 hover:bg-card p-2 rounded-full shadow-sm h-8 w-8"
               onClick={(e) => {
                 e.stopPropagation();
                 toggleFavorite(property.id);
               }}
             >
-              <Heart 
+              <Heart
                 className={`h-4 w-4 ${
-                  favorites.includes(property.id) 
-                    ? 'fill-red-500 text-red-500' 
-                    : 'text-gray-600'
-                }`} 
+                  favorites.includes(property.id)
+                    ? 'fill-red-500 text-red-500'
+                    : 'text-muted-foreground'
+                }`}
               />
             </Button>
           </div>
-          
-          <CardContent className="p-6">
-            <div className="flex items-start justify-between mb-3">
-              <div className="flex-1">
-                <h3 className="font-bold text-xl text-gray-900 mb-2 group-hover:text-blue-600 transition-colors">
-                  {property.title}
-                </h3>
-                <p className="text-gray-600 text-sm flex items-center mb-3">
-                  <MapPin className="h-4 w-4 mr-1 flex-shrink-0" />
-                  {property.address}
-                </p>
-              </div>
-            </div>
-            
+
+          <CardContent className="p-5">
+            <h3 className="font-semibold text-lg text-foreground mb-1 group-hover:text-primary transition-colors">
+              {property.title}
+            </h3>
+            <p className="text-muted-foreground text-sm flex items-center gap-1 mb-4">
+              <MapPin className="h-4 w-4 shrink-0" />
+              {property.address}
+            </p>
+
             <div className="flex items-center justify-between mb-4">
-              <div className="text-3xl font-bold text-blue-600">
+              <div className="text-2xl font-bold text-primary">
                 ${property.price.toLocaleString()}
               </div>
-              <div className="flex items-center text-sm text-gray-600">
-                <Star className="h-4 w-4 text-yellow-500 mr-1" />
+              <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                <Star className="h-4 w-4 text-yellow-500" />
                 {property.rating}
               </div>
             </div>
-            
-            <div className="flex items-center justify-between text-sm text-gray-600 mb-4">
-              <span className="flex items-center">
-                <Bed className="h-4 w-4 mr-1" />
+
+            <div className="flex items-center justify-between text-sm text-muted-foreground mb-4 border-t border-border pt-4">
+              <span className="flex items-center gap-1">
+                <Bed className="h-4 w-4" />
                 {property.bedrooms} bed
               </span>
-              <span className="flex items-center">
-                <Bath className="h-4 w-4 mr-1" />
+              <span className="flex items-center gap-1">
+                <Bath className="h-4 w-4" />
                 {property.bathrooms} bath
               </span>
-              <span className="flex items-center">
-                <Square className="h-4 w-4 mr-1" />
+              <span className="flex items-center gap-1">
+                <Square className="h-4 w-4" />
                 {property.sqft.toLocaleString()} sqft
               </span>
             </div>
-            
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-gray-500">
-                {property.daysOnMarket} days on market
-              </span>
-              <span className="text-xs font-medium text-gray-700">
+
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>{property.daysOnMarket} days on market</span>
+              <span className="font-medium text-foreground">
                 ${Math.round(property.price / property.sqft)}/sqft
               </span>
             </div>
