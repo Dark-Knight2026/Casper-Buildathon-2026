@@ -127,6 +127,10 @@ pub async fn process_event(
             // Event deferred to backfill - roll back so nothing is persisted.
             // Backfill runs once at startup; events deferred after backfill
             // completes will not be re-processed until the next indexer restart.
+            //
+            // xxx: implement a deferred-event retry queue or periodic backfill
+            // re-runs so that deferred events are picked up within a bounded
+            // window (see backfill/ico.rs doc comment for details).
             tracing::warn!(
                 deploy = %raw.deploy_hash,
                 event = %raw.event_name,

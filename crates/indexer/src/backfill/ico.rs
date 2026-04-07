@@ -15,6 +15,11 @@
 //! window, `GET /ico/balance` may show zero for a live purchase.
 //! Mitigation: periodic backfill re-runs or a deferred-event retry queue
 //! (not yet implemented).
+//!
+//! xxx: open a tracking issue for the deferred-event retry queue and link it
+//! here. Until resolved, `GET /ico/balance` may silently return zero for
+//! purchases made during the gap window between backfill completion and
+//! the next indexer restart.
 
 use core::time::Duration;
 use std::collections::HashMap;
