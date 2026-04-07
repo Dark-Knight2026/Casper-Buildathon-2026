@@ -162,6 +162,15 @@ pub async fn login(
     // Atomically consume nonce from Redis (one-time use via GETDEL).
     // This prevents replay attacks and eliminates the TOCTOU race window
     // that existed with separate GET + DEL commands.
+    //
+    // Threat-model tradeoff: consuming the nonce before signature verification
+    // means an attacker who knows a wallet address can call `/auth/login` with
+    // a garbage signature to invalidate the legitimate user's nonce. The user
+    // must then request a new nonce and retry. This is an accepted trade-off:
+    // TOCTOU elimination is more critical than the nonce-invalidation vector,
+    // because TOCTOU allows actual replay attacks while nonce-DoS only causes
+    // a retry. Mitigation: rate-limit failed login attempts per wallet address.
+    // xxx: add per-wallet rate-limit on failed logins to cap nonce-DoS impact
     let stored_nonce = state
         .redis
         .take_nonce(&wallet_address)
