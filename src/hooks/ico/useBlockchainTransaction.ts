@@ -163,7 +163,7 @@ export function useBlockchainTransaction<TArgs extends unknown[] = []>(
       } catch (err) {
         if (abortController.signal.aborted) return;
         const error = parseErrorRef.current(err instanceof Error ? err.message : undefined);
-        setState({ step: 'failed', txHash: null, error, isProcessing: false });
+        setState((prev) => ({ step: 'failed', txHash: prev.txHash, error, isProcessing: false }));
         onError?.(error);
       } finally {
         submittingRef.current = false;
