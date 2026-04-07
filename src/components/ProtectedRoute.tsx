@@ -16,8 +16,10 @@ export default function ProtectedRoute({ children, allowedRoles }: ProtectedRout
     return <LoadingSpinner fullScreen />;
   }
 
-  // Redirect to login if not authenticated (Supabase session or wallet JWT)
+  // If there's a JWT token in storage, trust it while profile hydrates
+  const hasStoredToken = !!localStorage.getItem('leasefi_jwt');
   if (!isAuthenticated || !profile) {
+    if (hasStoredToken) return <LoadingSpinner fullScreen />;
     return <Navigate to="/auth/login" replace />;
   }
 
@@ -30,7 +32,7 @@ export default function ProtectedRoute({ children, allowedRoles }: ProtectedRout
   }
 
   // Check if user's role matches any of the allowed roles
-  if (!allowedRoles.includes(userRole)) {
+  if (!allowedRoles.includes(userRole as 'landlord' | 'tenant' | 'admin' | 'both')) {
     // Redirect to appropriate dashboard based on user's role
     const redirectPath = userRole === 'landlord' ? '/landlord/dashboard' : '/tenant/dashboard';
     return <Navigate to={redirectPath} replace />;

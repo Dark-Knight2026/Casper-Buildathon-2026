@@ -4,8 +4,8 @@
  * Enhanced with loading states, error handling, and empty states
  */
 
-import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/hooks/useAuth';
 import {
   Home,
   FileText,
@@ -13,7 +13,6 @@ import {
   Wrench,
   Calendar,
   Download,
-  AlertCircle,
   CreditCard,
   Bell
 } from 'lucide-react';
@@ -21,83 +20,54 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { supabase } from '@/lib/supabase/client';
-import { leaseManagementService } from '@/services/leaseManagementService';
-import { paymentService, type Payment } from '@/services/paymentService';
-import type { LeaseAgreement } from '@/types/lease';
-import { DashboardSkeleton } from '@/components/ui/loading-skeleton';
+import type { LeaseAgreement, UtilityResponsibility } from '@/types/lease';
+import type { Payment } from '@/services/paymentService';
 import { EmptyState } from '@/components/ui/empty-state';
-import { useToast } from '@/hooks/use-toast';
 import { ErrorBoundary } from '@/components/ui/error-boundary';
 
+// TODO: remove when backend /api/v1/leases is ready
+const MOCK_LEASE: LeaseAgreement & { propertyAddress: string; paymentDueDay: number } = {
+  id: 'mock-lease-1',
+  propertyId: 'mock-prop-1',
+  landlordId: 'mock-landlord-1',
+  tenantIds: ['mock-tenant-1'],
+  type: 'residential-long-term',
+  status: 'active',
+  startDate: new Date('2025-01-01'),
+  endDate: new Date('2026-01-01'),
+  monthlyRent: 1500,
+  securityDeposit: 3000,
+  utilities: [
+    { utilityType: 'water', responsibleParty: 'landlord' } as UtilityResponsibility,
+    { utilityType: 'internet', responsibleParty: 'tenant' } as UtilityResponsibility,
+  ],
+  propertyAddress: '123 Demo Street, New York, NY 10001',
+  paymentDueDay: 1,
+  clauses: [],
+  addendums: [],
+  createdByRole: 'landlord',
+  approvalStatus: 'approved' as LeaseAgreement['approvalStatus'],
+  approvalHistory: [],
+  signatureStatus: 'signed',
+  signatureProgress: {} as LeaseAgreement['signatureProgress'],
+  documentLinks: {} as LeaseAgreement['documentLinks'],
+  complianceScore: 100,
+  complianceIssues: [],
+  stateSpecificRules: [],
+};
+
+const MOCK_PAYMENTS: Payment[] = [
+  { id: 'p1', amount: 1500, paymentDate: new Date('2025-12-01'), paymentMethod: 'bank_transfer', paymentStatus: 'completed', leaseId: 'mock-lease-1' } as Payment,
+  { id: 'p2', amount: 1500, paymentDate: new Date('2025-11-01'), paymentMethod: 'bank_transfer', paymentStatus: 'completed', leaseId: 'mock-lease-1' } as Payment,
+  { id: 'p3', amount: 1500, paymentDate: new Date('2025-10-01'), paymentMethod: 'credit_card',   paymentStatus: 'completed', leaseId: 'mock-lease-1' } as Payment,
+];
+
 export function TenantDashboard() {
-  const [loading, setLoading] = useState(true);
-  const [currentLease, setCurrentLease] = useState<LeaseAgreement | null>(null);
-  const [recentPayments, setRecentPayments] = useState<Payment[]>([]);
-  const [userId, setUserId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // TODO: replace with API calls when backend is ready
+  const currentLease = MOCK_LEASE;
+  const recentPayments = MOCK_PAYMENTS;
+
   const navigate = useNavigate();
-  const { toast } = useToast();
-
-  const loadDashboardData = useCallback(async () => {
-    let isMounted = true;
-    setLoading(true);
-    setError(null);
-
-    try {
-      // Get current user
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      if (!user) {
-        navigate('/auth/login');
-        return;
-      }
-
-      if (!isMounted) return;
-      setUserId(user.id);
-
-      // Get current lease
-      const leases = await leaseManagementService.getLeases({
-        tenantId: user.id,
-        status: ['active']
-      });
-
-      if (!isMounted) return;
-
-      if (leases.length > 0) {
-        setCurrentLease(leases[0]);
-
-        // Get recent payments
-        const payments = await paymentService.getPaymentsByLeaseId(leases[0].id);
-        if (isMounted) {
-          setRecentPayments(payments.slice(0, 5));
-        }
-      }
-    } catch (err) {
-      console.error('Error loading dashboard data:', err);
-      if (isMounted) {
-        const errorMessage = err instanceof Error ? err.message : 'Failed to load dashboard data';
-        setError(errorMessage);
-        toast({
-          variant: 'destructive',
-          title: 'Error loading dashboard',
-          description: errorMessage,
-        });
-      }
-    } finally {
-      if (isMounted) {
-        setLoading(false);
-      }
-    }
-
-    return () => {
-      isMounted = false;
-    };
-  }, [navigate, toast]);
-
-  useEffect(() => {
-    loadDashboardData();
-  }, [loadDashboardData]);
 
   const getDaysUntilExpiration = (endDate: Date): number => {
     const today = new Date();
@@ -137,42 +107,6 @@ export function TenantDashboard() {
       </Badge>
     );
   };
-
-  if (loading) {
-    return <DashboardSkeleton />;
-  }
-
-  if (error) {
-    return (
-      <div className="container mx-auto px-4 py-8">
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-        <div className="mt-4">
-          <Button onClick={loadDashboardData} aria-label="Retry loading dashboard">
-            Try Again
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
-  if (!currentLease) {
-    return (
-      <div className="container mx-auto px-4 py-8">
-        <EmptyState
-          icon={Home}
-          title="No Active Lease"
-          description="You don't have an active lease at the moment. View your lease history or contact your landlord for more information."
-          action={{
-            label: 'View All Leases',
-            onClick: () => navigate('/tenant/leases')
-          }}
-        />
-      </div>
-    );
-  }
 
   const daysUntilExpiration = getDaysUntilExpiration(currentLease.endDate);
   const showExpirationWarning = daysUntilExpiration <= 60;
@@ -289,7 +223,7 @@ export function TenantDashboard() {
                   <div className="flex flex-wrap gap-2">
                     {currentLease.utilities.map((utility, index) => (
                       <Badge key={index} variant="secondary">
-                        {utility}
+                        {utility.utilityType}
                       </Badge>
                     ))}
                   </div>

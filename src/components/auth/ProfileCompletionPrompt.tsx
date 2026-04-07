@@ -20,7 +20,7 @@ interface ProfileCompletionPromptProps {
 }
 
 export function ProfileCompletionPrompt({ onComplete, onSkip }: ProfileCompletionPromptProps) {
-  const { user, updateProfile } = useAuth();
+  const { profile, updateProfile } = useAuth();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -33,10 +33,10 @@ export function ProfileCompletionPrompt({ onComplete, onSkip }: ProfileCompletio
   useEffect(() => {
     // Check if profile completion is needed
     const needsCompletion = localStorage.getItem('needsProfileCompletion');
-    if (needsCompletion === 'true' && user) {
+    if (needsCompletion === 'true' && profile) {
       setOpen(true);
     }
-  }, [user]);
+  }, [profile]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

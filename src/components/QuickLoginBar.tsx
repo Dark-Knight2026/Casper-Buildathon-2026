@@ -5,14 +5,15 @@ import { User, Home, BarChart3, X } from 'lucide-react';
 import { useState } from 'react';
 
 export default function QuickLoginBar() {
-  const { user, signIn } = useAuth();
+  const { profile } = useAuth();
   const [isVisible, setIsVisible] = useState(true);
 
   // Don't show if user is already logged in or if dismissed
-  if (user || !isVisible) return null;
+  if (profile || !isVisible) return null;
 
-  const quickLogin = async (email: string, password: string) => {
-    await signIn(email, password);
+  // TODO: wire up to backend email/password login when ready
+  const quickLogin = async (_email: string, _password: string) => {
+    // signIn(_email, _password)
   };
 
   const demoAccounts = [
