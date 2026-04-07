@@ -1,25 +1,17 @@
 import { createContext } from 'react';
-import { User } from '@supabase/supabase-js';
+import type { User } from '@/types/user';
 
-export interface UserProfile {
-  id: string;
-  email: string;
-  role: 'landlord' | 'tenant' | 'admin';
-  full_name?: string;
-  phone?: string;
-  avatar_url?: string;
-}
+// Re-export for convenience
+export type { User };
+
+// UserProfile is the authenticated user stored in context
+export type UserProfile = User;
 
 export interface AuthContextType {
-  user: User | null;
   profile: UserProfile | null;
-  walletProfile: UserProfile | null;
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string, role: 'landlord' | 'tenant') => Promise<void>;
-  signOut: () => Promise<void>;
+  setWalletSession: (token: string, userId: string, role: string) => void; // sync — profile hydrates in background
   updateProfile: (updates: Partial<UserProfile>) => Promise<void>;
-  setWalletSession: (token: string, userId: string, role: string) => void;
   walletSignOut: () => void;
 }
 
