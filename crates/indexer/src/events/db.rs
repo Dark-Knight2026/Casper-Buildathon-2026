@@ -905,11 +905,14 @@ pub struct NewStakingRewardDeposit<'a> {
     pub block_height: i64,
     /// Block timestamp of the event.
     pub event_timestamp: DateTime<Utc>,
+    /// Transform index within the deploy (distinguishes batch events).
+    pub transform_idx: Option<i32>,
 }
 
 /// Insert a row into `staking_reward_deposits` for a `RewardsDeposited` event.
 ///
-/// Uses `ON CONFLICT DO NOTHING` on `transaction_hash` so re-processing is safe.
+/// Uses `ON CONFLICT DO NOTHING` on `(transaction_hash, COALESCE(transform_idx, 0))`
+/// so re-processing is safe while batch deploys with multiple events are recorded.
 /// Returns `true` when a new row was inserted, `false` on duplicate. Callers
 /// should skip global state mutations when this returns `false`.
 ///
@@ -924,9 +927,9 @@ pub async fn insert_staking_reward_deposit(
 ) -> IndexerResult<bool> {
     let result = sqlx::query!(
         r"
-            INSERT INTO staking_reward_deposits (caller_address, amount, reward_per_token_stored, transaction_hash, block_height, event_timestamp)
-            VALUES ($1, $2, $3, $4, $5, $6)
-            ON CONFLICT (transaction_hash) DO NOTHING
+            INSERT INTO staking_reward_deposits (caller_address, amount, reward_per_token_stored, transaction_hash, block_height, event_timestamp, transform_idx)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            ON CONFLICT (transaction_hash, COALESCE(transform_idx, 0)) DO NOTHING
         ",
         row.caller_address,
         row.amount,
@@ -934,6 +937,7 @@ pub async fn insert_staking_reward_deposit(
         row.transaction_hash,
         row.block_height,
         row.event_timestamp,
+        row.transform_idx,
     )
     .execute(tx.as_mut())
     .await?;
