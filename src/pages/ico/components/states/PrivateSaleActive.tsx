@@ -14,7 +14,6 @@ import { useTransactionHistory } from '@/hooks/ico/useTransactionHistory';
 import { useICOBalance } from '@/hooks/ico/useICOBalance';
 import { useVestingSchedules } from '@/hooks/ico/useVestingSchedules';
 import { useUnbondingStatus } from '@/hooks/ico/useUnbondingStatus';
-import { useWithdrawUnbonded } from '@/hooks/ico/useWithdrawUnbonded';
 import { deriveAccountHash } from '@/lib/blockchain/accountUtils';
 import { PurchaseConfirmationModal } from '../shared/PurchaseConfirmationModal';
 import { TransactionStatusToast } from '../shared/TransactionStatusToast';
@@ -22,8 +21,7 @@ import { UserTokenBalance } from '../shared/UserTokenBalance';
 import { TransactionHistory } from '../shared/TransactionHistory';
 import { VestingProgressBlock, type VestingEntry } from '../shared/VestingProgressBlock';
 import { UnbondingStatusBlock } from '../shared/UnbondingStatusBlock';
-import { useClaimTokens } from '@/hooks/ico/useClaimTokens';
-import logger from '@/lib/logger';
+import { useICOActions } from '@/hooks/ico/useICOActions';
 
 interface PrivateSaleActiveProps {
   className?: string;
@@ -122,54 +120,20 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: Private
     return { tokensPurchased, currentValue: undefined };
   }, [icoBalance, transactions]);
 
-  // ── Claim flow ──────────────────────────────────────────────────────
-  const [claimingId, setClaimingId] = useState<string | null>(null);
-  const [claimToastVisible, setClaimToastVisible] = useState(false);
+  // ── Claim + Withdraw flows ──────────────────────────────────────────
+  const {
+    claimState,
+    handleClaim,
+    claimingId,
+    claimToastVisible,
+    setClaimToastVisible,
+    withdrawState,
+    withdraw,
+    withdrawToastVisible,
+    setWithdrawToastVisible,
+  } = useICOActions(account?.publicKey ?? null, clickRef ?? null);
 
-  const { state: claimState, claim } = useClaimTokens(
-    account?.publicKey ?? null,
-    clickRef ?? null,
-    {
-      onSuccess: () => {
-        setClaimingId(null);
-        setClaimToastVisible(true);
-        queryClient.invalidateQueries({ queryKey: ['vesting-schedules'] });
-        queryClient.invalidateQueries({ queryKey: ['unbonding-status'] });
-      },
-      onError: (error) => {
-        logger.error('[useClaimTokens] claim failed', new Error(error));
-        setClaimToastVisible(true);
-      },
-    },
-  );
-
-  const handleClaim = useCallback(
-    (vestingId: bigint) => {
-      setClaimingId(String(vestingId));
-      claim(vestingId);
-    },
-    [claim],
-  );
-
-  // ── Withdraw flow ───────────────────────────────────────────────────
-  const [withdrawToastVisible, setWithdrawToastVisible] = useState(false);
   const { data: unbondingData } = useUnbondingStatus(accountHash);
-
-  const { state: withdrawState, withdraw } = useWithdrawUnbonded(
-    account?.publicKey ?? null,
-    clickRef ?? null,
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ['staking-info'] });
-        queryClient.invalidateQueries({ queryKey: ['vesting-schedules'] });
-        setWithdrawToastVisible(true);
-      },
-      onError: (error) => {
-        logger.error('[useWithdrawUnbonded] withdraw failed', new Error(error));
-        setWithdrawToastVisible(true);
-      },
-    },
-  );
 
   return (
     <div className={cn('max-w-5xl mx-auto', className)}>
