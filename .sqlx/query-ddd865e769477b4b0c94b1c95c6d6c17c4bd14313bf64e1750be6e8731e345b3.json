@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT\n                event_type AS \"event_type!\",\n                amount AS \"amount!\",\n                event_timestamp AS \"event_timestamp!\",\n                transaction_hash AS \"transaction_hash!\"\n            FROM staking_events\n            WHERE staker_address = $1\n              AND event_type IN ('unstake', 'withdraw')\n            ORDER BY event_timestamp\n            LIMIT 200\n        ",
+  "query": "\n            SELECT\n                event_type AS \"event_type!\",\n                amount AS \"amount!\",\n                event_timestamp AS \"event_timestamp!\",\n                transaction_hash AS \"transaction_hash!\"\n            FROM staking_events\n            WHERE staker_address = $1\n              AND event_type IN ('unstake', 'withdraw')\n            ORDER BY event_timestamp DESC\n            LIMIT 200\n        ",
   "describe": {
     "columns": [
       {
@@ -36,5 +36,5 @@
       false
     ]
   },
-  "hash": "63795a39afb2266514bc3290862d2859226faceca32ec83cd72849cafb14e602"
+  "hash": "ddd865e769477b4b0c94b1c95c6d6c17c4bd14313bf64e1750be6e8731e345b3"
 }

@@ -868,8 +868,8 @@ async fn unbonding_history_returns_chronologically(pool: PgPool) {
     let history = body["history"].as_array().unwrap();
     assert_eq!(history.len(), 3, "should have 3 events");
 
-    // Verify chronological order
-    assert_eq!(history[0]["eventType"], "unstake");
+    // Verify newest-first (DESC) order
+    assert_eq!(history[0]["eventType"], "withdraw");
     let amount_0 = history[0]["amount"].as_f64().unwrap();
     assert!((amount_0 - 500.0).abs() < 0.01);
 
@@ -877,14 +877,86 @@ async fn unbonding_history_returns_chronologically(pool: PgPool) {
     let amount_1 = history[1]["amount"].as_f64().unwrap();
     assert!((amount_1 - 300.0).abs() < 0.01);
 
-    assert_eq!(history[2]["eventType"], "withdraw");
+    assert_eq!(history[2]["eventType"], "unstake");
     let amount_2 = history[2]["amount"].as_f64().unwrap();
     assert!((amount_2 - 500.0).abs() < 0.01);
 
-    // Verify timestamps are ISO 8601 and ascending
+    // Verify timestamps are ISO 8601 and descending (newest first)
     let ts_0 = history[0]["timestamp"].as_str().unwrap();
     let ts_2 = history[2]["timestamp"].as_str().unwrap();
-    assert!(ts_0 < ts_2, "events should be in chronological order");
+    assert!(ts_0 > ts_2, "events should be newest-first (DESC)");
+}
+
+/// Unbonding history must return newest events first (DESC order).
+/// With a LIMIT of 200, ASC order silently drops recent activity for active
+/// stakers - the UI would show only ancient events.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn unbonding_history_returns_newest_first(pool: PgPool) {
+    let now = Utc::now();
+    let day_10 = (now - Duration::days(10)).to_rfc3339();
+    let day_5 = (now - Duration::days(5)).to_rfc3339();
+    let day_1 = (now - Duration::days(1)).to_rfc3339();
+
+    seed_staking_event(
+        &pool,
+        VALID_ADDRESS,
+        "unstake",
+        "100000000000000000000",
+        &day_10,
+    )
+    .await;
+    seed_staking_event(
+        &pool,
+        VALID_ADDRESS,
+        "unstake",
+        "200000000000000000000",
+        &day_5,
+    )
+    .await;
+    seed_staking_event(
+        &pool,
+        VALID_ADDRESS,
+        "withdraw",
+        "300000000000000000000",
+        &day_1,
+    )
+    .await;
+
+    let env = common::setup_test_server(pool, false).await;
+
+    let response = env
+        .server
+        .get(&format!("/api/v1/staking/{VALID_ADDRESS}/unbonding"))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+    let history = body["history"].as_array().unwrap();
+    assert_eq!(history.len(), 3);
+
+    // Newest event (1 day ago, withdraw 300) must come first.
+    assert_eq!(history[0]["eventType"], "withdraw");
+    let amount_0 = history[0]["amount"].as_f64().unwrap();
+    assert!(
+        (amount_0 - 300.0).abs() < 0.01,
+        "newest event first: expected ~300, got {amount_0}"
+    );
+
+    // Oldest event (10 days ago, unstake 100) must come last.
+    assert_eq!(history[2]["eventType"], "unstake");
+    let amount_2 = history[2]["amount"].as_f64().unwrap();
+    assert!(
+        (amount_2 - 100.0).abs() < 0.01,
+        "oldest event last: expected ~100, got {amount_2}"
+    );
+
+    // Timestamps must be descending.
+    let ts_0 = history[0]["timestamp"].as_str().unwrap();
+    let ts_2 = history[2]["timestamp"].as_str().unwrap();
+    assert!(
+        ts_0 > ts_2,
+        "history should be newest-first (DESC), got ts[0]={ts_0} <= ts[2]={ts_2}"
+    );
 }
 
 // GET /api/v1/staking/{accountHash} - pending rewards
