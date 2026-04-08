@@ -268,7 +268,9 @@ export class CSPRCloudService {
     block_number?: number;
     error_message?: string;
   }> {
-    // Use proxy in both dev and prod (Vite proxy in dev, Vercel serverless in prod)
+    // Dev uses path format (/api/cspr-cloud/deploys/:hash) — handled by Vite proxy rewrite.
+    // Prod uses query format (/api/cspr-cloud?path=...) — Vercel routes to the serverless
+    // function directly; no /:path* rewrite needed in vercel.json for production.
     const proxyUrl = import.meta.env.DEV
       ? `/api/cspr-cloud/deploys/${deployHash}`
       : `/api/cspr-cloud?path=${encodeURIComponent(`deploys/${deployHash}`)}`;
@@ -321,20 +323,19 @@ export class CSPRCloudService {
 
   /**
    * Submit a signed deploy to the blockchain
-   * Uses CSPR.cloud REST API or direct RPC
+   * Routes through /api/casper-rpc proxy (Vite dev proxy → Vercel serverless in prod)
+   * to keep auth and RPC method allowlist enforcement consistent with all other RPC calls.
    */
   async submitDeploy(signedDeploy: { deploy: Record<string, unknown>; signature: string }): Promise<{
     deploy_hash: string;
   }> {
-    const rpcUrl = import.meta.env.VITE_CASPER_RPC_URL || 'https://node.testnet.casper.network/rpc';
-
     try {
       // Submit via JSON-RPC
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 30_000);
       let response: Response;
       try {
-        response = await fetch(rpcUrl, {
+        response = await fetch('/api/casper-rpc', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           signal: controller.signal,

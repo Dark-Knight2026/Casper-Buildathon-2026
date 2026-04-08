@@ -167,9 +167,7 @@ export const OverviewTab = memo(function OverviewTab() {
         {/* Staking Info Card */}
         <Card className="p-5">
           <div className="w-full">
-            <h3 className="text-lg font-semibold text-[hsl(var(--ico-text-primary))] mb-4">
-              Staking Info
-            </h3>
+            <h3 className="text-lg font-semibold text-[hsl(var(--ico-text-primary))] mb-4">Staking Info</h3>
             <div className="space-y-4">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-lg bg-[hsl(var(--ico-brand-accent)/0.2)] flex items-center justify-center">
@@ -189,7 +187,7 @@ export const OverviewTab = memo(function OverviewTab() {
                 <div>
                   <p className="text-sm text-[hsl(var(--ico-text-secondary))]">Current APY</p>
                   <p className="text-lg font-semibold text-[hsl(var(--ico-text-primary))]">
-                    {stakingInfo?.currentApy ?? 0}%
+                    {formatNumber(stakingInfo?.currentApy ?? 0)}%
                   </p>
                 </div>
               </div>
@@ -227,9 +225,7 @@ export const OverviewTab = memo(function OverviewTab() {
         {/* Estimated Portfolio Value */}
         <Card className="p-5">
           <div className="w-full">
-            <h3 className="text-lg font-semibold text-[hsl(var(--ico-text-primary))] mb-4">
-              Estimated Portfolio Value
-            </h3>
+            <h3 className="text-lg font-semibold text-[hsl(var(--ico-text-primary))] mb-4">Estimated Portfolio Value</h3>
             <div className="space-y-2">
               <p className="text-3xl font-bold text-[hsl(var(--ico-text-primary))]">
                 {formatUSD(stakingPortfolio?.estimatedUsdValue ?? 0)}

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';
@@ -6,7 +6,6 @@ import { useContractDeploys, isICOPurchase } from '@/hooks/ico/useContractDeploy
 import type { FTTokenAction } from '@/types/csprCloud';
 
 const mockFetch = vi.fn();
-global.fetch = mockFetch;
 
 vi.mock('@/constants/ico', () => ({
   ICO_CONFIG: {
@@ -48,7 +47,12 @@ function createWrapper() {
 
 describe('useContractDeploys', () => {
   beforeEach(() => {
+    vi.stubGlobal('fetch', mockFetch);
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   // --- Successful fetch ---

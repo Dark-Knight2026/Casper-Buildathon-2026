@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, waitFor, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';
@@ -64,6 +64,19 @@ describe('useICOSchedules', () => {
   // --- Successful fetch ---
 
   describe('successful fetch', () => {
+    // Mock schedules use 2024 timestamps. Spy on Date.now so the hook's
+    // findRelevantSchedule sees 2024-01-15 (presale active) without activating
+    // fake timers — fake timers break React Query's waitFor.
+    const JAN_15_2024 = new Date('2024-01-15T12:00:00Z').getTime();
+
+    beforeEach(() => {
+      vi.spyOn(Date, 'now').mockReturnValue(JAN_15_2024);
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
     it('should fetch and parse schedules correctly', async () => {
       mockGetAllSchedules.mockResolvedValue([
         { id: 0n, schedule: mockPresaleSchedule },
@@ -161,6 +174,9 @@ describe('useICOSchedules', () => {
     });
 
     it('should handle only ICO schedule', async () => {
+      // With time=2024-01-15, ICO (starts 2024-02-01) is upcoming →
+      // findRelevantSchedule returns it as the relevant schedule.
+      // The hook does not distinguish by schedule id — it returns whichever is active/upcoming.
       mockGetAllSchedules.mockResolvedValue([
         { id: 1n, schedule: mockICOSchedule },
       ]);
@@ -173,9 +189,9 @@ describe('useICOSchedules', () => {
         expect(result.current.isLoading).toBe(false);
       });
 
-      expect(result.current.presaleProgress).toBeNull();
-      expect(result.current.timestamps?.presaleStart).toBe(0);
-      expect(result.current.timestamps?.presaleEnd).toBe(0);
+      expect(result.current.presaleProgress).not.toBeNull();
+      expect(result.current.timestamps?.presaleStart).toBe(Number(mockICOSchedule.startTimestamp));
+      expect(result.current.timestamps?.presaleEnd).toBe(Number(mockICOSchedule.endTimestamp));
     });
 
     it('should handle empty schedules', async () => {

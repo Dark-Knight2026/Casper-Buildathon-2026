@@ -7,20 +7,14 @@ const ICO_PACKAGE_HASH = ICO_CONFIG.CONTRACTS.icoPackageHash.replace(/^hash-/, '
 
 const STALE_TIME = 30 * 60 * 1000; // 30 minutes
 
-async function fetchBigTokenActions(page: number, pageSize: number): Promise<FTTokenActionsResponse> {
+async function fetchBigTokenActions(page: number, pageSize: number, querySignal?: AbortSignal): Promise<FTTokenActionsResponse> {
   const url = `/api/cspr-cloud/contract-packages/${BIG_TOKEN_PACKAGE_HASH}/ft-token-actions?page=${page}&page_size=${pageSize}`;
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15_000);
-  let res: Response;
-  try {
-    res = await fetch(url, {
-      headers: { accept: 'application/json' },
-      signal: controller.signal,
-    });
-  } finally {
-    clearTimeout(timeoutId);
-  }
+  const timeout = AbortSignal.timeout(15_000);
+  const res = await fetch(url, {
+    headers: { accept: 'application/json' },
+    signal: querySignal ? AbortSignal.any([querySignal, timeout]) : timeout,
+  });
 
   if (!res.ok) {
     throw new Error(`CSPR.cloud API error: ${res.status}`);
@@ -32,7 +26,7 @@ async function fetchBigTokenActions(page: number, pageSize: number): Promise<FTT
 export function useContractDeploys(page = 1, pageSize = 10) {
   const query = useQuery({
     queryKey: ['big-token-actions', page, pageSize],
-    queryFn: () => fetchBigTokenActions(page, pageSize),
+    queryFn: ({ signal }) => fetchBigTokenActions(page, pageSize, signal),
     staleTime: STALE_TIME,
     gcTime: STALE_TIME,
     enabled: !!BIG_TOKEN_PACKAGE_HASH,

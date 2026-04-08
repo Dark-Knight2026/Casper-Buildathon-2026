@@ -115,13 +115,12 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: Private
       const tokensPurchased = bigIntToNumber(safeBigInt(icoBalance.tokensPurchased));
       return {
         tokensPurchased,
-        totalSpentUSD: icoBalance.totalSpentUsd ?? 0,
         currentValue: icoBalance.currentValue ?? undefined,
       };
     }
     const tokensPurchased = transactions.reduce((sum, tx) => sum + tx.tokensReceived, 0);
-    return { tokensPurchased, totalSpentUSD: tokensPurchased * tokenPrice, currentValue: undefined };
-  }, [icoBalance, transactions, tokenPrice]);
+    return { tokensPurchased, currentValue: undefined };
+  }, [icoBalance, transactions]);
 
   // ── Claim flow ──────────────────────────────────────────────────────
   const [claimingId, setClaimingId] = useState<string | null>(null);
@@ -235,7 +234,6 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: Private
       {effectiveProgress && userBalance.tokensPurchased > 0 && (
         <UserTokenBalance
           tokensPurchased={userBalance.tokensPurchased}
-          totalSpentUSD={userBalance.totalSpentUSD}
           tokenPrice={effectiveProgress.priceUsd}
           tokenSymbol={ICO_CONFIG.TOKEN.symbol}
           currentValue={userBalance.currentValue}

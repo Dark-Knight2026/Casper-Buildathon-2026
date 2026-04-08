@@ -60,8 +60,9 @@ describe('TransactionHistory', () => {
     it('should display transaction type', () => {
       render(<TransactionHistory transactions={mockTransactions} />);
 
-      expect(screen.getAllByText('purchase')).toHaveLength(2);
-      expect(screen.getByText('claim')).toBeInTheDocument();
+      // TYPE_LABELS maps type values to capitalized labels
+      expect(screen.getAllByText('Purchase')).toHaveLength(2);
+      expect(screen.getByText('Claim')).toBeInTheDocument();
     });
 
     it('should display tokens received with + prefix', () => {

@@ -198,6 +198,7 @@ export interface StakingEarningsResponse {
 
 export interface StakingInfoResponse {
   currentApy: number;
+  pendingRewards: number;
   stakedTokens: number;
   totalRewardsEarned: number;
 }

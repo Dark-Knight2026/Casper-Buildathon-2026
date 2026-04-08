@@ -1,15 +1,17 @@
 /**
- * Centralized logging utility
- * - In development: logs to console
- * - In production: only errors are logged
+ * Backwards-compatibility shim — canonical logger lives at '@/utils/logger'.
+ * Import from '@/utils/logger' directly in new code.
+ *
+ * 'log' is aliased to 'debug' (suppressed in production builds via import.meta.env.DEV).
  */
+import { logger as canonical } from '@/utils/logger';
 
-const isDevelopment = process.env.NODE_ENV === 'development';
 const logger = {
-  log: isDevelopment ? console.log.bind(console) : () => {},
-  warn: console.warn.bind(console),
-  error: console.error.bind(console),
-  debug: isDevelopment ? console.debug.bind(console) : () => {},
-  info: isDevelopment ? console.info.bind(console) : () => {},
+  log:   canonical.debug.bind(canonical),
+  debug: canonical.debug.bind(canonical),
+  info:  canonical.info.bind(canonical),
+  warn:  canonical.warn.bind(canonical),
+  error: canonical.error.bind(canonical),
 };
+
 export default logger;

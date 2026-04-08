@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { ICO_CONFIG } from '@/constants/ico';
+import { rawTokenToNumber } from '@/lib/tokenAmount';
 import type { FTTokenAction, FTTokenActionsResponse } from '@/types/csprCloud';
 import type { ICOTransaction } from '@/types/ico';
 
@@ -23,14 +24,7 @@ async function fetchUserTokenActions(publicKeyHex: string, page: number, pageSiz
 }
 
 function mapToICOTransaction(action: FTTokenAction): ICOTransaction {
-  let raw: bigint;
-  try {
-    raw = BigInt(action.amount);
-  } catch {
-    raw = 0n;
-  }
-  const divisor = 10n ** BigInt(BIG_DECIMALS);
-  const tokensReceived = Number(raw / divisor) + Number(raw % divisor) / Number(divisor);
+  const tokensReceived = rawTokenToNumber(action.amount, BIG_DECIMALS);
 
   return {
     id: `${action.deploy_hash}-${action.transform_idx}`,

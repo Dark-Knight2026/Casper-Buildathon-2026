@@ -1,6 +1,9 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-const API_KEY = process.env.CSPR_CLOUD_API_KEY || process.env.VITE_CSPR_CLOUD_API_KEY || '';
+const API_KEY = process.env.CSPR_CLOUD_API_KEY ?? '';
+if (process.env.NODE_ENV === 'production' && !API_KEY) {
+  console.error('[security] CSPR_CLOUD_API_KEY is not set — proxy requests will be rejected');
+}
 
 const ALLOWED_RPC_METHODS = new Set([
   'query_global_state',
@@ -28,6 +31,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(204).end();
   }
 
+  if (!API_KEY) {
+    return res.status(500).json({ error: 'Proxy not configured' });
+  }
+
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -38,6 +45,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(403).json({ error: 'RPC method not allowed' });
   }
 
+  // VITE_CASPER_NETWORK is intentionally used here (not a separate CASPER_NETWORK var).
+  // Vercel injects all dashboard env vars into process.env at serverless runtime,
+  // regardless of the VITE_ prefix — so this works correctly in production.
+  // The VITE_ prefix also makes Vite inject the same value into the browser bundle,
+  // keeping frontend and serverless in sync with a single variable.
   const network = process.env.VITE_CASPER_NETWORK || 'casper-test';
   const rpcUrl = network === 'casper'
     ? 'https://node.cspr.cloud/rpc'

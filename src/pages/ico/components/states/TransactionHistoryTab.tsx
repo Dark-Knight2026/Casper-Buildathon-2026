@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/table';
 import { useTokenTransactions, type TokenTransaction } from '@/hooks/ico/useTokenTransactions';
 import { ICO_CONFIG } from '@/constants/ico';
+import { rawTokenToNumber } from '@/lib/tokenAmount';
 
 const EXPLORER_URL = ICO_CONFIG.CASPER.explorerUrl;
 const ICO_PACKAGE_HASH = ICO_CONFIG.CONTRACTS.icoPackageHash.replace(/^hash-/, '').toLowerCase();
@@ -39,9 +40,7 @@ function formatRelativeTime(timestamp: string | null): string {
 
 function formatBigAmount(raw: string | null): string {
   if (!raw) return '—';
-  const divisor = 10n ** BigInt(BIG_DECIMALS);
-  const big = BigInt(raw);
-  const num = Number(big / divisor) + Number(big % divisor) / Number(divisor);
+  const num = rawTokenToNumber(raw, BIG_DECIMALS);
   return num.toLocaleString('en-US', { maximumFractionDigits: 2 });
 }
 
@@ -115,7 +114,7 @@ export function TransactionHistoryTab() {
         ) : (
           <>
             <div className="overflow-x-auto">
-              <Table>
+              <Table aria-label="BIG token transactions">
                 <TableHeader>
                   <TableRow className="border-b border-[hsl(var(--ico-border-color))]">
                     <TableHead className="text-[hsl(var(--ico-text-muted))] text-xs font-medium">Tx Hash</TableHead>
@@ -138,14 +137,15 @@ export function TransactionHistoryTab() {
                           href={`${EXPLORER_URL}/deploy/${tx.deploy_hash}`}
                           target="_blank"
                           rel="noopener noreferrer"
+                          aria-label={`View deploy ${tx.deploy_hash} on Casper explorer (opens in new tab)`}
                           className="text-[hsl(var(--ico-brand-primary))] hover:underline inline-flex items-center gap-1"
                         >
                           {truncateHash(tx.deploy_hash)}
-                          <ExternalLink className="w-3 h-3" />
+                          <ExternalLink className="w-3 h-3" aria-hidden="true" />
                         </a>
                       </TableCell>
                       <TableCell className="text-sm text-[hsl(var(--ico-text-secondary))]">
-                        {tx.block_height.toLocaleString('en-US')}
+                        {tx.block_height != null ? tx.block_height.toLocaleString('en-US') : '—'}
                       </TableCell>
                       <TableCell className="text-sm text-[hsl(var(--ico-text-secondary))] whitespace-nowrap">
                         {formatRelativeTime(tx.timestamp)}

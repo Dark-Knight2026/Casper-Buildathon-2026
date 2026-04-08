@@ -11,31 +11,17 @@
 import { Args } from 'casper-js-sdk';
 import type { Transaction } from 'casper-js-sdk';
 import logger from '@/lib/logger';
+import { ICO_CONFIG } from '@/constants/ico';
 import { createContractCallTransaction } from './casperClient';
+import { STAKING_ERROR_MAP } from './stakingErrors';
 
-const STAKING_CONTRACT_HASH = import.meta.env.VITE_STAKING_CONTRACT_HASH ?? '';
+const STAKING_CONTRACT_HASH = ICO_CONFIG.CONTRACTS.stakingPackageHash;
 
 /** Gas estimate for withdraw_unbonded (2.5 CSPR in motes). */
 const GAS_WITHDRAW = 2_500_000_000n;
 
 // ── Error code mapping (from staking contract) ───────────────────────
-
-const STAKING_ERROR_MAP: Record<string, string> = {
-  '601': 'Staking contract is not configured',
-  '602': 'Invalid amount',
-  '603': 'Not authorized to unstake',
-  '604': 'Nothing staked',
-  '605': 'Insufficient staked amount',
-  '606': 'Unbonding already in progress',
-  '607': 'Vesting contract is not set',
-  '608': 'No rewards to claim',
-  '609': 'No unbonding in progress',
-  '610': 'Unbonding period not finished yet — please wait',
-  '611': 'No active stake',
-  '612': 'Not authorized to stake',
-  '613': 'Unstake blocked by active vesting lock',
-  '614': 'Not authorized to manage locks',
-};
+// Imported from shared stakingErrors.ts — single source of truth for codes 601-614.
 
 export function parseWithdrawError(rawMessage?: string): string {
   if (!rawMessage) return 'Withdraw failed';

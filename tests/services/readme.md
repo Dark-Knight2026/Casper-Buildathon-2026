@@ -10,3 +10,5 @@
 | odraStorage.test.ts | Test Odra contract storage key derivation |
 | proxyCallerService.test.ts | Test proxy caller WASM loading and transaction construction |
 | sellerService.test.ts | Test ICO contract seller account queries |
+| backendAuthService.test.ts | Tests backend nonce/signature authentication flow |
+| vestingClaimService.test.ts | Tests vesting claim transaction building and error parsing |

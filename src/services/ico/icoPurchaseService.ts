@@ -23,7 +23,6 @@ import { ICO_CONFIG, getCurrencyRateUsd } from '@/constants/ico';
 import logger from '@/lib/logger';
 import {
   createContractCallTransaction,
-  getCasperRpcClient,
   getAccountMainPurseURef,
 } from './casperClient';
 import { loadProxyCallerWasm, createProxyCallerTransaction } from './proxyCallerService';
@@ -368,21 +367,6 @@ export async function preparePurchase(
 
 // ── Transaction submission ───────────────────────────────────────────
 
-/**
- * Submits a signed transaction to the blockchain.
- * Returns the transaction hash.
- */
-export async function submitTransaction(
-  signedTransaction: Transaction,
-): Promise<string> {
-  const client = getCasperRpcClient();
-
-  const result = await client.putTransaction(signedTransaction);
-
-  logger.log('[icoPurchaseService] Transaction submitted:', result);
-  return result.transactionHash.toString();
-}
-
 // ── Contract error code mapping (from ico_schema.json) ──────────────
 
 const CONTRACT_ERROR_MAP: Record<string, string> = {
@@ -418,48 +402,6 @@ export function parseContractError(rawMessage?: string): string {
 
   return rawMessage;
 }
-
-/**
- * Gets the status of a submitted deploy.
- */
-export async function getDeployStatus(
-  deployHash: string,
-): Promise<{
-  status: 'pending' | 'executed' | 'failed';
-  errorMessage?: string;
-}> {
-  const client = getCasperRpcClient();
-
-  try {
-    const result = await client.getDeploy(deployHash);
-
-    // Check execution results from the raw JSON response
-    const execResults = result.rawJSON?.execution_results;
-    if (!execResults || execResults.length === 0) {
-      return { status: 'pending' };
-    }
-
-    // Check if execution was successful
-    const execResult = execResults[0]?.result;
-    if (execResult?.Success) {
-      return { status: 'executed' };
-    }
-
-    if (execResult?.Failure) {
-      return {
-        status: 'failed',
-        errorMessage: parseContractError(execResult.Failure.error_message),
-      };
-    }
-
-    return { status: 'pending' };
-  } catch (err) {
-    // Deploy not found yet = still pending
-    logger.warn('[icoPurchaseService] getDeployStatus error:', err);
-    return { status: 'pending' };
-  }
-}
-
 
 // ── Validation ──────────────────────────────────────────────────────
 

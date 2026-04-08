@@ -4,7 +4,6 @@ import { UserTokenBalance } from '@/pages/ico/components/shared/UserTokenBalance
 
 const defaultProps = {
   tokensPurchased: 1000000,
-  totalSpentUSD: 1000,
   tokenPrice: 0.001,
   tokenSymbol: 'BIG',
 };
@@ -17,12 +16,12 @@ describe('UserTokenBalance', () => {
       expect(screen.getByText('Your BIG Balance')).toBeInTheDocument();
     });
 
-    it('should render all three sections', () => {
+    it('should render tokens purchased and current value sections', () => {
       render(<UserTokenBalance {...defaultProps} />);
 
       expect(screen.getByText('Tokens Purchased')).toBeInTheDocument();
-      expect(screen.getByText('Total Spent')).toBeInTheDocument();
       expect(screen.getByText('Current Value')).toBeInTheDocument();
+      expect(screen.queryByText('Total Spent')).not.toBeInTheDocument();
     });
   });
 
@@ -45,35 +44,12 @@ describe('UserTokenBalance', () => {
     });
   });
 
-  describe('total spent display', () => {
-    it('should display total spent with $ prefix', () => {
-      render(<UserTokenBalance {...defaultProps} />);
-
-      // Note: With default props, Total Spent and Current Value are both $1,000
-      const elements = screen.getAllByText('$1,000');
-      expect(elements.length).toBeGreaterThanOrEqual(1);
-    });
-
-    it('should format large amounts correctly', () => {
-      render(
-        <UserTokenBalance
-          {...defaultProps}
-          totalSpentUSD={50000}
-        />
-      );
-
-      expect(screen.getByText('$50,000')).toBeInTheDocument();
-    });
-  });
-
   describe('current value calculation', () => {
     it('should calculate current value correctly', () => {
       // 1,000,000 tokens * $0.001 = $1,000
       render(<UserTokenBalance {...defaultProps} />);
 
-      // There should be two $1,000 values - total spent and current value
-      const values = screen.getAllByText('$1,000');
-      expect(values).toHaveLength(2);
+      expect(screen.getByText('$1,000')).toBeInTheDocument();
     });
 
     it('should show profit when token price increased', () => {

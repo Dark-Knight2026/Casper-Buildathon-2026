@@ -2,7 +2,7 @@ import { useCallback, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getAllSchedules } from '@/services/ico/icoContractService';
 import type { SaleTimestamps } from '@/types/ico';
-import type { ICOSchedule } from '@/services/ico/contractTypes';
+import type { ICOSchedule, ICOScheduleWithId } from '@/services/ico/contractTypes';
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -27,6 +27,14 @@ export interface ICOScheduleData {
 // ── Constants ────────────────────────────────────────────────────────
 
 const POLL_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
+
+// ── Helpers ──────────────────────────────────────────────────────────
+
+/** Normalizes a contract timestamp to milliseconds (handles both seconds and ms) */
+function toMs(ts: bigint): bigint {
+  return ts > 1_000_000_000_000n ? ts : ts * 1000n;
+}
+
 const TOKEN_DECIMALS = 18;
 const PRICE_DECIMALS = 6; // USD price uses 6 decimals (like USDC/USDT)
 const DECIMALS_DIVISOR = 10n ** BigInt(TOKEN_DECIMALS);
@@ -68,22 +76,40 @@ function scheduleToProgress(schedule: ICOSchedule): ScheduleProgress {
 
 // ── Fetch function ──────────────────────────────────────────────────
 
-interface FetchedData {
-  presale: ICOSchedule | null;
-  ico: ICOSchedule | null;
-}
-
-async function fetchSchedules(): Promise<FetchedData> {
+async function fetchSchedules(): Promise<ICOScheduleWithId[]> {
   try {
-    const schedules = await getAllSchedules();
-
-    const presale = schedules.find((s) => s.id === 0n)?.schedule ?? null;
-    const ico = schedules.find((s) => s.id === 1n)?.schedule ?? null;
-
-    return { presale, ico };
+    return await getAllSchedules();
   } catch (err) {
     throw err instanceof Error ? err : new Error('Failed to fetch ICO schedules');
   }
+}
+
+/**
+ * Finds the relevant schedule to display:
+ * 1. Active schedule (now is within start..end)
+ * 2. Next upcoming schedule (nearest start in the future)
+ * 3. null → no schedule → show post-ICO dashboard
+ */
+function findRelevantSchedule(schedules: ICOScheduleWithId[]): ICOScheduleWithId | null {
+  const nowMs = BigInt(Date.now());
+
+  // 1. Active schedule
+  const active = schedules.find(({ schedule: s }) => {
+    const startMs = toMs(s.startTimestamp);
+    const endMs = toMs(s.endTimestamp);
+    return nowMs >= startMs && nowMs < endMs;
+  });
+  if (active) return active;
+
+  // 2. Next upcoming (sorted by nearest start)
+  const upcoming = schedules
+    .filter(({ schedule: s }) => nowMs < toMs(s.startTimestamp))
+    .sort((a, b) => {
+      const diff = toMs(a.schedule.startTimestamp) - toMs(b.schedule.startTimestamp);
+      return diff < 0n ? -1 : diff > 0n ? 1 : 0;
+    });
+
+  return upcoming[0] ?? null;
 }
 
 // ── Hook ─────────────────────────────────────────────────────────────
@@ -94,7 +120,7 @@ export function useICOSchedules(): ICOScheduleData {
     isLoading,
     error: queryError,
     refetch: queryRefetch,
-  } = useQuery<FetchedData, Error>({
+  } = useQuery<ICOScheduleWithId[], Error>({
     queryKey: ['ico-schedules'],
     queryFn: fetchSchedules,
     staleTime: POLL_INTERVAL_MS,
@@ -110,15 +136,16 @@ export function useICOSchedules(): ICOScheduleData {
       };
     }
 
-    const { presale, ico } = data;
+    const relevant = findRelevantSchedule(data);
 
-    // Build timestamps from contract schedules
-    const timestamps: SaleTimestamps | null = (presale || ico) ? {
-      presaleStart: presale ? Number(presale.startTimestamp) : 0,
-      presaleEnd: presale ? Number(presale.endTimestamp) : 0,
-    } : null;
+    const timestamps: SaleTimestamps | null = relevant
+      ? {
+          presaleStart: Number(toMs(relevant.schedule.startTimestamp)),
+          presaleEnd: Number(toMs(relevant.schedule.endTimestamp)),
+        }
+      : null;
 
-    const presaleProgress = presale ? scheduleToProgress(presale) : null;
+    const presaleProgress = relevant ? scheduleToProgress(relevant.schedule) : null;
 
     return {
       timestamps,
