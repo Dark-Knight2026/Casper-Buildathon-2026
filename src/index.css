@@ -26,9 +26,9 @@
   --color-badge-success-foreground: hsl(var(--badge-success-foreground));
   --color-badge-info: hsl(var(--badge-info));
   --color-badge-info-foreground: hsl(var(--badge-info-foreground));
-  --radius-sm: calc(var(--radius) - 2px);
-  --radius-md: var(--radius);
-  --radius-lg: calc(var(--radius) + 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
 }
 
 @layer base {
@@ -45,8 +45,8 @@
     --secondary-foreground: 214 49% 23%;
     --muted: 220 14% 93%;
     --muted-foreground: 220 9% 46%;
-    --accent: 214 43% 25%;
-    --accent-foreground: 210 40% 98%;
+    --accent: 214 40% 93%;          /* subtle blue-tinted hover surface */
+    --accent-foreground: 214 49% 23%; /* dark navy text on light accent */
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
     --border: 220 13% 88%;
@@ -142,7 +142,7 @@
     --secondary-foreground: 210 40% 98%;
     --muted: 222 47% 17%;
     --muted-foreground: 215 20.2% 65.1%;
-    --accent: 214 49% 45%;
+    --accent: 222 47% 22%;          /* elevated surface, distinct from primary */
     --accent-foreground: 210 40% 98%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 210 40% 98%;
