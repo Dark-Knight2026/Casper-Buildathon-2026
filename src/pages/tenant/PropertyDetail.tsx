@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -39,17 +39,19 @@ import { format } from 'date-fns';
 export default function PropertyDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { toast } = useToast();
   const { requireAuth } = useAuthPrompt();
-  
-  const [property, setProperty] = useState<Property | null>(null);
-  const [loading, setLoading] = useState(true);
+
+  const stateProperty = (location.state?.property as Property) ?? null;
+  const [property, setProperty] = useState<Property | null>(stateProperty);
+  const [loading, setLoading] = useState(!stateProperty);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [showContactModal, setShowContactModal] = useState(false);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
 
   const loadProperty = useCallback(async () => {
-    if (!id) return;
+    if (!id || stateProperty) return; // skip if data passed via navigation state
 
     setLoading(true);
     try {
