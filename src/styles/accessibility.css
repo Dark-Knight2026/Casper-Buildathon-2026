@@ -106,11 +106,6 @@ select:invalid {
   outline-color: #dc2626;
 }
 
-input:valid:not(:placeholder-shown),
-textarea:valid:not(:placeholder-shown),
-select:valid {
-  border-color: #16a34a;
-}
 
 /* Required field indicator */
 [aria-required="true"]::after,

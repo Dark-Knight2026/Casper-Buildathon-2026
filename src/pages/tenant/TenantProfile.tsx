@@ -3,28 +3,15 @@
  * View and edit tenant profile information
  */
 
-import React, { useEffect, useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
-import {
-  User,
-  Mail,
-  Phone,
-  Home,
-  Calendar,
-  Loader2,
-  AlertCircle,
-  Save,
-  LogOut
-} from 'lucide-react';
+import { useState } from 'react';
+import { User, Mail, Phone, Home, Calendar, Save, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
-import { supabase } from '@/lib/supabase/client';
-import { leaseManagementService } from '@/services/leaseManagementService';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/hooks/useAuth';
 
 interface UserProfile {
   id: string;
@@ -36,160 +23,58 @@ interface UserProfile {
   createdAt: Date;
 }
 
+// TODO: remove when backend /api/v1/profile is ready
+const MOCK_PROFILE: UserProfile = {
+  id: 'mock-tenant-1',
+  email: 'tenant@demo.com',
+  fullName: 'Jane Doe',
+  phone: '+1 (555) 234-5678',
+  role: 'tenant',
+  status: 'active',
+  createdAt: new Date('2024-06-15'),
+};
+const MOCK_ACTIVE_LEASE_COUNT = 1;
+
+const formatDate = (date: Date): string =>
+  new Intl.DateTimeFormat('en-US', { year: 'numeric', month: 'long', day: 'numeric' }).format(new Date(date));
+
 export function TenantProfile() {
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { profile: authProfile } = useAuth();
+
+  // TODO: replace with API call when backend is ready
+  const profile: UserProfile = {
+    ...MOCK_PROFILE,
+    id: authProfile?.id ?? MOCK_PROFILE.id,
+    email: authProfile?.email ?? MOCK_PROFILE.email,
+    fullName: authProfile?.firstName
+      ? `${authProfile.firstName} ${authProfile.lastName ?? ''}`.trim()
+      : MOCK_PROFILE.fullName,
+  };
+
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [activeLeaseCount, setActiveLeaseCount] = useState(0);
   const [formData, setFormData] = useState({
-    fullName: '',
-    phone: ''
+    fullName: profile.fullName,
+    phone: profile.phone,
   });
-  const navigate = useNavigate();
   const { toast } = useToast();
 
-  const loadProfile = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      if (!user) {
-        navigate('/auth/login');
-        return;
-      }
-
-      // Get user profile from database
-      const { data: userData, error: userError } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', user.id)
-        .single();
-
-      if (userError) {
-        throw userError;
-      }
-
-      const userProfile: UserProfile = {
-        id: userData.id,
-        email: userData.email,
-        fullName: userData.full_name,
-        phone: userData.phone || '',
-        role: userData.role,
-        status: userData.status,
-        createdAt: new Date(userData.created_at)
-      };
-
-      setProfile(userProfile);
-      setFormData({
-        fullName: userProfile.fullName,
-        phone: userProfile.phone
-      });
-
-      // Get active lease count
-      const leases = await leaseManagementService.getLeases({
-        tenantId: user.id,
-        status: ['active']
-      });
-      setActiveLeaseCount(leases.length);
-    } catch (err) {
-      console.error('Error loading profile:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load profile');
-    } finally {
-      setLoading(false);
-    }
-  }, [navigate]);
-
-  useEffect(() => {
-    loadProfile();
-  }, [loadProfile]);
-
+  // TODO: replace with real PATCH /api/v1/profile when backend is ready
   const handleSave = async () => {
-    if (!profile) return;
-
     setSaving(true);
-
-    try {
-      const { error: updateError } = await supabase
-        .from('users')
-        .update({
-          full_name: formData.fullName,
-          phone: formData.phone,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', profile.id);
-
-      if (updateError) {
-        throw updateError;
-      }
-
-      toast({
-        title: 'Profile updated',
-        description: 'Your profile has been updated successfully'
-      });
-
-      // Reload profile
-      await loadProfile();
-    } catch (err) {
-      console.error('Error updating profile:', err);
-      toast({
-        title: 'Update failed',
-        description: err instanceof Error ? err.message : 'Failed to update profile',
-        variant: 'destructive'
-      });
-    } finally {
-      setSaving(false);
-    }
+    await new Promise(res => setTimeout(res, 600));
+    toast({ title: 'Profile updated', description: 'Your profile has been saved (mock)' });
+    setSaving(false);
   };
 
-  const handleLogout = async () => {
-    try {
-      await supabase.auth.signOut();
-      navigate('/auth/login');
-    } catch (err) {
-      console.error('Error logging out:', err);
-      toast({
-        title: 'Logout failed',
-        description: 'An error occurred while logging out',
-        variant: 'destructive'
-      });
-    }
+  const handleCancel = () => {
+    setFormData({ fullName: profile.fullName, phone: profile.phone });
   };
-
-  const formatDate = (date: Date): string => {
-    return new Intl.DateTimeFormat('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    }).format(new Date(date));
-  };
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
-      </div>
-    );
-  }
-
-  if (error || !profile) {
-    return (
-      <div className="container mx-auto px-4 py-8">
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{error || 'Profile not found'}</AlertDescription>
-        </Alert>
-      </div>
-    );
-  }
 
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2">My Profile</h1>
-        <p className="text-gray-600">Manage your account information</p>
+        <h1 className="text-3xl font-bold text-foreground mb-2">My Profile</h1>
+        <p className="text-muted-foreground">Manage your account information</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -204,58 +89,47 @@ export function TenantProfile() {
                 <div className="h-24 w-24 rounded-full bg-primary/10 flex items-center justify-center mb-4">
                   <User className="h-12 w-12 text-primary" />
                 </div>
-                <h3 className="text-xl font-semibold">{profile.fullName}</h3>
-                <p className="text-sm text-gray-500 capitalize">{profile.role}</p>
+                <h3 className="text-xl font-semibold text-foreground">{profile.fullName}</h3>
+                <p className="text-sm text-muted-foreground capitalize">{profile.role}</p>
               </div>
 
               <Separator />
 
               <div className="space-y-3">
                 <div className="flex items-center gap-3">
-                  <Mail className="h-5 w-5 text-gray-400" />
+                  <Mail className="h-5 w-5 text-muted-foreground shrink-0" />
                   <div>
-                    <p className="text-xs text-gray-500">Email</p>
-                    <p className="text-sm">{profile.email}</p>
+                    <p className="text-xs text-muted-foreground">Email</p>
+                    <p className="text-sm text-foreground">{profile.email}</p>
                   </div>
                 </div>
 
                 {profile.phone && (
                   <div className="flex items-center gap-3">
-                    <Phone className="h-5 w-5 text-gray-400" />
+                    <Phone className="h-5 w-5 text-muted-foreground shrink-0" />
                     <div>
-                      <p className="text-xs text-gray-500">Phone</p>
-                      <p className="text-sm">{profile.phone}</p>
+                      <p className="text-xs text-muted-foreground">Phone</p>
+                      <p className="text-sm text-foreground">{profile.phone}</p>
                     </div>
                   </div>
                 )}
 
                 <div className="flex items-center gap-3">
-                  <Home className="h-5 w-5 text-gray-400" />
+                  <Home className="h-5 w-5 text-muted-foreground shrink-0" />
                   <div>
-                    <p className="text-xs text-gray-500">Active Leases</p>
-                    <p className="text-sm">{activeLeaseCount}</p>
+                    <p className="text-xs text-muted-foreground">Active Leases</p>
+                    <p className="text-sm text-foreground">{MOCK_ACTIVE_LEASE_COUNT}</p>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-3">
-                  <Calendar className="h-5 w-5 text-gray-400" />
+                  <Calendar className="h-5 w-5 text-muted-foreground shrink-0" />
                   <div>
-                    <p className="text-xs text-gray-500">Member Since</p>
-                    <p className="text-sm">{formatDate(profile.createdAt)}</p>
+                    <p className="text-xs text-muted-foreground">Member Since</p>
+                    <p className="text-sm text-foreground">{formatDate(profile.createdAt)}</p>
                   </div>
                 </div>
               </div>
-
-              <Separator />
-
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={handleLogout}
-              >
-                <LogOut className="mr-2 h-4 w-4" />
-                Sign Out
-              </Button>
             </CardContent>
           </Card>
         </div>
@@ -284,9 +158,9 @@ export function TenantProfile() {
                   id="email"
                   value={profile.email}
                   disabled
-                  className="bg-gray-50"
+                  className="bg-muted text-muted-foreground"
                 />
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-muted-foreground">
                   Email cannot be changed. Contact support if you need to update your email.
                 </p>
               </div>
@@ -303,17 +177,10 @@ export function TenantProfile() {
               </div>
 
               <div className="flex justify-end gap-3 pt-4">
-                <Button
-                  variant="outline"
-                  onClick={loadProfile}
-                  disabled={saving}
-                >
+                <Button variant="outline" onClick={handleCancel} disabled={saving}>
                   Cancel
                 </Button>
-                <Button
-                  onClick={handleSave}
-                  disabled={saving}
-                >
+                <Button onClick={handleSave} disabled={saving}>
                   {saving ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -338,23 +205,21 @@ export function TenantProfile() {
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <p className="text-sm font-medium text-gray-500">Account Status</p>
-                  <p className="text-lg font-semibold capitalize">{profile.status}</p>
+                  <p className="text-sm font-medium text-muted-foreground">Account Status</p>
+                  <p className="text-lg font-semibold text-foreground capitalize">{profile.status}</p>
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-gray-500">Account Type</p>
-                  <p className="text-lg font-semibold capitalize">{profile.role}</p>
+                  <p className="text-sm font-medium text-muted-foreground">Account Type</p>
+                  <p className="text-lg font-semibold text-foreground capitalize">{profile.role}</p>
                 </div>
               </div>
 
               <Separator />
 
-              <div>
-                <p className="text-sm text-gray-500">
-                  Your account is in good standing. If you have any questions or need assistance, 
-                  please contact support through the platform.
-                </p>
-              </div>
+              <p className="text-sm text-muted-foreground">
+                Your account is in good standing. If you have any questions or need assistance,
+                please contact support through the platform.
+              </p>
             </CardContent>
           </Card>
         </div>

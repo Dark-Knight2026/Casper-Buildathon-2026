@@ -1,6 +1,10 @@
 import React from 'react';
 
-export const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+// Checks if device is truly mobile — based on device capability, NOT screen width
+// Covers iPadOS 13+ which reports as MacIntel but has maxTouchPoints > 1
+export const isMobile =
+  /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
 export type ProviderDef = {
   key: string;

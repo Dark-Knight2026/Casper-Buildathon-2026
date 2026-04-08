@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Home, Loader2, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -7,14 +7,25 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useWalletConnect } from '@/hooks/auth/useWalletConnect';
 import { RoleSelector } from './register/RoleSelector';
 import { ProviderList } from './register/ProviderList';
-import { WALLET_PROVIDERS, isMobile } from './register/constants';
+import { WALLET_PROVIDERS } from './register/constants';
 
-const availableProviders = isMobile
-  ? WALLET_PROVIDERS.filter(p => p.key === 'casper-wallet')
-  : WALLET_PROVIDERS;
+const getIsMobile = () =>
+  /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
 export function Register() {
   const [role, setRole] = useState<'tenant' | 'landlord'>('tenant');
+  const [isMobile, setIsMobile] = useState(getIsMobile);
+
+  useEffect(() => {
+    const onResize = () => setIsMobile(getIsMobile());
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  const availableProviders = isMobile
+    ? WALLET_PROVIDERS.filter(p => p.key === 'casper-wallet')
+    : WALLET_PROVIDERS;
 
   const {
     isConnected, account, isAuthenticated, isSigningIn,
