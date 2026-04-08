@@ -197,6 +197,7 @@ pub async fn get_portfolio(
         rewards_earned,
         total_big,
         estimated_usd_value,
+        // TODO: implement 24h percent change calculation
         change_24h_percent: 0.0,
     }))
 }
