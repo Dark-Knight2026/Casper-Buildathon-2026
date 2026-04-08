@@ -21,10 +21,19 @@ export default function FeaturedProperties() {
       {FEATURED_PROPERTIES.map((property) => (
         <Card
           key={property.id}
-          className="group overflow-hidden hover:shadow-md transition-shadow duration-200 border border-border bg-card cursor-pointer rounded-md"
+          className="group flex flex-col overflow-hidden hover:shadow-md transition-shadow duration-200 border border-border bg-card cursor-pointer rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           onClick={() => navigate(`/properties/${property.id}`, { state: { property } })}
+          tabIndex={0}
+          role="button"
+          aria-label={`View details for ${property.title}`}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              navigate(`/properties/${property.id}`, { state: { property } });
+            }
+          }}
         >
-          <div className="relative overflow-hidden">
+          <div className="relative w-full overflow-hidden">
             <img
               src={property.images[0]}
               alt={property.title}
@@ -64,7 +73,7 @@ export default function FeaturedProperties() {
             </Button>
           </div>
 
-          <CardContent className="p-5">
+          <CardContent className="p-5 w-full">
             <h3 className="font-semibold text-lg text-foreground mb-1 group-hover:text-primary transition-colors">
               {property.title}
             </h3>

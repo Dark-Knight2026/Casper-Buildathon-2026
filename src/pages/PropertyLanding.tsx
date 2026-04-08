@@ -70,14 +70,14 @@ export default function PropertyLanding() {
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-center min-h-full pt-20
         ">
           <div className={`text-center transition-all duration-1000 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}`}>
-            {/* <Badge className="mb-4 mt-4 bg-white/20 text-white border-white/30">
+            {/* <Badge className="mb-4 mt-4 bg-white/20 text-primary-foreground border-white/30">
               New Enhanced Features Available
             </Badge> */}
-            <h1 className="text-5xl md:text-7xl font-bold text-white mb-6 leading-tight">
+            <h1 className="text-5xl md:text-7xl font-bold text-primary-foreground mb-6 leading-tight">
               Find Your{' '}
-              <span className="text-white/80">Dream Home</span>
+              <span className="text-primary-foreground/80">Dream Home</span>
             </h1>
-            <p className="text-xl md:text-2xl text-white/70 mb-8 max-w-3xl mx-auto leading-relaxed">
+            <p className="text-xl md:text-2xl text-primary-foreground/90 mb-8 max-w-3xl mx-auto leading-relaxed">
               Discover the perfect property with our AI-powered platform. From cozy apartments to luxury estates,
               we make finding your next home effortless and exciting.
             </p>
@@ -111,11 +111,11 @@ export default function PropertyLanding() {
                   key={index}
                   className={`text-center transition-all duration-700 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-5'}`}
                 >
-                  <div className="flex items-center justify-center mb-2 text-white/80">
+                  <div className="flex items-center justify-center mb-2 text-primary-foreground/80">
                     {stat.icon}
                   </div>
-                  <div className="text-3xl font-bold text-white mb-1">{stat.number}</div>
-                  <div className="text-white/60 font-medium">{stat.label}</div>
+                  <div className="text-3xl font-bold text-primary-foreground mb-1">{stat.number}</div>
+                  <div className="text-primary-foreground/75 font-medium">{stat.label}</div>
                 </div>
               ))}
             </div>
