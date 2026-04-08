@@ -244,7 +244,7 @@ export default function PropertyDetail() {
                       <button
                         key={index}
                         onClick={() => setCurrentImageIndex(index)}
-                        className={`flex-shrink-0 w-20 h-20 rounded overflow-hidden border-2 ${
+                        className={`shrink-0 w-20 h-20 rounded overflow-hidden border-2 ${
                           index === currentImageIndex ? 'border-primary' : 'border-transparent'
                         }`}
                       >
