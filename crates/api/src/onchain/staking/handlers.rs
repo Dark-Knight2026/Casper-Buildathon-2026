@@ -97,12 +97,26 @@ pub async fn get_staking_info(
         .apy_data
         .rewards_per_year
         .parse::<Decimal>()
-        .unwrap_or(Decimal::ZERO);
+        .unwrap_or_else(|e| {
+            tracing::warn!(
+                raw = %snap.apy_data.rewards_per_year,
+                error = %e,
+                "Failed to parse rewards_per_year as Decimal, defaulting to 0"
+            );
+            Decimal::ZERO
+        });
     let total_staked = snap
         .apy_data
         .total_staked
         .parse::<Decimal>()
-        .unwrap_or(Decimal::ZERO);
+        .unwrap_or_else(|e| {
+            tracing::warn!(
+                raw = %snap.apy_data.total_staked,
+                error = %e,
+                "Failed to parse total_staked as Decimal, defaulting to 0"
+            );
+            Decimal::ZERO
+        });
     let current_apy = if total_staked.is_zero() {
         0.0
     } else {
