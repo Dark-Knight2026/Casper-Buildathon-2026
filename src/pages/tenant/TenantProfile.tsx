@@ -4,12 +4,13 @@
  */
 
 import { useState } from 'react';
-import { User, Mail, Phone, Home, Calendar, Save, Loader2 } from 'lucide-react';
+import { User, Mail, Phone, Home, Calendar, Save, Loader2, FileText } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
+import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -20,10 +21,13 @@ interface UserProfile {
   phone: string;
   role: string;
   status: string;
+  bio: string;
+  avatarUrl: string | null;
+  activeLeaseCount: number;
   createdAt: Date;
 }
 
-// TODO: remove when backend /api/v1/profile is ready
+// TODO: remove when GET /api/v1/users/me is ready
 const MOCK_PROFILE: UserProfile = {
   id: 'mock-tenant-1',
   email: 'tenant@demo.com',
@@ -31,9 +35,11 @@ const MOCK_PROFILE: UserProfile = {
   phone: '+1 (555) 234-5678',
   role: 'tenant',
   status: 'active',
+  bio: 'Looking for a long-term rental in downtown area. Responsible tenant with good references.',
+  avatarUrl: null,
+  activeLeaseCount: 1,
   createdAt: new Date('2024-06-15'),
 };
-const MOCK_ACTIVE_LEASE_COUNT = 1;
 
 const formatDate = (date: Date): string =>
   new Intl.DateTimeFormat('en-US', { year: 'numeric', month: 'long', day: 'numeric' }).format(new Date(date));
@@ -41,7 +47,7 @@ const formatDate = (date: Date): string =>
 export function TenantProfile() {
   const { profile: authProfile } = useAuth();
 
-  // TODO: replace with API call when backend is ready
+  // TODO: replace with GET /api/v1/users/me when backend is ready
   const profile: UserProfile = {
     ...MOCK_PROFILE,
     id: authProfile?.id ?? MOCK_PROFILE.id,
@@ -55,10 +61,11 @@ export function TenantProfile() {
   const [formData, setFormData] = useState({
     fullName: profile.fullName,
     phone: profile.phone,
+    bio: profile.bio,
   });
   const { toast } = useToast();
 
-  // TODO: replace with real PATCH /api/v1/profile when backend is ready
+  // TODO: replace with PATCH /api/v1/users/me when backend is ready
   const handleSave = async () => {
     setSaving(true);
     await new Promise(res => setTimeout(res, 600));
@@ -67,7 +74,7 @@ export function TenantProfile() {
   };
 
   const handleCancel = () => {
-    setFormData({ fullName: profile.fullName, phone: profile.phone });
+    setFormData({ fullName: profile.fullName, phone: profile.phone, bio: profile.bio });
   };
 
   return (
@@ -78,35 +85,55 @@ export function TenantProfile() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Profile Overview */}
-        <div className="lg:col-span-1">
+
+        {/* Left column — overview */}
+        <div className="lg:col-span-1 space-y-6">
           <Card>
-            <CardHeader>
-              <CardTitle>Account Overview</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="pt-6 space-y-4">
+              {/* Avatar */}
               <div className="flex flex-col items-center">
-                <div className="h-24 w-24 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-                  <User className="h-12 w-12 text-primary" />
-                </div>
-                <h3 className="text-xl font-semibold text-foreground">{profile.fullName}</h3>
+                {profile.avatarUrl ? (
+                  <img
+                    src={profile.avatarUrl}
+                    alt={profile.fullName}
+                    className="h-24 w-24 rounded-full object-cover mb-4 ring-2 ring-border"
+                  />
+                ) : (
+                  <div className="h-24 w-24 rounded-full bg-primary/10 flex items-center justify-center mb-4">
+                    <User className="h-12 w-12 text-primary" />
+                  </div>
+                )}
+                {/* TODO: wire to POST /api/v1/users/me/avatar */}
+                <Button variant="outline" size="sm" disabled className="text-xs">
+                  Change photo
+                </Button>
+              </div>
+
+              <Separator />
+
+              <div>
+                <h3 className="text-lg font-semibold text-foreground">{profile.fullName}</h3>
                 <p className="text-sm text-muted-foreground capitalize">{profile.role}</p>
               </div>
+
+              {profile.bio && (
+                <p className="text-sm text-muted-foreground leading-relaxed">{profile.bio}</p>
+              )}
 
               <Separator />
 
               <div className="space-y-3">
                 <div className="flex items-center gap-3">
-                  <Mail className="h-5 w-5 text-muted-foreground shrink-0" />
-                  <div>
+                  <Mail className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <div className="min-w-0">
                     <p className="text-xs text-muted-foreground">Email</p>
-                    <p className="text-sm text-foreground">{profile.email}</p>
+                    <p className="text-sm text-foreground truncate">{profile.email}</p>
                   </div>
                 </div>
 
                 {profile.phone && (
                   <div className="flex items-center gap-3">
-                    <Phone className="h-5 w-5 text-muted-foreground shrink-0" />
+                    <Phone className="h-4 w-4 text-muted-foreground shrink-0" />
                     <div>
                       <p className="text-xs text-muted-foreground">Phone</p>
                       <p className="text-sm text-foreground">{profile.phone}</p>
@@ -115,15 +142,15 @@ export function TenantProfile() {
                 )}
 
                 <div className="flex items-center gap-3">
-                  <Home className="h-5 w-5 text-muted-foreground shrink-0" />
+                  <Home className="h-4 w-4 text-muted-foreground shrink-0" />
                   <div>
                     <p className="text-xs text-muted-foreground">Active Leases</p>
-                    <p className="text-sm text-foreground">{MOCK_ACTIVE_LEASE_COUNT}</p>
+                    <p className="text-sm text-foreground">{profile.activeLeaseCount}</p>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-3">
-                  <Calendar className="h-5 w-5 text-muted-foreground shrink-0" />
+                  <Calendar className="h-4 w-4 text-muted-foreground shrink-0" />
                   <div>
                     <p className="text-xs text-muted-foreground">Member Since</p>
                     <p className="text-sm text-foreground">{formatDate(profile.createdAt)}</p>
@@ -132,10 +159,29 @@ export function TenantProfile() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Account status */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Account Status</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex justify-between">
+                <p className="text-sm text-muted-foreground">Status</p>
+                <p className="text-sm font-medium text-foreground capitalize">{profile.status}</p>
+              </div>
+              <div className="flex justify-between">
+                <p className="text-sm text-muted-foreground">Account Type</p>
+                <p className="text-sm font-medium text-foreground capitalize">{profile.role}</p>
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
-        {/* Edit Profile */}
+        {/* Right column — edit forms */}
         <div className="lg:col-span-2 space-y-6">
+
+          {/* Personal information */}
           <Card>
             <CardHeader>
               <CardTitle>Personal Information</CardTitle>
@@ -153,19 +199,6 @@ export function TenantProfile() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="email">Email Address</Label>
-                <Input
-                  id="email"
-                  value={profile.email}
-                  disabled
-                  className="bg-muted text-muted-foreground"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Email cannot be changed. Contact support if you need to update your email.
-                </p>
-              </div>
-
-              <div className="space-y-2">
                 <Label htmlFor="phone">Phone Number</Label>
                 <Input
                   id="phone"
@@ -176,52 +209,55 @@ export function TenantProfile() {
                 />
               </div>
 
-              <div className="flex justify-end gap-3 pt-4">
+              <div className="space-y-2">
+                <Label htmlFor="bio">Bio</Label>
+                <Textarea
+                  id="bio"
+                  value={formData.bio}
+                  onChange={(e) => setFormData(prev => ({ ...prev, bio: e.target.value }))}
+                  placeholder="Tell landlords a bit about yourself..."
+                  rows={3}
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2">
                 <Button variant="outline" onClick={handleCancel} disabled={saving}>
                   Cancel
                 </Button>
                 <Button onClick={handleSave} disabled={saving}>
                   {saving ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Saving...
-                    </>
+                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Saving...</>
                   ) : (
-                    <>
-                      <Save className="mr-2 h-4 w-4" />
-                      Save Changes
-                    </>
+                    <><Save className="mr-2 h-4 w-4" />Save Changes</>
                   )}
                 </Button>
               </div>
             </CardContent>
           </Card>
 
+          {/* Email — separate verification flow */}
           <Card>
             <CardHeader>
-              <CardTitle>Account Status</CardTitle>
-              <CardDescription>Your account information</CardDescription>
+              <CardTitle>Email Address</CardTitle>
+              <CardDescription>Changing email requires verification</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Account Status</p>
-                  <p className="text-lg font-semibold text-foreground capitalize">{profile.status}</p>
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3 min-w-0">
+                  <Mail className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <p className="text-sm text-foreground truncate">{profile.email}</p>
                 </div>
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Account Type</p>
-                  <p className="text-lg font-semibold text-foreground capitalize">{profile.role}</p>
-                </div>
+                {/* TODO: open email change flow → PATCH /api/v1/users/me/email */}
+                <Button variant="outline" size="sm" disabled>
+                  Change email
+                </Button>
               </div>
-
-              <Separator />
-
-              <p className="text-sm text-muted-foreground">
-                Your account is in good standing. If you have any questions or need assistance,
-                please contact support through the platform.
+              <p className="text-xs text-muted-foreground">
+                A confirmation link will be sent to your new email address.
               </p>
             </CardContent>
           </Card>
+
         </div>
       </div>
     </div>
