@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useNavigate } from 'react-router-dom';
+import { useToast } from '@/hooks/use-toast';
 import FeaturedProperties from '@/components/FeaturedProperties';
 import LandingHeader from '@/components/LandingHeader';
 import {
@@ -22,6 +23,7 @@ import {
 
 export default function PropertyLanding() {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
@@ -92,9 +94,10 @@ export default function PropertyLanding() {
                 <ArrowRight className="ml-2 h-5 w-5" />
               </Button>
               <Button
-                variant="outline"
+                variant="white"
                 size="lg"
-                className="px-8 py-4 bg-transparent border-white text-white hover:bg-white/10 hover:text-white text-lg font-semibold rounded-md"
+                className="px-8 py-4 text-lg font-semibold rounded-md"
+                onClick={() => toast({ title: 'Demo coming soon', description: 'Will be integrated with the messaging system.' })}
               >
                 <Play className="mr-2 h-5 w-5" />
                 Watch Demo
@@ -251,9 +254,10 @@ export default function PropertyLanding() {
               Start Your Search
             </Button>
             <Button
-              variant="outline"
+              variant="white"
               size="lg"
-              className="px-8 py-4 text-lg font-semibold rounded-md border-primary-foreground/50 text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground"
+              className="px-8 py-4 text-lg font-semibold rounded-md"
+              onClick={() => toast({ title: 'Consultation coming soon', description: 'Will be integrated with the messaging system.' })}
             >
               <Clock className="mr-2 h-5 w-5" />
               Schedule Consultation
