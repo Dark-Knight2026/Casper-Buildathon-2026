@@ -211,9 +211,13 @@ pub async fn get_release_schedule(
     State(state): State<Arc<AppState>>,
 ) -> ApiResult<Json<ReleaseScheduleResponse>> {
     let rows = db::fetch_all_schedules(&state.db).await?;
+    let is_truncated = rows.len() >= 10_000;
 
     if rows.is_empty() {
-        return Ok(Json(ReleaseScheduleResponse { data: vec![] }));
+        return Ok(Json(ReleaseScheduleResponse {
+            data: vec![],
+            is_truncated: false,
+        }));
     }
 
     // Find the earliest start_timestamp as the global origin.
@@ -302,5 +306,5 @@ pub async fn get_release_schedule(
         });
     }
 
-    Ok(Json(ReleaseScheduleResponse { data }))
+    Ok(Json(ReleaseScheduleResponse { data, is_truncated }))
 }

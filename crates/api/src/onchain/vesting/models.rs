@@ -88,4 +88,6 @@ pub struct ReleaseSchedulePoint {
 pub struct ReleaseScheduleResponse {
     /// Release schedule data points.
     pub data: Vec<ReleaseSchedulePoint>,
+    /// `true` when the 10,000-row safety cap was hit and results may be incomplete.
+    pub is_truncated: bool,
 }
