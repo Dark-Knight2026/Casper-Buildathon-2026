@@ -41,7 +41,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     const Comp = asChild ? Slot : 'button';
     
     // Add aria-disabled when disabled or loading
-    const ariaProps = (disabled || loading) ? { 'aria-disabled': 'true' } : {};
+    const ariaProps = (disabled || loading) ? { 'aria-disabled': true as const } : {};
     
     return (
       <Comp

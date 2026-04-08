@@ -23,7 +23,7 @@ const NAV_LINKS = [
   { to: '/tenant/payments',        label: 'Payments',     icon: CreditCard },
   { to: '/tenant/maintenance',     label: 'Maintenance',  icon: Wrench },
   { to: '/tenant/renewals',        label: 'Renewals',     icon: RefreshCw },
-  { to: '/messages',               label: 'Messages',     icon: MessageSquare },
+  { to: '/tenant/messages',         label: 'Messages',     icon: MessageSquare },
   { to: '/tenant/profile',         label: 'Profile',      icon: User },
 ];
 

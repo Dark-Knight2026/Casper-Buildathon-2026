@@ -212,21 +212,15 @@ function App() {
                 <Route path="renewals"              element={<TenantRenewalOfferList />} />
                 <Route path="renewals/:id"          element={<TenantRenewalOfferView />} />
                 <Route path="renewals/:id/negotiate" element={<TenantRenewalNegotiation />} />
+                <Route path="messages"             element={<CommunicationCenter />} />
                 <Route path="profile"              element={<TenantProfile />} />
               </Route>
               
-              {/* 
+              {/*
                 SHARED ROUTES - Both tenant and landlord can access
                 Requires authentication but allows multiple roles
               */}
-              <Route 
-                path="/messages" 
-                element={
-                  <ProtectedRoute allowedRoles={['both']}>
-                    <CommunicationCenter />
-                  </ProtectedRoute>
-                } 
-              />
+              {/* TODO: add /landlord/messages route inside landlord layout */}
               
               {/* Notification routes - Accessible by both roles */}
               <Route 

@@ -2,16 +2,17 @@ import { format } from 'date-fns';
 import { Check, CheckCheck } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
-import { supabase } from '@/lib/supabase/client';
 import type { Message } from '@/types/message';
+
+// TODO: replace with real user id from auth context when backend is ready
+const MOCK_USER_ID = 'mock-tenant-1';
 
 interface MessageBubbleProps {
   message: Message;
 }
 
 export default function MessageBubble({ message }: MessageBubbleProps) {
-  const { data: { user } } = supabase.auth.getUser();
-  const isOwnMessage = message.senderId === user?.then(u => u?.id);
+  const isOwnMessage = message.senderId === MOCK_USER_ID;
 
   return (
     <div
@@ -33,8 +34,8 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
         className={cn(
           'max-w-[70%] rounded-2xl px-4 py-2 shadow-sm',
           isOwnMessage
-            ? 'bg-blue-600 text-white'
-            : 'bg-white text-gray-900'
+            ? 'bg-primary text-primary-foreground'
+            : 'bg-muted text-foreground'
         )}
       >
         {/* Message Content */}
@@ -44,7 +45,7 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
         <div
           className={cn(
             'flex items-center gap-1 mt-1 text-xs',
-            isOwnMessage ? 'text-blue-100' : 'text-gray-500'
+            isOwnMessage ? 'text-primary-foreground/70' : 'text-muted-foreground'
           )}
         >
           <span>{format(message.createdAt, 'HH:mm')}</span>

@@ -26,6 +26,8 @@
   --color-badge-success-foreground: hsl(var(--badge-success-foreground));
   --color-badge-info: hsl(var(--badge-info));
   --color-badge-info-foreground: hsl(var(--badge-info-foreground));
+  --color-conversation-selected: hsl(var(--conversation-selected));
+  --color-conversation-selected-hover: hsl(var(--conversation-selected-hover));
   --radius-sm: calc(var(--radius) - 2px);
   --radius-md: var(--radius);
   --radius-lg: calc(var(--radius) + 2px);
@@ -120,6 +122,9 @@
     --badge-info: 214 49% 35%;             /* #2A4E7A - navy-blue for price changes, info */
     --badge-info-foreground: 0 0% 100%;
 
+    --conversation-selected: 213 94% 94%;       /* blue-100 — selected conversation item */
+    --conversation-selected-hover: 213 94% 97%; /* blue-50  — hover on conversation item */
+
     /* ICO Feedback Colors - Light Mode */
     --ico-error-bg: 0 86% 97%;             /* #FEF2F2 - red-50 */
     --ico-error-border: 0 72% 83%;         /* #FECACA - red-200 */
@@ -160,6 +165,9 @@
     --badge-success-foreground: 0 0% 100%;
     --badge-info: 214 49% 55%;
     --badge-info-foreground: 0 0% 100%;
+
+    --conversation-selected: 213 50% 25%;       /* dark blue — selected conversation item */
+    --conversation-selected-hover: 213 50% 20%; /* darker blue — hover on conversation item */
 
     /* ICO Page Variables - Dark Mode */
     --ico-bg-primary: 222 47% 8%;
