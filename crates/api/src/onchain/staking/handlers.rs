@@ -310,8 +310,9 @@ pub async fn get_unbonding(
 ) -> ApiResult<Json<UnbondingResponse>> {
     let account = common::validate_account(&path.account_hash)?;
 
-    let position = db::fetch_unbonding_position(&state.db, &account).await?;
-    let events = db::fetch_unbonding_events(&state.db, &account).await?;
+    let snap = db::fetch_unbonding_snapshot(&state.db, &account).await?;
+    let position = snap.position;
+    let events = snap.events;
 
     let now_ms = Utc::now().timestamp_millis();
 

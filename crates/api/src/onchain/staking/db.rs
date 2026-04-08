@@ -322,7 +322,7 @@ pub struct UnbondingPositionRow {
 /// Returns `sqlx::Error` if the database query fails.
 #[inline]
 pub async fn fetch_unbonding_position(
-    pool: &PgPool,
+    executor: impl PgExecutor<'_>,
     staker_address: &str,
 ) -> Result<Option<UnbondingPositionRow>, Error> {
     sqlx::query_as!(
@@ -334,7 +334,7 @@ pub async fn fetch_unbonding_position(
         ",
         staker_address,
     )
-    .fetch_optional(pool)
+    .fetch_optional(executor)
     .await
 }
 
@@ -351,14 +351,14 @@ pub struct UnbondingEventRow {
     pub transaction_hash: String,
 }
 
-/// Fetch unstake/withdraw events for a staker, ordered chronologically.
+/// Fetch unstake/withdraw events for a staker, newest first.
 ///
 /// # Errors
 ///
 /// Returns `sqlx::Error` if the database query fails.
 #[inline]
 pub async fn fetch_unbonding_events(
-    pool: &PgPool,
+    executor: impl PgExecutor<'_>,
     staker_address: &str,
 ) -> Result<Vec<UnbondingEventRow>, Error> {
     sqlx::query_as!(
@@ -377,8 +377,40 @@ pub async fn fetch_unbonding_events(
         "#,
         staker_address,
     )
-    .fetch_all(pool)
+    .fetch_all(executor)
     .await
+}
+
+/// Unbonding position + event history fetched in a single snapshot.
+#[derive(Debug)]
+pub struct UnbondingSnapshot {
+    /// Current unbonding position (if any).
+    pub position: Option<UnbondingPositionRow>,
+    /// Recent unstake/withdraw events, newest first.
+    pub events: Vec<UnbondingEventRow>,
+}
+
+/// Fetch unbonding data in a single `REPEATABLE READ` transaction.
+///
+/// # Errors
+///
+/// Returns `sqlx::Error` if any database query fails.
+#[inline]
+pub async fn fetch_unbonding_snapshot(
+    pool: &PgPool,
+    staker_address: &str,
+) -> Result<UnbondingSnapshot, Error> {
+    let mut tx = pool.begin().await?;
+    sqlx::query!("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
+        .execute(tx.as_mut())
+        .await?;
+
+    let position = fetch_unbonding_position(tx.as_mut(), staker_address).await?;
+    let events = fetch_unbonding_events(tx.as_mut(), staker_address).await?;
+
+    tx.commit().await?;
+
+    Ok(UnbondingSnapshot { position, events })
 }
 
 /// Fetch the sum of locked (not yet claimed) vesting tokens for an account.
