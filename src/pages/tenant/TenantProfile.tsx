@@ -4,7 +4,7 @@
  */
 
 import { useState } from 'react';
-import { User, Mail, Phone, Home, Calendar, Save, Loader2, FileText } from 'lucide-react';
+import { User, Mail, Phone, Home, Calendar, Save, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
