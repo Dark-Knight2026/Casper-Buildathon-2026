@@ -1018,7 +1018,7 @@ pub async fn update_staker_reward_snapshot(
     pending_rewards: &str,
     reward_per_token_paid: &str,
     block_height: i64,
-) -> IndexerResult<()> {
+) -> IndexerResult<u64> {
     let result = sqlx::query!(
         r"
             UPDATE staking_positions
@@ -1037,7 +1037,8 @@ pub async fn update_staker_reward_snapshot(
     .execute(tx.as_mut())
     .await?;
 
-    if result.rows_affected() == 0 {
+    let rows = result.rows_affected();
+    if rows == 0 {
         tracing::warn!(
             staker = %staker_address,
             block_height = block_height,
@@ -1045,5 +1046,5 @@ pub async fn update_staker_reward_snapshot(
         );
     }
 
-    Ok(())
+    Ok(rows)
 }

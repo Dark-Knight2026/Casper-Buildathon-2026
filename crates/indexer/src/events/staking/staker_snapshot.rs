@@ -47,7 +47,7 @@ impl IndexableEvent for StakerSnapshot {
     async fn process(&self, ctx: &mut EventContext<'_>) -> IndexerResult<()> {
         let staker = address::normalize_casper_address(&self.staker)?;
 
-        db::update_staker_reward_snapshot(
+        let rows = db::update_staker_reward_snapshot(
             ctx.tx,
             &staker,
             &self.pending_rewards,
@@ -56,13 +56,15 @@ impl IndexableEvent for StakerSnapshot {
         )
         .await?;
 
-        tracing::info!(
-            deploy = %ctx.deploy_hash,
-            staker = %staker,
-            pending_rewards = %self.pending_rewards,
-            reward_per_token_paid = %self.reward_per_token_paid,
-            "Staker snapshot recorded"
-        );
+        if rows > 0 {
+            tracing::info!(
+                deploy = %ctx.deploy_hash,
+                staker = %staker,
+                pending_rewards = %self.pending_rewards,
+                reward_per_token_paid = %self.reward_per_token_paid,
+                "Staker snapshot recorded"
+            );
+        }
 
         Ok(())
     }
