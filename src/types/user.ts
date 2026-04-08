@@ -139,6 +139,9 @@ export function getDashboardRoute(role: UserRole): string {
   return routes[role] || '/';
 }
 
+// Route-level role type (includes 'both' as a sentinel for landlord+tenant access)
+export type RouteRole = 'landlord' | 'tenant' | 'admin' | 'both';
+
 // Role categories for grouping
 export const CORE_ROLES: UserRole[] = ['buyer', 'seller', 'agent', 'broker', 'landlord', 'tenant'];
 export const PRE_OFFER_ROLES: UserRole[] = [
