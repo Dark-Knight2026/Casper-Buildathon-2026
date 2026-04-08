@@ -763,7 +763,7 @@ async fn staker_snapshot_updates_position(pool: PgPool) {
 
     let pos = sqlx::query!(
         r"
-            SELECT pending_rewards, reward_per_token_paid
+            SELECT pending_rewards, reward_per_token_paid, snapshot_block_height
             FROM staking_positions
             WHERE staker_address = $1
         ",
@@ -775,6 +775,11 @@ async fn staker_snapshot_updates_position(pool: PgPool) {
 
     assert_eq!(pos.pending_rewards, "500000000000000000000");
     assert_eq!(pos.reward_per_token_paid, "3000000000000000000");
+    assert_eq!(
+        pos.snapshot_block_height,
+        Some(500),
+        "snapshot_block_height must equal the event block_height"
+    );
 }
 
 /// A second `StakerSnapshot` overwrites (not accumulates) the reward fields.
@@ -1081,7 +1086,7 @@ async fn staker_snapshot_same_block_different_deploy(pool: PgPool) {
 
     let pos = sqlx::query!(
         r"
-            SELECT pending_rewards, reward_per_token_paid
+            SELECT pending_rewards, reward_per_token_paid, snapshot_block_height
             FROM staking_positions
             WHERE staker_address = $1
         ",
@@ -1098,5 +1103,10 @@ async fn staker_snapshot_same_block_different_deploy(pool: PgPool) {
     assert_eq!(
         pos.reward_per_token_paid, "5000000000000000000",
         "second same-block snapshot must overwrite reward_per_token_paid"
+    );
+    assert_eq!(
+        pos.snapshot_block_height,
+        Some(500),
+        "snapshot_block_height must remain 500 after same-block overwrite"
     );
 }
