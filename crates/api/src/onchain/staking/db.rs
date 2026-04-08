@@ -253,6 +253,7 @@ pub async fn fetch_monthly_earnings(
               AND event_timestamp >= $2
             GROUP BY TO_CHAR(event_timestamp, 'YYYY-MM')
             ORDER BY "month!"
+            LIMIT 120
         "#,
         staker_address,
         since,
