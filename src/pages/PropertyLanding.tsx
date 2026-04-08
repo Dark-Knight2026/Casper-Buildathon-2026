@@ -64,15 +64,11 @@ export default function PropertyLanding() {
     <div className="min-h-screen bg-secondary">
       <LandingHeader />
       {/* Hero Section */}
-      <section className="relative overflow-hidden pt-16 pb-20 border-b border-border">
+      <section className="relative overflow-hidden min-h-[560px] pt-16 border-b border-border">
         <div className="absolute inset-0" style={{ backgroundImage: "url('/images/ModernApartment.jpg')", backgroundRepeat: "no-repeat", backgroundSize: "cover", backgroundPosition: "center 30%" }} />
         <div className="absolute inset-0 bg-primary/75" />
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-center min-h-full pt-20
-        ">
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-center py-20">
           <div className={`text-center transition-all duration-1000 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}`}>
-            {/* <Badge className="mb-4 mt-4 bg-white/20 text-primary-foreground border-white/30">
-              New Enhanced Features Available
-            </Badge> */}
             <h1 className="text-5xl md:text-7xl font-bold text-primary-foreground mb-6 leading-tight">
               Find Your{' '}
               <span className="text-primary-foreground/80">Dream Home</span>

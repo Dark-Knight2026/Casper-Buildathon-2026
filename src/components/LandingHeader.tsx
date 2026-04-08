@@ -11,7 +11,7 @@ export default function LandingHeader() {
           LeaseFi
         </Link>
 
-                <nav className="hidden md:flex items-center gap-8">
+        <nav className="hidden md:flex items-center gap-8">
           <Link to="/listings" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
             Properties
           </Link>
