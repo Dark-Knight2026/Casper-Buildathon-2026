@@ -12,6 +12,8 @@
 | event_handlers.rs         | Integration tests for event handlers via `process_event` with DB assertions          |
 | event_registry.rs         | Tests `EventType::parse` - raw `(ContractType, event_name)` resolution               |
 | processor.rs              | Integration tests for `process_event`: idempotency, error handling, DB state         |
+| staking_events.rs         | Integration tests for all 6 staking event handlers                                   |
 | streaming.rs              | Integration tests for WebSocket message deserialization and contract helpers         |
 | testnet_ico.rs            | Manual testnet tests (`#[ignore]`) for ICO contract interaction                      |
+| vesting_events.rs         | Integration tests for ScheduleCreated and TokensClaimed                              |
 | common/                   | Shared test infrastructure: migration runner, fake deploys, RLS, JSON payloads       |
