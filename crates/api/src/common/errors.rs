@@ -61,6 +61,8 @@ pub enum ApiError {
     NotFound(String),
     /// Returned when creating a resource that already exists.
     Conflict(String),
+    /// Returned when the client has sent too many requests.
+    TooManyRequests(String),
     /// Wraps a `sqlx::Error`. These errors are not exposed to the client
     /// for security reasons, and will result in a generic 500 error.
     Database(sqlx::Error),
@@ -104,6 +106,7 @@ impl IntoResponse for ApiError {
             ApiError::Forbidden(msg) => (StatusCode::FORBIDDEN, msg.clone()),
             ApiError::NotFound(msg) => (StatusCode::NOT_FOUND, msg.clone()),
             ApiError::Conflict(msg) => (StatusCode::CONFLICT, msg.clone()),
+            ApiError::TooManyRequests(msg) => (StatusCode::TOO_MANY_REQUESTS, msg.clone()),
             ApiError::Queue(msg) => {
                 tracing::error!("Queue error: {}", msg);
                 (
