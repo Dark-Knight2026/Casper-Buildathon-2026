@@ -1,18 +1,8 @@
 import { useMemo } from 'react';
 import { ICO_CONFIG } from '@/constants/ico';
+import { rawTokenToNumber } from '@/lib/tokenAmount';
 import { useAccountTransactions } from './useAccountTransactions';
 import type { ICOTransaction } from '@/types/ico';
-
-// Safely convert raw BigInt string to decimal number without precision loss
-function parseTokenAmount(rawStr: string | null, decimals: number): number {
-  if (!rawStr || !/^\d+$/.test(rawStr)) return 0;
-  const raw = BigInt(rawStr);
-  if (raw === 0n) return 0;
-  const str = raw.toString().padStart(decimals + 1, '0');
-  const intStr = str.slice(0, str.length - decimals) || '0';
-  const fracStr = str.slice(str.length - decimals);
-  return parseFloat(`${intStr}.${fracStr}`);
-}
 
 export function useTransactionHistory(
   accountHash: string | null | undefined,
@@ -28,7 +18,7 @@ export function useTransactionHistory(
     rawTxs.map(tx => {
       const isBig = tx.currency === 'BIG';
       const decimals = isBig ? 18 : 6;
-      const amount = parseTokenAmount(tx.amount, decimals);
+      const amount = rawTokenToNumber(tx.amount ?? '', decimals);
       const isIncoming = tx.to_hash?.toLowerCase() === accountHex;
 
       // Auto-stake/vesting: BIG sent from user account (from_type=0) to a contract (to_type=1)

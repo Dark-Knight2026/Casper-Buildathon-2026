@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
+import { rawTokenToNumber } from '@/lib/tokenAmount';
 import type { ScheduleProgress } from '@/hooks/ico/useICOSchedules';
 import type { IcoProgressResponse } from '@/types/ico';
 import { ICO_CONFIG } from '@/constants/ico';
@@ -29,21 +30,11 @@ interface PrivateSaleActiveProps {
   progress?: ScheduleProgress | null;
 }
 
-const WEI = BigInt('1000000000000000000'); // 10^18
-
-function safeBigInt(s: string | null | undefined): bigint {
-  return s && /^\d+$/.test(s) ? BigInt(s) : 0n;
-}
-
-function bigIntToNumber(raw: bigint): number {
-  return Number(raw / WEI) + Number(raw % WEI) / Number(WEI);
-}
-
 function mapToScheduleProgress(p: IcoProgressResponse): ScheduleProgress {
   return {
-    tokensSold:       bigIntToNumber(safeBigInt(p.tokensSold)),
-    totalAllocation:  bigIntToNumber(safeBigInt(p.totalAllocation)),
-    tokensRemaining:  bigIntToNumber(safeBigInt(p.tokensRemaining)),
+    tokensSold:       rawTokenToNumber(p.tokensSold, 18),
+    totalAllocation:  rawTokenToNumber(p.totalAllocation, 18),
+    tokensRemaining:  rawTokenToNumber(p.tokensRemaining, 18),
     amountRaised:     p.amountRaised,
     hardCapUsd:       p.hardCapUsd,
     priceUsd:         p.priceUsd,
@@ -110,7 +101,7 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: Private
 
   const userBalance = useMemo(() => {
     if (icoBalance) {
-      const tokensPurchased = bigIntToNumber(safeBigInt(icoBalance.tokensPurchased));
+      const tokensPurchased = rawTokenToNumber(icoBalance.tokensPurchased ?? '', 18);
       return {
         tokensPurchased,
         currentValue: icoBalance.currentValue ?? undefined,
