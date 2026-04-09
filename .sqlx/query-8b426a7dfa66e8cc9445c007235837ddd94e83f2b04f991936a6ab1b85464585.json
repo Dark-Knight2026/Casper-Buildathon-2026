@@ -1,0 +1,44 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT schedule_id, start_timestamp, end_timestamp, sale_amount, price\n            FROM ico_schedules WHERE schedule_id = 'round-1'\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "schedule_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "start_timestamp",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "end_timestamp",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "sale_amount",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "price",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "8b426a7dfa66e8cc9445c007235837ddd94e83f2b04f991936a6ab1b85464585"
+}

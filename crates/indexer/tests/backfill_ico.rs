@@ -619,3 +619,90 @@ async fn successful_purchase_written_to_all_tables(pool: PgPool) {
     .unwrap();
     assert_eq!(cursor, Some(300));
 }
+
+/// Full happy-path for `add_schedule` deploy: the backfill must parse the
+/// schedule args, dispatch `ICOScheduleAdded`, and write a row to `ico_schedules`.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn successful_schedule_written_via_backfill(pool: PgPool) {
+    common::disable_rls(&pool).await;
+    sqlx::query("ALTER TABLE ico_schedules DISABLE ROW LEVEL SECURITY")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let rest = MockServer::start().await;
+    let config = common::test_config(rest.uri());
+    let client = Client::new();
+    let registry = EventRegistry::new();
+
+    let schedule_deploy_hash = "0000000000000000000000000000000000000000000000000000000000009999";
+
+    // No BIG transfers needed for schedule deploys.
+    Mock::given(matchers::method("GET"))
+        .and(matchers::path("/ft-token-actions"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(json!({ "data": [], "page_count": 1 })),
+        )
+        .mount(&rest)
+        .await;
+
+    Mock::given(matchers::method("GET"))
+        .and(matchers::path("/deploys"))
+        .respond_with(deploys_page(json!([
+            {
+                "deploy_hash": schedule_deploy_hash,
+                "block_height": 400,
+                "error_message": null,
+                "args": payloads::schedule_args(
+                    "round-1", 1_700_000_000_u64, 1_700_100_000_u64,
+                    &json!("500000000000000000000000000"),
+                    &json!("500000")
+                ),
+                "caller_public_key": FakeAddress::Alice.as_str(),
+                "timestamp": "2024-06-01T12:00:00.000Z"
+            }
+        ])))
+        .mount(&rest)
+        .await;
+
+    let known_hashes = HashSet::new();
+    let ctx = BackfillContext {
+        client: &client,
+        config: &config,
+        db_pool: &pool,
+        registry: &registry,
+        known_hashes: &known_hashes,
+    };
+    ico::backfill_ico(&ctx, "big_hash", ContractType::Ico, "ico_hash", 0)
+        .await
+        .unwrap();
+
+    // ico_schedules must contain the expected row.
+    let row = sqlx::query!(
+        r"
+            SELECT schedule_id, start_timestamp, end_timestamp, sale_amount, price
+            FROM ico_schedules WHERE schedule_id = 'round-1'
+        "
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("ico_schedules must have a row for the schedule deploy");
+
+    assert_eq!(row.schedule_id, "round-1");
+    assert_eq!(row.start_timestamp, 1_700_000_000);
+    assert_eq!(row.end_timestamp, 1_700_100_000);
+    assert_eq!(row.sale_amount, "500000000000000000000000000");
+    assert_eq!(row.price, "500000");
+
+    // Cursor must advance to block 400.
+    let cursor: Option<i64> = sqlx::query_scalar!(
+        r"
+            SELECT cursor_value FROM event_cursors
+            WHERE stream_type = 'backfill' AND contract_hash = 'ico_hash'
+        "
+    )
+    .fetch_optional(&pool)
+    .await
+    .unwrap();
+    assert_eq!(cursor, Some(400));
+}
