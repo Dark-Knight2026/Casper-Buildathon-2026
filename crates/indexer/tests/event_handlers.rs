@@ -26,8 +26,8 @@ use sqlx::PgPool;
 
 use common::{FakeAddress, MIGRATOR, PURCHASE_DEPLOY_HASH, TRANSFER_DEPLOY_HASH, payloads};
 use indexer::{
-    config::ContractType,
-    events::EventRegistry,
+    config::{ContractEntry, ContractRegistry, ContractType},
+    events::{self, EventRegistry},
     processor::{self, ProcessResult, RawEvent},
 };
 
@@ -1036,4 +1036,57 @@ async fn ico_schedule_added_stale_event_does_not_overwrite(pool: PgPool) {
         row.block_height, 500,
         "stale event must not overwrite newer block_height"
     );
+}
+
+// Contract registry — upsert_contract_registry
+
+/// Upserting contract registry must not deactivate contracts that belong to
+/// other environments / indexer instances on a shared database.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn upsert_contract_registry_preserves_foreign_contracts(pool: PgPool) {
+    common::disable_rls(&pool).await;
+    sqlx::query("ALTER TABLE contract_registry DISABLE ROW LEVEL SECURITY")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    // Seed a "foreign" contract not managed by this indexer instance.
+    sqlx::query(
+        r"INSERT INTO contract_registry (contract_type, contract_hash, is_active)
+          VALUES ('staking', 'foreign_staking_hash', TRUE)",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    // This indexer only manages ICO.
+    let registry = ContractRegistry {
+        ico: Some(ContractEntry::new("ico_hash_abc", 0)),
+        ..ContractRegistry::default()
+    };
+
+    events::db::upsert_contract_registry(&pool, &registry)
+        .await
+        .unwrap();
+
+    // Foreign contract must still be active.
+    let foreign_active: bool = sqlx::query_scalar(
+        "SELECT is_active FROM contract_registry WHERE contract_type = 'staking'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    assert!(
+        foreign_active,
+        "upsert must not deactivate contracts outside its own set"
+    );
+
+    // ICO contract must be active with the correct hash.
+    let ico_active: bool =
+        sqlx::query_scalar("SELECT is_active FROM contract_registry WHERE contract_type = 'ico'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(ico_active, "managed contract must be active after upsert");
 }

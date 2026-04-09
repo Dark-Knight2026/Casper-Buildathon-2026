@@ -126,12 +126,21 @@ pub async fn upsert_contract_registry(
 ) -> IndexerResult<()> {
     let mut tx = pool.begin().await?;
 
-    // Deactivate all contracts first; active ones will be re-enabled below.
-    sqlx::query!("UPDATE contract_registry SET is_active = FALSE")
-        .execute(tx.as_mut())
-        .await?;
+    // Deactivate only the contract types managed by this instance;
+    // foreign types (from other environments on a shared DB) stay untouched.
+    let active = contracts.active_contracts();
+    let types = active
+        .iter()
+        .map(|c| c.contract_type.as_str().to_owned())
+        .collect::<Vec<_>>();
+    sqlx::query!(
+        "UPDATE contract_registry SET is_active = FALSE WHERE contract_type = ANY($1)",
+        &types,
+    )
+    .execute(tx.as_mut())
+    .await?;
 
-    for contract in contracts.active_contracts() {
+    for contract in &active {
         sqlx::query!(
             r"
                 INSERT INTO contract_registry (contract_type, contract_hash, is_active)
