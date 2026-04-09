@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT COALESCE(\n                SUM(amount::NUMERIC * COALESCE(price::NUMERIC, 0))\n                    / (10::NUMERIC ^ 24),\n                0\n            )::TEXT\n            FROM ico_purchases\n            WHERE buyer_address = $1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "coalesce",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "4a241cf4274eb39bdfffba2d69644b05ee38f740d795c612bbf04a82ddaa1bd8"
+}

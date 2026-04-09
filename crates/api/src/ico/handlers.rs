@@ -101,16 +101,24 @@ pub async fn get_ico_balance(
         )
     };
 
-    let usd_value = (to_human(&snapshot.tokens_purchased)? * price_decimal)
+    let current_value = (to_human(&snapshot.tokens_purchased)? * price_decimal)
+        .to_f64()
+        .unwrap_or(0.0);
+
+    // Historical cost: SUM(amount * price) / 10^24, pre-divided in SQL.
+    let total_spent_usd = snapshot
+        .historical_cost_usd
+        .parse::<Decimal>()
+        .map_err(|_| ApiError::Internal("invalid historical cost data".to_owned()))?
         .to_f64()
         .unwrap_or(0.0);
 
     Ok(Json(IcoBalanceResponse {
         tokens_purchased: snapshot.tokens_purchased,
-        total_spent_usd: usd_value,
+        total_spent_usd,
         token_price: price_f64,
         token_symbol: "BIG".to_owned(),
-        current_value: usd_value,
+        current_value,
         is_active,
     }))
 }
@@ -178,7 +186,11 @@ pub async fn get_ico_progress(
     let tokens_remaining_dec = (alloc_dec - sold_dec).max(Decimal::ZERO);
     let tokens_remaining = tokens_remaining_dec.to_string();
 
-    let amount_raised = (to_human(&snapshot.tokens_sold)? * price_decimal)
+    // Historical cost: SUM(amount * price) / 10^24, pre-divided in SQL.
+    let amount_raised = snapshot
+        .historical_cost_usd
+        .parse::<Decimal>()
+        .map_err(|_| ApiError::Internal("invalid historical cost data".to_owned()))?
         .to_f64()
         .unwrap_or(0.0);
     let hard_cap_usd = (to_human(&total_allocation)? * price_decimal)
