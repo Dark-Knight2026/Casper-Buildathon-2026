@@ -1,4 +1,5 @@
 import { cn } from '@/lib/utils';
+import { logger } from '@/utils/logger';
 import { ProgressBar } from './ProgressBar';
 import { CountdownTimer } from './CountdownTimer';
 import { MainButton } from './MainButton';
@@ -186,7 +187,13 @@ export function VestingProgressBlock({
                     text={hasActiveUnbonding ? 'Unbonding…' : getClaimButtonText(entry.id)}
                     loading={isClaiming}
                     disabled={isClaiming || isClaimed || hasActiveUnbonding}
-                    onClick={() => onClaim?.(BigInt(entry.id))}
+                    onClick={() => {
+                      if (!/^\d+$/.test(entry.id)) {
+                        logger.error('[VestingProgressBlock] non-integer vesting id:', entry.id);
+                        return;
+                      }
+                      onClaim?.(BigInt(entry.id));
+                    }}
                     className="text-sm px-4 py-2"
                   />
                 </div>
