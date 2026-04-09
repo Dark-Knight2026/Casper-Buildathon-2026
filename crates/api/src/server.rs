@@ -116,18 +116,42 @@ pub fn public_data_router() -> OpenApiRouter<Arc<AppState>> {
 
 // Protected router ------------------------------------------------------------
 
+/// Rate limit: requests allowed per second for protected (authenticated) endpoints.
+pub const PROTECTED_RATE_LIMIT_PER_SECOND: u64 = 5;
+
+/// Rate limit: maximum burst size for protected (authenticated) endpoints.
+pub const PROTECTED_RATE_LIMIT_BURST: u32 = 30;
+
 /// Creates an `OpenAPI` router for protected endpoints that require JWT
 /// authentication.
 ///
 /// Authentication is enforced structurally via a router-level middleware
 /// (`require_auth`), so every current and future handler on this router is
 /// protected regardless of whether it includes the `AuthUser` extractor.
+///
+/// Rate limiting uses `SmartIpKeyExtractor` (same trust model as other routers).
+///
+/// # Panics
+///
+/// Panics at startup if the rate-limit configuration is invalid.
 #[inline]
 #[must_use]
 pub fn protected_router(state: Arc<AppState>) -> OpenApiRouter<Arc<AppState>> {
+    let rate_limit = Arc::new(
+        GovernorConfigBuilder::default()
+            .key_extractor(SmartIpKeyExtractor)
+            .per_second(PROTECTED_RATE_LIMIT_PER_SECOND)
+            .burst_size(PROTECTED_RATE_LIMIT_BURST)
+            .finish()
+            .expect(
+                "protected rate-limit config is always valid: per_second > 0 and burst_size > 0",
+            ),
+    );
+
     OpenApiRouter::new()
         .routes(routes!(tax::handlers::calculate_tax_liability))
         .routes(routes!(analytics::handlers::get_property_performance))
+        .route_layer(GovernorLayer::new(rate_limit))
         .route_layer(axum::middleware::from_fn_with_state(
             state,
             auth::middleware::require_auth,
