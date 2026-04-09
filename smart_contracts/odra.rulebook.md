@@ -857,7 +857,7 @@ pub struct MyContract {
 
 ### Error Handling : Revert Pattern
 
-**Description:** Use `self.env().revert(Error::Variant)` to halt execution with a typed error. For storage reads that must succeed, use `.get_or_revert_with(Error::Variant)`. For `Option` and `Result` values, use the `.unwrap_or_revert_with(Error::Variant)` extension. **Never** use `panic!`, `unwrap()`, or `expect()` in contract code.
+**Description:** Use `self.env().revert(Error::Variant)` to halt execution with a typed error. For storage reads that must succeed, use `.get_or_revert_with(Error::Variant)`. For `Option` and `Result` values, use the `.unwrap_or_revert_with(&self.env(), Error::Variant)` extension. **Never** use `panic!`, `unwrap()`, or `expect()` in contract code.
 
 **Rationale:**
 
