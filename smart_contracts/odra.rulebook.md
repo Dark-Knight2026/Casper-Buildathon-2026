@@ -882,10 +882,9 @@ pub fn withdraw(&mut self, amount: U256) {
 ```rust
 pub fn withdraw(&mut self, amount: U256) {
   let caller = self.env().caller();
-  let balance = self.balances.get_or_revert_with(
-    &caller,
-    Error::AccountNotFound,
-  );
+  let balance = self.balances
+    .get(&caller)
+    .unwrap_or_revert_with(&self.env(), Error::AccountNotFound);
   if balance < amount {
     self.env().revert(Error::InsufficientBalance);
   }
@@ -1246,7 +1245,8 @@ pub fn purchase(&mut self, schedule_id: u32) {
 
   // 1. Checks — OK
   let mut schedule = self.schedules
-    .get_or_revert_with(&schedule_id, Error::ScheduleNotFound);
+    .get(&schedule_id)
+    .unwrap_or_revert_with(&self.env(), Error::ScheduleNotFound);
 
   let purchase_amount = self.calculate_purchase(amount);
 
@@ -1268,7 +1268,8 @@ pub fn purchase(&mut self, schedule_id: u32) {
 
   // 1. Checks
   let mut schedule = self.schedules
-    .get_or_revert_with(&schedule_id, Error::ScheduleNotFound);
+    .get(&schedule_id)
+    .unwrap_or_revert_with(&self.env(), Error::ScheduleNotFound);
 
   let purchase_amount = self.calculate_purchase(amount);
 
