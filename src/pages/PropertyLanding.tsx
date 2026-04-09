@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useNavigate } from 'react-router-dom';
+import { useToast } from '@/hooks/use-toast';
 import FeaturedProperties from '@/components/FeaturedProperties';
 import LandingHeader from '@/components/LandingHeader';
 import {
@@ -22,6 +23,7 @@ import {
 
 export default function PropertyLanding() {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
@@ -62,20 +64,16 @@ export default function PropertyLanding() {
     <div className="min-h-screen bg-secondary">
       <LandingHeader />
       {/* Hero Section */}
-      <section className="relative overflow-hidden pt-16 pb-20 border-b border-border">
+      <section className="relative overflow-hidden min-h-[560px] pt-16 border-b border-border">
         <div className="absolute inset-0" style={{ backgroundImage: "url('/images/ModernApartment.jpg')", backgroundRepeat: "no-repeat", backgroundSize: "cover", backgroundPosition: "center 30%" }} />
         <div className="absolute inset-0 bg-primary/75" />
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-center min-h-full pt-20
-        ">
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-center py-20">
           <div className={`text-center transition-all duration-1000 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}`}>
-            {/* <Badge className="mb-4 mt-4 bg-white/20 text-white border-white/30">
-              New Enhanced Features Available
-            </Badge> */}
-            <h1 className="text-5xl md:text-7xl font-bold text-white mb-6 leading-tight">
+            <h1 className="text-5xl md:text-7xl font-bold text-primary-foreground mb-6 leading-tight">
               Find Your{' '}
-              <span className="text-white/80">Dream Home</span>
+              <span className="text-primary-foreground/80">Dream Home</span>
             </h1>
-            <p className="text-xl md:text-2xl text-white/70 mb-8 max-w-3xl mx-auto leading-relaxed">
+            <p className="text-xl md:text-2xl text-primary-foreground/90 mb-8 max-w-3xl mx-auto leading-relaxed">
               Discover the perfect property with our AI-powered platform. From cozy apartments to luxury estates,
               we make finding your next home effortless and exciting.
             </p>
@@ -92,9 +90,10 @@ export default function PropertyLanding() {
                 <ArrowRight className="ml-2 h-5 w-5" />
               </Button>
               <Button
-                variant="outline"
+                variant="white"
                 size="lg"
-                className="px-8 py-4 bg-transparent border-white text-white hover:bg-white/10 hover:text-white text-lg font-semibold rounded-md"
+                className="px-8 py-4 text-lg font-semibold rounded-md"
+                onClick={() => toast({ title: 'Demo coming soon', description: 'Will be integrated with the messaging system.' })}
               >
                 <Play className="mr-2 h-5 w-5" />
                 Watch Demo
@@ -108,11 +107,11 @@ export default function PropertyLanding() {
                   key={index}
                   className={`text-center transition-all duration-700 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-5'}`}
                 >
-                  <div className="flex items-center justify-center mb-2 text-white/80">
+                  <div className="flex items-center justify-center mb-2 text-primary-foreground/80">
                     {stat.icon}
                   </div>
-                  <div className="text-3xl font-bold text-white mb-1">{stat.number}</div>
-                  <div className="text-white/60 font-medium">{stat.label}</div>
+                  <div className="text-3xl font-bold text-primary-foreground mb-1">{stat.number}</div>
+                  <div className="text-primary-foreground/75 font-medium">{stat.label}</div>
                 </div>
               ))}
             </div>
@@ -251,9 +250,10 @@ export default function PropertyLanding() {
               Start Your Search
             </Button>
             <Button
-              variant="outline"
+              variant="white"
               size="lg"
-              className="px-8 py-4 text-lg font-semibold rounded-md border-primary-foreground/50 text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground"
+              className="px-8 py-4 text-lg font-semibold rounded-md"
+              onClick={() => toast({ title: 'Consultation coming soon', description: 'Will be integrated with the messaging system.' })}
             >
               <Clock className="mr-2 h-5 w-5" />
               Schedule Consultation
