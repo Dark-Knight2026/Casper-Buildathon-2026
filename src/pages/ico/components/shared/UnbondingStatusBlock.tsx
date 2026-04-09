@@ -6,7 +6,7 @@
  * - When ready: shows Withdraw button to call withdraw_unbonded()
  */
 
-import { useState, useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import { Clock, Wallet, ArrowDownCircle, CheckCircle2 } from 'lucide-react';
 import { CountdownTimer } from './CountdownTimer';
@@ -32,13 +32,10 @@ export function UnbondingStatusBlock({
   onWithdraw,
   withdrawStep,
 }: UnbondingStatusBlockProps) {
+  const queryClient = useQueryClient();
   const { data, isLoading } = useUnbondingStatus(accountHash);
 
-  const [isReady, setIsReady] = useState(data?.isWithdrawable ?? false);
-
-  useEffect(() => {
-    setIsReady(data?.isWithdrawable ?? false);
-  }, [data?.isWithdrawable]);
+  const isReady = data?.isWithdrawable ?? false;
 
   if (isLoading || !data || data.unbondingAmount === 0) return null;
 
@@ -126,7 +123,7 @@ export function UnbondingStatusBlock({
               variant="minimal"
               className="text-sm font-semibold text-amber-400"
               updateInterval={1000}
-              onExpire={() => setIsReady(true)}
+              onExpire={() => queryClient.invalidateQueries({ queryKey: ['unbonding-status'] })}
             />
           </div>
         )}
