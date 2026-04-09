@@ -11,18 +11,30 @@ vi.mock('@/services/ico/icoContractService', () => ({
   getAllSchedules: () => mockGetAllSchedules(),
 }));
 
+// Pinned reference date — same value used in the Date.now spy below.
+// All timestamps are relative so intent is clear without mentally decoding epoch ms.
+const REFERENCE_DATE = new Date('2024-01-15T12:00:00Z').getTime();
+const DAY = 86_400_000;
+
+// presale: started 15 days ago, ends 17 days from now (reference date is mid-presale)
+// ico:     starts when presale ends, runs for 30 more days
+const PRESALE_START = BigInt(REFERENCE_DATE - 15 * DAY);
+const PRESALE_END   = BigInt(REFERENCE_DATE + 17 * DAY);
+const ICO_START     = PRESALE_END;
+const ICO_END       = BigInt(REFERENCE_DATE + 47 * DAY);
+
 // Sample schedule data matching contract structure
 const mockPresaleSchedule: ICOSchedule = {
-  startTimestamp: 1704067200000n, // 2024-01-01
-  endTimestamp: 1706745600000n,   // 2024-02-01
+  startTimestamp: PRESALE_START,
+  endTimestamp:   PRESALE_END,
   price: 100000n,                  // $0.10 with 6 decimals
   saleAmount: 10000000000000000000000000n, // 10M tokens with 18 decimals
   soldAmount: 1000000000000000000000000n,  // 1M tokens sold
 };
 
 const mockICOSchedule: ICOSchedule = {
-  startTimestamp: 1706745600000n, // 2024-02-01
-  endTimestamp: 1709424000000n,   // 2024-03-03
+  startTimestamp: ICO_START,
+  endTimestamp:   ICO_END,
   price: 150000n,                  // $0.15 with 6 decimals
   saleAmount: 50000000000000000000000000n, // 50M tokens with 18 decimals
   soldAmount: 5000000000000000000000000n,  // 5M tokens sold
@@ -64,13 +76,10 @@ describe('useICOSchedules', () => {
   // --- Successful fetch ---
 
   describe('successful fetch', () => {
-    // Mock schedules use 2024 timestamps. Spy on Date.now so the hook's
-    // findRelevantSchedule sees 2024-01-15 (presale active) without activating
-    // fake timers — fake timers break React Query's waitFor.
-    const JAN_15_2024 = new Date('2024-01-15T12:00:00Z').getTime();
-
+    // Spy on Date.now so the hook's findRelevantSchedule sees REFERENCE_DATE
+    // (mid-presale) without activating fake timers — fake timers break React Query's waitFor.
     beforeEach(() => {
-      vi.spyOn(Date, 'now').mockReturnValue(JAN_15_2024);
+      vi.spyOn(Date, 'now').mockReturnValue(REFERENCE_DATE);
     });
 
     afterEach(() => {
