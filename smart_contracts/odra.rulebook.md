@@ -934,6 +934,38 @@ pub enum TokenError {
 }
 ```
 
+> Ranges above are illustrative — use your contract's assigned range from the Discriminant Registry.
+
+### Discriminant Registry
+
+The following table lists all current error discriminant range assignments across the project. When adding new errors to an existing contract, use the next available value within that contract's range. When adding a new contract, choose a non-overlapping 100-value range outside the ranges listed below.
+
+| Contract / Module | Range | Base | Error Count | First Discriminant | Last Discriminant |
+|---|---|---|---|---|---|
+| **NFT** | `100–199` | 100 | 3 | `CallerNotMinter = 100` | `CallerNotMinterNorBurner = 102` |
+| **Treasury** | `200–299` | 200 | 6 | `TailorCoinContractIsNotSet = 200` | `InsufficientWithdrawalTokenAmount = 205` |
+| **Escrow** | `300–399` | 300 | 11 | `CallerNotLeaseContract = 300` | `EqualBuyerAndSeller = 310` |
+| **Lease** | `400–499` | 400 | 8 | `CallerNotLandlord = 400` | `SecurityDepositChargeIsTooHigh = 408` |
+| **ICO** | `500–599` | 500 | 15 | `InvalidICOScheduleId = 500` | `ICOScheduleCliffExceedsVestingDuration = 514` |
+| **Staking** | `600–699` | 600 | 14 | `TailorCoinContractIsNotSet = 601` | `CallerNotAuthorizedToManageLocks = 614` |
+| **Vesting** | `700–799` | 700 | 8 | `CallerNotWhitelisted = 701` | `ClaimBlockedByActiveUnbonding = 708` |
+
+#### Available Ranges (unassigned)
+
+| Range | Status |
+|---|---|
+| `0–99` | ⚠️ Reserved (do not use — conflicts with Odra framework defaults) |
+| `800–899` | ✅ Available |
+| `900–999` | ✅ Available |
+| `1_000+` | ✅ Available (use sparingly; prefer contiguous ranges) |
+
+#### Rules for Adding New Discriminants
+
+1. **Existing contracts:** Append to the next unused value in the contract's assigned range (see table above).
+2. **New contracts:** Claim a fresh 100-value block from the "Available Ranges" table and update this registry.
+3. **Never reuse** a discriminant value, even if a contract is deprecated or removed.
+4. **Never overlap** ranges — each contract must occupy a distinct numeric block.
+
 ### Module Composition : SubModule for Composition
 
 **Description:** Use `SubModule<T>` to embed child modules within a parent module. Each `SubModule` gets its own isolated storage keyspace. Call methods directly on the submodule field. **Never** attempt to simulate inheritance; Odra uses composition exclusively.
