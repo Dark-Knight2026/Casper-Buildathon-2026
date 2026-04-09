@@ -219,6 +219,55 @@ fn parse_purchase_args_returns_none_when_args_is_empty() {
     assert!(ico::parse_purchase_args(&json!({})).is_none());
 }
 
+// parse_add_schedule_args
+
+#[test]
+fn parse_add_schedule_args_extracts_all_fields() {
+    let args = payloads::schedule_args("sched-1", 1000, 2000, &json!("999000"), &json!("500000"));
+    let result = ico::parse_add_schedule_args(&args).unwrap();
+    assert_eq!(result.id, "sched-1");
+    assert_eq!(result.start_timestamp, 1000);
+    assert_eq!(result.end_timestamp, 2000);
+    assert_eq!(result.sale_amount, "999000");
+    assert_eq!(result.price, "500000");
+}
+
+#[test]
+fn parse_add_schedule_args_extracts_numeric_sale_amount() {
+    let args = payloads::schedule_args("sched-2", 0, 100, &json!(42000u64), &json!(750u64));
+    let result = ico::parse_add_schedule_args(&args).unwrap();
+    assert_eq!(result.sale_amount, "42000");
+    assert_eq!(result.price, "750");
+}
+
+#[test]
+fn parse_add_schedule_args_returns_none_when_id_missing() {
+    let args = json!({
+        "start_timestamp": { "cl_type": "U64",  "parsed": 1000u64 },
+        "end_timestamp":   { "cl_type": "U64",  "parsed": 2000u64 },
+        "sale_amount":     { "cl_type": "U256", "parsed": "100" },
+        "price":           { "cl_type": "U256", "parsed": "50" }
+    });
+    assert!(ico::parse_add_schedule_args(&args).is_none());
+}
+
+#[test]
+fn parse_add_schedule_args_returns_none_when_required_field_missing() {
+    // Missing price
+    let args = json!({
+        "id":              { "cl_type": "String", "parsed": "sched" },
+        "start_timestamp": { "cl_type": "U64",    "parsed": 1000u64 },
+        "end_timestamp":   { "cl_type": "U64",    "parsed": 2000u64 },
+        "sale_amount":     { "cl_type": "U256",   "parsed": "100" }
+    });
+    assert!(ico::parse_add_schedule_args(&args).is_none());
+}
+
+#[test]
+fn parse_add_schedule_args_returns_none_when_args_is_empty() {
+    assert!(ico::parse_add_schedule_args(&json!({})).is_none());
+}
+
 // ico_currency_name
 
 #[test]
