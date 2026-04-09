@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE blockchain_events\n            SET    processed    = TRUE,\n                   processed_at = NOW()\n            WHERE  transaction_hash = $1\n              AND  event_type       = $2\n              AND  contract_address = $3\n              AND  COALESCE(transform_idx, -1) = COALESCE($4, -1)\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a23fcc6c07c106029ed03a6dedd0f207f0f707b5f44916958deaea5b57b86d01"
+}

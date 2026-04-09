@@ -53,22 +53,34 @@ async fn seed_expired_ico_schedule(pool: &PgPool) {
     .expect("Failed to seed expired ICO schedule");
 }
 
-/// Seed an ICO purchase row.
+/// Seed an ICO purchase row with the default schedule price.
 async fn seed_ico_purchase(pool: &PgPool, tx_hash: &str, buyer: &str, amount: &str) {
+    seed_ico_purchase_with_price(pool, tx_hash, buyer, amount, ICO_PRICE).await;
+}
+
+/// Seed an ICO purchase row with an explicit price at time of purchase.
+async fn seed_ico_purchase_with_price(
+    pool: &PgPool,
+    tx_hash: &str,
+    buyer: &str,
+    amount: &str,
+    price: &str,
+) {
     sqlx::query(
         r"
             INSERT INTO ico_purchases
                 (transaction_hash, block_height, buyer_address,
-                 amount, currency, cost, event_timestamp)
-            VALUES ($1, 1, $2, $3, 'CSPR', '100', 1700000000)
+                 amount, currency, price, cost, event_timestamp)
+            VALUES ($1, 1, $2, $3, 'USDC', $4, '0', 1700000000)
         ",
     )
     .bind(tx_hash)
     .bind(buyer)
     .bind(amount)
+    .bind(price)
     .execute(pool)
     .await
-    .expect("Failed to seed ICO purchase");
+    .expect("Failed to seed ICO purchase with price");
 }
 
 // GET /api/v1/ico/balance/{address}
@@ -424,4 +436,84 @@ async fn ico_progress_expired_schedule_is_inactive(pool: PgPool) {
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
     assert_eq!(body["isActive"], false);
+}
+
+/// `totalSpentUsd` must reflect historical purchase price, not current schedule
+/// price. When a buyer purchased tokens at $0.25 and the current price is $0.50,
+/// `totalSpentUsd` should be $2.50 (10 * $0.25), not $5.00 (10 * $0.50).
+/// `currentValue` should reflect the current price ($5.00).
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn ico_balance_total_spent_uses_historical_price(pool: PgPool) {
+    seed_ico_schedule(&pool).await; // price = 500000 ($0.50)
+
+    // Buyer purchased 10 BIG at $0.25 (250000 in 6 decimals)
+    let ten_big = "10000000000000000000"; // 10 * 10^18
+    let purchase_price = "250000"; // $0.25 in 6 decimals
+    seed_ico_purchase_with_price(
+        &pool,
+        &"a".repeat(64),
+        VALID_ADDRESS,
+        ten_big,
+        purchase_price,
+    )
+    .await;
+
+    let env = common::setup_test_server(pool, false).await;
+    let response = env
+        .server
+        .get(&format!("/api/v1/ico/balance/{VALID_ADDRESS}"))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+
+    let spent = body["totalSpentUsd"].as_f64().unwrap();
+    let current = body["currentValue"].as_f64().unwrap();
+
+    // `totalSpentUsd` = 10 BIG * $0.25 = $2.50 (historical)
+    assert!(
+        (spent - 2.5).abs() < USD_TOLERANCE,
+        "totalSpentUsd should be ~2.50 (historical), got {spent}"
+    );
+    // currentValue = 10 BIG * $0.50 = $5.00 (mark-to-market)
+    assert!(
+        (current - 5.0).abs() < USD_TOLERANCE,
+        "currentValue should be ~5.00 (current price), got {current}"
+    );
+    // They must differ when purchase price != current price
+    assert!(
+        (spent - current).abs() > USD_TOLERANCE,
+        "totalSpentUsd ({spent}) and currentValue ({current}) must differ"
+    );
+}
+
+/// `amountRaised` must reflect historical purchase prices, not current schedule price.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn ico_progress_amount_raised_uses_historical_price(pool: PgPool) {
+    seed_ico_schedule(&pool).await; // price = 500000 ($0.50)
+
+    // 10 BIG purchased at $0.25
+    let ten_big = "10000000000000000000";
+    let purchase_price = "250000";
+    seed_ico_purchase_with_price(
+        &pool,
+        &"a".repeat(64),
+        VALID_ADDRESS,
+        ten_big,
+        purchase_price,
+    )
+    .await;
+
+    let env = common::setup_test_server(pool, false).await;
+    let response = env.server.get("/api/v1/ico/progress").await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+
+    let raised = body["amountRaised"].as_f64().unwrap();
+    // amountRaised = 10 BIG * $0.25 = $2.50 (historical)
+    assert!(
+        (raised - 2.5).abs() < USD_TOLERANCE,
+        "amountRaised should be ~2.50 (historical), got {raised}"
+    );
 }

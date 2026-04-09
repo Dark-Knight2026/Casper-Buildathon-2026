@@ -17,5 +17,6 @@ ALTER TABLE ico_purchases
 
 -- Create a wider unique index that distinguishes intra-deploy events.
 -- A unique INDEX (not CONSTRAINT) is required because COALESCE is an expression.
+-- Sentinel -1 avoids collision with real transform_idx = 0.
 CREATE UNIQUE INDEX ico_purchases_tx_hash_transform_idx_key
-    ON ico_purchases (transaction_hash, COALESCE(transform_idx, 0));
+    ON ico_purchases (transaction_hash, COALESCE(transform_idx, -1));

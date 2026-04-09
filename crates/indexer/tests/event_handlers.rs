@@ -26,8 +26,8 @@ use sqlx::PgPool;
 
 use common::{FakeAddress, MIGRATOR, PURCHASE_DEPLOY_HASH, TRANSFER_DEPLOY_HASH, payloads};
 use indexer::{
-    config::ContractType,
-    events::EventRegistry,
+    config::{ContractEntry, ContractRegistry, ContractType},
+    events::{self, EventRegistry},
     processor::{self, RawEvent},
 };
 
@@ -832,5 +832,114 @@ async fn ico_schedule_added_stale_event_does_not_overwrite(pool: PgPool) {
     assert_eq!(
         row.block_height, 500,
         "stale event must not overwrite newer block_height"
+    );
+}
+
+// Contract registry — upsert_contract_registry
+
+/// Upserting contract registry must not deactivate contracts that belong to
+/// other environments / indexer instances on a shared database.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn upsert_contract_registry_preserves_foreign_contracts(pool: PgPool) {
+    common::disable_rls(&pool).await;
+    sqlx::query("ALTER TABLE contract_registry DISABLE ROW LEVEL SECURITY")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    // Seed a "foreign" contract not managed by this indexer instance.
+    sqlx::query(
+        r"INSERT INTO contract_registry (contract_type, contract_hash, is_active)
+          VALUES ('staking', 'foreign_staking_hash', TRUE)",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    // This indexer only manages ICO.
+    let registry = ContractRegistry {
+        ico: Some(ContractEntry::new("ico_hash_abc", 0)),
+        ..ContractRegistry::default()
+    };
+
+    events::db::upsert_contract_registry(&pool, &registry)
+        .await
+        .unwrap();
+
+    // Foreign contract must still be active.
+    let foreign_active: bool = sqlx::query_scalar(
+        "SELECT is_active FROM contract_registry WHERE contract_type = 'staking'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    assert!(
+        foreign_active,
+        "upsert must not deactivate contracts outside its own set"
+    );
+
+    // ICO contract must be active with the correct hash.
+    let ico_active: bool =
+        sqlx::query_scalar("SELECT is_active FROM contract_registry WHERE contract_type = 'ico'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(ico_active, "managed contract must be active after upsert");
+}
+
+// Deduplication - transform_idx NULL vs 0
+
+/// Events with `transform_idx = NULL` and `transform_idx = 0` must be treated
+/// as distinct rows. Casper transform index 0 is a real, commonly-occurring
+/// value; NULL means "unavailable" (e.g. streaming events).
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn null_and_zero_transform_idx_are_distinct_events(pool: PgPool) {
+    common::disable_rls(&pool).await;
+
+    let deploy = "a".repeat(64);
+    let contract = "c".repeat(64);
+    let event_data = serde_json::json!({});
+
+    // Insert event with transform_idx = NULL (streaming, index unavailable).
+    sqlx::query(
+        r"INSERT INTO blockchain_events
+              (event_type, contract_address, transaction_hash, block_number, event_data, transform_idx)
+          VALUES ('Transfer', $1, $2, 100, $3, NULL)",
+    )
+    .bind(&contract)
+    .bind(&deploy)
+    .bind(&event_data)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    // Insert event with transform_idx = 0 (backfill, real index).
+    // This must NOT collide with the NULL row.
+    sqlx::query(
+        r"INSERT INTO blockchain_events
+              (event_type, contract_address, transaction_hash, block_number, event_data, transform_idx)
+          VALUES ('Transfer', $1, $2, 100, $3, 0)",
+    )
+    .bind(&contract)
+    .bind(&deploy)
+    .bind(&event_data)
+    .execute(&pool)
+    .await
+    .expect("transform_idx=0 must not collide with transform_idx=NULL");
+
+    let count: i64 = sqlx::query_scalar(
+        r"SELECT COUNT(*) FROM blockchain_events
+          WHERE transaction_hash = $1 AND event_type = 'Transfer' AND contract_address = $2",
+    )
+    .bind(&deploy)
+    .bind(&contract)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(
+        count, 2,
+        "NULL and 0 transform_idx must produce two distinct rows"
     );
 }

@@ -128,12 +128,21 @@ pub async fn upsert_contract_registry(
 ) -> IndexerResult<()> {
     let mut tx = pool.begin().await?;
 
-    // Deactivate all contracts first; active ones will be re-enabled below.
-    sqlx::query!("UPDATE contract_registry SET is_active = FALSE")
-        .execute(tx.as_mut())
-        .await?;
+    // Deactivate only the contract types managed by this instance;
+    // foreign types (from other environments on a shared DB) stay untouched.
+    let active = contracts.active_contracts();
+    let types = active
+        .iter()
+        .map(|c| c.contract_type.as_str().to_owned())
+        .collect::<Vec<_>>();
+    sqlx::query!(
+        "UPDATE contract_registry SET is_active = FALSE WHERE contract_type = ANY($1)",
+        &types,
+    )
+    .execute(tx.as_mut())
+    .await?;
 
-    for contract in contracts.active_contracts() {
+    for contract in &active {
         sqlx::query!(
             r"
                 INSERT INTO contract_registry (contract_type, contract_hash, is_active)
@@ -190,7 +199,7 @@ pub async fn insert_blockchain_event(
         r"
             INSERT INTO blockchain_events (event_type, contract_address, transaction_hash, block_number, event_data, transform_idx)
             VALUES ($1, $2, $3, $4, $5, $6)
-            ON CONFLICT (transaction_hash, event_type, contract_address, COALESCE(transform_idx, 0)) DO NOTHING
+            ON CONFLICT (transaction_hash, event_type, contract_address, COALESCE(transform_idx, -1)) DO NOTHING
             RETURNING id
         ",
         row.event_type,
@@ -228,7 +237,7 @@ pub async fn mark_event_processed(
             WHERE  transaction_hash = $1
               AND  event_type       = $2
               AND  contract_address = $3
-              AND  COALESCE(transform_idx, 0) = COALESCE($4, 0)
+              AND  COALESCE(transform_idx, -1) = COALESCE($4, -1)
         ",
         transaction_hash,
         event_type,
@@ -277,7 +286,7 @@ pub struct NewBlockchainTx<'a> {
 /// Insert or backfill a row into `blockchain_transactions`.
 ///
 /// Uses an expression-based unique index on
-/// `(transaction_hash, transaction_type, from_address, COALESCE(transform_idx, 0))`
+/// `(transaction_hash, transaction_type, from_address, COALESCE(transform_idx, -1))`
 /// so that multiple events of the same type from the same sender within a
 /// single deploy are correctly distinguished by their transform index.
 ///
@@ -299,7 +308,7 @@ pub async fn insert_blockchain_transaction(
         r"
             INSERT INTO blockchain_transactions ( transaction_hash, deploy_hash, block_number, transaction_type, from_address, to_address, amount, currency, contract_hash, block_timestamp, from_type, to_type, transform_idx, status, metadata, confirmed_at )
             VALUES ($1, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'confirmed', $13, NOW())
-            ON CONFLICT (transaction_hash, transaction_type, from_address, COALESCE(transform_idx, 0))
+            ON CONFLICT (transaction_hash, transaction_type, from_address, COALESCE(transform_idx, -1))
             DO UPDATE SET
                 to_address      = COALESCE(blockchain_transactions.to_address,      EXCLUDED.to_address),
                 contract_hash   = COALESCE(blockchain_transactions.contract_hash,    EXCLUDED.contract_hash),
@@ -455,7 +464,7 @@ pub async fn insert_ico_purchase(
         r"
             INSERT INTO ico_purchases (transaction_hash, block_height, buyer_address, amount, currency, price, cost, event_timestamp, transform_idx)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-            ON CONFLICT (transaction_hash, COALESCE(transform_idx, 0)) DO NOTHING
+            ON CONFLICT (transaction_hash, COALESCE(transform_idx, -1)) DO NOTHING
         ",
         row.transaction_hash,
         row.block_height,

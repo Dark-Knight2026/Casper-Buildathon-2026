@@ -97,3 +97,27 @@ pub fn transfer_event_data(amount: &str) -> Value {
         "amount": amount
     })
 }
+
+/// Build a CSPR.cloud `args` object for a `purchase` deploy.
+///
+/// Used by `parse_purchase_args` unit tests and integration tests
+/// to construct the args format returned inline by CSPR.cloud `/deploys`.
+pub fn purchase_args(amount: &Value, currency: u64) -> Value {
+    json!({
+        "amount_to_spend": { "cl_type": "U256", "parsed": amount },
+        "currency":        { "cl_type": "U8",   "parsed": currency }
+    })
+}
+
+/// Build a CSPR.cloud `args` object for an `add_schedule` deploy.
+///
+/// Used by `parse_add_schedule_args` unit tests and integration tests.
+pub fn schedule_args(id: &str, start: u64, end: u64, sale_amount: &Value, price: &Value) -> Value {
+    json!({
+        "id":              { "cl_type": "String", "parsed": id },
+        "start_timestamp": { "cl_type": "U64",    "parsed": start },
+        "end_timestamp":   { "cl_type": "U64",    "parsed": end },
+        "sale_amount":     { "cl_type": "U256",   "parsed": sale_amount },
+        "price":           { "cl_type": "U256",   "parsed": price }
+    })
+}

@@ -160,6 +160,24 @@ pub async fn login(
         return Err(ApiError::BadRequest("Invalid wallet address".to_owned()));
     }
 
+    // Per-wallet rate limit: reject early if this wallet has too many recent
+    // failed login attempts, preventing nonce-DoS attacks.
+    if state
+        .redis
+        .is_login_rate_limited(&wallet_address)
+        .await
+        .unwrap_or(false)
+    {
+        tracing::warn!(
+            event = "login_rate_limited",
+            wallet_address = %wallet_address,
+            "Too many failed login attempts"
+        );
+        return Err(ApiError::TooManyRequests(
+            "Too many failed login attempts, try again later".to_owned(),
+        ));
+    }
+
     // Atomically consume nonce from Redis (one-time use via GETDEL).
     // This prevents replay attacks and eliminates the TOCTOU race window
     // that existed with separate GET + DEL commands.
@@ -170,8 +188,7 @@ pub async fn login(
     // must then request a new nonce and retry. This is an accepted trade-off:
     // TOCTOU elimination is more critical than the nonce-invalidation vector,
     // because TOCTOU allows actual replay attacks while nonce-DoS only causes
-    // a retry. Mitigation: rate-limit failed login attempts per wallet address.
-    // xxx: add per-wallet rate-limit on failed logins to cap nonce-DoS impact
+    // a retry. Mitigation: per-wallet rate limiting on failed logins (above).
     let stored_nonce = state
         .redis
         .take_nonce(&wallet_address)
@@ -208,6 +225,8 @@ pub async fn login(
     })?;
 
     if !is_valid {
+        // Record failure for per-wallet rate limiting (best-effort).
+        let _ = state.redis.record_login_failure(&wallet_address).await;
         tracing::warn!(
             event = "login_failed",
             reason = "signature_mismatch",

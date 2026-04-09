@@ -7,7 +7,9 @@
 
 use std::sync::Arc;
 
-use tower_governor::{GovernorLayer, governor::GovernorConfigBuilder};
+use tower_governor::{
+    GovernorLayer, governor::GovernorConfigBuilder, key_extractor::SmartIpKeyExtractor,
+};
 use utoipa_axum::router::OpenApiRouter;
 
 use crate::AppState;
@@ -41,7 +43,7 @@ pub const PUBLIC_DATA_RATE_LIMIT_BURST: u32 = 30;
 /// - `GET /staking/{accountHash}/rewards-history` - daily rewards history
 ///
 ///
-/// Same `PeerIpKeyExtractor` trust model as [`crate::services::public_router`] - see its docs.
+/// Same `SmartIpKeyExtractor` trust model as [`crate::services::public_router`] - see its docs.
 ///
 /// # Panics
 ///
@@ -51,8 +53,10 @@ pub const PUBLIC_DATA_RATE_LIMIT_BURST: u32 = 30;
 pub fn router() -> OpenApiRouter<Arc<AppState>> {
     let rate_limit = Arc::new(
         GovernorConfigBuilder::default()
+            .key_extractor(SmartIpKeyExtractor)
             .per_second(PUBLIC_DATA_RATE_LIMIT_PER_SECOND)
             .burst_size(PUBLIC_DATA_RATE_LIMIT_BURST)
+            .use_headers()
             .finish()
             .expect(
                 "public-data rate-limit config is always valid: per_second > 0 and burst_size > 0",

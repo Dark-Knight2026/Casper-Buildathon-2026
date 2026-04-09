@@ -50,6 +50,9 @@ pub struct ProgressSnapshot {
     pub schedule: Option<IcoScheduleRow>,
     /// Total tokens sold (U256 as TEXT).
     pub tokens_sold: String,
+    /// Historical USD cost: `SUM(amount * price) / 10^24` (as TEXT, human-readable).
+    /// Uses the price recorded at each purchase, not the current schedule price.
+    pub historical_cost_usd: String,
 }
 
 /// Fetches ICO schedule and sale totals in a single REPEATABLE READ transaction.
@@ -74,11 +77,23 @@ pub async fn fetch_progress_snapshot(pool: &PgPool) -> Result<ProgressSnapshot, 
             .fetch_one(tx.as_mut())
             .await?;
 
+    let cost: Option<String> = sqlx::query_scalar!(
+        r"SELECT COALESCE(
+              SUM(amount::NUMERIC * COALESCE(price::NUMERIC, 0))
+                  / (10::NUMERIC ^ 24),
+              0
+          )::TEXT
+          FROM ico_purchases",
+    )
+    .fetch_one(tx.as_mut())
+    .await?;
+
     tx.commit().await?;
 
     Ok(ProgressSnapshot {
         schedule,
         tokens_sold: row.unwrap_or_else(|| "0".to_owned()),
+        historical_cost_usd: cost.unwrap_or_else(|| "0".to_owned()),
     })
 }
 
@@ -89,6 +104,9 @@ pub struct BalanceSnapshot {
     pub schedule: Option<IcoScheduleRow>,
     /// Total tokens purchased by the buyer (U256 as TEXT).
     pub tokens_purchased: String,
+    /// Historical USD cost: `SUM(amount * price) / 10^24` (as TEXT, human-readable).
+    /// Uses the price recorded at each purchase, not the current schedule price.
+    pub historical_cost_usd: String,
 }
 
 /// Fetches ICO schedule and buyer tokens in a single REPEATABLE READ transaction.
@@ -122,10 +140,26 @@ pub async fn fetch_balance_snapshot(
     .fetch_one(tx.as_mut())
     .await?;
 
+    let cost: Option<String> = sqlx::query_scalar!(
+        r"
+            SELECT COALESCE(
+                SUM(amount::NUMERIC * COALESCE(price::NUMERIC, 0))
+                    / (10::NUMERIC ^ 24),
+                0
+            )::TEXT
+            FROM ico_purchases
+            WHERE buyer_address = $1
+        ",
+        buyer_address,
+    )
+    .fetch_one(tx.as_mut())
+    .await?;
+
     tx.commit().await?;
 
     Ok(BalanceSnapshot {
         schedule,
         tokens_purchased: value.unwrap_or_else(|| "0".to_owned()),
+        historical_cost_usd: cost.unwrap_or_else(|| "0".to_owned()),
     })
 }
