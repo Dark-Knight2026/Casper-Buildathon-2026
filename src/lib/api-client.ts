@@ -70,11 +70,17 @@ export class ApiClient {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);
     const signals = [controller.signal, options.signal].filter(Boolean) as AbortSignal[];
+    const combinedSignal =
+      signals.length === 1
+        ? signals[0]
+        : typeof AbortSignal.any === 'function'
+          ? AbortSignal.any(signals)
+          : signals[0]; // degraded: timeout signal only on Safari < 17.2
 
     try {
       const response = await fetch(url, {
         ...options,
-        signal: AbortSignal.any(signals),
+        signal: combinedSignal,
       });
       clearTimeout(timeoutId);
       return response;
@@ -158,7 +164,7 @@ export class ApiClient {
         delayMs: this.retryDelay,
         backoff: true,
         onRetry: (attempt, error) => {
-          logger.warn(`Retry attempt ${attempt} for GET ${url}:`, error.message);
+          logger.warn(`Retry attempt ${attempt} for GET ${url}:`, { error: error.message });
         },
       });
     }
@@ -195,7 +201,7 @@ export class ApiClient {
         delayMs: this.retryDelay,
         backoff: true,
         onRetry: (attempt, error) => {
-          logger.warn(`Retry attempt ${attempt} for POST ${url}:`, error.message);
+          logger.warn(`Retry attempt ${attempt} for POST ${url}:`, { error: error.message });
         },
       });
     }
@@ -232,7 +238,7 @@ export class ApiClient {
         delayMs: this.retryDelay,
         backoff: true,
         onRetry: (attempt, error) => {
-          logger.warn(`Retry attempt ${attempt} for PUT ${url}:`, error.message);
+          logger.warn(`Retry attempt ${attempt} for PUT ${url}:`, { error: error.message });
         },
       });
     }
@@ -266,7 +272,7 @@ export class ApiClient {
         delayMs: this.retryDelay,
         backoff: true,
         onRetry: (attempt, error) => {
-          logger.warn(`Retry attempt ${attempt} for DELETE ${url}:`, error.message);
+          logger.warn(`Retry attempt ${attempt} for DELETE ${url}:`, { error: error.message });
         },
       });
     }
