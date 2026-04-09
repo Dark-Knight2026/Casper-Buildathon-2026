@@ -1700,6 +1700,10 @@ fn test_deposit_and_withdraw() {
   let balance_before = test_env.balance_of(&depositor);
   wallet.with_tokens(U512::from(1_000)).deposit();
   assert_eq!(
+    test_env.balance_of(&depositor), 
+    balance_before - U512::from(1_000)
+  ); 
+  assert_eq!(
     test_env.balance_of(&wallet),
     U512::from(1_000),
   );
