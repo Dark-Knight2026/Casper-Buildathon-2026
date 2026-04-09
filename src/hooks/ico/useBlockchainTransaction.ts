@@ -91,8 +91,10 @@ export function useBlockchainTransaction<TArgs extends unknown[] = []>(
   buildTxRef.current = buildTx;
   const parseErrorRef = useRef(parseError);
   parseErrorRef.current = parseError;
-
-  const { onSuccess, onError } = options;
+  const onSuccessRef = useRef(options.onSuccess);
+  onSuccessRef.current = options.onSuccess;
+  const onErrorRef = useRef(options.onError);
+  onErrorRef.current = options.onError;
 
   useEffect(() => {
     return () => {
@@ -108,7 +110,7 @@ export function useBlockchainTransaction<TArgs extends unknown[] = []>(
       if (!publicKey) {
         const error = 'Wallet not connected';
         setState({ ...initialState, step: 'failed', error });
-        onError?.(error);
+        onErrorRef.current?.(error);
         submittingRef.current = false;
         return;
       }
@@ -116,7 +118,7 @@ export function useBlockchainTransaction<TArgs extends unknown[] = []>(
       if (!clickRef) {
         const error = 'Wallet SDK not initialized';
         setState({ ...initialState, step: 'failed', error });
-        onError?.(error);
+        onErrorRef.current?.(error);
         submittingRef.current = false;
         return;
       }
@@ -154,7 +156,7 @@ export function useBlockchainTransaction<TArgs extends unknown[] = []>(
 
         if (status === 'executed') {
           setState({ step: 'confirmed', txHash, error: null, isProcessing: false });
-          onSuccess?.(txHash);
+          onSuccessRef.current?.(txHash);
         } else if (status === 'failed') {
           throw new Error('Transaction failed on-chain');
         } else {
@@ -164,12 +166,12 @@ export function useBlockchainTransaction<TArgs extends unknown[] = []>(
         if (abortController.signal.aborted) return;
         const error = parseErrorRef.current(err instanceof Error ? err.message : undefined);
         setState((prev) => ({ step: 'failed', txHash: prev.txHash, error, isProcessing: false }));
-        onError?.(error);
+        onErrorRef.current?.(error);
       } finally {
         submittingRef.current = false;
       }
     },
-    [publicKey, clickRef, onSuccess, onError],
+    [publicKey, clickRef],
   );
 
   const reset = useCallback(() => {
