@@ -1090,3 +1090,59 @@ async fn upsert_contract_registry_preserves_foreign_contracts(pool: PgPool) {
             .unwrap();
     assert!(ico_active, "managed contract must be active after upsert");
 }
+
+// Deduplication - transform_idx NULL vs 0
+
+/// Events with `transform_idx = NULL` and `transform_idx = 0` must be treated
+/// as distinct rows. Casper transform index 0 is a real, commonly-occurring
+/// value; NULL means "unavailable" (e.g. streaming events).
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn null_and_zero_transform_idx_are_distinct_events(pool: PgPool) {
+    common::disable_rls(&pool).await;
+
+    let deploy = "a".repeat(64);
+    let contract = "c".repeat(64);
+    let event_data = serde_json::json!({});
+
+    // Insert event with transform_idx = NULL (streaming, index unavailable).
+    sqlx::query(
+        r"INSERT INTO blockchain_events
+              (event_type, contract_address, transaction_hash, block_number, event_data, transform_idx)
+          VALUES ('Transfer', $1, $2, 100, $3, NULL)",
+    )
+    .bind(&contract)
+    .bind(&deploy)
+    .bind(&event_data)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    // Insert event with transform_idx = 0 (backfill, real index).
+    // This must NOT collide with the NULL row.
+    sqlx::query(
+        r"INSERT INTO blockchain_events
+              (event_type, contract_address, transaction_hash, block_number, event_data, transform_idx)
+          VALUES ('Transfer', $1, $2, 100, $3, 0)",
+    )
+    .bind(&contract)
+    .bind(&deploy)
+    .bind(&event_data)
+    .execute(&pool)
+    .await
+    .expect("transform_idx=0 must not collide with transform_idx=NULL");
+
+    let count: i64 = sqlx::query_scalar(
+        r"SELECT COUNT(*) FROM blockchain_events
+          WHERE transaction_hash = $1 AND event_type = 'Transfer' AND contract_address = $2",
+    )
+    .bind(&deploy)
+    .bind(&contract)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(
+        count, 2,
+        "NULL and 0 transform_idx must produce two distinct rows"
+    );
+}
