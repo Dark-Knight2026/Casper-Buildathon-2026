@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import type { ICSPRClickSDK } from '@make-software/csprclick-core-types';
 import { useClaimTokens } from './useClaimTokens';
 import { useWithdrawUnbonded } from './useWithdrawUnbonded';
-import logger from '@/lib/logger';
+import { logger } from '@/utils/logger';
 
 export function useICOActions(
   publicKey: string | null,
