@@ -64,6 +64,7 @@ pub fn public_router() -> OpenApiRouter<Arc<AppState>> {
             .key_extractor(SmartIpKeyExtractor)
             .per_second(AUTH_RATE_LIMIT_PER_SECOND)
             .burst_size(AUTH_RATE_LIMIT_BURST)
+            .use_headers()
             .finish()
             .expect("auth rate-limit config is always valid: per_second > 0 and burst_size > 0"),
     );
@@ -102,6 +103,7 @@ pub fn public_data_router() -> OpenApiRouter<Arc<AppState>> {
             .key_extractor(SmartIpKeyExtractor)
             .per_second(PUBLIC_DATA_RATE_LIMIT_PER_SECOND)
             .burst_size(PUBLIC_DATA_RATE_LIMIT_BURST)
+            .use_headers()
             .finish()
             .expect(
                 "public-data rate-limit config is always valid: per_second > 0 and burst_size > 0",
@@ -142,6 +144,7 @@ pub fn protected_router(state: Arc<AppState>) -> OpenApiRouter<Arc<AppState>> {
             .key_extractor(SmartIpKeyExtractor)
             .per_second(PROTECTED_RATE_LIMIT_PER_SECOND)
             .burst_size(PROTECTED_RATE_LIMIT_BURST)
+            .use_headers()
             .finish()
             .expect(
                 "protected rate-limit config is always valid: per_second > 0 and burst_size > 0",
