@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { useAuthPrompt } from '@/hooks/useAuthPrompt';
-import { FavoriteButton } from '@/components/property/FavoriteButton';
+import { SavePropertyButton } from '@/components/property/SavePropertyButton';
 import { ContactLandlordModal } from '@/components/property/ContactLandlordModal';
 import { ScheduleViewingModal } from '@/components/property/ScheduleViewingModal';
 import { propertyService } from '@/services/propertyService';
@@ -168,11 +168,7 @@ export default function PropertyDetail() {
                 <Share2 className="mr-2 h-4 w-4" />
                 Share
               </Button>
-              <FavoriteButton
-                propertyId={property.id}
-                variant="outline"
-                size="sm"
-              />
+              <SavePropertyButton variant="outline" size="sm" />
             </div>
           </div>
         </div>
@@ -462,12 +458,7 @@ export default function PropertyDetail() {
 
                 {/* Favorite Button */}
                 <div className="flex justify-center pt-2">
-                  <FavoriteButton
-                    propertyId={property.id}
-                    variant="outline"
-                    size="default"
-                    className="w-full md:w-auto"
-                  />
+                  <SavePropertyButton variant="outline" size="default" className="w-full md:w-auto" />
                 </div>
               </CardContent>
             </Card>

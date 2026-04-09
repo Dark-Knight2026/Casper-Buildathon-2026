@@ -1,8 +1,18 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import { useAuth } from '@/hooks/useAuth';
 
 export default function LandingHeader() {
   const navigate = useNavigate();
+  const { profile } = useAuth();
+
+  const handlePropertiesClick = () => {
+    if (profile?.role === 'tenant') {
+      navigate('/tenant/properties');
+    } else {
+      navigate('/listings');
+    }
+  };
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-background/90 backdrop-blur-sm border-b border-border">
@@ -12,9 +22,12 @@ export default function LandingHeader() {
         </Link>
 
         <nav className="hidden md:flex items-center gap-8">
-          <Link to="/listings" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+          <button
+            onClick={handlePropertiesClick}
+            className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
             Properties
-          </Link>
+          </button>
           <Link to="/ico" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
             Token Sale
           </Link>
