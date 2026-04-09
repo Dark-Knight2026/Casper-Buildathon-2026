@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import type { ICSPRClickSDK } from '@make-software/csprclick-core-types';
-import { getNonce, loginWithSignature, applyToken } from '@/services/ico/backendAuthService';
+import { getNonce, loginWithSignature, applyToken } from '@/services/ico';
 import { logger } from '@/utils/logger';
 
 const TOKEN_KEY = 'leasefi_jwt';

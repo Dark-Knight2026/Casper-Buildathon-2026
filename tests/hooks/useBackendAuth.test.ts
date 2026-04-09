@@ -14,7 +14,7 @@ vi.mock('@/services/ico/backendAuthService', () => ({
 }));
 
 vi.mock('@/utils/logger', () => ({
-  logger: { debug: vi.fn(), error: vi.fn() },
+  logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
 import { useBackendAuth } from '@/hooks/ico/useBackendAuth';

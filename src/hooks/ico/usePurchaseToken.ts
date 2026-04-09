@@ -19,7 +19,7 @@ import {
   fromRawAmount,
   toRawAmount,
   parseContractError,
-} from '@/services/ico/icoPurchaseService';
+} from '@/services/ico';
 import { csprCloudService } from '@/lib/blockchain/csprCloudService';
 import { ICO_CONFIG, getCurrencyRateUsd } from '@/constants/ico';
 import type { PaymentCurrency } from '@/types/ico';

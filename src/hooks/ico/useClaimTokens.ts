@@ -10,7 +10,7 @@
 
 import { useCallback } from 'react';
 import type { ICSPRClickSDK } from '@make-software/csprclick-core-types';
-import { createClaimTransaction, parseVestingError } from '@/services/ico/vestingClaimService';
+import { createClaimTransaction, parseVestingError } from '@/services/ico';
 import {
   useBlockchainTransaction,
   type TxStep,
