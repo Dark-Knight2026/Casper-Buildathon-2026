@@ -192,6 +192,75 @@ async fn message_for_unknown_contract_is_skipped(pool: PgPool) {
     );
 }
 
+/// Regression: a WSS frame whose `transform_id` exceeds `i32::MAX` must
+/// surface an explicit error from `handle_text_message` rather than silently
+/// truncating the field to `None`. The prior behavior masked overflow events
+/// by routing them to the same `COALESCE(transform_idx, -1)` sentinel slot as
+/// backfill rows, making corruption invisible at ingest time.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn transform_id_overflow_returns_error(pool: PgPool) {
+    common::disable_rls(&pool).await;
+
+    let registry = EventRegistry::new();
+    let mut contract_map = HashMap::new();
+    contract_map.insert("big_contract_hash".to_owned(), ContractType::Big);
+
+    // i32::MAX = 2_147_483_647; pick a value one above that threshold.
+    let overflow_id = i64::from(i32::MAX) + 1;
+    let msg = payloads::wss_message_with_transform_id(
+        "big_contract_hash",
+        "Transfer",
+        payloads::transfer_event_data("100"),
+        TRANSFER_DEPLOY_HASH,
+        99,
+        500,
+        overflow_id,
+    );
+
+    let result = streaming::handle_text_message(
+        &msg.to_string(),
+        &contract_map,
+        &HashSet::new(),
+        &pool,
+        &registry,
+    )
+    .await;
+
+    assert!(
+        result.is_err(),
+        "transform_id > i32::MAX must return an explicit error, got Ok"
+    );
+
+    // The event must not land in the DB when the pipeline rejects the frame.
+    let count = sqlx::query_scalar!(r"SELECT COUNT(*) FROM blockchain_events")
+        .fetch_one(&pool)
+        .await
+        .unwrap()
+        .unwrap_or(0);
+
+    assert_eq!(
+        count, 0,
+        "overflowed transform_id must not write to blockchain_events"
+    );
+
+    // The streaming cursor must NOT advance for a rejected frame - otherwise
+    // a single poisoned message could permanently skip over a range of events.
+    let cursor = sqlx::query_scalar!(
+        r"
+            SELECT cursor_value FROM event_cursors
+            WHERE stream_type = 'streaming' AND contract_hash = ''
+        "
+    )
+    .fetch_optional(&pool)
+    .await
+    .unwrap();
+
+    assert!(
+        cursor.is_none(),
+        "streaming cursor must not advance past a rejected frame, got: {cursor:?}"
+    );
+}
+
 /// Valid Transfer message for a known contract must call `process_event`,
 /// write one row to `blockchain_events`, and update the streaming cursor to
 /// `event_id`.
