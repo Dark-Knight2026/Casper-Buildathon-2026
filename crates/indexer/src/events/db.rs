@@ -685,7 +685,7 @@ pub async fn is_vesting_claim_processed(
                 SELECT 1 FROM blockchain_transactions
                 WHERE transaction_hash = $1
                   AND transaction_type = 'vesting_tokens_claimed'
-                  AND COALESCE(transform_idx, 0) = COALESCE($2, 0)
+                  AND COALESCE(transform_idx, -1) = COALESCE($2, -1)
         )",
         deploy_hash,
         transform_idx,
@@ -737,7 +737,7 @@ pub async fn insert_staking_event(
         r"
             INSERT INTO staking_events (staker_address, event_type, amount, transaction_hash, block_height, event_timestamp, transform_idx)
             VALUES ($1, $2, $3, $4, $5, $6, $7)
-            ON CONFLICT (transaction_hash, event_type, COALESCE(transform_idx, 0)) DO NOTHING
+            ON CONFLICT (transaction_hash, event_type, COALESCE(transform_idx, -1)) DO NOTHING
         ",
         row.staker_address,
         row.event_type,
@@ -920,7 +920,7 @@ pub struct NewStakingRewardDeposit<'a> {
 
 /// Insert a row into `staking_reward_deposits` for a `RewardsDeposited` event.
 ///
-/// Uses `ON CONFLICT DO NOTHING` on `(transaction_hash, COALESCE(transform_idx, 0))`
+/// Uses `ON CONFLICT DO NOTHING` on `(transaction_hash, COALESCE(transform_idx, -1))`
 /// so re-processing is safe while batch deploys with multiple events are recorded.
 /// Returns `true` when a new row was inserted, `false` on duplicate. Callers
 /// should skip global state mutations when this returns `false`.
@@ -938,7 +938,7 @@ pub async fn insert_staking_reward_deposit(
         r"
             INSERT INTO staking_reward_deposits (caller_address, amount, reward_per_token_stored, transaction_hash, block_height, event_timestamp, transform_idx)
             VALUES ($1, $2, $3, $4, $5, $6, $7)
-            ON CONFLICT (transaction_hash, COALESCE(transform_idx, 0)) DO NOTHING
+            ON CONFLICT (transaction_hash, COALESCE(transform_idx, -1)) DO NOTHING
         ",
         row.caller_address,
         row.amount,

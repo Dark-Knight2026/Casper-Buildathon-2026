@@ -15,8 +15,10 @@ ALTER TABLE staking_reward_deposits
     DROP CONSTRAINT IF EXISTS staking_reward_deposits_transaction_hash_key;
 
 -- Step 3: Create expression-based unique index with transform_idx.
+-- Sentinel -1 avoids collision with real transform_idx = 0 (NULL streaming
+-- events and first-transform backfill events must remain distinct).
 CREATE UNIQUE INDEX IF NOT EXISTS uix_staking_reward_deposits_tx_tidx
     ON staking_reward_deposits (
         transaction_hash,
-        COALESCE(transform_idx, 0)
+        COALESCE(transform_idx, -1)
     );
