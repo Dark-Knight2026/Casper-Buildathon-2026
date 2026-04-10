@@ -70,25 +70,18 @@ pub async fn get_staking_info(
 
     let snap = db::fetch_staking_info_snapshot(&state.db, &account).await?;
 
+    let vesting_locked_tokens = common::to_human_f64(&snap.vesting_locked)?;
+
     let (staked_tokens, total_rewards_claimed, pending_rewards) = match &snap.position {
-        Some(p) => {
-            let staked = common::to_human_f64(&p.staked_amount)?;
-            // If staking position exists but has zero staked, fall back to vesting locked.
-            let effective_staked = if staked == 0.0 {
-                common::to_human_f64(&snap.vesting_locked)?
-            } else {
-                staked
-            };
-            (
-                effective_staked,
-                common::to_human_f64(&p.total_rewards_claimed)?,
-                match snap.pending_rewards_computed.as_deref() {
-                    Some(v) => common::to_human_f64(v)?,
-                    None => 0.0,
-                },
-            )
-        }
-        None => (common::to_human_f64(&snap.vesting_locked)?, 0.0, 0.0),
+        Some(p) => (
+            common::to_human_f64(&p.staked_amount)?,
+            common::to_human_f64(&p.total_rewards_claimed)?,
+            match snap.pending_rewards_computed.as_deref() {
+                Some(v) => common::to_human_f64(v)?,
+                None => 0.0,
+            },
+        ),
+        None => (0.0, 0.0, 0.0),
     };
 
     let total_rewards_earned = total_rewards_claimed + pending_rewards;
@@ -127,6 +120,7 @@ pub async fn get_staking_info(
 
     Ok(Json(StakingInfoResponse {
         staked_tokens,
+        vesting_locked_tokens,
         current_apy,
         total_rewards_earned,
         pending_rewards,
@@ -161,24 +155,19 @@ pub async fn get_portfolio(
     let snap = db::fetch_portfolio_snapshot(&state.db, &account).await?;
 
     let big_in_wallet = common::to_human_f64(&snap.big_balance)?;
+    let vesting_locked_tokens = common::to_human_f64(&snap.vesting_locked)?;
     let (big_staked, rewards_earned) = match &snap.position {
         Some(p) => {
             let pending = match snap.pending_rewards_computed.as_deref() {
                 Some(v) => common::to_human_f64(v)?,
                 None => 0.0,
             };
-            let staked = common::to_human_f64(&p.staked_amount)?;
-            let effective_staked = if staked == 0.0 {
-                common::to_human_f64(&snap.vesting_locked)?
-            } else {
-                staked
-            };
             (
-                effective_staked,
+                common::to_human_f64(&p.staked_amount)?,
                 common::to_human_f64(&p.total_rewards_claimed)? + pending,
             )
         }
-        None => (common::to_human_f64(&snap.vesting_locked)?, 0.0),
+        None => (0.0, 0.0),
     };
     let total_big = big_in_wallet + big_staked + rewards_earned;
 
@@ -194,6 +183,7 @@ pub async fn get_portfolio(
     Ok(Json(PortfolioResponse {
         big_in_wallet,
         big_staked,
+        vesting_locked_tokens,
         rewards_earned,
         total_big,
         estimated_usd_value,

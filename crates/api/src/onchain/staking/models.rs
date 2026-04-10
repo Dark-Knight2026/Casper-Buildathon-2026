@@ -48,6 +48,11 @@ pub struct StakingInfoResponse {
     /// Currently staked BIG tokens (human-readable f64).
     #[schema(example = 100_000.0)]
     pub staked_tokens: f64,
+    /// Sum of BIG tokens still locked in vesting schedules for this account
+    /// (human-readable f64). Independent of `stakedTokens`: a user can have
+    /// both an active staking position and unreleased vesting tokens.
+    #[schema(example = 25_000.0)]
+    pub vesting_locked_tokens: f64,
     /// Estimated annual percentage yield (%).
     #[schema(example = 12.5)]
     pub current_apy: f64,
@@ -69,6 +74,11 @@ pub struct PortfolioResponse {
     /// BIG tokens currently staked (human-readable f64).
     #[schema(example = 100_000.0)]
     pub big_staked: f64,
+    /// Sum of BIG tokens still locked in vesting schedules for this account
+    /// (human-readable f64). Not included in `totalBig` - these tokens are
+    /// not yet released and are reported separately.
+    #[schema(example = 25_000.0)]
+    pub vesting_locked_tokens: f64,
     /// Total rewards earned from staking (human-readable f64).
     #[schema(example = 5_000.0)]
     pub rewards_earned: f64,

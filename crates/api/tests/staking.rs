@@ -1084,9 +1084,10 @@ async fn seed_vesting_schedule(
     .expect("Failed to seed vesting schedule");
 }
 
-/// No staking position, but has vesting schedule -> stakedTokens = vesting locked.
+/// No staking position, but has vesting schedule -> stakedTokens is 0 and
+/// vestingLockedTokens reports the locked vesting balance as a separate field.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
-async fn staking_info_falls_back_to_vesting_locked(pool: PgPool) {
+async fn staking_info_no_position_exposes_vesting_locked_separately(pool: PgPool) {
     // 5000 BIG locked via vesting, 0 claimed
     seed_vesting_schedule(
         &pool,
@@ -1108,14 +1109,19 @@ async fn staking_info_falls_back_to_vesting_locked(pool: PgPool) {
     let body: Value = response.json();
     let staked = body["stakedTokens"].as_f64().unwrap();
     assert!(
-        (staked - 5000.0).abs() < 0.01,
-        "expected ~5000.0 from vesting fallback, got {staked}"
+        staked.abs() < 0.01,
+        "stakedTokens must be 0 when the user has never staked, got {staked}"
+    );
+    let vesting_locked = body["vestingLockedTokens"].as_f64().unwrap();
+    assert!(
+        (vesting_locked - 5000.0).abs() < 0.01,
+        "vestingLockedTokens must expose the 5000 BIG vesting balance, got {vesting_locked}"
     );
 }
 
-/// Vesting locked = total - claimed when some tokens are already claimed.
+/// vestingLockedTokens = total - claimed when some vesting tokens are already claimed.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
-async fn staking_info_vesting_fallback_subtracts_claimed(pool: PgPool) {
+async fn staking_info_vesting_locked_subtracts_claimed(pool: PgPool) {
     // 5000 BIG total, 2000 claimed -> 3000 locked
     seed_vesting_schedule(
         &pool,
@@ -1137,14 +1143,20 @@ async fn staking_info_vesting_fallback_subtracts_claimed(pool: PgPool) {
     let body: Value = response.json();
     let staked = body["stakedTokens"].as_f64().unwrap();
     assert!(
-        (staked - 3000.0).abs() < 0.01,
-        "expected ~3000.0 (5000 - 2000), got {staked}"
+        staked.abs() < 0.01,
+        "stakedTokens must be 0 when nothing is staked, got {staked}"
+    );
+    let vesting_locked = body["vestingLockedTokens"].as_f64().unwrap();
+    assert!(
+        (vesting_locked - 3000.0).abs() < 0.01,
+        "vestingLockedTokens should be 5000 - 2000 = 3000, got {vesting_locked}"
     );
 }
 
-/// Staking position with `staked_amount = 0`, but vesting exists -> fallback.
+/// Staking position with `staked_amount = 0`: stakedTokens is actual 0,
+/// vestingLockedTokens reports the vesting balance.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
-async fn staking_info_zero_staked_falls_back_to_vesting(pool: PgPool) {
+async fn staking_info_zero_staked_returns_zero_and_exposes_vesting(pool: PgPool) {
     // Staking position exists but with 0 staked (e.g. fully unstaked)
     seed_staking_position(&pool, VALID_ADDRESS, "0", "0").await;
     // Vesting schedule with 4000 BIG locked
@@ -1161,17 +1173,24 @@ async fn staking_info_zero_staked_falls_back_to_vesting(pool: PgPool) {
     let body: Value = response.json();
     let staked = body["stakedTokens"].as_f64().unwrap();
     assert!(
-        (staked - 4000.0).abs() < 0.01,
-        "expected ~4000.0 from vesting fallback, got {staked}"
+        staked.abs() < 0.01,
+        "stakedTokens must be the actual staked balance (0), \
+         not the vesting fallback, got {staked}"
+    );
+    let vesting_locked = body["vestingLockedTokens"].as_f64().unwrap();
+    assert!(
+        (vesting_locked - 4000.0).abs() < 0.01,
+        "vestingLockedTokens must expose the 4000 BIG vesting balance, got {vesting_locked}"
     );
 }
 
-/// Staking position with staked > 0 takes priority over vesting (no double counting).
+/// Staking position with staked > 0 does not affect vestingLockedTokens
+/// (both fields are independent and reported in parallel).
 #[sqlx::test(migrator = "common::MIGRATIONS")]
-async fn staking_info_prefers_staked_over_vesting(pool: PgPool) {
+async fn staking_info_reports_staked_and_vesting_locked_independently(pool: PgPool) {
     // 1000 BIG in staking position
     seed_staking_position(&pool, VALID_ADDRESS, "1000000000000000000000", "0").await;
-    // 5000 BIG locked in vesting (same tokens, should not add up)
+    // 5000 BIG locked in vesting (distinct balance, reported separately)
     seed_vesting_schedule(&pool, "0", VALID_ADDRESS, "5000000000000000000000", "0").await;
 
     let env = common::setup_test_server(pool, false).await;
@@ -1186,13 +1205,20 @@ async fn staking_info_prefers_staked_over_vesting(pool: PgPool) {
     let staked = body["stakedTokens"].as_f64().unwrap();
     assert!(
         (staked - 1000.0).abs() < 0.01,
-        "expected ~1000.0 from staking (not vesting), got {staked}"
+        "expected stakedTokens = 1000 from staking position, got {staked}"
+    );
+    let vesting_locked = body["vestingLockedTokens"].as_f64().unwrap();
+    assert!(
+        (vesting_locked - 5000.0).abs() < 0.01,
+        "vestingLockedTokens must be reported in parallel with stakedTokens, got {vesting_locked}"
     );
 }
 
-/// Portfolio endpoint also falls back to vesting locked tokens.
+/// Portfolio endpoint reports vestingLockedTokens as a separate field;
+/// bigStaked reflects the actual staking position (0 here) and totalBig
+/// follows the spec formula (bigInWallet + bigStaked + rewardsEarned).
 #[sqlx::test(migrator = "common::MIGRATIONS")]
-async fn portfolio_falls_back_to_vesting_locked(pool: PgPool) {
+async fn portfolio_exposes_vesting_locked_separately(pool: PgPool) {
     seed_token_holding(&pool, VALID_ADDRESS, "500000000000000000000").await; // 500 BIG wallet
     seed_vesting_schedule(
         &pool,
@@ -1214,19 +1240,24 @@ async fn portfolio_falls_back_to_vesting_locked(pool: PgPool) {
     let body: Value = response.json();
     let staked = body["bigStaked"].as_f64().unwrap();
     assert!(
-        (staked - 3000.0).abs() < 0.01,
-        "expected ~3000.0 from vesting fallback, got {staked}"
+        staked.abs() < 0.01,
+        "bigStaked must be the actual staking balance (0), not the vesting fallback, got {staked}"
+    );
+    let vesting_locked = body["vestingLockedTokens"].as_f64().unwrap();
+    assert!(
+        (vesting_locked - 3000.0).abs() < 0.01,
+        "vestingLockedTokens must expose the 3000 BIG vesting balance, got {vesting_locked}"
     );
     let total = body["totalBig"].as_f64().unwrap();
     assert!(
-        (total - 3500.0).abs() < 0.01,
-        "totalBig should be 500 + 3000 = 3500, got {total}"
+        (total - 500.0).abs() < 0.01,
+        "totalBig must follow the spec formula (wallet + staked + rewards) = 500, got {total}"
     );
 }
 
-/// Multiple vesting schedules sum up correctly.
+/// Multiple vesting schedules are summed into vestingLockedTokens; stakedTokens stays 0.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
-async fn staking_info_vesting_fallback_sums_multiple_schedules(pool: PgPool) {
+async fn staking_info_vesting_locked_sums_multiple_schedules(pool: PgPool) {
     // Two vesting schedules for the same beneficiary
     seed_vesting_schedule(&pool, "0", VALID_ADDRESS, "2000000000000000000000", "0").await;
     seed_vesting_schedule(
@@ -1248,9 +1279,14 @@ async fn staking_info_vesting_fallback_sums_multiple_schedules(pool: PgPool) {
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
     let staked = body["stakedTokens"].as_f64().unwrap();
+    assert!(
+        staked.abs() < 0.01,
+        "stakedTokens must be 0 when nothing is staked, got {staked}"
+    );
+    let vesting_locked = body["vestingLockedTokens"].as_f64().unwrap();
     // (2000 - 0) + (3000 - 1000) = 4000
     assert!(
-        (staked - 4000.0).abs() < 0.01,
-        "expected ~4000.0 (2000 + 2000), got {staked}"
+        (vesting_locked - 4000.0).abs() < 0.01,
+        "vestingLockedTokens should sum schedules: (2000) + (3000 - 1000) = 4000, got {vesting_locked}"
     );
 }
