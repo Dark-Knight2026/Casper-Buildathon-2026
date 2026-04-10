@@ -106,7 +106,7 @@ impl RedisStore {
         let count: u64 = conn.incr(&key, 1u64).await?;
         // Set TTL only on the first failure to start the window.
         if count == 1 {
-            conn.expire::<_, ()>(&key, LOGIN_FAIL_WINDOW_SECS.try_into().unwrap_or(60))
+            conn.expire::<_, ()>(&key, LOGIN_FAIL_WINDOW_SECS as i64)
                 .await?;
         }
         Ok(())
