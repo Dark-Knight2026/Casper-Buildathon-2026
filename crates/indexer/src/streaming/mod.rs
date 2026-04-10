@@ -257,17 +257,23 @@ pub async fn handle_text_message(
         .timestamp
         .as_deref()
         .and_then(|ts| DateTime::parse_from_rfc3339(ts).ok().map(|dt| dt.to_utc()));
-    let transform_idx = msg.extra.transform_id.and_then(|id| {
-        i32::try_from(id)
-            .map_err(|_| {
-                tracing::warn!(
-                    transform_id = id,
-                    deploy_hash = %msg.extra.deploy_hash,
-                    "transform_id exceeds i32::MAX - deduplication may be degraded"
-                );
+    // Casper's transform index is a `u32` in the node spec, so any value
+    // that does not fit `i32` is either a protocol change or corruption.
+    // Surface it as an explicit error: silently truncating to `None` would
+    // route overflowed events to the `COALESCE(transform_idx, -1)` sentinel
+    // slot, colliding with backfill rows and corrupting deduplication.
+    let transform_idx = msg
+        .extra
+        .transform_id
+        .map(|id| {
+            i32::try_from(id).map_err(|_| {
+                IndexerError::Parse(format!(
+                    "transform_id {id} exceeds i32::MAX for deploy {}",
+                    msg.extra.deploy_hash
+                ))
             })
-            .ok()
-    });
+        })
+        .transpose()?;
 
     let raw = RawEvent {
         contract_hash: msg.data.contract_package_hash,
