@@ -788,6 +788,11 @@ pub async fn upsert_staking_position_stake(
 /// UPDATE `staking_positions` for an `UnstakedInitiated` event: decrease
 /// `staked_amount`, set `unbonding_amount` and `unbonding_ends_at`.
 ///
+/// Defends against contract-level over-unstake: if `amount` exceeds the
+/// pre-update `staked_amount`, the unbonding delta is clamped to the
+/// available balance (via `LEAST`) so tokens that were never staked cannot
+/// enter the unbonding queue, and a warning is logged for operator visibility.
+///
 /// # Errors
 ///
 /// Returns [`IndexerError::Database`](IndexerError::Database)
@@ -801,26 +806,46 @@ pub async fn update_staking_position_unstake(
 ) -> IndexerResult<()> {
     let result = sqlx::query!(
         r"
-            UPDATE staking_positions
-            SET staked_amount     = GREATEST('0'::NUMERIC, staked_amount::NUMERIC - $2::TEXT::NUMERIC)::TEXT,
-                unbonding_amount  = (unbonding_amount::NUMERIC + $2::TEXT::NUMERIC)::TEXT,
+            WITH old AS (
+                SELECT staker_address, staked_amount::NUMERIC AS prev_staked
+                FROM staking_positions
+                WHERE staker_address = $1
+            )
+            UPDATE staking_positions AS sp
+            SET staked_amount     = GREATEST('0'::NUMERIC, old.prev_staked - $2::TEXT::NUMERIC)::TEXT,
+                unbonding_amount  = (sp.unbonding_amount::NUMERIC + LEAST($2::TEXT::NUMERIC, old.prev_staked))::TEXT,
                 unbonding_ends_at = $3,
                 last_updated_at   = NOW()
-            WHERE staker_address = $1
+            FROM old
+            WHERE sp.staker_address = old.staker_address
+            RETURNING
+                old.prev_staked::TEXT AS previous_staked_amount,
+                ($2::TEXT::NUMERIC > old.prev_staked) AS clamped
         ",
         staker_address,
         amount,
         unbonding_ends_at,
     )
-    .execute(tx.as_mut())
+    .fetch_optional(tx.as_mut())
     .await?;
 
-    if result.rows_affected() == 0 {
-        tracing::warn!(
-            staker = staker_address,
-            amount,
-            "unstake update matched no staking position - event arrived before Staked?"
-        );
+    match result {
+        None => {
+            tracing::warn!(
+                staker = staker_address,
+                amount,
+                "unstake update matched no staking position - event arrived before Staked?"
+            );
+        }
+        Some(row) if row.clamped.unwrap_or(false) => {
+            tracing::warn!(
+                staker = staker_address,
+                amount,
+                previous_staked = row.previous_staked_amount.as_deref().unwrap_or("0"),
+                "UnstakedInitiated amount exceeds staked balance - unbonding clamped to available"
+            );
+        }
+        Some(_) => {}
     }
 
     Ok(())

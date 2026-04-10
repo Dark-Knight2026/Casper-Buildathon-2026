@@ -1118,7 +1118,7 @@ const STAKING_DEPLOY_12: &str = "00000000000000000000000000000000000000000000000
 
 /// Regression for `COALESCE(transform_idx, 0)` sentinel collision in the
 /// `staking_reward_deposits` unique index. A streaming `RewardsDeposited`
-/// (transform_idx = NULL) and a backfill `RewardsDeposited` with
+/// (`transform_idx` = NULL) and a backfill `RewardsDeposited` with
 /// `transform_idx = 0` are distinct events but both map to `0` under the
 /// old sentinel, so the second insert is silently dropped.
 #[sqlx::test(migrator = "MIGRATOR")]
@@ -1192,7 +1192,7 @@ async fn rewards_deposited_null_and_zero_transform_idx_do_not_collide(pool: PgPo
 }
 
 /// Regression for `COALESCE(transform_idx, 0)` sentinel collision in the
-/// `staking_events` unique index. A streaming `Staked` event (transform_idx
+/// `staking_events` unique index. A streaming `Staked` event (`transform_idx`
 /// = NULL) and a backfill `Staked` with `transform_idx = 0` for the same
 /// deploy are distinct events but collide under the old sentinel.
 #[sqlx::test(migrator = "MIGRATOR")]
@@ -1259,5 +1259,76 @@ async fn staking_event_null_and_zero_transform_idx_do_not_collide(pool: PgPool) 
     assert_eq!(
         event_count, 2,
         "staking_events with transform_idx NULL and Some(0) must not collide"
+    );
+}
+
+// Regression: UnstakedInitiated over-balance clamp -----------------------------
+
+const STAKING_DEPLOY_13: &str = "0000000000000000000000000000000000000000000000000000000000009013";
+const STAKING_DEPLOY_14: &str = "0000000000000000000000000000000000000000000000000000000000009014";
+
+/// Regression for the silent `GREATEST()` clamp in
+/// `update_staking_position_unstake`. A contract-emitted unstake whose amount
+/// exceeds the staker's balance must not inject tokens into the unbonding
+/// queue that were never staked: the unbonding delta must be capped at the
+/// previously-staked amount, preserving the invariant
+/// `unbonding_amount <= (ever-staked - ever-withdrawn)`.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn unstaked_initiated_over_balance_clamps_unbonding(pool: PgPool) {
+    common::disable_rls(&pool).await;
+
+    // Seed: stake 1000 BIG.
+    processor::process_event(
+        &pool,
+        &EventRegistry::new(),
+        &HashSet::new(),
+        &staking_event(
+            STAKING_DEPLOY_13,
+            "Staked",
+            json!({ "staker": FakeAddress::Buyer.as_str(), "amount": "1000" }),
+        ),
+    )
+    .await
+    .unwrap();
+
+    // Over-unstake: 5000 > 1000 staked.
+    processor::process_event(
+        &pool,
+        &EventRegistry::new(),
+        &HashSet::new(),
+        &staking_event(
+            STAKING_DEPLOY_14,
+            "UnstakedInitiated",
+            json!({
+                "staker": FakeAddress::Buyer.as_str(),
+                "amount": "5000",
+                "unbonding_ends_at": 1_700_172_800_000_u64
+            }),
+        ),
+    )
+    .await
+    .unwrap();
+
+    let pos = sqlx::query!(
+        r"
+            SELECT staked_amount, unbonding_amount
+            FROM staking_positions
+            WHERE staker_address = $1
+        ",
+        FakeAddress::Buyer.as_str(),
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(
+        pos.staked_amount, "0",
+        "over-unstake must clamp staked_amount to zero"
+    );
+    assert_eq!(
+        pos.unbonding_amount, "1000",
+        "unbonding_amount must be clamped to the previously-staked balance \
+         (1000), not the requested unstake amount (5000) - tokens that were \
+         never staked cannot enter the unbonding queue"
     );
 }
