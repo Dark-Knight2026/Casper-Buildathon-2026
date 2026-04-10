@@ -59,6 +59,7 @@ dependencies = [
  "chrono",
  "config",
  "dotenv",
+ "futures-util",
  "hex",
  "jsonwebtoken",
  "rand 0.10.0",

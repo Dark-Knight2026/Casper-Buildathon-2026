@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT vesting_id, total_amount, claimed_amount, start_timestamp, cliff_duration, vesting_duration\n            FROM vesting_schedules\n            ORDER BY start_timestamp\n            LIMIT 10000\n        ",
+  "query": "\n            SELECT vesting_id, total_amount, claimed_amount, start_timestamp, cliff_duration, vesting_duration\n            FROM vesting_schedules\n            ORDER BY start_timestamp\n        ",
   "describe": {
     "columns": [
       {
@@ -46,5 +46,5 @@
       false
     ]
   },
-  "hash": "be6ce8840af10f04bb0e930a555601b06b40ed5c2ed739e708440f36ea52825f"
+  "hash": "f4e94f452076ba8c8ba462a78f4f36f10e6d6c356e24c3abc85d5a8be21674ea"
 }

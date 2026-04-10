@@ -1,5 +1,6 @@
 //! Database queries for vesting endpoints.
 
+use futures_util::stream::BoxStream;
 use sqlx::{FromRow, PgPool};
 
 /// Raw vesting schedule row from `vesting_schedules` table.
@@ -92,25 +93,64 @@ pub async fn fetch_circulating_supply(pool: &PgPool) -> Result<String, sqlx::Err
     Ok(value.unwrap_or_else(|| "0".to_owned()))
 }
 
-/// Returns all vesting schedules globally (for release schedule calculation).
-///
-/// Hard-capped at 10 000 rows to bound memory and CPU usage on this
-/// unauthenticated endpoint.
+/// Earliest and latest schedule timestamps used to size the release-schedule
+/// month buffer before streaming individual rows.
+#[derive(Debug)]
+pub struct ScheduleBounds {
+    /// Minimum `start_timestamp` across all schedules (epoch ms), or `None` if table is empty.
+    pub min_start: Option<i64>,
+    /// Maximum `start_timestamp + vesting_duration` across all schedules (epoch ms), or `None` if empty.
+    pub max_end: Option<i64>,
+    /// Total number of schedules.
+    pub count: i64,
+}
+
+/// Returns the bounding timestamps and row count for the global release
+/// schedule aggregation. Consumed by `get_release_schedule` to size its
+/// delta buffers before streaming individual rows.
 ///
 /// # Errors
 ///
 /// Returns `sqlx::Error` if the database query fails.
 #[inline]
-pub async fn fetch_all_schedules(pool: &PgPool) -> Result<Vec<VestingScheduleRow>, sqlx::Error> {
+pub async fn fetch_schedule_bounds(pool: &PgPool) -> Result<ScheduleBounds, sqlx::Error> {
+    let row = sqlx::query!(
+        r#"
+            SELECT
+                MIN(start_timestamp) AS min_start,
+                MAX(start_timestamp + vesting_duration) AS max_end,
+                COUNT(*) AS "count!"
+            FROM vesting_schedules
+        "#,
+    )
+    .fetch_one(pool)
+    .await?;
+
+    Ok(ScheduleBounds {
+        min_start: row.min_start,
+        max_end: row.max_end,
+        count: row.count,
+    })
+}
+
+/// Streams all vesting schedules globally (for release schedule calculation).
+///
+/// Returns a row-by-row stream so the handler can accumulate sweep-line deltas
+/// without materializing every schedule in a Rust `Vec`. Use
+/// [`fetch_schedule_bounds`] first to size the delta arrays before consuming
+/// this stream.
+#[inline]
+#[must_use]
+pub fn stream_all_schedules(
+    pool: &PgPool,
+) -> BoxStream<'_, Result<VestingScheduleRow, sqlx::Error>> {
     sqlx::query_as!(
         VestingScheduleRow,
         r"
             SELECT vesting_id, total_amount, claimed_amount, start_timestamp, cliff_duration, vesting_duration
             FROM vesting_schedules
             ORDER BY start_timestamp
-            LIMIT 10000
         ",
     )
-    .fetch_all(pool)
-    .await
+    .fetch(pool)
 }

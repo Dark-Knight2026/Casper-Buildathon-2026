@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use axum::{Json, extract::Query, extract::State};
 use chrono::Utc;
+use futures_util::TryStreamExt;
 use rust_decimal::{Decimal, prelude::ToPrimitive};
 use tracing::warn;
 
@@ -210,25 +211,14 @@ pub async fn get_token_supply(
 pub async fn get_release_schedule(
     State(state): State<Arc<AppState>>,
 ) -> ApiResult<Json<ReleaseScheduleResponse>> {
-    let rows = db::fetch_all_schedules(&state.db).await?;
-    let is_truncated = rows.len() >= 10_000;
+    let bounds = db::fetch_schedule_bounds(&state.db).await?;
 
-    if rows.is_empty() {
-        return Ok(Json(ReleaseScheduleResponse {
-            data: vec![],
-            is_truncated: false,
-        }));
+    if bounds.count == 0 {
+        return Ok(Json(ReleaseScheduleResponse { data: vec![] }));
     }
 
-    // Find the earliest start_timestamp as the global origin.
-    let origin = rows.iter().map(|r| r.start_timestamp).min().unwrap_or(0);
-
-    // Find the latest vesting end to determine the range.
-    let max_end = rows
-        .iter()
-        .map(|r| r.start_timestamp.saturating_add(r.vesting_duration))
-        .max()
-        .unwrap_or(0);
+    let origin = bounds.min_start.unwrap_or(0);
+    let max_end = bounds.max_end.unwrap_or(0);
 
     let total_months = ((max_end - origin) / MS_PER_MONTH) + 1;
     let len = usize::try_from(total_months + 1)
@@ -238,11 +228,13 @@ pub async fn get_release_schedule(
 
     // Sweep-line O(N + M): encode each schedule's linear vesting ramp as
     // second-order prefix-sum deltas, then reconstruct all month totals in
-    // a single pass.
+    // a single pass. Schedules are consumed from a streaming cursor so the
+    // whole result set is never materialized as a Vec.
     let mut base_delta = vec![Decimal::ZERO; len + 1];
     let mut slope_delta = vec![Decimal::ZERO; len + 1];
 
-    for r in &rows {
+    let mut stream = db::stream_all_schedules(&state.db);
+    while let Some(r) = stream.try_next().await? {
         let total_dec = r.total_amount.parse::<Decimal>().unwrap_or_else(|_| {
             warn!(vesting_id = %r.vesting_id, raw = %r.total_amount,
                 "release_schedule: failed to parse total_amount");
@@ -306,5 +298,5 @@ pub async fn get_release_schedule(
         });
     }
 
-    Ok(Json(ReleaseScheduleResponse { data, is_truncated }))
+    Ok(Json(ReleaseScheduleResponse { data }))
 }
