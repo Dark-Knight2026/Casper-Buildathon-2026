@@ -1110,3 +1110,154 @@ async fn staker_snapshot_same_block_different_deploy(pool: PgPool) {
         "snapshot_block_height must remain 500 after same-block overwrite"
     );
 }
+
+// Regression: transform_idx NULL vs Some(0) must be distinct ------------------
+
+const STAKING_DEPLOY_11: &str = "0000000000000000000000000000000000000000000000000000000000009011";
+const STAKING_DEPLOY_12: &str = "0000000000000000000000000000000000000000000000000000000000009012";
+
+/// Regression for `COALESCE(transform_idx, 0)` sentinel collision in the
+/// `staking_reward_deposits` unique index. A streaming `RewardsDeposited`
+/// (transform_idx = NULL) and a backfill `RewardsDeposited` with
+/// `transform_idx = 0` are distinct events but both map to `0` under the
+/// old sentinel, so the second insert is silently dropped.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn rewards_deposited_null_and_zero_transform_idx_do_not_collide(pool: PgPool) {
+    common::disable_rls(&pool).await;
+
+    // First: backfill event with transform_idx = Some(0) (first transform in the deploy).
+    processor::process_event(
+        &pool,
+        &EventRegistry::new(),
+        &HashSet::new(),
+        &RawEvent {
+            contract_hash: "staking_contract_hash".to_owned(),
+            deploy_hash: STAKING_DEPLOY_11.to_owned(),
+            block_height: 500,
+            contract_type: ContractType::Staking,
+            event_name: "RewardsDeposited".to_owned(),
+            event_data: json!({
+                "caller": FakeAddress::ContractX.as_str(),
+                "amount": "50000",
+                "reward_per_token_stored": "1000000000000000000"
+            }),
+            block_timestamp: Some(Utc::now()),
+            transform_idx: Some(0),
+            api_from_type: None,
+            api_to_type: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    // Second: streaming event with transform_idx = None for the same deploy.
+    processor::process_event(
+        &pool,
+        &EventRegistry::new(),
+        &HashSet::new(),
+        &RawEvent {
+            contract_hash: "staking_contract_hash".to_owned(),
+            deploy_hash: STAKING_DEPLOY_11.to_owned(),
+            block_height: 500,
+            contract_type: ContractType::Staking,
+            event_name: "RewardsDeposited".to_owned(),
+            event_data: json!({
+                "caller": FakeAddress::ContractX.as_str(),
+                "amount": "75000",
+                "reward_per_token_stored": "3000000000000000000"
+            }),
+            block_timestamp: Some(Utc::now()),
+            transform_idx: None,
+            api_from_type: None,
+            api_to_type: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let count: i64 = sqlx::query_scalar!(
+        r"SELECT COUNT(*) FROM staking_reward_deposits WHERE transaction_hash = $1",
+        STAKING_DEPLOY_11,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap()
+    .unwrap_or(0);
+
+    assert_eq!(
+        count, 2,
+        "transform_idx NULL and Some(0) must not collide: they represent \
+         distinct events (streaming vs first-backfill-transform)"
+    );
+}
+
+/// Regression for `COALESCE(transform_idx, 0)` sentinel collision in the
+/// `staking_events` unique index. A streaming `Staked` event (transform_idx
+/// = NULL) and a backfill `Staked` with `transform_idx = 0` for the same
+/// deploy are distinct events but collide under the old sentinel.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn staking_event_null_and_zero_transform_idx_do_not_collide(pool: PgPool) {
+    common::disable_rls(&pool).await;
+
+    // Backfill Staked event with transform_idx = Some(0).
+    processor::process_event(
+        &pool,
+        &EventRegistry::new(),
+        &HashSet::new(),
+        &RawEvent {
+            contract_hash: "staking_contract_hash".to_owned(),
+            deploy_hash: STAKING_DEPLOY_12.to_owned(),
+            block_height: 500,
+            contract_type: ContractType::Staking,
+            event_name: "Staked".to_owned(),
+            event_data: json!({
+                "staker": FakeAddress::Buyer.as_str(),
+                "amount": "1000"
+            }),
+            block_timestamp: Some(Utc::now()),
+            transform_idx: Some(0),
+            api_from_type: None,
+            api_to_type: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    // Streaming Staked event with transform_idx = None for the same deploy.
+    processor::process_event(
+        &pool,
+        &EventRegistry::new(),
+        &HashSet::new(),
+        &RawEvent {
+            contract_hash: "staking_contract_hash".to_owned(),
+            deploy_hash: STAKING_DEPLOY_12.to_owned(),
+            block_height: 500,
+            contract_type: ContractType::Staking,
+            event_name: "Staked".to_owned(),
+            event_data: json!({
+                "staker": FakeAddress::Buyer.as_str(),
+                "amount": "2000"
+            }),
+            block_timestamp: Some(Utc::now()),
+            transform_idx: None,
+            api_from_type: None,
+            api_to_type: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let event_count: i64 = sqlx::query_scalar!(
+        r"SELECT COUNT(*) FROM staking_events WHERE transaction_hash = $1 AND event_type = 'stake'",
+        STAKING_DEPLOY_12,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap()
+    .unwrap_or(0);
+
+    assert_eq!(
+        event_count, 2,
+        "staking_events with transform_idx NULL and Some(0) must not collide"
+    );
+}
