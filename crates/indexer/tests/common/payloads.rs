@@ -22,6 +22,31 @@ pub fn wss_message(
     event_id: i64,
     block_height: u64,
 ) -> Value {
+    wss_message_with_transform_id(
+        contract_package_hash,
+        event_name,
+        event_data,
+        deploy_hash,
+        event_id,
+        block_height,
+        0,
+    )
+}
+
+/// Build a WSS message with a caller-controlled `transform_id`.
+///
+/// Exists so that regression tests can exercise edge cases (e.g. values that
+/// exceed `i32::MAX`) without forking the entire JSON template.
+#[allow(clippy::needless_pass_by_value, clippy::too_many_arguments)]
+pub fn wss_message_with_transform_id(
+    contract_package_hash: &str,
+    event_name: &str,
+    event_data: Value,
+    deploy_hash: &str,
+    event_id: i64,
+    block_height: u64,
+    transform_id: i64,
+) -> Value {
     json!({
         "data": {
             "contract_package_hash": contract_package_hash,
@@ -33,7 +58,7 @@ pub fn wss_message(
         "extra": {
             "deploy_hash": deploy_hash,
             "event_id": event_id,
-            "transform_id": 0,
+            "transform_id": transform_id,
             "block_height": block_height
         },
         "timestamp": "2025-01-01T12:00:00.000Z"
