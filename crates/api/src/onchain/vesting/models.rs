@@ -41,9 +41,7 @@ pub struct VestingScheduleItem {
     /// Vesting schedule ID from the contract.
     #[schema(example = "0")]
     pub id: String,
-    /// Remaining tokens: `total_amount - claimed_amount` (human-readable f64).
-    /// Includes both time-locked and vested-but-unclaimed tokens.
-    /// True time-locked amount would be `total - vested`.
+    /// Tokens not yet released by the vesting schedule: `total_amount - vested_amount` (human-readable f64).
     #[schema(example = 50000.0)]
     pub locked_amount: f64,
     /// Block timestamp when the vesting clock started (epoch ms).
@@ -55,7 +53,8 @@ pub struct VestingScheduleItem {
     /// Timestamp when vesting ends and all tokens become claimable (epoch ms).
     #[schema(example = 1_793_548_800_000_i64)]
     pub vesting_end_timestamp: i64,
-    /// Tokens already unlocked/claimed (human-readable f64).
+    /// Vested tokens not yet claimed: `vested_amount - claimed_amount` (human-readable f64).
+    /// These tokens are available to claim from the contract.
     #[schema(example = 0.0)]
     pub unlocked_amount: f64,
 }
