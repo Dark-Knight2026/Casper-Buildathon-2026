@@ -1332,3 +1332,136 @@ async fn unstaked_initiated_over_balance_clamps_unbonding(pool: PgPool) {
          never staked cannot enter the unbonding queue"
     );
 }
+
+// Out-of-order event resilience -----------------------------------------------
+
+const STAKING_DEPLOY_15: &str = "0000000000000000000000000000000000000000000000000000000000009015";
+const STAKING_DEPLOY_16: &str = "0000000000000000000000000000000000000000000000000000000000009016";
+const STAKING_DEPLOY_17: &str = "0000000000000000000000000000000000000000000000000000000000009017";
+
+/// Regression: `UnstakedInitiated` arriving before any `Staked` event for
+/// the same staker must create a zero-staked position and preserve the
+/// unbonding delta instead of silently dropping it.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn unstake_before_stake_preserves_unbonding(pool: PgPool) {
+    common::disable_rls(&pool).await;
+
+    // No prior Staked event - position does not exist yet.
+    processor::process_event(
+        &pool,
+        &EventRegistry::new(),
+        &HashSet::new(),
+        &staking_event(
+            STAKING_DEPLOY_15,
+            "UnstakedInitiated",
+            json!({
+                "staker": FakeAddress::Buyer.as_str(),
+                "amount": "3000",
+                "unbonding_ends_at": 1_700_172_800_000_u64
+            }),
+        ),
+    )
+    .await
+    .unwrap();
+
+    let pos = sqlx::query!(
+        r"
+            SELECT staked_amount, unbonding_amount
+            FROM staking_positions
+            WHERE staker_address = $1
+        ",
+        FakeAddress::Buyer.as_str(),
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("position must be created even without a prior Staked event");
+
+    assert_eq!(
+        pos.staked_amount, "0",
+        "no prior stake - staked_amount must be zero"
+    );
+    assert_eq!(
+        pos.unbonding_amount, "3000",
+        "unbonding delta must be preserved, not silently dropped"
+    );
+}
+
+/// Regression: `UnbondedWithdrawn` arriving before any `Staked` event must
+/// create a position with default values rather than silently no-op.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn withdraw_before_stake_creates_position(pool: PgPool) {
+    common::disable_rls(&pool).await;
+
+    processor::process_event(
+        &pool,
+        &EventRegistry::new(),
+        &HashSet::new(),
+        &staking_event(
+            STAKING_DEPLOY_16,
+            "UnbondedWithdrawn",
+            json!({ "staker": FakeAddress::Buyer.as_str(), "amount": "1000" }),
+        ),
+    )
+    .await
+    .unwrap();
+
+    let pos = sqlx::query!(
+        r"
+            SELECT staked_amount, unbonding_amount
+            FROM staking_positions
+            WHERE staker_address = $1
+        ",
+        FakeAddress::Buyer.as_str(),
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("position must be created even without a prior Staked event");
+
+    assert_eq!(pos.staked_amount, "0");
+    assert_eq!(
+        pos.unbonding_amount, "0",
+        "withdraw clears unbonding - on a fresh position this is already zero"
+    );
+}
+
+/// Regression: `RewardsClaimed` arriving before any `Staked` event must
+/// create a position and preserve `total_rewards_claimed` instead of
+/// silently dropping the reward amount.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn rewards_claimed_before_stake_preserves_rewards(pool: PgPool) {
+    common::disable_rls(&pool).await;
+
+    processor::process_event(
+        &pool,
+        &EventRegistry::new(),
+        &HashSet::new(),
+        &staking_event(
+            STAKING_DEPLOY_17,
+            "RewardsClaimed",
+            json!({
+                "staker": FakeAddress::Buyer.as_str(),
+                "amount": "7500"
+            }),
+        ),
+    )
+    .await
+    .unwrap();
+
+    let pos = sqlx::query!(
+        r"
+            SELECT staked_amount, total_rewards_claimed
+            FROM staking_positions
+            WHERE staker_address = $1
+        ",
+        FakeAddress::Buyer.as_str(),
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("position must be created even without a prior Staked event");
+
+    assert_eq!(pos.staked_amount, "0");
+    assert_eq!(
+        pos.total_rewards_claimed, "7500",
+        "reward claim must be preserved, not silently dropped"
+    );
+}
