@@ -785,8 +785,12 @@ pub async fn upsert_staking_position_stake(
     Ok(())
 }
 
-/// UPDATE `staking_positions` for an `UnstakedInitiated` event: decrease
+/// UPSERT `staking_positions` for an `UnstakedInitiated` event: decrease
 /// `staked_amount`, set `unbonding_amount` and `unbonding_ends_at`.
+///
+/// Creates the position row if it doesn't exist yet (out-of-order events
+/// during backfill or indexer restart), ensuring the unstake delta is never
+/// silently lost.
 ///
 /// Defends against contract-level over-unstake: if `amount` exceeds the
 /// pre-update `staked_amount`, the unbonding delta is clamped to the
@@ -806,52 +810,44 @@ pub async fn update_staking_position_unstake(
 ) -> IndexerResult<()> {
     let result = sqlx::query!(
         r"
-            WITH old AS (
-                SELECT staker_address, staked_amount::NUMERIC AS prev_staked
-                FROM staking_positions
-                WHERE staker_address = $1
-            )
-            UPDATE staking_positions AS sp
-            SET staked_amount     = GREATEST('0'::NUMERIC, old.prev_staked - $2::TEXT::NUMERIC)::TEXT,
-                unbonding_amount  = (sp.unbonding_amount::NUMERIC + LEAST($2::TEXT::NUMERIC, old.prev_staked))::TEXT,
+            INSERT INTO staking_positions (staker_address, staked_amount, unbonding_amount, unbonding_ends_at, last_updated_at)
+            VALUES ($1, '0', $2, $3, NOW())
+            ON CONFLICT (staker_address) DO UPDATE SET
+                staked_amount     = GREATEST(
+                                        '0'::NUMERIC,
+                                        staking_positions.staked_amount::NUMERIC - $2::TEXT::NUMERIC
+                                    )::TEXT,
+                unbonding_amount  = (
+                                        staking_positions.unbonding_amount::NUMERIC
+                                        + LEAST($2::TEXT::NUMERIC, staking_positions.staked_amount::NUMERIC)
+                                    )::TEXT,
                 unbonding_ends_at = $3,
                 last_updated_at   = NOW()
-            FROM old
-            WHERE sp.staker_address = old.staker_address
-            RETURNING
-                old.prev_staked::TEXT AS previous_staked_amount,
-                ($2::TEXT::NUMERIC > old.prev_staked) AS clamped
+            RETURNING (xmax = 0) AS inserted
         ",
         staker_address,
         amount,
         unbonding_ends_at,
     )
-    .fetch_optional(tx.as_mut())
+    .fetch_one(tx.as_mut())
     .await?;
 
-    match result {
-        None => {
-            tracing::warn!(
-                staker = staker_address,
-                amount,
-                "unstake update matched no staking position - event arrived before Staked?"
-            );
-        }
-        Some(row) if row.clamped.unwrap_or(false) => {
-            tracing::warn!(
-                staker = staker_address,
-                amount,
-                previous_staked = row.previous_staked_amount.as_deref().unwrap_or("0"),
-                "UnstakedInitiated amount exceeds staked balance - unbonding clamped to available"
-            );
-        }
-        Some(_) => {}
+    if result.inserted.unwrap_or(false) {
+        tracing::warn!(
+            staker = staker_address,
+            amount,
+            "unstake upsert created new position - event arrived before Staked"
+        );
     }
 
     Ok(())
 }
 
-/// UPDATE `staking_positions` for an `UnbondedWithdrawn` event: clear unbonding state.
+/// UPSERT `staking_positions` for an `UnbondedWithdrawn` event: clear
+/// unbonding state.
+///
+/// Creates the position row if it doesn't exist yet (out-of-order events),
+/// ensuring the staker has a row for subsequent events.
 ///
 /// # Errors
 ///
@@ -864,29 +860,34 @@ pub async fn update_staking_position_withdraw(
 ) -> IndexerResult<()> {
     let result = sqlx::query!(
         r"
-            UPDATE staking_positions
-            SET unbonding_amount  = '0',
+            INSERT INTO staking_positions (staker_address, last_updated_at)
+            VALUES ($1, NOW())
+            ON CONFLICT (staker_address) DO UPDATE SET
+                unbonding_amount  = '0',
                 unbonding_ends_at = NULL,
                 last_updated_at   = NOW()
-            WHERE staker_address = $1
+            RETURNING (xmax = 0) AS inserted
         ",
         staker_address,
     )
-    .execute(tx.as_mut())
+    .fetch_one(tx.as_mut())
     .await?;
 
-    if result.rows_affected() == 0 {
+    if result.inserted.unwrap_or(false) {
         tracing::warn!(
             staker = staker_address,
-            "withdraw update matched no staking position - event arrived before Staked?"
+            "withdraw upsert created new position - event arrived before Staked"
         );
     }
 
     Ok(())
 }
 
-/// UPDATE `staking_positions` for a `RewardsClaimed` event: increase
+/// UPSERT `staking_positions` for a `RewardsClaimed` event: increase
 /// `total_rewards_claimed`.
+///
+/// Creates the position row if it doesn't exist yet (out-of-order events),
+/// ensuring the reward amount is never silently lost.
 ///
 /// # Errors
 ///
@@ -900,22 +901,24 @@ pub async fn update_staking_position_rewards(
 ) -> IndexerResult<()> {
     let result = sqlx::query!(
         r"
-            UPDATE staking_positions
-            SET total_rewards_claimed = (total_rewards_claimed::NUMERIC + $2::TEXT::NUMERIC)::TEXT,
+            INSERT INTO staking_positions (staker_address, total_rewards_claimed, last_updated_at)
+            VALUES ($1, $2, NOW())
+            ON CONFLICT (staker_address) DO UPDATE SET
+                total_rewards_claimed = (staking_positions.total_rewards_claimed::NUMERIC + $2::TEXT::NUMERIC)::TEXT,
                 last_updated_at       = NOW()
-            WHERE staker_address = $1
+            RETURNING (xmax = 0) AS inserted
         ",
         staker_address,
         amount,
     )
-    .execute(tx.as_mut())
+    .fetch_one(tx.as_mut())
     .await?;
 
-    if result.rows_affected() == 0 {
+    if result.inserted.unwrap_or(false) {
         tracing::warn!(
             staker = staker_address,
             amount,
-            "rewards update matched no staking position - event arrived before Staked?"
+            "rewards upsert created new position - event arrived before Staked"
         );
     }
 

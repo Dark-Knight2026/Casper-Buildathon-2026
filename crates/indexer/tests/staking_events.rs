@@ -276,8 +276,8 @@ async fn unstaked_initiated_sets_unbonding(pool: PgPool) {
     assert_eq!(pos.unbonding_ends_at, expected_ts);
 }
 
-/// `UnstakedInitiated` without a prior `Staked` event must not panic.
-/// The handler logs a warning and updates zero rows.
+/// `UnstakedInitiated` without a prior `Staked` event must not panic and
+/// must create a zero-staked position to preserve the unbonding delta.
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn unstaked_initiated_without_prior_staked(pool: PgPool) {
     common::disable_rls(&pool).await;
@@ -311,19 +311,23 @@ async fn unstaked_initiated_without_prior_staked(pool: PgPool) {
     .unwrap_or(0);
     assert_eq!(event_count, 1, "event log should record the unstake");
 
-    // No staking_positions row should exist (update matched zero rows)
-    let pos_count: i64 = sqlx::query_scalar!(
-        r"SELECT COUNT(*) FROM staking_positions WHERE staker_address = $1",
+    // Position must be created with the unbonding delta preserved.
+    let pos = sqlx::query!(
+        r"
+            SELECT staked_amount, unbonding_amount, unbonding_ends_at
+            FROM staking_positions
+            WHERE staker_address = $1
+        ",
         FakeAddress::Buyer.as_str(),
     )
     .fetch_one(&pool)
     .await
-    .unwrap()
-    .unwrap_or(0);
-    assert_eq!(
-        pos_count, 0,
-        "no position should be created by unstake alone"
-    );
+    .expect("upsert must create a position even without a prior Staked event");
+
+    assert_eq!(pos.staked_amount, "0", "no prior stake - staked_amount must be zero");
+    assert_eq!(pos.unbonding_amount, "5000", "unbonding delta must be preserved");
+    let expected_ts = chrono::DateTime::from_timestamp_millis(1_700_172_800_000);
+    assert_eq!(pos.unbonding_ends_at, expected_ts);
 }
 
 // UnbondedWithdrawn handler ---------------------------------------------------
