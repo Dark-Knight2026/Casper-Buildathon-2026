@@ -143,7 +143,7 @@ pub async fn setup_test_server_with(
         (SecretString::from(url), client, None)
     };
 
-    let jwt_secret = "test_jwt_secret_for_integration_tests".to_owned();
+    let jwt_secret = "test_jwt_secret_for_integration_tests_at_least_sixty_four_bytes!".to_owned();
     let config = ServerConfig {
         database_url: SecretString::from(TEST_DATABASE_URL),
         redis_url,

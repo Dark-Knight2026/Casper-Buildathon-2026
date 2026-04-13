@@ -324,8 +324,14 @@ async fn unstaked_initiated_without_prior_staked(pool: PgPool) {
     .await
     .expect("upsert must create a position even without a prior Staked event");
 
-    assert_eq!(pos.staked_amount, "0", "no prior stake - staked_amount must be zero");
-    assert_eq!(pos.unbonding_amount, "5000", "unbonding delta must be preserved");
+    assert_eq!(
+        pos.staked_amount, "0",
+        "no prior stake - staked_amount must be zero"
+    );
+    assert_eq!(
+        pos.unbonding_amount, "5000",
+        "unbonding delta must be preserved"
+    );
     let expected_ts = chrono::DateTime::from_timestamp_millis(1_700_172_800_000);
     assert_eq!(pos.unbonding_ends_at, expected_ts);
 }

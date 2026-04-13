@@ -159,9 +159,9 @@ impl ServerConfig {
             ));
         }
         let secret_len = self.jwt_secret.expose_secret().len();
-        if secret_len < 32 {
+        if secret_len < 64 {
             return Err(ServerError::EnvVar(format!(
-                "SUPABASE_JWT_SECRET must be at least 32 bytes, got {secret_len}"
+                "SUPABASE_JWT_SECRET must be at least 64 bytes for HS256 security, got {secret_len}"
             )));
         }
         Ok(())
