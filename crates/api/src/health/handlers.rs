@@ -10,6 +10,8 @@ use crate::{
     health::models::{ConnectionStatus, HealthResponse},
 };
 
+// `GET /health`
+//
 /// Checks the health status of the application and its dependencies.
 ///
 /// Verifies connectivity to:

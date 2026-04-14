@@ -20,14 +20,19 @@
 
 mod common;
 
+use std::collections::HashSet;
+
 use reqwest::Client;
 use serde_json::json;
 use sqlx::PgPool;
 use wiremock::{Mock, MockServer, ResponseTemplate, matchers};
 
-use common::{MIGRATOR, TRANSFER_DEPLOY_HASH, payloads};
+use common::{FakeAddress, MIGRATOR, TRANSFER_DEPLOY_HASH, payloads};
 use indexer::{
-    backfill::cep18::{self, FtActionType, FtTokenAction},
+    backfill::{
+        BackfillContext,
+        cep18::{self, FtActionType, FtTokenAction},
+    },
     config::ContractType,
     events::EventRegistry,
 };
@@ -333,17 +338,19 @@ async fn empty_data_exits_cleanly_without_cursor(pool: PgPool) {
         .mount(&server)
         .await;
 
-    cep18::backfill_cep18(
-        &Client::new(),
-        &common::test_config(server.uri()),
-        &pool,
-        &EventRegistry::new(),
-        ContractType::Big,
-        "big_hash",
-        0,
-    )
-    .await
-    .unwrap();
+    let client = Client::new();
+    let registry = EventRegistry::new();
+    let known_hashes = HashSet::new();
+    let ctx = BackfillContext {
+        client: &client,
+        config: &common::test_config(server.uri()),
+        db_pool: &pool,
+        registry: &registry,
+        known_hashes: &known_hashes,
+    };
+    cep18::backfill_cep18(&ctx, ContractType::Big, "big_hash", 0)
+        .await
+        .unwrap();
 
     let cursor: Option<i64> = sqlx::query_scalar!(
         r"
@@ -395,8 +402,8 @@ async fn cursor_resume_skips_actions_at_or_below_saved_block(pool: PgPool) {
             ResponseTemplate::new(200).set_body_json(payloads::ft_actions_single(
                 "old_deploy",
                 400,
-                Some("alice"),
-                Some("bob"),
+                Some(FakeAddress::Alice.as_str()),
+                Some(FakeAddress::Bob.as_str()),
                 "500",
                 2,
                 1,
@@ -405,17 +412,19 @@ async fn cursor_resume_skips_actions_at_or_below_saved_block(pool: PgPool) {
         .mount(&server)
         .await;
 
-    cep18::backfill_cep18(
-        &Client::new(),
-        &common::test_config(server.uri()),
-        &pool,
-        &EventRegistry::new(),
-        ContractType::Big,
-        "big_hash",
-        0,
-    )
-    .await
-    .unwrap();
+    let client = Client::new();
+    let registry = EventRegistry::new();
+    let known_hashes = HashSet::new();
+    let ctx = BackfillContext {
+        client: &client,
+        config: &common::test_config(server.uri()),
+        db_pool: &pool,
+        registry: &registry,
+        known_hashes: &known_hashes,
+    };
+    cep18::backfill_cep18(&ctx, ContractType::Big, "big_hash", 0)
+        .await
+        .unwrap();
 
     let cursor: Option<i64> = sqlx::query_scalar!(
         r"
@@ -456,8 +465,8 @@ async fn transfer_action_written_to_tables_and_cursor_advances(pool: PgPool) {
             ResponseTemplate::new(200).set_body_json(payloads::ft_actions_single(
                 TRANSFER_DEPLOY_HASH,
                 200,
-                Some("alice"),
-                Some("bob"),
+                Some(FakeAddress::Alice.as_str()),
+                Some(FakeAddress::Bob.as_str()),
                 "500",
                 2,
                 1,
@@ -466,17 +475,19 @@ async fn transfer_action_written_to_tables_and_cursor_advances(pool: PgPool) {
         .mount(&server)
         .await;
 
-    cep18::backfill_cep18(
-        &Client::new(),
-        &common::test_config(server.uri()),
-        &pool,
-        &EventRegistry::new(),
-        ContractType::Big,
-        "big_hash",
-        0,
-    )
-    .await
-    .unwrap();
+    let client = Client::new();
+    let registry = EventRegistry::new();
+    let known_hashes = HashSet::new();
+    let ctx = BackfillContext {
+        client: &client,
+        config: &common::test_config(server.uri()),
+        db_pool: &pool,
+        registry: &registry,
+        known_hashes: &known_hashes,
+    };
+    cep18::backfill_cep18(&ctx, ContractType::Big, "big_hash", 0)
+        .await
+        .unwrap();
 
     // blockchain_transactions must have one token_transfer row.
     let tx_count: i64 = sqlx::query_scalar!(
@@ -499,8 +510,9 @@ async fn transfer_action_written_to_tables_and_cursor_advances(pool: PgPool) {
     let bob_balance: Option<String> = sqlx::query_scalar!(
         r"
             SELECT balance FROM token_holdings
-            WHERE user_address = 'bob' AND token_type = 'BIG'
-        "
+            WHERE user_address = $1 AND token_type = 'BIG'
+        ",
+        FakeAddress::Bob.as_str(),
     )
     .fetch_optional(&pool)
     .await
@@ -515,8 +527,9 @@ async fn transfer_action_written_to_tables_and_cursor_advances(pool: PgPool) {
     let alice_balance: Option<String> = sqlx::query_scalar!(
         r"
             SELECT balance FROM token_holdings
-            WHERE user_address = 'alice' AND token_type = 'BIG'
-        "
+            WHERE user_address = $1 AND token_type = 'BIG'
+        ",
+        FakeAddress::Alice.as_str(),
     )
     .fetch_optional(&pool)
     .await
@@ -570,17 +583,19 @@ async fn burn_action_skipped_and_cursor_not_updated(pool: PgPool) {
         .mount(&server)
         .await;
 
-    cep18::backfill_cep18(
-        &Client::new(),
-        &common::test_config(server.uri()),
-        &pool,
-        &EventRegistry::new(),
-        ContractType::Big,
-        "big_hash",
-        0,
-    )
-    .await
-    .unwrap();
+    let client = Client::new();
+    let registry = EventRegistry::new();
+    let known_hashes = HashSet::new();
+    let ctx = BackfillContext {
+        client: &client,
+        config: &common::test_config(server.uri()),
+        db_pool: &pool,
+        registry: &registry,
+        known_hashes: &known_hashes,
+    };
+    cep18::backfill_cep18(&ctx, ContractType::Big, "big_hash", 0)
+        .await
+        .unwrap();
 
     let cursor: Option<i64> = sqlx::query_scalar!(
         r"
@@ -629,7 +644,7 @@ async fn mint_action_stored_raw_without_token_holdings_update(pool: PgPool) {
                 MINT_DEPLOY_HASH,
                 50,
                 None,
-                Some("initial_holder"),
+                Some(FakeAddress::Bob.as_str()),
                 "5000000000000000000000000000000",
                 1,
                 1,
@@ -638,17 +653,19 @@ async fn mint_action_stored_raw_without_token_holdings_update(pool: PgPool) {
         .mount(&server)
         .await;
 
-    cep18::backfill_cep18(
-        &Client::new(),
-        &common::test_config(server.uri()),
-        &pool,
-        &EventRegistry::new(),
-        ContractType::Big,
-        "big_hash",
-        0,
-    )
-    .await
-    .unwrap();
+    let client = Client::new();
+    let registry = EventRegistry::new();
+    let known_hashes = HashSet::new();
+    let ctx = BackfillContext {
+        client: &client,
+        config: &common::test_config(server.uri()),
+        db_pool: &pool,
+        registry: &registry,
+        known_hashes: &known_hashes,
+    };
+    cep18::backfill_cep18(&ctx, ContractType::Big, "big_hash", 0)
+        .await
+        .unwrap();
 
     // One blockchain_events row must exist for Mint and be marked processed.
     let event = sqlx::query!(r"SELECT processed FROM blockchain_events WHERE event_type = 'Mint'")
@@ -663,13 +680,16 @@ async fn mint_action_stored_raw_without_token_holdings_update(pool: PgPool) {
         "Mint event must be marked processed = true in blockchain_events"
     );
 
-    // No token_holdings must be written — Mint is deployment allocation only.
+    // Mint handler updates token_holdings for the recipient.
     let holdings: i64 = sqlx::query_scalar!(r"SELECT COUNT(*) FROM token_holdings")
         .fetch_one(&pool)
         .await
         .unwrap()
         .unwrap_or(0);
-    assert_eq!(holdings, 0, "Mint must not update token_holdings");
+    assert_eq!(
+        holdings, 1,
+        "Mint must create a token_holdings entry for recipient"
+    );
 }
 
 /// When `start_block` is greater than `cursor + 1`, the effective start block
@@ -700,8 +720,8 @@ async fn start_block_takes_precedence_over_cursor_when_greater(pool: PgPool) {
             ResponseTemplate::new(200).set_body_json(payloads::ft_actions_single(
                 TRANSFER_DEPLOY_HASH,
                 150,
-                Some("alice"),
-                Some("bob"),
+                Some(FakeAddress::Alice.as_str()),
+                Some(FakeAddress::Bob.as_str()),
                 "100",
                 2,
                 1,
@@ -710,11 +730,18 @@ async fn start_block_takes_precedence_over_cursor_when_greater(pool: PgPool) {
         .mount(&server)
         .await;
 
+    let client = Client::new();
+    let registry = EventRegistry::new();
+    let known_hashes = HashSet::new();
+    let ctx = BackfillContext {
+        client: &client,
+        config: &common::test_config(server.uri()),
+        db_pool: &pool,
+        registry: &registry,
+        known_hashes: &known_hashes,
+    };
     cep18::backfill_cep18(
-        &Client::new(),
-        &common::test_config(server.uri()),
-        &pool,
-        &EventRegistry::new(),
+        &ctx,
         ContractType::Big,
         "big_hash",
         200, // start_block > cursor + 1
@@ -765,8 +792,8 @@ async fn page_count_zero_with_data_processes_single_page_and_stops(pool: PgPool)
             ResponseTemplate::new(200).set_body_json(payloads::ft_actions_single(
                 TRANSFER_DEPLOY_HASH,
                 50,
-                Some("alice"),
-                Some("bob"),
+                Some(FakeAddress::Alice.as_str()),
+                Some(FakeAddress::Bob.as_str()),
                 "100",
                 2,
                 0,
@@ -775,17 +802,19 @@ async fn page_count_zero_with_data_processes_single_page_and_stops(pool: PgPool)
         .mount(&server)
         .await;
 
-    cep18::backfill_cep18(
-        &Client::new(),
-        &common::test_config(server.uri()),
-        &pool,
-        &EventRegistry::new(),
-        ContractType::Big,
-        "big_hash",
-        0,
-    )
-    .await
-    .unwrap();
+    let client = Client::new();
+    let registry = EventRegistry::new();
+    let known_hashes = HashSet::new();
+    let ctx = BackfillContext {
+        client: &client,
+        config: &common::test_config(server.uri()),
+        db_pool: &pool,
+        registry: &registry,
+        known_hashes: &known_hashes,
+    };
+    cep18::backfill_cep18(&ctx, ContractType::Big, "big_hash", 0)
+        .await
+        .unwrap();
 
     // The Transfer on page 1 must have been processed despite page_count = 0.
     let tx_count: i64 = sqlx::query_scalar!(

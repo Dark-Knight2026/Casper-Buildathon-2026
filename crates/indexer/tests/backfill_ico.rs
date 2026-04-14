@@ -13,14 +13,16 @@
 
 mod common;
 
+use std::collections::HashSet;
+
 use reqwest::Client;
 use serde_json::json;
 use sqlx::PgPool;
 use wiremock::{Mock, MockServer, ResponseTemplate, matchers};
 
-use common::{MIGRATOR, PURCHASE_DEPLOY_HASH, payloads};
+use common::{FakeAddress, MIGRATOR, PURCHASE_DEPLOY_HASH, payloads};
 use indexer::{
-    backfill::ico::{self, IcoBackfillCtx},
+    backfill::{BackfillContext, ico},
     config::ContractType,
     events::EventRegistry,
 };
@@ -43,6 +45,7 @@ async fn filters_only_ico_initiated_transfers() {
         &common::test_config(server.uri()),
         "big_hash",
         "ico_hash",
+        0,
     )
     .await
     .unwrap();
@@ -82,6 +85,7 @@ async fn paginates_all_pages_using_page_count_from_response() {
         &common::test_config(server.uri()),
         "big_hash",
         "ico_hash",
+        0,
     )
     .await
     .unwrap();
@@ -113,6 +117,7 @@ async fn returns_empty_map_when_no_ico_transfers_exist() {
         &common::test_config(server.uri()),
         "big_hash",
         "ico_hash",
+        0,
     )
     .await
     .unwrap();
@@ -135,6 +140,7 @@ async fn load_big_transfers_returns_error_on_5xx_response() {
         &common::test_config(server.uri()),
         "big_hash",
         "ico_hash",
+        0,
     )
     .await;
 
@@ -158,6 +164,7 @@ async fn load_big_transfers_returns_error_on_4xx_response() {
         &common::test_config(server.uri()),
         "big_hash",
         "ico_hash",
+        0,
     )
     .await;
 
@@ -210,6 +217,55 @@ fn parse_purchase_args_returns_none_when_currency_missing() {
 #[test]
 fn parse_purchase_args_returns_none_when_args_is_empty() {
     assert!(ico::parse_purchase_args(&json!({})).is_none());
+}
+
+// parse_add_schedule_args
+
+#[test]
+fn parse_add_schedule_args_extracts_all_fields() {
+    let args = payloads::schedule_args("sched-1", 1000, 2000, &json!("999000"), &json!("500000"));
+    let result = ico::parse_add_schedule_args(&args).unwrap();
+    assert_eq!(result.id, "sched-1");
+    assert_eq!(result.start_timestamp, 1000);
+    assert_eq!(result.end_timestamp, 2000);
+    assert_eq!(result.sale_amount, "999000");
+    assert_eq!(result.price, "500000");
+}
+
+#[test]
+fn parse_add_schedule_args_extracts_numeric_sale_amount() {
+    let args = payloads::schedule_args("sched-2", 0, 100, &json!(42000u64), &json!(750u64));
+    let result = ico::parse_add_schedule_args(&args).unwrap();
+    assert_eq!(result.sale_amount, "42000");
+    assert_eq!(result.price, "750");
+}
+
+#[test]
+fn parse_add_schedule_args_returns_none_when_id_missing() {
+    let args = json!({
+        "start_timestamp": { "cl_type": "U64",  "parsed": 1000u64 },
+        "end_timestamp":   { "cl_type": "U64",  "parsed": 2000u64 },
+        "sale_amount":     { "cl_type": "U256", "parsed": "100" },
+        "price":           { "cl_type": "U256", "parsed": "50" }
+    });
+    assert!(ico::parse_add_schedule_args(&args).is_none());
+}
+
+#[test]
+fn parse_add_schedule_args_returns_none_when_required_field_missing() {
+    // Missing price
+    let args = json!({
+        "id":              { "cl_type": "String", "parsed": "sched" },
+        "start_timestamp": { "cl_type": "U64",    "parsed": 1000u64 },
+        "end_timestamp":   { "cl_type": "U64",    "parsed": 2000u64 },
+        "sale_amount":     { "cl_type": "U256",   "parsed": "100" }
+    });
+    assert!(ico::parse_add_schedule_args(&args).is_none());
+}
+
+#[test]
+fn parse_add_schedule_args_returns_none_when_args_is_empty() {
+    assert!(ico::parse_add_schedule_args(&json!({})).is_none());
 }
 
 // ico_currency_name
@@ -267,20 +323,17 @@ async fn deploy_without_purchase_args_advances_cursor_but_writes_nothing(pool: P
         .mount(&rest)
         .await;
 
-    ico::backfill_ico(
-        &IcoBackfillCtx {
-            client: &client,
-            config: &config,
-            db_pool: &pool,
-            registry: &registry,
-            big_hash: "big_hash",
-        },
-        ContractType::Ico,
-        "ico_hash",
-        0,
-    )
-    .await
-    .unwrap();
+    let known_hashes = HashSet::new();
+    let ctx = BackfillContext {
+        client: &client,
+        config: &config,
+        db_pool: &pool,
+        registry: &registry,
+        known_hashes: &known_hashes,
+    };
+    ico::backfill_ico(&ctx, "big_hash", ContractType::Ico, "ico_hash", 0)
+        .await
+        .unwrap();
 
     let tx_count: i64 = sqlx::query_scalar!(
         r"
@@ -347,20 +400,17 @@ async fn failed_deploy_skipped_and_cursor_not_updated(pool: PgPool) {
         .mount(&rest)
         .await;
 
-    ico::backfill_ico(
-        &IcoBackfillCtx {
-            client: &client,
-            config: &config,
-            db_pool: &pool,
-            registry: &registry,
-            big_hash: "big_hash",
-        },
-        ContractType::Ico,
-        "ico_hash",
-        0,
-    )
-    .await
-    .unwrap();
+    let known_hashes = HashSet::new();
+    let ctx = BackfillContext {
+        client: &client,
+        config: &config,
+        db_pool: &pool,
+        registry: &registry,
+        known_hashes: &known_hashes,
+    };
+    ico::backfill_ico(&ctx, "big_hash", ContractType::Ico, "ico_hash", 0)
+        .await
+        .unwrap();
 
     let tx_count: i64 = sqlx::query_scalar!(r"SELECT COUNT(*) FROM blockchain_transactions")
         .fetch_one(&pool)
@@ -431,20 +481,17 @@ async fn cursor_resume_skips_already_processed_blocks(pool: PgPool) {
         .mount(&rest)
         .await;
 
-    ico::backfill_ico(
-        &IcoBackfillCtx {
-            client: &client,
-            config: &config,
-            db_pool: &pool,
-            registry: &registry,
-            big_hash: "big_hash",
-        },
-        ContractType::Ico,
-        "ico_hash",
-        0,
-    )
-    .await
-    .unwrap();
+    let known_hashes = HashSet::new();
+    let ctx = BackfillContext {
+        client: &client,
+        config: &config,
+        db_pool: &pool,
+        registry: &registry,
+        known_hashes: &known_hashes,
+    };
+    ico::backfill_ico(&ctx, "big_hash", ContractType::Ico, "ico_hash", 0)
+        .await
+        .unwrap();
 
     let cursor: Option<i64> = sqlx::query_scalar!(
         r"
@@ -490,27 +537,24 @@ async fn successful_purchase_written_to_all_tables(pool: PgPool) {
                 "block_height": 300,
                 "error_message": null,
                 "args": payloads::purchase_args(&json!("50000000"), 1),
-                "caller_public_key": "buyer_public_key_hex",
+                "caller_public_key": FakeAddress::Buyer.as_str(),
                 "timestamp": "2024-06-01T12:00:00.000Z"
             }
         ])))
         .mount(&rest)
         .await;
 
-    ico::backfill_ico(
-        &IcoBackfillCtx {
-            client: &client,
-            config: &config,
-            db_pool: &pool,
-            registry: &registry,
-            big_hash: "big_hash",
-        },
-        ContractType::Ico,
-        "ico_hash",
-        0,
-    )
-    .await
-    .unwrap();
+    let known_hashes = HashSet::new();
+    let ctx = BackfillContext {
+        client: &client,
+        config: &config,
+        db_pool: &pool,
+        registry: &registry,
+        known_hashes: &known_hashes,
+    };
+    ico::backfill_ico(&ctx, "big_hash", ContractType::Ico, "ico_hash", 0)
+        .await
+        .unwrap();
 
     // ico_purchases must have exactly one row.
     let purchase = sqlx::query!(
@@ -524,7 +568,7 @@ async fn successful_purchase_written_to_all_tables(pool: PgPool) {
     .await
     .expect("ico_purchases must have a row for the purchase deploy");
 
-    assert_eq!(purchase.buyer_address, "buyer_public_key_hex");
+    assert_eq!(purchase.buyer_address, FakeAddress::Buyer.as_str());
     assert_eq!(purchase.amount, "1000");
     assert_eq!(purchase.currency, "USDC");
     assert_eq!(purchase.cost, "50000000");
@@ -550,8 +594,9 @@ async fn successful_purchase_written_to_all_tables(pool: PgPool) {
     let balance: Option<String> = sqlx::query_scalar!(
         r"
             SELECT balance FROM token_holdings
-            WHERE user_address = 'buyer_public_key_hex' AND token_type = 'BIG'
-         "
+            WHERE user_address = $1 AND token_type = 'BIG'
+         ",
+        FakeAddress::Buyer.as_str(),
     )
     .fetch_optional(&pool)
     .await
@@ -573,4 +618,91 @@ async fn successful_purchase_written_to_all_tables(pool: PgPool) {
     .await
     .unwrap();
     assert_eq!(cursor, Some(300));
+}
+
+/// Full happy-path for `add_schedule` deploy: the backfill must parse the
+/// schedule args, dispatch `ICOScheduleAdded`, and write a row to `ico_schedules`.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn successful_schedule_written_via_backfill(pool: PgPool) {
+    common::disable_rls(&pool).await;
+    sqlx::query("ALTER TABLE ico_schedules DISABLE ROW LEVEL SECURITY")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let rest = MockServer::start().await;
+    let config = common::test_config(rest.uri());
+    let client = Client::new();
+    let registry = EventRegistry::new();
+
+    let schedule_deploy_hash = "0000000000000000000000000000000000000000000000000000000000009999";
+
+    // No BIG transfers needed for schedule deploys.
+    Mock::given(matchers::method("GET"))
+        .and(matchers::path("/ft-token-actions"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(json!({ "data": [], "page_count": 1 })),
+        )
+        .mount(&rest)
+        .await;
+
+    Mock::given(matchers::method("GET"))
+        .and(matchers::path("/deploys"))
+        .respond_with(deploys_page(json!([
+            {
+                "deploy_hash": schedule_deploy_hash,
+                "block_height": 400,
+                "error_message": null,
+                "args": payloads::schedule_args(
+                    "round-1", 1_700_000_000_u64, 1_700_100_000_u64,
+                    &json!("500000000000000000000000000"),
+                    &json!("500000")
+                ),
+                "caller_public_key": FakeAddress::Alice.as_str(),
+                "timestamp": "2024-06-01T12:00:00.000Z"
+            }
+        ])))
+        .mount(&rest)
+        .await;
+
+    let known_hashes = HashSet::new();
+    let ctx = BackfillContext {
+        client: &client,
+        config: &config,
+        db_pool: &pool,
+        registry: &registry,
+        known_hashes: &known_hashes,
+    };
+    ico::backfill_ico(&ctx, "big_hash", ContractType::Ico, "ico_hash", 0)
+        .await
+        .unwrap();
+
+    // ico_schedules must contain the expected row.
+    let row = sqlx::query!(
+        r"
+            SELECT schedule_id, start_timestamp, end_timestamp, sale_amount, price
+            FROM ico_schedules WHERE schedule_id = 'round-1'
+        "
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("ico_schedules must have a row for the schedule deploy");
+
+    assert_eq!(row.schedule_id, "round-1");
+    assert_eq!(row.start_timestamp, 1_700_000_000);
+    assert_eq!(row.end_timestamp, 1_700_100_000);
+    assert_eq!(row.sale_amount, "500000000000000000000000000");
+    assert_eq!(row.price, "500000");
+
+    // Cursor must advance to block 400.
+    let cursor: Option<i64> = sqlx::query_scalar!(
+        r"
+            SELECT cursor_value FROM event_cursors
+            WHERE stream_type = 'backfill' AND contract_hash = 'ico_hash'
+        "
+    )
+    .fetch_optional(&pool)
+    .await
+    .unwrap();
+    assert_eq!(cursor, Some(400));
 }

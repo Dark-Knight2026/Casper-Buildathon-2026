@@ -9,6 +9,9 @@ pub const CASPER_ED25519_PUBKEY_HEX_LEN: usize = 66;
 /// Length of `Secp256k1` public key in hex format (02 prefix + 33 bytes = 68 hex chars).
 pub const CASPER_SECP256K1_PUBKEY_HEX_LEN: usize = 68;
 
+/// Prefix that Casper Wallet browser extension prepends before signing a message.
+pub const CASPER_MESSAGE_PREFIX: &str = "Casper Message:\n";
+
 /// Custom error types for cryptographic operations.
 #[derive(Debug, Error)]
 pub enum CryptoError {
@@ -65,7 +68,8 @@ pub fn verify_casper_signature(
     let signature = Signature::from_hex(signature_hex)
         .map_err(|e| CryptoError::CasperError(format!("Invalid signature: {e:?}")))?;
 
-    let message_bytes = message.as_bytes();
+    let prefixed = format!("{CASPER_MESSAGE_PREFIX}{message}");
+    let message_bytes = prefixed.as_bytes();
 
     match crypto::verify(message_bytes, &signature, &public_key) {
         Ok(()) => Ok(true),

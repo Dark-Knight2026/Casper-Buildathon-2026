@@ -26,7 +26,7 @@ fn property_performance_request_date_parsing() {
 }
 
 /// Verifies that the analytics endpoint returns the expected response structure.
-#[sqlx::test(migrations = "../../supabase/migrations")]
+#[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn analytics_returns_expected_structure(pool: PgPool) {
     let env = common::setup_test_server(pool, false).await;
     let token = common::create_test_jwt(UserId::default(), UserRole::Tenant, &env.jwt_secret);

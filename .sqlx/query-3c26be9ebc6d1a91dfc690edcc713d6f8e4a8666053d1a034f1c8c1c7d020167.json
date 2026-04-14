@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE contract_registry SET is_active = FALSE WHERE contract_type = ANY($1)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "TextArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3c26be9ebc6d1a91dfc690edcc713d6f8e4a8666053d1a034f1c8c1c7d020167"
+}

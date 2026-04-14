@@ -19,6 +19,8 @@ pub mod cep18;
 pub mod db;
 pub mod ico;
 
+use std::collections::HashSet;
+
 use reqwest::Client;
 use sqlx::PgPool;
 
@@ -28,7 +30,20 @@ use crate::{
     events::EventRegistry,
 };
 
-use ico::IcoBackfillCtx;
+/// Shared dependencies for backfill operations (ICO and CEP-18).
+#[derive(Debug)]
+pub struct BackfillContext<'a> {
+    /// HTTP client used for CSPR.cloud API requests.
+    pub client: &'a Client,
+    /// Indexer configuration (API token, URLs, rate limit).
+    pub config: &'a IndexerConfig,
+    /// Database connection pool for reading and writing events.
+    pub db_pool: &'a PgPool,
+    /// Event registry for dispatching processed events.
+    pub registry: &'a EventRegistry,
+    /// Known contract package hashes for address type lookup.
+    pub known_hashes: &'a HashSet<String>,
+}
 
 /// Run backfill for all configured contracts.
 ///
@@ -42,6 +57,14 @@ use ico::IcoBackfillCtx;
 pub async fn run_backfill(config: &IndexerConfig, db_pool: &PgPool) -> IndexerResult<()> {
     let client = Client::new();
     let registry = EventRegistry::new();
+    let known_hashes = config.contracts.contract_hash_set();
+    let context = BackfillContext {
+        client: &client,
+        config,
+        db_pool,
+        registry: &registry,
+        known_hashes: &known_hashes,
+    };
 
     // BIG contract hash is needed by the ICO backfill to fetch transfer amounts from CSPR.cloud.
     let big_hash = config
@@ -67,10 +90,7 @@ pub async fn run_backfill(config: &IndexerConfig, db_pool: &PgPool) -> IndexerRe
             // no RPC calls needed.
             ct if ct.is_cep18_token() => {
                 cep18::backfill_cep18(
-                    &client,
-                    config,
-                    db_pool,
-                    &registry,
+                    &context,
                     contract.contract_type,
                     contract.hash,
                     contract.start_block,
@@ -82,26 +102,21 @@ pub async fn run_backfill(config: &IndexerConfig, db_pool: &PgPool) -> IndexerRe
             ContractType::Ico => {
                 if let Some(ref big) = big_hash {
                     ico::backfill_ico(
-                        &IcoBackfillCtx {
-                            client: &client,
-                            config,
-                            db_pool,
-                            registry: &registry,
-                            big_hash: big,
-                        },
+                        &context,
+                        big,
                         contract.contract_type,
                         contract.hash,
                         contract.start_block,
                     )
                     .await?;
                 } else {
-                    tracing::warn!("ICO backfill skipped — BIG contract hash not configured");
+                    tracing::warn!("ICO backfill skipped - BIG contract hash not configured");
                 }
             }
             _ => {
                 tracing::warn!(
                     contract = ?contract.contract_type,
-                    "Backfill not yet implemented for this contract type — relying on live streaming"
+                    "Backfill not yet implemented for this contract type - relying on live streaming"
                 );
             }
         }

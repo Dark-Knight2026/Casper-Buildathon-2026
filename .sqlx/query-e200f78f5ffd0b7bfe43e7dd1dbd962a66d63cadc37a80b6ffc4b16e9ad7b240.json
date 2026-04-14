@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT COALESCE(SUM(amount::NUMERIC), 0)::TEXT\n            FROM ico_purchases\n            WHERE buyer_address = $1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "coalesce",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "e200f78f5ffd0b7bfe43e7dd1dbd962a66d63cadc37a80b6ffc4b16e9ad7b240"
+}

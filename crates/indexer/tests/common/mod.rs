@@ -9,6 +9,8 @@
 // binary as "dead code". Suppress that warning for the whole module tree.
 #![allow(dead_code)]
 
+use core::fmt::{Display, Formatter, Result as FmtResult};
+
 use indexer::config::{Casper, ContractRegistry, IndexerConfig};
 use sqlx::PgPool;
 
@@ -31,6 +33,40 @@ pub const PURCHASE_DEPLOY_HASH: &str =
 pub const TRANSFER_DEPLOY_HASH: &str =
     "0000000000000000000000000000000000000000000000000000000000005678";
 
+/// Fake 64-hex account-hash addresses for integration tests.
+///
+/// Each variant maps to a deterministic 64-char lowercase hex string that
+/// passes through `normalize_casper_address` unchanged (idempotent).
+#[derive(Debug, Clone, Copy)]
+pub enum FakeAddress {
+    /// Sender / token owner.
+    Alice,
+    /// Recipient.
+    Bob,
+    /// ICO buyer.
+    Buyer,
+    /// Spender contract.
+    ContractX,
+}
+
+impl FakeAddress {
+    /// 64-char lowercase hex account hash.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Alice => "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            Self::Bob => "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            Self::Buyer => "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            Self::ContractX => "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        }
+    }
+}
+
+impl Display for FakeAddress {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        f.write_str(self.as_str())
+    }
+}
+
 /// Disable Row Level Security for all indexer-owned tables.
 ///
 /// Mirrors the helper in `backfill_ico.rs` — needed because Supabase migrations
@@ -40,6 +76,7 @@ pub async fn disable_rls(pool: &PgPool) {
         "blockchain_events",
         "blockchain_transactions",
         "ico_purchases",
+        "ico_schedules",
         "token_holdings",
     ] {
         sqlx::query(&format!(r"ALTER TABLE {table} DISABLE ROW LEVEL SECURITY"))

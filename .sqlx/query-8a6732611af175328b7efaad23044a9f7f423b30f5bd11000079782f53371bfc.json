@@ -1,0 +1,92 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT transaction_hash, block_number, block_timestamp, amount, currency, contract_hash, from_address, from_type, to_address, to_type, transaction_type, transform_idx\n            FROM blockchain_transactions\n            WHERE (from_address = $1 OR to_address = $1)\n              AND ($4::TEXT IS NULL OR transaction_type = $4)\n              AND ($5::SMALLINT IS NULL OR from_type = $5)\n            ORDER BY block_number DESC NULLS LAST, transform_idx NULLS LAST, transaction_hash DESC\n            LIMIT $2 OFFSET $3\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "transaction_hash",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "block_number",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "block_timestamp",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 3,
+        "name": "amount",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "currency",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "contract_hash",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "from_address",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "from_type",
+        "type_info": "Int2"
+      },
+      {
+        "ordinal": 8,
+        "name": "to_address",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 9,
+        "name": "to_type",
+        "type_info": "Int2"
+      },
+      {
+        "ordinal": 10,
+        "name": "transaction_type",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 11,
+        "name": "transform_idx",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int8",
+        "Int8",
+        "Text",
+        "Int2"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+      true,
+      true,
+      true,
+      false,
+      true
+    ]
+  },
+  "hash": "8a6732611af175328b7efaad23044a9f7f423b30f5bd11000079782f53371bfc"
+}

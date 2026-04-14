@@ -25,14 +25,21 @@ use jsonwebtoken::{EncodingKey, Header, encode};
 use secrecy::SecretString;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
-use sqlx::PgPool;
+use sqlx::{PgPool, migrate::Migrator};
 use testcontainers::{
     ContainerAsync, GenericImage,
     core::{IntoContainerPort, WaitFor},
     runners::AsyncRunner,
 };
 
-use api::{AppState, Claims, ServerConfig, UserId, UserRole, common::RedisStore, server};
+use api::{
+    AppState, Claims, IcoFallback, ServerConfig, UserId, UserRole,
+    common::{JWT_AUDIENCE, JWT_ISSUER, RedisStore},
+    server,
+};
+
+/// Embedded migrations for `#[sqlx::test(migrator = "common::MIGRATIONS")]`.
+pub static MIGRATIONS: Migrator = sqlx::migrate!("../../supabase/migrations");
 
 /// Test database URL for docker-compose `PostgreSQL`.
 pub const TEST_DATABASE_URL: &str = "postgres://postgres:postgres@127.0.0.1:5433/postgres";
@@ -97,20 +104,43 @@ pub struct TestEnv {
     pub redis: Option<RedisTestEnv>,
 }
 
+/// Optional overrides for test server configuration.
+#[derive(Debug, Default)]
+pub struct TestOverrides {
+    /// BIG token contract hash (enables `/transactions/token/big`).
+    pub contract_big: Option<String>,
+    /// ICO fallback config (used when `ico_schedules` table is empty).
+    pub ico_fallback: Option<IcoFallback>,
+}
+
 /// Creates a test server using a pool from `#[sqlx::test]`.
 ///
 /// - `PostgreSQL` pool comes from `#[sqlx::test]` (isolated per test).
 /// - Redis is optional: when `with_redis = true`, creates a dedicated container.
 #[inline]
 pub async fn setup_test_server(pool: PgPool, with_redis: bool) -> TestEnv {
+    setup_test_server_with(pool, with_redis, TestOverrides::default()).await
+}
+
+/// Creates a test server with custom config overrides.
+#[inline]
+pub async fn setup_test_server_with(
+    pool: PgPool,
+    with_redis: bool,
+    overrides: TestOverrides,
+) -> TestEnv {
     let (redis_url, redis_client, redis_env) = if with_redis {
         let env = RedisTestEnv::start().await;
-        (env.url.clone(), env.client.clone(), Some(env))
+        (
+            SecretString::from(env.url.clone()),
+            env.client.clone(),
+            Some(env),
+        )
     } else {
         // Fake Redis URL - will fail if actually used
-        let url = "redis://127.0.0.1:6379".to_owned();
-        let client = redis::Client::open(url.clone()).expect("Invalid Redis URL");
-        (url, client, None)
+        let url = "redis://127.0.0.1:6379";
+        let client = redis::Client::open(url).expect("Invalid Redis URL");
+        (SecretString::from(url), client, None)
     };
 
     let jwt_secret = "test_jwt_secret_for_integration_tests".to_owned();
@@ -120,10 +150,14 @@ pub async fn setup_test_server(pool: PgPool, with_redis: bool) -> TestEnv {
         jwt_secret: SecretString::from(jwt_secret.clone()),
         port: 0,
         cors_origin: TEST_CORS_ORIGIN.to_owned(),
+        contract_big: overrides.contract_big,
+        ico_fallback: overrides.ico_fallback,
     };
     let state = Arc::new(AppState {
         db: pool,
-        redis: RedisStore::new(redis_client),
+        redis: RedisStore::new(redis_client)
+            .await
+            .expect("Failed to connect to Redis"),
         config,
     });
 
@@ -156,6 +190,8 @@ pub fn create_test_jwt(user_id: UserId, role: UserRole, secret: &str) -> String 
         sub: user_id,
         role,
         exp,
+        iss: JWT_ISSUER.to_owned(),
+        aud: JWT_AUDIENCE.to_owned(),
     };
     encode(
         &Header::default(),

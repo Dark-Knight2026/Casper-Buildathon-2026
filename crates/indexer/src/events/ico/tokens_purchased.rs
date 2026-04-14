@@ -3,10 +3,11 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    address,
     config::ContractType,
-    error::IndexerResult,
+    error::{IndexerError, IndexerResult},
     event_trait::{EventContext, IndexableEvent},
-    events::db,
+    events::db::{self, HashType},
 };
 
 /// Payment currency used in an ICO purchase (deserialized from `u8` discriminant).
@@ -83,23 +84,38 @@ impl IndexableEvent for TokensPurchased {
 
     #[inline]
     async fn process(&self, ctx: &mut EventContext<'_>) -> IndexerResult<()> {
+        // Normalize caller address to 64-char lowercase hex account hash.
+        let buyer = address::normalize_casper_address(ctx.caller)?;
+
+        if buyer.is_empty() {
+            return Err(IndexerError::DeferredEvent(format!(
+                "TokensPurchased deploy={} has no caller (streaming) - \
+                 deferring to backfill",
+                ctx.deploy_hash,
+            )));
+        }
+
         // 1. Insert into ico_purchases table
         db::insert_ico_purchase(
             ctx.tx,
             &db::NewIcoPurchase {
                 transaction_hash: ctx.deploy_hash,
                 block_height: ctx.block_height.cast_signed(),
-                buyer_address: ctx.caller,
+                buyer_address: &buyer,
                 amount: &self.amount,
                 currency: self.currency.as_str(),
                 price: self.price.as_deref(),
                 cost: &self.cost,
                 event_timestamp: self.timestamp.cast_signed(),
+                transform_idx: ctx.transform_idx,
             },
         )
         .await?;
 
         // 2. Insert into blockchain_transactions
+        // Payment flow: buyer (Account) -> ICO contract (Contract).
+        // `amount` stores the payment cost (CSPR/USDC), not the BIG tokens
+        // received. BIG token quantity lives in `ico_purchases.amount`.
         let event_json = serde_json::to_value(self)?;
         db::insert_blockchain_transaction(
             ctx.tx,
@@ -107,9 +123,16 @@ impl IndexableEvent for TokensPurchased {
                 deploy_hash: ctx.deploy_hash,
                 block_number: ctx.block_height.cast_signed(),
                 transaction_type: "token_purchase",
-                from_address: ctx.caller,
+                from_address: &buyer,
+                to_address: Some(ctx.contract_hash),
+                // Stores payment cost (CSPR/USDC), not BIG tokens received.
                 amount: Some(&self.cost),
                 currency: Some(self.currency.as_str()),
+                contract_hash: Some(ctx.contract_hash),
+                block_timestamp: ctx.block_timestamp,
+                from_type: HashType::Account.to_db(),
+                to_type: HashType::Contract.to_db(),
+                transform_idx: ctx.transform_idx,
                 metadata: &event_json,
             },
         )
@@ -118,7 +141,7 @@ impl IndexableEvent for TokensPurchased {
         // Increase buyer's BIG token balance.
         db::update_token_balance(
             ctx.tx,
-            ctx.caller,
+            &buyer,
             ContractType::Big,
             db::BalanceUpdate::Increase(&self.amount),
         )
@@ -126,7 +149,7 @@ impl IndexableEvent for TokensPurchased {
 
         tracing::debug!(
             deploy = %ctx.deploy_hash,
-            buyer = %ctx.caller,
+            buyer = %buyer,
             amount = %self.amount,
             currency = %self.currency.as_str(),
             "ICO purchase processed, BIG balance updated"

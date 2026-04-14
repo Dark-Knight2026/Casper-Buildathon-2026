@@ -10,13 +10,157 @@
 //! - **Token holdings** — current CEP-18 balances per user (`token_holdings`).
 //! - **ICO** — detailed ICO purchase log (`ico_purchases`).
 
-use sqlx::PgTransaction;
+use std::collections::HashSet;
 
-use crate::{config::ContractType, error::IndexerResult};
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use sqlx::{PgPool, PgTransaction};
 
-// -----------------------------------------------------------------------------
-// Events
-// -----------------------------------------------------------------------------
+use crate::{
+    config::{ContractRegistry, ContractType},
+    error::IndexerResult,
+};
+
+// Address type ----------------------------------------------------------------
+
+/// Address type discriminant for `blockchain_transactions.from_type` / `to_type`.
+///
+/// Matches the CSPR.cloud `/ft-token-actions` convention:
+/// - `0` = regular user account
+/// - `1` = smart contract
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(from = "u8", into = "u8")]
+pub enum HashType {
+    /// Regular user account hash.
+    Account,
+    /// Smart contract hash.
+    Contract,
+    /// Unrecognised address type discriminant.
+    Unknown(u8),
+}
+
+impl From<u8> for HashType {
+    #[inline]
+    fn from(value: u8) -> Self {
+        match value {
+            0 => Self::Account,
+            1 => Self::Contract,
+            other => Self::Unknown(other),
+        }
+    }
+}
+
+impl From<HashType> for u8 {
+    #[inline]
+    fn from(value: HashType) -> Self {
+        match value {
+            HashType::Account => 0,
+            HashType::Contract => 1,
+            HashType::Unknown(v) => v,
+        }
+    }
+}
+
+impl HashType {
+    /// Returns the string label for this address type.
+    #[inline]
+    #[must_use]
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Account => "account",
+            Self::Contract => "contract",
+            Self::Unknown(_) => "unknown",
+        }
+    }
+
+    /// Convert to `Option<i16>` for storage in `blockchain_transactions`.
+    #[inline]
+    #[must_use]
+    pub fn to_db(self) -> Option<i16> {
+        Some(i16::from(u8::from(self)))
+    }
+
+    /// Determine address type from an API-provided value, or fall back to
+    /// checking if the address is a known contract.
+    ///
+    /// `api_type` is preferred when present (e.g. from CSPR.cloud
+    /// `from_type`/`to_type`). The `known_contracts` fallback uses package
+    /// hashes which live in a different hash domain than the normalized
+    /// account hashes passed as `address`, so it is best-effort only.
+    #[inline]
+    #[must_use]
+    pub fn lookup(address: &str, known_contracts: &HashSet<String>, api_type: Option<u8>) -> Self {
+        if let Some(t) = api_type {
+            return Self::from(t);
+        }
+        if known_contracts.contains(address) {
+            Self::Contract
+        } else {
+            Self::Account
+        }
+    }
+}
+
+// Contract registry -----------------------------------------------------------
+
+/// Populate the `contract_registry` table with all active contracts from config.
+///
+/// Runs inside a single transaction:
+/// 1. Mark all existing rows as inactive.
+/// 2. Upsert each configured contract, setting `is_active = TRUE`.
+///
+/// Contracts removed from the config will remain in the table with
+/// `is_active = FALSE`, preserving historical data while reflecting the
+/// current deployment state.
+///
+/// Called once at indexer startup before backfill and streaming begin.
+///
+/// # Errors
+///
+/// Returns [`IndexerError::Database`](crate::error::IndexerError::Database)
+/// on SQL failures.
+#[inline]
+pub async fn upsert_contract_registry(
+    pool: &PgPool,
+    contracts: &ContractRegistry,
+) -> IndexerResult<()> {
+    let mut tx = pool.begin().await?;
+
+    // Deactivate only the contract types managed by this instance;
+    // foreign types (from other environments on a shared DB) stay untouched.
+    let active = contracts.active_contracts();
+    let types = active
+        .iter()
+        .map(|c| c.contract_type.as_str().to_owned())
+        .collect::<Vec<_>>();
+    sqlx::query!(
+        "UPDATE contract_registry SET is_active = FALSE WHERE contract_type = ANY($1)",
+        &types,
+    )
+    .execute(tx.as_mut())
+    .await?;
+
+    for contract in &active {
+        sqlx::query!(
+            r"
+                INSERT INTO contract_registry (contract_type, contract_hash, is_active)
+                VALUES ($1, $2, TRUE)
+                ON CONFLICT (contract_type) DO UPDATE SET
+                    contract_hash = EXCLUDED.contract_hash,
+                    is_active     = TRUE
+            ",
+            contract.contract_type.as_str(),
+            contract.hash,
+        )
+        .execute(tx.as_mut())
+        .await?;
+    }
+
+    tx.commit().await?;
+    Ok(())
+}
+
+// Events ----------------------------------------------------------------------
 
 /// Data required to insert a row into `blockchain_events`.
 #[derive(Debug)]
@@ -31,6 +175,8 @@ pub struct NewBlockchainEvent<'a> {
     pub block_number: i64,
     /// Raw event payload as JSON.
     pub event_data: &'a serde_json::Value,
+    /// Transform index within the deploy. `None` when unavailable.
+    pub transform_idx: Option<i32>,
 }
 
 /// Insert a raw event into `blockchain_events` (idempotent).
@@ -49,9 +195,9 @@ pub async fn insert_blockchain_event(
 ) -> IndexerResult<bool> {
     let result = sqlx::query!(
         r"
-            INSERT INTO blockchain_events (event_type, contract_address, transaction_hash, block_number, event_data)
-            VALUES ($1, $2, $3, $4, $5)
-            ON CONFLICT (transaction_hash, event_type, contract_address) DO NOTHING
+            INSERT INTO blockchain_events (event_type, contract_address, transaction_hash, block_number, event_data, transform_idx)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            ON CONFLICT (transaction_hash, event_type, contract_address, COALESCE(transform_idx, -1)) DO NOTHING
             RETURNING id
         ",
         row.event_type,
@@ -59,6 +205,7 @@ pub async fn insert_blockchain_event(
         row.transaction_hash,
         row.block_number,
         row.event_data,
+        row.transform_idx,
     )
     .fetch_optional(tx.as_mut())
     .await?;
@@ -78,6 +225,7 @@ pub async fn mark_event_processed(
     transaction_hash: &str,
     event_type: &str,
     contract_address: &str,
+    transform_idx: Option<i32>,
 ) -> IndexerResult<()> {
     sqlx::query!(
         r"
@@ -87,10 +235,12 @@ pub async fn mark_event_processed(
             WHERE  transaction_hash = $1
               AND  event_type       = $2
               AND  contract_address = $3
+              AND  COALESCE(transform_idx, -1) = COALESCE($4, -1)
         ",
         transaction_hash,
         event_type,
         contract_address,
+        transform_idx,
     )
     .execute(tx.as_mut())
     .await?;
@@ -98,9 +248,7 @@ pub async fn mark_event_processed(
     Ok(())
 }
 
-// -----------------------------------------------------------------------------
-// Blockchain transactions
-// -----------------------------------------------------------------------------
+// Blockchain transactions -----------------------------------------------------
 
 /// Data required to insert a row into `blockchain_transactions`.
 #[derive(Debug)]
@@ -113,18 +261,37 @@ pub struct NewBlockchainTx<'a> {
     pub transaction_type: &'a str,
     /// Casper public key of the caller.
     pub from_address: &'a str,
+    /// Recipient address (account or contract hash).
+    pub to_address: Option<&'a str>,
     /// Amount involved (U256 as string), if applicable.
     pub amount: Option<&'a str>,
     /// Currency label, if applicable.
     pub currency: Option<&'a str>,
+    /// Contract package hash that emitted this event.
+    pub contract_hash: Option<&'a str>,
+    /// Block timestamp from the blockchain.
+    pub block_timestamp: Option<DateTime<Utc>>,
+    /// Address type of the sender (0=Account, 1=Contract).
+    pub from_type: Option<i16>,
+    /// Address type of the recipient (0=Account, 1=Contract).
+    pub to_type: Option<i16>,
+    /// Transform index within the deploy.
+    pub transform_idx: Option<i32>,
     /// Full event payload for the `metadata` JSONB column.
     pub metadata: &'a serde_json::Value,
 }
 
-/// Insert a row into `blockchain_transactions`.
+/// Insert or backfill a row into `blockchain_transactions`.
 ///
-/// Uses `ON CONFLICT DO NOTHING` on `transaction_hash` so re-processing the
-/// same deploy is safe.
+/// Uses an expression-based unique index on
+/// `(transaction_hash, transaction_type, from_address, COALESCE(transform_idx, -1))`
+/// so that multiple events of the same type from the same sender within a
+/// single deploy are correctly distinguished by their transform index.
+///
+/// On conflict the `DO UPDATE SET ... COALESCE` clause fills in columns that
+/// were `NULL` in pre-existing rows (e.g. rows inserted before the
+/// `to_address`, `contract_hash`, `block_timestamp`, `from_type`, `to_type`,
+/// `transform_idx` columns were added), making re-indexing safe.
 ///
 /// # Errors
 ///
@@ -137,16 +304,29 @@ pub async fn insert_blockchain_transaction(
 ) -> IndexerResult<()> {
     sqlx::query!(
         r"
-            INSERT INTO blockchain_transactions (transaction_hash, deploy_hash, block_number, transaction_type, from_address, amount, currency, status, metadata, confirmed_at)
-            VALUES ($1, $1, $2, $3, $4, $5, $6, 'confirmed', $7, NOW())
-            ON CONFLICT (transaction_hash, transaction_type, from_address) DO NOTHING
+            INSERT INTO blockchain_transactions ( transaction_hash, deploy_hash, block_number, transaction_type, from_address, to_address, amount, currency, contract_hash, block_timestamp, from_type, to_type, transform_idx, status, metadata, confirmed_at )
+            VALUES ($1, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'confirmed', $13, NOW())
+            ON CONFLICT (transaction_hash, transaction_type, from_address, COALESCE(transform_idx, -1))
+            DO UPDATE SET
+                to_address      = COALESCE(blockchain_transactions.to_address,      EXCLUDED.to_address),
+                contract_hash   = COALESCE(blockchain_transactions.contract_hash,    EXCLUDED.contract_hash),
+                block_timestamp = COALESCE(blockchain_transactions.block_timestamp,  EXCLUDED.block_timestamp),
+                from_type       = COALESCE(blockchain_transactions.from_type,        EXCLUDED.from_type),
+                to_type         = COALESCE(blockchain_transactions.to_type,          EXCLUDED.to_type),
+                transform_idx   = COALESCE(blockchain_transactions.transform_idx,    EXCLUDED.transform_idx)
         ",
         row.deploy_hash,
         row.block_number,
         row.transaction_type,
         row.from_address,
+        row.to_address,
         row.amount,
         row.currency,
+        row.contract_hash,
+        row.block_timestamp,
+        row.from_type,
+        row.to_type,
+        row.transform_idx,
         row.metadata,
     )
     .execute(tx.as_mut())
@@ -155,9 +335,7 @@ pub async fn insert_blockchain_transaction(
     Ok(())
 }
 
-// -----------------------------------------------------------------------------
-// Token holdings
-// -----------------------------------------------------------------------------
+// Token holdings --------------------------------------------------------------
 
 /// Direction and amount of a token balance change.
 #[derive(Debug, Clone, Copy)]
@@ -241,9 +419,7 @@ pub async fn update_token_balance(
     Ok(())
 }
 
-// -----------------------------------------------------------------------------
-// ICO purchases
-// -----------------------------------------------------------------------------
+// ICO purchases ---------------------------------------------------------------
 
 /// Data required to insert a row into `ico_purchases`.
 #[derive(Debug)]
@@ -265,6 +441,8 @@ pub struct NewIcoPurchase<'a> {
     pub cost: &'a str,
     /// Block timestamp (epoch seconds).
     pub event_timestamp: i64,
+    /// Intra-deploy event index (distinguishes multiple events per deploy).
+    pub transform_idx: Option<i32>,
 }
 
 /// Insert a row into `ico_purchases` for a `TokensPurchased` event.
@@ -282,9 +460,9 @@ pub async fn insert_ico_purchase(
 ) -> IndexerResult<()> {
     sqlx::query!(
         r"
-            INSERT INTO ico_purchases (transaction_hash, block_height, buyer_address, amount, currency, price, cost, event_timestamp)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-            ON CONFLICT (transaction_hash) DO NOTHING
+            INSERT INTO ico_purchases (transaction_hash, block_height, buyer_address, amount, currency, price, cost, event_timestamp, transform_idx)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            ON CONFLICT (transaction_hash, COALESCE(transform_idx, -1)) DO NOTHING
         ",
         row.transaction_hash,
         row.block_height,
@@ -294,9 +472,82 @@ pub async fn insert_ico_purchase(
         row.price,
         row.cost,
         row.event_timestamp,
+        row.transform_idx,
     )
     .execute(tx.as_mut())
     .await?;
+
+    Ok(())
+}
+
+// ICO schedules ---------------------------------------------------------------
+
+/// Data required to insert a row into `ico_schedules`.
+#[derive(Debug)]
+pub struct NewIcoSchedule<'a> {
+    /// Schedule ID from the contract.
+    pub schedule_id: &'a str,
+    /// Unix timestamp: sale window start.
+    pub start_timestamp: i64,
+    /// Unix timestamp: sale window end.
+    pub end_timestamp: i64,
+    /// Total allocation for this round (U256 as string).
+    pub sale_amount: &'a str,
+    /// Token price (U256 as string, 6 decimals).
+    pub price: &'a str,
+    /// Deploy hash that emitted the event.
+    pub transaction_hash: &'a str,
+    /// Block height of the deployment.
+    pub block_height: i64,
+}
+
+/// Upsert a row into `ico_schedules` for an `ICOScheduleAdded` event.
+///
+/// Uses `ON CONFLICT (schedule_id) DO UPDATE` so re-indexing is safe and
+/// schedule updates from the contract are reflected.
+///
+/// # Errors
+///
+/// Returns [`IndexerError::Database`](crate::error::IndexerError::Database)
+/// on SQL failures.
+#[inline]
+pub async fn upsert_ico_schedule(
+    tx: &mut PgTransaction<'_>,
+    row: &NewIcoSchedule<'_>,
+) -> IndexerResult<()> {
+    sqlx::query!(
+        r"
+            INSERT INTO ico_schedules (schedule_id, start_timestamp, end_timestamp, sale_amount, price, transaction_hash, block_height)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            ON CONFLICT (schedule_id) DO UPDATE SET
+                start_timestamp  = EXCLUDED.start_timestamp,
+                end_timestamp    = EXCLUDED.end_timestamp,
+                sale_amount      = EXCLUDED.sale_amount,
+                price            = EXCLUDED.price,
+                transaction_hash = EXCLUDED.transaction_hash,
+                block_height     = EXCLUDED.block_height,
+                updated_at       = NOW()
+            WHERE ico_schedules.block_height <= EXCLUDED.block_height
+        ",
+        row.schedule_id,
+        row.start_timestamp,
+        row.end_timestamp,
+        row.sale_amount,
+        row.price,
+        row.transaction_hash,
+        row.block_height,
+    )
+      .execute(tx.as_mut())
+      .await
+      .map(|r| {
+          if r.rows_affected() == 0 {
+              tracing::warn!(
+                  schedule_id = row.schedule_id,
+                  block_height = row.block_height,
+                  "upsert_ico_schedule no-op: older block_height"
+              );
+          }
+      })?;
 
     Ok(())
 }

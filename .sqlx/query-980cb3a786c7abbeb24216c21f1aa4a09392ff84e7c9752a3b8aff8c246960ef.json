@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT balance FROM token_holdings\n            WHERE user_address = $1 AND token_type = 'USDT'\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "balance",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "980cb3a786c7abbeb24216c21f1aa4a09392ff84e7c9752a3b8aff8c246960ef"
+}

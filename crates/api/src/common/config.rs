@@ -1,7 +1,8 @@
 //! Application configuration and state management.
 
 use config::{Config, Environment};
-use secrecy::SecretString;
+use rust_decimal::Decimal;
+use secrecy::{ExposeSecret, SecretString};
 use serde::Deserialize;
 
 use crate::{ServerError, common::RedisStore};
@@ -10,12 +11,23 @@ use crate::{ServerError, common::RedisStore};
 #[derive(Debug, Deserialize)]
 struct RawEnvConfig {
     database_url: SecretString,
-    redis_url: String,
+    redis_url: SecretString,
     supabase_jwt_secret: SecretString,
     #[serde(default = "default_port")]
     port: u16,
     #[serde(default = "default_cors_origin")]
     cors_origin: String,
+    /// BIG token contract package hash (hex, no prefix). Shared with `indexer`.
+    #[serde(default)]
+    contract_big: Option<String>,
+    /// Fallback ICO token price in USD (e.g. `"0.50"`).
+    /// Used only when `ico_schedules` table is empty.
+    #[serde(default)]
+    ico_price_usd: Option<String>,
+    /// Fallback ICO total allocation in minimal units.
+    /// Used only when `ico_schedules` table is empty.
+    #[serde(default)]
+    ico_total_allocation: Option<String>,
 }
 
 const fn default_port() -> u16 {
@@ -25,19 +37,40 @@ fn default_cors_origin() -> String {
     "http://localhost:8080".to_owned()
 }
 
+/// Fallback ICO configuration from `ICO_PRICE_USD` and `ICO_TOTAL_ALLOCATION` env vars.
+///
+/// Used only when the `ico_schedules` table is empty (before the indexer
+/// processes `ICOScheduleAdded` contract events).
+#[derive(Debug, Clone)]
+pub struct IcoFallback {
+    /// Price per 1 BIG token in USD (e.g. `0.50` = $0.50).
+    ///
+    /// **Note:** this is NOT the same format as the DB `ico_schedules.price` column,
+    /// which stores a U256 with 6 decimals (e.g. `"500000"` = $0.50).
+    /// Parsed from `ICO_PRICE_USD` at startup to fail fast on misconfiguration.
+    pub price_usd: Decimal,
+    /// Total allocation in minimal units (U256 as string, decimals=18).
+    pub total_allocation: String,
+}
+
 /// Server application configuration loaded from environment variables.
 #[derive(Debug, Clone)]
 pub struct ServerConfig {
     /// `PostgreSQL` database connection URL.
     pub database_url: SecretString,
-    /// `Redis` connection URL.
-    pub redis_url: String,
+    /// `Redis` connection URL (wrapped in `SecretString` to prevent credential leaks in logs).
+    pub redis_url: SecretString,
     /// Secret key for JWT token signing.
     pub jwt_secret: SecretString,
     /// HTTP server port.
     pub port: u16,
     /// Allowed CORS origin.
     pub cors_origin: String,
+    /// BIG token contract package hash (hex, no prefix). `None` when not configured.
+    pub contract_big: Option<String>,
+    /// Fallback ICO config from env vars. Used when `ico_schedules` table is empty
+    /// (e.g. before the indexer processes `ICOScheduleAdded` events).
+    pub ico_fallback: Option<IcoFallback>,
 }
 
 impl ServerConfig {
@@ -58,12 +91,41 @@ impl ServerConfig {
             .and_then(Config::try_deserialize)
             .map_err(|e| ServerError::EnvVar(e.to_string()))?;
 
+        let ico_fallback = match (raw.ico_price_usd, raw.ico_total_allocation) {
+            (Some(price_str), Some(total_allocation)) => {
+                let price_usd: Decimal = price_str.parse().map_err(|_| {
+                    ServerError::EnvVar(format!(
+                        "ICO_PRICE_USD must be a valid decimal, got \"{price_str}\""
+                    ))
+                })?;
+                Some(IcoFallback {
+                    price_usd,
+                    total_allocation,
+                })
+            }
+            (Some(_), None) => {
+                tracing::warn!(
+                    "ICO_PRICE_USD set but ICO_TOTAL_ALLOCATION missing - ICO fallback disabled"
+                );
+                None
+            }
+            (None, Some(_)) => {
+                tracing::warn!(
+                    "ICO_TOTAL_ALLOCATION set but ICO_PRICE_USD missing - ICO fallback disabled"
+                );
+                None
+            }
+            (None, None) => None,
+        };
+
         let config = Self {
             database_url: raw.database_url,
             redis_url: raw.redis_url,
             jwt_secret: raw.supabase_jwt_secret,
             port: raw.port,
             cors_origin: raw.cors_origin,
+            contract_big: raw.contract_big.map(|s| s.to_ascii_lowercase()),
+            ico_fallback,
         };
 
         config.validate()?;
@@ -72,7 +134,8 @@ impl ServerConfig {
 
     /// Validates business rules that serde cannot express.
     fn validate(&self) -> Result<(), ServerError> {
-        if !self.redis_url.starts_with("redis://") && !self.redis_url.starts_with("rediss://") {
+        let redis = self.redis_url.expose_secret();
+        if !redis.starts_with("redis://") && !redis.starts_with("rediss://") {
             return Err(ServerError::EnvVar(
                 "REDIS_URL must start with redis:// or rediss://".to_owned(),
             ));
@@ -84,6 +147,12 @@ impl ServerConfig {
             return Err(ServerError::EnvVar(
                 "CORS_ORIGIN must start with http:// or https://".to_owned(),
             ));
+        }
+        let secret_len = self.jwt_secret.expose_secret().len();
+        if secret_len < 32 {
+            return Err(ServerError::EnvVar(format!(
+                "SUPABASE_JWT_SECRET must be at least 32 bytes, got {secret_len}"
+            )));
         }
         Ok(())
     }

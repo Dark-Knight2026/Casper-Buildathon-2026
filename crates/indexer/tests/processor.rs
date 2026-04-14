@@ -18,10 +18,12 @@
 
 mod common;
 
+use std::collections::HashSet;
+
 use serde_json::json;
 use sqlx::PgPool;
 
-use common::{MIGRATOR, PURCHASE_DEPLOY_HASH, TRANSFER_DEPLOY_HASH};
+use common::{FakeAddress, MIGRATOR, PURCHASE_DEPLOY_HASH, TRANSFER_DEPLOY_HASH};
 use indexer::{
     config::ContractType,
     events::EventRegistry,
@@ -44,18 +46,22 @@ async fn duplicate_event_is_no_op(pool: PgPool) {
         caller: String::new(),
         contract_type: ContractType::Big,
         event_name: "Transfer".to_owned(),
-        event_data: json!({ "sender": "alice", "recipient": "bob", "amount": "100" }),
+        event_data: common::payloads::transfer_event_data("100"),
+        block_timestamp: None,
+        transform_idx: None,
+        api_from_type: None,
+        api_to_type: None,
     };
 
     // First call — new event, handler runs, row inserted.
-    processor::process_event(&pool, &registry, &event)
+    processor::process_event(&pool, &registry, &HashSet::new(), &event)
         .await
         .expect("first process_event must succeed");
 
-    // Second call — same (contract_hash, deploy_hash, event_name) triple
-    // matches the UNIQUE constraint -> insert_blockchain_event returns false ->
+    // Second call — same (transaction_hash, event_type, contract_address, transform_idx) tuple
+    // matches the UNIQUE index -> insert_blockchain_event returns false ->
     // process_event returns Ok(()) without calling the handler.
-    processor::process_event(&pool, &registry, &event)
+    processor::process_event(&pool, &registry, &HashSet::new(), &event)
         .await
         .expect("second process_event must succeed (idempotent)");
 
@@ -92,13 +98,17 @@ async fn handler_error_rolls_back_blockchain_events_row(pool: PgPool) {
         contract_hash: "ico_contract_hash".to_owned(),
         deploy_hash: PURCHASE_DEPLOY_HASH.to_owned(),
         block_height: 200,
-        caller: "buyer".to_owned(),
+        caller: FakeAddress::Buyer.to_string(),
         contract_type: ContractType::Ico,
         event_name: "TokensPurchased".to_owned(),
         event_data: json!({}),
+        block_timestamp: None,
+        transform_idx: None,
+        api_from_type: None,
+        api_to_type: None,
     };
 
-    let result = processor::process_event(&pool, &registry, &bad_event).await;
+    let result = processor::process_event(&pool, &registry, &HashSet::new(), &bad_event).await;
     assert!(
         result.is_err(),
         "malformed event_data must cause process_event to return Err"
@@ -138,9 +148,13 @@ async fn unknown_event_is_stored_raw_without_handler(pool: PgPool) {
         contract_type: ContractType::Big,
         event_name: "NonExistentEvent".to_owned(),
         event_data: json!({ "foo": "bar" }),
+        block_timestamp: None,
+        transform_idx: None,
+        api_from_type: None,
+        api_to_type: None,
     };
 
-    processor::process_event(&pool, &registry, &unknown)
+    processor::process_event(&pool, &registry, &HashSet::new(), &unknown)
         .await
         .expect("unknown event must not fail — it should be stored as raw data");
 
@@ -213,11 +227,15 @@ async fn reprocessing_after_full_rollback_does_not_double_balance(pool: PgPool) 
         caller: String::new(),
         contract_type: ContractType::Big,
         event_name: "Transfer".to_owned(),
-        event_data: json!({ "sender": "alice", "recipient": "bob", "amount": "100" }),
+        event_data: common::payloads::transfer_event_data("100"),
+        block_timestamp: None,
+        transform_idx: None,
+        api_from_type: None,
+        api_to_type: None,
     };
 
     // First call — all writes committed in one transaction.
-    processor::process_event(&pool, &registry, &event)
+    processor::process_event(&pool, &registry, &HashSet::new(), &event)
         .await
         .expect("first call must succeed");
 
@@ -238,21 +256,26 @@ async fn reprocessing_after_full_rollback_does_not_double_balance(pool: PgPool) 
     .execute(&pool)
     .await
     .unwrap();
-    sqlx::query!(r"DELETE FROM token_holdings WHERE user_address IN ('alice', 'bob')")
-        .execute(&pool)
-        .await
-        .unwrap();
+    sqlx::query!(
+        r"DELETE FROM token_holdings WHERE user_address IN ($1, $2)",
+        FakeAddress::Alice.as_str(),
+        FakeAddress::Bob.as_str(),
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
 
     // Second call — starts from a clean slate, must produce the same result.
-    processor::process_event(&pool, &registry, &event)
+    processor::process_event(&pool, &registry, &HashSet::new(), &event)
         .await
         .expect("second call must succeed");
 
     let balance: Option<String> = sqlx::query_scalar!(
         r"
             SELECT balance FROM token_holdings
-            WHERE user_address = 'bob' AND token_type = 'BIG'
-        "
+            WHERE user_address = $1 AND token_type = 'BIG'
+        ",
+        FakeAddress::Bob.as_str(),
     )
     .fetch_optional(&pool)
     .await
@@ -261,7 +284,6 @@ async fn reprocessing_after_full_rollback_does_not_double_balance(pool: PgPool) 
     assert_eq!(
         balance.as_deref(),
         Some("100"),
-        "recipient balance must equal the transferred amount after re-processing \
-         a fully rolled-back event"
+        "recipient balance must equal the transferred amount after re-processing a fully rolled-back event"
     );
 }

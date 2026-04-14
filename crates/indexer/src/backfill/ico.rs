@@ -1,9 +1,25 @@
 //! ICO backfill via CSPR.cloud `/deploys` endpoint.
 //!
-//! `TokensPurchased` event data is reconstructed from:
-//! - deploy session args (`amount_to_spend`, `currency`) returned inline by CSPR.cloud
-//! - BIG Transfer amount fetched directly from CSPR.cloud `/ft-token-actions`
-//!   (filtered by `from_hash = ICO contract package hash`)
+//! Reconstructs two event types from deploy session args:
+//!
+//! - `IcoScheduleAdded` from `add_schedule` deploys (args: `id`, `start_timestamp`,
+//!   `end_timestamp`, `sale_amount`, `price`)
+//! - `TokensPurchased` from `purchase` deploys (args: `amount_to_spend`, `currency`)
+//!   combined with BIG Transfer amount from CSPR.cloud `/ft-token-actions`
+//!
+//! # Deferred event gap
+//!
+//! Backfill runs once at indexer startup. Streaming events deferred via
+//! `DeferredEvent` (e.g. `TokensPurchased` without caller) after backfill
+//! completes are **not re-processed** until the next restart. During this
+//! window, `GET /ico/balance` may show zero for a live purchase.
+//! Mitigation: periodic backfill re-runs or a deferred-event retry queue
+//! (not yet implemented).
+//!
+//! xxx: open a tracking issue for the deferred-event retry queue and link it
+//! here. Until resolved, `GET /ico/balance` may silently return zero for
+//! purchases made during the gap window between backfill completion and
+//! the next indexer restart.
 
 use core::time::Duration;
 use std::collections::HashMap;
@@ -12,21 +28,18 @@ use chrono::DateTime;
 use reqwest::Client;
 use secrecy::ExposeSecret;
 use serde::Deserialize;
-use sqlx::PgPool;
+use tokio::time;
 
-use super::db;
+use super::{BackfillContext, db};
 use crate::{
+    address,
     config::{ContractType, IndexerConfig},
     error::{ApiErrorResponse, IndexerError, IndexerResult},
-    events::{
-        EventRegistry,
-        ico::{TokensPurchased, tokens_purchased::Currency},
-    },
+    events::ico::{IcoScheduleAdded, TokensPurchased, tokens_purchased::Currency},
     processor::{self, RawEvent},
 };
-// -----------------------------------------------------------------------------
-// CSPR.cloud /ft-token-actions response types (BIG transfers)
-// -----------------------------------------------------------------------------
+
+// CSPR.cloud /ft-token-actions response types (BIG transfers) -----------------
 
 /// Top-level response from the `/ft-token-actions` endpoint.
 #[derive(Debug, Deserialize)]
@@ -47,9 +60,7 @@ struct BigTransferItem {
     amount: String,
 }
 
-// -----------------------------------------------------------------------------
-// CSPR.cloud /deploys response types
-// -----------------------------------------------------------------------------
+// CSPR.cloud /deploys response types ------------------------------------------
 
 /// Top-level response from the `/deploys` endpoint.
 #[derive(Debug, Deserialize)]
@@ -77,28 +88,7 @@ pub(super) struct DeployListItem {
     pub(super) timestamp: String,
 }
 
-// -----------------------------------------------------------------------------
-// Shared context
-// -----------------------------------------------------------------------------
-
-/// Shared dependencies for ICO backfill operations.
-#[derive(Debug)]
-pub struct IcoBackfillCtx<'a> {
-    /// HTTP client used for CSPR.cloud API requests.
-    pub client: &'a Client,
-    /// Indexer configuration (API token, URLs, rate limit).
-    pub config: &'a IndexerConfig,
-    /// Database connection pool for reading and writing events.
-    pub db_pool: &'a PgPool,
-    /// Event registry for dispatching processed events.
-    pub registry: &'a EventRegistry,
-    /// BIG token contract package hash — used to look up purchase amounts in DB.
-    pub big_hash: &'a str,
-}
-
-// -----------------------------------------------------------------------------
-// Public-to-parent API
-// -----------------------------------------------------------------------------
+// Public API ------------------------------------------------------------------
 
 /// Backfill the ICO contract by reconstructing `TokensPurchased` events.
 ///
@@ -113,7 +103,8 @@ pub struct IcoBackfillCtx<'a> {
 /// Returns [`IndexerError`] on HTTP, API, or database failures.
 #[inline]
 pub async fn backfill_ico(
-    ctx: &IcoBackfillCtx<'_>,
+    ctx: &BackfillContext<'_>,
+    big_hash: &str,
     contract_type: ContractType,
     contract_hash: &str,
     start_block: u64,
@@ -122,7 +113,7 @@ pub async fn backfill_ico(
     // ICO-initiated transfers are identified by from_hash == ICO contract package hash.
     tracing::info!(%contract_hash, "Pre-fetching BIG transfers from CSPR.cloud");
     let big_amounts =
-        load_big_transfers(ctx.client, ctx.config, ctx.big_hash, contract_hash).await?;
+        load_big_transfers(ctx.client, ctx.config, big_hash, contract_hash, start_block).await?;
     tracing::info!(count = big_amounts.len(), "BIG transfer map ready");
 
     let mut page = 1u32;
@@ -173,19 +164,22 @@ pub async fn backfill_ico(
             match process_ico_deploy(ctx, contract_type, contract_hash, deploy_item, &big_amounts)
                 .await
             {
-                Ok(true) => total_events += 1,
-                Ok(false) => {}
+                Ok(success) => {
+                    if success {
+                        total_events += 1;
+                    }
+                    page_max_block =
+                        Some(page_max_block.unwrap_or(0).max(deploy_item.block_height));
+                }
                 Err(e) => {
                     tracing::warn!(
                         error = %e,
                         deploy = %deploy_item.deploy_hash,
-                        "Failed to process ICO deploy, skipping"
+                        block = deploy_item.block_height,
+                        "Failed to process ICO deploy - cursor NOT advanced"
                     );
                 }
             }
-
-            page_max_block = Some(page_max_block.unwrap_or(0).max(deploy_item.block_height));
-            tokio::time::sleep(Duration::from_millis(ctx.config.backfill_rate_limit_ms)).await;
         }
 
         // Persist progress so restarts resume from here instead of block 0.
@@ -197,6 +191,7 @@ pub async fn backfill_ico(
             break;
         }
         page += 1;
+        time::sleep(Duration::from_millis(ctx.config.backfill_rate_limit_ms)).await;
     }
 
     tracing::info!(
@@ -208,13 +203,16 @@ pub async fn backfill_ico(
     Ok(())
 }
 
-/// Process a single ICO deploy — parse inline args and emit event.
+/// Process a single ICO deploy - parse inline args and emit event.
 ///
-/// Returns `Ok(true)` if a `TokensPurchased` event was successfully processed,
-/// `Ok(false)` if the deploy was skipped (not a `purchase` call or BIG amount
-/// not found in pre-fetched map).
+/// Recognizes two deploy types:
+/// - `add_schedule(id, start, end, sale_amount, price)` -> `IcoScheduleAdded`
+/// - `purchase(amount_to_spend, currency)` -> `TokensPurchased`
+///
+/// Returns `Ok(true)` if an event was successfully processed,
+/// `Ok(false)` if the deploy was skipped (unrecognized call or missing data).
 async fn process_ico_deploy(
-    ctx: &IcoBackfillCtx<'_>,
+    ctx: &BackfillContext<'_>,
     contract_type: ContractType,
     contract_hash: &str,
     deploy_item: &DeployListItem,
@@ -222,39 +220,62 @@ async fn process_ico_deploy(
 ) -> IndexerResult<bool> {
     let deploy_hash = &deploy_item.deploy_hash;
 
-    // 1. parse args (amount_to_spend, currency) from inline CSPR.cloud data
+    let block_timestamp = DateTime::parse_from_rfc3339(&deploy_item.timestamp)
+        .ok()
+        .map(|dt| dt.to_utc());
+
+    // Try IcoScheduleAdded first (add_schedule deploy)
+    if let Some(schedule) = parse_add_schedule_args(&deploy_item.args) {
+        let event_data = serde_json::to_value(&schedule)?;
+        let raw = RawEvent {
+            contract_hash: contract_hash.to_owned(),
+            deploy_hash: deploy_hash.clone(),
+            block_height: deploy_item.block_height,
+            caller: address::normalize_casper_address(&deploy_item.caller_public_key)?,
+            contract_type,
+            event_name: "ICOScheduleAdded".to_owned(),
+            event_data,
+            block_timestamp,
+            transform_idx: None,
+            api_from_type: None,
+            api_to_type: None,
+        };
+        let _ = processor::process_event(ctx.db_pool, ctx.registry, ctx.known_hashes, &raw).await?;
+        tracing::debug!(
+            deploy = %deploy_hash,
+            schedule_id = %schedule.id,
+            "ICO IcoScheduleAdded processed"
+        );
+        return Ok(true);
+    }
+
+    // Try TokensPurchased (purchase deploy)
     let Some((cost, currency_id)) = parse_purchase_args(&deploy_item.args) else {
-        // Not a `purchase` call or args are malformed — skip silently.
         return Ok(false);
     };
 
-    // 2. look up BIG transfer amount from pre-fetched map
     let Some(big_amount) = big_amounts.get(deploy_hash.as_str()) else {
         tracing::warn!(
             deploy = %deploy_hash,
-            "BIG Transfer not found in CSPR.cloud for this deploy — skipping"
+            "BIG Transfer not found in CSPR.cloud for this deploy - skipping"
         );
         return Ok(false);
     };
 
-    // 3. build and process TokensPurchased event
     let currency_name = ico_currency_name(currency_id);
-
-    // Convert ISO-8601 timestamp to Unix epoch seconds (u64).
     let timestamp_secs: u64 = DateTime::parse_from_rfc3339(&deploy_item.timestamp).map_or_else(
         |e| {
             tracing::warn!(
                 deploy = %deploy_hash,
                 raw = %deploy_item.timestamp,
                 error = %e,
-                "Failed to parse deploy timestamp — storing 0"
+                "Failed to parse deploy timestamp - storing 0"
             );
             0
         },
         |dt| dt.timestamp().max(0).cast_unsigned(),
     );
 
-    // `price` is None: not available during backfill.
     let typed_event = TokensPurchased {
         amount: big_amount.clone(),
         currency: Currency::from(currency_id),
@@ -268,13 +289,17 @@ async fn process_ico_deploy(
         contract_hash: contract_hash.to_owned(),
         deploy_hash: deploy_hash.clone(),
         block_height: deploy_item.block_height,
-        caller: deploy_item.caller_public_key.clone(),
+        caller: address::normalize_casper_address(&deploy_item.caller_public_key)?,
         contract_type,
         event_name: "TokensPurchased".to_owned(),
         event_data,
+        block_timestamp,
+        transform_idx: None,
+        api_from_type: None,
+        api_to_type: None,
     };
 
-    processor::process_event(ctx.db_pool, ctx.registry, &raw).await?;
+    let _ = processor::process_event(ctx.db_pool, ctx.registry, ctx.known_hashes, &raw).await?;
 
     tracing::debug!(
         deploy = %deploy_hash,
@@ -308,6 +333,37 @@ pub fn parse_purchase_args(args: &serde_json::Value) -> Option<(String, u8)> {
     Some((cost, currency_id))
 }
 
+/// Extract `IcoScheduleAdded` fields from the `add_schedule` deploy args.
+///
+/// CSPR.cloud returns args as `{ "arg_name": { "cl_type": "...", "parsed": ... } }`.
+/// Expected args: `id`, `start_timestamp`, `end_timestamp`, `sale_amount`, `price`.
+/// Returns `None` if the expected args are missing or malformed.
+#[inline]
+#[must_use]
+pub fn parse_add_schedule_args(args: &serde_json::Value) -> Option<IcoScheduleAdded> {
+    let id = args.get("id")?.get("parsed")?.as_str()?.to_owned();
+    let start_timestamp = args.get("start_timestamp")?.get("parsed")?.as_u64()?;
+    let end_timestamp = args.get("end_timestamp")?.get("parsed")?.as_u64()?;
+    let sale_amount = args.get("sale_amount")?.get("parsed").and_then(|v| {
+        v.as_str()
+            .map(ToOwned::to_owned)
+            .or_else(|| v.as_u64().map(|n| n.to_string()))
+    })?;
+    let price = args.get("price")?.get("parsed").and_then(|v| {
+        v.as_str()
+            .map(ToOwned::to_owned)
+            .or_else(|| v.as_u64().map(|n| n.to_string()))
+    })?;
+
+    Some(IcoScheduleAdded {
+        id,
+        start_timestamp,
+        end_timestamp,
+        sale_amount,
+        price,
+    })
+}
+
 /// Map the ICO `Currency` enum variant index to a human-readable string.
 ///
 /// Matches the Rust enum order: `CSPR = 0`, `USDC = 1`, `USDT = 2`.
@@ -338,13 +394,14 @@ pub async fn load_big_transfers(
     config: &IndexerConfig,
     big_hash: &str,
     ico_hash: &str,
+    start_block: u64,
 ) -> IndexerResult<HashMap<String, String>> {
     let mut map = HashMap::new();
     let mut page = 1u32;
 
     loop {
         let url = format!(
-            "{}/ft-token-actions?contract_package_hash={big_hash}&page={page}&page_size=100&order_by=block_height&order_direction=ASC",
+            "{}/ft-token-actions?contract_package_hash={big_hash}&page={page}&page_size=100&order_by=block_height&order_direction=ASC&block_height[gte]={start_block}",
             config.casper.rest_url,
         );
         tracing::debug!(%url, "Fetching BIG ft-token-actions page {page}");
@@ -374,12 +431,11 @@ pub async fn load_big_transfers(
             }
         }
 
-        tokio::time::sleep(Duration::from_millis(config.backfill_rate_limit_ms)).await;
-
         if page >= page_count {
             break;
         }
         page += 1;
+        time::sleep(Duration::from_millis(config.backfill_rate_limit_ms)).await;
     }
 
     Ok(map)

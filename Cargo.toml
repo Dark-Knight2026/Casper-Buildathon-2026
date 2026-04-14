@@ -79,7 +79,7 @@ futures-util = "0.3"
 hex = "0.4"
 jsonwebtoken = { version = "10.3", features = ["rust_crypto"] }
 rand = "0.10.0"
-redis = { version = "1.0.2", features = ["tokio-comp"] }
+redis = { version = "1.0.2", features = ["tokio-comp", "connection-manager"] }
 reqwest = { version = "0.13", default-features = false, features = ["json", "rustls"] }
 rustls = { version = "0.23", features = ["ring"] }
 rust_decimal = { version = "1", features = ["serde"] }
@@ -89,7 +89,7 @@ serde_json = "1"
 serial_test = "3"
 wiremock = "0.6"
 sha2 = "0.10"
-sqlx = { version = "0.8.6", features = ["runtime-tokio-rustls", "postgres", "uuid", "rust_decimal", "migrate", "json"] }
+sqlx = { version = "0.8.6", features = ["runtime-tokio-rustls", "postgres", "uuid", "rust_decimal", "migrate", "json", "chrono"] }
 strum = { version = "0.28", features = ["derive"] }
 testcontainers = "0.27.0"
 thiserror = "2.0"

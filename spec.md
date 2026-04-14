@@ -30,6 +30,90 @@ Backend service for processing high-load real estate operations, including tax c
   - **Input:** `{ "wallet_address": "...", "signature": "..." }`
   - **Response:** `{ "token": "jwt...", "user": { ... } }`
 
+### Transaction History
+
+- **GET** `/api/v1/transactions/account/{address}`
+  - **Path:** `address` - Casper account hash (64 hex chars, no prefix)
+  - **Query:** `page` (default 1), `page_size` (default 25, max 100), `type` (optional filter: `token_purchase`, `token_transfer`, `token_mint`, `token_allowance`), `from_type` (optional filter: `0` = Account, `1` = Contract)
+  - **Response:** `PaginatedResponse<TransactionResponse>` `{ "itemCount": 42, "pageCount": 2, "data": [...] }`
+  - **Auth:** Public (no JWT required)
+  - **Rate limit:** 5 req/s, burst 30
+
+- **GET** `/api/v1/transactions/token/big`
+  - **Query:** `page` (default 1), `page_size` (default 25, max 100)
+  - **Response:** `PaginatedResponse<TransactionResponse>`
+  - **Auth:** Public
+  - **Rate limit:** 5 req/s, burst 30
+
+#### TransactionResponse Schema
+```json
+{
+  "deploy_hash": "abc123...",
+  "block_height": 12345,  // null if unconfirmed
+  "timestamp": "2025-06-15T10:30:00Z",
+  "amount": "1000000000000000000",
+  "currency": "CSPR",
+  "contract_package_hash": "def456...",
+  "from_hash": "aaa...",
+  "from_type": 0,
+  "to_hash": "bbb...",
+  "to_type": 0,
+  "ft_action_type_id": 2,
+  "transform_idx": 0
+}
+```
+
+> **`amount` semantics for `token_purchase` rows:** `amount` contains the
+> payment cost in the purchase currency (CSPR or USDC), not the quantity of
+> BIG tokens received. The BIG token amount is stored in `ico_purchases.amount`
+> and can be found in the transaction `metadata` JSON.
+
+### ICO
+
+- **GET** `/api/v1/ico/balance/{address}`
+  - **Path:** `address` - Casper account hash (64 hex chars, no prefix)
+  - **Response:** `IcoBalanceResponse`
+  - **Auth:** Public
+  - **Rate limit:** 5 req/s, burst 30
+
+```json
+{
+  "tokensPurchased": "500000000000000000000",
+  "totalSpentUsd": 250.0,
+  "tokenPrice": 0.50,
+  "tokenSymbol": "BIG",
+  "currentValue": 250.0,
+  "isActive": true
+}
+```
+
+- **GET** `/api/v1/ico/progress`
+  - **Response:** `IcoProgressResponse`
+  - **Auth:** Public
+  - **Rate limit:** 5 req/s, burst 30
+
+```json
+{
+  "tokensSold": "100000000000000000000000",
+  "totalAllocation": "1000000000000000000000000",
+  "tokensRemaining": "900000000000000000000000",
+  "amountRaised": 50000.0,
+  "hardCapUsd": 500000.0,
+  "priceUsd": 0.50,
+  "percentSold": 10.0,
+  "isActive": true
+}
+```
+
+#### PaginatedResponse Schema
+```json
+{
+  "itemCount": 100,
+  "pageCount": 4,
+  "data": [ "...items..." ]
+}
+```
+
 ## 3. Security Requirements
 - **Authentication:** JWT Bearer Token — issued locally via HS256 using `SUPABASE_JWT_SECRET`. Login uses Casper Wallet signature challenge-response (Ed25519 / Secp256k1). No Supabase Auth service call at validation time. Sign message format: `"Sign this message to login to LeaseFi. Nonce: <nonce>"`. JWT expiry: 24 h. Nonce TTL: 5 min (Redis).
 - **Database:** No direct SQL injection (checked via SQLx).
@@ -112,6 +196,16 @@ async fn get_user(
 - Internal errors MUST NOT expose database details or stack traces to clients
 - Log full error details server-side with `tracing::error!`
 - Return generic messages to clients (e.g., "Internal error" instead of SQL error text)
+
+### Deployment: Reverse Proxy Requirement
+
+The API rate limiter uses `SmartIpKeyExtractor` which trusts the
+`X-Forwarded-For` header unconditionally. **This API MUST be deployed
+behind a trusted reverse proxy** (e.g. Nginx, Cloudflare, ALB) that
+overwrites `X-Forwarded-For` with the real client IP.
+
+Direct exposure to the internet without a trusted proxy allows clients to
+spoof `X-Forwarded-For` and bypass all per-IP rate limits.
 
 ## 5. Performance Goals
 

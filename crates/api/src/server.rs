@@ -1,6 +1,7 @@
 //! Server implementation and startup logic.
 
 use core::{net::SocketAddr, str::FromStr, time::Duration};
+use std::env;
 use std::sync::Arc;
 
 use axum::{
@@ -9,15 +10,28 @@ use axum::{
 };
 use secrecy::ExposeSecret;
 use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
-use tower_governor::{GovernorLayer, governor::GovernorConfigBuilder};
+use tokio::{
+    net::TcpListener,
+    signal::{
+        self,
+        unix::{self, SignalKind},
+    },
+};
+use tower_governor::{
+    GovernorLayer, governor::GovernorConfigBuilder, key_extractor::SmartIpKeyExtractor,
+};
 use tower_http::{cors::CorsLayer, limit::RequestBodyLimitLayer, trace::TraceLayer};
 use utoipa::OpenApi;
 use utoipa_axum::{router::OpenApiRouter, routes};
+#[cfg(debug_assertions)]
 use utoipa_swagger_ui::SwaggerUi;
 
 use crate::{
-    ApiDoc, AppState, RedisStore, ServerConfig, ServerError, analytics, auth, health, tax,
+    ApiDoc, AppState, RedisStore, ServerConfig, ServerError, analytics, auth, health, ico, tax,
+    transactions,
 };
+
+// Public router ---------------------------------------------------------------
 
 /// Rate limit: requests allowed per second for auth endpoints.
 pub const AUTH_RATE_LIMIT_PER_SECOND: u64 = 1;
@@ -25,18 +39,34 @@ pub const AUTH_RATE_LIMIT_PER_SECOND: u64 = 1;
 /// Rate limit: maximum burst size for auth endpoints.
 pub const AUTH_RATE_LIMIT_BURST: u32 = 15;
 
-/// Creates an `OpenAPI` router for public API endpoints that do not require authentication.
+/// Creates an `OpenAPI` router for public API endpoints that do not require
+/// authentication.
 ///
 /// Includes rate limiting:
 /// - Authentication endpoints (`/auth/*`)
+///
+/// # Rate limiter trust model
+///
+/// Uses `SmartIpKeyExtractor` which trusts `X-Forwarded-For` unconditionally.
+/// **Deployment constraint**: this API MUST sit behind a trusted reverse proxy
+/// (e.g. Nginx, Cloudflare, ALB) that overwrites `X-Forwarded-For` with the
+/// real client IP. Direct exposure to the internet allows clients to spoof
+/// `X-Forwarded-For` and bypass per-IP rate limits.
+///
+/// # Panics
+///
+/// Panics at startup if the rate-limit configuration is invalid (e.g. zero burst size).
 #[inline]
+#[must_use]
 pub fn public_router() -> OpenApiRouter<Arc<AppState>> {
     let rate_limit = Arc::new(
         GovernorConfigBuilder::default()
+            .key_extractor(SmartIpKeyExtractor)
             .per_second(AUTH_RATE_LIMIT_PER_SECOND)
             .burst_size(AUTH_RATE_LIMIT_BURST)
+            .use_headers()
             .finish()
-            .unwrap_or_default(),
+            .expect("auth rate-limit config is always valid: per_second > 0 and burst_size > 0"),
     );
 
     OpenApiRouter::new()
@@ -45,43 +75,132 @@ pub fn public_router() -> OpenApiRouter<Arc<AppState>> {
         .route_layer(GovernorLayer::new(rate_limit))
 }
 
-/// Creates an `OpenAPI` router for protected endpoints that require JWT authentication.
+// Public data router ----------------------------------------------------------
+
+/// Rate limit: requests allowed per second for public data endpoints.
+pub const PUBLIC_DATA_RATE_LIMIT_PER_SECOND: u64 = 5;
+
+/// Rate limit: maximum burst size for public data endpoints.
+pub const PUBLIC_DATA_RATE_LIMIT_BURST: u32 = 30;
+
+/// Creates a rate-limited `OpenAPI` router for public data endpoints (no auth).
 ///
-/// Authentication is enforced via the `AuthUser` extractor in handlers.
+/// - `GET /ico/progress` - ICO sale progress
+/// - `GET /ico/balance/{address}` - ICO balance for an account
+/// - `GET /transactions/token/big` - BIG token transactions
+/// - `GET /transactions/account/{address}` - account transaction history
 ///
-/// Includes:
-/// - Tax endpoints (`/tax/*`)
-/// - Analytics endpoints (`/analytics/*`)
+/// Same `SmartIpKeyExtractor` trust model as [`public_router`] - see its docs.
+///
+/// # Panics
+///
+/// Panics at startup if the rate-limit configuration is invalid (e.g. zero burst size).
 #[inline]
-pub fn protected_router() -> OpenApiRouter<Arc<AppState>> {
+#[must_use]
+pub fn public_data_router() -> OpenApiRouter<Arc<AppState>> {
+    let rate_limit = Arc::new(
+        GovernorConfigBuilder::default()
+            .key_extractor(SmartIpKeyExtractor)
+            .per_second(PUBLIC_DATA_RATE_LIMIT_PER_SECOND)
+            .burst_size(PUBLIC_DATA_RATE_LIMIT_BURST)
+            .use_headers()
+            .finish()
+            .expect(
+                "public-data rate-limit config is always valid: per_second > 0 and burst_size > 0",
+            ),
+    );
+
+    OpenApiRouter::new()
+        .nest("/transactions", transactions_router())
+        .nest("/ico", ico_router())
+        .route_layer(GovernorLayer::new(rate_limit))
+}
+
+// Protected router ------------------------------------------------------------
+
+/// Rate limit: requests allowed per second for protected (authenticated) endpoints.
+pub const PROTECTED_RATE_LIMIT_PER_SECOND: u64 = 5;
+
+/// Rate limit: maximum burst size for protected (authenticated) endpoints.
+pub const PROTECTED_RATE_LIMIT_BURST: u32 = 30;
+
+/// Creates an `OpenAPI` router for protected endpoints that require JWT
+/// authentication.
+///
+/// Authentication is enforced structurally via a router-level middleware
+/// (`require_auth`), so every current and future handler on this router is
+/// protected regardless of whether it includes the `AuthUser` extractor.
+///
+/// Rate limiting uses `SmartIpKeyExtractor` (same trust model as other routers).
+///
+/// # Panics
+///
+/// Panics at startup if the rate-limit configuration is invalid.
+#[inline]
+#[must_use]
+pub fn protected_router(state: Arc<AppState>) -> OpenApiRouter<Arc<AppState>> {
+    let rate_limit = Arc::new(
+        GovernorConfigBuilder::default()
+            .key_extractor(SmartIpKeyExtractor)
+            .per_second(PROTECTED_RATE_LIMIT_PER_SECOND)
+            .burst_size(PROTECTED_RATE_LIMIT_BURST)
+            .use_headers()
+            .finish()
+            .expect(
+                "protected rate-limit config is always valid: per_second > 0 and burst_size > 0",
+            ),
+    );
+
     OpenApiRouter::new()
         .routes(routes!(tax::handlers::calculate_tax_liability))
         .routes(routes!(analytics::handlers::get_property_performance))
+        .route_layer(GovernorLayer::new(rate_limit))
+        .route_layer(axum::middleware::from_fn_with_state(
+            state,
+            auth::middleware::require_auth,
+        ))
 }
 
+/// Creates an `OpenAPI` router for blockchain transaction endpoints
+#[inline]
+#[must_use]
+pub fn transactions_router() -> OpenApiRouter<Arc<AppState>> {
+    OpenApiRouter::new()
+        .routes(routes!(transactions::handlers::get_account_transactions))
+        .routes(routes!(transactions::handlers::get_big_token_transactions))
+}
+
+/// Creates an `OpenAPI` router for ICO endpoints
+#[inline]
+#[must_use]
+pub fn ico_router() -> OpenApiRouter<Arc<AppState>> {
+    OpenApiRouter::new()
+        .routes(routes!(ico::handlers::get_ico_balance))
+        .routes(routes!(ico::handlers::get_ico_progress))
+}
+
+// Full router -----------------------------------------------------------------
+
 /// Creates the full application router combining public and protected routes.
-///
-/// Route structure:
-/// - `/health` - Health check (no rate limiting)
-/// - `/api/v1/auth/*` - Authentication (rate limited)
-/// - `/api/v1/*` - Protected endpoints (require JWT)
-/// - `/swagger-ui` - `OpenAPI` documentation UI
-/// - `/api-docs/openapi.json` - `OpenAPI` specification
-///
-/// # Arguments
-///
-/// * `state` - The shared application state.
 #[inline]
 pub fn create_router(state: Arc<AppState>) -> Router {
     let (router, api) = OpenApiRouter::with_openapi(ApiDoc::openapi())
         .routes(routes!(health::handlers::health_check))
         .nest("/api/v1/auth", public_router())
-        .nest("/api/v1", protected_router())
+        .nest("/api/v1", public_data_router())
+        .nest("/api/v1", protected_router(state.clone()))
         .with_state(state)
         .split_for_parts();
 
-    router.merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", api))
+    #[cfg(debug_assertions)]
+    let router = router.merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", api));
+    #[cfg(not(debug_assertions))]
+    drop(api);
+
+    router
 }
+
+// Application -----------------------------------------------------------------
 
 /// Maximum request body size (1 MB).
 const REQUEST_BODY_LIMIT: usize = 1024 * 1024;
@@ -147,7 +266,7 @@ pub async fn main() -> Result<(), ServerError> {
         .await?;
 
     // Run migrations
-    if std::env::var("RUN_MIGRATIONS").unwrap_or_default() == "true" {
+    if env::var("RUN_MIGRATIONS").unwrap_or_default() == "true" {
         sqlx::migrate!("../../supabase/migrations")
             .run(&pool)
             .await?;
@@ -155,15 +274,19 @@ pub async fn main() -> Result<(), ServerError> {
     tracing::info!("Database connected");
 
     // Initialize Redis store
-    let redis_client = redis::Client::open(config.redis_url.clone()).map_err(|e| {
+    let redis_client = redis::Client::open(config.redis_url.expose_secret()).map_err(|e| {
         tracing::error!(error = %e, "Failed to parse REDIS_URL");
         ServerError::EnvVar("Invalid Redis URL".to_owned())
+    })?;
+    let redis_store = RedisStore::new(redis_client).await.map_err(|e| {
+        tracing::error!(error = %e, "Failed to connect to Redis");
+        ServerError::EnvVar("Redis connection failed".to_owned())
     })?;
 
     // 3. Build application state
     let state = Arc::new(AppState {
         db: pool,
-        redis: RedisStore::new(redis_client),
+        redis: redis_store,
         config: config.clone(),
     });
 
@@ -171,10 +294,13 @@ pub async fn main() -> Result<(), ServerError> {
     let app = create_app(state)?;
     let addr = SocketAddr::from(([0, 0, 0, 0], config.port));
     tracing::info!(address = %addr, "Server listening");
-    let listener = tokio::net::TcpListener::bind(addr).await?;
-    axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal())
-        .await?;
+    let listener = TcpListener::bind(addr).await?;
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .with_graceful_shutdown(shutdown_signal())
+    .await?;
 
     Ok(())
 }
@@ -182,14 +308,14 @@ pub async fn main() -> Result<(), ServerError> {
 /// Awaits a shutdown signal (e.g., Ctrl+C) to gracefully shut down the server.
 async fn shutdown_signal() {
     let ctrl_c = async {
-        tokio::signal::ctrl_c()
+        signal::ctrl_c()
             .await
             .expect("Failed to install Ctrl+C handler - OS may not support graceful shutdown");
     };
 
     #[cfg(unix)]
     let terminate = async {
-        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+        unix::signal(SignalKind::terminate())
             .expect("Failed to install SIGTERM handler - OS may not support graceful shutdown")
             .recv()
             .await;

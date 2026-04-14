@@ -11,6 +11,8 @@ use crate::{
     common::{ApiResult, AppState},
 };
 
+// `POST /api/v1/analytics/property-performance`
+//
 /// Retrieves performance metrics for a set of properties over a specified date range.
 ///
 /// Calculates total revenue, expenses, net operating income (NOI), ROI, and occupancy rates.

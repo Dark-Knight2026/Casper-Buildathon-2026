@@ -2,7 +2,7 @@
 
 mod common;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use sqlx::PgPool;
 
@@ -38,11 +38,14 @@ fn deserializes_wss_message() {
     assert_eq!(msg.extra.deploy_hash, "aabbcc");
     assert_eq!(msg.extra.event_id, 42);
     assert_eq!(msg.extra.block_height, 1_234_567);
+    assert_eq!(msg.extra.transform_id, Some(0));
+    assert_eq!(msg.timestamp.as_deref(), Some("2025-01-01T12:00:00.000Z"));
 }
 
 #[test]
 fn deserializes_ignores_unknown_fields() {
-    // "timestamp", "action", "raw_data", "future_field" must not cause failure.
+    // "action", "future_field", "extra_unknown" must not cause failure.
+    // "timestamp" and "transform_id" are now deserialized (no longer ignored).
     let minimal = r#"{
         "data": { "contract_package_hash": "x", "name": "Foo", "data": {}, "extra_unknown": true },
         "action": "emitted",
@@ -52,6 +55,8 @@ fn deserializes_ignores_unknown_fields() {
     }"#;
     let msg: WssMessage = serde_json::from_str(minimal).unwrap();
     assert_eq!(msg.data.name, "Foo");
+    assert_eq!(msg.extra.transform_id, Some(0));
+    assert_eq!(msg.timestamp.as_deref(), Some("2025-01-01T00:00:00Z"));
 }
 
 #[test]
@@ -122,9 +127,15 @@ async fn non_json_frame_is_silently_skipped(pool: PgPool) {
     let registry = EventRegistry::new();
     let contract_map = HashMap::new();
 
-    streaming::handle_text_message("not-json-keepalive", &contract_map, &pool, &registry)
-        .await
-        .expect("non-JSON frame must return Ok(())");
+    streaming::handle_text_message(
+        "not-json-keepalive",
+        &contract_map,
+        &HashSet::new(),
+        &pool,
+        &registry,
+    )
+    .await
+    .expect("non-JSON frame must return Ok(())");
 
     let count: i64 = sqlx::query_scalar!(r"SELECT COUNT(*) FROM blockchain_events")
         .fetch_one(&pool)
@@ -156,9 +167,15 @@ async fn message_for_unknown_contract_is_skipped(pool: PgPool) {
         1_234_567,
     );
 
-    streaming::handle_text_message(&msg.to_string(), &contract_map, &pool, &registry)
-        .await
-        .expect("message for unknown contract must return Ok(())");
+    streaming::handle_text_message(
+        &msg.to_string(),
+        &contract_map,
+        &HashSet::new(),
+        &pool,
+        &registry,
+    )
+    .await
+    .expect("message for unknown contract must return Ok(())");
 
     let count: i64 = sqlx::query_scalar!(r"SELECT COUNT(*) FROM blockchain_events")
         .fetch_one(&pool)
@@ -169,6 +186,75 @@ async fn message_for_unknown_contract_is_skipped(pool: PgPool) {
     assert_eq!(
         count, 0,
         "unknown contract message must not write to blockchain_events"
+    );
+}
+
+/// Regression: a WSS frame whose `transform_id` exceeds `i32::MAX` must
+/// surface an explicit error from `handle_text_message` rather than silently
+/// truncating the field to `None`. The prior behavior masked overflow events
+/// by routing them to the same `COALESCE(transform_idx, -1)` sentinel slot as
+/// backfill rows, making corruption invisible at ingest time.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn transform_id_overflow_returns_error(pool: PgPool) {
+    common::disable_rls(&pool).await;
+
+    let registry = EventRegistry::new();
+    let mut contract_map = HashMap::new();
+    contract_map.insert("big_contract_hash".to_owned(), ContractType::Big);
+
+    // i32::MAX = 2_147_483_647; pick a value one above that threshold.
+    let overflow_id = i64::from(i32::MAX) + 1;
+    let msg = payloads::wss_message_with_transform_id(
+        "big_contract_hash",
+        "Transfer",
+        payloads::transfer_event_data("100"),
+        TRANSFER_DEPLOY_HASH,
+        99,
+        500,
+        overflow_id,
+    );
+
+    let result = streaming::handle_text_message(
+        &msg.to_string(),
+        &contract_map,
+        &HashSet::new(),
+        &pool,
+        &registry,
+    )
+    .await;
+
+    assert!(
+        result.is_err(),
+        "transform_id > i32::MAX must return an explicit error, got Ok"
+    );
+
+    // The event must not land in the DB when the pipeline rejects the frame.
+    let count = sqlx::query_scalar!(r"SELECT COUNT(*) FROM blockchain_events")
+        .fetch_one(&pool)
+        .await
+        .unwrap()
+        .unwrap_or(0);
+
+    assert_eq!(
+        count, 0,
+        "overflowed transform_id must not write to blockchain_events"
+    );
+
+    // The streaming cursor must NOT advance for a rejected frame - otherwise
+    // a single poisoned message could permanently skip over a range of events.
+    let cursor = sqlx::query_scalar!(
+        r"
+            SELECT cursor_value FROM event_cursors
+            WHERE stream_type = 'streaming' AND contract_hash = ''
+        "
+    )
+    .fetch_optional(&pool)
+    .await
+    .unwrap();
+
+    assert!(
+        cursor.is_none(),
+        "streaming cursor must not advance past a rejected frame, got: {cursor:?}"
     );
 }
 
@@ -186,15 +272,21 @@ async fn valid_message_processes_event_and_updates_cursor(pool: PgPool) {
     let msg = payloads::wss_message(
         "big_contract_hash",
         "Transfer",
-        serde_json::json!({ "sender": "alice", "recipient": "bob", "amount": "100" }),
+        payloads::transfer_event_data("100"),
         TRANSFER_DEPLOY_HASH,
         99,
         500,
     );
 
-    streaming::handle_text_message(&msg.to_string(), &contract_map, &pool, &registry)
-        .await
-        .expect("valid Transfer message must succeed");
+    streaming::handle_text_message(
+        &msg.to_string(),
+        &contract_map,
+        &HashSet::new(),
+        &pool,
+        &registry,
+    )
+    .await
+    .expect("valid Transfer message must succeed");
 
     let count: i64 = sqlx::query_scalar!(r"SELECT COUNT(*) FROM blockchain_events")
         .fetch_one(&pool)

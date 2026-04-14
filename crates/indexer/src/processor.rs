@@ -7,7 +7,9 @@
 //!
 //! If any step fails, the transaction is rolled back.
 
+use chrono::{DateTime, Utc};
 use sqlx::PgPool;
+use std::{collections::HashSet, hash::RandomState};
 
 use crate::{
     config::ContractType,
@@ -33,6 +35,16 @@ pub struct RawEvent {
     pub event_name: String,
     /// Raw event data as JSON.
     pub event_data: serde_json::Value,
+    /// Block timestamp from the blockchain. `None` when unavailable.
+    pub block_timestamp: Option<DateTime<Utc>>,
+    /// Transform index within the deploy. `None` when unavailable.
+    pub transform_idx: Option<i32>,
+    /// Sender address type from CSPR.cloud (0=Account, 1=Contract).
+    /// `None` during streaming or when the API field is absent.
+    pub api_from_type: Option<u8>,
+    /// Recipient address type from CSPR.cloud (0=Account, 1=Contract).
+    /// `None` during streaming or when the API field is absent.
+    pub api_to_type: Option<u8>,
 }
 
 impl<'a> From<&'a RawEvent> for db::NewBlockchainEvent<'a> {
@@ -44,8 +56,18 @@ impl<'a> From<&'a RawEvent> for db::NewBlockchainEvent<'a> {
             transaction_hash: &raw.deploy_hash,
             block_number: raw.block_height.cast_signed(),
             event_data: &raw.event_data,
+            transform_idx: raw.transform_idx,
         }
     }
+}
+
+/// Outcome of [`process_event`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProcessResult {
+    /// Event was fully processed and committed.
+    Processed,
+    /// Event was deferred (e.g. missing caller) - nothing was persisted.
+    Deferred,
 }
 
 /// Process a single event using the trait-based architecture.
@@ -57,14 +79,15 @@ impl<'a> From<&'a RawEvent> for db::NewBlockchainEvent<'a> {
 pub async fn process_event(
     db_pool: &PgPool,
     registry: &EventRegistry,
+    known_hashes: &HashSet<String, RandomState>,
     raw: &RawEvent,
-) -> IndexerResult<()> {
+) -> IndexerResult<ProcessResult> {
     let mut tx = db_pool.begin().await?;
 
     // 1. Store raw event (idempotent via UNIQUE constraint)
     if !db::insert_blockchain_event(&mut tx, db::NewBlockchainEvent::from(raw)).await? {
         // Duplicate — already processed, nothing to do
-        return Ok(());
+        return Ok(ProcessResult::Processed);
     }
 
     // 2. Dispatch to event handler via registry.
@@ -77,6 +100,11 @@ pub async fn process_event(
         block_height: raw.block_height,
         caller: &raw.caller,
         contract_type: raw.contract_type,
+        block_timestamp: raw.block_timestamp,
+        transform_idx: raw.transform_idx,
+        known_contract_hashes: known_hashes,
+        api_from_type: raw.api_from_type,
+        api_to_type: raw.api_to_type,
     };
 
     match registry
@@ -87,16 +115,33 @@ pub async fn process_event(
             // Event processed successfully
         }
         Err(IndexerError::UnknownEvent { .. }) => {
-            // Unknown event — store raw data only, don't fail
+            // Unknown event - store raw data only, don't fail
             tracing::warn!(
                 contract = ?raw.contract_type,
                 event = %raw.event_name,
                 deploy = %raw.deploy_hash,
-                "Unknown event — stored raw data in blockchain_events"
+                "Unknown event - stored raw data in blockchain_events"
             );
         }
+        Err(IndexerError::DeferredEvent(reason)) => {
+            // Event deferred to backfill - roll back so nothing is persisted.
+            // Backfill runs once at startup; events deferred after backfill
+            // completes will not be re-processed until the next indexer restart.
+            //
+            // xxx: implement a deferred-event retry queue or periodic backfill
+            // re-runs so that deferred events are picked up within a bounded
+            // window (see backfill/ico.rs doc comment for details).
+            tracing::warn!(
+                deploy = %raw.deploy_hash,
+                event = %raw.event_name,
+                %reason,
+                "Event deferred - rolling back transaction"
+            );
+            tx.rollback().await?;
+            return Ok(ProcessResult::Deferred);
+        }
         Err(e) => {
-            // Other errors — rollback transaction
+            // Other errors - rollback transaction
             return Err(e);
         }
     }
@@ -107,6 +152,7 @@ pub async fn process_event(
         &raw.deploy_hash,
         &raw.event_name,
         &raw.contract_hash,
+        raw.transform_idx,
     )
     .await?;
 
@@ -119,5 +165,5 @@ pub async fn process_event(
         "Event processed"
     );
 
-    Ok(())
+    Ok(ProcessResult::Processed)
 }

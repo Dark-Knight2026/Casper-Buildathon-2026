@@ -4,15 +4,13 @@ use core::time::Duration;
 
 use reqwest::Client;
 use secrecy::ExposeSecret;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
-use sqlx::PgPool;
 
-use super::db;
+use super::{BackfillContext, db};
 use crate::{
     config::{ContractType, IndexerConfig},
     error::{ApiErrorResponse, IndexerError, IndexerResult},
-    events::EventRegistry,
     processor::{self, RawEvent},
 };
 
@@ -29,8 +27,8 @@ pub struct FtTokenActionPage {
 }
 
 /// Type of fungible-token action as returned by CSPR.cloud `/ft-token-action-types`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
-#[serde(from = "u8")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(from = "u8", into = "u8")]
 pub enum FtActionType {
     /// New tokens created (no sender).
     Mint,
@@ -38,7 +36,7 @@ pub enum FtActionType {
     Transfer,
     /// Allowance approval (owner authorizes spender).
     Approve,
-    /// Any action type not explicitly handled (e.g. Burn = 4).
+    /// Any action type not explicitly handled (e.g. `Burn = 4`, `TransferFrom = 5`).
     Unknown(u8),
 }
 
@@ -50,6 +48,18 @@ impl From<u8> for FtActionType {
             2 => Self::Transfer,
             3 => Self::Approve,
             other => Self::Unknown(other),
+        }
+    }
+}
+
+impl From<FtActionType> for u8 {
+    #[inline]
+    fn from(value: FtActionType) -> Self {
+        match value {
+            FtActionType::Mint => 1,
+            FtActionType::Transfer => 2,
+            FtActionType::Approve => 3,
+            FtActionType::Unknown(v) => v,
         }
     }
 }
@@ -67,9 +77,21 @@ pub struct FtTokenAction {
     pub to_hash: Option<String>,
     /// Token amount as a decimal string.
     pub amount: String,
-    /// Action type — deserialized from the numeric `ft_action_type_id` JSON field.
+    /// Action type - deserialized from the numeric `ft_action_type_id` JSON field.
     #[serde(rename = "ft_action_type_id")]
     pub ft_action_type: FtActionType,
+    /// Address type of the sender (0=Account, 1=Contract).
+    #[serde(default)]
+    pub from_type: Option<u8>,
+    /// Address type of the recipient (0=Account, 1=Contract).
+    #[serde(default)]
+    pub to_type: Option<u8>,
+    /// Block timestamp as ISO-8601 string (e.g. "2026-03-13T08:28:08Z").
+    #[serde(default)]
+    pub timestamp: Option<String>,
+    /// Transform index within the deploy execution.
+    #[serde(default)]
+    pub transform_idx: Option<i32>,
 }
 
 impl FtTokenAction {
@@ -91,6 +113,10 @@ impl FtTokenAction {
             to_hash: to_hash.map(Into::into),
             amount: amount.into(),
             ft_action_type,
+            from_type: None,
+            to_type: None,
+            timestamp: None,
+            transform_idx: None,
         }
     }
 }
@@ -149,10 +175,7 @@ pub async fn fetch_ft_token_actions_page(
 /// Returns [`IndexerError`] on HTTP, API, or database failures.
 #[inline]
 pub async fn backfill_cep18(
-    client: &Client,
-    config: &IndexerConfig,
-    db_pool: &PgPool,
-    registry: &EventRegistry,
+    ctx: &BackfillContext<'_>,
     contract_type: ContractType,
     contract_hash: &str,
     start_block: u64,
@@ -161,7 +184,7 @@ pub async fn backfill_cep18(
     let mut total_events = 0u64;
 
     // Resume from the last saved block instead of re-processing the whole history.
-    let cursor_block = db::get_cursor(db_pool, contract_hash).await?;
+    let cursor_block = db::get_cursor(ctx.db_pool, contract_hash).await?;
     let effective_start = cursor_block
         .map_or(0, |b| b.cast_unsigned().saturating_add(1))
         .max(start_block);
@@ -172,7 +195,8 @@ pub async fn backfill_cep18(
     loop {
         tracing::debug!(%contract_hash, page, "Fetching ft-token-actions page");
 
-        let page_data = fetch_ft_token_actions_page(client, config, contract_hash, page).await?;
+        let page_data =
+            fetch_ft_token_actions_page(ctx.client, ctx.config, contract_hash, page).await?;
         let page_count = page_data.page_count;
         let mut page_max_block: Option<u64> = None;
 
@@ -185,7 +209,13 @@ pub async fn backfill_cep18(
                 continue;
             };
 
-            // caller is not available in /ft-token-actions — same as streaming
+            // caller is not available in /ft-token-actions - same as streaming.
+            let block_timestamp = action
+                .timestamp
+                .as_deref()
+                .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+                .map(|dt| dt.with_timezone(&chrono::Utc));
+
             let raw = RawEvent {
                 contract_hash: contract_hash.to_owned(),
                 deploy_hash: action.deploy_hash.clone(),
@@ -194,12 +224,17 @@ pub async fn backfill_cep18(
                 contract_type,
                 event_name: event_name.to_owned(),
                 event_data,
+                block_timestamp,
+                transform_idx: action.transform_idx,
+                api_from_type: action.from_type,
+                api_to_type: action.to_type,
             };
 
-            match processor::process_event(db_pool, registry, &raw).await {
-                Ok(()) => {
+            match processor::process_event(ctx.db_pool, ctx.registry, ctx.known_hashes, &raw).await
+            {
+                Ok(_) => {
                     total_events += 1;
-                    // Advance cursor only on success — a transient DB error must
+                    // Advance cursor only on success - a transient DB error must
                     // not silently skip this event on the next restart.
                     page_max_block = Some(page_max_block.unwrap_or(0).max(action.block_height));
                 }
@@ -216,9 +251,9 @@ pub async fn backfill_cep18(
 
         // Persist progress so restarts resume from here instead of block 0.
         if let Some(max_block) = page_max_block {
-            db::update_cursor(db_pool, contract_hash, max_block.cast_signed()).await?;
+            db::update_cursor(ctx.db_pool, contract_hash, max_block.cast_signed()).await?;
         }
-        tokio::time::sleep(Duration::from_millis(config.backfill_rate_limit_ms)).await;
+        tokio::time::sleep(Duration::from_millis(ctx.config.backfill_rate_limit_ms)).await;
 
         if page >= page_count {
             break;

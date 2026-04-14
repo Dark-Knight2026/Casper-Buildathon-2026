@@ -6,10 +6,13 @@
 
 pub mod db;
 
-use core::fmt::Write as _;
-use core::time::Duration;
-use std::collections::HashMap;
+use core::{fmt::Write as _, time::Duration};
+use std::{
+    collections::{HashMap, HashSet},
+    hash::RandomState,
+};
 
+use chrono::DateTime;
 use futures_util::StreamExt;
 use secrecy::ExposeSecret;
 use serde::Deserialize;
@@ -24,25 +27,24 @@ use crate::{
     config::{ContractRegistry, ContractType, IndexerConfig},
     error::{IndexerError, IndexerResult},
     events::EventRegistry,
-    processor,
+    processor::{self, ProcessResult, RawEvent},
 };
-
 use db::StreamType;
 
-// -----------------------------------------------------------------------------
-// CSPR.cloud WebSocket message types
-// -----------------------------------------------------------------------------
+// CSPR.cloud WebSocket message types ------------------------------------------
 
 /// Top-level message received from the CSPR.cloud Streaming API.
 ///
 /// Every contract-level event arrives as a JSON object of this shape.
-/// Unknown fields (e.g. `timestamp`) are ignored by serde automatically.
 #[derive(Debug, Deserialize)]
 pub struct WssMessage {
     /// CES event payload.
     pub data: WssData,
     /// Blockchain context for the event (deploy hash, block height, etc.).
     pub extra: WssExtra,
+    /// ISO 8601 block timestamp (e.g. `"2025-01-01T12:00:00.000Z"`).
+    #[serde(default)]
+    pub timestamp: Option<String>,
 }
 
 /// Payload of a single CES event inside a [`WssMessage`].
@@ -69,11 +71,12 @@ pub struct WssExtra {
     pub event_id: i64,
     /// Block height at which the event was included.
     pub block_height: u64,
+    /// Transform index within the deploy.
+    #[serde(default)]
+    pub transform_id: Option<i64>,
 }
 
-// -----------------------------------------------------------------------------
-// Contract registry helpers
-// -----------------------------------------------------------------------------
+// Contract registry helpers ---------------------------------------------------
 
 /// Build a lookup map from contract package hash to [`ContractType`].
 ///
@@ -101,9 +104,7 @@ pub fn build_hashes_csv(registry: &ContractRegistry) -> String {
         .join(",")
 }
 
-// -----------------------------------------------------------------------------
-// Connection
-// -----------------------------------------------------------------------------
+// Connection ------------------------------------------------------------------
 
 /// Establish an authenticated WebSocket connection to the CSPR.cloud
 /// Streaming API, subscribed to all configured contracts.
@@ -184,8 +185,9 @@ pub(crate) async fn connect_and_stream(
         tracing::info!(last_event_id = id, "Resuming streaming from last cursor");
     }
 
-    // Build the hash (contract type lookup map) once for this connection lifetime.
+    // Build lookup maps once for this connection lifetime.
     let contract_map = build_contract_map(&config.contracts);
+    let known_hashes = config.contracts.contract_hash_set();
     let ws_stream = connect(config, last_event_id).await?;
 
     // Split into independent read/write halves.
@@ -196,7 +198,7 @@ pub(crate) async fn connect_and_stream(
     while let Some(msg) = read.next().await {
         match msg? {
             Message::Text(text) => {
-                handle_text_message(&text, &contract_map, db_pool, registry).await?;
+                handle_text_message(&text, &contract_map, &known_hashes, db_pool, registry).await?;
             }
             Message::Close(frame) => {
                 tracing::info!(?frame, "WebSocket connection closed by server");
@@ -225,15 +227,13 @@ pub(crate) async fn connect_and_stream(
 ///
 /// Returns [`IndexerError`] on JSON parse, processor, or database failures.
 #[inline]
-pub async fn handle_text_message<S>(
+pub async fn handle_text_message(
     text: &str,
-    contract_map: &HashMap<String, ContractType, S>,
+    contract_map: &HashMap<String, ContractType, RandomState>,
+    known_hashes: &HashSet<String, RandomState>,
     db_pool: &PgPool,
     registry: &EventRegistry,
-) -> IndexerResult<()>
-where
-    S: core::hash::BuildHasher,
-{
+) -> IndexerResult<()> {
     tracing::debug!(%text, "WSS message received");
 
     // CSPR.cloud sends periodic non-JSON keepalive text frames (e.g. empty strings).
@@ -252,7 +252,30 @@ where
     };
     // Not available in streaming events; backfill fills this via REST.
     let caller = String::new();
-    let raw = processor::RawEvent {
+
+    let block_timestamp = msg
+        .timestamp
+        .as_deref()
+        .and_then(|ts| DateTime::parse_from_rfc3339(ts).ok().map(|dt| dt.to_utc()));
+    // Casper's transform index is a `u32` in the node spec, so any value
+    // that does not fit `i32` is either a protocol change or corruption.
+    // Surface it as an explicit error: silently truncating to `None` would
+    // route overflowed events to the `COALESCE(transform_idx, -1)` sentinel
+    // slot, colliding with backfill rows and corrupting deduplication.
+    let transform_idx = msg
+        .extra
+        .transform_id
+        .map(|id| {
+            i32::try_from(id).map_err(|_| {
+                IndexerError::Parse(format!(
+                    "transform_id {id} exceeds i32::MAX for deploy {}",
+                    msg.extra.deploy_hash
+                ))
+            })
+        })
+        .transpose()?;
+
+    let raw = RawEvent {
         contract_hash: msg.data.contract_package_hash,
         deploy_hash: msg.extra.deploy_hash,
         block_height: msg.extra.block_height,
@@ -260,10 +283,17 @@ where
         contract_type,
         event_name: msg.data.name,
         event_data: msg.data.data,
+        block_timestamp,
+        transform_idx,
+        api_from_type: None,
+        api_to_type: None,
     };
 
-    processor::process_event(db_pool, registry, &raw).await?;
-    db::update_cursor(db_pool, StreamType::Streaming, msg.extra.event_id).await?;
+    let result = processor::process_event(db_pool, registry, known_hashes, &raw).await?;
+
+    if result == ProcessResult::Processed {
+        db::update_cursor(db_pool, StreamType::Streaming, msg.extra.event_id).await?;
+    }
 
     Ok(())
 }

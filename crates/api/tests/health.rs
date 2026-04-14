@@ -5,7 +5,7 @@ mod common;
 use axum::http::StatusCode;
 use sqlx::PgPool;
 
-#[sqlx::test(migrations = "../../supabase/migrations")]
+#[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn health_check_returns_status(pool: PgPool) {
     let env = common::setup_test_server(pool, true).await;
 

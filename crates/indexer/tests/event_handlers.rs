@@ -1,28 +1,34 @@
-//! Integration tests for CEP-18 event handlers.
+//! Integration tests for event handlers.
 //!
 //! Tests the business logic of individual event handlers by processing events
 //! through `processor::process_event` and asserting on the resulting DB state.
 //!
 //! Covered handlers:
 //!
-//! - **`Transfer`** — writes `blockchain_transactions` (`token_transfer`) and
+//! - **`Transfer`** - writes `blockchain_transactions` (`token_transfer`) and
 //!   updates two `token_holdings` rows (Decrease sender, Increase recipient).
 //!   Tested for all three CEP-18 token types (BIG, USDC, USDT).
-//! - **`SetAllowance`** — writes `blockchain_transactions` (`token_allowance`)
+//! - **`SetAllowance`** - writes `blockchain_transactions` (`token_allowance`)
 //!   only; `token_holdings` must remain unchanged.
-//! - **`TokensPurchased`** — unknown `currency` discriminant (> 2) must be
+//! - **`TokensPurchased`** - unknown `currency` discriminant (> 2) must be
 //!   stored as `"UNKNOWN"` in `ico_purchases` and `blockchain_transactions`.
+//!   Deferred-event flow: streaming (empty caller) -> rollback, then backfill
+//!   (real caller) -> persists all rows.
+//! - **`IcoScheduleAdded`** - writes `ico_schedules` row with schedule ID,
+//!   price, and sale amount; UPSERT updates existing rows.
 
 mod common;
+
+use std::collections::HashSet;
 
 use serde_json::json;
 use sqlx::PgPool;
 
-use common::{MIGRATOR, PURCHASE_DEPLOY_HASH, TRANSFER_DEPLOY_HASH};
+use common::{FakeAddress, MIGRATOR, PURCHASE_DEPLOY_HASH, TRANSFER_DEPLOY_HASH, payloads};
 use indexer::{
-    config::ContractType,
-    events::EventRegistry,
-    processor::{self, RawEvent},
+    config::{ContractEntry, ContractRegistry, ContractType},
+    events::{self, EventRegistry},
+    processor::{self, ProcessResult, RawEvent},
 };
 
 // Transfer handler — blockchain_transactions
@@ -37,6 +43,7 @@ async fn transfer_writes_blockchain_transaction_row(pool: PgPool) {
     processor::process_event(
         &pool,
         &EventRegistry::new(),
+        &HashSet::new(),
         &RawEvent {
             contract_hash: "big_hash".to_owned(),
             deploy_hash: TRANSFER_DEPLOY_HASH.to_owned(),
@@ -44,7 +51,11 @@ async fn transfer_writes_blockchain_transaction_row(pool: PgPool) {
             caller: String::new(),
             contract_type: ContractType::Big,
             event_name: "Transfer".to_owned(),
-            event_data: json!({ "sender": "alice", "recipient": "bob", "amount": "500" }),
+            event_data: payloads::transfer_event_data("500"),
+            block_timestamp: None,
+            transform_idx: None,
+            api_from_type: None,
+            api_to_type: None,
         },
     )
     .await
@@ -63,7 +74,7 @@ async fn transfer_writes_blockchain_transaction_row(pool: PgPool) {
     .unwrap();
 
     assert_eq!(row.transaction_type, "token_transfer");
-    assert_eq!(row.from_address, "alice");
+    assert_eq!(row.from_address, FakeAddress::Alice.as_str());
     assert_eq!(row.amount.as_deref(), Some("500"));
 }
 
@@ -78,6 +89,7 @@ async fn transfer_increases_recipient_and_clamps_unknown_sender(pool: PgPool) {
     processor::process_event(
         &pool,
         &EventRegistry::new(),
+        &HashSet::new(),
         &RawEvent {
             contract_hash: "big_hash".to_owned(),
             deploy_hash: TRANSFER_DEPLOY_HASH.to_owned(),
@@ -85,7 +97,11 @@ async fn transfer_increases_recipient_and_clamps_unknown_sender(pool: PgPool) {
             caller: String::new(),
             contract_type: ContractType::Big,
             event_name: "Transfer".to_owned(),
-            event_data: json!({ "sender": "alice", "recipient": "bob", "amount": "300" }),
+            event_data: payloads::transfer_event_data("300"),
+            block_timestamp: None,
+            transform_idx: None,
+            api_from_type: None,
+            api_to_type: None,
         },
     )
     .await
@@ -94,8 +110,9 @@ async fn transfer_increases_recipient_and_clamps_unknown_sender(pool: PgPool) {
     let bob: Option<String> = sqlx::query_scalar!(
         r"
             SELECT balance FROM token_holdings
-            WHERE user_address = 'bob' AND token_type = 'BIG'
-        "
+            WHERE user_address = $1 AND token_type = 'BIG'
+        ",
+        FakeAddress::Bob.as_str(),
     )
     .fetch_optional(&pool)
     .await
@@ -109,8 +126,9 @@ async fn transfer_increases_recipient_and_clamps_unknown_sender(pool: PgPool) {
     let alice: Option<String> = sqlx::query_scalar!(
         r"
             SELECT balance FROM token_holdings
-            WHERE user_address = 'alice' AND token_type = 'BIG'
-        "
+            WHERE user_address = $1 AND token_type = 'BIG'
+        ",
+        FakeAddress::Alice.as_str(),
     )
     .fetch_optional(&pool)
     .await
@@ -131,8 +149,9 @@ async fn transfer_decreases_existing_sender_balance(pool: PgPool) {
     sqlx::query!(
         r"
             INSERT INTO token_holdings (user_address, token_type, balance, last_updated_at)
-            VALUES ('alice', 'BIG', '1000', NOW())
-        "
+            VALUES ($1, 'BIG', '1000', NOW())
+        ",
+        FakeAddress::Alice.as_str(),
     )
     .execute(&pool)
     .await
@@ -141,6 +160,7 @@ async fn transfer_decreases_existing_sender_balance(pool: PgPool) {
     processor::process_event(
         &pool,
         &EventRegistry::new(),
+        &HashSet::new(),
         &RawEvent {
             contract_hash: "big_hash".to_owned(),
             deploy_hash: TRANSFER_DEPLOY_HASH.to_owned(),
@@ -148,7 +168,11 @@ async fn transfer_decreases_existing_sender_balance(pool: PgPool) {
             caller: String::new(),
             contract_type: ContractType::Big,
             event_name: "Transfer".to_owned(),
-            event_data: json!({ "sender": "alice", "recipient": "bob", "amount": "400" }),
+            event_data: payloads::transfer_event_data("400"),
+            block_timestamp: None,
+            transform_idx: None,
+            api_from_type: None,
+            api_to_type: None,
         },
     )
     .await
@@ -157,8 +181,9 @@ async fn transfer_decreases_existing_sender_balance(pool: PgPool) {
     let alice: Option<String> = sqlx::query_scalar!(
         r"
             SELECT balance FROM token_holdings
-            WHERE user_address = 'alice' AND token_type = 'BIG'
-        "
+            WHERE user_address = $1 AND token_type = 'BIG'
+        ",
+        FakeAddress::Alice.as_str(),
     )
     .fetch_optional(&pool)
     .await
@@ -182,6 +207,7 @@ async fn set_allowance_writes_blockchain_transaction_row(pool: PgPool) {
     processor::process_event(
         &pool,
         &EventRegistry::new(),
+        &HashSet::new(),
         &RawEvent {
             contract_hash: "big_hash".to_owned(),
             deploy_hash: TRANSFER_DEPLOY_HASH.to_owned(),
@@ -189,7 +215,15 @@ async fn set_allowance_writes_blockchain_transaction_row(pool: PgPool) {
             caller: String::new(),
             contract_type: ContractType::Big,
             event_name: "SetAllowance".to_owned(),
-            event_data: json!({ "owner": "alice", "spender": "contract_x", "amount": "1000" }),
+            event_data: json!({
+                "owner": FakeAddress::Alice.as_str(),
+                "spender": FakeAddress::ContractX.as_str(),
+                "amount": "1000"
+            }),
+            block_timestamp: None,
+            transform_idx: None,
+            api_from_type: None,
+            api_to_type: None,
         },
     )
     .await
@@ -208,7 +242,7 @@ async fn set_allowance_writes_blockchain_transaction_row(pool: PgPool) {
     .unwrap();
 
     assert_eq!(row.transaction_type, "token_allowance");
-    assert_eq!(row.from_address, "alice");
+    assert_eq!(row.from_address, FakeAddress::Alice.as_str());
     assert_eq!(row.amount.as_deref(), Some("1000"));
 }
 
@@ -224,11 +258,12 @@ async fn tokens_purchased_writes_ico_purchase_and_blockchain_transaction(pool: P
     processor::process_event(
         &pool,
         &EventRegistry::new(),
+        &HashSet::new(),
         &RawEvent {
             contract_hash: "ico_hash".to_owned(),
             deploy_hash: PURCHASE_DEPLOY_HASH.to_owned(),
             block_height: 100,
-            caller: "buyer".to_owned(),
+            caller: FakeAddress::Buyer.to_string(),
             contract_type: ContractType::Ico,
             event_name: "TokensPurchased".to_owned(),
             event_data: json!({
@@ -237,6 +272,10 @@ async fn tokens_purchased_writes_ico_purchase_and_blockchain_transaction(pool: P
                 "cost": "500000000",
                 "timestamp": 1_700_000_000_u64
             }),
+            block_timestamp: None,
+            transform_idx: None,
+            api_from_type: None,
+            api_to_type: None,
         },
     )
     .await
@@ -254,7 +293,7 @@ async fn tokens_purchased_writes_ico_purchase_and_blockchain_transaction(pool: P
     .await
     .unwrap();
 
-    assert_eq!(purchase.buyer_address, "buyer");
+    assert_eq!(purchase.buyer_address, FakeAddress::Buyer.as_str());
     assert_eq!(purchase.amount, "1000000000");
     assert_eq!(purchase.currency, "CSPR");
 
@@ -271,7 +310,7 @@ async fn tokens_purchased_writes_ico_purchase_and_blockchain_transaction(pool: P
     .unwrap();
 
     assert_eq!(tx_row.transaction_type, "token_purchase");
-    assert_eq!(tx_row.from_address, "buyer");
+    assert_eq!(tx_row.from_address, FakeAddress::Buyer.as_str());
     assert_eq!(tx_row.amount.as_deref(), Some("500000000"));
     assert_eq!(tx_row.currency.as_deref(), Some("CSPR"));
 }
@@ -284,11 +323,12 @@ async fn tokens_purchased_increases_buyer_big_balance(pool: PgPool) {
     processor::process_event(
         &pool,
         &EventRegistry::new(),
+        &HashSet::new(),
         &RawEvent {
             contract_hash: "ico_hash".to_owned(),
             deploy_hash: PURCHASE_DEPLOY_HASH.to_owned(),
             block_height: 100,
-            caller: "buyer".to_owned(),
+            caller: FakeAddress::Buyer.to_string(),
             contract_type: ContractType::Ico,
             event_name: "TokensPurchased".to_owned(),
             event_data: json!({
@@ -297,6 +337,10 @@ async fn tokens_purchased_increases_buyer_big_balance(pool: PgPool) {
                 "cost": "100",
                 "timestamp": 1_700_000_000_u64
             }),
+            block_timestamp: None,
+            transform_idx: None,
+            api_from_type: None,
+            api_to_type: None,
         },
     )
     .await
@@ -305,8 +349,9 @@ async fn tokens_purchased_increases_buyer_big_balance(pool: PgPool) {
     let balance: Option<String> = sqlx::query_scalar!(
         r"
             SELECT balance FROM token_holdings
-            WHERE user_address = 'buyer' AND token_type = 'BIG'
-        "
+            WHERE user_address = $1 AND token_type = 'BIG'
+        ",
+        FakeAddress::Buyer.as_str(),
     )
     .fetch_optional(&pool)
     .await
@@ -330,6 +375,7 @@ async fn transfer_usdc_updates_usdc_token_holdings(pool: PgPool) {
     processor::process_event(
         &pool,
         &EventRegistry::new(),
+        &HashSet::new(),
         &RawEvent {
             contract_hash: "usdc_hash".to_owned(),
             deploy_hash: TRANSFER_DEPLOY_HASH.to_owned(),
@@ -337,7 +383,11 @@ async fn transfer_usdc_updates_usdc_token_holdings(pool: PgPool) {
             caller: String::new(),
             contract_type: ContractType::Usdc,
             event_name: "Transfer".to_owned(),
-            event_data: json!({ "sender": "alice", "recipient": "bob", "amount": "250" }),
+            event_data: payloads::transfer_event_data("250"),
+            block_timestamp: None,
+            transform_idx: None,
+            api_from_type: None,
+            api_to_type: None,
         },
     )
     .await
@@ -346,8 +396,9 @@ async fn transfer_usdc_updates_usdc_token_holdings(pool: PgPool) {
     let bob: Option<String> = sqlx::query_scalar!(
         r"
             SELECT balance FROM token_holdings
-            WHERE user_address = 'bob' AND token_type = 'USDC'
-        "
+            WHERE user_address = $1 AND token_type = 'USDC'
+        ",
+        FakeAddress::Bob.as_str(),
     )
     .fetch_optional(&pool)
     .await
@@ -381,6 +432,7 @@ async fn transfer_usdt_updates_usdt_token_holdings(pool: PgPool) {
     processor::process_event(
         &pool,
         &EventRegistry::new(),
+        &HashSet::new(),
         &RawEvent {
             contract_hash: "usdt_hash".to_owned(),
             deploy_hash: TRANSFER_DEPLOY_HASH.to_owned(),
@@ -388,7 +440,11 @@ async fn transfer_usdt_updates_usdt_token_holdings(pool: PgPool) {
             caller: String::new(),
             contract_type: ContractType::Usdt,
             event_name: "Transfer".to_owned(),
-            event_data: json!({ "sender": "alice", "recipient": "bob", "amount": "350" }),
+            event_data: payloads::transfer_event_data("350"),
+            block_timestamp: None,
+            transform_idx: None,
+            api_from_type: None,
+            api_to_type: None,
         },
     )
     .await
@@ -397,8 +453,9 @@ async fn transfer_usdt_updates_usdt_token_holdings(pool: PgPool) {
     let bob: Option<String> = sqlx::query_scalar!(
         r"
             SELECT balance FROM token_holdings
-            WHERE user_address = 'bob' AND token_type = 'USDT'
-        "
+            WHERE user_address = $1 AND token_type = 'USDT'
+        ",
+        FakeAddress::Bob.as_str(),
     )
     .fetch_optional(&pool)
     .await
@@ -434,11 +491,12 @@ async fn tokens_purchased_unknown_currency_stored_as_unknown_label(pool: PgPool)
     processor::process_event(
         &pool,
         &EventRegistry::new(),
+        &HashSet::new(),
         &RawEvent {
             contract_hash: "ico_hash".to_owned(),
             deploy_hash: PURCHASE_DEPLOY_HASH.to_owned(),
             block_height: 100,
-            caller: "buyer".to_owned(),
+            caller: FakeAddress::Buyer.to_string(),
             contract_type: ContractType::Ico,
             event_name: "TokensPurchased".to_owned(),
             event_data: json!({
@@ -447,6 +505,10 @@ async fn tokens_purchased_unknown_currency_stored_as_unknown_label(pool: PgPool)
                 "cost": "200",
                 "timestamp": 1_700_000_000_u64
             }),
+            block_timestamp: None,
+            transform_idx: None,
+            api_from_type: None,
+            api_to_type: None,
         },
     )
     .await
@@ -492,6 +554,7 @@ async fn set_allowance_does_not_modify_token_holdings(pool: PgPool) {
     processor::process_event(
         &pool,
         &EventRegistry::new(),
+        &HashSet::new(),
         &RawEvent {
             contract_hash: "big_hash".to_owned(),
             deploy_hash: TRANSFER_DEPLOY_HASH.to_owned(),
@@ -499,7 +562,15 @@ async fn set_allowance_does_not_modify_token_holdings(pool: PgPool) {
             caller: String::new(),
             contract_type: ContractType::Big,
             event_name: "SetAllowance".to_owned(),
-            event_data: json!({ "owner": "alice", "spender": "contract_x", "amount": "1000" }),
+            event_data: json!({
+                "owner": FakeAddress::Alice.as_str(),
+                "spender": FakeAddress::ContractX.as_str(),
+                "amount": "1000"
+            }),
+            block_timestamp: None,
+            transform_idx: None,
+            api_from_type: None,
+            api_to_type: None,
         },
     )
     .await
@@ -514,5 +585,564 @@ async fn set_allowance_does_not_modify_token_holdings(pool: PgPool) {
     assert_eq!(
         holdings, 0,
         "SetAllowance must not write any token_holdings rows"
+    );
+}
+
+/// `IcoScheduleAdded` must write exactly one row to `ico_schedules` with the
+/// correct schedule ID, price, and sale amount.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn ico_schedule_added_writes_schedule_row(pool: PgPool) {
+    common::disable_rls(&pool).await;
+
+    let deploy_hash = "0000000000000000000000000000000000000000000000000000000000009999";
+
+    processor::process_event(
+        &pool,
+        &EventRegistry::new(),
+        &HashSet::new(),
+        &RawEvent {
+            contract_hash: "ico_hash".to_owned(),
+            deploy_hash: deploy_hash.to_owned(),
+            block_height: 500,
+            caller: String::new(),
+            contract_type: ContractType::Ico,
+            event_name: "ICOScheduleAdded".to_owned(),
+            event_data: json!({
+                "id": "schedule-1",
+                "start_timestamp": 1_700_000_000_u64,
+                "end_timestamp": 1_710_000_000_u64,
+                "sale_amount": "500000000000000000000000000",
+                "price": "500000"
+            }),
+            block_timestamp: None,
+            transform_idx: None,
+            api_from_type: None,
+            api_to_type: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let row = sqlx::query!(
+        r"
+            SELECT schedule_id, start_timestamp, end_timestamp, sale_amount, price, transaction_hash, block_height
+            FROM   ico_schedules
+            WHERE  schedule_id = 'schedule-1'
+        ",
+    )
+      .fetch_one(&pool)
+      .await
+      .unwrap();
+
+    assert_eq!(row.schedule_id, "schedule-1");
+    assert_eq!(row.start_timestamp, 1_700_000_000);
+    assert_eq!(row.end_timestamp, 1_710_000_000);
+    assert_eq!(row.sale_amount, "500000000000000000000000000");
+    assert_eq!(row.price, "500000");
+    assert_eq!(row.transaction_hash, deploy_hash);
+    assert_eq!(row.block_height, 500);
+
+    // Must also write a blockchain_transactions audit row.
+    let tx_row = sqlx::query!(
+        r"
+            SELECT transaction_type, from_address
+            FROM   blockchain_transactions
+            WHERE  transaction_hash = $1
+        ",
+        deploy_hash,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(tx_row.transaction_type, "ico_schedule_added");
+    assert_eq!(tx_row.from_address, "ico_hash");
+}
+
+/// Re-processing the same `IcoScheduleAdded` event must update the existing
+/// row (UPSERT), not fail or duplicate.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn ico_schedule_added_upsert_updates_existing_row(pool: PgPool) {
+    common::disable_rls(&pool).await;
+
+    let deploy_hash_1 = "0000000000000000000000000000000000000000000000000000000000009901";
+    let deploy_hash_2 = "0000000000000000000000000000000000000000000000000000000000009902";
+
+    // First event
+    processor::process_event(
+        &pool,
+        &EventRegistry::new(),
+        &HashSet::new(),
+        &RawEvent {
+            contract_hash: "ico_hash".to_owned(),
+            deploy_hash: deploy_hash_1.to_owned(),
+            block_height: 100,
+            caller: String::new(),
+            contract_type: ContractType::Ico,
+            event_name: "ICOScheduleAdded".to_owned(),
+            event_data: json!({
+                "id": "schedule-upsert",
+                "start_timestamp": 1_000_000_u64,
+                "end_timestamp": 2_000_000_u64,
+                "sale_amount": "100",
+                "price": "100000"
+            }),
+            block_timestamp: None,
+            transform_idx: None,
+            api_from_type: None,
+            api_to_type: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    // Second event with same schedule ID but updated price
+    processor::process_event(
+        &pool,
+        &EventRegistry::new(),
+        &HashSet::new(),
+        &RawEvent {
+            contract_hash: "ico_hash".to_owned(),
+            deploy_hash: deploy_hash_2.to_owned(),
+            block_height: 200,
+            caller: String::new(),
+            contract_type: ContractType::Ico,
+            event_name: "ICOScheduleAdded".to_owned(),
+            event_data: json!({
+                "id": "schedule-upsert",
+                "start_timestamp": 1_000_000_u64,
+                "end_timestamp": 2_000_000_u64,
+                "sale_amount": "200",
+                "price": "750000"
+            }),
+            block_timestamp: None,
+            transform_idx: None,
+            api_from_type: None,
+            api_to_type: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let count: i64 = sqlx::query_scalar!(
+        r"
+            SELECT COUNT(*) FROM ico_schedules
+            WHERE schedule_id = 'schedule-upsert'
+        "
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap()
+    .unwrap_or(0);
+
+    assert_eq!(count, 1, "UPSERT must not create duplicate rows");
+
+    let row = sqlx::query!(
+        r"
+            SELECT price, sale_amount, block_height FROM ico_schedules
+            WHERE schedule_id = 'schedule-upsert'
+        "
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(row.price, "750000", "price must be updated by UPSERT");
+    assert_eq!(
+        row.sale_amount, "200",
+        "sale_amount must be updated by UPSERT"
+    );
+    assert_eq!(
+        row.block_height, 200,
+        "block_height must be updated by UPSERT"
+    );
+}
+
+// TokensPurchased handler — streaming without caller
+
+/// When `TokensPurchased` arrives via streaming with an empty caller, the
+/// processor must roll back the transaction so that nothing is persisted.
+/// Backfill will later re-process the event with the full caller address.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn tokens_purchased_without_caller_defers_to_backfill(pool: PgPool) {
+    common::disable_rls(&pool).await;
+
+    let deploy_hash = "0000000000000000000000000000000000000000000000000000000000007777";
+
+    // Empty caller simulates a streaming event.
+    let result = processor::process_event(
+        &pool,
+        &EventRegistry::new(),
+        &HashSet::new(),
+        &RawEvent {
+            contract_hash: "ico_hash".to_owned(),
+            deploy_hash: deploy_hash.to_owned(),
+            block_height: 100,
+            caller: String::new(),
+            contract_type: ContractType::Ico,
+            event_name: "TokensPurchased".to_owned(),
+            event_data: json!({
+                "amount": "1000",
+                "currency": 0,
+                "cost": "500",
+                "timestamp": 1_700_000_000_u64
+            }),
+            block_timestamp: None,
+            transform_idx: None,
+            api_from_type: None,
+            api_to_type: None,
+        },
+    )
+    .await;
+
+    // Must succeed and report Deferred (no caller in streaming mode).
+    assert_eq!(result.unwrap(), ProcessResult::Deferred);
+
+    // Nothing should be persisted - transaction was rolled back.
+    let event_count: i64 = sqlx::query_scalar!(
+        r"SELECT COUNT(*) FROM blockchain_events WHERE transaction_hash = $1",
+        deploy_hash,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap()
+    .unwrap_or(0);
+    assert_eq!(
+        event_count, 0,
+        "deferred event must not be stored in blockchain_events"
+    );
+
+    let purchase_count: i64 = sqlx::query_scalar!(
+        r"SELECT COUNT(*) FROM ico_purchases WHERE transaction_hash = $1",
+        deploy_hash,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap()
+    .unwrap_or(0);
+    assert_eq!(
+        purchase_count, 0,
+        "deferred event must not create ico_purchases row"
+    );
+
+    let tx_count: i64 = sqlx::query_scalar!(
+        r"SELECT COUNT(*) FROM blockchain_transactions WHERE transaction_hash = $1",
+        deploy_hash,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap()
+    .unwrap_or(0);
+    assert_eq!(
+        tx_count, 0,
+        "deferred event must not create blockchain_transactions row"
+    );
+}
+
+/// End-to-end test: streaming event defers (empty caller), then backfill
+/// re-processes the same deploy with a real caller and persists all rows.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn deferred_event_then_backfill_persists_data(pool: PgPool) {
+    common::disable_rls(&pool).await;
+
+    let deploy_hash = "0000000000000000000000000000000000000000000000000000000000008888";
+
+    // Step 1: streaming event with empty caller -> deferred, nothing persisted.
+    let result = processor::process_event(
+        &pool,
+        &EventRegistry::new(),
+        &HashSet::new(),
+        &RawEvent {
+            contract_hash: "ico_hash".to_owned(),
+            deploy_hash: deploy_hash.to_owned(),
+            block_height: 200,
+            caller: String::new(),
+            contract_type: ContractType::Ico,
+            event_name: "TokensPurchased".to_owned(),
+            event_data: json!({
+                "amount": "5000",
+                "currency": 0,
+                "cost": "2500",
+                "timestamp": 1_700_000_000_u64
+            }),
+            block_timestamp: None,
+            transform_idx: None,
+            api_from_type: None,
+            api_to_type: None,
+        },
+    )
+    .await;
+    assert_eq!(result.unwrap(), ProcessResult::Deferred);
+
+    // Verify nothing persisted after deferral.
+    let count: i64 = sqlx::query_scalar!(
+        "SELECT COUNT(*) FROM ico_purchases WHERE transaction_hash = $1",
+        deploy_hash,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap()
+    .unwrap_or(0);
+    assert_eq!(count, 0, "deferred event must not persist ico_purchases");
+
+    // Step 2: backfill re-processes the same deploy with a real caller.
+    let result = processor::process_event(
+        &pool,
+        &EventRegistry::new(),
+        &HashSet::new(),
+        &RawEvent {
+            contract_hash: "ico_hash".to_owned(),
+            deploy_hash: deploy_hash.to_owned(),
+            block_height: 200,
+            caller: FakeAddress::Buyer.to_string(),
+            contract_type: ContractType::Ico,
+            event_name: "TokensPurchased".to_owned(),
+            event_data: json!({
+                "amount": "5000",
+                "currency": 0,
+                "cost": "2500",
+                "timestamp": 1_700_000_000_u64
+            }),
+            block_timestamp: None,
+            transform_idx: None,
+            api_from_type: None,
+            api_to_type: None,
+        },
+    )
+    .await;
+    result.unwrap();
+
+    // Verify rows persisted after backfill.
+    let purchase_count: i64 = sqlx::query_scalar!(
+        "SELECT COUNT(*) FROM ico_purchases WHERE transaction_hash = $1",
+        deploy_hash,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap()
+    .unwrap_or(0);
+    assert_eq!(purchase_count, 1, "backfill must persist ico_purchases row");
+
+    let tx_count: i64 = sqlx::query_scalar!(
+        "SELECT COUNT(*) FROM blockchain_transactions WHERE transaction_hash = $1",
+        deploy_hash,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap()
+    .unwrap_or(0);
+    assert_eq!(
+        tx_count, 1,
+        "backfill must persist blockchain_transactions row"
+    );
+
+    let holding_count: i64 = sqlx::query_scalar!(
+        r#"SELECT COUNT(*) as "count!" FROM token_holdings WHERE user_address = $1"#,
+        FakeAddress::Buyer.as_str(),
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        holding_count, 1,
+        "backfill must update token_holdings for the buyer"
+    );
+}
+
+/// A stale `IcoScheduleAdded` event (lower `block_height`) must NOT overwrite
+/// a newer schedule row. The `block_height` guard prevents out-of-order updates.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn ico_schedule_added_stale_event_does_not_overwrite(pool: PgPool) {
+    common::disable_rls(&pool).await;
+
+    let deploy_hash_new = "0000000000000000000000000000000000000000000000000000000000009903";
+    let deploy_hash_old = "0000000000000000000000000000000000000000000000000000000000009904";
+
+    // Newer event first (block_height=500)
+    processor::process_event(
+        &pool,
+        &EventRegistry::new(),
+        &HashSet::new(),
+        &RawEvent {
+            contract_hash: "ico_hash".to_owned(),
+            deploy_hash: deploy_hash_new.to_owned(),
+            block_height: 500,
+            caller: String::new(),
+            contract_type: ContractType::Ico,
+            event_name: "ICOScheduleAdded".to_owned(),
+            event_data: json!({
+                "id": "schedule-guard",
+                "start_timestamp": 1_000_000_u64,
+                "end_timestamp": 2_000_000_u64,
+                "sale_amount": "999",
+                "price": "750000"
+            }),
+            block_timestamp: None,
+            transform_idx: None,
+            api_from_type: None,
+            api_to_type: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    // Stale event arrives later (block_height=100) - must NOT overwrite
+    processor::process_event(
+        &pool,
+        &EventRegistry::new(),
+        &HashSet::new(),
+        &RawEvent {
+            contract_hash: "ico_hash".to_owned(),
+            deploy_hash: deploy_hash_old.to_owned(),
+            block_height: 100,
+            caller: String::new(),
+            contract_type: ContractType::Ico,
+            event_name: "ICOScheduleAdded".to_owned(),
+            event_data: json!({
+                "id": "schedule-guard",
+                "start_timestamp": 1_000_000_u64,
+                "end_timestamp": 2_000_000_u64,
+                "sale_amount": "50",
+                "price": "100000"
+            }),
+            block_timestamp: None,
+            transform_idx: None,
+            api_from_type: None,
+            api_to_type: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let row = sqlx::query!(
+        r"
+            SELECT price, sale_amount, block_height FROM ico_schedules
+            WHERE schedule_id = 'schedule-guard'
+        "
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(
+        row.price, "750000",
+        "stale event must not overwrite newer price"
+    );
+    assert_eq!(
+        row.sale_amount, "999",
+        "stale event must not overwrite newer sale_amount"
+    );
+    assert_eq!(
+        row.block_height, 500,
+        "stale event must not overwrite newer block_height"
+    );
+}
+
+// Contract registry — upsert_contract_registry
+
+/// Upserting contract registry must not deactivate contracts that belong to
+/// other environments / indexer instances on a shared database.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn upsert_contract_registry_preserves_foreign_contracts(pool: PgPool) {
+    common::disable_rls(&pool).await;
+    sqlx::query("ALTER TABLE contract_registry DISABLE ROW LEVEL SECURITY")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    // Seed a "foreign" contract not managed by this indexer instance.
+    sqlx::query(
+        r"INSERT INTO contract_registry (contract_type, contract_hash, is_active)
+          VALUES ('staking', 'foreign_staking_hash', TRUE)",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    // This indexer only manages ICO.
+    let registry = ContractRegistry {
+        ico: Some(ContractEntry::new("ico_hash_abc", 0)),
+        ..ContractRegistry::default()
+    };
+
+    events::db::upsert_contract_registry(&pool, &registry)
+        .await
+        .unwrap();
+
+    // Foreign contract must still be active.
+    let foreign_active: bool = sqlx::query_scalar(
+        "SELECT is_active FROM contract_registry WHERE contract_type = 'staking'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    assert!(
+        foreign_active,
+        "upsert must not deactivate contracts outside its own set"
+    );
+
+    // ICO contract must be active with the correct hash.
+    let ico_active: bool =
+        sqlx::query_scalar("SELECT is_active FROM contract_registry WHERE contract_type = 'ico'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(ico_active, "managed contract must be active after upsert");
+}
+
+// Deduplication - transform_idx NULL vs 0
+
+/// Events with `transform_idx = NULL` and `transform_idx = 0` must be treated
+/// as distinct rows. Casper transform index 0 is a real, commonly-occurring
+/// value; NULL means "unavailable" (e.g. streaming events).
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn null_and_zero_transform_idx_are_distinct_events(pool: PgPool) {
+    common::disable_rls(&pool).await;
+
+    let deploy = "a".repeat(64);
+    let contract = "c".repeat(64);
+    let event_data = serde_json::json!({});
+
+    // Insert event with transform_idx = NULL (streaming, index unavailable).
+    sqlx::query(
+        r"INSERT INTO blockchain_events
+              (event_type, contract_address, transaction_hash, block_number, event_data, transform_idx)
+          VALUES ('Transfer', $1, $2, 100, $3, NULL)",
+    )
+    .bind(&contract)
+    .bind(&deploy)
+    .bind(&event_data)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    // Insert event with transform_idx = 0 (backfill, real index).
+    // This must NOT collide with the NULL row.
+    sqlx::query(
+        r"INSERT INTO blockchain_events
+              (event_type, contract_address, transaction_hash, block_number, event_data, transform_idx)
+          VALUES ('Transfer', $1, $2, 100, $3, 0)",
+    )
+    .bind(&contract)
+    .bind(&deploy)
+    .bind(&event_data)
+    .execute(&pool)
+    .await
+    .expect("transform_idx=0 must not collide with transform_idx=NULL");
+
+    let count: i64 = sqlx::query_scalar(
+        r"SELECT COUNT(*) FROM blockchain_events
+          WHERE transaction_hash = $1 AND event_type = 'Transfer' AND contract_address = $2",
+    )
+    .bind(&deploy)
+    .bind(&contract)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(
+        count, 2,
+        "NULL and 0 transform_idx must produce two distinct rows"
     );
 }
