@@ -1,4 +1,5 @@
 import { memo, useMemo, useState } from 'react';
+import { cn } from '@/lib/utils';
 import { Card } from '../shared/Card';
 import { TrendingUp, Clock, Percent, Wallet } from 'lucide-react';
 import { TransactionHistory } from '../shared/TransactionHistory';
@@ -196,9 +197,14 @@ export const OverviewTab = memo(function OverviewTab() {
               <p className="text-3xl font-bold text-[hsl(var(--ico-text-primary))]">
                 {formatUSD(stakingPortfolio?.estimatedUsdValue ?? 0)}
               </p>
-              <p className="text-sm text-[hsl(var(--ico-state-active))]">
-                {stakingPortfolio?.change24hPercent ?? 0}% (24h)
-              </p>
+              {(() => {
+                const change = stakingPortfolio?.change24hPercent ?? 0;
+                return (
+                  <p className={cn('text-sm', change >= 0 ? 'text-[hsl(var(--ico-state-active))]' : 'text-red-400')}>
+                    {change >= 0 ? '+' : ''}{change}% (24h)
+                  </p>
+                );
+              })()}
               <p className='text-[hsl(var(--ico-text-secondary))]'>Current USD value of your holdings</p>
             </div>
           </div>
