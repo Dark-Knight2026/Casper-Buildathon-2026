@@ -85,6 +85,8 @@ export function VestingProgressBlock({
     if (!nextUnlock) return 100;
 
     const vestingDuration = nextUnlock.vestingEndTimestamp - nextUnlock.purchaseTimestamp;
+    if (vestingDuration <= 0) return 100;
+
     const elapsed = now - nextUnlock.purchaseTimestamp;
     return Math.min(Math.max((elapsed / vestingDuration) * 100, 0), 100);
   };
