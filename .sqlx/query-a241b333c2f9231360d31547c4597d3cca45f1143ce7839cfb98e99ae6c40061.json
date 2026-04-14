@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT COALESCE(\n                SUM(total_amount::NUMERIC - claimed_amount::NUMERIC), 0\n            )::TEXT\n            FROM vesting_schedules\n            WHERE beneficiary = $1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "coalesce",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "a241b333c2f9231360d31547c4597d3cca45f1143ce7839cfb98e99ae6c40061"
+}

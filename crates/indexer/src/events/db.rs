@@ -9,6 +9,8 @@
 //! - **Transactions** — generic blockchain transaction log (`blockchain_transactions`).
 //! - **Token holdings** — current CEP-18 balances per user (`token_holdings`).
 //! - **ICO** — detailed ICO purchase log (`ico_purchases`).
+//! - **Vesting** — vesting schedule tracking (`vesting_schedules`).
+//! - **Staking** — staking positions, events and reward deposits.
 
 use std::collections::HashSet;
 
@@ -18,7 +20,7 @@ use sqlx::{PgPool, PgTransaction};
 
 use crate::{
     config::{ContractRegistry, ContractType},
-    error::IndexerResult,
+    error::{IndexerError, IndexerResult},
 };
 
 // Address type ----------------------------------------------------------------
@@ -117,7 +119,7 @@ impl HashType {
 ///
 /// # Errors
 ///
-/// Returns [`IndexerError::Database`](crate::error::IndexerError::Database)
+/// Returns [`IndexerError::Database`](IndexerError::Database)
 /// on SQL failures.
 #[inline]
 pub async fn upsert_contract_registry(
@@ -186,7 +188,7 @@ pub struct NewBlockchainEvent<'a> {
 ///
 /// # Errors
 ///
-/// Returns [`IndexerError::Database`](crate::error::IndexerError::Database)
+/// Returns [`IndexerError::Database`](IndexerError::Database)
 /// on SQL failures.
 #[inline]
 pub async fn insert_blockchain_event(
@@ -217,7 +219,7 @@ pub async fn insert_blockchain_event(
 ///
 /// # Errors
 ///
-/// Returns [`IndexerError::Database`](crate::error::IndexerError::Database)
+/// Returns [`IndexerError::Database`](IndexerError::Database)
 /// on SQL failures.
 #[inline]
 pub async fn mark_event_processed(
@@ -295,7 +297,7 @@ pub struct NewBlockchainTx<'a> {
 ///
 /// # Errors
 ///
-/// Returns [`IndexerError::Database`](crate::error::IndexerError::Database)
+/// Returns [`IndexerError::Database`](IndexerError::Database)
 /// on SQL failures.
 #[inline]
 pub async fn insert_blockchain_transaction(
@@ -358,7 +360,7 @@ pub enum BalanceUpdate<'a> {
 ///
 /// # Errors
 ///
-/// Returns [`IndexerError::Database`](crate::error::IndexerError::Database)
+/// Returns [`IndexerError::Database`](IndexerError::Database)
 /// if `amount` is not a valid decimal string or if the SQL fails.
 #[inline]
 pub async fn update_token_balance(
@@ -451,7 +453,7 @@ pub struct NewIcoPurchase<'a> {
 ///
 /// # Errors
 ///
-/// Returns [`IndexerError::Database`](crate::error::IndexerError::Database)
+/// Returns [`IndexerError::Database`](IndexerError::Database)
 /// on SQL failures.
 #[inline]
 pub async fn insert_ico_purchase(
@@ -508,7 +510,7 @@ pub struct NewIcoSchedule<'a> {
 ///
 /// # Errors
 ///
-/// Returns [`IndexerError::Database`](crate::error::IndexerError::Database)
+/// Returns [`IndexerError::Database`](IndexerError::Database)
 /// on SQL failures.
 #[inline]
 pub async fn upsert_ico_schedule(
@@ -550,4 +552,536 @@ pub async fn upsert_ico_schedule(
       })?;
 
     Ok(())
+}
+
+// Vesting schedules -----------------------------------------------------------
+
+/// Data required to insert a row into `vesting_schedules`.
+#[derive(Debug)]
+pub struct NewVestingSchedule<'a> {
+    /// Vesting schedule ID from the contract (U256 as string).
+    pub vesting_id: &'a str,
+    /// Account hash of the beneficiary (64 hex, no prefix).
+    pub beneficiary: &'a str,
+    /// Account hash of the whitelisted creator (e.g. ICO contract).
+    pub whitelisted_creator: &'a str,
+    /// Total number of tokens locked (U256 as string).
+    pub total_amount: &'a str,
+    /// Block timestamp when the vesting clock starts (epoch ms).
+    pub start_timestamp: i64,
+    /// Duration before any tokens become claimable (ms).
+    pub cliff_duration: i64,
+    /// Total duration from start to full vesting (ms).
+    pub vesting_duration: i64,
+    /// Deploy hash that emitted the event.
+    pub transaction_hash: &'a str,
+    /// Block height where the event was included.
+    pub block_height: i64,
+}
+
+/// Upsert a row into `vesting_schedules` for a `ScheduleCreated` event.
+///
+/// Uses `ON CONFLICT (vesting_id) DO UPDATE` so re-indexing is safe.
+///
+/// # Errors
+///
+/// Returns [`IndexerError::Database`](IndexerError::Database)
+/// on SQL failures.
+#[inline]
+pub async fn upsert_vesting_schedule(
+    tx: &mut PgTransaction<'_>,
+    row: &NewVestingSchedule<'_>,
+) -> IndexerResult<()> {
+    sqlx::query!(
+        r"
+            INSERT INTO vesting_schedules (vesting_id, beneficiary, whitelisted_creator, total_amount, start_timestamp, cliff_duration, vesting_duration, transaction_hash, block_height)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            ON CONFLICT (vesting_id) DO UPDATE SET
+                beneficiary         = EXCLUDED.beneficiary,
+                whitelisted_creator = EXCLUDED.whitelisted_creator,
+                total_amount        = EXCLUDED.total_amount,
+                start_timestamp     = EXCLUDED.start_timestamp,
+                cliff_duration      = EXCLUDED.cliff_duration,
+                vesting_duration    = EXCLUDED.vesting_duration,
+                transaction_hash    = EXCLUDED.transaction_hash,
+                block_height        = EXCLUDED.block_height,
+                updated_at          = NOW()
+            WHERE vesting_schedules.block_height <= EXCLUDED.block_height
+        ",
+        row.vesting_id,
+        row.beneficiary,
+        row.whitelisted_creator,
+        row.total_amount,
+        row.start_timestamp,
+        row.cliff_duration,
+        row.vesting_duration,
+        row.transaction_hash,
+        row.block_height,
+    )
+    .execute(tx.as_mut())
+    .await?;
+
+    Ok(())
+}
+
+/// Increase `claimed_amount` on a vesting schedule after a `TokensClaimed` event.
+///
+/// Uses `::NUMERIC` arithmetic so U256-scale values are handled correctly.
+/// Idempotency is guaranteed at the processor level: `insert_blockchain_event`
+/// deduplicates by `(transaction_hash, event_type, contract_address)` and
+/// short-circuits before the handler is called on replay.
+///
+/// # Errors
+///
+/// Returns [`IndexerError::Database`](IndexerError::Database)
+/// on SQL failures.
+#[inline]
+pub async fn update_vesting_claimed(
+    tx: &mut PgTransaction<'_>,
+    vesting_id: &str,
+    amount: &str,
+) -> IndexerResult<()> {
+    let result = sqlx::query!(
+        r"
+            UPDATE vesting_schedules
+            SET claimed_amount = (claimed_amount::NUMERIC + $2::TEXT::NUMERIC)::TEXT,
+                updated_at     = NOW()
+            WHERE vesting_id = $1
+        ",
+        vesting_id,
+        amount,
+    )
+    .execute(tx.as_mut())
+    .await?;
+
+    if result.rows_affected() == 0 {
+        tracing::warn!(vesting_id, "update_vesting_claimed: vesting_id not found");
+    }
+
+    Ok(())
+}
+
+/// Check whether a `TokensClaimed` event has already been recorded in
+/// `blockchain_transactions`. Used as an idempotency guard to prevent
+/// double-counting `claimed_amount` on replays or backfills.
+///
+/// The check includes `transform_idx` so that batch deploys emitting
+/// `TokensClaimed` for multiple vesting schedules are distinguished
+/// correctly (matching the `blockchain_transactions` conflict target).
+///
+/// # Errors
+///
+/// Returns [`IndexerError::Database`](IndexerError::Database)
+/// on SQL failures.
+#[inline]
+pub async fn is_vesting_claim_processed(
+    tx: &mut PgTransaction<'_>,
+    deploy_hash: &str,
+    transform_idx: Option<i32>,
+) -> IndexerResult<bool> {
+    let exists: bool = sqlx::query_scalar!(
+        r"
+            SELECT EXISTS(
+                SELECT 1 FROM blockchain_transactions
+                WHERE transaction_hash = $1
+                  AND transaction_type = 'vesting_tokens_claimed'
+                  AND COALESCE(transform_idx, -1) = COALESCE($2, -1)
+        )",
+        deploy_hash,
+        transform_idx,
+    )
+    .fetch_one(tx.as_mut())
+    .await?
+    .unwrap_or(false);
+
+    Ok(exists)
+}
+
+// Staking positions -----------------------------------------------------------
+
+/// Data required to insert a staking event into `staking_events`.
+#[derive(Debug)]
+pub struct NewStakingEvent<'a> {
+    /// Account hash of the staker (64 hex, no prefix).
+    pub staker_address: &'a str,
+    /// Event kind: `"stake"`, `"unstake"`, `"withdraw"`, `"reward_claim"`.
+    pub event_type: &'a str,
+    /// Token amount involved (U256 as string).
+    pub amount: &'a str,
+    /// Deploy hash that emitted the event.
+    pub transaction_hash: &'a str,
+    /// Block height where the event was included.
+    pub block_height: i64,
+    /// Block timestamp of the event.
+    pub event_timestamp: DateTime<Utc>,
+    /// Transform index within the deploy (distinguishes batch events).
+    pub transform_idx: Option<i32>,
+}
+
+/// Insert a row into `staking_events` (append-only log).
+///
+/// Returns `true` if a new row was inserted, `false` if the event was already
+/// recorded (duplicate `transaction_hash`). Callers should skip arithmetic
+/// position mutations when this returns `false` to stay idempotent.
+///
+/// # Errors
+///
+/// Returns [`IndexerError::Database`](IndexerError::Database)
+/// on SQL failures.
+#[inline]
+pub async fn insert_staking_event(
+    tx: &mut PgTransaction<'_>,
+    row: &NewStakingEvent<'_>,
+) -> IndexerResult<bool> {
+    let result = sqlx::query!(
+        r"
+            INSERT INTO staking_events (staker_address, event_type, amount, transaction_hash, block_height, event_timestamp, transform_idx)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            ON CONFLICT (transaction_hash, event_type, COALESCE(transform_idx, -1)) DO NOTHING
+        ",
+        row.staker_address,
+        row.event_type,
+        row.amount,
+        row.transaction_hash,
+        row.block_height,
+        row.event_timestamp,
+        row.transform_idx,
+    )
+    .execute(tx.as_mut())
+    .await?;
+
+    Ok(result.rows_affected() > 0)
+}
+
+/// UPSERT `staking_positions` for a `Staked` event: increase `staked_amount`.
+///
+/// Creates the row if the staker has never staked before.
+/// Uses `::NUMERIC` arithmetic for U256-safe addition.
+///
+/// # Errors
+///
+/// Returns [`IndexerError::Database`](IndexerError::Database)
+/// on SQL failures.
+#[inline]
+pub async fn upsert_staking_position_stake(
+    tx: &mut PgTransaction<'_>,
+    staker_address: &str,
+    amount: &str,
+) -> IndexerResult<()> {
+    sqlx::query!(
+        r"
+            INSERT INTO staking_positions (staker_address, staked_amount, last_updated_at)
+            VALUES ($1, $2, NOW())
+            ON CONFLICT (staker_address) DO UPDATE SET
+                staked_amount   = (staking_positions.staked_amount::NUMERIC + $2::TEXT::NUMERIC)::TEXT,
+                last_updated_at = NOW()
+        ",
+        staker_address,
+        amount,
+    )
+    .execute(tx.as_mut())
+    .await?;
+
+    Ok(())
+}
+
+/// UPSERT `staking_positions` for an `UnstakedInitiated` event: decrease
+/// `staked_amount`, set `unbonding_amount` and `unbonding_ends_at`.
+///
+/// Creates the position row if it doesn't exist yet (out-of-order events
+/// during backfill or indexer restart), ensuring the unstake delta is never
+/// silently lost.
+///
+/// Defends against contract-level over-unstake: if `amount` exceeds the
+/// pre-update `staked_amount`, the unbonding delta is clamped to the
+/// available balance (via `LEAST`) so tokens that were never staked cannot
+/// enter the unbonding queue, and a warning is logged for operator visibility.
+///
+/// # Errors
+///
+/// Returns [`IndexerError::Database`](IndexerError::Database)
+/// on SQL failures.
+#[inline]
+pub async fn update_staking_position_unstake(
+    tx: &mut PgTransaction<'_>,
+    staker_address: &str,
+    amount: &str,
+    unbonding_ends_at: Option<DateTime<Utc>>,
+) -> IndexerResult<()> {
+    let result = sqlx::query!(
+        r"
+            INSERT INTO staking_positions (staker_address, staked_amount, unbonding_amount, unbonding_ends_at, last_updated_at)
+            VALUES ($1, '0', $2, $3, NOW())
+            ON CONFLICT (staker_address) DO UPDATE SET
+                staked_amount     = GREATEST(
+                                        '0'::NUMERIC,
+                                        staking_positions.staked_amount::NUMERIC - $2::TEXT::NUMERIC
+                                    )::TEXT,
+                unbonding_amount  = (
+                                        staking_positions.unbonding_amount::NUMERIC
+                                        + LEAST($2::TEXT::NUMERIC, staking_positions.staked_amount::NUMERIC)
+                                    )::TEXT,
+                unbonding_ends_at = $3,
+                last_updated_at   = NOW()
+            RETURNING (xmax = 0) AS inserted
+        ",
+        staker_address,
+        amount,
+        unbonding_ends_at,
+    )
+    .fetch_one(tx.as_mut())
+    .await?;
+
+    if result.inserted.unwrap_or(false) {
+        tracing::warn!(
+            staker = staker_address,
+            amount,
+            "unstake upsert created new position - event arrived before Staked"
+        );
+    }
+
+    Ok(())
+}
+
+/// UPSERT `staking_positions` for an `UnbondedWithdrawn` event: clear
+/// unbonding state.
+///
+/// Creates the position row if it doesn't exist yet (out-of-order events),
+/// ensuring the staker has a row for subsequent events.
+///
+/// # Errors
+///
+/// Returns [`IndexerError::Database`](IndexerError::Database)
+/// on SQL failures.
+#[inline]
+pub async fn update_staking_position_withdraw(
+    tx: &mut PgTransaction<'_>,
+    staker_address: &str,
+) -> IndexerResult<()> {
+    let result = sqlx::query!(
+        r"
+            INSERT INTO staking_positions (staker_address, last_updated_at)
+            VALUES ($1, NOW())
+            ON CONFLICT (staker_address) DO UPDATE SET
+                unbonding_amount  = '0',
+                unbonding_ends_at = NULL,
+                last_updated_at   = NOW()
+            RETURNING (xmax = 0) AS inserted
+        ",
+        staker_address,
+    )
+    .fetch_one(tx.as_mut())
+    .await?;
+
+    if result.inserted.unwrap_or(false) {
+        tracing::warn!(
+            staker = staker_address,
+            "withdraw upsert created new position - event arrived before Staked"
+        );
+    }
+
+    Ok(())
+}
+
+/// UPSERT `staking_positions` for a `RewardsClaimed` event: increase
+/// `total_rewards_claimed`.
+///
+/// Creates the position row if it doesn't exist yet (out-of-order events),
+/// ensuring the reward amount is never silently lost.
+///
+/// # Errors
+///
+/// Returns [`IndexerError::Database`](IndexerError::Database)
+/// on SQL failures.
+#[inline]
+pub async fn update_staking_position_rewards(
+    tx: &mut PgTransaction<'_>,
+    staker_address: &str,
+    amount: &str,
+) -> IndexerResult<()> {
+    let result = sqlx::query!(
+        r"
+            INSERT INTO staking_positions (staker_address, total_rewards_claimed, last_updated_at)
+            VALUES ($1, $2, NOW())
+            ON CONFLICT (staker_address) DO UPDATE SET
+                total_rewards_claimed = (staking_positions.total_rewards_claimed::NUMERIC + $2::TEXT::NUMERIC)::TEXT,
+                last_updated_at       = NOW()
+            RETURNING (xmax = 0) AS inserted
+        ",
+        staker_address,
+        amount,
+    )
+    .fetch_one(tx.as_mut())
+    .await?;
+
+    if result.inserted.unwrap_or(false) {
+        tracing::warn!(
+            staker = staker_address,
+            amount,
+            "rewards upsert created new position - event arrived before Staked"
+        );
+    }
+
+    Ok(())
+}
+
+// Staking reward deposits -----------------------------------------------------
+
+/// Data required to insert a row into `staking_reward_deposits`.
+#[derive(Debug)]
+pub struct NewStakingRewardDeposit<'a> {
+    /// Account hash of the caller who deposited rewards.
+    pub caller_address: &'a str,
+    /// Deposited amount (U256 as string).
+    pub amount: &'a str,
+    /// Global `reward_per_token_stored` snapshot at deposit time (U256 as string).
+    pub reward_per_token_stored: &'a str,
+    /// Deploy hash that emitted the event.
+    pub transaction_hash: &'a str,
+    /// Block height where the event was included.
+    pub block_height: i64,
+    /// Block timestamp of the event.
+    pub event_timestamp: DateTime<Utc>,
+    /// Transform index within the deploy (distinguishes batch events).
+    pub transform_idx: Option<i32>,
+}
+
+/// Insert a row into `staking_reward_deposits` for a `RewardsDeposited` event.
+///
+/// Uses `ON CONFLICT DO NOTHING` on `(transaction_hash, COALESCE(transform_idx, -1))`
+/// so re-processing is safe while batch deploys with multiple events are recorded.
+/// Returns `true` when a new row was inserted, `false` on duplicate. Callers
+/// should skip global state mutations when this returns `false`.
+///
+/// # Errors
+///
+/// Returns [`IndexerError::Database`](IndexerError::Database)
+/// on SQL failures.
+#[inline]
+pub async fn insert_staking_reward_deposit(
+    tx: &mut PgTransaction<'_>,
+    row: &NewStakingRewardDeposit<'_>,
+) -> IndexerResult<bool> {
+    let result = sqlx::query!(
+        r"
+            INSERT INTO staking_reward_deposits (caller_address, amount, reward_per_token_stored, transaction_hash, block_height, event_timestamp, transform_idx)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            ON CONFLICT (transaction_hash, COALESCE(transform_idx, -1)) DO NOTHING
+        ",
+        row.caller_address,
+        row.amount,
+        row.reward_per_token_stored,
+        row.transaction_hash,
+        row.block_height,
+        row.event_timestamp,
+        row.transform_idx,
+    )
+    .execute(tx.as_mut())
+    .await?;
+
+    Ok(result.rows_affected() > 0)
+}
+
+// Global reward state ---------------------------------------------------------
+
+/// Update the singleton `staking_reward_state` row with the latest
+/// `reward_per_token_stored` from a `RewardsDeposited` event.
+///
+/// The monotonicity guard (`reward_per_token_stored < $1`) ensures
+/// out-of-order events cannot regress the accumulator.  If the
+/// singleton row is missing the function returns an error - this
+/// indicates a broken migration.
+///
+/// # Errors
+///
+/// Returns [`IndexerError::Database`](IndexerError::Database)
+/// on SQL failures, or [`IndexerError::Startup`](IndexerError::Startup)
+/// if the singleton row does not exist.
+#[inline]
+pub async fn update_global_reward_state(
+    tx: &mut PgTransaction<'_>,
+    reward_per_token_stored: &str,
+) -> IndexerResult<()> {
+    let result = sqlx::query!(
+        r"
+            UPDATE staking_reward_state
+            SET reward_per_token_stored = $1, last_updated_at = NOW()
+            WHERE id = 1
+              AND reward_per_token_stored::NUMERIC < ($1::TEXT)::NUMERIC
+        ",
+        reward_per_token_stored,
+    )
+    .execute(tx.as_mut())
+    .await?;
+
+    if result.rows_affected() == 0 {
+        // Distinguish "singleton missing" from "monotonicity skip".
+        let exists =
+            sqlx::query_scalar!("SELECT EXISTS(SELECT 1 FROM staking_reward_state WHERE id = 1)")
+                .fetch_one(tx.as_mut())
+                .await?;
+
+        if exists == Some(false) {
+            return Err(IndexerError::Startup(
+                "staking_reward_state singleton row (id=1) is missing - check migrations".into(),
+            ));
+        }
+
+        tracing::debug!(
+            reward_per_token_stored,
+            "update_global_reward_state: skipped - current value >= new value (monotonicity guard)"
+        );
+    }
+
+    Ok(())
+}
+
+// Staker reward snapshot ------------------------------------------------------
+
+/// Update per-user reward tracking columns from a `StakerSnapshot` event.
+///
+/// Overwrites `pending_rewards` and `reward_per_token_paid` on the existing
+/// `staking_positions` row. The position row must already exist (created by
+/// the `Staked` event that fires before the snapshot).
+///
+/// # Errors
+///
+/// Returns [`IndexerError::Database`](IndexerError::Database)
+/// on SQL failures.
+#[inline]
+pub async fn update_staker_reward_snapshot(
+    tx: &mut PgTransaction<'_>,
+    staker_address: &str,
+    pending_rewards: &str,
+    reward_per_token_paid: &str,
+    block_height: i64,
+) -> IndexerResult<u64> {
+    let result = sqlx::query!(
+        r"
+            UPDATE staking_positions
+            SET pending_rewards = $2,
+                reward_per_token_paid = $3,
+                snapshot_block_height = $4,
+                last_updated_at = NOW()
+            WHERE staker_address = $1
+              AND (snapshot_block_height IS NULL OR snapshot_block_height <= $4)
+        ",
+        staker_address,
+        pending_rewards,
+        reward_per_token_paid,
+        block_height,
+    )
+    .execute(tx.as_mut())
+    .await?;
+
+    let rows = result.rows_affected();
+    if rows == 0 {
+        tracing::warn!(
+            staker = %staker_address,
+            block_height = block_height,
+            "StakerSnapshot: skipped - no row or monotonicity guard"
+        );
+    }
+
+    Ok(rows)
 }

@@ -78,6 +78,11 @@ pub async fn disable_rls(pool: &PgPool) {
         "ico_purchases",
         "ico_schedules",
         "token_holdings",
+        "vesting_schedules",
+        "staking_positions",
+        "staking_events",
+        "staking_reward_deposits",
+        "staking_reward_state",
     ] {
         sqlx::query(&format!(r"ALTER TABLE {table} DISABLE ROW LEVEL SECURITY"))
             .execute(pool)
@@ -94,6 +99,7 @@ pub fn test_config(rest_url: String) -> IndexerConfig {
             api_token: "test-token".to_owned().into(),
             rest_url,
             wss_url: "wss://test".to_owned(),
+            node_rpc_url: "https://node.test/rpc".to_owned(),
         },
         contracts: ContractRegistry::default(),
         backfill_rate_limit_ms: 0,

@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT pending_rewards, reward_per_token_paid\n            FROM staking_positions\n            WHERE staker_address = $1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "pending_rewards",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "reward_per_token_paid",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "e470fe6c5ba8314d5c6c9d085afdc5785d4488c828fa7e5af11f1e7dae5a7dd2"
+}

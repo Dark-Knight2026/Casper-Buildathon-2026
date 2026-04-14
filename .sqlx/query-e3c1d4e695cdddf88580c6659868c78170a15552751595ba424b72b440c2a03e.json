@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT claimed_amount, total_amount FROM vesting_schedules WHERE vesting_id = '0'",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "claimed_amount",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "total_amount",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "e3c1d4e695cdddf88580c6659868c78170a15552751595ba424b72b440c2a03e"
+}

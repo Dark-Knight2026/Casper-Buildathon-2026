@@ -10,6 +10,8 @@ pub use transfer::Transfer;
 
 use core::str::FromStr;
 
+use crate::error::{IndexerError, IndexerResult};
+
 /// All possible CEP-18 token events (BIG, USDC, USDT).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Cep18EventType {
@@ -47,11 +49,10 @@ impl Cep18EventType {
 }
 
 impl FromStr for Cep18EventType {
-    /// The unrecognized event name that failed to parse.
-    type Err = String;
+    type Err = IndexerError;
 
     #[inline]
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    fn from_str(s: &str) -> IndexerResult<Self> {
         match s {
             "Transfer" => Ok(Self::Transfer),
             "TransferFrom" => Ok(Self::TransferFrom),
@@ -60,7 +61,7 @@ impl FromStr for Cep18EventType {
             "SetAllowance" => Ok(Self::SetAllowance),
             "IncreaseAllowance" => Ok(Self::IncreaseAllowance),
             "DecreaseAllowance" => Ok(Self::DecreaseAllowance),
-            _ => Err(s.to_owned()),
+            _ => Err(IndexerError::InvalidEventName(s.to_owned())),
         }
     }
 }

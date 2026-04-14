@@ -4,8 +4,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     address,
+    backfill::parser::{CesEvent, EventSchema, FieldType},
     config::ContractType,
-    error::{IndexerError, IndexerResult},
+    error::IndexerResult,
     event_trait::{EventContext, IndexableEvent},
     events::db::{self, HashType},
 };
@@ -63,6 +64,8 @@ impl Currency {
 }
 
 /// A user purchased BIG tokens during an ICO round.
+///
+/// Field order matches the on-chain CES schema emitted by the ICO contract.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TokensPurchased {
     /// Number of BIG tokens purchased (U256 as string).
@@ -77,6 +80,26 @@ pub struct TokensPurchased {
     pub cost: String,
     /// Block timestamp of the purchase.
     pub timestamp: u64,
+    /// Account hash of the buyer (hex, no prefix).
+    pub buyer: String,
+    /// Vesting schedule ID assigned to this purchase (U256 as string).
+    #[serde(default)]
+    pub vesting_id: Option<String>,
+}
+
+impl CesEvent for TokensPurchased {
+    const SCHEMA: EventSchema = EventSchema {
+        name: Self::EVENT_NAME,
+        fields: &[
+            ("amount", FieldType::U256),
+            ("currency", FieldType::U8),
+            ("price", FieldType::U256),
+            ("cost", FieldType::U256),
+            ("timestamp", FieldType::U64),
+            ("buyer", FieldType::Key),
+            ("vesting_id", FieldType::U256),
+        ],
+    };
 }
 
 impl IndexableEvent for TokensPurchased {
@@ -84,16 +107,8 @@ impl IndexableEvent for TokensPurchased {
 
     #[inline]
     async fn process(&self, ctx: &mut EventContext<'_>) -> IndexerResult<()> {
-        // Normalize caller address to 64-char lowercase hex account hash.
-        let buyer = address::normalize_casper_address(ctx.caller)?;
-
-        if buyer.is_empty() {
-            return Err(IndexerError::DeferredEvent(format!(
-                "TokensPurchased deploy={} has no caller (streaming) - \
-                 deferring to backfill",
-                ctx.deploy_hash,
-            )));
-        }
+        // Normalize buyer address to 64-char lowercase hex account hash.
+        let buyer = address::normalize_casper_address(&self.buyer)?;
 
         // 1. Insert into ico_purchases table
         db::insert_ico_purchase(

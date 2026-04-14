@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT staked_amount, unbonding_amount, unbonding_ends_at\n            FROM staking_positions\n            WHERE staker_address = $1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "staked_amount",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "unbonding_amount",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "unbonding_ends_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "51d5f76b30f60b2631444579e41f9b9b2eecfef533bd692cc649a7c1ce5989ac"
+}

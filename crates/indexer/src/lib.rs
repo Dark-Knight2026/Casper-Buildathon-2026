@@ -1,4 +1,4 @@
-//! Casper Network event indexer v2 — Trait-based modular architecture.
+//! Casper Network event indexer v2 - Trait-based modular architecture.
 //!
 //! This is a complete rewrite of the indexer using a trait-based event system
 //! for better modularity, extensibility, and zero-cost abstractions.

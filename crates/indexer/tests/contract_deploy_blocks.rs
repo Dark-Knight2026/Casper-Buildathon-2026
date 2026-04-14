@@ -11,6 +11,8 @@
 //! - `CSPR_CLOUD_API_TOKEN`
 //! - At least one `CONTRACT_*` variable
 
+#![cfg(feature = "integration")]
+
 use std::env;
 
 use indexer::config::ContractRegistry;

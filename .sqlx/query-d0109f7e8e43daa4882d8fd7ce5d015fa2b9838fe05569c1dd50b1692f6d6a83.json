@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO staking_positions (staker_address, staked_amount, last_updated_at)\n            VALUES ($1, $2, NOW())\n            ON CONFLICT (staker_address) DO UPDATE SET\n                staked_amount   = (staking_positions.staked_amount::NUMERIC + $2::TEXT::NUMERIC)::TEXT,\n                last_updated_at = NOW()\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d0109f7e8e43daa4882d8fd7ce5d015fa2b9838fe05569c1dd50b1692f6d6a83"
+}

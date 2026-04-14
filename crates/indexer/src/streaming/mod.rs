@@ -191,7 +191,7 @@ pub(crate) async fn connect_and_stream(
     let ws_stream = connect(config, last_event_id).await?;
 
     // Split into independent read/write halves.
-    // `_write` must stay alive for the duration of the loop — dropping it
+    // `_write` must stay alive for the duration of the loop - dropping it
     // would close the connection immediately.
     let (_write, mut read) = ws_stream.split();
 
@@ -246,13 +246,10 @@ pub async fn handle_text_message(
         tracing::warn!(
             hash = %msg.data.contract_package_hash,
             event = %msg.data.name,
-            "Received event for unregistered contract — skipping"
+            "Received event for unregistered contract - skipping"
         );
         return Ok(());
     };
-    // Not available in streaming events; backfill fills this via REST.
-    let caller = String::new();
-
     let block_timestamp = msg
         .timestamp
         .as_deref()
@@ -279,7 +276,6 @@ pub async fn handle_text_message(
         contract_hash: msg.data.contract_package_hash,
         deploy_hash: msg.extra.deploy_hash,
         block_height: msg.extra.block_height,
-        caller,
         contract_type,
         event_name: msg.data.name,
         event_data: msg.data.data,
@@ -289,9 +285,27 @@ pub async fn handle_text_message(
         api_to_type: None,
     };
 
-    let result = processor::process_event(db_pool, registry, known_hashes, &raw).await?;
+    let advance_cursor = match processor::process_event(db_pool, registry, known_hashes, &raw).await
+    {
+        Ok(ProcessResult::Processed) => true,
+        Ok(ProcessResult::Deferred) => false,
+        // Database errors are fatal (connection lost, etc.)
+        Err(e @ IndexerError::Database(_)) => return Err(e),
+        // All other errors (Json, Parse, etc.) are logged and skipped.
+        // Cursor still advances - a malformed event won't become valid on retry.
+        Err(e) => {
+            tracing::error!(
+                deploy = %raw.deploy_hash,
+                event = %raw.event_name,
+                contract = ?raw.contract_type,
+                error = %e,
+                "Event processing failed - skipping"
+            );
+            true
+        }
+    };
 
-    if result == ProcessResult::Processed {
+    if advance_cursor {
         db::update_cursor(db_pool, StreamType::Streaming, msg.extra.event_id).await?;
     }
 

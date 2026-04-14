@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE staking_reward_state\n            SET reward_per_token_stored = $1, last_updated_at = NOW()\n            WHERE id = 1\n              AND reward_per_token_stored::NUMERIC < ($1::TEXT)::NUMERIC\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "41143972a061c07d75753be074fea13833bc3c0f77845da0dd264455dc8f6eab"
+}

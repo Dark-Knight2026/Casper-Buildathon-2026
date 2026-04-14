@@ -11,6 +11,8 @@
 //! - `CSPR_CLOUD_API_TOKEN` - CSPR.cloud API token (for free RPC queries)
 //! - `CASPER_SECRET_KEY` - path to your `.pem` secret key file (for paid deploys)
 
+#![cfg(feature = "integration")]
+
 use core::time::Duration;
 use std::{process::Command, sync::Once, thread};
 
@@ -156,7 +158,7 @@ fn ico_call(entry_point: &str, session_args: &[&str]) -> String {
     cmd.args(["--node-address", PUBLIC_NODE]);
     cmd.args(["--chain-name", CHAIN]);
     cmd.args(["--secret-key", &key]);
-    cmd.args(["--payment-amount", "3000000000"]);
+    cmd.args(["--payment-amount", "10000000000"]);
     cmd.args(["--standard-payment", "true"]);
     cmd.args(["--gas-price-tolerance", "10"]);
     cmd.args(["--contract-hash", &ico_contract()]);

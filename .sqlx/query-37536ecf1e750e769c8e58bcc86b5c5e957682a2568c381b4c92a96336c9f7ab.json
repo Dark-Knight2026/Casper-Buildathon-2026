@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO staking_events (staker_address, event_type, amount, transaction_hash, block_height, event_timestamp, transform_idx)\n            VALUES ($1, $2, $3, $4, $5, $6, $7)\n            ON CONFLICT (transaction_hash, event_type, COALESCE(transform_idx, -1)) DO NOTHING\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Int8",
+        "Timestamptz",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "37536ecf1e750e769c8e58bcc86b5c5e957682a2568c381b4c92a96336c9f7ab"
+}

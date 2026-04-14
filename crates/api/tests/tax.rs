@@ -1,5 +1,7 @@
 //! Tests for tax module: request deserialization and endpoint response structure.
 
+#![cfg(feature = "integration")]
+
 mod common;
 
 use axum::http::{Method, StatusCode};
@@ -7,7 +9,9 @@ use serde_json::{Value, json};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use api::{UserId, UserRole, server::PROTECTED_RATE_LIMIT_BURST, tax::TaxCalculationRequest};
+use api::{
+    UserId, UserRole, services::PROTECTED_RATE_LIMIT_BURST, services::tax::TaxCalculationRequest,
+};
 
 #[test]
 fn tax_request_deserialization() {

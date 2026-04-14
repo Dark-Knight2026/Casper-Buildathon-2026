@@ -1,5 +1,7 @@
 //! Integration tests for authentication endpoints.
 
+#![cfg(feature = "integration")]
+
 mod common;
 
 use axum::http::{Method, StatusCode};
@@ -15,7 +17,7 @@ use uuid::Uuid;
 use api::{
     Claims, UserRole,
     common::{CASPER_MESSAGE_PREFIX, JWT_AUDIENCE, JWT_ISSUER},
-    server::AUTH_RATE_LIMIT_BURST,
+    services::AUTH_RATE_LIMIT_BURST,
 };
 
 /// Signs a message with the Casper Wallet prefix, matching browser extension behavior.

@@ -18,6 +18,8 @@
 //!    * `effective_start = max(cursor + 1, start_block)` when `start_block > cursor`
 //!    * `page_count = 0` with non-empty data processes one page and stops
 
+#![cfg(feature = "integration")]
+
 mod common;
 
 use std::collections::HashSet;

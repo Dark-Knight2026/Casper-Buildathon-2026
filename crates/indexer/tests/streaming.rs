@@ -1,5 +1,7 @@
 //! Integration tests for WebSocket message deserialization and contract helpers.
 
+#![cfg(feature = "integration")]
+
 mod common;
 
 use std::collections::{HashMap, HashSet};
@@ -158,6 +160,7 @@ async fn message_for_unknown_contract_is_skipped(pool: PgPool) {
     let registry = EventRegistry::new();
     // Empty map — "abc123" is not registered.
     let contract_map = HashMap::new();
+
     let msg = payloads::wss_message(
         "abc123",
         "TokensPurchased",
@@ -313,5 +316,66 @@ async fn valid_message_processes_event_and_updates_cursor(pool: PgPool) {
         cursor,
         Some(99),
         "streaming cursor must be updated to event_id after processing"
+    );
+}
+
+/// Malformed event data (missing required fields) must NOT kill the WSS
+/// connection. The handler must return `Ok(())`, skip the event, and still
+/// advance the streaming cursor so the same broken event is not replayed
+/// on reconnect.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn malformed_event_data_skipped_without_error(pool: PgPool) {
+    common::disable_rls(&pool).await;
+
+    let registry = EventRegistry::new();
+    let mut contract_map = HashMap::new();
+    contract_map.insert("staking_hash".to_owned(), ContractType::Staking);
+
+    // Staked event requires `staker` and `amount` fields.
+    // Send only `staker` - `amount` is missing, triggering a `Json` error.
+    let msg = payloads::wss_message(
+        "staking_hash",
+        "Staked",
+        serde_json::json!({ "staker": "account-hash-aabb" }),
+        "0000000000000000000000000000000000000000000000000000000000009999",
+        55,
+        700,
+    );
+
+    streaming::handle_text_message(
+        &msg.to_string(),
+        &contract_map,
+        &HashSet::new(),
+        &pool,
+        &registry,
+    )
+    .await
+    .expect("malformed event must return Ok(()), not kill WSS connection");
+
+    // Event must not be persisted (transaction rolled back).
+    let count: i64 = sqlx::query_scalar!(r"SELECT COUNT(*) FROM blockchain_events")
+        .fetch_one(&pool)
+        .await
+        .unwrap()
+        .unwrap_or(0);
+    assert_eq!(
+        count, 0,
+        "malformed event must not be stored in blockchain_events"
+    );
+
+    // Cursor must still advance past the broken event.
+    let cursor: Option<i64> = sqlx::query_scalar!(
+        r"
+            SELECT cursor_value FROM event_cursors
+            WHERE stream_type = 'streaming' AND contract_hash = ''
+        "
+    )
+    .fetch_optional(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        cursor,
+        Some(55),
+        "cursor must advance past malformed event to prevent replay loop"
     );
 }

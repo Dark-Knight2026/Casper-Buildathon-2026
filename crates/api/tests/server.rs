@@ -1,12 +1,14 @@
 //! Integration tests for server configuration: rate limiting, CORS.
 
+#![cfg(feature = "integration")]
+
 mod common;
 
 use axum::http::{Method, StatusCode};
 use axum_test::http::header;
 use sqlx::PgPool;
 
-use api::server::AUTH_RATE_LIMIT_BURST;
+use api::services::AUTH_RATE_LIMIT_BURST;
 
 /// Verifies that auth endpoints enforce rate limiting after `burst_size` (15) requests.
 ///

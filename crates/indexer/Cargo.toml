@@ -15,6 +15,7 @@ enabled = [
     "dep:config",
     "dep:dotenv",
     "dep:futures-util",
+    "dep:hex",
     "dep:reqwest",
     "dep:rustls",
     "dep:secrecy",
@@ -28,6 +29,7 @@ enabled = [
     "dep:tracing-subscriber",
 ]
 full = ["enabled"]
+integration = []
 
 [dependencies]
 casper-types = { workspace = true, optional = true }
@@ -35,6 +37,7 @@ chrono = { workspace = true, optional = true }
 config = { workspace = true, optional = true }
 dotenv = { workspace = true, optional = true }
 futures-util = { workspace = true, optional = true }
+hex = { workspace = true, optional = true }
 reqwest = { workspace = true, optional = true }
 rustls = { workspace = true, optional = true }
 secrecy = { workspace = true, optional = true }
@@ -48,5 +51,6 @@ tracing = { workspace = true, optional = true }
 tracing-subscriber = { workspace = true, optional = true }
 
 [dev-dependencies]
+reqwest = { workspace = true }
 serial_test = { workspace = true }
 wiremock = { workspace = true }

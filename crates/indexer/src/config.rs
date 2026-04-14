@@ -23,6 +23,7 @@ struct RawEnvConfig {
     cspr_cloud_api_token: SecretString,
     cspr_cloud_rest_url: String,
     cspr_cloud_wss_url: String,
+    casper_node_rpc_url: String,
     #[serde(default = "default_backfill_rate_limit_ms")]
     backfill_rate_limit_ms: u64,
     #[serde(default = "default_wss_reconnect_delay_ms")]
@@ -59,7 +60,7 @@ pub struct IndexerConfig {
     pub wss_reconnect_delay_ms: u64,
 }
 
-/// CSPR.cloud API credentials.
+/// CSPR.cloud API credentials and Casper node RPC URL.
 #[derive(Debug, Clone)]
 pub struct Casper {
     /// `CSPR.cloud` API access token.
@@ -68,6 +69,8 @@ pub struct Casper {
     pub rest_url: String,
     /// `CSPR.cloud` WebSocket streaming URL.
     pub wss_url: String,
+    /// Casper node JSON-RPC URL. Used for CES backfill.
+    pub node_rpc_url: String,
 }
 
 impl IndexerConfig {
@@ -92,6 +95,7 @@ impl IndexerConfig {
                 api_token: raw.cspr_cloud_api_token,
                 rest_url: raw.cspr_cloud_rest_url,
                 wss_url: raw.cspr_cloud_wss_url,
+                node_rpc_url: raw.casper_node_rpc_url,
             },
             contracts,
             backfill_rate_limit_ms: raw.backfill_rate_limit_ms,
@@ -121,6 +125,11 @@ impl IndexerConfig {
                 "CSPR_CLOUD_WSS_URL must start with wss://".to_owned(),
             ));
         }
+        if !self.casper.node_rpc_url.starts_with("https://") {
+            return Err(IndexerError::Config(
+                "CASPER_NODE_RPC_URL must start with https://".to_owned(),
+            ));
+        }
         Ok(())
     }
 }
@@ -148,6 +157,8 @@ pub enum ContractType {
     Roles,
     /// Staking contract.
     Staking,
+    /// Vesting contract for token lock-up schedules.
+    Vesting,
     /// Unknown contract.
     Unknown,
 }
@@ -187,6 +198,7 @@ impl ContractType {
             Self::Nft => "nft",
             Self::Roles => "roles",
             Self::Staking => "staking",
+            Self::Vesting => "vesting",
             Self::Unknown => "unknown",
         }
     }
@@ -243,6 +255,8 @@ pub struct ContractRegistry {
     pub roles: Option<ContractEntry>,
     /// Staking contract entry.
     pub staking: Option<ContractEntry>,
+    /// Vesting contract entry.
+    pub vesting: Option<ContractEntry>,
 }
 
 impl ContractRegistry {
@@ -271,6 +285,7 @@ impl ContractRegistry {
             nft: Self::read_contract(settings, "nft"),
             roles: Self::read_contract(settings, "roles"),
             staking: Self::read_contract(settings, "staking"),
+            vesting: Self::read_contract(settings, "vesting"),
         }
     }
 
@@ -307,7 +322,7 @@ impl ContractRegistry {
     #[inline]
     #[must_use]
     pub fn active_contracts(&self) -> Vec<ActiveContract<'_>> {
-        let pairs: [(ContractType, &Option<ContractEntry>); 10] = [
+        let pairs: [(ContractType, &Option<ContractEntry>); 11] = [
             (ContractType::Usdc, &self.usdc),
             (ContractType::Usdt, &self.usdt),
             (ContractType::Big, &self.big),
@@ -318,6 +333,7 @@ impl ContractRegistry {
             (ContractType::Nft, &self.nft),
             (ContractType::Roles, &self.roles),
             (ContractType::Staking, &self.staking),
+            (ContractType::Vesting, &self.vesting),
         ];
 
         pairs

@@ -7,6 +7,8 @@
 pub mod cep18;
 pub mod db;
 pub mod ico;
+pub mod staking;
+pub mod vesting;
 
 use serde_json::Value;
 
@@ -14,6 +16,10 @@ use crate::{
     config::ContractType,
     error::{IndexerError, IndexerResult},
     event_trait::{EventContext, IndexableEvent},
+    events::{
+        cep18::Cep18EventType, ico::IcoEventType, staking::StakingEventType,
+        vesting::VestingEventType,
+    },
 };
 
 /// A typed event from any known contract — the single source of truth for
@@ -21,9 +27,13 @@ use crate::{
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EventType {
     /// An event emitted by the ICO contract.
-    Ico(ico::IcoEventType),
+    Ico(IcoEventType),
     /// An event emitted by a CEP-18 token contract (BIG, USDC, USDT).
-    Cep18(cep18::Cep18EventType),
+    Cep18(Cep18EventType),
+    /// An event emitted by the Vesting contract.
+    Vesting(VestingEventType),
+    /// An event emitted by the Staking contract.
+    Staking(StakingEventType),
 }
 
 impl EventType {
@@ -49,6 +59,16 @@ impl EventType {
             ContractType::Big | ContractType::Usdc | ContractType::Usdt => event_name
                 .parse::<cep18::Cep18EventType>()
                 .map(Self::Cep18)
+                .map_err(|_| unknown()),
+
+            ContractType::Vesting => event_name
+                .parse::<vesting::VestingEventType>()
+                .map(Self::Vesting)
+                .map_err(|_| unknown()),
+
+            ContractType::Staking => event_name
+                .parse::<staking::StakingEventType>()
+                .map(Self::Staking)
                 .map_err(|_| unknown()),
 
             _ => Err(unknown()),
@@ -108,17 +128,36 @@ impl EventRegistry {
         // Parse raw string into typed event (single validation point).
         let event_type = EventType::parse(ctx.contract_type, event_name)?;
 
+        // Admin-only events that are parsed but require no indexing.
+        if matches!(
+            event_type,
+            EventType::Vesting(
+                VestingEventType::WhitelistedCreatorAdded
+                    | VestingEventType::WhitelistedCreatorRemoved
+            )
+        ) {
+            return Ok(());
+        }
+
         // Type-safe dispatch - compiler enforces exhaustiveness.
         // Add new event handlers here. Unhandled event types fall through to
         // the wildcard arm and are stored as raw data in `blockchain_events`
         // without updating derived tables.
         dispatch_events!(
             event_type, ctx, event_data, event_name;
-            EventType::Ico(ico::IcoEventType::TokensPurchased) => ico::TokensPurchased,
-            EventType::Ico(ico::IcoEventType::IcoScheduleAdded) => ico::IcoScheduleAdded,
-            EventType::Cep18(cep18::Cep18EventType::Transfer) => cep18::Transfer,
-            EventType::Cep18(cep18::Cep18EventType::Mint) => cep18::Mint,
-            EventType::Cep18(cep18::Cep18EventType::SetAllowance) => cep18::SetAllowance,
+            EventType::Ico(IcoEventType::TokensPurchased) => ico::TokensPurchased,
+            EventType::Ico(IcoEventType::IcoScheduleAdded) => ico::IcoScheduleAdded,
+            EventType::Cep18(Cep18EventType::Transfer) => cep18::Transfer,
+            EventType::Cep18(Cep18EventType::Mint) => cep18::Mint,
+            EventType::Cep18(Cep18EventType::SetAllowance) => cep18::SetAllowance,
+            EventType::Vesting(VestingEventType::ScheduleCreated) => vesting::ScheduleCreated,
+            EventType::Vesting(VestingEventType::TokensClaimed) => vesting::TokensClaimed,
+            EventType::Staking(StakingEventType::Staked) => staking::Staked,
+            EventType::Staking(StakingEventType::UnstakedInitiated) => staking::UnstakedInitiated,
+            EventType::Staking(StakingEventType::UnbondedWithdrawn) => staking::UnbondedWithdrawn,
+            EventType::Staking(StakingEventType::RewardsDeposited) => staking::RewardsDeposited,
+            EventType::Staking(StakingEventType::RewardsClaimed) => staking::RewardsClaimed,
+            EventType::Staking(StakingEventType::StakerSnapshot) => staking::StakerSnapshot,
         )
     }
 }

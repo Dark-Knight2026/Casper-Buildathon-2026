@@ -14,7 +14,7 @@ pub mod pagination;
 pub mod redis;
 
 // Re-exports
-pub use config::{AppState, IcoFallback, ServerConfig};
+pub use config::{AppState, IcoFallback, ServerConfig, TOTAL_SUPPLY};
 pub use crypto::{
     CASPER_ED25519_PUBKEY_HEX_LEN, CASPER_MESSAGE_PREFIX, CASPER_SECP256K1_PUBKEY_HEX_LEN,
     CryptoError, verify_casper_signature,

@@ -27,8 +27,6 @@ pub struct RawEvent {
     pub deploy_hash: String,
     /// Block height where event was emitted.
     pub block_height: u64,
-    /// Public key of deploy caller.
-    pub caller: String,
     /// Type of contract that emitted the event.
     pub contract_type: ContractType,
     /// CES event name (e.g. `TokensPurchased`).
@@ -98,7 +96,6 @@ pub async fn process_event(
         contract_hash: &raw.contract_hash,
         deploy_hash: &raw.deploy_hash,
         block_height: raw.block_height,
-        caller: &raw.caller,
         contract_type: raw.contract_type,
         block_timestamp: raw.block_timestamp,
         transform_idx: raw.transform_idx,
@@ -122,23 +119,6 @@ pub async fn process_event(
                 deploy = %raw.deploy_hash,
                 "Unknown event - stored raw data in blockchain_events"
             );
-        }
-        Err(IndexerError::DeferredEvent(reason)) => {
-            // Event deferred to backfill - roll back so nothing is persisted.
-            // Backfill runs once at startup; events deferred after backfill
-            // completes will not be re-processed until the next indexer restart.
-            //
-            // xxx: implement a deferred-event retry queue or periodic backfill
-            // re-runs so that deferred events are picked up within a bounded
-            // window (see backfill/ico.rs doc comment for details).
-            tracing::warn!(
-                deploy = %raw.deploy_hash,
-                event = %raw.event_name,
-                %reason,
-                "Event deferred - rolling back transaction"
-            );
-            tx.rollback().await?;
-            return Ok(ProcessResult::Deferred);
         }
         Err(e) => {
             // Other errors - rollback transaction

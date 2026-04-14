@@ -3,17 +3,23 @@
 #![allow(clippy::needless_for_each)]
 
 use utoipa::{
-    Modify, OpenApi,
-    openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme},
+    Modify, OpenApi as OpenApiDerive,
+    openapi::{
+        OpenApi,
+        security::{HttpAuthScheme, HttpBuilder, SecurityScheme},
+    },
 };
 
-use crate::{analytics, auth, health, ico, tax, transactions};
+use crate::{
+    onchain::{ico, staking, transactions, vesting},
+    services::{analytics, auth, health, tax},
+};
 
 /// `OpenAPI` documentation configuration.
 ///
 /// Note: `paths` is empty because routes are registered automatically
 /// via `OpenApiRouter` and `routes!` macro.
-#[derive(Debug, OpenApi)]
+#[derive(Debug, OpenApiDerive)]
 #[openapi(
     info(
         title = "LeaseFi API",
@@ -25,6 +31,9 @@ use crate::{analytics, auth, health, ico, tax, transactions};
     ),
     components(
         schemas(
+            // Common models
+            crate::common::UserRole,
+            crate::common::Claims,
             // Auth models
             auth::models::NonceRequest,
             auth::models::NonceResponse,
@@ -51,9 +60,20 @@ use crate::{analytics, auth, health, ico, tax, transactions};
             // ICO models
             ico::models::IcoBalanceResponse,
             ico::models::IcoProgressResponse,
-            // Common models
-            crate::common::UserRole,
-            crate::common::Claims,
+            // Vesting models
+            vesting::models::VestingScheduleItem,
+            vesting::models::TokenSupplyResponse,
+            vesting::models::ReleaseSchedulePoint,
+            vesting::models::ReleaseScheduleResponse,
+            // Staking models
+            staking::models::StakingInfoResponse,
+            staking::models::PortfolioResponse,
+            staking::models::EarningsPoint,
+            staking::models::EarningsResponse,
+            staking::models::RewardsHistoryPoint,
+            staking::models::RewardsHistoryResponse,
+            staking::models::UnbondingResponse,
+            staking::models::UnbondingEvent,
         )
     ),
     modifiers(&SecurityAddon),
@@ -63,7 +83,9 @@ use crate::{analytics, auth, health, ico, tax, transactions};
         (name = "Tax", description = "Tax calculation endpoints"),
         (name = "Analytics", description = "Property analytics endpoints"),
         (name = "Transactions", description = "Transaction history endpoints"),
-        (name = "ICO", description = "ICO balance and progress endpoints")
+        (name = "ICO", description = "ICO balance and progress endpoints"),
+        (name = "Vesting", description = "Vesting schedule and token supply endpoints"),
+        (name = "Staking", description = "Staking, portfolio and rewards endpoints")
     )
 )]
 pub struct ApiDoc;
@@ -73,7 +95,7 @@ struct SecurityAddon;
 
 impl Modify for SecurityAddon {
     #[inline]
-    fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
+    fn modify(&self, openapi: &mut OpenApi) {
         let components = openapi.components.get_or_insert_with(Default::default);
         components.add_security_scheme(
             "bearer_auth",

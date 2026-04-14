@@ -7,6 +7,9 @@ use serde::Deserialize;
 
 use crate::{ServerError, common::RedisStore};
 
+/// Total BIG token supply (human-readable).
+pub const TOTAL_SUPPLY: f64 = 5_000_000_000.0;
+
 /// Flat intermediate struct whose field names match lowercase env var names.
 #[derive(Debug, Deserialize)]
 struct RawEnvConfig {
@@ -28,6 +31,10 @@ struct RawEnvConfig {
     /// Used only when `ico_schedules` table is empty.
     #[serde(default)]
     ico_total_allocation: Option<String>,
+    /// Total BIG token supply (human-readable, e.g. `5000000000`).
+    /// Defaults to 5 billion if not set.
+    #[serde(default)]
+    total_supply: Option<f64>,
 }
 
 const fn default_port() -> u16 {
@@ -71,6 +78,8 @@ pub struct ServerConfig {
     /// Fallback ICO config from env vars. Used when `ico_schedules` table is empty
     /// (e.g. before the indexer processes `ICOScheduleAdded` events).
     pub ico_fallback: Option<IcoFallback>,
+    /// Total BIG token supply (human-readable). Defaults to 5 billion.
+    pub total_supply: f64,
 }
 
 impl ServerConfig {
@@ -126,6 +135,7 @@ impl ServerConfig {
             cors_origin: raw.cors_origin,
             contract_big: raw.contract_big.map(|s| s.to_ascii_lowercase()),
             ico_fallback,
+            total_supply: raw.total_supply.unwrap_or(TOTAL_SUPPLY),
         };
 
         config.validate()?;
@@ -149,9 +159,9 @@ impl ServerConfig {
             ));
         }
         let secret_len = self.jwt_secret.expose_secret().len();
-        if secret_len < 32 {
+        if secret_len < 64 {
             return Err(ServerError::EnvVar(format!(
-                "SUPABASE_JWT_SECRET must be at least 32 bytes, got {secret_len}"
+                "SUPABASE_JWT_SECRET must be at least 64 bytes for HS256 security, got {secret_len}"
             )));
         }
         Ok(())

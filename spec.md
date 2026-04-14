@@ -114,6 +114,153 @@ Backend service for processing high-load real estate operations, including tax c
 }
 ```
 
+### Vesting
+
+- **GET** `/api/v1/vesting/schedules?account={accountHash}`
+  - **Query:** `account` (64 hex chars, no prefix), `page` (default 1), `page_size` (default 25, max 100)
+  - **Response:** `PaginatedResponse<VestingScheduleItem>`
+  - **Auth:** Public
+  - **Rate limit:** 5 req/s, burst 30
+  - **Business rules:** Vesting uses cliff + post-cliff linear formula. Before cliff end (`start + cliff_duration`), `unlockedAmount = 0`. After full vesting (`start + vesting_duration`), `unlockedAmount = total - claimed`. Between: post-cliff linear interpolation `unlockedAmount = total * ((now - cliff_end) / (vesting_duration - cliff_duration)) - claimed`, where `cliff_end = start + cliff_duration`. Linear growth begins at `cliff_end`, not at `start`.
+
+```json
+{
+  "id": "0",
+  "lockedAmount": 800.0,
+  "purchaseTimestamp": 1700000000000,
+  "unlockTimestamp": 1702592000000,
+  "vestingEndTimestamp": 1793548800000,
+  "unlockedAmount": 200.0
+}
+```
+
+  - `vestingEndTimestamp` (epoch ms): end of the full vesting period, computed as `start_timestamp + vesting_duration`.
+
+- **GET** `/api/v1/vesting/token-supply`
+  - **Response:** `TokenSupplyResponse`
+  - **Auth:** Public
+  - **Rate limit:** 5 req/s, burst 30
+  - **Business rules:** `totalSupply` is fixed at 5,000,000,000 BIG. `circulatingSupply` is the sum of all BIG balances in `token_holdings` excluding addresses registered as contracts in `contract_registry`.
+
+```json
+{
+  "totalSupply": 5000000000.0,
+  "circulatingSupply": 1234567.89
+}
+```
+
+- **GET** `/api/v1/vesting/release-schedule`
+  - **Response:** `ReleaseScheduleResponse`
+  - **Auth:** Public
+  - **Rate limit:** 5 req/s, burst 30
+  - **Business rules:** Aggregates all vesting schedules into a monthly timeline. Each point shows cumulative tokens released across all schedules at that month offset from the earliest schedule start.
+
+```json
+{
+  "data": [
+    { "month": "0", "released": 0.0 },
+    { "month": "6", "released": 500.0 },
+    { "month": "12", "released": 1000.0 }
+  ]
+}
+```
+
+### Staking
+
+- **GET** `/api/v1/staking/{accountHash}`
+  - **Path:** `accountHash` - 64 hex chars, no prefix
+  - **Response:** `StakingInfoResponse`
+  - **Auth:** Public
+  - **Rate limit:** 5 req/s, burst 30
+  - **Business rules:** APY = `(rewards_deposited_last_30_days * 365 / 30) / total_staked * 100`. Returns 0 if `total_staked` is zero. `pendingRewards` is computed off-chain: `pending_rewards + (staked * (global_rpt - user_rpt)) / 1e18`. `stakedTokens` is the actual staking position balance - it is `0` when the user has no active stake. `vestingLockedTokens` is reported as a separate field (sum of `total_amount - claimed_amount` across all vesting schedules for the account) so clients can display vesting and staking balances independently.
+
+```json
+{
+  "stakedTokens": 100000.0,
+  "vestingLockedTokens": 25000.0,
+  "currentApy": 12.5,
+  "totalRewardsEarned": 5000.0,
+  "pendingRewards": 1200.0
+}
+```
+
+- **GET** `/api/v1/staking/{accountHash}/portfolio`
+  - **Path:** `accountHash` - 64 hex chars, no prefix
+  - **Response:** `PortfolioResponse`
+  - **Auth:** Public
+  - **Rate limit:** 5 req/s, burst 30
+  - **Business rules:** `totalBig = bigInWallet + bigStaked + rewardsEarned`. USD value estimated from latest ICO schedule price (6 decimals). `bigStaked` is the actual staking position balance (`0` when no active stake). `vestingLockedTokens` is reported separately and is NOT included in `totalBig` - it represents tokens that are not yet released by vesting.
+
+```json
+{
+  "bigInWallet": 50000.0,
+  "bigStaked": 100000.0,
+  "vestingLockedTokens": 25000.0,
+  "rewardsEarned": 5000.0,
+  "totalBig": 155000.0,
+  "estimatedUsdValue": 77500.0,
+  "change24hPercent": 0.0
+}
+```
+
+- **GET** `/api/v1/staking/{accountHash}/earnings?period={period}`
+  - **Path:** `accountHash` - 64 hex chars, no prefix
+  - **Query:** `period` - one of `1m`, `3m`, `6m` (default), `1y`, `all`. Invalid values return 400.
+  - **Response:** `EarningsResponse`
+  - **Auth:** Public
+  - **Rate limit:** 5 req/s, burst 30
+  - **Business rules:** Groups `reward_claim` events by month within the period window.
+
+```json
+{
+  "data": [
+    { "month": "2026-01", "earnings": 1200.0 },
+    { "month": "2026-02", "earnings": 800.0 }
+  ]
+}
+```
+
+- **GET** `/api/v1/staking/{accountHash}/rewards-history?period={days}`
+  - **Path:** `accountHash` - 64 hex chars, no prefix
+  - **Query:** `period` - number of days to look back (default 90, clamped 1-365)
+  - **Response:** `RewardsHistoryResponse`
+  - **Auth:** Public
+  - **Rate limit:** 5 req/s, burst 30
+  - **Business rules:** Daily cumulative `reward_claim` events. `txFees` is always 0 (contract does not distinguish fee component).
+
+```json
+{
+  "data": [
+    { "day": 1, "stakingPool": 500.0, "txFees": 0.0 },
+    { "day": 2, "stakingPool": 750.0, "txFees": 0.0 }
+  ]
+}
+```
+
+- **GET** `/api/v1/staking/{accountHash}/unbonding`
+  - **Path:** `accountHash` - 64 hex chars, no prefix
+  - **Response:** `UnbondingResponse`
+  - **Auth:** Public
+  - **Rate limit:** 5 req/s, burst 30
+  - **Business rules:** Returns the current unbonding state and a chronological history of unstake/withdraw events. `isWithdrawable` is `true` when `unbondingEndsAt > 0 && unbondingEndsAt <= now`. `timeRemainingMs` is the milliseconds until withdraw is possible (0 if already withdrawable or no active unbonding).
+
+```json
+{
+  "unbondingAmount": 5000.0,
+  "unbondingEndsAt": 1719849600000,
+  "isWithdrawable": false,
+  "timeRemainingMs": 604800000,
+  "history": [
+    {
+      "eventType": "unstake",
+      "amount": 5000.0,
+      "timestamp": "2026-03-20T12:00:00Z",
+      "transactionHash": "abc123..."
+    }
+  ]
+}
+```
+
 ## 3. Security Requirements
 - **Authentication:** JWT Bearer Token — issued locally via HS256 using `SUPABASE_JWT_SECRET`. Login uses Casper Wallet signature challenge-response (Ed25519 / Secp256k1). No Supabase Auth service call at validation time. Sign message format: `"Sign this message to login to LeaseFi. Nonce: <nonce>"`. JWT expiry: 24 h. Nonce TTL: 5 min (Redis).
 - **Database:** No direct SQL injection (checked via SQLx).
@@ -199,13 +346,12 @@ async fn get_user(
 
 ### Deployment: Reverse Proxy Requirement
 
-The API rate limiter uses `SmartIpKeyExtractor` which trusts the
-`X-Forwarded-For` header unconditionally. **This API MUST be deployed
-behind a trusted reverse proxy** (e.g. Nginx, Cloudflare, ALB) that
-overwrites `X-Forwarded-For` with the real client IP.
-
-Direct exposure to the internet without a trusted proxy allows clients to
-spoof `X-Forwarded-For` and bypass all per-IP rate limits.
+The API rate limiter uses the default `PeerIpKeyExtractor` which keys on
+the TCP peer address. Behind a reverse proxy all requests share the proxy's
+peer IP, collapsing all clients into a single rate-limit bucket. If
+per-client limiting is needed behind a proxy, switch to
+`SmartIpKeyExtractor` and ensure the proxy overwrites `X-Forwarded-For`
+with the real client IP.
 
 ## 5. Performance Goals
 

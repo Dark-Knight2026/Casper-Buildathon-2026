@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO staking_positions (staker_address, total_rewards_claimed, last_updated_at)\n            VALUES ($1, $2, NOW())\n            ON CONFLICT (staker_address) DO UPDATE SET\n                total_rewards_claimed = (staking_positions.total_rewards_claimed::NUMERIC + $2::TEXT::NUMERIC)::TEXT,\n                last_updated_at       = NOW()\n            RETURNING (xmax = 0) AS inserted\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "inserted",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "fbccc8c244914a6d5f20dd6929d318ea00b7385d8b39f893ff3471c2237ad178"
+}

@@ -43,7 +43,7 @@ unsafe fn set_required_env_vars() {
         std::env::set_var("REDIS_URL", "redis://127.0.0.1:6379");
         std::env::set_var(
             "SUPABASE_JWT_SECRET",
-            "test-secret-that-is-at-least-32-bytes!",
+            "test-secret-that-is-at-least-sixty-four-bytes-long-for-HS256-security!",
         );
     }
 }
@@ -80,7 +80,7 @@ fn from_env_fails_without_database_url() {
         std::env::set_var("REDIS_URL", "redis://127.0.0.1:6379");
         std::env::set_var(
             "SUPABASE_JWT_SECRET",
-            "test-secret-that-is-at-least-32-bytes!",
+            "test-secret-that-is-at-least-sixty-four-bytes-long-for-HS256-security!",
         );
     }
 
@@ -100,7 +100,7 @@ fn from_env_fails_without_redis_url() {
         std::env::set_var("DATABASE_URL", "postgres://localhost/test");
         std::env::set_var(
             "SUPABASE_JWT_SECRET",
-            "test-secret-that-is-at-least-32-bytes!",
+            "test-secret-that-is-at-least-sixty-four-bytes-long-for-HS256-security!",
         );
     }
 
@@ -177,7 +177,7 @@ fn from_env_rejects_short_jwt_secret() {
     let err = ServerConfig::from_env().unwrap_err();
     assert!(
         err.to_string()
-            .contains("SUPABASE_JWT_SECRET must be at least 32 bytes"),
+            .contains("SUPABASE_JWT_SECRET must be at least 64 bytes"),
         "Unexpected error: {err}"
     );
 }

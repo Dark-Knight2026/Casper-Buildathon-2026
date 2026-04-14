@@ -34,7 +34,7 @@ use testcontainers::{
 
 use api::{
     AppState, Claims, IcoFallback, ServerConfig, UserId, UserRole,
-    common::{JWT_AUDIENCE, JWT_ISSUER, RedisStore},
+    common::{JWT_AUDIENCE, JWT_ISSUER, RedisStore, TOTAL_SUPPLY},
     server,
 };
 
@@ -143,7 +143,7 @@ pub async fn setup_test_server_with(
         (SecretString::from(url), client, None)
     };
 
-    let jwt_secret = "test_jwt_secret_for_integration_tests".to_owned();
+    let jwt_secret = "test_jwt_secret_for_integration_tests_at_least_sixty_four_bytes!".to_owned();
     let config = ServerConfig {
         database_url: SecretString::from(TEST_DATABASE_URL),
         redis_url,
@@ -152,6 +152,7 @@ pub async fn setup_test_server_with(
         cors_origin: TEST_CORS_ORIGIN.to_owned(),
         contract_big: overrides.contract_big,
         ico_fallback: overrides.ico_fallback,
+        total_supply: TOTAL_SUPPLY,
     };
     let state = Arc::new(AppState {
         db: pool,

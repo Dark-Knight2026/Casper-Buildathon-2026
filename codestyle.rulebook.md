@@ -62,8 +62,8 @@ Most rules in this document follow a consistent structure for clarity:
 |                             | [Comments: Define and Use Task Markers](#comments--comments-define-and-use-task-markers)                                                                        | Use structured `Task Markers` to track work and requests in code.                                                |
 |                             | [Comments: Annotate Addressed Tasks](#comments--comments-annotate-addressed-tasks)                                                                              | Add `// aaa:` below existing task comments to explain findings/actions.                                          |
 | **Macros**                  | [Declarative Macros, a. k. a. `macro_rules`](#macros--declarative-macros-a-k-a-macro_rules)                                                                     | Follow code style rules for macros with specific caveats.                                                        |
-|                             | [=> Token](#macros--token)                                                                                                                                      | Place `=>` on a separate line from macro pattern.                                                                |
-|                             | [{{ / }} in bodies](#macros----in-bodies)                                                                                                                       | Allow `{{` and `}}` on the same line for readability.                                                            |
+|                             | [=> Token](#macros---token)                                                                                                                                     | Place `=>` on a separate line from macro pattern.                                                                |
+|                             | [{{ / }} in bodies](#macros-----in-bodies)                                                                                                                      | Allow `{{` and `}}` on the same line for readability.                                                            |
 |                             | [Short matches](#macros--short-matches)                                                                                                                         | Place short macro patterns and bodies on the same line.                                                          |
 | **Naming Conventions**      | [File Naming](#naming-conventions--file-naming)                                                                                                                 | All file names must use `snake_case` and be in all lowercase letters.                                            |
 |                             | [Directory Naming: Avoid Redundant Prefixes](#naming-conventions--directory-naming-avoid-redundant-prefixes)                                                    | If a crate's name has a prefix matching its parent directory, remove the prefix from the crate's directory name. |
@@ -111,7 +111,7 @@ fn main() {
 }
 ```
 
-### Imports and Modules  Structuring Prefer Specific Local and Grouped use
+### Imports and Modules : Structuring: Prefer Specific Local and Grouped use
 
 - **Avoid Global `use`**: Do not use `use` statements at the crate root (`lib.rs` or `main.rs`) that are only needed in specific submodules. Place `use` statements within the modules where they are actually used.
 - **Be Specific**: Import only the specific items needed (e.g., `use std::collections::HashMap;`) rather than using wildcards (e.g., `use std::collections::*;`) unless importing a prelude.
@@ -155,7 +155,7 @@ use std::fmt::*;
 use std::fmt::{self, Debug, Display};
 ```
 
-### Imports and Modules  Structuring use of crate
+### Imports and Modules : Structuring use of crate
 
 - **Use `super::*` for Parent Modules**: When accessing items from a direct parent module, prefer `use super::Item;`.
 - **Use `crate::*` Sparingly**: Use `crate::` primarily for accessing items from the crate root or distant modules where `super::` would be unclear or overly verbose. Avoid excessive `crate::` usage when `super::` is sufficient.
@@ -208,7 +208,7 @@ fn use_parent() {
 }
 ```
 
-### Imports and Modules  Structuring Local Entities
+### Imports and Modules : Structuring: Local Entities
 
 - **Prefer High-Level Imports for External Crates**: When using items from external crates, import the top-level module or the specific type directly (e.g., `use thiserror::Error;` or `use serde::Deserialize;`) rather than importing deeply nested items if the higher-level import provides sufficient access.
 - **Use Full Paths for Clarity**: Within function bodies or other code blocks, if an import is not used, refer to items using their full path (e.g., `std::collections::HashMap::new()`) for clarity, especially for less frequently used items or to avoid ambiguity.
@@ -240,7 +240,7 @@ fn process_data() {
 }
 ```
 
-### Imports and Modules  Structuring Import Grouping Order
+### Imports and Modules : Structuring: Import Grouping Order
 
 **Description:** Imports must be organized into three groups, each separated by a blank line. This follows the `StdExternalCrate` convention used by `rustfmt` (`group_imports = "StdExternalCrate"`).
 
@@ -270,7 +270,7 @@ use serde::Serialize;
 use crate::models::User;
 ```
 
-### Imports and Modules  Structuring Structuring std Imports
+### Imports and Modules : Structuring: Structuring std Imports
 
 - **Consolidate `std` Imports**: Group all standard library imports together.
 - **Avoid Multi-Level Nesting**: Do not nest imports deeply within curly braces. Prefer separate `use` statements for different top-level `std` modules (like `collections`, `fmt`, `io`).
@@ -293,7 +293,7 @@ use std::fmt::{self, Debug, Display};
 use std::io::{self, Read, Write};
 ```
 
-### Imports and Modules  Structuring Factor Common Paths in Imports and Declarations
+### Imports and Modules : Structuring Factor Common Paths in Imports and Declarations
 
 **Description:** When importing multiple items from the same module or declaring multiple modules with a common parent, always factor out the common path prefix using curly braces `{}`. This is the primary principle for reducing redundancy.
 
@@ -310,7 +310,7 @@ use std::fmt::Display;
 use std::fmt::{Debug, Display};
 ```
 
-### Imports and Modules  Structuring Use Multi-Line Grouping for Complex Imports
+### Imports and Modules : Structuring: Use Multi-Line Grouping for Complex Imports
 
 **Description:** A `use` or `mod` group **must** be formatted across multiple lines if it meets any of these criteria:
 
@@ -336,7 +336,7 @@ use unilang::{
 };
 ```
 
-### Imports and Modules  Structuring Hierarchical Formatting for Multi-Line use Statements
+### Imports and Modules : Structuring: Hierarchical Formatting for Multi-Line use Statements
 
 **Description:** When a `use` statement must be multi-line (as per the previous rule), it must be formatted hierarchically. This improves readability for complex imports.
 
@@ -366,7 +366,7 @@ use unilang::{
 };
 ```
 
-### Imports and Modules  Structuring Centralized Workspace Dependency Manifest
+### Imports and Modules : Structuring: Centralized Workspace Dependency Manifest
 
 **Description:** In a Cargo workspace, the root `Cargo.toml` **must** serve as the single source of truth for all dependency definitions. All dependencies—including their versions and sources—**must** be declared in the `[workspace.dependencies]` table. Feature flags **must not** be specified in this central manifest.
 
@@ -412,7 +412,7 @@ rand = { workspace = true }
 serde = { workspace = true, features = ["rc"] }
 ```
 
-### Imports and Modules  Structuring Forbid Undeclared Workspace Dependencies
+### Imports and Modules : Structuring: Forbid Undeclared Workspace Dependencies
 
 **Description:** This is a rigid and non-negotiable rule. In a Cargo workspace, it is **strictly forbidden** for any member crate's `Cargo.toml` to reference a dependency—even using `workspace = true`—that has not first been explicitly declared in the `[workspace.dependencies]` table of the root `Cargo.toml` file. Every single dependency used by any crate in the workspace **must** originate from the central workspace definition. There are no exceptions. This rule complements the "[Structuring: Centralized Workspace Dependency Manifest](#imports--modules--structuring-centralized-workspace-dependency-manifest)" rule by making it an explicit error to bypass the central manifest.
 
@@ -453,7 +453,7 @@ phf_codegen = { workspace = true }
 serde = { workspace = true }
 ```
 
-### Imports and Modules  Mandatory enabled and full Features for Crate Toggling
+### Imports and Modules : Mandatory enabled and full Features for Crate Toggling
 
 **Description:** This is a rigid and non-negotiable rule for managing complex build configurations **for every crate that is a member of the workspace**. It does not apply to external, third-party dependencies. Every workspace crate **must** expose two specific features: `enabled` and `full`.
 
@@ -525,7 +525,7 @@ mod implementation {
 pub use implementation::*;
 ```
 
-### Lints and Docs  Lints and warnings
+### Lints and Docs : Lints and warnings
 
 Make sure you have no warnings from clippy with these lints enabled.
 
@@ -590,7 +590,7 @@ mod_module_files = "allow"
 missing_docs_in_private_items = "allow"
 ```
 
-### Lints and Docs  Strict Workspace Lint Inheritance
+### Lints and Docs : Strict Workspace Lint Inheritance
 
 **Description:** This is a rigid and non-negotiable rule. In a Cargo workspace, the root `Cargo.toml` serves as the **single, authoritative manifest for all lint configurations**. All lint settings for both `rustc` (`[workspace.lints.rust]`) and `clippy` (`[workspace.lints.clippy]`) **must** be defined exclusively in the root `Cargo.toml`.
 
@@ -646,7 +646,7 @@ pedantic = "warn"
 workspace = true
 ```
 
-### Lints and Docs  Single Source of Truth for Crate Documentation
+### Lints and Docs : Single Source of Truth for Crate Documentation
 
 **Description:** To avoid duplication and ensure consistency, the `readme.md` file **must** serve as the single source of truth for crate-level documentation. All library (`lib.rs`) and binary (`main.rs` or `src/bin/*.rs`) entry points **must** include the contents of the `readme.md` file as their inner doc comments.
 
@@ -690,7 +690,7 @@ The **only acceptable method** is to use a two-part approach at the top of the e
 #![cfg_attr(doc, doc = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/", "readme.md")))]
 ```
 
-### Lints and Docs  Set html_root_url for Public Crates
+### Lints and Docs : Set html_root_url for Public Crates
 
 **Description:** For any public-facing crate (i.e., intended for publishing to `crates.io`), the `lib.rs` file **must** include the `html_root_url` attribute. This attribute is critical for `docs.rs` to correctly generate links to items from other crates in your documentation. The URL should be formatted as `https://docs.rs/CRATE_NAME/latest/CRATE_NAME/`, replacing `CRATE_NAME` with the actual name of your crate.
 
@@ -713,7 +713,7 @@ The **only acceptable method** is to use a two-part approach at the top of the e
 #![deny(missing_docs)]
 ```
 
-### Lints and Docs  Avoid Using Attributes for Documentation Use Doc Comments
+### Lints and Docs : Avoid Using Attributes for Documentation Use Doc Comments
 
 For documenting code, prefer using ordinary doc comments `//!` over attributes like `#![doc = ""]`. Doc comments are more conventional and readable, aligning with Rust's idiomatic documentation practices. This approach ensures consistency in how documentation is written and maintained across the codebase.
 
@@ -743,7 +743,7 @@ mod secure_connection {
 }
 ```
 
-### Testing  Test Directory
+### Testing : Test Directory
 
 **Description:** This is a rigid and non-negotiable rule. All tests, including unit tests, integration tests, and benchmarks, **must** be located in the `tests` directory of the crate alongside the `src` directory. It is **strictly forbidden** to have a `#[cfg(test)]` module or any `#[test]` functions inside the `src` directory. There are no exceptions.
 
@@ -796,7 +796,7 @@ fn test_add_from_outside() {
 }
 ```
 
-### Testing  Integration Test Feature Gating
+### Testing : Integration Test Feature Gating
 
 **Description:** All integration tests **must** be conditionally compiled using a feature named `integration`. This feature **must** be included in the crate's `default` feature set in its `Cargo.toml`. This allows developers to optionally exclude slow or environment-dependent tests from normal build and test cycles.
 
@@ -842,7 +842,7 @@ fn test_database_connection() {
 }
 ```
 
-### Formatting and Whitespace  Attributes Separate Attributes from Items
+### Formatting and Whitespace : Attributes: Separate Attributes from Items
 
 **Description:** Each attribute (`#[...]` or `#![...]`) must be placed on its own line. Furthermore, the entire block of attributes annotating an item (like a struct, enum, function, field, etc.) must be separated from the item itself by a newline. This ensures clear visual separation between metadata (attributes) and the code element they modify.
 
@@ -910,7 +910,7 @@ struct YetAnotherStruct {
 }
 ```
 
-### Formatting and Whitespace  Where Clause Formatting
+### Formatting and Whitespace : Where Clause Formatting
 
 - New Line for Where Clause : The `where` keyword should start on a new line when the preceding function, struct, or impl declaration line is too long, or when it contributes to better readability.
 - One Parameter Per Line : Each parameter in the `where` clause should start on a new line. This enhances readability, especially when there are multiple constraints or when constraints are lengthy.
@@ -941,7 +941,7 @@ where
 }
 ```
 
-### Formatting and Whitespace  Trait Implementation Formatting
+### Formatting and Whitespace : Trait Implementation Formatting
 
 - **Trait on New Line**: When defining a trait implementation (`impl`) for a type, if the trait and the type it is being implemented for do not fit on the same line, the trait should start on a new line.
 - **Consistent Where Clause**: The `where` clause should also start on a new line to maintain readability, especially when there are constraints or multiple bounds.
@@ -962,7 +962,7 @@ impl<K, __Context, __Formed> ::Trait1 for CommandFormerDefinitionTypes<K, __Cont
 {}
 ```
 
-### Formatting and Whitespace  Function Signature Formatting
+### Formatting and Whitespace : Function Signature Formatting
 
 - **Parameter Alignment**: Function parameters should be listed with one per line, each starting on a new line after the opening parenthesis. This enhances readability and version control diff clarity.
 - **Return Type on New Line**: The return type should start on a new line when the parameters or function signature is too long or for consistency with the rest of the codebase.
@@ -991,7 +991,7 @@ pub fn begin<IntoEnd>(mut storage: core::option::Option<<Definition::Types as fo
 {}
 ```
 
-### Formatting and Whitespace  Lifetime Annotations
+### Formatting and Whitespace : Lifetime Annotations
 
 - **No Spaces Around Lifetime Specifier**: When using lifetime annotations (e.g., `'a`), do not include spaces between the ampersand `&` and the lifetime specifier.
 
@@ -1011,21 +1011,21 @@ fn info<'a>(src: and 'a str) -> and 'a str {
 }
 ```
 
-### Formatting and Whitespace  Nesting
+### Formatting and Whitespace : Nesting
 
 - Avoid complex, multi-level inline nesting. Prefer splitting content across multiple lines.
 - Opt for shorter, clearer lines over long, deeply nested ones to enhance code maintainability.
 
-### Formatting and Whitespace  Code Length
+### Formatting and Whitespace : Code Length
 
 - Aim for concise, focused functions to improve both readability and ease of maintenance.
 - Keep lines under 110 characters to accommodate various editor and IDE setups without horizontal scrolling.
 
-### Comments  Comments Spaces
+### Comments : Comments: Spaces
 
 - Inline comments (`//`) should start with a space following the slashes for readability.
 
-### Comments  Comments Focus on Rationale Preserve Existing Tasks
+### Comments : Comments: Focus on Rationale, Preserve Existing Tasks
 
 **Description:** Comments should primarily explain the "why" or clarify non-obvious aspects of the *current* code. Avoid adding comments that merely state *what* change was just made (e.g., "Removed unused import", "Added derive") or serve purely as a historical log. Such transitory comments clutter the code without providing lasting value.
 
@@ -1067,7 +1067,7 @@ struct MyData {
 }
 ```
 
-### Comments  Comments Define and Use Task Markers
+### Comments : Comments: Define and Use Task Markers
 
 **Description:** Use structured `Task Markers` in source code comments to track tasks, requests, and their resolutions. This practice connects the codebase directly to the task management process.
 
@@ -1101,7 +1101,7 @@ fn parse_data(data: &[u8]) -> Result<Data, ParseError> { /* ... */ }
 log::debug!("Processing item: {:?}", item);
 ```
 
-### Comments  Comments Annotate Addressed Tasks
+### Comments : Comments: Annotate Addressed Tasks
 
 **Description:** When addressing or investigating an existing task comment (e.g., `// TODO:`, `// xxx:`, `// FIXME:`), **do not remove the original task comment**. Instead, add a new comment line immediately below it, starting with `// aaa:` (for "addressed" or "analyzed"), explaining the findings, actions taken, or current status regarding that specific task. This preserves the original context while providing an update.
 
@@ -1145,11 +1145,11 @@ fn another_function() {
 }
 ```
 
-### Macros  Declarative Macros a. k. a. macro_rules
+### Macros : Declarative Macros, a. k. a. `macro_rules`
 
 Overall, code style for macros is the same as for the simple code, but there are some caveats you should know.
 
-### Macros  => Token
+### Macros : => Token
 
 Generally, `=>` token should reside on a separate line from macro pattern
 
@@ -1187,7 +1187,7 @@ macro_rules! count {
 }
 ```
 
-### Macros  {{ / }} in bodies
+### Macros : {{ / }} in bodies
 
 You are allowed to place the starting `{{` and the ending `}}` on the same line to improve readability
 
@@ -1227,7 +1227,7 @@ macro_rules! hmap {
 }
 ```
 
-### Macros  Short matches
+### Macros : Short matches
 
 You can place the macro pattern and its body on the same line if they are short enough.
 
@@ -1251,7 +1251,7 @@ macro_rules! empty {
 }
 ```
 
-### Naming Conventions  File Naming
+### Naming Conventions : File Naming
 
 All file names must use `snake_case` and be in all lowercase letters. This rule applies universally to all files within the repository, including source code, documentation (`readme.md`), and license files (`license`).
 
@@ -1272,7 +1272,7 @@ README.md
 LICENSE
 ```
 
-### Naming Conventions  Directory Naming Avoid Redundant Prefixes
+### Naming Conventions : Directory Naming: Avoid Redundant Prefixes
 
 **Description:** If a crate's name contains a prefix that matches the name of its parent directory, this prefix **must** be removed from the crate's own directory name on the filesystem. The full crate name, including the prefix, **must** be preserved in its `Cargo.toml` file.
 
@@ -1308,7 +1308,7 @@ name = "api_gemini"
 name = "api_gemini" # The full name is preserved here
 ```
 
-### Error Handling  thiserror
+### Error Handling : `thiserror`
 
 `thiserror` is the standard error handling library for this project. The use of `anyhow` is forbidden to ensure structured, typed error management across the codebase.
 

@@ -11,11 +11,12 @@ use serial_test::serial;
 use indexer::config::{ContractEntry, ContractRegistry, ContractType, IndexerConfig};
 
 /// All env var keys used by `IndexerConfig::from_env()`.
-const CONFIG_ENV_VARS: [&str; 7] = [
+const CONFIG_ENV_VARS: [&str; 8] = [
     "DATABASE_URL",
     "CSPR_CLOUD_API_TOKEN",
     "CSPR_CLOUD_REST_URL",
     "CSPR_CLOUD_WSS_URL",
+    "CASPER_NODE_RPC_URL",
     "BACKFILL_RATE_LIMIT_MS",
     "WSS_RECONNECT_DELAY_MS",
     "RUST_LOG",
@@ -81,6 +82,7 @@ unsafe fn set_required_env_vars() {
         std::env::set_var("CSPR_CLOUD_API_TOKEN", "test-token-123");
         std::env::set_var("CSPR_CLOUD_REST_URL", "https://api.testnet.cspr.cloud");
         std::env::set_var("CSPR_CLOUD_WSS_URL", "wss://streaming.testnet.cspr.cloud");
+        std::env::set_var("CASPER_NODE_RPC_URL", "https://node.testnet.cspr.cloud/rpc");
     }
 }
 
@@ -286,9 +288,10 @@ fn active_contracts_returns_all_when_fully_configured() {
         nft: Some(ContractEntry::new("8", 0)),
         roles: Some(ContractEntry::new("9", 0)),
         staking: Some(ContractEntry::new("10", 0)),
+        vesting: Some(ContractEntry::new("11", 0)),
     };
 
-    assert_eq!(registry.active_contracts().len(), 10);
+    assert_eq!(registry.active_contracts().len(), 11);
 }
 
 #[test]

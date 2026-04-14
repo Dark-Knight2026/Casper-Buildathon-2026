@@ -53,12 +53,9 @@ pub enum IndexerError {
         event_name: String,
     },
 
-    /// Event processing deferred to backfill (e.g. streaming event without caller).
-    ///
-    /// The processor rolls back the transaction so that nothing is persisted.
-    /// The streaming client must still advance the cursor past this event.
-    #[error("Deferred event: {0}")]
-    DeferredEvent(String),
+    /// Event name not recognized by a contract event type's `FromStr` parser.
+    #[error("Invalid event name: '{0}'")]
+    InvalidEventName(String),
 }
 
 /// Shorthand for `Result<T, IndexerError>` used throughout the indexer crate.
