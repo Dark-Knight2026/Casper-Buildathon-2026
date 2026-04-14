@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import type { ICSPRClickSDK } from '@make-software/csprclick-core-types';
 import { getNonce, loginWithSignature, applyToken } from '@/services/ico';
 import { logger } from '@/utils/logger';
@@ -31,6 +31,7 @@ export function useBackendAuth(
   const [isAuthenticated, setIsAuthenticated] = useState(() => !!loadStoredToken());
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const prevPublicKeyRef = useRef(publicKey);
 
   const login = useCallback(async () => {
     if (!clickRef || !publicKey) return;
@@ -80,6 +81,17 @@ export function useBackendAuth(
     applyToken(null);
     setIsAuthenticated(false);
   }, []);
+
+  useEffect(() => {
+    const prev = prevPublicKeyRef.current;
+    prevPublicKeyRef.current = publicKey;
+
+    // Logout when wallet disconnects or switches to a different account.
+    // Prevents JWT from Account A being sent in Account B context.
+    if (prev && prev !== publicKey) {
+      logout();
+    }
+  }, [publicKey, logout]);
 
   return { isAuthenticated, isLoading, error, login, logout };
 }
