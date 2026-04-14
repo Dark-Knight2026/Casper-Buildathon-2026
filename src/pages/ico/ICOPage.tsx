@@ -95,17 +95,19 @@ export function ICOPage() {
   const renderStateComponent = () => {
     switch (state) {
       case 1:
+        if (!timestamps) return <PostICODashboard />;
         return (
           <PrivateSaleCountdown
-            targetTimestamp={timestamps!.presaleStart}
-            endTimestamp={timestamps!.presaleEnd}
+            targetTimestamp={timestamps.presaleStart}
+            endTimestamp={timestamps.presaleEnd}
             progress={presaleProgress}
           />
         );
       case 2:
+        if (!timestamps) return <PostICODashboard />;
         return (
           <PrivateSaleActive
-            endTimestamp={timestamps!.presaleEnd}
+            endTimestamp={timestamps.presaleEnd}
             progress={presaleProgress}
           />
         );
