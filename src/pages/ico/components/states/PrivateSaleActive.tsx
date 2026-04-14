@@ -107,7 +107,9 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: Private
         currentValue: icoBalance.currentValue ?? undefined,
       };
     }
-    const tokensPurchased = transactions.reduce((sum, tx) => sum + tx.tokensReceived, 0);
+    const tokensPurchased = transactions
+      .filter((tx) => tx.type === 'purchase' && tx.direction !== 'out')
+      .reduce((sum, tx) => sum + tx.tokensReceived, 0);
     return { tokensPurchased, currentValue: undefined };
   }, [icoBalance, transactions]);
 
