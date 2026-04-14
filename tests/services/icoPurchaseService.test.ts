@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { readFileSync } from 'fs';
 import {
   toRawAmount,
   fromRawAmount,
@@ -11,10 +12,7 @@ import {
 import { getAllowance } from '@/services/ico/cep18Service';
 // Schema loaded inline to avoid path alias issues in test environment
 const icoSchema = JSON.parse(
-  require('fs').readFileSync(
-    require('path').resolve(__dirname, '../../docs/casper_contract_schemas/ico_schema.json'),
-    'utf-8',
-  ),
+  readFileSync(new URL('../../docs/casper_contract_schemas/ico_schema.json', import.meta.url), 'utf-8'),
 );
 
 // Capture args passed to Args.fromMap so we can inspect deploy arguments
