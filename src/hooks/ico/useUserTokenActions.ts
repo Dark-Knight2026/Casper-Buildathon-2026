@@ -13,7 +13,11 @@ async function fetchUserTokenActions(publicKeyHex: string, page: number, pageSiz
   const timeout = AbortSignal.timeout(15_000);
   const res = await fetch(url, {
     headers: { accept: 'application/json' },
-    signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+    signal: signal
+      ? typeof AbortSignal.any === 'function'
+        ? AbortSignal.any([signal, timeout])
+        : timeout
+      : timeout,
   });
 
   if (!res.ok) {

@@ -73,7 +73,9 @@ async function fetchActualTokensReceived(
 
       const url = `/api/cspr-cloud/ft-token-actions?deploy_hash=${deployHash}`;
       const resp = await fetch(url, {
-        signal: AbortSignal.any([outerSignal, AbortSignal.timeout(15_000)]),
+        signal: typeof AbortSignal.any === 'function'
+          ? AbortSignal.any([outerSignal, AbortSignal.timeout(15_000)])
+          : outerSignal,
       });
       if (!resp.ok) continue;
 
