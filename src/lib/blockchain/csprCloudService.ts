@@ -262,7 +262,7 @@ export class CSPRCloudService {
    * Get deploy information by hash
    * Uses CSPR.cloud REST API
    */
-  async getDeploy(deployHash: string): Promise<{
+  async getDeploy(deployHash: string, signal?: AbortSignal): Promise<{
     status: 'pending' | 'executed' | 'failed';
     confirmations?: number;
     block_number?: number;
@@ -278,6 +278,8 @@ export class CSPRCloudService {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 15_000);
+      // Propagate external abort (e.g. component unmount) into the internal controller
+      signal?.addEventListener('abort', () => controller.abort(), { once: true });
       let response: Response;
       try {
         response = await fetch(proxyUrl, { signal: controller.signal });

@@ -9,7 +9,7 @@
  * 5. Handle success/failure callbacks
  */
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import type { ICSPRClickSDK } from '@make-software/csprclick-core-types';
 import { deriveAccountHash } from '@/lib/blockchain/accountUtils';
 import {
@@ -37,7 +37,13 @@ const DEPLOY_POLL_INTERVAL_MS = 10_000; // 10 seconds
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
-const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+// Resolves after `ms` ms, or immediately if signal is already aborted / fires during wait.
+const delay = (ms: number, signal?: AbortSignal) =>
+  new Promise<void>((resolve) => {
+    if (signal?.aborted) { resolve(); return; }
+    const id = setTimeout(resolve, ms);
+    signal?.addEventListener('abort', () => { clearTimeout(id); resolve(); }, { once: true });
+  });
 
 /**
  * Safe BigInt parsing — returns null instead of throwing on invalid input.
@@ -107,16 +113,19 @@ async function fetchActualTokensReceived(
 /**
  * Polls getDeployStatus until the deploy is executed, failed, or times out.
  * Used to ensure the CEP-18 approval is on-chain before submitting the purchase.
+ * Pass an AbortSignal so the loop stops when the component unmounts mid-transaction.
  */
 async function waitForDeployConfirmation(
   deployHash: string,
-): Promise<'executed' | 'failed' | 'timed-out'> {
+  signal: AbortSignal,
+): Promise<'executed' | 'failed' | 'timed-out' | 'aborted'> {
   const deadline = Date.now() + APPROVAL_CONFIRMATION_TIMEOUT_MS;
   while (Date.now() < deadline) {
-    const { status } = await csprCloudService.getDeploy(deployHash);
+    if (signal.aborted) return 'aborted';
+    const { status } = await csprCloudService.getDeploy(deployHash, signal);
     if (status === 'executed') return 'executed';
     if (status === 'failed') return 'failed';
-    await delay(DEPLOY_POLL_INTERVAL_MS);
+    await delay(DEPLOY_POLL_INTERVAL_MS, signal);
   }
   return 'timed-out';
 }
@@ -180,6 +189,12 @@ export function usePurchaseToken(
   // Tracks allowance from a completed approve tx so that a failed purchase
   // doesn't force the user to re-approve (Odra CEP-18 on-chain query always fails).
   const approvalCacheRef = useRef<{ currency: PaymentCurrency; rawAmount: bigint } | null>(null);
+  // Aborts the active waitForDeployConfirmation loop when the component unmounts.
+  const purchaseControllerRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => { purchaseControllerRef.current?.abort(); };
+  }, []);
 
   const { onSuccess, onError, onApprovalNeeded } = options;
 
@@ -191,6 +206,12 @@ export function usePurchaseToken(
       // Synchronous guard — prevents duplicate submissions on rapid clicks
       if (submittingRef.current) return;
       submittingRef.current = true;
+
+      // Create a fresh controller for this purchase; abort any previous one.
+      purchaseControllerRef.current?.abort();
+      const purchaseController = new AbortController();
+      purchaseControllerRef.current = purchaseController;
+      const { signal } = purchaseController;
 
       if (!publicKey) {
         const error = 'Wallet not connected';
@@ -284,7 +305,8 @@ export function usePurchaseToken(
 
           // Wait for approval to execute on-chain before submitting purchase.
           // CEP-18 transfer_from() requires the allowance to be set first.
-          const approvalStatus = await waitForDeployConfirmation(approvalTxHash);
+          const approvalStatus = await waitForDeployConfirmation(approvalTxHash, signal);
+          if (approvalStatus === 'aborted') return;
           if (approvalStatus !== 'executed') {
             throw new Error(
               approvalStatus === 'timed-out'
@@ -332,7 +354,8 @@ export function usePurchaseToken(
         }));
 
         // 5. Verify purchase deploy executed on-chain before fetching tokens
-        const purchaseStatus = await waitForDeployConfirmation(purchaseTxHash);
+        const purchaseStatus = await waitForDeployConfirmation(purchaseTxHash, signal);
+        if (purchaseStatus === 'aborted') return;
         if (purchaseStatus !== 'executed') {
           throw new Error(
             purchaseStatus === 'timed-out'
