@@ -15,7 +15,7 @@ export function useICOActions(
   const [claimToastVisible, setClaimToastVisible] = useState(false);
   const [withdrawToastVisible, setWithdrawToastVisible] = useState(false);
 
-  const { state: claimState, claim } = useClaimTokens(publicKey, clickRef, {
+  const { state: claimState, claim, reset: resetClaim } = useClaimTokens(publicKey, clickRef, {
     onSuccess: () => {
       setClaimingId(null);
       setClaimToastVisible(true);
@@ -30,13 +30,14 @@ export function useICOActions(
 
   const handleClaim = useCallback(
     (vestingId: bigint) => {
+      resetClaim();
       setClaimingId(String(vestingId));
       claim(vestingId);
     },
-    [claim],
+    [claim, resetClaim],
   );
 
-  const { state: withdrawState, withdraw } = useWithdrawUnbonded(publicKey, clickRef, {
+  const { state: withdrawState, withdraw, reset: resetWithdraw } = useWithdrawUnbonded(publicKey, clickRef, {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['staking-info'] });
       queryClient.invalidateQueries({ queryKey: ['vesting-schedules'] });
@@ -51,11 +52,13 @@ export function useICOActions(
   return {
     claimState,
     handleClaim,
+    resetClaim,
     claimingId,
     claimToastVisible,
     setClaimToastVisible,
     withdrawState,
     withdraw,
+    resetWithdraw,
     withdrawToastVisible,
     setWithdrawToastVisible,
   };
