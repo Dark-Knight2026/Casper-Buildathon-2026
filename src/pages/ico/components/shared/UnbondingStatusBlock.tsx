@@ -12,11 +12,13 @@ import { Clock, Wallet, ArrowDownCircle, CheckCircle2 } from 'lucide-react';
 import { CountdownTimer } from './CountdownTimer';
 import { MainButton } from './MainButton';
 import { formatNumber, formatUSD, formatDateTime } from '../../utils/formatters';
-import { useUnbondingStatus } from '@/hooks/ico/useUnbondingStatus';
+import type { UnbondingStatus } from '@/hooks/ico/useUnbondingStatus';
 import type { WithdrawStep } from '@/hooks/ico/useWithdrawUnbonded';
 
 interface UnbondingStatusBlockProps {
-  accountHash: string | null | undefined;
+  /** Unbonding data from the parent's useUnbondingStatus call — avoids a duplicate fetch. */
+  data: UnbondingStatus | null | undefined;
+  isLoading?: boolean;
   tokenSymbol?: string;
   tokenPrice?: number;
   className?: string;
@@ -25,7 +27,8 @@ interface UnbondingStatusBlockProps {
 }
 
 export function UnbondingStatusBlock({
-  accountHash,
+  data,
+  isLoading = false,
   tokenSymbol = 'BIG',
   tokenPrice,
   className,
@@ -33,7 +36,6 @@ export function UnbondingStatusBlock({
   withdrawStep,
 }: UnbondingStatusBlockProps) {
   const queryClient = useQueryClient();
-  const { data, isLoading } = useUnbondingStatus(accountHash);
 
   const isReady = data?.isWithdrawable ?? false;
 

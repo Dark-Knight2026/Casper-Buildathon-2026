@@ -54,7 +54,7 @@ export const OverviewTab = memo(function OverviewTab() {
     }));
   }, [vestingSchedules]);
 
-  const { data: unbondingData } = useUnbondingStatus(accountHash ?? null);
+  const { data: unbondingData, isLoading: unbondingLoading } = useUnbondingStatus(accountHash ?? null);
   const dashboardCards = useMemo(() => [
     {
       label: 'BIG Balance',
@@ -166,7 +166,8 @@ export const OverviewTab = memo(function OverviewTab() {
 
       {/* Unbonding Status */}
       <UnbondingStatusBlock
-        accountHash={accountHash}
+        data={unbondingData}
+        isLoading={unbondingLoading}
         tokenSymbol={ICO_CONFIG.TOKEN.symbol}
         onWithdraw={withdraw}
         withdrawStep={withdrawState.step}

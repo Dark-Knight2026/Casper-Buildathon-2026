@@ -126,7 +126,7 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: Private
     setWithdrawToastVisible,
   } = useICOActions(account?.publicKey ?? null, clickRef ?? null);
 
-  const { data: unbondingData } = useUnbondingStatus(accountHash);
+  const { data: unbondingData, isLoading: unbondingLoading } = useUnbondingStatus(accountHash);
 
   return (
     <div className={cn('max-w-5xl mx-auto', className)}>
@@ -200,7 +200,8 @@ export function PrivateSaleActive({ className, endTimestamp, progress }: Private
 
       {/* Unbonding Status */}
       <UnbondingStatusBlock
-        accountHash={accountHash}
+        data={unbondingData}
+        isLoading={unbondingLoading}
         tokenSymbol={ICO_CONFIG.TOKEN.symbol}
         onWithdraw={withdraw}
         withdrawStep={withdrawState.step}
