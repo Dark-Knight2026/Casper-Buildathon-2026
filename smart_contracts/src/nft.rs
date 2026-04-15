@@ -11,7 +11,7 @@ use sha3::{Digest, Keccak256};
 
 use crate::nft::{
     errors::Error,
-    events::{BurnerAdded, BurnerRemoved, Frozen, MinterAdded, MinterRemoved},
+    events::{BurnerAdded, BurnerRemoved, ForcedTransfer, Frozen, MinterAdded, MinterRemoved},
 };
 
 // =============================================================================
@@ -98,7 +98,13 @@ pub mod errors {
 // Contract
 // =============================================================================
 
-#[odra::module(errors = Error, events = [MinterAdded, MinterRemoved, BurnerAdded, BurnerRemoved])]
+#[odra::module(errors = Error, events = [
+  BurnerAdded,
+  BurnerRemoved,
+  ForcedTransfer,
+  MinterAdded,
+  MinterRemoved,
+])]
 pub struct NFT {
     access_control: SubModule<AccessControl>,
     ownable: SubModule<Ownable>,
@@ -183,7 +189,48 @@ impl NFT {
         self.whitelist.get_or_default(account)
     }
 
+    // =========================================================================
+    // ERC-7943 Admin Functions
+    // =========================================================================
 
+    /// Freeze or unfreeze a specific token. Restricted to FREEZER role.
+    pub fn set_frozen_tokens(&mut self, account: &Address, token_id: &U256, frozen_status: bool) {
+        self.assert_role(ROLE_FREEZER);
+        self.frozen_tokens.set(token_id, frozen_status);
+
+        self.env().emit_event(Frozen {
+            account: *account,
+            token_id: *token_id,
+            frozen_status,
+        });
+    }
+
+    pub fn forced_transfer(&mut self, from: Address, to: Address, token_id: U256) {
+        self.assert_role(ROLE_FORCE_TRANSFERER);
+
+        if self.cep95.owner_of(token_id) != Some(from) {
+            self.env().revert(Error::CannotTransact);
+        }
+
+        if self.can_transact(&to) {
+            self.env().revert(Error::CannotTransact);
+        }
+
+        // Unfreeze if frozen; new owner gets an unfrozen token
+        if self.frozen_tokens.get_or_default(&token_id) {
+            self.frozen_tokens.set(&token_id, false);
+            self.env().emit_event(Frozen {
+                account: from,
+                token_id,
+                frozen_status: false,
+            });
+        }
+
+        self.cep95.clear_approval(&token_id);
+        self.cep95.raw_transfer(to, token_id);
+
+        self.env().emit_event(ForcedTransfer { from, to, token_id });
+    }
 
     /// Allows to add a new minter by the owner
     pub fn add_minter(&mut self, minter: &Address) {
@@ -287,6 +334,14 @@ impl NFT {
 
         hasher.update(role_name.as_bytes());
         hasher.finalize().into()
+    }
+
+    #[inline]
+    fn assert_role(&self, role_name: &str) {
+        let role = Self::hash_role(role_name);
+        if !self.access_control.has_role(&role, &self.env().caller()) {
+            self.env().revert(Error::NotAuthorized);
+        }
     }
 
     #[inline]
