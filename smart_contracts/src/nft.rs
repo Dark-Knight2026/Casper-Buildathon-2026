@@ -3,26 +3,117 @@ use odra::{
     prelude::*,
 };
 use odra_modules::{
-    access::Ownable,
+    access::{AccessControl, Ownable, Role, DEFAULT_ADMIN_ROLE},
     cep95::{CEP95Interface, Cep95},
 };
+
+use sha3::{Digest, Keccak256};
 
 use crate::nft::{
     errors::Error,
     events::{BurnerAdded, BurnerRemoved, MinterAdded, MinterRemoved},
 };
 
+// =============================================================================
+// Roles
+// =============================================================================
+
+pub const ROLE_MINTER: &str = "MINTER";
+pub const ROLE_BURNER: &str = "BURNER";
+pub const ROLE_WHITELIST_MANAGER: &str = "WHITELIST_MANAGER";
+pub const ROLE_FREEZER: &str = "FREEZER";
+pub const ROLE_FORCE_TRANSFERER: &str = "FORCE_TRANSFERER";
+
+// =============================================================================
+// Events
+// =============================================================================
+
+pub mod events {
+    use odra::{casper_types::U256, prelude::*};
+
+    #[odra::event]
+    pub struct MinterAdded {
+        pub minter: Address,
+    }
+
+    #[odra::event]
+    pub struct MinterRemoved {
+        pub minter: Address,
+    }
+
+    #[odra::event]
+    pub struct BurnerAdded {
+        pub burner: Address,
+    }
+
+    #[odra::event]
+    pub struct BurnerRemoved {
+        pub burner: Address,
+    }
+
+    #[odra::event]
+    pub struct Whitelisted {
+        pub account: Address,
+        pub status: bool,
+    }
+
+    #[odra::event]
+    pub struct Frozen {
+        pub account: Address,
+        pub token_id: U256,
+        pub frozen_status: bool,
+    }
+
+    #[odra::event]
+    pub struct ForcedTransfer {
+        pub from: Address,
+        pub to: Address,
+        pub token_id: U256,
+    }
+}
+
+// =============================================================================
+// Errors
+// =============================================================================
+
+pub mod errors {
+    use odra::prelude::*;
+
+    #[odra::odra_error]
+    pub enum Error {
+        // TODO: Evaluate if we need backward compatibility
+        // Backward Compatible
+        CallerNotMinter = 100,
+        CallerNotBurner = 101,
+
+        CallerNotMinterNorBurner = 102,
+        CannotTransact = 200,
+        CannotTransfer = 201,
+        TokenIsFrozen = 202,
+        NotAuthorized = 203,
+    }
+}
+
+// =============================================================================
+// Contract
+// =============================================================================
+
 #[odra::module(errors = Error, events = [MinterAdded, MinterRemoved, BurnerAdded, BurnerRemoved])]
 pub struct NFT {
+    access_control: SubModule<AccessControl>,
     ownable: SubModule<Ownable>,
     cep95: SubModule<Cep95>,
-    minters: Mapping<Address, bool>,
-    burners: Mapping<Address, bool>,
     tokens_count: Var<U256>,
+    whitelist: Mapping<Address, bool>,
+    frozen_tokens: Mapping<U256, bool>,
 }
 
 #[odra::module]
 impl NFT {
+    // =========================================================================
+    // Initialization
+    // =========================================================================
+
     pub fn init(
         &mut self,
         owner: Address,
@@ -31,15 +122,28 @@ impl NFT {
         minters: Vec<Address>,
         burners: Vec<Address>,
     ) {
-        self.ownable.init(owner);
+        // TODO: Evaluate with we need the ownable module
+        // self.ownable.init(owner);
+
+        self.access_control
+            .unchecked_grant_role(&DEFAULT_ADMIN_ROLE, &owner);
         self.cep95.init(symbol, name);
 
-        minters
-            .iter()
-            .for_each(|minter| self.add_minter_internal(minter));
-        burners
-            .iter()
-            .for_each(|burner| self.add_burner_internal(burner));
+        let minter_role = Self::hash_role(ROLE_MINTER);
+        let burner_role = Self::hash_role(ROLE_BURNER);
+
+        // TODO: Check if we can refactor this logic into the add_minter internal function
+        // TODO: Check if a foor loop would be better than an iterator
+        minters.iter().for_each(|minter| {
+            self.access_control
+                .unchecked_grant_role(&minter_role, minter);
+            self.env().emit_event(MinterAdded { minter: *minter });
+        });
+        burners.iter().for_each(|burner| {
+            self.access_control
+                .unchecked_grant_role(&burner_role, burner);
+            self.env().emit_event(BurnerAdded { burner: *burner });
+        });
     }
 
     /// Allows to add a new minter by the owner
@@ -139,6 +243,13 @@ impl NFT {
 }
 
 impl NFT {
+    pub fn hash_role(role_name: &str) -> Role {
+        let mut hasher = Keccak256::default();
+
+        hasher.update(role_name.as_bytes());
+        hasher.finalize().into()
+    }
+
     #[inline]
     fn assert_owner(&self) {
         self.ownable.assert_owner(&self.env().caller());
@@ -175,40 +286,5 @@ impl NFT {
         self.burners.set(&burner, true);
 
         self.env().emit_event(BurnerAdded { burner: *burner });
-    }
-}
-
-pub mod errors {
-    use odra::prelude::*;
-
-    #[odra::odra_error]
-    pub enum Error {
-        CallerNotMinter = 100,
-        CallerNotBurner = 101,
-        CallerNotMinterNorBurner = 102,
-    }
-}
-
-pub mod events {
-    use odra::prelude::*;
-
-    #[odra::event]
-    pub struct MinterAdded {
-        pub minter: Address,
-    }
-
-    #[odra::event]
-    pub struct MinterRemoved {
-        pub minter: Address,
-    }
-
-    #[odra::event]
-    pub struct BurnerAdded {
-        pub burner: Address,
-    }
-
-    #[odra::event]
-    pub struct BurnerRemoved {
-        pub burner: Address,
     }
 }
