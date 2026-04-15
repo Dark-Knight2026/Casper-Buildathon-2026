@@ -11,7 +11,7 @@ use sha3::{Digest, Keccak256};
 
 use crate::nft::{
     errors::Error,
-    events::{BurnerAdded, BurnerRemoved, MinterAdded, MinterRemoved},
+    events::{BurnerAdded, BurnerRemoved, Frozen, MinterAdded, MinterRemoved},
 };
 
 // =============================================================================
@@ -85,8 +85,8 @@ pub mod errors {
         // Backward Compatible
         CallerNotMinter = 100,
         CallerNotBurner = 101,
-
         CallerNotMinterNorBurner = 102,
+
         CannotTransact = 200,
         CannotTransfer = 201,
         TokenIsFrozen = 202,
@@ -105,6 +105,7 @@ pub struct NFT {
     cep95: SubModule<Cep95>,
     tokens_count: Var<U256>,
     whitelist: Mapping<Address, bool>,
+    // TODO: I'm not completely sure if we can do it this way or if we need like a nested mapping like  mapping(address account => mapping(uint256 tokenId => bool frozen)). This nested mapping is from the reference implementation (https://github.com/xaler5/uRWA/blob/master/contracts/uRWA721.sol) but i don't understand why they did it like that. Why can't you just freeze a token regardless of the account? If its frozen, its frozen. What difference does it make if the mapping references the account if each NFT only has exactly one owner? Need to perfectly evaluate if each NFT really does have exactly one owner.
     frozen_tokens: Mapping<U256, bool>,
 }
 
@@ -145,6 +146,44 @@ impl NFT {
             self.env().emit_event(BurnerAdded { burner: *burner });
         });
     }
+
+    // =========================================================================
+    // ERC-7943 View Functions
+    // =========================================================================
+
+    /// Returns true if the account is whitelisted and allowed to transact.
+    /// @dev This is often used for allowlist/KYC/KYB/AML checks.
+    pub fn can_transact(&self, account: &Address) -> bool {
+        self.whitelist.get_or_default(account)
+    }
+
+    /// Returns true if transfer of token from `from` to `to is allowed.
+    /// Checks: `from` owns the token, token is not frozen, both parties are whitelisted
+    pub fn can_transfer(&self, from: &Address, to: &Address, token_id: &U256) -> bool {
+        if self.cep95.owner_of(*token_id) != Some(*from) {
+            return false;
+        }
+        if self.frozen_tokens.get_or_default(token_id) {
+            return false;
+        }
+        self.can_transact(from) && self.can_transact(to)
+    }
+
+    /// Returns true if the given token is frozen
+    /// The `account` parameter is accepted for interface compliance;
+    /// frozen status is tracked per token ID (each NFT has exactly one owner)
+    /// TODO: Evaluate if we can delete the account argument from here since we are not completely beholden by the interface
+    pub fn get_frozen_tokens(&self, account: &Address, token_id: &U256) -> bool {
+        let _ = account;
+        self.frozen_tokens.get_or_default(token_id)
+    }
+
+    /// Returns true if the address is on the whitelist
+    pub fn is_whitelisted(&self, account: &Address) -> bool {
+        self.whitelist.get_or_default(account)
+    }
+
+
 
     /// Allows to add a new minter by the owner
     pub fn add_minter(&mut self, minter: &Address) {
