@@ -11,7 +11,9 @@ use sha3::{Digest, Keccak256};
 
 use crate::nft::{
     errors::Error,
-    events::{BurnerAdded, BurnerRemoved, ForcedTransfer, Frozen, MinterAdded, MinterRemoved},
+    events::{
+        BurnerAdded, BurnerRemoved, ForcedTransfer, Frozen, MinterAdded, MinterRemoved, Whitelisted,
+    },
 };
 
 // =============================================================================
@@ -205,6 +207,10 @@ impl NFT {
         });
     }
 
+    /// Takes `token_id` from one address and transfers it to another.
+    /// Restricted to FORCE_TRANSFERER role.
+    /// Bypass freeze and approval checks but still requires receiver to be whitelisted.
+    /// @dev Forced transfer for regulatory enforcement or recovery scenarios.
     pub fn forced_transfer(&mut self, from: Address, to: Address, token_id: U256) {
         self.assert_role(ROLE_FORCE_TRANSFERER);
 
@@ -231,6 +237,34 @@ impl NFT {
 
         self.env().emit_event(ForcedTransfer { from, to, token_id });
     }
+
+    // =========================================================================
+    // Whitelist Management
+    // =========================================================================
+
+    pub fn add_to_whitelist(&mut self, account: &Address) {
+        self.assert_role(ROLE_WHITELIST_MANAGER);
+        self.whitelist.set(account, true);
+
+        self.env().emit_event(Whitelisted {
+            account: *account,
+            status: true,
+        })
+    }
+
+    pub fn remove_from_whitelist(&mut self, account: &Address) {
+        self.assert_role(ROLE_WHITELIST_MANAGER);
+        self.whitelist.set(account, false);
+
+        self.env().emit_event(Whitelisted {
+            account: *account,
+            status: true,
+        })
+    }
+
+    // =========================================================================
+    // Minter / Burner Management (backward compatibility API)
+    // =========================================================================
 
     /// Allows to add a new minter by the owner
     pub fn add_minter(&mut self, minter: &Address) {
