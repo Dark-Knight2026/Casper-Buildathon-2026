@@ -266,33 +266,55 @@ impl NFT {
     // Minter / Burner Management (backward compatibility API)
     // =========================================================================
 
-    /// Allows to add a new minter by the owner
+    /// Allows to add a new minter by the admin
     pub fn add_minter(&mut self, minter: &Address) {
-        self.assert_owner();
-        self.add_minter_internal(minter);
+        self.assert_admin();
+        let role = Self::hash_role(ROLE_MINTER);
+        self.access_control.unchecked_grant_role(&role, minter);
+
+        self.env().emit_event(MinterAdded { minter: *minter });
     }
 
-    /// Allows to remove a minter by the owner
+    /// Allows to remove a minter by the admin
     pub fn remove_minter(&mut self, minter: &Address) {
-        self.assert_owner();
-        self.minters.set(&minter, false);
+        self.assert_admin();
+        let role = Self::hash_role(ROLE_MINTER);
+        self.access_control.revoke_role(&role, minter);
 
         self.env().emit_event(MinterRemoved { minter: *minter });
     }
 
-    /// Allows to add a new burner by the owner
+    /// Allows to add a new burner by the admin
     pub fn add_burner(&mut self, burner: &Address) {
-        self.assert_owner();
-        self.add_burner_internal(burner);
+        self.assert_admin();
+        let role = Self::hash_role(ROLE_BURNER);
+        self.access_control.unchecked_grant_role(&role, burner);
+        self.env().emit_event(BurnerAdded { burner: *burner });
     }
 
-    /// Allows to remove a burner by the owner
+    /// Allows to remove a burner by the admin
     pub fn remove_burner(&mut self, burner: &Address) {
-        self.assert_owner();
-        self.burners.set(&burner, false);
-
+        self.assert_admin();
+        let role = Self::hash_role(ROLE_BURNER);
+        self.access_control.revoke_role(&role, burner);
         self.env().emit_event(BurnerRemoved { burner: *burner });
     }
+
+    /// Returns `true` if `address` has the `minter` role, `false` otherwise
+    pub fn is_minter(&self, address: &Address) -> bool {
+        let role = Self::hash_role(ROLE_MINTER);
+        self.access_control.has_role(&role, address)
+    }
+
+    /// Returns `true` if `address` has the `burner` role, `false` otherwise
+    pub fn is_burner(&self, address: &Address) -> bool {
+        let role = Self::hash_role(ROLE_BURNER);
+        self.access_control.has_role(&role, address)
+    }
+
+    // =========================================================================
+    // Token Operations (compliance aware)
+    // =========================================================================
 
     /// Allows to mint new token and set its metadata by the minter
     pub fn mint(&mut self, to: Address, metadata: Vec<(String, String)>) {
@@ -320,16 +342,6 @@ impl NFT {
     pub fn update_metadata(&mut self, token_id: U256, metadata: Vec<(String, String)>) {
         self.assert_minter_or_burner();
         self.cep95.update_metadata(token_id, metadata);
-    }
-
-    /// Returns `true` if `address` has the `minter` role, `false` otherwise
-    pub fn is_minter(&self, address: &Address) -> bool {
-        self.minters.get_or_default(&address)
-    }
-
-    /// Returns `true` if `address` has the `burner` role, `false` otherwise
-    pub fn is_burner(&self, address: &Address) -> bool {
-        self.burners.get_or_default(&address)
     }
 
     /// Returns a number of minted tokens
@@ -374,6 +386,16 @@ impl NFT {
     fn assert_role(&self, role_name: &str) {
         let role = Self::hash_role(role_name);
         if !self.access_control.has_role(&role, &self.env().caller()) {
+            self.env().revert(Error::NotAuthorized);
+        }
+    }
+
+    #[inline]
+    fn assert_admin(&self) {
+        if !self
+            .access_control
+            .has_role(&DEFAULT_ADMIN_ROLE, &self.env().caller())
+        {
             self.env().revert(Error::NotAuthorized);
         }
     }
