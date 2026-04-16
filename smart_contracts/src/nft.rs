@@ -421,11 +421,25 @@ impl NFT {
         Self::hash_role(ROLE_FORCE_TRANSFERER)
     }
 
+    // =========================================================================
+    // Access Control & CEP-95 Delegation
+    // =========================================================================
+
     delegate! {
-        to self.ownable {
-            fn transfer_ownership(&mut self, new_owner: &Address);
-            fn renounce_ownership(&mut self);
-            fn get_owner(&self) -> Address;
+      // Question: Do we need the ownable module anymore now that we are using the access control module?
+        // to self.ownable {
+        //     fn transfer_ownership(&mut self, new_owner: &Address);
+        //     fn renounce_ownership(&mut self);
+        //     fn get_owner(&self) -> Address;
+        // }
+
+        to self.access_control {
+          fn has_role(&self, role: &Role, address: &Address) -> bool;
+          fn get_role_admin(&self, role: &Role) -> Role;
+          fn grant_role(&mut self, role: &Role, address: &Address);
+          fn revoke_role(&mut self, role: &Role, address: &Address);
+          fn renounce_role(&mut self, role: &Role, address: &Address);
+
         }
 
         to self.cep95 {
@@ -443,6 +457,10 @@ impl NFT {
         }
     }
 }
+
+// =========================================================================
+// Internal Helpers
+// =========================================================================
 
 impl NFT {
     pub fn hash_role(role_name: &str) -> Role {
@@ -475,36 +493,32 @@ impl NFT {
         self.ownable.assert_owner(&self.env().caller());
     }
 
+    // TODO: Can we or should we just use the is_minter function in the minter/burner management?
     #[inline]
     fn assert_minter(&self) {
-        if !self.is_minter(&self.env().caller()) {
+        let role = Self::hash_role(ROLE_MINTER);
+        if !self.access_control.has_role(&role, &self.env().caller()) {
             self.env().revert(Error::CallerNotMinter);
         }
     }
 
     #[inline]
     fn assert_burner(&self) {
-        if !self.is_burner(&self.env().caller()) {
+        let role = Self::hash_role(ROLE_BURNER);
+        if !self.access_control.has_role(&role, &self.env().caller()) {
             self.env().revert(Error::CallerNotBurner);
         }
     }
 
     #[inline]
     fn assert_minter_or_burner(&self) {
-        if !self.is_minter(&self.env().caller()) && !self.is_burner(&self.env().caller()) {
+        let caller = self.env().caller();
+        let minter_role = Self::hash_role(ROLE_MINTER);
+        let burner_role = Self::hash_role(ROLE_BURNER);
+        if !self.access_control.has_role(&minter_role, &caller)
+            && !self.access_control.has_role(&burner_role, &caller)
+        {
             self.env().revert(Error::CallerNotMinterNorBurner);
         }
-    }
-
-    fn add_minter_internal(&mut self, minter: &Address) {
-        self.minters.set(&minter, true);
-
-        self.env().emit_event(MinterAdded { minter: *minter });
-    }
-
-    fn add_burner_internal(&mut self, burner: &Address) {
-        self.burners.set(&burner, true);
-
-        self.env().emit_event(BurnerAdded { burner: *burner });
     }
 }
