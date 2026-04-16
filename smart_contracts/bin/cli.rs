@@ -5,6 +5,8 @@ use odra::{
 };
 use odra_cli::{deploy::DeployScript, DeployedContractsContainer, DeployerExt, OdraCli};
 
+use odra_modules::access::DEFAULT_ADMIN_ROLE;
+
 use leasefi_contracts::{
     big_coin::{BigCoin, BigCoinInitArgs},
     constants::{PRIVATE_SALE_CLIFF_DURATION, PRIVATE_SALE_VESTING_DURATION},
@@ -210,7 +212,7 @@ impl DeployScript for LeasefiDeployScript {
         ico.add_ico_schedule(creation_params);
 
         // Transfer ownership
-        nft.transfer_ownership(&new_owner);
+        nft.grant_role(&DEFAULT_ADMIN_ROLE, &new_owner);
         treasury.transfer_ownership(&new_owner);
         escrow.transfer_ownership(&new_owner);
         lease.transfer_ownership(&new_owner);
