@@ -3,9 +3,11 @@ use odra::casper_types::U256;
 use odra::host::{Deployer, HostEnv};
 use odra::prelude::*;
 use odra_modules::{
-    access::errors::Error as AccessError,
+    access::DEFAULT_ADMIN_ROLE,
     cep95::{Burn, MetadataUpdate, Mint},
 };
+
+use crate::nft::ROLE_WHITELIST_MANAGER;
 
 struct TestData {
     env: HostEnv,
@@ -18,10 +20,11 @@ struct TestData {
 fn test_init_should_initialize_contract_properly() {
     let test_data = setup(odra_test::env());
 
-    assert_eq!(
-        test_data.nft.get_owner(),
-        test_data.env.get_account(0),
-        "Invalid owner"
+    assert!(
+        test_data
+            .nft
+            .has_role(&DEFAULT_ADMIN_ROLE, &test_data.env.get_account(0)),
+        "Account 0 should have DEFAULT_ADMIN_ROLE"
     );
     assert_eq!(
         test_data.nft.symbol(),
@@ -58,7 +61,7 @@ fn test_add_minter_should_revert_if_not_owner_is_calling() {
             .nft
             .try_add_minter(&test_data.env.get_account(1))
             .unwrap_err(),
-        AccessError::CallerNotTheOwner.into(),
+        Error::NotAuthorized.into(),
         "Should revert when is called by not the owner"
     );
 }
@@ -90,7 +93,7 @@ fn test_remove_minter_should_revert_if_not_owner_is_calling() {
             .nft
             .try_remove_minter(&test_data.env.get_account(1))
             .unwrap_err(),
-        AccessError::CallerNotTheOwner.into(),
+        Error::NotAuthorized.into(),
         "Should revert when is called by not the owner"
     );
 }
@@ -123,7 +126,7 @@ fn test_add_burner_should_revert_if_not_owner_is_calling() {
             .nft
             .try_add_burner(&test_data.env.get_account(1))
             .unwrap_err(),
-        AccessError::CallerNotTheOwner.into(),
+        Error::NotAuthorized.into(),
         "Should revert when is called by not the owner"
     );
 }
@@ -155,7 +158,7 @@ fn test_remove_burner_should_revert_if_not_owner_is_calling() {
             .nft
             .try_remove_burner(&test_data.env.get_account(1))
             .unwrap_err(),
-        AccessError::CallerNotTheOwner.into(),
+        Error::NotAuthorized.into(),
         "Should revert when is called by not the owner"
     );
 }
@@ -338,7 +341,7 @@ fn test_update_metadata_should_update_metadata_properly() {
 fn setup(env: HostEnv) -> TestData {
     let minters = vec![env.get_account(10), env.get_account(11)];
     let burners = vec![env.get_account(12), env.get_account(13)];
-    let nft = NFT::deploy(
+    let mut nft = NFT::deploy(
         &env,
         NFTInitArgs {
             owner: env.get_account(0),
@@ -348,6 +351,10 @@ fn setup(env: HostEnv) -> TestData {
             burners: burners.clone(),
         },
     );
+
+    // Grant WHITE_LIST_MANAGER role to admin so tests can whitelist addresses
+    let wl_role = NFT::hash_role(ROLE_WHITELIST_MANAGER);
+    nft.grant_role(&wl_role, &env.get_account(0));
 
     TestData {
         env,
@@ -359,6 +366,10 @@ fn setup(env: HostEnv) -> TestData {
 
 fn mint(test_data: &mut TestData, to: Address, metadata: Vec<(String, String)>) -> U256 {
     let expected_token_id = test_data.nft.get_tokens_count();
+
+    // Whitelist the recipient before minting
+    test_data.env.set_caller(test_data.env.get_account(0));
+    test_data.nft.add_to_whitelist(&to);
 
     test_data.env.set_caller(test_data.minters[0]);
     test_data.nft.mint(to, metadata);
