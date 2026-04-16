@@ -213,6 +213,7 @@ impl DeployScript for LeasefiDeployScript {
 
         // Transfer ownership
         nft.grant_role(&DEFAULT_ADMIN_ROLE, &new_owner);
+        nft.revoke_role(&DEFAULT_ADMIN_ROLE, &env.caller());
         treasury.transfer_ownership(&new_owner);
         escrow.transfer_ownership(&new_owner);
         lease.transfer_ownership(&new_owner);
