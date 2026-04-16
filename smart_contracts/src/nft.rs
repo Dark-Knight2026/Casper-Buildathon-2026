@@ -397,6 +397,30 @@ impl NFT {
         self.cep95.safe_transfer_from(from, to, token_id, data);
     }
 
+    // =========================================================================
+    // Role Hash Getters
+    // =========================================================================
+
+    pub fn minter_role(&self) -> Role {
+        Self::hash_role(ROLE_MINTER)
+    }
+
+    pub fn burner_role(&self) -> Role {
+        Self::hash_role(ROLE_BURNER)
+    }
+
+    pub fn whitelist_manager_role(&self) -> Role {
+        Self::hash_role(ROLE_WHITELIST_MANAGER)
+    }
+
+    pub fn freezer_role(&self) -> Role {
+        Self::hash_role(ROLE_FREEZER)
+    }
+
+    pub fn force_transferer_role(&self) -> Role {
+        Self::hash_role(ROLE_FORCE_TRANSFERER)
+    }
+
     delegate! {
         to self.ownable {
             fn transfer_ownership(&mut self, new_owner: &Address);
