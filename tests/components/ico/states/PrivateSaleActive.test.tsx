@@ -27,11 +27,6 @@ vi.mock('@/lib/api-client', () => ({
   backendClient: { get: (...args: unknown[]) => mockGet(...args) },
 }));
 
-// Mock useUserTokenActions
-vi.mock('@/hooks/ico/useUserTokenActions', () => ({
-  useUserTokenActions: () => ({ transactions: [] }),
-}));
-
 // blockchain utils — vi.fn() so withData tests can inject a real accountHash
 vi.mock('@/lib/blockchain/accountUtils', () => ({
   deriveAccountHash: vi.fn(() => null),
