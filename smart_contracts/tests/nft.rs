@@ -7,7 +7,7 @@ use odra_modules::{
     cep95::{Burn, MetadataUpdate, Mint},
 };
 
-use crate::nft::ROLE_WHITELIST_MANAGER;
+use crate::nft::{ROLE_FREEZER, ROLE_WHITELIST_MANAGER};
 
 // =============================================================================
 // Test Context
@@ -507,4 +507,79 @@ fn test_whitelist_managment_should_work_properly() {
             status: false,
         }
     ));
+}
+
+// =============================================================================
+// transfer()
+// =============================================================================
+
+#[test]
+fn test_transfer_should_revert_if_not_whitelisted() {
+    let mut ctx = setup(odra_test::env());
+    let sender = ctx.env.get_account(5);
+    let receiver = ctx.env.get_account(6);
+
+    // Mint token to sender (mint helper already whitelists sender)
+    let token_id = mint(
+        &mut ctx,
+        sender,
+        vec![(String::from("key"), String::from("value"))],
+    );
+
+    // Receiver is NOT whitelisted, transfer should fail
+    ctx.env.set_caller(sender);
+    assert_eq!(
+        ctx.nft
+            .try_transfer_from(sender, receiver, token_id)
+            .unwrap_err(),
+        Error::CannotTransfer.into(),
+        "Should revert when receiver is not whitelisted"
+    );
+
+    // Whitelist receiver, remove sender, transfer should still fail
+    ctx.env.set_caller(ctx.env.get_account(0));
+    ctx.nft.add_to_whitelist(&receiver);
+    ctx.nft.remove_from_whitelist(&sender);
+
+    ctx.env.set_caller(sender);
+    assert_eq!(
+        ctx.nft
+            .try_transfer_from(sender, receiver, token_id)
+            .unwrap_err(),
+        Error::CannotTransfer.into(),
+        "Should revert when sender is not whitelisted"
+    );
+}
+
+#[test]
+fn test_transfer_should_revert_if_token_frozen() {
+    let mut ctx = setup(odra_test::env());
+    let sender = ctx.env.get_account(5);
+    let receiver = ctx.env.get_account(6);
+
+    // Mint token to sender (mint helper already whitelists sender)
+    let token_id = mint(
+        &mut ctx,
+        sender,
+        vec![(String::from("key"), String::from("value"))],
+    );
+
+    // Whitelist receiver and grant FREEZER role to admin
+    let admin = ctx.env.get_account(0);
+    ctx.env.set_caller(admin);
+    ctx.nft.add_to_whitelist(&receiver);
+    ctx.nft.grant_role(&NFT::hash_role(ROLE_FREEZER), &admin);
+
+    // Freeze the token
+    ctx.nft.set_frozen_tokens(&token_id, true);
+
+    ctx.env.set_caller(sender);
+
+    assert_eq!(
+        ctx.nft
+            .try_transfer_from(sender, receiver, token_id)
+            .unwrap_err(),
+        Error::CannotTransfer.into(),
+        "Should revert when token is frozen"
+    );
 }
