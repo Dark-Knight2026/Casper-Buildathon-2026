@@ -7,7 +7,7 @@ use odra_modules::{
     cep95::{Burn, MetadataUpdate, Mint},
 };
 
-use crate::nft::{ROLE_FREEZER, ROLE_WHITELIST_MANAGER};
+use crate::nft::{ROLE_FORCE_TRANSFERER, ROLE_FREEZER, ROLE_WHITELIST_MANAGER};
 
 // =============================================================================
 // Test Context
@@ -574,7 +574,6 @@ fn test_transfer_should_revert_if_token_frozen() {
     ctx.nft.set_frozen_tokens(&token_id, true);
 
     ctx.env.set_caller(sender);
-
     assert_eq!(
         ctx.nft
             .try_transfer_from(sender, receiver, token_id)
@@ -582,4 +581,73 @@ fn test_transfer_should_revert_if_token_frozen() {
         Error::CannotTransfer.into(),
         "Should revert when token is frozen"
     );
+}
+
+// =============================================================================
+// Freeze
+// =============================================================================
+
+#[test]
+fn test_set_frozen_tokens_should_revert_if_not_freezer() {
+    let mut ctx = setup(odra_test::env());
+    let sender = ctx.env.get_account(5);
+    let token_id = mint(
+        &mut ctx,
+        sender,
+        vec![(String::from("key"), String::from("value"))],
+    );
+
+    // Account 1 has no FREEZER role
+    ctx.env.set_caller(ctx.env.get_account(1));
+    assert_eq!(
+        ctx.nft.try_set_frozen_tokens(&token_id, true).unwrap_err(),
+        Error::NotAuthorized.into(),
+        "Should revert when caller lacks FREEZER role"
+    );
+}
+
+#[test]
+fn test_freeze_and_unfreeze_should_work_properly() {
+    let mut ctx = setup(odra_test::env());
+    let owner = ctx.env.get_account(5);
+    let token_id = mint(
+        &mut ctx,
+        owner,
+        vec![(String::from("key"), String::from("value"))],
+    );
+
+    // Grant FREEZER role to admin
+    let admin = ctx.env.get_account(0);
+    ctx.env.set_caller(admin);
+    let freezer_role = NFT::hash_role(ROLE_FREEZER);
+    ctx.nft.grant_role(&freezer_role, &admin);
+
+    // Not frozen by default
+    assert!(!ctx.nft.get_frozen_tokens(&token_id));
+
+    // Freeze
+    ctx.nft.set_frozen_tokens(&token_id, true);
+
+    assert!(ctx.nft.get_frozen_tokens(&token_id));
+    assert!(ctx.env.emitted_event(
+        &ctx.nft,
+        Frozen {
+            account: owner,
+            token_id,
+            frozen_status: true,
+        }
+    ));
+
+    // Unfreeze
+    ctx.nft.set_frozen_tokens(&token_id, false);
+
+    assert!(!ctx.nft.get_frozen_tokens(&token_id));
+    assert!(ctx.env.emitted_event(
+        &ctx.nft,
+        Frozen {
+            account: owner,
+            token_id,
+            frozen_status: false,
+        }
+    ));
 }
