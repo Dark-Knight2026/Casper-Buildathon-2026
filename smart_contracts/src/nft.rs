@@ -111,7 +111,6 @@ pub mod errors {
 ])]
 pub struct NFT {
     access_control: SubModule<AccessControl>,
-    ownable: SubModule<Ownable>,
     cep95: SubModule<Cep95>,
     tokens_count: Var<U256>,
     whitelist: Mapping<Address, bool>,
@@ -133,9 +132,6 @@ impl NFT {
         minters: Vec<Address>,
         burners: Vec<Address>,
     ) {
-        // TODO: Evaluate with we need the ownable module
-        // self.ownable.init(owner);
-
         self.access_control
             .unchecked_grant_role(&DEFAULT_ADMIN_ROLE, &owner);
         self.cep95.init(symbol, name);
@@ -210,9 +206,11 @@ impl NFT {
     }
 
     /// Takes `token_id` from one address and transfers it to another.
-    /// Restricted to FORCE_TRANSFERER role.
-    /// Bypass freeze and approval checks but still requires receiver to be whitelisted.
-    /// @dev Forced transfer for regulatory enforcement or recovery scenarios.
+    /// Restricted to FORCE_TRANSFERER role. Still requires receiver to be whitelisted.
+    /// Forced transfer for regulatory enforcement or recovery scenarios.
+    /// @dev `cep95.transfer_from()` checks that the caller is the token owner or an approved
+    /// operator. An admin performing a forced transfer isn't either. `raw_transfer(to, token_id)`
+    /// bypasses all CEP-95 authorization, which is exactly what forced_transfer needs.
     pub fn forced_transfer(&mut self, from: Address, to: Address, token_id: U256) {
         self.assert_role(ROLE_FORCE_TRANSFERER);
 
@@ -426,13 +424,6 @@ impl NFT {
     // =========================================================================
 
     delegate! {
-      // Question: Do we need the ownable module anymore now that we are using the access control module?
-        // to self.ownable {
-        //     fn transfer_ownership(&mut self, new_owner: &Address);
-        //     fn renounce_ownership(&mut self);
-        //     fn get_owner(&self) -> Address;
-        // }
-
         to self.access_control {
           fn has_role(&self, role: &Role, address: &Address) -> bool;
           fn get_role_admin(&self, role: &Role) -> Role;
@@ -486,11 +477,6 @@ impl NFT {
         {
             self.env().revert(Error::NotAuthorized);
         }
-    }
-
-    #[inline]
-    fn assert_owner(&self) {
-        self.ownable.assert_owner(&self.env().caller());
     }
 
     // TODO: Can we or should we just use the is_minter function in the minter/burner management?
