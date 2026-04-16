@@ -651,3 +651,75 @@ fn test_freeze_and_unfreeze_should_work_properly() {
         }
     ));
 }
+
+// =============================================================================
+// forced_transfer()
+// =============================================================================
+
+#[test]
+fn test_forced_transfer_should_revert_if_not_authorized() {
+    let mut ctx = setup(odra_test::env());
+    let sender = ctx.env.get_account(5);
+    let receiver = ctx.env.get_account(6);
+    let token_id = mint(
+        &mut ctx,
+        sender,
+        vec![(String::from("key"), String::from("value"))],
+    );
+
+    // Account 1 has no FORCE_TRANSFERER role
+    ctx.env.set_caller(ctx.env.get_account(1));
+    assert_eq!(
+        ctx.nft
+            .try_forced_transfer(sender, receiver, token_id)
+            .unwrap_err(),
+        Error::NotAuthorized.into(),
+        "Should revert when caller lacks FORCE_TRANSFERER role"
+    );
+}
+
+#[test]
+fn test_forced_transfer_should_work_properly() {
+    let mut ctx = setup(odra_test::env());
+    let sender = ctx.env.get_account(5);
+    let receiver = ctx.env.get_account(6);
+    let token_id = mint(
+        &mut ctx,
+        sender,
+        vec![(String::from("key"), String::from("value"))],
+    );
+
+    // Setup: whitelist receiver, grant FREEZER + FORCE_TRANSFERER to admin
+    let admin = ctx.env.get_account(0);
+    ctx.env.set_caller(admin);
+    ctx.nft.add_to_whitelist(&receiver);
+
+    let freezer_role = NFT::hash_role(ROLE_FREEZER);
+    let ft_role = NFT::hash_role(ROLE_FORCE_TRANSFERER);
+    ctx.nft.grant_role(&freezer_role, &admin);
+    ctx.nft.grant_role(&ft_role, &admin);
+
+    // Freeze the token — forced transfer should still work
+    ctx.nft.set_frozen_tokens(&token_id, true);
+    assert!(ctx.nft.get_frozen_tokens(&token_id));
+
+    // Forced transfer
+    ctx.nft.forced_transfer(sender, receiver, token_id);
+
+    assert_eq!(
+        ctx.nft.owner_of(token_id),
+        Some(receiver),
+        "Token should belong to receiver"
+    );
+
+    // Token should be unfrozen after forced transfer
+    assert!(!ctx.nft.get_frozen_tokens(&token_id));
+    assert!(ctx.env.emitted_event(
+        &ctx.nft,
+        ForcedTransfer {
+            from: sender,
+            to: receiver,
+            token_id,
+        }
+    ));
+}
