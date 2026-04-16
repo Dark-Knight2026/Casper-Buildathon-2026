@@ -3,7 +3,7 @@ use odra::{
     prelude::*,
 };
 use odra_modules::{
-    access::{AccessControl, Ownable, Role, DEFAULT_ADMIN_ROLE},
+    access::{AccessControl, Role, DEFAULT_ADMIN_ROLE},
     cep95::{CEP95Interface, Cep95},
 };
 
@@ -15,8 +15,6 @@ use crate::nft::{
         BurnerAdded, BurnerRemoved, ForcedTransfer, Frozen, MinterAdded, MinterRemoved, Whitelisted,
     },
 };
-
-// QUESTION: Should we build out the ERC-7943 interface and put it in the interfaces directory? Is that necessary for Odra like we might do in Solidity? In Solidity we would build out the interface and then import it and then have the contract inherit it. But in Odra, i think we might only need an interface to actually interact with an existing contract. I don't think we can or should or need to inherit the interface like we do in Solidity. I don't think Odra even has inheritance.
 
 // =============================================================================
 // Roles
@@ -85,7 +83,6 @@ pub mod errors {
 
     #[odra::odra_error]
     pub enum Error {
-        // TODO: Evaluate if we need backward compatibility
         // Backward Compatible
         CallerNotMinter = 100,
         CallerNotBurner = 101,
@@ -106,15 +103,16 @@ pub mod errors {
   BurnerAdded,
   BurnerRemoved,
   ForcedTransfer,
+  Frozen,
   MinterAdded,
   MinterRemoved,
+  Whitelisted,
 ])]
 pub struct NFT {
     access_control: SubModule<AccessControl>,
     cep95: SubModule<Cep95>,
     tokens_count: Var<U256>,
     whitelist: Mapping<Address, bool>,
-    // TODO: I'm not completely sure if we can do it this way or if we need like a nested mapping like  mapping(address account => mapping(uint256 tokenId => bool frozen)). This nested mapping is from the reference implementation (https://github.com/xaler5/uRWA/blob/master/contracts/uRWA721.sol) but i don't understand why they did it like that. Why can't you just freeze a token regardless of the account? If its frozen, its frozen. What difference does it make if the mapping references the account if each NFT only has exactly one owner? Need to perfectly evaluate if each NFT really does have exactly one owner.
     frozen_tokens: Mapping<U256, bool>,
 }
 
@@ -139,8 +137,6 @@ impl NFT {
         let minter_role = Self::hash_role(ROLE_MINTER);
         let burner_role = Self::hash_role(ROLE_BURNER);
 
-        // TODO: Check if we can refactor this logic into the add_minter internal function
-        // TODO: Check if a foor loop would be better than an iterator
         minters.iter().for_each(|minter| {
             self.access_control
                 .unchecked_grant_role(&minter_role, minter);
@@ -178,9 +174,7 @@ impl NFT {
     /// Returns true if the given token is frozen
     /// The `account` parameter is accepted for interface compliance;
     /// frozen status is tracked per token ID (each NFT has exactly one owner)
-    /// TODO: Evaluate if we can delete the account argument from here since we are not completely beholden by the interface
-    pub fn get_frozen_tokens(&self, account: &Address, token_id: &U256) -> bool {
-        let _ = account;
+    pub fn get_frozen_tokens(&self, token_id: &U256) -> bool {
         self.frozen_tokens.get_or_default(token_id)
     }
 
@@ -194,12 +188,14 @@ impl NFT {
     // =========================================================================
 
     /// Freeze or unfreeze a specific token. Restricted to FREEZER role.
-    pub fn set_frozen_tokens(&mut self, account: &Address, token_id: &U256, frozen_status: bool) {
+    pub fn set_frozen_tokens(&mut self, token_id: &U256, frozen_status: bool) {
         self.assert_role(ROLE_FREEZER);
         self.frozen_tokens.set(token_id, frozen_status);
 
+        let account = self.cep95.owner_of(*token_id).unwrap_or_revert(&self.env());
+
         self.env().emit_event(Frozen {
-            account: *account,
+            account,
             token_id: *token_id,
             frozen_status,
         });
@@ -215,10 +211,10 @@ impl NFT {
         self.assert_role(ROLE_FORCE_TRANSFERER);
 
         if self.cep95.owner_of(token_id) != Some(from) {
-            self.env().revert(Error::CannotTransact);
+            self.env().revert(Error::CannotTransfer);
         }
 
-        if self.can_transact(&to) {
+        if !self.can_transact(&to) {
             self.env().revert(Error::CannotTransact);
         }
 
@@ -258,7 +254,7 @@ impl NFT {
 
         self.env().emit_event(Whitelisted {
             account: *account,
-            status: true,
+            status: false,
         })
     }
 
@@ -479,19 +475,16 @@ impl NFT {
         }
     }
 
-    // TODO: Can we or should we just use the is_minter function in the minter/burner management?
     #[inline]
     fn assert_minter(&self) {
-        let role = Self::hash_role(ROLE_MINTER);
-        if !self.access_control.has_role(&role, &self.env().caller()) {
+        if !self.is_minter(&self.env().caller()) {
             self.env().revert(Error::CallerNotMinter);
         }
     }
 
     #[inline]
     fn assert_burner(&self) {
-        let role = Self::hash_role(ROLE_BURNER);
-        if !self.access_control.has_role(&role, &self.env().caller()) {
+        if !self.is_burner(&self.env().caller()) {
             self.env().revert(Error::CallerNotBurner);
         }
     }
@@ -499,11 +492,7 @@ impl NFT {
     #[inline]
     fn assert_minter_or_burner(&self) {
         let caller = self.env().caller();
-        let minter_role = Self::hash_role(ROLE_MINTER);
-        let burner_role = Self::hash_role(ROLE_BURNER);
-        if !self.access_control.has_role(&minter_role, &caller)
-            && !self.access_control.has_role(&burner_role, &caller)
-        {
+        if !self.is_minter(&caller) && !self.is_burner(&caller) {
             self.env().revert(Error::CallerNotMinterNorBurner);
         }
     }
