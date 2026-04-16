@@ -368,7 +368,35 @@ impl NFT {
     pub fn get_tokens_count(&self) -> U256 {
         self.tokens_count.get_or_default()
     }
-    
+
+    // =========================================================================
+    // Transfers (compliance-wrapped)
+    // =========================================================================
+
+    /// Pulled out of `delegate!` so we can enforce ERC-7943 check
+    /// @dev CEP-95 still does its own checks (caller must be owner or approved operator)
+    pub fn transfer_from(&mut self, from: Address, to: Address, token_id: U256) {
+        if !self.can_transfer(&from, &to, &token_id) {
+            self.env().revert(Error::CannotTransfer);
+        }
+        self.cep95.transfer_from(from, to, token_id);
+    }
+
+    /// Pulled out of `delegate!` so we can enforce ERC-7943 check
+    /// @dev CEP-95 still does its own checks (caller must be owner or approved operator)
+    pub fn safe_transfer_from(
+        &mut self,
+        from: Address,
+        to: Address,
+        token_id: U256,
+        data: Option<Bytes>,
+    ) {
+        if !self.can_transfer(&from, &to, &token_id) {
+            self.env().revert(Error::CannotTransfer);
+        }
+        self.cep95.safe_transfer_from(from, to, token_id, data);
+    }
+
     delegate! {
         to self.ownable {
             fn transfer_ownership(&mut self, new_owner: &Address);
@@ -381,8 +409,6 @@ impl NFT {
             fn symbol(&self) -> String;
             fn balance_of(&self, owner: Address) -> U256;
             fn owner_of(&self, token_id: U256) -> Option<Address>;
-            fn safe_transfer_from(&mut self, from: Address, to: Address, token_id: U256, data: Option<Bytes>);
-            fn transfer_from(&mut self, from: Address, to: Address, token_id: U256);
             fn approve(&mut self, spender: Address, token_id: U256);
             fn revoke_approval(&mut self, token_id: U256);
             fn approved_for(&self, token_id: U256) -> Option<Address>;
