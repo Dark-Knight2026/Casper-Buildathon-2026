@@ -456,3 +456,55 @@ fn test_update_metadata_should_update_metadata_properly() {
         "Invalid token metadata"
     );
 }
+
+// =============================================================================
+// add_to_whitelist()
+// =============================================================================
+
+#[test]
+fn test_add_to_whitelist_should_revert_if_not_whitelist_manager() {
+    let mut ctx = setup(odra_test::env());
+
+    ctx.env.set_caller(ctx.env.get_account(1));
+
+    assert_eq!(
+        ctx.nft
+            .try_add_to_whitelist(&ctx.env.get_account(5))
+            .unwrap_err(),
+        Error::NotAuthorized.into(),
+        "Should revert when caller lacks WHITE_MANAGER role"
+    );
+}
+
+#[test]
+fn test_whitelist_managment_should_work_properly() {
+    let mut ctx = setup(odra_test::env());
+    let account = ctx.env.get_account(5);
+
+    // Not whitelisted by default
+    assert!(!ctx.nft.can_transact(&account));
+
+    // Add to whitelist
+    ctx.nft.add_to_whitelist(&account);
+
+    assert!(ctx.nft.can_transact(&account));
+    assert!(ctx.env.emitted_event(
+        &ctx.nft,
+        Whitelisted {
+            account,
+            status: true,
+        }
+    ));
+
+    // Remove from whitelist
+    ctx.nft.remove_from_whitelist(&account);
+
+    assert!(!ctx.nft.can_transact(&account));
+    assert!(ctx.env.emitted_event(
+        &ctx.nft,
+        Whitelisted {
+            account,
+            status: false,
+        }
+    ));
+}
