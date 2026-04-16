@@ -25,9 +25,8 @@ export const ICO_CONFIG = {
     usdcAddress: import.meta.env.VITE_USDC_CONTRACT_HASH ?? '',
     usdtAddress: import.meta.env.VITE_USDT_CONTRACT_HASH ?? '',
     // Contract instance hashes — used for state queries (allowance check, balance)
-    // Falls back to package hash if not set (for non-Odra contracts where package == contract)
-    usdcInstanceHash: import.meta.env.VITE_USDC_CONTRACT_INSTANCE_HASH || '',
-    usdtInstanceHash: import.meta.env.VITE_USDT_CONTRACT_INSTANCE_HASH || '',
+    usdcInstanceHash: import.meta.env.VITE_USDC_CONTRACT_INSTANCE_HASH ?? '',
+    usdtInstanceHash: import.meta.env.VITE_USDT_CONTRACT_INSTANCE_HASH ?? '',
   },
 
   CASPER: {
@@ -59,8 +58,10 @@ export function validateICOConfig(): void {
     ['VITE_ICO_CONTRACT_HASH',       ICO_CONFIG.CONTRACTS.icoAddress],
     ['VITE_ICO_PACKAGE_HASH',        ICO_CONFIG.CONTRACTS.icoPackageHash],
     ['VITE_BIG_TOKEN_CONTRACT_HASH', ICO_CONFIG.CONTRACTS.tokenAddress],
-    ['VITE_USDC_CONTRACT_HASH',      ICO_CONFIG.CONTRACTS.usdcAddress],
-    ['VITE_USDT_CONTRACT_HASH',      ICO_CONFIG.CONTRACTS.usdtAddress],
+    ['VITE_USDC_CONTRACT_HASH',              ICO_CONFIG.CONTRACTS.usdcAddress],
+    ['VITE_USDT_CONTRACT_HASH',              ICO_CONFIG.CONTRACTS.usdtAddress],
+    ['VITE_USDC_CONTRACT_INSTANCE_HASH',     ICO_CONFIG.CONTRACTS.usdcInstanceHash],
+    ['VITE_USDT_CONTRACT_INSTANCE_HASH',     ICO_CONFIG.CONTRACTS.usdtInstanceHash],
   ];
 
   const missing = required.filter(([, value]) => !value).map(([key]) => key);
