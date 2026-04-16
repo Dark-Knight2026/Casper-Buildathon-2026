@@ -16,6 +16,8 @@ use crate::nft::{
     },
 };
 
+// QUESTION: Should we build out the ERC-7943 interface and put it in the interfaces directory? Is that necessary for Odra like we might do in Solidity? In Solidity we would build out the interface and then import it and then have the contract inherit it. But in Odra, i think we might only need an interface to actually interact with an existing contract. I don't think we can or should or need to inherit the interface like we do in Solidity. I don't think Odra even has inheritance.
+
 // =============================================================================
 // Roles
 // =============================================================================
@@ -316,9 +318,14 @@ impl NFT {
     // Token Operations (compliance aware)
     // =========================================================================
 
-    /// Allows to mint new token and set its metadata by the minter
+    /// Mint a new token and set its metadata. Requires the MINTER role.
+    /// @dev ERC-7943: recipient must be whitelisted.
     pub fn mint(&mut self, to: Address, metadata: Vec<(String, String)>) {
         self.assert_minter();
+
+        if !self.can_transact(&to) {
+            self.env().revert(Error::CannotTransact);
+        }
 
         let token_id = self.tokens_count.get_or_default();
 
@@ -326,9 +333,22 @@ impl NFT {
         self.tokens_count.set(token_id + 1);
     }
 
-    /// Allows to burn a token by the burner
+    /// Burn a token. Requires the BURNER role.
+    /// @dev Unfreezes the token if frozen before burning.
     pub fn burn(&mut self, token_id: U256) {
         self.assert_burner();
+
+        if self.frozen_tokens.get_or_default(&token_id) {
+            self.frozen_tokens.set(&token_id, false);
+            if let Some(owner) = self.cep95.owner_of(token_id) {
+                self.env().emit_event(Frozen {
+                    account: owner,
+                    token_id,
+                    frozen_status: false,
+                });
+            }
+        }
+
         self.cep95.raw_burn(token_id);
     }
 
@@ -348,7 +368,7 @@ impl NFT {
     pub fn get_tokens_count(&self) -> U256 {
         self.tokens_count.get_or_default()
     }
-
+    
     delegate! {
         to self.ownable {
             fn transfer_ownership(&mut self, new_owner: &Address);
