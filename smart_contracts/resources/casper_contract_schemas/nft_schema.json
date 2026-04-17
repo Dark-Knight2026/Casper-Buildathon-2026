@@ -94,6 +94,52 @@
     },
     {
       "struct": {
+        "name": "ForcedTransfer",
+        "description": null,
+        "members": [
+          {
+            "name": "from",
+            "description": null,
+            "ty": "Key"
+          },
+          {
+            "name": "to",
+            "description": null,
+            "ty": "Key"
+          },
+          {
+            "name": "token_id",
+            "description": null,
+            "ty": "U256"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
+        "name": "Frozen",
+        "description": null,
+        "members": [
+          {
+            "name": "account",
+            "description": null,
+            "ty": "Key"
+          },
+          {
+            "name": "token_id",
+            "description": null,
+            "ty": "U256"
+          },
+          {
+            "name": "frozen_status",
+            "description": null,
+            "ty": "Bool"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
         "name": "MetadataUpdate",
         "description": null,
         "members": [
@@ -151,28 +197,6 @@
     },
     {
       "struct": {
-        "name": "OwnershipTransferred",
-        "description": null,
-        "members": [
-          {
-            "name": "previous_owner",
-            "description": null,
-            "ty": {
-              "Option": "Key"
-            }
-          },
-          {
-            "name": "new_owner",
-            "description": null,
-            "ty": {
-              "Option": "Key"
-            }
-          }
-        ]
-      }
-    },
-    {
-      "struct": {
         "name": "RevokeApproval",
         "description": null,
         "members": [
@@ -214,6 +238,85 @@
     },
     {
       "struct": {
+        "name": "RoleAdminChanged",
+        "description": null,
+        "members": [
+          {
+            "name": "role",
+            "description": null,
+            "ty": {
+              "ByteArray": 32
+            }
+          },
+          {
+            "name": "previous_admin_role",
+            "description": null,
+            "ty": {
+              "ByteArray": 32
+            }
+          },
+          {
+            "name": "new_admin_role",
+            "description": null,
+            "ty": {
+              "ByteArray": 32
+            }
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
+        "name": "RoleGranted",
+        "description": null,
+        "members": [
+          {
+            "name": "role",
+            "description": null,
+            "ty": {
+              "ByteArray": 32
+            }
+          },
+          {
+            "name": "address",
+            "description": null,
+            "ty": "Key"
+          },
+          {
+            "name": "sender",
+            "description": null,
+            "ty": "Key"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
+        "name": "RoleRevoked",
+        "description": null,
+        "members": [
+          {
+            "name": "role",
+            "description": null,
+            "ty": {
+              "ByteArray": 32
+            }
+          },
+          {
+            "name": "address",
+            "description": null,
+            "ty": "Key"
+          },
+          {
+            "name": "sender",
+            "description": null,
+            "ty": "Key"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
         "name": "Transfer",
         "description": null,
         "members": [
@@ -231,6 +334,24 @@
             "name": "token_id",
             "description": null,
             "ty": "U256"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
+        "name": "Whitelisted",
+        "description": null,
+        "members": [
+          {
+            "name": "account",
+            "description": null,
+            "ty": "Key"
+          },
+          {
+            "name": "status",
+            "description": null,
+            "ty": "Bool"
           }
         ]
       }
@@ -273,6 +394,16 @@
       "discriminant": 20001
     },
     {
+      "name": "CannotTransact",
+      "description": "",
+      "discriminant": 200
+    },
+    {
+      "name": "CannotTransfer",
+      "description": "",
+      "discriminant": 201
+    },
+    {
       "name": "InvalidTokenId",
       "description": "The token ID is invalid.",
       "discriminant": 40005
@@ -286,6 +417,11 @@
       "name": "NotAnOwnerOrApproved",
       "description": "The token ID is invalid.",
       "discriminant": 40002
+    },
+    {
+      "name": "NotAuthorized",
+      "description": "",
+      "discriminant": 203
     },
     {
       "name": "OwnerNotSet",
@@ -303,6 +439,11 @@
       "discriminant": 40006
     },
     {
+      "name": "TokenIsFrozen",
+      "description": "",
+      "discriminant": 202
+    },
+    {
       "name": "TransferFailed",
       "description": "The transfer failed.",
       "discriminant": 40001
@@ -315,8 +456,166 @@
   ],
   "entry_points": [
     {
+      "name": "can_transact",
+      "description": "Returns true if the account is whitelisted and allowed to transact.",
+      "is_mutable": false,
+      "arguments": [
+        {
+          "name": "account",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        }
+      ],
+      "return_ty": "Bool",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "can_transfer",
+      "description": "Returns true if transfer of token from `from` to `to is allowed.",
+      "is_mutable": false,
+      "arguments": [
+        {
+          "name": "from",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        },
+        {
+          "name": "to",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        },
+        {
+          "name": "token_id",
+          "description": null,
+          "ty": "U256",
+          "optional": false
+        }
+      ],
+      "return_ty": "Bool",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "get_frozen_tokens",
+      "description": "Returns true if the given token is frozen",
+      "is_mutable": false,
+      "arguments": [
+        {
+          "name": "token_id",
+          "description": null,
+          "ty": "U256",
+          "optional": false
+        }
+      ],
+      "return_ty": "Bool",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "is_whitelisted",
+      "description": "Returns true if the address is on the whitelist",
+      "is_mutable": false,
+      "arguments": [
+        {
+          "name": "account",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        }
+      ],
+      "return_ty": "Bool",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "set_frozen_tokens",
+      "description": "Freeze or unfreeze a specific token. Restricted to FREEZER role.",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "token_id",
+          "description": null,
+          "ty": "U256",
+          "optional": false
+        },
+        {
+          "name": "frozen_status",
+          "description": null,
+          "ty": "Bool",
+          "optional": false
+        }
+      ],
+      "return_ty": "Unit",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "forced_transfer",
+      "description": "Takes `token_id` from one address and transfers it to another.",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "from",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        },
+        {
+          "name": "to",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        },
+        {
+          "name": "token_id",
+          "description": null,
+          "ty": "U256",
+          "optional": false
+        }
+      ],
+      "return_ty": "Unit",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "add_to_whitelist",
+      "description": "",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "account",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        }
+      ],
+      "return_ty": "Unit",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "remove_from_whitelist",
+      "description": "",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "account",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        }
+      ],
+      "return_ty": "Unit",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
       "name": "add_minter",
-      "description": "Allows to add a new minter by the owner",
+      "description": "Allows to add a new minter by the admin",
       "is_mutable": true,
       "arguments": [
         {
@@ -332,7 +631,7 @@
     },
     {
       "name": "remove_minter",
-      "description": "Allows to remove a minter by the owner",
+      "description": "Allows to remove a minter by the admin",
       "is_mutable": true,
       "arguments": [
         {
@@ -348,7 +647,7 @@
     },
     {
       "name": "add_burner",
-      "description": "Allows to add a new burner by the owner",
+      "description": "Allows to add a new burner by the admin",
       "is_mutable": true,
       "arguments": [
         {
@@ -364,116 +663,13 @@
     },
     {
       "name": "remove_burner",
-      "description": "Allows to remove a burner by the owner",
+      "description": "Allows to remove a burner by the admin",
       "is_mutable": true,
       "arguments": [
         {
           "name": "burner",
           "description": null,
           "ty": "Key",
-          "optional": false
-        }
-      ],
-      "return_ty": "Unit",
-      "is_contract_context": true,
-      "access": "public"
-    },
-    {
-      "name": "mint",
-      "description": "Allows to mint new token and set its metadata by the minter",
-      "is_mutable": true,
-      "arguments": [
-        {
-          "name": "to",
-          "description": null,
-          "ty": "Key",
-          "optional": false
-        },
-        {
-          "name": "metadata",
-          "description": null,
-          "ty": {
-            "List": {
-              "Tuple2": [
-                "String",
-                "String"
-              ]
-            }
-          },
-          "optional": false
-        }
-      ],
-      "return_ty": "Unit",
-      "is_contract_context": true,
-      "access": "public"
-    },
-    {
-      "name": "burn",
-      "description": "Allows to burn a token by the burner",
-      "is_mutable": true,
-      "arguments": [
-        {
-          "name": "token_id",
-          "description": null,
-          "ty": "U256",
-          "optional": false
-        }
-      ],
-      "return_ty": "Unit",
-      "is_contract_context": true,
-      "access": "public"
-    },
-    {
-      "name": "set_metadata",
-      "description": "Allows to set new metadata for a token by the minter or the burner",
-      "is_mutable": true,
-      "arguments": [
-        {
-          "name": "token_id",
-          "description": null,
-          "ty": "U256",
-          "optional": false
-        },
-        {
-          "name": "metadata",
-          "description": null,
-          "ty": {
-            "List": {
-              "Tuple2": [
-                "String",
-                "String"
-              ]
-            }
-          },
-          "optional": false
-        }
-      ],
-      "return_ty": "Unit",
-      "is_contract_context": true,
-      "access": "public"
-    },
-    {
-      "name": "update_metadata",
-      "description": "Allows to update metadata for a token by the minter or the burner",
-      "is_mutable": true,
-      "arguments": [
-        {
-          "name": "token_id",
-          "description": null,
-          "ty": "U256",
-          "optional": false
-        },
-        {
-          "name": "metadata",
-          "description": null,
-          "ty": {
-            "List": {
-              "Tuple2": [
-                "String",
-                "String"
-              ]
-            }
-          },
           "optional": false
         }
       ],
@@ -514,6 +710,100 @@
       "access": "public"
     },
     {
+      "name": "mint",
+      "description": "Mint a new token and set its metadata. Requires the MINTER role.",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "to",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        },
+        {
+          "name": "metadata",
+          "description": null,
+          "ty": {
+            "List": {
+              "Tuple2": ["String", "String"]
+            }
+          },
+          "optional": false
+        }
+      ],
+      "return_ty": "U256",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "burn",
+      "description": "Burn a token. Requires the BURNER role.",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "token_id",
+          "description": null,
+          "ty": "U256",
+          "optional": false
+        }
+      ],
+      "return_ty": "Unit",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "set_metadata",
+      "description": "Allows to set new metadata for a token by the minter or the burner",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "token_id",
+          "description": null,
+          "ty": "U256",
+          "optional": false
+        },
+        {
+          "name": "metadata",
+          "description": null,
+          "ty": {
+            "List": {
+              "Tuple2": ["String", "String"]
+            }
+          },
+          "optional": false
+        }
+      ],
+      "return_ty": "Unit",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "update_metadata",
+      "description": "Allows to update metadata for a token by the minter or the burner",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "token_id",
+          "description": null,
+          "ty": "U256",
+          "optional": false
+        },
+        {
+          "name": "metadata",
+          "description": null,
+          "ty": {
+            "List": {
+              "Tuple2": ["String", "String"]
+            }
+          },
+          "optional": false
+        }
+      ],
+      "return_ty": "Unit",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
       "name": "get_tokens_count",
       "description": "Returns a number of minted tokens",
       "is_mutable": false,
@@ -523,12 +813,185 @@
       "access": "public"
     },
     {
-      "name": "transfer_ownership",
-      "description": "Delegated. See `self.ownable.transfer_ownership()` for details.",
+      "name": "transfer_from",
+      "description": "Pulled out of `delegate!` so we can enforce ERC-7943 check",
       "is_mutable": true,
       "arguments": [
         {
-          "name": "new_owner",
+          "name": "from",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        },
+        {
+          "name": "to",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        },
+        {
+          "name": "token_id",
+          "description": null,
+          "ty": "U256",
+          "optional": false
+        }
+      ],
+      "return_ty": "Unit",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "safe_transfer_from",
+      "description": "Pulled out of `delegate!` so we can enforce ERC-7943 check",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "from",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        },
+        {
+          "name": "to",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        },
+        {
+          "name": "token_id",
+          "description": null,
+          "ty": "U256",
+          "optional": false
+        },
+        {
+          "name": "data",
+          "description": null,
+          "ty": {
+            "Option": {
+              "List": "U8"
+            }
+          },
+          "optional": false
+        }
+      ],
+      "return_ty": "Unit",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "minter_role",
+      "description": "",
+      "is_mutable": false,
+      "arguments": [],
+      "return_ty": {
+        "ByteArray": 32
+      },
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "burner_role",
+      "description": "",
+      "is_mutable": false,
+      "arguments": [],
+      "return_ty": {
+        "ByteArray": 32
+      },
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "whitelist_manager_role",
+      "description": "",
+      "is_mutable": false,
+      "arguments": [],
+      "return_ty": {
+        "ByteArray": 32
+      },
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "freezer_role",
+      "description": "",
+      "is_mutable": false,
+      "arguments": [],
+      "return_ty": {
+        "ByteArray": 32
+      },
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "force_transferer_role",
+      "description": "",
+      "is_mutable": false,
+      "arguments": [],
+      "return_ty": {
+        "ByteArray": 32
+      },
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "has_role",
+      "description": "Delegated. See `self.access_control.has_role()` for details.",
+      "is_mutable": false,
+      "arguments": [
+        {
+          "name": "role",
+          "description": null,
+          "ty": {
+            "ByteArray": 32
+          },
+          "optional": false
+        },
+        {
+          "name": "address",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        }
+      ],
+      "return_ty": "Bool",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "get_role_admin",
+      "description": "Delegated. See `self.access_control.get_role_admin()` for details.",
+      "is_mutable": false,
+      "arguments": [
+        {
+          "name": "role",
+          "description": null,
+          "ty": {
+            "ByteArray": 32
+          },
+          "optional": false
+        }
+      ],
+      "return_ty": {
+        "ByteArray": 32
+      },
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "grant_role",
+      "description": "Delegated. See `self.access_control.grant_role()` for details.",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "role",
+          "description": null,
+          "ty": {
+            "ByteArray": 32
+          },
+          "optional": false
+        },
+        {
+          "name": "address",
           "description": null,
           "ty": "Key",
           "optional": false
@@ -539,20 +1002,50 @@
       "access": "public"
     },
     {
-      "name": "renounce_ownership",
-      "description": "Delegated. See `self.ownable.renounce_ownership()` for details.",
+      "name": "revoke_role",
+      "description": "Delegated. See `self.access_control.revoke_role()` for details.",
       "is_mutable": true,
-      "arguments": [],
+      "arguments": [
+        {
+          "name": "role",
+          "description": null,
+          "ty": {
+            "ByteArray": 32
+          },
+          "optional": false
+        },
+        {
+          "name": "address",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        }
+      ],
       "return_ty": "Unit",
       "is_contract_context": true,
       "access": "public"
     },
     {
-      "name": "get_owner",
-      "description": "Delegated. See `self.ownable.get_owner()` for details.",
-      "is_mutable": false,
-      "arguments": [],
-      "return_ty": "Key",
+      "name": "renounce_role",
+      "description": "Delegated. See `self.access_control.renounce_role()` for details.",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "role",
+          "description": null,
+          "ty": {
+            "ByteArray": 32
+          },
+          "optional": false
+        },
+        {
+          "name": "address",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        }
+      ],
+      "return_ty": "Unit",
       "is_contract_context": true,
       "access": "public"
     },
@@ -605,72 +1098,6 @@
       "return_ty": {
         "Option": "Key"
       },
-      "is_contract_context": true,
-      "access": "public"
-    },
-    {
-      "name": "safe_transfer_from",
-      "description": "Delegated. See `self.cep95.safe_transfer_from()` for details.",
-      "is_mutable": true,
-      "arguments": [
-        {
-          "name": "from",
-          "description": null,
-          "ty": "Key",
-          "optional": false
-        },
-        {
-          "name": "to",
-          "description": null,
-          "ty": "Key",
-          "optional": false
-        },
-        {
-          "name": "token_id",
-          "description": null,
-          "ty": "U256",
-          "optional": false
-        },
-        {
-          "name": "data",
-          "description": null,
-          "ty": {
-            "Option": {
-              "List": "U8"
-            }
-          },
-          "optional": false
-        }
-      ],
-      "return_ty": "Unit",
-      "is_contract_context": true,
-      "access": "public"
-    },
-    {
-      "name": "transfer_from",
-      "description": "Delegated. See `self.cep95.transfer_from()` for details.",
-      "is_mutable": true,
-      "arguments": [
-        {
-          "name": "from",
-          "description": null,
-          "ty": "Key",
-          "optional": false
-        },
-        {
-          "name": "to",
-          "description": null,
-          "ty": "Key",
-          "optional": false
-        },
-        {
-          "name": "token_id",
-          "description": null,
-          "ty": "U256",
-          "optional": false
-        }
-      ],
-      "return_ty": "Unit",
       "is_contract_context": true,
       "access": "public"
     },
@@ -798,10 +1225,7 @@
       ],
       "return_ty": {
         "List": {
-          "Tuple2": [
-            "String",
-            "String"
-          ]
+          "Tuple2": ["String", "String"]
         }
       },
       "is_contract_context": true,
@@ -830,6 +1254,14 @@
       "ty": "BurnerRemoved"
     },
     {
+      "name": "ForcedTransfer",
+      "ty": "ForcedTransfer"
+    },
+    {
+      "name": "Frozen",
+      "ty": "Frozen"
+    },
+    {
       "name": "MetadataUpdate",
       "ty": "MetadataUpdate"
     },
@@ -846,10 +1278,6 @@
       "ty": "MinterRemoved"
     },
     {
-      "name": "OwnershipTransferred",
-      "ty": "OwnershipTransferred"
-    },
-    {
       "name": "RevokeApproval",
       "ty": "RevokeApproval"
     },
@@ -858,8 +1286,24 @@
       "ty": "RevokeApprovalForAll"
     },
     {
+      "name": "RoleAdminChanged",
+      "ty": "RoleAdminChanged"
+    },
+    {
+      "name": "RoleGranted",
+      "ty": "RoleGranted"
+    },
+    {
+      "name": "RoleRevoked",
+      "ty": "RoleRevoked"
+    },
+    {
       "name": "Transfer",
       "ty": "Transfer"
+    },
+    {
+      "name": "Whitelisted",
+      "ty": "Whitelisted"
     }
   ],
   "call": {

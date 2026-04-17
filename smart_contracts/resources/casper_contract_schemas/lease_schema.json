@@ -111,6 +111,11 @@
             "name": "is_finished",
             "description": null,
             "ty": "Bool"
+          },
+          {
+            "name": "token_id",
+            "description": null,
+            "ty": "U256"
           }
         ]
       }
@@ -298,6 +303,106 @@
       "access": "public"
     },
     {
+      "name": "set_nft",
+      "description": "Sets the NFT contract address by the owner",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "nft",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        }
+      ],
+      "return_ty": "Unit",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "get_roles_contract_address",
+      "description": "Returns the Roles contract address",
+      "is_mutable": false,
+      "arguments": [],
+      "return_ty": "Key",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "get_escrow_contract_address",
+      "description": "Returns the Escrow contract address",
+      "is_mutable": false,
+      "arguments": [],
+      "return_ty": "Key",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "get_nft_contract_address",
+      "description": "Returns the NFT contract address",
+      "is_mutable": false,
+      "arguments": [],
+      "return_ty": "Key",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "get_lease_agreement_by_id",
+      "description": "Returns lease agreement by its ID",
+      "is_mutable": false,
+      "arguments": [
+        {
+          "name": "lease_agreement_id",
+          "description": null,
+          "ty": "U256",
+          "optional": false
+        }
+      ],
+      "return_ty": "LeaseAgreement",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "get_lease_agreements_count",
+      "description": "Returns number of lease agreements created through this contract",
+      "is_mutable": false,
+      "arguments": [],
+      "return_ty": "U256",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "is_security_deposit_paid",
+      "description": "Returns `true` if security deposit is paid for lease agreement, `false` otherwise",
+      "is_mutable": false,
+      "arguments": [
+        {
+          "name": "lease_agreement_id",
+          "description": null,
+          "ty": "U256",
+          "optional": false
+        }
+      ],
+      "return_ty": "Bool",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "is_all_invoices_paid",
+      "description": "Returns `true` if all invoices are paid for lease agreement, `false` if at least one invoice is not paid",
+      "is_mutable": false,
+      "arguments": [
+        {
+          "name": "lease_agreement_id",
+          "description": null,
+          "ty": "U256",
+          "optional": false
+        }
+      ],
+      "return_ty": "Bool",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
       "name": "create_lease_agreement",
       "description": "Allows to create a new lease agreement and all invoices for this agreement by a landlord",
       "is_mutable": true,
@@ -360,81 +465,6 @@
         }
       ],
       "return_ty": "Unit",
-      "is_contract_context": true,
-      "access": "public"
-    },
-    {
-      "name": "get_roles_contract_address",
-      "description": "Returns the Roles contract address",
-      "is_mutable": false,
-      "arguments": [],
-      "return_ty": "Key",
-      "is_contract_context": true,
-      "access": "public"
-    },
-    {
-      "name": "get_escrow_contract_address",
-      "description": "Returns the Escrow contract address",
-      "is_mutable": false,
-      "arguments": [],
-      "return_ty": "Key",
-      "is_contract_context": true,
-      "access": "public"
-    },
-    {
-      "name": "get_lease_agreement_by_id",
-      "description": "Returns lease agreement by its ID",
-      "is_mutable": false,
-      "arguments": [
-        {
-          "name": "lease_agreement_id",
-          "description": null,
-          "ty": "U256",
-          "optional": false
-        }
-      ],
-      "return_ty": "LeaseAgreement",
-      "is_contract_context": true,
-      "access": "public"
-    },
-    {
-      "name": "get_lease_agreements_count",
-      "description": "Returns number of lease agreements created through this contract",
-      "is_mutable": false,
-      "arguments": [],
-      "return_ty": "U256",
-      "is_contract_context": true,
-      "access": "public"
-    },
-    {
-      "name": "is_security_deposit_paid",
-      "description": "Returns `true` if security deposit is paid for lease agreement, `false` otherwise",
-      "is_mutable": false,
-      "arguments": [
-        {
-          "name": "lease_agreement_id",
-          "description": null,
-          "ty": "U256",
-          "optional": false
-        }
-      ],
-      "return_ty": "Bool",
-      "is_contract_context": true,
-      "access": "public"
-    },
-    {
-      "name": "is_all_invoices_paid",
-      "description": "Returns `true` if all invoices are paid for lease agreement, `false` if at least one invoice is not paid",
-      "is_mutable": false,
-      "arguments": [
-        {
-          "name": "lease_agreement_id",
-          "description": null,
-          "ty": "U256",
-          "optional": false
-        }
-      ],
-      "return_ty": "Bool",
       "is_contract_context": true,
       "access": "public"
     },
