@@ -33,6 +33,7 @@ pub mod types {
         pub start: u64,
         pub end: u64,
         pub is_finished: bool,
+        pub token_id: U256,
     }
 
     #[odra::odra_type]
@@ -245,6 +246,15 @@ impl Lease {
         }
 
         let lease_agreement_id = self.get_lease_agreements_count();
+
+        // Mint a lease NFT to the tenant and freeze it so it can't be transferred without auth
+        let metadata = vec![(
+            String::from("lease_agreement_id"),
+            lease_agreement_id.to_string(),
+        )];
+        let token_id = self.nft.mint(params.tenant, metadata);
+        self.nft.set_frozen_tokens(&token_id, true);
+
         let lease_agreement = LeaseAgreement {
             tenant: params.tenant,
             landlord,
@@ -254,6 +264,7 @@ impl Lease {
             start: params.start,
             end: params.end,
             is_finished: false,
+            token_id,
         };
 
         self.leases.set(&lease_agreement_id, lease_agreement);
@@ -291,6 +302,11 @@ impl Lease {
             &mut lease_agreement.security_deposit,
             security_deposit_charge,
         );
+
+        // Freeze the lease NFT. the lease is over, it shouldn't be transferable
+        // under normal business flow. A FREEZER-role admin can still unfreeze for
+        // exceptional cases (disputes, regulatory action).
+        self.nft.set_frozen_tokens(&lease_agreement.token_id, true);
 
         lease_agreement.is_finished = true;
         self.leases.set(lease_agreement_id, lease_agreement);

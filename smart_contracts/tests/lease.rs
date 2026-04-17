@@ -255,7 +255,8 @@ fn test_create_lease_agreement_should_create_lease_agreement_properly() {
             invoices_ids: (0..=12).map(|n| U256::from(n)).collect(),
             start: params.start,
             end: params.end,
-            is_finished: false
+            is_finished: false,
+            token_id: lease_agreement.token_id,
         },
         "Invalid lease agreement"
     );
