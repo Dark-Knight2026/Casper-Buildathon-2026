@@ -10,6 +10,7 @@ use crate::{
         events::{LeaseAgreementCreated, LeaseAgreementFinished, LeaseAgreementProlonged},
         types::{CreateLeaseAgreementParams, LeaseAgreement},
     },
+    nft::NFTContractRef,
     roles::RolesContractRef,
 };
 
@@ -105,6 +106,7 @@ pub struct Lease {
     ownable: SubModule<Ownable>,
     roles: External<RolesContractRef>,
     escrow: External<EscrowContractRef>,
+    nft: External<NFTContractRef>,
     leases: Mapping<U256, LeaseAgreement>,
     leases_count: Var<U256>,
 }
@@ -135,6 +137,12 @@ impl Lease {
         self.escrow.set(escrow);
     }
 
+    /// Sets the NFT contract address by the owner
+    pub fn set_nft(&mut self, nft: Address) {
+        self.assert_owner();
+        self.nft.set(nft);
+    }
+
     // =========================================================================
     // View Functions
     // =========================================================================
@@ -147,6 +155,11 @@ impl Lease {
     /// Returns the Escrow contract address
     pub fn get_escrow_contract_address(&self) -> Address {
         *self.escrow.address()
+    }
+
+    /// Returns the NFT contract address
+    pub fn get_nft_contract_address(&self) -> Address {
+        *self.nft.address()
     }
 
     /// Returns lease agreement by its ID
