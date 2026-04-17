@@ -20,6 +20,8 @@ use leasefi_contracts::lease::{
 };
 use leasefi_contracts::roles::{Roles, RolesHostRef, RolesInitArgs};
 
+use crate::nft::{NFTInitArgs, NFT, ROLE_FREEZER, ROLE_MINTER, ROLE_WHITELIST_MANAGER};
+
 // =============================================================================
 // Test Context
 // =============================================================================
@@ -39,12 +41,14 @@ fn setup(env: HostEnv) -> TestData {
             admin: env.get_account(0),
         },
     );
+
     let mut lease = Lease::deploy(
         &env,
         LeaseInitArgs {
             owner: env.get_account(0),
         },
     );
+
     let mut escrow = Escrow::deploy(
         &env,
         EscrowInitArgs {
@@ -52,13 +56,32 @@ fn setup(env: HostEnv) -> TestData {
             min_deadline: 5 * 60, // 5 minutes
         },
     );
+
+    let mut nft = NFT::deploy(
+        &env,
+        NFTInitArgs {
+            owner: env.get_account(0),
+            symbol: String::from("LEASE"),
+            name: String::from("LEASE"),
+            minters: vec![],
+            burners: vec![],
+        },
+    );
+
     let landlord = env.get_account(14);
 
     lease.set_escrow(escrow.address());
     lease.set_roles(roles.address());
+    lease.set_nft(nft.address());
 
     escrow.set_lease(lease.address());
     escrow.set_treasury(env.get_account(19));
+
+    let lease_addr = lease.address();
+    nft.grant_role(&NFT::hash_role(ROLE_MINTER), &lease_addr);
+    nft.grant_role(&NFT::hash_role(ROLE_FREEZER), &lease_addr);
+    nft.grant_role(&NFT::hash_role(ROLE_WHITELIST_MANAGER), &env.get_account(0));
+    nft.add_to_whitelist(&env.get_account(0));
 
     roles.grant_role(
         &roles.get_role_admin(&roles.get_landlord_role()),
@@ -218,6 +241,39 @@ fn test_set_escrow_should_set_escrow_properly() {
         test_data.lease.get_escrow_contract_address(),
         escrow,
         "Invalid Escrow contract address"
+    );
+}
+
+// =============================================================================
+// set_nft()
+// =============================================================================
+
+#[test]
+fn test_set_nft_should_revert_if_not_owner_is_calling() {
+    let mut test_data = setup(odra_test::env());
+
+    assert_eq!(
+        test_data
+            .lease
+            .try_set_nft(test_data.env.get_account(1))
+            .unwrap_err(),
+        AccessError::CallerNotTheOwner.into(),
+        "Should revert when is called by not the owner"
+    );
+}
+
+#[test]
+fn test_set_nft_should_set_escrow_properly() {
+    let mut test_data = setup(odra_test::env());
+    let nft = test_data.env.get_account(10);
+
+    test_data.env.set_caller(test_data.env.get_account(0));
+    test_data.lease.set_nft(nft);
+
+    assert_eq!(
+        test_data.lease.get_nft_contract_address(),
+        nft,
+        "Invalid NFT contract address"
     );
 }
 
