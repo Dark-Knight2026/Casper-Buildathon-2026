@@ -5,13 +5,13 @@ use odra::{
 };
 use odra_modules::access::errors::Error as AccessError;
 
+use leasefi_contracts::big_coin::{BigCoin, BigCoinHostRef, BigCoinInitArgs};
 use leasefi_contracts::constants::{
     ONE_MONTH_IN_MILLISECONDS, PRIVATE_SALE_CLIFF_DURATION, PRIVATE_SALE_VESTING_DURATION,
 };
 use leasefi_contracts::staking::{
     errors::Error::UnstakeBlockedByVestingLock, Staking, StakingHostRef, StakingInitArgs,
 };
-use leasefi_contracts::tailor_coin::{TailorCoin, TailorCoinHostRef, TailorCoinInitArgs};
 use leasefi_contracts::vesting::{
     errors::Error,
     events::{ScheduleCreated, TokensClaimed},
@@ -48,7 +48,7 @@ struct Users {
 
 struct Context {
     env: HostEnv,
-    tailor_coin: TailorCoinHostRef,
+    tailor_coin: BigCoinHostRef,
     vesting: VestingHostRef,
     staking: StakingHostRef,
     users: Users,
@@ -63,9 +63,9 @@ fn setup(env: HostEnv) -> Context {
         bob: env.get_account(2),
     };
 
-    let tailor_coin = TailorCoin::deploy(
+    let tailor_coin = BigCoin::deploy(
         &env,
-        TailorCoinInitArgs {
+        BigCoinInitArgs {
             symbol: String::from("BIG"),
             name: String::from("BIG"),
             decimals: 18,

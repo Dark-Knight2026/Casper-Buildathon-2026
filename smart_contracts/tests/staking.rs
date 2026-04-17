@@ -5,8 +5,8 @@ use odra::{
 };
 use odra_modules::access::errors::Error as AccessError;
 
+use leasefi_contracts::big_coin::{BigCoin, BigCoinHostRef, BigCoinInitArgs};
 use leasefi_contracts::staking::{events::*, Staking, StakingHostRef, StakingInitArgs};
-use leasefi_contracts::tailor_coin::{TailorCoin, TailorCoinHostRef, TailorCoinInitArgs};
 
 use crate::{
     constants::UNBONDING_PERIOD,
@@ -37,7 +37,7 @@ struct Users {
 
 struct Context {
     env: HostEnv,
-    tailor_coin: TailorCoinHostRef,
+    tailor_coin: BigCoinHostRef,
     staking: StakingHostRef,
     vesting: VestingHostRef,
     users: Users,
@@ -50,9 +50,9 @@ fn setup(env: HostEnv) -> Context {
         bob: env.get_account(2),
     };
 
-    let tailor_coin = TailorCoin::deploy(
+    let tailor_coin = BigCoin::deploy(
         &env,
-        TailorCoinInitArgs {
+        BigCoinInitArgs {
             symbol: String::from("BIG"),
             name: String::from("BIG"),
             decimals: 18,

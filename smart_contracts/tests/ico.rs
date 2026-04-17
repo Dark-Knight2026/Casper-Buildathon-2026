@@ -6,6 +6,7 @@ use odra::{
 };
 use odra_modules::access::errors::Error as AccessError;
 
+use leasefi_contracts::big_coin::{BigCoin, BigCoinHostRef, BigCoinInitArgs};
 use leasefi_contracts::constants::{PRIVATE_SALE_CLIFF_DURATION, PRIVATE_SALE_VESTING_DURATION};
 use leasefi_contracts::ico::{
     errors::Error,
@@ -17,7 +18,6 @@ use leasefi_contracts::ico::{
 };
 use leasefi_contracts::mocks::styks_price_feed::{StyksPriceFeed, StyksPriceFeedHostRef};
 use leasefi_contracts::staking::{Staking, StakingHostRef, StakingInitArgs};
-use leasefi_contracts::tailor_coin::{TailorCoin, TailorCoinHostRef, TailorCoinInitArgs};
 use leasefi_contracts::treasury::{Treasury, TreasuryHostRef, TreasuryInitArgs};
 use leasefi_contracts::vesting::{Vesting, VestingHostRef, VestingInitArgs};
 
@@ -29,9 +29,9 @@ struct Users {
 
 struct Context {
     env: HostEnv,
-    tailor_coin: TailorCoinHostRef,
-    usdc: TailorCoinHostRef,
-    usdt: TailorCoinHostRef,
+    tailor_coin: BigCoinHostRef,
+    usdc: BigCoinHostRef,
+    usdt: BigCoinHostRef,
     treasury: TreasuryHostRef,
     vesting: VestingHostRef,
     staking: StakingHostRef,
@@ -1277,10 +1277,10 @@ fn deploy_mock_cep18_token(
     name: &str,
     decimals: u8,
     initial_supply: u128,
-) -> TailorCoinHostRef {
-    TailorCoin::deploy(
+) -> BigCoinHostRef {
+    BigCoin::deploy(
         env,
-        TailorCoinInitArgs {
+        BigCoinInitArgs {
             symbol: String::from(symbol),
             name: String::from(name),
             decimals,

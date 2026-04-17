@@ -6,9 +6,9 @@ use odra::{
 };
 use odra_modules::access::errors::Error as AccessError;
 
+use leasefi_contracts::big_coin::{BigCoin, BigCoinHostRef, BigCoinInitArgs};
 use leasefi_contracts::constants::{ONE_HUNDRED_PERCENT_BPS, STAKING_REWARDS_BPS};
 use leasefi_contracts::staking::{Staking, StakingHostRef, StakingInitArgs};
-use leasefi_contracts::tailor_coin::{TailorCoin, TailorCoinHostRef, TailorCoinInitArgs};
 use leasefi_contracts::treasury::{
     errors::Error,
     events::{ReservesWithdrawn, RewardsDeposited, TokenWithdrawn},
@@ -20,8 +20,8 @@ fn setup(
 ) -> (
     TreasuryHostRef,
     StakingHostRef,
-    TailorCoinHostRef,
-    TailorCoinHostRef,
+    BigCoinHostRef,
+    BigCoinHostRef,
 ) {
     let mut treasury = Treasury::deploy(
         env,
@@ -29,18 +29,18 @@ fn setup(
             owner: env.get_account(0),
         },
     );
-    let tailor_coin = TailorCoin::deploy(
+    let tailor_coin = BigCoin::deploy(
         env,
-        TailorCoinInitArgs {
+        BigCoinInitArgs {
             symbol: String::from("BIG"),
             name: String::from("BIG"),
             decimals: 18,
             initial_supply: U256::from_dec_str("5000000000000000000000000000000").unwrap(),
         },
     );
-    let mock_cep18 = TailorCoin::deploy(
+    let mock_cep18 = BigCoin::deploy(
         env,
-        TailorCoinInitArgs {
+        BigCoinInitArgs {
             symbol: String::from("MOCK"),
             name: String::from("MOCK"),
             decimals: 18,
@@ -64,7 +64,7 @@ fn setup(
 
 fn deposit_rewards(
     rewards_amount: &U256,
-    tailor_coin: &mut TailorCoinHostRef,
+    tailor_coin: &mut BigCoinHostRef,
     treasury: &mut TreasuryHostRef,
 ) {
     tailor_coin.approve(&treasury.address(), rewards_amount);
@@ -73,7 +73,7 @@ fn deposit_rewards(
 
 fn create_active_stake(
     env: &HostEnv,
-    tailor_coin: &mut TailorCoinHostRef,
+    tailor_coin: &mut BigCoinHostRef,
     staking: &mut StakingHostRef,
     staker: Address,
     amount: U256,

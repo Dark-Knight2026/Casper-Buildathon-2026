@@ -13,14 +13,14 @@ use leasefi_contracts::escrow::{
     types::{Invoice, InvoiceKind},
     Escrow, EscrowHostRef, EscrowInitArgs,
 };
-use leasefi_contracts::tailor_coin::{TailorCoin, TailorCoinHostRef, TailorCoinInitArgs};
+use leasefi_contracts::big_coin::{BigCoin, BigCoinHostRef, BigCoinInitArgs};
 
 const MIN_DEADLINE: u64 = 5 * 60; // 5 minutes
 
 struct TestData {
     env: HostEnv,
     escrow: EscrowHostRef,
-    mock_cep18: TailorCoinHostRef,
+    mock_cep18: BigCoinHostRef,
 }
 
 struct InvoiceParams {
@@ -434,9 +434,9 @@ fn setup(env: HostEnv) -> TestData {
             min_deadline: MIN_DEADLINE,
         },
     );
-    let mock_cep18 = TailorCoin::deploy(
+    let mock_cep18 = BigCoin::deploy(
         &env,
-        TailorCoinInitArgs {
+        BigCoinInitArgs {
             symbol: String::from("MOCK"),
             name: String::from("MOCK"),
             decimals: 18,

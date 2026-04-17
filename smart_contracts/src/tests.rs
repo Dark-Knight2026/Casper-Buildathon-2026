@@ -16,8 +16,8 @@ mod roles;
 #[path = "../tests/staking.rs"]
 mod staking;
 
-#[path = "../tests/tailor_coin.rs"]
-mod tailor_coin;
+#[path = "../tests/big_coin.rs"]
+mod big_coin;
 
 #[path = "../tests/treasury.rs"]
 mod treasury;
