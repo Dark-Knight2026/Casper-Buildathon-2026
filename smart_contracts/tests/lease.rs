@@ -20,6 +20,10 @@ use leasefi_contracts::lease::{
 };
 use leasefi_contracts::roles::{Roles, RolesHostRef, RolesInitArgs};
 
+// =============================================================================
+// Test Context
+// =============================================================================
+
 struct TestData {
     env: HostEnv,
     roles: RolesHostRef,
@@ -27,6 +31,103 @@ struct TestData {
     escrow: EscrowHostRef,
     landlord: Address,
 }
+
+fn setup(env: HostEnv) -> TestData {
+    let mut roles = Roles::deploy(
+        &env,
+        RolesInitArgs {
+            admin: env.get_account(0),
+        },
+    );
+    let mut lease = Lease::deploy(
+        &env,
+        LeaseInitArgs {
+            owner: env.get_account(0),
+        },
+    );
+    let mut escrow = Escrow::deploy(
+        &env,
+        EscrowInitArgs {
+            owner: env.get_account(0),
+            min_deadline: 5 * 60, // 5 minutes
+        },
+    );
+    let landlord = env.get_account(14);
+
+    lease.set_escrow(escrow.address());
+    lease.set_roles(roles.address());
+
+    escrow.set_lease(lease.address());
+    escrow.set_treasury(env.get_account(19));
+
+    roles.grant_role(
+        &roles.get_role_admin(&roles.get_landlord_role()),
+        &env.get_account(0),
+    );
+    roles.grant_role(&roles.get_landlord_role(), &landlord);
+
+    env.set_caller(landlord);
+
+    TestData {
+        env,
+        roles,
+        lease,
+        escrow,
+        landlord,
+    }
+}
+
+// =============================================================================
+// Helpers
+// =============================================================================
+
+fn generate_lease_agreement_creation_params(test_data: &TestData) -> CreateLeaseAgreementParams {
+    CreateLeaseAgreementParams {
+        tenant: test_data.env.get_account(0),
+        monthly_rent: CurrencyAmount::new(None, U256::from_dec_str("250000000000000000").unwrap()),
+        security_deposit: CurrencyAmount::new(
+            None,
+            U256::from_dec_str("5000000000000000000").unwrap(),
+        ),
+        start: test_data.env.block_time(),
+        end: test_data.env.block_time() + (ONE_MONTH_IN_SECONDS * 12),
+        invoice_validity_duration: test_data.escrow.get_min_deadline(),
+    }
+}
+
+fn pay_all_lease_agreement_invoices(test_data: &mut TestData, lease_agreement_id: &U256) {
+    let mut lease_agreement = test_data
+        .lease
+        .get_lease_agreement_by_id(&lease_agreement_id);
+
+    test_data.env.set_caller(lease_agreement.tenant);
+    test_data
+        .escrow
+        .with_tokens(lease_agreement.security_deposit.amount().to_u512())
+        .pay_invoice(lease_agreement.invoices_ids[0]);
+
+    for invoice_id in lease_agreement.invoices_ids.iter().skip(1) {
+        test_data
+            .escrow
+            .with_tokens(lease_agreement.monthly_rent.amount().to_u512())
+            .pay_invoice(*invoice_id);
+    }
+
+    test_data.env.set_caller(lease_agreement.landlord);
+
+    assert!(
+        test_data.lease.is_security_deposit_paid(lease_agreement_id),
+        "Security deposit invoice should been paid"
+    );
+    assert!(
+        test_data.lease.is_all_invoices_paid(lease_agreement_id),
+        "All invoices should been paid"
+    );
+}
+
+// =============================================================================
+// init()
+// =============================================================================
 
 #[test]
 fn test_init_should_initialize_contract_properly() {
@@ -53,6 +154,10 @@ fn test_init_should_initialize_contract_properly() {
         "Invalid initial lease agreements count"
     );
 }
+
+// =============================================================================
+// set_roles()
+// =============================================================================
 
 #[test]
 fn test_set_roles_should_revert_if_not_owner_is_calling() {
@@ -83,6 +188,10 @@ fn test_set_roles_should_set_roles_properly() {
     );
 }
 
+// =============================================================================
+// set_escrow()
+// =============================================================================
+
 #[test]
 fn test_set_escrow_should_revert_if_not_owner_is_calling() {
     let mut test_data = setup(odra_test::env());
@@ -111,6 +220,10 @@ fn test_set_escrow_should_set_escrow_properly() {
         "Invalid Escrow contract address"
     );
 }
+
+// =============================================================================
+// create_lease_agreement()
+// =============================================================================
 
 #[test]
 fn test_create_lease_agreement_should_fail_if_not_landlord_is_calling() {
@@ -298,6 +411,10 @@ fn test_create_lease_agreement_should_create_lease_agreement_properly() {
     }
 }
 
+// =============================================================================
+// finalize_lease_agreement()
+// =============================================================================
+
 #[test]
 fn test_finalize_lease_agreement_should_fail_if_lease_agreement_does_not_exist() {
     let mut test_data = setup(odra_test::env());
@@ -397,6 +514,10 @@ fn test_finalize_lease_agreement_should_finalize_properly_when_all_invoices_paid
         }
     ));
 }
+
+// =============================================================================
+// prolong_lease_agreement()
+// =============================================================================
 
 #[test]
 fn test_prolong_lease_agreement_should_fail_if_lease_agreement_does_not_exist() {
@@ -589,93 +710,4 @@ fn test_prolong_lease_agreement_should_prolong_lease_agreement_and_create_new_in
             i
         );
     }
-}
-
-fn setup(env: HostEnv) -> TestData {
-    let mut roles = Roles::deploy(
-        &env,
-        RolesInitArgs {
-            admin: env.get_account(0),
-        },
-    );
-    let mut lease = Lease::deploy(
-        &env,
-        LeaseInitArgs {
-            owner: env.get_account(0),
-        },
-    );
-    let mut escrow = Escrow::deploy(
-        &env,
-        EscrowInitArgs {
-            owner: env.get_account(0),
-            min_deadline: 5 * 60, // 5 minutes
-        },
-    );
-    let landlord = env.get_account(14);
-
-    lease.set_escrow(escrow.address());
-    lease.set_roles(roles.address());
-
-    escrow.set_lease(lease.address());
-    escrow.set_treasury(env.get_account(19));
-
-    roles.grant_role(
-        &roles.get_role_admin(&roles.get_landlord_role()),
-        &env.get_account(0),
-    );
-    roles.grant_role(&roles.get_landlord_role(), &landlord);
-
-    env.set_caller(landlord);
-
-    TestData {
-        env,
-        roles,
-        lease,
-        escrow,
-        landlord,
-    }
-}
-
-fn generate_lease_agreement_creation_params(test_data: &TestData) -> CreateLeaseAgreementParams {
-    CreateLeaseAgreementParams {
-        tenant: test_data.env.get_account(0),
-        monthly_rent: CurrencyAmount::new(None, U256::from_dec_str("250000000000000000").unwrap()),
-        security_deposit: CurrencyAmount::new(
-            None,
-            U256::from_dec_str("5000000000000000000").unwrap(),
-        ),
-        start: test_data.env.block_time(),
-        end: test_data.env.block_time() + (ONE_MONTH_IN_SECONDS * 12),
-        invoice_validity_duration: test_data.escrow.get_min_deadline(),
-    }
-}
-
-fn pay_all_lease_agreement_invoices(test_data: &mut TestData, lease_agreement_id: &U256) {
-    let mut lease_agreement = test_data
-        .lease
-        .get_lease_agreement_by_id(&lease_agreement_id);
-
-    test_data.env.set_caller(lease_agreement.tenant);
-    test_data
-        .escrow
-        .with_tokens(lease_agreement.security_deposit.amount().to_u512())
-        .pay_invoice(lease_agreement.invoices_ids[0]);
-
-    for invoice_id in lease_agreement.invoices_ids.iter().skip(1) {
-        test_data
-            .escrow
-            .with_tokens(lease_agreement.monthly_rent.amount().to_u512())
-            .pay_invoice(*invoice_id);
-    }
-
-    test_data.env.set_caller(lease_agreement.landlord);
-
-    assert!(
-        test_data.lease.is_security_deposit_paid(lease_agreement_id),
-        "Security deposit invoice should been paid"
-    );
-    assert!(
-        test_data.lease.is_all_invoices_paid(lease_agreement_id),
-        "All invoices should been paid"
-    );
 }
