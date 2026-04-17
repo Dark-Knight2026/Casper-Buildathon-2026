@@ -314,7 +314,7 @@ impl NFT {
 
     /// Mint a new token and set its metadata. Requires the MINTER role.
     /// @dev ERC-7943: recipient must be whitelisted.
-    pub fn mint(&mut self, to: Address, metadata: Vec<(String, String)>) {
+    pub fn mint(&mut self, to: Address, metadata: Vec<(String, String)>) -> U256 {
         self.assert_minter();
 
         if !self.can_transact(&to) {
@@ -325,6 +325,8 @@ impl NFT {
 
         self.cep95.raw_mint(to, token_id, metadata);
         self.tokens_count.set(token_id + 1);
+
+        token_id
     }
 
     /// Burn a token. Requires the BURNER role.
