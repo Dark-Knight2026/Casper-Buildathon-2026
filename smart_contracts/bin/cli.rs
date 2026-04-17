@@ -6,6 +6,7 @@ use odra::{
 use odra_cli::{deploy::DeployScript, DeployedContractsContainer, DeployerExt, OdraCli};
 
 use leasefi_contracts::{
+    big_coin::{BigCoin, BigCoinInitArgs},
     constants::{PRIVATE_SALE_CLIFF_DURATION, PRIVATE_SALE_VESTING_DURATION},
     escrow::{Escrow, EscrowInitArgs},
     ico::{
@@ -16,7 +17,6 @@ use leasefi_contracts::{
     nft::{NFTInitArgs, NFT},
     roles::{Roles, RolesInitArgs},
     staking::{Staking, StakingInitArgs},
-    tailor_coin::{TailorCoin, TailorCoinInitArgs},
     treasury::{Treasury, TreasuryInitArgs},
     vesting::{Vesting, VestingInitArgs},
 };
@@ -56,17 +56,17 @@ impl DeployScript for LeasefiDeployScript {
             )
             .unwrap(),
         );
-        let mut tailor_coin = TailorCoin::load_or_deploy_with_cfg(
+        let mut tailor_coin = BigCoin::load_or_deploy_with_cfg(
             &env,
             None,
-            TailorCoinInitArgs {
+            BigCoinInitArgs {
                 symbol: String::from("BIG"),
                 name: String::from("BIG"),
                 decimals: 18,
                 initial_supply: U256::from(5_000_000_000_000u128)
                     * U256::from(10).pow(U256::from(18)),
             },
-            InstallConfig::upgradable::<TailorCoin>(),
+            InstallConfig::upgradable::<BigCoin>(),
             container,
             350_000_000_000,
         )?;
@@ -226,7 +226,7 @@ pub fn main() {
     OdraCli::new()
         .about("CLI tool for deploying of leasefi smart contracts")
         .deploy(LeasefiDeployScript)
-        .contract::<TailorCoin>()
+        .contract::<BigCoin>()
         .contract::<NFT>()
         .contract::<Roles>()
         .contract::<Treasury>()
