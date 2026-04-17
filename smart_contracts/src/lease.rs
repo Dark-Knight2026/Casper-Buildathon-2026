@@ -13,7 +13,94 @@ use crate::{
     roles::RolesContractRef,
 };
 
-#[odra::module(errors = Error, events = [LeaseAgreementCreated, LeaseAgreementFinished, LeaseAgreementProlonged])]
+// =============================================================================
+// Lease Types
+// =============================================================================
+
+pub mod types {
+    use odra::{casper_types::U256, prelude::*};
+
+    use crate::common::CurrencyAmount;
+
+    #[odra::odra_type]
+    pub struct LeaseAgreement {
+        pub tenant: Address,
+        pub landlord: Address,
+        pub monthly_rent: CurrencyAmount,
+        pub security_deposit: CurrencyAmount,
+        pub invoices_ids: Vec<U256>,
+        pub start: u64,
+        pub end: u64,
+        pub is_finished: bool,
+    }
+
+    #[odra::odra_type]
+    pub struct CreateLeaseAgreementParams {
+        pub tenant: Address,
+        pub monthly_rent: CurrencyAmount,
+        pub security_deposit: CurrencyAmount,
+        pub start: u64,
+        pub end: u64,
+        pub invoice_validity_duration: u64,
+    }
+}
+
+// =============================================================================
+// Events
+// =============================================================================
+
+pub mod events {
+    use odra::{casper_types::U256, prelude::*};
+
+    #[odra::event]
+    pub struct LeaseAgreementCreated {
+        pub lease_agreement_id: U256,
+        pub created_at: u64,
+    }
+
+    #[odra::event]
+    pub struct LeaseAgreementFinished {
+        pub lease_agreement_id: U256,
+        pub finished_at: u64,
+    }
+
+    #[odra::event]
+    pub struct LeaseAgreementProlonged {
+        pub lease_agreement_id: U256,
+        pub prolonged_at: u64,
+    }
+}
+
+// =============================================================================
+// Errors
+// =============================================================================
+
+pub mod errors {
+    use odra::prelude::*;
+
+    #[odra::odra_error]
+    pub enum Error {
+        CallerNotLandlord = 400,
+        InvalidLeaseAgreementId = 401,
+        EqualTenantAndLandlord = 402,
+        InvalidTimeframes = 403,
+        ZeroAmount = 404,
+        InvalidLandlord = 405,
+        LeaseAgreementHasNotFinishedYet = 406,
+        NotAllInvoicesArePaid = 407,
+        SecurityDepositChargeIsTooHigh = 408,
+    }
+}
+
+// =============================================================================
+// Contract
+// =============================================================================
+
+#[odra::module(errors = Error, events = [
+  LeaseAgreementCreated,
+  LeaseAgreementFinished,
+  LeaseAgreementProlonged
+])]
 pub struct Lease {
     ownable: SubModule<Ownable>,
     roles: External<RolesContractRef>,
@@ -24,9 +111,17 @@ pub struct Lease {
 
 #[odra::module]
 impl Lease {
+    // =========================================================================
+    // Initialization
+    // =========================================================================
+
     pub fn init(&mut self, owner: Address) {
         self.ownable.init(owner);
     }
+
+    // =========================================================================
+    // Owner-only configuration
+    // =========================================================================
 
     /// Sets the Roles contract address by the owner
     pub fn set_roles(&mut self, roles: Address) {
@@ -39,6 +134,59 @@ impl Lease {
         self.assert_owner();
         self.escrow.set(escrow);
     }
+
+    // =========================================================================
+    // View Functions
+    // =========================================================================
+
+    /// Returns the Roles contract address
+    pub fn get_roles_contract_address(&self) -> Address {
+        *self.roles.address()
+    }
+
+    /// Returns the Escrow contract address
+    pub fn get_escrow_contract_address(&self) -> Address {
+        *self.escrow.address()
+    }
+
+    /// Returns lease agreement by its ID
+    pub fn get_lease_agreement_by_id(&self, lease_agreement_id: &U256) -> LeaseAgreement {
+        self.leases
+            .get(lease_agreement_id)
+            .unwrap_or_revert_with(&self.env(), Error::InvalidLeaseAgreementId)
+    }
+
+    /// Returns number of lease agreements created through this contract
+    pub fn get_lease_agreements_count(&self) -> U256 {
+        self.leases_count.get_or_default()
+    }
+
+    /// Returns `true` if security deposit is paid for lease agreement, `false` otherwise
+    pub fn is_security_deposit_paid(&self, lease_agreement_id: &U256) -> bool {
+        let lease_agreement = self.get_lease_agreement_by_id(lease_agreement_id);
+        let security_deposit_invoice_id = lease_agreement.invoices_ids[0];
+
+        self.escrow
+            .get_invoice_by_id(security_deposit_invoice_id)
+            .is_paid
+    }
+
+    /// Returns `true` if all invoices are paid for lease agreement, `false` if at least one invoice is not paid
+    pub fn is_all_invoices_paid(&self, lease_agreement_id: &U256) -> bool {
+        let lease_agreement = self.get_lease_agreement_by_id(lease_agreement_id);
+
+        for invoice_id in &lease_agreement.invoices_ids {
+            if !self.escrow.get_invoice_by_id(*invoice_id).is_paid {
+                return false;
+            }
+        }
+
+        true
+    }
+
+    // =========================================================================
+    // Lease Management
+    // =========================================================================
 
     /// Allows to create a new lease agreement and all invoices for this agreement by a landlord
     #[odra(non_reentrant)]
@@ -193,50 +341,9 @@ impl Lease {
         });
     }
 
-    /// Returns the Roles contract address
-    pub fn get_roles_contract_address(&self) -> Address {
-        *self.roles.address()
-    }
-
-    /// Returns the Escrow contract address
-    pub fn get_escrow_contract_address(&self) -> Address {
-        *self.escrow.address()
-    }
-
-    /// Returns lease agreement by its ID
-    pub fn get_lease_agreement_by_id(&self, lease_agreement_id: &U256) -> LeaseAgreement {
-        self.leases
-            .get(lease_agreement_id)
-            .unwrap_or_revert_with(&self.env(), Error::InvalidLeaseAgreementId)
-    }
-
-    /// Returns number of lease agreements created through this contract
-    pub fn get_lease_agreements_count(&self) -> U256 {
-        self.leases_count.get_or_default()
-    }
-
-    /// Returns `true` if security deposit is paid for lease agreement, `false` otherwise
-    pub fn is_security_deposit_paid(&self, lease_agreement_id: &U256) -> bool {
-        let lease_agreement = self.get_lease_agreement_by_id(lease_agreement_id);
-        let security_deposit_invoice_id = lease_agreement.invoices_ids[0];
-
-        self.escrow
-            .get_invoice_by_id(security_deposit_invoice_id)
-            .is_paid
-    }
-
-    /// Returns `true` if all invoices are paid for lease agreement, `false` if at least one invoice is not paid
-    pub fn is_all_invoices_paid(&self, lease_agreement_id: &U256) -> bool {
-        let lease_agreement = self.get_lease_agreement_by_id(lease_agreement_id);
-
-        for invoice_id in &lease_agreement.invoices_ids {
-            if !self.escrow.get_invoice_by_id(*invoice_id).is_paid {
-                return false;
-            }
-        }
-
-        true
-    }
+    // =========================================================================
+    // Ownable delegation
+    // =========================================================================
 
     delegate! {
         to self.ownable {
@@ -246,6 +353,10 @@ impl Lease {
         }
     }
 }
+
+// =============================================================================
+// Internal Types
+// =============================================================================
 
 impl Lease {
     #[inline]
@@ -307,72 +418,5 @@ impl Lease {
                 tenant,
             );
         }
-    }
-}
-
-pub mod events {
-    use odra::{casper_types::U256, prelude::*};
-
-    #[odra::event]
-    pub struct LeaseAgreementCreated {
-        pub lease_agreement_id: U256,
-        pub created_at: u64,
-    }
-
-    #[odra::event]
-    pub struct LeaseAgreementFinished {
-        pub lease_agreement_id: U256,
-        pub finished_at: u64,
-    }
-
-    #[odra::event]
-    pub struct LeaseAgreementProlonged {
-        pub lease_agreement_id: U256,
-        pub prolonged_at: u64,
-    }
-}
-
-pub mod errors {
-    use odra::prelude::*;
-
-    #[odra::odra_error]
-    pub enum Error {
-        CallerNotLandlord = 400,
-        InvalidLeaseAgreementId = 401,
-        EqualTenantAndLandlord = 402,
-        InvalidTimeframes = 403,
-        ZeroAmount = 404,
-        InvalidLandlord = 405,
-        LeaseAgreementHasNotFinishedYet = 406,
-        NotAllInvoicesArePaid = 407,
-        SecurityDepositChargeIsTooHigh = 408,
-    }
-}
-
-pub mod types {
-    use odra::{casper_types::U256, prelude::*};
-
-    use crate::common::CurrencyAmount;
-
-    #[odra::odra_type]
-    pub struct LeaseAgreement {
-        pub tenant: Address,
-        pub landlord: Address,
-        pub monthly_rent: CurrencyAmount,
-        pub security_deposit: CurrencyAmount,
-        pub invoices_ids: Vec<U256>,
-        pub start: u64,
-        pub end: u64,
-        pub is_finished: bool,
-    }
-
-    #[odra::odra_type]
-    pub struct CreateLeaseAgreementParams {
-        pub tenant: Address,
-        pub monthly_rent: CurrencyAmount,
-        pub security_deposit: CurrencyAmount,
-        pub start: u64,
-        pub end: u64,
-        pub invoice_validity_duration: u64,
     }
 }
