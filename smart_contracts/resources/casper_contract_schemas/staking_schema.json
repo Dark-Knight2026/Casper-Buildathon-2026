@@ -193,6 +193,11 @@
   ],
   "errors": [
     {
+      "name": "BigCoinContractIsNotSet",
+      "description": "",
+      "discriminant": 601
+    },
+    {
       "name": "CallerNotAuthorizedToManageLocks",
       "description": "",
       "discriminant": 614
@@ -263,11 +268,6 @@
       "discriminant": 20004
     },
     {
-      "name": "TailorCoinContractIsNotSet",
-      "description": "",
-      "discriminant": 601
-    },
-    {
       "name": "UnbondingAlreadyInProgress",
       "description": "",
       "discriminant": 606
@@ -290,12 +290,12 @@
   ],
   "entry_points": [
     {
-      "name": "set_tailor_coin",
-      "description": "Sets the TailorCoin (BIG) token contract address by the owner",
+      "name": "set_big_coin",
+      "description": "Sets the BIG token contract address by the owner",
       "is_mutable": true,
       "arguments": [
         {
-          "name": "tailor_coin",
+          "name": "big_coin",
           "description": null,
           "ty": "Key",
           "optional": false
@@ -322,8 +322,8 @@
       "access": "public"
     },
     {
-      "name": "get_tailor_coin_contract_address",
-      "description": "Returns the TailorCoin (BIG) token contract address",
+      "name": "get_big_coin_contract_address",
+      "description": "Returns the BIG token contract address",
       "is_mutable": false,
       "arguments": [],
       "return_ty": "Key",

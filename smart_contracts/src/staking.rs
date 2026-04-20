@@ -89,7 +89,7 @@ pub mod errors {
 
     #[odra::odra_error]
     pub enum Error {
-        TailorCoinContractIsNotSet = 601,
+        BigCoinContractIsNotSet = 601,
         InvalidAmount = 602,
         CallerNotAuthorizedToUnstake = 603,
         NothingStaked = 604,
@@ -125,8 +125,8 @@ pub struct Staking {
     /// Ownership control — only the owner can configure the contract.
     ownable: SubModule<Ownable>,
 
-    /// Reference to the TailorCoin (BIG) CEP-18 token contract.
-    tailor_coin: External<Cep18ContractRef>,
+    /// Reference to the BIG CEP-18 token contract.
+    big_coin: External<Cep18ContractRef>,
 
     /// Trusted Vesting contract address allowed to initiate unstaking on behalf of a staker
     vesting: External<VestingContractRef>,
@@ -161,10 +161,10 @@ impl Staking {
     // Owner-only configuration
     // =========================================================================
 
-    /// Sets the TailorCoin (BIG) token contract address by the owner
-    pub fn set_tailor_coin(&mut self, tailor_coin: Address) {
+    /// Sets the BIG token contract address by the owner
+    pub fn set_big_coin(&mut self, big_coin: Address) {
         self.assert_owner();
-        self.tailor_coin.set(tailor_coin);
+        self.big_coin.set(big_coin);
     }
 
     /// Sets the Vesting contract address by the owner
@@ -177,9 +177,9 @@ impl Staking {
     // View functions
     // =========================================================================
 
-    /// Returns the TailorCoin (BIG) token contract address
-    pub fn get_tailor_coin_contract_address(&self) -> Address {
-        *self.tailor_coin.address()
+    /// Returns the BIG token contract address
+    pub fn get_big_coin_contract_address(&self) -> Address {
+        *self.big_coin.address()
     }
 
     /// Returns the Vesting contract address
@@ -240,7 +240,7 @@ impl Staking {
 
         let caller = &self.env().caller();
         let staking_contract = &self.env().self_address();
-        self.tailor_coin
+        self.big_coin
             .transfer_from(caller, staking_contract, &amount);
 
         let mut staker_info = self.stakers.get_or_default(&staker);
@@ -345,7 +345,7 @@ impl Staking {
 
         let caller = self.env().caller();
         let staking_contract = self.env().self_address();
-        self.tailor_coin
+        self.big_coin
             .transfer_from(&caller, &staking_contract, &amount);
 
         let current = self.reward_per_token_stored.get_or_default();
@@ -381,7 +381,7 @@ impl Staking {
         staker_info.pending_rewards = U256::zero();
         self.stakers.set(&staker, staker_info);
 
-        self.tailor_coin.transfer(&staker, &rewards);
+        self.big_coin.transfer(&staker, &rewards);
 
         self.env().emit_event(RewardsClaimed {
             staker,
@@ -419,7 +419,7 @@ impl Staking {
         staker_info.unbonding_ends_at = 0;
         self.stakers.set(&staker, staker_info);
 
-        self.tailor_coin.transfer(&staker, &amount);
+        self.big_coin.transfer(&staker, &amount);
 
         self.env().emit_event(UnbondedWithdrawn { staker, amount });
     }
