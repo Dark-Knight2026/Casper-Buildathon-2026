@@ -88,6 +88,11 @@
   ],
   "errors": [
     {
+      "name": "BigCoinContractIsNotSet",
+      "description": "",
+      "discriminant": 200
+    },
+    {
       "name": "CallerNotTheNewOwner",
       "description": "The caller is not the new owner.",
       "discriminant": 20002
@@ -136,11 +141,6 @@
       "name": "StakingContractIsNotSet",
       "description": "",
       "discriminant": 201
-    },
-    {
-      "name": "TailorCoinContractIsNotSet",
-      "description": "",
-      "discriminant": 200
     }
   ],
   "entry_points": [
@@ -177,12 +177,12 @@
       "access": "public"
     },
     {
-      "name": "set_tailor_coin",
-      "description": "Sets the TailorCoin (BIG) token contract address by the owner",
+      "name": "set_big_coin",
+      "description": "Sets the BIG token contract address by the owner",
       "is_mutable": true,
       "arguments": [
         {
-          "name": "tailor_coin",
+          "name": "big_coin",
           "description": null,
           "ty": "Key",
           "optional": false
@@ -194,7 +194,7 @@
     },
     {
       "name": "deposit_rewards",
-      "description": "Allows to deposit any rewards amount in the TailorCoin (BIG) token by anyone, then distributes these rewards",
+      "description": "Allows to deposit any rewards amount in the BIG token by anyone, then distributes these rewards",
       "is_mutable": true,
       "arguments": [
         {
@@ -232,7 +232,7 @@
     },
     {
       "name": "withdraw_token",
-      "description": "Allows to withdraw any token that is stored on this contract except of the TailorCoin (BIG) token which is the",
+      "description": "Allows to withdraw any token that is stored on this contract except of the BIG token which is the",
       "is_mutable": true,
       "arguments": [
         {
@@ -262,7 +262,7 @@
     },
     {
       "name": "get_reserves",
-      "description": "Returns the TailorCoin (BIG) token reserves stored on this contract and available to withdraw by the owner",
+      "description": "Returns the BIG token reserves stored on this contract and available to withdraw by the owner",
       "is_mutable": false,
       "arguments": [],
       "return_ty": "U256",
@@ -279,8 +279,8 @@
       "access": "public"
     },
     {
-      "name": "get_tailor_coin_contract_address",
-      "description": "Returns the TailorCoin (BIG) token contract address",
+      "name": "get_big_coin_contract_address",
+      "description": "Returns the BIG token contract address",
       "is_mutable": false,
       "arguments": [],
       "return_ty": "Key",

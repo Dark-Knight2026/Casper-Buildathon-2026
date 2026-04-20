@@ -12,7 +12,7 @@ use crate::treasury::{
 pub struct Treasury {
     ownable: SubModule<Ownable>,
     staking: Var<Address>,
-    tailor_coin: Var<Address>,
+    big_coin: Var<Address>,
 }
 
 #[odra::module]
@@ -31,29 +31,29 @@ impl Treasury {
         self.staking.set(staking);
     }
 
-    /// Sets the TailorCoin (BIG) token contract address by the owner
-    pub fn set_tailor_coin(&mut self, tailor_coin: Address) {
+    /// Sets the BIG token contract address by the owner
+    pub fn set_big_coin(&mut self, big_coin: Address) {
         self.assert_owner();
-        self.tailor_coin.set(tailor_coin);
+        self.big_coin.set(big_coin);
     }
 
-    /// Allows to deposit any rewards amount in the TailorCoin (BIG) token by anyone, then distributes these rewards
+    /// Allows to deposit any rewards amount in the BIG token by anyone, then distributes these rewards
     /// between the Staking contract and internal reserves.
     ///
     /// If there is no active stake yet, the full deposit remains in Treasury reserves instead of reverting.
     #[odra(non_reentrant)]
     pub fn deposit_rewards(&mut self, amount: U256) {
         if amount > U256::zero() {
-            let mut tailor_coin =
-                Cep18ContractRef::new(self.env(), self.get_tailor_coin_contract_address());
+            let mut big_coin =
+                Cep18ContractRef::new(self.env(), self.get_big_coin_contract_address());
             let staking_rewards = amount * STAKING_REWARDS_BPS / ONE_HUNDRED_PERCENT_BPS;
             let staking_address = self.get_staking_contract_address();
             let mut staking = StakingContractRef::new(self.env(), staking_address);
 
-            tailor_coin.transfer_from(&self.env().caller(), &self.env().self_address(), &amount);
+            big_coin.transfer_from(&self.env().caller(), &self.env().self_address(), &amount);
 
             if !staking_rewards.is_zero() && !staking.get_total_staked().is_zero() {
-                tailor_coin.approve(&staking_address, &staking_rewards);
+                big_coin.approve(&staking_address, &staking_rewards);
                 staking.deposit_rewards(staking_rewards);
             }
 
@@ -71,7 +71,7 @@ impl Treasury {
         }
 
         if amount > U256::zero() {
-            Cep18ContractRef::new(self.env(), self.get_tailor_coin_contract_address())
+            Cep18ContractRef::new(self.env(), self.get_big_coin_contract_address())
                 .transfer(&recipient, &amount);
 
             self.env()
@@ -79,7 +79,7 @@ impl Treasury {
         }
     }
 
-    /// Allows to withdraw any token that is stored on this contract except of the TailorCoin (BIG) token which is the
+    /// Allows to withdraw any token that is stored on this contract except of the BIG token which is the
     /// reserves token. Only the owner can interact with this entrypoint
     #[odra(non_reentrant)]
     pub fn withdraw_token(&mut self, token: Option<Address>, amount: U256, recipient: Address) {
@@ -100,7 +100,7 @@ impl Treasury {
                 self.env().transfer_tokens(&recipient, &amount);
             }
             Some(token) => {
-                if token == self.get_tailor_coin_contract_address() {
+                if token == self.get_big_coin_contract_address() {
                     self.env()
                         .revert(Error::DirectReservesTokenWithdrawalIsNotAllowed);
                 }
@@ -122,9 +122,9 @@ impl Treasury {
         });
     }
 
-    /// Returns the TailorCoin (BIG) token reserves stored on this contract and available to withdraw by the owner
+    /// Returns the BIG token reserves stored on this contract and available to withdraw by the owner
     pub fn get_reserves(&self) -> U256 {
-        Cep18ContractRef::new(self.env(), self.get_tailor_coin_contract_address())
+        Cep18ContractRef::new(self.env(), self.get_big_coin_contract_address())
             .balance_of(&self.env().self_address())
     }
 
@@ -134,10 +134,10 @@ impl Treasury {
             .get_or_revert_with(Error::StakingContractIsNotSet)
     }
 
-    /// Returns the TailorCoin (BIG) token contract address
-    pub fn get_tailor_coin_contract_address(&self) -> Address {
-        self.tailor_coin
-            .get_or_revert_with(Error::TailorCoinContractIsNotSet)
+    /// Returns the BIG token contract address
+    pub fn get_big_coin_contract_address(&self) -> Address {
+        self.big_coin
+            .get_or_revert_with(Error::BigCoinContractIsNotSet)
     }
 
     delegate! {
@@ -183,7 +183,7 @@ pub mod errors {
 
     #[odra::odra_error]
     pub enum Error {
-        TailorCoinContractIsNotSet = 200,
+        BigCoinContractIsNotSet = 200,
         StakingContractIsNotSet = 201,
         NotEnoughReserves = 202,
         InvalidWithdrawalAmount = 203,
