@@ -34,7 +34,7 @@ pub struct ICO {
     ico_schedules: Mapping<ICOScheduleId, ICOSchedule>,
     ico_schedules_count: Var<U128>,
     styks_price_feed: External<StyksPriceFeedOracleContractRef>,
-    tailor_coin: External<Cep18ContractRef>,
+    big_coin: External<Cep18ContractRef>,
     treasury: External<TreasuryContractRef>,
     staking: External<StakingContractRef>,
     vesting: External<VestingContractRef>,
@@ -48,10 +48,10 @@ impl ICO {
         self.styks_price_feed.set(styks_price_feed);
     }
 
-    /// Sets the TailorCoin (BIG) token contract address by the owner
-    pub fn set_tailor_coin(&mut self, tailor_coin: Address) {
+    /// Sets the BIG token contract address by the owner
+    pub fn set_big_coin(&mut self, big_coin: Address) {
         self.assert_owner();
-        self.tailor_coin.set(tailor_coin);
+        self.big_coin.set(big_coin);
     }
 
     /// Sets the Treasury contract address by the owner
@@ -116,7 +116,7 @@ impl ICO {
         self.ico_schedules.set(&ico_id, ico_schedule.clone().into());
         self.ico_schedules_count.set(ico_id + 1);
 
-        self.tailor_coin
+        self.big_coin
             .transfer_from(&owner, &self_address, &sale_amount);
 
         self.env().emit_event(ICOScheduleAdded {
@@ -191,7 +191,7 @@ impl ICO {
         self.ico_schedules
             .set(&current_ico_schedule_id, current_ico_schedule);
 
-        self.tailor_coin
+        self.big_coin
             .approve(self.staking.address(), &purchase_amount);
 
         self.staking.stake_for(*caller, purchase_amount);
@@ -247,7 +247,7 @@ impl ICO {
         }
 
         if amount > U256::zero() {
-            self.tailor_coin.transfer(&recipient, &amount);
+            self.big_coin.transfer(&recipient, &amount);
 
             self.env()
                 .emit_event(UnsoldTokensWithdrawn { recipient, amount });
@@ -317,9 +317,9 @@ impl ICO {
         *self.styks_price_feed.address()
     }
 
-    /// Returns the TailorCoin (BIG) token contract address
-    pub fn get_tailor_coin_contract_address(&self) -> Address {
-        *self.tailor_coin.address()
+    /// Returns the BIG token contract address
+    pub fn get_big_coin_contract_address(&self) -> Address {
+        *self.big_coin.address()
     }
 
     /// Returns the Treasury contract address
