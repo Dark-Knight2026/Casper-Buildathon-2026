@@ -94,6 +94,32 @@
     },
     {
       "struct": {
+        "name": "ForceTransfererAdded",
+        "description": null,
+        "members": [
+          {
+            "name": "address",
+            "description": null,
+            "ty": "Key"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
+        "name": "ForceTransfererRemoved",
+        "description": null,
+        "members": [
+          {
+            "name": "address",
+            "description": null,
+            "ty": "Key"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
         "name": "ForcedTransfer",
         "description": null,
         "members": [
@@ -111,6 +137,32 @@
             "name": "token_id",
             "description": null,
             "ty": "U256"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
+        "name": "FreezerAdded",
+        "description": null,
+        "members": [
+          {
+            "name": "address",
+            "description": null,
+            "ty": "Key"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
+        "name": "FreezerRemoved",
+        "description": null,
+        "members": [
+          {
+            "name": "address",
+            "description": null,
+            "ty": "Key"
           }
         ]
       }
@@ -340,6 +392,32 @@
     },
     {
       "struct": {
+        "name": "WhitelistManagerAdded",
+        "description": null,
+        "members": [
+          {
+            "name": "address",
+            "description": null,
+            "ty": "Key"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
+        "name": "WhitelistManagerRemoved",
+        "description": null,
+        "members": [
+          {
+            "name": "address",
+            "description": null,
+            "ty": "Key"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
         "name": "Whitelisted",
         "description": null,
         "members": [
@@ -396,12 +474,12 @@
     {
       "name": "CannotTransact",
       "description": "",
-      "discriminant": 200
+      "discriminant": 103
     },
     {
       "name": "CannotTransfer",
       "description": "",
-      "discriminant": 201
+      "discriminant": 104
     },
     {
       "name": "InvalidTokenId",
@@ -421,7 +499,7 @@
     {
       "name": "NotAuthorized",
       "description": "",
-      "discriminant": 203
+      "discriminant": 106
     },
     {
       "name": "OwnerNotSet",
@@ -441,7 +519,7 @@
     {
       "name": "TokenIsFrozen",
       "description": "",
-      "discriminant": 202
+      "discriminant": 105
     },
     {
       "name": "TransferFailed",
@@ -678,6 +756,102 @@
       "access": "public"
     },
     {
+      "name": "add_whitelist_manager",
+      "description": "Allows to add a new whitelist manager by the admin",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "address",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        }
+      ],
+      "return_ty": "Unit",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "remove_whitelist_manager",
+      "description": "Allows to remove a whitelist manager by the admin",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "address",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        }
+      ],
+      "return_ty": "Unit",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "add_freezer",
+      "description": "Allows to add a new freezer by the admin",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "address",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        }
+      ],
+      "return_ty": "Unit",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "remove_freezer",
+      "description": "Allows to remove a freezer by the admin",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "address",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        }
+      ],
+      "return_ty": "Unit",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "add_force_transferer",
+      "description": "Allows to add a new force transferer by the admin",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "address",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        }
+      ],
+      "return_ty": "Unit",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "remove_force_transferer",
+      "description": "Allows to remove a force transferer by the admin",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "address",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        }
+      ],
+      "return_ty": "Unit",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
       "name": "is_minter",
       "description": "Returns `true` if `address` has the `minter` role, `false` otherwise",
       "is_mutable": false,
@@ -725,7 +899,10 @@
           "description": null,
           "ty": {
             "List": {
-              "Tuple2": ["String", "String"]
+              "Tuple2": [
+                "String",
+                "String"
+              ]
             }
           },
           "optional": false
@@ -767,7 +944,10 @@
           "description": null,
           "ty": {
             "List": {
-              "Tuple2": ["String", "String"]
+              "Tuple2": [
+                "String",
+                "String"
+              ]
             }
           },
           "optional": false
@@ -793,7 +973,10 @@
           "description": null,
           "ty": {
             "List": {
-              "Tuple2": ["String", "String"]
+              "Tuple2": [
+                "String",
+                "String"
+              ]
             }
           },
           "optional": false
@@ -1225,7 +1408,10 @@
       ],
       "return_ty": {
         "List": {
-          "Tuple2": ["String", "String"]
+          "Tuple2": [
+            "String",
+            "String"
+          ]
         }
       },
       "is_contract_context": true,
@@ -1254,8 +1440,24 @@
       "ty": "BurnerRemoved"
     },
     {
+      "name": "ForceTransfererAdded",
+      "ty": "ForceTransfererAdded"
+    },
+    {
+      "name": "ForceTransfererRemoved",
+      "ty": "ForceTransfererRemoved"
+    },
+    {
       "name": "ForcedTransfer",
       "ty": "ForcedTransfer"
+    },
+    {
+      "name": "FreezerAdded",
+      "ty": "FreezerAdded"
+    },
+    {
+      "name": "FreezerRemoved",
+      "ty": "FreezerRemoved"
     },
     {
       "name": "Frozen",
@@ -1300,6 +1502,14 @@
     {
       "name": "Transfer",
       "ty": "Transfer"
+    },
+    {
+      "name": "WhitelistManagerAdded",
+      "ty": "WhitelistManagerAdded"
+    },
+    {
+      "name": "WhitelistManagerRemoved",
+      "ty": "WhitelistManagerRemoved"
     },
     {
       "name": "Whitelisted",
@@ -1362,6 +1572,30 @@
       },
       {
         "name": "burners",
+        "description": null,
+        "ty": {
+          "List": "Key"
+        },
+        "optional": false
+      },
+      {
+        "name": "whitelist_managers",
+        "description": null,
+        "ty": {
+          "List": "Key"
+        },
+        "optional": false
+      },
+      {
+        "name": "freezers",
+        "description": null,
+        "ty": {
+          "List": "Key"
+        },
+        "optional": false
+      },
+      {
+        "name": "force_transferers",
         "description": null,
         "ty": {
           "List": "Key"

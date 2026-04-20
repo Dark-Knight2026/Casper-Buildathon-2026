@@ -12,7 +12,9 @@ use sha3::{Digest, Keccak256};
 use crate::nft::{
     errors::Error,
     events::{
-        BurnerAdded, BurnerRemoved, ForcedTransfer, Frozen, MinterAdded, MinterRemoved, Whitelisted,
+        BurnerAdded, BurnerRemoved, ForceTransfererAdded, ForceTransfererRemoved, ForcedTransfer,
+        FreezerAdded, FreezerRemoved, Frozen, MinterAdded, MinterRemoved, WhitelistManagerAdded,
+        WhitelistManagerRemoved, Whitelisted,
     },
 };
 
@@ -51,6 +53,36 @@ pub mod events {
     #[odra::event]
     pub struct BurnerRemoved {
         pub burner: Address,
+    }
+
+    #[odra::event]
+    pub struct WhitelistManagerAdded {
+        pub address: Address,
+    }
+
+    #[odra::event]
+    pub struct WhitelistManagerRemoved {
+        pub address: Address,
+    }
+
+    #[odra::event]
+    pub struct FreezerAdded {
+        pub address: Address,
+    }
+
+    #[odra::event]
+    pub struct FreezerRemoved {
+        pub address: Address,
+    }
+
+    #[odra::event]
+    pub struct ForceTransfererAdded {
+        pub address: Address,
+    }
+
+    #[odra::event]
+    pub struct ForceTransfererRemoved {
+        pub address: Address,
     }
 
     #[odra::event]
@@ -101,9 +133,15 @@ pub mod errors {
   BurnerAdded,
   BurnerRemoved,
   ForcedTransfer,
+  ForceTransfererAdded,
+  ForceTransfererRemoved,
+  FreezerAdded,
+  FreezerRemoved,
   Frozen,
   MinterAdded,
   MinterRemoved,
+  WhitelistManagerAdded,
+  WhitelistManagerRemoved,
   Whitelisted,
 ])]
 pub struct NFT {
@@ -127,6 +165,9 @@ impl NFT {
         name: String,
         minters: Vec<Address>,
         burners: Vec<Address>,
+        whitelist_managers: Vec<Address>,
+        freezers: Vec<Address>,
+        force_transferers: Vec<Address>,
     ) {
         self.access_control
             .unchecked_grant_role(&DEFAULT_ADMIN_ROLE, &owner);
@@ -134,6 +175,9 @@ impl NFT {
 
         let minter_role = Self::hash_role(ROLE_MINTER);
         let burner_role = Self::hash_role(ROLE_BURNER);
+        let whitelist_manager_role = Self::hash_role(ROLE_WHITELIST_MANAGER);
+        let freezer_role = Self::hash_role(ROLE_FREEZER);
+        let force_transferer_role = Self::hash_role(ROLE_FORCE_TRANSFERER);
 
         minters.iter().for_each(|minter| {
             self.access_control
@@ -144,6 +188,23 @@ impl NFT {
             self.access_control
                 .unchecked_grant_role(&burner_role, burner);
             self.env().emit_event(BurnerAdded { burner: *burner });
+        });
+        whitelist_managers.iter().for_each(|address| {
+            self.access_control
+                .unchecked_grant_role(&whitelist_manager_role, address);
+            self.env()
+                .emit_event(WhitelistManagerAdded { address: *address });
+        });
+        freezers.iter().for_each(|address| {
+            self.access_control
+                .unchecked_grant_role(&freezer_role, address);
+            self.env().emit_event(FreezerAdded { address: *address });
+        });
+        force_transferers.iter().for_each(|address| {
+            self.access_control
+                .unchecked_grant_role(&force_transferer_role, address);
+            self.env()
+                .emit_event(ForceTransfererAdded { address: *address });
         });
     }
 
@@ -257,7 +318,7 @@ impl NFT {
     }
 
     // =========================================================================
-    // Minter / Burner Management (backward compatibility API)
+    // Role Management
     // =========================================================================
 
     /// Allows to add a new minter by the admin
@@ -292,6 +353,58 @@ impl NFT {
         let role = Self::hash_role(ROLE_BURNER);
         self.access_control.revoke_role(&role, burner);
         self.env().emit_event(BurnerRemoved { burner: *burner });
+    }
+
+    /// Allows to add a new whitelist manager by the admin
+    pub fn add_whitelist_manager(&mut self, address: &Address) {
+        self.assert_admin();
+        let role = Self::hash_role(ROLE_WHITELIST_MANAGER);
+        self.access_control.unchecked_grant_role(&role, address);
+        self.env()
+            .emit_event(WhitelistManagerAdded { address: *address });
+    }
+
+    /// Allows to remove a whitelist manager by the admin
+    pub fn remove_whitelist_manager(&mut self, address: &Address) {
+        self.assert_admin();
+        let role = Self::hash_role(ROLE_WHITELIST_MANAGER);
+        self.access_control.revoke_role(&role, address);
+        self.env()
+            .emit_event(WhitelistManagerRemoved { address: *address });
+    }
+
+    /// Allows to add a new freezer by the admin
+    pub fn add_freezer(&mut self, address: &Address) {
+        self.assert_admin();
+        let role = Self::hash_role(ROLE_FREEZER);
+        self.access_control.unchecked_grant_role(&role, address);
+        self.env().emit_event(FreezerAdded { address: *address });
+    }
+
+    /// Allows to remove a freezer by the admin
+    pub fn remove_freezer(&mut self, address: &Address) {
+        self.assert_admin();
+        let role = Self::hash_role(ROLE_FREEZER);
+        self.access_control.revoke_role(&role, address);
+        self.env().emit_event(FreezerRemoved { address: *address });
+    }
+
+    /// Allows to add a new force transferer by the admin
+    pub fn add_force_transferer(&mut self, address: &Address) {
+        self.assert_admin();
+        let role = Self::hash_role(ROLE_FORCE_TRANSFERER);
+        self.access_control.unchecked_grant_role(&role, address);
+        self.env()
+            .emit_event(ForceTransfererAdded { address: *address });
+    }
+
+    /// Allows to remove a force transferer by the admin
+    pub fn remove_force_transferer(&mut self, address: &Address) {
+        self.assert_admin();
+        let role = Self::hash_role(ROLE_FORCE_TRANSFERER);
+        self.access_control.revoke_role(&role, address);
+        self.env()
+            .emit_event(ForceTransfererRemoved { address: *address });
     }
 
     /// Returns `true` if `address` has the `minter` role, `false` otherwise

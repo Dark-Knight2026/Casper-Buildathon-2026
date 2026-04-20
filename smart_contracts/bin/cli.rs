@@ -81,6 +81,9 @@ impl DeployScript for LeasefiDeployScript {
                 name: String::from("BIG"),
                 minters: vec![],
                 burners: vec![],
+                whitelist_managers: vec![env.caller()],
+                freezers: vec![],
+                force_transferers: vec![],
             },
             InstallConfig::upgradable::<NFT>(),
             container,
@@ -175,6 +178,12 @@ impl DeployScript for LeasefiDeployScript {
         // Setup Lease
         lease.set_roles(roles.address());
         lease.set_escrow(escrow.address());
+        lease.set_nft(nft.address());
+
+        // Setup NFT
+        nft.add_minter(&lease.address());
+        nft.add_freezer(&lease.address());
+        nft.add_whitelist_manager(&lease.address());
 
         // Setup Escrow
         escrow.set_lease(lease.address());

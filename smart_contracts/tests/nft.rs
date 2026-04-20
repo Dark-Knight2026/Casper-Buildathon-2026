@@ -1,3 +1,4 @@
+use crate::nft::{ROLE_FORCE_TRANSFERER, ROLE_FREEZER};
 use leasefi_contracts::nft::{errors::*, events::*, NFTHostRef, NFTInitArgs, NFT};
 use odra::casper_types::U256;
 use odra::host::{Deployer, HostEnv};
@@ -6,9 +7,6 @@ use odra_modules::{
     access::DEFAULT_ADMIN_ROLE,
     cep95::{Burn, MetadataUpdate, Mint},
 };
-
-use crate::nft::{ROLE_FORCE_TRANSFERER, ROLE_FREEZER, ROLE_WHITELIST_MANAGER};
-
 // =============================================================================
 // Test Context
 // =============================================================================
@@ -23,7 +21,7 @@ struct TestData {
 fn setup(env: HostEnv) -> TestData {
     let minters = vec![env.get_account(10), env.get_account(11)];
     let burners = vec![env.get_account(12), env.get_account(13)];
-    let mut nft = NFT::deploy(
+    let nft = NFT::deploy(
         &env,
         NFTInitArgs {
             owner: env.get_account(0),
@@ -31,12 +29,11 @@ fn setup(env: HostEnv) -> TestData {
             name: String::from("NFT"),
             minters: minters.clone(),
             burners: burners.clone(),
+            whitelist_managers: vec![env.get_account(0)],
+            freezers: vec![],
+            force_transferers: vec![],
         },
     );
-
-    // Grant WHITE_LIST_MANAGER role to admin so tests can whitelist addresses
-    let wl_role = NFT::hash_role(ROLE_WHITELIST_MANAGER);
-    nft.grant_role(&wl_role, &env.get_account(0));
 
     TestData {
         env,

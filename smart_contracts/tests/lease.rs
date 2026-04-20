@@ -20,7 +20,7 @@ use leasefi_contracts::lease::{
 };
 use leasefi_contracts::roles::{Roles, RolesHostRef, RolesInitArgs};
 
-use crate::nft::{NFTInitArgs, NFT, ROLE_FREEZER, ROLE_MINTER, ROLE_WHITELIST_MANAGER};
+use crate::nft::{NFTInitArgs, NFT};
 
 // =============================================================================
 // Test Context
@@ -63,8 +63,11 @@ fn setup(env: HostEnv) -> TestData {
             owner: env.get_account(0),
             symbol: String::from("LEASE"),
             name: String::from("LEASE"),
-            minters: vec![],
+            minters: vec![lease.address()],
             burners: vec![],
+            whitelist_managers: vec![env.get_account(0)],
+            freezers: vec![lease.address()],
+            force_transferers: vec![],
         },
     );
 
@@ -77,10 +80,6 @@ fn setup(env: HostEnv) -> TestData {
     escrow.set_lease(lease.address());
     escrow.set_treasury(env.get_account(19));
 
-    let lease_addr = lease.address();
-    nft.grant_role(&NFT::hash_role(ROLE_MINTER), &lease_addr);
-    nft.grant_role(&NFT::hash_role(ROLE_FREEZER), &lease_addr);
-    nft.grant_role(&NFT::hash_role(ROLE_WHITELIST_MANAGER), &env.get_account(0));
     nft.add_to_whitelist(&env.get_account(0));
 
     roles.grant_role(
