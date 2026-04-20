@@ -1,8 +1,8 @@
 last_updated = "2026-03-30T14:13:39Z"
 
 [[contracts]]
-name = "TailorCoin"
-package_name = "TailorCoin"
+name = "BigCoin"
+package_name = "BigCoin"
 package_hash = "hash-f7d94fd8670fdc69aabd07c214ab8d52c3fc1fd839f0cc7713e1574cdfd899ec"
 
 [[contracts]]
