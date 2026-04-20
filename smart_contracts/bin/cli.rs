@@ -56,7 +56,7 @@ impl DeployScript for LeasefiDeployScript {
             )
             .unwrap(),
         );
-        let mut tailor_coin = BigCoin::load_or_deploy_with_cfg(
+        let mut big_coin = BigCoin::load_or_deploy_with_cfg(
             &env,
             None,
             BigCoinInitArgs {
@@ -159,11 +159,11 @@ impl DeployScript for LeasefiDeployScript {
         )?;
 
         // Setup Treasury
-        treasury.set_tailor_coin(tailor_coin.address());
+        treasury.set_big_coin(big_coin.address());
         treasury.set_staking(staking.address());
 
         // Setup Staking
-        staking.set_tailor_coin(tailor_coin.address());
+        staking.set_big_coin(big_coin.address());
         staking.set_vesting(vesting.address());
 
         // Setup Vesting
@@ -181,7 +181,7 @@ impl DeployScript for LeasefiDeployScript {
         // Setup ICO
         let creation_params = LeasefiDeployScript::get_ico_schedule_creation_params(&env);
 
-        ico.set_tailor_coin(tailor_coin.address());
+        ico.set_big_coin(big_coin.address());
         ico.set_treasury(treasury.address());
         ico.set_vesting(vesting.address());
         ico.set_staking(staking.address());
@@ -206,7 +206,7 @@ impl DeployScript for LeasefiDeployScript {
             ),
         );
         env.set_gas(20_000_000_000);
-        tailor_coin.approve(&ico.address(), &(creation_params.sale_amount));
+        big_coin.approve(&ico.address(), &(creation_params.sale_amount));
         ico.add_ico_schedule(creation_params);
 
         // Transfer ownership
