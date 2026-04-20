@@ -5,7 +5,7 @@ use odra::{
 
 use leasefi_contracts::big_coin::{BigCoin, BigCoinHostRef, BigCoinInitArgs};
 
-fn deploy_tailor_coin(env: &HostEnv) -> BigCoinHostRef {
+fn deploy_big_coin(env: &HostEnv) -> BigCoinHostRef {
     BigCoin::deploy(
         env,
         BigCoinInitArgs {
@@ -20,26 +20,26 @@ fn deploy_tailor_coin(env: &HostEnv) -> BigCoinHostRef {
 #[test]
 fn test_init_should_initialize_token_properly() {
     let env = odra_test::env();
-    let tailor_coin = deploy_tailor_coin(&env);
+    let big_coin = deploy_big_coin(&env);
     let expected_symbol = String::from("BIG");
     let expected_name = String::from("BIG");
     let expected_decimals = 18;
     let expected_initial_supply = U256::from_dec_str("5000000000000000000000000000000").unwrap();
 
-    assert_eq!(tailor_coin.symbol(), expected_symbol, "Invalid coin symbol");
-    assert_eq!(tailor_coin.name(), expected_name, "Invalid coin name");
+    assert_eq!(big_coin.symbol(), expected_symbol, "Invalid coin symbol");
+    assert_eq!(big_coin.name(), expected_name, "Invalid coin name");
     assert_eq!(
-        tailor_coin.decimals(),
+        big_coin.decimals(),
         expected_decimals,
         "Invalid coin decimals"
     );
     assert_eq!(
-        tailor_coin.total_supply(),
+        big_coin.total_supply(),
         expected_initial_supply,
         "Invalid coin total supply"
     );
     assert_eq!(
-        tailor_coin.balance_of(&env.caller()),
+        big_coin.balance_of(&env.caller()),
         expected_initial_supply,
         "Invalid balance of deployer"
     );
@@ -48,16 +48,16 @@ fn test_init_should_initialize_token_properly() {
 #[test]
 fn test_transfer_should_transfer_properly() {
     let env = odra_test::env();
-    let mut tailor_coin = deploy_tailor_coin(&env);
+    let mut big_coin = deploy_big_coin(&env);
     let recipient = env.get_account(1);
     let amount = U256::from_dec_str("1000000000000000000").unwrap();
-    let prev_sender_balance = tailor_coin.balance_of(&env.caller());
-    let prev_recipient_balance = tailor_coin.balance_of(&recipient);
+    let prev_sender_balance = big_coin.balance_of(&env.caller());
+    let prev_recipient_balance = big_coin.balance_of(&recipient);
 
-    tailor_coin.transfer(&recipient, &amount);
+    big_coin.transfer(&recipient, &amount);
 
-    let curr_sender_balance = tailor_coin.balance_of(&env.caller());
-    let curr_recipient_balance = tailor_coin.balance_of(&recipient);
+    let curr_sender_balance = big_coin.balance_of(&env.caller());
+    let curr_recipient_balance = big_coin.balance_of(&recipient);
 
     assert_eq!(
         curr_sender_balance,
@@ -74,19 +74,19 @@ fn test_transfer_should_transfer_properly() {
 #[test]
 fn test_transfer_from_should_transfer_properly() {
     let env = odra_test::env();
-    let mut tailor_coin = deploy_tailor_coin(&env);
+    let mut big_coin = deploy_big_coin(&env);
     let owner = env.caller();
     let spender = env.get_account(1);
     let amount = U256::from_dec_str("10000000000000000000").unwrap();
-    let prev_owner_balance = tailor_coin.balance_of(&owner);
-    let prev_spender_balance = tailor_coin.balance_of(&spender);
+    let prev_owner_balance = big_coin.balance_of(&owner);
+    let prev_spender_balance = big_coin.balance_of(&spender);
 
-    tailor_coin.approve(&spender, &amount);
+    big_coin.approve(&spender, &amount);
     env.set_caller(spender);
-    tailor_coin.transfer_from(&owner, &spender, &amount);
+    big_coin.transfer_from(&owner, &spender, &amount);
 
-    let curr_owner_balance = tailor_coin.balance_of(&owner);
-    let curr_spender_balance = tailor_coin.balance_of(&spender);
+    let curr_owner_balance = big_coin.balance_of(&owner);
+    let curr_spender_balance = big_coin.balance_of(&spender);
 
     assert_eq!(
         curr_owner_balance,
@@ -103,15 +103,15 @@ fn test_transfer_from_should_transfer_properly() {
 #[test]
 fn test_approve_should_approve_properly() {
     let env = odra_test::env();
-    let mut tailor_coin = deploy_tailor_coin(&env);
+    let mut big_coin = deploy_big_coin(&env);
     let owner = env.caller();
     let spender = env.get_account(1);
     let amount = U256::from_dec_str("500000000000000000").unwrap();
-    let prev_allowance = tailor_coin.allowance(&owner, &spender);
+    let prev_allowance = big_coin.allowance(&owner, &spender);
 
-    tailor_coin.approve(&spender, &amount);
+    big_coin.approve(&spender, &amount);
 
-    let curr_allowance = tailor_coin.allowance(&owner, &spender);
+    let curr_allowance = big_coin.allowance(&owner, &spender);
 
     assert_eq!(
         curr_allowance,
@@ -123,16 +123,16 @@ fn test_approve_should_approve_properly() {
 #[test]
 fn test_decrease_allowance_should_decrease_allowance_properly() {
     let env = odra_test::env();
-    let mut tailor_coin = deploy_tailor_coin(&env);
+    let mut big_coin = deploy_big_coin(&env);
     let owner = env.caller();
     let spender = env.get_account(1);
     let amount = U256::from_dec_str("500000000000000000").unwrap();
-    let prev_allowance = tailor_coin.allowance(&owner, &spender);
+    let prev_allowance = big_coin.allowance(&owner, &spender);
 
-    tailor_coin.approve(&spender, &amount);
-    tailor_coin.decrease_allowance(&spender, &(amount / 2));
+    big_coin.approve(&spender, &amount);
+    big_coin.decrease_allowance(&spender, &(amount / 2));
 
-    let curr_allowance = tailor_coin.allowance(&owner, &spender);
+    let curr_allowance = big_coin.allowance(&owner, &spender);
 
     assert_eq!(
         curr_allowance,
@@ -144,16 +144,16 @@ fn test_decrease_allowance_should_decrease_allowance_properly() {
 #[test]
 fn test_increase_allowance_should_increase_allowance_properly() {
     let env = odra_test::env();
-    let mut tailor_coin = deploy_tailor_coin(&env);
+    let mut big_coin = deploy_big_coin(&env);
     let owner = env.caller();
     let spender = env.get_account(1);
     let amount = U256::from_dec_str("500000000000000000").unwrap();
-    let prev_allowance = tailor_coin.allowance(&owner, &spender);
+    let prev_allowance = big_coin.allowance(&owner, &spender);
 
-    tailor_coin.approve(&spender, &amount);
-    tailor_coin.increase_allowance(&spender, &(amount / 2));
+    big_coin.approve(&spender, &amount);
+    big_coin.increase_allowance(&spender, &(amount / 2));
 
-    let curr_allowance = tailor_coin.allowance(&owner, &spender);
+    let curr_allowance = big_coin.allowance(&owner, &spender);
 
     assert_eq!(
         curr_allowance,
