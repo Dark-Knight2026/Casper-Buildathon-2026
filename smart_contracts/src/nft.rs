@@ -88,10 +88,10 @@ pub mod errors {
         CallerNotBurner = 101,
         CallerNotMinterNorBurner = 102,
 
-        CannotTransact = 200,
-        CannotTransfer = 201,
-        TokenIsFrozen = 202,
-        NotAuthorized = 203,
+        CannotTransact = 103,
+        CannotTransfer = 104,
+        TokenIsFrozen = 105,
+        NotAuthorized = 106,
     }
 }
 
