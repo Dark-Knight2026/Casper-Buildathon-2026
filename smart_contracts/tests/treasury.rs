@@ -29,7 +29,7 @@ fn setup(
             owner: env.get_account(0),
         },
     );
-    let tailor_coin = BigCoin::deploy(
+    let big_coin = BigCoin::deploy(
         env,
         BigCoinInitArgs {
             symbol: String::from("BIG"),
@@ -54,34 +54,34 @@ fn setup(
         },
     );
 
-    treasury.set_tailor_coin(tailor_coin.address());
+    treasury.set_big_coin(big_coin.address());
     treasury.set_staking(staking.address());
 
-    staking.set_tailor_coin(tailor_coin.address());
+    staking.set_big_coin(big_coin.address());
 
-    (treasury, staking, tailor_coin, mock_cep18)
+    (treasury, staking, big_coin, mock_cep18)
 }
 
 fn deposit_rewards(
     rewards_amount: &U256,
-    tailor_coin: &mut BigCoinHostRef,
+    big_coin: &mut BigCoinHostRef,
     treasury: &mut TreasuryHostRef,
 ) {
-    tailor_coin.approve(&treasury.address(), rewards_amount);
+    big_coin.approve(&treasury.address(), rewards_amount);
     treasury.deposit_rewards(*rewards_amount);
 }
 
 fn create_active_stake(
     env: &HostEnv,
-    tailor_coin: &mut BigCoinHostRef,
+    big_coin: &mut BigCoinHostRef,
     staking: &mut StakingHostRef,
     staker: Address,
     amount: U256,
 ) {
-    tailor_coin.transfer(&staker, &amount);
+    big_coin.transfer(&staker, &amount);
 
     env.set_caller(staker);
-    tailor_coin.approve(&staking.address(), &amount);
+    big_coin.approve(&staking.address(), &amount);
     staking.stake_for(staker, amount);
     env.set_caller(env.get_account(0));
 }
@@ -89,7 +89,7 @@ fn create_active_stake(
 #[test]
 fn test_init_should_initialize_contract_properly() {
     let env = odra_test::env();
-    let (treasury, staking, tailor_coin, _) = setup(&env);
+    let (treasury, staking, big_coin, _) = setup(&env);
 
     assert_eq!(treasury.get_owner(), env.get_account(0), "Invalid owner");
     assert_eq!(
@@ -98,9 +98,9 @@ fn test_init_should_initialize_contract_properly() {
         "Invalid Staking contract address"
     );
     assert_eq!(
-        treasury.get_tailor_coin_contract_address(),
-        tailor_coin.address(),
-        "Invalid TailorCoin contract address"
+        treasury.get_big_coin_contract_address(),
+        big_coin.address(),
+        "Invalid BIG coin contract address"
     );
 }
 
@@ -134,61 +134,59 @@ fn test_set_staking_should_set_staking_properly() {
 }
 
 #[test]
-fn test_set_tailor_coin_should_revert_if_not_owner_is_calling() {
+fn test_set_big_coin_should_revert_if_not_owner_is_calling() {
     let env = odra_test::env();
     let (mut treasury, _, _, _) = setup(&env);
 
     env.set_caller(env.get_account(1));
 
     assert_eq!(
-        treasury
-            .try_set_tailor_coin(env.get_account(1))
-            .unwrap_err(),
+        treasury.try_set_big_coin(env.get_account(1)).unwrap_err(),
         AccessError::CallerNotTheOwner.into(),
         "Should revert when is called by not the owner"
     );
 }
 
 #[test]
-fn test_set_tailor_coin_should_set_tailor_coin_properly() {
+fn test_set_big_coin_should_set_big_coin_properly() {
     let env = odra_test::env();
     let (mut treasury, _, _, _) = setup(&env);
-    let tailor_coin = env.get_account(10);
+    let big_coin = env.get_account(10);
 
-    treasury.set_tailor_coin(tailor_coin);
+    treasury.set_big_coin(big_coin);
 
     assert_eq!(
-        treasury.get_tailor_coin_contract_address(),
-        tailor_coin,
-        "Invalid TailorCoin contract address"
+        treasury.get_big_coin_contract_address(),
+        big_coin,
+        "Invalid BIG coin contract address"
     );
 }
 
 #[test]
 fn test_deposit_rewards_should_deposit_rewards_properly() {
     let env = odra_test::env();
-    let (mut treasury, mut staking, mut tailor_coin, _) = setup(&env);
+    let (mut treasury, mut staking, mut big_coin, _) = setup(&env);
     let stake_amount = U256::from_dec_str("1000000000000000000").unwrap();
     let rewards_amount = U256::from_dec_str("5000000000000000000").unwrap();
     let expected_staking_rewards = rewards_amount * STAKING_REWARDS_BPS / ONE_HUNDRED_PERCENT_BPS;
 
     create_active_stake(
         &env,
-        &mut tailor_coin,
+        &mut big_coin,
         &mut staking,
         env.get_account(1),
         stake_amount,
     );
 
-    let prev_user_balance = tailor_coin.balance_of(&env.caller());
-    let prev_treasury_balance = tailor_coin.balance_of(&treasury.address());
-    let prev_staking_balance = tailor_coin.balance_of(&staking.address());
+    let prev_user_balance = big_coin.balance_of(&env.caller());
+    let prev_treasury_balance = big_coin.balance_of(&treasury.address());
+    let prev_staking_balance = big_coin.balance_of(&staking.address());
 
-    deposit_rewards(&rewards_amount, &mut tailor_coin, &mut treasury);
+    deposit_rewards(&rewards_amount, &mut big_coin, &mut treasury);
 
-    let curr_user_balance = tailor_coin.balance_of(&env.caller());
-    let curr_treasury_balance = tailor_coin.balance_of(&treasury.address());
-    let curr_staking_balance = tailor_coin.balance_of(&staking.address());
+    let curr_user_balance = big_coin.balance_of(&env.caller());
+    let curr_treasury_balance = big_coin.balance_of(&treasury.address());
+    let curr_staking_balance = big_coin.balance_of(&staking.address());
 
     assert!(env.emitted_event(
         &treasury,
@@ -221,17 +219,17 @@ fn test_deposit_rewards_should_deposit_rewards_properly() {
 #[test]
 fn test_deposit_rewards_should_keep_all_rewards_as_reserves_if_no_active_stake() {
     let env = odra_test::env();
-    let (mut treasury, staking, mut tailor_coin, _) = setup(&env);
+    let (mut treasury, staking, mut big_coin, _) = setup(&env);
     let rewards_amount = U256::from_dec_str("5000000000000000000").unwrap();
-    let prev_user_balance = tailor_coin.balance_of(&env.caller());
-    let prev_treasury_balance = tailor_coin.balance_of(&treasury.address());
-    let prev_staking_balance = tailor_coin.balance_of(&staking.address());
+    let prev_user_balance = big_coin.balance_of(&env.caller());
+    let prev_treasury_balance = big_coin.balance_of(&treasury.address());
+    let prev_staking_balance = big_coin.balance_of(&staking.address());
 
-    deposit_rewards(&rewards_amount, &mut tailor_coin, &mut treasury);
+    deposit_rewards(&rewards_amount, &mut big_coin, &mut treasury);
 
-    let curr_user_balance = tailor_coin.balance_of(&env.caller());
-    let curr_treasury_balance = tailor_coin.balance_of(&treasury.address());
-    let curr_staking_balance = tailor_coin.balance_of(&staking.address());
+    let curr_user_balance = big_coin.balance_of(&env.caller());
+    let curr_treasury_balance = big_coin.balance_of(&treasury.address());
+    let curr_staking_balance = big_coin.balance_of(&staking.address());
 
     assert!(env.emitted_event(
         &treasury,
@@ -293,24 +291,24 @@ fn test_withdraw_reserves_should_fail_if_not_enough_reserves() {
 #[test]
 fn test_withdraw_reserves_should_withdraw_part_of_reserves_properly() {
     let env = odra_test::env();
-    let (mut treasury, _, mut tailor_coin, _) = setup(&env);
+    let (mut treasury, _, mut big_coin, _) = setup(&env);
 
     deposit_rewards(
         &U256::from_dec_str("10000000000000000000").unwrap(),
-        &mut tailor_coin,
+        &mut big_coin,
         &mut treasury,
     );
 
     let reserves_amount = treasury.get_reserves();
     let recipient = env.get_account(5);
     let amount_to_withdraw = reserves_amount / 2;
-    let prev_recipient_balance = tailor_coin.balance_of(&recipient);
-    let prev_treasury_balance = tailor_coin.balance_of(&treasury.address());
+    let prev_recipient_balance = big_coin.balance_of(&recipient);
+    let prev_treasury_balance = big_coin.balance_of(&treasury.address());
 
     treasury.withdraw_reserves(recipient, amount_to_withdraw);
 
-    let curr_recipient_balance = tailor_coin.balance_of(&recipient);
-    let curr_treasury_balance = tailor_coin.balance_of(&treasury.address());
+    let curr_recipient_balance = big_coin.balance_of(&recipient);
+    let curr_treasury_balance = big_coin.balance_of(&treasury.address());
 
     assert!(env.emitted_event(
         &treasury,
@@ -339,23 +337,23 @@ fn test_withdraw_reserves_should_withdraw_part_of_reserves_properly() {
 #[test]
 fn test_withdraw_reserves_should_withdraw_all_reserves_properly() {
     let env = odra_test::env();
-    let (mut treasury, _, mut tailor_coin, _) = setup(&env);
+    let (mut treasury, _, mut big_coin, _) = setup(&env);
 
     deposit_rewards(
         &U256::from_dec_str("20000000000000000000").unwrap(),
-        &mut tailor_coin,
+        &mut big_coin,
         &mut treasury,
     );
 
     let reserves_amount = treasury.get_reserves();
     let recipient = env.get_account(5);
-    let prev_recipient_balance = tailor_coin.balance_of(&recipient);
-    let prev_treasury_balance = tailor_coin.balance_of(&treasury.address());
+    let prev_recipient_balance = big_coin.balance_of(&recipient);
+    let prev_treasury_balance = big_coin.balance_of(&treasury.address());
 
     treasury.withdraw_reserves(recipient, reserves_amount);
 
-    let curr_recipient_balance = tailor_coin.balance_of(&recipient);
-    let curr_treasury_balance = tailor_coin.balance_of(&treasury.address());
+    let curr_recipient_balance = big_coin.balance_of(&recipient);
+    let curr_treasury_balance = big_coin.balance_of(&treasury.address());
 
     assert!(env.emitted_event(
         &treasury,
@@ -428,11 +426,11 @@ fn test_withdraw_token_should_revert_if_withdrawal_cspr_token_amount_is_gt_avail
 #[test]
 fn test_withdraw_token_should_revert_if_withdrawal_cep18_token_is_reserves_token() {
     let env = odra_test::env();
-    let (mut treasury, _, tailor_coin, _) = setup(&env);
+    let (mut treasury, _, big_coin, _) = setup(&env);
 
     assert_eq!(
         treasury
-            .try_withdraw_token(Some(tailor_coin.address()), U256::one(), env.get_account(1))
+            .try_withdraw_token(Some(big_coin.address()), U256::one(), env.get_account(1))
             .unwrap_err(),
         Error::DirectReservesTokenWithdrawalIsNotAllowed.into(),
         "Should revert when withdrawal CEP18 token is the same as reserves token"
