@@ -43,48 +43,48 @@ Most rules in this document follow a consistent structure for clarity:
 
 ### Quick Reference Summary
 
-| Group                     | Rule                                                                                                    | Description                                                                                                                |
-| ------------------------- | ------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| **Project Structure**     | [Odra.toml Contract Registration](#project-structure--odratoml-contract-registration)                   | Every deployable contract must be registered in `Odra.toml` with its fully qualified name.                                 |
-|                           | [Cargo.toml Dependency Setup](#project-structure--cargotoml-dependency-setup)                           | Odra dependencies must use matching versions with `default-features = false`.                                              |
-|                           | [Binary Entry Points](#project-structure--binary-entry-points)                                          | Projects must include `build_contract`, `build_schema`, and `cli` binary targets.                                          |
-|                           | [Crate Entry Point Configuration](#project-structure--crate-entry-point-configuration)                  | `lib.rs` must declare `no_std` and `no_main` for non-test builds and import the global allocator.                          |
-| **Module Definition**     | [Module Struct Annotation](#module-definition--module-struct-annotation)                                | All contract structs must use `#[odra::module]` with explicit `events` and `errors` registration.                          |
-|                           | [Module Impl Annotation](#module-definition--module-impl-annotation)                                    | All contract implementation blocks exposing entry points must use `#[odra::module]`.                                       |
-|                           | [Constructor Pattern](#module-definition--constructor-pattern)                                          | Use `init` as the constructor function name. It is called once on deployment.                                              |
-|                           | [Entry Point Visibility](#module-definition--entry-point-visibility)                                    | Only `pub` functions in `#[odra::module] impl` blocks become external entry points.                                        |
-|                           | [Mutability Convention](#module-definition--mutability-convention)                                      | Use `&self` for read-only entry points and `&mut self` for state-modifying entry points.                                   |
-| **Storage**               | [Use Appropriate Storage Types](#storage--use-appropriate-storage-types)                                | Choose the correct storage primitive (`Var`, `Mapping`, `List`, `Sequence`) for each use case.                             |
-|                           | [Avoid Complex Types in Var](#storage--avoid-complex-types-in-var)                                      | Do not store `Vec`, `HashMap`, or other collection types inside `Var<T>`. Use `Mapping` or `List` instead.                 |
-|                           | [Mapping Compound Keys](#storage--mapping-compound-keys)                                                | Use tuples for compound keys in `Mapping` (e.g., `Mapping<(Address, Address), U256>`).                                     |
-|                           | [Mapping with Module Values](#storage--mapping-with-module-values)                                      | Use `.module()` instead of `.get()` when the value type of a `Mapping` is an Odra module.                                  |
-|                           | [Custom Storage Types](#storage--custom-storage-types)                                                  | All custom types stored on-chain must be annotated with `#[odra::odra_type]`.                                              |
-|                           | [Default Value Access](#storage--default-value-access)                                                  | Prefer `get_or_default()` or `get_or_revert_with(error)` over raw `get()` to avoid `Option` handling at call sites.        |
-| **Events**                | [Event Definition](#events--event-definition)                                                           | All events must use the `#[odra::event]` attribute and have `pub` fields.                                                  |
-|                           | [Event Registration](#events--event-registration)                                                       | All events emitted by a module must be registered in the `#[odra::module(events = [...])]` attribute.                      |
-|                           | [Event Emission](#events--event-emission)                                                               | Emit events via `self.env().emit_native_event()` for every state-changing operation that external observers need to track. |
-| **Error Handling**        | [Error Definition](#error-handling--error-definition)                                                   | All errors must use `#[odra::odra_error]` with explicit, unique numeric discriminants.                                     |
-|                           | [Error Registration](#error-handling--error-registration)                                               | All errors must be registered in the `#[odra::module(errors = ErrorEnum)]` attribute.                                      |
-|                           | [Revert Pattern](#error-handling--revert-pattern)                                                       | Use `self.env().revert(Error::Variant)` or `.get_or_revert_with()` for error handling. Never use `panic!` or `unwrap`.     |
-|                           | [Unique Error Discriminants](#error-handling--unique-error-discriminants)                               | Error discriminants must be unique across the entire project, not just within a single enum.                               |
-| **Module Composition**    | [SubModule for Composition](#module-composition--submodule-for-composition)                             | Use `SubModule<T>` to compose modules. Never attempt inheritance patterns.                                                 |
-|                           | [Delegate Macro for Forwarding](#module-composition--delegate-macro-for-forwarding)                     | Use the `delegate!` macro to forward entry points to child submodules and reduce boilerplate.                              |
-|                           | [External for Cross-Contract Calls](#module-composition--external-for-cross-contract-calls)             | Use `External<ContractRef>` for cross-contract calls to known Odra contracts.                                              |
-|                           | [External Contract Trait for Third-Party](#module-composition--external-contract-trait-for-third-party) | Use `#[odra::external_contract]` trait definitions for interacting with non-Odra or third-party contracts.                 |
-| **Security**              | [Payable Annotation](#security--payable-annotation)                                                     | Only functions annotated with `#[odra(payable)]` may receive native tokens. Never use on constructors.                     |
-|                           | [Reentrancy Guard](#security--reentrancy-guard)                                                         | Use `#[odra(non_reentrant)]` on all functions that perform external calls or token transfers.                              |
-|                           | [Checks-Effects-Interactions](#security--checks-effects-interactions)                                   | Validate inputs first, update internal state second, make external calls last.                                             |
-|                           | [Arithmetic Safety](#security--arithmetic-safety)                                                       | Use checked or saturating arithmetic for all financial calculations involving token amounts.                               |
-|                           | [Timestamp Handling](#security--timestamp-handling)                                                     | `get_block_time()` returns milliseconds. Account for validator manipulation tolerance in deadline windows.                 |
-|                           | [Access Control](#security--access-control)                                                             | Guard privileged operations with ownership or role checks at the start of the function body.                               |
-|                           | [Address Handling](#security--address-handling)                                                         | Use `Option<Address>` instead of a zero/default address. Odra `Address` has no default value.                              |
-| **Testing**               | [Test Environment Setup](#testing--test-environment-setup)                                              | Use `odra_test::env()` to create the test environment and `Module::deploy()` for contract instantiation.                   |
-|                           | [Test Both Backends](#testing--test-both-backends)                                                      | Run tests against both OdraVM and CasperVM before considering a feature complete.                                          |
-|                           | [Error Assertions](#testing--error-assertions)                                                          | Use auto-generated `try_` method variants to assert expected reverts.                                                      |
-|                           | [Event Assertions](#testing--event-assertions)                                                          | Always assert that expected events were emitted after state-changing operations.                                           |
-|                           | [Token Transfer Testing](#testing--token-transfer-testing)                                              | Use `.with_tokens()` to attach native tokens in tests and `balance_of()` to verify balances.                               |
-| **Deployment & Upgrades** | [Gas Configuration](#deployment--upgrades--gas-configuration)                                           | Always set explicit gas values before deployments and contract calls on livenet.                                           |
-|                           | [Upgradable Contracts](#deployment--upgrades--upgradable-contracts)                                     | Use `InstallConfig::upgradable()` for contracts that need future upgrades and provide `upgrade` migration functions.       |
+| Group                     | Rule                                                                                                    | Description                                                                                                            |
+| ------------------------- | ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| **Project Structure**     | [Odra.toml Contract Registration](#project-structure--odratoml-contract-registration)                   | Every deployable contract must be registered in `Odra.toml` with its fully qualified name.                             |
+|                           | [Cargo.toml Dependency Setup](#project-structure--cargotoml-dependency-setup)                           | Odra dependencies must use matching versions with `default-features = false`.                                          |
+|                           | [Binary Entry Points](#project-structure--binary-entry-points)                                          | Projects must include `build_contract`, `build_schema`, and `cli` binary targets.                                      |
+|                           | [Crate Entry Point Configuration](#project-structure--crate-entry-point-configuration)                  | `lib.rs` must declare `no_std` and `no_main` for non-test builds and import the global allocator.                      |
+| **Module Definition**     | [Module Struct Annotation](#module-definition--module-struct-annotation)                                | All contract structs must use `#[odra::module]` with explicit `events` and `errors` registration.                      |
+|                           | [Module Impl Annotation](#module-definition--module-impl-annotation)                                    | All contract implementation blocks exposing entry points must use `#[odra::module]`.                                   |
+|                           | [Constructor Pattern](#module-definition--constructor-pattern)                                          | Use `init` as the constructor function name. It is called once on deployment.                                          |
+|                           | [Entry Point Visibility](#module-definition--entry-point-visibility)                                    | Only `pub` functions in `#[odra::module] impl` blocks become external entry points.                                    |
+|                           | [Mutability Convention](#module-definition--mutability-convention)                                      | Use `&self` for read-only entry points and `&mut self` for state-modifying entry points.                               |
+| **Storage**               | [Use Appropriate Storage Types](#storage--use-appropriate-storage-types)                                | Choose the correct storage primitive (`Var`, `Mapping`, `List`, `Sequence`) for each use case.                         |
+|                           | [Avoid Complex Types in Var](#storage--avoid-complex-types-in-var)                                      | Do not store `Vec`, `HashMap`, or other collection types inside `Var<T>`. Use `Mapping` or `List` instead.             |
+|                           | [Mapping Compound Keys](#storage--mapping-compound-keys)                                                | Use tuples for compound keys in `Mapping` (e.g., `Mapping<(Address, Address), U256>`).                                 |
+|                           | [Mapping with Module Values](#storage--mapping-with-module-values)                                      | Use `.module()` instead of `.get()` when the value type of a `Mapping` is an Odra module.                              |
+|                           | [Custom Storage Types](#storage--custom-storage-types)                                                  | All custom types stored on-chain must be annotated with `#[odra::odra_type]`.                                          |
+|                           | [Default Value Access](#storage--default-value-access)                                                  | Prefer `get_or_default()` or `get_or_revert_with(error)` over raw `get()` to avoid `Option` handling at call sites.    |
+| **Events**                | [Event Definition](#events--event-definition)                                                           | All events must use the `#[odra::event]` attribute and have `pub` fields.                                              |
+|                           | [Event Registration](#events--event-registration)                                                       | All events emitted by a module must be registered in the `#[odra::module(events = [...])]` attribute.                  |
+|                           | [Event Emission](#events--event-emission)                                                               | Emit events via `self.env().emit_event()` for every state-changing operation that external observers need to track.    |
+| **Error Handling**        | [Error Definition](#error-handling--error-definition)                                                   | All errors must use `#[odra::odra_error]` with explicit, unique numeric discriminants.                                 |
+|                           | [Error Registration](#error-handling--error-registration)                                               | All errors must be registered in the `#[odra::module(errors = ErrorEnum)]` attribute.                                  |
+|                           | [Revert Pattern](#error-handling--revert-pattern)                                                       | Use `self.env().revert(Error::Variant)` or `.get_or_revert_with()` for error handling. Never use `panic!` or `unwrap`. |
+|                           | [Unique Error Discriminants](#error-handling--unique-error-discriminants)                               | Error discriminants must be unique across the entire project, not just within a single enum.                           |
+| **Module Composition**    | [SubModule for Composition](#module-composition--submodule-for-composition)                             | Use `SubModule<T>` to compose modules. Never attempt inheritance patterns.                                             |
+|                           | [Delegate Macro for Forwarding](#module-composition--delegate-macro-for-forwarding)                     | Use the `delegate!` macro to forward entry points to child submodules and reduce boilerplate.                          |
+|                           | [External for Cross-Contract Calls](#module-composition--external-for-cross-contract-calls)             | Use `External<ContractRef>` for cross-contract calls to known Odra contracts.                                          |
+|                           | [External Contract Trait for Third-Party](#module-composition--external-contract-trait-for-third-party) | Use `#[odra::external_contract]` trait definitions for interacting with non-Odra or third-party contracts.             |
+| **Security**              | [Payable Annotation](#security--payable-annotation)                                                     | Only functions annotated with `#[odra(payable)]` may receive native tokens. Never use on constructors.                 |
+|                           | [Reentrancy Guard](#security--reentrancy-guard)                                                         | Use `#[odra(non_reentrant)]` on all functions that perform external calls or token transfers.                          |
+|                           | [Checks-Effects-Interactions](#security--checks-effects-interactions)                                   | Validate inputs first, update internal state second, make external calls last.                                         |
+|                           | [Arithmetic Safety](#security--arithmetic-safety)                                                       | Use checked or saturating arithmetic for all financial calculations involving token amounts.                           |
+|                           | [Timestamp Handling](#security--timestamp-handling)                                                     | `get_block_time()` returns milliseconds. Account for validator manipulation tolerance in deadline windows.             |
+|                           | [Access Control](#security--access-control)                                                             | Guard privileged operations with ownership or role checks at the start of the function body.                           |
+|                           | [Address Handling](#security--address-handling)                                                         | Use `Option<Address>` instead of a zero/default address. Odra `Address` has no default value.                          |
+| **Testing**               | [Test Environment Setup](#testing--test-environment-setup)                                              | Use `odra_test::env()` to create the test environment and `Module::deploy()` for contract instantiation.               |
+|                           | [Test Both Backends](#testing--test-both-backends)                                                      | Run tests against both OdraVM and CasperVM before considering a feature complete.                                      |
+|                           | [Error Assertions](#testing--error-assertions)                                                          | Use auto-generated `try_` method variants to assert expected reverts.                                                  |
+|                           | [Event Assertions](#testing--event-assertions)                                                          | Always assert that expected events were emitted after state-changing operations.                                       |
+|                           | [Token Transfer Testing](#testing--token-transfer-testing)                                              | Use `.with_tokens()` to attach native tokens in tests and `balance_of()` to verify balances.                           |
+| **Deployment & Upgrades** | [Gas Configuration](#deployment--upgrades--gas-configuration)                                           | Always set explicit gas values before deployments and contract calls on livenet.                                       |
+|                           | [Upgradable Contracts](#deployment--upgrades--upgradable-contracts)                                     | Use `InstallConfig::upgradable()` for contracts that need future upgrades and provide `upgrade` migration functions.   |
 
 ### Project Structure : Odra.toml Contract Registration
 
@@ -657,7 +657,7 @@ let owner = self.owner.get_or_revert_with(Error::OwnerNotSet);
 
 ### Events : Event Definition
 
-**Description:** All events must be defined as structs annotated with `#[odra::event]`. Event fields must be `pub` so they can be constructed and inspected in tests. Events are emitted as native Casper events via `emit_native_event()`.
+**Description:** All events must be defined as structs annotated with `#[odra::event]`. Event fields must be `pub` so they can be constructed and inspected in tests. Events are emitted as native Casper events via `emit_event()`.
 
 **Rationale:**
 
@@ -707,7 +707,7 @@ pub struct MyToken {
 impl MyToken {
   pub fn transfer(&mut self, to: Address, amount: U256) {
     // ... logic ...
-    self.env().emit_native_event(Transfer {
+    self.env().emit_event(Transfer {
       from: Some(self.env().caller()),
       to: Some(to),
       amount,
@@ -728,15 +728,15 @@ pub struct MyToken {
 
 ### Events : Event Emission
 
-**Description:** Emit events via `self.env().emit_native_event()` for every state-changing operation that external observers (dApps, indexers, block explorers) need to track. This includes token transfers, approvals, ownership changes, role grants, and any business-critical state transitions.
+**Description:** Emit events via `self.env().emit_event()` for every state-changing operation that external observers (dApps, indexers, block explorers) need to track. This includes token transfers, approvals, ownership changes, role grants, and any business-critical state transitions.
 
-`emit_native_event()` produces CES-compliant events indexed by the Casper Event Standard. `emit_event()` is a distinct, legacy API and **must not** be used for standard event emission — events emitted via `emit_event()` are not CES-compliant and will not be indexed by block explorers or dApps on Casper mainnet.
+`emit_event()` produces CES-compliant events indexed by the Casper Event Standard. `emit_event()` is a distinct, legacy API and **must not** be used for standard event emission — events emitted via `emit_event()` are not CES-compliant and will not be indexed by block explorers or dApps on Casper mainnet.
 
 **Rationale:**
 
 - **Observability:** Events are the primary mechanism for off-chain systems to track on-chain activity. Missing events create blind spots.
 - **Auditability:** A complete event trail is essential for financial contracts, enabling reconciliation and dispute resolution.
-- **CES Compliance:** Only `emit_native_event()` produces events compatible with the Casper Event Standard, ensuring visibility across the ecosystem.
+- **CES Compliance:** Only `emit_event()` produces events compatible with the Casper Event Standard, ensuring visibility across the ecosystem.
 
 > ❌ **Bad** (State change without event emission)
 
@@ -753,7 +753,7 @@ pub fn transfer(&mut self, to: Address, amount: U256) {
 }
 ```
 
-> ❌ **Bad** (Using legacy `emit_event()` instead of `emit_native_event()`)
+> ❌ **Bad** (Using legacy `emit_event()` instead of `emit_event()`)
 
 ```rust
 pub fn transfer(&mut self, to: Address, amount: U256) {
@@ -767,7 +767,7 @@ pub fn transfer(&mut self, to: Address, amount: U256) {
 }
 ```
 
-> ✅ **Good** (Using `emit_native_event()` after state change)
+> ✅ **Good** (Using `emit_event()` after state change)
 
 ```rust
 pub fn transfer(&mut self, to: Address, amount: U256) {
@@ -778,7 +778,7 @@ pub fn transfer(&mut self, to: Address, amount: U256) {
     &to,
     self.balances.get_or_default(&to) + amount,
   );
-  self.env().emit_native_event(Transfer {
+  self.env().emit_event(Transfer {
     from: Some(caller),
     to: Some(to),
     amount,
@@ -1308,7 +1308,7 @@ pub fn purchase(&mut self, schedule_id: u32) {
   // 2. Effects — update state FIRST
   schedule.sold_amount += purchase_amount;
   self.schedules.set(&schedule_id, schedule);
-  self.env().emit_native_event(TokensPurchased {
+  self.env().emit_event(TokensPurchased {
     buyer: caller,
     amount: purchase_amount,
   });
@@ -1459,7 +1459,7 @@ pub fn set_fee(&mut self, new_fee: U256) {
 pub fn set_fee(&mut self, new_fee: U256) {
   self.ownable.ensure_ownership(&self.env().caller());
   self.fee.set(new_fee);
-  self.env().emit_native_event(FeeChanged { new_fee });
+  self.env().emit_event(FeeChanged { new_fee });
 }
 ```
 
