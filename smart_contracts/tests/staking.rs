@@ -37,7 +37,7 @@ struct Users {
 
 struct Context {
     env: HostEnv,
-    tailor_coin: BigCoinHostRef,
+    big_coin: BigCoinHostRef,
     staking: StakingHostRef,
     vesting: VestingHostRef,
     users: Users,
@@ -50,7 +50,7 @@ fn setup(env: HostEnv) -> Context {
         bob: env.get_account(2),
     };
 
-    let tailor_coin = BigCoin::deploy(
+    let big_coin = BigCoin::deploy(
         &env,
         BigCoinInitArgs {
             symbol: String::from("BIG"),
@@ -63,14 +63,14 @@ fn setup(env: HostEnv) -> Context {
     let mut staking = Staking::deploy(&env, StakingInitArgs { owner: users.owner });
     let mut vesting = Vesting::deploy(&env, VestingInitArgs { owner: users.owner });
 
-    staking.set_tailor_coin(tailor_coin.address());
+    staking.set_big_coin(big_coin.address());
     staking.set_vesting(vesting.address());
     vesting.set_staking(staking.address());
     vesting.add_whitelisted_creator(users.owner);
 
     Context {
         env,
-        tailor_coin,
+        big_coin,
         staking,
         vesting,
         users,
@@ -85,11 +85,11 @@ fn setup(env: HostEnv) -> Context {
 fn fund_and_approve(ctx: &mut Context, user: Address, amount: U256) {
     // Owner transfers tokens to user
     ctx.env.set_caller(ctx.users.owner);
-    ctx.tailor_coin.transfer(&user, &amount);
+    ctx.big_coin.transfer(&user, &amount);
 
     // User approves staking contract
     ctx.env.set_caller(user);
-    ctx.tailor_coin.approve(&ctx.staking.address(), &amount);
+    ctx.big_coin.approve(&ctx.staking.address(), &amount);
 }
 
 /// Helper to stake tokens for a user
@@ -108,8 +108,7 @@ fn create_vesting_schedule(
 ) -> U256 {
     ctx.env.set_caller(ctx.users.owner);
 
-    ctx.tailor_coin
-        .approve(&ctx.staking.address(), &total_amount);
+    ctx.big_coin.approve(&ctx.staking.address(), &total_amount);
 
     ctx.staking.stake_for(beneficiary, total_amount);
 
@@ -135,9 +134,9 @@ fn test_init_should_initialize_contract_properly() {
 
     assert_eq!(ctx.staking.get_owner(), ctx.users.owner, "Invalid owner");
     assert_eq!(
-        ctx.staking.get_tailor_coin_contract_address(),
-        ctx.tailor_coin.address(),
-        "Invalid TailorCoin contract address"
+        ctx.staking.get_big_coin_contract_address(),
+        ctx.big_coin.address(),
+        "Invalid bigCoin contract address"
     );
     assert_eq!(
         ctx.staking.get_vesting_contract_address(),
@@ -147,36 +146,34 @@ fn test_init_should_initialize_contract_properly() {
 }
 
 // =============================================================================
-// set_tailor_coin()
+// set_big_coin()
 // =============================================================================
 
 #[test]
-fn test_set_tailor_coin_should_revert_if_not_owner_is_calling() {
+fn test_set_big_coin_should_revert_if_not_owner_is_calling() {
     let mut ctx = setup(odra_test::env());
 
     ctx.env.set_caller(ctx.users.alice);
 
     assert_eq!(
-        ctx.staking
-            .try_set_tailor_coin(ctx.users.alice)
-            .unwrap_err(),
+        ctx.staking.try_set_big_coin(ctx.users.alice).unwrap_err(),
         AccessError::CallerNotTheOwner.into(),
         "Should revert when is called by not the owner"
     );
 }
 
 #[test]
-fn test_set_tailor_coin_should_set_tailor_coin_properly() {
+fn test_set_big_coin_should_set_big_coin_properly() {
     let mut ctx = setup(odra_test::env());
 
-    let tailor_coin = ctx.env.get_account(10);
+    let big_coin = ctx.env.get_account(10);
 
-    ctx.staking.set_tailor_coin(tailor_coin);
+    ctx.staking.set_big_coin(big_coin);
 
     assert_eq!(
-        ctx.staking.get_tailor_coin_contract_address(),
-        tailor_coin,
-        "Invalid TailorCoin contract address"
+        ctx.staking.get_big_coin_contract_address(),
+        big_coin,
+        "Invalid BIG Coin contract address"
     );
 }
 
@@ -266,7 +263,7 @@ fn test_get_pending_rewards_should_be_proportional_for_multiple_stakers() {
 
     // Owner deposits rewards
     ctx.env.set_caller(ctx.users.owner);
-    ctx.tailor_coin
+    ctx.big_coin
         .approve(&ctx.staking.address(), &rewards_amount);
     ctx.staking.deposit_rewards(rewards_amount);
 
@@ -303,7 +300,7 @@ fn test_late_joiner_does_not_earn_pre_join_rewards() {
     stake_for(&mut ctx, alice, amount);
 
     ctx.env.set_caller(owner);
-    ctx.tailor_coin
+    ctx.big_coin
         .approve(&ctx.staking.address(), &(first_rewards + second_rewards));
     ctx.staking.deposit_rewards(first_rewards);
 
@@ -405,12 +402,12 @@ fn test_stake_for_should_checkpoint_rewards_before_updating_balance() {
     stake_for(&mut ctx, alice, amount);
 
     ctx.env.set_caller(owner);
-    ctx.tailor_coin.approve(&ctx.staking.address(), &rewards);
+    ctx.big_coin.approve(&ctx.staking.address(), &rewards);
     ctx.staking.deposit_rewards(rewards);
 
     // Alice stakes again, rewards must be checkpointed before balances updates
     ctx.env.set_caller(alice);
-    ctx.tailor_coin.approve(&ctx.staking.address(), &amount);
+    ctx.big_coin.approve(&ctx.staking.address(), &amount);
     ctx.staking.stake_for(alice, amount);
 
     // All rewards should be capture since Alice was the only staker
@@ -630,14 +627,14 @@ fn test_deposit_rewards_should_deposit_properly() {
     fund_and_approve(&mut ctx, alice, amount);
     stake_for(&mut ctx, alice, amount);
 
-    let prev_staking_bal = ctx.tailor_coin.balance_of(&staking_contract);
+    let prev_staking_bal = ctx.big_coin.balance_of(&staking_contract);
 
     // deposit rewards
     ctx.env.set_caller(owner);
-    ctx.tailor_coin.approve(&staking_contract, &rewards);
+    ctx.big_coin.approve(&staking_contract, &rewards);
     ctx.staking.deposit_rewards(rewards);
 
-    let new_staking_bal = ctx.tailor_coin.balance_of(&staking_contract);
+    let new_staking_bal = ctx.big_coin.balance_of(&staking_contract);
 
     assert_eq!(new_staking_bal, prev_staking_bal + rewards);
 
@@ -685,16 +682,16 @@ fn test_claim_rewards_should_claim_properly() {
     stake_for(&mut ctx, alice, amount);
 
     ctx.env.set_caller(owner);
-    ctx.tailor_coin.approve(&ctx.staking.address(), &rewards);
+    ctx.big_coin.approve(&ctx.staking.address(), &rewards);
     ctx.staking.deposit_rewards(rewards);
 
-    let prev_balance = ctx.tailor_coin.balance_of(&alice);
+    let prev_balance = ctx.big_coin.balance_of(&alice);
 
     ctx.env.set_caller(alice);
     ctx.staking.claim_rewards();
 
     // Tokens transferred to staker
-    assert_eq!(ctx.tailor_coin.balance_of(&alice), prev_balance + rewards);
+    assert_eq!(ctx.big_coin.balance_of(&alice), prev_balance + rewards);
     // Pending rewards cleared
     assert_eq!(ctx.staking.get_pending_rewards(alice), U256::zero());
     // Active stake unaffected
@@ -722,7 +719,7 @@ fn test_claim_rewards_should_not_accrue_already_claimed_rewards() {
 
     // First reward deposit
     ctx.env.set_caller(owner);
-    ctx.tailor_coin.approve(&ctx.staking.address(), &rewards);
+    ctx.big_coin.approve(&ctx.staking.address(), &rewards);
     ctx.staking.deposit_rewards(rewards);
 
     // First claim
@@ -732,7 +729,7 @@ fn test_claim_rewards_should_not_accrue_already_claimed_rewards() {
 
     // Second reward deposit
     ctx.env.set_caller(owner);
-    ctx.tailor_coin.approve(&ctx.staking.address(), &rewards);
+    ctx.big_coin.approve(&ctx.staking.address(), &rewards);
     ctx.staking.deposit_rewards(rewards);
 
     // Only the second deposit should be pending, not both
@@ -789,14 +786,14 @@ fn test_withdraw_unbonded_should_withdraw_properly() {
 
     ctx.env.advance_block_time(UNBONDING_PERIOD + 1);
 
-    let prev_balance = ctx.tailor_coin.balance_of(&alice);
+    let prev_balance = ctx.big_coin.balance_of(&alice);
 
     ctx.env.set_caller(alice);
     ctx.staking.withdraw_unbonded();
 
     // Tokens returned to staker
     assert_eq!(
-        ctx.tailor_coin.balance_of(&alice),
+        ctx.big_coin.balance_of(&alice),
         prev_balance + unstake_amount
     );
 
@@ -843,7 +840,7 @@ fn test_staking_full_lifecycle() {
     // --- Deposit Rewards ---
 
     ctx.env.set_caller(owner);
-    ctx.tailor_coin.approve(&ctx.staking.address(), &rewards);
+    ctx.big_coin.approve(&ctx.staking.address(), &rewards);
     ctx.staking.deposit_rewards(rewards);
 
     // Alice 25%, Bob 75%
@@ -873,16 +870,16 @@ fn test_staking_full_lifecycle() {
 
     ctx.env.advance_block_time(UNBONDING_PERIOD + 1);
 
-    let prev_alice = ctx.tailor_coin.balance_of(&alice);
-    let prev_bob = ctx.tailor_coin.balance_of(&bob);
+    let prev_alice = ctx.big_coin.balance_of(&alice);
+    let prev_bob = ctx.big_coin.balance_of(&bob);
 
     ctx.env.set_caller(alice);
     ctx.staking.withdraw_unbonded();
     ctx.env.set_caller(bob);
     ctx.staking.withdraw_unbonded();
 
-    assert_eq!(ctx.tailor_coin.balance_of(&alice), prev_alice + alice_stake);
-    assert_eq!(ctx.tailor_coin.balance_of(&bob), prev_bob + bob_stake);
+    assert_eq!(ctx.big_coin.balance_of(&alice), prev_alice + alice_stake);
+    assert_eq!(ctx.big_coin.balance_of(&bob), prev_bob + bob_stake);
 
     // Both stakers fully cleared
     assert_eq!(

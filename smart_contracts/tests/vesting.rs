@@ -48,7 +48,7 @@ struct Users {
 
 struct Context {
     env: HostEnv,
-    tailor_coin: BigCoinHostRef,
+    big_coin: BigCoinHostRef,
     vesting: VestingHostRef,
     staking: StakingHostRef,
     users: Users,
@@ -63,7 +63,7 @@ fn setup(env: HostEnv) -> Context {
         bob: env.get_account(2),
     };
 
-    let tailor_coin = BigCoin::deploy(
+    let big_coin = BigCoin::deploy(
         &env,
         BigCoinInitArgs {
             symbol: String::from("BIG"),
@@ -79,12 +79,12 @@ fn setup(env: HostEnv) -> Context {
     vesting.add_whitelisted_creator(users.owner);
     vesting.set_staking(staking.address());
 
-    staking.set_tailor_coin(tailor_coin.address());
+    staking.set_big_coin(big_coin.address());
     staking.set_vesting(vesting.address());
 
     Context {
         env,
-        tailor_coin,
+        big_coin,
         vesting,
         staking,
         users,
@@ -106,7 +106,7 @@ fn create_test_schedule(
 ) -> VestingId {
     ctx.env.set_caller(ctx.users.owner);
 
-    ctx.tailor_coin
+    ctx.big_coin
         .approve(&ctx.staking.address(), &total_amount);
     ctx.staking.stake_for(beneficiary, total_amount);
 
@@ -294,8 +294,8 @@ fn test_create_schedule_should_create_properly() {
     let vesting = ctx.vesting_duration;
     let alice = ctx.users.alice;
 
-    let prev_owner_balance = ctx.tailor_coin.balance_of(&ctx.users.owner);
-    let prev_staking_balance = ctx.tailor_coin.balance_of(&ctx.staking.address());
+    let prev_owner_balance = ctx.big_coin.balance_of(&ctx.users.owner);
+    let prev_staking_balance = ctx.big_coin.balance_of(&ctx.staking.address());
 
     let vesting_id = create_test_schedule(&mut ctx, alice, vesting_amount(), cliff, vesting);
 
@@ -307,8 +307,8 @@ fn test_create_schedule_should_create_properly() {
         "Schedules count should be 1"
     );
 
-    let current_owner_balance = ctx.tailor_coin.balance_of(&ctx.users.owner);
-    let current_staking_balance = ctx.tailor_coin.balance_of(&ctx.staking.address());
+    let current_owner_balance = ctx.big_coin.balance_of(&ctx.users.owner);
+    let current_staking_balance = ctx.big_coin.balance_of(&ctx.staking.address());
     assert_eq!(
         current_owner_balance,
         prev_owner_balance - vesting_amount(),
@@ -465,10 +465,10 @@ fn test_claim_should_revert_if_active_unbonding_from_direct_staking() {
 
     // Alice stakes directly (outside of vesting)
     ctx.env.set_caller(ctx.users.owner);
-    ctx.tailor_coin.transfer(&alice, &stake_amount);
+    ctx.big_coin.transfer(&alice, &stake_amount);
 
     ctx.env.set_caller(alice);
-    ctx.tailor_coin
+    ctx.big_coin
         .approve(&ctx.staking.address(), &stake_amount);
     ctx.staking.stake_for(alice, stake_amount);
 
@@ -484,7 +484,7 @@ fn test_claim_should_revert_if_active_unbonding_from_direct_staking() {
 
     // Create a vesting schedule for Alice
     ctx.env.set_caller(ctx.users.owner);
-    ctx.tailor_coin
+    ctx.big_coin
         .approve(&ctx.staking.address(), &stake_amount);
     ctx.staking.stake_for(alice, stake_amount);
 
@@ -553,8 +553,8 @@ fn test_claim_should_increase_beneficiary_balance_by_unstaked_amount() {
     // Advance to exactly the cliff, 50% vested
     ctx.env.advance_block_time(cliff);
 
-    let prev_alice_balance = ctx.tailor_coin.balance_of(&alice);
-    let prev_staking_balance = ctx.tailor_coin.balance_of(&ctx.staking.address());
+    let prev_alice_balance = ctx.big_coin.balance_of(&alice);
+    let prev_staking_balance = ctx.big_coin.balance_of(&ctx.staking.address());
 
     // Claim initiates unstaking (enters unbonding period)
     ctx.env.set_caller(alice);
@@ -563,7 +563,7 @@ fn test_claim_should_increase_beneficiary_balance_by_unstaked_amount() {
     let expected_claim = vesting_amount() / 2;
 
     // Balance should not increase yet, tokens are in unbonding
-    let mid_alice_balance = ctx.tailor_coin.balance_of(&alice);
+    let mid_alice_balance = ctx.big_coin.balance_of(&alice);
     assert_eq!(
         mid_alice_balance, prev_alice_balance,
         "Balance should not increase immediately after claim, tokens are unbonding"
@@ -576,8 +576,8 @@ fn test_claim_should_increase_beneficiary_balance_by_unstaked_amount() {
     ctx.staking.withdraw_unbonded();
 
     // Verify beneficiary balance increased
-    let curr_alice_balance = ctx.tailor_coin.balance_of(&alice);
-    let curr_staking_balance = ctx.tailor_coin.balance_of(&ctx.staking.address());
+    let curr_alice_balance = ctx.big_coin.balance_of(&alice);
+    let curr_staking_balance = ctx.big_coin.balance_of(&ctx.staking.address());
 
     assert_eq!(
         curr_alice_balance,

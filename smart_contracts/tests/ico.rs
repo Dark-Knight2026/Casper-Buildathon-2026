@@ -29,7 +29,7 @@ struct Users {
 
 struct Context {
     env: HostEnv,
-    tailor_coin: BigCoinHostRef,
+    big_coin: BigCoinHostRef,
     usdc: BigCoinHostRef,
     usdt: BigCoinHostRef,
     treasury: TreasuryHostRef,
@@ -55,9 +55,9 @@ fn test_init_should_initialize_contract_properly() {
         "Invalid Styks Oracle Price Feed contract address"
     );
     assert_eq!(
-        ctx.ico.get_tailor_coin_contract_address(),
-        ctx.tailor_coin.address(),
-        "Invalid TailorCoin contract address"
+        ctx.ico.get_big_coin_contract_address(),
+        ctx.big_coin.address(),
+        "Invalid BIG coin contract address"
     );
     assert_eq!(
         ctx.ico.get_treasury_contract_address(),
@@ -77,33 +77,33 @@ fn test_init_should_initialize_contract_properly() {
 }
 
 /////////////////////////////////////////////////////////////////////////////
-//                            set_tailor_coin()                            //
+//                            set_big_coin()                            //
 /////////////////////////////////////////////////////////////////////////////
 
 #[test]
-fn test_set_tailor_coin_should_revert_if_not_owner_is_calling() {
+fn test_set_big_coin_should_revert_if_not_owner_is_calling() {
     let mut ctx = setup(odra_test::env(), false);
 
     ctx.env.set_caller(ctx.users.alice);
 
     assert_eq!(
-        ctx.ico.try_set_tailor_coin(ctx.usdc.address()).unwrap_err(),
+        ctx.ico.try_set_big_coin(ctx.usdc.address()).unwrap_err(),
         AccessError::CallerNotTheOwner.into(),
         "Should revert when is called by not the owner"
     );
 }
 
 #[test]
-fn test_set_tailor_coin_should_set_tailor_coin_properly() {
+fn test_set_big_coin_should_set_coin_coin_properly() {
     let mut ctx = setup(odra_test::env(), false);
-    let tailor_coin = ctx.usdc.address();
+    let big_coin = ctx.usdc.address();
 
-    ctx.ico.set_tailor_coin(tailor_coin);
+    ctx.ico.set_big_coin(big_coin);
 
     assert_eq!(
-        ctx.ico.get_tailor_coin_contract_address(),
-        tailor_coin,
-        "Invalid TailorCoin contract address"
+        ctx.ico.get_big_coin_contract_address(),
+        big_coin,
+        "Invalid BIG coin contract address"
     );
 }
 
@@ -386,7 +386,7 @@ fn test_add_ico_schedule_should_fail_if_invalid_ico_schedule_start_timestamp_2()
     let mut ctx = setup(odra_test::env(), false);
     let mut creation_params = get_ico_schedules_creation_params(&ctx.env);
 
-    ctx.tailor_coin
+    ctx.big_coin
         .approve(&ctx.ico.address(), &creation_params[0].sale_amount);
     ctx.ico.add_ico_schedule(creation_params[0].clone());
 
@@ -410,7 +410,7 @@ fn test_add_ico_schedule_should_fail_if_invalid_ico_schedule_start_timestamp_3()
     let mut ctx = setup(odra_test::env(), false);
     let mut creation_params = get_ico_schedules_creation_params(&ctx.env);
 
-    ctx.tailor_coin
+    ctx.big_coin
         .approve(&ctx.ico.address(), &creation_params[0].sale_amount);
     ctx.ico.add_ico_schedule(creation_params[0].clone());
 
@@ -667,9 +667,9 @@ fn test_purchase_should_purchase_with_cspr_token_properly() {
     let amount_to_spend = U256::from(100) * price;
     let expected_purchase_amount = amount_to_spend * U256::from(10).pow(U256::from(18)) / price;
     let prev_current_ico_schedule = ctx.ico.get_current_ico_schedule().unwrap();
-    let prev_buyer_balance = ctx.tailor_coin.balance_of(&ctx.users.alice);
-    let prev_ico_balance = ctx.tailor_coin.balance_of(&ctx.ico.address());
-    let prev_staking_balance = ctx.tailor_coin.balance_of(&ctx.staking.address());
+    let prev_buyer_balance = ctx.big_coin.balance_of(&ctx.users.alice);
+    let prev_ico_balance = ctx.big_coin.balance_of(&ctx.ico.address());
+    let prev_staking_balance = ctx.big_coin.balance_of(&ctx.staking.address());
     let prev_treasury_balance = ctx.env.balance_of(&ctx.treasury.address());
     let prev_user_schedules_count = ctx.vesting.get_user_schedules_count(ctx.users.alice);
 
@@ -683,11 +683,11 @@ fn test_purchase_should_purchase_with_cspr_token_properly() {
     ctx.env.set_caller(ctx.users.owner);
 
     let curr_current_ico_schedule = ctx.ico.get_current_ico_schedule().unwrap();
-    let curr_buyer_balance = ctx.tailor_coin.balance_of(&ctx.users.alice);
-    let curr_ico_balance = ctx.tailor_coin.balance_of(&ctx.ico.address());
-    let curr_staking_balance = ctx.tailor_coin.balance_of(&ctx.staking.address());
+    let curr_buyer_balance = ctx.big_coin.balance_of(&ctx.users.alice);
+    let curr_ico_balance = ctx.big_coin.balance_of(&ctx.ico.address());
+    let curr_staking_balance = ctx.big_coin.balance_of(&ctx.staking.address());
     let curr_staking_allowance = ctx
-        .tailor_coin
+        .big_coin
         .allowance(&ctx.ico.address(), &ctx.staking.address());
     let curr_treasury_balance = ctx.env.balance_of(&ctx.treasury.address());
     let curr_user_schedules_count = ctx.vesting.get_user_schedules_count(ctx.users.alice);
@@ -765,9 +765,9 @@ fn test_purchase_should_purchase_with_cep18_token_properly() {
     let amount_to_spend = U256::from(100) * price;
     let expected_purchase_amount = amount_to_spend * U256::from(10).pow(U256::from(18)) / price;
     let prev_current_ico_schedule = ctx.ico.get_current_ico_schedule().unwrap();
-    let prev_buyer_balance = ctx.tailor_coin.balance_of(&ctx.users.alice);
-    let prev_ico_balance = ctx.tailor_coin.balance_of(&ctx.ico.address());
-    let prev_staking_balance = ctx.tailor_coin.balance_of(&ctx.staking.address());
+    let prev_buyer_balance = ctx.big_coin.balance_of(&ctx.users.alice);
+    let prev_ico_balance = ctx.big_coin.balance_of(&ctx.ico.address());
+    let prev_staking_balance = ctx.big_coin.balance_of(&ctx.staking.address());
     let prev_treasury_balance = ctx.usdc.balance_of(&ctx.treasury.address());
     let prev_user_schedules_count = ctx.vesting.get_user_schedules_count(ctx.users.alice);
 
@@ -779,11 +779,11 @@ fn test_purchase_should_purchase_with_cep18_token_properly() {
     ctx.env.set_caller(ctx.users.owner);
 
     let curr_current_ico_schedule = ctx.ico.get_current_ico_schedule().unwrap();
-    let curr_buyer_balance = ctx.tailor_coin.balance_of(&ctx.users.alice);
-    let curr_ico_balance = ctx.tailor_coin.balance_of(&ctx.ico.address());
-    let curr_staking_balance = ctx.tailor_coin.balance_of(&ctx.staking.address());
+    let curr_buyer_balance = ctx.big_coin.balance_of(&ctx.users.alice);
+    let curr_ico_balance = ctx.big_coin.balance_of(&ctx.ico.address());
+    let curr_staking_balance = ctx.big_coin.balance_of(&ctx.staking.address());
     let curr_staking_allowance = ctx
-        .tailor_coin
+        .big_coin
         .allowance(&ctx.ico.address(), &ctx.staking.address());
     let curr_treasury_balance = ctx.usdc.balance_of(&ctx.treasury.address());
     let curr_user_schedules_count = ctx.vesting.get_user_schedules_count(ctx.users.alice);
@@ -929,13 +929,13 @@ fn test_withdraw_unsold_tokens_should_withdraw_unsold_tokens_from_one_ico_schedu
     ctx.env
         .advance_block_time(creation_params[0].end_timestamp + 1 - ctx.env.block_time());
 
-    let prev_recipient_balance = ctx.tailor_coin.balance_of(&recipient);
-    let prev_ico_balance = ctx.tailor_coin.balance_of(&ctx.ico.address());
+    let prev_recipient_balance = ctx.big_coin.balance_of(&recipient);
+    let prev_ico_balance = ctx.big_coin.balance_of(&ctx.ico.address());
 
     ctx.ico.withdraw_unsold_tokens(recipient);
 
-    let curr_recipient_balance = ctx.tailor_coin.balance_of(&recipient);
-    let curr_ico_balance = ctx.tailor_coin.balance_of(&ctx.ico.address());
+    let curr_recipient_balance = ctx.big_coin.balance_of(&recipient);
+    let curr_ico_balance = ctx.big_coin.balance_of(&ctx.ico.address());
 
     assert!(
         ctx.env.emitted_event(
@@ -969,13 +969,13 @@ fn test_withdraw_unsold_tokens_should_not_withdraw_same_tokens_twice() {
     ctx.env
         .advance_block_time(creation_params[0].end_timestamp + 1 - ctx.env.block_time());
 
-    let prev_recipient_balance = ctx.tailor_coin.balance_of(&recipient);
-    let prev_ico_balance = ctx.tailor_coin.balance_of(&ctx.ico.address());
+    let prev_recipient_balance = ctx.big_coin.balance_of(&recipient);
+    let prev_ico_balance = ctx.big_coin.balance_of(&ctx.ico.address());
 
     ctx.ico.withdraw_unsold_tokens(recipient);
 
-    let after_first_recipient_balance = ctx.tailor_coin.balance_of(&recipient);
-    let after_first_ico_balance = ctx.tailor_coin.balance_of(&ctx.ico.address());
+    let after_first_recipient_balance = ctx.big_coin.balance_of(&recipient);
+    let after_first_ico_balance = ctx.big_coin.balance_of(&ctx.ico.address());
     let after_first_schedule = ctx
         .ico
         .get_ico_schedule_by_id(&first_ico_schedule_id)
@@ -983,8 +983,8 @@ fn test_withdraw_unsold_tokens_should_not_withdraw_same_tokens_twice() {
 
     ctx.ico.withdraw_unsold_tokens(recipient);
 
-    let after_second_recipient_balance = ctx.tailor_coin.balance_of(&recipient);
-    let after_second_ico_balance = ctx.tailor_coin.balance_of(&ctx.ico.address());
+    let after_second_recipient_balance = ctx.big_coin.balance_of(&recipient);
+    let after_second_ico_balance = ctx.big_coin.balance_of(&ctx.ico.address());
     let after_second_schedule = ctx
         .ico
         .get_ico_schedule_by_id(&first_ico_schedule_id)
@@ -1023,8 +1023,8 @@ fn test_withdraw_unsold_tokens_should_withdraw_unsold_tokens_from_all_ico_schedu
     let mut ctx: Context = setup(odra_test::env(), true);
     let creation_params = get_ico_schedules_creation_params(&ctx.env);
     let recipient = ctx.users.owner;
-    let prev_recipient_balance = ctx.tailor_coin.balance_of(&recipient);
-    let prev_ico_balance = ctx.tailor_coin.balance_of(&ctx.ico.address());
+    let prev_recipient_balance = ctx.big_coin.balance_of(&recipient);
+    let prev_ico_balance = ctx.big_coin.balance_of(&ctx.ico.address());
     let withdrawn_amount = creation_params
         .iter()
         .fold(U256::zero(), |acc, params| acc + params.sale_amount);
@@ -1035,8 +1035,8 @@ fn test_withdraw_unsold_tokens_should_withdraw_unsold_tokens_from_all_ico_schedu
 
     ctx.ico.withdraw_unsold_tokens(recipient);
 
-    let curr_recipient_balance = ctx.tailor_coin.balance_of(&recipient);
-    let curr_ico_balance = ctx.tailor_coin.balance_of(&ctx.ico.address());
+    let curr_recipient_balance = ctx.big_coin.balance_of(&recipient);
+    let curr_ico_balance = ctx.big_coin.balance_of(&ctx.ico.address());
 
     assert!(
         ctx.env.emitted_event(
@@ -1214,7 +1214,7 @@ fn setup(env: HostEnv, add_ico_schedules: bool) -> Context {
     };
     let initial_supply = 5_000_000_000_000 * 10u128.pow(18);
     let styks_price_feed = StyksPriceFeed::deploy(&env, NoArgs);
-    let tailor_coin = deploy_mock_cep18_token(&env, "BIG", "BIG", 18, initial_supply);
+    let big_coin = deploy_mock_cep18_token(&env, "BIG", "BIG", 18, initial_supply);
     let mut usdc = deploy_mock_cep18_token(&env, "USDC", "USD Coin", 6, initial_supply);
     let mut usdt = deploy_mock_cep18_token(&env, "USDT", "Tether USD", 6, initial_supply);
     let mut treasury = Treasury::deploy(&env, TreasuryInitArgs { owner: users.owner });
@@ -1226,7 +1226,7 @@ fn setup(env: HostEnv, add_ico_schedules: bool) -> Context {
         },
     );
 
-    treasury.set_tailor_coin(tailor_coin.address());
+    treasury.set_big_coin(big_coin.address());
 
     let mut vesting = Vesting::deploy(&env, VestingInitArgs { owner: users.owner });
     let mut staking = Staking::deploy(&env, StakingInitArgs { owner: users.owner });
@@ -1234,10 +1234,10 @@ fn setup(env: HostEnv, add_ico_schedules: bool) -> Context {
     vesting.add_whitelisted_creator(ico.address());
     vesting.set_staking(staking.address());
 
-    staking.set_tailor_coin(tailor_coin.address());
+    staking.set_big_coin(big_coin.address());
     staking.set_vesting(vesting.address());
 
-    ico.set_tailor_coin(tailor_coin.address());
+    ico.set_big_coin(big_coin.address());
     ico.set_treasury(treasury.address());
     ico.set_vesting(vesting.address());
     ico.set_staking(staking.address());
@@ -1253,7 +1253,7 @@ fn setup(env: HostEnv, add_ico_schedules: bool) -> Context {
 
     let mut ctx = Context {
         env,
-        tailor_coin,
+        big_coin,
         usdc,
         usdt,
         treasury,
@@ -1315,15 +1315,15 @@ fn add_and_verify_ico_schedules(ctx: &mut Context) {
 
     for params in &creation_params {
         let expected_ico_schedule_id = ctx.ico.get_ico_schedules_count();
-        let prev_owner_balance = ctx.tailor_coin.balance_of(&ctx.users.owner);
-        let prev_ico_balance = ctx.tailor_coin.balance_of(&ctx.ico.address());
+        let prev_owner_balance = ctx.big_coin.balance_of(&ctx.users.owner);
+        let prev_ico_balance = ctx.big_coin.balance_of(&ctx.ico.address());
 
-        ctx.tailor_coin
+        ctx.big_coin
             .approve(&ctx.ico.address(), &params.sale_amount);
 
         let ico_schedule_id = ctx.ico.add_ico_schedule(params.clone());
-        let curr_owner_balance = ctx.tailor_coin.balance_of(&ctx.users.owner);
-        let curr_ico_balance = ctx.tailor_coin.balance_of(&ctx.ico.address());
+        let curr_owner_balance = ctx.big_coin.balance_of(&ctx.users.owner);
+        let curr_ico_balance = ctx.big_coin.balance_of(&ctx.ico.address());
 
         assert!(
             ctx.env.emitted_event(
