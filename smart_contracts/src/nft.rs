@@ -83,11 +83,9 @@ pub mod errors {
 
     #[odra::odra_error]
     pub enum Error {
-        // Backward Compatible
         CallerNotMinter = 100,
         CallerNotBurner = 101,
         CallerNotMinterNorBurner = 102,
-
         CannotTransact = 103,
         CannotTransfer = 104,
         TokenIsFrozen = 105,
