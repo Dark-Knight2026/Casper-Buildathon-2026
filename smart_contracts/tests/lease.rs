@@ -18,6 +18,7 @@ use leasefi_contracts::lease::{
     types::{CreateLeaseAgreementParams, LeaseAgreement},
     Lease, LeaseHostRef, LeaseInitArgs,
 };
+use leasefi_contracts::nft::errors::Error as NftError;
 use leasefi_contracts::roles::{Roles, RolesHostRef, RolesInitArgs};
 
 use crate::nft::{NFTInitArgs, NFT};
@@ -357,6 +358,23 @@ fn test_create_lease_agreement_should_fail_if_lease_duration_is_not_even_to_n_mo
             .unwrap_err(),
         Error::InvalidTimeframes.into(),
         "Should revert when lease agreement duration is not even to N months"
+    );
+}
+
+#[test]
+fn test_create_lease_agreement_should_fail_if_tenant_is_not_whitelisted() {
+    let mut test_data = setup(odra_test::env());
+    let mut params = generate_lease_agreement_creation_params(&test_data);
+
+    params.tenant = test_data.env.get_account(1);
+
+    assert_eq!(
+        test_data
+            .lease
+            .try_create_lease_agreement(params)
+            .unwrap_err(),
+        NftError::CannotTransact.into(),
+        "Should revert if tenant is not whitelisted to transact",
     );
 }
 
