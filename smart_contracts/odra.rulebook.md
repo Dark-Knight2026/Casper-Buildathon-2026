@@ -730,7 +730,7 @@ pub struct MyToken {
 
 **Description:** Emit events via `self.env().emit_event()` for every state-changing operation that external observers (dApps, indexers, block explorers) need to track. This includes token transfers, approvals, ownership changes, role grants, and any business-critical state transitions.
 
-`emit_event()` produces CES-compliant events indexed by the Casper Event Standard. `emit_event()` is a distinct, legacy API and **must not** be used for standard event emission — events emitted via `emit_event()` are not CES-compliant and will not be indexed by block explorers or dApps on Casper mainnet.
+`emit_event()` produces CES-compliant events indexed by the Casper Event Standard. `emit_native_event()` is a distinct API and **must not** be used for standard event emission — events emitted via `emit_native_event()` are not CES-compliant and will not be indexed by block explorers or dApps on Casper mainnet.
 
 **Rationale:**
 
@@ -753,13 +753,13 @@ pub fn transfer(&mut self, to: Address, amount: U256) {
 }
 ```
 
-> ❌ **Bad** (Using legacy `emit_event()` instead of `emit_event()`)
+> ❌ **Bad** (Using `emit_native_event()` instead of `emit_event()`)
 
 ```rust
 pub fn transfer(&mut self, to: Address, amount: U256) {
   // ... state changes ...
-  // WRONG: emit_event() is NOT CES-compliant
-  self.env().emit_event(Transfer {
+  // WRONG: emit_native_event() is NOT CES-compliant
+  self.env().emit_native_event(Transfer {
     from: Some(self.env().caller()),
     to: Some(to),
     amount,
