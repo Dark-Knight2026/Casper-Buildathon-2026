@@ -248,9 +248,9 @@ impl NFT {
     /// Freeze or unfreeze a specific token. Restricted to FREEZER role.
     pub fn set_frozen_tokens(&mut self, token_id: &U256, frozen_status: bool) {
         self.assert_role(ROLE_FREEZER);
-        self.frozen_tokens.set(token_id, frozen_status);
-
         let account = self.cep95.owner_of(*token_id).unwrap_or_revert(&self.env());
+
+        self.frozen_tokens.set(token_id, frozen_status);
 
         self.env().emit_event(Frozen {
             account,
