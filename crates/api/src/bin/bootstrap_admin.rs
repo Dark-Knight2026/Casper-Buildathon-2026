@@ -51,8 +51,7 @@ async fn main() -> ExitCode {
     dotenv::dotenv().ok();
 
     match run().await {
-        Ok(RunOutcome::Completed) => ExitCode::SUCCESS,
-        Ok(RunOutcome::Skipped) => ExitCode::SUCCESS,
+        Ok(RunOutcome::Completed | RunOutcome::Skipped) => ExitCode::SUCCESS,
         Err(e) => {
             eprintln!("bootstrap_admin failed: {e:?}");
             ExitCode::FAILURE

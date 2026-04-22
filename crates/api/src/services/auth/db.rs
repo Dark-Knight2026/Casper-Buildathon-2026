@@ -35,8 +35,8 @@ pub async fn upsert_user_by_wallet(
         r#"
             INSERT INTO users ( email, role, wallet_address, first_name, last_name, auth_id, status )
             VALUES ($1, 'tenant', $2, 'Wallet', 'User', NULL, 'active')
-            ON CONFLICT (wallet_address) DO UPDATE
-                SET last_login_at = NOW()
+            ON CONFLICT (wallet_address) WHERE wallet_address IS NOT NULL AND deleted_at IS NULL
+                DO UPDATE SET last_login_at = NOW()
             RETURNING id, role
         "#,
         email,
