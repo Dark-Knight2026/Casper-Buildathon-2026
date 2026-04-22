@@ -224,16 +224,15 @@ impl NFT {
         if self.cep95.owner_of(*token_id) != Some(*from) {
             return false;
         }
-        if self.frozen_tokens.get_or_default(token_id) {
+        if self.is_frozen(token_id) {
             return false;
         }
         self.can_transact(from) && self.can_transact(to)
     }
 
-    /// Returns true if the given token is frozen
-    /// The `account` parameter is accepted for interface compliance;
+    /// Returns true if token is frozen
     /// frozen status is tracked per token ID (each NFT has exactly one owner)
-    pub fn get_frozen_tokens(&self, token_id: &U256) -> bool {
+    pub fn is_frozen(&self, token_id: &U256) -> bool {
         self.frozen_tokens.get_or_default(token_id)
     }
 
@@ -278,7 +277,7 @@ impl NFT {
         }
 
         // Unfreeze if frozen; new owner gets an unfrozen token
-        if self.frozen_tokens.get_or_default(&token_id) {
+        if self.is_frozen(&token_id) {
             self.frozen_tokens.set(&token_id, false);
             self.env().emit_event(Frozen {
                 account: from,
@@ -445,7 +444,7 @@ impl NFT {
     pub fn burn(&mut self, token_id: U256) {
         self.assert_burner();
 
-        if self.frozen_tokens.get_or_default(&token_id) {
+        if self.is_frozen(&token_id) {
             self.frozen_tokens.set(&token_id, false);
             if let Some(owner) = self.cep95.owner_of(token_id) {
                 self.env().emit_event(Frozen {
@@ -483,9 +482,13 @@ impl NFT {
     /// Pulled out of `delegate!` so we can enforce ERC-7943 check
     /// @dev CEP-95 still does its own checks (caller must be owner or approved operator)
     pub fn transfer_from(&mut self, from: Address, to: Address, token_id: U256) {
-        if !self.can_transfer(&from, &to, &token_id) {
-            self.env().revert(Error::CannotTransfer);
+        if self.is_frozen(&token_id) {
+            self.env().revert(Error::TokenIsFrozen);
         }
+        if !self.can_transact(&from) || !self.can_transact(&to) {
+            self.env().revert(Error::CannotTransact);
+        }
+
         self.cep95.transfer_from(from, to, token_id);
     }
 
@@ -498,9 +501,13 @@ impl NFT {
         token_id: U256,
         data: Option<Bytes>,
     ) {
-        if !self.can_transfer(&from, &to, &token_id) {
-            self.env().revert(Error::CannotTransfer);
+        if self.is_frozen(&token_id) {
+            self.env().revert(Error::TokenIsFrozen);
         }
+        if !self.can_transact(&from) || !self.can_transact(&to) {
+            self.env().revert(Error::CannotTransact);
+        }
+
         self.cep95.safe_transfer_from(from, to, token_id, data);
     }
 

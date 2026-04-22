@@ -529,7 +529,7 @@ fn test_transfer_should_revert_if_not_whitelisted() {
         ctx.nft
             .try_transfer_from(sender, receiver, token_id)
             .unwrap_err(),
-        Error::CannotTransfer.into(),
+        Error::CannotTransact.into(),
         "Should revert when receiver is not whitelisted"
     );
 
@@ -543,7 +543,7 @@ fn test_transfer_should_revert_if_not_whitelisted() {
         ctx.nft
             .try_transfer_from(sender, receiver, token_id)
             .unwrap_err(),
-        Error::CannotTransfer.into(),
+        Error::CannotTransact.into(),
         "Should revert when sender is not whitelisted"
     );
 }
@@ -575,7 +575,7 @@ fn test_transfer_should_revert_if_token_frozen() {
         ctx.nft
             .try_transfer_from(sender, receiver, token_id)
             .unwrap_err(),
-        Error::CannotTransfer.into(),
+        Error::TokenIsFrozen.into(),
         "Should revert when token is frozen"
     );
 }
@@ -620,12 +620,12 @@ fn test_freeze_and_unfreeze_should_work_properly() {
     ctx.nft.grant_role(&freezer_role, &admin);
 
     // Not frozen by default
-    assert!(!ctx.nft.get_frozen_tokens(&token_id));
+    assert!(!ctx.nft.is_frozen(&token_id));
 
     // Freeze
     ctx.nft.set_frozen_tokens(&token_id, true);
 
-    assert!(ctx.nft.get_frozen_tokens(&token_id));
+    assert!(ctx.nft.is_frozen(&token_id));
     assert!(ctx.env.emitted_event(
         &ctx.nft,
         Frozen {
@@ -638,7 +638,7 @@ fn test_freeze_and_unfreeze_should_work_properly() {
     // Unfreeze
     ctx.nft.set_frozen_tokens(&token_id, false);
 
-    assert!(!ctx.nft.get_frozen_tokens(&token_id));
+    assert!(!ctx.nft.is_frozen(&token_id));
     assert!(ctx.env.emitted_event(
         &ctx.nft,
         Frozen {
@@ -698,7 +698,7 @@ fn test_forced_transfer_should_work_properly() {
 
     // Freeze the token — forced transfer should still work
     ctx.nft.set_frozen_tokens(&token_id, true);
-    assert!(ctx.nft.get_frozen_tokens(&token_id));
+    assert!(ctx.nft.is_frozen(&token_id));
 
     // Forced transfer
     ctx.nft.forced_transfer(sender, receiver, token_id);
@@ -710,7 +710,7 @@ fn test_forced_transfer_should_work_properly() {
     );
 
     // Token should be unfrozen after forced transfer
-    assert!(!ctx.nft.get_frozen_tokens(&token_id));
+    assert!(!ctx.nft.is_frozen(&token_id));
     assert!(ctx.env.emitted_event(
         &ctx.nft,
         ForcedTransfer {
