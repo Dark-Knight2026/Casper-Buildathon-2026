@@ -265,6 +265,7 @@ impl NFT {
     /// @dev `cep95.transfer_from()` checks that the caller is the token owner or an approved
     /// operator. An admin performing a forced transfer isn't either. `raw_transfer(to, token_id)`
     /// bypasses all CEP-95 authorization, which is exactly what forced_transfer needs.
+    #[odra(non_reentrant)]
     pub fn forced_transfer(&mut self, from: Address, to: Address, token_id: U256) {
         self.assert_role(ROLE_FORCE_TRANSFERER);
 
@@ -424,6 +425,7 @@ impl NFT {
 
     /// Mint a new token and set its metadata. Requires the MINTER role.
     /// @dev ERC-7943: recipient must be whitelisted.
+    #[odra(non_reentrant)]
     pub fn mint(&mut self, to: Address, metadata: Vec<(String, String)>) -> U256 {
         self.assert_minter();
 
@@ -441,6 +443,7 @@ impl NFT {
 
     /// Burn a token. Requires the BURNER role.
     /// @dev Unfreezes the token if frozen before burning.
+    #[odra(non_reentrant)]
     pub fn burn(&mut self, token_id: U256) {
         self.assert_burner();
 
@@ -481,6 +484,7 @@ impl NFT {
 
     /// Pulled out of `delegate!` so we can enforce ERC-7943 check
     /// @dev CEP-95 still does its own checks (caller must be owner or approved operator)
+    #[odra(non_reentrant)]
     pub fn transfer_from(&mut self, from: Address, to: Address, token_id: U256) {
         if self.is_frozen(&token_id) {
             self.env().revert(Error::TokenIsFrozen);
@@ -494,6 +498,7 @@ impl NFT {
 
     /// Pulled out of `delegate!` so we can enforce ERC-7943 check
     /// @dev CEP-95 still does its own checks (caller must be owner or approved operator)
+    #[odra(non_reentrant)]
     pub fn safe_transfer_from(
         &mut self,
         from: Address,
