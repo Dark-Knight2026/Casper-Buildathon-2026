@@ -625,6 +625,29 @@ fn test_transfer_should_revert_if_token_frozen() {
 }
 
 #[test]
+fn test_transfer_from_should_succeed_with_whitelisted_parties() {
+    let mut ctx = setup(odra_test::env());
+    let sender = ctx.env.get_account(5);
+    let receiver = ctx.env.get_account(6);
+
+    // Mint token to sender
+    let token_id = mint(
+        &mut ctx,
+        sender,
+        vec![(String::from("key"), String::from("value"))],
+    );
+
+    // Whitelist receiver
+    ctx.env.set_caller(ctx.env.get_account(0));
+    ctx.nft.add_to_whitelist(&receiver);
+
+    ctx.env.set_caller(sender);
+    ctx.nft.transfer_from(sender, receiver, token_id);
+
+    assert_eq!(ctx.nft.owner_of(token_id), Some(receiver));
+}
+
+#[test]
 fn test_safe_transfer_from_happy_path() {
     let mut ctx = setup(odra_test::env());
     let sender = ctx.env.get_account(5);
