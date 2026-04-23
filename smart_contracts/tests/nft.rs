@@ -381,6 +381,36 @@ fn test_burn_should_burn_properly() {
     );
 }
 
+#[test]
+fn test_burn_should_fail_if_token_is_frozen() {
+    let mut test_data = setup(odra_test::env());
+    let recipient = test_data.env.get_account(5);
+    let token_id = mint(
+        &mut test_data,
+        recipient,
+        vec![(
+            String::from("description"),
+            String::from("Token description"),
+        )],
+    );
+
+    // Grant FREEZER role to admin
+    let admin = test_data.env.get_account(0);
+    test_data.env.set_caller(admin);
+    let freezer_role = common::hash_role(ROLE_FREEZER);
+    test_data.nft.grant_role(&freezer_role, &admin);
+
+    // Freeze the token
+    test_data.nft.set_frozen_tokens(&token_id, true);
+
+    test_data.env.set_caller(test_data.burners[0]);
+    assert_eq!(
+        test_data.nft.try_burn(token_id).unwrap_err(),
+        Error::TokenIsFrozen.into(),
+        "Should revert when token is frozen"
+    );
+}
+
 // =============================================================================
 // set_metadata()
 // =============================================================================

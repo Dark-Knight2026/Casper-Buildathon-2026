@@ -441,20 +441,13 @@ impl NFT {
     }
 
     /// Burn a token. Requires the BURNER role.
-    /// @dev Unfreezes the token if frozen before burning.
+    /// @dev Token needs to be unfrozen before burning
     #[odra(non_reentrant)]
     pub fn burn(&mut self, token_id: U256) {
         self.assert_burner();
 
         if self.is_frozen(&token_id) {
-            self.frozen_tokens.set(&token_id, false);
-            if let Some(owner) = self.cep95.owner_of(token_id) {
-                self.env().emit_event(Frozen {
-                    account: owner,
-                    token_id,
-                    frozen_status: false,
-                });
-            }
+            self.env().revert(Error::TokenIsFrozen);
         }
 
         self.cep95.raw_burn(token_id);
