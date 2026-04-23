@@ -862,6 +862,58 @@ fn test_forced_transfer_should_work_properly() {
     assert!(!ctx.nft.is_frozen(&token_id));
     assert!(ctx.env.emitted_event(
         &ctx.nft,
+        Frozen {
+            account: receiver,
+            token_id,
+            frozen_status: false,
+        }
+    ));
+    assert!(ctx.env.emitted_event(
+        &ctx.nft,
+        ForcedTransfer {
+            from: sender,
+            to: receiver,
+            token_id,
+        }
+    ));
+}
+
+#[test]
+fn test_forced_transfer_should_not_emit_frozen_event_for_unfrozen_token() {
+    let mut ctx = setup(odra_test::env());
+    let sender = ctx.env.get_account(5);
+    let receiver = ctx.env.get_account(6);
+    let token_id = mint(
+        &mut ctx,
+        sender,
+        vec![(String::from("key"), String::from("value"))],
+    );
+
+    // Setup: whitelist receiver, grant FORCE_TRANSFERER to admin
+    let admin = ctx.env.get_account(0);
+    ctx.env.set_caller(admin);
+    ctx.nft.add_to_whitelist(&receiver);
+
+    let ft_role = common::hash_role(ROLE_FORCE_TRANSFERER);
+    ctx.nft.grant_role(&ft_role, &admin);
+
+    // Token is NOT frozen by default
+    assert!(!ctx.nft.is_frozen(&token_id));
+
+    // Forced transfer
+    ctx.nft.forced_transfer(sender, receiver, token_id);
+
+    // Should NOT emit Frozen event
+    assert!(!ctx.env.emitted_event(
+        &ctx.nft,
+        Frozen {
+            account: receiver,
+            token_id,
+            frozen_status: false,
+        }
+    ));
+    assert!(ctx.env.emitted_event(
+        &ctx.nft,
         ForcedTransfer {
             from: sender,
             to: receiver,
