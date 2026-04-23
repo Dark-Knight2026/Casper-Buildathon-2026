@@ -21,7 +21,7 @@ use leasefi_contracts::lease::{
 use leasefi_contracts::nft::errors::Error as NftError;
 use leasefi_contracts::roles::{Roles, RolesHostRef, RolesInitArgs};
 
-use crate::nft::{NFTInitArgs, NFT};
+use crate::nft::{NFTHostRef, NFTInitArgs, NFT};
 
 // =============================================================================
 // Test Context
@@ -32,6 +32,7 @@ struct TestData {
     roles: RolesHostRef,
     lease: LeaseHostRef,
     escrow: EscrowHostRef,
+    nft: NFTHostRef,
     landlord: Address,
 }
 
@@ -96,6 +97,7 @@ fn setup(env: HostEnv) -> TestData {
         roles,
         lease,
         escrow,
+        nft,
         landlord,
     }
 }
@@ -399,11 +401,23 @@ fn test_create_lease_agreement_should_fail_if_monthly_rent_amount_is_zero() {
 fn test_create_lease_agreement_should_create_lease_agreement_properly() {
     let mut test_data = setup(odra_test::env());
     let params = generate_lease_agreement_creation_params(&test_data);
+
+    let expected_token_id = test_data.nft.get_tokens_count();
+
     let lease_agreement_id = test_data.lease.create_lease_agreement(params.clone());
     let lease_agreement = test_data
         .lease
         .get_lease_agreement_by_id(&lease_agreement_id);
 
+    assert_eq!(
+        lease_agreement.token_id, expected_token_id,
+        "Lease agreement token ID should match expected token ID"
+    );
+    assert_eq!(
+        test_data.nft.owner_of(expected_token_id),
+        Some(params.tenant),
+        "NFT should be minted to tenant",
+    );
     assert!(test_data.env.emitted_event(
         &test_data.lease,
         LeaseAgreementCreated {
@@ -442,7 +456,7 @@ fn test_create_lease_agreement_should_create_lease_agreement_properly() {
             start: params.start,
             end: params.end,
             is_finished: false,
-            token_id: U256::zero(),
+            token_id: expected_token_id,
         },
         "Invalid lease agreement"
     );
