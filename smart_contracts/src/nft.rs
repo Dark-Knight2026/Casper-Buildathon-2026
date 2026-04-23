@@ -276,19 +276,23 @@ impl NFT {
             self.env().revert(Error::CannotTransact);
         }
 
+        let frozen = self.is_frozen(&token_id);
+
         // Unfreeze if frozen; new owner gets an unfrozen token
-        if self.is_frozen(&token_id) {
+        if frozen {
             self.frozen_tokens.set(&token_id, false);
         }
 
         self.cep95.clear_approval(&token_id);
         self.cep95.raw_transfer(to, token_id);
 
-        self.env().emit_event(Frozen {
-            account: to,
-            token_id,
-            frozen_status: false,
-        });
+        if frozen {
+            self.env().emit_event(Frozen {
+                account: to,
+                token_id,
+                frozen_status: false,
+            });
+        }
         self.env().emit_event(ForcedTransfer { from, to, token_id });
     }
 
