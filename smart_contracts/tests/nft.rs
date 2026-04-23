@@ -300,7 +300,7 @@ fn test_mint_should_fail_if_not_minter_is_calling() {
 }
 
 #[test]
-fn test_mint_should_revert_if_recipient_not_whitelisted() {
+fn test_mint_should_fail_if_recipient_is_not_whitelisted() {
     let mut test_data = setup(odra_test::env());
     let recipient = test_data.env.get_account(5);
 
@@ -308,7 +308,7 @@ fn test_mint_should_revert_if_recipient_not_whitelisted() {
     assert_eq!(
         test_data.nft.try_mint(recipient, vec![]).unwrap_err(),
         Error::CannotTransact.into(),
-        "Should revert when recipient is not whitelisted"
+        "Should revert if recipient is not whitelisted"
     );
 }
 
