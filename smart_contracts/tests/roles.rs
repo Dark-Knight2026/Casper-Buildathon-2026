@@ -1,3 +1,4 @@
+use crate::common;
 use leasefi_contracts::roles::{Roles, RolesHostRef, RolesInitArgs};
 use odra::host::{Deployer, HostEnv};
 use odra_modules::access::DEFAULT_ADMIN_ROLE;
@@ -22,17 +23,17 @@ fn test_init_should_initialize_contract_properly() {
     );
     assert_eq!(
         roles_contract.get_role_admin(&roles_contract.get_landlord_role()),
-        Roles::hash_role(ROLE_LANDLORD_ADMIN),
+        common::hash_role(ROLE_LANDLORD_ADMIN),
         "ROLE_LANDLORD should have proper ROLE_LANDLORD_ADMIN"
     );
     assert_eq!(
         roles_contract.get_role_admin(&roles_contract.get_agent_role()),
-        Roles::hash_role(ROLE_AGENT_ADMIN),
+        common::hash_role(ROLE_AGENT_ADMIN),
         "ROLE_AGENT should have proper ROLE_AGENT_ADMIN"
     );
     assert_eq!(
         roles_contract.get_role_admin(&roles_contract.get_manager_role()),
-        Roles::hash_role(ROLE_MANAGER_ADMIN),
+        common::hash_role(ROLE_MANAGER_ADMIN),
         "ROLE_MANAGER should have proper ROLE_MANAGER_ADMIN"
     );
 }

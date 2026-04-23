@@ -7,7 +7,7 @@ use odra_modules::{
     cep95::{CEP95Interface, Cep95},
 };
 
-use sha3::{Digest, Keccak256};
+use crate::common;
 
 use crate::nft::{
     errors::Error,
@@ -173,11 +173,11 @@ impl NFT {
             .unchecked_grant_role(&DEFAULT_ADMIN_ROLE, &owner);
         self.cep95.init(symbol, name);
 
-        let minter_role = Self::hash_role(ROLE_MINTER);
-        let burner_role = Self::hash_role(ROLE_BURNER);
-        let whitelist_manager_role = Self::hash_role(ROLE_WHITELIST_MANAGER);
-        let freezer_role = Self::hash_role(ROLE_FREEZER);
-        let force_transferer_role = Self::hash_role(ROLE_FORCE_TRANSFERER);
+        let minter_role = common::hash_role(ROLE_MINTER);
+        let burner_role = common::hash_role(ROLE_BURNER);
+        let whitelist_manager_role = common::hash_role(ROLE_WHITELIST_MANAGER);
+        let freezer_role = common::hash_role(ROLE_FREEZER);
+        let force_transferer_role = common::hash_role(ROLE_FORCE_TRANSFERER);
 
         minters.iter().for_each(|minter| {
             self.access_control
@@ -323,7 +323,7 @@ impl NFT {
     /// Allows to add a new minter by the admin
     pub fn add_minter(&mut self, minter: &Address) {
         self.assert_admin();
-        let role = Self::hash_role(ROLE_MINTER);
+        let role = common::hash_role(ROLE_MINTER);
         self.access_control.unchecked_grant_role(&role, minter);
 
         self.env().emit_event(MinterAdded { minter: *minter });
@@ -332,7 +332,7 @@ impl NFT {
     /// Allows to remove a minter by the admin
     pub fn remove_minter(&mut self, minter: &Address) {
         self.assert_admin();
-        let role = Self::hash_role(ROLE_MINTER);
+        let role = common::hash_role(ROLE_MINTER);
         self.access_control.revoke_role(&role, minter);
 
         self.env().emit_event(MinterRemoved { minter: *minter });
@@ -341,7 +341,7 @@ impl NFT {
     /// Allows to add a new burner by the admin
     pub fn add_burner(&mut self, burner: &Address) {
         self.assert_admin();
-        let role = Self::hash_role(ROLE_BURNER);
+        let role = common::hash_role(ROLE_BURNER);
         self.access_control.unchecked_grant_role(&role, burner);
         self.env().emit_event(BurnerAdded { burner: *burner });
     }
@@ -349,7 +349,7 @@ impl NFT {
     /// Allows to remove a burner by the admin
     pub fn remove_burner(&mut self, burner: &Address) {
         self.assert_admin();
-        let role = Self::hash_role(ROLE_BURNER);
+        let role = common::hash_role(ROLE_BURNER);
         self.access_control.revoke_role(&role, burner);
         self.env().emit_event(BurnerRemoved { burner: *burner });
     }
@@ -357,7 +357,7 @@ impl NFT {
     /// Allows to add a new whitelist manager by the admin
     pub fn add_whitelist_manager(&mut self, address: &Address) {
         self.assert_admin();
-        let role = Self::hash_role(ROLE_WHITELIST_MANAGER);
+        let role = common::hash_role(ROLE_WHITELIST_MANAGER);
         self.access_control.unchecked_grant_role(&role, address);
         self.env()
             .emit_event(WhitelistManagerAdded { address: *address });
@@ -366,7 +366,7 @@ impl NFT {
     /// Allows to remove a whitelist manager by the admin
     pub fn remove_whitelist_manager(&mut self, address: &Address) {
         self.assert_admin();
-        let role = Self::hash_role(ROLE_WHITELIST_MANAGER);
+        let role = common::hash_role(ROLE_WHITELIST_MANAGER);
         self.access_control.revoke_role(&role, address);
         self.env()
             .emit_event(WhitelistManagerRemoved { address: *address });
@@ -375,7 +375,7 @@ impl NFT {
     /// Allows to add a new freezer by the admin
     pub fn add_freezer(&mut self, address: &Address) {
         self.assert_admin();
-        let role = Self::hash_role(ROLE_FREEZER);
+        let role = common::hash_role(ROLE_FREEZER);
         self.access_control.unchecked_grant_role(&role, address);
         self.env().emit_event(FreezerAdded { address: *address });
     }
@@ -383,7 +383,7 @@ impl NFT {
     /// Allows to remove a freezer by the admin
     pub fn remove_freezer(&mut self, address: &Address) {
         self.assert_admin();
-        let role = Self::hash_role(ROLE_FREEZER);
+        let role = common::hash_role(ROLE_FREEZER);
         self.access_control.revoke_role(&role, address);
         self.env().emit_event(FreezerRemoved { address: *address });
     }
@@ -391,7 +391,7 @@ impl NFT {
     /// Allows to add a new force transferer by the admin
     pub fn add_force_transferer(&mut self, address: &Address) {
         self.assert_admin();
-        let role = Self::hash_role(ROLE_FORCE_TRANSFERER);
+        let role = common::hash_role(ROLE_FORCE_TRANSFERER);
         self.access_control.unchecked_grant_role(&role, address);
         self.env()
             .emit_event(ForceTransfererAdded { address: *address });
@@ -400,7 +400,7 @@ impl NFT {
     /// Allows to remove a force transferer by the admin
     pub fn remove_force_transferer(&mut self, address: &Address) {
         self.assert_admin();
-        let role = Self::hash_role(ROLE_FORCE_TRANSFERER);
+        let role = common::hash_role(ROLE_FORCE_TRANSFERER);
         self.access_control.revoke_role(&role, address);
         self.env()
             .emit_event(ForceTransfererRemoved { address: *address });
@@ -408,13 +408,13 @@ impl NFT {
 
     /// Returns `true` if `address` has the `minter` role, `false` otherwise
     pub fn is_minter(&self, address: &Address) -> bool {
-        let role = Self::hash_role(ROLE_MINTER);
+        let role = common::hash_role(ROLE_MINTER);
         self.access_control.has_role(&role, address)
     }
 
     /// Returns `true` if `address` has the `burner` role, `false` otherwise
     pub fn is_burner(&self, address: &Address) -> bool {
-        let role = Self::hash_role(ROLE_BURNER);
+        let role = common::hash_role(ROLE_BURNER);
         self.access_control.has_role(&role, address)
     }
 
@@ -520,23 +520,23 @@ impl NFT {
     // =========================================================================
 
     pub fn minter_role(&self) -> Role {
-        Self::hash_role(ROLE_MINTER)
+        common::hash_role(ROLE_MINTER)
     }
 
     pub fn burner_role(&self) -> Role {
-        Self::hash_role(ROLE_BURNER)
+        common::hash_role(ROLE_BURNER)
     }
 
     pub fn whitelist_manager_role(&self) -> Role {
-        Self::hash_role(ROLE_WHITELIST_MANAGER)
+        common::hash_role(ROLE_WHITELIST_MANAGER)
     }
 
     pub fn freezer_role(&self) -> Role {
-        Self::hash_role(ROLE_FREEZER)
+        common::hash_role(ROLE_FREEZER)
     }
 
     pub fn force_transferer_role(&self) -> Role {
-        Self::hash_role(ROLE_FORCE_TRANSFERER)
+        common::hash_role(ROLE_FORCE_TRANSFERER)
     }
 
     // =========================================================================
@@ -574,16 +574,9 @@ impl NFT {
 // =========================================================================
 
 impl NFT {
-    pub fn hash_role(role_name: &str) -> Role {
-        let mut hasher = Keccak256::default();
-
-        hasher.update(role_name.as_bytes());
-        hasher.finalize().into()
-    }
-
     #[inline]
     fn assert_role(&self, role_name: &str) {
-        let role = Self::hash_role(role_name);
+        let role = common::hash_role(role_name);
         if !self.access_control.has_role(&role, &self.env().caller()) {
             self.env().revert(Error::NotAuthorized);
         }

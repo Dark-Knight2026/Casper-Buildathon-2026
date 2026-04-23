@@ -1,3 +1,4 @@
+use crate::common;
 use crate::nft::{ROLE_FORCE_TRANSFERER, ROLE_FREEZER};
 use leasefi_contracts::nft::{errors::*, events::*, NFTHostRef, NFTInitArgs, NFT};
 use odra::casper_types::U256;
@@ -565,7 +566,7 @@ fn test_transfer_should_revert_if_token_frozen() {
     let admin = ctx.env.get_account(0);
     ctx.env.set_caller(admin);
     ctx.nft.add_to_whitelist(&receiver);
-    ctx.nft.grant_role(&NFT::hash_role(ROLE_FREEZER), &admin);
+    ctx.nft.grant_role(&common::hash_role(ROLE_FREEZER), &admin);
 
     // Freeze the token
     ctx.nft.set_frozen_tokens(&token_id, true);
@@ -616,7 +617,7 @@ fn test_freeze_and_unfreeze_should_work_properly() {
     // Grant FREEZER role to admin
     let admin = ctx.env.get_account(0);
     ctx.env.set_caller(admin);
-    let freezer_role = NFT::hash_role(ROLE_FREEZER);
+    let freezer_role = common::hash_role(ROLE_FREEZER);
     ctx.nft.grant_role(&freezer_role, &admin);
 
     // Not frozen by default
@@ -691,8 +692,8 @@ fn test_forced_transfer_should_work_properly() {
     ctx.env.set_caller(admin);
     ctx.nft.add_to_whitelist(&receiver);
 
-    let freezer_role = NFT::hash_role(ROLE_FREEZER);
-    let ft_role = NFT::hash_role(ROLE_FORCE_TRANSFERER);
+    let freezer_role = common::hash_role(ROLE_FREEZER);
+    let ft_role = common::hash_role(ROLE_FORCE_TRANSFERER);
     ctx.nft.grant_role(&freezer_role, &admin);
     ctx.nft.grant_role(&ft_role, &admin);
 
