@@ -1,6 +1,4 @@
 #![doc = "Binary for building schema definitions from ODRA contracts."]
-#[allow(unused_imports)]
-use leasefi_contracts;
 
 #[cfg(not(target_arch = "wasm32"))]
 extern "Rust" {

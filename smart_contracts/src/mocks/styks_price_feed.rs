@@ -17,7 +17,7 @@ impl StyksPriceFeed {
 
     // Signature should be exact like this to mimic Styks Oracle Price Feed contract's behavior
     #[allow(unused_variables)]
-    pub fn get_twap_price(&self, id: &String) -> Option<u64> {
+    pub fn get_twap_price(&self, id: String) -> Option<u64> {
         self.twap_price.get()
     }
 }

@@ -16,6 +16,7 @@ use crate::nft::{
         FreezerAdded, FreezerRemoved, Frozen, MinterAdded, MinterRemoved, WhitelistManagerAdded,
         WhitelistManagerRemoved, Whitelisted,
     },
+    types::NFTInitParams,
 };
 
 // =============================================================================
@@ -27,6 +28,26 @@ pub const ROLE_BURNER: &str = "BURNER";
 pub const ROLE_WHITELIST_MANAGER: &str = "WHITELIST_MANAGER";
 pub const ROLE_FREEZER: &str = "FREEZER";
 pub const ROLE_FORCE_TRANSFERER: &str = "FORCE_TRANSFERER";
+
+// =============================================================================
+// NFT Types
+// =============================================================================
+
+pub mod types {
+    use odra::prelude::*;
+
+    #[odra::odra_type]
+    pub struct NFTInitParams {
+        pub owner: Address,
+        pub symbol: String,
+        pub name: String,
+        pub minters: Vec<Address>,
+        pub burners: Vec<Address>,
+        pub whitelist_managers: Vec<Address>,
+        pub freezers: Vec<Address>,
+        pub force_transferers: Vec<Address>,
+    }
+}
 
 // =============================================================================
 // Events
@@ -158,20 +179,10 @@ impl NFT {
     // Initialization
     // =========================================================================
 
-    pub fn init(
-        &mut self,
-        owner: Address,
-        symbol: String,
-        name: String,
-        minters: Vec<Address>,
-        burners: Vec<Address>,
-        whitelist_managers: Vec<Address>,
-        freezers: Vec<Address>,
-        force_transferers: Vec<Address>,
-    ) {
+    pub fn init(&mut self, params: NFTInitParams) {
         self.access_control
-            .unchecked_grant_role(&DEFAULT_ADMIN_ROLE, &owner);
-        self.cep95.init(symbol, name);
+            .unchecked_grant_role(&DEFAULT_ADMIN_ROLE, &params.owner);
+        self.cep95.init(params.symbol, params.name);
 
         let minter_role = common::hash_role(ROLE_MINTER);
         let burner_role = common::hash_role(ROLE_BURNER);
@@ -179,28 +190,28 @@ impl NFT {
         let freezer_role = common::hash_role(ROLE_FREEZER);
         let force_transferer_role = common::hash_role(ROLE_FORCE_TRANSFERER);
 
-        minters.iter().for_each(|minter| {
+        params.minters.iter().for_each(|minter| {
             self.access_control
                 .unchecked_grant_role(&minter_role, minter);
             self.env().emit_event(MinterAdded { minter: *minter });
         });
-        burners.iter().for_each(|burner| {
+        params.burners.iter().for_each(|burner| {
             self.access_control
                 .unchecked_grant_role(&burner_role, burner);
             self.env().emit_event(BurnerAdded { burner: *burner });
         });
-        whitelist_managers.iter().for_each(|address| {
+        params.whitelist_managers.iter().for_each(|address| {
             self.access_control
                 .unchecked_grant_role(&whitelist_manager_role, address);
             self.env()
                 .emit_event(WhitelistManagerAdded { address: *address });
         });
-        freezers.iter().for_each(|address| {
+        params.freezers.iter().for_each(|address| {
             self.access_control
                 .unchecked_grant_role(&freezer_role, address);
             self.env().emit_event(FreezerAdded { address: *address });
         });
-        force_transferers.iter().for_each(|address| {
+        params.force_transferers.iter().for_each(|address| {
             self.access_control
                 .unchecked_grant_role(&force_transferer_role, address);
             self.env()

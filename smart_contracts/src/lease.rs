@@ -295,7 +295,7 @@ impl Lease {
             self.env().revert(Error::LeaseAgreementHasNotFinishedYet);
         }
 
-        self.assert_all_invoices_paid(&lease_agreement_id);
+        self.assert_all_invoices_paid(lease_agreement_id);
         self.release_security_deposit(
             &lease_agreement.tenant,
             &lease_agreement.landlord,
@@ -336,7 +336,7 @@ impl Lease {
             self.env().revert(Error::LeaseAgreementHasNotFinishedYet);
         }
 
-        self.assert_all_invoices_paid(&lease_agreement_id);
+        self.assert_all_invoices_paid(lease_agreement_id);
 
         if lease_agreement.end >= new_end {
             self.env().revert(Error::InvalidTimeframes);
@@ -414,7 +414,7 @@ impl Lease {
                 .transfer_tokens(recipient, &currency_amount.amount().to_u512());
         } else {
             Cep18ContractRef::new(self.env(), currency_amount.currency().unwrap())
-                .transfer(&recipient, currency_amount.amount());
+                .transfer(recipient, currency_amount.amount());
         }
     }
 

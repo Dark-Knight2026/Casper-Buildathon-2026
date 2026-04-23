@@ -16,7 +16,7 @@ use leasefi_contracts::{
         ICOInitArgs, ICO,
     },
     lease::{Lease, LeaseInitArgs},
-    nft::{NFTInitArgs, NFT},
+    nft::{types::NFTInitParams, NFTInitArgs, NFT},
     roles::{Roles, RolesInitArgs},
     staking::{Staking, StakingInitArgs},
     treasury::{Treasury, TreasuryInitArgs},
@@ -33,10 +33,10 @@ impl LeasefiDeployScript {
 
     fn get_ico_schedule_creation_params(env: &HostEnv) -> ICOScheduleCreateParams {
         ICOScheduleCreateParams {
-            start_timestamp: env.block_time() + Self::ONE_MINUTE + (1 * Self::ONE_HOUR),
+            start_timestamp: env.block_time() + Self::ONE_MINUTE + Self::ONE_HOUR,
             end_timestamp: env.block_time()
                 + Self::ONE_MINUTE
-                + (1 * Self::ONE_HOUR)
+                + Self::ONE_HOUR
                 + (20 * Self::ONE_DAY),
             sale_amount: U256::from(500_000_000) * U256::from(10).pow(U256::from(18)),
             price: U256::from(500_000), // 0.5 USD (0.5 * 1 * 10^6)
@@ -59,7 +59,7 @@ impl DeployScript for LeasefiDeployScript {
             .unwrap(),
         );
         let mut big_coin = BigCoin::load_or_deploy_with_cfg(
-            &env,
+            env,
             None,
             BigCoinInitArgs {
                 symbol: String::from("BIG"),
@@ -72,25 +72,29 @@ impl DeployScript for LeasefiDeployScript {
             container,
             350_000_000_000,
         )?;
+
+        let nft_params = NFTInitParams {
+            owner: env.caller(),
+            symbol: String::from("BIG"),
+            name: String::from("BIG"),
+            minters: vec![],
+            burners: vec![],
+            whitelist_managers: vec![env.caller()],
+            freezers: vec![],
+            force_transferers: vec![],
+        };
+
         let mut nft = NFT::load_or_deploy_with_cfg(
-            &env,
+            env,
             None,
-            NFTInitArgs {
-                owner: env.caller(),
-                symbol: String::from("BIG"),
-                name: String::from("BIG"),
-                minters: vec![],
-                burners: vec![],
-                whitelist_managers: vec![env.caller()],
-                freezers: vec![],
-                force_transferers: vec![],
-            },
+            NFTInitArgs { params: nft_params },
             InstallConfig::upgradable::<NFT>(),
             container,
             450_000_000_000,
         )?;
+
         let roles = Roles::load_or_deploy_with_cfg(
-            &env,
+            env,
             None,
             RolesInitArgs { admin: new_owner },
             InstallConfig::upgradable::<Roles>(),
@@ -98,7 +102,7 @@ impl DeployScript for LeasefiDeployScript {
             310_000_000_000,
         )?;
         let mut treasury = Treasury::load_or_deploy_with_cfg(
-            &env,
+            env,
             None,
             TreasuryInitArgs {
                 owner: env.caller(),
@@ -108,7 +112,7 @@ impl DeployScript for LeasefiDeployScript {
             400_000_000_000,
         )?;
         let mut escrow = Escrow::load_or_deploy_with_cfg(
-            &env,
+            env,
             None,
             EscrowInitArgs {
                 owner: env.caller(),
@@ -119,7 +123,7 @@ impl DeployScript for LeasefiDeployScript {
             400_000_000_000,
         )?;
         let mut lease = Lease::load_or_deploy_with_cfg(
-            &env,
+            env,
             None,
             LeaseInitArgs {
                 owner: env.caller(),
@@ -129,7 +133,7 @@ impl DeployScript for LeasefiDeployScript {
             400_000_000_000,
         )?;
         let mut vesting = Vesting::load_or_deploy_with_cfg(
-            &env,
+            env,
             None,
             VestingInitArgs {
                 owner: env.caller(),
@@ -139,7 +143,7 @@ impl DeployScript for LeasefiDeployScript {
             400_000_000_000,
         )?;
         let mut staking = Staking::load_or_deploy_with_cfg(
-            &env,
+            env,
             None,
             StakingInitArgs {
                 owner: env.caller(),
@@ -149,7 +153,7 @@ impl DeployScript for LeasefiDeployScript {
             400_000_000_000,
         )?;
         let mut ico = ICO::load_or_deploy_with_cfg(
-            &env,
+            env,
             None,
             ICOInitArgs {
                 owner: env.caller(),
@@ -190,7 +194,7 @@ impl DeployScript for LeasefiDeployScript {
         escrow.set_treasury(treasury.address());
 
         // Setup ICO
-        let creation_params = LeasefiDeployScript::get_ico_schedule_creation_params(&env);
+        let creation_params = LeasefiDeployScript::get_ico_schedule_creation_params(env);
 
         ico.set_big_coin(big_coin.address());
         ico.set_treasury(treasury.address());

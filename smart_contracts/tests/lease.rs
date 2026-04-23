@@ -18,7 +18,7 @@ use leasefi_contracts::lease::{
     types::{CreateLeaseAgreementParams, LeaseAgreement},
     Lease, LeaseHostRef, LeaseInitArgs,
 };
-use leasefi_contracts::nft::errors::Error as NftError;
+use leasefi_contracts::nft::{errors::Error as NftError, types::NFTInitParams};
 use leasefi_contracts::roles::{Roles, RolesHostRef, RolesInitArgs};
 
 use crate::nft::{NFTHostRef, NFTInitArgs, NFT};
@@ -62,14 +62,16 @@ fn setup(env: HostEnv) -> TestData {
     let mut nft = NFT::deploy(
         &env,
         NFTInitArgs {
-            owner: env.get_account(0),
-            symbol: String::from("LEASE"),
-            name: String::from("LEASE"),
-            minters: vec![lease.address()],
-            burners: vec![],
-            whitelist_managers: vec![env.get_account(0)],
-            freezers: vec![lease.address()],
-            force_transferers: vec![],
+            params: NFTInitParams {
+                owner: env.get_account(0),
+                symbol: String::from("LEASE"),
+                name: String::from("LEASE"),
+                minters: vec![lease.address()],
+                burners: vec![],
+                whitelist_managers: vec![env.get_account(0)],
+                freezers: vec![lease.address()],
+                force_transferers: vec![],
+            },
         },
     );
 
@@ -452,7 +454,7 @@ fn test_create_lease_agreement_should_create_lease_agreement_properly() {
             landlord: test_data.landlord,
             monthly_rent: params.monthly_rent,
             security_deposit: params.security_deposit,
-            invoices_ids: (0..=12).map(|n| U256::from(n)).collect(),
+            invoices_ids: (0..=12).map(U256::from).collect(),
             start: params.start,
             end: params.end,
             is_finished: false,

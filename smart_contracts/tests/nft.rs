@@ -1,6 +1,8 @@
 use crate::common;
 use crate::nft::{ROLE_FORCE_TRANSFERER, ROLE_FREEZER};
-use leasefi_contracts::nft::{errors::*, events::*, NFTHostRef, NFTInitArgs, NFT};
+use leasefi_contracts::nft::{
+    errors::*, events::*, types::NFTInitParams, NFTHostRef, NFTInitArgs, NFT,
+};
 use odra::casper_types::U256;
 use odra::host::{Deployer, HostEnv};
 use odra::prelude::*;
@@ -25,14 +27,16 @@ fn setup(env: HostEnv) -> TestData {
     let nft = NFT::deploy(
         &env,
         NFTInitArgs {
-            owner: env.get_account(0),
-            symbol: String::from("NFT"),
-            name: String::from("NFT"),
-            minters: minters.clone(),
-            burners: burners.clone(),
-            whitelist_managers: vec![env.get_account(0)],
-            freezers: vec![],
-            force_transferers: vec![],
+            params: NFTInitParams {
+                owner: env.get_account(0),
+                symbol: String::from("NFT"),
+                name: String::from("NFT"),
+                minters: minters.clone(),
+                burners: burners.clone(),
+                whitelist_managers: vec![env.get_account(0)],
+                freezers: vec![],
+                force_transferers: vec![],
+            },
         },
     );
 
