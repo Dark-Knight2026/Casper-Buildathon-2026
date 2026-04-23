@@ -300,6 +300,19 @@ fn test_mint_should_fail_if_not_minter_is_calling() {
 }
 
 #[test]
+fn test_mint_should_revert_if_recipient_not_whitelisted() {
+    let mut test_data = setup(odra_test::env());
+    let recipient = test_data.env.get_account(5);
+
+    test_data.env.set_caller(test_data.minters[0]);
+    assert_eq!(
+        test_data.nft.try_mint(recipient, vec![]).unwrap_err(),
+        Error::CannotTransact.into(),
+        "Should revert when recipient is not whitelisted"
+    );
+}
+
+#[test]
 fn test_mint_should_mint_properly() {
     let mut test_data = setup(odra_test::env());
     let recipient = test_data.env.get_account(5);
@@ -581,6 +594,85 @@ fn test_transfer_should_revert_if_token_frozen() {
     );
 }
 
+#[test]
+fn test_safe_transfer_from_happy_path() {
+    let mut ctx = setup(odra_test::env());
+    let sender = ctx.env.get_account(5);
+    let receiver = ctx.env.get_account(6);
+
+    // Mint token to sender
+    let token_id = mint(
+        &mut ctx,
+        sender,
+        vec![(String::from("key"), String::from("value"))],
+    );
+
+    // Whitelist receiver
+    ctx.env.set_caller(ctx.env.get_account(0));
+    ctx.nft.add_to_whitelist(&receiver);
+
+    ctx.env.set_caller(sender);
+    ctx.nft.safe_transfer_from(sender, receiver, token_id, None);
+
+    assert_eq!(ctx.nft.owner_of(token_id), Some(receiver));
+}
+
+#[test]
+fn test_safe_transfer_from_should_revert_if_token_frozen() {
+    let mut ctx = setup(odra_test::env());
+    let sender = ctx.env.get_account(5);
+    let receiver = ctx.env.get_account(6);
+
+    // Mint token to sender
+    let token_id = mint(
+        &mut ctx,
+        sender,
+        vec![(String::from("key"), String::from("value"))],
+    );
+
+    // Whitelist receiver and grant FREEZER role to admin
+    let admin = ctx.env.get_account(0);
+    ctx.env.set_caller(admin);
+    ctx.nft.add_to_whitelist(&receiver);
+    ctx.nft.grant_role(&common::hash_role(ROLE_FREEZER), &admin);
+
+    // Freeze the token
+    ctx.nft.set_frozen_tokens(&token_id, true);
+
+    ctx.env.set_caller(sender);
+    assert_eq!(
+        ctx.nft
+            .try_safe_transfer_from(sender, receiver, token_id, None)
+            .unwrap_err(),
+        Error::TokenIsFrozen.into(),
+        "Should revert when token is frozen"
+    );
+}
+
+#[test]
+fn test_safe_transfer_from_should_revert_if_not_whitelisted() {
+    let mut ctx = setup(odra_test::env());
+    let sender = ctx.env.get_account(5);
+    let receiver = ctx.env.get_account(6);
+
+    // Mint token to sender
+    let token_id = mint(
+        &mut ctx,
+        sender,
+        vec![(String::from("key"), String::from("value"))],
+    );
+
+    // Receiver is NOT whitelisted
+    ctx.env.set_caller(sender);
+    assert_eq!(
+        ctx.nft
+            .try_safe_transfer_from(sender, receiver, token_id, None)
+            .unwrap_err(),
+        Error::CannotTransact.into(),
+        "Should revert when receiver is not whitelisted"
+    );
+}
+
 // =============================================================================
 // Freeze
 // =============================================================================
@@ -673,6 +765,32 @@ fn test_forced_transfer_should_revert_if_not_authorized() {
             .unwrap_err(),
         Error::NotAuthorized.into(),
         "Should revert when caller lacks FORCE_TRANSFERER role"
+    );
+}
+
+#[test]
+fn test_forced_transfer_should_revert_if_receiver_not_whitelisted() {
+    let mut ctx = setup(odra_test::env());
+    let sender = ctx.env.get_account(5);
+    let receiver = ctx.env.get_account(6);
+    let token_id = mint(
+        &mut ctx,
+        sender,
+        vec![(String::from("key"), String::from("value"))],
+    );
+
+    // Grant FORCE_TRANSFERER to admin but do NOT whitelist receiver
+    let admin = ctx.env.get_account(0);
+    ctx.env.set_caller(admin);
+    let ft_role = common::hash_role(ROLE_FORCE_TRANSFERER);
+    ctx.nft.grant_role(&ft_role, &admin);
+
+    assert_eq!(
+        ctx.nft
+            .try_forced_transfer(sender, receiver, token_id)
+            .unwrap_err(),
+        Error::CannotTransact.into(),
+        "Should revert when receiver is not whitelisted"
     );
 }
 
