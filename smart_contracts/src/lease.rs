@@ -247,7 +247,10 @@ impl Lease {
 
         let lease_agreement_id = self.get_lease_agreements_count();
 
-        // Mint a lease NFT to the tenant and freeze it so it can't be transferred without auth
+        // Mint a lease NFT to the tenant and freeze it.
+        // Invariant: The NFT remains frozen for the entire lease lifecycle to prevent
+        // unauthorized transfers. Only administrative actions (disputes/recovery)
+        // can move it.
         let metadata = vec![(
             String::from("lease_agreement_id"),
             lease_agreement_id.to_string(),
@@ -303,11 +306,7 @@ impl Lease {
             security_deposit_charge,
         );
 
-        // Freeze the lease NFT. the lease is over, it shouldn't be transferable
-        // under normal business flow. A FREEZER-role admin can still unfreeze for
-        // exceptional cases (disputes, regulatory action).
-        self.nft.set_frozen_tokens(&lease_agreement.token_id, true);
-
+        // The lease NFT remains frozen (set at creation) to prevent unauthorized transfers.
         lease_agreement.is_finished = true;
         self.leases.set(lease_agreement_id, lease_agreement);
 
