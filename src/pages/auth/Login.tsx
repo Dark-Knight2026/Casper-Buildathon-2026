@@ -1,4 +1,3 @@
-import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Home, Loader2, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -6,24 +5,8 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useWalletConnect } from '@/hooks/auth/useWalletConnect';
 import { ProviderList } from './register/ProviderList';
-import { WALLET_PROVIDERS } from './register/constants';
-
-const getIsMobile = () =>
-  /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
-  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
 export function Login() {
-  const [isMobile, setIsMobile] = useState(getIsMobile);
-
-  useEffect(() => {
-    const onResize = () => setIsMobile(getIsMobile());
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
-  }, []);
-
-  const availableProviders = isMobile
-    ? WALLET_PROVIDERS.filter(p => p.key === 'casper-wallet')
-    : WALLET_PROVIDERS;
   const {
     isConnected, account, isAuthenticated, isSigningIn,
     connectingProvider, setConnectingProvider,
@@ -68,7 +51,6 @@ export function Login() {
             </Button>
           ) : (
             <ProviderList
-              providers={availableProviders}
               connectingProvider={connectingProvider}
               onConnect={handleConnectProvider}
               onCancel={() => setConnectingProvider(null)}

@@ -1,4 +1,5 @@
 import React from 'react';
+import { WALLET_KEYS } from '@make-software/csprclick-core-types';
 
 // Checks if device is truly mobile — based on device capability, NOT screen width
 // Covers iPadOS 13+ which reports as MacIntel but has maxTouchPoints > 1
@@ -22,53 +23,9 @@ export const TERMINAL_PROVIDER_STATUSES = new Set([
   'no-device-found',               // Ledger: no hardware wallet detected
 ]);
 
-export const WALLET_PROVIDERS: ProviderDef[] = [
-  {
-    key: 'casper-wallet',
-    label: 'Casper Wallet',
-    icon: (
-      <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.5"/>
-        <path d="M8 12c0-2.21 1.79-4 4-4s4 1.79 4 4-1.79 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-        <circle cx="12" cy="12" r="1.5" fill="currentColor"/>
-      </svg>
-    ),
-  },
-  {
-    key: 'ledger',
-    label: 'Ledger',
-    icon: (
-      <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" strokeWidth="1.5"/>
-        <path d="M3 10h6M3 14h6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-        <rect x="13" y="9" width="5" height="6" rx="1" fill="currentColor" opacity="0.4"/>
-      </svg>
-    ),
-  },
-  {
-    key: 'metamask-snap',
-    label: 'MetaMask Snap',
-    icon: (
-      <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-        <path d="M20.5 3L13.5 8.3l1.3-3.1L20.5 3z" opacity="0.8"/>
-        <path d="M3.5 3l6.9 5.4L9.2 5.2 3.5 3z" opacity="0.6"/>
-        <path d="M17.9 16.4l-1.8 2.8 3.9 1.1 1.1-3.8-3.2-.1z" opacity="0.8"/>
-        <path d="M2.9 16.5l1.1 3.8 3.9-1.1-1.8-2.8-3.2.1z" opacity="0.6"/>
-        <path d="M7.6 10.8L6.5 12.5l3.9.2-.1-4.3-2.7 2.4z"/>
-        <path d="M16.4 10.8l-2.8-2.5-.1 4.4 3.9-.2-1-1.7z"/>
-        <path d="M7.9 19.2l2.4-1.1-2-1.6-.4 2.7z"/>
-        <path d="M13.7 18.1l2.3 1.1-.3-2.7-2 1.6z"/>
-      </svg>
-    ),
-  },
-];
-
-// Social login — requires CSPR Click paid plan.
-// To enable: add key to clickOptions.providers in AuthWalletLayout,
-// then call clickRef.connect(key) like wallet providers.
 export const SOCIAL_PROVIDERS: ProviderDef[] = [
   {
-    key: 'csprclick-w3agoogle',
+    key: WALLET_KEYS.W3A_GOOGLE,
     label: 'Google',
     icon: (
       <svg viewBox="0 0 24 24" className="h-5 w-5" xmlns="http://www.w3.org/2000/svg">
@@ -80,26 +37,11 @@ export const SOCIAL_PROVIDERS: ProviderDef[] = [
     ),
   },
   {
-    key: 'csprclick-customjwt',
-    label: 'Email',
+    key: WALLET_KEYS.W3A_APPLE,
+    label: 'Apple',
     icon: (
-      <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <rect x="2" y="4" width="20" height="16" rx="2" stroke="currentColor" strokeWidth="1.5"/>
-        <path d="M2 7l10 7 10-7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-      </svg>
-    ),
-  },
-  {
-    key: 'torus',
-    label: 'Twitter / Discord / GitHub',
-    icon: (
-      <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <circle cx="12" cy="8" r="3" stroke="currentColor" strokeWidth="1.5"/>
-        <circle cx="5" cy="17" r="2" stroke="currentColor" strokeWidth="1.5"/>
-        <circle cx="19" cy="17" r="2" stroke="currentColor" strokeWidth="1.5"/>
-        <path d="M7 16c1-3 8-3 10 0" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-        <path d="M9 10c-2 2-2 4-2 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-        <path d="M15 10c2 2 2 4 2 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+      <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+        <path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.48-3.24 0-1.44.62-2.2.44-3.06-.4C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/>
       </svg>
     ),
   },

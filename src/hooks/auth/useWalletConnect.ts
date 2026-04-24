@@ -21,7 +21,7 @@ export function useWalletConnect() {
   const [connectingProvider, setConnectingProvider] = useState<string | null>(null);
   const didRedirect = useRef(false);
 
-  const { isConnected, account, isConnecting, error: walletError, clickRef } = useICOWallet();
+  const { isConnected, account, isConnecting, error: walletError, clickRef, syncActiveAccount, connect } = useICOWallet();
   const { isAuthenticated, isLoading: isSigningIn, error: authError, login } = useBackendAuth(
     clickRef,
     account?.publicKey ?? null,
@@ -86,15 +86,49 @@ export function useWalletConnect() {
   }, [clickRef]);
 
   const handleConnectProvider = useCallback(async (providerKey: string) => {
-    if (!clickRef || isConnecting || connectingProvider) return;
+    console.log('[DEBUG 1] handleConnectProvider called with:', providerKey);
+    console.log('[DEBUG 2] guards:', { hasClickRef: !!clickRef, isConnecting, connectingProvider });
+    if (!clickRef || isConnecting || connectingProvider) {
+      console.log('[DEBUG 3] early-return — guard blocked');
+      return;
+    }
     setConnectingProvider(providerKey);
+    const isSocial = providerKey.startsWith('w3a-') || providerKey.startsWith('csprclick-') || providerKey === 'torus' || providerKey === 'customjwt';
     try {
-      await clickRef.connect(providerKey);
-    } catch {
+      // For social providers — prefer signInWithAccount() when the account is already
+      // known to CSPR.click (avoids the broken OAuth popup handoff). Fall back to
+      // connect() for first-time auth and for wallet providers.
+      if (isSocial) {
+        const opts = await clickRef.getSignInOptions();
+        console.log('[DEBUG 4a] getSignInOptions →', opts);
+        const knownAccounts: Array<{ provider: string; public_key: string }> =
+          (opts && (opts.accounts || opts.knownAccounts)) || [];
+        console.log('[DEBUG 4a2] known accounts:', JSON.stringify(knownAccounts, null, 2));
+        console.log('[DEBUG 4a3] looking for provider:', providerKey);
+        const match = knownAccounts.find(a => a.provider === providerKey);
+        if (match) {
+          console.log('[DEBUG 4b] known account found, calling signInWithAccount →', match);
+          const res = await clickRef.signInWithAccount(match as never);
+          console.log('[DEBUG 5] signInWithAccount resolved:', res);
+          await syncActiveAccount();
+          console.log('[DEBUG 7] syncActiveAccount done');
+          return;
+        }
+        console.log('[DEBUG 4c] no known account, falling back to connect()');
+      }
+      console.log('[DEBUG 4] calling clickRef.connect()...');
+      const options = isSocial
+        ? { chainName: import.meta.env.VITE_CASPER_NETWORK ?? 'casper-test' }
+        : undefined;
+      const account = await clickRef.connect(providerKey, options);
+      console.log('[DEBUG 5] connect() resolved with:', account);
+      if (account) await syncActiveAccount();
+      console.log('[DEBUG 7] syncActiveAccount done');
+    } catch (err) {
+      console.error('[DEBUG X] threw:', err);
       setConnectingProvider(null);
     }
-    // Success → csprclick:signed_in fires → useICOWallet updates → auto-login effect runs
-  }, [clickRef, isConnecting, connectingProvider]);
+  }, [clickRef, isConnecting, connectingProvider, syncActiveAccount]);
 
   return {
     isConnected,
@@ -104,8 +138,11 @@ export function useWalletConnect() {
     setConnectingProvider,
     error: walletError ?? authError,
     isLoading: isConnecting || isSigningIn || connectingProvider !== null,
+    isConnecting,
     isSigningIn,
     login,
+    connect,
+    clickRef,
     handleConnectProvider,
   };
 }

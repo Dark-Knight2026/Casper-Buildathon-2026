@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Home, Loader2, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -7,31 +7,15 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useWalletConnect } from '@/hooks/auth/useWalletConnect';
 import { RoleSelector } from './register/RoleSelector';
 import { ProviderList } from './register/ProviderList';
-import { WALLET_PROVIDERS } from './register/constants';
-
-const getIsMobile = () =>
-  /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
-  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
 export function Register() {
   const [role, setRole] = useState<'tenant' | 'landlord'>('tenant');
-  const [isMobile, setIsMobile] = useState(getIsMobile);
-
-  useEffect(() => {
-    const onResize = () => setIsMobile(getIsMobile());
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
-  }, []);
-
-  const availableProviders = isMobile
-    ? WALLET_PROVIDERS.filter(p => p.key === 'casper-wallet')
-    : WALLET_PROVIDERS;
 
   const {
-    isConnected, account, isAuthenticated, isSigningIn,
+    isConnected, account, isAuthenticated, isSigningIn, isConnecting,
     connectingProvider, setConnectingProvider,
-    error, isLoading,
-    handleConnectProvider, login,
+    error, isLoading, clickRef,
+    handleConnectProvider, login, connect,
   } = useWalletConnect();
 
   // NOTE FOR BACKEND TEAM:
@@ -82,13 +66,36 @@ export function Register() {
               }
             </Button>
           ) : (
-            <ProviderList
-              providers={availableProviders}
-              connectingProvider={connectingProvider}
-              onConnect={handleConnectProvider}
-              onCancel={() => setConnectingProvider(null)}
-              disabled={isAuthenticated}
-            />
+            <>
+              {/* CSPR.click native UI — opens SDK modal with all providers (same flow as ICO header) */}
+              <Button
+                className="w-full"
+                variant="default"
+                onClick={connect}
+                disabled={isAuthenticated || !clickRef || isConnecting}
+              >
+                {isConnecting
+                  ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Connecting…</>
+                  : 'Sign in with CSPR.click'
+                }
+              </Button>
+
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t" />
+                </div>
+                <div className="relative flex justify-center text-xs">
+                  <span className="bg-white px-2 text-muted-foreground">or use custom UI</span>
+                </div>
+              </div>
+
+              <ProviderList
+                connectingProvider={connectingProvider}
+                onConnect={handleConnectProvider}
+                onCancel={() => setConnectingProvider(null)}
+                disabled={isAuthenticated}
+              />
+            </>
           )}
         </CardContent>
 
