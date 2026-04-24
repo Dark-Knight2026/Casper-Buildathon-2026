@@ -493,10 +493,15 @@ impl NFT {
     /// @dev CEP-95 still does its own checks (caller must be owner or approved operator)
     #[odra(non_reentrant)]
     pub fn transfer_from(&mut self, from: Address, to: Address, token_id: U256) {
+        let caller = self.env().caller();
+
         if self.is_frozen(&token_id) {
             self.env().revert(Error::TokenIsFrozen);
         }
         if !self.can_transact(&from) || !self.can_transact(&to) {
+            self.env().revert(Error::CannotTransact);
+        }
+        if caller != from && !self.can_transact(&caller) {
             self.env().revert(Error::CannotTransact);
         }
 
@@ -513,10 +518,15 @@ impl NFT {
         token_id: U256,
         data: Option<Bytes>,
     ) {
+        let caller = self.env().caller();
+
         if self.is_frozen(&token_id) {
             self.env().revert(Error::TokenIsFrozen);
         }
         if !self.can_transact(&from) || !self.can_transact(&to) {
+            self.env().revert(Error::CannotTransact);
+        }
+        if caller != from && !self.can_transact(&caller) {
             self.env().revert(Error::CannotTransact);
         }
 
