@@ -125,7 +125,7 @@ fn generate_lease_agreement_creation_params(test_data: &TestData) -> CreateLease
 fn pay_all_lease_agreement_invoices(test_data: &mut TestData, lease_agreement_id: &U256) {
     let mut lease_agreement = test_data
         .lease
-        .get_lease_agreement_by_id(&lease_agreement_id);
+        .get_lease_agreement_by_id(lease_agreement_id);
 
     test_data.env.set_caller(lease_agreement.tenant);
     test_data
