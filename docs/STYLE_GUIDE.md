@@ -65,6 +65,13 @@
 - Subtle shadow or 1px border (low contrast)
 - Rounded corners: 4–6px (minimal)
 
+### Tabs
+
+- Base height: `h-14` (56px) — applied to all `TabsList` instances by default
+- Bottom margin: `mb-4` (16px) — separates the tab bar from its content panel
+- Override per-instance via `className` when a tighter layout is needed
+  (e.g. modal dialogs, sidebars). Pass `h-10 mb-2` or similar.
+
 ---
 
 ## Brand Positioning
