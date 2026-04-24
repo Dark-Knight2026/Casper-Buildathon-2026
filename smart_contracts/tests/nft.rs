@@ -286,6 +286,249 @@ fn test_remove_burner_should_remove_burner_properly() {
 }
 
 // =============================================================================
+// add_whitelist_manager()
+// =============================================================================
+
+#[test]
+fn test_add_whitelist_manager_should_revert_if_not_owner_is_calling() {
+    let mut test_data = setup(odra_test::env());
+
+    test_data.env.set_caller(test_data.env.get_account(1));
+
+    assert_eq!(
+        test_data
+            .nft
+            .try_add_whitelist_manager(&test_data.env.get_account(1))
+            .unwrap_err(),
+        Error::NotAuthorized.into(),
+        "Should revert when is called by not the owner"
+    );
+}
+
+#[test]
+fn test_add_whitelist_manager_should_add_whitelist_manager_properly() {
+    let mut test_data = setup(odra_test::env());
+    let whitelist_manager = test_data.env.get_account(5);
+
+    test_data.nft.add_whitelist_manager(&whitelist_manager);
+
+    assert!(test_data.env.emitted_event(
+        &test_data.nft,
+        WhitelistManagerAdded {
+            address: whitelist_manager
+        }
+    ));
+    assert!(
+        test_data
+            .nft
+            .has_role(&test_data.nft.whitelist_manager_role(), &whitelist_manager),
+        "Should have been set as whitelist manager"
+    )
+}
+
+// =============================================================================
+// remove_whitelist_manager()
+// =============================================================================
+
+#[test]
+fn test_remove_whitelist_manager_should_revert_if_not_owner_is_calling() {
+    let mut test_data = setup(odra_test::env());
+
+    test_data.env.set_caller(test_data.env.get_account(1));
+
+    assert_eq!(
+        test_data
+            .nft
+            .try_remove_whitelist_manager(&test_data.env.get_account(1))
+            .unwrap_err(),
+        Error::NotAuthorized.into(),
+        "Should revert when is called by not the owner"
+    );
+}
+
+#[test]
+fn test_remove_whitelist_manager_should_remove_whitelist_manager_properly() {
+    let mut test_data = setup(odra_test::env());
+    let whitelist_manager = test_data.env.get_account(5);
+
+    test_data.nft.add_whitelist_manager(&whitelist_manager);
+    test_data.nft.remove_whitelist_manager(&whitelist_manager);
+
+    assert!(test_data.env.emitted_event(
+        &test_data.nft,
+        WhitelistManagerRemoved {
+            address: whitelist_manager
+        }
+    ));
+    assert!(
+        !test_data
+            .nft
+            .has_role(&test_data.nft.whitelist_manager_role(), &whitelist_manager),
+        "Should have been unset as whitelist manager"
+    )
+}
+
+// =============================================================================
+// add_freezer()
+// =============================================================================
+
+#[test]
+fn test_add_freezer_should_revert_if_not_owner_is_calling() {
+    let mut test_data = setup(odra_test::env());
+
+    test_data.env.set_caller(test_data.env.get_account(1));
+
+    assert_eq!(
+        test_data
+            .nft
+            .try_add_freezer(&test_data.env.get_account(1))
+            .unwrap_err(),
+        Error::NotAuthorized.into(),
+        "Should revert when is called by not the owner"
+    );
+}
+
+#[test]
+fn test_add_freezer_should_add_freezer_properly() {
+    let mut test_data = setup(odra_test::env());
+    let freezer = test_data.env.get_account(5);
+
+    test_data.nft.add_freezer(&freezer);
+
+    assert!(test_data
+        .env
+        .emitted_event(&test_data.nft, FreezerAdded { address: freezer }));
+    assert!(
+        test_data
+            .nft
+            .has_role(&test_data.nft.freezer_role(), &freezer),
+        "Should have been set as freezer"
+    )
+}
+
+// =============================================================================
+// remove_freezer()
+// =============================================================================
+
+#[test]
+fn test_remove_freezer_should_revert_if_not_owner_is_calling() {
+    let mut test_data = setup(odra_test::env());
+
+    test_data.env.set_caller(test_data.env.get_account(1));
+
+    assert_eq!(
+        test_data
+            .nft
+            .try_remove_freezer(&test_data.env.get_account(1))
+            .unwrap_err(),
+        Error::NotAuthorized.into(),
+        "Should revert when is called by not the owner"
+    );
+}
+
+#[test]
+fn test_remove_freezer_should_remove_freezer_properly() {
+    let mut test_data = setup(odra_test::env());
+    let freezer = test_data.env.get_account(5);
+
+    test_data.nft.add_freezer(&freezer);
+    test_data.nft.remove_freezer(&freezer);
+
+    assert!(test_data
+        .env
+        .emitted_event(&test_data.nft, FreezerRemoved { address: freezer }));
+    assert!(
+        !test_data
+            .nft
+            .has_role(&test_data.nft.freezer_role(), &freezer),
+        "Should have been unset as freezer"
+    )
+}
+
+// =============================================================================
+// add_force_transferer()
+// =============================================================================
+
+#[test]
+fn test_add_force_transferer_should_revert_if_not_owner_is_calling() {
+    let mut test_data = setup(odra_test::env());
+
+    test_data.env.set_caller(test_data.env.get_account(1));
+
+    assert_eq!(
+        test_data
+            .nft
+            .try_add_force_transferer(&test_data.env.get_account(1))
+            .unwrap_err(),
+        Error::NotAuthorized.into(),
+        "Should revert when is called by not the owner"
+    );
+}
+
+#[test]
+fn test_add_force_transferer_should_add_force_transferer_properly() {
+    let mut test_data = setup(odra_test::env());
+    let force_transferer = test_data.env.get_account(5);
+
+    test_data.nft.add_force_transferer(&force_transferer);
+
+    assert!(test_data.env.emitted_event(
+        &test_data.nft,
+        ForceTransfererAdded {
+            address: force_transferer
+        }
+    ));
+    assert!(
+        test_data
+            .nft
+            .has_role(&test_data.nft.force_transferer_role(), &force_transferer),
+        "Should have been set as force transferer"
+    )
+}
+
+// =============================================================================
+// remove_force_transferer()
+// =============================================================================
+
+#[test]
+fn test_remove_force_transferer_should_revert_if_not_owner_is_calling() {
+    let mut test_data = setup(odra_test::env());
+
+    test_data.env.set_caller(test_data.env.get_account(1));
+
+    assert_eq!(
+        test_data
+            .nft
+            .try_remove_force_transferer(&test_data.env.get_account(1))
+            .unwrap_err(),
+        Error::NotAuthorized.into(),
+        "Should revert when is called by not the owner"
+    );
+}
+
+#[test]
+fn test_remove_force_transferer_should_remove_force_transferer_properly() {
+    let mut test_data = setup(odra_test::env());
+    let force_transferer = test_data.env.get_account(5);
+
+    test_data.nft.add_force_transferer(&force_transferer);
+    test_data.nft.remove_force_transferer(&force_transferer);
+
+    assert!(test_data.env.emitted_event(
+        &test_data.nft,
+        ForceTransfererRemoved {
+            address: force_transferer
+        }
+    ));
+    assert!(
+        !test_data
+            .nft
+            .has_role(&test_data.nft.force_transferer_role(), &force_transferer),
+        "Should have been unset as force transferer"
+    )
+}
+
+// =============================================================================
 // mint()
 // =============================================================================
 
