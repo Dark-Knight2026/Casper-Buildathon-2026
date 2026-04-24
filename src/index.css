@@ -26,7 +26,7 @@
   --color-badge-success-foreground: hsl(var(--badge-success-foreground));
   --color-badge-info: hsl(var(--badge-info));
   --color-badge-info-foreground: hsl(var(--badge-info-foreground));
-  --radius-sm: calc(var(--radius) - 4px);
+  --radius-sm: calc(var(--radius) - 2px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
 }

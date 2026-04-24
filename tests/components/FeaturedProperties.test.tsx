@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import FeaturedProperties from '@/components/FeaturedProperties';
 
@@ -176,14 +176,13 @@ describe('FeaturedProperties', () => {
   describe('favorite button', () => {
     it('heart button click does not trigger card navigation (stopPropagation)', () => {
       renderComponent();
-      // Heart buttons have no accessible name — find by querying inside each card
-      const cards = screen.getAllByRole('button', { name: /view details for/i });
-      // The heart button is a sibling button inside the same card group
-      const firstCard = cards[0].closest('.group') as HTMLElement;
-      const heartButton = firstCard.querySelector('button');
-      if (heartButton) {
-        fireEvent.click(heartButton);
-      }
+      const firstCard = screen
+        .getByRole('button', { name: /view details for modern downtown apartment/i })
+        .closest('.group') as HTMLElement;
+      const heartButton = within(firstCard).getByRole('button', {
+        name: /save modern downtown apartment to favorites/i,
+      });
+      fireEvent.click(heartButton);
       expect(mockNavigate).not.toHaveBeenCalled();
     });
 

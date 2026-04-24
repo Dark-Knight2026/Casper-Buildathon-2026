@@ -78,7 +78,7 @@ export default function PropertyDetail() {
     } finally {
       setLoading(false);
     }
-  }, [id, navigate, toast]);
+  }, [id, navigate, toast, stateProperty]);
 
   useEffect(() => {
     loadProperty();

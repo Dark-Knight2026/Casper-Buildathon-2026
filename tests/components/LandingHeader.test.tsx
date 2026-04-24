@@ -1,17 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect } from 'vitest';
+import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import LandingHeader from '@/components/LandingHeader';
-
-const mockNavigate = vi.fn();
-
-vi.mock('react-router-dom', async () => {
-  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
-  return {
-    ...actual,
-    useNavigate: () => mockNavigate,
-  };
-});
 
 function renderHeader() {
   return render(
@@ -22,24 +12,20 @@ function renderHeader() {
 }
 
 describe('LandingHeader', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
   describe('rendering', () => {
     it('renders without crashing', () => {
       renderHeader();
       expect(screen.getByText('LeaseFi')).toBeInTheDocument();
     });
 
-    it('renders Sign In button', () => {
+    it('renders Sign In link', () => {
       renderHeader();
-      expect(screen.getByRole('button', { name: /sign in/i })).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: /sign in/i })).toBeInTheDocument();
     });
 
-    it('renders Get Started button', () => {
+    it('renders Get Started link', () => {
       renderHeader();
-      expect(screen.getByRole('button', { name: /get started/i })).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: /get started/i })).toBeInTheDocument();
     });
 
     it('renders Properties nav link', () => {
@@ -75,17 +61,17 @@ describe('LandingHeader', () => {
     });
   });
 
-  describe('auth navigation', () => {
-    it('Sign In navigates to /auth/login', () => {
+  describe('auth links', () => {
+    // Rendered as real <a href> so right-click "Open in new tab", middle-click,
+    // and screen-reader "link" role all work — which onClick(navigate) would hide.
+    it('Sign In link points to /auth/login', () => {
       renderHeader();
-      fireEvent.click(screen.getByRole('button', { name: /sign in/i }));
-      expect(mockNavigate).toHaveBeenCalledWith('/auth/login');
+      expect(screen.getByRole('link', { name: /sign in/i })).toHaveAttribute('href', '/auth/login');
     });
 
-    it('Get Started navigates to /auth/register', () => {
+    it('Get Started link points to /auth/register', () => {
       renderHeader();
-      fireEvent.click(screen.getByRole('button', { name: /get started/i }));
-      expect(mockNavigate).toHaveBeenCalledWith('/auth/register');
+      expect(screen.getByRole('link', { name: /get started/i })).toHaveAttribute('href', '/auth/register');
     });
   });
 });

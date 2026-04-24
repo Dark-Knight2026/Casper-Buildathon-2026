@@ -5,6 +5,15 @@ import { Badge } from '@/components/ui/badge';
 import { useNavigate } from 'react-router-dom';
 import { MapPin, Bed, Bath, Square, Heart, Camera, TrendingUp, Star } from 'lucide-react';
 import { FEATURED_PROPERTIES } from '@/data/featuredProperties';
+import type { Property } from '@/types/property';
+
+const STATUS_LABELS: Record<Property['status'], string> = {
+  active: 'For Rent',
+  pending: 'Pending',
+  rented: 'Rented',
+  inactive: 'Inactive',
+  archived: 'Archived',
+};
 
 export default function FeaturedProperties() {
   const navigate = useNavigate();
@@ -41,7 +50,7 @@ export default function FeaturedProperties() {
             />
 
             <Badge variant="success" className="absolute top-3 left-3 shadow-sm">
-              For Rent
+              {STATUS_LABELS[property.status] ?? property.status}
             </Badge>
 
             <Badge variant="info" className="absolute top-3 right-3 shadow-sm flex items-center gap-1">
@@ -58,6 +67,12 @@ export default function FeaturedProperties() {
               variant="ghost"
               size="sm"
               className="absolute bottom-3 right-3 bg-card/90 hover:bg-card p-2 rounded-full shadow-sm h-8 w-8"
+              aria-label={
+                favorites.includes(property.id)
+                  ? `Remove ${property.title} from favorites`
+                  : `Save ${property.title} to favorites`
+              }
+              aria-pressed={favorites.includes(property.id)}
               onClick={(e) => {
                 e.stopPropagation();
                 toggleFavorite(property.id);
@@ -109,9 +124,11 @@ export default function FeaturedProperties() {
 
             <div className="flex items-center justify-between text-xs text-muted-foreground">
               <span>{property.daysOnMarket} days on market</span>
-              <span className="font-medium text-foreground">
-                ${Math.round(property.rent / (property.squareFeet ?? 1))}/sqft
-              </span>
+              {property.squareFeet ? (
+                <span className="font-medium text-foreground">
+                  ${Math.round(property.rent / property.squareFeet)}/sqft
+                </span>
+              ) : null}
             </div>
           </CardContent>
         </Card>
