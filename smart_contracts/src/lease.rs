@@ -317,8 +317,8 @@ impl Lease {
         });
     }
 
-    /// Allows to prolong lease agreement between tenant and landlord when agreement has finished and both parties
-    /// decided to prolong it
+    /// Allows to prolong lease agreement between tenant and landlord when agreement has finished and both parties decided to prolong it
+    /// @dev The lease NFT is not updated during prolongation — the token persists in its current state. Lease terms are authoritative via get_lease_agreement_by_id(); the NFT metadata references the lease ID, not the terms themselves.
     #[odra(non_reentrant)]
     pub fn prolong_lease_agreement(
         &mut self,
