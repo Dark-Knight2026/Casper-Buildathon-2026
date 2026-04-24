@@ -1,6 +1,6 @@
 {
   "casper_contract_schema_version": 1,
-  "toolchain": "rustc 1.85.0-nightly (7f75bfa1a 2024-12-30)",
+  "toolchain": "rustc 1.85.0-nightly (14ee63a3c 2024-12-29)",
   "authors": [],
   "repository": null,
   "homepage": null,
@@ -243,6 +243,64 @@
             "name": "minter",
             "description": null,
             "ty": "Key"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
+        "name": "NFTInitParams",
+        "description": null,
+        "members": [
+          {
+            "name": "owner",
+            "description": null,
+            "ty": "Key"
+          },
+          {
+            "name": "symbol",
+            "description": null,
+            "ty": "String"
+          },
+          {
+            "name": "name",
+            "description": null,
+            "ty": "String"
+          },
+          {
+            "name": "minters",
+            "description": null,
+            "ty": {
+              "List": "Key"
+            }
+          },
+          {
+            "name": "burners",
+            "description": null,
+            "ty": {
+              "List": "Key"
+            }
+          },
+          {
+            "name": "whitelist_managers",
+            "description": null,
+            "ty": {
+              "List": "Key"
+            }
+          },
+          {
+            "name": "freezers",
+            "description": null,
+            "ty": {
+              "List": "Key"
+            }
+          },
+          {
+            "name": "force_transferers",
+            "description": null,
+            "ty": {
+              "List": "Key"
+            }
           }
         ]
       }
@@ -578,8 +636,8 @@
       "access": "public"
     },
     {
-      "name": "get_frozen_tokens",
-      "description": "Returns true if the given token is frozen",
+      "name": "is_frozen",
+      "description": "Returns true if token is frozen",
       "is_mutable": false,
       "arguments": [
         {
@@ -1545,61 +1603,9 @@
         "optional": false
       },
       {
-        "name": "owner",
+        "name": "params",
         "description": null,
-        "ty": "Key",
-        "optional": false
-      },
-      {
-        "name": "symbol",
-        "description": null,
-        "ty": "String",
-        "optional": false
-      },
-      {
-        "name": "name",
-        "description": null,
-        "ty": "String",
-        "optional": false
-      },
-      {
-        "name": "minters",
-        "description": null,
-        "ty": {
-          "List": "Key"
-        },
-        "optional": false
-      },
-      {
-        "name": "burners",
-        "description": null,
-        "ty": {
-          "List": "Key"
-        },
-        "optional": false
-      },
-      {
-        "name": "whitelist_managers",
-        "description": null,
-        "ty": {
-          "List": "Key"
-        },
-        "optional": false
-      },
-      {
-        "name": "freezers",
-        "description": null,
-        "ty": {
-          "List": "Key"
-        },
-        "optional": false
-      },
-      {
-        "name": "force_transferers",
-        "description": null,
-        "ty": {
-          "List": "Key"
-        },
+        "ty": "NFTInitParams",
         "optional": false
       }
     ]
