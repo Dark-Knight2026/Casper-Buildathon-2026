@@ -193,8 +193,10 @@ export function usePurchaseToken(
 ): UsePurchaseTokenReturn {
   const [state, setState] = useState<PurchaseState>(initialState);
   const submittingRef = useRef(false);
-  // Tracks allowance from a completed approve tx so that a failed purchase
-  // doesn't force the user to re-approve (Odra CEP-18 on-chain query always fails).
+  // Session-level cache of the allowance from a just-completed approve tx.
+  // Acts as a short-circuit so `preparePurchase` can skip the on-chain RPC
+  // lookup when we already know the value. Falls back to on-chain getAllowance
+  // (works correctly since f41b47d fixed the instance-hash lookup).
   const approvalCacheRef = useRef<{ currency: PaymentCurrency; rawAmount: bigint } | null>(null);
   // Aborts the active waitForDeployConfirmation loop when the component unmounts.
   const purchaseControllerRef = useRef<AbortController | null>(null);
@@ -263,8 +265,9 @@ export function usePurchaseToken(
         // 2. Check approval and prepare transactions
         setState((prev) => ({ ...prev, step: 'checking-approval' }));
 
-        // Use cached allowance if we already approved this currency in the current session.
-        // The on-chain query fails for Odra CEP-18 contracts (different storage layout).
+        // Use cached allowance if we already approved this currency in the current session
+        // to save an on-chain RPC lookup on retry. Cache is populated after a confirmed
+        // approve; falling back to getAllowance is still correct if no cache is set.
         const cached = approvalCacheRef.current;
         const cachedAllowance =
           cached?.currency === currency ? cached.rawAmount : undefined;
@@ -486,5 +489,3 @@ export function getStepMessage(step: PurchaseStep): string {
       return '';
   }
 }
-
-export default usePurchaseToken;
