@@ -201,7 +201,7 @@ describe('OverviewTab', () => {
     it('should display 24h change', () => {
       renderWithRouter(<OverviewTab />);
 
-      expect(screen.getByText('0% (24h)')).toBeInTheDocument();
+      expect(screen.getByText('+0% (24h)')).toBeInTheDocument();
     });
 
     it('should display portfolio description', () => {
@@ -278,7 +278,7 @@ describe('OverviewTab', () => {
     it('displays 24h portfolio change from backend', async () => {
       renderWithRouter(<OverviewTab />);
       await waitFor(() =>
-        expect(screen.getByText('2.5% (24h)')).toBeInTheDocument(),
+        expect(screen.getByText('+2.5% (24h)')).toBeInTheDocument(),
       );
     });
   });

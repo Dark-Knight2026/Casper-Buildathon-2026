@@ -10,7 +10,10 @@ vi.mock('@/lib/api-client', () => ({
   backendClient: { get: (...args: unknown[]) => mockGet(...args) },
 }));
 
-// ── External SDK — must stay mocked ────────────────────────────────
+// ── useICOWallet: cannot integrate ───────────────────────────────────
+// Depends on useClickRef() from @make-software/csprclick-ui, which is a
+// browser-extension event-emitter with no jsdom equivalent. Any attempt to
+// run the real hook will throw "useClickRef must be used inside CsprClickProvider".
 vi.mock('@/hooks/ico/useICOWallet', () => ({
   useICOWallet: () => ({
     account: { publicKey: 'fake-public-key', accountHash: 'fake-account-hash', provider: 'casper' },
