@@ -10,7 +10,14 @@ function loadStoredToken(): string | null {
   if (!token) return null;
 
   try {
-    const payload = JSON.parse(atob(token.split('.')[1]));
+    // JWT payloads are base64url (RFC 7515): '-'/'_' instead of '+'/'/' and no '='
+    // padding. atob() requires standard base64, so normalize before decoding —
+    // otherwise tokens whose payload bytes encode to '-' or '_' (most of them)
+    // throw InvalidCharacterError and force a silent re-login.
+    const part = token.split('.')[1];
+    const b64 = part.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = b64 + '='.repeat((4 - b64.length % 4) % 4);
+    const payload = JSON.parse(atob(padded));
     if (Date.now() / 1000 > payload.exp) {
       localStorage.removeItem(TOKEN_KEY);
       return null;

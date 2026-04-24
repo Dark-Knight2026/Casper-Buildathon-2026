@@ -422,6 +422,17 @@ export function validatePurchase(
     return { valid: false, error: 'Invalid amount' };
   }
 
+  // Reject sub-precision amounts before they silently truncate to 0n in toRawAmount.
+  // E.g. "0.0000001" for USDT (6 decimals) → fraction "0000001".slice(0,6) → "000000" → 0.
+  const decimals = getDecimals(currency);
+  const fraction = amount.split('.')[1] ?? '';
+  if (fraction.length > decimals) {
+    return {
+      valid: false,
+      error: `${currency} supports up to ${decimals} decimal places`,
+    };
+  }
+
   // Check minimum/maximum in USD
   let currencyRate: number;
   try {

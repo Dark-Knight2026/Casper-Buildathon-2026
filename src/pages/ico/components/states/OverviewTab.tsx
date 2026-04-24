@@ -1,4 +1,4 @@
-import { memo, useMemo, useState } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Card } from '../shared/Card';
 import { TrendingUp, Clock, Percent, Wallet } from 'lucide-react';
@@ -25,6 +25,9 @@ export const OverviewTab = memo(function OverviewTab() {
   const { account, clickRef } = useICOWallet();
   const accountHash = account?.publicKey ? deriveAccountHash(account.publicKey) : null;
   const [page, setPage] = useState(1);
+  // Reset pagination when the active wallet changes — otherwise we'd request
+  // page N for an account that may have fewer pages and show empty results.
+  useEffect(() => { setPage(1); }, [accountHash]);
   const { transactions, totalPages } = useTransactionHistory(accountHash, page, PAGE_SIZE);
   const { data: stakingPortfolio } = useStakingPortfolio(accountHash);
   const { data: stakingInfo } = useStakingInfo(accountHash);
@@ -38,6 +41,7 @@ export const OverviewTab = memo(function OverviewTab() {
     setClaimToastVisible,
     withdrawState,
     withdraw,
+    resetWithdraw,
     withdrawToastVisible,
     setWithdrawToastVisible,
   } = useICOActions(account?.publicKey ?? null, clickRef ?? null);
@@ -240,7 +244,9 @@ export const OverviewTab = memo(function OverviewTab() {
       {/* Withdraw Transaction Toast */}
       <TransactionStatusToast
         isVisible={withdrawToastVisible}
-        onClose={() => setWithdrawToastVisible(false)}
+        // Reset internal state when toast is dismissed so a stale 'failed' step
+        // doesn't linger past the user's acknowledgement of the error.
+        onClose={() => { setWithdrawToastVisible(false); resetWithdraw(); }}
         step={withdrawState.step}
         txHash={withdrawState.txHash}
         tokensReceived={null}

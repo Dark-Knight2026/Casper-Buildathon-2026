@@ -67,15 +67,22 @@ function safeBigInt(raw: string): bigint | null {
  */
 async function fetchActualTokensReceived(
   deployHash: string,
+  externalSignal?: AbortSignal,
   maxRetries = 3,
   retryDelayMs = 5000,
 ): Promise<bigint | null> {
-  const outerSignal = AbortSignal.timeout(60_000);
+  // Combine the caller's abort signal (component unmount) with our 60s budget
+  // so either source can stop the polling loop.
+  const timeoutSignal = AbortSignal.timeout(60_000);
+  const outerSignal = externalSignal && typeof AbortSignal.any === 'function'
+    ? AbortSignal.any([externalSignal, timeoutSignal])
+    : (externalSignal ?? timeoutSignal);
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     if (outerSignal.aborted) return null;
     try {
       // Wait before querying — the indexer needs time to process the deploy
-      await delay(attempt === 1 ? 3000 : retryDelayMs);
+      await delay(attempt === 1 ? 3000 : retryDelayMs, outerSignal);
+      if (outerSignal.aborted) return null;
 
       const url = `/api/cspr-cloud/ft-token-actions?deploy_hash=${deployHash}`;
       const resp = await fetch(url, {
@@ -366,7 +373,10 @@ export function usePurchaseToken(
 
         // 6. Fetch actual tokens received via CSPR.Cloud REST API
         let tokensReceived: string;
-        const actualTokens = await fetchActualTokensReceived(purchaseTxHash);
+        const actualTokens = await fetchActualTokensReceived(purchaseTxHash, signal);
+        // fetchActualTokensReceived returns null on abort — bail before touching
+        // state/callbacks so an unmounted component doesn't get onSuccess fired.
+        if (signal.aborted) return;
 
         if (actualTokens !== null && actualTokens > 0n) {
           tokensReceived = fromRawAmount(actualTokens, ICO_CONFIG.TOKEN.decimals);
@@ -388,6 +398,9 @@ export function usePurchaseToken(
 
         onSuccess?.(purchaseTxHash, tokensReceived);
       } catch (err) {
+        // User-triggered abort (component unmount, route change) — drop silently.
+        if (signal.aborted) return;
+
         const raw = err instanceof Error ? err.message : 'Purchase failed';
         const errorMessage = parseContractError(raw);
 
