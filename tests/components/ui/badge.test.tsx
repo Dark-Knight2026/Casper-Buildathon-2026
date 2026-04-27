@@ -60,4 +60,73 @@ describe('Badge', () => {
       expect(badge.className).toContain('bg-primary');
     });
   });
+
+  describe('variant="secondary"', () => {
+    it('renders without crashing', () => {
+      render(<Badge variant="secondary">Secondary</Badge>);
+      expect(screen.getByText('Secondary')).toBeInTheDocument();
+    });
+
+    it('applies secondary background class', () => {
+      render(<Badge variant="secondary">Secondary</Badge>);
+      const badge = screen.getByText('Secondary');
+      expect(badge.className).toContain('bg-secondary');
+    });
+
+    it('applies secondary foreground text class', () => {
+      render(<Badge variant="secondary">Secondary</Badge>);
+      const badge = screen.getByText('Secondary');
+      expect(badge.className).toContain('text-secondary-foreground');
+    });
+
+    it('has no visible border (border-transparent)', () => {
+      render(<Badge variant="secondary">Secondary</Badge>);
+      const badge = screen.getByText('Secondary');
+      expect(badge.className).toContain('border-transparent');
+    });
+  });
+
+  describe('variant="destructive"', () => {
+    it('renders without crashing', () => {
+      render(<Badge variant="destructive">Destructive</Badge>);
+      expect(screen.getByText('Destructive')).toBeInTheDocument();
+    });
+
+    it('applies destructive background class', () => {
+      render(<Badge variant="destructive">Destructive</Badge>);
+      const badge = screen.getByText('Destructive');
+      expect(badge.className).toContain('bg-destructive');
+    });
+
+    it('applies destructive foreground text class', () => {
+      render(<Badge variant="destructive">Destructive</Badge>);
+      const badge = screen.getByText('Destructive');
+      expect(badge.className).toContain('text-destructive-foreground');
+    });
+
+    it('has no visible border (border-transparent)', () => {
+      render(<Badge variant="destructive">Destructive</Badge>);
+      const badge = screen.getByText('Destructive');
+      expect(badge.className).toContain('border-transparent');
+    });
+  });
+
+  describe('variant="outline"', () => {
+    it('renders without crashing', () => {
+      render(<Badge variant="outline">Outline</Badge>);
+      expect(screen.getByText('Outline')).toBeInTheDocument();
+    });
+
+    it('applies foreground text class', () => {
+      render(<Badge variant="outline">Outline</Badge>);
+      const badge = screen.getByText('Outline');
+      expect(badge.className).toContain('text-foreground');
+    });
+
+    it('does not apply any background fill class', () => {
+      render(<Badge variant="outline">Outline</Badge>);
+      const badge = screen.getByText('Outline');
+      expect(badge.className).not.toMatch(/\bbg-(primary|secondary|destructive|badge-success|badge-info)\b/);
+    });
+  });
 });
