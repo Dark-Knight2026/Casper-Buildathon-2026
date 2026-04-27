@@ -13,7 +13,11 @@ async function fetchBigTokenActions(page: number, pageSize: number, querySignal?
   const timeout = AbortSignal.timeout(15_000);
   const res = await fetch(url, {
     headers: { accept: 'application/json' },
-    signal: querySignal ? AbortSignal.any([querySignal, timeout]) : timeout,
+    signal: querySignal
+      ? typeof AbortSignal.any === 'function'
+        ? AbortSignal.any([querySignal, timeout])
+        : timeout
+      : timeout,
   });
 
   if (!res.ok) {

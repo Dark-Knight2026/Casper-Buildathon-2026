@@ -9,13 +9,10 @@ import {
   parseContractError,
 } from '@/services/ico/icoPurchaseService';
 import { getAllowance } from '@/services/ico/cep18Service';
-// Schema loaded inline to avoid path alias issues in test environment
-const icoSchema = JSON.parse(
-  require('fs').readFileSync(
-    require('path').resolve(__dirname, '../../docs/casper_contract_schemas/ico_schema.json'),
-    'utf-8',
-  ),
-);
+// Vite/Vitest natively transform JSON imports — works in happy-dom (where
+// readFileSync(new URL(..., import.meta.url)) fails because import.meta.url
+// resolves to an http:// URL, not file://).
+import icoSchema from '../../docs/casper_contract_schemas/ico_schema.json';
 
 // Capture args passed to Args.fromMap so we can inspect deploy arguments
 let capturedArgsMap: Record<string, unknown> = {};
@@ -355,7 +352,9 @@ describe('checkApprovalNeeded', () => {
   });
 
   it('returns needed: false for CARD without querying allowance', async () => {
-    const result = await checkApprovalNeeded('account-hash-abc', '100', 'CARD');
+    // Cast — exercising defensive fallback for unsupported currencies; the
+    // PaymentCurrency union doesn't include 'CARD' by design.
+    const result = await checkApprovalNeeded('account-hash-abc', '100', 'CARD' as never);
     expect(result).toEqual({ needed: false, currentAllowance: 0n, requiredAmount: 0n });
     expect(mockGetAllowance).not.toHaveBeenCalled();
   });

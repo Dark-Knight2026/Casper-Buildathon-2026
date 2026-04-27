@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { VestingProgressBlock, VestingEntry } from '@/pages/ico/components/shared/VestingProgressBlock';
 
@@ -19,9 +19,20 @@ vi.mock('@/pages/ico/components/shared/ProgressBar', () => ({
   ),
 }));
 
+const PINNED_NOW = new Date('2024-06-01T12:00:00Z').getTime();
+const oneDay = 24 * 60 * 60 * 1000;
+
 describe('VestingProgressBlock', () => {
-  const now = Date.now();
-  const oneDay = 24 * 60 * 60 * 1000;
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(PINNED_NOW);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const now = PINNED_NOW;
 
   const createMockEntry = (
     id: string,
