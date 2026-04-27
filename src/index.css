@@ -155,10 +155,10 @@
     --chart-4: 280 65% 60%;
     --chart-5: 340 75% 55%;
 
-    /* Badge Status Colors - Dark Mode */
-    --badge-success: 142 60% 40%;
+    /* Badge Status Colors - Dark Mode (darkened to meet WCAG AA 4.5:1 with white fg) */
+    --badge-success: 142 60% 30%;          /* ≈5.1:1 vs white */
     --badge-success-foreground: 0 0% 100%;
-    --badge-info: 214 49% 55%;
+    --badge-info: 214 49% 42%;             /* ≈4.6:1 vs white */
     --badge-info-foreground: 0 0% 100%;
 
     /* ICO Page Variables - Dark Mode */
