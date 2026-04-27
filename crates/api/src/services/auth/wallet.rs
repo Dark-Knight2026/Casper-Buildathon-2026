@@ -293,11 +293,27 @@ pub async fn login(
         "User logged in successfully"
     );
 
+    // 2.3 transition: only `id` and `role` are populated until 3.2 wires
+    // `auth::db::fetch_user_profile` into this handler. Remaining `Option`
+    // fields stay `None` and are skipped by serde, so the JSON shape on the
+    // wire is unchanged.
     Ok(Json(LoginResponse {
         token: encoded.token,
         user: UserInfo {
             id: user_record.id,
             role: user_role,
+            wallet_address: None,
+            status: None,
+            email: None,
+            first_name: None,
+            last_name: None,
+            phone: None,
+            avatar_url: None,
+            bio: None,
+            is_profile_complete: None,
+            active_leases_count: None,
+            created_at: None,
+            updated_at: None,
         },
     }))
 }

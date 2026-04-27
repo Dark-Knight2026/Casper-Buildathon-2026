@@ -17,7 +17,7 @@ pub mod routes;
 pub mod wallet;
 
 // Re-exports
-pub use db::upsert_user_by_wallet;
+pub use db::{UserProfileRecord, fetch_user_profile, upsert_user_by_wallet};
 pub use jwt::{ACCESS_TOKEN_TTL, EncodedAccessToken, decode_token, encode_access_token};
 pub use middleware::{AuthError, AuthUser};
 pub use models::UserInfo;
