@@ -43,11 +43,17 @@ export default function FeaturedProperties() {
           }}
         >
           <div className="relative w-full overflow-hidden">
-            <img
-              src={property.images[0]}
-              alt={property.title}
-              className="w-full h-56 object-cover"
-            />
+            {property.images[0] ? (
+              <img
+                src={property.images[0]}
+                alt={property.title}
+                className="w-full h-56 object-cover"
+              />
+            ) : (
+              <div className="w-full h-56 bg-muted flex items-center justify-center">
+                <span className="text-muted-foreground text-sm">No image</span>
+              </div>
+            )}
 
             <Badge variant="success" className="absolute top-3 left-3 shadow-sm">
               {STATUS_LABELS[property.status] ?? property.status}
