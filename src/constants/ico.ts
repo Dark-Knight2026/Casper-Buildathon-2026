@@ -19,9 +19,14 @@ export const ICO_CONFIG = {
     icoPackageHash: import.meta.env.VITE_ICO_PACKAGE_HASH ?? '',
     tokenAddress: import.meta.env.VITE_BIG_TOKEN_CONTRACT_HASH ?? '',
     treasuryAddress: import.meta.env.VITE_TREASURY_CONTRACT_HASH ?? '',
-    vestingAddress: import.meta.env.VITE_VESTING_CONTRACT_HASH ?? '',
+    vestingPackageHash: import.meta.env.VITE_VESTING_PACKAGE_HASH ?? '',
+    stakingPackageHash: import.meta.env.VITE_STAKING_CONTRACT_HASH ?? '',
+    // Package hashes — used for approve() transactions
     usdcAddress: import.meta.env.VITE_USDC_CONTRACT_HASH ?? '',
     usdtAddress: import.meta.env.VITE_USDT_CONTRACT_HASH ?? '',
+    // Contract instance hashes — used for state queries (allowance check, balance)
+    usdcInstanceHash: import.meta.env.VITE_USDC_CONTRACT_INSTANCE_HASH ?? '',
+    usdtInstanceHash: import.meta.env.VITE_USDT_CONTRACT_INSTANCE_HASH ?? '',
   },
 
   CASPER: {
@@ -53,8 +58,10 @@ export function validateICOConfig(): void {
     ['VITE_ICO_CONTRACT_HASH',       ICO_CONFIG.CONTRACTS.icoAddress],
     ['VITE_ICO_PACKAGE_HASH',        ICO_CONFIG.CONTRACTS.icoPackageHash],
     ['VITE_BIG_TOKEN_CONTRACT_HASH', ICO_CONFIG.CONTRACTS.tokenAddress],
-    ['VITE_USDC_CONTRACT_HASH',      ICO_CONFIG.CONTRACTS.usdcAddress],
-    ['VITE_USDT_CONTRACT_HASH',      ICO_CONFIG.CONTRACTS.usdtAddress],
+    ['VITE_USDC_CONTRACT_HASH',              ICO_CONFIG.CONTRACTS.usdcAddress],
+    ['VITE_USDT_CONTRACT_HASH',              ICO_CONFIG.CONTRACTS.usdtAddress],
+    ['VITE_USDC_CONTRACT_INSTANCE_HASH',     ICO_CONFIG.CONTRACTS.usdcInstanceHash],
+    ['VITE_USDT_CONTRACT_INSTANCE_HASH',     ICO_CONFIG.CONTRACTS.usdtInstanceHash],
   ];
 
   const missing = required.filter(([, value]) => !value).map(([key]) => key);

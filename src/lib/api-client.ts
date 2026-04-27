@@ -37,6 +37,7 @@ export class ApiClient {
   private maxRetries: number;
   private retryDelay: number;
   private onAuthError?: () => void;
+  private authToken: string | null = null;
 
   constructor(options: ApiClientOptions = {}) {
     this.baseUrl = options.baseUrl || '';
@@ -44,6 +45,18 @@ export class ApiClient {
     this.maxRetries = options.maxRetries || 3;
     this.retryDelay = options.retryDelay || 1000;
     this.onAuthError = options.onAuthError;
+  }
+
+  setAuthToken(token: string | null): void {
+    this.authToken = token;
+  }
+
+  getAuthToken(): string | null {
+    return this.authToken;
+  }
+
+  private buildAuthHeaders(): Record<string, string> {
+    return this.authToken ? { Authorization: `Bearer ${this.authToken}` } : {};
   }
 
   /**
@@ -56,11 +69,18 @@ export class ApiClient {
     const timeout = options.timeout || this.timeout;
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);
+    const signals = [controller.signal, options.signal].filter(Boolean) as AbortSignal[];
+    const combinedSignal =
+      signals.length === 1
+        ? signals[0]
+        : typeof AbortSignal.any === 'function'
+          ? AbortSignal.any(signals)
+          : signals[0]; // degraded: timeout signal only on Safari < 17.2
 
     try {
       const response = await fetch(url, {
         ...options,
-        signal: controller.signal,
+        signal: combinedSignal,
       });
       clearTimeout(timeoutId);
       return response;
@@ -130,6 +150,10 @@ export class ApiClient {
       const response = await this.fetchWithTimeout(fullUrl, {
         ...options,
         method: 'GET',
+        headers: {
+          ...this.buildAuthHeaders(),
+          ...options.headers,
+        },
       });
       return this.handleResponse<T>(response);
     };
@@ -140,7 +164,7 @@ export class ApiClient {
         delayMs: this.retryDelay,
         backoff: true,
         onRetry: (attempt, error) => {
-          logger.warn(`Retry attempt ${attempt} for GET ${url}:`, error.message);
+          logger.warn(`Retry attempt ${attempt} for GET ${url}:`, { error: error.message });
         },
       });
     }
@@ -153,7 +177,8 @@ export class ApiClient {
    */
   async post<T>(url: string, data?: unknown, options: RequestOptions = {}): Promise<T> {
     const fullUrl = `${this.baseUrl}${url}`;
-    const shouldRetry = options.retry !== false;
+    // POST is non-idempotent: retry only when explicitly requested to avoid duplicate mutations.
+    const shouldRetry = options.retry === true;
     const maxRetries = options.maxRetries || this.maxRetries;
 
     const makeRequest = async () => {
@@ -162,6 +187,7 @@ export class ApiClient {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...this.buildAuthHeaders(),
           ...options.headers,
         },
         body: data ? JSON.stringify(data) : undefined,
@@ -175,7 +201,7 @@ export class ApiClient {
         delayMs: this.retryDelay,
         backoff: true,
         onRetry: (attempt, error) => {
-          logger.warn(`Retry attempt ${attempt} for POST ${url}:`, error.message);
+          logger.warn(`Retry attempt ${attempt} for POST ${url}:`, { error: error.message });
         },
       });
     }
@@ -188,7 +214,8 @@ export class ApiClient {
    */
   async put<T>(url: string, data?: unknown, options: RequestOptions = {}): Promise<T> {
     const fullUrl = `${this.baseUrl}${url}`;
-    const shouldRetry = options.retry !== false;
+    // PUT mutates state: retry only when explicitly requested to avoid unintended repeated writes.
+    const shouldRetry = options.retry === true;
     const maxRetries = options.maxRetries || this.maxRetries;
 
     const makeRequest = async () => {
@@ -197,6 +224,7 @@ export class ApiClient {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
+          ...this.buildAuthHeaders(),
           ...options.headers,
         },
         body: data ? JSON.stringify(data) : undefined,
@@ -210,7 +238,7 @@ export class ApiClient {
         delayMs: this.retryDelay,
         backoff: true,
         onRetry: (attempt, error) => {
-          logger.warn(`Retry attempt ${attempt} for PUT ${url}:`, error.message);
+          logger.warn(`Retry attempt ${attempt} for PUT ${url}:`, { error: error.message });
         },
       });
     }
@@ -230,6 +258,10 @@ export class ApiClient {
       const response = await this.fetchWithTimeout(fullUrl, {
         ...options,
         method: 'DELETE',
+        headers: {
+          ...this.buildAuthHeaders(),
+          ...options.headers,
+        },
       });
       return this.handleResponse<T>(response);
     };
@@ -240,7 +272,7 @@ export class ApiClient {
         delayMs: this.retryDelay,
         backoff: true,
         onRetry: (attempt, error) => {
-          logger.warn(`Retry attempt ${attempt} for DELETE ${url}:`, error.message);
+          logger.warn(`Retry attempt ${attempt} for DELETE ${url}:`, { error: error.message });
         },
       });
     }
@@ -267,6 +299,19 @@ export class ApiClient {
     return getUserFriendlyError(error);
   }
 }
+
+// LeaseFi backend API client
+export const backendClient = new ApiClient({
+  baseUrl: import.meta.env.VITE_BACKEND_URL ?? '',
+  timeout: 30000,
+  maxRetries: 3,
+  retryDelay: 1000,
+  onAuthError: () => {
+    if (typeof window !== 'undefined') {
+      window.location.href = '/';
+    }
+  },
+});
 
 // Create default API client instance
 export const apiClient = new ApiClient({

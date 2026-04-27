@@ -1,16 +1,18 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { TransactionHistory } from '@/pages/ico/components/shared/TransactionHistory';
-import type { ICOTransaction as Transaction } from '@/types/ico';
+import type { ICOTransaction } from '@/types/ico';
 
-const mockTransactions: Transaction[] = [
+const PINNED_NOW = new Date('2025-02-01T12:00:00Z');
+
+const mockTransactions: ICOTransaction[] = [
   {
     id: '1',
     type: 'purchase',
     tokensReceived: 1000000,
     tokenSymbol: 'BIG',
     status: 'completed',
-    timestamp: new Date('2025-01-20T10:30:00'),
+    timestamp: new Date(PINNED_NOW.getTime() - 12 * 24 * 60 * 60 * 1000),
     txHash: '0x1234567890abcdef1234567890abcdef12345678',
   },
   {
@@ -19,7 +21,7 @@ const mockTransactions: Transaction[] = [
     tokensReceived: 66666,
     tokenSymbol: 'BIG',
     status: 'pending',
-    timestamp: new Date('2025-01-15T14:20:00'),
+    timestamp: new Date(PINNED_NOW.getTime() - 17 * 24 * 60 * 60 * 1000),
     txHash: '0xabcdef1234567890abcdef1234567890abcdef12',
   },
   {
@@ -28,11 +30,20 @@ const mockTransactions: Transaction[] = [
     tokensReceived: 333333,
     tokenSymbol: 'BIG',
     status: 'failed',
-    timestamp: new Date('2025-01-10T09:15:00'),
+    timestamp: new Date(PINNED_NOW.getTime() - 22 * 24 * 60 * 60 * 1000),
   },
 ];
 
 describe('TransactionHistory', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(PINNED_NOW);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   describe('rendering', () => {
     it('should render the title', () => {
       render(<TransactionHistory transactions={mockTransactions} />);
@@ -60,8 +71,9 @@ describe('TransactionHistory', () => {
     it('should display transaction type', () => {
       render(<TransactionHistory transactions={mockTransactions} />);
 
-      expect(screen.getAllByText('purchase')).toHaveLength(2);
-      expect(screen.getByText('claim')).toBeInTheDocument();
+      // TYPE_LABELS maps type values to capitalized labels
+      expect(screen.getAllByText('Purchase')).toHaveLength(2);
+      expect(screen.getByText('Claim')).toBeInTheDocument();
     });
 
     it('should display tokens received with + prefix', () => {
@@ -114,13 +126,13 @@ describe('TransactionHistory', () => {
 
   describe('status styling', () => {
     it('should render failed transaction with correct styling class', () => {
-      const failedTx: Transaction[] = [{
+      const failedTx: ICOTransaction[] = [{
         id: '1',
         type: 'purchase',
         tokensReceived: 1000000,
         tokenSymbol: 'BIG',
         status: 'failed',
-        timestamp: new Date('2025-01-20T10:30:00'),
+        timestamp: new Date(PINNED_NOW.getTime() - 12 * 24 * 60 * 60 * 1000),
         txHash: '0x1234567890abcdef1234567890abcdef12345678',
       }];
 
@@ -131,13 +143,13 @@ describe('TransactionHistory', () => {
     });
 
     it('should render pending transaction with correct styling class', () => {
-      const pendingTx: Transaction[] = [{
+      const pendingTx: ICOTransaction[] = [{
         id: '2',
         type: 'purchase',
         tokensReceived: 66666,
         tokenSymbol: 'BIG',
         status: 'pending',
-        timestamp: new Date('2025-01-15T14:20:00'),
+        timestamp: new Date(PINNED_NOW.getTime() - 17 * 24 * 60 * 60 * 1000),
         txHash: '0xabcdef1234567890abcdef1234567890abcdef12',
       }];
 

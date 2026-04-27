@@ -48,7 +48,7 @@ export default defineConfig(({ mode }) => {
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/cspr-cloud/, ''),
         headers: {
-          authorization: env.VITE_CSPR_CLOUD_API_KEY || '',
+          authorization: env.CSPR_CLOUD_API_KEY || '',
         },
       },
       '/api/casper-rpc': {
@@ -56,8 +56,12 @@ export default defineConfig(({ mode }) => {
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/casper-rpc/, '/rpc'),
         headers: {
-          authorization: env.VITE_CSPR_CLOUD_API_KEY || '',
+          authorization: env.CSPR_CLOUD_API_KEY || '',
         },
+      },
+      '/api/v1': {
+        target: env.VITE_BACKEND_URL || 'http://localhost:8080',
+        changeOrigin: true,
       },
       '/api/coingecko': {
         target: 'https://api.coingecko.com',

@@ -42,11 +42,13 @@ export function ICOPage() {
 
   // Show loading while fetching contract data
   // IMPORTANT: Check this BEFORE calling useICOState to avoid flash of wrong state
-  const hasLoadedData = !isLoading && timestamps !== null;
+  // timestamps === null after loading means no active/upcoming schedules → state 3
+  const hasLoadedData = !isLoading;
 
   // Determine state based on timestamps from contract
+  // null timestamps → undefined → calculateState returns 3 (post-ICO)
   const { state, setDevState, isDevOverride } = useICOState({
-    timestamps: hasLoadedData ? timestamps : undefined,
+    timestamps: hasLoadedData ? (timestamps ?? undefined) : undefined,
   });
 
   logger.debug('[ICOPage] useICOState result:', { state, timestamps });
@@ -93,6 +95,7 @@ export function ICOPage() {
   const renderStateComponent = () => {
     switch (state) {
       case 1:
+        if (!timestamps) return <PostICODashboard />;
         return (
           <PrivateSaleCountdown
             targetTimestamp={timestamps.presaleStart}
@@ -101,6 +104,7 @@ export function ICOPage() {
           />
         );
       case 2:
+        if (!timestamps) return <PostICODashboard />;
         return (
           <PrivateSaleActive
             endTimestamp={timestamps.presaleEnd}

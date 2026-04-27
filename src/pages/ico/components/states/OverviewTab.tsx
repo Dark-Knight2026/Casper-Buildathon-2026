@@ -1,49 +1,84 @@
-import { memo, useMemo } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react';
+import { cn } from '@/lib/utils';
 import { Card } from '../shared/Card';
-import { Badge } from '@/components/ui/badge';
-import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { TrendingUp, Clock, Percent, Wallet } from 'lucide-react';
 import { TransactionHistory } from '../shared/TransactionHistory';
-import { useUserTokenActions } from '@/hooks/ico/useUserTokenActions';
+import { EarningsChart } from '../shared/EarningsChart';
+import { VestingProgressBlock, type VestingEntry } from '../shared/VestingProgressBlock';
+import { UnbondingStatusBlock } from '../shared/UnbondingStatusBlock';
+import { TransactionStatusToast } from '../shared/TransactionStatusToast';
 import { useICOWallet } from '@/hooks/ico/useICOWallet';
-import { MOCK_DASHBOARD, MOCK_STAKING_INFO, MOCK_EARNINGS_DATA, MOCK_PORTFOLIO } from '@/constants/icoMockData';
+import { useTransactionHistory } from '@/hooks/ico/useTransactionHistory';
+import { useStakingPortfolio } from '@/hooks/ico/useStakingPortfolio';
+import { useStakingInfo } from '@/hooks/ico/useStakingInfo';
+import { useVestingSchedules } from '@/hooks/ico/useVestingSchedules';
+import { useUnbondingStatus } from '@/hooks/ico/useUnbondingStatus';
+import { useICOProgress } from '@/hooks/ico/useICOProgress';
+import { useICOActions } from '@/hooks/ico/useICOActions';
+import { deriveAccountHash } from '@/lib/blockchain/accountUtils';
 import { formatNumber, formatUSD } from '../../utils/formatters';
+import { ICO_CONFIG } from '@/constants/ico';
 
-const chartConfig = {
-  earnings: {
-    label: 'Earnings',
-    color: '#1F7A63',  /* Primary green */
-  },
-};
+const PAGE_SIZE = 8;
 
 export const OverviewTab = memo(function OverviewTab() {
-  const { account } = useICOWallet();
-  const { transactions } = useUserTokenActions(account?.publicKey);
+  const { account, clickRef } = useICOWallet();
+  const accountHash = account?.publicKey ? deriveAccountHash(account.publicKey) : null;
+  const [page, setPage] = useState(1);
+  // Reset pagination when the active wallet changes — otherwise we'd request
+  // page N for an account that may have fewer pages and show empty results.
+  useEffect(() => { setPage(1); }, [accountHash]);
+  const { transactions, totalPages } = useTransactionHistory(accountHash, page, PAGE_SIZE);
+  const { data: stakingPortfolio } = useStakingPortfolio(accountHash);
+  const { data: stakingInfo } = useStakingInfo(accountHash);
+  const { data: vestingSchedules } = useVestingSchedules(accountHash);
+  const { data: icoProgress } = useICOProgress();
+  const {
+    claimState,
+    handleClaim,
+    claimingId,
+    claimToastVisible,
+    setClaimToastVisible,
+    withdrawState,
+    withdraw,
+    resetWithdraw,
+    withdrawToastVisible,
+    setWithdrawToastVisible,
+  } = useICOActions(account?.publicKey ?? null, clickRef ?? null);
 
+  const vestingEntries = useMemo<VestingEntry[]>(() => {
+    if (!vestingSchedules?.data?.length) return [];
+    return vestingSchedules.data.map((s) => ({
+      id: s.id,
+      lockedAmount: s.lockedAmount,
+      purchaseTimestamp: s.purchaseTimestamp,
+      unlockTimestamp: s.unlockTimestamp,
+      unlockedAmount: s.unlockedAmount,
+      vestingEndTimestamp: s.vestingEndTimestamp,
+    }));
+  }, [vestingSchedules]);
+
+  const { data: unbondingData, isLoading: unbondingLoading } = useUnbondingStatus(accountHash ?? null);
   const dashboardCards = useMemo(() => [
     {
       label: 'BIG Balance',
-      value: MOCK_DASHBOARD.bigInWallet,
-      usdValue: '100.00',
+      value: stakingPortfolio?.bigInWallet ?? 0,
       icon: Wallet,
       color: 'var(--ico-card-wallet)',
     },
     {
       label: 'BIG Staked',
-      value: MOCK_DASHBOARD.bigStaked,
-      usdValue: '750.00',
+      value: stakingPortfolio?.bigStaked ?? 0,
       icon: TrendingUp,
       color: 'var(--ico-card-staked)',
     },
     {
       label: 'Rewards Earned',
-      value: MOCK_DASHBOARD.rewardsEarned,
-      usdValue: '8.25',
+      value: stakingPortfolio?.rewardsEarned ?? 0,
       icon: TrendingUp,
       color: 'var(--ico-card-rewards)',
     },
-  ], []);
+  ], [stakingPortfolio]);
 
   return (
     <div className="space-y-4">
@@ -57,17 +92,14 @@ export const OverviewTab = memo(function OverviewTab() {
             >
               <TrendingUp className="w-5 h-5" style={{ color: 'hsl(var(--ico-card-total))' }} />
             </div>
-            <div className="flex items-center gap-2">
-              <p className="text-sm md:text-xl text-[hsl(var(--ico-text-secondary))]">BIG Value</p>
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0 whitespace-nowrap text-[hsl(var(--ico-text-muted))]">Demo Data</Badge>
-            </div>
+            <p className="text-sm md:text-xl text-[hsl(var(--ico-text-secondary))]">BIG Value</p>
           </div>
 
           <p className="text-xl font-bold text-[hsl(var(--ico-text-primary))]">
-            {formatNumber(MOCK_DASHBOARD.totalBig)}
+            {formatNumber(stakingPortfolio?.totalBig ?? 0)}
           </p>
           <p className="text-sm md:text-xl text-[hsl(var(--ico-text-muted))]">
-            {formatUSD(MOCK_DASHBOARD.estimatedUsdcValue)}
+            {formatUSD(stakingPortfolio?.estimatedUsdValue ?? 0)}
           </p>
         </div>
       </Card>
@@ -89,15 +121,9 @@ export const OverviewTab = memo(function OverviewTab() {
                   />
                 </div>
                 <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <p className="text-sm text-[hsl(var(--ico-text-secondary))]">{card.label}</p>
-                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 whitespace-nowrap text-[hsl(var(--ico-text-muted))]">Demo Data</Badge>
-                  </div>
+                  <p className="text-sm text-[hsl(var(--ico-text-secondary))] mb-1">{card.label}</p>
                   <p className="text-xl font-bold text-[hsl(var(--ico-text-primary))]">
                     {formatNumber(card.value)}
-                  </p>
-                  <p className="text-sm text-[hsl(var(--ico-text-muted))]">
-                    {formatUSD(card.usdValue)}
                   </p>
                 </div>
               </div>
@@ -111,10 +137,7 @@ export const OverviewTab = memo(function OverviewTab() {
         {/* Staking Info Card */}
         <Card className="p-5">
           <div className="w-full">
-            <div className="flex items-center gap-2 mb-4">
-              <h3 className="text-lg font-semibold text-[hsl(var(--ico-text-primary))]">Staking Info</h3>
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0 whitespace-nowrap text-[hsl(var(--ico-text-muted))]">Demo Data</Badge>
-            </div>
+            <h3 className="text-lg font-semibold text-[hsl(var(--ico-text-primary))] mb-4">Staking Info</h3>
             <div className="space-y-4">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-lg bg-[hsl(var(--ico-brand-accent)/0.2)] flex items-center justify-center">
@@ -123,7 +146,7 @@ export const OverviewTab = memo(function OverviewTab() {
                 <div>
                   <p className="text-sm text-[hsl(var(--ico-text-secondary))]">Next Rewards</p>
                   <p className="text-lg font-semibold text-[hsl(var(--ico-text-primary))]">
-                    {MOCK_STAKING_INFO.nextRewards}
+                    —
                   </p>
                 </div>
               </div>
@@ -134,7 +157,7 @@ export const OverviewTab = memo(function OverviewTab() {
                 <div>
                   <p className="text-sm text-[hsl(var(--ico-text-secondary))]">Current APY</p>
                   <p className="text-lg font-semibold text-[hsl(var(--ico-text-primary))]">
-                    {MOCK_STAKING_INFO.currentAPY}%
+                    {formatNumber(stakingInfo?.currentApy ?? 0)}%
                   </p>
                 </div>
               </div>
@@ -142,70 +165,97 @@ export const OverviewTab = memo(function OverviewTab() {
           </div>
         </Card>
 
-        {/* Earnings Overview Chart */}
-        <Card className="p-5 md:col-span-2">
-          <div className="w-full">
-            <div className="flex items-center gap-2 mb-4">
-              <h3 className="text-lg font-semibold text-[hsl(var(--ico-text-primary))]">Earnings Overview</h3>
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0 whitespace-nowrap text-[hsl(var(--ico-text-muted))]">Demo Data</Badge>
-            </div>
-            <ChartContainer config={chartConfig} className="h-[200px] w-full">
-              <AreaChart data={MOCK_EARNINGS_DATA} margin={{ left: 12, right: 12 }}>
-                <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="hsl(var(--ico-border-color))" />
-                <XAxis
-                  dataKey="month"
-                  tickLine={false}
-                  axisLine={false}
-                  tickMargin={8}
-                  tick={{ fill: 'hsl(var(--ico-text-muted))', fontSize: 12 }}
-                />
-                <YAxis
-                  tickLine={false}
-                  axisLine={false}
-                  tick={{ fill: 'hsl(var(--ico-text-muted))', fontSize: 12 }}
-                  tickFormatter={(value) => `$${value}`}
-                />
-                <ChartTooltip
-                  cursor={false}
-                  content={<ChartTooltipContent indicator="line" />}
-                />
-                <Area
-                  type="natural"
-                  dataKey="earnings"
-                  fill="var(--color-earnings)"
-                  fillOpacity={0.4}
-                  stroke="var(--color-earnings)"
-                />
-              </AreaChart>
-            </ChartContainer>
-          </div>
-        </Card>
+        <EarningsChart accountHash={accountHash} className="md:col-span-2" />
       </div>
+
+      {/* Unbonding Status */}
+      <UnbondingStatusBlock
+        data={unbondingData}
+        isLoading={unbondingLoading}
+        tokenSymbol={ICO_CONFIG.TOKEN.symbol}
+        onWithdraw={withdraw}
+        withdrawStep={withdrawState.step}
+      />
+
+      {/* Vesting Progress */}
+      {vestingEntries.length > 0 && (
+        <Card className="p-5">
+          <VestingProgressBlock
+            vestingEntries={vestingEntries}
+            tokenSymbol={ICO_CONFIG.TOKEN.symbol}
+            onClaim={handleClaim}
+            claimingId={claimingId}
+            claimStep={claimState.step}
+            hasActiveUnbonding={!!(unbondingData?.unbondingAmount && !unbondingData.isWithdrawable)}
+            tokenPrice={icoProgress?.priceUsd}
+          />
+        </Card>
+      )}
 
       {/* Third Row: Portfolio Value + Transactions */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Estimated Portfolio Value */}
         <Card className="p-5">
           <div className="w-full">
-            <div className="flex items-center gap-2 mb-4">
-              <h3 className="text-lg font-semibold text-[hsl(var(--ico-text-primary))]">Estimated Portfolio Value</h3>
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0 whitespace-nowrap text-[hsl(var(--ico-text-muted))]">Demo Data</Badge>
-            </div>
+            <h3 className="text-lg font-semibold text-[hsl(var(--ico-text-primary))] mb-4">Estimated Portfolio Value</h3>
             <div className="space-y-2">
               <p className="text-3xl font-bold text-[hsl(var(--ico-text-primary))]">
-                {formatUSD(MOCK_PORTFOLIO.estimatedValue)}
+                {formatUSD(stakingPortfolio?.estimatedUsdValue ?? 0)}
               </p>
-              <p className="text-sm text-[hsl(var(--ico-state-active))]">
-                {MOCK_PORTFOLIO.change24h}% (24h)
-              </p>
+              {(() => {
+                const change = stakingPortfolio?.change24hPercent ?? 0;
+                return (
+                  <p className={cn('text-sm', change >= 0 ? 'text-[hsl(var(--ico-state-active))]' : 'text-red-400')}>
+                    {change >= 0 ? '+' : ''}{change}% (24h)
+                  </p>
+                );
+              })()}
               <p className='text-[hsl(var(--ico-text-secondary))]'>Current USD value of your holdings</p>
             </div>
           </div>
         </Card>
 
         {/* Transactions Card */}
-        <TransactionHistory transactions={transactions} className="md:col-span-2 p-5" />
+        <div className="md:col-span-2">
+          <TransactionHistory
+            transactions={transactions}
+            currentPage={page}
+            totalPages={totalPages}
+            onPageChange={setPage}
+            className="p-5"
+          />
+        </div>
       </div>
+
+      {/* Claim Transaction Toast */}
+      <TransactionStatusToast
+        isVisible={claimToastVisible}
+        onClose={() => setClaimToastVisible(false)}
+        step={claimState.step}
+        txHash={claimState.txHash}
+        tokensReceived={null}
+        error={claimState.error}
+        tokenSymbol={ICO_CONFIG.TOKEN.symbol}
+        successTitle="Claim Successful!"
+        errorTitle="Claim Failed"
+        pendingTitle="Claiming tokens..."
+      />
+
+      {/* Withdraw Transaction Toast */}
+      <TransactionStatusToast
+        isVisible={withdrawToastVisible}
+        // Reset internal state when toast is dismissed so a stale 'failed' step
+        // doesn't linger past the user's acknowledgement of the error.
+        onClose={() => { setWithdrawToastVisible(false); resetWithdraw(); }}
+        step={withdrawState.step}
+        txHash={withdrawState.txHash}
+        tokensReceived={null}
+        error={withdrawState.error}
+        tokenSymbol={ICO_CONFIG.TOKEN.symbol}
+        successTitle="Withdraw Successful!"
+        errorTitle="Withdraw Failed"
+        pendingTitle="Withdrawing tokens..."
+      />
     </div>
   );
 });

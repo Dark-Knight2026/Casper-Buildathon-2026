@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, waitFor, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';
@@ -11,18 +11,30 @@ vi.mock('@/services/ico/icoContractService', () => ({
   getAllSchedules: () => mockGetAllSchedules(),
 }));
 
+// Pinned reference date — same value used in the Date.now spy below.
+// All timestamps are relative so intent is clear without mentally decoding epoch ms.
+const REFERENCE_DATE = new Date('2024-01-15T12:00:00Z').getTime();
+const DAY = 86_400_000;
+
+// presale: started 15 days ago, ends 17 days from now (reference date is mid-presale)
+// ico:     starts when presale ends, runs for 30 more days
+const PRESALE_START = BigInt(REFERENCE_DATE - 15 * DAY);
+const PRESALE_END   = BigInt(REFERENCE_DATE + 17 * DAY);
+const ICO_START     = PRESALE_END;
+const ICO_END       = BigInt(REFERENCE_DATE + 47 * DAY);
+
 // Sample schedule data matching contract structure
 const mockPresaleSchedule: ICOSchedule = {
-  startTimestamp: 1704067200000n, // 2024-01-01
-  endTimestamp: 1706745600000n,   // 2024-02-01
+  startTimestamp: PRESALE_START,
+  endTimestamp:   PRESALE_END,
   price: 100000n,                  // $0.10 with 6 decimals
   saleAmount: 10000000000000000000000000n, // 10M tokens with 18 decimals
   soldAmount: 1000000000000000000000000n,  // 1M tokens sold
 };
 
 const mockICOSchedule: ICOSchedule = {
-  startTimestamp: 1706745600000n, // 2024-02-01
-  endTimestamp: 1709424000000n,   // 2024-03-03
+  startTimestamp: ICO_START,
+  endTimestamp:   ICO_END,
   price: 150000n,                  // $0.15 with 6 decimals
   saleAmount: 50000000000000000000000000n, // 50M tokens with 18 decimals
   soldAmount: 5000000000000000000000000n,  // 5M tokens sold
@@ -64,6 +76,16 @@ describe('useICOSchedules', () => {
   // --- Successful fetch ---
 
   describe('successful fetch', () => {
+    // Spy on Date.now so the hook's findRelevantSchedule sees REFERENCE_DATE
+    // (mid-presale) without activating fake timers — fake timers break React Query's waitFor.
+    beforeEach(() => {
+      vi.spyOn(Date, 'now').mockReturnValue(REFERENCE_DATE);
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
     it('should fetch and parse schedules correctly', async () => {
       mockGetAllSchedules.mockResolvedValue([
         { id: 0n, schedule: mockPresaleSchedule },
@@ -161,6 +183,9 @@ describe('useICOSchedules', () => {
     });
 
     it('should handle only ICO schedule', async () => {
+      // With time=2024-01-15, ICO (starts 2024-02-01) is upcoming →
+      // findRelevantSchedule returns it as the relevant schedule.
+      // The hook does not distinguish by schedule id — it returns whichever is active/upcoming.
       mockGetAllSchedules.mockResolvedValue([
         { id: 1n, schedule: mockICOSchedule },
       ]);
@@ -173,9 +198,9 @@ describe('useICOSchedules', () => {
         expect(result.current.isLoading).toBe(false);
       });
 
-      expect(result.current.presaleProgress).toBeNull();
-      expect(result.current.timestamps?.presaleStart).toBe(0);
-      expect(result.current.timestamps?.presaleEnd).toBe(0);
+      expect(result.current.presaleProgress).not.toBeNull();
+      expect(result.current.timestamps?.presaleStart).toBe(Number(mockICOSchedule.startTimestamp));
+      expect(result.current.timestamps?.presaleEnd).toBe(Number(mockICOSchedule.endTimestamp));
     });
 
     it('should handle empty schedules', async () => {

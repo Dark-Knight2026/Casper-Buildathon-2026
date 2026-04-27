@@ -5,6 +5,7 @@ interface UserTokenBalanceProps {
   tokensPurchased: number;
   tokenPrice: number;
   tokenSymbol: string;
+  currentValue?: number;
   className?: string;
 }
 
@@ -12,9 +13,11 @@ export function UserTokenBalance({
   tokensPurchased,
   tokenPrice,
   tokenSymbol,
+  currentValue: currentValueProp,
   className,
 }: UserTokenBalanceProps) {
-  const currentValue = tokensPurchased * tokenPrice;
+  const safeTokensPurchased = tokensPurchased ?? 0;
+  const currentValue = currentValueProp ?? safeTokensPurchased * tokenPrice;
 
   return (
     <Card className={cn('p-6 w-full', className)}>
@@ -28,7 +31,7 @@ export function UserTokenBalance({
               Tokens Purchased
             </span>
             <span className="text-2xl font-bold text-[hsl(var(--ico-text-primary))]">
-              {tokensPurchased.toLocaleString()} {tokenSymbol}
+              {safeTokensPurchased.toLocaleString()} {tokenSymbol}
             </span>
           </div>
           <div className="flex flex-col gap-1">

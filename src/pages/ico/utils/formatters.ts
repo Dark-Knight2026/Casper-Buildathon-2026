@@ -5,8 +5,11 @@
 /**
  * Formats a number with locale-specific thousand separators
  */
-export const formatNumber = (value: string | number): string => {
-  return Number(value).toLocaleString();
+export const formatNumber = (value: string | number, precision = 2): string => {
+  return Number(value).toLocaleString(undefined, {
+    minimumFractionDigits: precision,
+    maximumFractionDigits: precision,
+  });
 };
 
 /**

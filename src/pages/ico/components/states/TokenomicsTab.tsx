@@ -1,28 +1,13 @@
 import { memo } from 'react';
+import { useReleaseSchedule } from '@/hooks/ico/useReleaseSchedule';
+import { useTokenSupply } from '@/hooks/ico/useTokenSupply';
 import { Card } from '../shared/Card';
 import { SubTitle } from '../shared/SubTitle';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 import { AreaChart, Area, XAxis, YAxis, BarChart, Bar, Cell, CartesianGrid } from 'recharts';
 import { Coins, CircleDot } from 'lucide-react';
 
-const TOTAL_SUPPLY = '5 000 000 000';
-const CIRCULATING_SUPPLY = '1 000 000 000';
 
-// Vesting schedule based on whitepaper section 4.4
-// Liquidity (1B) immediate, Private Sale (1B) 6-mo cliff + 12-mo vest,
-// Staking Pool (1B) 6%/yr release, Team (750M) + Advisors (250M) 12-mo cliff + 48-mo vest,
-// Treasury (1B) reserved
-const MOCK_VESTING_DATA = [
-  { month: '0', released: 1_000_000_000 },    // Liquidity immediate
-  { month: '6', released: 1_000_000_000 },     // Private Sale cliff starts
-  { month: '12', released: 1_810_000_000 },    // Private Sale vesting + Staking 6% + Team/Advisors cliff
-  { month: '18', released: 2_290_000_000 },
-  { month: '24', released: 2_810_000_000 },
-  { month: '30', released: 3_100_000_000 },
-  { month: '36', released: 3_410_000_000 },
-  { month: '48', released: 3_810_000_000 },
-  { month: '60', released: 4_060_000_000 },    // Team/Advisors fully vested
-];
 
 // Whitepaper section 4.3 — Token Distribution
 const ALLOCATION_DATA = [
@@ -42,13 +27,17 @@ const allocationChartConfig = {
   value: { label: 'Allocation %', color: '#1F7A63' },
 };
 
-const VestingChart = memo(function VestingChart() {
+interface VestingChartProps {
+  data: { month: string; released: number }[];
+}
+
+const VestingChart = memo(function VestingChart({ data }: VestingChartProps) {
   return (
     <ChartContainer
       config={vestingChartConfig}
       className="h-62.5 w-full aspect-auto md:aspect-video"
     >
-      <AreaChart data={MOCK_VESTING_DATA} margin={{ left: 12, right: 12, top: 10, bottom: 20 }}>
+      <AreaChart data={data} margin={{ left: 12, right: 12, top: 10, bottom: 20 }}>
         <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="hsl(var(--ico-border-color))" />
         <XAxis
           dataKey="month"
@@ -145,6 +134,9 @@ const AllocationChart = memo(function AllocationChart() {
 });
 
 export function TokenomicsTab() {
+  const { data: releaseSchedule } = useReleaseSchedule();
+  const { data: tokenSupply } = useTokenSupply();
+
   return (
     <div className="space-y-6">
       <SubTitle>Tokenomics</SubTitle>
@@ -159,7 +151,7 @@ export function TokenomicsTab() {
             <div>
               <p className="text-sm text-[hsl(var(--ico-text-secondary))]">Total Supply</p>
               <p className="text-lg font-semibold text-[hsl(var(--ico-text-primary))]">
-                {TOTAL_SUPPLY} BIG
+                {tokenSupply?.totalSupply.toLocaleString() ?? '—'} BIG
               </p>
             </div>
           </div>
@@ -172,7 +164,7 @@ export function TokenomicsTab() {
             <div>
               <p className="text-sm text-[hsl(var(--ico-text-secondary))]">Circulating Supply</p>
               <p className="text-lg font-semibold text-[hsl(var(--ico-text-primary))]">
-                {CIRCULATING_SUPPLY} BIG
+                {tokenSupply?.circulatingSupply.toLocaleString() ?? '—'} BIG
               </p>
             </div>
           </div>
@@ -185,7 +177,7 @@ export function TokenomicsTab() {
             <h3 className="text-lg font-semibold text-[hsl(var(--ico-text-primary))] mb-4">
               Vesting & Release Schedule
             </h3>
-            <VestingChart />
+            <VestingChart data={releaseSchedule?.data ?? []} />
           </div>
         </Card>
 

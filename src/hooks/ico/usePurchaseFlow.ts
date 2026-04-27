@@ -23,6 +23,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import logger from '@/lib/logger';
 import type { PaymentCurrency } from '@/types/ico';
 import { useICOWallet } from './useICOWallet';
+import type { ICSPRClickSDK } from '@make-software/csprclick-core-types';
 import { useWalletBalances } from './useWalletBalances';
 import { usePurchaseToken, type PurchaseState } from './usePurchaseToken';
 import { useCSPRPrice } from '@/hooks/useCSPRPrice';
@@ -44,6 +45,7 @@ interface UsePurchaseFlowReturn {
   isConnected: boolean;
   account: { publicKey: string } | null;
   connect: () => void;
+  clickRef: ICSPRClickSDK | null | undefined;
   balances: {
     cspr: number;
     usdt: number;
@@ -111,6 +113,7 @@ export function usePurchaseFlow({
   // csprPriceUsd is display-only — used for UI estimations (token preview, USD equivalent).
   // The smart contract determines the actual exchange rate on-chain.
   const { priceUSD: csprPriceUsd, isStale: csprPriceStale } = useCSPRPrice();
+
   // Modal and toast state
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [pendingPurchase, setPendingPurchase] = useState<PendingPurchase | null>(null);
@@ -129,14 +132,23 @@ export function usePurchaseFlow({
       onSuccess: (txHash, tokensReceived) => {
         logger.debug('Purchase successful', { txHash, tokensReceived });
         queryClient.invalidateQueries({ queryKey: ['ico-schedules'] });
+        queryClient.invalidateQueries({ queryKey: ['ico-progress'] });
+        queryClient.invalidateQueries({ queryKey: ['ico-balance'] });
         queryClient.invalidateQueries({ queryKey: ['user-token-actions'] });
+        queryClient.invalidateQueries({ queryKey: ['vesting-schedules'] });
+        queryClient.invalidateQueries({ queryKey: ['account-transactions'] });
         setShowToast(true);
         setShowConfirmModal(false);
         setPendingPurchase(null);
         onPurchaseSuccess?.(txHash, tokensReceived);
         // Refresh balances after purchase — delay to let the blockchain settle
         refetchBalances();
-        setTimeout(() => refetchBalances(), 15_000);
+        setTimeout(() => {
+          refetchBalances();
+          queryClient.invalidateQueries({ queryKey: ['ico-balance'] });
+          queryClient.invalidateQueries({ queryKey: ['vesting-schedules'] });
+          queryClient.invalidateQueries({ queryKey: ['account-transactions'] });
+        }, 15_000);
       },
       onError: (error) => {
         logger.error('Purchase failed:', error);
@@ -174,9 +186,11 @@ export function usePurchaseFlow({
     if (!purchaseState.isProcessing) {
       setShowConfirmModal(false);
       setPendingPurchase(null);
-      resetPurchase();
+      if (!showToast) {
+        resetPurchase();
+      }
     }
-  }, [purchaseState.isProcessing, resetPurchase]);
+  }, [purchaseState.isProcessing, showToast, resetPurchase]);
 
   // Open fiat on-ramp to buy CSPR with card
   const buyCspr = useCallback(() => {
@@ -230,6 +244,7 @@ export function usePurchaseFlow({
     isConnected,
     account,
     connect,
+    clickRef,
     balances,
     balanceError,
     balancesLoading,

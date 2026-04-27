@@ -1,7 +1,30 @@
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RewardsTab } from '@/pages/ico/components/states/RewardsTab';
+
+// ── Fetch boundary mock ─────────────────────────────────────────────
+const mockGet = vi.fn();
+vi.mock('@/lib/api-client', () => ({
+  backendClient: { get: (...args: unknown[]) => mockGet(...args) },
+}));
+
+// ── useICOWallet: cannot integrate ───────────────────────────────────
+// Depends on useClickRef() from @make-software/csprclick-ui, which is a
+// browser-extension event-emitter with no jsdom equivalent. Any attempt to
+// run the real hook will throw "useClickRef must be used inside CsprClickProvider".
+vi.mock('@/hooks/ico/useICOWallet', () => ({
+  useICOWallet: () => ({
+    account: { publicKey: 'fake-public-key', accountHash: 'fake-account-hash', provider: 'casper' },
+    isConnected: true,
+  }),
+}));
+
+vi.mock('@/lib/blockchain/accountUtils', () => ({
+  deriveAccountHash: () => 'fake-account-hash',
+  stripAccountHashPrefix: (addr: string) => addr.replace('account-hash-', ''),
+}));
 
 // Mock the child components
 vi.mock('@/pages/ico/components/shared/Card', () => ({
@@ -37,10 +60,23 @@ vi.mock('recharts', () => ({
 }));
 
 const renderWithRouter = (ui: React.ReactElement) => {
-  return render(<BrowserRouter>{ui}</BrowserRouter>);
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter>{ui}</BrowserRouter>
+    </QueryClientProvider>
+  );
 };
 
 describe('RewardsTab', () => {
+  beforeEach(() => {
+    mockGet.mockResolvedValue({ stakedTokens: 500000, currentApy: 12.5, totalRewardsEarned: 0 });
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
   describe('rendering', () => {
     it('should render the Staking title', () => {
       renderWithRouter(<RewardsTab />);
@@ -63,25 +99,25 @@ describe('RewardsTab', () => {
       expect(stakingTitles.length).toBeGreaterThan(0);
     });
 
-    it('should display Staked Tokens', () => {
+    it('should display Staked Tokens', async () => {
       renderWithRouter(<RewardsTab />);
 
       expect(screen.getByText('Staked Tokens')).toBeInTheDocument();
-      expect(screen.getByText('500,000 BIG')).toBeInTheDocument();
+      await waitFor(() => expect(screen.getByText('500000 BIG')).toBeInTheDocument());
     });
 
-    it('should display Current APY', () => {
+    it('should display Current APY', async () => {
       renderWithRouter(<RewardsTab />);
 
       expect(screen.getByText('Current APY')).toBeInTheDocument();
-      expect(screen.getByText('12.5%')).toBeInTheDocument();
+      await waitFor(() => expect(screen.getByText(/12[.,]5\d*%/)).toBeInTheDocument());
     });
 
     it('should display Next Rewards', () => {
       renderWithRouter(<RewardsTab />);
 
       expect(screen.getByText('Next Rewards')).toBeInTheDocument();
-      expect(screen.getByText('2d 14h 32m')).toBeInTheDocument();
+      expect(screen.getByText('—')).toBeInTheDocument();
     });
   });
 

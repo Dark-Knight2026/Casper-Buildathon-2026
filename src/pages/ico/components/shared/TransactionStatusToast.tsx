@@ -6,12 +6,18 @@ import type { PurchaseStep } from '@/hooks/ico/usePurchaseToken';
 interface TransactionStatusToastProps {
   isVisible: boolean;
   onClose: () => void;
-  step: PurchaseStep;
+  step: PurchaseStep | string;
   txHash: string | null;
   tokensReceived: string | null;
   error: string | null;
   tokenSymbol: string;
   autoCloseDelay?: number;
+  /** Override the success title. Defaults to "Purchase Successful!" */
+  successTitle?: string;
+  /** Override the error title. Defaults to "Purchase Failed" */
+  errorTitle?: string;
+  /** Override the pending title. Defaults to "Processing..." */
+  pendingTitle?: string;
 }
 
 export function TransactionStatusToast({
@@ -23,6 +29,9 @@ export function TransactionStatusToast({
   error,
   tokenSymbol,
   autoCloseDelay = 8000,
+  successTitle = 'Purchase Successful!',
+  errorTitle = 'Purchase Failed',
+  pendingTitle = 'Processing...',
 }: TransactionStatusToastProps) {
   // Auto-close on success after delay
   useEffect(() => {
@@ -57,7 +66,7 @@ export function TransactionStatusToast({
           <div className="flex items-center gap-3">
             {/* Icon */}
             {isSuccess && (
-              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center">
+              <div className="shrink-0 w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center">
                 <svg
                   className="w-5 h-5 text-green-400"
                   fill="none"
@@ -74,7 +83,7 @@ export function TransactionStatusToast({
               </div>
             )}
             {isError && (
-              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-red-500/20 flex items-center justify-center">
+              <div className="shrink-0 w-8 h-8 rounded-full bg-red-500/20 flex items-center justify-center">
                 <svg
                   className="w-5 h-5 text-red-400"
                   fill="none"
@@ -101,9 +110,9 @@ export function TransactionStatusToast({
                   !isSuccess && !isError && 'text-[hsl(var(--ico-brand-secondary))]',
                 )}
               >
-                {isSuccess && 'Purchase Successful!'}
-                {isError && 'Purchase Failed'}
-                {!isSuccess && !isError && 'Processing...'}
+                {isSuccess && successTitle}
+                {isError && errorTitle}
+                {!isSuccess && !isError && pendingTitle}
               </h4>
             </div>
           </div>
@@ -111,7 +120,7 @@ export function TransactionStatusToast({
           {/* Close button */}
           <button
             onClick={onClose}
-            className="flex-shrink-0 text-white/50 hover:text-white transition-colors"
+            className="shrink-0 text-white/50 hover:text-white transition-colors"
             aria-label="Close notification"
           >
             <svg

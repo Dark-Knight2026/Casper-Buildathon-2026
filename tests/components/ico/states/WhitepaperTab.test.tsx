@@ -172,6 +172,7 @@ describe('WhitepaperTab', () => {
 
       const viewer = screen.getByLabelText('BIG WhitePaper') as HTMLObjectElement;
       expect(viewer.tagName.toLowerCase()).toBe('object');
+      expect(viewer.getAttribute('data')).toContain('BIG_WhitePaper.pdf');
     });
   });
 

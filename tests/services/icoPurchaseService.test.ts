@@ -9,13 +9,10 @@ import {
   parseContractError,
 } from '@/services/ico/icoPurchaseService';
 import { getAllowance } from '@/services/ico/cep18Service';
-// Schema loaded inline to avoid path alias issues in test environment
-const icoSchema = JSON.parse(
-  require('fs').readFileSync(
-    require('path').resolve(__dirname, '../../docs/casper_contract_schemas/ico_schema.json'),
-    'utf-8',
-  ),
-);
+// Vite/Vitest natively transform JSON imports — works in happy-dom (where
+// readFileSync(new URL(..., import.meta.url)) fails because import.meta.url
+// resolves to an http:// URL, not file://).
+import icoSchema from '../../docs/casper_contract_schemas/ico_schema.json';
 
 // Capture args passed to Args.fromMap so we can inspect deploy arguments
 let capturedArgsMap: Record<string, unknown> = {};
@@ -355,7 +352,9 @@ describe('checkApprovalNeeded', () => {
   });
 
   it('returns needed: false for CARD without querying allowance', async () => {
-    const result = await checkApprovalNeeded('account-hash-abc', '100', 'CARD');
+    // Cast — exercising defensive fallback for unsupported currencies; the
+    // PaymentCurrency union doesn't include 'CARD' by design.
+    const result = await checkApprovalNeeded('account-hash-abc', '100', 'CARD' as never);
     expect(result).toEqual({ needed: false, currentAllowance: 0n, requiredAmount: 0n });
     expect(mockGetAllowance).not.toHaveBeenCalled();
   });
@@ -386,16 +385,16 @@ describe('parseContractError', () => {
     expect(parseContractError(undefined)).toBe('Deploy failed');
   });
 
-  it('maps "User error: 59005" to "Invalid amount to spend"', () => {
-    expect(parseContractError('User error: 59005')).toBe('Invalid amount to spend');
+  it('maps "User error: 505" to "Invalid amount to spend"', () => {
+    expect(parseContractError('User error: 505')).toBe('Invalid amount to spend');
   });
 
-  it('maps "User error: 59012" to "Purchase amount below minimum"', () => {
-    expect(parseContractError('User error: 59012')).toBe('Purchase amount below minimum');
+  it('maps "User error: 512" to "Invalid purchase amount"', () => {
+    expect(parseContractError('User error: 512')).toBe('Invalid purchase amount');
   });
 
-  it('maps "User error: 59007" to no active ICO schedule message', () => {
-    expect(parseContractError('User error: 59007')).toBe('No active ICO schedule — sale is not currently open');
+  it('maps "User error: 507" to no active ICO schedule message', () => {
+    expect(parseContractError('User error: 507')).toBe('No active ICO schedule — sale is not currently open');
   });
 
   it('returns raw message for unknown error code', () => {

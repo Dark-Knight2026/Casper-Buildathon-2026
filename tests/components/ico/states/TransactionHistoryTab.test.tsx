@@ -5,6 +5,14 @@ import React from 'react';
 
 const mockFetch = vi.fn();
 
+vi.mock('@/lib/api-client', async (importOriginal) => {
+  const mod = await importOriginal<typeof import('@/lib/api-client')>();
+  return {
+    ...mod,
+    backendClient: new mod.ApiClient({ maxRetries: 1, retryDelay: 0 }),
+  };
+});
+
 vi.mock('@/constants/ico', () => ({
   ICO_CONFIG: {
     CASPER: { explorerUrl: 'https://explorer.example.com' },
@@ -70,6 +78,8 @@ function renderTab() {
 function mockOkResponse(data: object[] = [], itemCount = data.length, pageCount = 1) {
   mockFetch.mockResolvedValueOnce({
     ok: true,
+    status: 200,
+    headers: { get: () => 'application/json' },
     json: async () => ({ item_count: itemCount, page_count: pageCount, data }),
   });
 }

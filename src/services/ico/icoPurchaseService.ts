@@ -59,8 +59,9 @@ export interface PurchaseParams {
   scheduleId?: bigint;
   /**
    * Cached allowance from a prior approve tx (raw units).
-   * Bypasses the on-chain query, which fails for Odra CEP-18 contracts
-   * because they use a different storage layout than standard CEP-18.
+   * Session-level optimization to skip an extra RPC query when we already
+   * know the allowance from a just-completed approve in the same session.
+   * Falls back to on-chain `getAllowance` when undefined.
    */
   cachedAllowance?: bigint;
 }
@@ -123,7 +124,8 @@ function getDecimals(currency: PaymentCurrency): number {
 }
 
 /**
- * Gets the contract hash for a CEP-18 currency.
+ * Gets the package hash for a CEP-18 currency.
+ * Used for approve() transactions — Odra contracts are called via package hash.
  */
 function getCurrencyContractHash(currency: PaymentCurrency): string | null {
   switch (currency) {
@@ -131,6 +133,21 @@ function getCurrencyContractHash(currency: PaymentCurrency): string | null {
       return ICO_CONFIG.CONTRACTS.usdtAddress;
     case 'USDC':
       return ICO_CONFIG.CONTRACTS.usdcAddress;
+    default:
+      return null;
+  }
+}
+
+/**
+ * Gets the contract instance hash for a CEP-18 currency.
+ * Used for state queries (allowance, balance) — Odra state dict lives on the instance.
+ */
+function getCurrencyInstanceHash(currency: PaymentCurrency): string | null {
+  switch (currency) {
+    case 'USDT':
+      return ICO_CONFIG.CONTRACTS.usdtInstanceHash;
+    case 'USDC':
+      return ICO_CONFIG.CONTRACTS.usdcInstanceHash;
     default:
       return null;
   }
@@ -158,16 +175,16 @@ export async function checkApprovalNeeded(
 
   const decimals = getDecimals(currency);
   const requiredAmount = toRawAmount(amount, decimals);
-
-  // Check allowance using ICO_PACKAGE_HASH — the same key that createApproveTransaction()
-  // grants allowance to. This ensures we correctly detect existing allowances, so if a
-  // purchase fails after approve succeeds, the user doesn't need to re-approve.
   const icoPackageKey = ICO_PACKAGE_HASH.startsWith('hash-') ? ICO_PACKAGE_HASH : `hash-${ICO_PACKAGE_HASH}`;
-  const currentAllowance = await getAllowance(
-    tokenContract,
-    senderAccountHash,
-    icoPackageKey,
-  );
+
+  // For state queries, use the contract instance hash (not the package hash).
+  // Odra state dictionary lives on the contract instance, not the package.
+  const instanceHash = getCurrencyInstanceHash(currency) ?? tokenContract;
+
+  // Read allowance from the "allowances" named dictionary (standard CEP-18 layout).
+  // Key = blake2b(owner_bytes + spender_bytes).
+  // Requires the contract instance hash, not the package hash.
+  const currentAllowance = await getAllowance(instanceHash, senderAccountHash, icoPackageKey);
 
   return {
     needed: currentAllowance < requiredAmount,
@@ -311,7 +328,7 @@ export async function preparePurchase(
 
   // Check if approval is needed (for CEP-18 tokens).
   // If cachedAllowance is provided (from a prior approve in the same session),
-  // skip the on-chain query — it fails for Odra CEP-18 contracts anyway.
+  // skip the on-chain query to save an RPC round-trip.
   let approvalCheck: ApprovalCheckResult;
   if (cachedAllowance !== undefined) {
     const decimals = getDecimals(currency);
@@ -354,23 +371,24 @@ export async function preparePurchase(
 // ── Contract error code mapping (from ico_schema.json) ──────────────
 
 const CONTRACT_ERROR_MAP: Record<string, string> = {
-  '59000': 'Invalid ICO schedule',
-  '59001': 'Invalid ICO schedule start time',
-  '59002': 'Invalid ICO schedule end time',
-  '59003': 'Invalid ICO schedule sale amount',
-  '59004': 'Invalid ICO schedule price',
-  '59005': 'Invalid amount to spend',
-  '59006': 'Unsupported currency',
-  '59007': 'No active ICO schedule — sale is not currently open',
-  '59008': 'Price oracle unavailable — please try again later',
-  '59010': 'Invalid amount attached to transaction',
-  '59011': 'Insufficient tokens available for sale',
-  '59012': 'Purchase amount below minimum',
-  '59013': 'Invalid vesting duration in ICO schedule',
-  '59014': 'Vesting cliff exceeds total vesting duration',
-  '59015': 'Staking contract address not configured — contact support',
+  '500':   'Invalid ICO schedule',
+  '501':   'Invalid ICO schedule start time',
+  '502':   'Invalid ICO schedule end time',
+  '503':   'Invalid ICO schedule sale amount',
+  '504':   'Invalid ICO schedule price',
+  '505':   'Invalid amount to spend',
+  '506':   'Unsupported currency',
+  '507':   'No active ICO schedule — sale is not currently open',
+  '508':   'Price oracle unavailable — please try again later',
+  '509':   'Address is required',
+  '510':   'Invalid amount attached to transaction',
+  '511':   'Insufficient tokens available for sale',
+  '512':   'Invalid purchase amount',
+  '513':   'Invalid vesting duration in ICO schedule',
+  '514':   'Vesting cliff exceeds total vesting duration',
   '20000': 'Contract owner not configured',
   '20001': 'Unauthorized: caller is not the owner',
+  '20002': 'Unauthorized: caller is not the new owner',
   '20003': 'Unauthorized: missing required role',
   '20004': 'Cannot renounce role for another address',
 };
@@ -403,6 +421,17 @@ export function validatePurchase(
 
   if (isNaN(numAmount) || !isFinite(numAmount) || numAmount <= 0) {
     return { valid: false, error: 'Invalid amount' };
+  }
+
+  // Reject sub-precision amounts before they silently truncate to 0n in toRawAmount.
+  // E.g. "0.0000001" for USDT (6 decimals) → fraction "0000001".slice(0,6) → "000000" → 0.
+  const decimals = getDecimals(currency);
+  const fraction = amount.split('.')[1] ?? '';
+  if (fraction.length > decimals) {
+    return {
+      valid: false,
+      error: `${currency} supports up to ${decimals} decimal places`,
+    };
   }
 
   // Check minimum/maximum in USD

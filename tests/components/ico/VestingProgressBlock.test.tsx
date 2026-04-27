@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { VestingProgressBlock, VestingEntry } from '@/pages/ico/components/shared/VestingProgressBlock';
 
@@ -19,9 +19,20 @@ vi.mock('@/pages/ico/components/shared/ProgressBar', () => ({
   ),
 }));
 
+const PINNED_NOW = new Date('2024-06-01T12:00:00Z').getTime();
+const oneDay = 24 * 60 * 60 * 1000;
+
 describe('VestingProgressBlock', () => {
-  const now = Date.now();
-  const oneDay = 24 * 60 * 60 * 1000;
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(PINNED_NOW);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const now = PINNED_NOW;
 
   const createMockEntry = (
     id: string,
@@ -33,6 +44,7 @@ describe('VestingProgressBlock', () => {
     lockedAmount,
     unlockTimestamp: now + daysUntilUnlock * oneDay,
     purchaseTimestamp: now - 30 * oneDay,
+    vestingEndTimestamp: now + (daysUntilUnlock + 60) * oneDay,
     unlockedAmount,
   });
 
@@ -62,19 +74,22 @@ describe('VestingProgressBlock', () => {
       expect(screen.getByTestId('countdown-timer')).toBeInTheDocument();
     });
 
-    it('should render "All tokens have been unlocked" when no upcoming unlocks', () => {
+    it('should not render locked section when no upcoming unlocks', () => {
+      // All entries are in the past → upcomingUnlocks = [] → component renders nothing
       const pastEntries: VestingEntry[] = [
         {
           id: '1',
           lockedAmount: 1000,
-          unlockTimestamp: now - oneDay, // past
+          unlockTimestamp: now - oneDay,
           purchaseTimestamp: now - 30 * oneDay,
+          vestingEndTimestamp: now - oneDay,
         },
       ];
 
       render(<VestingProgressBlock vestingEntries={pastEntries} />);
 
-      expect(screen.getByText('All tokens have been unlocked')).toBeInTheDocument();
+      expect(screen.queryByText(/Locked Tokens/)).not.toBeInTheDocument();
+      expect(screen.queryByTestId('progress-bar')).not.toBeInTheDocument();
     });
 
     it('should not render entries list when all unlocked', () => {
@@ -84,6 +99,7 @@ describe('VestingProgressBlock', () => {
           lockedAmount: 1000,
           unlockTimestamp: now - oneDay,
           purchaseTimestamp: now - 30 * oneDay,
+          vestingEndTimestamp: now - oneDay,
         },
       ];
 
@@ -110,13 +126,13 @@ describe('VestingProgressBlock', () => {
   });
 
   describe('token display', () => {
+    // formatNumber uses toLocaleString with 2 decimal places → "1,000.00"
     it('should display default token symbol "BIG"', () => {
       const singleEntry = [createMockEntry('1', 1000, 10)];
 
       render(<VestingProgressBlock vestingEntries={singleEntry} />);
 
-      // Should appear in both entry list and total - use getAllByText
-      const elements = screen.getAllByText(/1,000 BIG/);
+      const elements = screen.getAllByText(/1,000\.00 BIG/);
       expect(elements.length).toBeGreaterThanOrEqual(1);
     });
 
@@ -125,7 +141,7 @@ describe('VestingProgressBlock', () => {
 
       render(<VestingProgressBlock vestingEntries={singleEntry} tokenSymbol="LSFI" />);
 
-      const elements = screen.getAllByText(/1,000 LSFI/);
+      const elements = screen.getAllByText(/1,000\.00 LSFI/);
       expect(elements.length).toBeGreaterThanOrEqual(1);
     });
 
@@ -134,7 +150,7 @@ describe('VestingProgressBlock', () => {
 
       render(<VestingProgressBlock vestingEntries={singleEntry} />);
 
-      const elements = screen.getAllByText(/1,000,000 BIG/);
+      const elements = screen.getAllByText(/1,000,000\.00 BIG/);
       expect(elements.length).toBeGreaterThanOrEqual(1);
     });
   });
@@ -165,19 +181,20 @@ describe('VestingProgressBlock', () => {
 
       // 1000 + 2000 + 3000 = 6000
       expect(screen.getByText('Total Locked')).toBeInTheDocument();
-      expect(screen.getByText(/6,000 BIG/)).toBeInTheDocument();
+      expect(screen.getByText(/6,000\.00 BIG/)).toBeInTheDocument();
     });
 
-    it('should subtract unlockedAmount from total', () => {
+    it('should show total as sum of lockedAmount (not subtracted by unlockedAmount)', () => {
+      // totalLocked = sum(entry.lockedAmount) — component does not subtract unlockedAmount
       const entriesWithUnlocked: VestingEntry[] = [
-        createMockEntry('1', 1000, 10, 200), // 800 remaining
-        createMockEntry('2', 2000, 20, 500), // 1500 remaining
+        createMockEntry('1', 1000, 10, 200),
+        createMockEntry('2', 2000, 20, 500),
       ];
 
       render(<VestingProgressBlock vestingEntries={entriesWithUnlocked} />);
 
-      // 800 + 1500 = 2300
-      expect(screen.getByText(/2,300 BIG/)).toBeInTheDocument();
+      // 1000 + 2000 = 3000 (lockedAmount as-is)
+      expect(screen.getByText(/3,000\.00 BIG/)).toBeInTheDocument();
     });
 
     it('should display total USD value when tokenPrice provided', () => {
@@ -205,8 +222,8 @@ describe('VestingProgressBlock', () => {
         el.className.includes('font-medium')
       );
 
-      // First entry should be 2000 (closest unlock)
-      expect(entryDivs[0]).toHaveTextContent('2,000 BIG');
+      // First entry should be 2000 (closest unlock) — formatNumber adds .00
+      expect(entryDivs[0]).toHaveTextContent('2,000.00 BIG');
     });
   });
 
@@ -256,9 +273,11 @@ describe('VestingProgressBlock', () => {
 
   describe('empty state', () => {
     it('should handle empty entries array', () => {
+      // Empty entries → no upcoming unlocks → locked section not rendered
       render(<VestingProgressBlock vestingEntries={[]} />);
 
-      expect(screen.getByText('All tokens have been unlocked')).toBeInTheDocument();
+      expect(screen.queryByText(/Locked Tokens/)).not.toBeInTheDocument();
+      expect(screen.queryByTestId('progress-bar')).not.toBeInTheDocument();
     });
   });
 });

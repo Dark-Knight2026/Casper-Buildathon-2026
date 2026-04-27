@@ -1,9 +1,19 @@
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import React from 'react';
 import { TokenomicsTab } from '@/pages/ico/components/states/TokenomicsTab';
 
-// Mock the child components
+// ── HTTP boundary mock ────────────────────────────────────────────────────────
+// Only the HTTP client is mocked — not the hooks that call it.
+// useTokenSupply and useReleaseSchedule run their real logic and hit this boundary.
+const mockGet = vi.fn();
+vi.mock('@/lib/api-client', () => ({
+  backendClient: { get: (...args: unknown[]) => mockGet(...args) },
+}));
+
+// ── UI mocks (browser APIs unavailable in jsdom) ──────────────────────────────
 vi.mock('@/pages/ico/components/shared/Card', () => ({
   Card: ({ children, className }: { children: React.ReactNode; className?: string }) => (
     <div data-testid="card" className={className}>{children}</div>
@@ -41,11 +51,33 @@ vi.mock('recharts', () => ({
   Cell: () => <div data-testid="cell" />,
 }));
 
+// ─────────────────────────────────────────────────────────────────────────────
+
+const MOCK_TOKEN_SUPPLY = { circulatingSupply: 1_000_000_000, totalSupply: 5_000_000_000 };
+const MOCK_RELEASE_SCHEDULE = { data: [{ month: '2025-01', released: 100_000 }] };
+
 const renderWithRouter = (ui: React.ReactElement) => {
-  return render(<BrowserRouter>{ui}</BrowserRouter>);
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter>{ui}</BrowserRouter>
+    </QueryClientProvider>
+  );
 };
 
 describe('TokenomicsTab', () => {
+  beforeEach(() => {
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/api/v1/vesting/token-supply') return Promise.resolve(MOCK_TOKEN_SUPPLY);
+      if (url === '/api/v1/vesting/release-schedule') return Promise.resolve(MOCK_RELEASE_SCHEDULE);
+      return Promise.resolve(null);
+    });
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
   describe('rendering', () => {
     it('should render the Tokenomics title', () => {
       renderWithRouter(<TokenomicsTab />);
@@ -61,18 +93,32 @@ describe('TokenomicsTab', () => {
   });
 
   describe('supply stats', () => {
-    it('should display Total Supply', () => {
+    it('should display Total Supply label', () => {
       renderWithRouter(<TokenomicsTab />);
 
       expect(screen.getByText('Total Supply')).toBeInTheDocument();
-      expect(screen.getByText('5 000 000 000 BIG')).toBeInTheDocument();
     });
 
-    it('should display Circulating Supply', () => {
+    it('should display Total Supply value from API', async () => {
+      renderWithRouter(<TokenomicsTab />);
+
+      await waitFor(() =>
+        expect(screen.getByText(/5[,.\s]?000[,.\s]?000[,.\s]?000.*BIG/)).toBeInTheDocument()
+      );
+    });
+
+    it('should display Circulating Supply label', () => {
       renderWithRouter(<TokenomicsTab />);
 
       expect(screen.getByText('Circulating Supply')).toBeInTheDocument();
-      expect(screen.getByText('1 000 000 000 BIG')).toBeInTheDocument();
+    });
+
+    it('should display Circulating Supply value from API', async () => {
+      renderWithRouter(<TokenomicsTab />);
+
+      await waitFor(() =>
+        expect(screen.getByText(/1[,.\s]?000[,.\s]?000[,.\s]?000.*BIG/)).toBeInTheDocument()
+      );
     });
   });
 
