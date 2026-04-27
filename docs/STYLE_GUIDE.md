@@ -63,7 +63,18 @@
 
 - White cards on off-white background
 - Subtle shadow or 1px border (low contrast)
-- Rounded corners: 4–6px (minimal)
+- Rounded corners: 4–8px (see Radius Scale below)
+
+### Radius Scale
+
+Token system (defined in `src/index.css`):
+
+- `--radius-sm`: **4px** — tight chips, checkboxes, menu items, tab triggers
+- `--radius-md`: **6px** — cards, inputs, badges, default buttons
+- `--radius-lg`: **8px** — dialogs, popovers, large surfaces
+
+Base token `--radius` = 8px (= `lg`). Maps directly to Tailwind utilities
+`rounded-sm` / `rounded-md` / `rounded-lg`.
 
 ### Tabs
 
