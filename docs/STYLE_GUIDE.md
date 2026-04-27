@@ -72,6 +72,18 @@
 - Override per-instance via `className` when a tighter layout is needed
   (e.g. modal dialogs, sidebars). Pass `h-10 mb-2` or similar.
 
+**Manually verified after the `h-10 → h-14 mb-4` default change:**
+
+- `/properties/:id` — tenant `PropertyDetail` (override `grid grid-cols-3` preserved)
+- `/listings` — `PropertySearch` with `AdvancedSearchFilters`
+- `/auth/mfa-setup` — narrow form layout
+- `/tenant/dashboard`, `/tenant/payments`, `/tenant/payments/methods`,
+  `/tenant/leases`, `/tenant/leases/:leaseId`, `/tenant/maintenance`
+- `/landlord/dashboard` (incl. `TaxDashboard` sub-tabs and `DashboardSettings` modal)
+- `/landlord/properties/:id`, `/landlord/leases/:leaseId`,
+  `/landlord/applications/:id`
+- `MessageCenter` modal (opened from Navbar)
+
 ---
 
 ## Brand Positioning
