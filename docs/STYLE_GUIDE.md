@@ -63,7 +63,37 @@
 
 - White cards on off-white background
 - Subtle shadow or 1px border (low contrast)
-- Rounded corners: 4–6px (minimal)
+- Rounded corners: 4–8px (see Radius Scale below)
+
+### Radius Scale
+
+Token system (defined in `src/index.css`):
+
+- `--radius-sm`: **4px** — tight chips, checkboxes, menu items, tab triggers
+- `--radius-md`: **6px** — cards, inputs, badges, default buttons
+- `--radius-lg`: **8px** — dialogs, popovers, large surfaces
+
+Base token `--radius` = 8px (= `lg`). Maps directly to Tailwind utilities
+`rounded-sm` / `rounded-md` / `rounded-lg`.
+
+### Tabs
+
+- Base height: `h-14` (56px) — applied to all `TabsList` instances by default
+- Bottom margin: `mb-4` (16px) — separates the tab bar from its content panel
+- Override per-instance via `className` when a tighter layout is needed
+  (e.g. modal dialogs, sidebars). Pass `h-10 mb-2` or similar.
+
+**Manually verified after the `h-10 → h-14 mb-4` default change:**
+
+- `/properties/:id` — tenant `PropertyDetail` (override `grid grid-cols-3` preserved)
+- `/listings` — `PropertySearch` with `AdvancedSearchFilters`
+- `/auth/mfa-setup` — narrow form layout
+- `/tenant/dashboard`, `/tenant/payments`, `/tenant/payments/methods`,
+  `/tenant/leases`, `/tenant/leases/:leaseId`, `/tenant/maintenance`
+- `/landlord/dashboard` (incl. `TaxDashboard` sub-tabs and `DashboardSettings` modal)
+- `/landlord/properties/:id`, `/landlord/leases/:leaseId`,
+  `/landlord/applications/:id`
+- `MessageCenter` modal (opened from Navbar)
 
 ---
 

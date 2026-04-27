@@ -9,6 +9,9 @@ const TabsList = React.forwardRef<React.ElementRef<typeof TabsPrimitive.List>, R
   ({ className, ...props }, ref) => (
     <TabsPrimitive.List
       ref={ref}
+      // h-14 + mb-4 are intentional dashboard-wide defaults — refreshed nav
+      // requires more breathing room around tab bars. Override via className
+      // on individual TabsList instances if a tighter layout is needed.
       className={cn('inline-flex h-14 mb-4 items-center justify-center rounded-md bg-muted p-1 text-muted-foreground', className)}
       {...props}
     />

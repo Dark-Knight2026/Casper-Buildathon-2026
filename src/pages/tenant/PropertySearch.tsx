@@ -164,6 +164,7 @@ export default function PropertySearch() {
                 bathrooms: property.bathrooms,
                 squareFeet: property.square_feet,
                 images: property.images ?? [],
+                status: property.is_available ? 'active' : 'inactive',
                 priceChange: property.priceChange,
                 rating: property.rating,
                 daysOnMarket: property.daysOnMarket,

@@ -1,5 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { Button } from '@/components/ui/button';
+import { buttonVariants } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
 
 export default function LandingHeader() {
@@ -34,12 +34,14 @@ export default function LandingHeader() {
         </nav>
 
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="sm" onClick={() => navigate('/auth/login')}>
+          {/* Render as real <a> (via Link) with button styling — preserves right-click /
+              middle-click / screen-reader "link" role that a <button>+onClick would hide. */}
+          <Link to="/auth/login" className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
             Sign In
-          </Button>
-          <Button size="sm" onClick={() => navigate('/auth/register')}>
+          </Link>
+          <Link to="/auth/register" className={buttonVariants({ size: 'sm' })}>
             Get Started
-          </Button>
+          </Link>
         </div>
       </div>
     </header>

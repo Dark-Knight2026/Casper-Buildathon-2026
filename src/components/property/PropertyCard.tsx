@@ -3,6 +3,16 @@ import { Badge } from '@/components/ui/badge';
 import { SavePropertyButton } from '@/components/property/SavePropertyButton';
 import { MapPin, Bed, Bath, Square, TrendingUp, Star, Camera } from 'lucide-react';
 
+type PropertyStatus = 'active' | 'pending' | 'rented' | 'inactive' | 'archived';
+
+const STATUS_LABELS: Record<PropertyStatus, string> = {
+  active: 'For Rent',
+  pending: 'Pending',
+  rented: 'Rented',
+  inactive: 'Inactive',
+  archived: 'Archived',
+};
+
 export interface PropertyCardData {
   id: string;
   title: string;
@@ -14,6 +24,7 @@ export interface PropertyCardData {
   bathrooms: number;
   squareFeet?: number;
   images: string[];
+  status?: PropertyStatus;
   priceChange?: string;
   rating?: number;
   daysOnMarket?: number;
@@ -52,7 +63,7 @@ export function PropertyCard({ property, onClick }: PropertyCardProps) {
         />
 
         <Badge variant="success" className="absolute top-3 left-3 shadow-sm">
-          For Rent
+          {STATUS_LABELS[property.status ?? 'active']}
         </Badge>
 
         {property.priceChange && (

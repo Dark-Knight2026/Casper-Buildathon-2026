@@ -15,6 +15,7 @@ import { SavePropertyButton } from '@/components/property/SavePropertyButton';
 import { ContactLandlordModal } from '@/components/property/ContactLandlordModal';
 import { ScheduleViewingModal } from '@/components/property/ScheduleViewingModal';
 import { propertyService } from '@/services/propertyService';
+import { FEATURED_PROPERTIES } from '@/data/featuredProperties';
 import type { Property } from '@/types/property';
 import {
   ArrowLeft,
@@ -23,7 +24,6 @@ import {
   Maximize2,
   MapPin,
   Calendar,
-  Heart,
   Share2,
   Phone,
   Mail,
@@ -44,14 +44,20 @@ export default function PropertyDetail() {
   const { requireAuth } = useAuthPrompt();
 
   const stateProperty = (location.state?.property as Property) ?? null;
-  const [property, setProperty] = useState<Property | null>(stateProperty);
-  const [loading, setLoading] = useState(!stateProperty);
+  // Hydrate from FEATURED_PROPERTIES on direct URL access (refresh, bookmark,
+  // shared link) so demo IDs `prop-1`...`prop-6` work without router state.
+  const demoFallback = !stateProperty && id
+    ? FEATURED_PROPERTIES.find(p => p.id === id) ?? null
+    : null;
+  const initialProperty = stateProperty ?? demoFallback;
+  const [property, setProperty] = useState<Property | null>(initialProperty);
+  const [loading, setLoading] = useState(!initialProperty);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [showContactModal, setShowContactModal] = useState(false);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
 
   const loadProperty = useCallback(async () => {
-    if (!id || stateProperty) return; // skip if data passed via navigation state
+    if (!id || initialProperty) return; // skip if data already hydrated (state or demo fallback)
 
     setLoading(true);
     try {
@@ -78,7 +84,7 @@ export default function PropertyDetail() {
     } finally {
       setLoading(false);
     }
-  }, [id, navigate, toast]);
+  }, [id, navigate, toast, initialProperty]);
 
   useEffect(() => {
     loadProperty();

@@ -21,6 +21,7 @@ export default function FeaturedProperties() {
             bathrooms: property.bathrooms,
             squareFeet: property.squareFeet ?? undefined,
             images: property.images,
+            status: property.status,
             priceChange: property.priceChange,
             rating: property.rating,
             daysOnMarket: property.daysOnMarket,
