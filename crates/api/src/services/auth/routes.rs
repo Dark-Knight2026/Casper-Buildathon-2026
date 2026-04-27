@@ -8,7 +8,7 @@ use axum::{
 };
 
 use crate::common::AppState;
-use crate::services::auth::handlers::{get_nonce, login};
+use crate::services::auth::wallet::{get_nonce, login};
 
 /// Creates the authentication router with nonce and login endpoints.
 #[inline]

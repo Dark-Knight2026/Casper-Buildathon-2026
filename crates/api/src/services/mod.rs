@@ -59,8 +59,8 @@ pub fn public_router() -> OpenApiRouter<Arc<AppState>> {
     );
 
     OpenApiRouter::new()
-        .routes(routes!(auth::handlers::get_nonce))
-        .routes(routes!(auth::handlers::login))
+        .routes(routes!(auth::wallet::get_nonce))
+        .routes(routes!(auth::wallet::login))
         .route_layer(GovernorLayer::new(rate_limit))
 }
 

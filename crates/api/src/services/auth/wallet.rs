@@ -1,4 +1,4 @@
-//! HTTP request handlers for authentication.
+//! Wallet-based authentication: nonce generation and signature login.
 
 use core::str::FromStr;
 use std::sync::Arc;
@@ -8,19 +8,54 @@ use axum::{
     extract::{Query, State},
 };
 use rand::{RngExt, distr::Alphanumeric};
-use secrecy::ExposeSecret;
+use secrecy::{ExposeSecret, SecretString};
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use utoipa::ToSchema;
 
 use crate::{
     common::{
         self, ApiError, ApiResult, AppState, CASPER_ED25519_PUBKEY_HEX_LEN,
         CASPER_SECP256K1_PUBKEY_HEX_LEN, UserRole,
     },
-    services::auth::{
-        self, jwt,
-        models::{LoginRequest, LoginResponse, NonceRequest, NonceResponse, UserInfo},
-    },
+    services::auth::{self, jwt, models::UserInfo},
 };
+
+/// Request payload for generating a login nonce.
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct NonceRequest {
+    /// The wallet address (public key).
+    pub wallet_address: String,
+}
+
+/// Response containing the generated nonce.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct NonceResponse {
+    /// A randomly generated string used to prevent replay attacks.
+    pub nonce: String,
+    /// The full message string that the user must sign with their wallet.
+    /// Format: `"Sign this message to log in to LeaseFi. Nonce: <nonce>"`
+    pub message: String,
+}
+
+/// Request payload for verifying a login signature.
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct LoginRequest {
+    /// The wallet address (public key) of the user.
+    pub wallet_address: String,
+    /// The cryptographic signature of the nonce message.
+    #[schema(value_type = String)]
+    pub signature: SecretString,
+}
+
+/// Response returned upon successful login.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct LoginResponse {
+    /// Use this JSON Web Token (JWT) for authenticating subsequent requests.
+    pub token: String,
+    /// Basic information about the authenticated user.
+    pub user: UserInfo,
+}
 
 // `GET /api/v1/auth/nonce`
 //

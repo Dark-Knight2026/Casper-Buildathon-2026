@@ -37,10 +37,10 @@ use crate::{
             crate::common::TokenType,
             crate::common::VerificationLevel,
             // Auth models
-            auth::models::NonceRequest,
-            auth::models::NonceResponse,
-            auth::models::LoginRequest,
-            auth::models::LoginResponse,
+            auth::wallet::NonceRequest,
+            auth::wallet::NonceResponse,
+            auth::wallet::LoginRequest,
+            auth::wallet::LoginResponse,
             auth::models::UserInfo,
             // Health models
             health::models::ConnectionStatus,
