@@ -6,7 +6,7 @@ use utoipa::{
     Modify, OpenApi as OpenApiDerive,
     openapi::{
         OpenApi,
-        security::{HttpAuthScheme, HttpBuilder, SecurityScheme},
+        security::{ApiKey, ApiKeyValue, SecurityScheme},
     },
 };
 
@@ -34,6 +34,8 @@ use crate::{
             // Common models
             crate::common::UserRole,
             crate::common::Claims,
+            crate::common::TokenType,
+            crate::common::VerificationLevel,
             // Auth models
             auth::models::NonceRequest,
             auth::models::NonceResponse,
@@ -90,7 +92,9 @@ use crate::{
 )]
 pub struct ApiDoc;
 
-/// Adds JWT bearer authentication to the `OpenAPI` spec.
+/// Adds cookie-based JWT authentication (`access_token` cookie) to the
+/// `OpenAPI` spec. The previous bearer scheme was removed when the access
+/// token migrated from `Authorization: Bearer` to `Set-Cookie`.
 struct SecurityAddon;
 
 impl Modify for SecurityAddon {
@@ -98,13 +102,8 @@ impl Modify for SecurityAddon {
     fn modify(&self, openapi: &mut OpenApi) {
         let components = openapi.components.get_or_insert_with(Default::default);
         components.add_security_scheme(
-            "bearer_auth",
-            SecurityScheme::Http(
-                HttpBuilder::new()
-                    .scheme(HttpAuthScheme::Bearer)
-                    .bearer_format("JWT")
-                    .build(),
-            ),
+            "cookie_auth",
+            SecurityScheme::ApiKey(ApiKey::Cookie(ApiKeyValue::new("access_token"))),
         );
     }
 }

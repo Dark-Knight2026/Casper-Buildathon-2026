@@ -574,6 +574,9 @@ async fn jwt_wrong_issuer_rejected(pool: PgPool) {
         exp,
         iss: "wrong-issuer".to_owned(),
         aud: JWT_AUDIENCE.to_owned(),
+        token_type: None,
+        verification_level: None,
+        jti: None,
     };
 
     let token = jsonwebtoken::encode(
@@ -612,6 +615,9 @@ async fn jwt_wrong_audience_rejected(pool: PgPool) {
         exp,
         iss: JWT_ISSUER.to_owned(),
         aud: "wrong-audience".to_owned(),
+        token_type: None,
+        verification_level: None,
+        jti: None,
     };
 
     let token = jsonwebtoken::encode(

@@ -80,27 +80,14 @@ pub struct ErrorResponse {
     pub error: String,
 }
 
-/// Maps an `AuthError` to an HTTP status code and message.
-fn auth_error_response(err: &AuthError) -> (StatusCode, String) {
-    match err {
-        AuthError::MissingCredentials => {
-            (StatusCode::UNAUTHORIZED, "Missing credentials".to_owned())
-        }
-        AuthError::InvalidToken(jwt_err) => {
-            tracing::warn!(error = %jwt_err, "JWT validation failed");
-            (
-                StatusCode::UNAUTHORIZED,
-                "Invalid or expired token".to_owned(),
-            )
-        }
-    }
-}
-
 impl IntoResponse for ApiError {
     #[inline]
     fn into_response(self) -> Response {
         let (status, error_message) = match &self {
-            ApiError::Auth(err) => auth_error_response(err),
+            ApiError::Auth(err) => {
+                let (status, code) = err.status_and_code();
+                (status, code.to_owned())
+            }
             ApiError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg.clone()),
             ApiError::Unauthorized(msg) => (StatusCode::UNAUTHORIZED, msg.clone()),
             ApiError::Forbidden(msg) => (StatusCode::FORBIDDEN, msg.clone()),

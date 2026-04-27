@@ -33,8 +33,49 @@ pub const JWT_ISSUER: &str = "leasefi-api";
 /// JWT audience claim value. Only tokens intended for our users are accepted.
 pub const JWT_AUDIENCE: &str = "leasefi-users";
 
+/// JWT token category - used to prevent access tokens from being accepted as
+/// refresh tokens and vice versa.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, EnumString, Display, ToSchema,
+)]
+#[serde(rename_all = "snake_case")]
+#[strum(serialize_all = "snake_case")]
+pub enum TokenType {
+    /// Short-lived token used for API authentication.
+    Access,
+    /// Long-lived token used to obtain a new access token.
+    Refresh,
+}
+
+/// User verification level. Mirrors the `users.verification_level` column
+/// (`'none' | 'email' | 'identity' | 'full'`) introduced by the
+/// `extend user status and add verification_level` migration.
+///
+/// Encoded into access-token claims so authorization extractors can gate
+/// endpoints by verification without re-querying the database on every request.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, EnumString, Display, ToSchema,
+)]
+#[serde(rename_all = "snake_case")]
+#[strum(serialize_all = "snake_case")]
+pub enum VerificationLevel {
+    /// Default for newly registered users; no verification performed.
+    None,
+    /// Email address has been verified.
+    Email,
+    /// Basic identity (KYC) has been verified.
+    Identity,
+    /// Both email and identity have been verified.
+    Full,
+}
+
 /// JWT Claims structure used for token generation and validation.
-#[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]
+///
+/// `token_type`, `verification_level`, and `jti` are wrapped in `Option` with
+/// `#[serde(default)]` so JWTs issued before this rollout (without these
+/// fields) still decode successfully. Once the longest legacy access-token
+/// TTL has elapsed in production, a follow-up commit can drop the `Option`.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct Claims {
     /// Subject: The User UUID.
     #[schema(value_type = Uuid)]
@@ -47,4 +88,17 @@ pub struct Claims {
     pub iss: String,
     /// Intended audience of the token.
     pub aud: String,
+    /// Token category (access vs. refresh). Optional for backward compatibility
+    /// during transition from pre-typed tokens.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub token_type: Option<TokenType>,
+    /// User verification level at the moment of issuance. Optional for
+    /// backward compatibility during transition.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub verification_level: Option<VerificationLevel>,
+    /// JWT ID - unique per access token, used for the logout blocklist.
+    /// Optional for backward compatibility during transition.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(value_type = Option<Uuid>)]
+    pub jti: Option<Uuid>,
 }

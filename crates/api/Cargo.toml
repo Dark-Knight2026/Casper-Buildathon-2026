@@ -11,6 +11,7 @@ workspace = true
 default = ["enabled"]
 enabled = [
     "dep:axum",
+    "dep:axum-extra",
     "dep:casper-types",
     "dep:chrono",
     "dep:config",
@@ -43,6 +44,7 @@ integration = []
 
 [dependencies]
 axum = { workspace = true, optional = true }
+axum-extra = { workspace = true, optional = true }
 casper-types = { workspace = true, optional = true }
 chrono = { workspace = true, optional = true }
 config = { workspace = true, optional = true }

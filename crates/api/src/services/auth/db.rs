@@ -1,7 +1,11 @@
 //! Database operations for authentication.
 
+use core::str::FromStr;
+
 use sqlx::PgPool;
 use uuid::Uuid;
+
+use crate::common::VerificationLevel;
 
 /// User record returned after login/registration.
 #[derive(Debug)]
@@ -10,6 +14,9 @@ pub struct UserRecord {
     pub id: Uuid,
     /// User's role (e.g., "tenant", "landlord").
     pub role: String,
+    /// User's verification level. Parsed from the underlying TEXT column
+    /// at the db layer so handlers receive a typed value.
+    pub verification_level: VerificationLevel,
 }
 
 /// Upserts a user by wallet address.
@@ -37,7 +44,7 @@ pub async fn upsert_user_by_wallet(
             VALUES ($1, 'tenant', $2, 'Wallet', 'User', NULL, 'active')
             ON CONFLICT (wallet_address) WHERE wallet_address IS NOT NULL AND deleted_at IS NULL
                 DO UPDATE SET last_login_at = NOW()
-            RETURNING id, role
+            RETURNING id, role, verification_level
         "#,
         email,
         wallet_address
@@ -45,8 +52,17 @@ pub async fn upsert_user_by_wallet(
     .fetch_one(pool)
     .await?;
 
+    let verification_level =
+        VerificationLevel::from_str(&record.verification_level).map_err(|err| {
+            sqlx::Error::ColumnDecode {
+                index: "verification_level".to_owned(),
+                source: Box::new(err),
+            }
+        })?;
+
     Ok(UserRecord {
         id: record.id,
         role: record.role,
+        verification_level,
     })
 }

@@ -7,8 +7,6 @@ use axum::{
     Json,
     extract::{Query, State},
 };
-use chrono::{Duration, Utc};
-use jsonwebtoken::{Algorithm, EncodingKey, Header};
 use rand::{RngExt, distr::Alphanumeric};
 use secrecy::ExposeSecret;
 use sha2::{Digest, Sha256};
@@ -16,10 +14,10 @@ use sha2::{Digest, Sha256};
 use crate::{
     common::{
         self, ApiError, ApiResult, AppState, CASPER_ED25519_PUBKEY_HEX_LEN,
-        CASPER_SECP256K1_PUBKEY_HEX_LEN, Claims, JWT_AUDIENCE, JWT_ISSUER, UserRole,
+        CASPER_SECP256K1_PUBKEY_HEX_LEN, UserRole,
     },
     services::auth::{
-        self,
+        self, jwt,
         models::{LoginRequest, LoginResponse, NonceRequest, NonceResponse, UserInfo},
     },
 };
@@ -246,35 +244,12 @@ pub async fn login(
         auth::upsert_user_by_wallet(&state.db, &placeholder_email, &wallet_address).await?;
     let user_role = UserRole::from_str(&user_record.role).unwrap_or(UserRole::Unknown);
 
-    let expiration = Utc::now()
-        .checked_add_signed(Duration::hours(24))
-        .ok_or_else(|| {
-            ApiError::Internal("Timestamp overflow calculating JWT expiration".to_owned())
-        })?
-        .timestamp();
-
-    // Safe conversion: timestamp is always positive for dates after 1970,
-    // and JWT expiration within 24 hours fits in usize on all platforms
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-    let exp = usize::try_from(expiration.max(0))
-        .map_err(|_| ApiError::Internal("JWT expiration timestamp overflow".to_owned()))?;
-
-    let claims = Claims {
-        sub: user_record.id,
-        role: user_role.clone(),
-        exp,
-        iss: JWT_ISSUER.to_owned(),
-        aud: JWT_AUDIENCE.to_owned(),
-    };
-
-    let secret = state.config.jwt_secret.expose_secret();
-
-    let token = jsonwebtoken::encode(
-        &Header::new(Algorithm::HS256),
-        &claims,
-        &EncodingKey::from_secret(secret.as_bytes()),
-    )
-    .map_err(|e| ApiError::Internal(format!("Token encoding error: {e}")))?;
+    let encoded = jwt::encode_access_token(
+        user_record.id,
+        user_role.clone(),
+        user_record.verification_level,
+        &state.config.jwt_secret,
+    )?;
 
     tracing::info!(
         event = "user_login",
@@ -284,7 +259,7 @@ pub async fn login(
     );
 
     Ok(Json(LoginResponse {
-        token,
+        token: encoded.token,
         user: UserInfo {
             id: user_record.id,
             role: user_role,

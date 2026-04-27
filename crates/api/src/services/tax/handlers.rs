@@ -44,7 +44,7 @@ use crate::{
         (status = 500, description = "Internal server error")
     ),
     security(
-        ("bearer_auth" = [])
+        ("cookie_auth" = [])
     )
 )]
 #[inline]

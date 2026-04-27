@@ -16,9 +16,7 @@
 use std::sync::Arc;
 
 use axum::http::{Method, StatusCode};
-use axum_test::{
-    TestResponse, TestServer, TestServerConfig, Transport, http::header::AUTHORIZATION,
-};
+use axum_test::{TestServer, TestServerConfig, Transport, http::header::COOKIE};
 use chrono::{Duration, Utc};
 use core::net::SocketAddr;
 use jsonwebtoken::{EncodingKey, Header, encode};
@@ -31,10 +29,11 @@ use testcontainers::{
     core::{IntoContainerPort, WaitFor},
     runners::AsyncRunner,
 };
+use uuid::Uuid;
 
 use api::{
     AppState, Claims, IcoFallback, ServerConfig, UserId, UserRole,
-    common::{JWT_AUDIENCE, JWT_ISSUER, RedisStore, TOTAL_SUPPLY},
+    common::{JWT_AUDIENCE, JWT_ISSUER, RedisStore, TOTAL_SUPPLY, TokenType, VerificationLevel},
     server,
 };
 
@@ -179,7 +178,7 @@ pub async fn setup_test_server_with(
     }
 }
 
-/// Creates a test JWT token.
+/// Creates a test JWT access token populated with the full typed-claim schema.
 #[inline]
 pub fn create_test_jwt(user_id: UserId, role: UserRole, secret: &str) -> String {
     let expiration = Utc::now()
@@ -193,6 +192,9 @@ pub fn create_test_jwt(user_id: UserId, role: UserRole, secret: &str) -> String 
         exp,
         iss: JWT_ISSUER.to_owned(),
         aud: JWT_AUDIENCE.to_owned(),
+        token_type: Some(TokenType::Access),
+        verification_level: Some(VerificationLevel::None),
+        jti: Some(Uuid::new_v4()),
     };
     encode(
         &Header::default(),
@@ -202,7 +204,8 @@ pub fn create_test_jwt(user_id: UserId, role: UserRole, secret: &str) -> String 
     .expect("Failed to create test JWT")
 }
 
-/// Makes an authenticated request.
+/// Makes an authenticated request by attaching the JWT as the
+/// `access_token` cookie (the transport the middleware now expects).
 #[inline]
 pub async fn authed_request<T: DeserializeOwned>(
     server: &TestServer,
@@ -211,33 +214,24 @@ pub async fn authed_request<T: DeserializeOwned>(
     token: &str,
     body: &Value,
 ) -> (StatusCode, Option<T>) {
-    let response: TestResponse = match *method {
-        Method::GET => {
-            server
-                .get(uri)
-                .add_header(AUTHORIZATION, format!("Bearer {token}"))
-                .await
-        }
+    let cookie_header = format!("access_token={token}");
+    let response = match *method {
+        Method::GET => server.get(uri).add_header(COOKIE, &cookie_header).await,
         Method::POST => {
             server
                 .post(uri)
-                .add_header(AUTHORIZATION, format!("Bearer {token}"))
+                .add_header(COOKIE, &cookie_header)
                 .json(&body)
                 .await
         }
         Method::PUT => {
             server
                 .put(uri)
-                .add_header(AUTHORIZATION, format!("Bearer {token}"))
+                .add_header(COOKIE, &cookie_header)
                 .json(&body)
                 .await
         }
-        Method::DELETE => {
-            server
-                .delete(uri)
-                .add_header(AUTHORIZATION, format!("Bearer {token}"))
-                .await
-        }
+        Method::DELETE => server.delete(uri).add_header(COOKIE, &cookie_header).await,
         _ => panic!("Unsupported HTTP method: {method}"),
     };
 

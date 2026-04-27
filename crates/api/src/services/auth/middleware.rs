@@ -1,4 +1,8 @@
 //! Authentication middleware and error types.
+//!
+//! Access-token transport: `access_token` cookie (HttpOnly; Secure; SameSite=Strict).
+//! The previous `Authorization: Bearer` flow has been removed - the frontend
+//! reads the token from a cookie set at login time.
 
 use std::sync::Arc;
 
@@ -10,14 +14,18 @@ use axum::{
     middleware::Next,
     response::{IntoResponse, Response},
 };
-use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode};
-use secrecy::ExposeSecret;
-use serde_json::json;
+use axum_extra::extract::CookieJar;
 use thiserror::Error;
 
-use crate::common::{AppState, Claims, JWT_AUDIENCE, JWT_ISSUER};
+use crate::{
+    common::{AppState, Claims, ErrorResponse, TokenType},
+    services::auth::jwt,
+};
 
-/// Authenticated user extracted from JWT token.
+/// Name of the cookie that carries the access token.
+pub const ACCESS_TOKEN_COOKIE: &str = "access_token";
+
+/// Authenticated user extracted from the `access_token` JWT cookie.
 #[derive(Debug)]
 pub struct AuthUser(pub Claims);
 
@@ -29,26 +37,24 @@ impl FromRequestParts<Arc<AppState>> for AuthUser {
         parts: &mut Parts,
         state: &Arc<AppState>,
     ) -> Result<Self, Self::Rejection> {
-        let auth_header = parts
-            .headers
-            .get("Authorization")
-            .and_then(|value| value.to_str().ok())
-            .ok_or(AuthError::MissingCredentials)?;
+        let jar = CookieJar::from_headers(&parts.headers);
+        let token = jar
+            .get(ACCESS_TOKEN_COOKIE)
+            .ok_or(AuthError::MissingAccessToken)?
+            .value()
+            .to_owned();
 
-        let Some(token) = auth_header.strip_prefix("Bearer ") else {
-            return Err(AuthError::MissingCredentials);
-        };
-        let secret = state.config.jwt_secret.expose_secret();
-        let mut validation = Validation::new(Algorithm::HS256);
-        validation.set_issuer(&[JWT_ISSUER]);
-        validation.set_audience(&[JWT_AUDIENCE]);
-        let token_data = decode::<Claims>(
-            token,
-            &DecodingKey::from_secret(secret.as_bytes()),
-            &validation,
-        )?;
+        let claims = jwt::decode_token(&token, &state.config.jwt_secret)?;
 
-        Ok(AuthUser(token_data.claims))
+        // A refresh token must never authorize a protected request even if it
+        // accidentally lands in the access cookie. Legacy tokens (issued before
+        // typed claims rolled out) have `token_type = None` and are accepted
+        // until they expire naturally.
+        if matches!(claims.token_type, Some(TokenType::Refresh)) {
+            return Err(AuthError::WrongTokenType);
+        }
+
+        Ok(AuthUser(claims))
     }
 }
 
@@ -58,9 +64,10 @@ impl FromRequestParts<Arc<AppState>> for AuthUser {
 ///
 /// # Errors
 ///
-/// Returns [`AuthError::MissingCredentials`] when the `Authorization` header is
-/// absent or malformed, and [`AuthError::InvalidToken`] when JWT decoding or
-/// validation fails.
+/// Returns [`AuthError::MissingAccessToken`] when the `access_token` cookie is
+/// absent, [`AuthError::InvalidToken`] when JWT decoding or validation fails,
+/// and [`AuthError::WrongTokenType`] when a refresh token is presented as an
+/// access token.
 #[inline]
 pub async fn require_auth(
     State(state): State<Arc<AppState>>,
@@ -75,27 +82,49 @@ pub async fn require_auth(
 /// Authentication errors.
 #[derive(Debug, Error)]
 pub enum AuthError {
-    /// Authorization header is missing or malformed.
-    #[error("Missing credentials")]
-    MissingCredentials,
-    /// JWT token is invalid or expired.
+    /// `access_token` cookie is missing from the request.
+    #[error("Missing access token")]
+    MissingAccessToken,
+    /// JWT token failed signature, issuer, audience, or expiration validation.
     #[error("Invalid token: {0}")]
     InvalidToken(#[from] jsonwebtoken::errors::Error),
+    /// A token of the wrong type was presented (e.g., refresh used as access).
+    #[error("Wrong token type")]
+    WrongTokenType,
+}
+
+impl AuthError {
+    /// Maps the error to its HTTP status and stable client-facing error code.
+    ///
+    /// Logging of suspicious cases lives here so every conversion path
+    /// (direct extractor rejection and `ApiError::Auth` wrapping) emits
+    /// the same telemetry without duplication.
+    #[inline]
+    pub(crate) fn status_and_code(&self) -> (StatusCode, &'static str) {
+        match self {
+            Self::MissingAccessToken => (StatusCode::UNAUTHORIZED, "missing_access_token"),
+            Self::InvalidToken(err) => {
+                tracing::warn!(error = %err, "JWT validation failed");
+                (StatusCode::UNAUTHORIZED, "invalid_token")
+            }
+            Self::WrongTokenType => {
+                tracing::warn!("Refresh token presented as access token");
+                (StatusCode::UNAUTHORIZED, "invalid_token")
+            }
+        }
+    }
 }
 
 impl IntoResponse for AuthError {
     #[inline]
     fn into_response(self) -> Response {
-        let (status, error_message) = match &self {
-            AuthError::MissingCredentials => (StatusCode::UNAUTHORIZED, "Missing credentials"),
-            AuthError::InvalidToken(err) => {
-                tracing::warn!(error = %err, "JWT validation failed");
-                (StatusCode::UNAUTHORIZED, "Invalid token")
-            }
-        };
-        let body = Json(json!({
-            "error": error_message,
-        }));
-        (status, body).into_response()
+        let (status, code) = self.status_and_code();
+        (
+            status,
+            Json(ErrorResponse {
+                error: code.to_owned(),
+            }),
+        )
+            .into_response()
     }
 }
