@@ -59,8 +59,9 @@ export interface PurchaseParams {
   scheduleId?: bigint;
   /**
    * Cached allowance from a prior approve tx (raw units).
-   * Bypasses the on-chain query, which fails for Odra CEP-18 contracts
-   * because they use a different storage layout than standard CEP-18.
+   * Session-level optimization to skip an extra RPC query when we already
+   * know the allowance from a just-completed approve in the same session.
+   * Falls back to on-chain `getAllowance` when undefined.
    */
   cachedAllowance?: bigint;
 }
@@ -327,7 +328,7 @@ export async function preparePurchase(
 
   // Check if approval is needed (for CEP-18 tokens).
   // If cachedAllowance is provided (from a prior approve in the same session),
-  // skip the on-chain query — it fails for Odra CEP-18 contracts anyway.
+  // skip the on-chain query to save an RPC round-trip.
   let approvalCheck: ApprovalCheckResult;
   if (cachedAllowance !== undefined) {
     const decimals = getDecimals(currency);
@@ -420,6 +421,17 @@ export function validatePurchase(
 
   if (isNaN(numAmount) || !isFinite(numAmount) || numAmount <= 0) {
     return { valid: false, error: 'Invalid amount' };
+  }
+
+  // Reject sub-precision amounts before they silently truncate to 0n in toRawAmount.
+  // E.g. "0.0000001" for USDT (6 decimals) → fraction "0000001".slice(0,6) → "000000" → 0.
+  const decimals = getDecimals(currency);
+  const fraction = amount.split('.')[1] ?? '';
+  if (fraction.length > decimals) {
+    return {
+      valid: false,
+      error: `${currency} supports up to ${decimals} decimal places`,
+    };
   }
 
   // Check minimum/maximum in USD

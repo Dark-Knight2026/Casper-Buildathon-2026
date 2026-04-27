@@ -13,7 +13,7 @@ import type { ICSPRClickSDK } from '@make-software/csprclick-core-types';
 import {
   createWithdrawUnbondedTransaction,
   parseWithdrawError,
-} from '@/services/ico/withdrawUnbondedService';
+} from '@/services/ico';
 import {
   useBlockchainTransaction,
   type TxStep,

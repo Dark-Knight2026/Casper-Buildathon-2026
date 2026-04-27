@@ -1,6 +1,6 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import type { ICSPRClickSDK } from '@make-software/csprclick-core-types';
-import { getNonce, loginWithSignature, applyToken } from '@/services/ico/backendAuthService';
+import { getNonce, loginWithSignature, applyToken } from '@/services/ico';
 import { logger } from '@/utils/logger';
 
 const TOKEN_KEY = 'leasefi_jwt';
@@ -10,7 +10,14 @@ function loadStoredToken(): string | null {
   if (!token) return null;
 
   try {
-    const payload = JSON.parse(atob(token.split('.')[1]));
+    // JWT payloads are base64url (RFC 7515): '-'/'_' instead of '+'/'/' and no '='
+    // padding. atob() requires standard base64, so normalize before decoding —
+    // otherwise tokens whose payload bytes encode to '-' or '_' (most of them)
+    // throw InvalidCharacterError and force a silent re-login.
+    const part = token.split('.')[1];
+    const b64 = part.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = b64 + '='.repeat((4 - b64.length % 4) % 4);
+    const payload = JSON.parse(atob(padded));
     if (Date.now() / 1000 > payload.exp) {
       localStorage.removeItem(TOKEN_KEY);
       return null;
@@ -31,6 +38,7 @@ export function useBackendAuth(
   const [isAuthenticated, setIsAuthenticated] = useState(() => !!loadStoredToken());
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const prevPublicKeyRef = useRef(publicKey);
 
   const login = useCallback(async () => {
     if (!clickRef || !publicKey) return;
@@ -80,6 +88,17 @@ export function useBackendAuth(
     applyToken(null);
     setIsAuthenticated(false);
   }, []);
+
+  useEffect(() => {
+    const prev = prevPublicKeyRef.current;
+    prevPublicKeyRef.current = publicKey;
+
+    // Logout when wallet disconnects or switches to a different account.
+    // Prevents JWT from Account A being sent in Account B context.
+    if (prev && prev !== publicKey) {
+      logout();
+    }
+  }, [publicKey, logout]);
 
   return { isAuthenticated, isLoading, error, login, logout };
 }

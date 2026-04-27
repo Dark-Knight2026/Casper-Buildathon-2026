@@ -12,7 +12,7 @@ const ALLOWED_BASE_URLS = [
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // CORS headers
   if (process.env.NODE_ENV === 'production' && !process.env.ALLOWED_ORIGIN) {
-    console.error('[security] ALLOWED_ORIGIN not set in production — proxy is open to all origins');
+    return res.status(403).json({ error: 'CORS not configured' });
   }
   res.setHeader('Access-Control-Allow-Origin', process.env.ALLOWED_ORIGIN || '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');

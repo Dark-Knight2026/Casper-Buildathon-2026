@@ -14,12 +14,17 @@ vi.mock('@/services/ico/backendAuthService', () => ({
 }));
 
 vi.mock('@/utils/logger', () => ({
-  logger: { debug: vi.fn(), error: vi.fn() },
+  logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
 import { useBackendAuth } from '@/hooks/ico/useBackendAuth';
 
 // ── JWT helpers ────────────────────────────────────────────────────────────
+
+// Pinned to a fixed point so futureExp/pastExp never drift with wall-clock time.
+// The hook checks exp against Date.now() — fake timers keep both in sync.
+const PINNED_DATE = new Date('2024-06-01T12:00:00Z').getTime();
+const PINNED_UNIX = Math.floor(PINNED_DATE / 1000);
 
 function makeFakeJwt(exp: number): string {
   const header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
@@ -27,8 +32,8 @@ function makeFakeJwt(exp: number): string {
   return `${header}.${payload}.signature`;
 }
 
-const futureExp = Math.floor(Date.now() / 1000) + 3600;
-const pastExp = Math.floor(Date.now() / 1000) - 3600;
+const futureExp = PINNED_UNIX + 3600; // 1 hour after pinned date
+const pastExp   = PINNED_UNIX - 3600; // 1 hour before pinned date
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
@@ -54,6 +59,8 @@ function makeClickRef(overrides: Record<string, unknown> = {}) {
 
 describe('useBackendAuth', () => {
   beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(PINNED_DATE);
     vi.clearAllMocks();
     localStorage.clear();
     mockGetNonce.mockResolvedValue({ message: NONCE_MESSAGE });
@@ -61,6 +68,7 @@ describe('useBackendAuth', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     localStorage.clear();
   });
 

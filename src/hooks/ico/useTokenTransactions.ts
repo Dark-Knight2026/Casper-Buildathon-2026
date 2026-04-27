@@ -28,11 +28,14 @@ async function fetchTokenTransactions(page: number, pageSize: number): Promise<T
   );
 }
 
-export function useTokenTransactions(page = 1, pageSize = 10) {
+// This endpoint is public — no auth guard needed.
+// An optional `enabled` prop is exposed so callers can pause fetching if needed.
+export function useTokenTransactions(page = 1, pageSize = 10, enabled = true) {
   const query = useQuery({
     queryKey: ['token-transactions-big', page, pageSize],
     queryFn: () => fetchTokenTransactions(page, pageSize),
     staleTime: 1000 * 60 * 2,
+    enabled,
   });
 
   return {

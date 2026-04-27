@@ -6,17 +6,19 @@
  * - When ready: shows Withdraw button to call withdraw_unbonded()
  */
 
-import { useState, useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import { Clock, Wallet, ArrowDownCircle, CheckCircle2 } from 'lucide-react';
 import { CountdownTimer } from './CountdownTimer';
 import { MainButton } from './MainButton';
 import { formatNumber, formatUSD, formatDateTime } from '../../utils/formatters';
-import { useUnbondingStatus } from '@/hooks/ico/useUnbondingStatus';
+import type { UnbondingStatus } from '@/hooks/ico/useUnbondingStatus';
 import type { WithdrawStep } from '@/hooks/ico/useWithdrawUnbonded';
 
 interface UnbondingStatusBlockProps {
-  accountHash: string | null | undefined;
+  /** Unbonding data from the parent's useUnbondingStatus call — avoids a duplicate fetch. */
+  data: UnbondingStatus | null | undefined;
+  isLoading?: boolean;
   tokenSymbol?: string;
   tokenPrice?: number;
   className?: string;
@@ -25,20 +27,17 @@ interface UnbondingStatusBlockProps {
 }
 
 export function UnbondingStatusBlock({
-  accountHash,
+  data,
+  isLoading = false,
   tokenSymbol = 'BIG',
   tokenPrice,
   className,
   onWithdraw,
   withdrawStep,
 }: UnbondingStatusBlockProps) {
-  const { data, isLoading } = useUnbondingStatus(accountHash);
+  const queryClient = useQueryClient();
 
-  const [isReady, setIsReady] = useState(data?.isWithdrawable ?? false);
-
-  useEffect(() => {
-    setIsReady(data?.isWithdrawable ?? false);
-  }, [data?.isWithdrawable]);
+  const isReady = data?.isWithdrawable ?? false;
 
   if (isLoading || !data || data.unbondingAmount === 0) return null;
 
@@ -126,7 +125,7 @@ export function UnbondingStatusBlock({
               variant="minimal"
               className="text-sm font-semibold text-amber-400"
               updateInterval={1000}
-              onExpire={() => setIsReady(true)}
+              onExpire={() => queryClient.invalidateQueries({ queryKey: ['unbonding-status'] })}
             />
           </div>
         )}

@@ -1,5 +1,5 @@
-import { memo, useCallback, useMemo, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { memo, useEffect, useMemo, useState } from 'react';
+import { cn } from '@/lib/utils';
 import { Card } from '../shared/Card';
 import { TrendingUp, Clock, Percent, Wallet } from 'lucide-react';
 import { TransactionHistory } from '../shared/TransactionHistory';
@@ -12,28 +12,39 @@ import { useTransactionHistory } from '@/hooks/ico/useTransactionHistory';
 import { useStakingPortfolio } from '@/hooks/ico/useStakingPortfolio';
 import { useStakingInfo } from '@/hooks/ico/useStakingInfo';
 import { useVestingSchedules } from '@/hooks/ico/useVestingSchedules';
-import { useClaimTokens } from '@/hooks/ico/useClaimTokens';
 import { useUnbondingStatus } from '@/hooks/ico/useUnbondingStatus';
-import { useWithdrawUnbonded } from '@/hooks/ico/useWithdrawUnbonded';
+import { useICOProgress } from '@/hooks/ico/useICOProgress';
+import { useICOActions } from '@/hooks/ico/useICOActions';
 import { deriveAccountHash } from '@/lib/blockchain/accountUtils';
 import { formatNumber, formatUSD } from '../../utils/formatters';
 import { ICO_CONFIG } from '@/constants/ico';
-import logger from '@/lib/logger';
 
 const PAGE_SIZE = 8;
 
 export const OverviewTab = memo(function OverviewTab() {
-  const queryClient = useQueryClient();
   const { account, clickRef } = useICOWallet();
   const accountHash = account?.publicKey ? deriveAccountHash(account.publicKey) : null;
   const [page, setPage] = useState(1);
-  const [claimingId, setClaimingId] = useState<string | null>(null);
-  const [claimToastVisible, setClaimToastVisible] = useState(false);
-  const [withdrawToastVisible, setWithdrawToastVisible] = useState(false);
+  // Reset pagination when the active wallet changes — otherwise we'd request
+  // page N for an account that may have fewer pages and show empty results.
+  useEffect(() => { setPage(1); }, [accountHash]);
   const { transactions, totalPages } = useTransactionHistory(accountHash, page, PAGE_SIZE);
   const { data: stakingPortfolio } = useStakingPortfolio(accountHash);
   const { data: stakingInfo } = useStakingInfo(accountHash);
   const { data: vestingSchedules } = useVestingSchedules(accountHash);
+  const { data: icoProgress } = useICOProgress();
+  const {
+    claimState,
+    handleClaim,
+    claimingId,
+    claimToastVisible,
+    setClaimToastVisible,
+    withdrawState,
+    withdraw,
+    resetWithdraw,
+    withdrawToastVisible,
+    setWithdrawToastVisible,
+  } = useICOActions(account?.publicKey ?? null, clickRef ?? null);
 
   const vestingEntries = useMemo<VestingEntry[]>(() => {
     if (!vestingSchedules?.data?.length) return [];
@@ -47,48 +58,7 @@ export const OverviewTab = memo(function OverviewTab() {
     }));
   }, [vestingSchedules]);
 
-  const { state: claimState, claim } = useClaimTokens(
-    account?.publicKey ?? null,
-    clickRef ?? null,
-    {
-      onSuccess: () => {
-        setClaimingId(null);
-        setClaimToastVisible(true);
-        queryClient.invalidateQueries({ queryKey: ['vesting-schedules'] });
-        queryClient.invalidateQueries({ queryKey: ['unbonding-status'] });
-      },
-      onError: (error) => {
-        logger.error('[useClaimTokens] claim failed', new Error(error));
-        setClaimToastVisible(true);
-      },
-    },
-  );
-
-  const handleClaim = useCallback(
-    (vestingId: bigint) => {
-      setClaimingId(String(vestingId));
-      claim(vestingId);
-    },
-    [claim],
-  );
-
-  const { data: unbondingData } = useUnbondingStatus(accountHash ?? null);
-
-  const { state: withdrawState, withdraw } = useWithdrawUnbonded(
-    account?.publicKey ?? null,
-    clickRef ?? null,
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ['staking-info'] });
-        queryClient.invalidateQueries({ queryKey: ['vesting-schedules'] });
-        setWithdrawToastVisible(true);
-      },
-      onError: (error) => {
-        logger.error('[useWithdrawUnbonded] withdraw failed', new Error(error));
-        setWithdrawToastVisible(true);
-      },
-    },
-  );
+  const { data: unbondingData, isLoading: unbondingLoading } = useUnbondingStatus(accountHash ?? null);
   const dashboardCards = useMemo(() => [
     {
       label: 'BIG Balance',
@@ -200,7 +170,8 @@ export const OverviewTab = memo(function OverviewTab() {
 
       {/* Unbonding Status */}
       <UnbondingStatusBlock
-        accountHash={accountHash}
+        data={unbondingData}
+        isLoading={unbondingLoading}
         tokenSymbol={ICO_CONFIG.TOKEN.symbol}
         onWithdraw={withdraw}
         withdrawStep={withdrawState.step}
@@ -216,6 +187,7 @@ export const OverviewTab = memo(function OverviewTab() {
             claimingId={claimingId}
             claimStep={claimState.step}
             hasActiveUnbonding={!!(unbondingData?.unbondingAmount && !unbondingData.isWithdrawable)}
+            tokenPrice={icoProgress?.priceUsd}
           />
         </Card>
       )}
@@ -230,9 +202,14 @@ export const OverviewTab = memo(function OverviewTab() {
               <p className="text-3xl font-bold text-[hsl(var(--ico-text-primary))]">
                 {formatUSD(stakingPortfolio?.estimatedUsdValue ?? 0)}
               </p>
-              <p className="text-sm text-[hsl(var(--ico-state-active))]">
-                {stakingPortfolio?.change24hPercent ?? 0}% (24h)
-              </p>
+              {(() => {
+                const change = stakingPortfolio?.change24hPercent ?? 0;
+                return (
+                  <p className={cn('text-sm', change >= 0 ? 'text-[hsl(var(--ico-state-active))]' : 'text-red-400')}>
+                    {change >= 0 ? '+' : ''}{change}% (24h)
+                  </p>
+                );
+              })()}
               <p className='text-[hsl(var(--ico-text-secondary))]'>Current USD value of your holdings</p>
             </div>
           </div>
@@ -267,7 +244,9 @@ export const OverviewTab = memo(function OverviewTab() {
       {/* Withdraw Transaction Toast */}
       <TransactionStatusToast
         isVisible={withdrawToastVisible}
-        onClose={() => setWithdrawToastVisible(false)}
+        // Reset internal state when toast is dismissed so a stale 'failed' step
+        // doesn't linger past the user's acknowledgement of the error.
+        onClose={() => { setWithdrawToastVisible(false); resetWithdraw(); }}
         step={withdrawState.step}
         txHash={withdrawState.txHash}
         tokensReceived={null}

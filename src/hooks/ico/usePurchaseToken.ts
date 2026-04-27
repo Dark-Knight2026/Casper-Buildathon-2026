@@ -9,7 +9,7 @@
  * 5. Handle success/failure callbacks
  */
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import type { ICSPRClickSDK } from '@make-software/csprclick-core-types';
 import { deriveAccountHash } from '@/lib/blockchain/accountUtils';
 import {
@@ -19,7 +19,7 @@ import {
   fromRawAmount,
   toRawAmount,
   parseContractError,
-} from '@/services/ico/icoPurchaseService';
+} from '@/services/ico';
 import { csprCloudService } from '@/lib/blockchain/csprCloudService';
 import { ICO_CONFIG, getCurrencyRateUsd } from '@/constants/ico';
 import type { PaymentCurrency } from '@/types/ico';
@@ -37,7 +37,13 @@ const DEPLOY_POLL_INTERVAL_MS = 10_000; // 10 seconds
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
-const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+// Resolves after `ms` ms, or immediately if signal is already aborted / fires during wait.
+const delay = (ms: number, signal?: AbortSignal) =>
+  new Promise<void>((resolve) => {
+    if (signal?.aborted) { resolve(); return; }
+    const id = setTimeout(resolve, ms);
+    signal?.addEventListener('abort', () => { clearTimeout(id); resolve(); }, { once: true });
+  });
 
 /**
  * Safe BigInt parsing — returns null instead of throwing on invalid input.
@@ -61,19 +67,28 @@ function safeBigInt(raw: string): bigint | null {
  */
 async function fetchActualTokensReceived(
   deployHash: string,
+  externalSignal?: AbortSignal,
   maxRetries = 3,
   retryDelayMs = 5000,
 ): Promise<bigint | null> {
-  const outerSignal = AbortSignal.timeout(60_000);
+  // Combine the caller's abort signal (component unmount) with our 60s budget
+  // so either source can stop the polling loop.
+  const timeoutSignal = AbortSignal.timeout(60_000);
+  const outerSignal = externalSignal && typeof AbortSignal.any === 'function'
+    ? AbortSignal.any([externalSignal, timeoutSignal])
+    : (externalSignal ?? timeoutSignal);
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     if (outerSignal.aborted) return null;
     try {
       // Wait before querying — the indexer needs time to process the deploy
-      await delay(attempt === 1 ? 3000 : retryDelayMs);
+      await delay(attempt === 1 ? 3000 : retryDelayMs, outerSignal);
+      if (outerSignal.aborted) return null;
 
       const url = `/api/cspr-cloud/ft-token-actions?deploy_hash=${deployHash}`;
       const resp = await fetch(url, {
-        signal: AbortSignal.any([outerSignal, AbortSignal.timeout(15_000)]),
+        signal: typeof AbortSignal.any === 'function'
+          ? AbortSignal.any([outerSignal, AbortSignal.timeout(15_000)])
+          : outerSignal,
       });
       if (!resp.ok) continue;
 
@@ -105,16 +120,19 @@ async function fetchActualTokensReceived(
 /**
  * Polls getDeployStatus until the deploy is executed, failed, or times out.
  * Used to ensure the CEP-18 approval is on-chain before submitting the purchase.
+ * Pass an AbortSignal so the loop stops when the component unmounts mid-transaction.
  */
 async function waitForDeployConfirmation(
   deployHash: string,
-): Promise<'executed' | 'failed' | 'timed-out'> {
+  signal: AbortSignal,
+): Promise<'executed' | 'failed' | 'timed-out' | 'aborted'> {
   const deadline = Date.now() + APPROVAL_CONFIRMATION_TIMEOUT_MS;
   while (Date.now() < deadline) {
-    const { status } = await csprCloudService.getDeploy(deployHash);
+    if (signal.aborted) return 'aborted';
+    const { status } = await csprCloudService.getDeploy(deployHash, signal);
     if (status === 'executed') return 'executed';
     if (status === 'failed') return 'failed';
-    await delay(DEPLOY_POLL_INTERVAL_MS);
+    await delay(DEPLOY_POLL_INTERVAL_MS, signal);
   }
   return 'timed-out';
 }
@@ -175,9 +193,17 @@ export function usePurchaseToken(
 ): UsePurchaseTokenReturn {
   const [state, setState] = useState<PurchaseState>(initialState);
   const submittingRef = useRef(false);
-  // Tracks allowance from a completed approve tx so that a failed purchase
-  // doesn't force the user to re-approve (Odra CEP-18 on-chain query always fails).
+  // Session-level cache of the allowance from a just-completed approve tx.
+  // Acts as a short-circuit so `preparePurchase` can skip the on-chain RPC
+  // lookup when we already know the value. Falls back to on-chain getAllowance
+  // (works correctly since f41b47d fixed the instance-hash lookup).
   const approvalCacheRef = useRef<{ currency: PaymentCurrency; rawAmount: bigint } | null>(null);
+  // Aborts the active waitForDeployConfirmation loop when the component unmounts.
+  const purchaseControllerRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => { purchaseControllerRef.current?.abort(); };
+  }, []);
 
   const { onSuccess, onError, onApprovalNeeded } = options;
 
@@ -189,6 +215,12 @@ export function usePurchaseToken(
       // Synchronous guard — prevents duplicate submissions on rapid clicks
       if (submittingRef.current) return;
       submittingRef.current = true;
+
+      // Create a fresh controller for this purchase; abort any previous one.
+      purchaseControllerRef.current?.abort();
+      const purchaseController = new AbortController();
+      purchaseControllerRef.current = purchaseController;
+      const { signal } = purchaseController;
 
       if (!publicKey) {
         const error = 'Wallet not connected';
@@ -233,8 +265,9 @@ export function usePurchaseToken(
         // 2. Check approval and prepare transactions
         setState((prev) => ({ ...prev, step: 'checking-approval' }));
 
-        // Use cached allowance if we already approved this currency in the current session.
-        // The on-chain query fails for Odra CEP-18 contracts (different storage layout).
+        // Use cached allowance if we already approved this currency in the current session
+        // to save an on-chain RPC lookup on retry. Cache is populated after a confirmed
+        // approve; falling back to getAllowance is still correct if no cache is set.
         const cached = approvalCacheRef.current;
         const cachedAllowance =
           cached?.currency === currency ? cached.rawAmount : undefined;
@@ -282,7 +315,8 @@ export function usePurchaseToken(
 
           // Wait for approval to execute on-chain before submitting purchase.
           // CEP-18 transfer_from() requires the allowance to be set first.
-          const approvalStatus = await waitForDeployConfirmation(approvalTxHash);
+          const approvalStatus = await waitForDeployConfirmation(approvalTxHash, signal);
+          if (approvalStatus === 'aborted') return;
           if (approvalStatus !== 'executed') {
             throw new Error(
               approvalStatus === 'timed-out'
@@ -330,7 +364,8 @@ export function usePurchaseToken(
         }));
 
         // 5. Verify purchase deploy executed on-chain before fetching tokens
-        const purchaseStatus = await waitForDeployConfirmation(purchaseTxHash);
+        const purchaseStatus = await waitForDeployConfirmation(purchaseTxHash, signal);
+        if (purchaseStatus === 'aborted') return;
         if (purchaseStatus !== 'executed') {
           throw new Error(
             purchaseStatus === 'timed-out'
@@ -341,7 +376,10 @@ export function usePurchaseToken(
 
         // 6. Fetch actual tokens received via CSPR.Cloud REST API
         let tokensReceived: string;
-        const actualTokens = await fetchActualTokensReceived(purchaseTxHash);
+        const actualTokens = await fetchActualTokensReceived(purchaseTxHash, signal);
+        // fetchActualTokensReceived returns null on abort — bail before touching
+        // state/callbacks so an unmounted component doesn't get onSuccess fired.
+        if (signal.aborted) return;
 
         if (actualTokens !== null && actualTokens > 0n) {
           tokensReceived = fromRawAmount(actualTokens, ICO_CONFIG.TOKEN.decimals);
@@ -363,6 +401,9 @@ export function usePurchaseToken(
 
         onSuccess?.(purchaseTxHash, tokensReceived);
       } catch (err) {
+        // User-triggered abort (component unmount, route change) — drop silently.
+        if (signal.aborted) return;
+
         const raw = err instanceof Error ? err.message : 'Purchase failed';
         const errorMessage = parseContractError(raw);
 
@@ -448,5 +489,3 @@ export function getStepMessage(step: PurchaseStep): string {
       return '';
   }
 }
-
-export default usePurchaseToken;
