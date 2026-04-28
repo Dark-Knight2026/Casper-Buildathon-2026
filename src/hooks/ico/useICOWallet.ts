@@ -56,37 +56,6 @@ export function useICOWallet(): UseICOWalletReturn {
     error: null,
   });
 
-  // TEMP DEBUG — installed from a React hook so HMR reloads it reliably (main.tsx doesn't HMR entry point).
-  useEffect(() => {
-    console.log('[DIAG] installing global listeners from useICOWallet effect');
-    const onReject = (e: PromiseRejectionEvent) => {
-      console.log('[DIAG UNHANDLED REJECTION] reason:', e.reason);
-      if (Array.isArray(e.reason)) {
-        console.log('[DIAG ARRAY]', JSON.stringify(e.reason, null, 2));
-        e.reason.forEach((item, i) => console.log(`[DIAG ARRAY item ${i}]`, item));
-      } else if (e.reason && typeof e.reason === 'object') {
-        console.log('[DIAG OBJECT]', JSON.stringify(e.reason, Object.getOwnPropertyNames(e.reason), 2));
-      }
-    };
-    const onMsg = (e: MessageEvent) => {
-      if (typeof e.data === 'object' && e.data !== null) {
-        const keys = Object.keys(e.data).join(',');
-        if (keys.includes('csprclick') || keys.includes('error') || keys.includes('account') || keys.includes('method') || keys.includes('result')) {
-          console.log('[DIAG POSTMESSAGE] from', e.origin, ':', e.data);
-          try {
-            console.log('[DIAG POSTMESSAGE JSON]', JSON.stringify(e.data, null, 2));
-          } catch { /* circular, ignore */ }
-        }
-      }
-    };
-    window.addEventListener('unhandledrejection', onReject);
-    window.addEventListener('message', onMsg);
-    return () => {
-      window.removeEventListener('unhandledrejection', onReject);
-      window.removeEventListener('message', onMsg);
-    };
-  }, []);
-
   // Listen to CSPR.click events
   useEffect(() => {
     if (!clickRef) return;
@@ -177,13 +146,6 @@ export function useICOWallet(): UseICOWalletReturn {
         error: null,
       });
     };
-
-    // TEMP DEBUG — log every event SDK emits so we can see real event names for social flow
-    const originalEmit = clickRef.emit.bind(clickRef);
-    clickRef.emit = ((event: string, ...args: unknown[]) => {
-      console.log('[SDK emit]', event, args);
-      return originalEmit(event, ...args);
-    }) as typeof clickRef.emit;
 
     clickRef.on('csprclick:signed_in', handleSignedIn);
     clickRef.on('csprclick:switched_account', handleSwitchedAccount);
