@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT u.id, u.role, u.verification_level\n            FROM users u\n            JOIN wallet_connections wc ON wc.user_id = u.id\n            WHERE wc.wallet_address = $1\n              AND u.deleted_at IS NULL\n            LIMIT 1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "role",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "verification_level",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "fb51b73b8ec8b5f2457c464e4efc4f7bc70b11638014781b52c6dc6b714e40a1"
+}

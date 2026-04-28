@@ -62,25 +62,36 @@ pub struct UserProfileRecord {
     pub updated_at: DateTime<Utc>,
 }
 
-/// Upserts a user by wallet address.
+/// Resolves a user by wallet address, creating a new account if none exists.
 ///
-/// If the user exists, updates `last_login_at` and leaves `role` unchanged
-/// (the `role` parameter is honored only on first insert - subsequent logins
-/// cannot promote a user via the `role` field). Otherwise, creates a new user
-/// with the supplied role.
+/// Lookup goes through `wallet_connections` (the canonical multi-wallet table)
+/// rather than `users.wallet_address` (a cached column). This lets a user log
+/// in with any of their connected wallets - cspr.click SDK, Casper Wallet
+/// extension, or a future custodial provisioned address.
+///
+/// All side effects happen inside a single transaction:
+///
+/// - **Existing `wallet_connection`:** bumps `wallet_connections.last_used_at`
+///   and `users.last_login_at` for the resolved user; `email`/`role`
+///   parameters are ignored.
+/// - **New wallet:** inserts a `users` row (without writing `wallet_address`
+///   directly - the AFTER-trigger on `wallet_connections` syncs the cached
+///   column) and a `wallet_connections` row with `is_primary=true,
+///   is_custodial=false, provider='casper_wallet'`.
 ///
 /// # Arguments
 ///
 /// * `pool` - Database connection pool
-/// * `email` - Placeholder email for the user
-/// * `wallet_address` - User's wallet address
-/// * `role` - Role to assign on first insert; ignored on conflict. Caller MUST
-///   pre-validate via [`UserRole::is_self_registerable`] - this layer trusts
-///   the input and only the DB CHECK constraint provides a final guard.
+/// * `email` - Placeholder email used only when creating a new user
+/// * `wallet_address` - User's wallet address (must be lowercased by caller)
+/// * `role` - Role to assign on first insert; ignored on existing user.
+///   Caller MUST pre-validate via [`UserRole::is_self_registerable`].
 ///
 /// # Errors
 ///
-/// Returns `sqlx::Error` if the database operation fails.
+/// Returns `sqlx::Error` on DB failure (including unique-constraint violation
+/// from concurrent first-time logins of the same wallet, which is mapped to
+/// `ApiError::Conflict` upstream).
 #[inline]
 pub async fn upsert_user_by_wallet(
     pool: &PgPool,
@@ -88,35 +99,100 @@ pub async fn upsert_user_by_wallet(
     wallet_address: &str,
     role: UserRole,
 ) -> Result<UserRecord, sqlx::Error> {
-    let role_str = role.to_string();
-    let record = sqlx::query!(
-        r#"
-            INSERT INTO users ( email, role, wallet_address, first_name, last_name, auth_id, status )
-            VALUES ($1, $3, $2, 'Wallet', 'User', NULL, 'active')
-            ON CONFLICT (wallet_address) WHERE wallet_address IS NOT NULL AND deleted_at IS NULL
-                DO UPDATE SET last_login_at = NOW()
-            RETURNING id, role, verification_level
-        "#,
-        email,
+    let mut tx = pool.begin().await?;
+
+    let existing = sqlx::query!(
+        r"
+            SELECT u.id, u.role, u.verification_level
+            FROM users u
+            JOIN wallet_connections wc ON wc.user_id = u.id
+            WHERE wc.wallet_address = $1
+              AND u.deleted_at IS NULL
+            LIMIT 1
+        ",
         wallet_address,
-        role_str,
     )
-    .fetch_one(pool)
+    .fetch_optional(tx.as_mut())
     .await?;
 
-    let verification_level =
-        VerificationLevel::from_str(&record.verification_level).map_err(|err| {
-            sqlx::Error::ColumnDecode {
+    let record = if let Some(row) = existing {
+        sqlx::query!(
+            r"
+                UPDATE wallet_connections
+                SET last_used_at = NOW()
+                WHERE user_id = $1 AND wallet_address = $2
+            ",
+            row.id,
+            wallet_address,
+        )
+        .execute(tx.as_mut())
+        .await?;
+
+        sqlx::query!(
+            r"
+                UPDATE users
+                SET last_login_at = NOW()
+                WHERE id = $1
+            ",
+            row.id,
+        )
+        .execute(tx.as_mut())
+        .await?;
+
+        let verification_level =
+            VerificationLevel::from_str(&row.verification_level).map_err(|err| {
+                sqlx::Error::ColumnDecode {
+                    index: "verification_level".to_owned(),
+                    source: Box::new(err),
+                }
+            })?;
+
+        UserRecord {
+            id: row.id,
+            role: row.role,
+            verification_level,
+        }
+    } else {
+        let role_str = role.to_string();
+        let inserted = sqlx::query!(
+            r"
+                INSERT INTO users (email, role, first_name, last_name, auth_id, status)
+                VALUES ($1, $2, 'Wallet', 'User', NULL, 'active')
+                RETURNING id, role, verification_level
+            ",
+            email,
+            role_str,
+        )
+        .fetch_one(tx.as_mut())
+        .await?;
+
+        sqlx::query!(
+            r"
+                INSERT INTO wallet_connections (user_id, wallet_address, provider, is_primary, is_custodial)
+                VALUES ($1, $2, 'casper_wallet', true, false)
+            ",
+            inserted.id,
+            wallet_address,
+        )
+        .execute(tx.as_mut())
+        .await?;
+
+        let verification_level = VerificationLevel::from_str(&inserted.verification_level)
+            .map_err(|err| sqlx::Error::ColumnDecode {
                 index: "verification_level".to_owned(),
                 source: Box::new(err),
-            }
-        })?;
+            })?;
 
-    Ok(UserRecord {
-        id: record.id,
-        role: record.role,
-        verification_level,
-    })
+        UserRecord {
+            id: inserted.id,
+            role: inserted.role,
+            verification_level,
+        }
+    };
+
+    tx.commit().await?;
+
+    Ok(record)
 }
 
 /// Loads the full profile for `user_id`, joining lease participation counts.

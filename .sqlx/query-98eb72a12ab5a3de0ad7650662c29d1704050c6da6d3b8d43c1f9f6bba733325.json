@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                INSERT INTO wallet_connections (user_id, wallet_address, provider, is_primary, is_custodial)\n                VALUES ($1, $2, 'casper_wallet', true, false)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "98eb72a12ab5a3de0ad7650662c29d1704050c6da6d3b8d43c1f9f6bba733325"
+}
