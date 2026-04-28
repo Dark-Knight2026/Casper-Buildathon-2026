@@ -46,6 +46,11 @@ pub struct LoginRequest {
     /// The cryptographic signature of the nonce message.
     #[schema(value_type = String)]
     pub signature: SecretString,
+    /// Optional role chosen by the user at first login. Honored only when
+    /// creating a new user record; ignored on subsequent logins. Allowed
+    /// values: `tenant`, `landlord`, `agent`. Defaults to `tenant`.
+    #[serde(default)]
+    pub role: Option<UserRole>,
 }
 
 /// Response returned upon successful login.
@@ -269,14 +274,39 @@ pub async fn login(
         return Err(ApiError::Unauthorized("Invalid signature".to_owned()));
     }
 
+    // Validate the optional `role` against the self-register whitelist before
+    // touching the DB. Default to `tenant` when the client did not supply one.
+    // `role` is honored only on first insert; on repeat logins the DB ignores
+    // it (ON CONFLICT ... DO UPDATE SET last_login_at = NOW()). We still
+    // validate on every request so a bogus role fails fast with 400 rather
+    // than being silently dropped.
+    let requested_role = payload.role.clone().unwrap_or(UserRole::Tenant);
+    if !requested_role.is_self_registerable() {
+        tracing::warn!(
+            event = "login_failed",
+            reason = "invalid_role",
+            wallet_address = %wallet_address,
+            role = %requested_role,
+            "Role not allowed for self-registration"
+        );
+        return Err(ApiError::BadRequest(
+            "Role not allowed for self-registration".to_owned(),
+        ));
+    }
+
     // Since the users table requires an email address, we generate a unique one using a hash.
     // Using `SHA-256` hash prevents collisions that could occur with simple address truncation.
     let hash = Sha256::digest(wallet_address.as_bytes());
     let placeholder_email = format!("wallet_{}@leasefi.local", hex::encode(&hash[..20]));
 
     // If a user with this wallet_address already exists, return it. If not, create a new one.
-    let user_record =
-        auth::upsert_user_by_wallet(&state.db, &placeholder_email, &wallet_address).await?;
+    let user_record = auth::upsert_user_by_wallet(
+        &state.db,
+        &placeholder_email,
+        &wallet_address,
+        requested_role,
+    )
+    .await?;
     let user_role = UserRole::from_str(&user_record.role).unwrap_or(UserRole::Unknown);
 
     let encoded = jwt::encode_access_token(

@@ -28,6 +28,22 @@ pub enum UserRole {
     Unknown,
 }
 
+impl UserRole {
+    /// Returns `true` if this role can be selected by a user during
+    /// self-registration (wallet login, password register, OAuth signup).
+    ///
+    /// Privileged roles (`admin`, `property_manager`) are explicitly excluded
+    /// and may only be assigned via the bootstrap-seed binary or the
+    /// `grant_admin.sh` operations script. `Unknown` (the serde fallback for
+    /// unrecognized strings) is also rejected so that bogus role values fail
+    /// fast with a 400 instead of reaching a CHECK-constraint at the DB.
+    #[inline]
+    #[must_use]
+    pub const fn is_self_registerable(&self) -> bool {
+        matches!(self, Self::Tenant | Self::Landlord | Self::Agent)
+    }
+}
+
 /// JWT issuer claim value. Only tokens issued by our API are accepted.
 pub const JWT_ISSUER: &str = "leasefi-api";
 /// JWT audience claim value. Only tokens intended for our users are accepted.

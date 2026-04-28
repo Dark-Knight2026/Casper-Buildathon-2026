@@ -6,7 +6,7 @@ use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::common::VerificationLevel;
+use crate::common::{UserRole, VerificationLevel};
 
 /// User record returned after login/registration.
 #[derive(Debug)]
@@ -63,13 +63,19 @@ pub struct UserProfileRecord {
 
 /// Upserts a user by wallet address.
 ///
-/// If the user exists, updates `last_login_at`. Otherwise, creates a new user.
+/// If the user exists, updates `last_login_at` and leaves `role` unchanged
+/// (the `role` parameter is honored only on first insert - subsequent logins
+/// cannot promote a user via the `role` field). Otherwise, creates a new user
+/// with the supplied role.
 ///
 /// # Arguments
 ///
 /// * `pool` - Database connection pool
 /// * `email` - Placeholder email for the user
 /// * `wallet_address` - User's wallet address
+/// * `role` - Role to assign on first insert; ignored on conflict. Caller MUST
+///   pre-validate via [`UserRole::is_self_registerable`] - this layer trusts
+///   the input and only the DB CHECK constraint provides a final guard.
 ///
 /// # Errors
 ///
@@ -79,17 +85,20 @@ pub async fn upsert_user_by_wallet(
     pool: &PgPool,
     email: &str,
     wallet_address: &str,
+    role: UserRole,
 ) -> Result<UserRecord, sqlx::Error> {
+    let role_str = role.to_string();
     let record = sqlx::query!(
         r#"
             INSERT INTO users ( email, role, wallet_address, first_name, last_name, auth_id, status )
-            VALUES ($1, 'tenant', $2, 'Wallet', 'User', NULL, 'active')
+            VALUES ($1, $3, $2, 'Wallet', 'User', NULL, 'active')
             ON CONFLICT (wallet_address) WHERE wallet_address IS NOT NULL AND deleted_at IS NULL
                 DO UPDATE SET last_login_at = NOW()
             RETURNING id, role, verification_level
         "#,
         email,
-        wallet_address
+        wallet_address,
+        role_str,
     )
     .fetch_one(pool)
     .await?;
