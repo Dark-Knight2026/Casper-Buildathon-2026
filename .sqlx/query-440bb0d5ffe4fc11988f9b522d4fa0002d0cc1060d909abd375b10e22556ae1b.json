@@ -1,0 +1,36 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO users ( email, role, wallet_address, first_name, last_name, auth_id, status )\n            VALUES ($1, $3, $2, 'Wallet', 'User', NULL, 'active')\n            ON CONFLICT (wallet_address) WHERE wallet_address IS NOT NULL AND deleted_at IS NULL\n                DO UPDATE SET last_login_at = NOW()\n            RETURNING id, role, verification_level\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "role",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "verification_level",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Text",
+        "Varchar"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "440bb0d5ffe4fc11988f9b522d4fa0002d0cc1060d909abd375b10e22556ae1b"
+}

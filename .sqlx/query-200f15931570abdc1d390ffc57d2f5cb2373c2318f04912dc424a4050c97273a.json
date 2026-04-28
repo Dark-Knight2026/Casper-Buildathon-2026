@@ -1,0 +1,106 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT\n                u.id,\n                u.wallet_address,\n                u.role,\n                u.status,\n                u.email,\n                u.first_name,\n                u.last_name,\n                u.phone,\n                u.avatar_url,\n                u.bio,\n                u.is_profile_complete,\n                u.verification_level,\n                u.created_at AS \"created_at!\",\n                u.updated_at AS \"updated_at!\",\n                (\n                    SELECT COUNT(DISTINCT l.id)\n                    FROM leases l\n                    WHERE l.status = 'active'\n                      AND (\n                          l.primary_tenant_id = u.id\n                          OR l.landlord_id = u.id\n                          OR l.agent_id = u.id\n                          OR u.id = ANY(l.tenant_ids)\n                      )\n                ) AS \"active_leases_count!\"\n            FROM users u\n            WHERE u.id = $1 AND u.deleted_at IS NULL\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "wallet_address",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "role",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "status",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "email",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 5,
+        "name": "first_name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 6,
+        "name": "last_name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 7,
+        "name": "phone",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 8,
+        "name": "avatar_url",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 9,
+        "name": "bio",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 10,
+        "name": "is_profile_complete",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 11,
+        "name": "verification_level",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 12,
+        "name": "created_at!",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 13,
+        "name": "updated_at!",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 14,
+        "name": "active_leases_count!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      false,
+      true,
+      true,
+      false,
+      false,
+      true,
+      true,
+      true,
+      false,
+      false,
+      true,
+      true,
+      null
+    ]
+  },
+  "hash": "200f15931570abdc1d390ffc57d2f5cb2373c2318f04912dc424a4050c97273a"
+}
