@@ -24,6 +24,8 @@ import {
   MaintenanceTab,
   MessagesTab,
 } from '@/components/tenant/property-detail';
+import { LeaseExtensionBanner } from '@/components/tenant/LeaseExtensionBanner';
+import { LeaseDecisionBanner } from '@/components/tenant/LeaseDecisionBanner';
 import { formatCurrency, formatDateLong } from '@/components/tenant/property-detail/shared';
 
 export default function MyPropertyDetail() {
@@ -127,6 +129,20 @@ export default function MyPropertyDetail() {
           />
 
           <TabsContent value="overview" className="mt-6 space-y-4">
+            {currentLease.status === 'active' && (
+              <>
+                <LeaseExtensionBanner
+                  leaseId={currentLease.id}
+                  endDate={currentLease.endDate}
+                  propertyAddress={propertyAddress}
+                />
+                <LeaseDecisionBanner
+                  leaseId={currentLease.id}
+                  endDate={currentLease.endDate}
+                  propertyAddress={propertyAddress}
+                />
+              </>
+            )}
             <Card>
               <CardContent className="p-6 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                 <div>

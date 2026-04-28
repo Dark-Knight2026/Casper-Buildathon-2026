@@ -115,14 +115,14 @@ select:invalid {
   font-weight: bold;
 }
 
-/* Error message styling */
+/* Structural defaults for live-region alerts.
+   Color/severity styling is opted-in via [role="alert"][data-severity="…"]
+   rules below — generic [role="alert"] must not force a red error palette,
+   otherwise it overrides shadcn Alert variants on every banner in the app. */
 [role="alert"],
 [aria-live="assertive"] {
   padding: 0.75rem;
   border-radius: 0.375rem;
-  background-color: #fee2e2;
-  border: 1px solid #dc2626;
-  color: #991b1b;
 }
 
 /* Success message styling */

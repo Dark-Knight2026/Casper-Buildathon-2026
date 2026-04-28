@@ -25,10 +25,24 @@ export const MOCK_TENANT_LEASES: TenantLease[] = [
     tenantId: CURRENT_TENANT_ID,
     propertyId: 'prop-2',
     status: 'active',
-    startDate: new Date('2025-04-15'),
-    endDate: new Date('2026-04-14'),
+    startDate: new Date('2025-10-01'),
+    endDate: new Date('2026-09-30'),
     monthlyRent: 2100,
     securityDeposit: 4200,
+    paymentDueDay: 1,
+  },
+  // Demo lease in T-91 decision window (~60 days from "today" 2026-04-28)
+  // — used to exercise Task 5 banner + landlord listing flow alongside
+  // Task 4's lease-current-1 which sits in the 6-month extension window.
+  {
+    id: 'lease-current-2',
+    tenantId: CURRENT_TENANT_ID,
+    propertyId: 'prop-4',
+    status: 'active',
+    startDate: new Date('2025-06-28'),
+    endDate: new Date('2026-06-27'),
+    monthlyRent: 3700,
+    securityDeposit: 7400,
     paymentDueDay: 1,
   },
   {

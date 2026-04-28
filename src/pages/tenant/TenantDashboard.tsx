@@ -24,6 +24,8 @@ import type { LeaseAgreement, UtilityResponsibility } from '@/types/lease';
 import type { Payment } from '@/services/paymentService';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorBoundary } from '@/components/ui/error-boundary';
+import { LeaseExtensionBanner } from '@/components/tenant/LeaseExtensionBanner';
+import { LeaseDecisionBanner } from '@/components/tenant/LeaseDecisionBanner';
 
 // TODO: remove when backend /api/v1/leases is ready
 const MOCK_LEASE: LeaseAgreement & { propertyAddress: string; paymentDueDay: number } = {
@@ -33,8 +35,8 @@ const MOCK_LEASE: LeaseAgreement & { propertyAddress: string; paymentDueDay: num
   tenantIds: ['mock-tenant-1'],
   type: 'residential-long-term',
   status: 'active',
-  startDate: new Date('2025-01-01'),
-  endDate: new Date('2026-01-01'),
+  startDate: new Date('2025-10-01'),
+  endDate: new Date('2026-09-30'),
   monthlyRent: 1500,
   securityDeposit: 3000,
   utilities: [
@@ -126,6 +128,21 @@ export function TenantDashboard() {
               Your lease expires in {daysUntilExpiration} days. Consider reaching out to your landlord about renewal options.
             </AlertDescription>
           </Alert>
+        )}
+
+        {currentLease.status === 'active' && (
+          <div className="mb-6 space-y-3">
+            <LeaseExtensionBanner
+              leaseId={currentLease.id}
+              endDate={currentLease.endDate}
+              propertyAddress={currentLease.propertyAddress}
+            />
+            <LeaseDecisionBanner
+              leaseId={currentLease.id}
+              endDate={currentLease.endDate}
+              propertyAddress={currentLease.propertyAddress}
+            />
+          </div>
         )}
 
         {/* Quick Stats */}
