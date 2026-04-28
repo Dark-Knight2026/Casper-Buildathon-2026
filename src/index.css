@@ -249,3 +249,11 @@
 .animate-shrink-width {
   animation: shrink-width linear forwards;
 }
+
+/* Radix Select/Popover/DropdownMenu wrapper sets `z-index: 50` inline.
+   Dialog overlay+content also use z-50, so dropdowns inside dialogs end up
+   below the modal panel. !important is required because the conflicting
+   z-index is on the wrapper's inline `style` attribute. */
+html body [data-radix-popper-content-wrapper] {
+  z-index: 9999 !important;
+}
