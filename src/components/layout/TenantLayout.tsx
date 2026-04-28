@@ -4,6 +4,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import {
   LayoutDashboard,
+  Home,
   Search,
   FileText,
   CreditCard,
@@ -18,7 +19,8 @@ import {
 
 const NAV_LINKS = [
   { to: '/tenant/dashboard',       label: 'Dashboard',    icon: LayoutDashboard },
-  { to: '/tenant/properties',      label: 'Properties',   icon: Search },
+  { to: '/tenant/properties',      label: 'My Properties', icon: Home },
+  { to: '/tenant/property-search', label: 'Browse',       icon: Search },
   { to: '/tenant/leases',          label: 'Leases',       icon: FileText },
   { to: '/tenant/payments',        label: 'Payments',     icon: CreditCard },
   { to: '/tenant/maintenance',     label: 'Maintenance',  icon: Wrench },

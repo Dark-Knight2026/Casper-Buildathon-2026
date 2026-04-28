@@ -22,6 +22,7 @@ const MFASetup = lazy(() => import('@/pages/auth/MFASetup'));
 const MFAVerify = lazy(() => import('@/pages/auth/MFAVerify'));
 
 import TenantLayout from '@/components/layout/TenantLayout';
+import PublicLayout from '@/components/layout/PublicLayout';
 
 // Lazy load tenant pages
 const TenantDashboard = lazy(() => import('@/pages/tenant/TenantDashboard').then(m => ({ default: m.TenantDashboard })));
@@ -39,6 +40,7 @@ const TenantProfile = lazy(() => import('@/pages/tenant/TenantProfile').then(m =
 // Lazy load tenant property search pages (PUBLIC ACCESS for browsing)
 const PropertySearch = lazy(() => import('@/pages/tenant/PropertySearch'));
 const TenantPropertyDetail = lazy(() => import('@/pages/tenant/PropertyDetail'));
+const MyProperties = lazy(() => import('@/pages/tenant/MyProperties'));
 
 // Lazy load tenant property interaction pages
 const SavedProperties = lazy(() => import('@/pages/tenant/SavedProperties'));
@@ -160,10 +162,13 @@ function App() {
               {/* Landing Page - Default route for all visitors */}
               <Route path="/" element={<PropertyLanding />} />
               
-              {/* Property Browsing - Public access for exploration */}
-              <Route path="/listings" element={<PropertySearch />} />
-              <Route path="/properties" element={<PropertySearch />} />
-              <Route path="/properties/:id" element={<TenantPropertyDetail />} />
+              {/* Property Browsing - Public access for exploration, wrapped with the
+                  same landing header so navigation persists across browse/detail views. */}
+              <Route element={<PublicLayout />}>
+                <Route path="/listings" element={<PropertySearch />} />
+                <Route path="/properties" element={<PropertySearch />} />
+                <Route path="/properties/:id" element={<TenantPropertyDetail />} />
+              </Route>
 
               {/* ICO Pages - Public access for token sale, wrapped with Casper wallet provider */}
               <Route path="/ico" element={<ICOLayout><ICOPage /></ICOLayout>} />
@@ -195,7 +200,7 @@ function App() {
                 <Route index element={<Navigate to="/tenant/dashboard" replace />} />
                 <Route path="dashboard"             element={<TenantDashboard />} />
                 <Route path="property-search"       element={<PropertySearch />} />
-                <Route path="properties"            element={<PropertySearch />} />
+                <Route path="properties"            element={<MyProperties />} />
                 <Route path="properties/:id"        element={<TenantPropertyDetail />} />
                 <Route path="saved-properties"      element={<SavedProperties />} />
                 <Route path="my-applications"       element={<MyApplications />} />
