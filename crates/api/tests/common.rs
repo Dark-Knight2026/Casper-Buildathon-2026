@@ -149,6 +149,7 @@ pub async fn setup_test_server_with(
         jwt_secret: SecretString::from(jwt_secret.clone()),
         port: 0,
         cors_origin: TEST_CORS_ORIGIN.to_owned(),
+        cookie_secure: false,
         contract_big: overrides.contract_big,
         ico_fallback: overrides.ico_fallback,
         total_supply: TOTAL_SUPPLY,

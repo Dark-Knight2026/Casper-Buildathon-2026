@@ -20,6 +20,10 @@ struct RawEnvConfig {
     port: u16,
     #[serde(default = "default_cors_origin")]
     cors_origin: String,
+    /// `Secure` flag toggle for auth cookies. Production/staging deploys must
+    /// set `COOKIE_SECURE=true` so HTTPS-only delivery is enforced.
+    #[serde(default)]
+    cookie_secure: bool,
     /// BIG token contract package hash (hex, no prefix). Shared with `indexer`.
     #[serde(default)]
     contract_big: Option<String>,
@@ -73,6 +77,11 @@ pub struct ServerConfig {
     pub port: u16,
     /// Allowed CORS origin.
     pub cors_origin: String,
+    /// Whether auth cookies are issued with the `Secure` flag. Must be `true`
+    /// in any HTTPS deployment, must be `false` for plain-HTTP local dev (the
+    /// browser silently drops `Secure` cookies on `http://`, which would break
+    /// login). Wired through to `Cookie::build(...).secure(...)` at issuance.
+    pub cookie_secure: bool,
     /// BIG token contract package hash (hex, no prefix). `None` when not configured.
     pub contract_big: Option<String>,
     /// Fallback ICO config from env vars. Used when `ico_schedules` table is empty
@@ -133,6 +142,7 @@ impl ServerConfig {
             jwt_secret: raw.supabase_jwt_secret,
             port: raw.port,
             cors_origin: raw.cors_origin,
+            cookie_secure: raw.cookie_secure,
             contract_big: raw.contract_big.map(|s| s.to_ascii_lowercase()),
             ico_fallback,
             total_supply: raw.total_supply.unwrap_or(TOTAL_SUPPLY),

@@ -285,3 +285,48 @@ pub async fn fetch_user_profile(
         updated_at: record.updated_at,
     })
 }
+
+/// Inserts a fresh `refresh_tokens` row and returns its primary key.
+///
+/// `token_hash` is the raw SHA-256 of the opaque plaintext - never the
+/// plaintext itself. The plaintext is returned to the caller exactly once
+/// (in the `Set-Cookie` header) and only the hash is persisted.
+///
+/// `family_id` groups all rotations of one login session: at first login
+/// the caller passes a brand-new UUID; on rotation (Phase 4.2) the new row
+/// inherits the predecessor's `family_id`. Reuse-detection later revokes
+/// the entire family in one statement.
+///
+/// `replaced_by` is left NULL here - it is set on the predecessor row
+/// during rotation, not at issuance.
+///
+/// # Errors
+///
+/// Returns `sqlx::Error` on DB failure. The partial unique index on
+/// `(token_hash) WHERE revoked_at IS NULL` would surface the
+/// astronomically-unlikely SHA-256 collision as a unique-violation;
+/// upstream maps that to `ApiError::Conflict`.
+#[inline]
+pub async fn insert_refresh_token(
+    pool: &PgPool,
+    user_id: Uuid,
+    family_id: Uuid,
+    token_hash: &[u8],
+    expires_at: DateTime<Utc>,
+) -> Result<Uuid, sqlx::Error> {
+    let row = sqlx::query!(
+        r"
+            INSERT INTO refresh_tokens (user_id, token_hash, family_id, expires_at)
+            VALUES ($1, $2, $3, $4)
+            RETURNING id
+        ",
+        user_id,
+        token_hash,
+        family_id,
+        expires_at,
+    )
+    .fetch_one(pool)
+    .await?;
+
+    Ok(row.id)
+}

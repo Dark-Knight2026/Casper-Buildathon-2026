@@ -19,11 +19,8 @@ use thiserror::Error;
 
 use crate::{
     common::{AppState, Claims, ErrorResponse, TokenType},
-    services::auth::jwt,
+    services::auth::{cookies::ACCESS_TOKEN_COOKIE, jwt},
 };
-
-/// Name of the cookie that carries the access token.
-pub const ACCESS_TOKEN_COOKIE: &str = "access_token";
 
 /// Authenticated user extracted from the `access_token` JWT cookie.
 #[derive(Debug)]

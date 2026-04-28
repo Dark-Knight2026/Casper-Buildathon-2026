@@ -173,16 +173,26 @@ async fn full_auth_flow_nonce_sign_login(pool: PgPool) {
         }))
         .await;
 
-    // 5. Verify success
+    // 5. Verify success: tokens come via Set-Cookie, body has user only.
     assert_eq!(login_response.status_code(), StatusCode::OK);
-    let login_body: Value = login_response.json();
+    let access_cookie = login_response.cookie("access_token");
     assert!(
-        login_body.get("token").is_some(),
-        "Response must contain token"
+        !access_cookie.value().is_empty(),
+        "access_token cookie must be set"
     );
+    let refresh_cookie = login_response.cookie("refresh_token");
+    assert!(
+        !refresh_cookie.value().is_empty(),
+        "refresh_token cookie must be set"
+    );
+    let login_body: Value = login_response.json();
     assert!(
         login_body.get("user").is_some(),
         "Response must contain user info"
+    );
+    assert!(
+        login_body.get("token").is_none(),
+        "Token must not appear in body - it lives in the cookie now"
     );
 }
 
@@ -548,14 +558,24 @@ async fn full_auth_flow_secp256k1(pool: PgPool) {
         .await;
 
     assert_eq!(login_response.status_code(), StatusCode::OK);
-    let login_body: Value = login_response.json();
+    let access_cookie = login_response.cookie("access_token");
     assert!(
-        login_body.get("token").is_some(),
-        "Response must contain token"
+        !access_cookie.value().is_empty(),
+        "access_token cookie must be set"
     );
+    let refresh_cookie = login_response.cookie("refresh_token");
+    assert!(
+        !refresh_cookie.value().is_empty(),
+        "refresh_token cookie must be set"
+    );
+    let login_body: Value = login_response.json();
     assert!(
         login_body.get("user").is_some(),
         "Response must contain user info"
+    );
+    assert!(
+        login_body.get("token").is_none(),
+        "Token must not appear in body - it lives in the cookie now"
     );
 }
 

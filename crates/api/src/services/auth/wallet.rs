@@ -7,10 +7,12 @@ use axum::{
     Json,
     extract::{Query, State},
 };
+use axum_extra::extract::CookieJar;
 use rand::{RngExt, distr::Alphanumeric};
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use time::Duration;
 use utoipa::ToSchema;
 
 use crate::{
@@ -18,7 +20,7 @@ use crate::{
         self, ApiError, ApiResult, AppState, CASPER_ED25519_PUBKEY_HEX_LEN,
         CASPER_SECP256K1_PUBKEY_HEX_LEN, UserRole,
     },
-    services::auth::{self, jwt, models::UserInfo},
+    services::auth::{self, cookies, jwt, models::UserInfo, refresh},
 };
 
 /// Request payload for generating a login nonce.
@@ -53,12 +55,16 @@ pub struct LoginRequest {
     pub role: Option<UserRole>,
 }
 
-/// Response returned upon successful login.
+/// Response body returned upon successful login.
+///
+/// Tokens are NOT in this body - they are delivered via `Set-Cookie`
+/// headers (`access_token` and `refresh_token`, both `HttpOnly`). The
+/// frontend never reads token material from JS; the browser attaches the
+/// cookies automatically on subsequent requests. This closes the XSS
+/// exfiltration vector that a body-returned JWT would have.
 #[derive(Debug, Serialize, ToSchema)]
 pub struct LoginResponse {
-    /// Use this JSON Web Token (JWT) for authenticating subsequent requests.
-    pub token: String,
-    /// Basic information about the authenticated user.
+    /// Profile of the authenticated user.
     pub user: UserInfo,
 }
 
@@ -139,14 +145,16 @@ pub async fn get_nonce(
     }))
 }
 
-// `GET /api/v1/auth/login`
+// `POST /api/v1/auth/login`
 //
 /// Authenticates a user by verifying their signature against a stored nonce.
 ///
 /// 1. Retrieves the previously generated nonce from Redis using the wallet address.
 /// 2. Verifies the provided signature against the stored message and public key.
 /// 3. If valid, creates or updates the user record in the database.
-/// 4. Generates a signed JWT for session management.
+/// 4. Mints a short-lived access JWT and an opaque refresh token.
+/// 5. Returns both via `Set-Cookie` (HttpOnly+SameSite=Strict), and a
+///    body containing only the user profile.
 ///
 /// # Arguments
 ///
@@ -155,7 +163,9 @@ pub async fn get_nonce(
 ///
 /// # Returns
 ///
-/// * `Ok(Json<LoginResponse>)` - JSON containing the JWT and user info.
+/// `(CookieJar, Json<LoginResponse>)` - jar carries `access_token`
+/// (Path=/, Max-Age=15m) and `refresh_token` (Path=/api/v1/auth,
+/// Max-Age=14d) cookies; body has user info only.
 ///
 /// # Errors
 ///
@@ -180,7 +190,7 @@ pub async fn get_nonce(
 pub async fn login(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<LoginRequest>,
-) -> ApiResult<Json<LoginResponse>> {
+) -> ApiResult<(CookieJar, Json<LoginResponse>)> {
     // Normalize to lowercase for consistent Redis key lookup.
     let wallet_address = payload.wallet_address.to_ascii_lowercase();
 
@@ -316,6 +326,14 @@ pub async fn login(
         &state.config.jwt_secret,
     )?;
 
+    // Issue a brand-new refresh token + family for this login session. The
+    // plaintext is returned to the client only via the `refresh_token` cookie
+    // below; the DB row keeps just the SHA-256 hash. Failures (DB outage,
+    // unique-violation on the astronomically-unlikely hash collision) abort
+    // the login because without a refresh token the user could not survive
+    // past the 15-minute access window.
+    let issued_refresh = refresh::issue_login_refresh_token(&state.db, user_record.id).await?;
+
     // Fetch the full profile for the response. `upsert_user_by_wallet` returns
     // only the minimal fields needed to mint a JWT (id, role, verification);
     // the public response body needs joined data (active_leases_count) and the
@@ -323,30 +341,48 @@ pub async fn login(
     // upsert/trigger has run.
     let profile = auth::fetch_user_profile(&state.db, user_record.id).await?;
 
+    // Build the cookies. `cookie_secure` from config decides whether the
+    // browser refuses to send the cookies over plain HTTP - false in dev so
+    // the login works on http://localhost, true in any HTTPS deployment.
+    let access_cookie = cookies::build_access_cookie(
+        encoded.token,
+        Duration::seconds(jwt::ACCESS_TOKEN_TTL.num_seconds()),
+        state.config.cookie_secure,
+    );
+    let refresh_cookie = cookies::build_refresh_cookie(
+        issued_refresh.plaintext,
+        Duration::seconds(refresh::REFRESH_TOKEN_TTL.num_seconds()),
+        state.config.cookie_secure,
+    );
+    let jar = CookieJar::new().add(access_cookie).add(refresh_cookie);
+
     tracing::info!(
         event = "user_login",
         user_id = %user_record.id,
         wallet_address = %wallet_address,
+        refresh_family = %issued_refresh.family_id,
         "User logged in successfully"
     );
 
-    Ok(Json(LoginResponse {
-        token: encoded.token,
-        user: UserInfo {
-            id: profile.id,
-            role: user_role,
-            wallet_address: profile.wallet_address,
-            status: profile.status,
-            email: profile.email,
-            first_name: profile.first_name,
-            last_name: profile.last_name,
-            phone: profile.phone,
-            avatar_url: profile.avatar_url,
-            bio: profile.bio,
-            is_profile_complete: profile.is_profile_complete,
-            active_leases_count: profile.active_leases_count,
-            created_at: profile.created_at,
-            updated_at: profile.updated_at,
-        },
-    }))
+    Ok((
+        jar,
+        Json(LoginResponse {
+            user: UserInfo {
+                id: profile.id,
+                role: user_role,
+                wallet_address: profile.wallet_address,
+                status: profile.status,
+                email: profile.email,
+                first_name: profile.first_name,
+                last_name: profile.last_name,
+                phone: profile.phone,
+                avatar_url: profile.avatar_url,
+                bio: profile.bio,
+                is_profile_complete: profile.is_profile_complete,
+                active_leases_count: profile.active_leases_count,
+                created_at: profile.created_at,
+                updated_at: profile.updated_at,
+            },
+        }),
+    ))
 }

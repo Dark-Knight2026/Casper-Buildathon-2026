@@ -12,6 +12,7 @@ default = ["enabled"]
 enabled = [
     "dep:axum",
     "dep:axum-extra",
+    "dep:base64",
     "dep:casper-types",
     "dep:chrono",
     "dep:config",
@@ -29,6 +30,7 @@ enabled = [
     "dep:sqlx",
     "dep:strum",
     "dep:thiserror",
+    "dep:time",
     "dep:tokio",
     "dep:tower-http",
     "dep:tower_governor",
@@ -45,6 +47,7 @@ integration = []
 [dependencies]
 axum = { workspace = true, optional = true }
 axum-extra = { workspace = true, optional = true }
+base64 = { workspace = true, optional = true }
 casper-types = { workspace = true, optional = true }
 chrono = { workspace = true, optional = true }
 config = { workspace = true, optional = true }
@@ -62,6 +65,7 @@ sha2 = { workspace = true, optional = true }
 sqlx = { workspace = true, optional = true }
 strum = { workspace = true, optional = true }
 thiserror = { workspace = true, optional = true }
+time = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true }
 tower-http = { workspace = true, optional = true }
 tower_governor = { workspace = true, optional = true }
