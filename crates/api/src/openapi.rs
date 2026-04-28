@@ -35,6 +35,7 @@ use crate::{
             crate::common::UserRole,
             crate::common::Claims,
             crate::common::TokenType,
+            crate::common::UserStatus,
             crate::common::VerificationLevel,
             // Auth models
             auth::wallet::NonceRequest,

@@ -6,7 +6,7 @@ use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::common::{UserRole, VerificationLevel};
+use crate::common::{UserRole, UserStatus, VerificationLevel};
 
 /// User record returned after login/registration.
 #[derive(Debug)]
@@ -35,8 +35,9 @@ pub struct UserProfileRecord {
     pub wallet_address: Option<String>,
     /// User's role.
     pub role: String,
-    /// Account status (`active`, `inactive`, `suspended`, `pending_verification`).
-    pub status: Option<String>,
+    /// Account status. Parsed from the underlying TEXT column at the db
+    /// layer so handlers receive a typed value.
+    pub status: Option<UserStatus>,
     /// Email address (nullable: wallet-only users may have none).
     pub email: Option<String>,
     /// First name (NOT NULL in `users` schema).
@@ -181,11 +182,20 @@ pub async fn fetch_user_profile(
             }
         })?;
 
+    let status = record
+        .status
+        .map(|s| UserStatus::from_str(&s))
+        .transpose()
+        .map_err(|err| sqlx::Error::ColumnDecode {
+            index: "status".to_owned(),
+            source: Box::new(err),
+        })?;
+
     Ok(UserProfileRecord {
         id: record.id,
         wallet_address: record.wallet_address,
         role: record.role,
-        status: record.status,
+        status,
         email: record.email,
         first_name: record.first_name,
         last_name: record.last_name,

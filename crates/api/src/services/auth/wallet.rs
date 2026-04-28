@@ -316,6 +316,13 @@ pub async fn login(
         &state.config.jwt_secret,
     )?;
 
+    // Fetch the full profile for the response. `upsert_user_by_wallet` returns
+    // only the minimal fields needed to mint a JWT (id, role, verification);
+    // the public response body needs joined data (active_leases_count) and the
+    // wallet_address cache, both of which live on `users` after the
+    // upsert/trigger has run.
+    let profile = auth::fetch_user_profile(&state.db, user_record.id).await?;
+
     tracing::info!(
         event = "user_login",
         user_id = %user_record.id,
@@ -323,27 +330,23 @@ pub async fn login(
         "User logged in successfully"
     );
 
-    // 2.3 transition: only `id` and `role` are populated until 3.2 wires
-    // `auth::db::fetch_user_profile` into this handler. Remaining `Option`
-    // fields stay `None` and are skipped by serde, so the JSON shape on the
-    // wire is unchanged.
     Ok(Json(LoginResponse {
         token: encoded.token,
         user: UserInfo {
-            id: user_record.id,
+            id: profile.id,
             role: user_role,
-            wallet_address: None,
-            status: None,
-            email: None,
-            first_name: None,
-            last_name: None,
-            phone: None,
-            avatar_url: None,
-            bio: None,
-            is_profile_complete: None,
-            active_leases_count: None,
-            created_at: None,
-            updated_at: None,
+            wallet_address: profile.wallet_address,
+            status: profile.status,
+            email: profile.email,
+            first_name: profile.first_name,
+            last_name: profile.last_name,
+            phone: profile.phone,
+            avatar_url: profile.avatar_url,
+            bio: profile.bio,
+            is_profile_complete: profile.is_profile_complete,
+            active_leases_count: profile.active_leases_count,
+            created_at: profile.created_at,
+            updated_at: profile.updated_at,
         },
     }))
 }

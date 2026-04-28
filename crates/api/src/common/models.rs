@@ -63,6 +63,29 @@ pub enum TokenType {
     Refresh,
 }
 
+/// Account status. Mirrors the `users.status` column CHECK constraint
+/// (`'active' | 'inactive' | 'suspended' | 'pending_verification'`).
+///
+/// Unlike [`UserRole`], no `Unknown` fallback variant is provided: `status` is
+/// only ever written by trusted internal code (admin actions, triggers), so an
+/// unparseable value indicates a missing migration rather than malicious input
+/// and should fail loudly via `sqlx::Error::ColumnDecode`.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, EnumString, Display, ToSchema,
+)]
+#[serde(rename_all = "snake_case")]
+#[strum(serialize_all = "snake_case")]
+pub enum UserStatus {
+    /// Account is active and may sign in.
+    Active,
+    /// Account is inactive (self-deactivated or never activated).
+    Inactive,
+    /// Account is suspended by an administrator.
+    Suspended,
+    /// Account awaits verification (email, KYC, etc.) before full access.
+    PendingVerification,
+}
+
 /// User verification level. Mirrors the `users.verification_level` column
 /// (`'none' | 'email' | 'identity' | 'full'`) introduced by the
 /// `extend user status and add verification_level` migration.
