@@ -108,7 +108,7 @@ export default function TenantRenewalNegotiation() {
   };
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <div className="container mx-auto px-4 py-6 space-y-6">
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="icon" onClick={() => navigate(`/tenant/renewals/${id}`, { state: { offer } })}>
           <ArrowLeft className="h-4 w-4" />

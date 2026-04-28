@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { leaseRenewalService, LeaseRenewal } from '@/services/leaseRenewalService';
 import RenewalOfferCard from '@/components/lease-renewal/RenewalOfferCard';

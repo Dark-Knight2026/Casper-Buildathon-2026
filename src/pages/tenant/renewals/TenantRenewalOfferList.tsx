@@ -99,7 +99,7 @@ export default function TenantRenewalOfferList() {
   const offers = MOCK_OFFERS;
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <div className="container mx-auto px-4 py-6 space-y-6">
       <div>
         <h1 className="text-3xl font-bold text-foreground">Lease Renewal Offers</h1>
         <p className="text-muted-foreground">View and respond to renewal offers from your landlord</p>
@@ -178,7 +178,7 @@ export default function TenantRenewalOfferList() {
                     </div>
                   )}
 
-                  <div className="flex gap-2">
+                  <div className="flex flex-col md:flex-row gap-2">
                     <Button onClick={() => navigate(`/tenant/renewals/${offer.id}`, { state: { offer } })}>
                       <Eye className="h-4 w-4 mr-2" />
                       View Details

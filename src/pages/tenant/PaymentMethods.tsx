@@ -102,16 +102,21 @@ export function PaymentMethods() {
 
           {/* ── Payment Methods ── */}
           <TabsContent value="methods" className="space-y-6">
-            <div className="flex justify-between items-center">
+            <div className="flex justify-between items-start gap-3">
               <div>
                 <h2 className="text-xl font-semibold text-foreground">Saved Payment Methods</h2>
                 <p className="text-sm text-muted-foreground mt-1">
                   Manage your saved cards and bank accounts
                 </p>
               </div>
-              <Button onClick={() => setShowAddForm(true)}>
-                <Plus className="mr-2 h-4 w-4" />
-                Add Payment Method
+              <Button
+                onClick={() => setShowAddForm(true)}
+                size="icon"
+                className="sm:size-auto sm:px-4"
+                aria-label="Add Payment Method"
+              >
+                <Plus className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Add Payment Method</span>
               </Button>
             </div>
 
