@@ -22,7 +22,7 @@ function LeasedPropertyCard({
 }) {
   const { lease, property } = item;
   return (
-    <div className="space-y-2">
+    <div className="space-y-2 w-full [&>div]:w-full">
       <PropertyCard
         property={{
           id: property.id,
