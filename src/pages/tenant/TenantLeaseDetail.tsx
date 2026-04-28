@@ -14,7 +14,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsContent } from '@/components/ui/tabs';
+import { ResponsiveTabsHeader } from '@/components/ui/responsive-tabs-header';
 import type { LeaseAgreement } from '@/types/lease';
 
 type DetailLease = LeaseAgreement & {
@@ -197,6 +198,14 @@ export function TenantLeaseDetail() {
   const navigate = useNavigate();
   const location = useLocation();
   const [showUpload, setShowUpload] = useState(false);
+  const [activeTab, setActiveTab] = useState('overview');
+
+  const tabOptions = [
+    { value: 'overview',  label: 'Overview' },
+    { value: 'documents', label: 'Documents' },
+    { value: 'terms',     label: 'Terms & Conditions' },
+    { value: 'activity',  label: 'Activity' },
+  ];
 
   // Use lease passed via navigation state, fallback to mock if accessed directly
   // TODO: replace fallback with GET /api/v1/leases/:id when backend is ready
@@ -223,13 +232,8 @@ export function TenantLeaseDetail() {
         </Badge>
       </div>
 
-      <Tabs defaultValue="overview" className="space-y-6">
-        <TabsList>
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="documents">Documents</TabsTrigger>
-          <TabsTrigger value="terms">Terms & Conditions</TabsTrigger>
-          <TabsTrigger value="activity">Activity</TabsTrigger>
-        </TabsList>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+        <ResponsiveTabsHeader options={tabOptions} activeTab={activeTab} onChange={setActiveTab} />
 
         {/* ── Overview ── */}
         <TabsContent value="overview" className="space-y-6">
@@ -510,7 +514,7 @@ export function TenantLeaseDetail() {
         <TabsContent value="documents">
           <Card>
             <CardHeader>
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col md:flex-row gap-2 items-start  md:items-center justify-between">
                 <div>
                   <CardTitle>Lease Documents</CardTitle>
                   <CardDescription>View and download lease-related documents</CardDescription>

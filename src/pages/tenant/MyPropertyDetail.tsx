@@ -3,7 +3,8 @@ import { useMemo, useState } from 'react';
 import { ArrowLeft, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsContent } from '@/components/ui/tabs';
+import { ResponsiveTabsHeader } from '@/components/ui/responsive-tabs-header';
 import { FilterBar } from '@/components/ui/filter-bar';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorBoundary } from '@/components/ui/error-boundary';
@@ -20,8 +21,8 @@ import {
   LeaseCard,
   PaymentCard,
   PaymentsSummary,
-  MaintenanceCard,
-  MessageCard,
+  MaintenanceTab,
+  MessagesTab,
 } from '@/components/tenant/property-detail';
 import { formatCurrency, formatDateLong } from '@/components/tenant/property-detail/shared';
 
@@ -30,6 +31,7 @@ export default function MyPropertyDetail() {
   const navigate = useNavigate();
   const { toast } = useToast();
 
+  const [activeTab, setActiveTab] = useState('overview');
   const [paymentStatusFilter, setPaymentStatusFilter] = useState('all');
   const [paymentYearFilter, setPaymentYearFilter] = useState('all');
 
@@ -99,6 +101,14 @@ export default function MyPropertyDetail() {
 
   const currentLease = leases.find((l) => l.status === 'active') ?? leases[0];
 
+  const tabOptions = [
+    { value: 'overview',    label: 'Overview' },
+    { value: 'leases',      label: `Leases (${leases.length})` },
+    { value: 'payments',    label: `Payments (${payments.length})` },
+    { value: 'maintenance', label: `Maintenance (${maintenance.length})` },
+    { value: 'messages',    label: `Messages (${messages.length})` },
+  ];
+
   return (
     <ErrorBoundary>
       <div className="container mx-auto px-4 py-8 space-y-6">
@@ -109,14 +119,12 @@ export default function MyPropertyDetail() {
 
         <PropertyHeader property={property} currentLease={currentLease} />
 
-        <Tabs defaultValue="overview" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 md:grid-cols-5">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="leases">Leases ({leases.length})</TabsTrigger>
-            <TabsTrigger value="payments">Payments ({payments.length})</TabsTrigger>
-            <TabsTrigger value="maintenance">Maintenance ({maintenance.length})</TabsTrigger>
-            <TabsTrigger value="messages">Messages ({messages.length})</TabsTrigger>
-          </TabsList>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <ResponsiveTabsHeader
+            options={tabOptions}
+            activeTab={activeTab}
+            onChange={setActiveTab}
+          />
 
           <TabsContent value="overview" className="mt-6 space-y-4">
             <Card>
@@ -217,20 +225,12 @@ export default function MyPropertyDetail() {
             )}
           </TabsContent>
 
-          <TabsContent value="maintenance" className="mt-6 space-y-3">
-            {maintenance.length === 0 ? (
-              <p className="text-sm text-muted-foreground italic">No maintenance requests.</p>
-            ) : (
-              maintenance.map((m) => <MaintenanceCard key={m.id} request={m} />)
-            )}
+          <TabsContent value="maintenance" className="mt-6">
+            <MaintenanceTab requests={maintenance} property={property} />
           </TabsContent>
 
-          <TabsContent value="messages" className="mt-6 space-y-3">
-            {messages.length === 0 ? (
-              <p className="text-sm text-muted-foreground italic">No messages yet.</p>
-            ) : (
-              messages.map((m) => <MessageCard key={m.id} message={m} />)
-            )}
+          <TabsContent value="messages" className="mt-6">
+            <MessagesTab messages={messages} />
           </TabsContent>
         </Tabs>
       </div>

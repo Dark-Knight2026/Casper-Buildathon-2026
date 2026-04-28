@@ -83,8 +83,8 @@ export default function MyProperties() {
             </p>
           </div>
           <Button variant="outline" onClick={() => navigate('/tenant/property-search')}>
-            <Search className="h-4 w-4 mr-2" />
-            Browse New
+            <Search className="h-4 w-4 mr-2 hidden md:block" />
+            Find New
           </Button>
         </div>
 

@@ -157,14 +157,19 @@ export default function MaintenanceRequestList() {
   return (
     <div className="container mx-auto py-8 px-4">
       {/* Header */}
-      <div className="flex justify-between items-center mb-8">
+      <div className="flex justify-between items-start gap-3 mb-8">
         <div>
           <h1 className="text-3xl font-bold text-foreground">Maintenance Requests</h1>
           <p className="text-muted-foreground mt-1">Track and manage your maintenance requests</p>
         </div>
-        <Button onClick={() => navigate('/tenant/maintenance/create')}>
-          <Plus className="mr-2 h-4 w-4" />
-          New Request
+        <Button
+          onClick={() => navigate('/tenant/maintenance/create')}
+          size="icon"
+          className="sm:size-auto sm:px-4"
+          aria-label="New Request"
+        >
+          <Plus className="h-4 w-4 sm:mr-2" />
+          <span className="hidden sm:inline">New Request</span>
         </Button>
       </div>
 

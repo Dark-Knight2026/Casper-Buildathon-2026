@@ -3,4 +3,7 @@ export { LeaseCard } from './LeaseCard';
 export { PaymentCard } from './PaymentCard';
 export { PaymentsSummary } from './PaymentsSummary';
 export { MaintenanceCard } from './MaintenanceCard';
+export { MaintenanceTab } from './MaintenanceTab';
 export { MessageCard } from './MessageCard';
+export { MessagesTab } from './MessagesTab';
+export { MessageThreadDialog } from './MessageThreadDialog';

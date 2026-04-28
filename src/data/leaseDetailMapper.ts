@@ -1,5 +1,63 @@
 import type { LeaseAgreement } from '@/types/lease';
-import { CURRENT_TENANT_ID, type TenantLease } from '@/data/tenantLeases';
+import type { MaintenanceRequest, Priority, RequestStatus } from '@/services/maintenanceService';
+import type { Property } from '@/types/property';
+import {
+  CURRENT_TENANT_ID,
+  type TenantLease,
+  type MockMaintenanceRequest,
+  type MaintenanceStatus,
+  type MaintenancePriority,
+} from '@/data/tenantLeases';
+
+const STATUS_MAP: Record<MaintenanceStatus, RequestStatus> = {
+  open: 'submitted',
+  in_progress: 'in_progress',
+  resolved: 'completed',
+  cancelled: 'closed',
+};
+
+const PRIORITY_MAP: Record<MaintenancePriority, Priority> = {
+  low: 'low',
+  medium: 'medium',
+  high: 'high',
+  urgent: 'emergency',
+};
+
+// Build a full MaintenanceRequest from the slim MockMaintenanceRequest so that
+// MaintenanceRequestDetail renders correctly via location.state.
+export function buildMaintenanceRequest(
+  req: MockMaintenanceRequest,
+  property: Property,
+): MaintenanceRequest {
+  return {
+    id: req.id,
+    propertyId: req.propertyId,
+    tenantId: CURRENT_TENANT_ID,
+    landlordId: property.landlordId,
+    vendorId: null,
+    title: req.title,
+    description: req.description,
+    issueType: 'other',
+    priority: PRIORITY_MAP[req.priority],
+    status: STATUS_MAP[req.status],
+    preferredAccessTime: null,
+    permissionToEnter: true,
+    estimatedCost: null,
+    actualCost: null,
+    completedAt: req.status === 'resolved' ? req.updatedAt : null,
+    rating: null,
+    review: null,
+    photos: [],
+    createdAt: req.createdAt,
+    updatedAt: req.updatedAt,
+    property: {
+      title: property.title,
+      address: property.address,
+      city: property.city,
+      state: property.state,
+    },
+  };
+}
 
 export type DetailLease = LeaseAgreement & {
   propertyAddress: string;

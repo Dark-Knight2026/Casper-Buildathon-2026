@@ -177,6 +177,13 @@ export function getMaintenanceByProperty(propertyId: string): MockMaintenanceReq
 
 // ─── Messages ──────────────────────────────────────────────────────────────
 
+export interface MockMessageThread {
+  id: string;
+  from: 'tenant' | 'landlord';
+  content: string;
+  sentAt: Date;
+}
+
 export interface MockMessage {
   id: string;
   propertyId: string;
@@ -185,6 +192,7 @@ export interface MockMessage {
   preview: string;
   sentAt: Date;
   unread: boolean;
+  thread: MockMessageThread[];
 }
 
 // TODO: replace with GET /api/v1/messages?propertyId={id}
@@ -194,18 +202,52 @@ export const MOCK_MESSAGES: MockMessage[] = [
     subject: 'Annual inspection — May 12',
     preview: 'Just a heads up that the annual unit inspection is scheduled for…',
     sentAt: new Date('2026-04-20'), unread: true,
+    thread: [
+      {
+        id: 'msg-1-t1', from: 'landlord', sentAt: new Date('2026-04-20T09:14:00'),
+        content: 'Hi! Just a heads up that the annual unit inspection is scheduled for May 12, 10:00–11:00 AM. We\'ll need access for about an hour. Let me know if that day doesn\'t work and we can reschedule.',
+      },
+      {
+        id: 'msg-1-t2', from: 'tenant', sentAt: new Date('2026-04-20T11:02:00'),
+        content: 'Thanks for letting me know. May 12 works — I\'ll be at work but can leave a key with the neighbour, or buzz remotely. Should I prep anything specifically?',
+      },
+      {
+        id: 'msg-1-t3', from: 'landlord', sentAt: new Date('2026-04-20T13:30:00'),
+        content: 'No prep needed — we just check the smoke detectors, HVAC filter, and any visible plumbing issues. Buzz access is fine. I\'ll send a reminder the day before.',
+      },
+    ],
   },
   {
     id: 'msg-2', propertyId: 'prop-2', from: 'tenant',
     subject: 'Re: Lease renewal options',
     preview: 'Thanks for the renewal terms — could we discuss the rent increase?',
     sentAt: new Date('2026-04-15'), unread: false,
+    thread: [
+      {
+        id: 'msg-2-t1', from: 'landlord', sentAt: new Date('2026-04-12T10:00:00'),
+        content: 'Hi — your lease is up in April 2027. Wanted to share renewal terms early: $2,250/mo for another 12 months (up from $2,100), 2-year option at $2,200/mo locked in. Let me know your thoughts.',
+      },
+      {
+        id: 'msg-2-t2', from: 'tenant', sentAt: new Date('2026-04-15T16:45:00'),
+        content: 'Thanks for the renewal terms — could we discuss the rent increase? 7% feels steep given the market. Would you consider $2,180 for the 12-month option?',
+      },
+    ],
   },
   {
     id: 'msg-3', propertyId: 'prop-1', from: 'landlord',
     subject: 'Security deposit returned',
     preview: 'Deposit of $6,000 was returned to your bank account on April 30.',
     sentAt: new Date('2025-04-30'), unread: false,
+    thread: [
+      {
+        id: 'msg-3-t1', from: 'landlord', sentAt: new Date('2025-04-30T15:20:00'),
+        content: 'Deposit of $6,000 was returned to your bank account on April 30. Itemised statement attached for your records. Thanks for being a great tenant — wish you all the best in your new place.',
+      },
+      {
+        id: 'msg-3-t2', from: 'tenant', sentAt: new Date('2025-05-01T08:10:00'),
+        content: 'Confirmed received. Thank you for everything over the past two years!',
+      },
+    ],
   },
 ];
 

@@ -167,7 +167,9 @@ export default function MaintenanceRequestCreate() {
                     <FormLabel className='pr-2'>Property</FormLabel>
                     <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
-                        <SelectTrigger><SelectValue placeholder="Select property" /></SelectTrigger>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Select property" />
+                        </SelectTrigger>
                       </FormControl>
                       <SelectContent>
                         {MOCK_PROPERTIES.map(p => (
@@ -189,7 +191,9 @@ export default function MaintenanceRequestCreate() {
                       <FormLabel className='pr-2'>Issue Type</FormLabel>
                       <Select onValueChange={field.onChange} value={field.value}>
                         <FormControl>
-                          <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Select type" />
+                          </SelectTrigger>
                         </FormControl>
                         <SelectContent>
                           {ISSUE_TYPES.map(t => (
@@ -210,7 +214,9 @@ export default function MaintenanceRequestCreate() {
                       <FormLabel className='pr-2'>Priority</FormLabel>
                       <Select onValueChange={field.onChange} value={field.value}>
                         <FormControl>
-                          <SelectTrigger><SelectValue placeholder="Select priority" /></SelectTrigger>
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Select priority" />
+                          </SelectTrigger>
                         </FormControl>
                         <SelectContent>
                           {PRIORITIES.map(p => (
