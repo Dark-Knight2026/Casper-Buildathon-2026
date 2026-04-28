@@ -66,3 +66,26 @@ pub mod errors {
         MissingIdentityHash = 801,
     }
 }
+
+// =============================================================================
+// Contract
+// =============================================================================
+
+#[odra::module(errors = Error, events = [InvestorRecordSet, InvestorFrozen])]
+pub struct InvestorRegistry {
+    access_control: SubModule<AccessControl>,
+    records: Mapping<Address, InvestorRecord>,
+}
+
+#[odra::module]
+impl InvestorRegistry {
+    // =============================================================================
+    // Initialization
+    // =============================================================================
+
+    pub fn init(&mut self, owner: Address) {
+        self.access_control
+            .unchecked_grant_role(&DEFAULT_ADMIN_ROLE, &owner);
+    }
+
+}
