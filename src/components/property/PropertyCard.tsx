@@ -34,11 +34,12 @@ export interface PropertyCardData {
 interface PropertyCardProps {
   property: PropertyCardData;
   onClick: () => void;
+  showSave?: boolean;
 }
 
 const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=800';
 
-export function PropertyCard({ property, onClick }: PropertyCardProps) {
+export function PropertyCard({ property, onClick, showSave = true }: PropertyCardProps) {
   const image = property.images?.[0] ?? FALLBACK_IMAGE;
 
   return (
@@ -80,7 +81,7 @@ export function PropertyCard({ property, onClick }: PropertyCardProps) {
           </div>
         )}
 
-        <SavePropertyButton iconOnly className="absolute bottom-3 right-3" />
+        {showSave && <SavePropertyButton iconOnly className="absolute bottom-3 right-3" />}
       </div>
 
       <CardContent className="p-5 w-full">

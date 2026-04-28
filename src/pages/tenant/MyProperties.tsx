@@ -38,6 +38,7 @@ function LeasedPropertyCard({
           status: lease.status === 'active' ? 'rented' : 'archived',
         }}
         onClick={onClick}
+        showSave={false}
       />
       <p className="text-xs text-muted-foreground px-1">
         Leased {formatDate(lease.startDate)} – {formatDate(lease.endDate)}

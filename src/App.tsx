@@ -41,6 +41,7 @@ const TenantProfile = lazy(() => import('@/pages/tenant/TenantProfile').then(m =
 const PropertySearch = lazy(() => import('@/pages/tenant/PropertySearch'));
 const TenantPropertyDetail = lazy(() => import('@/pages/tenant/PropertyDetail'));
 const MyProperties = lazy(() => import('@/pages/tenant/MyProperties'));
+const MyPropertyDetail = lazy(() => import('@/pages/tenant/MyPropertyDetail'));
 
 // Lazy load tenant property interaction pages
 const SavedProperties = lazy(() => import('@/pages/tenant/SavedProperties'));
@@ -201,7 +202,7 @@ function App() {
                 <Route path="dashboard"             element={<TenantDashboard />} />
                 <Route path="property-search"       element={<PropertySearch />} />
                 <Route path="properties"            element={<MyProperties />} />
-                <Route path="properties/:id"        element={<TenantPropertyDetail />} />
+                <Route path="properties/:id"        element={<MyPropertyDetail />} />
                 <Route path="saved-properties"      element={<SavedProperties />} />
                 <Route path="my-applications"       element={<MyApplications />} />
                 <Route path="my-viewings"           element={<MyViewings />} />
