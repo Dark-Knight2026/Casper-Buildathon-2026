@@ -148,9 +148,54 @@ impl PropertyRegistry {
     // View Functions
     // =============================================================================
 
+    /// Returns the number of property records created.
+    pub fn get_properties_count(&self) -> U256 {
+        self.properties_count.get_or_default()
+    }
+
     // =============================================================================
     // Property Creation
     // =============================================================================
+
+    /// Creates a property record in `Draft` status.
+    /// Restricted to `PROPERTY_MANAGER`
+    /// @dev Token and revenue distributor addresses are intentionally set later so deployment can be done in small, verifiable steps.
+    pub fn create_property(&mut self, params: CreatePropertyParams) -> U256 {
+        self.assert_role(ROLE_PROPERTY_MANAGER);
+
+        if params.total_supply.is_zero() {
+            self.env().revert(Error::ZeroTotalSupply);
+        }
+        if params.metadata_uri.is_empty() {
+            self.env().revert(Error::EmptyMetadataUri);
+        }
+
+        let property_id = self.get_properties_count();
+        let issuer = params.issuer;
+        let total_supply = params.total_supply;
+
+        self.properties.set(
+            &property_id,
+            PropertyRecord {
+                issuer,
+                token: None,
+                revenue_distributor: None,
+                total_supply,
+                metadata_uri: params.metadata_uri,
+                status: PropertyStatus::Draft,
+            },
+        );
+
+        self.properties_count.set(property_id + 1);
+
+        self.env().emit_event(PropertyCreated {
+            property_id,
+            issuer,
+            total_supply,
+        });
+
+        property_id
+    }
 }
 
 // =============================================================================
