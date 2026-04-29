@@ -290,9 +290,9 @@ pub async fn fetch_user_profile(pool: &PgPool, user_id: Uuid) -> Result<UserProf
 /// (in the `Set-Cookie` header) and only the hash is persisted.
 ///
 /// `family_id` groups all rotations of one login session: at first login
-/// the caller passes a brand-new UUID; on rotation (Phase 4.2) the new row
-/// inherits the predecessor's `family_id`. Reuse-detection later revokes
-/// the entire family in one statement.
+/// the caller passes a brand-new UUID; on rotation the new row inherits
+/// the predecessor's `family_id`. Reuse-detection later revokes the entire
+/// family in one statement.
 ///
 /// `replaced_by` is left NULL here - it is set on the predecessor row
 /// during rotation, not at issuance.

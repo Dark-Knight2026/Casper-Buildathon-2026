@@ -10,7 +10,7 @@
 -- * user_id FK uses ON DELETE CASCADE so unlinking happens automatically
 --   when a user is hard-deleted; soft-delete on users still keeps the row
 --   (we never hard-delete in this product).
--- * email is denormalised for audit ("which address was linked when"); the
+-- * email is denormalized for audit ("which address was linked when"); the
 --   canonical email lives on users.email.
 -- * No CHECK on provider: new providers will be added by application code
 --   (Rust enum + handler), not by schema migration.

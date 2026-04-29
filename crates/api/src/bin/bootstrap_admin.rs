@@ -9,12 +9,12 @@
 //! exits successfully - so dev environments without a bootstrap admin work
 //! without extra configuration.
 //!
-//! After a successful INSERT/UPDATE, the binary mints a short-lived
-//! (10 minute) bootstrap-login token, stores its mapping in Redis, and
-//! prints it to stdout. The admin exchanges this token for a session on
-//! first login (endpoint lands in a later phase); the token itself is
-//! intentionally emitted only to stdout and not to `tracing`, so it ends
-//! up in deploy logs rather than a centralized log-aggregation service.
+//! After a successful INSERT/UPDATE, the binary mints a short-lived (10 minute)
+//! bootstrap-login token, stores its mapping in Redis, and prints it to stdout.
+//! The admin exchanges this token for a session on first login;
+//! the token itself is intentionally emitted only to stdout and not to
+//! `tracing`, so it ends up in deploy logs rather than a centralized
+//! log-aggregation service.
 //!
 //! `password_hash`, `wallet_address`, and `auth_id` stay NULL: the admin
 //! sets a password via `POST /users/me/password/set` after the first login,

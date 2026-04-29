@@ -1,6 +1,6 @@
 -- Add authentication-identity columns that future auth methods (password, OAuth)
--- and the profile endpoint will depend on. Columns are added now so that all
--- follow-up work (Phases 2-5) can reference them without additional migrations.
+-- and the profile endpoint will depend on. Columns are added now so that
+-- follow-up work can reference them without additional migrations.
 --
 -- is_profile_complete is intentionally a regular column with a trigger, not
 -- GENERATED: GENERATED ALWAYS AS ... STORED requires an IMMUTABLE expression
@@ -24,22 +24,19 @@ ALTER TABLE users
 COMMENT ON COLUMN users.password_hash IS 'Argon2id PHC-formatted hash; NULL for wallet-only or OAuth-only users';
 COMMENT ON COLUMN users.primary_auth_method IS 'Method used at signup: wallet, password, or oauth';
 COMMENT ON COLUMN users.bio IS 'Free-form user bio for profile display';
-COMMENT ON COLUMN users.is_profile_complete IS 'Maintained by trg_users_profile_complete; true when email, first_name, last_name, phone are all present';
+COMMENT ON COLUMN users.is_profile_complete IS 'Maintained by trg_users_profile_complete; true when phone is set (email, first_name, last_name are NOT NULL by schema)';
 
--- Trigger that keeps is_profile_complete in sync with the four required
--- profile fields. BEFORE INSERT OR UPDATE so the new row already carries the
--- correct value when it reaches storage and downstream triggers.
+-- Trigger that keeps is_profile_complete in sync with phone presence. The
+-- other required profile fields (email, first_name, last_name) are NOT NULL
+-- by schema constraint, so phone is the only column whose presence can
+-- actually flip this flag. BEFORE INSERT OR UPDATE so the new row already
+-- carries the correct value when it reaches storage and downstream triggers.
 CREATE OR REPLACE FUNCTION users_set_profile_complete()
 RETURNS trigger
 LANGUAGE plpgsql
 AS $$
 BEGIN
-    NEW.is_profile_complete := (
-        NEW.email IS NOT NULL
-        AND NEW.first_name IS NOT NULL
-        AND NEW.last_name IS NOT NULL
-        AND NEW.phone IS NOT NULL
-    );
+    NEW.is_profile_complete := NEW.phone IS NOT NULL;
     RETURN NEW;
 END;
 $$;
@@ -47,7 +44,7 @@ $$;
 DROP TRIGGER IF EXISTS trg_users_profile_complete ON users;
 
 CREATE TRIGGER trg_users_profile_complete
-    BEFORE INSERT OR UPDATE OF email, first_name, last_name, phone
+    BEFORE INSERT OR UPDATE OF phone
     ON users
     FOR EACH ROW
     EXECUTE FUNCTION users_set_profile_complete();
@@ -56,10 +53,5 @@ CREATE TRIGGER trg_users_profile_complete
 -- trigger handles new rows automatically; this UPDATE is idempotent and safe
 -- to re-run.
 UPDATE users
-SET is_profile_complete = (
-    email IS NOT NULL
-    AND first_name IS NOT NULL
-    AND last_name IS NOT NULL
-    AND phone IS NOT NULL
-)
+SET is_profile_complete = (phone IS NOT NULL)
 WHERE deleted_at IS NULL;

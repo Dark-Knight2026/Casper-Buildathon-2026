@@ -18,9 +18,9 @@ use crate::common::{
 /// Short window (15 minutes) is paired with a 14-day rotating refresh-token
 /// (see [`super::refresh`]). Keeping the access token cheap-to-replay-but-
 /// expires-fast caps the blast radius of a stolen token: even without the
-/// blocklist (Phase 4.3), an attacker has at most 15 minutes before the
-/// access cookie is rejected and the refresh cookie is required to mint a
-/// new one - which the legitimate user's browser revoked on next login.
+/// logout blocklist, an attacker has at most 15 minutes before the access
+/// cookie is rejected and the refresh cookie is required to mint a new one -
+/// which the legitimate user's browser revoked on next login.
 pub const ACCESS_TOKEN_TTL: Duration = Duration::minutes(15);
 
 /// Result of encoding an access token: the signed JWT and its `jti` claim.

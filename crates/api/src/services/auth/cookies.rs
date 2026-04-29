@@ -3,7 +3,7 @@
 //! Centralizes the per-cookie attributes (path, max-age, security flags) so
 //! every issuance/clear path uses the same shape. Splitting this out of the
 //! handler keeps the route handler focused on policy (when to issue, when to
-//! clear) and lets refresh/logout reuse the exact same builders.
+//! clear) and let's refresh/logout reuse the exact same builders.
 
 use axum_extra::extract::cookie::{Cookie, SameSite};
 use time::Duration as CookieDuration;
@@ -20,9 +20,8 @@ pub const ACCESS_TOKEN_COOKIE: &str = "access_token";
 pub const REFRESH_TOKEN_COOKIE: &str = "refresh_token";
 
 /// Path scope for the refresh-token cookie. Kept as a constant so refresh
-/// (Phase 4.2) and logout (Phase 4.3) clear it on the exact same path -
-/// otherwise the browser would not match the cookie for deletion and a stale
-/// `refresh_token` would linger.
+/// and logout clear it on the exact same path - otherwise the browser would
+/// not match the cookie for deletion and a stale `refresh_token` would linger.
 pub const REFRESH_COOKIE_PATH: &str = "/api/v1/auth";
 
 /// Builds the access-token cookie.

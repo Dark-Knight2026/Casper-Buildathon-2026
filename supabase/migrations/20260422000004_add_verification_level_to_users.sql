@@ -45,7 +45,7 @@ BEGIN
     -- Identity verified transitioned to true: upgrade to 'full' if email is
     -- already present, otherwise to 'identity'. Ordering matters - this
     -- branch runs after the email branch, so if both booleans flip on the
-    -- same INSERT, NEW.verification_level will already be 'email' here and
+    -- same INSERT, NEW.verification_level will already be 'email' here, and
     -- we correctly promote to 'full'.
     IF NEW.identity_verified = true AND OLD.identity_verified IS DISTINCT FROM true THEN
         IF NEW.email_verified = true

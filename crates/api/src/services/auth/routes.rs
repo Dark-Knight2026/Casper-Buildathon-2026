@@ -2,9 +2,8 @@
 //!
 //! Aggregates every `/auth/*` handler into a single `OpenApiRouter` so the
 //! top-level `public_router` only references a single auth entry point.
-//! Adding a new auth handler (e.g. `/auth/logout` in Phase 4.3, or the
-//! password/oauth flows in later phases) is a one-line change here rather
-//! than a cross-file edit in `services/mod.rs`.
+//! Adding a new auth handler (e.g. password/OAuth flows) is a one-line change
+//! here rather than a cross-file edit in `services/mod.rs`.
 
 use std::sync::Arc;
 

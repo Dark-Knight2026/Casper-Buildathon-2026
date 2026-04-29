@@ -4,9 +4,9 @@
 --
 -- Rationale: the auth flow currently resolves users by `users.wallet_address`
 -- directly, which prevents a single user from having multiple wallet
--- connections (cspr.click + browser extension, primary + backup). Future
--- phases (3.3) will switch the resolve path to JOIN through
--- `wallet_connections`; this migration lays the DB-side foundation.
+-- connections (cspr.click + browser extension, primary + backup). A follow-up
+-- migration will switch the resolve path to JOIN through `wallet_connections`;
+-- this migration lays the DB-side foundation.
 --
 -- Ownership rules after this migration:
 --   - auth code NEVER writes `users.wallet_address` directly;
@@ -26,7 +26,7 @@
 --    `ADD COLUMN ... wallet_address TEXT UNIQUE`, which Postgres auto-names
 --    `users_wallet_address_key`.
 --
---    Why partial: wallet-less users (password/OAuth-only after Phase 6-7)
+--    Why partial: wallet-less users (password/OAuth-only)
 --    have `wallet_address IS NULL`, and multiple NULLs must coexist.
 --    Global UNIQUE already allows multiple NULLs, but a partial index is
 --    the conventional pairing for soft-delete - it ALSO skips rows where
@@ -56,7 +56,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_wallet_connections_primary
 --
 --    3a. For users with a cached `wallet_address` but no wallet_connections
 --        record at all: create one and mark it primary. Without this, the
---        resolve-by-join path in Phase 3.3 would fail to find existing
+--        future resolve-by-join path would fail to find existing
 --        wallet-logged-in users.
 -- ---------------------------------------------------------------------------
 
@@ -113,7 +113,7 @@ promotion_candidates AS (
     ORDER BY
         wc.user_id,
         (wc.wallet_address = uwp.cached_wallet) DESC NULLS LAST,
-        wc.connected_at ASC
+        wc.connected_at
 )
 UPDATE wallet_connections wc
 SET is_primary = true
