@@ -72,7 +72,7 @@ This directory contains all test files for the LeaseFi application, organized by
 ## Running Tests
 
 ```bash
-npm run test          # Run all tests
-npm run test:watch    # Run tests in watch mode
-npm run test:ui       # Run tests with Vitest UI
+pnpm test          # Run all tests
+pnpm test:watch    # Run tests in watch mode
+pnpm test:ui       # Run tests with Vitest UI
 ```

@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { buttonVariants } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
 
-export default function LandingHeader() {
+export function LandingHeader() {
   const { profile } = useAuth();
   const dashboardPath = profile?.role === 'landlord' ? '/landlord/dashboard' : '/tenant/dashboard';
 
@@ -13,6 +13,9 @@ export default function LandingHeader() {
           LeaseFi
         </Link>
 
+        {/* Mobile nav (hamburger / Sheet) deferred — below md the brand and
+            auth CTAs remain; Properties / Token Sale are reachable from the
+            footer and the landing page CTAs. */}
         <nav className="hidden md:flex items-center gap-8">
           <Link
             to="/properties"
