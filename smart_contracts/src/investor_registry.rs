@@ -92,6 +92,9 @@ impl InvestorRegistry {
     // Admin Configuration
     // =============================================================================
 
+    /// Stores or replaces the on-chain verification record for an investor wallet.
+    /// Restricted to `VERIFICATION_MANAGER`
+    /// @dev `identity_hash` should be an opaque off-chain identifier used only for compliance linkage
     pub fn set_investor_record(&mut self, account: Address, record: InvestorRecord) {
         self.assert_role(ROLE_VERIFICATION_MANAGER);
 
@@ -99,16 +102,19 @@ impl InvestorRegistry {
             self.env().revert(Error::MissingIdentityHash);
         }
 
-        self.records.set(&account, record);
-
         self.env().emit_event(InvestorRecordSet {
             account,
             verified: record.verified,
             verified_until: record.verified_until,
             jurisdiction: record.jurisdiction,
         });
+
+        self.records.set(&account, record);
     }
 
+    /// Freezes or unfreezes an investor wallet
+    /// Restricted to `FREEZER`.
+    /// @dev A frozen wallet remains registered, but `is_verified()` returns false while the wallet is frozen.
     pub fn set_frozen(&mut self, account: Address, frozen: bool) {
         self.assert_role(ROLE_FREEZER);
 
@@ -130,10 +136,13 @@ impl InvestorRegistry {
     // View Functions
     // =============================================================================
 
+    /// Returns the stored investor record for `account`, if one exists.
     pub fn get_investor_record(&self, account: Address) -> Option<InvestorRecord> {
         self.records.get(&account)
     }
 
+    /// Returns true if `account` has a non-empty identity hash on-chain
+    /// @dev This checks registration only. It does not check verification status, expiry, or freeze status
     pub fn is_registered(&self, account: Address) -> bool {
         self.records
             .get(&account)
@@ -141,6 +150,9 @@ impl InvestorRegistry {
             .unwrap_or(false)
     }
 
+    /// Returns true if `account` is currently allowed to pass identity checks.
+    /// @dev A wallet is verified only when it has an active record, is not frozen, has a non-empty
+    ///      identity hash, and its verification is not expired.
     pub fn is_verified(&self, account: Address) -> bool {
         self.records
             .get(&account)
@@ -153,6 +165,7 @@ impl InvestorRegistry {
             .unwrap_or(false)
     }
 
+    /// Returns true if `account` is currently frozen.
     pub fn is_frozen(&self, account: Address) -> bool {
         self.records
             .get(&account)
@@ -164,10 +177,12 @@ impl InvestorRegistry {
     // Role Getters
     // =============================================================================
 
+    /// Returns the role hash for accounts allowed to update investor records
     pub fn verification_manager_role(&self) -> Role {
         common::hash_role(ROLE_VERIFICATION_MANAGER)
     }
 
+    /// Returns the role hash for accounts to freeze or unfreeze investors
     pub fn freezer_role(&self) -> Role {
         common::hash_role(ROLE_FREEZER)
     }
