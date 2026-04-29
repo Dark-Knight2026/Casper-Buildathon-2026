@@ -1,0 +1,132 @@
+use odra::{casper_types::U256, prelude::*};
+use odra_modules::access::{AccessControl, Role, DEFAULT_ADMIN_ROLE};
+
+use crate::common;
+
+use crate::property_registry::{
+    errors::Error,
+    events::{
+        PropertyCreated, PropertyMetadataSet, PropertyStatusSet, PropertyTokenSet,
+        RevenueDistributorSet,
+    },
+    types::{CreatePropertyParams, PropertyRecord, PropertyStatus},
+};
+
+// =============================================================================
+// Roles
+// =============================================================================
+
+pub const ROLE_PROPERTY_MANAGER: &str = "PROPERTY_MANAGER";
+
+// =============================================================================
+// Types
+// =============================================================================
+
+pub mod types {
+    use odra::{casper_types::U256, prelude::*};
+
+    #[odra::odra_type]
+    #[derive(Copy)]
+    pub enum PropertyStatus {
+        Draft,
+        Active,
+        Paused,
+        Sold,
+        Liquidating,
+        Closed,
+    }
+
+    #[odra::odra_type]
+    pub struct CreatePropertyParams {
+        pub issuer: Address,
+        pub total_supply: U256,
+        pub metadata_uri: String,
+    }
+
+    #[odra::odra_type]
+    pub struct PropertyRecord {
+        pub issuer: Address,
+        pub token: Option<Address>,
+        pub revenue_distributor: Option<Address>,
+        pub total_supply: U256,
+        pub metadata_uri: String,
+        pub status: PropertyStatus,
+    }
+}
+
+// =============================================================================
+// Events
+// =============================================================================
+
+pub mod events {
+    use crate::property_registry::types::PropertyStatus;
+    use odra::{casper_types::U256, prelude::*};
+
+    #[odra::event]
+    pub struct PropertyCreated {
+        pub property_id: U256,
+        pub issuer: Address,
+        pub total_supply: U256,
+    }
+
+    #[odra::event]
+    pub struct PropertyTokenSet {
+        pub property_id: U256,
+        pub token: Address,
+    }
+
+    #[odra::event]
+    pub struct RevenueDistributorSet {
+        pub property_id: U256,
+        pub revenue_distributor: Address,
+    }
+
+    #[odra::event]
+    pub struct PropertyStatusSet {
+        pub property_id: U256,
+        pub status: PropertyStatus,
+    }
+
+    #[odra::event]
+    pub struct PropertyMetadataSet {
+        pub property_id: U256,
+    }
+}
+
+// =============================================================================
+// Errors
+// =============================================================================
+
+pub mod errors {
+    use odra::prelude::*;
+
+    #[odra::odra_error]
+    pub enum Error {
+        NotAuthorized = 900,
+        InvalidPropertyId = 901,
+        ZeroTotalSupply = 902,
+        EmptyMetadataUri = 903,
+        PropertyNotDraft = 904,
+        MissingPropertyToken = 905,
+        MissingRevenueDistributor = 906,
+    }
+}
+
+// =============================================================================
+// Contract
+// =============================================================================
+
+#[odra::module(errors = Error, events = [
+    PropertyCreated,
+    PropertyMetadataSet,
+    PropertyStatusSet,
+    PropertyTokenSet,
+    RevenueDistributorSet
+])]
+pub struct PropertyRegistry {
+    access_control: SubModule<AccessControl>,
+    properties: Mapping<U256, PropertyRecord>,
+    properties_count: Var<U256>,
+}
+
+
