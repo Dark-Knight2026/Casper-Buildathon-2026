@@ -148,6 +148,13 @@ impl PropertyRegistry {
     // View Functions
     // =============================================================================
 
+    /// Returns the property record for `property_id`.
+    pub fn get_property(&self, property_id: U256) -> PropertyRecord {
+        self.properties
+            .get(&property_id)
+            .unwrap_or_revert_with(&self.env(), Error::InvalidPropertyId)
+    }
+
     /// Returns the number of property records created.
     pub fn get_properties_count(&self) -> U256 {
         self.properties_count.get_or_default()
