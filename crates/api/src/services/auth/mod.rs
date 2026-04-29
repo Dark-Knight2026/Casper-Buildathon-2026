@@ -29,6 +29,6 @@ pub use db::{UserProfileRecord, fetch_user_profile, insert_refresh_token, upsert
 pub use jwt::{ACCESS_TOKEN_TTL, EncodedAccessToken, decode_token, encode_access_token};
 pub use middleware::{AuthError, AuthUser};
 pub use models::UserInfo;
-pub use refresh::{IssuedRefreshToken, REFRESH_TOKEN_TTL, issue_login_refresh_token};
+pub use refresh::{IssuedRefreshToken, REFRESH_TOKEN_TTL, issue_login_refresh_token, rotate};
 pub use routes::router;
 pub use wallet::{LoginRequest, LoginResponse, NonceRequest, NonceResponse, get_nonce, login};

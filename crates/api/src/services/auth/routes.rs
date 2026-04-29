@@ -1,19 +1,29 @@
 //! Router configuration for authentication endpoints.
+//!
+//! Aggregates every `/auth/*` handler into a single `OpenApiRouter` so the
+//! top-level `public_router` only references a single auth entry point.
+//! Adding a new auth handler (e.g. `/auth/logout` in Phase 4.3, or the
+//! password/oauth flows in later phases) is a one-line change here rather
+//! than a cross-file edit in `services/mod.rs`.
 
 use std::sync::Arc;
 
-use axum::{
-    Router,
-    routing::{get, post},
+use utoipa_axum::{router::OpenApiRouter, routes};
+
+use crate::{
+    common::AppState,
+    services::auth::{refresh, wallet},
 };
 
-use crate::common::AppState;
-use crate::services::auth::wallet::{get_nonce, login};
-
-/// Creates the authentication router with nonce and login endpoints.
+/// Builds the auth `OpenApiRouter`.
+///
+/// Returned router has no rate-limiter or middleware applied; the caller
+/// (`public_router`) wraps it with the auth-tier `GovernorLayer`.
 #[inline]
-pub fn router() -> Router<Arc<AppState>> {
-    Router::new()
-        .route("/nonce", get(get_nonce))
-        .route("/login", post(login))
+#[must_use]
+pub fn router() -> OpenApiRouter<Arc<AppState>> {
+    OpenApiRouter::new()
+        .routes(routes!(wallet::get_nonce))
+        .routes(routes!(wallet::login))
+        .routes(routes!(refresh::rotate))
 }

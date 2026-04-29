@@ -5,6 +5,7 @@
 mod common;
 
 use axum::http::{Method, StatusCode};
+use axum_test::{TestResponse, http::header::COOKIE};
 use casper_types::{AsymmetricType, PublicKey, SecretKey, crypto};
 use chrono::{Duration, Utc};
 use jsonwebtoken::{EncodingKey, Header};
@@ -34,6 +35,31 @@ fn generate_random_ed25519() -> (SecretKey, PublicKey) {
     let secret_key = SecretKey::ed25519_from_bytes(bytes).unwrap();
     let public_key = PublicKey::from(&secret_key);
     (secret_key, public_key)
+}
+
+/// Performs a full nonce -> sign -> login round-trip and returns the login
+/// response so the caller can pluck the rotated cookies out.
+async fn login_with_seed(env: &common::TestEnv, secret_seed: [u8; 32]) -> TestResponse {
+    let secret_key = SecretKey::ed25519_from_bytes(secret_seed).unwrap();
+    let public_key = PublicKey::from(&secret_key);
+    let wallet_address = public_key.to_hex();
+
+    let nonce_body: Value = env
+        .server
+        .get("/api/v1/auth/nonce")
+        .add_query_param("wallet_address", &wallet_address)
+        .await
+        .json();
+    let message = nonce_body["message"].as_str().unwrap();
+    let signature_hex = sign_with_prefix(message, &secret_key, &public_key);
+
+    env.server
+        .post("/api/v1/auth/login")
+        .json(&serde_json::json!({
+            "wallet_address": wallet_address,
+            "signature": signature_hex,
+        }))
+        .await
 }
 
 #[sqlx::test(migrator = "common::MIGRATIONS")]
@@ -660,5 +686,132 @@ async fn jwt_wrong_audience_rejected(pool: PgPool) {
         status,
         StatusCode::UNAUTHORIZED,
         "JWT with wrong audience must be rejected"
+    );
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn refresh_without_cookie_returns_401(pool: PgPool) {
+    let env = common::setup_test_server(pool, false).await;
+
+    let response = env.server.post("/api/v1/auth/refresh").await;
+
+    assert_eq!(response.status_code(), StatusCode::UNAUTHORIZED);
+}
+
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn refresh_with_unknown_token_returns_401(pool: PgPool) {
+    let env = common::setup_test_server(pool, false).await;
+
+    let response = env
+        .server
+        .post("/api/v1/auth/refresh")
+        .add_header(COOKIE, "refresh_token=not_a_real_token")
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::UNAUTHORIZED);
+}
+
+/// Happy path: a freshly-issued refresh cookie rotates into a new pair.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn refresh_rotates_tokens(pool: PgPool) {
+    let env = common::setup_test_server(pool, true).await;
+
+    let login = login_with_seed(&env, [11u8; 32]).await;
+    assert_eq!(login.status_code(), StatusCode::OK);
+    let original_refresh = login.cookie("refresh_token").value().to_owned();
+    let original_access = login.cookie("access_token").value().to_owned();
+
+    let response = env
+        .server
+        .post("/api/v1/auth/refresh")
+        .add_header(COOKIE, format!("refresh_token={original_refresh}"))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::NO_CONTENT);
+    let new_refresh = response.cookie("refresh_token");
+    let new_access = response.cookie("access_token");
+    assert!(!new_refresh.value().is_empty(), "rotated refresh missing");
+    assert!(!new_access.value().is_empty(), "rotated access missing");
+    assert_ne!(
+        new_refresh.value(),
+        original_refresh,
+        "refresh cookie must rotate to a fresh value"
+    );
+    assert_ne!(
+        new_access.value(),
+        original_access,
+        "access cookie must rotate to a fresh value"
+    );
+}
+
+/// Replaying a rotated refresh token must trip reuse-detection and revoke
+/// the entire family - the freshly minted successor stops working too.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn refresh_reuse_detection_revokes_family(pool: PgPool) {
+    let env = common::setup_test_server(pool, true).await;
+
+    let login = login_with_seed(&env, [12u8; 32]).await;
+    let r1 = login.cookie("refresh_token").value().to_owned();
+
+    let first = env
+        .server
+        .post("/api/v1/auth/refresh")
+        .add_header(COOKIE, format!("refresh_token={r1}"))
+        .await;
+    assert_eq!(first.status_code(), StatusCode::NO_CONTENT);
+    let r2 = first.cookie("refresh_token").value().to_owned();
+
+    // Replaying r1 simulates either a stolen-cookie attack or a double-tab race
+    // - both must be rejected and must invalidate r2 by family revocation.
+    let replay = env
+        .server
+        .post("/api/v1/auth/refresh")
+        .add_header(COOKIE, format!("refresh_token={r1}"))
+        .await;
+    assert_eq!(replay.status_code(), StatusCode::UNAUTHORIZED);
+
+    let after_revoke = env
+        .server
+        .post("/api/v1/auth/refresh")
+        .add_header(COOKIE, format!("refresh_token={r2}"))
+        .await;
+    assert_eq!(
+        after_revoke.status_code(),
+        StatusCode::UNAUTHORIZED,
+        "successor must be revoked when reuse-detection trips on the family"
+    );
+}
+
+/// Race: two concurrent rotations of the same token must serialize via the
+/// `SELECT ... FOR UPDATE` row lock - exactly one wins (204), the other must
+/// fall into reuse-detection (401). The pre-lock implementation would let
+/// both succeed and break a legitimate user session on the next request.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn refresh_race_serializes_one_winner(pool: PgPool) {
+    let env = common::setup_test_server(pool, true).await;
+
+    let login = login_with_seed(&env, [13u8; 32]).await;
+    let cookie_value = login.cookie("refresh_token").value().to_owned();
+    let cookie_header = format!("refresh_token={cookie_value}");
+
+    let first = env
+        .server
+        .post("/api/v1/auth/refresh")
+        .add_header(COOKIE, cookie_header.clone());
+    let second = env
+        .server
+        .post("/api/v1/auth/refresh")
+        .add_header(COOKIE, cookie_header);
+
+    let (a, b) = tokio::join!(first, second);
+
+    let codes = [a.status_code(), b.status_code()];
+    assert!(
+        codes.contains(&StatusCode::NO_CONTENT),
+        "expected exactly one rotation to succeed, got {codes:?}"
+    );
+    assert!(
+        codes.contains(&StatusCode::UNAUTHORIZED),
+        "expected the loser to be rejected with 401, got {codes:?}"
     );
 }

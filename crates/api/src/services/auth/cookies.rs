@@ -6,7 +6,7 @@
 //! clear) and lets refresh/logout reuse the exact same builders.
 
 use axum_extra::extract::cookie::{Cookie, SameSite};
-use time::Duration;
+use time::Duration as CookieDuration;
 
 /// Name of the cookie that carries the access token (short-lived JWT).
 pub const ACCESS_TOKEN_COOKIE: &str = "access_token";
@@ -31,7 +31,11 @@ pub const REFRESH_COOKIE_PATH: &str = "/api/v1/auth";
 /// enforce TLS-only delivery while local HTTP dev still receives the cookie.
 #[inline]
 #[must_use]
-pub fn build_access_cookie(value: String, max_age: Duration, secure: bool) -> Cookie<'static> {
+pub fn build_access_cookie(
+    value: String,
+    max_age: CookieDuration,
+    secure: bool,
+) -> Cookie<'static> {
     Cookie::build((ACCESS_TOKEN_COOKIE, value))
         .http_only(true)
         .secure(secure)
@@ -48,7 +52,11 @@ pub fn build_access_cookie(value: String, max_age: Duration, secure: bool) -> Co
 /// do not even have the option of seeing it.
 #[inline]
 #[must_use]
-pub fn build_refresh_cookie(value: String, max_age: Duration, secure: bool) -> Cookie<'static> {
+pub fn build_refresh_cookie(
+    value: String,
+    max_age: CookieDuration,
+    secure: bool,
+) -> Cookie<'static> {
     Cookie::build((REFRESH_TOKEN_COOKIE, value))
         .http_only(true)
         .secure(secure)

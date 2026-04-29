@@ -58,10 +58,7 @@ pub fn public_router() -> OpenApiRouter<Arc<AppState>> {
             .expect("auth rate-limit config is always valid: per_second > 0 and burst_size > 0"),
     );
 
-    OpenApiRouter::new()
-        .routes(routes!(auth::wallet::get_nonce))
-        .routes(routes!(auth::wallet::login))
-        .route_layer(GovernorLayer::new(rate_limit))
+    auth::routes::router().route_layer(GovernorLayer::new(rate_limit))
 }
 
 /// Rate limit: requests allowed per second for protected (authenticated) endpoints.

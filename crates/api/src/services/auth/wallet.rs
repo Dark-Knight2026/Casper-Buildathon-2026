@@ -12,7 +12,7 @@ use rand::{RngExt, distr::Alphanumeric};
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use time::Duration;
+use time::Duration as CookieDuration;
 use utoipa::ToSchema;
 
 use crate::{
@@ -346,12 +346,12 @@ pub async fn login(
     // the login works on http://localhost, true in any HTTPS deployment.
     let access_cookie = cookies::build_access_cookie(
         encoded.token,
-        Duration::seconds(jwt::ACCESS_TOKEN_TTL.num_seconds()),
+        CookieDuration::seconds(jwt::ACCESS_TOKEN_TTL.num_seconds()),
         state.config.cookie_secure,
     );
     let refresh_cookie = cookies::build_refresh_cookie(
         issued_refresh.plaintext,
-        Duration::seconds(refresh::REFRESH_TOKEN_TTL.num_seconds()),
+        CookieDuration::seconds(refresh::REFRESH_TOKEN_TTL.num_seconds()),
         state.config.cookie_secure,
     );
     let jar = CookieJar::new().add(access_cookie).add(refresh_cookie);

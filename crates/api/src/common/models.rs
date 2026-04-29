@@ -11,7 +11,7 @@ pub type UserId = Uuid;
 pub type PropertyId = Uuid;
 
 /// Defines the role of a user in the system.
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, EnumString, Display, ToSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, EnumString, Display, ToSchema)]
 #[serde(rename_all = "snake_case")]
 #[strum(serialize_all = "snake_case")]
 pub enum UserRole {

@@ -3,7 +3,7 @@
 use core::str::FromStr;
 
 use chrono::{DateTime, Utc};
-use sqlx::PgPool;
+use sqlx::{Error, PgPool};
 use uuid::Uuid;
 
 use crate::common::{UserRole, UserStatus, VerificationLevel};
@@ -98,7 +98,7 @@ pub async fn upsert_user_by_wallet(
     email: &str,
     wallet_address: &str,
     role: UserRole,
-) -> Result<UserRecord, sqlx::Error> {
+) -> Result<UserRecord, Error> {
     let mut tx = pool.begin().await?;
 
     let existing = sqlx::query!(
@@ -141,7 +141,7 @@ pub async fn upsert_user_by_wallet(
 
         let verification_level =
             VerificationLevel::from_str(&row.verification_level).map_err(|err| {
-                sqlx::Error::ColumnDecode {
+                Error::ColumnDecode {
                     index: "verification_level".to_owned(),
                     source: Box::new(err),
                 }
@@ -178,7 +178,7 @@ pub async fn upsert_user_by_wallet(
         .await?;
 
         let verification_level = VerificationLevel::from_str(&inserted.verification_level)
-            .map_err(|err| sqlx::Error::ColumnDecode {
+            .map_err(|err| Error::ColumnDecode {
                 index: "verification_level".to_owned(),
                 source: Box::new(err),
             })?;
@@ -210,10 +210,7 @@ pub async fn upsert_user_by_wallet(
 /// Returns `sqlx::Error` if the query fails or `verification_level` cannot be
 /// decoded into the typed enum.
 #[inline]
-pub async fn fetch_user_profile(
-    pool: &PgPool,
-    user_id: Uuid,
-) -> Result<UserProfileRecord, sqlx::Error> {
+pub async fn fetch_user_profile(pool: &PgPool, user_id: Uuid) -> Result<UserProfileRecord, Error> {
     let record = sqlx::query!(
         r#"
             SELECT
@@ -252,7 +249,7 @@ pub async fn fetch_user_profile(
 
     let verification_level =
         VerificationLevel::from_str(&record.verification_level).map_err(|err| {
-            sqlx::Error::ColumnDecode {
+            Error::ColumnDecode {
                 index: "verification_level".to_owned(),
                 source: Box::new(err),
             }
@@ -262,7 +259,7 @@ pub async fn fetch_user_profile(
         .status
         .map(|s| UserStatus::from_str(&s))
         .transpose()
-        .map_err(|err| sqlx::Error::ColumnDecode {
+        .map_err(|err| Error::ColumnDecode {
             index: "status".to_owned(),
             source: Box::new(err),
         })?;
@@ -313,7 +310,7 @@ pub async fn insert_refresh_token(
     family_id: Uuid,
     token_hash: &[u8],
     expires_at: DateTime<Utc>,
-) -> Result<Uuid, sqlx::Error> {
+) -> Result<Uuid, Error> {
     let row = sqlx::query!(
         r"
             INSERT INTO refresh_tokens (user_id, token_hash, family_id, expires_at)
@@ -329,4 +326,203 @@ pub async fn insert_refresh_token(
     .await?;
 
     Ok(row.id)
+}
+
+/// Owner metadata returned from a successful refresh-token rotation.
+#[derive(Debug)]
+pub struct RotatedRefresh {
+    /// User the rotated token belongs to.
+    pub user_id: Uuid,
+    /// Family id shared by the predecessor and the freshly minted row.
+    pub family_id: Uuid,
+    /// User's role at the moment of rotation. Parsed at the db layer (with
+    /// `Unknown` as the fallback for unrecognized strings, mirroring the
+    /// wallet-login path) so the handler can encode it directly into the
+    /// new access JWT without reparsing.
+    pub role: UserRole,
+    /// Aggregate verification level (parsed at the db layer so callers do
+    /// not see raw strings for typed values).
+    pub verification_level: VerificationLevel,
+}
+
+/// Outcome of [`rotate_refresh_token`].
+///
+/// Each variant maps to a distinct handler response, so the result enum is
+/// exhaustive rather than collapsed into `Option`/`Result` - the handler
+/// must explicitly handle reuse vs. expiry vs. unknown vs. success because
+/// they all 401 but log differently.
+#[derive(Debug)]
+pub enum RefreshOutcome {
+    /// Predecessor was active; revoked + new row inserted.
+    Rotated(RotatedRefresh),
+    /// Predecessor was already revoked - sign of theft. The whole family
+    /// is revoked by this same call before returning.
+    Reused {
+        /// The user the compromised family belongs to (for audit logging).
+        user_id: Uuid,
+        /// Family identifier (for audit logging).
+        family_id: Uuid,
+    },
+    /// Predecessor row exists but `expires_at <= NOW()`; the row is also
+    /// revoked here so the partial unique index stays clean.
+    Expired,
+    /// No row matches the presented hash. Either the token never existed,
+    /// the family was revoked and rows pruned, or the client is sending
+    /// garbage.
+    NotFound,
+}
+
+/// Rotates a refresh token under a `SELECT ... FOR UPDATE` row lock.
+///
+/// The lock is the load-bearing piece of this function: two concurrent
+/// refresh requests for the same plaintext (typical for a duplicated
+/// browser tab or a flaky-network mobile retry) without it would both
+/// observe `revoked_at IS NULL`, both insert successors, and the second
+/// COMMIT would later trip reuse-detection - logging the legitimate user
+/// out for no reason. With `FOR UPDATE` the second transaction blocks on
+/// the row until the first commits, then sees `revoked_at IS NOT NULL`
+/// and correctly takes the reuse-detection branch.
+///
+/// All side effects happen inside one transaction so the predecessor's
+/// revoke and the successor's insert either both apply or neither does.
+///
+/// # Arguments
+///
+/// * `pool` - DB connection pool
+/// * `presented_hash` - SHA-256 of the plaintext the client presented
+/// * `new_token_id` - Pre-generated UUID for the successor row
+/// * `new_token_hash` - SHA-256 of the plaintext returned to the client
+/// * `new_expires_at` - Absolute expiration timestamp of the successor
+///
+/// # Errors
+///
+/// Returns `sqlx::Error` on DB failure. Unique-violation on the partial
+/// `(token_hash) WHERE revoked_at IS NULL` index (astronomically unlikely
+/// SHA-256 collision) surfaces as `ApiError::Conflict` upstream.
+#[inline]
+pub async fn rotate_refresh_token(
+    pool: &PgPool,
+    presented_hash: &[u8],
+    new_token_id: Uuid,
+    new_token_hash: &[u8],
+    new_expires_at: DateTime<Utc>,
+) -> Result<RefreshOutcome, Error> {
+    let mut tx = pool.begin().await?;
+
+    // `FOR UPDATE OF rt` locks only the refresh-token row; the joined
+    // `users` row is read-only here and locking it would create needless
+    // contention with profile updates that hit the same user.
+    let row = sqlx::query!(
+        r"
+            SELECT
+                rt.id,
+                rt.user_id,
+                rt.family_id,
+                rt.expires_at,
+                rt.revoked_at,
+                u.role,
+                u.verification_level
+            FROM refresh_tokens rt
+            JOIN users u ON u.id = rt.user_id
+            WHERE rt.token_hash = $1
+            FOR UPDATE OF rt
+        ",
+        presented_hash,
+    )
+    .fetch_optional(tx.as_mut())
+    .await?;
+
+    let Some(row) = row else {
+        // Nothing to commit; transaction rolls back on drop.
+        return Ok(RefreshOutcome::NotFound);
+    };
+
+    if row.revoked_at.is_some() {
+        // Reuse detected: the presented token was already rotated or
+        // logged out. Anyone replaying it is either the legitimate client
+        // racing itself (the second arm of the FOR UPDATE serialization)
+        // or an attacker. Either way the safe action is to revoke every
+        // active sibling so the entire family is locked out.
+        sqlx::query!(
+            r"
+                UPDATE refresh_tokens
+                SET revoked_at = NOW()
+                WHERE family_id = $1 AND revoked_at IS NULL
+            ",
+            row.family_id,
+        )
+        .execute(tx.as_mut())
+        .await?;
+        tx.commit().await?;
+        return Ok(RefreshOutcome::Reused {
+            user_id: row.user_id,
+            family_id: row.family_id,
+        });
+    }
+
+    if row.expires_at <= Utc::now() {
+        // Expired tokens are revoked here so the partial active index
+        // does not accumulate stale entries. The handler still returns
+        // 401 - an expired token is unusable.
+        sqlx::query!(
+            r"
+                UPDATE refresh_tokens
+                SET revoked_at = NOW()
+                WHERE id = $1
+            ",
+            row.id,
+        )
+        .execute(tx.as_mut())
+        .await?;
+        tx.commit().await?;
+        return Ok(RefreshOutcome::Expired);
+    }
+
+    let verification_level =
+        VerificationLevel::from_str(&row.verification_level).map_err(|err| {
+            Error::ColumnDecode {
+                index: "verification_level".to_owned(),
+                source: Box::new(err),
+            }
+        })?;
+
+    // `UserRole` parses with an `Unknown` fallback (no `Err` for unrecognized
+    // strings) - mirrors the wallet-login path so a stray DB value can never
+    // 500 the refresh handler.
+    let role = UserRole::from_str(&row.role).unwrap_or(UserRole::Unknown);
+
+    sqlx::query!(
+        r"
+            UPDATE refresh_tokens
+            SET revoked_at = NOW(), replaced_by = $1
+            WHERE id = $2
+        ",
+        new_token_id,
+        row.id,
+    )
+    .execute(tx.as_mut())
+    .await?;
+
+    sqlx::query!(
+        r"
+            INSERT INTO refresh_tokens (id, user_id, token_hash, family_id, expires_at)
+            VALUES ($1, $2, $3, $4, $5)
+        ",
+        new_token_id,
+        row.user_id,
+        new_token_hash,
+        row.family_id,
+        new_expires_at,
+    )
+    .execute(tx.as_mut())
+    .await?;
+
+    tx.commit().await?;
+
+    Ok(RefreshOutcome::Rotated(RotatedRefresh {
+        user_id: row.user_id,
+        family_id: row.family_id,
+        role,
+        verification_level,
+    }))
 }
