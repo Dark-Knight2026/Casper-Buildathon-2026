@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { useNavigate } from 'react-router-dom';
 import { MapPin, Bed, Bath, Square, Heart, Camera, TrendingUp, Star } from 'lucide-react';
 import { FEATURED_PROPERTIES } from '@/data/featuredProperties';
+import { cn } from '@/lib/utils';
 import type { Property } from '@/types/property';
 
 const STATUS_LABELS: Record<Property['status'], string> = {
@@ -85,11 +86,10 @@ export default function FeaturedProperties() {
               }}
             >
               <Heart
-                className={`h-4 w-4 ${
-                  favorites.includes(property.id)
-                    ? 'fill-red-500 text-red-500'
-                    : 'text-muted-foreground'
-                }`}
+                className={cn(
+                  'h-4 w-4',
+                  favorites.includes(property.id) ? 'fill-red-500 text-red-500' : 'text-muted-foreground'
+                )}
               />
             </Button>
           </div>

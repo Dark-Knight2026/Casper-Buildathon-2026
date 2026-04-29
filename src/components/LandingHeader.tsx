@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { buttonVariants } from '@/components/ui/button';
 
-export default function LandingHeader() {
+export function LandingHeader() {
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-background/90 backdrop-blur-sm border-b border-border">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
@@ -9,6 +9,9 @@ export default function LandingHeader() {
           LeaseFi
         </Link>
 
+        {/* Mobile nav (hamburger / Sheet) deferred — below md the brand and
+            auth CTAs remain; Properties / Token Sale are reachable from the
+            footer and the landing page CTAs. */}
         <nav className="hidden md:flex items-center gap-8">
           <Link to="/listings" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
             Properties

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import LandingHeader from '@/components/LandingHeader';
+import { LandingHeader } from '@/components/LandingHeader';
 
 function renderHeader() {
   return render(
@@ -15,27 +15,39 @@ describe('LandingHeader', () => {
   describe('rendering', () => {
     it('renders without crashing', () => {
       renderHeader();
-      expect(screen.getByText('LeaseFi')).toBeInTheDocument();
+      expect(screen.getByText('LeaseFi'), 'brand text "LeaseFi" should be visible').toBeInTheDocument();
     });
 
     it('renders Sign In link', () => {
       renderHeader();
-      expect(screen.getByRole('link', { name: /sign in/i })).toBeInTheDocument();
+      expect(
+        screen.getByRole('link', { name: /sign in/i }),
+        'Sign In CTA link should be rendered'
+      ).toBeInTheDocument();
     });
 
     it('renders Get Started link', () => {
       renderHeader();
-      expect(screen.getByRole('link', { name: /get started/i })).toBeInTheDocument();
+      expect(
+        screen.getByRole('link', { name: /get started/i }),
+        'Get Started CTA link should be rendered'
+      ).toBeInTheDocument();
     });
 
     it('renders Properties nav link', () => {
       renderHeader();
-      expect(screen.getByRole('link', { name: /properties/i })).toBeInTheDocument();
+      expect(
+        screen.getByRole('link', { name: /properties/i }),
+        'Properties nav link should be rendered'
+      ).toBeInTheDocument();
     });
 
     it('renders Token Sale nav link', () => {
       renderHeader();
-      expect(screen.getByRole('link', { name: /token sale/i })).toBeInTheDocument();
+      expect(
+        screen.getByRole('link', { name: /token sale/i }),
+        'Token Sale nav link should be rendered'
+      ).toBeInTheDocument();
     });
   });
 
@@ -43,7 +55,7 @@ describe('LandingHeader', () => {
     it('logo links to /', () => {
       renderHeader();
       const logo = screen.getByRole('link', { name: /leasefi/i });
-      expect(logo).toHaveAttribute('href', '/');
+      expect(logo, 'brand logo should link to root "/"').toHaveAttribute('href', '/');
     });
   });
 
@@ -51,13 +63,13 @@ describe('LandingHeader', () => {
     it('Properties link points to /listings', () => {
       renderHeader();
       const link = screen.getByRole('link', { name: /properties/i });
-      expect(link).toHaveAttribute('href', '/listings');
+      expect(link, 'Properties nav should link to /listings').toHaveAttribute('href', '/listings');
     });
 
     it('Token Sale link points to /ico', () => {
       renderHeader();
       const link = screen.getByRole('link', { name: /token sale/i });
-      expect(link).toHaveAttribute('href', '/ico');
+      expect(link, 'Token Sale nav should link to /ico').toHaveAttribute('href', '/ico');
     });
   });
 
@@ -66,12 +78,18 @@ describe('LandingHeader', () => {
     // and screen-reader "link" role all work — which onClick(navigate) would hide.
     it('Sign In link points to /auth/login', () => {
       renderHeader();
-      expect(screen.getByRole('link', { name: /sign in/i })).toHaveAttribute('href', '/auth/login');
+      expect(
+        screen.getByRole('link', { name: /sign in/i }),
+        'Sign In CTA should link to /auth/login'
+      ).toHaveAttribute('href', '/auth/login');
     });
 
     it('Get Started link points to /auth/register', () => {
       renderHeader();
-      expect(screen.getByRole('link', { name: /get started/i })).toHaveAttribute('href', '/auth/register');
+      expect(
+        screen.getByRole('link', { name: /get started/i }),
+        'Get Started CTA should link to /auth/register'
+      ).toHaveAttribute('href', '/auth/register');
     });
   });
 });
