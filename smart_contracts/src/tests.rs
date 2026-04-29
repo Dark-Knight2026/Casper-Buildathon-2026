@@ -27,3 +27,6 @@ mod vesting;
 
 #[path = "../tests/investor_registry.rs"]
 mod investor_registry;
+
+#[path = "../tests/property_registry.rs"]
+mod property_registry;
