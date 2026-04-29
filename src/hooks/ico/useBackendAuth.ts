@@ -1,41 +1,26 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import type { ICSPRClickSDK } from '@make-software/csprclick-core-types';
-import { getNonce, loginWithSignature, applyToken } from '@/services/ico';
+import {
+  getNonce,
+  loginWithSignature,
+  logoutSession,
+  type ServerUserInfo,
+} from '@/services/ico';
 import { logger } from '@/utils/logger';
 
-const TOKEN_KEY = 'leasefi_jwt';
-
-function loadStoredToken(): string | null {
-  const token = localStorage.getItem(TOKEN_KEY);
-  if (!token) return null;
-
-  try {
-    // JWT payloads are base64url (RFC 7515): '-'/'_' instead of '+'/'/' and no '='
-    // padding. atob() requires standard base64, so normalize before decoding —
-    // otherwise tokens whose payload bytes encode to '-' or '_' (most of them)
-    // throw InvalidCharacterError and force a silent re-login.
-    const part = token.split('.')[1];
-    const b64 = part.replace(/-/g, '+').replace(/_/g, '/');
-    const padded = b64 + '='.repeat((4 - b64.length % 4) % 4);
-    const payload = JSON.parse(atob(padded));
-    if (Date.now() / 1000 > payload.exp) {
-      localStorage.removeItem(TOKEN_KEY);
-      return null;
-    }
-  } catch {
-    localStorage.removeItem(TOKEN_KEY);
-    return null;
-  }
-
-  applyToken(token);
-  return token;
-}
-
+/**
+ * Wallet sign-in against the LeaseFi backend.
+ *
+ * Tokens are delivered as HttpOnly cookies (`access_token`, `refresh_token`)
+ * by the backend at `/auth/login` and refreshed at `/auth/refresh`. The hook
+ * exposes only the resulting `user` object; the cookies travel automatically
+ * on subsequent requests via `credentials: 'include'`.
+ */
 export function useBackendAuth(
   clickRef: ICSPRClickSDK | null,
   publicKey: string | null | undefined,
 ) {
-  const [isAuthenticated, setIsAuthenticated] = useState(() => !!loadStoredToken());
+  const [user, setUser] = useState<ServerUserInfo | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const prevPublicKeyRef = useRef(publicKey);
@@ -58,20 +43,10 @@ export function useBackendAuth(
         throw new Error('Message signing was cancelled');
       }
 
-      // 3. Login with signature → get JWT
-      const { token } = await loginWithSignature(publicKey, result.signatureHex);
-
-      // 4. Store and apply token
-      // SECURITY RISK (accepted, planned remediation): JWT is stored in localStorage,
-      // which is readable by any JavaScript on the page (XSS, browser extensions).
-      // The expiry check in loadStoredToken() limits the exposure window but does not
-      // eliminate the risk. Planned fix: migrate to HttpOnly + Secure + SameSite=Strict
-      // cookies set by the backend (/api/v1/auth/login) and remove the token from the
-      // JSON response body. Target date: Q2 2026.
-      // Tracked in: https://github.com/obox-systems/2025_anthony_leasefi_frontend/issues/13
-      localStorage.setItem(TOKEN_KEY, token);
-      applyToken(token);
-      setIsAuthenticated(true);
+      // 3. Exchange signature for an authenticated session. The backend sets
+      //    HttpOnly auth cookies; the body returns only the user profile.
+      const { user: serverUser } = await loginWithSignature(publicKey, result.signatureHex);
+      setUser(serverUser);
 
       logger.debug('[useBackendAuth] Login successful');
     } catch (err) {
@@ -84,9 +59,8 @@ export function useBackendAuth(
   }, [clickRef, publicKey]);
 
   const logout = useCallback(() => {
-    localStorage.removeItem(TOKEN_KEY);
-    applyToken(null);
-    setIsAuthenticated(false);
+    setUser(null);
+    void logoutSession();
   }, []);
 
   useEffect(() => {
@@ -94,11 +68,19 @@ export function useBackendAuth(
     prevPublicKeyRef.current = publicKey;
 
     // Logout when wallet disconnects or switches to a different account.
-    // Prevents JWT from Account A being sent in Account B context.
+    // Prevents the cookie session from Account A from being implicitly
+    // associated with Account B in the UI.
     if (prev && prev !== publicKey) {
       logout();
     }
   }, [publicKey, logout]);
 
-  return { isAuthenticated, isLoading, error, login, logout };
+  return {
+    user,
+    isAuthenticated: user !== null,
+    isLoading,
+    error,
+    login,
+    logout,
+  };
 }

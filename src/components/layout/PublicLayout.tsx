@@ -1,5 +1,5 @@
 import { Outlet } from 'react-router-dom';
-import LandingHeader from '@/components/LandingHeader';
+import { LandingHeader } from '@/components/LandingHeader';
 
 export default function PublicLayout() {
   return (

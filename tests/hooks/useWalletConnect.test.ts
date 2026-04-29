@@ -37,13 +37,43 @@ import { useWalletConnect } from '@/hooks/auth/useWalletConnect';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
-const TOKEN_KEY = 'leasefi_jwt';
 const PUBLIC_KEY = '01abc123';
 
-function makeJwt(payload: Record<string, unknown>): string {
-  const header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
-  const body = btoa(JSON.stringify(payload));
-  return `${header}.${body}.signature`;
+interface ServerUserShape {
+  id: string;
+  role: string;
+  wallet_address: string | null;
+  status: string | null;
+  email: string | null;
+  first_name: string;
+  last_name: string;
+  phone: string | null;
+  avatar_url: string | null;
+  bio: string | null;
+  is_profile_complete: boolean;
+  active_leases_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+function makeServerUser(overrides: Partial<ServerUserShape> = {}): ServerUserShape {
+  return {
+    id: 'user-42',
+    role: 'landlord',
+    wallet_address: PUBLIC_KEY,
+    status: 'active',
+    email: 'user@example.com',
+    first_name: 'Ada',
+    last_name: 'Lovelace',
+    phone: null,
+    avatar_url: null,
+    bio: null,
+    is_profile_complete: true,
+    active_leases_count: 0,
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-04-01T00:00:00Z',
+    ...overrides,
+  };
 }
 
 function makeClickRef() {
@@ -70,12 +100,14 @@ function setWalletState(overrides: Partial<{
 }
 
 function setBackendAuthState(overrides: Partial<{
+  user: ServerUserShape | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
   login: ReturnType<typeof vi.fn>;
 }> = {}) {
   mockUseBackendAuth.mockReturnValue({
+    user: null,
     isAuthenticated: false,
     isLoading: false,
     error: null,
@@ -171,52 +203,52 @@ describe('useWalletConnect', () => {
       expect(login).not.toHaveBeenCalled();
     });
 
-    it('decodes JWT and syncs walletSession on successful backend auth', () => {
+    it('passes the server user to walletSession on successful backend auth', () => {
       const setWalletSession = vi.fn();
-      const token = makeJwt({ sub: 'user-42', role: 'landlord' });
-      localStorage.setItem(TOKEN_KEY, token);
+      const user = makeServerUser({ id: 'user-42', role: 'landlord' });
 
       setAuthContext({ setWalletSession });
-      setBackendAuthState({ isAuthenticated: true });
+      setBackendAuthState({ user, isAuthenticated: true });
 
       renderHook(() => useWalletConnect());
 
-      expect(setWalletSession).toHaveBeenCalledWith(token, 'user-42', 'landlord');
+      expect(
+        setWalletSession,
+        'after backend auth, the full ServerUserInfo should flow into AuthContext'
+      ).toHaveBeenCalledWith(user);
     });
 
-    it('redirects by role once profile hydrates after JWT sync', () => {
-      const token = makeJwt({ sub: 'user-7', role: 'landlord' });
-      localStorage.setItem(TOKEN_KEY, token);
-      setBackendAuthState({ isAuthenticated: true });
+    it('redirects by role once profile hydrates after walletSession sync', () => {
+      const user = makeServerUser({ id: 'user-7', role: 'landlord' });
+      setBackendAuthState({ user, isAuthenticated: true });
 
       const { rerender } = renderHook(() => useWalletConnect());
-      expect(mockNavigate).not.toHaveBeenCalled();
+      expect(
+        mockNavigate,
+        'navigation must wait for AuthContext.profile to hydrate'
+      ).not.toHaveBeenCalled();
 
       // AuthContext hydrates the profile after setWalletSession resolves
       setAuthContext({ profile: { id: 'user-7', role: 'landlord' } });
       rerender();
 
-      expect(mockNavigate).toHaveBeenCalledWith('/landlord/dashboard', { replace: true });
+      expect(
+        mockNavigate,
+        'landlord profile should redirect to /landlord/dashboard once hydrated'
+      ).toHaveBeenCalledWith('/landlord/dashboard', { replace: true });
     });
 
-    it('does not crash on malformed JWT', () => {
-      localStorage.setItem(TOKEN_KEY, 'not-a-jwt');
+    it('does nothing when isAuthenticated flips true but no user object is exposed', () => {
       const setWalletSession = vi.fn();
       setAuthContext({ setWalletSession });
-      setBackendAuthState({ isAuthenticated: true });
-
-      expect(() => renderHook(() => useWalletConnect())).not.toThrow();
-      expect(setWalletSession).not.toHaveBeenCalled();
-    });
-
-    it('does nothing when isAuthenticated flips true but no token is in storage', () => {
-      const setWalletSession = vi.fn();
-      setAuthContext({ setWalletSession });
-      setBackendAuthState({ isAuthenticated: true });
+      setBackendAuthState({ user: null, isAuthenticated: true });
 
       renderHook(() => useWalletConnect());
 
-      expect(setWalletSession).not.toHaveBeenCalled();
+      expect(
+        setWalletSession,
+        'walletSession should not be called without a server-supplied user'
+      ).not.toHaveBeenCalled();
     });
   });
 

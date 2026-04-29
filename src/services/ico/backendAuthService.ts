@@ -1,13 +1,36 @@
 import { backendClient } from '@/lib/api-client';
 
-interface NonceResponse {
+export interface NonceResponse {
   nonce: string;
   message: string;
 }
 
-interface LoginResponse {
-  token: string;
-  user: { id: string; role: string };
+/**
+ * Server-shape of the authenticated user, mirroring backend
+ * `crates/api/src/services/auth/models.rs::UserInfo`.
+ *
+ * Snake-case fields match the JSON wire format. Map to the frontend
+ * `User` type at the call site (see `mapServerUserInfo` below).
+ */
+export interface ServerUserInfo {
+  id: string;
+  role: string;
+  wallet_address: string | null;
+  status: string | null;
+  email: string | null;
+  first_name: string;
+  last_name: string;
+  phone: string | null;
+  avatar_url: string | null;
+  bio: string | null;
+  is_profile_complete: boolean;
+  active_leases_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LoginResponse {
+  user: ServerUserInfo;
 }
 
 export async function getNonce(publicKey: string): Promise<NonceResponse> {
@@ -32,7 +55,8 @@ export async function loginWithSignature(
   const prefix = publicKey.startsWith('02') ? '02' : '01';
   const signature = signatureHex.startsWith(prefix) ? signatureHex : `${prefix}${signatureHex}`;
 
-  // The API field is named wallet_address, but the value is the public key (see getNonce above).
+  // Tokens travel as HttpOnly cookies set by the response — the request must
+  // therefore opt into credentialed mode so the browser stores Set-Cookie.
   return backendClient.post<LoginResponse>(
     '/api/v1/auth/login',
     { wallet_address: publicKey, signature },
@@ -40,6 +64,49 @@ export async function loginWithSignature(
   );
 }
 
-export function applyToken(token: string | null): void {
-  backendClient.setAuthToken(token);
+/**
+ * Trade the `refresh_token` cookie for a fresh `access_token`.
+ *
+ * The backend reads the opaque refresh token from the (cookie-only) request
+ * and rotates both cookies on success. The frontend never sees either token —
+ * the browser handles the cookie swap transparently.
+ *
+ * Returns `true` on success, `false` if the refresh cookie is missing/expired.
+ * Network errors propagate so the caller can distinguish "logged out" from
+ * "backend down" and avoid wiping the session on transient failures.
+ */
+export async function refreshSession(): Promise<boolean> {
+  try {
+    await backendClient.post<void>('/api/v1/auth/refresh', undefined, {
+      retry: false,
+      // Refresh must not itself trigger the 401-refresh loop in the client.
+      skipRefresh: true,
+    });
+    return true;
+  } catch (err) {
+    if (err instanceof Error && 'statusCode' in err) {
+      const status = (err as { statusCode?: number }).statusCode;
+      if (status === 401 || status === 403 || status === 404) {
+        return false;
+      }
+    }
+    throw err;
+  }
+}
+
+/**
+ * Best-effort server-side logout: clears `access_token` + `refresh_token`
+ * cookies and revokes the refresh-token family on the backend. Never throws —
+ * callers should also clear local session state regardless of the result.
+ */
+export async function logoutSession(): Promise<void> {
+  try {
+    await backendClient.post<void>('/api/v1/auth/logout', undefined, {
+      retry: false,
+      skipRefresh: true,
+    });
+  } catch {
+    // Logout is best-effort — even if the backend rejects (already-expired
+    // refresh, network down), the client will still clear its local state.
+  }
 }

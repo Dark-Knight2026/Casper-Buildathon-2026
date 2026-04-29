@@ -23,7 +23,7 @@ export function useWalletConnect() {
   const didRedirect = useRef(false);
 
   const { isConnected, account, isConnecting, error: walletError, clickRef, syncActiveAccount, connect } = useICOWallet();
-  const { isAuthenticated, isLoading: isSigningIn, error: authError, login } = useBackendAuth(
+  const { user, isAuthenticated, isLoading: isSigningIn, error: authError, login } = useBackendAuth(
     clickRef,
     account?.publicKey ?? null,
   );
@@ -36,22 +36,14 @@ export function useWalletConnect() {
     navigate(destination, { replace: true });
   }, [profile, navigate]);
 
-  // After fresh backend auth — sync JWT to AuthContext (redirect handled by effect above)
+  // After fresh backend auth — copy the server user into AuthContext.
+  // Tokens live in HttpOnly cookies; only the profile object travels through JS.
   useEffect(() => {
-    if (!isAuthenticated || didRedirect.current) return;
-
-    const token = localStorage.getItem('leasefi_jwt');
-    if (!token) return;
-
-    try {
-      const payload = JSON.parse(atob(token.split('.')[1])) as { sub: string; role: string };
-      setWalletSession(token, payload.sub, payload.role);
-      // redirect fires from the profile effect once AuthContext updates
-    } catch {
-      // malformed token
-    }
+    if (!user || didRedirect.current) return;
+    setWalletSession(user);
+  // setWalletSession is stable (useCallback); only re-run when login produces a new user.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated]);
+  }, [user]);
 
   // Once wallet connects, automatically trigger backend auth
   useEffect(() => {
