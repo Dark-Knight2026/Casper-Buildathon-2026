@@ -144,6 +144,62 @@ impl PropertyRegistry {
     // Admin Configuration
     // =============================================================================
 
+    /// Sets the property ownership token address.
+    /// Restricted to `PROPERTY_MANAGER`.
+    /// @dev The property must still be in `Draft` status. Once active, the token address is
+    ///      treated as part of the property identity.
+    pub fn set_property_token(&mut self, property_id: U256, token: Address) {
+        self.assert_role(ROLE_PROPERTY_MANAGER);
+
+        let mut property = self.get_property(property_id);
+        self.assert_draft(&property);
+
+        property.token = Some(token);
+        self.properties.set(&property_id, property);
+
+        self.env()
+            .emit_event(PropertyTokenSet { property_id, token });
+    }
+
+    /// Sets the property revenue distributor address.
+    /// Restricted to `PROPERTY_MANAGER`.
+    /// @dev The property must still be in `Draft` status.
+    pub fn set_revenue_distributor(&mut self, property_id: U256, revenue_distributor: Address) {
+        self.assert_role(ROLE_PROPERTY_MANAGER);
+
+        let mut property = self.get_property(property_id);
+        self.assert_draft(&property);
+
+        property.revenue_distributor = Some(revenue_distributor);
+        self.properties.set(&property_id, property);
+
+        self.env().emit_event(RevenueDistributorSet {
+            property_id,
+            revenue_distributor,
+        });
+    }
+
+    /// Updates the metadata URI or content hash for a draft property.
+    /// Restricted to `PROPERTY_MANAGER`.
+    /// @dev Metadata must not contain private investor data.
+    pub fn set_metadata_uri(&mut self, property_id: U256, metadata_uri: String) {
+        self.assert_role(ROLE_PROPERTY_MANAGER);
+
+        if metadata_uri.is_empty() {
+            self.env().revert(Error::EmptyMetadataUri);
+        }
+
+        let mut property = self.get_property(property_id);
+        self.assert_draft(&property);
+
+        property.metadata_uri = metadata_uri;
+        self.properties.set(&property_id, property);
+
+        self.env().emit_event(PropertyMetadataSet { property_id });
+    }
+
+    
+
     // =============================================================================
     // View Functions
     // =============================================================================
@@ -165,7 +221,7 @@ impl PropertyRegistry {
     // =============================================================================
 
     /// Creates a property record in `Draft` status.
-    /// Restricted to `PROPERTY_MANAGER`
+    /// Restricted to `PROPERTY_MANAGER`.
     /// @dev Token and revenue distributor addresses are intentionally set later so deployment can be done in small, verifiable steps.
     pub fn create_property(&mut self, params: CreatePropertyParams) -> U256 {
         self.assert_role(ROLE_PROPERTY_MANAGER);
