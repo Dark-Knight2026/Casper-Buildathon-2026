@@ -24,3 +24,6 @@ mod treasury;
 
 #[path = "../tests/vesting.rs"]
 mod vesting;
+
+#[path = "../tests/investor_registry.rs"]
+mod investor_registry;
