@@ -22,7 +22,7 @@ export function useWalletConnect() {
   const [connectingProvider, setConnectingProvider] = useState<string | null>(null);
   const didRedirect = useRef(false);
 
-  const { isConnected, account, isConnecting, error: walletError, clickRef, syncActiveAccount, connect } = useICOWallet();
+  const { isConnected, account, isConnecting, error: walletError, clickRef, syncActiveAccount, connect, disconnect } = useICOWallet();
   const { user, isAuthenticated, isLoading: isSigningIn, error: authError, login } = useBackendAuth(
     clickRef,
     account?.publicKey ?? null,
@@ -45,14 +45,12 @@ export function useWalletConnect() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
-  // Once wallet connects, automatically trigger backend auth
-  useEffect(() => {
-    if (isConnected && account && !isAuthenticated && !isSigningIn) {
-      login();
-    }
-  // login is stable (useCallback) — safe to omit
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isConnected, account?.publicKey]);
+  // Note: we intentionally do NOT auto-call login() here. The CSPR.click SDK
+  // restores the previous session's `connected` state on init, so visiting
+  // /auth/login after a Sign Out would otherwise auto-trigger a signMessage
+  // popup before the user has clicked anything. Login.tsx and Register.tsx
+  // expose an explicit "Sign in with connected wallet" button which calls
+  // login() — that's the only path that should fire signMessage.
 
   // Reset connectingProvider on modal close / rejection.
   // Each provider signals cancellation differently:
@@ -97,8 +95,18 @@ export function useWalletConnect() {
           return;
         }
       }
+      // selectAccount=true forces CSPR.click to show the Google/social
+      // account picker instead of silently re-using the cached OAuth token.
+      // Without this, a user who logged in with account A can never sign
+      // in with account B from the same browser without manually clearing
+      // cookies on accounts.cspr.click. The trade-off: existing users
+      // with a single account see one extra "Continue as …" tap on every
+      // login — small UX cost in exchange for working multi-account.
       const options = isSocial
-        ? { chainName: import.meta.env.VITE_CASPER_NETWORK ?? 'casper-test' }
+        ? {
+            chainName: import.meta.env.VITE_CASPER_NETWORK ?? 'casper-test',
+            selectAccount: true,
+          }
         : undefined;
       const account = await clickRef.connect(providerKey, options);
       if (account) await syncActiveAccount();
@@ -120,6 +128,7 @@ export function useWalletConnect() {
     isSigningIn,
     login,
     connect,
+    disconnect,
     clickRef,
     handleConnectProvider,
   };

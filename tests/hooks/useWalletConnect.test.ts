@@ -177,7 +177,12 @@ describe('useWalletConnect', () => {
   });
 
   describe('connect → auth → redirect by role', () => {
-    it('calls login() once wallet connects and backend auth has not started', () => {
+    it('does NOT auto-call login() when SDK restores a connected wallet', () => {
+      // CSPR.click rehydrates the previous session's connection on init.
+      // We intentionally don't auto-trigger backend login from that —
+      // otherwise visiting /auth/login after a Sign Out would force a fresh
+      // signMessage popup with no user click. Login.tsx exposes an explicit
+      // "Sign in with connected wallet" button which calls login() directly.
       const login = vi.fn();
       setWalletState({
         isConnected: true,
@@ -187,7 +192,10 @@ describe('useWalletConnect', () => {
 
       renderHook(() => useWalletConnect());
 
-      expect(login).toHaveBeenCalledTimes(1);
+      expect(
+        login,
+        'auto-login is disabled — login() must only fire from an explicit user action'
+      ).not.toHaveBeenCalled();
     });
 
     it('does not call login() while backend auth is in flight', () => {

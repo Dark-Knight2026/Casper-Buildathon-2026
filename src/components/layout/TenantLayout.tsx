@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Link, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
+import { useICOWallet } from '@/hooks/ico/useICOWallet';
 import { Button } from '@/components/ui/button';
 import { ProfileNudgeDialog } from '@/components/auth/ProfileNudgeDialog';
 import {
@@ -54,13 +55,21 @@ const NAV_LINKS = [
 
 export default function TenantLayout() {
   const { profile, walletSignOut } = useAuth();
-  const navigate = useNavigate();
+  const { disconnect } = useICOWallet();
   const { pathname } = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
 
+  // Sign out fully — both our backend session AND the CSPR.click wallet
+  // session. We use a hard `location.assign` instead of `navigate` because
+  // `clickRef.signOut()` is asynchronous: a soft React-Router navigation
+  // would mount the next page while the SDK still has the previous account
+  // cached, and useWalletConnect's auto-login effect would immediately
+  // trigger a fresh signMessage popup. Reloading the page nukes the in-memory
+  // SDK state so the next page (landing) starts from a clean slate.
   const handleSignOut = () => {
+    disconnect();
     walletSignOut();
-    navigate('/auth/login', { replace: true });
+    window.location.assign('/');
   };
 
   const isActive = (to: string) => pathname === to || pathname.startsWith(to + '/');
