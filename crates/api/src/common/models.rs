@@ -110,7 +110,7 @@ pub enum VerificationLevel {
 
 /// JWT Claims structure used for token generation and validation.
 ///
-/// `token_type`, `verification_level`, and `jti` are wrapped in `Option` with
+/// `token_type` and `verification_level` are wrapped in `Option` with
 /// `#[serde(default)]` so JWTs issued before this rollout (without these
 /// fields) still decode successfully. Once the longest legacy access-token
 /// TTL has elapsed in production, a follow-up commit can drop the `Option`.
@@ -136,8 +136,6 @@ pub struct Claims {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub verification_level: Option<VerificationLevel>,
     /// JWT ID - unique per access token, used for the logout blocklist.
-    /// Optional for backward compatibility during transition.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[schema(value_type = Option<Uuid>)]
-    pub jti: Option<Uuid>,
+    #[schema(value_type = Uuid)]
+    pub jti: Uuid,
 }

@@ -31,10 +31,10 @@ use crate::{
 /// revokes the refresh-token family, and instructs the browser to drop both
 /// auth cookies.
 ///
-/// 1. Reads the `access_token` cookie. If it decodes to a valid JWT carrying
-///    a `jti`, the `jti` is added to the Redis blocklist with TTL = `exp - now`
-///    so the same access cookie cannot be replayed for the rest of its
-///    15-minute window.
+/// 1. Reads the `access_token` cookie. If it decodes to a valid JWT, its
+///    `jti` is added to the Redis blocklist with TTL = `exp - now` so the
+///    same access cookie cannot be replayed for the rest of its 15-minute
+///    window.
 /// 2. Reads the `refresh_token` cookie. If present, hashes the value and
 ///    revokes every active row in its family - locking out concurrent
 ///    sessions sharing the same login.
@@ -84,7 +84,6 @@ pub async fn logout(
     // case and still clear the cookie below.
     if let Some(access_cookie) = jar.get(ACCESS_TOKEN_COOKIE)
         && let Ok(claims) = jwt::decode_token(access_cookie.value(), &state.config.jwt_secret)
-        && let Some(jti) = claims.jti
     {
         // TTL is anchored to the JWT's own `exp` so the blocklist key
         // evicts at the moment the token would have stopped being
@@ -94,13 +93,13 @@ pub async fn logout(
         let exp_secs = i64::try_from(claims.exp).unwrap_or(0);
         let remaining = (exp_secs - now_secs).max(0);
         let ttl = u64::try_from(remaining).unwrap_or(0);
-        if let Err(err) = state.redis.blocklist_jwt(jti, ttl).await {
+        if let Err(err) = state.redis.blocklist_jwt(claims.jti, ttl).await {
             // Fail-open: a Redis hiccup must not turn logout into 500.
             // The cookie is still cleared, and the access token will
             // expire on its own within 15 minutes.
             tracing::warn!(
                 error = %err,
-                jti = %jti,
+                jti = %claims.jti,
                 "Failed to blocklist access-token jti on logout"
             );
         }

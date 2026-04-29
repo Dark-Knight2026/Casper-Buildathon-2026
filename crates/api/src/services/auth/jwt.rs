@@ -37,9 +37,11 @@ pub struct EncodedAccessToken {
 
 /// Encodes a signed access token for the given user.
 ///
-/// Populates every optional claim (`token_type`, `verification_level`, `jti`)
+/// Populates every optional claim (`token_type`, `verification_level`)
 /// explicitly so newly issued tokens carry the full schema; the `Option`
-/// wrappers on `Claims` only serve the legacy-decode path.
+/// wrappers on `Claims` only serve the legacy-decode path. `jti` is required
+/// because every access token issued under the current rollout must be
+/// blocklist-addressable.
 ///
 /// # Errors
 ///
@@ -68,7 +70,7 @@ pub fn encode_access_token(
         aud: JWT_AUDIENCE.to_owned(),
         token_type: Some(TokenType::Access),
         verification_level: Some(verification_level),
-        jti: Some(jti),
+        jti,
     };
     let token = jsonwebtoken::encode(
         &Header::new(Algorithm::HS256),

@@ -195,7 +195,7 @@ pub fn create_test_jwt(user_id: UserId, role: UserRole, secret: &str) -> String 
         aud: JWT_AUDIENCE.to_owned(),
         token_type: Some(TokenType::Access),
         verification_level: Some(VerificationLevel::None),
-        jti: Some(Uuid::new_v4()),
+        jti: Uuid::new_v4(),
     };
     encode(
         &Header::default(),

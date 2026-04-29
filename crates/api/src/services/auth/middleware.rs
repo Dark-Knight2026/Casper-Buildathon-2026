@@ -51,23 +51,19 @@ impl FromRequestParts<Arc<AppState>> for AuthUser {
             return Err(AuthError::WrongTokenType);
         }
 
-        // Logout-blocklist check. A `jti` is only present on tokens minted
-        // after Phase 2.1 - legacy tokens (`jti = None`) skip the check and
-        // continue to expire naturally. Redis errors are fail-open (warn +
-        // allow): a partial Redis outage must not take down the entire
-        // protected surface, and the access-token TTL of 15 minutes already
-        // caps the worst-case replay window.
-        if let Some(jti) = claims.jti {
-            match state.redis.is_jwt_blocklisted(jti).await {
-                Ok(true) => return Err(AuthError::TokenRevoked),
-                Ok(false) => {}
-                Err(err) => {
-                    tracing::warn!(
-                        error = %err,
-                        jti = %jti,
-                        "Blocklist check failed; allowing request (fail-open)"
-                    );
-                }
+        // Logout-blocklist check. Redis errors are fail-open (warn + allow):
+        // a partial Redis outage must not take down the entire protected
+        // surface, and the access-token TTL of 15 minutes already caps the
+        // worst-case replay window.
+        match state.redis.is_jwt_blocklisted(claims.jti).await {
+            Ok(true) => return Err(AuthError::TokenRevoked),
+            Ok(false) => {}
+            Err(err) => {
+                tracing::warn!(
+                    error = %err,
+                    jti = %claims.jti,
+                    "Blocklist check failed; allowing request (fail-open)"
+                );
             }
         }
 

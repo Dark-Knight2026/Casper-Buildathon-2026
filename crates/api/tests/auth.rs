@@ -42,12 +42,12 @@ async fn login_with_seed(env: &common::TestEnv, secret_seed: [u8; 32]) -> TestRe
     let public_key = PublicKey::from(&secret_key);
     let wallet_address = public_key.to_hex();
 
-    let nonce_body: Value = env
+    let nonce_body = env
         .server
         .get("/api/v1/auth/nonce")
         .add_query_param("wallet_address", &wallet_address)
         .await
-        .json();
+        .json::<Value>();
     let message = nonce_body["message"].as_str().unwrap();
     let signature_hex = sign_with_prefix(message, &secret_key, &public_key);
 
@@ -84,7 +84,7 @@ async fn nonce_endpoint_returns_challenge(pool: PgPool) {
 
     assert_eq!(response.status_code(), StatusCode::OK);
 
-    let body: Value = response.json();
+    let body = response.json::<Value>();
     assert!(body.get("nonce").is_some());
     assert!(body.get("message").is_some());
 
@@ -146,7 +146,7 @@ async fn protected_endpoint_requires_auth(pool: PgPool) {
 async fn protected_endpoint_rejects_invalid_token(pool: PgPool) {
     let env = common::setup_test_server(pool, false).await;
 
-    let (status, _): (StatusCode, Option<Value>) = common::authed_request(
+    let (status, _) = common::authed_request::<Value>(
         &env.server,
         &Method::POST,
         "/api/v1/tax/calculate-liability",
@@ -179,7 +179,7 @@ async fn full_auth_flow_nonce_sign_login(pool: PgPool) {
         .await;
     assert_eq!(nonce_response.status_code(), StatusCode::OK);
 
-    let nonce_body: Value = nonce_response.json();
+    let nonce_body = nonce_response.json::<Value>();
     let message = nonce_body["message"]
         .as_str()
         .expect("message field required");
@@ -209,7 +209,7 @@ async fn full_auth_flow_nonce_sign_login(pool: PgPool) {
         !refresh_cookie.value().is_empty(),
         "refresh_token cookie must be set"
     );
-    let login_body: Value = login_response.json();
+    let login_body = login_response.json::<Value>();
     assert!(
         login_body.get("user").is_some(),
         "Response must contain user info"
@@ -230,12 +230,12 @@ async fn replay_attack_prevention(pool: PgPool) {
     let wallet_address = public_key.to_hex();
 
     // Get nonce and sign
-    let nonce_body: Value = env
+    let nonce_body = env
         .server
         .get("/api/v1/auth/nonce")
         .add_query_param("wallet_address", &wallet_address)
         .await
-        .json();
+        .json::<Value>();
     let message = nonce_body["message"].as_str().unwrap();
     let signature_hex = sign_with_prefix(message, &secret_key, &public_key);
 
@@ -276,20 +276,20 @@ async fn concurrent_nonce_overwrites_previous(pool: PgPool) {
     let wallet_address = public_key.to_hex();
 
     // Request first nonce
-    let _first_body: Value = env
+    let _first_body = env
         .server
         .get("/api/v1/auth/nonce")
         .add_query_param("wallet_address", &wallet_address)
         .await
-        .json();
+        .json::<Value>();
 
     // Request second nonce (overwrites first in Redis)
-    let second_body: Value = env
+    let second_body = env
         .server
         .get("/api/v1/auth/nonce")
         .add_query_param("wallet_address", &wallet_address)
         .await
-        .json();
+        .json::<Value>();
     let second_message = second_body["message"].as_str().unwrap();
     let second_sig = sign_with_prefix(second_message, &secret_key, &public_key);
 
@@ -317,12 +317,12 @@ async fn failed_login_consumes_nonce(pool: PgPool) {
     let wallet_address = public_key.to_hex();
 
     // Get nonce and sign the correct message
-    let nonce_body: Value = env
+    let nonce_body = env
         .server
         .get("/api/v1/auth/nonce")
         .add_query_param("wallet_address", &wallet_address)
         .await
-        .json();
+        .json::<Value>();
     let message = nonce_body["message"].as_str().unwrap();
     let correct_sig = sign_with_prefix(message, &secret_key, &public_key);
 
@@ -411,7 +411,7 @@ async fn nonce_has_ttl_set_in_redis(pool: PgPool) {
         .expect("Redis connection failed");
 
     let key = format!("nonce:{wallet_address}");
-    let ttl: i64 = conn.ttl(&key).await.expect("TTL query failed");
+    let ttl = conn.ttl::<_, i64>(&key).await.expect("TTL query failed");
 
     // TTL should be positive and close to 300s (allow some margin for test execution)
     assert!(
@@ -563,7 +563,7 @@ async fn full_auth_flow_secp256k1(pool: PgPool) {
         .await;
     assert_eq!(nonce_response.status_code(), StatusCode::OK);
 
-    let nonce_body: Value = nonce_response.json();
+    let nonce_body = nonce_response.json::<Value>();
     let message = nonce_body["message"]
         .as_str()
         .expect("message field required");
@@ -592,7 +592,7 @@ async fn full_auth_flow_secp256k1(pool: PgPool) {
         !refresh_cookie.value().is_empty(),
         "refresh_token cookie must be set"
     );
-    let login_body: Value = login_response.json();
+    let login_body = login_response.json::<Value>();
     assert!(
         login_body.get("user").is_some(),
         "Response must contain user info"
@@ -611,7 +611,6 @@ async fn jwt_wrong_issuer_rejected(pool: PgPool) {
     let env = common::setup_test_server(pool, false).await;
 
     let exp = usize::try_from((Utc::now() + Duration::hours(1)).timestamp().max(0)).unwrap();
-
     let claims = Claims {
         sub: Uuid::new_v4(),
         role: UserRole::Tenant,
@@ -620,9 +619,8 @@ async fn jwt_wrong_issuer_rejected(pool: PgPool) {
         aud: JWT_AUDIENCE.to_owned(),
         token_type: None,
         verification_level: None,
-        jti: None,
+        jti: Uuid::new_v4(),
     };
-
     let token = jsonwebtoken::encode(
         &Header::default(),
         &claims,
@@ -630,7 +628,7 @@ async fn jwt_wrong_issuer_rejected(pool: PgPool) {
     )
     .unwrap();
 
-    let (status, _): (StatusCode, Option<Value>) = common::authed_request(
+    let (status, _) = common::authed_request::<Value>(
         &env.server,
         &Method::POST,
         "/api/v1/tax/calculate-liability",
@@ -652,7 +650,6 @@ async fn jwt_wrong_audience_rejected(pool: PgPool) {
     let env = common::setup_test_server(pool, false).await;
 
     let exp = usize::try_from((Utc::now() + Duration::hours(1)).timestamp().max(0)).unwrap();
-
     let claims = Claims {
         sub: Uuid::new_v4(),
         role: UserRole::Tenant,
@@ -661,9 +658,8 @@ async fn jwt_wrong_audience_rejected(pool: PgPool) {
         aud: "wrong-audience".to_owned(),
         token_type: None,
         verification_level: None,
-        jti: None,
+        jti: Uuid::new_v4(),
     };
-
     let token = jsonwebtoken::encode(
         &Header::default(),
         &claims,
@@ -671,7 +667,7 @@ async fn jwt_wrong_audience_rejected(pool: PgPool) {
     )
     .unwrap();
 
-    let (status, _): (StatusCode, Option<Value>) = common::authed_request(
+    let (status, _) = common::authed_request::<Value>(
         &env.server,
         &Method::POST,
         "/api/v1/tax/calculate-liability",
@@ -684,6 +680,52 @@ async fn jwt_wrong_audience_rejected(pool: PgPool) {
         status,
         StatusCode::UNAUTHORIZED,
         "JWT with wrong audience must be rejected"
+    );
+}
+
+/// A JWT missing the `jti` claim must be rejected.
+///
+/// Pins the invariant introduced when `Claims.jti` lost its `Option<Uuid>`
+/// wrapping: every access token now carries a `jti`, and a payload without
+/// one is treated as malformed (serde rejects it during decode -> 401).
+/// The payload is hand-rolled via `serde_json::json!` because the typed
+/// `Claims` struct compile-time-forbids omitting `jti` - that is exactly
+/// the invariant under test.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn jwt_without_jti_rejected(pool: PgPool) {
+    let env = common::setup_test_server(pool, false).await;
+
+    let exp = usize::try_from((Utc::now() + Duration::hours(1)).timestamp().max(0)).unwrap();
+    let payload = serde_json::json!({
+        "sub": Uuid::new_v4(),
+        "role": "tenant",
+        "exp": exp,
+        "iss": JWT_ISSUER,
+        "aud": JWT_AUDIENCE,
+        "token_type": "access",
+        "verification_level": "none",
+    });
+
+    let token = jsonwebtoken::encode(
+        &Header::default(),
+        &payload,
+        &EncodingKey::from_secret(env.jwt_secret.as_bytes()),
+    )
+    .unwrap();
+
+    let (status, _) = common::authed_request::<Value>(
+        &env.server,
+        &Method::POST,
+        "/api/v1/tax/calculate-liability",
+        &token,
+        &serde_json::json!({ "fiscal_year": 2024, "property_ids": [] }),
+    )
+    .await;
+
+    assert_eq!(
+        status,
+        StatusCode::UNAUTHORIZED,
+        "JWT without jti must be rejected (legacy Option<Uuid> compat removed)"
     );
 }
 
