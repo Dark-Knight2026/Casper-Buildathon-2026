@@ -9,6 +9,8 @@ pub mod cookies;
 pub mod db;
 /// JWT encoding/decoding primitives.
 pub mod jwt;
+/// Logout handler: clears auth cookies and revokes refresh-family + jti blocklist.
+pub mod logout;
 /// Authentication middleware and extractors.
 pub mod middleware;
 /// Shared response models for authentication endpoints.
@@ -27,6 +29,7 @@ pub use cookies::{
 };
 pub use db::{UserProfileRecord, fetch_user_profile, insert_refresh_token, upsert_user_by_wallet};
 pub use jwt::{ACCESS_TOKEN_TTL, EncodedAccessToken, decode_token, encode_access_token};
+pub use logout::logout;
 pub use middleware::{AuthError, AuthUser};
 pub use models::UserInfo;
 pub use refresh::{IssuedRefreshToken, REFRESH_TOKEN_TTL, issue_login_refresh_token, rotate};

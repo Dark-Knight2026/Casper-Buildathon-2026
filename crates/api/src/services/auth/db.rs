@@ -491,18 +491,14 @@ pub async fn rotate_refresh_token(
     // 500 the refresh handler.
     let role = UserRole::from_str(&row.role).unwrap_or(UserRole::Unknown);
 
-    sqlx::query!(
-        r"
-            UPDATE refresh_tokens
-            SET revoked_at = NOW(), replaced_by = $1
-            WHERE id = $2
-        ",
-        new_token_id,
-        row.id,
-    )
-    .execute(tx.as_mut())
-    .await?;
-
+    // Insert the successor BEFORE pointing the predecessor at it. The
+    // `replaced_by` FK references `refresh_tokens(id)` and is checked
+    // immediately (PostgreSQL FKs are NOT DEFERRABLE by default), so
+    // back-pointing to a row that does not yet exist trips a foreign-key
+    // violation even inside a single transaction. The two writes still
+    // commit atomically - external observers never see the intermediate
+    // "successor exists, predecessor not yet revoked" state because the
+    // FOR UPDATE lock holds them off until COMMIT.
     sqlx::query!(
         r"
             INSERT INTO refresh_tokens (id, user_id, token_hash, family_id, expires_at)
@@ -517,6 +513,18 @@ pub async fn rotate_refresh_token(
     .execute(tx.as_mut())
     .await?;
 
+    sqlx::query!(
+        r"
+            UPDATE refresh_tokens
+            SET revoked_at = NOW(), replaced_by = $1
+            WHERE id = $2
+        ",
+        new_token_id,
+        row.id,
+    )
+    .execute(tx.as_mut())
+    .await?;
+
     tx.commit().await?;
 
     Ok(RefreshOutcome::Rotated(RotatedRefresh {
@@ -525,4 +533,45 @@ pub async fn rotate_refresh_token(
         role,
         verification_level,
     }))
+}
+
+/// Revokes every active row in the family that contains `presented_hash`.
+///
+/// Idempotent and tolerant by design - the logout handler calls this with a
+/// raw cookie value the client supplied, so the hash may not match anything
+/// (already-rotated, never-existed, or garbage). In every case the call is a
+/// successful no-op rather than an error: logout is meant to leave the
+/// account in a defined state regardless of what the client presents.
+///
+/// Already-revoked rows in the matched family are left untouched so their
+/// original `revoked_at` timestamps are preserved for audit.
+///
+/// # Errors
+///
+/// Returns `sqlx::Error` only on infrastructure failure (connection drop,
+/// statement-cache miss, etc.). The "no rows match" outcome is normal and
+/// surfaces as `Ok(())` with `rows_affected = 0`.
+#[inline]
+pub async fn revoke_refresh_family_by_hash(
+    pool: &PgPool,
+    presented_hash: &[u8],
+) -> Result<(), Error> {
+    sqlx::query!(
+        r"
+            UPDATE refresh_tokens
+            SET revoked_at = NOW()
+            WHERE family_id = (
+                SELECT family_id
+                FROM refresh_tokens
+                WHERE token_hash = $1
+                LIMIT 1
+            )
+              AND revoked_at IS NULL
+        ",
+        presented_hash,
+    )
+    .execute(pool)
+    .await?;
+
+    Ok(())
 }

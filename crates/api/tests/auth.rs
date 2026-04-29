@@ -1,7 +1,5 @@
 //! Integration tests for authentication endpoints.
 
-#![cfg(feature = "integration")]
-
 mod common;
 
 use axum::http::{Method, StatusCode};
@@ -813,5 +811,140 @@ async fn refresh_race_serializes_one_winner(pool: PgPool) {
     assert!(
         codes.contains(&StatusCode::UNAUTHORIZED),
         "expected the loser to be rejected with 401, got {codes:?}"
+    );
+}
+
+// Logout tests --------------------------------------------------------------
+
+/// Logout is idempotent: even without any auth cookies the response is 204
+/// and both clearing cookies are emitted so the client's storage drops to a
+/// clean state.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn logout_without_cookies_returns_204(pool: PgPool) {
+    let env = common::setup_test_server(pool, false).await;
+
+    let response = env.server.post("/api/v1/auth/logout").await;
+
+    assert_eq!(response.status_code(), StatusCode::NO_CONTENT);
+    let cleared_access = response.cookie("access_token");
+    let cleared_refresh = response.cookie("refresh_token");
+    assert!(
+        cleared_access.value().is_empty(),
+        "logout must emit an empty access_token cookie"
+    );
+    assert!(
+        cleared_refresh.value().is_empty(),
+        "logout must emit an empty refresh_token cookie"
+    );
+    let access_max_age = cleared_access
+        .max_age()
+        .expect("access_token clearing cookie must set Max-Age");
+    let refresh_max_age = cleared_refresh
+        .max_age()
+        .expect("refresh_token clearing cookie must set Max-Age");
+    assert_eq!(
+        access_max_age.whole_seconds(),
+        0,
+        "access_token clearing cookie must have Max-Age=0"
+    );
+    assert_eq!(
+        refresh_max_age.whole_seconds(),
+        0,
+        "refresh_token clearing cookie must have Max-Age=0"
+    );
+}
+
+/// Garbage cookies do not turn logout into an error - the handler is
+/// deliberately tolerant of unknown refresh hashes and undecodable JWTs.
+/// Redis is intentionally not started: an undecodable JWT short-circuits
+/// before any Redis call, and the unknown refresh hash only touches the DB.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn logout_with_garbage_cookies_returns_204(pool: PgPool) {
+    let env = common::setup_test_server(pool, false).await;
+
+    let response = env
+        .server
+        .post("/api/v1/auth/logout")
+        .add_header(COOKIE, "access_token=not_a_jwt; refresh_token=not_a_token")
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::NO_CONTENT);
+}
+
+/// After logout, the same access cookie must be rejected by `require_auth`
+/// (the `jti` is on the Redis blocklist) even though the JWT itself is
+/// still cryptographically valid for another 15 minutes.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn logout_blocklists_access_token(pool: PgPool) {
+    let env = common::setup_test_server(pool, true).await;
+
+    let login = login_with_seed(&env, [21u8; 32]).await;
+    assert_eq!(login.status_code(), StatusCode::OK);
+    let access = login.cookie("access_token").value().to_owned();
+    let refresh = login.cookie("refresh_token").value().to_owned();
+
+    // Sanity: the access cookie works before logout.
+    let pre_logout = env
+        .server
+        .post("/api/v1/tax/calculate-liability")
+        .add_header(COOKIE, format!("access_token={access}"))
+        .json(&serde_json::json!({ "fiscal_year": 2024, "property_ids": [] }))
+        .await;
+    assert_ne!(
+        pre_logout.status_code(),
+        StatusCode::UNAUTHORIZED,
+        "fresh access cookie must authenticate before logout"
+    );
+
+    let logout = env
+        .server
+        .post("/api/v1/auth/logout")
+        .add_header(
+            COOKIE,
+            format!("access_token={access}; refresh_token={refresh}"),
+        )
+        .await;
+    assert_eq!(logout.status_code(), StatusCode::NO_CONTENT);
+
+    // Same access cookie now blocklisted.
+    let post_logout = env
+        .server
+        .post("/api/v1/tax/calculate-liability")
+        .add_header(COOKIE, format!("access_token={access}"))
+        .json(&serde_json::json!({ "fiscal_year": 2024, "property_ids": [] }))
+        .await;
+    assert_eq!(
+        post_logout.status_code(),
+        StatusCode::UNAUTHORIZED,
+        "blocklisted access token must be rejected after logout"
+    );
+}
+
+/// After logout, the refresh family is revoked - replaying the refresh
+/// cookie must fail just like a stolen-token reuse attempt.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn logout_revokes_refresh_family(pool: PgPool) {
+    let env = common::setup_test_server(pool, true).await;
+
+    let login = login_with_seed(&env, [22u8; 32]).await;
+    assert_eq!(login.status_code(), StatusCode::OK);
+    let refresh = login.cookie("refresh_token").value().to_owned();
+
+    let logout = env
+        .server
+        .post("/api/v1/auth/logout")
+        .add_header(COOKIE, format!("refresh_token={refresh}"))
+        .await;
+    assert_eq!(logout.status_code(), StatusCode::NO_CONTENT);
+
+    let after = env
+        .server
+        .post("/api/v1/auth/refresh")
+        .add_header(COOKIE, format!("refresh_token={refresh}"))
+        .await;
+    assert_eq!(
+        after.status_code(),
+        StatusCode::UNAUTHORIZED,
+        "refresh-family must be revoked after logout"
     );
 }

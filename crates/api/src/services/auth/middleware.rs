@@ -51,6 +51,26 @@ impl FromRequestParts<Arc<AppState>> for AuthUser {
             return Err(AuthError::WrongTokenType);
         }
 
+        // Logout-blocklist check. A `jti` is only present on tokens minted
+        // after Phase 2.1 - legacy tokens (`jti = None`) skip the check and
+        // continue to expire naturally. Redis errors are fail-open (warn +
+        // allow): a partial Redis outage must not take down the entire
+        // protected surface, and the access-token TTL of 15 minutes already
+        // caps the worst-case replay window.
+        if let Some(jti) = claims.jti {
+            match state.redis.is_jwt_blocklisted(jti).await {
+                Ok(true) => return Err(AuthError::TokenRevoked),
+                Ok(false) => {}
+                Err(err) => {
+                    tracing::warn!(
+                        error = %err,
+                        jti = %jti,
+                        "Blocklist check failed; allowing request (fail-open)"
+                    );
+                }
+            }
+        }
+
         Ok(AuthUser(claims))
     }
 }
@@ -63,8 +83,9 @@ impl FromRequestParts<Arc<AppState>> for AuthUser {
 ///
 /// Returns [`AuthError::MissingAccessToken`] when the `access_token` cookie is
 /// absent, [`AuthError::InvalidToken`] when JWT decoding or validation fails,
-/// and [`AuthError::WrongTokenType`] when a refresh token is presented as an
-/// access token.
+/// [`AuthError::WrongTokenType`] when a refresh token is presented as an
+/// access token, and [`AuthError::TokenRevoked`] when the token's `jti` is on
+/// the logout blocklist.
 #[inline]
 pub async fn require_auth(
     State(state): State<Arc<AppState>>,
@@ -88,6 +109,9 @@ pub enum AuthError {
     /// A token of the wrong type was presented (e.g., refresh used as access).
     #[error("Wrong token type")]
     WrongTokenType,
+    /// The token's `jti` is on the logout blocklist.
+    #[error("Token revoked")]
+    TokenRevoked,
 }
 
 impl AuthError {
@@ -96,6 +120,12 @@ impl AuthError {
     /// Logging of suspicious cases lives here so every conversion path
     /// (direct extractor rejection and `ApiError::Auth` wrapping) emits
     /// the same telemetry without duplication.
+    ///
+    /// All token-rejection variants collapse to the same `invalid_token`
+    /// client-code on purpose - exposing whether a token was malformed,
+    /// of the wrong type, or specifically revoked would leak attacker-
+    /// useful state. The variant-specific log line keeps that distinction
+    /// available to operators without exposing it to clients.
     #[inline]
     pub(crate) fn status_and_code(&self) -> (StatusCode, &'static str) {
         match self {
@@ -106,6 +136,10 @@ impl AuthError {
             }
             Self::WrongTokenType => {
                 tracing::warn!("Refresh token presented as access token");
+                (StatusCode::UNAUTHORIZED, "invalid_token")
+            }
+            Self::TokenRevoked => {
+                tracing::warn!("Blocklisted access token presented");
                 (StatusCode::UNAUTHORIZED, "invalid_token")
             }
         }

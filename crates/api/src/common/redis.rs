@@ -134,6 +134,48 @@ impl RedisStore {
             .await
     }
 
+    /// Adds a JWT `jti` to the access-token blocklist for `ttl_seconds`.
+    ///
+    /// `ttl_seconds` MUST be derived from the JWT's `exp - now` clamp at
+    /// the call site so the key naturally evicts the moment the token
+    /// would have expired anyway. Calls with `ttl_seconds == 0` are a
+    /// no-op: the JWT clock has already invalidated the token and a
+    /// zero-TTL `SET EX` is a Redis error.
+    ///
+    /// Stored value is a single byte; only key existence matters.
+    ///
+    /// # Errors
+    ///
+    /// Returns `RedisError` if the connection fails.
+    #[inline]
+    pub async fn blocklist_jwt(&self, jti: Uuid, ttl_seconds: u64) -> RedisResult<()> {
+        if ttl_seconds == 0 {
+            return Ok(());
+        }
+        let mut conn = self.conn.clone();
+        let key = Self::jwt_blocklist_key(jti);
+        conn.set_ex(&key, 1u8, ttl_seconds).await
+    }
+
+    /// Returns `true` if the given `jti` is currently on the blocklist.
+    ///
+    /// Called from `require_auth` on every protected request - kept to a
+    /// single `EXISTS` so the per-request cost stays in low-millisecond
+    /// territory even under load.
+    ///
+    /// # Errors
+    ///
+    /// Returns `RedisError` if the connection fails. Callers in the auth
+    /// path are expected to fail-open (log + skip) so a Redis outage does
+    /// not take down the entire authenticated surface.
+    #[inline]
+    pub async fn is_jwt_blocklisted(&self, jti: Uuid) -> RedisResult<bool> {
+        let mut conn = self.conn.clone();
+        let key = Self::jwt_blocklist_key(jti);
+        let exists: i32 = conn.exists(&key).await?;
+        Ok(exists != 0)
+    }
+
     /// Generates the Redis key for a wallet address nonce.
     #[inline]
     fn nonce_key(wallet_address: &str) -> String {
@@ -150,5 +192,11 @@ impl RedisStore {
     #[inline]
     fn bootstrap_login_key(token: &str) -> String {
         format!("bootstrap_login:{token}")
+    }
+
+    /// Generates the Redis key for a blocklisted access-token `jti`.
+    #[inline]
+    fn jwt_blocklist_key(jti: Uuid) -> String {
+        format!("jwt_blocklist:{jti}")
     }
 }

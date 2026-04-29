@@ -65,3 +65,39 @@ pub fn build_refresh_cookie(
         .max_age(max_age)
         .build()
 }
+
+/// Builds an "expired" access-token cookie used by logout to instruct the
+/// browser to drop its stored cookie immediately.
+///
+/// Browsers match the deletion cookie against the original by name + path +
+/// domain - if any of those drift, the original lingers. The `Path`,
+/// `HttpOnly`, `Secure` and `SameSite` attributes therefore mirror
+/// [`build_access_cookie`] exactly; only `Max-Age` flips to `0` and the
+/// value becomes empty.
+#[inline]
+#[must_use]
+pub fn build_expired_access_cookie(secure: bool) -> Cookie<'static> {
+    Cookie::build((ACCESS_TOKEN_COOKIE, ""))
+        .http_only(true)
+        .secure(secure)
+        .same_site(SameSite::Strict)
+        .path("/")
+        .max_age(CookieDuration::seconds(0))
+        .build()
+}
+
+/// Builds an "expired" refresh-token cookie used by logout. See
+/// [`build_expired_access_cookie`] for why every attribute (especially
+/// `Path`) must mirror [`build_refresh_cookie`] - otherwise the browser
+/// silently keeps the old refresh material.
+#[inline]
+#[must_use]
+pub fn build_expired_refresh_cookie(secure: bool) -> Cookie<'static> {
+    Cookie::build((REFRESH_TOKEN_COOKIE, ""))
+        .http_only(true)
+        .secure(secure)
+        .same_site(SameSite::Strict)
+        .path(REFRESH_COOKIE_PATH)
+        .max_age(CookieDuration::seconds(0))
+        .build()
+}

@@ -73,8 +73,12 @@ fn generate_refresh_token() -> ApiResult<GeneratedRefreshToken> {
     let mut bytes = [0u8; REFRESH_TOKEN_BYTES];
     rand::rng().fill_bytes(&mut bytes);
 
+    // Hash the base64-encoded plaintext (the exact form that lands in
+    // the cookie), not the raw 32 random bytes. The rotation handler
+    // hashes `cookie.value().as_bytes()` on lookup, so the two forms
+    // must agree byte-for-byte or `WHERE token_hash = $1` never matches.
     let plaintext = URL_SAFE_NO_PAD.encode(bytes);
-    let hash: [u8; 32] = Sha256::digest(bytes).into();
+    let hash: [u8; 32] = Sha256::digest(plaintext.as_bytes()).into();
 
     let expires_at = Utc::now()
         .checked_add_signed(REFRESH_TOKEN_TTL)
