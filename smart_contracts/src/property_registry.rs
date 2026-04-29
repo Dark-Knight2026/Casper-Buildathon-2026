@@ -240,6 +240,28 @@ impl PropertyRegistry {
         self.properties_count.get_or_default()
     }
 
+    /// Returns the property token address
+    pub fn get_property_token(&self, property_id: U256) -> Address {
+        self.get_property(property_id)
+            .token
+            .unwrap_or_revert_with(&self.env(), Error::MissingPropertyToken)
+    }
+
+    /// Returns the property revenue distributor address
+    pub fn get_revenue_distributor(&self, property_id: U256) -> Address {
+        self.get_property(property_id)
+            .revenue_distributor
+            .unwrap_or_revert_with(&self.env(), Error::MissingRevenueDistributor)
+    }
+
+    /// Returns true if the property exist and is active.
+    pub fn is_property_active(&self, property_id: U256) -> bool {
+        match self.get_property(property_id).status {
+            PropertyStatus::Active => true,
+            _ => false,
+        }
+    }
+
     // =============================================================================
     // Property Creation
     // =============================================================================
@@ -288,9 +310,24 @@ impl PropertyRegistry {
     // Role Getters
     // =========================================================================
 
+    /// Returns the role hash for accounts allowed to manage property records.
+    pub fn property_manager_role(&self) -> Role {
+        common::hash_role(ROLE_PROPERTY_MANAGER)
+    }
+
     // =========================================================================
     // Delegation
     // =========================================================================
+
+    delegate! {
+        to self.access_control {
+            fn has_role(&self, role: &Role, address: &Address) -> bool;
+            fn get_role_admin(&self, role: &Role) -> Role;
+            fn grant_role(&mut self, role: &Role, address: &Address);
+            fn revoke_role(&mut self, role: &Role, address: &Address);
+            fn renounce_role(&mut self, role: &Role, address: &Address);
+        }
+    }
 }
 
 // =============================================================================
