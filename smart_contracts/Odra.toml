@@ -24,3 +24,6 @@ fqn = "ico::ICO"
 
 [[contracts]]
 fqn = "vesting::Vesting"
+
+[[contracts]]
+fqn = "investor_registry::InvestoryRegistry"
