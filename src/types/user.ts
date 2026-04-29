@@ -48,6 +48,14 @@ export interface User {
   specializations?: string[];
   createdAt: Date;
   lastLogin?: Date;
+  // Wallet-auth users carry their primary Casper public key here so the UI
+  // can show a recognisable identifier before the user completes their profile.
+  walletAddress?: string;
+  // Mirrors backend `users.is_profile_complete` (true once email + names + phone
+  // are populated). Used by the UI to nudge wallet-only users to fill in their
+  // profile and to suppress the "Wallet User" placeholder backend ships on
+  // first wallet login (see crates/api/src/services/auth/db.rs).
+  isProfileComplete?: boolean;
 }
 
 export interface UserProfile extends User {

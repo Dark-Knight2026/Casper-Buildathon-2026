@@ -28,6 +28,8 @@ function mapServerUserInfo(info: ServerUserInfo): UserProfile {
     profileImage: info.avatar_url ?? undefined,
     bio: info.bio ?? undefined,
     createdAt: new Date(info.created_at),
+    walletAddress: info.wallet_address ?? undefined,
+    isProfileComplete: info.is_profile_complete,
   };
 }
 

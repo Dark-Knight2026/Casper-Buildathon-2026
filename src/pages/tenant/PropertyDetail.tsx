@@ -36,6 +36,16 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 
+// Returns a formatted date or `null` when the input cannot be parsed —
+// callers render a fallback ("—") instead of letting `format()` throw
+// `RangeError: Invalid time value` and unmount the whole page. Backend
+// `properties.available_date` is nullable, so this is reachable in practice.
+function formatDateSafe(value: Date | string | null | undefined, fmt: string): string | null {
+  if (value === null || value === undefined) return null;
+  const d = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(d.getTime()) ? null : format(d, fmt);
+}
+
 export default function PropertyDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -311,7 +321,7 @@ export default function PropertyDetail() {
                     <div>
                       <p className="text-sm text-gray-500">Available</p>
                       <p className="font-semibold">
-                        {format(new Date(property.availableDate), 'MMM d')}
+                        {formatDateSafe(property.availableDate, 'MMM d') ?? '—'}
                       </p>
                     </div>
                   </div>
@@ -504,7 +514,7 @@ export default function PropertyDetail() {
                 </Button>
 
                 <p className="text-xs text-center text-gray-500">
-                  Available {format(new Date(property.availableDate), 'MMMM d, yyyy')}
+                  Available {formatDateSafe(property.availableDate, 'MMMM d, yyyy') ?? 'TBD'}
                 </p>
               </CardContent>
             </Card>
