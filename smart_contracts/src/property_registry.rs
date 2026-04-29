@@ -129,4 +129,48 @@ pub struct PropertyRegistry {
     properties_count: Var<U256>,
 }
 
+#[odra::module]
+impl PropertyRegistry {
+    // =============================================================================
+    // Initialization
+    // =============================================================================
 
+    pub fn init(&mut self, owner: Address) {
+        self.access_control
+            .unchecked_grant_role(&DEFAULT_ADMIN_ROLE, &owner);
+    }
+
+    // =============================================================================
+    // Admin Configuration
+    // =============================================================================
+
+    // =============================================================================
+    // View Functions
+    // =============================================================================
+
+    // =============================================================================
+    // Property Creation
+    // =============================================================================
+}
+
+// =============================================================================
+// Internal helpers
+// =============================================================================
+
+impl PropertyRegistry {
+    fn assert_role(&self, role_name: &str) {
+        let role = common::hash_role(role_name);
+
+        if !self.access_control.has_role(&role, &self.env().caller()) {
+            self.env().revert(Error::NotAuthorized);
+        }
+    }
+
+    fn assert_draft(&self, property: &PropertyRecord) {
+        if let PropertyStatus::Draft = property.status {
+            return;
+        }
+
+        self.env().revert(Error::PropertyNotDraft);
+    }
+}
