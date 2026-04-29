@@ -198,7 +198,31 @@ impl PropertyRegistry {
         self.env().emit_event(PropertyMetadataSet { property_id });
     }
 
-    
+    /// Updates the lifecycle status of a property.
+    /// Restricted to `PROPERTY_MANAGER`.
+    /// @dev Moving to `Active` requires both token and revenue distributor addresses to be set.
+    pub fn set_property_status(&mut self, property_id: U256, status: PropertyStatus) {
+        self.assert_role(ROLE_PROPERTY_MANAGER);
+
+        let mut property = self.get_property(property_id);
+
+        if let PropertyStatus::Active = status {
+            if property.token.is_none() {
+                self.env().revert(Error::MissingPropertyToken);
+            }
+            if property.revenue_distributor.is_none() {
+                self.env().revert(Error::MissingRevenueDistributor);
+            }
+        }
+
+        property.status = status;
+        self.properties.set(&property_id, property);
+
+        self.env().emit_event(PropertyStatusSet {
+            property_id,
+            status,
+        });
+    }
 
     // =============================================================================
     // View Functions
@@ -259,6 +283,14 @@ impl PropertyRegistry {
 
         property_id
     }
+
+    // =========================================================================
+    // Role Getters
+    // =========================================================================
+
+    // =========================================================================
+    // Delegation
+    // =========================================================================
 }
 
 // =============================================================================
