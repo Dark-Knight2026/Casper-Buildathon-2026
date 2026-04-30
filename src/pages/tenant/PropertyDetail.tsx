@@ -16,6 +16,7 @@ import { ContactLandlordModal } from '@/components/property/ContactLandlordModal
 import { ScheduleViewingModal } from '@/components/property/ScheduleViewingModal';
 import { propertyService } from '@/services/propertyService';
 import { FEATURED_PROPERTIES } from '@/data/featuredProperties';
+import { cn } from '@/lib/utils';
 import type { Property } from '@/types/property';
 import {
   ArrowLeft,
@@ -226,9 +227,10 @@ export default function PropertyDetail() {
                             {property.images.map((_, index) => (
                               <button
                                 key={index}
-                                className={`w-2 h-2 rounded-full ${
+                                className={cn(
+                                  'w-2 h-2 rounded-full',
                                   index === currentImageIndex ? 'bg-white' : 'bg-white/50'
-                                }`}
+                                )}
                                 onClick={() => setCurrentImageIndex(index)}
                               />
                             ))}
@@ -253,9 +255,10 @@ export default function PropertyDetail() {
                       <button
                         key={index}
                         onClick={() => setCurrentImageIndex(index)}
-                        className={`shrink-0 w-20 h-20 rounded overflow-hidden border-2 ${
+                        className={cn(
+                          'shrink-0 w-20 h-20 rounded overflow-hidden border-2',
                           index === currentImageIndex ? 'border-primary' : 'border-transparent'
-                        }`}
+                        )}
                       >
                         <img
                           src={image}
