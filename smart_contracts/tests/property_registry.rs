@@ -217,4 +217,95 @@ fn test_set_metadata_uri_should_update_metadata_uri_for_draft_property() {
         new_metadata_uri,
         "Invalid metadata URI",
     );
+    assert!(ctx
+        .env
+        .emitted_event(&ctx.registry, PropertyMetadataSet { property_id }));
+}
+
+// =============================================================================
+// set_property_status()
+// =============================================================================
+
+#[test]
+fn test_set_property_status_should_require_token_before_active_status() {
+    let mut ctx = setup(odra_test::env());
+    let property_id = create_property(&mut ctx);
+
+    assert_eq!(
+        ctx.registry
+            .try_set_property_status(property_id, PropertyStatus::Active)
+            .unwrap_err(),
+        Error::MissingPropertyToken.into(),
+        "Should require token before activation",
+    );
+}
+
+#[test]
+fn test_set_property_status_should_require_distributor_before_active_status() {
+    let mut ctx = setup(odra_test::env());
+    let property_id = create_property(&mut ctx);
+
+    // Set the token as its the first error thrown
+    ctx.registry.set_property_token(property_id, ctx.token);
+
+    assert_eq!(
+        ctx.registry
+            .try_set_property_status(property_id, PropertyStatus::Active)
+            .unwrap_err(),
+        Error::MissingRevenueDistributor.into(),
+        "Should require revenue distributor before activation",
+    );
+}
+
+#[test]
+fn test_set_property_status_should_activate_property_after_required_addresses_are_set() {
+    let mut ctx = setup(odra_test::env());
+    let property_id = create_property(&mut ctx);
+
+    ctx.registry.set_property_token(property_id, ctx.token);
+    ctx.registry
+        .set_revenue_distributor(property_id, ctx.revenue_distributor);
+    ctx.registry
+        .set_property_status(property_id, PropertyStatus::Active);
+
+    assert!(
+        ctx.registry.is_property_active(property_id),
+        "Property should be active",
+    );
+}
+
+#[test]
+fn test_draft_only_fields_should_revert_after_property_is_active() {
+    let mut ctx = setup(odra_test::env());
+    let property_id = create_property(&mut ctx);
+
+    ctx.registry.set_property_token(property_id, ctx.token);
+    ctx.registry
+        .set_revenue_distributor(property_id, ctx.revenue_distributor);
+    ctx.registry
+        .set_property_status(property_id, PropertyStatus::Active);
+
+    assert_eq!(
+        ctx.registry
+            .try_set_property_token(property_id, ctx.env.get_account(5))
+            .unwrap_err(),
+        Error::PropertyNotDraft.into(),
+        "Should not allow token changes after activation",
+    );
+
+    assert_eq!(
+        ctx.registry
+            .try_set_revenue_distributor(property_id, ctx.env.get_account(6))
+            .unwrap_err(),
+        Error::PropertyNotDraft.into(),
+        "Should not allow revenue distributor changes after activation",
+    );
+
+    assert_eq!(
+        ctx.registry
+            .try_set_metadata_uri(property_id, String::from("ipfs://metadata-changed"))
+            .unwrap_err(),
+        Error::PropertyNotDraft.into(),
+        "Should not allow metadata URI changes after activation",
+    );
 }
