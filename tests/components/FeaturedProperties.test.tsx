@@ -1,27 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, within } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { render, screen, fireEvent } from '@testing-library/react';
+
 import { FeaturedProperties } from '@/components/FeaturedProperties';
 import { FEATURED_PROPERTIES } from '@/data/featuredProperties';
 
 const mockNavigate = vi.fn();
 
-vi.mock('react-router-dom', async () => {
-  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
-  return {
-    ...actual,
-    useNavigate: () => mockNavigate,
-  };
-});
+vi.mock('react-router-dom', () => ({
+  useNavigate: () => mockNavigate,
+}));
 
 const [first, second] = FEATURED_PROPERTIES;
 
 function renderComponent() {
-  return render(
-    <MemoryRouter>
-      <FeaturedProperties />
-    </MemoryRouter>
-  );
+  return render(<FeaturedProperties />);
 }
 
 describe('FeaturedProperties', () => {
@@ -126,10 +118,7 @@ describe('FeaturedProperties', () => {
   describe('favorite button', () => {
     it('heart button click does not trigger card navigation (stopPropagation)', () => {
       renderComponent();
-      const firstCard = screen
-        .getByRole('button', { name: new RegExp(`view details for ${first.title}`, 'i') })
-        .closest('.group') as HTMLElement;
-      const heartButton = within(firstCard).getByRole('button', {
+      const heartButton = screen.getByRole('button', {
         name: new RegExp(`save ${first.title} to favorites`, 'i'),
       });
       fireEvent.click(heartButton);
