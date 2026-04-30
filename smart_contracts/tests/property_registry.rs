@@ -155,3 +155,66 @@ fn test_create_property_should_revert_if_metadata_uri_is_empty() {
         "Should revert if metadata URI is empty",
     );
 }
+
+// =============================================================================
+// Draft Configuration
+// =============================================================================
+
+#[test]
+fn test_set_property_token_should_set_token_for_draft_property() {
+    let mut ctx = setup(odra_test::env());
+    let property_id = create_property(&mut ctx);
+
+    ctx.registry.set_property_token(property_id, ctx.token);
+
+    assert_eq!(
+        ctx.registry.get_property_token(property_id),
+        ctx.token,
+        "Invalid property token",
+    );
+    assert!(ctx.env.emitted_event(
+        &ctx.registry,
+        PropertyTokenSet {
+            property_id,
+            token: ctx.token,
+        }
+    ));
+}
+
+#[test]
+fn test_set_revenue_distributor_should_set_distributor_for_draft_property() {
+    let mut ctx = setup(odra_test::env());
+    let property_id = create_property(&mut ctx);
+
+    ctx.registry
+        .set_revenue_distributor(property_id, ctx.revenue_distributor);
+
+    assert_eq!(
+        ctx.registry.get_revenue_distributor(property_id),
+        ctx.revenue_distributor,
+        "Invalid revenue distributor",
+    );
+    assert!(ctx.env.emitted_event(
+        &ctx.registry,
+        RevenueDistributorSet {
+            property_id,
+            revenue_distributor: ctx.revenue_distributor,
+        }
+    ));
+}
+
+#[test]
+fn test_set_metadata_uri_should_update_metadata_uri_for_draft_property() {
+    let mut ctx = setup(odra_test::env());
+    let property_id = create_property(&mut ctx);
+    let new_metadata_uri = String::from("ipfs://property-1-updated");
+
+    ctx.registry
+        .set_metadata_uri(property_id, new_metadata_uri.clone());
+
+    assert_eq!(
+        ctx.registry.get_property(property_id).metadata_uri,
+        new_metadata_uri,
+        "Invalid metadata URI",
+    );
+}
