@@ -1,9 +1,9 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { MapPin, Bed, Bath, Square, Heart, Camera, TrendingUp, Star } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { useNavigate } from 'react-router-dom';
-import { MapPin, Bed, Bath, Square, Heart, Camera, TrendingUp, Star } from 'lucide-react';
 import { FEATURED_PROPERTIES } from '@/data/featuredProperties';
 import { cn } from '@/lib/utils';
 import type { Property } from '@/types/property';
@@ -16,7 +16,7 @@ const STATUS_LABELS: Record<Property['status'], string> = {
   archived: 'Archived',
 };
 
-export default function FeaturedProperties() {
+export function FeaturedProperties() {
   const navigate = useNavigate();
   const [favorites, setFavorites] = useState<string[]>([]);
 
@@ -122,10 +122,12 @@ export default function FeaturedProperties() {
                 <Bath className="h-4 w-4" />
                 {property.bathrooms} bath
               </span>
-              <span className="flex items-center gap-1">
-                <Square className="h-4 w-4" />
-                {property.squareFeet?.toLocaleString()} sqft
-              </span>
+              {property.squareFeet ? (
+                <span className="flex items-center gap-1">
+                  <Square className="h-4 w-4" />
+                  {property.squareFeet.toLocaleString()} sqft
+                </span>
+              ) : null}
             </div>
 
             <div className="flex items-center justify-between text-xs text-muted-foreground">

@@ -37,6 +37,7 @@ This directory contains all test files for the LeaseFi application, organized by
 | `components/LandingHeader.test.tsx` | Tests for public landing page header (logo, nav links, auth CTAs) |
 | `components/ui/` | Unit tests for shadcn-based UI primitives (see `components/ui/readme.md`) |
 | `components/ui/badge.test.tsx` | Tests for Badge variants (default, secondary, destructive, outline, success, info) |
+| `components/ui/button.test.tsx` | Tests for Button variants, sizes, loading/disabled states, and asChild composition |
 | `components/ico/AmountInput.test.tsx` | Tests for token amount input field (validation, formatting) |
 | `components/ico/Card.test.tsx` | Tests for generic card container component |
 | `components/ico/CountdownTimer.test.tsx` | Tests for countdown timer display and tick logic |

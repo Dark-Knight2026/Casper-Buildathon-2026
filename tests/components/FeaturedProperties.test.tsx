@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import FeaturedProperties from '@/components/FeaturedProperties';
+import { FeaturedProperties } from '@/components/FeaturedProperties';
 import { FEATURED_PROPERTIES } from '@/data/featuredProperties';
 
 const mockNavigate = vi.fn();

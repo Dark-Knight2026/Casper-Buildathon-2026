@@ -37,6 +37,8 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 
+const APPLICATION_FEE = 50;
+
 export default function PropertyDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -499,12 +501,12 @@ export default function PropertyDetail() {
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Application Fee</span>
-                    <span className="font-semibold">$50</span>
+                    <span className="font-semibold">{formatCurrency(APPLICATION_FEE)}</span>
                   </div>
                   <div className="border-t pt-2 flex justify-between">
                     <span className="font-semibold">Total Move-in Cost</span>
                     <span className="font-bold text-lg">
-                      {formatCurrency(property.rent + property.securityDeposit + 50)}
+                      {formatCurrency(property.rent + property.securityDeposit + APPLICATION_FEE)}
                     </span>
                   </div>
                 </div>

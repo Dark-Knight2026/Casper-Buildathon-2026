@@ -4,7 +4,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
-import FeaturedProperties from '@/components/FeaturedProperties';
+import { cn } from '@/lib/utils';
+import { FeaturedProperties } from '@/components/FeaturedProperties';
 import { LandingHeader } from '@/components/LandingHeader';
 import {
   Search,
@@ -64,11 +65,19 @@ export default function PropertyLanding() {
     <div className="min-h-screen bg-secondary">
       <LandingHeader />
       {/* Hero Section */}
-      <section className="relative overflow-hidden min-h-[560px] pt-16 border-b border-border">
-        <div className="absolute inset-0" style={{ backgroundImage: "url('/images/ModernApartment.jpg')", backgroundRepeat: "no-repeat", backgroundSize: "cover", backgroundPosition: "center 30%" }} />
+      <section
+        aria-label="Hero"
+        className="relative overflow-hidden min-h-[560px] pt-16 border-b border-border"
+      >
+        <div className="absolute inset-0 bg-[url('/images/ModernApartment.jpg')] bg-cover bg-no-repeat bg-[center_30%]" />
         <div className="absolute inset-0 bg-primary/75" />
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-center py-20">
-          <div className={`text-center transition-all duration-1000 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}`}>
+          <div
+            className={cn(
+              'text-center transition-all duration-1000',
+              isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'
+            )}
+          >
             <h1 className="text-5xl md:text-7xl font-bold text-primary-foreground mb-6 leading-tight">
               Find Your{' '}
               <span className="text-primary-foreground/80">Dream Home</span>
@@ -105,7 +114,10 @@ export default function PropertyLanding() {
               {stats.map((stat, index) => (
                 <div
                   key={index}
-                  className={`text-center transition-all duration-700 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-5'}`}
+                  className={cn(
+                    'text-center transition-all duration-700',
+                    isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-5'
+                  )}
                 >
                   <div className="flex items-center justify-center mb-2 text-primary-foreground/80">
                     {stat.icon}
@@ -120,7 +132,7 @@ export default function PropertyLanding() {
       </section>
 
       {/* Featured Properties Section */}
-      <section className="py-20 bg-background border-b border-border">
+      <section aria-label="Featured Properties" className="py-20 bg-background border-b border-border">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
             <Badge className="mb-4 bg-secondary text-secondary-foreground border-border">
@@ -139,7 +151,7 @@ export default function PropertyLanding() {
       </section>
 
       {/* Why Choose Our Platform Section */}
-      <section className="py-20 bg-secondary">
+      <section aria-label="Why Choose Us" className="py-20 bg-secondary">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
             <Badge className="mb-4 bg-background text-secondary-foreground border-border">
@@ -178,7 +190,7 @@ export default function PropertyLanding() {
       </section>
 
       {/* How It Works Section */}
-      <section className="py-20 bg-background border-t border-border">
+      <section aria-label="How It Works" className="py-20 bg-background border-t border-border">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
             <Badge className="mb-4 bg-secondary text-secondary-foreground border-border">
@@ -231,7 +243,7 @@ export default function PropertyLanding() {
       </section>
 
       {/* CTA Section */}
-      <section className="py-20 bg-primary text-primary-foreground">
+      <section aria-label="Get Started" className="py-20 bg-primary text-primary-foreground">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h2 className="text-4xl md:text-5xl font-bold mb-6">
             Ready to Find Your Dream Home?

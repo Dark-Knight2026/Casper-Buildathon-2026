@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { RoleSwitcher } from '../components/auth/RoleSwitcher';
 import { getDashboardRoute } from '../types/user';
 import HeroSection from '@/components/HeroSection';
-import FeaturedProperties from '@/components/FeaturedProperties';
+import { FeaturedProperties } from '@/components/FeaturedProperties';
 import MarketAnalytics from '@/components/MarketAnalytics';
 import PropertyAnalysis from '@/components/PropertyAnalysis';
 import InvestmentCalculator from '@/components/InvestmentCalculator';
