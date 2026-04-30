@@ -26,7 +26,6 @@ import {
   Maximize2,
   MapPin,
   Calendar,
-  Heart,
   Share2,
   Phone,
   Mail,
@@ -209,6 +208,7 @@ export default function PropertyDetail() {
                           <Button
                             variant="outline"
                             size="sm"
+                            aria-label="Previous image"
                             className="absolute left-4 top-1/2 transform -translate-y-1/2"
                             onClick={() => setCurrentImageIndex(Math.max(0, currentImageIndex - 1))}
                             disabled={currentImageIndex === 0}
@@ -218,6 +218,7 @@ export default function PropertyDetail() {
                           <Button
                             variant="outline"
                             size="sm"
+                            aria-label="Next image"
                             className="absolute right-4 top-1/2 transform -translate-y-1/2"
                             onClick={() => setCurrentImageIndex(Math.min(property.images.length - 1, currentImageIndex + 1))}
                             disabled={currentImageIndex === property.images.length - 1}
@@ -228,6 +229,8 @@ export default function PropertyDetail() {
                             {property.images.map((_, index) => (
                               <button
                                 key={index}
+                                aria-label={`Go to image ${index + 1}`}
+                                aria-current={index === currentImageIndex ? 'true' : undefined}
                                 className={cn(
                                   'w-2 h-2 rounded-full',
                                   index === currentImageIndex ? 'bg-white' : 'bg-white/50'
