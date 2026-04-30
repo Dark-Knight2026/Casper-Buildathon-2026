@@ -84,7 +84,7 @@ export function Register() {
                 disabled={isSigningIn || isAuthenticated}
                 className="block w-full text-center text-sm text-muted-foreground hover:text-foreground hover:underline disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Use a different wallet
+                Use a different account
               </button>
             </div>
           ) : (

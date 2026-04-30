@@ -44,7 +44,7 @@ export function Login() {
 
           {isConnected && account ? (
             <div className="space-y-2">
-              <Button className="w-full" onClick={login} disabled={isSigningIn || isAuthenticated}>
+              <Button className="w-full" onClick={() => login()} disabled={isSigningIn || isAuthenticated}>
                 {isSigningIn
                   ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Signing in…</>
                   : 'Sign in'
@@ -63,7 +63,7 @@ export function Login() {
                 disabled={isSigningIn || isAuthenticated}
                 className="block w-full text-center text-sm text-muted-foreground hover:text-foreground hover:underline disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Use a different wallet
+                Use a different account
               </button>
             </div>
           ) : (
