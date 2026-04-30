@@ -17,6 +17,7 @@ import { ScheduleViewingModal } from '@/components/property/ScheduleViewingModal
 import { propertyService } from '@/services/propertyService';
 import { FEATURED_PROPERTIES } from '@/data/featuredProperties';
 import { cn } from '@/lib/utils';
+import { logger } from '@/utils/logger';
 import type { Property } from '@/types/property';
 import {
   ArrowLeft,
@@ -79,7 +80,7 @@ export default function PropertyDetail() {
         navigate('/tenant/properties');
       }
     } catch (error) {
-      console.error('Error loading property:', error);
+      logger.error('Error loading property:', error);
       toast({
         title: 'Error',
         description: 'Failed to load property details',
