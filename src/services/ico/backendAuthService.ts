@@ -42,9 +42,18 @@ export async function getNonce(publicKey: string): Promise<NonceResponse> {
   );
 }
 
+/**
+ * Roles the backend accepts during self-registration. Mirrors
+ * `UserRole::is_self_registerable` in `crates/api/src/common/models.rs` —
+ * any other value would be rejected with 400. The field is honored only on
+ * first INSERT; on subsequent logins the backend ignores it.
+ */
+export type SelfRegisterableRole = 'tenant' | 'landlord' | 'agent';
+
 export async function loginWithSignature(
   publicKey: string,
   signatureHex: string,
+  role?: SelfRegisterableRole,
 ): Promise<LoginResponse> {
   // casper_types::Signature::from_hex expects a 1-byte algorithm prefix:
   //   01 = Ed25519, 02 = Secp256k1
@@ -59,7 +68,13 @@ export async function loginWithSignature(
   // therefore opt into credentialed mode so the browser stores Set-Cookie.
   return backendClient.post<LoginResponse>(
     '/api/v1/auth/login',
-    { wallet_address: publicKey, signature },
+    {
+      wallet_address: publicKey,
+      signature,
+      // Only include role when explicitly provided; backend defaults to
+      // `tenant` and the field is honored only on the very first login.
+      ...(role !== undefined ? { role } : {}),
+    },
     { retry: false },
   );
 }

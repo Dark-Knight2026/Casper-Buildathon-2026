@@ -44,6 +44,22 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     // Add aria-disabled when disabled or loading
     const ariaProps = (disabled || loading) ? { 'aria-disabled': true as const } : {};
     
+    // Slot (rendered when asChild=true) calls React.Children.only and
+    // therefore accepts exactly one React element. Adding the loading
+    // spinner alongside `children` breaks every `<Button asChild>` callsite
+    // (navigation Links, etc.) with "React.Children.only expected to receive
+    // a single React element child". The loading state only makes sense for
+    // real <button> form actions anyway — Slot consumers (Links) don't have
+    // an in-flight state to spin, so we silently skip the spinner there.
+    const content = asChild ? (
+      children
+    ) : (
+      <>
+        {loading && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+        {children}
+      </>
+    );
+
     return (
       <Comp
         className={cn(buttonVariants({ variant, size, className }))}
@@ -53,8 +69,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         {...ariaProps}
         {...props}
       >
-        {loading && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
-        {children}
+        {content}
       </Comp>
     );
   }

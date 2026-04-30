@@ -5,6 +5,7 @@ import {
   loginWithSignature,
   logoutSession,
   type ServerUserInfo,
+  type SelfRegisterableRole,
 } from '@/services/ico';
 import { logger } from '@/utils/logger';
 
@@ -25,7 +26,7 @@ export function useBackendAuth(
   const [error, setError] = useState<string | null>(null);
   const prevPublicKeyRef = useRef(publicKey);
 
-  const login = useCallback(async () => {
+  const login = useCallback(async (role?: SelfRegisterableRole) => {
     if (!clickRef || !publicKey) return;
 
     setIsLoading(true);
@@ -45,7 +46,14 @@ export function useBackendAuth(
 
       // 3. Exchange signature for an authenticated session. The backend sets
       //    HttpOnly auth cookies; the body returns only the user profile.
-      const { user: serverUser } = await loginWithSignature(publicKey, result.signatureHex);
+      //    `role` is optional and only consumed by the backend on first
+      //    registration — passed from Register's RoleSelector, omitted from
+      //    Login (where the user already exists).
+      const { user: serverUser } = await loginWithSignature(
+        publicKey,
+        result.signatureHex,
+        role,
+      );
       setUser(serverUser);
 
       logger.debug('[useBackendAuth] Login successful');

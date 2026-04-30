@@ -140,6 +140,29 @@ describe('backendAuthService', () => {
       );
     });
 
+    it('omits role from the body when not provided', async () => {
+      mockPost.mockResolvedValue({ user: SAMPLE_USER });
+      await loginWithSignature('02walletabc', '02sigabc');
+      const [, body] = mockPost.mock.calls[0];
+      expect(
+        body,
+        'role must not appear in the login body unless the caller passes one — backend defaults to tenant on first INSERT'
+      ).not.toHaveProperty('role');
+    });
+
+    it('forwards role as a top-level field when provided (Register flow)', async () => {
+      mockPost.mockResolvedValue({ user: SAMPLE_USER });
+      await loginWithSignature('02walletabc', '02sigabc', 'landlord');
+      expect(
+        mockPost,
+        'when Register passes role=landlord it must reach the backend in the JSON body'
+      ).toHaveBeenCalledWith(
+        '/api/v1/auth/login',
+        { wallet_address: '02walletabc', signature: '02sigabc', role: 'landlord' },
+        { retry: false },
+      );
+    });
+
     it('returns the login response (user only — tokens travel as cookies)', async () => {
       const response = { user: SAMPLE_USER };
       mockPost.mockResolvedValue(response);

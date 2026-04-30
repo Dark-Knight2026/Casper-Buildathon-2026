@@ -18,10 +18,11 @@ export function Register() {
     handleConnectProvider, login, disconnect,
   } = useWalletConnect();
 
-  // NOTE FOR BACKEND TEAM:
-  // `role` needs to be sent to POST /api/v1/auth/login as an optional field.
-  // Backend should use it only on first registration (INSERT) and ignore on subsequent
-  // logins (ON CONFLICT DO UPDATE). Until supported, new users always get 'tenant' role.
+  // The selected role is forwarded to POST /api/v1/auth/login. Backend
+  // honors it only on the first INSERT (`upsert_user_by_wallet`) and ignores
+  // it on subsequent logins, so re-running registration with a different
+  // role for the same wallet has no effect — the user must connect a
+  // different wallet to claim a different role.
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4 py-8">
@@ -60,10 +61,14 @@ export function Register() {
 
           {isConnected && account ? (
             <div className="space-y-2">
-              <Button className="w-full" onClick={login} disabled={isSigningIn || isAuthenticated}>
+              <Button
+                className="w-full"
+                onClick={() => login(role)}
+                disabled={isSigningIn || isAuthenticated}
+              >
                 {isSigningIn
                   ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Signing in…</>
-                  : 'Sign in with connected wallet'
+                  : 'Sign in'
                 }
               </Button>
               <button
