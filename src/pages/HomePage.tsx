@@ -1,8 +1,9 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
-import { RoleSwitcher } from '../components/auth/RoleSwitcher';
-import { getDashboardRoute } from '../types/user';
+
+import { useAuth } from '@/contexts/AuthContext';
+import { RoleSwitcher } from '@/components/auth/RoleSwitcher';
+import { getDashboardRoute } from '@/types/user';
 import HeroSection from '@/components/HeroSection';
 import { FeaturedProperties } from '@/components/FeaturedProperties';
 import MarketAnalytics from '@/components/MarketAnalytics';
