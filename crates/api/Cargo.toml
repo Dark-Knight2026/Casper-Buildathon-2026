@@ -18,6 +18,7 @@ enabled = [
     "dep:chrono",
     "dep:config",
     "dep:dotenv",
+    "dep:email_address",
     "dep:futures-util",
     "dep:hex",
     "dep:jsonwebtoken",
@@ -54,6 +55,7 @@ casper-types = { workspace = true, optional = true }
 chrono = { workspace = true, optional = true }
 config = { workspace = true, optional = true }
 dotenv = { workspace = true, optional = true }
+email_address = { workspace = true, optional = true }
 futures-util = { workspace = true, optional = true }
 hex = { workspace = true, optional = true }
 jsonwebtoken = { workspace = true, optional = true }

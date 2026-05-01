@@ -11,9 +11,14 @@ pub mod handlers;
 pub mod models;
 /// Router configuration for user-profile endpoints.
 pub mod routes;
+/// Email-change opaque-token generation and verification.
+pub mod tokens;
 
 // Re-exports
-pub use db::{ProfilePatch, UserProfileRecord, fetch_user_profile, update_user_profile};
-pub use handlers::{get_me, patch_me};
-pub use models::UpdateProfileRequest;
+pub use db::{
+    ProfilePatch, UserProfileRecord, apply_email_change, fetch_user_profile, is_email_taken,
+    update_user_profile,
+};
+pub use handlers::{confirm_email_change, get_me, patch_me, request_email_change};
+pub use models::{EmailChangeConfirmRequest, EmailChangeRequest, UpdateProfileRequest};
 pub use routes::router;

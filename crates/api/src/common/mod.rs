@@ -36,7 +36,7 @@ pub use redis::RedisStore;
 ///
 /// Returns `ApiError::BadRequest` if the address is not exactly 64 hex characters.
 #[inline]
-pub fn validate_account(account: &str) -> Result<String, errors::ApiError> {
+pub fn validate_account(account: &str) -> ApiResult<String> {
     let account = account.to_ascii_lowercase();
     if account.len() != 64 || !account.chars().all(|c| c.is_ascii_hexdigit()) {
         return Err(errors::ApiError::BadRequest(

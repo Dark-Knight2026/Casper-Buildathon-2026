@@ -164,3 +164,20 @@ impl From<EmailError> for ApiError {
         Self::Internal(err.to_string())
     }
 }
+
+impl From<redis::RedisError> for ApiError {
+    /// Maps Redis transport failures to the existing `Queue` variant.
+    ///
+    /// Most existing call sites handle Redis errors inline because they
+    /// have specific recovery semantics (auth-middleware fail-open,
+    /// wallet-failure log-and-ignore). The newer email-change handlers
+    /// instead need fail-stop propagation through `?`: without Redis
+    /// neither rate-limit nor token storage works, so 500 is the only
+    /// safe answer. `IntoResponse` for `Queue` already logs the error
+    /// server-side and emits a flat "Internal system error" body, so no
+    /// transport details leak to the client.
+    #[inline]
+    fn from(err: redis::RedisError) -> Self {
+        Self::Queue(err.to_string())
+    }
+}

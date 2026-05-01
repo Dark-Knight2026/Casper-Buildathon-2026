@@ -80,9 +80,9 @@ pub trait EmailSender: Send + Sync {
 /// logs already has stronger-than-email access to the system.
 ///
 /// MUST NOT be installed in any environment where real users could trigger
-/// flows that depend on email delivery (login, password reset, email change)
-/// - they will succeed on the server side but the user will never see the
-/// follow-up message.
+/// flows that depend on email delivery (login, password reset, email change).
+/// Such flows will succeed on the server side but the user will never see
+/// the follow-up message.
 #[derive(Debug, Default)]
 pub struct LoggingEmailSender;
 

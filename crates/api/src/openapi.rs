@@ -44,6 +44,8 @@ use crate::{
             auth::models::NonceRequest,
             auth::models::NonceResponse,
             // Users models
+            users::models::EmailChangeConfirmRequest,
+            users::models::EmailChangeRequest,
             users::models::UpdateProfileRequest,
             // Health models
             health::models::ConnectionStatus,

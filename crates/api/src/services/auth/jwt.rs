@@ -10,7 +10,8 @@ use secrecy::{ExposeSecret, SecretString};
 use uuid::Uuid;
 
 use crate::common::{
-    ApiError, Claims, JWT_AUDIENCE, JWT_ISSUER, TokenType, UserId, UserRole, VerificationLevel,
+    ApiError, ApiResult, Claims, JWT_AUDIENCE, JWT_ISSUER, TokenType, UserId, UserRole,
+    VerificationLevel,
 };
 
 /// Access-token TTL.
@@ -53,7 +54,7 @@ pub fn encode_access_token(
     role: UserRole,
     verification_level: VerificationLevel,
     secret: &SecretString,
-) -> Result<EncodedAccessToken, ApiError> {
+) -> ApiResult<EncodedAccessToken> {
     let exp_at = Utc::now()
         .checked_add_signed(ACCESS_TOKEN_TTL)
         .ok_or_else(|| {

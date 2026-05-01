@@ -263,3 +263,95 @@ pub async fn update_user_profile(
 
     fetch_user_profile(pool, user_id).await
 }
+
+/// Returns `true` when `email` is already used by some active user other
+/// than `exclude_user_id`.
+///
+/// `exclude_user_id` lets the request handler pre-check uniqueness for the
+/// caller's own (already-stored) email without spuriously reporting a
+/// 409 when the user submits their current address. Soft-deleted rows
+/// are excluded so re-using the email of a deleted account is allowed.
+///
+/// This is a UX-preserving pre-check, not a substitute for the
+/// `users_email_key` UNIQUE constraint: the actual rewrite still goes
+/// through the constraint via [`apply_email_change`], so a race with
+/// another concurrent change is caught and surfaced as 409 by
+/// `From<sqlx::Error>` for `ApiError`.
+///
+/// # Errors
+///
+/// Returns `sqlx::Error` if the query fails.
+#[inline]
+pub async fn is_email_taken(
+    pool: &PgPool,
+    email: &str,
+    exclude_user_id: Uuid,
+) -> Result<bool, Error> {
+    let row = sqlx::query!(
+        r#"
+            SELECT EXISTS(
+                SELECT 1 FROM users
+                WHERE email = $1
+                  AND id <> $2
+                  AND deleted_at IS NULL
+            ) AS "exists!"
+        "#,
+        email,
+        exclude_user_id,
+    )
+    .fetch_one(pool)
+    .await?;
+    Ok(row.exists)
+}
+
+/// Rewrites the user's email to `new_email` and marks it verified.
+///
+/// `email_verified` is set to `TRUE` because the caller has already
+/// proved control of `new_email` via the confirmation round-trip - the
+/// only path into this function is a successful `take_email_change_token`
+/// match. Setting it to `FALSE` here would leave the user in a stale
+/// "email-known-but-not-verified" state right after they verified, and
+/// would force a redundant second round-trip.
+///
+/// `verification_level` is NOT written explicitly: the
+/// `trg_users_profile_complete` BEFORE-trigger recomputes it from the
+/// atomic-bool columns (`email_verified`, `phone_verified`, ...) on every
+/// UPDATE, so the aggregate is always consistent without handler code
+/// touching it.
+///
+/// Conflicts surface as `sqlx::Error::Database` with
+/// `is_unique_violation()`, which `From<sqlx::Error>` for `ApiError`
+/// already maps to 409 - no special-casing needed at the call site.
+///
+/// # Errors
+///
+/// - [`Error::RowNotFound`] if the user disappeared between confirmation
+///   and apply (soft-deleted, or never existed - though the JWT path
+///   makes that unreachable).
+/// - [`sqlx::Error`] for unique-violation (race with another email-change
+///   that committed first) or any other DB failure.
+#[inline]
+pub async fn apply_email_change(
+    pool: &PgPool,
+    user_id: Uuid,
+    new_email: &str,
+) -> Result<UserProfileRecord, Error> {
+    let rows_affected = sqlx::query!(
+        r"
+            UPDATE users
+            SET email = $2, email_verified = TRUE
+            WHERE id = $1 AND deleted_at IS NULL
+        ",
+        user_id,
+        new_email,
+    )
+    .execute(pool)
+    .await?
+    .rows_affected();
+
+    if rows_affected == 0 {
+        return Err(Error::RowNotFound);
+    }
+
+    fetch_user_profile(pool, user_id).await
+}
