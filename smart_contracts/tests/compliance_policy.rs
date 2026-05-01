@@ -158,3 +158,62 @@ fn verify_sender_and_recipient(ctx: &mut Context) {
     verify_investor(ctx, ctx.sender);
     verify_investor(ctx, ctx.recipient);
 }
+
+// =============================================================================
+// Admin Configuration
+// =============================================================================
+
+#[test]
+fn test_set_compliance_config_should_store_config() {
+    let mut ctx = setup(odra_test::env());
+    let property_id = create_active_property(&mut ctx);
+
+    enable_transfers(&mut ctx, property_id);
+
+    assert!(
+        ctx.compliance
+            .get_compliance_config(property_id)
+            .transfers_enabled,
+        "Transfers should be enabled",
+    );
+}
+
+#[test]
+fn test_set_compliance_config_should_revert_if_caller_is_not_manager() {
+    let mut ctx = setup(odra_test::env());
+    let property_id = create_active_property(&mut ctx);
+
+    ctx.env.set_caller(ctx.env.get_account(9));
+
+    assert_eq!(
+        ctx.compliance
+            .try_set_compliance_config(
+                property_id,
+                ComplianceConfig {
+                    transfers_enabled: true,
+                }
+            )
+            .unwrap_err(),
+        ComplianceError::NotAuthorized.into(),
+        "Should revert if caller is not compliance manager",
+    );
+}
+
+#[test]
+fn test_set_transfer_exempt_should_store_exemption() {
+    let mut ctx = setup(odra_test::env());
+
+    ctx.env.set_caller(ctx.compliance_manager);
+
+    ctx.compliance.set_transfer_exempt(ctx.sender, true);
+
+    assert!(ctx.compliance.is_transfer_exempt(ctx.sender));
+
+    assert!(ctx.env.emitted_event(
+        &ctx.compliance,
+        TransferExemptSet {
+            account: ctx.sender,
+            exempt: true,
+        }
+    ))
+}
