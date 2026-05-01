@@ -174,6 +174,29 @@ impl CompliancePolicy {
     pub fn is_transfer_exempt(&self, account: Address) -> bool {
         self.transfer_exempt_accounts.get(&account).unwrap_or(false)
     }
+
+    // =========================================================================
+    // Role Getters
+    // =========================================================================
+
+    /// Returns the role hash for accounts allowed to manage property records.
+    pub fn compliance_manager_role(&self) -> Role {
+        common::hash_role(ROLE_COMPLIANCE_MANAGER)
+    }
+
+    // =========================================================================
+    // Delegation
+    // =========================================================================
+
+    delegate! {
+        to self.access_control {
+            fn has_role(&self, role: &Role, address: &Address) -> bool;
+            fn get_role_admin(&self, role: &Role) -> Role;
+            fn grant_role(&mut self, role: &Role, address: &Address);
+            fn revoke_role(&mut self, role: &Role, address: &Address);
+            fn renounce_role(&mut self, role: &Role, address: &Address);
+        }
+    }
 }
 
 // =============================================================================
