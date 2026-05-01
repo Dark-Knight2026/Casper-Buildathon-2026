@@ -6,7 +6,7 @@ use chrono::{DateTime, Utc};
 use sqlx::{Error, PgPool};
 use uuid::Uuid;
 
-use crate::common::{UserStatus, VerificationLevel};
+use crate::common::{UserInfo, UserRole, UserStatus, VerificationLevel};
 
 /// Full user profile loaded by [`fetch_user_profile`].
 ///
@@ -49,6 +49,40 @@ pub struct UserProfileRecord {
     pub created_at: DateTime<Utc>,
     /// Last profile update timestamp.
     pub updated_at: DateTime<Utc>,
+}
+
+/// Maps a DB-side `UserProfileRecord` into the public-facing [`UserInfo`]
+/// shape returned by `/me` endpoints and the wallet login response.
+///
+/// `verification_level` is intentionally dropped: it lives on the record so
+/// authorization-checking code can read it without a second SQL trip, but
+/// `UserInfo` does not expose it - surfacing aggregate verification
+/// publicly is a deliberate omission to avoid leaking onboarding state to
+/// the wrong UI surfaces.
+///
+/// `role` is parsed here with an `Unknown` fallback (mirroring the
+/// wallet-login path) so a stray DB value can never 500 a profile read or
+/// a refresh-token rotation - the handler always gets a typed enum.
+impl From<UserProfileRecord> for UserInfo {
+    #[inline]
+    fn from(record: UserProfileRecord) -> Self {
+        Self {
+            id: record.id,
+            role: UserRole::from_str(&record.role).unwrap_or(UserRole::Unknown),
+            wallet_address: record.wallet_address,
+            status: record.status,
+            email: record.email,
+            first_name: record.first_name,
+            last_name: record.last_name,
+            phone: record.phone,
+            avatar_url: record.avatar_url,
+            bio: record.bio,
+            is_profile_complete: record.is_profile_complete,
+            active_leases_count: record.active_leases_count,
+            created_at: record.created_at,
+            updated_at: record.updated_at,
+        }
+    }
 }
 
 /// Loads the full profile for `user_id`, joining lease participation counts.
@@ -137,4 +171,95 @@ pub async fn fetch_user_profile(pool: &PgPool, user_id: Uuid) -> Result<UserProf
         created_at: record.created_at,
         updated_at: record.updated_at,
     })
+}
+
+/// Validated patch produced by `UpdateProfileRequest::into_patch`.
+///
+/// Each field is `Some(value)` to set or `None` to leave the column
+/// unchanged. `phone_verified` is intentionally not in this struct - it is
+/// reset implicitly by `update_user_profile` whenever `phone` is set to a
+/// value different from the stored one, so callers cannot accidentally keep
+/// a stale verification flag for a fresh number.
+#[derive(Debug)]
+pub struct ProfilePatch {
+    /// New first name, or `None` to keep the existing value.
+    pub first_name: Option<String>,
+    /// New last name, or `None` to keep the existing value.
+    pub last_name: Option<String>,
+    /// New phone number, or `None` to keep the existing value. Setting this
+    /// to a value different from the stored one resets `phone_verified`.
+    pub phone: Option<String>,
+    /// New bio, or `None` to keep the existing value.
+    pub bio: Option<String>,
+    /// New avatar URL, or `None` to keep the existing value.
+    pub avatar_url: Option<String>,
+}
+
+/// Patches the editable subset of a user's profile.
+///
+/// Each column is updated via `COALESCE($n, col)`, so passing `None` for a
+/// field leaves the corresponding column untouched. Side effects:
+///
+/// - `phone_verified` is reset to `false` if and only if a new phone is
+///   provided AND it is `IS DISTINCT FROM` the stored one (NULL-aware): a
+///   no-op patch never invalidates an already-verified number.
+/// - `is_profile_complete` is maintained by `trg_users_profile_complete`
+///   (BEFORE INSERT/UPDATE OF phone) so we never write that column directly.
+/// - `updated_at` is bumped by the standard `updated_at` trigger on `users`.
+///
+/// After the UPDATE, the row is reloaded via [`fetch_user_profile`] so the
+/// caller responds with the same shape `GET /me` produces, including the
+/// joined `active_leases_count`. Any concurrent UPDATE racing between the
+/// patch and the reload is acceptable: the response simply reflects the
+/// final committed state, which is what the caller wants anyway.
+///
+/// # Errors
+///
+/// - [`Error::RowNotFound`] when the user no longer exists (e.g.
+///   soft-deleted between JWT issue and this call - the access token
+///   outlives the row by up to 15 minutes).
+/// - [`sqlx::Error`] for any DB failure or column-decode error in the
+///   follow-up `fetch_user_profile`.
+#[inline]
+pub async fn update_user_profile(
+    pool: &PgPool,
+    user_id: Uuid,
+    patch: ProfilePatch,
+) -> Result<UserProfileRecord, Error> {
+    let rows_affected = sqlx::query!(
+        r"
+            UPDATE users
+            SET
+                first_name = COALESCE($2, first_name),
+                last_name  = COALESCE($3, last_name),
+                phone      = COALESCE($4, phone),
+                phone_verified = CASE
+                    WHEN $4::text IS NOT NULL AND $4 IS DISTINCT FROM phone
+                    THEN false
+                    ELSE phone_verified
+                END,
+                bio        = COALESCE($5, bio),
+                avatar_url = COALESCE($6, avatar_url)
+            WHERE id = $1 AND deleted_at IS NULL
+        ",
+        user_id,
+        patch.first_name,
+        patch.last_name,
+        patch.phone,
+        patch.bio,
+        patch.avatar_url,
+    )
+    .execute(pool)
+    .await?
+    .rows_affected();
+
+    if rows_affected == 0 {
+        // Either no user with this id (impossible: the JWT sub came from a
+        // real login) or the row was soft-deleted between login and now.
+        // Surface as RowNotFound so the handler maps to 404 - the same
+        // shape `GET /me` uses for the deleted-while-logged-in case.
+        return Err(Error::RowNotFound);
+    }
+
+    fetch_user_profile(pool, user_id).await
 }

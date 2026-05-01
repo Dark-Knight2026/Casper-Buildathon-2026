@@ -23,5 +23,5 @@ use crate::{common::AppState, services::users::handlers};
 #[inline]
 #[must_use]
 pub fn router() -> OpenApiRouter<Arc<AppState>> {
-    OpenApiRouter::new().routes(routes!(handlers::get_me))
+    OpenApiRouter::new().routes(routes!(handlers::get_me, handlers::patch_me))
 }

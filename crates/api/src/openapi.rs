@@ -12,7 +12,7 @@ use utoipa::{
 
 use crate::{
     onchain::{ico, staking, transactions, vesting},
-    services::{analytics, auth, health, tax},
+    services::{analytics, auth, health, tax, users},
 };
 
 /// `OpenAPI` documentation configuration.
@@ -43,6 +43,8 @@ use crate::{
             auth::models::LoginResponse,
             auth::models::NonceRequest,
             auth::models::NonceResponse,
+            // Users models
+            users::models::UpdateProfileRequest,
             // Health models
             health::models::ConnectionStatus,
             health::models::HealthResponse,
