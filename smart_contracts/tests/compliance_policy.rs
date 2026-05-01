@@ -217,3 +217,108 @@ fn test_set_transfer_exempt_should_store_exemption() {
         }
     ))
 }
+
+// =============================================================================
+// can_transfer()
+// =============================================================================
+
+#[test]
+fn test_can_transfer_should_return_true_for_verified_transfer_on_active_property() {
+    let mut ctx = setup(odra_test::env());
+    let property_id = create_active_property(&mut ctx);
+
+    enable_transfers(&mut ctx, property_id);
+    verify_sender_and_recipient(&mut ctx);
+
+    assert!(
+        ctx.compliance
+            .can_transfer(property_id, ctx.sender, ctx.recipient, U256::from(100)),
+        "Transfer should be allowed",
+    );
+}
+
+#[test]
+fn test_can_transfer_should_return_false_if_transfers_are_disabled() {
+    let mut ctx = setup(odra_test::env());
+    let property_id = create_active_property(&mut ctx);
+
+    verify_sender_and_recipient(&mut ctx);
+
+    assert!(
+        !ctx.compliance
+            .can_transfer(property_id, ctx.sender, ctx.recipient, U256::from(100),),
+        "Transfer should be blocked when transfers are disabled",
+    );
+}
+
+#[test]
+fn test_can_transfer_should_allow_unverified_exempt_sender() {
+    let mut ctx = setup(odra_test::env());
+    let property_id = create_active_property(&mut ctx);
+
+    enable_transfers(&mut ctx, property_id);
+    verify_sender_and_recipient(&mut ctx);
+
+    ctx.env.set_caller(ctx.compliance_manager);
+    ctx.compliance.set_transfer_exempt(ctx.sender, true);
+
+    assert!(
+        ctx.compliance
+            .can_transfer(property_id, ctx.sender, ctx.recipient, U256::from(100),),
+        "Transfer should be allowed from exempt sender"
+    );
+}
+
+// =============================================================================
+// assert_transfer()
+// =============================================================================
+
+#[test]
+fn test_assert_can_transfer_should_revert_if_amount_is_zero() {
+    let mut ctx = setup(odra_test::env());
+    let property_id = create_active_property(&mut ctx);
+
+    enable_transfers(&mut ctx, property_id);
+    verify_sender_and_recipient(&mut ctx);
+
+    assert_eq!(
+        ctx.compliance
+            .try_assert_can_transfer(property_id, ctx.sender, ctx.recipient, U256::zero(),)
+            .unwrap_err(),
+        ComplianceError::ZeroAmount.into(),
+        "Should revert when amount is zero",
+    );
+}
+
+#[test]
+fn test_assert_can_transfer_should_revert_if_property_is_not_active() {
+    let mut ctx = setup(odra_test::env());
+    let property_id = create_draft_property(&mut ctx);
+
+    enable_transfers(&mut ctx, property_id);
+    verify_sender_and_recipient(&mut ctx);
+
+    assert_eq!(
+        ctx.compliance
+            .try_assert_can_transfer(property_id, ctx.sender, ctx.recipient, U256::from(100),)
+            .unwrap_err(),
+        ComplianceError::PropertyNotActive.into(),
+        "Should revert when property is not active",
+    );
+}
+
+#[test]
+fn test_assert_can_transfer_should_revert_if_transfers_are_disabled() {
+    let mut ctx = setup(odra_test::env());
+    let property_id = create_active_property(&mut ctx);
+
+    verify_sender_and_recipient(&mut ctx);
+
+    assert_eq!(
+        ctx.compliance
+            .try_assert_can_transfer(property_id, ctx.sender, ctx.recipient, U256::from(100))
+            .unwrap_err(),
+        ComplianceError::TransfersDisabled.into(),
+        "Should revert when transfers are disabled"
+    );
+}
