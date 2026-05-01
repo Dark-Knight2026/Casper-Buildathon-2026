@@ -4,6 +4,9 @@
 **Participants:** Anthony Batten (client), Chris, Kenneth, Anastasia, Oleksandra
 **Owner:** Anastasia (FE), Ivan (BE), Kenneth (contracts)
 
+**Related docs:**
+- [CASPER_NAME_PAYMENT_FLOW.md](./CASPER_NAME_PAYMENT_FLOW.md) — payment flow for Casper.name purchase (post-KYC, fiat → on-chain via Stripe + relayer)
+
 ---
 
 ## Table of Contents
@@ -27,6 +30,9 @@
 | FE-02 | **Help/Onboarding tab** with quick-action cards: `Create landlord account`, `Create tenant account`, `Create property manager account`, `List property`, `Look for property`, `Create wallet`. Should walk the user through the main flows in 1-2 clicks | Global (header or dashboard) | M |
 | FE-03 | **Seamless fiat→crypto UX** — gas and token payments should feel like tapping Apple Pay, with no visible transitions. Currently gas is paid by the landlord (see decision §5) | Property listing flow, transaction flows | M |
 | FE-04 | **Portfolio Accounting tab (slim)** for tenants and landlords — see detailed spec §6 | `/landlord/portfolio`, `/tenant/expenses` | L |
+| FE-05 | **Casper.name picker UI** (post-KYC step) — name input, debounced availability check, price display | KYC completion flow | M |
+| FE-06 | **Stripe Checkout integration** for Casper.name purchase | KYC completion flow | S |
+| FE-07 | **Registration progress modal** — multi-step states `Preparing → Registering → Done` with success/failure | KYC completion flow | S |
 
 ### 1.2. Backend + contracts (parallel tracks)
 
@@ -37,6 +43,10 @@
 | BE-03 | KYC integration with Sumsub | Ivan | ❌ planned |
 | BE-04 | Casper.name integration on backend (identity layer) | Ivan | ❌ planned |
 | BE-05 | Endpoints for Portfolio Accounting (see §6) | Ivan | ❌ planned |
+| BE-06 | Stripe integration: Checkout Session + webhook handler + idempotency | Ivan | ❌ planned |
+| BE-07 | Treasury wallet + signer service (KMS-managed key) | Ivan | ❌ planned |
+| BE-08 | Casper.name reservation + registration job (with retry/refund) | Ivan | ❌ planned |
+| BE-09 | Refund flow + ops alerts (CSPR balance, failed registrations) | Ivan | ❌ planned |
 | SC-01 | ERC-3643 suite: Compliance Policy, Property Fraction Token, Revenue Distribution contracts | Kenneth | 🔄 |
 | SC-02 | Lease/Escrow integration for automated rent routing | Kenneth | ❌ |
 | SC-03 | Possibly rename Investor Registry → Identity Registry with Casper.names support | Kenneth | 🔄 investigation |
@@ -51,8 +61,10 @@ Focus: **lease-to-own + fractional equity for the tenant** (e.g. after 10 years 
 - FE-01 (price input)
 - FE-02 (help/onboarding tab)
 - FE-04 (Portfolio Accounting — slim version, see §6)
+- FE-05, FE-06, FE-07 (Casper.name purchase UI — see [CASPER_NAME_PAYMENT_FLOW.md](./CASPER_NAME_PAYMENT_FLOW.md))
 - BE-01, BE-02 (auth)
 - BE-05 (portfolio endpoints — slim)
+- BE-06, BE-07, BE-08, BE-09 (Casper.name payment infra)
 - Property archival flag (status: active/archived/sold)
 - CSPR.click login (Google/Apple/email) + Sumsub KYC + Casper.name identity
 
@@ -98,7 +110,7 @@ Focus: **lease-to-own + fractional equity for the tenant** (e.g. after 10 years 
 |---|---|---|
 | Login | **CSPR.click** | Google / Apple / Email. **No Casper Wallet** for login in MVP |
 | KYC | **Sumsub** | Separate backend layer, data is not on-chain |
-| Public identity | **Casper.name** | Users only (NOT properties in MVP). User picks the name themselves. **User pays the cost** |
+| Public identity | **Casper.name** | Users only (NOT properties in MVP). User picks the name themselves. **User pays the cost** — purchased via Stripe with backend relayer registering on-chain. Full flow: [CASPER_NAME_PAYMENT_FLOW.md](./CASPER_NAME_PAYMENT_FLOW.md) |
 
 ### 5.2. Gas and tokens
 - **Landlord pays gas** when listing a property and minting the lease agreement NFT
