@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
-import { AuthContext, UserProfile } from './AuthContextDefinition';
+import { AuthContext } from './AuthContextDefinition';
 import { backendClient } from '@/lib/api-client';
 import {
   logoutSession,
   refreshSession,
   type ServerUserInfo,
 } from '@/services/ico/backendAuthService';
-import type { UserRole } from '@/types/user';
+import type { UserProfile, UserRole } from '@/types/user';
 
 // Non-secret session marker. The actual auth tokens live in HttpOnly cookies
 // set by the backend at /auth/login; this localStorage entry is just a hint to
@@ -107,9 +107,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const updateProfile = useCallback(async (updates: Partial<UserProfile>) => {
-    const updated = await backendClient.put<UserProfile>('/api/v1/users/me', updates);
-    saveSessionMarker(updated);
-    setProfile(updated);
+    const updated = await backendClient.put<ServerUserInfo>('/api/v1/users/me', updates);
+    const mapped = mapServerUserInfo(updated);
+    saveSessionMarker(mapped);
+    setProfile(mapped);
   }, []);
 
   const walletSignOut = useCallback(() => {

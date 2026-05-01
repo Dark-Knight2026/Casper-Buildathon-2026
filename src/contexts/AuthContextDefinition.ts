@@ -1,12 +1,6 @@
 import { createContext } from 'react';
-import type { User } from '@/types/user';
+import type { UserProfile } from '@/types/user';
 import type { ServerUserInfo } from '@/services/ico/backendAuthService';
-
-// Re-export for convenience
-export type { User };
-
-// UserProfile is the authenticated user stored in context
-export type UserProfile = User;
 
 export interface AuthContextType {
   profile: UserProfile | null;
