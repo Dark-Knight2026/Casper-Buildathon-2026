@@ -12,7 +12,7 @@ use crate::AppState;
 use tower_governor::{
     GovernorLayer, governor::GovernorConfigBuilder, key_extractor::SmartIpKeyExtractor,
 };
-use utoipa_axum::{router::OpenApiRouter, routes};
+use utoipa_axum::router::OpenApiRouter;
 
 /// Property analytics feature module.
 pub mod analytics;
@@ -98,8 +98,8 @@ pub fn protected_router(state: Arc<AppState>) -> OpenApiRouter<Arc<AppState>> {
     );
 
     OpenApiRouter::new()
-        .routes(routes!(tax::handlers::calculate_tax_liability))
-        .routes(routes!(analytics::handlers::get_property_performance))
+        .nest("/tax", tax::routes::router())
+        .nest("/analytics", analytics::routes::router())
         .nest("/users", users::routes::router())
         .route_layer(GovernorLayer::new(rate_limit))
         .route_layer(axum::middleware::from_fn_with_state(

@@ -34,7 +34,7 @@ use crate::{
 /// Returns `ApiError` if retrieval fails.
 #[utoipa::path(
     post,
-    path = "/analytics/property-performance",
+    path = "/property-performance",
     tag = "Analytics",
     request_body = PropertyPerformanceRequest,
     responses(

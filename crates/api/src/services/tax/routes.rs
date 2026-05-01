@@ -1,13 +1,23 @@
 //! Router configuration for tax endpoints.
+//!
+//! Path prefix `/tax` is NOT repeated in the handlers' `#[utoipa::path]`;
+//! it is added once via `.nest("/tax", ...)` in `services::protected_router`,
+//! so handlers below mount as e.g. `path = "/calculate-liability"` ->
+//! `/api/v1/tax/calculate-liability`.
 
 use std::sync::Arc;
 
-use axum::{Router, routing::post};
+use utoipa_axum::{router::OpenApiRouter, routes};
 
-use crate::{common::AppState, services::tax::handlers::calculate_tax_liability};
+use crate::{common::AppState, services::tax::handlers};
 
-/// Creates the tax router with calculation endpoints.
+/// Builds the tax `OpenApiRouter`.
+///
+/// Returned router has no auth or rate-limiter middleware applied; the caller
+/// (`protected_router`) wraps it with the protected-tier `GovernorLayer`, the
+/// `require_auth` middleware, and the `/tax` path prefix via `.nest()`.
 #[inline]
-pub fn router() -> Router<Arc<AppState>> {
-    Router::new().route("/tax/calculate-liability", post(calculate_tax_liability))
+#[must_use]
+pub fn router() -> OpenApiRouter<Arc<AppState>> {
+    OpenApiRouter::new().routes(routes!(handlers::calculate_tax_liability))
 }

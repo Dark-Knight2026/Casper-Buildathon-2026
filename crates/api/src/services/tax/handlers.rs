@@ -35,7 +35,7 @@ use crate::{
 /// Returns `ApiError` if calculation fails.
 #[utoipa::path(
     post,
-    path = "/tax/calculate-liability",
+    path = "/calculate-liability",
     tag = "Tax",
     request_body = TaxCalculationRequest,
     responses(
