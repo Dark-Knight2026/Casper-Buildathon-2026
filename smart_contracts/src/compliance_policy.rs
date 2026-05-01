@@ -71,6 +71,11 @@ pub mod errors {
     #[odra::odra_error]
     pub enum Error {
         NotAuthorized = 1000,
+        ZeroAmount = 1001,
+        PropertyNotActive = 1002,
+        TransfersDisabled = 1003,
+        SenderNotVerified = 1004,
+        RecipientNotVerified = 1005,
     }
 }
 
@@ -176,6 +181,21 @@ impl CompliancePolicy {
     }
 
     // =========================================================================
+    // Compliance Checks
+    // =========================================================================
+
+    pub fn can_transfer(
+        &self,
+        property_id: U256,
+        from: Address,
+        to: Address,
+        amount: U256,
+    ) -> bool {
+        self.get_transfer_error(property_id, from, to, amount)
+            .is_none()
+    }
+
+    // =========================================================================
     // Role Getters
     // =========================================================================
 
@@ -210,5 +230,35 @@ impl CompliancePolicy {
         if !self.access_control.has_role(&role, &self.env().caller()) {
             self.env().revert(Error::NotAuthorized);
         }
+    }
+
+    pub fn get_transfer_error(
+        &self,
+        property_id: U256,
+        from: Address,
+        to: Address,
+        amount: U256,
+    ) -> Option<Error> {
+        if amount.is_zero() {
+            return Some(Error::ZeroAmount);
+        }
+
+        if !self.property_registry.is_property_active(property_id) {
+            return Some(Error::PropertyNotActive);
+        }
+
+        if !self.get_compliance_config(property_id).transfers_enabled {
+            return Some(Error::TransfersDisabled);
+        }
+
+        if !self.is_transfer_exempt(from) && !self.investor_registry.is_verified(from) {
+            return Some(Error::SenderNotVerified);
+        }
+
+        if !self.is_transfer_exempt(to) && !self.investor_registry.is_verified(to) {
+            return Some(Error::RecipientNotVerified);
+        }
+
+        None
     }
 }
