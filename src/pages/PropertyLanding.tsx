@@ -93,8 +93,9 @@ export default function PropertyLanding() {
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-12">
               <Button
                 onClick={() => navigate('/listings')}
+                variant="white-solid"
                 size="lg"
-                className="px-8 py-4 bg-white text-primary hover:bg-white/90 text-lg font-semibold rounded-md shadow-sm"
+                className="px-8 py-4 text-lg font-semibold rounded-md shadow-sm"
               >
                 <Search className="mr-2 h-5 w-5" />
                 Explore Properties
