@@ -52,7 +52,9 @@ export default function PropertyDetail() {
   const stateProperty = (location.state?.property as Property) ?? null;
   // Hydrate from FEATURED_PROPERTIES on direct URL access (refresh, bookmark,
   // shared link) so demo IDs `prop-1`...`prop-6` work without router state.
-  const demoFallback = !stateProperty && id
+  // Dev-only — in production these IDs route to mock-landlord-1, which would
+  // silently misroute contact requests.
+  const demoFallback = import.meta.env.DEV && !stateProperty && id
     ? FEATURED_PROPERTIES.find(p => p.id === id) ?? null
     : null;
   const initialProperty = stateProperty ?? demoFallback;
