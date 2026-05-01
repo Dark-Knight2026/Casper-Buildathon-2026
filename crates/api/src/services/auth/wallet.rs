@@ -20,7 +20,10 @@ use crate::{
         self, ApiError, ApiResult, AppState, CASPER_ED25519_PUBKEY_HEX_LEN,
         CASPER_SECP256K1_PUBKEY_HEX_LEN, UserRole,
     },
-    services::auth::{self, cookies, jwt, models::UserInfo, refresh},
+    services::{
+        auth::{self, cookies, jwt, models::UserInfo, refresh},
+        users,
+    },
 };
 
 /// Request payload for generating a login nonce.
@@ -339,7 +342,7 @@ pub async fn login(
     // the public response body needs joined data (active_leases_count) and the
     // wallet_address cache, both of which live on `users` after the
     // upsert/trigger has run.
-    let profile = auth::fetch_user_profile(&state.db, user_record.id).await?;
+    let profile = users::fetch_user_profile(&state.db, user_record.id).await?;
 
     // Build the cookies. `cookie_secure` from config decides whether the
     // browser refuses to send the cookies over plain HTTP - false in dev so

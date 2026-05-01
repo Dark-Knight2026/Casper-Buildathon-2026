@@ -4,6 +4,7 @@
 //! - [`analytics`] - Property performance analytics
 //! - [`health`] - Health check endpoint
 //! - [`tax`] - Tax calculation endpoints
+//! - [`users`] - Authenticated user-profile endpoints
 
 use std::sync::Arc;
 
@@ -21,6 +22,8 @@ pub mod auth;
 pub mod health;
 /// Tax calculation feature module.
 pub mod tax;
+/// Authenticated user-profile feature module.
+pub mod users;
 
 /// Rate limit: requests allowed per second for auth endpoints.
 pub const AUTH_RATE_LIMIT_PER_SECOND: u64 = 1;
@@ -97,6 +100,7 @@ pub fn protected_router(state: Arc<AppState>) -> OpenApiRouter<Arc<AppState>> {
     OpenApiRouter::new()
         .routes(routes!(tax::handlers::calculate_tax_liability))
         .routes(routes!(analytics::handlers::get_property_performance))
+        .nest("/users", users::routes::router())
         .route_layer(GovernorLayer::new(rate_limit))
         .route_layer(axum::middleware::from_fn_with_state(
             state,

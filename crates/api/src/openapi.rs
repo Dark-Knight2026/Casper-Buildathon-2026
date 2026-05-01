@@ -83,6 +83,7 @@ use crate::{
     tags(
         (name = "Health", description = "Health check endpoints"),
         (name = "Auth", description = "Authentication endpoints"),
+        (name = "Users", description = "Authenticated user-profile endpoints"),
         (name = "Tax", description = "Tax calculation endpoints"),
         (name = "Analytics", description = "Property analytics endpoints"),
         (name = "Transactions", description = "Transaction history endpoints"),
