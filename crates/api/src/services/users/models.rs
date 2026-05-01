@@ -7,7 +7,10 @@
 use serde::Deserialize;
 use utoipa::ToSchema;
 
-use crate::{common::ApiError, services::users::db::ProfilePatch};
+use crate::{
+    common::{ApiError, ApiResult},
+    services::users::db::ProfilePatch,
+};
 
 const MAX_NAME_LEN: usize = 100;
 const MAX_PHONE_LEN: usize = 20;
@@ -58,7 +61,7 @@ impl UpdateProfileRequest {
     ///   set a "verified-empty" phone number);
     /// - any field exceeds its length cap.
     #[inline]
-    pub fn into_patch(self) -> Result<ProfilePatch, ApiError> {
+    pub fn into_patch(self) -> ApiResult<ProfilePatch> {
         Ok(ProfilePatch {
             first_name: trim_required("first_name", self.first_name, MAX_NAME_LEN)?,
             last_name: trim_required("last_name", self.last_name, MAX_NAME_LEN)?,
@@ -78,7 +81,7 @@ fn trim_required(
     field: &str,
     value: Option<String>,
     max_len: usize,
-) -> Result<Option<String>, ApiError> {
+) -> ApiResult<Option<String>> {
     let Some(raw) = value else {
         return Ok(None);
     };
@@ -105,7 +108,7 @@ fn trim_optional(
     field: &str,
     value: Option<String>,
     max_len: usize,
-) -> Result<Option<String>, ApiError> {
+) -> ApiResult<Option<String>> {
     let Some(raw) = value else {
         return Ok(None);
     };

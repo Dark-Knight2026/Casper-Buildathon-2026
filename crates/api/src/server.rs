@@ -23,7 +23,10 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 #[cfg(debug_assertions)]
 use utoipa_swagger_ui::SwaggerUi;
 
-use crate::{ApiDoc, AppState, RedisStore, ServerConfig, ServerError, onchain, services};
+use crate::{
+    ApiDoc, AppState, EmailSender, LoggingEmailSender, RedisStore, ServerConfig, ServerError,
+    onchain, services,
+};
 
 /// Creates the full application router combining public and protected routes.
 #[inline]
@@ -125,10 +128,17 @@ pub async fn main() -> Result<(), ServerError> {
         ServerError::EnvVar("Redis connection failed".to_owned())
     })?;
 
+    // Bootstrap a no-delivery mailer. Real-provider impls (SMTP, SES) are
+    // a follow-up: they will be selected here based on env config without
+    // changes to handlers, since AppState holds the mailer behind the
+    // `EmailSender` trait object.
+    let mailer: Arc<dyn EmailSender> = Arc::new(LoggingEmailSender);
+
     // 3. Build application state
     let state = Arc::new(AppState {
         db: pool,
         redis: redis_store,
+        mailer,
         config: config.clone(),
     });
 

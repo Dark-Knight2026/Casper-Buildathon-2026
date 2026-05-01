@@ -32,7 +32,7 @@ use testcontainers::{
 use uuid::Uuid;
 
 use api::{
-    AppState, Claims, IcoFallback, ServerConfig, UserId, UserRole,
+    AppState, Claims, IcoFallback, LoggingEmailSender, ServerConfig, UserId, UserRole,
     common::{JWT_AUDIENCE, JWT_ISSUER, RedisStore, TOTAL_SUPPLY, TokenType, VerificationLevel},
     server,
 };
@@ -159,6 +159,7 @@ pub async fn setup_test_server_with(
         redis: RedisStore::new(redis_client)
             .await
             .expect("Failed to connect to Redis"),
+        mailer: Arc::new(LoggingEmailSender),
         config,
     });
 

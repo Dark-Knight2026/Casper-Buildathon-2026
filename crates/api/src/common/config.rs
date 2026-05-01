@@ -1,11 +1,16 @@
 //! Application configuration and state management.
 
+use std::sync::Arc;
+
 use config::{Config, Environment};
 use rust_decimal::Decimal;
 use secrecy::{ExposeSecret, SecretString};
 use serde::Deserialize;
 
-use crate::{ServerError, common::RedisStore};
+use crate::{
+    ServerError,
+    common::{EmailSender, RedisStore},
+};
 
 /// Total BIG token supply (human-readable).
 pub const TOTAL_SUPPLY: f64 = 5_000_000_000.0;
@@ -185,6 +190,10 @@ pub struct AppState {
     pub db: sqlx::PgPool,
     /// `Redis` client wrapper for caching and session storage.
     pub redis: RedisStore,
+    /// Outbound email sender. Boxed-trait so the bootstrap can swap
+    /// `LoggingEmailSender` (dev/test) for an SMTP/transactional-API
+    /// implementation in production without touching call sites.
+    pub mailer: Arc<dyn EmailSender>,
     /// Application configuration.
     pub config: ServerConfig,
 }
@@ -195,6 +204,7 @@ impl core::fmt::Debug for AppState {
         f.debug_struct("AppState")
             .field("db", &"PgPool")
             .field("redis", &"RedisStore")
+            .field("mailer", &"EmailSender")
             .field("config", &self.config)
             .finish()
     }

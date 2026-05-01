@@ -4,6 +4,8 @@
 pub mod config;
 /// Cryptographic utilities for signature verification.
 pub mod crypto;
+/// Email-sending abstraction.
+pub mod email;
 /// Error types for the application.
 pub mod errors;
 /// Shared data models and type definitions.
@@ -19,6 +21,7 @@ pub use crypto::{
     CASPER_ED25519_PUBKEY_HEX_LEN, CASPER_MESSAGE_PREFIX, CASPER_SECP256K1_PUBKEY_HEX_LEN,
     CryptoError, verify_casper_signature,
 };
+pub use email::{EmailError, EmailMessage, EmailSender, LoggingEmailSender};
 pub use errors::{ApiError, ApiResult, ErrorResponse, ServerError};
 pub use models::{
     Claims, JWT_AUDIENCE, JWT_ISSUER, PropertyId, TokenType, UserId, UserInfo, UserRole,

@@ -32,8 +32,9 @@ pub mod services;
 // Re-exports
 #[cfg(feature = "enabled")]
 pub use common::{
-    AppState, Claims, IcoFallback, Pageable, PaginatedResponse, Pagination, PropertyId, RedisStore,
-    ServerConfig, ServerError, UserId, UserRole,
+    AppState, Claims, EmailError, EmailMessage, EmailSender, IcoFallback, LoggingEmailSender,
+    Pageable, PaginatedResponse, Pagination, PropertyId, RedisStore, ServerConfig, ServerError,
+    UserId, UserRole,
 };
 #[cfg(feature = "enabled")]
 pub use openapi::ApiDoc;

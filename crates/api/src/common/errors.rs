@@ -1,5 +1,7 @@
 //! Application-level error types.
 
+use std::env::VarError;
+
 use axum::{
     Json,
     http::StatusCode,
@@ -8,7 +10,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
-use crate::services::auth::AuthError;
+use crate::{common::EmailError, services::auth::AuthError};
 
 /// Represents errors that can occur at the application level (e.g., startup).
 /// These are not intended to be converted into API responses but are for logging
@@ -35,9 +37,9 @@ pub enum ServerError {
     Queue(String),
 }
 
-impl From<std::env::VarError> for ServerError {
+impl From<VarError> for ServerError {
     #[inline]
-    fn from(err: std::env::VarError) -> Self {
+    fn from(err: VarError) -> Self {
         Self::EnvVar(err.to_string())
     }
 }
@@ -144,5 +146,21 @@ impl From<sqlx::Error> for ApiError {
             }
             _ => ApiError::Database(err),
         }
+    }
+}
+
+impl From<EmailError> for ApiError {
+    /// Maps email-transport failures to a generic 500.
+    ///
+    /// The provider-side message goes into [`ApiError::Internal`], which
+    /// `IntoResponse` logs but does NOT echo into the response body - the
+    /// client gets a flat "internal server error" so SMTP hostnames,
+    /// rate-limit hints, or quota details cannot leak. A future variant
+    /// `ApiError::Email(EmailError)` is justified only when handlers need
+    /// differentiated responses (e.g. 503 + `Retry-After` for provider
+    /// rate-limits); until then this stringly-typed wrap is enough.
+    #[inline]
+    fn from(err: EmailError) -> Self {
+        Self::Internal(err.to_string())
     }
 }
