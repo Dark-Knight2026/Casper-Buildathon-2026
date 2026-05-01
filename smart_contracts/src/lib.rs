@@ -5,6 +5,7 @@ extern crate self as leasefi_contracts;
 
 pub mod big_coin;
 pub mod common;
+pub mod compliance_policy;
 pub mod constants;
 pub mod escrow;
 pub mod ico;
