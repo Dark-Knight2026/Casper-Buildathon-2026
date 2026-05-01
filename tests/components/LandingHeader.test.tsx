@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
+
 import { MemoryRouter } from 'react-router-dom';
+
 import { LandingHeader } from '@/components/LandingHeader';
 
 function renderHeader() {
@@ -56,6 +58,16 @@ describe('LandingHeader', () => {
       renderHeader();
       const logo = screen.getByRole('link', { name: /leasefi/i });
       expect(logo, 'brand logo should link to root "/"').toHaveAttribute('href', '/');
+    });
+  });
+
+  describe('a11y landmarks', () => {
+    it('exposes the nav as "Main navigation" landmark', () => {
+      renderHeader();
+      expect(
+        screen.getByRole('navigation', { name: /main navigation/i }),
+        '<nav> should expose aria-label="Main navigation" so multiple nav landmarks stay distinguishable'
+      ).toBeInTheDocument();
     });
   });
 
