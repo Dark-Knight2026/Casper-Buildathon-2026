@@ -5,7 +5,9 @@ use crate::{
     common,
     compliance_policy::{
         errors::Error,
-        events::{InvestorRegistrySet, PropertyRegistrySet},
+        events::{
+            ComplianceConfigSet, InvestorRegistrySet, PropertyRegistrySet, TransferExemptSet,
+        },
         types::ComplianceConfig,
     },
     investor_registry::InvestorRegistryContractRef,
@@ -45,6 +47,18 @@ pub mod events {
     pub struct PropertyRegistrySet {
         pub property_registry: Address,
     }
+
+    #[odra::event]
+    pub struct ComplianceConfigSet {
+        pub property_id: U256,
+        pub transfers_enabled: bool,
+    }
+
+    #[odra::event]
+    pub struct TransferExemptSet {
+        pub account: Address,
+        pub exempt: bool,
+    }
 }
 
 // =============================================================================
@@ -55,7 +69,9 @@ pub mod errors {
     use odra::prelude::*;
 
     #[odra::odra_error]
-    pub enum Error {}
+    pub enum Error {
+        NotAuthorized = 1000,
+    }
 }
 
 // =============================================================================
@@ -106,6 +122,35 @@ impl CompliancePolicy {
         self.env()
             .emit_event(PropertyRegistrySet { property_registry });
     }
+
+    /// Sets the transfer configuration for a property
+    /// Restricted to the `COMPLIANCE_MANAGER`.
+    /// @dev Transfers are disabled by default. A property must also be active in `PropertyRegistry`
+    ///      before normal transfers can pass.
+    pub fn set_compliance_config(&mut self, property_id: U256, config: ComplianceConfig) {
+        self.assert_role(ROLE_COMPLIANCE_MANAGER);
+
+        self.env().emit_event(ComplianceConfigSet {
+            property_id,
+            transfers_enabled: config.transfers_enabled,
+        });
+
+        self.configs.set(&property_id, config);
+    }
+
+    /// Sets whether an account is exempt from investor verification checks
+    /// Restricted to the `COMPLIANCE_MANAGER`.
+    /// @dev This is intended for issuance escrow or other protocol-controlled accounts.
+    ///      Investor recipient wallets should not be exempt.
+    pub fn set_transfer_exempt(&mut self, account: Address, exempt: bool) {
+        self.assert_role(ROLE_COMPLIANCE_MANAGER);
+
+        self.transfer_exempt_accounts.set(&account, exempt);
+
+        self.env().emit_event(TransferExemptSet { account, exempt });
+    }
+
+    
 }
 
 // =============================================================================
