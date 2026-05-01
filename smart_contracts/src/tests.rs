@@ -30,3 +30,6 @@ mod investor_registry;
 
 #[path = "../tests/property_registry.rs"]
 mod property_registry;
+
+#[path = "../tests/compliance_policy.rs"]
+mod compliance_policy;
