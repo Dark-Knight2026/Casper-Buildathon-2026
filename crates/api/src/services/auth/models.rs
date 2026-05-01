@@ -1,56 +1,59 @@
-//! Shared response models for authentication endpoints.
+//! Request/response models for authentication endpoints.
 //!
-//! Method-specific request/response models live next to their handlers in
-//! [`super::wallet`] (and future `password`/`oauth` modules). `UserInfo` is
-//! shared across login methods and the future `/profile` endpoint, so it lives
-//! here.
+//! Hosts the wallet-flow shapes (nonce challenge, login). Future password and
+//! OAuth modules will add their own shapes here. The cross-module profile
+//! shape `UserInfo` lives in [`crate::common::models`] because both `auth` and
+//! `users` produce it.
 
-use chrono::{DateTime, Utc};
-use serde::Serialize;
+use secrecy::SecretString;
+use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
-use crate::common::{UserId, UserRole, UserStatus};
+use crate::common::{UserInfo, UserRole};
 
-/// User profile returned by login endpoints and (future) `/profile` endpoint.
-///
-/// Field nullability mirrors the `users` schema: `first_name`/`last_name` and
-/// timestamps are `NOT NULL` in the DB and therefore required here, while
-/// `wallet_address`/`email`/`phone`/etc. are nullable (wallet-only and
-/// password/OAuth-only users will not have all of them).
+// Wallet ----------------------------------------------------------------------
+
+/// Request payload for generating a login nonce.
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct NonceRequest {
+    /// The wallet address (public key).
+    pub wallet_address: String,
+}
+
+/// Response containing the generated nonce.
 #[derive(Debug, Serialize, ToSchema)]
-pub struct UserInfo {
-    /// The unique identifier of the user in the database.
-    #[schema(value_type = uuid::Uuid)]
-    pub id: UserId,
-    /// The user's role.
-    pub role: UserRole,
-    /// Primary wallet address (cached on `users.wallet_address` from the
-    /// primary `wallet_connections` row via trigger). `None` for password/OAuth
-    /// users who have not connected a wallet.
-    pub wallet_address: Option<String>,
-    /// Account status. `None` only if the underlying column ever becomes
-    /// nullable (currently has `DEFAULT 'active'`).
-    pub status: Option<UserStatus>,
-    /// Email address. `None` for wallet-only users until they complete profile.
-    pub email: Option<String>,
-    /// First name.
-    pub first_name: String,
-    /// Last name.
-    pub last_name: String,
-    /// Phone number.
-    pub phone: Option<String>,
-    /// Avatar URL.
-    pub avatar_url: Option<String>,
-    /// Free-form bio.
-    pub bio: Option<String>,
-    /// `true` once email, `first_name`, `last_name` and phone are all populated
-    /// (maintained by `trg_users_profile_complete`).
-    pub is_profile_complete: bool,
-    /// Number of currently `active` leases where the user is involved as
-    /// primary tenant, listed tenant, landlord, or agent.
-    pub active_leases_count: i64,
-    /// Account creation timestamp.
-    pub created_at: DateTime<Utc>,
-    /// Last profile update timestamp.
-    pub updated_at: DateTime<Utc>,
+pub struct NonceResponse {
+    /// A randomly generated string used to prevent replay attacks.
+    pub nonce: String,
+    /// The full message string that the user must sign with their wallet.
+    /// Format: `"Sign this message to log in to LeaseFi. Nonce: <nonce>"`
+    pub message: String,
+}
+
+/// Request payload for verifying a login signature.
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct LoginRequest {
+    /// The wallet address (public key) of the user.
+    pub wallet_address: String,
+    /// The cryptographic signature of the nonce message.
+    #[schema(value_type = String)]
+    pub signature: SecretString,
+    /// Optional role chosen by the user at first login. Honored only when
+    /// creating a new user record; ignored on subsequent logins. Allowed
+    /// values: `tenant`, `landlord`, `agent`. Defaults to `tenant`.
+    #[serde(default)]
+    pub role: Option<UserRole>,
+}
+
+/// Response body returned upon successful login.
+///
+/// Tokens are NOT in this body - they are delivered via `Set-Cookie`
+/// headers (`access_token` and `refresh_token`, both `HttpOnly`). The
+/// frontend never reads token material from JS; the browser attaches the
+/// cookies automatically on subsequent requests. This closes the XSS
+/// exfiltration vector that a body-returned JWT would have.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct LoginResponse {
+    /// Profile of the authenticated user.
+    pub user: UserInfo,
 }

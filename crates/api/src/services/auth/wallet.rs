@@ -9,67 +9,24 @@ use axum::{
 };
 use axum_extra::extract::CookieJar;
 use rand::{RngExt, distr::Alphanumeric};
-use secrecy::{ExposeSecret, SecretString};
-use serde::{Deserialize, Serialize};
+use secrecy::ExposeSecret;
 use sha2::{Digest, Sha256};
 use time::Duration as CookieDuration;
-use utoipa::ToSchema;
 
 use crate::{
     common::{
         self, ApiError, ApiResult, AppState, CASPER_ED25519_PUBKEY_HEX_LEN,
-        CASPER_SECP256K1_PUBKEY_HEX_LEN, UserRole,
+        CASPER_SECP256K1_PUBKEY_HEX_LEN, UserInfo, UserRole,
     },
     services::{
-        auth::{self, cookies, jwt, models::UserInfo, refresh},
+        auth::{
+            self, cookies, jwt,
+            models::{LoginRequest, LoginResponse, NonceRequest, NonceResponse},
+            refresh,
+        },
         users,
     },
 };
-
-/// Request payload for generating a login nonce.
-#[derive(Debug, Deserialize, ToSchema)]
-pub struct NonceRequest {
-    /// The wallet address (public key).
-    pub wallet_address: String,
-}
-
-/// Response containing the generated nonce.
-#[derive(Debug, Serialize, ToSchema)]
-pub struct NonceResponse {
-    /// A randomly generated string used to prevent replay attacks.
-    pub nonce: String,
-    /// The full message string that the user must sign with their wallet.
-    /// Format: `"Sign this message to log in to LeaseFi. Nonce: <nonce>"`
-    pub message: String,
-}
-
-/// Request payload for verifying a login signature.
-#[derive(Debug, Deserialize, ToSchema)]
-pub struct LoginRequest {
-    /// The wallet address (public key) of the user.
-    pub wallet_address: String,
-    /// The cryptographic signature of the nonce message.
-    #[schema(value_type = String)]
-    pub signature: SecretString,
-    /// Optional role chosen by the user at first login. Honored only when
-    /// creating a new user record; ignored on subsequent logins. Allowed
-    /// values: `tenant`, `landlord`, `agent`. Defaults to `tenant`.
-    #[serde(default)]
-    pub role: Option<UserRole>,
-}
-
-/// Response body returned upon successful login.
-///
-/// Tokens are NOT in this body - they are delivered via `Set-Cookie`
-/// headers (`access_token` and `refresh_token`, both `HttpOnly`). The
-/// frontend never reads token material from JS; the browser attaches the
-/// cookies automatically on subsequent requests. This closes the XSS
-/// exfiltration vector that a body-returned JWT would have.
-#[derive(Debug, Serialize, ToSchema)]
-pub struct LoginResponse {
-    /// Profile of the authenticated user.
-    pub user: UserInfo,
-}
 
 // `GET /api/v1/auth/nonce`
 //

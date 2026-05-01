@@ -6,11 +6,8 @@ use std::sync::Arc;
 use axum::{Json, extract::State};
 
 use crate::{
-    common::{ApiResult, AppState, UserRole},
-    services::{
-        auth::{AuthUser, models::UserInfo},
-        users::db,
-    },
+    common::{ApiResult, AppState, UserInfo, UserRole},
+    services::{auth::AuthUser, users::db},
 };
 
 // `GET /api/v1/users/me`

@@ -32,17 +32,17 @@ use crate::{
     components(
         schemas(
             // Common models
-            crate::common::UserRole,
             crate::common::Claims,
             crate::common::TokenType,
+            crate::common::UserInfo,
+            crate::common::UserRole,
             crate::common::UserStatus,
             crate::common::VerificationLevel,
             // Auth models
-            auth::wallet::NonceRequest,
-            auth::wallet::NonceResponse,
-            auth::wallet::LoginRequest,
-            auth::wallet::LoginResponse,
-            auth::models::UserInfo,
+            auth::models::LoginRequest,
+            auth::models::LoginResponse,
+            auth::models::NonceRequest,
+            auth::models::NonceResponse,
             // Health models
             health::models::ConnectionStatus,
             health::models::HealthResponse,

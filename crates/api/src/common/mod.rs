@@ -21,8 +21,8 @@ pub use crypto::{
 };
 pub use errors::{ApiError, ApiResult, ErrorResponse, ServerError};
 pub use models::{
-    Claims, JWT_AUDIENCE, JWT_ISSUER, PropertyId, TokenType, UserId, UserRole, UserStatus,
-    VerificationLevel,
+    Claims, JWT_AUDIENCE, JWT_ISSUER, PropertyId, TokenType, UserId, UserInfo, UserRole,
+    UserStatus, VerificationLevel,
 };
 pub use pagination::{Pageable, PaginatedResponse, Pagination};
 pub use redis::RedisStore;
