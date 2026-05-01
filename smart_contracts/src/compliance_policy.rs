@@ -1,4 +1,4 @@
-use odra::{casper_types::U256, prelude::*};
+use odra::{casper_types::U256, prelude::*, ContractRef};
 use odra_modules::access::{AccessControl, Role, DEFAULT_ADMIN_ROLE};
 
 use crate::{
@@ -150,7 +150,30 @@ impl CompliancePolicy {
         self.env().emit_event(TransferExemptSet { account, exempt });
     }
 
-    
+    // =============================================================================
+    // View Functions
+    // =============================================================================
+
+    /// Returns the investor registry contract address.
+    pub fn get_investor_registry_contract(&self) -> Address {
+        *self.investor_registry.address()
+    }
+
+    /// Returns the property registry contract address.
+    pub fn get_property_registry_contract(&self) -> Address {
+        *self.property_registry.address()
+    }
+
+    /// Returns the compliance config for a property
+    pub fn get_compliance_config(&self, property_id: U256) -> ComplianceConfig {
+        self.configs.get(&property_id).unwrap_or(ComplianceConfig {
+            transfers_enabled: false,
+        })
+    }
+
+    pub fn is_transfer_exempt(&self, account: Address) -> bool {
+        self.transfer_exempt_accounts.get(&account).unwrap_or(false)
+    }
 }
 
 // =============================================================================
