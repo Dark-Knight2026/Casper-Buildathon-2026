@@ -5,20 +5,8 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, useLocation, Navigate } from 'react-router-dom';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useToast } from '@/hooks/use-toast';
-import { useAuthPrompt } from '@/hooks/useAuthPrompt';
-import { FavoriteButton } from '@/components/property/FavoriteButton';
-import { ContactLandlordModal } from '@/components/property/ContactLandlordModal';
-import { ScheduleViewingModal } from '@/components/property/ScheduleViewingModal';
-import { propertyService } from '@/services/propertyService';
-import { FEATURED_PROPERTIES } from '@/data/featuredProperties';
-import { cn } from '@/lib/utils';
-import { logger } from '@/utils/logger';
-import type { Property } from '@/types/property';
+
+import { format } from 'date-fns';
 import {
   ArrowLeft,
   Bed,
@@ -36,7 +24,21 @@ import {
   Loader2,
   FileText,
 } from 'lucide-react';
-import { format } from 'date-fns';
+
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useToast } from '@/hooks/use-toast';
+import { useAuthPrompt } from '@/hooks/useAuthPrompt';
+import { FavoriteButton } from '@/components/property/FavoriteButton';
+import { ContactLandlordModal } from '@/components/property/ContactLandlordModal';
+import { ScheduleViewingModal } from '@/components/property/ScheduleViewingModal';
+import { propertyService } from '@/services/propertyService';
+import { FEATURED_PROPERTIES } from '@/data/featuredProperties';
+import { cn } from '@/lib/utils';
+import { logger } from '@/utils/logger';
+import type { Property } from '@/types/property';
 
 const APPLICATION_FEE = 50;
 

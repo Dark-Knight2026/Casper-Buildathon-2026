@@ -1,12 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { useNavigate } from 'react-router-dom';
-import { useToast } from '@/hooks/use-toast';
-import { cn } from '@/lib/utils';
-import { FeaturedProperties } from '@/components/FeaturedProperties';
-import { LandingHeader } from '@/components/LandingHeader';
+
 import {
   Search,
   Home,
@@ -19,8 +13,16 @@ import {
   Award,
   Clock,
   CheckCircle,
-  ArrowRight
+  ArrowRight,
 } from 'lucide-react';
+
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { useToast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
+import { FeaturedProperties } from '@/components/FeaturedProperties';
+import { LandingHeader } from '@/components/LandingHeader';
 
 export default function PropertyLanding() {
   const navigate = useNavigate();
