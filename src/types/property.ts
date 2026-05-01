@@ -119,6 +119,14 @@ export interface Property {
   updatedAt: Date;
 }
 
+// Featured property (landing-page demo data with marketing extras)
+export interface FeaturedProperty extends Property {
+  priceChange: string;
+  rating: number;
+  daysOnMarket: number;
+  photoCount: number;
+}
+
 // Property list response
 export interface PropertyListResponse {
   properties: Property[];

@@ -16,7 +16,7 @@ export function LandingHeader() {
         {/* Mobile nav (hamburger / Sheet) deferred — below md the brand and
             auth CTAs remain; Properties / Token Sale are reachable from the
             footer and the landing page CTAs. */}
-        <nav className="hidden md:flex items-center gap-8">
+        <nav aria-label="Main navigation" className="hidden md:flex items-center gap-8">
           <Link
             to="/properties"
             className="text-sm text-muted-foreground hover:text-foreground transition-colors"

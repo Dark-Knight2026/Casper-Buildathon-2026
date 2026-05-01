@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
+
 import { MemoryRouter } from 'react-router-dom';
+
 import PropertyLanding from '@/pages/PropertyLanding';
 import { Toaster } from '@/components/ui/toaster';
 import { FEATURED_PROPERTIES } from '@/data/featuredProperties';

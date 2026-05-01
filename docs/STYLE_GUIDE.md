@@ -70,8 +70,9 @@
 Token system (defined in `src/index.css`):
 
 - `--radius-sm`: **4px** — tight chips, checkboxes, menu items, tab triggers
-- `--radius-md`: **6px** — cards, inputs, badges, default buttons
+- `--radius-md`: **6px** — cards, inputs, default buttons
 - `--radius-lg`: **8px** — dialogs, popovers, large surfaces
+- `rounded-full` — **pill shape**, used by badges (`Badge` CVA base)
 
 Base token `--radius` = 8px (= `lg`). Maps directly to Tailwind utilities
 `rounded-sm` / `rounded-md` / `rounded-lg`.
