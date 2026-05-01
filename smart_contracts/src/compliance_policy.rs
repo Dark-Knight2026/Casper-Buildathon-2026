@@ -83,7 +83,12 @@ pub mod errors {
 // Contract
 // =============================================================================
 
-#[odra::module(errors = Error, events = [InvestorRegistrySet, PropertyRegistrySet])]
+#[odra::module(errors = Error, events = [
+  InvestorRegistrySet,
+  PropertyRegistrySet,
+  ComplianceConfigSet,
+  TransferExemptSet,
+])]
 pub struct CompliancePolicy {
     access_control: SubModule<AccessControl>,
     investor_registry: External<InvestorRegistryContractRef>,
@@ -193,6 +198,12 @@ impl CompliancePolicy {
     ) -> bool {
         self.get_transfer_error(property_id, from, to, amount)
             .is_none()
+    }
+
+    pub fn assert_can_transfer(&self, property_id: U256, from: Address, to: Address, amount: U256) {
+        if let Some(error) = self.get_transfer_error(property_id, from, to, amount) {
+            self.env().revert(error);
+        }
     }
 
     // =========================================================================

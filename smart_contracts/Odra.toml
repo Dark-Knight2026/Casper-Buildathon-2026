@@ -27,3 +27,6 @@ fqn = "vesting::Vesting"
 
 [[contracts]]
 fqn = "investor_registry::InvestoryRegistry"
+
+[[contracts]]
+fqn = "compliance_policy::CompliancePolicy"
