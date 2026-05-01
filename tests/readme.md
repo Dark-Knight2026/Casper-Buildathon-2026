@@ -22,6 +22,7 @@ This directory contains all test files for the LeaseFi application, organized by
 | `lib/utils/taxCalculations.test.ts` | Tests for tax calculation utilities (depreciation, net income, tax liability) |
 | `pages/` | Unit tests for top-level page components |
 | `pages/ico/ICOPage.test.tsx` | Tests for ICO page rendering and routing behavior |
+| `pages/PropertyLanding.test.tsx` | Tests for landing page (hero, stats, CTAs, FeaturedProperties + LandingHeader integration) |
 | `services/` | Unit tests for service layer (API interactions, data fetching) |
 | `services/casperClient.test.ts` | Tests for Casper RPC client initialization and query methods |
 | `services/cep18Service.test.ts` | Tests for CEP-18 token contract interactions (balance, allowance, approve) |
@@ -32,6 +33,12 @@ This directory contains all test files for the LeaseFi application, organized by
 | `services/proxyCallerService.test.ts` | Tests for proxy-caller contract interactions |
 | `services/sellerService.test.ts` | Tests for seller-related service methods (listings, offers, showings, documents, market analytics) |
 | `components/` | Unit tests for reusable UI components |
+| `components/FeaturedProperties.test.tsx` | Tests for featured property cards (rendering, navigation, keyboard a11y, favorite button) |
+| `components/LandingHeader.test.tsx` | Tests for public landing page header (logo, nav links, auth CTAs) |
+| `components/ui/` | Unit tests for shadcn-based UI primitives (see `components/ui/readme.md`) |
+| `components/ui/badge.test.tsx` | Tests for Badge variants (default, secondary, destructive, outline, success, info) |
+| `components/ui/button.test.tsx` | Tests white variant classes and loading/disabled behavior |
+| `components/ui/tabs.test.tsx` | Tests TabsList default sizing, className override, and trigger cursor |
 | `components/ico/AmountInput.test.tsx` | Tests for token amount input field (validation, formatting) |
 | `components/ico/Card.test.tsx` | Tests for generic card container component |
 | `components/ico/CountdownTimer.test.tsx` | Tests for countdown timer display and tick logic |
@@ -67,7 +74,7 @@ This directory contains all test files for the LeaseFi application, organized by
 ## Running Tests
 
 ```bash
-npm run test          # Run all tests
-npm run test:watch    # Run tests in watch mode
-npm run test:ui       # Run tests with Vitest UI
+pnpm test          # Run all tests
+pnpm test:watch    # Run tests in watch mode
+pnpm test:ui       # Run tests with Vitest UI
 ```

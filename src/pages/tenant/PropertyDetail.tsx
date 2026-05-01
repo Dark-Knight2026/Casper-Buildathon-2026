@@ -4,18 +4,9 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useToast } from '@/hooks/use-toast';
-import { useAuthPrompt } from '@/hooks/useAuthPrompt';
-import { FavoriteButton } from '@/components/property/FavoriteButton';
-import { ContactLandlordModal } from '@/components/property/ContactLandlordModal';
-import { ScheduleViewingModal } from '@/components/property/ScheduleViewingModal';
-import { propertyService } from '@/services/propertyService';
-import type { Property } from '@/types/property';
+import { useParams, useNavigate, useLocation, Navigate } from 'react-router-dom';
+
+import { format } from 'date-fns';
 import {
   ArrowLeft,
   Bed,
@@ -23,7 +14,6 @@ import {
   Maximize2,
   MapPin,
   Calendar,
-  Heart,
   Share2,
   Phone,
   Mail,
@@ -34,22 +24,48 @@ import {
   Loader2,
   FileText,
 } from 'lucide-react';
-import { format } from 'date-fns';
+
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useToast } from '@/hooks/use-toast';
+import { useAuthPrompt } from '@/hooks/useAuthPrompt';
+import { FavoriteButton } from '@/components/property/FavoriteButton';
+import { ContactLandlordModal } from '@/components/property/ContactLandlordModal';
+import { ScheduleViewingModal } from '@/components/property/ScheduleViewingModal';
+import { propertyService } from '@/services/propertyService';
+import { FEATURED_PROPERTIES } from '@/data/featuredProperties';
+import { cn } from '@/lib/utils';
+import { logger } from '@/utils/logger';
+import type { Property } from '@/types/property';
+
+const APPLICATION_FEE = 50;
 
 export default function PropertyDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { toast } = useToast();
   const { requireAuth } = useAuthPrompt();
-  
-  const [property, setProperty] = useState<Property | null>(null);
-  const [loading, setLoading] = useState(true);
+
+  const stateProperty = (location.state?.property as Property) ?? null;
+  // Hydrate from FEATURED_PROPERTIES on direct URL access (refresh, bookmark,
+  // shared link) so demo IDs `prop-1`...`prop-6` work without router state.
+  // Dev-only — in production these IDs route to mock-landlord-1, which would
+  // silently misroute contact requests.
+  const demoFallback = import.meta.env.DEV && !stateProperty && id
+    ? FEATURED_PROPERTIES.find(p => p.id === id) ?? null
+    : null;
+  const initialProperty = stateProperty ?? demoFallback;
+  const [property, setProperty] = useState<Property | null>(initialProperty);
+  const [loading, setLoading] = useState(!initialProperty);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [showContactModal, setShowContactModal] = useState(false);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
 
   const loadProperty = useCallback(async () => {
-    if (!id) return;
+    if (!id || initialProperty) return; // skip if data already hydrated (state or demo fallback)
 
     setLoading(true);
     try {
@@ -67,7 +83,7 @@ export default function PropertyDetail() {
         navigate('/tenant/properties');
       }
     } catch (error) {
-      console.error('Error loading property:', error);
+      logger.error('Error loading property:', error);
       toast({
         title: 'Error',
         description: 'Failed to load property details',
@@ -76,7 +92,7 @@ export default function PropertyDetail() {
     } finally {
       setLoading(false);
     }
-  }, [id, navigate, toast]);
+  }, [id, navigate, toast, initialProperty]);
 
   useEffect(() => {
     loadProperty();
@@ -145,7 +161,7 @@ export default function PropertyDetail() {
   }
 
   if (!property) {
-    return null;
+    return <Navigate to="/listings" replace />;
   }
 
   return (
@@ -196,6 +212,7 @@ export default function PropertyDetail() {
                           <Button
                             variant="outline"
                             size="sm"
+                            aria-label="Previous image"
                             className="absolute left-4 top-1/2 transform -translate-y-1/2"
                             onClick={() => setCurrentImageIndex(Math.max(0, currentImageIndex - 1))}
                             disabled={currentImageIndex === 0}
@@ -205,6 +222,7 @@ export default function PropertyDetail() {
                           <Button
                             variant="outline"
                             size="sm"
+                            aria-label="Next image"
                             className="absolute right-4 top-1/2 transform -translate-y-1/2"
                             onClick={() => setCurrentImageIndex(Math.min(property.images.length - 1, currentImageIndex + 1))}
                             disabled={currentImageIndex === property.images.length - 1}
@@ -215,9 +233,12 @@ export default function PropertyDetail() {
                             {property.images.map((_, index) => (
                               <button
                                 key={index}
-                                className={`w-2 h-2 rounded-full ${
+                                aria-label={`Go to image ${index + 1}`}
+                                aria-current={index === currentImageIndex ? 'true' : undefined}
+                                className={cn(
+                                  'w-2 h-2 rounded-full',
                                   index === currentImageIndex ? 'bg-white' : 'bg-white/50'
-                                }`}
+                                )}
                                 onClick={() => setCurrentImageIndex(index)}
                               />
                             ))}
@@ -242,9 +263,10 @@ export default function PropertyDetail() {
                       <button
                         key={index}
                         onClick={() => setCurrentImageIndex(index)}
-                        className={`flex-shrink-0 w-20 h-20 rounded overflow-hidden border-2 ${
+                        className={cn(
+                          'shrink-0 w-20 h-20 rounded overflow-hidden border-2',
                           index === currentImageIndex ? 'border-primary' : 'border-transparent'
-                        }`}
+                        )}
                       >
                         <img
                           src={image}
@@ -490,12 +512,12 @@ export default function PropertyDetail() {
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Application Fee</span>
-                    <span className="font-semibold">$50</span>
+                    <span className="font-semibold">{formatCurrency(APPLICATION_FEE)}</span>
                   </div>
                   <div className="border-t pt-2 flex justify-between">
                     <span className="font-semibold">Total Move-in Cost</span>
                     <span className="font-bold text-lg">
-                      {formatCurrency(property.rent + property.securityDeposit + 50)}
+                      {formatCurrency(property.rent + property.securityDeposit + APPLICATION_FEE)}
                     </span>
                   </div>
                 </div>
