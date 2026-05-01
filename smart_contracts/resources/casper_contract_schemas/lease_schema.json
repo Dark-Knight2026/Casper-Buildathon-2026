@@ -442,7 +442,7 @@
     },
     {
       "name": "prolong_lease_agreement",
-      "description": "Allows to prolong lease agreement between tenant and landlord when agreement has finished and both parties",
+      "description": "Allows to prolong lease agreement between tenant and landlord when agreement has finished and both parties decided to prolong it",
       "is_mutable": true,
       "arguments": [
         {
