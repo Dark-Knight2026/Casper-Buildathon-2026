@@ -990,3 +990,41 @@ async fn logout_revokes_refresh_family(pool: PgPool) {
         "refresh-family must be revoked after logout"
     );
 }
+
+/// Regression: two concurrent first-logins for the same wallet must both
+/// resolve to the same user, not blow up with a unique-violation 500.
+///
+/// Without `ON CONFLICT` handling on the `wallet_connections` insert (and the
+/// users-email placeholder collision), two transactions racing through the
+/// "no existing wallet -> insert" branch will both observe an empty SELECT,
+/// both INSERT, and the second one will trip the unique constraint at COMMIT.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn concurrent_first_login_resolves_same_user(pool: PgPool) {
+    let secret_key = SecretKey::ed25519_from_bytes([42u8; 32]).unwrap();
+    let public_key = PublicKey::from(&secret_key);
+    let wallet_address = public_key.to_hex().to_ascii_lowercase();
+    let placeholder_email = format!("wallet_{}@leasefi.local", &wallet_address[..40]);
+
+    let pool_a = pool.clone();
+    let pool_b = pool.clone();
+    let wallet_a = wallet_address.clone();
+    let wallet_b = wallet_address.clone();
+    let email_a = placeholder_email.clone();
+    let email_b = placeholder_email.clone();
+
+    let (result_a, result_b) = tokio::join!(
+        api::services::auth::upsert_user_by_wallet(&pool_a, &email_a, &wallet_a, UserRole::Tenant),
+        api::services::auth::upsert_user_by_wallet(&pool_b, &email_b, &wallet_b, UserRole::Tenant),
+    );
+
+    let record_a =
+        result_a.expect("first concurrent upsert must succeed (the race winner inserts the row)");
+    let record_b = result_b.expect(
+        "second concurrent upsert must succeed (the race loser must resolve to the existing user)",
+    );
+
+    assert_eq!(
+        record_a.id, record_b.id,
+        "both concurrent upserts must converge on the same user_id"
+    );
+}
