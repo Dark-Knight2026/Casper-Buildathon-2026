@@ -1132,3 +1132,109 @@ async fn second_login_revokes_first_refresh_family(pool: PgPool) {
         "the most recent refresh token must remain valid after the prior family is revoked",
     );
 }
+
+/// Regression: deleting a refresh-token row that another row points to
+/// via `replaced_by` must be blocked by the FK, so a cleanup job cannot
+/// silently break the audit chain.
+///
+/// The buggy schema declares `replaced_by ... ON DELETE SET NULL`. A
+/// cleanup-job that deletes expired/revoked tokens out-of-order (newest
+/// first) silently NULLs every predecessor's chain pointer; the family
+/// timeline gets shredded with no error to investigate. ON DELETE
+/// RESTRICT replaces the silent corruption with a loud FK violation,
+/// forcing cleanup policy to either walk chains oldest-first or use
+/// soft-delete.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn replaced_by_fk_blocks_chain_breaking_deletes(pool: PgPool) {
+    let secret_key = SecretKey::ed25519_from_bytes([55u8; 32]).unwrap();
+    let public_key = PublicKey::from(&secret_key);
+    let wallet_address = public_key.to_hex().to_ascii_lowercase();
+    let placeholder_email = format!("wallet_{}@leasefi.local", &wallet_address[..40]);
+
+    let user = api::services::auth::upsert_user_by_wallet(
+        &pool,
+        &placeholder_email,
+        &wallet_address,
+        UserRole::Tenant,
+    )
+    .await
+    .expect("seed user creation must succeed");
+
+    let predecessor_id = Uuid::new_v4();
+    let successor_id = Uuid::new_v4();
+    let family_id = Uuid::new_v4();
+
+    sqlx::query!(
+        r"
+            INSERT INTO refresh_tokens (id, user_id, token_hash, family_id, expires_at)
+            VALUES ($1, $2, $3, $4, NOW() + INTERVAL '1 day')
+        ",
+        predecessor_id,
+        user.id,
+        &b"predecessor_chain_hash"[..],
+        family_id,
+    )
+    .execute(&pool)
+    .await
+    .expect("predecessor insert");
+
+    sqlx::query!(
+        r"
+            INSERT INTO refresh_tokens (id, user_id, token_hash, family_id, expires_at)
+            VALUES ($1, $2, $3, $4, NOW() + INTERVAL '1 day')
+        ",
+        successor_id,
+        user.id,
+        &b"successor_chain_hash"[..],
+        family_id,
+    )
+    .execute(&pool)
+    .await
+    .expect("successor insert");
+
+    sqlx::query!(
+        r"
+            UPDATE refresh_tokens
+            SET replaced_by = $1
+            WHERE id = $2
+        ",
+        successor_id,
+        predecessor_id,
+    )
+    .execute(&pool)
+    .await
+    .expect("wiring predecessor->successor chain");
+
+    let delete_result = sqlx::query!(
+        r"
+            DELETE FROM refresh_tokens
+            WHERE id = $1
+        ",
+        successor_id,
+    )
+    .execute(&pool)
+    .await;
+
+    assert!(
+        delete_result.is_err(),
+        "DELETE of a successor must be blocked by FK RESTRICT while a predecessor still points to it; otherwise an out-of-order cleanup silently shreds audit history",
+    );
+
+    let chain: Option<Uuid> = sqlx::query_scalar!(
+        r"
+            SELECT replaced_by
+            FROM refresh_tokens
+            WHERE id = $1
+        ",
+        predecessor_id,
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("predecessor row must still exist");
+
+    assert_eq!(
+        chain,
+        Some(successor_id),
+        "predecessor.replaced_by must remain pointing at the successor after the blocked DELETE; SET NULL would have silently NULLed it",
+    );
+}
