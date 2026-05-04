@@ -152,6 +152,14 @@ fn enable_transfers(ctx: &mut Context, property_id: U256) {
             transfers_enabled: true,
         },
     );
+
+    assert!(ctx.env.emitted_event(
+        &ctx.compliance,
+        ComplianceConfigSet {
+            property_id,
+            transfers_enabled: true
+        }
+    ));
 }
 
 fn verify_sender_and_recipient(ctx: &mut Context) {
