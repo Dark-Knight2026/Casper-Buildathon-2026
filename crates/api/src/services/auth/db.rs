@@ -194,11 +194,12 @@ pub async fn upsert_user_by_wallet(
 ///
 /// UX trade-off: this enforces a **single-device session model**. Logging
 /// in on phone forcibly logs out web; the simultaneous-multi-device case
-/// is not yet supported because we have no per-session metadata
-/// (`user_agent`/`ip` are populated only by future session-listing work).
-/// When that work lands, this function should be replaced by
-/// "revoke other sessions" exposed through a `DELETE /sessions/:id`
-/// endpoint instead of being implicit in `login`.
+/// is not yet supported because we have no per-session metadata - refresh
+/// rows are anonymous beyond `user_id` and `family_id`, so we cannot tell
+/// "phone" apart from "web" to revoke selectively. When session-listing
+/// lands (with the per-session capture re-introduced), this function
+/// should be replaced by "revoke other sessions" exposed through a
+/// `DELETE /sessions/:id` endpoint instead of being implicit in `login`.
 ///
 /// # Errors
 ///
