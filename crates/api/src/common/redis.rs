@@ -319,8 +319,15 @@ impl RedisStore {
     }
 
     /// Generates the Redis key for a wallet address nonce.
+    ///
+    /// Exposed `pub` (rather than `pub(crate)`) so integration tests can
+    /// reach the canonical key format without literalizing
+    /// `"nonce:{wallet}"` themselves - any future change to the format
+    /// then breaks the tests at compile-time, instead of silently making
+    /// them read a non-existent key and assert on `TTL = -2`.
     #[inline]
-    fn nonce_key(wallet_address: &str) -> String {
+    #[must_use]
+    pub fn nonce_key(wallet_address: &str) -> String {
         format!("nonce:{wallet_address}")
     }
 

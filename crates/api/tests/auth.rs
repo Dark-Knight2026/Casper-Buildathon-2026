@@ -14,7 +14,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use api::{
-    Claims, UserRole,
+    Claims, RedisStore, UserRole,
     common::{CASPER_MESSAGE_PREFIX, JWT_AUDIENCE, JWT_ISSUER},
     services::AUTH_RATE_LIMIT_BURST,
 };
@@ -410,7 +410,7 @@ async fn nonce_has_ttl_set_in_redis(pool: PgPool) {
         .await
         .expect("Redis connection failed");
 
-    let key = format!("nonce:{wallet_address}");
+    let key = RedisStore::nonce_key(&wallet_address);
     let ttl = conn.ttl::<_, i64>(&key).await.expect("TTL query failed");
 
     // TTL should be positive and close to 300s (allow some margin for test execution)
