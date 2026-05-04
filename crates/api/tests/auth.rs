@@ -1084,3 +1084,51 @@ async fn nonce_miss_counts_toward_rate_limit(pool: PgPool) {
         "6th nonce-miss attempt must be rate-limited; otherwise an attacker can probe wallets indefinitely",
     );
 }
+
+/// Regression: a second login with the same wallet must invalidate the
+/// previously-issued refresh-token family. Without this, an attacker who
+/// stole an old `refresh_token` cookie keeps a valid 14-day session even
+/// after the legitimate user re-authenticates.
+///
+/// The buggy `issue_login_refresh_token` inserts a fresh row without
+/// touching prior families, so the old hash stays in the active partial
+/// index and `POST /auth/refresh` happily rotates it.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn second_login_revokes_first_refresh_family(pool: PgPool) {
+    let env = common::setup_test_server(pool, true).await;
+
+    let first = login_with_seed(&env, [10u8; 32]).await;
+    assert_eq!(first.status_code(), StatusCode::OK);
+    let first_refresh = first.cookie("refresh_token").value().to_owned();
+
+    let second = login_with_seed(&env, [10u8; 32]).await;
+    assert_eq!(second.status_code(), StatusCode::OK);
+    let second_refresh = second.cookie("refresh_token").value().to_owned();
+
+    assert_ne!(
+        first_refresh, second_refresh,
+        "second login must mint a fresh refresh token (otherwise the test cannot distinguish them)",
+    );
+
+    let refresh_with_first = env
+        .server
+        .post("/api/v1/auth/refresh")
+        .add_header(COOKIE, format!("refresh_token={first_refresh}"))
+        .await;
+    assert_eq!(
+        refresh_with_first.status_code(),
+        StatusCode::UNAUTHORIZED,
+        "first refresh token must be invalidated by the second login; otherwise a stolen cookie stays live until natural expiry",
+    );
+
+    let refresh_with_second = env
+        .server
+        .post("/api/v1/auth/refresh")
+        .add_header(COOKIE, format!("refresh_token={second_refresh}"))
+        .await;
+    assert_eq!(
+        refresh_with_second.status_code(),
+        StatusCode::NO_CONTENT,
+        "the most recent refresh token must remain valid after the prior family is revoked",
+    );
+}
