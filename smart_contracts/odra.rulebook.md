@@ -122,6 +122,34 @@ fqn = "escrow::Escrow"
 fqn = "staking::Staking"
 ```
 
+#### Current LeaseFi Contract Registry
+
+The following deployable contracts are part of the current project surface:
+
+| Contract           | Module Path                              | Responsibility                                                |
+| ------------------ | ---------------------------------------- | ------------------------------------------------------------- |
+| `BigCoin`          | `big_coin::BigCoin`                      | CEP-18 protocol token used for payments, staking, and rewards |
+| `Roles`            | `roles::Roles`                           | Shared role management for actors such as landlords and agents |
+| `Escrow`           | `escrow::Escrow`                         | Invoice payment and conditional fund release                  |
+| `Treasury`         | `treasury::Treasury`                     | Protocol reserves and staking reward deposits                 |
+| `NFT`              | `nft::NFT`                               | CEP-95 assets, certificates, and lease-related NFTs           |
+| `Lease`            | `lease::Lease`                           | Lease lifecycle and invoice creation                          |
+| `Staking`          | `staking::Staking`                       | BIG staking, unbonding, and reward claims                     |
+| `ICO`              | `ico::ICO`                               | BIG token sale schedules and purchase flow                    |
+| `Vesting`          | `vesting::Vesting`                       | Time-based BIG vesting and optional staking integration       |
+| `InvestorRegistry` | `investor_registry::InvestorRegistry`    | On-chain investor eligibility, expiry, and freeze status      |
+| `PropertyRegistry` | `property_registry::PropertyRegistry`    | Tokenized property records and lifecycle status               |
+| `CompliancePolicy` | `compliance_policy::CompliancePolicy`    | Minimal transfer compliance gate for property tokens          |
+
+`InvestorRegistry`, `PropertyRegistry`, and `CompliancePolicy` form the compliance foundation for tokenized property
+ownership. `InvestorRegistry` stores only on-chain eligibility facts from off-chain KYC/compliance review. It must never
+store names, documents, raw Sumsub IDs, or other personal data. `PropertyRegistry` stores property lifecycle state and
+the addresses of the future property ownership token and revenue distributor. `CompliancePolicy` reads both registries
+and answers whether a property-token transfer is allowed. It does not move tokens, hold funds, or perform KYC.
+
+Property-token contracts must call `CompliancePolicy.assert_can_transfer(property_id, from, to, amount)` before moving
+ownership balances.
+
 ### Project Structure : Cargo.toml Dependency Setup
 
 **Description:** The `Cargo.toml` must include `odra`, `odra-modules` (if using reusable modules), `odra-test` (dev-dependency), `odra-build` (build-dependency), and `odra-cli` (non-WASM dependency). All Odra crates **must** use the same version. All Odra dependencies **must** specify `default-features = false`.
@@ -940,24 +968,25 @@ pub enum TokenError {
 
 The following table lists all current error discriminant range assignments across the project. When adding new errors to an existing contract, use the next available value within that contract's range. When adding a new contract, choose a non-overlapping 100-value range outside the ranges listed below.
 
-| Contract / Module | Range     | Base | Error Count | First Discriminant              | Last Discriminant                              |
-| ----------------- | --------- | ---- | ----------- | ------------------------------- | ---------------------------------------------- |
-| **NFT**           | `100–199` | 100  | 7           | `CallerNotMinter = 100`         | `NotAuthorized = 106`                          |
-| **Treasury**      | `200–299` | 200  | 6           | `BigCoinContractIsNotSet = 200` | `InsufficientWithdrawalTokenAmount = 205`      |
-| **Escrow**        | `300–399` | 300  | 11          | `CallerNotLeaseContract = 300`  | `EqualBuyerAndSeller = 310`                    |
-| **Lease**         | `400–499` | 400  | 8           | `CallerNotLandlord = 400`       | `SecurityDepositChargeIsTooHigh = 408`         |
-| **ICO**           | `500–599` | 500  | 15          | `InvalidICOScheduleId = 500`    | `ICOScheduleCliffExceedsVestingDuration = 514` |
-| **Staking**       | `600–699` | 600  | 14          | `BigCoinContractIsNotSet = 601` | `CallerNotAuthorizedToManageLocks = 614`       |
-| **Vesting**       | `700–799` | 700  | 8           | `CallerNotWhitelisted = 701`    | `ClaimBlockedByActiveUnbonding = 708`          |
+| Contract / Module    | Range       | Base | Error Count | First Discriminant              | Last Discriminant                              |
+| -------------------- | ----------- | ---- | ----------- | ------------------------------- | ---------------------------------------------- |
+| **NFT**              | `100–199`   | 100  | 7           | `CallerNotMinter = 100`         | `NotAuthorized = 106`                          |
+| **Treasury**         | `200–299`   | 200  | 6           | `BigCoinContractIsNotSet = 200` | `InsufficientWithdrawalTokenAmount = 205`      |
+| **Escrow**           | `300–399`   | 300  | 11          | `CallerNotLeaseContract = 300`  | `EqualBuyerAndSeller = 310`                    |
+| **Lease**            | `400–499`   | 400  | 8           | `CallerNotLandlord = 400`       | `SecurityDepositChargeIsTooHigh = 408`         |
+| **ICO**              | `500–599`   | 500  | 15          | `InvalidICOScheduleId = 500`    | `ICOScheduleCliffExceedsVestingDuration = 514` |
+| **Staking**          | `600–699`   | 600  | 14          | `BigCoinContractIsNotSet = 601` | `CallerNotAuthorizedToManageLocks = 614`       |
+| **Vesting**          | `700–799`   | 700  | 8           | `CallerNotWhitelisted = 701`    | `ClaimBlockedByActiveUnbonding = 708`          |
+| **InvestorRegistry** | `800–899`   | 800  | 2           | `NotAuthorized = 800`           | `MissingIdentityHash = 801`                    |
+| **PropertyRegistry** | `900–999`   | 900  | 7           | `NotAuthorized = 900`           | `MissingRevenueDistributor = 906`              |
+| **CompliancePolicy** | `1000–1099` | 1000 | 6           | `NotAuthorized = 1000`          | `RecipientNotVerified = 1005`                  |
 
 #### Available Ranges (unassigned)
 
 | Range     | Status                                                            |
 | --------- | ----------------------------------------------------------------- |
 | `0–99`    | ⚠️ Reserved (do not use — conflicts with Odra framework defaults) |
-| `800–899` | ✅ Available                                                      |
-| `900–999` | ✅ Available                                                      |
-| `1_000+`  | ✅ Available (use sparingly; prefer contiguous ranges)            |
+| `1100+`   | ✅ Available (use sparingly; prefer contiguous ranges)            |
 
 #### Rules for Adding New Discriminants
 

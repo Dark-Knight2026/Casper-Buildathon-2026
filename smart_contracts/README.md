@@ -4,7 +4,7 @@
 
 This repository contains a suite of smart contracts built with the `Odra` framework and designed for deployment on the
 `Casper Network`. Together, these contracts implement a complete on-chain ecosystem for property leasing, invoice
-management and payments, staking with rewards, and treasury management.
+management and payments, staking with rewards, treasury management, and tokenized property compliance.
 
 Each contract is modular, upgradeable, and interacts with others through well-defined interfaces.
 
@@ -44,6 +44,52 @@ Each contract is modular, upgradeable, and interacts with others through well-de
    creating vesting schedules with customizable cliff periods and vesting durations, linear vesting calculation,
    whitelisted creator system (typically the ICO contract), per-user schedule tracking, and token claiming by
    beneficiaries. The contract integrates with the Staking contract for auto-staking of vested tokens.
+
+10. `InvestorRegistry` - stores the on-chain eligibility state used by tokenized real estate flows. It does not perform
+    KYC and does not store personal data. Off-chain verification providers such as Sumsub are expected to produce a
+    final approval result, and an authorized `VERIFICATION_MANAGER` writes only the wallet's verification status,
+    expiry, jurisdiction code, and opaque identity hash. A separate `FREEZER` role can freeze or unfreeze investor
+    wallets.
+
+11. `PropertyRegistry` - stores tokenized property records. Each property starts in `Draft` status, then a property
+    manager sets the property ownership token address and revenue distributor address before activating it. The registry
+    is the source of truth for property lifecycle status used by compliance checks.
+
+12. `CompliancePolicy` - provides the minimal on-chain transfer gate for property ownership tokens. It reads
+    `InvestorRegistry` to verify sender and recipient wallets, reads `PropertyRegistry` to ensure the property is
+    active, and checks whether transfers are enabled for that property. It does not move tokens or hold funds; property
+    token contracts call it before executing transfers.
+
+### Tokenized Property Compliance Flow
+
+The tokenization contracts introduced in this PR are intentionally small and composable:
+
+1. A `VERIFICATION_MANAGER` records an investor wallet in `InvestorRegistry` after off-chain KYC/compliance approval.
+   The contract stores only eligibility status and an opaque identity hash, never personal documents or raw KYC data.
+2. A `PROPERTY_MANAGER` creates a property in `PropertyRegistry`. The property remains in `Draft` status until both the
+   property token address and revenue distributor address are set.
+3. The `PROPERTY_MANAGER` activates the property. Activation fails unless the token and revenue distributor addresses
+   are already configured.
+4. A `COMPLIANCE_MANAGER` wires `CompliancePolicy` to the deployed `InvestorRegistry` and `PropertyRegistry` contracts.
+5. The `COMPLIANCE_MANAGER` enables transfers for a property by setting its `ComplianceConfig`.
+6. A future `PropertyFractionToken` contract calls `CompliancePolicy.assert_can_transfer(property_id, from, to, amount)`
+   before moving ownership balances. The transfer is rejected if the property is inactive, transfers are disabled, the
+   amount is zero, or either non-exempt party is not currently verified.
+
+Example transfer pre-check:
+
+```rust
+compliance_policy.assert_can_transfer(
+    property_id,
+    sender,
+    recipient,
+    amount,
+);
+```
+
+Issuer, escrow, or protocol-controlled addresses can be marked transfer-exempt by `COMPLIANCE_MANAGER` when they need
+to distribute tokens but should not represent a verified human investor wallet. Investor recipient wallets should not be
+exempt.
 
 ## Error Code Conventions
 
@@ -88,16 +134,19 @@ range.
 
 Error codes are allocated in blocks of 100 per contract:
 
-| Range   | Contract | Purpose                                  |
-| ------- | -------- | ---------------------------------------- |
-| 0-99    | Reserved | Used for any Protocol-wide errors        |
-| 100-199 | NFT      | CEP-95 token operations                  |
-| 200-299 | Treasury | Reserve management and token withdrawals |
-| 300-399 | Escrow   | Invoice creation and payment handling    |
-| 400-499 | Lease    | Lease agreement lifecycle management     |
-| 500-599 | ICO      | Token sale schedules and purchases       |
-| 600-699 | Staking  | Staking, unstaking, and rewards          |
-| 700-799 | Vesting  | Vesting schedule creation and claims     |
+| Range     | Contract         | Purpose                                   |
+| --------- | ---------------- | ----------------------------------------- |
+| 0-99      | Reserved         | Used for any Protocol-wide errors         |
+| 100-199   | NFT              | CEP-95 token operations                   |
+| 200-299   | Treasury         | Reserve management and token withdrawals  |
+| 300-399   | Escrow           | Invoice creation and payment handling     |
+| 400-499   | Lease            | Lease agreement lifecycle management      |
+| 500-599   | ICO              | Token sale schedules and purchases        |
+| 600-699   | Staking          | Staking, unstaking, and rewards           |
+| 700-799   | Vesting          | Vesting schedule creation and claims      |
+| 800-899   | InvestorRegistry | Investor verification and freeze state    |
+| 900-999   | PropertyRegistry | Tokenized property records and lifecycle  |
+| 1000-1099 | CompliancePolicy | Property token transfer compliance checks |
 
 When adding new contracts or error codes, use the next available block of 100 codes and follow the existing naming
 conventions.
