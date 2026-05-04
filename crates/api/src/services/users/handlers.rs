@@ -209,7 +209,28 @@ pub async fn request_email_change(
             token.plaintext,
         ),
     };
-    state.mailer.send(message).await?;
+    if let Err(send_err) = state.mailer.send(message).await {
+        // Roll back both side effects so a transient SMTP outage does
+        // not (a) leave a 24h orphan token tying up the slot and (b)
+        // burn one of the user's three daily attempts. Failures here
+        // are best-effort - we log them but still surface the original
+        // transport error so the operator sees the root cause.
+        if let Err(redis_err) = state.redis.clear_email_change_token(user_id).await {
+            tracing::warn!(
+                error = %redis_err,
+                user_id = %user_id,
+                "failed to clear email-change token after mailer failure",
+            );
+        }
+        if let Err(redis_err) = state.redis.decrement_email_change_attempt(user_id).await {
+            tracing::warn!(
+                error = %redis_err,
+                user_id = %user_id,
+                "failed to decrement email-change attempt counter after mailer failure",
+            );
+        }
+        return Err(send_err.into());
+    }
 
     Ok(StatusCode::ACCEPTED)
 }

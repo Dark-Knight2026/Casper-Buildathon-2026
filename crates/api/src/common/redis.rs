@@ -257,6 +257,53 @@ impl RedisStore {
         }))
     }
 
+    /// Drops a pending email-change request without consuming it through
+    /// the apply path.
+    ///
+    /// Used by `request_email_change` to roll the slot back when the
+    /// follow-up `mailer.send` fails: the user never received the link,
+    /// so leaving the token live for 24 hours just keeps the slot
+    /// hostage and the next legitimate attempt would overwrite it
+    /// silently anyway.
+    ///
+    /// # Errors
+    ///
+    /// Returns `RedisError` if the connection fails. Callers treat this
+    /// as best-effort and log-warn rather than masking the upstream
+    /// failure that triggered the rollback.
+    #[inline]
+    pub async fn clear_email_change_token(&self, user_id: Uuid) -> RedisResult<()> {
+        let mut conn = self.conn.clone();
+        let key = Self::email_change_key(user_id);
+        conn.del::<_, ()>(&key).await
+    }
+
+    /// Reverses a previous `record_email_change_attempt` after the
+    /// downstream send fails.
+    ///
+    /// Uses `DECR`; when the resulting count drops to zero (or below,
+    /// defensively) the key is deleted entirely so the next legitimate
+    /// attempt starts a fresh `EMAIL_CHANGE_RATE_WINDOW_SECS` window.
+    /// Leaving a `0`-valued key with the original TTL would silently
+    /// shrink the rolling window for the next request - the user would
+    /// keep losing time off their 24h cap on every transient failure.
+    ///
+    /// # Errors
+    ///
+    /// Returns `RedisError` if the connection fails. Callers treat this
+    /// as best-effort: the rate-limit overcounting it cleans up is a
+    /// UX issue, not a security one.
+    #[inline]
+    pub async fn decrement_email_change_attempt(&self, user_id: Uuid) -> RedisResult<()> {
+        let mut conn = self.conn.clone();
+        let key = Self::email_change_attempts_key(user_id);
+        let count = conn.decr::<_, _, i64>(&key, 1i64).await?;
+        if count <= 0 {
+            conn.del::<_, ()>(&key).await?;
+        }
+        Ok(())
+    }
+
     /// Returns `true` when the user has already exceeded
     /// [`EMAIL_CHANGE_MAX_ATTEMPTS`] within the rolling window.
     ///
