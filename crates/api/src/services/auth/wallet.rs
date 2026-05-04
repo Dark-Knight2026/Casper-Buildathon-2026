@@ -332,22 +332,7 @@ pub async fn login(
     Ok((
         jar,
         Json(LoginResponse {
-            user: UserInfo {
-                id: profile.id,
-                role: user_role,
-                wallet_address: profile.wallet_address,
-                status: profile.status,
-                email: profile.email,
-                first_name: profile.first_name,
-                last_name: profile.last_name,
-                phone: profile.phone,
-                avatar_url: profile.avatar_url,
-                bio: profile.bio,
-                is_profile_complete: profile.is_profile_complete,
-                active_leases_count: profile.active_leases_count,
-                created_at: profile.created_at,
-                updated_at: profile.updated_at,
-            },
+            user: UserInfo::from(profile),
         }),
     ))
 }
