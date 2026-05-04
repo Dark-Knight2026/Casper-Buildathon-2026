@@ -12,6 +12,26 @@
 -- Level ordering: none(0) < email(1) < identity(2) < full(3).
 -- "full" means both email and identity verified; reached by verifying
 -- email after identity or identity after email.
+--
+-- Admin downgrade procedure (KYC revocation, GDPR identity-proof delete,
+-- account merge cleanup): the trigger above is upgrade-only AND only
+-- fires on UPDATE OF (email_verified, identity_verified). It does NOT
+-- block direct UPDATEs of verification_level, and it does NOT
+-- auto-downgrade when a boolean flips true->false (the IS DISTINCT FROM
+-- guards on lines ~39/~50 are upgrade-only). A revoke is therefore one
+-- atomic UPDATE that sets all three columns together, e.g.:
+--
+--     UPDATE users
+--     SET email_verified = false,
+--         identity_verified = false,
+--         verification_level = 'none'
+--     WHERE id = '<user_id>';
+--
+-- Touching only the booleans leaves a stale verification_level (trigger
+-- declines to auto-downgrade); touching only verification_level
+-- desynchronizes the underlying flags so the next legitimate
+-- email-verified=true upgrades from a misleading floor. Always write
+-- all three in one statement.
 
 ALTER TABLE users
     ADD COLUMN IF NOT EXISTS verification_level TEXT NOT NULL DEFAULT 'none';
