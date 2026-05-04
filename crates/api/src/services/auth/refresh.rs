@@ -112,9 +112,17 @@ pub struct IssuedRefreshToken {
 /// Used on login. Subsequent refreshes go through [`rotate`], which inherits
 /// the predecessor's `family_id` and links the rows via `replaced_by`.
 ///
+/// Side effect: revokes every still-active refresh-token row for
+/// `user_id` before inserting the new family. This enforces a
+/// single-device session model - a fresh login on any device
+/// immediately invalidates whatever session was active before, so a
+/// stolen `refresh_token` cookie cannot outlive the user's next
+/// legitimate login. See
+/// [`db::revoke_all_active_refresh_tokens_for_user`] for the trade-off.
+///
 /// # Errors
 ///
-/// Returns [`ApiError::Internal`] if the underlying DB insert fails or the
+/// Returns [`ApiError::Internal`] if the underlying DB calls fail or the
 /// expiration timestamp arithmetic overflows.
 #[inline]
 pub async fn issue_login_refresh_token(
@@ -123,6 +131,13 @@ pub async fn issue_login_refresh_token(
 ) -> ApiResult<IssuedRefreshToken> {
     let token = generate_refresh_token()?;
     let family_id = Uuid::new_v4();
+
+    // Revoke prior families BEFORE inserting the new row so a concurrent
+    // `POST /auth/refresh` with the stale cookie cannot squeeze through
+    // between revoke and insert. The two statements are not in one tx
+    // because the rotation path takes its own row lock per token; an
+    // interleaving here would still observe the revoked predecessors.
+    db::revoke_all_active_refresh_tokens_for_user(pool, user_id).await?;
 
     // `?` -> `From<sqlx::Error> for ApiError`: row-not-found becomes 404,
     // unique-violation (vanishingly unlikely SHA-256 collision on the active

@@ -182,6 +182,46 @@ pub async fn upsert_user_by_wallet(
     Err(Error::RowNotFound)
 }
 
+/// Revokes every still-active `refresh_tokens` row for the given user.
+///
+/// Called at login time so a fresh login invalidates any prior session
+/// (web browser, mobile, stolen cookie). The match condition is
+/// `revoked_at IS NULL` rather than `expires_at > NOW()` because we want
+/// already-expired-but-not-revoked rows to be cleaned up too: leaving a
+/// dangling row with `revoked_at IS NULL` is what would otherwise let
+/// the partial unique index (`(token_hash) WHERE revoked_at IS NULL`)
+/// silently block a future hash collision recovery.
+///
+/// UX trade-off: this enforces a **single-device session model**. Logging
+/// in on phone forcibly logs out web; the simultaneous-multi-device case
+/// is not yet supported because we have no per-session metadata
+/// (`user_agent`/`ip` are populated only by future session-listing work).
+/// When that work lands, this function should be replaced by
+/// "revoke other sessions" exposed through a `DELETE /sessions/:id`
+/// endpoint instead of being implicit in `login`.
+///
+/// # Errors
+///
+/// Returns `sqlx::Error` on DB failure. Upstream maps `?` -> `ApiError`
+/// like every other db call in this module.
+#[inline]
+pub async fn revoke_all_active_refresh_tokens_for_user(
+    pool: &PgPool,
+    user_id: Uuid,
+) -> Result<(), Error> {
+    sqlx::query!(
+        r"
+            UPDATE refresh_tokens
+            SET revoked_at = NOW()
+            WHERE user_id = $1 AND revoked_at IS NULL
+        ",
+        user_id,
+    )
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
 /// Inserts a fresh `refresh_tokens` row and returns its primary key.
 ///
 /// `token_hash` is the raw SHA-256 of the opaque plaintext - never the
