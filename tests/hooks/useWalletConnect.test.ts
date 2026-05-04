@@ -144,7 +144,10 @@ describe('useWalletConnect', () => {
 
       renderHook(() => useWalletConnect());
 
-      expect(mockNavigate).toHaveBeenCalledWith('/landlord/dashboard', { replace: true });
+      expect(
+        mockNavigate,
+        'landlord profile must redirect to /landlord/dashboard'
+      ).toHaveBeenCalledWith('/landlord/dashboard', { replace: true });
     });
 
     it('redirects tenant profile to /tenant/dashboard on mount', () => {
@@ -152,13 +155,19 @@ describe('useWalletConnect', () => {
 
       renderHook(() => useWalletConnect());
 
-      expect(mockNavigate).toHaveBeenCalledWith('/tenant/dashboard', { replace: true });
+      expect(
+        mockNavigate,
+        'tenant profile must redirect to /tenant/dashboard'
+      ).toHaveBeenCalledWith('/tenant/dashboard', { replace: true });
     });
 
     it('does not redirect when no profile is loaded', () => {
       renderHook(() => useWalletConnect());
 
-      expect(mockNavigate).not.toHaveBeenCalled();
+      expect(
+        mockNavigate,
+        'redirect must wait for AuthContext.profile to populate'
+      ).not.toHaveBeenCalled();
     });
 
     it('does not call login when already authenticated', () => {
@@ -172,7 +181,10 @@ describe('useWalletConnect', () => {
 
       renderHook(() => useWalletConnect());
 
-      expect(login).not.toHaveBeenCalled();
+      expect(
+        login,
+        'login() must not re-fire when the session is already authenticated'
+      ).not.toHaveBeenCalled();
     });
   });
 
@@ -208,7 +220,10 @@ describe('useWalletConnect', () => {
 
       renderHook(() => useWalletConnect());
 
-      expect(login).not.toHaveBeenCalled();
+      expect(
+        login,
+        'login() must not double-fire while a sign-in round-trip is already in flight'
+      ).not.toHaveBeenCalled();
     });
 
     it('passes the server user to walletSession on successful backend auth', () => {
@@ -266,7 +281,10 @@ describe('useWalletConnect', () => {
 
       const { result } = renderHook(() => useWalletConnect());
 
-      expect(result.current.error).toBe('Wallet not available');
+      expect(
+        result.current.error,
+        'wallet-side errors must surface unchanged through .error'
+      ).toBe('Wallet not available');
     });
 
     it('exposes backend auth error via .error', () => {
@@ -274,7 +292,10 @@ describe('useWalletConnect', () => {
 
       const { result } = renderHook(() => useWalletConnect());
 
-      expect(result.current.error).toBe('Backend rejected signature');
+      expect(
+        result.current.error,
+        'backend auth errors must surface through .error when no wallet error is set'
+      ).toBe('Backend rejected signature');
     });
 
     it('prefers wallet error over backend error when both are present', () => {
@@ -283,7 +304,10 @@ describe('useWalletConnect', () => {
 
       const { result } = renderHook(() => useWalletConnect());
 
-      expect(result.current.error).toBe('wallet-err');
+      expect(
+        result.current.error,
+        'wallet error must win — backend error is irrelevant if the wallet itself failed'
+      ).toBe('wallet-err');
     });
   });
 
@@ -297,7 +321,10 @@ describe('useWalletConnect', () => {
       act(() => {
         result.current.setConnectingProvider('casper-wallet');
       });
-      expect(result.current.connectingProvider).toBe('casper-wallet');
+      expect(
+        result.current.connectingProvider,
+        'precondition: connectingProvider should reflect the in-flight selection before cancellation'
+      ).toBe('casper-wallet');
 
       const cancelledHandler = clickRef.on.mock.calls.find(c => c[0] === 'csprclick:cancelled')?.[1];
       act(() => { cancelledHandler?.(); });

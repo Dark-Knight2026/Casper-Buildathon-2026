@@ -1,16 +1,19 @@
 import { Link } from 'react-router-dom';
+
 import { Home, Loader2, AlertCircle } from 'lucide-react';
+
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useWalletConnect } from '@/hooks/auth/useWalletConnect';
+
 import { ProviderList } from './register/ProviderList';
 
-export function Login() {
+export default function Login() {
   const {
     isConnected, account, isAuthenticated, isSigningIn,
     connectingProvider, setConnectingProvider,
-    error, isLoading,
+    error,
     handleConnectProvider, login, disconnect,
   } = useWalletConnect();
 

@@ -126,7 +126,10 @@ export default function MaintenanceRequestCreate() {
       property: { title: property.title, address: property.address, city: 'New York', state: 'NY' },
     };
 
-    toast({ title: 'Request submitted', description: `Request #${newId.slice(-4)} created successfully` });
+    toast({
+      title: 'Request submitted (demo)',
+      description: `Preview mode — request #${newId.slice(-4)} is local only. Real submission will land once the backend endpoint ships.`,
+    });
     setSubmitting(false);
     navigate(`/tenant/maintenance/${newId}`, { state: { request: newRequest } });
   };

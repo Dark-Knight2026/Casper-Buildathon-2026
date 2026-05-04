@@ -1,14 +1,17 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+
 import { Home, Loader2, AlertCircle } from 'lucide-react';
+
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useWalletConnect } from '@/hooks/auth/useWalletConnect';
+
 import { RoleSelector } from './register/RoleSelector';
 import { ProviderList } from './register/ProviderList';
 
-export function Register() {
+export default function Register() {
   const [role, setRole] = useState<'tenant' | 'landlord'>('tenant');
 
   const {

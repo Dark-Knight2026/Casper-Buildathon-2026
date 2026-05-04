@@ -85,10 +85,15 @@ export default defineConfig(({ mode }) => {
     basicSsl(),
     wasmIntegrityPlugin,
     nodePolyfills({
-      // Polyfill specific Node built-ins that csprclick-web-sdk's transitive deps
-      // require at runtime (eventsource uses util.inherits; casper-js-sdk pulls in
-      // buffer/stream/crypto). Without this, Vite serves empty modules and pages
-      // crash silently with "util.inherits is not a function".
+      // Tradeoff: this ships ~Node-shim code into every prod chunk that touches
+      // the wallet/blockchain stack. Required because csprclick-web-sdk's
+      // transitive deps assume a Node runtime — eventsource uses util.inherits,
+      // casper-js-sdk pulls in buffer/stream/crypto. Without these polyfills
+      // Vite serves empty modules and pages crash silently with "util.inherits
+      // is not a function". The `include` list is intentionally narrow (only
+      // the built-ins the SDK actually touches) so we don't drag in the full
+      // polyfill bundle. Revisit if/when @make-software ships a browser-native
+      // build of the SDK.
       include: ['util', 'buffer', 'stream', 'process', 'events', 'crypto', 'http', 'https', 'url'],
       globals: { Buffer: true, global: true, process: true },
       protocolImports: true,

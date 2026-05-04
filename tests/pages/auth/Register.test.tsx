@@ -29,7 +29,7 @@ vi.mock('@/pages/auth/register/ProviderList', () => ({
   ),
 }));
 
-import { Register } from '@/pages/auth/Register';
+import Register from '@/pages/auth/Register';
 
 interface WalletState {
   isConnected: boolean;
@@ -182,7 +182,7 @@ describe('Register', () => {
       ).toBeInTheDocument();
     });
 
-    it('"Use a different wallet" link calls disconnect and reloads', () => {
+    it('"Use a different account" link calls disconnect and reloads', () => {
       const disconnect = vi.fn();
       const reloadSpy = vi.fn();
       Object.defineProperty(window, 'location', {
@@ -192,7 +192,7 @@ describe('Register', () => {
 
       setWalletConnect({ isConnected: true, account, disconnect });
       renderRegister();
-      fireEvent.click(screen.getByRole('button', { name: /use a different wallet/i }));
+      fireEvent.click(screen.getByRole('button', { name: /use a different account/i }));
       expect(disconnect, 'switch flow must invoke useWalletConnect.disconnect').toHaveBeenCalled();
       expect(
         reloadSpy,

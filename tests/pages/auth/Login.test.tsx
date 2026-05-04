@@ -35,7 +35,7 @@ vi.mock('@/pages/auth/register/ProviderList', () => ({
   ),
 }));
 
-import { Login } from '@/pages/auth/Login';
+import Login from '@/pages/auth/Login';
 
 interface WalletState {
   isConnected: boolean;
@@ -156,7 +156,7 @@ describe('Login', () => {
       ).toBeDisabled();
     });
 
-    it('shows "Use a different wallet" link that calls disconnect', () => {
+    it('shows "Use a different account" link that calls disconnect', () => {
       const disconnect = vi.fn();
       // window.location.reload is part of the click handler; mock it to a no-op
       // so the test environment doesn't actually navigate.
@@ -168,7 +168,7 @@ describe('Login', () => {
 
       setWalletConnect({ isConnected: true, account, disconnect });
       renderLogin();
-      fireEvent.click(screen.getByRole('button', { name: /use a different wallet/i }));
+      fireEvent.click(screen.getByRole('button', { name: /use a different account/i }));
       expect(
         disconnect,
         'wallet-switch link must drive useWalletConnect.disconnect (clickRef.signOut)'

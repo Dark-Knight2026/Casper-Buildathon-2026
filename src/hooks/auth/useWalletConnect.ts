@@ -4,6 +4,7 @@ import { useICOWallet } from '@/hooks/ico/useICOWallet';
 import { useBackendAuth } from '@/hooks/ico/useBackendAuth';
 import { useAuth } from '@/hooks/useAuth';
 import { TERMINAL_PROVIDER_STATUSES } from '@/pages/auth/register/constants';
+import { getDashboardRoute } from '@/types/user';
 import logger from '@/lib/logger';
 
 /**
@@ -32,8 +33,7 @@ export function useWalletConnect() {
   useEffect(() => {
     if (!profile || didRedirect.current) return;
     didRedirect.current = true;
-    const destination = profile.role === 'landlord' ? '/landlord/dashboard' : '/tenant/dashboard';
-    navigate(destination, { replace: true });
+    navigate(getDashboardRoute(profile.role), { replace: true });
   }, [profile, navigate]);
 
   // After fresh backend auth — copy the server user into AuthContext.
