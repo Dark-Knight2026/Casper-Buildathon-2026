@@ -2,7 +2,7 @@ import React from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
-import { RouteRole } from '@/types/user';
+import { RouteRole, getDashboardRoute } from '@/types/user';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -32,9 +32,7 @@ export default function ProtectedRoute({ children, allowedRoles }: ProtectedRout
 
   // Check if user's role matches any of the allowed roles
   if (!allowedRoles.includes(userRole as RouteRole)) {
-    // Redirect to appropriate dashboard based on user's role
-    const redirectPath = userRole === 'landlord' ? '/landlord/dashboard' : '/tenant/dashboard';
-    return <Navigate to={redirectPath} replace />;
+    return <Navigate to={getDashboardRoute(userRole)} replace />;
   }
 
   return <>{children}</>;

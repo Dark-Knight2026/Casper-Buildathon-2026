@@ -13,6 +13,8 @@ import { StripeProvider } from '@/components/payments/StripeProvider';
 import { PaymentMethodCard } from '@/components/payments/PaymentMethodCard';
 import { AddPaymentMethodForm } from '@/components/payments/AddPaymentMethodForm';
 import { AutopaySetup } from '@/components/payments/AutopaySetup';
+import { ComingSoon } from '@/components/common/ComingSoon';
+import { PAYMENTS_ENABLED } from '@/lib/featureFlags';
 import { useToast } from '@/hooks/use-toast';
 import type { PaymentMethodData } from '@/services/stripeService';
 
@@ -45,6 +47,15 @@ export function PaymentMethods() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const { toast } = useToast();
+
+  if (!PAYMENTS_ENABLED) {
+    return (
+      <ComingSoon
+        title="Payment methods coming soon"
+        description="Card and bank account management will be available once the payment integration is finalized."
+      />
+    );
+  }
 
   // TODO: wire to PATCH /api/v1/stripe/payment-methods/:id/default when backend is ready
   const handleSetDefault = async (paymentMethodId: string) => {

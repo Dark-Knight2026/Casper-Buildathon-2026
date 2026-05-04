@@ -16,8 +16,6 @@ import { Register } from '@/pages/auth/Register';
 import PropertyLanding from '@/pages/PropertyLanding';
 
 // Lazy load auth pages
-const ForgotPassword = lazy(() => import('@/pages/auth/ForgotPassword'));
-const ResetPassword = lazy(() => import('@/pages/auth/ResetPassword'));
 const MFASetup = lazy(() => import('@/pages/auth/MFASetup'));
 const MFAVerify = lazy(() => import('@/pages/auth/MFAVerify'));
 
@@ -181,8 +179,6 @@ function App() {
               */}
               <Route path="/auth/login" element={<AuthWalletLayout><Login /></AuthWalletLayout>} />
               <Route path="/auth/register" element={<AuthWalletLayout><Register /></AuthWalletLayout>} />
-              <Route path="/auth/forgot-password" element={<ForgotPassword />} />
-              <Route path="/auth/reset-password" element={<ResetPassword />} />
               <Route path="/auth/mfa-setup" element={<MFASetup />} />
               <Route path="/auth/mfa-verify" element={<MFAVerify />} />
               

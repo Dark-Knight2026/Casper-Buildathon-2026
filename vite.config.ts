@@ -78,6 +78,10 @@ export default defineConfig(({ mode }) => {
     },
   },
   plugins: [
+    // CSPR.click wallet SDK requires a secure context (HTTPS) at runtime —
+    // WebCrypto APIs and the wallet provider's WSS handshake refuse to
+    // initialize over plain http://. basicSsl serves a self-signed cert in
+    // dev so the SDK can boot without standing up a real cert chain.
     basicSsl(),
     wasmIntegrityPlugin,
     nodePolyfills({
