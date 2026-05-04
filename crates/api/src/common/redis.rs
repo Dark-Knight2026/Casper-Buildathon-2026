@@ -12,9 +12,6 @@ const LOGIN_FAIL_MAX_ATTEMPTS: u64 = 5;
 /// Time window for failed login rate limiting (60 seconds).
 const LOGIN_FAIL_WINDOW_SECS: u64 = 60;
 
-/// Time-to-live for a bootstrap-admin login token (10 minutes).
-const BOOTSTRAP_LOGIN_TTL: u64 = 600;
-
 /// Time-to-live for a pending email-change token (24 hours).
 ///
 /// Generous on purpose: the link is delivered by email and may sit in a
@@ -134,24 +131,6 @@ impl RedisStore {
                 .await?;
         }
         Ok(())
-    }
-
-    /// Stores a one-time bootstrap-admin login token keyed by its opaque value.
-    ///
-    /// Used by the `bootstrap_admin` binary: after inserting the platform
-    /// admin row, the binary prints an opaque token to stdout and persists
-    /// the mapping `bootstrap_login:{token} -> user_id` so that the admin
-    /// can exchange the token for a session once and only once.
-    ///
-    /// # Errors
-    ///
-    /// Returns `RedisError` if the connection fails.
-    #[inline]
-    pub async fn save_bootstrap_login_token(&self, token: &str, user_id: Uuid) -> RedisResult<()> {
-        let mut conn = self.conn.clone();
-        let key = Self::bootstrap_login_key(token);
-        conn.set_ex(&key, user_id.to_string(), BOOTSTRAP_LOGIN_TTL)
-            .await
     }
 
     /// Adds a JWT `jti` to the access-token blocklist for `ttl_seconds`.
@@ -349,12 +328,6 @@ impl RedisStore {
     #[inline]
     fn login_fail_key(wallet_address: &str) -> String {
         format!("login_fail:{wallet_address}")
-    }
-
-    /// Generates the Redis key for a bootstrap-admin login token.
-    #[inline]
-    fn bootstrap_login_key(token: &str) -> String {
-        format!("bootstrap_login:{token}")
     }
 
     /// Generates the Redis key for a blocklisted access-token `jti`.
