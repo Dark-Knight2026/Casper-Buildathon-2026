@@ -322,3 +322,43 @@ fn test_assert_can_transfer_should_revert_if_transfers_are_disabled() {
         "Should revert when transfers are disabled"
     );
 }
+
+#[test]
+fn test_assert_can_transfer_should_revert_if_sender_is_not_verified() {
+    let mut ctx = setup(odra_test::env());
+    let property_id = create_active_property(&mut ctx);
+
+    enable_transfers(&mut ctx, property_id);
+
+    ctx.env.set_caller(ctx.verification_manager);
+    ctx.investor_registry
+        .set_investor_record(ctx.recipient, active_investor_record(&ctx.env));
+
+    assert_eq!(
+        ctx.compliance
+            .try_assert_can_transfer(property_id, ctx.sender, ctx.recipient, U256::from(100))
+            .unwrap_err(),
+        ComplianceError::SenderNotVerified.into(),
+        "Should revert when sender is not verified",
+    );
+}
+
+#[test]
+fn test_assert_can_transfer_should_revert_if_recipient_is_not_verified() {
+    let mut ctx = setup(odra_test::env());
+    let property_id = create_active_property(&mut ctx);
+
+    enable_transfers(&mut ctx, property_id);
+
+    ctx.env.set_caller(ctx.verification_manager);
+    ctx.investor_registry
+        .set_investor_record(ctx.sender, active_investor_record(&ctx.env));
+
+    assert_eq!(
+        ctx.compliance
+            .try_assert_can_transfer(property_id, ctx.sender, ctx.recipient, U256::from(100))
+            .unwrap_err(),
+        ComplianceError::RecipientNotVerified.into(),
+        "Should revert when recipient is not verified",
+    );
+}
