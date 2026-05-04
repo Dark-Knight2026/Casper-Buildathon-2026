@@ -24,13 +24,17 @@ ALTER TABLE users
 COMMENT ON COLUMN users.password_hash IS 'Argon2id PHC-formatted hash; NULL for wallet-only or OAuth-only users';
 COMMENT ON COLUMN users.primary_auth_method IS 'Method used at signup: wallet, password, or oauth';
 COMMENT ON COLUMN users.bio IS 'Free-form user bio for profile display';
-COMMENT ON COLUMN users.is_profile_complete IS 'Maintained by trg_users_profile_complete; true when phone is set (email, first_name, last_name are NOT NULL by schema)';
+COMMENT ON COLUMN users.is_profile_complete IS 'Maintained by trg_users_profile_complete; predicate is "phone IS NOT NULL". first_name and last_name are NOT NULL by schema, so they cannot flip this flag; email is nullable (since 20260421000001_make_users_email_nullable) and intentionally excluded so wallet-only signups can still reach "complete".';
 
 -- Trigger that keeps is_profile_complete in sync with phone presence. The
--- other required profile fields (email, first_name, last_name) are NOT NULL
--- by schema constraint, so phone is the only column whose presence can
--- actually flip this flag. BEFORE INSERT OR UPDATE so the new row already
--- carries the correct value when it reaches storage and downstream triggers.
+-- predicate is intentionally `phone IS NOT NULL` only:
+--   * first_name and last_name are NOT NULL by schema, so they can never
+--     flip the flag - they are guaranteed present on every row;
+--   * email is nullable since 20260421000001 (wallet-only signups have
+--     no email at creation time), so requiring it here would mean those
+--     accounts never reach "complete" no matter what the user fills in.
+-- BEFORE INSERT OR UPDATE so the new row already carries the correct
+-- value when it reaches storage and downstream triggers.
 CREATE OR REPLACE FUNCTION users_set_profile_complete()
 RETURNS trigger
 LANGUAGE plpgsql
