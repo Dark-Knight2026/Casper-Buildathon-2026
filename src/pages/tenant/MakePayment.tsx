@@ -8,6 +8,8 @@ import { ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { StripeProvider } from '@/components/payments/StripeProvider';
 import { PaymentForm } from '@/components/payments/PaymentForm';
+import { ComingSoon } from '@/components/common/ComingSoon';
+import { PAYMENTS_ENABLED } from '@/lib/featureFlags';
 
 // TODO: remove when GET /api/v1/leases?status=active is ready
 const MOCK_CUSTOMER_ID = 'cus_mock_tenant_1';
@@ -24,6 +26,15 @@ const currentMonth = new Date().toLocaleDateString('en-US', { month: 'long', yea
 export function MakePayment() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+
+  if (!PAYMENTS_ENABLED) {
+    return (
+      <ComingSoon
+        title="Payments coming soon"
+        description="Online rent payments will be available once the payment integration is finalized."
+      />
+    );
+  }
 
   const leaseIdParam = searchParams.get('leaseId') ?? DEFAULT_LEASE_ID;
   const lease = MOCK_LEASES[leaseIdParam] ?? MOCK_LEASES[DEFAULT_LEASE_ID];

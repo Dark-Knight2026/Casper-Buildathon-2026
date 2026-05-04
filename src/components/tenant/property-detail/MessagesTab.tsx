@@ -33,8 +33,17 @@ export function MessagesTab({ messages }: MessagesTabProps) {
         {messages.map((msg) => (
           <Card
             key={msg.id}
+            role="button"
+            tabIndex={0}
             onClick={() => setOpenMessage(msg)}
-            className={`cursor-pointer hover:shadow-md transition-shadow ${
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                setOpenMessage(msg);
+              }
+            }}
+            aria-label={`Open message: ${msg.subject}`}
+            className={`cursor-pointer hover:shadow-md transition-shadow focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none ${
               msg.unread ? 'border-primary/40' : ''
             }`}
           >

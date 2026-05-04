@@ -174,8 +174,17 @@ export function MaintenanceTab({ requests, property }: MaintenanceTabProps) {
               {filtered.map((req) => (
                 <TableRow
                   key={req.id}
-                  className="cursor-pointer hover:bg-muted/50"
+                  role="button"
+                  tabIndex={0}
+                  className="cursor-pointer hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none"
                   onClick={() => goToDetail(req)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      goToDetail(req);
+                    }
+                  }}
+                  aria-label={`Open maintenance request: ${req.title}`}
                 >
                   <TableCell className="font-mono text-sm text-muted-foreground">
                     #{req.id.slice(-4)}

@@ -70,8 +70,8 @@ export function LeaseExtensionBanner({
     setIntent(created);
     // TODO: backend should email/push the landlord; mocking the side-effect here.
     toast({
-      title: 'Extension requested',
-      description: 'Your landlord has been notified of your intent to extend.',
+      title: 'Extension requested (demo)',
+      description: 'Preview mode — landlord notification will go out once the backend integration ships.',
     });
   };
 

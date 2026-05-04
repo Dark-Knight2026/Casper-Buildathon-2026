@@ -37,6 +37,8 @@ This directory contains all test files for the LeaseFi application, organized by
 | `components/LandingHeader.test.tsx` | Tests for public landing page header (logo, nav links, auth CTAs) |
 | `components/ui/` | Unit tests for shadcn-based UI primitives (see `components/ui/readme.md`) |
 | `components/ui/badge.test.tsx` | Tests for Badge variants (default, secondary, destructive, outline, success, info) |
+| `components/ui/button.test.tsx` | Tests white variant classes and loading/disabled behavior |
+| `components/ui/tabs.test.tsx` | Tests TabsList default sizing, className override, and trigger cursor |
 | `components/ico/AmountInput.test.tsx` | Tests for token amount input field (validation, formatting) |
 | `components/ico/Card.test.tsx` | Tests for generic card container component |
 | `components/ico/CountdownTimer.test.tsx` | Tests for countdown timer display and tick logic |
@@ -72,7 +74,7 @@ This directory contains all test files for the LeaseFi application, organized by
 ## Running Tests
 
 ```bash
-npm run test          # Run all tests
-npm run test:watch    # Run tests in watch mode
-npm run test:ui       # Run tests with Vitest UI
+pnpm test          # Run all tests
+pnpm test:watch    # Run tests in watch mode
+pnpm test:ui       # Run tests with Vitest UI
 ```

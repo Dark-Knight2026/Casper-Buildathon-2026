@@ -1,11 +1,4 @@
-import type { Property } from '@/types/property';
-
-type FeaturedProperty = Property & {
-  priceChange: string;
-  rating: number;
-  daysOnMarket: number;
-  photoCount: number;
-};
+import type { FeaturedProperty } from '@/types/property';
 
 export const FEATURED_PROPERTIES: FeaturedProperty[] = [
   {

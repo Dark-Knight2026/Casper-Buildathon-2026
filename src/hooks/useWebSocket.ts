@@ -1,6 +1,5 @@
 import { useEffect, useCallback, useState } from 'react';
 import { wsManager, MessageHandler } from '@/lib/websocket';
-import { authManager } from '@/lib/auth';
 
 /**
  * Hook for WebSocket connection
@@ -9,14 +8,14 @@ export function useWebSocket() {
   const [status, setStatus] = useState(wsManager.getStatus());
 
   useEffect(() => {
-    // Connect with auth token
-    const token = authManager.getState().tokens?.accessToken;
-    if (token) {
-      wsManager.connect(token);
-    }
+    // TODO: re-wire auth when the backend WS endpoint lands. Tokens now live
+    // in HttpOnly cookies and aren't accessible to JS, so the browser will
+    // attach them automatically on the WSS handshake — no token arg needed
+    // unless the backend opts for a ticket-based scheme.
+    wsManager.connect();
 
     // Listen for connection status changes
-    const unsubscribe = wsManager.on('connection', (data) => {
+    const unsubscribe = wsManager.on('connection', () => {
       setStatus(wsManager.getStatus());
     });
 

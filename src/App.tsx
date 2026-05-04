@@ -7,17 +7,17 @@ import { AuthProvider } from '@/contexts/AuthContext';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import SkipNavigation from '@/components/layout/SkipNavigation';
 import { AuthWalletLayout } from '@/components/auth/AuthWalletLayout';
+import { ComingSoon } from '@/components/common/ComingSoon';
+import { MFA_ENABLED } from '@/lib/featureFlags';
 
 // Eagerly load auth pages (critical for initial load)
-import { Login } from '@/pages/auth/Login';
-import { Register } from '@/pages/auth/Register';
+import Login from '@/pages/auth/Login';
+import Register from '@/pages/auth/Register';
 
 // Eagerly load public landing page
 import PropertyLanding from '@/pages/PropertyLanding';
 
 // Lazy load auth pages
-const ForgotPassword = lazy(() => import('@/pages/auth/ForgotPassword'));
-const ResetPassword = lazy(() => import('@/pages/auth/ResetPassword'));
 const MFASetup = lazy(() => import('@/pages/auth/MFASetup'));
 const MFAVerify = lazy(() => import('@/pages/auth/MFAVerify'));
 
@@ -181,10 +181,22 @@ function App() {
               */}
               <Route path="/auth/login" element={<AuthWalletLayout><Login /></AuthWalletLayout>} />
               <Route path="/auth/register" element={<AuthWalletLayout><Register /></AuthWalletLayout>} />
-              <Route path="/auth/forgot-password" element={<ForgotPassword />} />
-              <Route path="/auth/reset-password" element={<ResetPassword />} />
-              <Route path="/auth/mfa-setup" element={<MFASetup />} />
-              <Route path="/auth/mfa-verify" element={<MFAVerify />} />
+              <Route
+                path="/auth/mfa-setup"
+                element={
+                  MFA_ENABLED
+                    ? <MFASetup />
+                    : <ComingSoon title="MFA coming soon" description="Multi-factor authentication will be available once the backend enrollment flow is finalized." />
+                }
+              />
+              <Route
+                path="/auth/mfa-verify"
+                element={
+                  MFA_ENABLED
+                    ? <MFAVerify />
+                    : <ComingSoon title="MFA coming soon" description="Multi-factor authentication will be available once the backend enrollment flow is finalized." />
+                }
+              />
               
               {/*
                 TENANT ROUTES - Protected

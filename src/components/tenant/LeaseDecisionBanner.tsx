@@ -85,12 +85,9 @@ export function LeaseDecisionBanner({
     toast({
       title:
         kind === 'renew'
-          ? 'Renewal request sent'
-          : 'Move-out confirmed',
-      description:
-        kind === 'renew'
-          ? 'Your landlord has been notified you intend to renew.'
-          : 'Your landlord has been notified you intend to move out.',
+          ? 'Renewal request sent (demo)'
+          : 'Move-out confirmed (demo)',
+      description: 'Preview mode — landlord notification will go out once the backend integration ships.',
     });
   };
 

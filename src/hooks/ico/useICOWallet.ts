@@ -131,9 +131,9 @@ export function useICOWallet(): UseICOWalletReturn {
     // `csprclick:signed_in` and their `connect()` Promise may not resolve. They emit
     // provider-specific `...:connected` events — on those we re-read the active account.
     const handleSocialConnected = async (evt: unknown) => {
-      console.log('[useICOWallet] social provider connected event:', evt);
+      logger.debug('[useICOWallet] social provider connected event', { evt });
       const active = await clickRef.getActiveAccountAsync();
-      console.log('[useICOWallet] active after social connect:', active);
+      logger.debug('[useICOWallet] active after social connect', { active });
       if (!active) return;
       setState({
         isConnected: true,
@@ -214,9 +214,9 @@ export function useICOWallet(): UseICOWalletReturn {
     const active = await clickRef.getActiveAccountAsync();
     // Log full payload so we can see what extra fields (email, avatar, JWT, custom)
     // CSPR.click returns for each provider — useful for deciding what to forward
-    // to the backend beyond public_key. Using console.info so devtools shows the
-    // object as an expandable tree (logger.info stringifies and loses structure).
-    console.info('[useICOWallet] getActiveAccountAsync →', active);
+    // to the backend beyond public_key. logger.debug is suppressed in production
+    // so this stays out of end-user consoles while remaining handy in dev tools.
+    logger.debug('[useICOWallet] getActiveAccountAsync', { active });
     if (!active) return;
     setState({
       isConnected: true,

@@ -1,17 +1,20 @@
 import { Link } from 'react-router-dom';
+
 import { Home, Loader2, AlertCircle } from 'lucide-react';
+
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useWalletConnect } from '@/hooks/auth/useWalletConnect';
+
 import { ProviderList } from './register/ProviderList';
 
-export function Login() {
+export default function Login() {
   const {
     isConnected, account, isAuthenticated, isSigningIn,
     connectingProvider, setConnectingProvider,
-    error, isLoading,
-    handleConnectProvider, login,
+    error,
+    handleConnectProvider, login, disconnect,
   } = useWalletConnect();
 
   return (
@@ -43,12 +46,29 @@ export function Login() {
           )}
 
           {isConnected && account ? (
-            <Button className="w-full" onClick={login} disabled={isSigningIn || isAuthenticated}>
-              {isSigningIn
-                ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Signing in…</>
-                : 'Sign in with connected wallet'
-              }
-            </Button>
+            <div className="space-y-2">
+              <Button className="w-full" onClick={() => login()} disabled={isSigningIn || isAuthenticated}>
+                {isSigningIn
+                  ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Signing in…</>
+                  : 'Sign in'
+                }
+              </Button>
+              <button
+                type="button"
+                onClick={() => {
+                  // signOut() clears SDK state but the CSPR.click iframe
+                  // (accounts.cspr.click) holds its own cookies that survive
+                  // — without a hard reload the next connect silently re-uses
+                  // the cached account regardless of selectAccount:true.
+                  disconnect();
+                  window.location.reload();
+                }}
+                disabled={isSigningIn || isAuthenticated}
+                className="block w-full text-center text-sm text-muted-foreground hover:text-foreground hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Use a different account
+              </button>
+            </div>
           ) : (
             <ProviderList
               connectingProvider={connectingProvider}

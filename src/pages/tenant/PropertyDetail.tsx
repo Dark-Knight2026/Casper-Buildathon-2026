@@ -4,19 +4,9 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useToast } from '@/hooks/use-toast';
-import { useAuthPrompt } from '@/hooks/useAuthPrompt';
-import { SavePropertyButton } from '@/components/property/SavePropertyButton';
-import { ContactLandlordModal } from '@/components/property/ContactLandlordModal';
-import { ScheduleViewingModal } from '@/components/property/ScheduleViewingModal';
-import { propertyService } from '@/services/propertyService';
-import { FEATURED_PROPERTIES } from '@/data/featuredProperties';
-import type { Property } from '@/types/property';
+import { useParams, useNavigate, useLocation, Navigate } from 'react-router-dom';
+
+import { format } from 'date-fns';
 import {
   ArrowLeft,
   Bed,
@@ -34,7 +24,33 @@ import {
   Loader2,
   FileText,
 } from 'lucide-react';
-import { format } from 'date-fns';
+
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useToast } from '@/hooks/use-toast';
+import { useAuthPrompt } from '@/hooks/useAuthPrompt';
+import { SavePropertyButton } from '@/components/property/SavePropertyButton';
+import { ContactLandlordModal } from '@/components/property/ContactLandlordModal';
+import { ScheduleViewingModal } from '@/components/property/ScheduleViewingModal';
+import { propertyService } from '@/services/propertyService';
+import { FEATURED_PROPERTIES } from '@/data/featuredProperties';
+import { cn } from '@/lib/utils';
+import { logger } from '@/utils/logger';
+import type { Property } from '@/types/property';
+
+const APPLICATION_FEE = 50;
+
+// Returns a formatted date or `null` when the input cannot be parsed —
+// callers render a fallback ("—") instead of letting `format()` throw
+// `RangeError: Invalid time value` and unmount the whole page. Backend
+// `properties.available_date` is nullable, so this is reachable in practice.
+function formatDateSafe(value: Date | string | null | undefined, fmt: string): string | null {
+  if (value === null || value === undefined) return null;
+  const d = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(d.getTime()) ? null : format(d, fmt);
+}
 
 export default function PropertyDetail() {
   const { id } = useParams<{ id: string }>();
@@ -46,7 +62,9 @@ export default function PropertyDetail() {
   const stateProperty = (location.state?.property as Property) ?? null;
   // Hydrate from FEATURED_PROPERTIES on direct URL access (refresh, bookmark,
   // shared link) so demo IDs `prop-1`...`prop-6` work without router state.
-  const demoFallback = !stateProperty && id
+  // Dev-only — in production these IDs route to mock-landlord-1, which would
+  // silently misroute contact requests.
+  const demoFallback = import.meta.env.DEV && !stateProperty && id
     ? FEATURED_PROPERTIES.find(p => p.id === id) ?? null
     : null;
   const initialProperty = stateProperty ?? demoFallback;
@@ -75,7 +93,7 @@ export default function PropertyDetail() {
         navigate('/tenant/properties');
       }
     } catch (error) {
-      console.error('Error loading property:', error);
+      logger.error('Error loading property:', error);
       toast({
         title: 'Error',
         description: 'Failed to load property details',
@@ -153,7 +171,7 @@ export default function PropertyDetail() {
   }
 
   if (!property) {
-    return null;
+    return <Navigate to="/listings" replace />;
   }
 
   return (
@@ -200,6 +218,7 @@ export default function PropertyDetail() {
                           <Button
                             variant="outline"
                             size="sm"
+                            aria-label="Previous image"
                             className="absolute left-4 top-1/2 transform -translate-y-1/2"
                             onClick={() => setCurrentImageIndex(Math.max(0, currentImageIndex - 1))}
                             disabled={currentImageIndex === 0}
@@ -209,6 +228,7 @@ export default function PropertyDetail() {
                           <Button
                             variant="outline"
                             size="sm"
+                            aria-label="Next image"
                             className="absolute right-4 top-1/2 transform -translate-y-1/2"
                             onClick={() => setCurrentImageIndex(Math.min(property.images.length - 1, currentImageIndex + 1))}
                             disabled={currentImageIndex === property.images.length - 1}
@@ -219,9 +239,12 @@ export default function PropertyDetail() {
                             {property.images.map((_, index) => (
                               <button
                                 key={index}
-                                className={`w-2 h-2 rounded-full ${
+                                aria-label={`Go to image ${index + 1}`}
+                                aria-current={index === currentImageIndex ? 'true' : undefined}
+                                className={cn(
+                                  'w-2 h-2 rounded-full',
                                   index === currentImageIndex ? 'bg-white' : 'bg-white/50'
-                                }`}
+                                )}
                                 onClick={() => setCurrentImageIndex(index)}
                               />
                             ))}
@@ -246,9 +269,10 @@ export default function PropertyDetail() {
                       <button
                         key={index}
                         onClick={() => setCurrentImageIndex(index)}
-                        className={`shrink-0 w-20 h-20 rounded overflow-hidden border-2 ${
+                        className={cn(
+                          'shrink-0 w-20 h-20 rounded overflow-hidden border-2',
                           index === currentImageIndex ? 'border-primary' : 'border-transparent'
-                        }`}
+                        )}
                       >
                         <img
                           src={image}
@@ -311,7 +335,7 @@ export default function PropertyDetail() {
                     <div>
                       <p className="text-sm text-gray-500">Available</p>
                       <p className="font-semibold">
-                        {format(new Date(property.availableDate), 'MMM d')}
+                        {formatDateSafe(property.availableDate, 'MMM d') ?? '—'}
                       </p>
                     </div>
                   </div>
@@ -489,12 +513,12 @@ export default function PropertyDetail() {
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Application Fee</span>
-                    <span className="font-semibold">$50</span>
+                    <span className="font-semibold">{formatCurrency(APPLICATION_FEE)}</span>
                   </div>
                   <div className="border-t pt-2 flex justify-between">
                     <span className="font-semibold">Total Move-in Cost</span>
                     <span className="font-bold text-lg">
-                      {formatCurrency(property.rent + property.securityDeposit + 50)}
+                      {formatCurrency(property.rent + property.securityDeposit + APPLICATION_FEE)}
                     </span>
                   </div>
                 </div>
@@ -504,7 +528,7 @@ export default function PropertyDetail() {
                 </Button>
 
                 <p className="text-xs text-center text-gray-500">
-                  Available {format(new Date(property.availableDate), 'MMMM d, yyyy')}
+                  Available {formatDateSafe(property.availableDate, 'MMMM d, yyyy') ?? 'TBD'}
                 </p>
               </CardContent>
             </Card>

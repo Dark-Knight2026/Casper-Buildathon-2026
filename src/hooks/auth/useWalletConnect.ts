@@ -4,6 +4,7 @@ import { useICOWallet } from '@/hooks/ico/useICOWallet';
 import { useBackendAuth } from '@/hooks/ico/useBackendAuth';
 import { useAuth } from '@/hooks/useAuth';
 import { TERMINAL_PROVIDER_STATUSES } from '@/pages/auth/register/constants';
+import { getDashboardRoute } from '@/types/user';
 import logger from '@/lib/logger';
 
 /**
@@ -22,8 +23,8 @@ export function useWalletConnect() {
   const [connectingProvider, setConnectingProvider] = useState<string | null>(null);
   const didRedirect = useRef(false);
 
-  const { isConnected, account, isConnecting, error: walletError, clickRef, syncActiveAccount, connect } = useICOWallet();
-  const { isAuthenticated, isLoading: isSigningIn, error: authError, login } = useBackendAuth(
+  const { isConnected, account, isConnecting, error: walletError, clickRef, syncActiveAccount, connect, disconnect } = useICOWallet();
+  const { user, isAuthenticated, isLoading: isSigningIn, error: authError, login } = useBackendAuth(
     clickRef,
     account?.publicKey ?? null,
   );
@@ -32,35 +33,24 @@ export function useWalletConnect() {
   useEffect(() => {
     if (!profile || didRedirect.current) return;
     didRedirect.current = true;
-    const destination = profile.role === 'landlord' ? '/landlord/dashboard' : '/tenant/dashboard';
-    navigate(destination, { replace: true });
+    navigate(getDashboardRoute(profile.role), { replace: true });
   }, [profile, navigate]);
 
-  // After fresh backend auth — sync JWT to AuthContext (redirect handled by effect above)
+  // After fresh backend auth — copy the server user into AuthContext.
+  // Tokens live in HttpOnly cookies; only the profile object travels through JS.
   useEffect(() => {
-    if (!isAuthenticated || didRedirect.current) return;
-
-    const token = localStorage.getItem('leasefi_jwt');
-    if (!token) return;
-
-    try {
-      const payload = JSON.parse(atob(token.split('.')[1])) as { sub: string; role: string };
-      setWalletSession(token, payload.sub, payload.role);
-      // redirect fires from the profile effect once AuthContext updates
-    } catch {
-      // malformed token
-    }
+    if (!user || didRedirect.current) return;
+    setWalletSession(user);
+  // setWalletSession is stable (useCallback); only re-run when login produces a new user.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated]);
+  }, [user]);
 
-  // Once wallet connects, automatically trigger backend auth
-  useEffect(() => {
-    if (isConnected && account && !isAuthenticated && !isSigningIn) {
-      login();
-    }
-  // login is stable (useCallback) — safe to omit
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isConnected, account?.publicKey]);
+  // Note: we intentionally do NOT auto-call login() here. The CSPR.click SDK
+  // restores the previous session's `connected` state on init, so visiting
+  // /auth/login after a Sign Out would otherwise auto-trigger a signMessage
+  // popup before the user has clicked anything. Login.tsx and Register.tsx
+  // expose an explicit "Sign in with connected wallet" button which calls
+  // login() — that's the only path that should fire signMessage.
 
   // Reset connectingProvider on modal close / rejection.
   // Each provider signals cancellation differently:
@@ -105,8 +95,18 @@ export function useWalletConnect() {
           return;
         }
       }
+      // selectAccount=true forces CSPR.click to show the Google/social
+      // account picker instead of silently re-using the cached OAuth token.
+      // Without this, a user who logged in with account A can never sign
+      // in with account B from the same browser without manually clearing
+      // cookies on accounts.cspr.click. The trade-off: existing users
+      // with a single account see one extra "Continue as …" tap on every
+      // login — small UX cost in exchange for working multi-account.
       const options = isSocial
-        ? { chainName: import.meta.env.VITE_CASPER_NETWORK ?? 'casper-test' }
+        ? {
+            chainName: import.meta.env.VITE_CASPER_NETWORK ?? 'casper-test',
+            selectAccount: true,
+          }
         : undefined;
       const account = await clickRef.connect(providerKey, options);
       if (account) await syncActiveAccount();
@@ -128,6 +128,7 @@ export function useWalletConnect() {
     isSigningIn,
     login,
     connect,
+    disconnect,
     clickRef,
     handleConnectProvider,
   };

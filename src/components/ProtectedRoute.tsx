@@ -2,7 +2,7 @@ import React from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
-import { RouteRole } from '@/types/user';
+import { RouteRole, getDashboardRoute } from '@/types/user';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -12,15 +12,13 @@ interface ProtectedRouteProps {
 export default function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {
   const { profile, loading, isAuthenticated } = useAuth();
 
-  // Show loading spinner while checking authentication
+  // Show loading spinner while AuthContext is verifying the cookie-backed
+  // session via /auth/refresh on mount.
   if (loading) {
     return <LoadingSpinner fullScreen />;
   }
 
-  // If there's a JWT token in storage, trust it while profile hydrates
-  const hasStoredToken = !!localStorage.getItem('leasefi_jwt');
   if (!isAuthenticated || !profile) {
-    if (hasStoredToken) return <LoadingSpinner fullScreen />;
     return <Navigate to="/auth/login" replace />;
   }
 
@@ -34,9 +32,7 @@ export default function ProtectedRoute({ children, allowedRoles }: ProtectedRout
 
   // Check if user's role matches any of the allowed roles
   if (!allowedRoles.includes(userRole as RouteRole)) {
-    // Redirect to appropriate dashboard based on user's role
-    const redirectPath = userRole === 'landlord' ? '/landlord/dashboard' : '/tenant/dashboard';
-    return <Navigate to={redirectPath} replace />;
+    return <Navigate to={getDashboardRoute(userRole)} replace />;
   }
 
   return <>{children}</>;

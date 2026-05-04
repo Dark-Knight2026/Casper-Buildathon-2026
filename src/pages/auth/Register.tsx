@@ -1,27 +1,31 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+
 import { Home, Loader2, AlertCircle } from 'lucide-react';
+
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useWalletConnect } from '@/hooks/auth/useWalletConnect';
+
 import { RoleSelector } from './register/RoleSelector';
 import { ProviderList } from './register/ProviderList';
 
-export function Register() {
+export default function Register() {
   const [role, setRole] = useState<'tenant' | 'landlord'>('tenant');
 
   const {
-    isConnected, account, isAuthenticated, isSigningIn, isConnecting,
+    isConnected, account, isAuthenticated, isSigningIn,
     connectingProvider, setConnectingProvider,
-    error, isLoading, clickRef,
-    handleConnectProvider, login, connect,
+    error, isLoading,
+    handleConnectProvider, login, disconnect,
   } = useWalletConnect();
 
-  // NOTE FOR BACKEND TEAM:
-  // `role` needs to be sent to POST /api/v1/auth/login as an optional field.
-  // Backend should use it only on first registration (INSERT) and ignore on subsequent
-  // logins (ON CONFLICT DO UPDATE). Until supported, new users always get 'tenant' role.
+  // The selected role is forwarded to POST /api/v1/auth/login. Backend
+  // honors it only on the first INSERT (`upsert_user_by_wallet`) and ignores
+  // it on subsequent logins, so re-running registration with a different
+  // role for the same wallet has no effect — the user must connect a
+  // different wallet to claim a different role.
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4 py-8">
@@ -59,36 +63,35 @@ export function Register() {
           )}
 
           {isConnected && account ? (
-            <Button className="w-full" onClick={login} disabled={isSigningIn || isAuthenticated}>
-              {isSigningIn
-                ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Signing in…</>
-                : 'Sign in with connected wallet'
-              }
-            </Button>
-          ) : (
-            <>
-              {/* CSPR.click native UI — opens SDK modal with all providers (same flow as ICO header) */}
+            <div className="space-y-2">
               <Button
                 className="w-full"
-                variant="default"
-                onClick={connect}
-                disabled={isAuthenticated || !clickRef || isConnecting}
+                onClick={() => login(role)}
+                disabled={isSigningIn || isAuthenticated}
               >
-                {isConnecting
-                  ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Connecting…</>
-                  : 'Sign in with CSPR.click'
+                {isSigningIn
+                  ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Signing in…</>
+                  : 'Sign in'
                 }
               </Button>
-
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <span className="w-full border-t" />
-                </div>
-                <div className="relative flex justify-center text-xs">
-                  <span className="bg-white px-2 text-muted-foreground">or use custom UI</span>
-                </div>
-              </div>
-
+              <button
+                type="button"
+                onClick={() => {
+                  // signOut() clears SDK state but the CSPR.click iframe
+                  // (accounts.cspr.click) holds its own cookies that survive
+                  // — without a hard reload the next connect silently re-uses
+                  // the cached account regardless of selectAccount:true.
+                  disconnect();
+                  window.location.reload();
+                }}
+                disabled={isSigningIn || isAuthenticated}
+                className="block w-full text-center text-sm text-muted-foreground hover:text-foreground hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Use a different account
+              </button>
+            </div>
+          ) : (
+            <>
               <ProviderList
                 connectingProvider={connectingProvider}
                 onConnect={handleConnectProvider}

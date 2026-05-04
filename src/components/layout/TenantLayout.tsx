@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Link, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
+import { useICOWallet } from '@/hooks/ico/useICOWallet';
 import { Button } from '@/components/ui/button';
+import { ProfileNudgeDialog } from '@/components/auth/ProfileNudgeDialog';
 import {
   LayoutDashboard,
   Home,
@@ -16,6 +18,28 @@ import {
   X,
   LogOut,
 } from 'lucide-react';
+import type { User as UserType } from '@/types/user';
+
+// The placeholder backend stamps onto wallet-only rows on first login
+// (see crates/api/src/services/auth/db.rs — `INSERT … 'Wallet', 'User'`).
+// We treat this exact pair as "no real name yet" and prefer the wallet
+// address instead, so every wallet-only user does not appear as "Wallet".
+const PLACEHOLDER_FIRST = 'Wallet';
+const PLACEHOLDER_LAST = 'User';
+
+function shortenWallet(address: string): string {
+  if (address.length <= 4) return address;
+  return `${address.slice(0, 2)}..${address.slice(-2)}`;
+}
+
+function headerDisplayName(profile: UserType): string {
+  const isPlaceholder =
+    profile.firstName === PLACEHOLDER_FIRST && profile.lastName === PLACEHOLDER_LAST;
+  if (!isPlaceholder && profile.firstName) return profile.firstName;
+  if (profile.walletAddress) return shortenWallet(profile.walletAddress);
+  if (profile.email) return profile.email;
+  return 'Account';
+}
 
 const NAV_LINKS = [
   { to: '/tenant/dashboard',       label: 'Dashboard',    icon: LayoutDashboard },
@@ -31,13 +55,21 @@ const NAV_LINKS = [
 
 export default function TenantLayout() {
   const { profile, walletSignOut } = useAuth();
-  const navigate = useNavigate();
+  const { disconnect } = useICOWallet();
   const { pathname } = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
 
+  // Sign out fully — both our backend session AND the CSPR.click wallet
+  // session. We use a hard `location.assign` instead of `navigate` because
+  // `clickRef.signOut()` is asynchronous: a soft React-Router navigation
+  // would mount the next page while the SDK still has the previous account
+  // cached, and useWalletConnect's auto-login effect would immediately
+  // trigger a fresh signMessage popup. Reloading the page nukes the in-memory
+  // SDK state so the next page (landing) starts from a clean slate.
   const handleSignOut = () => {
+    disconnect();
     walletSignOut();
-    navigate('/auth/login', { replace: true });
+    window.location.assign('/');
   };
 
   const isActive = (to: string) => pathname === to || pathname.startsWith(to + '/');
@@ -79,7 +111,7 @@ export default function TenantLayout() {
           <div className="hidden lg:flex items-center gap-3">
             {profile && (
               <span className="text-sm text-muted-foreground">
-                {profile.firstName ?? profile.email}
+                {headerDisplayName(profile)}
               </span>
             )}
             <Button variant="ghost" size="sm" onClick={handleSignOut}>
@@ -123,7 +155,7 @@ export default function TenantLayout() {
           <div className="mt-6 pt-4 border-t border-border flex items-center justify-between">
             {profile && (
               <span className="text-sm text-muted-foreground">
-                {profile.firstName ?? profile.email}
+                {headerDisplayName(profile)}
               </span>
             )}
             <Button variant="ghost" size="sm" onClick={handleSignOut}>
@@ -137,6 +169,8 @@ export default function TenantLayout() {
       <main className="pt-16">
         <Outlet />
       </main>
+
+      <ProfileNudgeDialog profilePath="/tenant/profile" />
     </div>
   );
 }

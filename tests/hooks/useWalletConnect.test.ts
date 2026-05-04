@@ -37,13 +37,43 @@ import { useWalletConnect } from '@/hooks/auth/useWalletConnect';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
-const TOKEN_KEY = 'leasefi_jwt';
 const PUBLIC_KEY = '01abc123';
 
-function makeJwt(payload: Record<string, unknown>): string {
-  const header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
-  const body = btoa(JSON.stringify(payload));
-  return `${header}.${body}.signature`;
+interface ServerUserShape {
+  id: string;
+  role: string;
+  wallet_address: string | null;
+  status: string | null;
+  email: string | null;
+  first_name: string;
+  last_name: string;
+  phone: string | null;
+  avatar_url: string | null;
+  bio: string | null;
+  is_profile_complete: boolean;
+  active_leases_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+function makeServerUser(overrides: Partial<ServerUserShape> = {}): ServerUserShape {
+  return {
+    id: 'user-42',
+    role: 'landlord',
+    wallet_address: PUBLIC_KEY,
+    status: 'active',
+    email: 'user@example.com',
+    first_name: 'Ada',
+    last_name: 'Lovelace',
+    phone: null,
+    avatar_url: null,
+    bio: null,
+    is_profile_complete: true,
+    active_leases_count: 0,
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-04-01T00:00:00Z',
+    ...overrides,
+  };
 }
 
 function makeClickRef() {
@@ -70,12 +100,14 @@ function setWalletState(overrides: Partial<{
 }
 
 function setBackendAuthState(overrides: Partial<{
+  user: ServerUserShape | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
   login: ReturnType<typeof vi.fn>;
 }> = {}) {
   mockUseBackendAuth.mockReturnValue({
+    user: null,
     isAuthenticated: false,
     isLoading: false,
     error: null,
@@ -112,7 +144,10 @@ describe('useWalletConnect', () => {
 
       renderHook(() => useWalletConnect());
 
-      expect(mockNavigate).toHaveBeenCalledWith('/landlord/dashboard', { replace: true });
+      expect(
+        mockNavigate,
+        'landlord profile must redirect to /landlord/dashboard'
+      ).toHaveBeenCalledWith('/landlord/dashboard', { replace: true });
     });
 
     it('redirects tenant profile to /tenant/dashboard on mount', () => {
@@ -120,13 +155,19 @@ describe('useWalletConnect', () => {
 
       renderHook(() => useWalletConnect());
 
-      expect(mockNavigate).toHaveBeenCalledWith('/tenant/dashboard', { replace: true });
+      expect(
+        mockNavigate,
+        'tenant profile must redirect to /tenant/dashboard'
+      ).toHaveBeenCalledWith('/tenant/dashboard', { replace: true });
     });
 
     it('does not redirect when no profile is loaded', () => {
       renderHook(() => useWalletConnect());
 
-      expect(mockNavigate).not.toHaveBeenCalled();
+      expect(
+        mockNavigate,
+        'redirect must wait for AuthContext.profile to populate'
+      ).not.toHaveBeenCalled();
     });
 
     it('does not call login when already authenticated', () => {
@@ -140,12 +181,20 @@ describe('useWalletConnect', () => {
 
       renderHook(() => useWalletConnect());
 
-      expect(login).not.toHaveBeenCalled();
+      expect(
+        login,
+        'login() must not re-fire when the session is already authenticated'
+      ).not.toHaveBeenCalled();
     });
   });
 
   describe('connect → auth → redirect by role', () => {
-    it('calls login() once wallet connects and backend auth has not started', () => {
+    it('does NOT auto-call login() when SDK restores a connected wallet', () => {
+      // CSPR.click rehydrates the previous session's connection on init.
+      // We intentionally don't auto-trigger backend login from that —
+      // otherwise visiting /auth/login after a Sign Out would force a fresh
+      // signMessage popup with no user click. Login.tsx exposes an explicit
+      // "Sign in with connected wallet" button which calls login() directly.
       const login = vi.fn();
       setWalletState({
         isConnected: true,
@@ -155,7 +204,10 @@ describe('useWalletConnect', () => {
 
       renderHook(() => useWalletConnect());
 
-      expect(login).toHaveBeenCalledTimes(1);
+      expect(
+        login,
+        'auto-login is disabled — login() must only fire from an explicit user action'
+      ).not.toHaveBeenCalled();
     });
 
     it('does not call login() while backend auth is in flight', () => {
@@ -168,55 +220,58 @@ describe('useWalletConnect', () => {
 
       renderHook(() => useWalletConnect());
 
-      expect(login).not.toHaveBeenCalled();
+      expect(
+        login,
+        'login() must not double-fire while a sign-in round-trip is already in flight'
+      ).not.toHaveBeenCalled();
     });
 
-    it('decodes JWT and syncs walletSession on successful backend auth', () => {
+    it('passes the server user to walletSession on successful backend auth', () => {
       const setWalletSession = vi.fn();
-      const token = makeJwt({ sub: 'user-42', role: 'landlord' });
-      localStorage.setItem(TOKEN_KEY, token);
+      const user = makeServerUser({ id: 'user-42', role: 'landlord' });
 
       setAuthContext({ setWalletSession });
-      setBackendAuthState({ isAuthenticated: true });
+      setBackendAuthState({ user, isAuthenticated: true });
 
       renderHook(() => useWalletConnect());
 
-      expect(setWalletSession).toHaveBeenCalledWith(token, 'user-42', 'landlord');
+      expect(
+        setWalletSession,
+        'after backend auth, the full ServerUserInfo should flow into AuthContext'
+      ).toHaveBeenCalledWith(user);
     });
 
-    it('redirects by role once profile hydrates after JWT sync', () => {
-      const token = makeJwt({ sub: 'user-7', role: 'landlord' });
-      localStorage.setItem(TOKEN_KEY, token);
-      setBackendAuthState({ isAuthenticated: true });
+    it('redirects by role once profile hydrates after walletSession sync', () => {
+      const user = makeServerUser({ id: 'user-7', role: 'landlord' });
+      setBackendAuthState({ user, isAuthenticated: true });
 
       const { rerender } = renderHook(() => useWalletConnect());
-      expect(mockNavigate).not.toHaveBeenCalled();
+      expect(
+        mockNavigate,
+        'navigation must wait for AuthContext.profile to hydrate'
+      ).not.toHaveBeenCalled();
 
       // AuthContext hydrates the profile after setWalletSession resolves
       setAuthContext({ profile: { id: 'user-7', role: 'landlord' } });
       rerender();
 
-      expect(mockNavigate).toHaveBeenCalledWith('/landlord/dashboard', { replace: true });
+      expect(
+        mockNavigate,
+        'landlord profile should redirect to /landlord/dashboard once hydrated'
+      ).toHaveBeenCalledWith('/landlord/dashboard', { replace: true });
     });
 
-    it('does not crash on malformed JWT', () => {
-      localStorage.setItem(TOKEN_KEY, 'not-a-jwt');
+    it('does nothing when isAuthenticated flips true but no user object is exposed', () => {
       const setWalletSession = vi.fn();
       setAuthContext({ setWalletSession });
-      setBackendAuthState({ isAuthenticated: true });
-
-      expect(() => renderHook(() => useWalletConnect())).not.toThrow();
-      expect(setWalletSession).not.toHaveBeenCalled();
-    });
-
-    it('does nothing when isAuthenticated flips true but no token is in storage', () => {
-      const setWalletSession = vi.fn();
-      setAuthContext({ setWalletSession });
-      setBackendAuthState({ isAuthenticated: true });
+      setBackendAuthState({ user: null, isAuthenticated: true });
 
       renderHook(() => useWalletConnect());
 
-      expect(setWalletSession).not.toHaveBeenCalled();
+      expect(
+        setWalletSession,
+        'walletSession should not be called without a server-supplied user'
+      ).not.toHaveBeenCalled();
     });
   });
 
@@ -226,7 +281,10 @@ describe('useWalletConnect', () => {
 
       const { result } = renderHook(() => useWalletConnect());
 
-      expect(result.current.error).toBe('Wallet not available');
+      expect(
+        result.current.error,
+        'wallet-side errors must surface unchanged through .error'
+      ).toBe('Wallet not available');
     });
 
     it('exposes backend auth error via .error', () => {
@@ -234,7 +292,10 @@ describe('useWalletConnect', () => {
 
       const { result } = renderHook(() => useWalletConnect());
 
-      expect(result.current.error).toBe('Backend rejected signature');
+      expect(
+        result.current.error,
+        'backend auth errors must surface through .error when no wallet error is set'
+      ).toBe('Backend rejected signature');
     });
 
     it('prefers wallet error over backend error when both are present', () => {
@@ -243,7 +304,10 @@ describe('useWalletConnect', () => {
 
       const { result } = renderHook(() => useWalletConnect());
 
-      expect(result.current.error).toBe('wallet-err');
+      expect(
+        result.current.error,
+        'wallet error must win — backend error is irrelevant if the wallet itself failed'
+      ).toBe('wallet-err');
     });
   });
 
@@ -257,7 +321,10 @@ describe('useWalletConnect', () => {
       act(() => {
         result.current.setConnectingProvider('casper-wallet');
       });
-      expect(result.current.connectingProvider).toBe('casper-wallet');
+      expect(
+        result.current.connectingProvider,
+        'precondition: connectingProvider should reflect the in-flight selection before cancellation'
+      ).toBe('casper-wallet');
 
       const cancelledHandler = clickRef.on.mock.calls.find(c => c[0] === 'csprclick:cancelled')?.[1];
       act(() => { cancelledHandler?.(); });

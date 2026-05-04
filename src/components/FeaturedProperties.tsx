@@ -2,7 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { FEATURED_PROPERTIES } from '@/data/featuredProperties';
 import { PropertyCard } from '@/components/property/PropertyCard';
 
-export default function FeaturedProperties() {
+export function FeaturedProperties() {
   const navigate = useNavigate();
 
   return (
