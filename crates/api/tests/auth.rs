@@ -1028,3 +1028,59 @@ async fn concurrent_first_login_resolves_same_user(pool: PgPool) {
         "both concurrent upserts must converge on the same user_id"
     );
 }
+
+/// Regression: a `POST /auth/login` against a wallet that has no nonce
+/// stored in Redis must increment the per-wallet failure counter so
+/// repeated attempts hit the 429 ceiling instead of returning 401
+/// indefinitely.
+///
+/// The buggy path returns `Unauthorized` directly from `take_nonce`'s
+/// `ok_or_else`, never calling `record_login_failure`. An attacker who
+/// only knows a wallet address can then probe the `/auth/login`
+/// endpoint without first paying for a `/auth/nonce` round-trip and
+/// without ever tripping the rate-limit gate.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn nonce_miss_counts_toward_rate_limit(pool: PgPool) {
+    let env = common::setup_test_server(pool, true).await;
+
+    // Valid-shape wallet address (66 chars = ED25519); we never request a
+    // nonce for it, so the login attempts hit the nonce-miss branch every
+    // time.
+    let wallet_address = "01a234567890abcdef01234567890abcdef01234567890abcdef01234567890abc";
+    let signature = "01".to_string() + &"ab".repeat(64);
+
+    // First 5 attempts must surface as 401 (nonce missing) - this is the
+    // failure we're counting. LOGIN_FAIL_MAX_ATTEMPTS is 5, so after the
+    // 5th miss the counter equals the threshold.
+    for attempt in 0..5 {
+        let response = env
+            .server
+            .post("/api/v1/auth/login")
+            .json(&serde_json::json!({
+                "wallet_address": wallet_address,
+                "signature": signature,
+            }))
+            .await;
+        assert_eq!(
+            response.status_code(),
+            StatusCode::UNAUTHORIZED,
+            "attempt {attempt}: nonce-miss must surface as 401 before the limit is reached",
+        );
+    }
+
+    // 6th attempt: the per-wallet limit must trigger before the handler
+    // even consults Redis for a nonce, returning 429.
+    let response = env
+        .server
+        .post("/api/v1/auth/login")
+        .json(&serde_json::json!({
+            "wallet_address": wallet_address,
+            "signature": signature,
+        }))
+        .await;
+    assert_eq!(
+        response.status_code(),
+        StatusCode::TOO_MANY_REQUESTS,
+        "6th nonce-miss attempt must be rate-limited; otherwise an attacker can probe wallets indefinitely",
+    );
+}
