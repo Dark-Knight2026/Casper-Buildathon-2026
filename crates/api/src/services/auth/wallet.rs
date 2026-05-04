@@ -197,23 +197,28 @@ pub async fn login(
     // TOCTOU elimination is more critical than the nonce-invalidation vector,
     // because TOCTOU allows actual replay attacks while nonce-DoS only causes
     // a retry. Mitigation: per-wallet rate limiting on failed logins (above).
-    let stored_nonce = state
-        .redis
-        .take_nonce(&wallet_address)
-        .await
-        .map_err(|e| {
-            tracing::error!(error = %e, "Failed to get nonce");
-            ApiError::Internal(format!("Failed to get nonce: {e}"))
-        })?
-        .ok_or_else(|| {
-            tracing::warn!(
-                event = "login_failed",
-                reason = "nonce_expired",
-                wallet_address = %wallet_address,
-                "Nonce not found or expired"
-            );
-            ApiError::Unauthorized("Nonce not found or expired".to_owned())
-        })?;
+    let Some(stored_nonce) = state.redis.take_nonce(&wallet_address).await.map_err(|e| {
+        tracing::error!(error = %e, "Failed to get nonce");
+        ApiError::Internal(format!("Failed to get nonce: {e}"))
+    })?
+    else {
+        // Count nonce-miss as a login failure so an attacker who knows
+        // a wallet address can't probe `/auth/login` indefinitely without
+        // ever paying for a `/auth/nonce` round-trip. Without this, the
+        // per-wallet rate-limit gate on the next request is never
+        // reached. Best-effort: a Redis hiccup at this point should not
+        // mask the upstream nonce-miss with a 500.
+        let _ = state.redis.record_login_failure(&wallet_address).await;
+        tracing::warn!(
+            event = "login_failed",
+            reason = "nonce_expired",
+            wallet_address = %wallet_address,
+            "Nonce not found or expired"
+        );
+        return Err(ApiError::Unauthorized(
+            "Nonce not found or expired".to_owned(),
+        ));
+    };
 
     // Security: Verify Signature and RETURN ERROR if invalid
     let is_valid = common::verify_casper_signature(
