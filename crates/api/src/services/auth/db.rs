@@ -24,7 +24,7 @@ pub struct UserRecord {
 ///
 /// Lookup goes through `wallet_connections` (the canonical multi-wallet table)
 /// rather than `users.wallet_address` (a cached column). This lets a user log
-/// in with any of their connected wallets - cspr.click SDK, Casper Wallet
+/// in with any of their connected wallets - `cspr.click` SDK, Casper Wallet
 /// extension, or a future custodial provisioned address.
 ///
 /// All side effects happen inside a single transaction:
@@ -37,6 +37,13 @@ pub struct UserRecord {
 ///   column) and a `wallet_connections` row with `is_primary=true,
 ///   is_custodial=false, provider='casper_wallet'`.
 ///
+/// Concurrent first-logins for the same wallet are race-safe: both INSERT
+/// statements use `ON CONFLICT DO NOTHING`, and the loser rolls back its
+/// transaction and retries through the SELECT branch, where it sees the
+/// winner's row and falls into the UPDATE path. A bounded retry (two
+/// attempts) prevents pathological loops while comfortably covering the
+/// single race the constraints can produce.
+///
 /// # Arguments
 ///
 /// * `pool` - Database connection pool
@@ -47,9 +54,9 @@ pub struct UserRecord {
 ///
 /// # Errors
 ///
-/// Returns `sqlx::Error` on DB failure (including unique-constraint violation
-/// from concurrent first-time logins of the same wallet, which is mapped to
-/// `ApiError::Conflict` upstream).
+/// Returns `sqlx::Error` on DB failure. Concurrent first-time logins for
+/// the same wallet are handled internally and never surface as
+/// unique-constraint errors to the caller.
 #[inline]
 pub async fn upsert_user_by_wallet(
     pool: &PgPool,
@@ -57,77 +64,100 @@ pub async fn upsert_user_by_wallet(
     wallet_address: &str,
     role: UserRole,
 ) -> Result<UserRecord, Error> {
-    let mut tx = pool.begin().await?;
+    let role_str = role.to_string();
 
-    let existing = sqlx::query!(
-        r"
-            SELECT u.id, u.role, u.verification_level
-            FROM users u
-            JOIN wallet_connections wc ON wc.user_id = u.id
-            WHERE wc.wallet_address = $1
-              AND u.deleted_at IS NULL
-            LIMIT 1
-        ",
-        wallet_address,
-    )
-    .fetch_optional(tx.as_mut())
-    .await?;
+    for _ in 0..2 {
+        let mut tx = pool.begin().await?;
 
-    let record = if let Some(row) = existing {
-        sqlx::query!(
+        let existing = sqlx::query!(
             r"
-                UPDATE wallet_connections
-                SET last_used_at = NOW()
-                WHERE user_id = $1 AND wallet_address = $2
+                SELECT u.id, u.role, u.verification_level
+                FROM users u
+                JOIN wallet_connections wc ON wc.user_id = u.id
+                WHERE wc.wallet_address = $1
+                  AND u.deleted_at IS NULL
+                LIMIT 1
             ",
-            row.id,
             wallet_address,
         )
-        .execute(tx.as_mut())
+        .fetch_optional(tx.as_mut())
         .await?;
 
-        sqlx::query!(
-            r"
-                UPDATE users
-                SET last_login_at = NOW()
-                WHERE id = $1
-            ",
-            row.id,
-        )
-        .execute(tx.as_mut())
-        .await?;
+        if let Some(row) = existing {
+            sqlx::query!(
+                r"
+                    UPDATE wallet_connections
+                    SET last_used_at = NOW()
+                    WHERE user_id = $1 AND wallet_address = $2
+                ",
+                row.id,
+                wallet_address,
+            )
+            .execute(tx.as_mut())
+            .await?;
 
-        let verification_level =
-            VerificationLevel::from_str(&row.verification_level).map_err(|err| {
-                Error::ColumnDecode {
-                    index: "verification_level".to_owned(),
-                    source: Box::new(err),
-                }
-            })?;
+            sqlx::query!(
+                r"
+                    UPDATE users
+                    SET last_login_at = NOW()
+                    WHERE id = $1
+                ",
+                row.id,
+            )
+            .execute(tx.as_mut())
+            .await?;
 
-        UserRecord {
-            id: row.id,
-            role: row.role,
-            verification_level,
+            let verification_level =
+                VerificationLevel::from_str(&row.verification_level).map_err(|err| {
+                    Error::ColumnDecode {
+                        index: "verification_level".to_owned(),
+                        source: Box::new(err),
+                    }
+                })?;
+
+            tx.commit().await?;
+            return Ok(UserRecord {
+                id: row.id,
+                role: row.role,
+                verification_level,
+            });
         }
-    } else {
-        let role_str = role.to_string();
-        let inserted = sqlx::query!(
+
+        // `users_email_unique` is a partial index
+        // (`WHERE email IS NOT NULL AND deleted_at IS NULL`), so the
+        // `ON CONFLICT` target must repeat that predicate verbatim or
+        // Postgres rejects the statement with "no unique or exclusion
+        // constraint matching the ON CONFLICT specification".
+        let inserted_user = sqlx::query!(
             r"
-                INSERT INTO users (email, role, first_name, last_name, auth_id, status)
-                VALUES ($1, $2, 'Wallet', 'User', NULL, 'active')
+                INSERT INTO users (email, role, first_name, last_name, auth_id, status, last_login_at)
+                VALUES ($1, $2, 'Wallet', 'User', NULL, 'active', NOW())
+                ON CONFLICT (email) WHERE email IS NOT NULL AND deleted_at IS NULL DO NOTHING
                 RETURNING id, role, verification_level
             ",
             email,
             role_str,
         )
-        .fetch_one(tx.as_mut())
+        .fetch_optional(tx.as_mut())
         .await?;
 
+        let Some(inserted) = inserted_user else {
+            // Race lost on email: another transaction created this user
+            // first. Roll back and retry through the SELECT branch.
+            tx.rollback().await?;
+            continue;
+        };
+
+        // `wallet_connections` has no unique on `wallet_address` alone -
+        // only the composite `UNIQUE (user_id, wallet_address)`. The pair
+        // is the only collision possible in this branch (same user just
+        // inserted, same wallet) and a `DO NOTHING` keeps the operation
+        // idempotent if a parallel retry observes the same state.
         sqlx::query!(
             r"
                 INSERT INTO wallet_connections (user_id, wallet_address, provider, is_primary, is_custodial)
                 VALUES ($1, $2, 'casper_wallet', true, false)
+                ON CONFLICT (user_id, wallet_address) DO NOTHING
             ",
             inserted.id,
             wallet_address,
@@ -141,16 +171,15 @@ pub async fn upsert_user_by_wallet(
                 source: Box::new(err),
             })?;
 
-        UserRecord {
+        tx.commit().await?;
+        return Ok(UserRecord {
             id: inserted.id,
             role: inserted.role,
             verification_level,
-        }
-    };
+        });
+    }
 
-    tx.commit().await?;
-
-    Ok(record)
+    Err(Error::RowNotFound)
 }
 
 /// Inserts a fresh `refresh_tokens` row and returns its primary key.

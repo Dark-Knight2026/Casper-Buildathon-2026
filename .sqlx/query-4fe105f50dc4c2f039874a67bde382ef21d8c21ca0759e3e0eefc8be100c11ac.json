@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n                INSERT INTO users (email, role, first_name, last_name, auth_id, status)\n                VALUES ($1, $2, 'Wallet', 'User', NULL, 'active')\n                RETURNING id, role, verification_level\n            ",
+  "query": "\n                INSERT INTO users (email, role, first_name, last_name, auth_id, status, last_login_at)\n                VALUES ($1, $2, 'Wallet', 'User', NULL, 'active', NOW())\n                ON CONFLICT (email) WHERE email IS NOT NULL AND deleted_at IS NULL DO NOTHING\n                RETURNING id, role, verification_level\n            ",
   "describe": {
     "columns": [
       {
@@ -31,5 +31,5 @@
       false
     ]
   },
-  "hash": "74a46f78984db736a22dfd40e1a6a852e5a744c1ee8a9c97073a93219917c4d2"
+  "hash": "4fe105f50dc4c2f039874a67bde382ef21d8c21ca0759e3e0eefc8be100c11ac"
 }
