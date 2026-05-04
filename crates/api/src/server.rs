@@ -54,20 +54,29 @@ const REQUEST_BODY_LIMIT: usize = 1024 * 1024;
 ///
 /// # Errors
 ///
-/// Returns `ServerError::EnvVar` if `CORS_ORIGIN` is not a valid HTTP header value.
+/// Returns `ServerError::EnvVar` when:
+/// - `CORS_ORIGIN` is the wildcard `*` (incompatible with cookie auth: the
+///   browser refuses `Access-Control-Allow-Origin: *` together with
+///   `Access-Control-Allow-Credentials: true`, so the wildcard would
+///   silently break the entire authenticated surface);
+/// - `CORS_ORIGIN` is not a valid HTTP header value.
 #[inline]
 pub fn create_app(state: Arc<AppState>) -> Result<Router, ServerError> {
+    let cors_origin = state.config.cors_origin.trim();
+    if cors_origin == "*" {
+        return Err(ServerError::EnvVar(
+            "CORS_ORIGIN must be an explicit origin (wildcard `*` is rejected by browsers when allow_credentials=true)".to_owned(),
+        ));
+    }
     let cors = CorsLayer::new()
         .allow_origin(
-            state
-                .config
-                .cors_origin
+            cors_origin
                 .parse::<header::HeaderValue>()
                 .map_err(|e| ServerError::EnvVar(format!("Invalid CORS_ORIGIN: {e}")))?,
         )
         .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE])
-        .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION])
-        .allow_credentials(false);
+        .allow_headers([header::CONTENT_TYPE])
+        .allow_credentials(true);
 
     Ok(create_router(state)
         .layer(cors)
