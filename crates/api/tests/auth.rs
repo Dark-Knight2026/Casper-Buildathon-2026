@@ -108,6 +108,40 @@ async fn login_rejects_invalid_wallet_address(pool: PgPool) {
     assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
 }
 
+/// Wallet address with valid Casper Ed25519 length (66 chars) but
+/// containing a non-hex character must be rejected by the wallet-address
+/// validator before any signature work happens.
+///
+/// Pins the second half of the wallet-address invariant -
+/// `login_rejects_invalid_wallet_address` already covers the length-fail
+/// path (literal "invalid" is too short). This test specifically exercises
+/// the `chars().all(is_ascii_hexdigit)` guard so a future refactor cannot
+/// silently drop hex validation while length-fails keep passing the
+/// existing test.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn login_rejects_non_hex_address(pool: PgPool) {
+    let env = common::setup_test_server(pool, false).await;
+
+    // 66 chars (Ed25519 length) but the trailing `c` of the canonical
+    // sample address is replaced with `z` - length passes, hex check fails.
+    let non_hex_address = "01a234567890abcdef01234567890abcdef01234567890abcdef01234567890abz";
+
+    let response = env
+        .server
+        .post("/api/v1/auth/login")
+        .json(&serde_json::json!({
+            "wallet_address": non_hex_address,
+            "signature": "01a234567890abcdef01234567890abcdef01234567890abcdef01234567890abc01234567890abcdef01234567890abcdef01234567890abcdef01234567890abcdef"
+        }))
+        .await;
+
+    assert_eq!(
+        response.status_code(),
+        StatusCode::BAD_REQUEST,
+        "wallet_address with non-hex chars must be rejected before signature check",
+    );
+}
+
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn login_without_nonce_returns_401(pool: PgPool) {
     let env = common::setup_test_server(pool, false).await;
@@ -729,6 +763,92 @@ async fn jwt_without_jti_rejected(pool: PgPool) {
     );
 }
 
+/// JWT with `exp` already in the past must be rejected by the auth
+/// middleware. Mirrors the structure of `jwt_wrong_issuer_rejected` but
+/// flips the time axis instead of the issuer string - no clock-skew
+/// tolerance is intended in the verifier, so a 1-hour-stale `exp` is
+/// strictly out of bounds.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn jwt_with_expired_exp_rejected(pool: PgPool) {
+    let env = common::setup_test_server(pool, false).await;
+
+    let exp = usize::try_from((Utc::now() - Duration::hours(1)).timestamp().max(0)).unwrap();
+    let claims = Claims {
+        sub: Uuid::new_v4(),
+        role: UserRole::Tenant,
+        exp,
+        iss: JWT_ISSUER.to_owned(),
+        aud: JWT_AUDIENCE.to_owned(),
+        token_type: None,
+        verification_level: None,
+        jti: Uuid::new_v4(),
+    };
+    let token = jsonwebtoken::encode(
+        &Header::default(),
+        &claims,
+        &EncodingKey::from_secret(env.jwt_secret.as_bytes()),
+    )
+    .unwrap();
+
+    let (status, _) = common::authed_request::<Value>(
+        &env.server,
+        &Method::POST,
+        "/api/v1/tax/calculate-liability",
+        &token,
+        &serde_json::json!({ "fiscal_year": 2024, "property_ids": [] }),
+    )
+    .await;
+
+    assert_eq!(
+        status,
+        StatusCode::UNAUTHORIZED,
+        "JWT with exp already in the past must be rejected"
+    );
+}
+
+/// JWT signed with a secret that differs from the server's `jwt_secret`
+/// must be rejected, even when issuer/audience/exp are all perfectly
+/// formed. Pins the cryptographic check itself: an attacker who knows the
+/// claim shape but not the HS256 secret cannot mint usable tokens.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn jwt_signed_with_wrong_secret_rejected(pool: PgPool) {
+    let env = common::setup_test_server(pool, false).await;
+
+    let exp = usize::try_from((Utc::now() + Duration::hours(1)).timestamp().max(0)).unwrap();
+    let claims = Claims {
+        sub: Uuid::new_v4(),
+        role: UserRole::Tenant,
+        exp,
+        iss: JWT_ISSUER.to_owned(),
+        aud: JWT_AUDIENCE.to_owned(),
+        token_type: None,
+        verification_level: None,
+        jti: Uuid::new_v4(),
+    };
+    // Sign with a *different* secret than the one the server is using.
+    let token = jsonwebtoken::encode(
+        &Header::default(),
+        &claims,
+        &EncodingKey::from_secret(b"a-different-secret-not-the-servers"),
+    )
+    .unwrap();
+
+    let (status, _) = common::authed_request::<Value>(
+        &env.server,
+        &Method::POST,
+        "/api/v1/tax/calculate-liability",
+        &token,
+        &serde_json::json!({ "fiscal_year": 2024, "property_ids": [] }),
+    )
+    .await;
+
+    assert_eq!(
+        status,
+        StatusCode::UNAUTHORIZED,
+        "JWT signed with a non-server secret must fail signature verification"
+    );
+}
+
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn refresh_without_cookie_returns_401(pool: PgPool) {
     let env = common::setup_test_server(pool, false).await;
@@ -1236,5 +1356,61 @@ async fn replaced_by_fk_blocks_chain_breaking_deletes(pool: PgPool) {
         chain,
         Some(successor_id),
         "predecessor.replaced_by must remain pointing at the successor after the blocked DELETE; SET NULL would have silently NULLed it",
+    );
+}
+
+/// Logging in twice with the same wallet address must return the same
+/// `user_id`. The first login creates the row through `upsert_user_by_wallet`;
+/// the second must resolve to the existing user via the
+/// `wallet_connections` lookup, NOT create a fresh users row.
+///
+/// Distinct from `concurrent_first_login_resolves_same_user`, which covers
+/// the *race* between two simultaneous first-logins (both attempt INSERT,
+/// the unique index decides the winner). This test covers the sequential
+/// reissue case where the first login has fully committed before the
+/// second begins - a different code path through the upsert that goes
+/// through "wallet already linked, fetch user" instead of the
+/// ON CONFLICT branch. If a future refactor accidentally splits these
+/// paths, only the sequential test catches the regression.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn repeated_login_same_wallet_returns_same_user(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), true).await;
+
+    let seed = [99u8; 32];
+
+    let first = login_with_seed(&env, seed).await;
+    assert_eq!(first.status_code(), StatusCode::OK);
+    let first_user_id = first.json::<Value>()["user"]["id"]
+        .as_str()
+        .and_then(|s| Uuid::parse_str(s).ok())
+        .expect("first login response must include user.id");
+
+    let second = login_with_seed(&env, seed).await;
+    assert_eq!(second.status_code(), StatusCode::OK);
+    let second_user_id = second.json::<Value>()["user"]["id"]
+        .as_str()
+        .and_then(|s| Uuid::parse_str(s).ok())
+        .expect("second login response must include user.id");
+
+    assert_eq!(
+        first_user_id, second_user_id,
+        "second login on the same wallet must resolve to the same user_id; otherwise the user gets a fresh account on every reissue and loses all profile/lease history",
+    );
+
+    // Belt-and-suspenders: confirm the DB really has only one wallet row.
+    let row_count: i64 = sqlx::query_scalar!(
+        r#"
+            SELECT COUNT(*) AS "count!"
+            FROM wallet_connections
+            WHERE user_id = $1
+        "#,
+        first_user_id,
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("count query failed");
+    assert_eq!(
+        row_count, 1,
+        "exactly one wallet_connections row must exist after two logins on the same wallet",
     );
 }
