@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 
 import { Home, Loader2, AlertCircle } from 'lucide-react';
 
@@ -11,8 +11,18 @@ import { useWalletConnect } from '@/hooks/auth/useWalletConnect';
 import { RoleSelector } from './register/RoleSelector';
 import { ProviderList } from './register/ProviderList';
 
+type SupportedRole = 'tenant' | 'landlord';
+const SUPPORTED_ROLES: SupportedRole[] = ['tenant', 'landlord'];
+
 export default function Register() {
-  const [role, setRole] = useState<'tenant' | 'landlord'>('tenant');
+  const [searchParams] = useSearchParams();
+  // Honor ?role=… deep-links from the help hub. Unsupported values
+  // (e.g. property_manager) silently fall back to tenant — the role isn't
+  // wired into the backend role contract yet.
+  const initialRole = (searchParams.get('role') as SupportedRole | null);
+  const [role, setRole] = useState<SupportedRole>(
+    initialRole && SUPPORTED_ROLES.includes(initialRole) ? initialRole : 'tenant'
+  );
 
   const {
     isConnected, account, isAuthenticated, isSigningIn,

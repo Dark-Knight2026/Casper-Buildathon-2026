@@ -26,6 +26,9 @@ export function LandingHeader() {
           <Link to="/ico" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
             Token Sale
           </Link>
+          <Link to="/help" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+            Help
+          </Link>
         </nav>
 
         <div className="flex items-center gap-3">

@@ -20,6 +20,7 @@ import PropertyLanding from '@/pages/PropertyLanding';
 // Lazy load auth pages
 const MFASetup = lazy(() => import('@/pages/auth/MFASetup'));
 const MFAVerify = lazy(() => import('@/pages/auth/MFAVerify'));
+const HelpHub = lazy(() => import('@/pages/HelpHub'));
 
 import TenantLayout from '@/components/layout/TenantLayout';
 import PublicLayout from '@/components/layout/PublicLayout';
@@ -162,7 +163,10 @@ function App() {
               
               {/* Landing Page - Default route for all visitors */}
               <Route path="/" element={<PropertyLanding />} />
-              
+
+              {/* Onboarding hub — public, role-agnostic entry point for new users. */}
+              <Route path="/help" element={<HelpHub />} />
+
               {/* Property Browsing - Public access for exploration, wrapped with the
                   same landing header so navigation persists across browse/detail views. */}
               <Route element={<PublicLayout />}>
