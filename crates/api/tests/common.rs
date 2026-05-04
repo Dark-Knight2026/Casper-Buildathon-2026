@@ -13,6 +13,7 @@
 #![allow(clippy::missing_panics_doc)]
 #![allow(clippy::must_use_candidate)]
 
+use core::fmt::{Debug, Formatter, Result as FmtResult};
 use std::sync::Arc;
 
 use axum::http::{Method, StatusCode};
@@ -33,7 +34,10 @@ use uuid::Uuid;
 
 use api::{
     AppState, Claims, IcoFallback, LoggingEmailSender, ServerConfig, UserId, UserRole,
-    common::{JWT_AUDIENCE, JWT_ISSUER, RedisStore, TOTAL_SUPPLY, TokenType, VerificationLevel},
+    common::{
+        EmailSender, JWT_AUDIENCE, JWT_ISSUER, RedisStore, TOTAL_SUPPLY, TokenType,
+        VerificationLevel,
+    },
     server,
 };
 
@@ -57,9 +61,9 @@ pub struct RedisTestEnv {
     _container: ContainerAsync<GenericImage>,
 }
 
-impl core::fmt::Debug for RedisTestEnv {
+impl Debug for RedisTestEnv {
     #[inline]
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         f.debug_struct("RedisTestEnv")
             .field("client", &"redis::Client")
             .field("url", &self.url)
@@ -104,12 +108,30 @@ pub struct TestEnv {
 }
 
 /// Optional overrides for test server configuration.
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct TestOverrides {
     /// BIG token contract hash (enables `/transactions/token/big`).
     pub contract_big: Option<String>,
     /// ICO fallback config (used when `ico_schedules` table is empty).
     pub ico_fallback: Option<IcoFallback>,
+    /// Custom mailer for the test (defaults to `LoggingEmailSender`).
+    ///
+    /// Tests that exercise `mailer.send` failure paths (e.g. the
+    /// email-change rollback) supply a fake here that returns
+    /// `EmailError::Transport` so the rest of the handler can be observed
+    /// without wiring up a real SMTP relay.
+    pub mailer: Option<Arc<dyn EmailSender>>,
+}
+
+impl core::fmt::Debug for TestOverrides {
+    #[inline]
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("TestOverrides")
+            .field("contract_big", &self.contract_big)
+            .field("ico_fallback", &self.ico_fallback)
+            .field("mailer", &self.mailer.as_ref().map(|_| "EmailSender"))
+            .finish()
+    }
 }
 
 /// Creates a test server using a pool from `#[sqlx::test]`.
@@ -154,12 +176,15 @@ pub async fn setup_test_server_with(
         ico_fallback: overrides.ico_fallback,
         total_supply: TOTAL_SUPPLY,
     };
+    let mailer = overrides
+        .mailer
+        .unwrap_or_else(|| Arc::new(LoggingEmailSender) as Arc<dyn EmailSender>);
     let state = Arc::new(AppState {
         db: pool,
         redis: RedisStore::new(redis_client)
             .await
             .expect("Failed to connect to Redis"),
-        mailer: Arc::new(LoggingEmailSender),
+        mailer,
         config,
     });
 
