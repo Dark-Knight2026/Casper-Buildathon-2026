@@ -275,13 +275,29 @@ pub async fn login(
     let placeholder_email = format!("wallet_{}@leasefi.local", hex::encode(&hash[..20]));
 
     // If a user with this wallet_address already exists, return it. If not, create a new one.
-    let user_record = auth::upsert_user_by_wallet(
+    // The `NotActive` arm covers wallets that are linked to a non-`active`
+    // user (suspended/inactive/pending). Tokens must NOT be issued in that
+    // case: a 15-minute access window is the blast radius of any later
+    // status downgrade if the gate is missed.
+    let user_record = match auth::upsert_user_by_wallet(
         &state.db,
         &placeholder_email,
         &wallet_address,
         requested_role,
     )
-    .await?;
+    .await?
+    {
+        auth::UpsertOutcome::Resolved(record) => record,
+        auth::UpsertOutcome::NotActive => {
+            tracing::warn!(
+                event = "login_failed",
+                reason = "user_not_active",
+                wallet_address = %wallet_address,
+                "User exists but status is not active"
+            );
+            return Err(ApiError::Forbidden("Account is not active".to_owned()));
+        }
+    };
     let user_role = UserRole::from_str(&user_record.role).unwrap_or(UserRole::Unknown);
 
     let encoded = jwt::encode_access_token(

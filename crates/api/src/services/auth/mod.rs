@@ -27,7 +27,7 @@ pub use cookies::{
     ACCESS_TOKEN_COOKIE, REFRESH_COOKIE_PATH, REFRESH_TOKEN_COOKIE, build_access_cookie,
     build_refresh_cookie,
 };
-pub use db::{insert_refresh_token, upsert_user_by_wallet};
+pub use db::{UpsertOutcome, insert_refresh_token, upsert_user_by_wallet};
 pub use jwt::{ACCESS_TOKEN_TTL, EncodedAccessToken, decode_token, encode_access_token};
 pub use logout::logout;
 pub use middleware::{AuthError, AuthUser};

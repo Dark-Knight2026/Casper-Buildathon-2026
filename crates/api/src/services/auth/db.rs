@@ -20,6 +20,22 @@ pub struct UserRecord {
     pub verification_level: VerificationLevel,
 }
 
+/// Outcome of [`upsert_user_by_wallet`].
+///
+/// Each variant maps to a distinct handler response (200 vs. 403), so the
+/// result is an exhaustive enum rather than a collapsed `Option`/error.
+/// Mirrors the [`RefreshOutcome`] pattern used by the refresh-rotation
+/// path in this same module.
+#[derive(Debug)]
+pub enum UpsertOutcome {
+    /// Wallet resolved (existing or just-created) to an `active` user.
+    Resolved(UserRecord),
+    /// Wallet is linked to a user whose `status` is not `'active'`
+    /// (suspended, inactive, or pending verification). Login must be
+    /// rejected with 403 and no tokens issued.
+    NotActive,
+}
+
 /// Resolves a user by wallet address, creating a new account if none exists.
 ///
 /// Lookup goes through `wallet_connections` (the canonical multi-wallet table)
@@ -63,7 +79,7 @@ pub async fn upsert_user_by_wallet(
     email: &str,
     wallet_address: &str,
     role: UserRole,
-) -> Result<UserRecord, Error> {
+) -> Result<UpsertOutcome, Error> {
     let role_str = role.to_string();
 
     for _ in 0..2 {
@@ -71,7 +87,7 @@ pub async fn upsert_user_by_wallet(
 
         let existing = sqlx::query!(
             r"
-                SELECT u.id, u.role, u.verification_level
+                SELECT u.id, u.role, u.verification_level, u.status
                 FROM users u
                 JOIN wallet_connections wc ON wc.user_id = u.id
                 WHERE wc.wallet_address = $1
@@ -84,6 +100,19 @@ pub async fn upsert_user_by_wallet(
         .await?;
 
         if let Some(row) = existing {
+            // Status gate: only `active` users may receive tokens. The
+            // SELECT above intentionally does not filter on status so we
+            // can distinguish "wallet unknown" (-> create new account)
+            // from "wallet known but suspended/inactive" (-> 403). A
+            // status filter inside the SELECT would collapse both cases
+            // into the INSERT branch and accidentally provision a fresh
+            // active account on top of a deliberately-disabled one.
+            if row.status.as_deref() != Some("active") {
+                // No mutating writes happened in this branch, so the
+                // transaction simply rolls back on drop.
+                return Ok(UpsertOutcome::NotActive);
+            }
+
             sqlx::query!(
                 r"
                     UPDATE wallet_connections
@@ -116,11 +145,11 @@ pub async fn upsert_user_by_wallet(
                 })?;
 
             tx.commit().await?;
-            return Ok(UserRecord {
+            return Ok(UpsertOutcome::Resolved(UserRecord {
                 id: row.id,
                 role: row.role,
                 verification_level,
-            });
+            }));
         }
 
         // `users_email_unique` is a partial index
@@ -172,11 +201,11 @@ pub async fn upsert_user_by_wallet(
             })?;
 
         tx.commit().await?;
-        return Ok(UserRecord {
+        return Ok(UpsertOutcome::Resolved(UserRecord {
             id: inserted.id,
             role: inserted.role,
             verification_level,
-        });
+        }));
     }
 
     Err(Error::RowNotFound)

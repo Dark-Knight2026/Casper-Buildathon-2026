@@ -16,7 +16,7 @@ use uuid::Uuid;
 use api::{
     Claims, RedisStore, UserRole,
     common::{CASPER_MESSAGE_PREFIX, JWT_AUDIENCE, JWT_ISSUER},
-    services::AUTH_RATE_LIMIT_BURST,
+    services::{AUTH_RATE_LIMIT_BURST, auth::UpsertOutcome},
 };
 
 /// Signs a message with the Casper Wallet prefix, matching browser extension behavior.
@@ -1137,11 +1137,16 @@ async fn concurrent_first_login_resolves_same_user(pool: PgPool) {
         api::services::auth::upsert_user_by_wallet(&pool_b, &email_b, &wallet_b, UserRole::Tenant),
     );
 
-    let record_a =
-        result_a.expect("first concurrent upsert must succeed (the race winner inserts the row)");
-    let record_b = result_b.expect(
+    let UpsertOutcome::Resolved(record_a) =
+        result_a.expect("first concurrent upsert must succeed (the race winner inserts the row)")
+    else {
+        panic!("first concurrent upsert must Resolve - fresh wallets are 'active' on insert");
+    };
+    let UpsertOutcome::Resolved(record_b) = result_b.expect(
         "second concurrent upsert must succeed (the race loser must resolve to the existing user)",
-    );
+    ) else {
+        panic!("second concurrent upsert must Resolve - the existing row was just inserted active");
+    };
 
     assert_eq!(
         record_a.id, record_b.id,
@@ -1271,14 +1276,16 @@ async fn replaced_by_fk_blocks_chain_breaking_deletes(pool: PgPool) {
     let wallet_address = public_key.to_hex().to_ascii_lowercase();
     let placeholder_email = format!("wallet_{}@leasefi.local", &wallet_address[..40]);
 
-    let user = api::services::auth::upsert_user_by_wallet(
+    let UpsertOutcome::Resolved(user) = api::services::auth::upsert_user_by_wallet(
         &pool,
         &placeholder_email,
         &wallet_address,
         UserRole::Tenant,
     )
     .await
-    .expect("seed user creation must succeed");
+    .expect("seed user creation must succeed") else {
+        panic!("seed user must Resolve - fresh wallet upserts default to status='active'");
+    };
 
     let predecessor_id = Uuid::new_v4();
     let successor_id = Uuid::new_v4();
