@@ -107,14 +107,18 @@ impl InvestorRegistry {
             record.frozen = existing.frozen;
         }
 
-        self.env().emit_event(InvestorRecordSet {
-            account,
-            verified: record.verified,
-            verified_until: record.verified_until,
-            jurisdiction: record.jurisdiction,
-        });
+        let verified = record.verified;
+        let verified_until = record.verified_until;
+        let jurisdiction = record.jurisdiction;
 
         self.records.set(&account, record);
+
+        self.env().emit_event(InvestorRecordSet {
+            account,
+            verified,
+            verified_until,
+            jurisdiction,
+        });
     }
 
     /// Freezes or unfreezes an investor wallet

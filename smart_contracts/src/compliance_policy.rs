@@ -142,12 +142,14 @@ impl CompliancePolicy {
     pub fn set_compliance_config(&mut self, property_id: U256, config: ComplianceConfig) {
         self.assert_role(ROLE_COMPLIANCE_MANAGER);
 
-        self.env().emit_event(ComplianceConfigSet {
-            property_id,
-            transfers_enabled: config.transfers_enabled,
-        });
+        let transfers_enabled = config.transfers_enabled;
 
         self.configs.set(&property_id, config);
+
+        self.env().emit_event(ComplianceConfigSet {
+            property_id,
+            transfers_enabled,
+        });
     }
 
     /// Sets whether an account is exempt from investor verification checks
