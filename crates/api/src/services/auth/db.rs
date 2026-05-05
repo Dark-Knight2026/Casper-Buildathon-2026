@@ -3,7 +3,7 @@
 use core::str::FromStr;
 
 use chrono::{DateTime, Utc};
-use sqlx::{Error, PgPool};
+use sqlx::{Error, PgConnection, PgPool};
 use uuid::Uuid;
 
 use crate::common::{UserRole, VerificationLevel};
@@ -213,30 +213,30 @@ pub async fn upsert_user_by_wallet(
 
 /// Revokes every still-active `refresh_tokens` row for the given user.
 ///
-/// Called at login time so a fresh login invalidates any prior session
-/// (web browser, mobile, stolen cookie). The match condition is
-/// `revoked_at IS NULL` rather than `expires_at > NOW()` because we want
+/// Called at login time so a fresh login invalidates any prior session (web
+/// browser, mobile, stolen cookie). The match condition is `revoked_at IS NULL`
+/// rather than `expires_at > NOW()` because we want
 /// already-expired-but-not-revoked rows to be cleaned up too: leaving a
-/// dangling row with `revoked_at IS NULL` is what would otherwise let
-/// the partial unique index (`(token_hash) WHERE revoked_at IS NULL`)
-/// silently block a future hash collision recovery.
+/// dangling row with `revoked_at IS NULL` is what would otherwise let the
+/// partial unique index (`(token_hash) WHERE revoked_at IS NULL`) silently
+/// block a future hash collision recovery.
 ///
-/// UX trade-off: this enforces a **single-device session model**. Logging
-/// in on phone forcibly logs out web; the simultaneous-multi-device case
-/// is not yet supported because we have no per-session metadata - refresh
-/// rows are anonymous beyond `user_id` and `family_id`, so we cannot tell
-/// "phone" apart from "web" to revoke selectively. When session-listing
-/// lands (with the per-session capture re-introduced), this function
-/// should be replaced by "revoke other sessions" exposed through a
-/// `DELETE /sessions/:id` endpoint instead of being implicit in `login`.
+/// UX trade-off: this enforces a **single-device session model**. Logging in on
+/// phone forcibly logs out web; the simultaneous-multi-device case is not yet
+/// supported because we have no per-session metadata - refresh rows are
+/// anonymous beyond `user_id` and `family_id`, so we cannot tell "phone" apart
+/// from "web" to revoke selectively. When session-listing lands (with the
+/// per-session capture re-introduced), this function should be replaced by
+/// "revoke other sessions" exposed through a `DELETE /sessions/:id` endpoint
+/// instead of being implicit in `login`.
 ///
 /// # Errors
 ///
-/// Returns `sqlx::Error` on DB failure. Upstream maps `?` -> `ApiError`
-/// like every other db call in this module.
+/// Returns `sqlx::Error` on DB failure. Upstream maps `?` -> `ApiError` like
+/// every other db call in this module.
 #[inline]
 pub async fn revoke_all_active_refresh_tokens_for_user(
-    pool: &PgPool,
+    conn: &mut PgConnection,
     user_id: Uuid,
 ) -> Result<(), Error> {
     sqlx::query!(
@@ -247,7 +247,7 @@ pub async fn revoke_all_active_refresh_tokens_for_user(
         ",
         user_id,
     )
-    .execute(pool)
+    .execute(conn)
     .await?;
     Ok(())
 }
@@ -255,26 +255,26 @@ pub async fn revoke_all_active_refresh_tokens_for_user(
 /// Inserts a fresh `refresh_tokens` row and returns its primary key.
 ///
 /// `token_hash` is the raw SHA-256 of the opaque plaintext - never the
-/// plaintext itself. The plaintext is returned to the caller exactly once
-/// (in the `Set-Cookie` header) and only the hash is persisted.
+/// plaintext itself. The plaintext is returned to the caller exactly once (in
+/// the `Set-Cookie` header) and only the hash is persisted.
 ///
-/// `family_id` groups all rotations of one login session: at first login
-/// the caller passes a brand-new UUID; on rotation the new row inherits
-/// the predecessor's `family_id`. Reuse-detection later revokes the entire
-/// family in one statement.
+/// `family_id` groups all rotations of one login session: at first login the
+/// caller passes a brand-new UUID; on rotation the new row inherits the
+/// predecessor's `family_id`. Reuse-detection later revokes the entire family
+/// in one statement.
 ///
-/// `replaced_by` is left NULL here - it is set on the predecessor row
-/// during rotation, not at issuance.
+/// `replaced_by` is left NULL here - it is set on the predecessor row during
+/// rotation, not at issuance.
 ///
 /// # Errors
 ///
 /// Returns `sqlx::Error` on DB failure. The partial unique index on
 /// `(token_hash) WHERE revoked_at IS NULL` would surface the
-/// astronomically-unlikely SHA-256 collision as a unique-violation;
-/// upstream maps that to `ApiError::Conflict`.
+/// astronomically-unlikely SHA-256 collision as a unique-violation; upstream
+/// maps that to `ApiError::Conflict`.
 #[inline]
 pub async fn insert_refresh_token(
-    pool: &PgPool,
+    conn: &mut PgConnection,
     user_id: Uuid,
     family_id: Uuid,
     token_hash: &[u8],
@@ -291,7 +291,7 @@ pub async fn insert_refresh_token(
         family_id,
         expires_at,
     )
-    .fetch_one(pool)
+    .fetch_one(conn)
     .await?;
 
     Ok(row.id)

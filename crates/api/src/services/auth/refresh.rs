@@ -132,25 +132,30 @@ pub async fn issue_login_refresh_token(
     let token = generate_refresh_token()?;
     let family_id = Uuid::new_v4();
 
-    // Revoke prior families BEFORE inserting the new row so a concurrent
-    // `POST /auth/refresh` with the stale cookie cannot squeeze through
-    // between revoke and insert. The two statements are not in one tx
-    // because the rotation path takes its own row lock per token; an
-    // interleaving here would still observe the revoked predecessors.
-    db::revoke_all_active_refresh_tokens_for_user(pool, user_id).await?;
+    // Revoke + insert run in one transaction so a transient INSERT failure (FK
+    // violation, partial-unique collision, connection drop) rolls back the
+    // revoke and the user keeps their previously-active session. Without this
+    // atomicity guarantee a flaky DB at login time would leave the account with
+    // zero live refresh tokens: prior family dead, new family never persisted,
+    // and the only path back is a fresh nonce + re-sign.
+    let mut tx = pool.begin().await?;
+
+    db::revoke_all_active_refresh_tokens_for_user(tx.as_mut(), user_id).await?;
 
     // `?` -> `From<sqlx::Error> for ApiError`: row-not-found becomes 404,
     // unique-violation (vanishingly unlikely SHA-256 collision on the active
     // index) becomes 409, every other DB failure becomes 500. Keeping the
     // mapping uniform across the codebase avoids drift between handlers.
     db::insert_refresh_token(
-        pool,
+        tx.as_mut(),
         user_id,
         family_id,
         token.hash.as_slice(),
         token.expires_at,
     )
     .await?;
+
+    tx.commit().await?;
 
     Ok(IssuedRefreshToken {
         plaintext: token.plaintext,
