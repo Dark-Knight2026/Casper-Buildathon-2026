@@ -12,7 +12,6 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useAuth } from '@/hooks/useAuth';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { RoleSwitcher } from '@/components/auth/RoleSwitcher';
 import { useMobileDetection } from '@/hooks/useMobileDetection';
 
 interface HeaderProps {
@@ -51,11 +50,6 @@ export const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
       )}
       
       <div className="flex items-center gap-1 sm:gap-2 ml-auto">
-        {/* Role Switcher - Hidden on mobile */}
-        <div className="hidden md:flex">
-          <RoleSwitcher />
-        </div>
-
         {/* Notifications */}
         <Button 
           variant="ghost" 
@@ -87,15 +81,6 @@ export const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
           <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuLabel>My Account</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            {/* Show role switcher in mobile menu */}
-            {isMobile && (
-              <>
-                <div className="px-2 py-2">
-                  <RoleSwitcher />
-                </div>
-                <DropdownMenuSeparator />
-              </>
-            )}
             <DropdownMenuItem>Profile</DropdownMenuItem>
             <DropdownMenuItem>Settings</DropdownMenuItem>
             <DropdownMenuItem>Support</DropdownMenuItem>
