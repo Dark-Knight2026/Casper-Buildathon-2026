@@ -100,6 +100,15 @@ describe('LandingHeader', () => {
       const link = screen.getByRole('link', { name: /token sale/i });
       expect(link, 'Token Sale nav should link to /ico').toHaveAttribute('href', '/ico');
     });
+
+    it('Help link points to /help', () => {
+      renderHeader();
+      const link = screen.getByRole('link', { name: /^help$/i });
+      expect(
+        link,
+        'Help nav should link to /help so the public header can reach the onboarding hub'
+      ).toHaveAttribute('href', '/help');
+    });
   });
 
   describe('auth links (guest)', () => {

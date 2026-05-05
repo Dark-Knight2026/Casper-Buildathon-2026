@@ -70,6 +70,14 @@ function renderRegister() {
   );
 }
 
+function renderRegisterAt(path: string) {
+  return render(
+    <MemoryRouter initialEntries={[path]}>
+      <Register />
+    </MemoryRouter>
+  );
+}
+
 describe('Register', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -220,6 +228,42 @@ describe('Register', () => {
         link,
         'Register must offer a Sign in entrypoint for returning users'
       ).toHaveAttribute('href', '/auth/login');
+    });
+  });
+
+  describe('?role= deep-link', () => {
+    it('pre-selects landlord when ?role=landlord is present', () => {
+      renderRegisterAt('/auth/register?role=landlord');
+      expect(
+        screen.getByRole('radio', { name: /landlord/i }),
+        'help-hub deep-link must pre-select Landlord so the user lands on the right role'
+      ).toBeChecked();
+    });
+
+    it('pre-selects tenant when ?role=tenant is present', () => {
+      renderRegisterAt('/auth/register?role=tenant');
+      expect(
+        screen.getByRole('radio', { name: /tenant/i }),
+        'tenant deep-link must pre-select Tenant'
+      ).toBeChecked();
+    });
+
+    it('falls back to tenant for an unsupported ?role= value', () => {
+      // Backend role contract only knows tenant/landlord today; anything else
+      // (e.g. property_manager) must silently default rather than 500 the page.
+      renderRegisterAt('/auth/register?role=property_manager');
+      expect(
+        screen.getByRole('radio', { name: /tenant/i }),
+        'unsupported roles must fall back to Tenant — the safer default'
+      ).toBeChecked();
+    });
+
+    it('defaults to tenant when ?role= is absent', () => {
+      renderRegisterAt('/auth/register');
+      expect(
+        screen.getByRole('radio', { name: /tenant/i }),
+        'no query param means the standard Tenant default'
+      ).toBeChecked();
     });
   });
 });
