@@ -1414,3 +1414,70 @@ async fn repeated_login_same_wallet_returns_same_user(pool: PgPool) {
         "exactly one wallet_connections row must exist after two logins on the same wallet",
     );
 }
+
+/// Regression: a user whose `status` column is no longer `'active'` must
+/// not be able to log in.
+///
+/// `users.status` has a CHECK constraint with four values: `active`,
+/// `inactive`, `suspended`, `pending_verification`. Only `active` should
+/// pass authentication. The buggy `upsert_user_by_wallet` SELECT does not
+/// filter on status at all, so a `suspended` user can request a nonce,
+/// sign it, and receive a valid 15-minute access token plus a refresh
+/// family - which is exactly the situation an admin invoking "suspend"
+/// is trying to prevent.
+///
+/// Sequencing: first login creates the row with status `'active'`
+/// (default at INSERT). We then downgrade the status directly via SQL
+/// (mirroring the documented admin downgrade procedure) and replay the
+/// login. On buggy code the second login returns 200; the fix must
+/// return 403 `Forbidden` before issuing any tokens.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn login_blocked_for_suspended_user(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), true).await;
+
+    let seed = [42u8; 32];
+
+    let first = login_with_seed(&env, seed).await;
+    assert_eq!(
+        first.status_code(),
+        StatusCode::OK,
+        "first login on a fresh wallet must succeed (default status = 'active')",
+    );
+    let user_id = first.json::<Value>()["user"]["id"]
+        .as_str()
+        .and_then(|s| Uuid::parse_str(s).ok())
+        .expect("first login response must include user.id");
+
+    let updated = sqlx::query!(
+        r"
+            UPDATE users
+            SET status = 'suspended'
+            WHERE id = $1
+        ",
+        user_id,
+    )
+    .execute(&pool)
+    .await
+    .expect("manual status downgrade must succeed");
+    assert_eq!(
+        updated.rows_affected(),
+        1,
+        "the just-created user row must exist for the downgrade to hit it",
+    );
+
+    let second = login_with_seed(&env, seed).await;
+    assert_eq!(
+        second.status_code(),
+        StatusCode::FORBIDDEN,
+        "suspended users must be rejected before any token is issued; got {}",
+        second.status_code(),
+    );
+    assert!(
+        second.maybe_cookie("access_token").is_none(),
+        "no access_token cookie must be set when login is rejected for status",
+    );
+    assert!(
+        second.maybe_cookie("refresh_token").is_none(),
+        "no refresh_token cookie must be set when login is rejected for status",
+    );
+}

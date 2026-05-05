@@ -6,7 +6,10 @@ use std::sync::Arc;
 
 use axum::{
     Router,
-    http::{Method, header::{HeaderValue, CONTENT_TYPE}},
+    http::{
+        Method,
+        header::{CONTENT_TYPE, HeaderValue},
+    },
 };
 use secrecy::ExposeSecret;
 use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
