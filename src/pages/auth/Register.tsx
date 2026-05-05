@@ -12,16 +12,20 @@ import { RoleSelector } from './register/RoleSelector';
 import { ProviderList } from './register/ProviderList';
 
 type SupportedRole = 'tenant' | 'landlord';
-const SUPPORTED_ROLES: SupportedRole[] = ['tenant', 'landlord'];
+const SUPPORTED_ROLES: readonly SupportedRole[] = ['tenant', 'landlord'];
+
+function isSupportedRole(value: string | null): value is SupportedRole {
+  return value !== null && (SUPPORTED_ROLES as readonly string[]).includes(value);
+}
 
 export default function Register() {
   const [searchParams] = useSearchParams();
   // Honor ?role=… deep-links from the help hub. Unsupported values
   // (e.g. property_manager) silently fall back to tenant — the role isn't
   // wired into the backend role contract yet.
-  const initialRole = (searchParams.get('role') as SupportedRole | null);
+  const rawRole = searchParams.get('role');
   const [role, setRole] = useState<SupportedRole>(
-    initialRole && SUPPORTED_ROLES.includes(initialRole) ? initialRole : 'tenant'
+    isSupportedRole(rawRole) ? rawRole : 'tenant'
   );
 
   const {
