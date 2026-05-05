@@ -6,7 +6,7 @@ use odra_modules::{
 
 use crate::{
     common,
-    compliance_policy::{self, CompliancePolicyContractRef},
+    compliance_policy::CompliancePolicyContractRef,
     property_fraction_token::{
         errors::Error,
         events::{CompliancePolicySet, PropertyFractionTokenInitialized},
