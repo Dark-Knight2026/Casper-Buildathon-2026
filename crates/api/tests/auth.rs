@@ -10,7 +10,7 @@ use jsonwebtoken::{EncodingKey, Header};
 use rand::Rng;
 use redis::AsyncCommands;
 use serde_json::Value;
-use sqlx::PgPool;
+use sqlx::{Error, PgPool};
 use uuid::Uuid;
 
 use api::{
@@ -1714,5 +1714,52 @@ async fn refresh_token_in_access_cookie_rejected_with_401(pool: PgPool) {
         StatusCode::UNAUTHORIZED,
         "refresh-typed JWT in access_token cookie must 401; got {}",
         response.status_code(),
+    );
+}
+
+/// Regression: when `upsert_user_by_wallet` exhausts its retry budget, the
+/// returned `sqlx::Error` must NOT be `RowNotFound`. `RowNotFound` is
+/// mapped to `ApiError::NotFound` -> HTTP 404 by the `From<sqlx::Error>`
+/// impl, but retry exhaustion is a server-side condition (the wallet
+/// itself was not "missing", the upsert just lost the race twice). The
+/// correct status is 500.
+///
+/// Setup pre-inserts an active user whose `email` matches the placeholder
+/// the upsert would generate, but with no `wallet_connections` row. The
+/// retry loop then:
+///   - iteration 1: SELECT joined on `wallet_connections` -> empty;
+///     INSERT ON CONFLICT (email) DO NOTHING -> returns None;
+///     rollback, continue.
+///   - iteration 2: same story.
+/// On buggy code, the function falls through to `Err(RowNotFound)`.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn upsert_retry_exhaustion_is_not_row_not_found(pool: PgPool) {
+    let placeholder_email = "retry-exhaust@leasefi.local";
+    let wallet_address = "01a234567890abcdef01234567890abcdef01234567890abcdef01234567890abc";
+
+    sqlx::query!(
+        r"
+            INSERT INTO users (email, role, first_name, last_name, status)
+            VALUES ($1, $2, 'Wallet', 'User', 'active')
+        ",
+        placeholder_email,
+        UserRole::Tenant.to_string(),
+    )
+    .execute(&pool)
+    .await
+    .expect("seed user insert");
+
+    let result = api::services::auth::upsert_user_by_wallet(
+        &pool,
+        placeholder_email,
+        wallet_address,
+        UserRole::Tenant,
+    )
+    .await;
+
+    let err = result.expect_err("retry budget must be exhausted in this scenario");
+    assert!(
+        !matches!(err, Error::RowNotFound),
+        "retry exhaustion must NOT surface as RowNotFound (would map to HTTP 404); got: {err:?}",
     );
 }
