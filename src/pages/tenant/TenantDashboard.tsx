@@ -25,6 +25,8 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorBoundary } from '@/components/ui/error-boundary';
 import { LeaseExtensionBanner } from '@/components/tenant/LeaseExtensionBanner';
 import { LeaseDecisionBanner } from '@/components/tenant/LeaseDecisionBanner';
+import { RecommendedProperties } from '@/components/tenant/RecommendedProperties';
+import { CURRENT_TENANT_ID, getMyCurrentProperties } from '@/data/tenantLeases';
 
 // TODO: remove when backend /api/v1/leases is ready
 const MOCK_LEASE: LeaseAgreement & { propertyAddress: string; paymentDueDay: number } = {
@@ -143,6 +145,26 @@ export function TenantDashboard() {
             />
           </div>
         )}
+
+        {/* Task 6 — recommendations within 180 days of lease end. The dashboard's
+            MOCK_LEASE is a stripped-down LeaseAgreement; for the recommendations
+            section we need a real Property object, so we source the first active
+            tenant lease via getMyCurrentProperties (same demo seed as MyProperties). */}
+        {(() => {
+          const [firstCurrent] = getMyCurrentProperties(CURRENT_TENANT_ID);
+          if (!firstCurrent) return null;
+          return (
+            <div className="mb-8">
+              <RecommendedProperties
+                tenantId={CURRENT_TENANT_ID}
+                leaseEndDate={firstCurrent.lease.endDate}
+                monthlyRent={firstCurrent.lease.monthlyRent}
+                currentProperty={firstCurrent.property}
+                variant="compact"
+              />
+            </div>
+          );
+        })()}
 
         {/* Quick Stats */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">

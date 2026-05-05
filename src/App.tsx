@@ -37,6 +37,7 @@ const TenantMaintenanceDetail = lazy(() => import('@/pages/tenant/TenantMaintena
 const TenantRenewals = lazy(() => import('@/pages/tenant/TenantRenewals'));
 const TenantRenewalDetail = lazy(() => import('@/pages/tenant/TenantRenewalDetail'));
 const TenantProfile = lazy(() => import('@/pages/tenant/TenantProfile').then(m => ({ default: m.TenantProfile })));
+const TenantRecommended = lazy(() => import('@/pages/tenant/TenantRecommended'));
 
 // Lazy load tenant property search pages (PUBLIC ACCESS for browsing)
 const PropertySearch = lazy(() => import('@/pages/tenant/PropertySearch'));
@@ -219,6 +220,7 @@ function App() {
                 <Route path="property-search"       element={<PropertySearch />} />
                 <Route path="properties"            element={<MyProperties />} />
                 <Route path="properties/:id"        element={<MyPropertyDetail />} />
+                <Route path="recommended"           element={<TenantRecommended />} />
                 <Route path="saved-properties"      element={<SavedProperties />} />
                 <Route path="my-applications"       element={<MyApplications />} />
                 <Route path="my-viewings"           element={<MyViewings />} />

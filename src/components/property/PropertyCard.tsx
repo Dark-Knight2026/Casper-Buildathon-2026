@@ -2,6 +2,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { SavePropertyButton } from '@/components/property/SavePropertyButton';
 import { MapPin, Bed, Bath, Square, TrendingUp, Star, Camera } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 type PropertyStatus = 'active' | 'pending' | 'rented' | 'inactive' | 'archived';
 
@@ -35,16 +36,20 @@ interface PropertyCardProps {
   property: PropertyCardData;
   onClick: () => void;
   showSave?: boolean;
+  className?: string;
 }
 
 const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=800';
 
-export function PropertyCard({ property, onClick, showSave = true }: PropertyCardProps) {
+export function PropertyCard({ property, onClick, showSave = true, className }: PropertyCardProps) {
   const image = property.images?.[0] ?? FALLBACK_IMAGE;
 
   return (
     <Card
-      className="group flex flex-col overflow-hidden hover:shadow-md transition-shadow duration-200 border border-border bg-card cursor-pointer rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+      className={cn(
+        'group flex flex-col overflow-hidden hover:shadow-md transition-shadow duration-200 border border-border bg-card cursor-pointer rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+        className,
+      )}
       onClick={onClick}
       tabIndex={0}
       role="button"
@@ -84,7 +89,7 @@ export function PropertyCard({ property, onClick, showSave = true }: PropertyCar
         {showSave && <SavePropertyButton iconOnly className="absolute bottom-3 right-3" />}
       </div>
 
-      <CardContent className="p-5 w-full">
+      <CardContent className="p-5 w-full flex-1 flex flex-col">
         <h3 className="font-semibold text-lg text-foreground mb-1 group-hover:text-primary transition-colors">
           {property.title}
         </h3>

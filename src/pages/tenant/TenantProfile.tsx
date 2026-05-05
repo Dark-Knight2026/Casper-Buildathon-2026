@@ -4,15 +4,19 @@
  */
 
 import { useState } from 'react';
-import { User, Mail, Phone, Home, Calendar, Save, Loader2 } from 'lucide-react';
+import { User, Mail, Phone, Home, Calendar, Save, Loader2, Sliders } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
+import { useTenantPreferences } from '@/hooks/useTenantPreferences';
+import { TenantPreferencesDialog } from '@/components/tenant/TenantPreferencesDialog';
+import { countActivePreferences, ALL_MATCH_CATEGORIES } from '@/types/tenantPreferences';
 
 interface UserProfile {
   id: string;
@@ -64,6 +68,14 @@ export function TenantProfile() {
     bio: profile.bio,
   });
   const { toast } = useToast();
+
+  const {
+    preferences,
+    hasExplicitPreferences,
+    updatePreferences,
+  } = useTenantPreferences(profile.id);
+  const [preferencesOpen, setPreferencesOpen] = useState(false);
+  const activeCount = countActivePreferences(preferences);
 
   // TODO: replace with PATCH /api/v1/users/me when backend is ready
   const handleSave = async () => {
@@ -234,6 +246,45 @@ export function TenantProfile() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Rental Preferences — drives Task 6 recommendations */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Sliders className="h-4 w-4" />
+                Rental Preferences
+              </CardTitle>
+              <CardDescription>
+                Used to recommend properties as your lease nears its end.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {hasExplicitPreferences ? (
+                <p className="text-sm text-muted-foreground">
+                  <Badge variant="secondary" className="mr-2">
+                    {activeCount}/{ALL_MATCH_CATEGORIES.length}
+                  </Badge>
+                  preference categories set. Edit to refine your matches.
+                </p>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No preferences yet — we'll use your current home as a starting point.
+                </p>
+              )}
+              <div className="flex justify-end">
+                <Button variant="outline" size="sm" onClick={() => setPreferencesOpen(true)}>
+                  {hasExplicitPreferences ? 'Edit preferences' : 'Set preferences'}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <TenantPreferencesDialog
+            open={preferencesOpen}
+            onOpenChange={setPreferencesOpen}
+            initialPreferences={preferences}
+            onSave={updatePreferences}
+          />
 
           {/* Email — separate verification flow */}
           <Card>
