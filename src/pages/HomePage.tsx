@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
 
 import { useAuth } from '@/contexts/AuthContext';
-import { RoleSwitcher } from '@/components/auth/RoleSwitcher';
 import { getDashboardRoute } from '@/types/user';
 import HeroSection from '@/components/HeroSection';
 import { FeaturedProperties } from '@/components/FeaturedProperties';
@@ -25,18 +24,14 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen">
-      {/* Role Switcher Bar */}
       {user && (
         <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white py-3 px-4 sticky top-0 z-50 shadow-lg">
           <div className="container mx-auto flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <span className="text-sm font-medium">
-                Welcome, {user.name || user.email}
-              </span>
-              <RoleSwitcher />
-            </div>
-            <Button 
-              variant="secondary" 
+            <span className="text-sm font-medium">
+              Welcome, {user.name || user.email}
+            </span>
+            <Button
+              variant="secondary"
               size="sm"
               onClick={handleGoToDashboard}
               className="gap-2"

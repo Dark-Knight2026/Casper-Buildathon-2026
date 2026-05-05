@@ -11,7 +11,6 @@ import { useAuth } from '@/hooks/useAuth';
 import { useLandlordManagement } from '@/contexts/LandlordManagementContext';
 import { useLeaseManagement } from '@/contexts/LeaseManagementContext';
 import { useDashboardPreferences } from '@/contexts/DashboardPreferencesContext';
-import { RoleSwitcher } from '@/components/auth/RoleSwitcher';
 import { Property } from '@/types/clientLandlord';
 import { LeaseAgreement, LeaseClause, LeaseTemplate } from '@/types/lease';
 import PropertyListEnhanced from '@/components/property/PropertyListEnhanced';
@@ -792,7 +791,6 @@ export default function LandlordDashboard() {
               </p>
             </div>
             <div className="flex gap-2 items-center">
-              <RoleSwitcher />
               {!isMobile && (
                 <>
                   <Button
