@@ -66,14 +66,8 @@ pub async fn get_nonce(
     State(state): State<Arc<AppState>>,
     Query(payload): Query<NonceRequest>,
 ) -> ApiResult<Json<NonceResponse>> {
-    // Validate wallet address length and hex content before touching Redis.
     let wallet = payload.wallet_address.to_ascii_lowercase();
-    let len = wallet.len();
-    if (len != CASPER_ED25519_PUBKEY_HEX_LEN && len != CASPER_SECP256K1_PUBKEY_HEX_LEN)
-        || !wallet.chars().all(|c| c.is_ascii_hexdigit())
-    {
-        return Err(ApiError::BadRequest("Invalid wallet address".to_owned()));
-    }
+    validate_wallet_address(&wallet)?;
 
     // Generate a random string (16 characters)
     let random_string: String = rand::rng()
