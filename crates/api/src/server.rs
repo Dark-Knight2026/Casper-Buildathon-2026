@@ -178,17 +178,29 @@ pub async fn main() -> Result<(), ServerError> {
 /// Awaits a shutdown signal (e.g., Ctrl+C) to gracefully shut down the server.
 async fn shutdown_signal() {
     let ctrl_c = async {
-        signal::ctrl_c()
-            .await
-            .expect("Failed to install Ctrl+C handler - OS may not support graceful shutdown");
+        if let Err(err) = signal::ctrl_c().await {
+            tracing::warn!(
+                error = %err,
+                "Ctrl+C handler unavailable - graceful shutdown via Ctrl+C disabled",
+            );
+            core::future::pending::<()>().await;
+        }
     };
 
     #[cfg(unix)]
     let terminate = async {
-        unix::signal(SignalKind::terminate())
-            .expect("Failed to install SIGTERM handler - OS may not support graceful shutdown")
-            .recv()
-            .await;
+        match unix::signal(SignalKind::terminate()) {
+            Ok(mut sig) => {
+                sig.recv().await;
+            }
+            Err(err) => {
+                tracing::warn!(
+                    error = %err,
+                    "SIGTERM handler unavailable - graceful shutdown via SIGTERM disabled",
+                );
+                core::future::pending::<()>().await;
+            }
+        }
     };
 
     #[cfg(not(unix))]
