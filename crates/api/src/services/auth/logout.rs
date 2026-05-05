@@ -82,9 +82,18 @@ pub async fn logout(
     // logout time is normal (e.g. user clicks "logout" 20 minutes after
     // their last activity), so we silently skip the blocklist step in that
     // case and still clear the cookie below.
+    //
+    // `authenticated_user_id` is hoisted out of the if-let-chain so the
+    // final audit log can include the user identity even after the local
+    // `claims` binding goes out of scope. Stays `None` when the cookie is
+    // missing or the JWT failed to decode, signaling an "anonymous logout"
+    // event in the audit trail.
+    let mut authenticated_user_id = None;
     if let Some(access_cookie) = jar.get(ACCESS_TOKEN_COOKIE)
         && let Ok(claims) = jwt::decode_token(access_cookie.value(), &state.config.jwt_secret)
     {
+        authenticated_user_id = Some(claims.sub);
+
         // TTL is anchored to the JWT's own `exp` so the blocklist key
         // evicts at the moment the token would have stopped being
         // accepted anyway - no chance of either over-retaining (Redis
@@ -123,7 +132,25 @@ pub async fn logout(
     let clear_access = cookies::build_expired_access_cookie(state.config.cookie_secure);
     let clear_refresh = cookies::build_expired_refresh_cookie(state.config.cookie_secure);
 
-    tracing::info!(event = "user_logout", "User logged out");
+    // Audit log fires in both branches because logout is idempotent: a
+    // missing or undecodable access cookie still clears state and counts
+    // as a successful logout, but the operator-visible distinction
+    // matters for incident analysis (a wave of `anonymous_logout=true`
+    // events points at expired-cookie traffic, not authenticated users
+    // ending sessions).
+    if let Some(user_id) = authenticated_user_id {
+        tracing::info!(
+            event = "user_logout",
+            user_id = %user_id,
+            "User logged out"
+        );
+    } else {
+        tracing::info!(
+            event = "user_logout",
+            anonymous_logout = true,
+            "User logged out (no decodable access cookie)"
+        );
+    }
 
     Ok((
         CookieJar::new().add(clear_access).add(clear_refresh),
