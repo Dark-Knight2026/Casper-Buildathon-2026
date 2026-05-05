@@ -208,7 +208,18 @@ pub async fn upsert_user_by_wallet(
         }));
     }
 
-    Err(Error::RowNotFound)
+    // Retry budget exhausted: both iterations lost the email-conflict
+    // race without the SELECT branch ever observing the committed row.
+    // Surface this as `Error::Protocol` rather than `RowNotFound` -
+    // `RowNotFound` is mapped to HTTP 404 ("Resource not found") by the
+    // `From<sqlx::Error> for ApiError` impl, which would mislead callers
+    // into thinking the wallet itself was missing. The catch-all arm in
+    // `errors.rs` routes `Error::Protocol` through `ApiError::Database`
+    // -> HTTP 500, which is the correct status for a server-side
+    // contention failure.
+    Err(Error::Protocol(
+        "upsert_user_by_wallet: retry budget exhausted".to_owned(),
+    ))
 }
 
 /// Revokes every still-active `refresh_tokens` row for the given user.
