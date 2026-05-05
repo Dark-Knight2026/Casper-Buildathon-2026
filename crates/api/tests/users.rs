@@ -15,7 +15,7 @@ use uuid::Uuid;
 
 use api::common::{CASPER_MESSAGE_PREFIX, EmailError, EmailMessage, EmailSender};
 
-use crate::common::{TestOverrides, setup_test_server_with};
+use crate::common::TestOverrides;
 
 /// Mailer that always fails delivery.
 ///
@@ -48,7 +48,7 @@ fn sign_with_prefix(message: &str, secret_key: &SecretKey, public_key: &PublicKe
 /// failure leaks both side effects.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn request_email_change_rolls_back_state_on_mailer_failure(pool: PgPool) {
-    let env = setup_test_server_with(
+    let env = common::setup_test_server_with(
         pool.clone(),
         true,
         TestOverrides {
@@ -83,7 +83,7 @@ async fn request_email_change_rolls_back_state_on_mailer_failure(pool: PgPool) {
     let access_cookie = login_response.cookie("access_token");
     let access_token = access_cookie.value().to_owned();
 
-    let user_id: Uuid = sqlx::query_scalar!(
+    let user_id = sqlx::query_scalar!(
         r"
             SELECT user_id
             FROM wallet_connections
@@ -116,14 +116,20 @@ async fn request_email_change_rolls_back_state_on_mailer_failure(pool: PgPool) {
         .expect("Redis connection failed");
 
     let token_key = format!("email_change:{user_id}");
-    let token_exists: i32 = conn.exists(&token_key).await.expect("EXISTS query failed");
+    let token_exists = conn
+        .exists::<_, i32>(&token_key)
+        .await
+        .expect("EXISTS query failed");
     assert_eq!(
         token_exists, 0,
         "email-change token slot must be cleared when mailer fails, otherwise it lives 24h orphaned",
     );
 
     let attempts_key = format!("email_change_attempts:{user_id}");
-    let attempts: Option<u64> = conn.get(&attempts_key).await.expect("GET query failed");
+    let attempts = conn
+        .get::<_, Option<u64>>(&attempts_key)
+        .await
+        .expect("GET query failed");
     assert!(
         attempts.is_none_or(|c| c == 0),
         "rate-limit counter must not be consumed on mailer failure (got {attempts:?}); otherwise the user burns 1 of 3 daily attempts on a transient SMTP outage",
@@ -143,7 +149,7 @@ async fn request_email_change_rolls_back_state_on_mailer_failure(pool: PgPool) {
 /// real one.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn confirm_email_change_with_wrong_token_returns_401(pool: PgPool) {
-    let env = setup_test_server_with(pool, true, TestOverrides::default()).await;
+    let env = common::setup_test_server_with(pool, true, TestOverrides::default()).await;
 
     let secret_key = SecretKey::ed25519_from_bytes([11u8; 32]).unwrap();
     let public_key = PublicKey::from(&secret_key);
@@ -209,7 +215,7 @@ async fn confirm_email_change_with_wrong_token_returns_401(pool: PgPool) {
 /// to `Unauthorized` before any hash comparison runs.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn confirm_email_change_with_expired_token_returns_401(pool: PgPool) {
-    let env = setup_test_server_with(pool.clone(), true, TestOverrides::default()).await;
+    let env = common::setup_test_server_with(pool.clone(), true, TestOverrides::default()).await;
 
     let secret_key = SecretKey::ed25519_from_bytes([13u8; 32]).unwrap();
     let public_key = PublicKey::from(&secret_key);
@@ -235,7 +241,7 @@ async fn confirm_email_change_with_expired_token_returns_401(pool: PgPool) {
     assert_eq!(login_response.status_code(), StatusCode::OK);
     let access_token = login_response.cookie("access_token").value().to_owned();
 
-    let user_id: Uuid = sqlx::query_scalar!(
+    let user_id = sqlx::query_scalar!(
         r"
             SELECT user_id
             FROM wallet_connections
@@ -283,5 +289,252 @@ async fn confirm_email_change_with_expired_token_returns_401(pool: PgPool) {
         confirm_response.status_code(),
         StatusCode::UNAUTHORIZED,
         "confirm after the Redis slot has been wiped (TTL elapsed or manual delete) must return 401",
+    );
+}
+
+/// `GET /api/v1/users/me` happy path: a freshly logged-in user can read
+/// back the same profile shape the login response returned. Pins that the
+/// access cookie issued by `/auth/login` is accepted by `require_auth`,
+/// that `fetch_user_profile` includes the wallet-default placeholders
+/// (`first_name = 'Wallet'`, `last_name = 'User'`, status = 'active')
+/// inserted by `upsert_user_by_wallet`, and that the response carries a
+/// non-null `wallet_address` synced via the `wallet_connections` trigger.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn get_me_returns_authenticated_user_profile(pool: PgPool) {
+    let env = common::setup_test_server(pool, true).await;
+
+    let secret_key = SecretKey::ed25519_from_bytes([21u8; 32]).unwrap();
+    let public_key = PublicKey::from(&secret_key);
+    let wallet_address = public_key.to_hex();
+
+    let nonce_body = env
+        .server
+        .get("/api/v1/auth/nonce")
+        .add_query_param("wallet_address", &wallet_address)
+        .await
+        .json::<Value>();
+    let message = nonce_body["message"].as_str().unwrap();
+    let signature_hex = sign_with_prefix(message, &secret_key, &public_key);
+
+    let login_response = env
+        .server
+        .post("/api/v1/auth/login")
+        .json(&serde_json::json!({
+            "wallet_address": wallet_address,
+            "signature": signature_hex,
+        }))
+        .await;
+    assert_eq!(login_response.status_code(), StatusCode::OK);
+    let login_body = login_response.json::<Value>();
+    // `LoginResponse` shape is `{ user: UserInfo }` - tokens go via
+    // Set-Cookie, profile is nested under `user`.
+    let login_user_id = login_body["user"]["id"].as_str().unwrap().to_owned();
+    let access_token = login_response.cookie("access_token").value().to_owned();
+
+    let me_response = env
+        .server
+        .get("/api/v1/users/me")
+        .add_header(COOKIE, format!("access_token={access_token}"))
+        .await;
+    assert_eq!(me_response.status_code(), StatusCode::OK);
+    // GET /me returns `UserInfo` directly (not wrapped in `{ user: ... }`
+    // like login does). Pinning that asymmetry here so a future refactor
+    // that "harmonizes" the two shapes surfaces in this assert.
+    let me_body = me_response.json::<Value>();
+
+    assert_eq!(
+        me_body["id"].as_str().unwrap(),
+        login_user_id,
+        "GET /me must return the same user id the login response carried",
+    );
+    assert_eq!(
+        me_body["wallet_address"]
+            .as_str()
+            .unwrap()
+            .to_ascii_lowercase(),
+        wallet_address.to_ascii_lowercase(),
+        "wallet_address must be populated from the wallet_connections trigger",
+    );
+    assert_eq!(me_body["first_name"].as_str().unwrap(), "Wallet");
+    assert_eq!(me_body["last_name"].as_str().unwrap(), "User");
+    assert_eq!(me_body["status"].as_str().unwrap(), "active");
+    assert!(me_body["id"].is_string());
+    assert!(me_body["created_at"].is_string());
+    assert!(me_body["updated_at"].is_string());
+}
+
+/// `GET /api/v1/users/me` without any auth cookie must 401 - the
+/// `require_auth` middleware short-circuits before the handler runs, and
+/// no profile data leaks to anonymous callers. Pins the protected-tier
+/// router wiring: a future regression that mounts `/me` outside the
+/// authenticated nest would surface as a 200 here instead of a 401.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn get_me_without_authentication_returns_401(pool: PgPool) {
+    let env = common::setup_test_server(pool, false).await;
+
+    let response = env.server.get("/api/v1/users/me").await;
+
+    assert_eq!(
+        response.status_code(),
+        StatusCode::UNAUTHORIZED,
+        "GET /users/me must require an access cookie; got {}",
+        response.status_code(),
+    );
+}
+
+/// `PATCH /api/v1/users/me` happy path: the editable subset
+/// (`first_name`, `last_name`, `phone`, `bio`, `avatar_url`) is rewritten
+/// atomically and the response reflects the post-update state.
+///
+/// Verifies (a) the response body shape matches the post-update profile,
+/// (b) the row in `users` carries the new values (catches a future
+/// refactor that returns the patch payload back without actually
+/// committing it), and (c) `phone_verified` was reset to `false` because
+/// the new phone differs from the stored value (was NULL after wallet
+/// signup, so any non-null phone triggers the reset branch).
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn patch_me_updates_editable_fields(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), true).await;
+
+    let secret_key = SecretKey::ed25519_from_bytes([23u8; 32]).unwrap();
+    let public_key = PublicKey::from(&secret_key);
+    let wallet_address = public_key.to_hex();
+
+    let nonce_body = env
+        .server
+        .get("/api/v1/auth/nonce")
+        .add_query_param("wallet_address", &wallet_address)
+        .await
+        .json::<Value>();
+    let message = nonce_body["message"].as_str().unwrap();
+    let signature_hex = sign_with_prefix(message, &secret_key, &public_key);
+
+    let login_response = env
+        .server
+        .post("/api/v1/auth/login")
+        .json(&serde_json::json!({
+            "wallet_address": wallet_address,
+            "signature": signature_hex,
+        }))
+        .await;
+    assert_eq!(login_response.status_code(), StatusCode::OK);
+    let access_token = login_response.cookie("access_token").value().to_owned();
+    let user_id = login_response.json::<Value>()["user"]["id"]
+        .as_str()
+        .unwrap()
+        .parse::<Uuid>()
+        .unwrap();
+
+    let patch_response = env
+        .server
+        .patch("/api/v1/users/me")
+        .add_header(COOKIE, format!("access_token={access_token}"))
+        .json(&serde_json::json!({
+            "first_name": "  Alice  ",
+            "last_name": "Smith",
+            "phone": "+12025550123",
+            "bio": "Casper hodler",
+            "avatar_url": "https://example.com/a.png",
+        }))
+        .await;
+    assert_eq!(patch_response.status_code(), StatusCode::OK);
+    let patched = patch_response.json::<Value>();
+
+    assert_eq!(
+        patched["first_name"].as_str().unwrap(),
+        "Alice",
+        "first_name must be trimmed before persistence",
+    );
+    assert_eq!(patched["last_name"].as_str().unwrap(), "Smith");
+    assert_eq!(patched["phone"].as_str().unwrap(), "+12025550123");
+    assert_eq!(patched["bio"].as_str().unwrap(), "Casper hodler");
+    assert_eq!(
+        patched["avatar_url"].as_str().unwrap(),
+        "https://example.com/a.png",
+    );
+
+    let row = sqlx::query!(
+        r"
+            SELECT first_name, last_name, phone, bio, avatar_url, phone_verified
+            FROM users
+            WHERE id = $1
+        ",
+        user_id,
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("user row must exist after PATCH");
+
+    assert_eq!(row.first_name, "Alice");
+    assert_eq!(row.last_name, "Smith");
+    assert_eq!(row.phone.as_deref(), Some("+12025550123"));
+    assert_eq!(row.bio.as_deref(), Some("Casper hodler"));
+    assert_eq!(row.avatar_url.as_deref(), Some("https://example.com/a.png"));
+    assert!(
+        !row.phone_verified.unwrap_or(false),
+        "phone_verified must be false after writing a phone distinct from the stored value",
+    );
+}
+
+/// `PATCH /api/v1/users/me` must reject blanking out columns the schema
+/// declares NOT NULL via the request-layer `trim_required` validator.
+///
+/// An all-whitespace `first_name` (or `last_name`) is the realistic shape
+/// of an accidental client wipe: a form-field bound to an `<input>` that
+/// the user cleared, then submitted. The contract is "missing field =
+/// keep stored value, empty/whitespace = `400 BadRequest`" so the user
+/// never silently loses a populated column.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn patch_me_rejects_empty_required_fields(pool: PgPool) {
+    let env = common::setup_test_server(pool, true).await;
+
+    let secret_key = SecretKey::ed25519_from_bytes([25u8; 32]).unwrap();
+    let public_key = PublicKey::from(&secret_key);
+    let wallet_address = public_key.to_hex();
+
+    let nonce_body = env
+        .server
+        .get("/api/v1/auth/nonce")
+        .add_query_param("wallet_address", &wallet_address)
+        .await
+        .json::<Value>();
+    let message = nonce_body["message"].as_str().unwrap();
+    let signature_hex = sign_with_prefix(message, &secret_key, &public_key);
+
+    let login_response = env
+        .server
+        .post("/api/v1/auth/login")
+        .json(&serde_json::json!({
+            "wallet_address": wallet_address,
+            "signature": signature_hex,
+        }))
+        .await;
+    assert_eq!(login_response.status_code(), StatusCode::OK);
+    let access_token = login_response.cookie("access_token").value().to_owned();
+
+    let whitespace_first_name = env
+        .server
+        .patch("/api/v1/users/me")
+        .add_header(COOKIE, format!("access_token={access_token}"))
+        .json(&serde_json::json!({ "first_name": "   " }))
+        .await;
+    assert_eq!(
+        whitespace_first_name.status_code(),
+        StatusCode::BAD_REQUEST,
+        "all-whitespace first_name must 400 (column is NOT NULL); got {}",
+        whitespace_first_name.status_code(),
+    );
+
+    let empty_last_name = env
+        .server
+        .patch("/api/v1/users/me")
+        .add_header(COOKIE, format!("access_token={access_token}"))
+        .json(&serde_json::json!({ "last_name": "" }))
+        .await;
+    assert_eq!(
+        empty_last_name.status_code(),
+        StatusCode::BAD_REQUEST,
+        "empty last_name must 400; got {}",
+        empty_last_name.status_code(),
     );
 }
