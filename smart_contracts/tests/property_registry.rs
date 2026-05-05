@@ -10,6 +10,8 @@ use odra::{
     prelude::*,
 };
 
+use crate::property_registry::events::PropertyStatusSet;
+
 // =============================================================================
 // Test Context
 // =============================================================================
@@ -272,6 +274,14 @@ fn test_set_property_status_should_activate_property_after_required_addresses_ar
         ctx.registry.is_property_active(property_id),
         "Property should be active",
     );
+
+    assert!(ctx.env.emitted_event(
+        &ctx.registry,
+        PropertyStatusSet {
+            property_id,
+            status: PropertyStatus::Active,
+        }
+    ));
 }
 
 #[test]
