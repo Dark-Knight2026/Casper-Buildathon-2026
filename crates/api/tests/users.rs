@@ -2,7 +2,7 @@
 
 mod common;
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use axum::http::StatusCode;
@@ -30,6 +30,33 @@ impl EmailSender for FailingMailer {
         Err(EmailError::Transport(
             "failing mailer (test fixture)".to_owned(),
         ))
+    }
+}
+
+/// Mailer that records every successfully-sent message in memory.
+///
+/// Used by the email-change happy-path test to recover the plaintext
+/// confirmation token: the token never lands in Redis (Redis stores only
+/// its SHA-256 hash) and is never echoed in the HTTP response, so the
+/// only path to it from a test harness is intercepting the outbound
+/// message body before it reaches a real SMTP relay.
+///
+/// `std::sync::Mutex` (not `tokio::sync::Mutex`) is correct here because
+/// the `send` impl pushes-and-returns without crossing an `.await`; the
+/// lock is released before the future yields.
+#[derive(Debug, Default, Clone)]
+struct CapturingMailer {
+    sent: Arc<Mutex<Vec<EmailMessage>>>,
+}
+
+#[async_trait]
+impl EmailSender for CapturingMailer {
+    async fn send(&self, message: EmailMessage) -> Result<(), EmailError> {
+        self.sent
+            .lock()
+            .expect("CapturingMailer mutex poisoned")
+            .push(message);
+        Ok(())
     }
 }
 
@@ -536,5 +563,173 @@ async fn patch_me_rejects_empty_required_fields(pool: PgPool) {
         StatusCode::BAD_REQUEST,
         "empty last_name must 400; got {}",
         empty_last_name.status_code(),
+    );
+}
+
+/// Email-change happy path end-to-end: request a change, intercept the
+/// confirmation email, post the token back, and assert that the column was
+/// rewritten and the aggregate `verification_level` was upgraded.
+///
+/// Why intercept the email and not just inspect Redis: Redis stores only
+/// `(SHA-256(plaintext), new_email)` - the plaintext exists in memory of the
+/// `request_email_change` handler for one stack frame and then is dropped. A
+/// `CapturingMailer` test fixture is the only seam that observes it before that
+/// drop.
+///
+/// What this test pins, beyond what the failure-mode tests already cover:
+///
+/// - The `email` column is rewritten to the new (lowercase, trimmed) value, not
+/// the wallet-derived placeholder login left there. - `email_verified` flips
+/// from `false` to `true` in the same UPDATE (the handler relies on the trip
+/// from request to confirm to prove reachability, so a future refactor that
+/// forgets the verified flag would silently downgrade trust). - The
+/// `trg_users_sync_verification_level` BEFORE-trigger upgrades
+/// `verification_level` from `'none'` to `'email'` on that flip - the
+/// confirmation response shape (`UserInfo`) intentionally drops this column
+/// (see `From<UserProfileRecord> for UserInfo`), so the test verifies it
+/// against the DB row directly.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn confirm_email_change_happy_path_upgrades_verification(pool: PgPool) {
+    let mailer = CapturingMailer::default();
+    let captured = Arc::clone(&mailer.sent);
+    let env = common::setup_test_server_with(
+        pool.clone(),
+        true,
+        TestOverrides {
+            mailer: Some(Arc::new(mailer) as Arc<dyn EmailSender>),
+            ..TestOverrides::default()
+        },
+    )
+    .await;
+
+    let secret_key = SecretKey::ed25519_from_bytes([29u8; 32]).unwrap();
+    let public_key = PublicKey::from(&secret_key);
+    let wallet_address = public_key.to_hex();
+
+    let nonce_body = env
+        .server
+        .get("/api/v1/auth/nonce")
+        .add_query_param("wallet_address", &wallet_address)
+        .await
+        .json::<Value>();
+    let message = nonce_body["message"].as_str().unwrap();
+    let signature_hex = sign_with_prefix(message, &secret_key, &public_key);
+
+    let login_response = env
+        .server
+        .post("/api/v1/auth/login")
+        .json(&serde_json::json!({
+            "wallet_address": wallet_address,
+            "signature": signature_hex,
+        }))
+        .await;
+    assert_eq!(login_response.status_code(), StatusCode::OK);
+    let access_token = login_response.cookie("access_token").value().to_owned();
+    let user_id = login_response.json::<Value>()["user"]["id"]
+        .as_str()
+        .unwrap()
+        .parse::<Uuid>()
+        .unwrap();
+
+    let initial = sqlx::query!(
+        r"
+            SELECT verification_level, email_verified
+            FROM users
+            WHERE id = $1
+        ",
+        user_id,
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("user row must exist after login");
+    assert_eq!(
+        initial.verification_level, "none",
+        "fresh wallet user must start at verification_level='none'",
+    );
+    assert_eq!(
+        initial.email_verified,
+        Some(false),
+        "fresh wallet user must start with email_verified=false",
+    );
+
+    let new_email = "fresh.confirmed@example.com";
+    let request_response = env
+        .server
+        .post("/api/v1/users/me/email")
+        .add_header(COOKIE, format!("access_token={access_token}"))
+        .json(&serde_json::json!({ "new_email": new_email }))
+        .await;
+    assert_eq!(request_response.status_code(), StatusCode::ACCEPTED);
+
+    // Pull the plaintext token out of the captured email body. The
+    // handler formats the body as
+    // `"Use this token within 24 hours to confirm the email change: <TOKEN>"`,
+    // so `rsplit(": ").next()` gives the token and trims away any
+    // trailing whitespace defensively.
+    let body = {
+        let lock = captured.lock().expect("CapturingMailer mutex poisoned");
+        assert_eq!(
+            lock.len(),
+            1,
+            "exactly one confirmation email must have been queued",
+        );
+        let msg = &lock[0];
+        assert_eq!(
+            msg.to, new_email,
+            "confirmation must be sent to the new email"
+        );
+        assert_eq!(msg.subject, "Confirm your new email address");
+        msg.body.clone()
+    };
+    let token = body
+        .rsplit(": ")
+        .next()
+        .expect("body must contain ': '")
+        .trim();
+    assert_eq!(
+        token.len(),
+        43,
+        "token must be 43 base64url-no-pad chars; got body: {body:?}",
+    );
+
+    let confirm_response = env
+        .server
+        .post("/api/v1/users/me/email/confirm")
+        .add_header(COOKIE, format!("access_token={access_token}"))
+        .json(&serde_json::json!({ "token": token }))
+        .await;
+    assert_eq!(confirm_response.status_code(), StatusCode::OK);
+    let confirm_body = confirm_response.json::<Value>();
+    assert_eq!(
+        confirm_body["email"].as_str().unwrap(),
+        new_email,
+        "confirm response must echo the new email",
+    );
+
+    let final_row = sqlx::query!(
+        r"
+            SELECT email, verification_level, email_verified
+            FROM users
+            WHERE id = $1
+        ",
+        user_id,
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("user row must still exist after confirm");
+
+    assert_eq!(
+        final_row.email.as_deref(),
+        Some(new_email),
+        "users.email must be rewritten to the new value",
+    );
+    assert_eq!(
+        final_row.email_verified,
+        Some(true),
+        "users.email_verified must flip to true on confirm",
+    );
+    assert_eq!(
+        final_row.verification_level, "email",
+        "verification_level must upgrade from 'none' to 'email' via trg_users_sync_verification_level",
     );
 }
