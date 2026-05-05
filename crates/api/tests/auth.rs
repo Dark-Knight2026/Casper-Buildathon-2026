@@ -654,6 +654,7 @@ async fn jwt_wrong_issuer_rejected(pool: PgPool) {
         token_type: None,
         verification_level: None,
         jti: Uuid::new_v4(),
+        iat: 0,
     };
     let token = jsonwebtoken::encode(
         &Header::default(),
@@ -693,6 +694,7 @@ async fn jwt_wrong_audience_rejected(pool: PgPool) {
         token_type: None,
         verification_level: None,
         jti: Uuid::new_v4(),
+        iat: 0,
     };
     let token = jsonwebtoken::encode(
         &Header::default(),
@@ -782,6 +784,7 @@ async fn jwt_with_expired_exp_rejected(pool: PgPool) {
         token_type: None,
         verification_level: None,
         jti: Uuid::new_v4(),
+        iat: 0,
     };
     let token = jsonwebtoken::encode(
         &Header::default(),
@@ -824,6 +827,7 @@ async fn jwt_signed_with_wrong_secret_rejected(pool: PgPool) {
         token_type: None,
         verification_level: None,
         jti: Uuid::new_v4(),
+        iat: 0,
     };
     // Sign with a *different* secret than the one the server is using.
     let token = jsonwebtoken::encode(
@@ -1695,6 +1699,7 @@ async fn refresh_token_in_access_cookie_rejected_with_401(pool: PgPool) {
         token_type: Some(TokenType::Refresh),
         verification_level: None,
         jti: Uuid::new_v4(),
+        iat: 0,
     };
     let token = jsonwebtoken::encode(
         &Header::default(),

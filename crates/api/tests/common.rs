@@ -208,11 +208,13 @@ pub async fn setup_test_server_with(
 /// Creates a test JWT access token populated with the full typed-claim schema.
 #[inline]
 pub fn create_test_jwt(user_id: UserId, role: UserRole, secret: &str) -> String {
-    let expiration = Utc::now()
+    let now = Utc::now();
+    let expiration = now
         .checked_add_signed(Duration::hours(24))
         .expect("Valid timestamp")
         .timestamp();
     let exp = usize::try_from(expiration.max(0)).expect("Valid expiration timestamp");
+    let iat = usize::try_from(now.timestamp().max(0)).expect("Valid issued-at timestamp");
     let claims = Claims {
         sub: user_id,
         role,
@@ -222,6 +224,7 @@ pub fn create_test_jwt(user_id: UserId, role: UserRole, secret: &str) -> String 
         token_type: Some(TokenType::Access),
         verification_level: Some(VerificationLevel::None),
         jti: Uuid::new_v4(),
+        iat,
     };
     encode(
         &Header::default(),

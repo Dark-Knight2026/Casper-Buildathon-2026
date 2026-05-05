@@ -515,6 +515,42 @@ pub async fn rotate_refresh_token(
     }))
 }
 
+/// Returns the `users.jwt_invalidate_before` value for the given user, if set.
+///
+/// Used by the auth middleware to enforce force-revoke flows: any access
+/// token whose `iat` claim is at or below this cutoff must be rejected,
+/// even though its `exp` is still in the future and its `jti` is not in
+/// the logout blocklist.
+///
+/// `Ok(None)` covers two cases that the middleware treats identically -
+/// "user has no cutoff set" and "user no longer exists" both mean "this
+/// JWT carries no force-revoke signal." A deleted-user JWT will fail the
+/// downstream handler's profile load (`fetch_user_profile` -> 404), so
+/// the middleware does not need to discriminate them here.
+///
+/// # Errors
+///
+/// Returns `sqlx::Error` on infrastructure failure. Upstream maps `?` to
+/// `ApiError::Internal` so the middleware fails closed on DB outages.
+#[inline]
+pub async fn fetch_jwt_invalidate_before(
+    pool: &PgPool,
+    user_id: Uuid,
+) -> Result<Option<DateTime<Utc>>, Error> {
+    let row = sqlx::query!(
+        r"
+            SELECT jwt_invalidate_before
+            FROM users
+            WHERE id = $1 AND deleted_at IS NULL
+        ",
+        user_id,
+    )
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(row.and_then(|r| r.jwt_invalidate_before))
+}
+
 /// Revokes every active row in the family that contains `presented_hash`.
 ///
 /// Idempotent and tolerant by design - the logout handler calls this with a

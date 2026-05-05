@@ -139,6 +139,18 @@ pub struct Claims {
     /// JWT ID - unique per access token, used for the logout blocklist.
     #[schema(value_type = Uuid)]
     pub jti: Uuid,
+    /// Issued-at timestamp (Unix seconds). Compared against
+    /// `users.jwt_invalidate_before` by the auth middleware so force-revoke
+    /// flows (role change, revoke-all, self-delete) can kill outstanding
+    /// access tokens before their natural `exp`.
+    ///
+    /// `#[serde(default)]` is required for backward compatibility with JWTs
+    /// issued before this field was added: those tokens deserialize with
+    /// `iat = 0`, which is `<= NOW()` for any non-NULL cutoff, so a
+    /// force-revoke event correctly invalidates them too. Newly issued
+    /// tokens always populate this field with a real timestamp.
+    #[serde(default)]
+    pub iat: usize,
 }
 
 /// Public user-profile shape returned by login responses and the

@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE users\n            SET jwt_invalidate_before = NOW() + INTERVAL '5 seconds'\n            WHERE id = $1\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "048654c76045a142073406848c3c83bba204b9351c9e70a44b1db09bb3dc64aa"
+}

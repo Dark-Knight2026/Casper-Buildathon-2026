@@ -19,7 +19,7 @@ use thiserror::Error;
 
 use crate::{
     common::{AppState, Claims, ErrorResponse, TokenType},
-    services::auth::{cookies::ACCESS_TOKEN_COOKIE, jwt},
+    services::auth::{cookies::ACCESS_TOKEN_COOKIE, db, jwt},
 };
 
 /// Authenticated user extracted from the `access_token` JWT cookie.
@@ -49,6 +49,23 @@ impl FromRequestParts<Arc<AppState>> for AuthUser {
         // until they expire naturally.
         if matches!(claims.token_type, Some(TokenType::Refresh)) {
             return Err(AuthError::WrongTokenType);
+        }
+
+        // Force-revoke check. `users.jwt_invalidate_before` is set by flows
+        // that need to kill outstanding access tokens before their natural
+        // `exp` (role change, revoke-all-sessions, self-delete). DB errors
+        // here surface as `AuthError::Database` -> 500 (fail-closed): the
+        // alternative would let an attacker who can disrupt our DB for a
+        // few seconds bypass force-revoke entirely. Legacy tokens issued
+        // before the `iat` claim was added decode with `iat = 0`, which is
+        // `<= NOW()` for any non-NULL cutoff, so they are correctly killed
+        // by the same code path.
+        let cutoff = db::fetch_jwt_invalidate_before(&state.db, claims.sub).await?;
+        if let Some(cutoff_at) = cutoff {
+            let cutoff_ts = usize::try_from(cutoff_at.timestamp().max(0)).unwrap_or(usize::MAX);
+            if claims.iat <= cutoff_ts {
+                return Err(AuthError::TokenInvalidated);
+            }
         }
 
         // Logout-blocklist check. Redis errors are fail-open (warn + allow):
@@ -108,6 +125,17 @@ pub enum AuthError {
     /// The token's `jti` is on the logout blocklist.
     #[error("Token revoked")]
     TokenRevoked,
+    /// The token's `iat` is at or below `users.jwt_invalidate_before`,
+    /// meaning a force-revoke flow (role change, revoke-all-sessions,
+    /// self-delete) ran since this token was issued.
+    #[error("Token invalidated by force-revoke")]
+    TokenInvalidated,
+    /// Database lookup of `jwt_invalidate_before` failed. Fail-closed:
+    /// without this read we cannot tell whether the token has been
+    /// force-revoked, so we refuse the request rather than risk admitting
+    /// an invalidated token.
+    #[error("Auth DB error: {0}")]
+    Database(#[from] sqlx::Error),
 }
 
 impl AuthError {
@@ -137,6 +165,16 @@ impl AuthError {
             Self::TokenRevoked => {
                 tracing::warn!("Blocklisted access token presented");
                 (StatusCode::UNAUTHORIZED, "invalid_token")
+            }
+            Self::TokenInvalidated => {
+                tracing::warn!(
+                    "Force-revoked access token presented (iat <= jwt_invalidate_before)"
+                );
+                (StatusCode::UNAUTHORIZED, "invalid_token")
+            }
+            Self::Database(err) => {
+                tracing::error!(error = %err, "Auth DB lookup failed; failing closed");
+                (StatusCode::INTERNAL_SERVER_ERROR, "internal_error")
             }
         }
     }
