@@ -6,19 +6,23 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { AuthProvider } from '@/contexts/AuthContext';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import SkipNavigation from '@/components/layout/SkipNavigation';
+import { AuthWalletLayout } from '@/components/auth/AuthWalletLayout';
+import { ComingSoon } from '@/components/common/ComingSoon';
+import { MFA_ENABLED } from '@/lib/featureFlags';
 
 // Eagerly load auth pages (critical for initial load)
-import { Login } from '@/pages/auth/Login';
-import { Register } from '@/pages/auth/Register';
+import Login from '@/pages/auth/Login';
+import Register from '@/pages/auth/Register';
 
 // Eagerly load public landing page
 import PropertyLanding from '@/pages/PropertyLanding';
 
 // Lazy load auth pages
-const ForgotPassword = lazy(() => import('@/pages/auth/ForgotPassword'));
-const ResetPassword = lazy(() => import('@/pages/auth/ResetPassword'));
 const MFASetup = lazy(() => import('@/pages/auth/MFASetup'));
 const MFAVerify = lazy(() => import('@/pages/auth/MFAVerify'));
+
+import TenantLayout from '@/components/layout/TenantLayout';
+import PublicLayout from '@/components/layout/PublicLayout';
 
 // Lazy load tenant pages
 const TenantDashboard = lazy(() => import('@/pages/tenant/TenantDashboard').then(m => ({ default: m.TenantDashboard })));
@@ -36,6 +40,8 @@ const TenantProfile = lazy(() => import('@/pages/tenant/TenantProfile').then(m =
 // Lazy load tenant property search pages (PUBLIC ACCESS for browsing)
 const PropertySearch = lazy(() => import('@/pages/tenant/PropertySearch'));
 const TenantPropertyDetail = lazy(() => import('@/pages/tenant/PropertyDetail'));
+const MyProperties = lazy(() => import('@/pages/tenant/MyProperties'));
+const MyPropertyDetail = lazy(() => import('@/pages/tenant/MyPropertyDetail'));
 
 // Lazy load tenant property interaction pages
 const SavedProperties = lazy(() => import('@/pages/tenant/SavedProperties'));
@@ -157,10 +163,13 @@ function App() {
               {/* Landing Page - Default route for all visitors */}
               <Route path="/" element={<PropertyLanding />} />
               
-              {/* Property Browsing - Public access for exploration */}
-              <Route path="/listings" element={<PropertySearch />} />
-              <Route path="/properties" element={<PropertySearch />} />
-              <Route path="/properties/:id" element={<TenantPropertyDetail />} />
+              {/* Property Browsing - Public access for exploration, wrapped with the
+                  same landing header so navigation persists across browse/detail views. */}
+              <Route element={<PublicLayout />}>
+                <Route path="/listings" element={<PropertySearch />} />
+                <Route path="/properties" element={<PropertySearch />} />
+                <Route path="/properties/:id" element={<TenantPropertyDetail />} />
+              </Route>
 
               {/* ICO Pages - Public access for token sale, wrapped with Casper wallet provider */}
               <Route path="/ico" element={<ICOLayout><ICOPage /></ICOLayout>} />
@@ -170,200 +179,66 @@ function App() {
                 AUTHENTICATION ROUTES
                 Sign up and login pages
               */}
-              <Route path="/auth/login" element={<Login />} />
-              <Route path="/auth/register" element={<Register />} />
-              <Route path="/auth/forgot-password" element={<ForgotPassword />} />
-              <Route path="/auth/reset-password" element={<ResetPassword />} />
-              <Route path="/auth/mfa-setup" element={<MFASetup />} />
-              <Route path="/auth/mfa-verify" element={<MFAVerify />} />
+              <Route path="/auth/login" element={<AuthWalletLayout><Login /></AuthWalletLayout>} />
+              <Route path="/auth/register" element={<AuthWalletLayout><Register /></AuthWalletLayout>} />
+              <Route
+                path="/auth/mfa-setup"
+                element={
+                  MFA_ENABLED
+                    ? <MFASetup />
+                    : <ComingSoon title="MFA coming soon" description="Multi-factor authentication will be available once the backend enrollment flow is finalized." />
+                }
+              />
+              <Route
+                path="/auth/mfa-verify"
+                element={
+                  MFA_ENABLED
+                    ? <MFAVerify />
+                    : <ComingSoon title="MFA coming soon" description="Multi-factor authentication will be available once the backend enrollment flow is finalized." />
+                }
+              />
               
-              {/* 
+              {/*
                 TENANT ROUTES - Protected
-                Requires authentication and tenant role
+                Single ProtectedRoute on the parent — TenantLayout renders <Outlet />
               */}
-              <Route path="/tenant">
+              <Route
+                path="/tenant"
+                element={
+                  <ProtectedRoute allowedRoles={['tenant']}>
+                    <TenantLayout />
+                  </ProtectedRoute>
+                }
+              >
                 <Route index element={<Navigate to="/tenant/dashboard" replace />} />
-                <Route 
-                  path="dashboard" 
-                  element={
-                    <ProtectedRoute allowedRoles={['tenant']}>
-                      <TenantDashboard />
-                    </ProtectedRoute>
-                  } 
-                />
-                
-                {/* Tenant Property Search Routes - Protected for authenticated tenants */}
-                <Route 
-                  path="property-search" 
-                  element={
-                    <ProtectedRoute allowedRoles={['tenant']}>
-                      <PropertySearch />
-                    </ProtectedRoute>
-                  } 
-                />
-                <Route 
-                  path="properties" 
-                  element={
-                    <ProtectedRoute allowedRoles={['tenant']}>
-                      <PropertySearch />
-                    </ProtectedRoute>
-                  } 
-                />
-                <Route 
-                  path="properties/:id" 
-                  element={
-                    <ProtectedRoute allowedRoles={['tenant']}>
-                      <TenantPropertyDetail />
-                    </ProtectedRoute>
-                  } 
-                />
-                
-                {/* Tenant Saved Properties, Applications, and Viewings */}
-                <Route 
-                  path="saved-properties" 
-                  element={
-                    <ProtectedRoute allowedRoles={['tenant']}>
-                      <SavedProperties />
-                    </ProtectedRoute>
-                  } 
-                />
-                <Route 
-                  path="my-applications" 
-                  element={
-                    <ProtectedRoute allowedRoles={['tenant']}>
-                      <MyApplications />
-                    </ProtectedRoute>
-                  } 
-                />
-                <Route 
-                  path="my-viewings" 
-                  element={
-                    <ProtectedRoute allowedRoles={['tenant']}>
-                      <MyViewings />
-                    </ProtectedRoute>
-                  } 
-                />
-                
-                {/* Tenant Application Routes */}
-                <Route 
-                  path="apply" 
-                  element={
-                    <ProtectedRoute allowedRoles={['tenant']}>
-                      <TenantApplication />
-                    </ProtectedRoute>
-                  } 
-                />
-                
-                <Route 
-                  path="leases" 
-                  element={
-                    <ProtectedRoute allowedRoles={['tenant']}>
-                      <TenantLeases />
-                    </ProtectedRoute>
-                  } 
-                />
-                <Route 
-                  path="leases/:leaseId" 
-                  element={
-                    <ProtectedRoute allowedRoles={['tenant']}>
-                      <TenantLeaseDetail />
-                    </ProtectedRoute>
-                  } 
-                />
-                <Route 
-                  path="payments" 
-                  element={
-                    <ProtectedRoute allowedRoles={['tenant']}>
-                      <TenantPayments />
-                    </ProtectedRoute>
-                  } 
-                />
-                <Route 
-                  path="payments/methods" 
-                  element={
-                    <ProtectedRoute allowedRoles={['tenant']}>
-                      <PaymentMethods />
-                    </ProtectedRoute>
-                  } 
-                />
-                <Route 
-                  path="payments/make" 
-                  element={
-                    <ProtectedRoute allowedRoles={['tenant']}>
-                      <MakePayment />
-                    </ProtectedRoute>
-                  } 
-                />
-                <Route 
-                  path="maintenance" 
-                  element={
-                    <ProtectedRoute allowedRoles={['tenant']}>
-                      <MaintenanceRequestList />
-                    </ProtectedRoute>
-                  } 
-                />
-                <Route 
-                  path="maintenance/create" 
-                  element={
-                    <ProtectedRoute allowedRoles={['tenant']}>
-                      <MaintenanceRequestCreate />
-                    </ProtectedRoute>
-                  } 
-                />
-                <Route 
-                  path="maintenance/:id" 
-                  element={
-                    <ProtectedRoute allowedRoles={['tenant']}>
-                      <MaintenanceRequestDetail />
-                    </ProtectedRoute>
-                  } 
-                />
-                <Route 
-                  path="renewals" 
-                  element={
-                    <ProtectedRoute allowedRoles={['tenant']}>
-                      <TenantRenewalOfferList />
-                    </ProtectedRoute>
-                  } 
-                />
-                <Route 
-                  path="renewals/:id" 
-                  element={
-                    <ProtectedRoute allowedRoles={['tenant']}>
-                      <TenantRenewalOfferView />
-                    </ProtectedRoute>
-                  } 
-                />
-                <Route 
-                  path="renewals/:id/negotiate" 
-                  element={
-                    <ProtectedRoute allowedRoles={['tenant']}>
-                      <TenantRenewalNegotiation />
-                    </ProtectedRoute>
-                  } 
-                />
-                <Route 
-                  path="profile" 
-                  element={
-                    <ProtectedRoute allowedRoles={['tenant']}>
-                      <TenantProfile />
-                    </ProtectedRoute>
-                  } 
-                />
+                <Route path="dashboard"             element={<TenantDashboard />} />
+                <Route path="property-search"       element={<PropertySearch />} />
+                <Route path="properties"            element={<MyProperties />} />
+                <Route path="properties/:id"        element={<MyPropertyDetail />} />
+                <Route path="saved-properties"      element={<SavedProperties />} />
+                <Route path="my-applications"       element={<MyApplications />} />
+                <Route path="my-viewings"           element={<MyViewings />} />
+                <Route path="apply"                 element={<TenantApplication />} />
+                <Route path="leases"                element={<TenantLeases />} />
+                <Route path="leases/:leaseId"       element={<TenantLeaseDetail />} />
+                <Route path="payments"              element={<TenantPayments />} />
+                <Route path="payments/methods"      element={<PaymentMethods />} />
+                <Route path="payments/make"         element={<MakePayment />} />
+                <Route path="maintenance"           element={<MaintenanceRequestList />} />
+                <Route path="maintenance/create"    element={<MaintenanceRequestCreate />} />
+                <Route path="maintenance/:id"       element={<MaintenanceRequestDetail />} />
+                <Route path="renewals"              element={<TenantRenewalOfferList />} />
+                <Route path="renewals/:id"          element={<TenantRenewalOfferView />} />
+                <Route path="renewals/:id/negotiate" element={<TenantRenewalNegotiation />} />
+                <Route path="messages"             element={<CommunicationCenter />} />
+                <Route path="profile"              element={<TenantProfile />} />
               </Route>
               
-              {/* 
+              {/*
                 SHARED ROUTES - Both tenant and landlord can access
                 Requires authentication but allows multiple roles
               */}
-              <Route 
-                path="/messages" 
-                element={
-                  <ProtectedRoute allowedRoles={['both']}>
-                    <CommunicationCenter />
-                  </ProtectedRoute>
-                } 
-              />
+              {/* TODO: add /landlord/messages route inside landlord layout */}
               
               {/* Notification routes - Accessible by both roles */}
               <Route 

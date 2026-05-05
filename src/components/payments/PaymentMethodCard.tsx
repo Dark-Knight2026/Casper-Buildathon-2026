@@ -64,25 +64,25 @@ export function PaymentMethodCard({
                   </Badge>
                 )}
               </div>
-              <div className="text-sm text-gray-600">
+              <div className="text-sm text-muted-foreground">
                 {paymentMethod.type === 'card' && paymentMethod.card ? (
                   <>
                     <p>•••• •••• •••• {paymentMethod.card.last4}</p>
-                    <p className="text-xs text-gray-500 mt-1">
+                    <p className="text-xs text-muted-foreground mt-1">
                       Expires {formatExpiry(paymentMethod.card.exp_month, paymentMethod.card.exp_year)}
                     </p>
                   </>
                 ) : paymentMethod.type === 'us_bank_account' && paymentMethod.us_bank_account ? (
                   <>
                     <p>{paymentMethod.us_bank_account.bank_name}</p>
-                    <p className="text-xs text-gray-500 mt-1">
+                    <p className="text-xs text-muted-foreground mt-1">
                       •••• {paymentMethod.us_bank_account.last4}
                     </p>
                   </>
                 ) : null}
               </div>
               {paymentMethod.billing_details.name && (
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-muted-foreground mt-1">
                   {paymentMethod.billing_details.name}
                 </p>
               )}

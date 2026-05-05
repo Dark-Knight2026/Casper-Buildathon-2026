@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 
 import { FeaturedProperties } from '@/components/FeaturedProperties';
 import { FEATURED_PROPERTIES } from '@/data/featuredProperties';
@@ -115,16 +115,19 @@ describe('FeaturedProperties', () => {
     });
   });
 
-  describe('favorite button', () => {
-    it('heart button click does not trigger card navigation (stopPropagation)', () => {
+  describe('save button', () => {
+    it('save button click does not trigger card navigation (stopPropagation)', () => {
       renderComponent();
-      const heartButton = screen.getByRole('button', {
-        name: new RegExp(`save ${first.title} to favorites`, 'i'),
+      const firstCard = screen
+        .getByRole('button', { name: new RegExp(`view details for ${first.title}`, 'i') })
+        .closest('.group') as HTMLElement;
+      const saveButton = within(firstCard).getByRole('button', {
+        name: /save property/i,
       });
-      fireEvent.click(heartButton);
+      fireEvent.click(saveButton);
       expect(
         mockNavigate,
-        'heart button click must stopPropagation and not navigate the card'
+        'save-property button click must stopPropagation and not navigate the card'
       ).not.toHaveBeenCalled();
     });
 

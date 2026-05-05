@@ -125,6 +125,9 @@
     --badge-info: 214 49% 35%;             /* #2A4E7A - navy-blue for price changes, info */
     --badge-info-foreground: 0 0% 100%;
 
+    --conversation-selected: 213 94% 94%;       /* blue-100 — selected conversation item */
+    --conversation-selected-hover: 213 94% 97%; /* blue-50  — hover on conversation item */
+
     /* ICO Feedback Colors - Light Mode */
     --ico-error-bg: 0 86% 97%;             /* #FEF2F2 - red-50 */
     --ico-error-border: 0 72% 83%;         /* #FECACA - red-200 */
@@ -165,6 +168,9 @@
     --badge-success-foreground: 0 0% 100%;
     --badge-info: 214 49% 42%;             /* ≈4.6:1 vs white */
     --badge-info-foreground: 0 0% 100%;
+
+    --conversation-selected: 213 50% 25%;       /* dark blue — selected conversation item */
+    --conversation-selected-hover: 213 50% 20%; /* darker blue — hover on conversation item */
 
     /* ICO Page Variables - Dark Mode */
     --ico-bg-primary: 222 47% 8%;
@@ -247,4 +253,12 @@
 
 .animate-shrink-width {
   animation: shrink-width linear forwards;
+}
+
+/* Radix Select/Popover/DropdownMenu wrapper sets `z-index: 50` inline.
+   Dialog overlay+content also use z-50, so dropdowns inside dialogs end up
+   below the modal panel. !important is required because the conflicting
+   z-index is on the wrapper's inline `style` attribute. */
+html body [data-radix-popper-content-wrapper] {
+  z-index: 9999 !important;
 }

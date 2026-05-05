@@ -11,13 +11,31 @@ export interface ApiClientOptions {
   timeout?: number;
   maxRetries?: number;
   retryDelay?: number;
+  /**
+   * Called after a 401 has been observed and the refresh attempt also failed
+   * (or refresh is disabled). The default implementation redirects to a login
+   * page; supply a no-op when the consumer wants to keep the response and
+   * surface the error itself.
+   */
   onAuthError?: () => void;
+  /**
+   * If set, on 401 the client first POSTs here (with credentials) and, on
+   * success, replays the original request once. Path is relative to `baseUrl`.
+   * Leave undefined to disable transparent refresh entirely.
+   */
+  refreshPath?: string;
 }
 
 export interface RequestOptions extends RequestInit {
   retry?: boolean;
   maxRetries?: number;
   timeout?: number;
+  /**
+   * Skip the 401 → refresh → replay path for this single call. The
+   * refresh and logout endpoints set this so they cannot recursively
+   * trigger themselves.
+   */
+  skipRefresh?: boolean;
 }
 
 export class ApiError extends Error {
@@ -37,7 +55,8 @@ export class ApiClient {
   private maxRetries: number;
   private retryDelay: number;
   private onAuthError?: () => void;
-  private authToken: string | null = null;
+  private refreshPath?: string;
+  private refreshInFlight: Promise<boolean> | null = null;
 
   constructor(options: ApiClientOptions = {}) {
     this.baseUrl = options.baseUrl || '';
@@ -45,18 +64,7 @@ export class ApiClient {
     this.maxRetries = options.maxRetries || 3;
     this.retryDelay = options.retryDelay || 1000;
     this.onAuthError = options.onAuthError;
-  }
-
-  setAuthToken(token: string | null): void {
-    this.authToken = token;
-  }
-
-  getAuthToken(): string | null {
-    return this.authToken;
-  }
-
-  private buildAuthHeaders(): Record<string, string> {
-    return this.authToken ? { Authorization: `Bearer ${this.authToken}` } : {};
+    this.refreshPath = options.refreshPath;
   }
 
   /**
@@ -79,6 +87,11 @@ export class ApiClient {
 
     try {
       const response = await fetch(url, {
+        // Auth tokens travel as HttpOnly cookies set at /auth/login. Without
+        // `credentials: 'include'` the browser strips them on cross-origin
+        // calls (Vite dev → backend on a different port), so every request
+        // would 401.
+        credentials: 'include',
         ...options,
         signal: combinedSignal,
       });
@@ -94,14 +107,40 @@ export class ApiClient {
   }
 
   /**
+   * Try to renew the session via the refresh endpoint. Concurrent callers
+   * coalesce on the same in-flight promise so a burst of 401s triggers a
+   * single refresh attempt.
+   */
+  private async tryRefresh(): Promise<boolean> {
+    if (!this.refreshPath) return false;
+    if (this.refreshInFlight) return this.refreshInFlight;
+
+    const path = this.refreshPath;
+    this.refreshInFlight = (async () => {
+      try {
+        const response = await this.fetchWithTimeout(`${this.baseUrl}${path}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          skipRefresh: true,
+        });
+        return response.ok;
+      } catch (err) {
+        logger.warn('Token refresh failed:', { error: (err as Error).message });
+        return false;
+      } finally {
+        this.refreshInFlight = null;
+      }
+    })();
+
+    return this.refreshInFlight;
+  }
+
+  /**
    * Handle API response
    */
   private async handleResponse<T>(response: Response): Promise<T> {
     // Handle authentication errors
     if (response.status === 401) {
-      if (this.onAuthError) {
-        this.onAuthError();
-      }
       throw new ApiError('Unauthorized', 401);
     }
 
@@ -139,6 +178,36 @@ export class ApiClient {
   }
 
   /**
+   * Wrap a request so a single 401 triggers refresh + replay. On refresh
+   * failure (or when `skipRefresh` is set) the original 401 propagates and
+   * `onAuthError` fires.
+   */
+  private async withAuthRetry<T>(
+    request: () => Promise<T>,
+    options: RequestOptions
+  ): Promise<T> {
+    try {
+      return await request();
+    } catch (err) {
+      if (
+        err instanceof ApiError &&
+        err.statusCode === 401 &&
+        !options.skipRefresh &&
+        this.refreshPath
+      ) {
+        const refreshed = await this.tryRefresh();
+        if (refreshed) {
+          return await request();
+        }
+        if (this.onAuthError) this.onAuthError();
+      } else if (err instanceof ApiError && err.statusCode === 401 && this.onAuthError) {
+        this.onAuthError();
+      }
+      throw err;
+    }
+  }
+
+  /**
    * Make GET request
    */
   async get<T>(url: string, options: RequestOptions = {}): Promise<T> {
@@ -151,15 +220,16 @@ export class ApiClient {
         ...options,
         method: 'GET',
         headers: {
-          ...this.buildAuthHeaders(),
           ...options.headers,
         },
       });
       return this.handleResponse<T>(response);
     };
 
+    const wrapped = () => this.withAuthRetry(makeRequest, options);
+
     if (shouldRetry) {
-      return retryAsync(makeRequest, {
+      return retryAsync(wrapped, {
         maxAttempts: maxRetries,
         delayMs: this.retryDelay,
         backoff: true,
@@ -169,7 +239,7 @@ export class ApiClient {
       });
     }
 
-    return makeRequest();
+    return wrapped();
   }
 
   /**
@@ -187,7 +257,6 @@ export class ApiClient {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...this.buildAuthHeaders(),
           ...options.headers,
         },
         body: data ? JSON.stringify(data) : undefined,
@@ -195,8 +264,10 @@ export class ApiClient {
       return this.handleResponse<T>(response);
     };
 
+    const wrapped = () => this.withAuthRetry(makeRequest, options);
+
     if (shouldRetry) {
-      return retryAsync(makeRequest, {
+      return retryAsync(wrapped, {
         maxAttempts: maxRetries,
         delayMs: this.retryDelay,
         backoff: true,
@@ -206,7 +277,7 @@ export class ApiClient {
       });
     }
 
-    return makeRequest();
+    return wrapped();
   }
 
   /**
@@ -224,7 +295,6 @@ export class ApiClient {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          ...this.buildAuthHeaders(),
           ...options.headers,
         },
         body: data ? JSON.stringify(data) : undefined,
@@ -232,8 +302,10 @@ export class ApiClient {
       return this.handleResponse<T>(response);
     };
 
+    const wrapped = () => this.withAuthRetry(makeRequest, options);
+
     if (shouldRetry) {
-      return retryAsync(makeRequest, {
+      return retryAsync(wrapped, {
         maxAttempts: maxRetries,
         delayMs: this.retryDelay,
         backoff: true,
@@ -243,7 +315,7 @@ export class ApiClient {
       });
     }
 
-    return makeRequest();
+    return wrapped();
   }
 
   /**
@@ -259,15 +331,16 @@ export class ApiClient {
         ...options,
         method: 'DELETE',
         headers: {
-          ...this.buildAuthHeaders(),
           ...options.headers,
         },
       });
       return this.handleResponse<T>(response);
     };
 
+    const wrapped = () => this.withAuthRetry(makeRequest, options);
+
     if (shouldRetry) {
-      return retryAsync(makeRequest, {
+      return retryAsync(wrapped, {
         maxAttempts: maxRetries,
         delayMs: this.retryDelay,
         backoff: true,
@@ -277,7 +350,7 @@ export class ApiClient {
       });
     }
 
-    return makeRequest();
+    return wrapped();
   }
 
   /**
@@ -306,9 +379,18 @@ export const backendClient = new ApiClient({
   timeout: 30000,
   maxRetries: 3,
   retryDelay: 1000,
+  refreshPath: '/api/v1/auth/refresh',
   onAuthError: () => {
     if (typeof window !== 'undefined') {
-      window.location.href = '/';
+      // Strip the legacy localStorage session marker so ProtectedRoute /
+      // AuthContext don't show a stale signed-in UI after the cookie was
+      // already invalidated server-side.
+      try {
+        localStorage.removeItem('leasefi_session');
+      } catch {
+        // localStorage may be disabled (private mode, embedded webview).
+      }
+      window.location.href = '/auth/login';
     }
   },
 });

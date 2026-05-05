@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase/client';
+// TODO: replace mock implementation with real Supabase calls when backend is ready
 import type {
   Message,
   SendMessageData,
@@ -7,477 +7,154 @@ import type {
   MessageSearchResult,
 } from '@/types/message';
 
-interface MessageRow {
-  id: string;
-  conversation_id: string;
-  sender_id: string;
-  sender_role: string;
-  content: string;
-  message_type: string;
-  attachment_url?: string;
-  attachment_name?: string;
-  attachment_type?: string;
-  attachment_size?: number;
-  is_read: boolean;
-  read_at?: string;
-  read_by: string[];
-  created_at: string;
-  updated_at: string;
-  deleted_at?: string;
-  sender?: {
-    id: string;
-    first_name: string;
-    last_name: string;
-    email: string;
-    avatar_url?: string;
-  };
-  conversation?: {
-    id: string;
-    landlord_id: string;
-    tenant_id: string;
-    landlord?: {
-      id: string;
-      first_name: string;
-      last_name: string;
-      email: string;
-    };
-    tenant?: {
-      id: string;
-      first_name: string;
-      last_name: string;
-      email: string;
-    };
-  };
-}
+const MOCK_USER_ID = 'mock-tenant-1';
+
+// In-memory message store keyed by conversationId
+const mockMessages: Record<string, Message[]> = {
+  'conv-1': [
+    msg('m1', 'conv-1', MOCK_USER_ID, 'tenant', 'Hi John, I wanted to ask about the lease renewal offer.', Date.now() - 1000 * 60 * 65),
+    msg('m2', 'conv-1', 'mock-landlord-1', 'landlord', 'Hi! Sure, the offer has been sent to your email. The new rent would be $1,575/month for another 12 months.', Date.now() - 1000 * 60 * 60),
+    msg('m3', 'conv-1', MOCK_USER_ID, 'tenant', 'That sounds reasonable. Can we discuss the pet policy as well?', Date.now() - 1000 * 60 * 30),
+    msg('m4', 'conv-1', 'mock-landlord-1', 'landlord', 'Of course! The current no-pets clause can be updated with an additional deposit.', Date.now() - 1000 * 60 * 5, false),
+  ],
+  'conv-2': [
+    msg('m5', 'conv-2', 'mock-vendor-1', 'tenant', 'We scheduled the AC maintenance for Thursday at 10 AM. Will you be home?', Date.now() - 1000 * 60 * 60 * 24),
+    msg('m6', 'conv-2', MOCK_USER_ID, 'tenant', "Yes, I'll be home. Please ring the bell when you arrive.", Date.now() - 1000 * 60 * 60 * 23),
+  ],
+  'conv-3': [
+    msg('m7', 'conv-3', 'mock-vendor-2', 'tenant', 'The plumbing repair is complete. The leak has been fixed.', Date.now() - 1000 * 60 * 60 * 72),
+    msg('m8', 'conv-3', MOCK_USER_ID, 'tenant', 'Thank you! Everything looks great.', Date.now() - 1000 * 60 * 60 * 70),
+  ],
+};
+
+// No-op channel mock
+const mockChannel = { unsubscribe: () => {} };
 
 class MessageService {
-  /**
-   * Send a new message
-   */
   async sendMessage(data: SendMessageData): Promise<Message> {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('User not authenticated');
-
-      // Get user role
-      const { data: profile } = await supabase
-        .from('users')
-        .select('role')
-        .eq('id', user.id)
-        .single();
-
-      const messageData = {
-        conversation_id: data.conversationId,
-        sender_id: user.id,
-        sender_role: profile?.role || 'tenant',
-        content: data.content,
-        message_type: data.attachments && data.attachments.length > 0 ? 'file' : 'text',
-        is_read: false,
-        read_by: [],
-      };
-
-      const { data: message, error } = await supabase
-        .from('messages')
-        .insert(messageData)
-        .select(`
-          *,
-          sender:users!sender_id(id, first_name, last_name, email, avatar_url)
-        `)
-        .single();
-
-      if (error) throw error;
-
-      // Update conversation last message
-      await supabase
-        .from('conversations')
-        .update({
-          last_message_at: new Date().toISOString(),
-          last_message_preview: data.content.substring(0, 100),
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', data.conversationId);
-
-      // Increment unread count for the other participant
-      await this.incrementUnreadCount(data.conversationId, user.id);
-
-      return this.formatMessage(message as MessageRow);
-    } catch (error) {
-      console.error('Error sending message:', error);
-      throw error;
+    await delay(150);
+    const newMsg = msg(
+      `m-${Date.now()}`,
+      data.conversationId,
+      MOCK_USER_ID,
+      'tenant',
+      data.content,
+      Date.now()
+    );
+    if (!mockMessages[data.conversationId]) {
+      mockMessages[data.conversationId] = [];
     }
+    mockMessages[data.conversationId].push(newMsg);
+    return newMsg;
   }
 
-  /**
-   * Get messages for a conversation with pagination
-   */
   async getMessages(
     conversationId: string,
     options: MessagePaginationOptions
   ): Promise<MessagesResponse> {
-    try {
-      const { limit, offset } = options;
-
-      const { data: messages, error, count } = await supabase
-        .from('messages')
-        .select(`
-          *,
-          sender:users!sender_id(id, first_name, last_name, email, avatar_url)
-        `, { count: 'exact' })
-        .eq('conversation_id', conversationId)
-        .is('deleted_at', null)
-        .order('created_at', { ascending: false })
-        .range(offset, offset + limit - 1);
-
-      if (error) throw error;
-
-      return {
-        messages: (messages || []).map((m) => this.formatMessage(m as MessageRow)).reverse(),
-        hasMore: (count || 0) > offset + limit,
-        total: count || 0,
-      };
-    } catch (error) {
-      console.error('Error getting messages:', error);
-      throw error;
-    }
+    await delay(100);
+    const all = mockMessages[conversationId] ?? [];
+    const { limit, offset } = options;
+    const slice = all.slice(offset, offset + limit);
+    return { messages: slice, hasMore: offset + limit < all.length, total: all.length };
   }
 
-  /**
-   * Mark a message as read
-   */
-  async markAsRead(messageId: string): Promise<void> {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('User not authenticated');
-
-      const { data: message } = await supabase
-        .from('messages')
-        .select('read_by, conversation_id, sender_id')
-        .eq('id', messageId)
-        .single();
-
-      if (!message || message.sender_id === user.id) return;
-
-      const readBy = message.read_by || [];
-      if (readBy.includes(user.id)) return;
-
-      await supabase
-        .from('messages')
-        .update({
-          is_read: true,
-          read_at: new Date().toISOString(),
-          read_by: [...readBy, user.id],
-        })
-        .eq('id', messageId);
-
-      // Decrement unread count
-      await this.decrementUnreadCount(message.conversation_id, user.id);
-    } catch (error) {
-      console.error('Error marking message as read:', error);
-      throw error;
-    }
+  async markAsRead(_messageId: string): Promise<void> {
+    // mock — no-op
   }
 
-  /**
-   * Mark all messages in a conversation as read
-   */
-  async markConversationAsRead(conversationId: string): Promise<void> {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('User not authenticated');
-
-      // Get unread messages
-      const { data: messages } = await supabase
-        .from('messages')
-        .select('id, read_by')
-        .eq('conversation_id', conversationId)
-        .eq('is_read', false)
-        .neq('sender_id', user.id);
-
-      if (!messages || messages.length === 0) return;
-
-      // Update all unread messages
-      for (const message of messages) {
-        const readBy = message.read_by || [];
-        if (!readBy.includes(user.id)) {
-          await supabase
-            .from('messages')
-            .update({
-              is_read: true,
-              read_at: new Date().toISOString(),
-              read_by: [...readBy, user.id],
-            })
-            .eq('id', message.id);
-        }
-      }
-
-      // Reset unread count
-      await this.resetUnreadCount(conversationId, user.id);
-    } catch (error) {
-      console.error('Error marking conversation as read:', error);
-      throw error;
-    }
+  async markConversationAsRead(_conversationId: string): Promise<void> {
+    // mock — no-op
   }
 
-  /**
-   * Delete a message (soft delete)
-   */
   async deleteMessage(messageId: string): Promise<void> {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('User not authenticated');
-
-      await supabase
-        .from('messages')
-        .update({ deleted_at: new Date().toISOString() })
-        .eq('id', messageId)
-        .eq('sender_id', user.id);
-    } catch (error) {
-      console.error('Error deleting message:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Search messages
-   */
-  async searchMessages(
-    query: string,
-    conversationId?: string
-  ): Promise<MessageSearchResult[]> {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('User not authenticated');
-
-      let queryBuilder = supabase
-        .from('messages')
-        .select(`
-          *,
-          sender:users!sender_id(id, first_name, last_name, email, avatar_url),
-          conversation:conversations(
-            *,
-            landlord:users!landlord_id(id, first_name, last_name, email),
-            tenant:users!tenant_id(id, first_name, last_name, email)
-          )
-        `)
-        .textSearch('content', query)
-        .is('deleted_at', null)
-        .order('created_at', { ascending: false })
-        .limit(50);
-
-      if (conversationId) {
-        queryBuilder = queryBuilder.eq('conversation_id', conversationId);
+    for (const msgs of Object.values(mockMessages)) {
+      const idx = msgs.findIndex((m) => m.id === messageId);
+      if (idx !== -1) {
+        msgs[idx] = { ...msgs[idx], deletedAt: new Date() };
+        break;
       }
-
-      const { data: messages, error } = await queryBuilder;
-
-      if (error) throw error;
-
-      return (messages || []).map((msg) => ({
-        message: this.formatMessage(msg as MessageRow),
-        conversation: msg.conversation,
-        matchedText: this.extractMatchedText(msg.content, query),
-      }));
-    } catch (error) {
-      console.error('Error searching messages:', error);
-      throw error;
     }
   }
 
-  /**
-   * Subscribe to new messages in a conversation
-   */
+  async searchMessages(query: string, conversationId?: string): Promise<MessageSearchResult[]> {
+    const results: MessageSearchResult[] = [];
+    const target = query.toLowerCase();
+    const sources = conversationId
+      ? { [conversationId]: mockMessages[conversationId] ?? [] }
+      : mockMessages;
+
+    for (const [, msgs] of Object.entries(sources)) {
+      for (const m of msgs) {
+        if (m.content.toLowerCase().includes(target)) {
+          results.push({ message: m, conversation: {} as never, matchedText: extractMatch(m.content, query) });
+        }
+      }
+    }
+    return results;
+  }
+
   subscribeToMessages(
-    conversationId: string,
-    callback: (message: Message) => void
+    _conversationId: string,
+    _callback: (message: Message) => void
   ) {
-    return supabase
-      .channel(`messages:${conversationId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'messages',
-          filter: `conversation_id=eq.${conversationId}`,
-        },
-        async (payload) => {
-          // Fetch full message with sender info
-          const { data } = await supabase
-            .from('messages')
-            .select(`
-              *,
-              sender:users!sender_id(id, first_name, last_name, email, avatar_url)
-            `)
-            .eq('id', payload.new.id)
-            .single();
-
-          if (data) {
-            callback(this.formatMessage(data as MessageRow));
-          }
-        }
-      )
-      .subscribe();
+    return mockChannel;
   }
 
-  /**
-   * Subscribe to message updates (read receipts)
-   */
   subscribeToMessageUpdates(
-    conversationId: string,
-    callback: (message: Message) => void
+    _conversationId: string,
+    _callback: (message: Message) => void
   ) {
-    return supabase
-      .channel(`message-updates:${conversationId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'messages',
-          filter: `conversation_id=eq.${conversationId}`,
-        },
-        async (payload) => {
-          const { data } = await supabase
-            .from('messages')
-            .select(`
-              *,
-              sender:users!sender_id(id, first_name, last_name, email, avatar_url)
-            `)
-            .eq('id', payload.new.id)
-            .single();
-
-          if (data) {
-            callback(this.formatMessage(data as MessageRow));
-          }
-        }
-      )
-      .subscribe();
+    return mockChannel;
   }
 
-  /**
-   * Broadcast typing indicator
-   */
-  async broadcastTyping(conversationId: string, isTyping: boolean): Promise<void> {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    const channel = supabase.channel(`typing:${conversationId}`);
-    await channel.send({
-      type: 'broadcast',
-      event: 'typing',
-      payload: { userId: user.id, isTyping },
-    });
+  async broadcastTyping(_conversationId: string, _isTyping: boolean): Promise<void> {
+    // mock — no-op
   }
 
-  /**
-   * Subscribe to typing indicators
-   */
   subscribeToTyping(
-    conversationId: string,
-    callback: (userId: string, isTyping: boolean) => void
+    _conversationId: string,
+    _callback: (userId: string, isTyping: boolean) => void
   ) {
-    return supabase
-      .channel(`typing:${conversationId}`)
-      .on('broadcast', { event: 'typing' }, (payload) => {
-        callback(payload.payload.userId, payload.payload.isTyping);
-      })
-      .subscribe();
+    return mockChannel;
   }
+}
 
-  // Helper methods
+// Helpers
 
-  private async incrementUnreadCount(conversationId: string, senderId: string): Promise<void> {
-    const { data: conversation } = await supabase
-      .from('conversations')
-      .select('landlord_id, tenant_id')
-      .eq('id', conversationId)
-      .single();
+function msg(
+  id: string,
+  conversationId: string,
+  senderId: string,
+  senderRole: 'landlord' | 'tenant',
+  content: string,
+  timestamp: number,
+  isRead = true
+): Message {
+  return {
+    id,
+    conversationId,
+    senderId,
+    senderRole,
+    content,
+    messageType: 'text',
+    isRead,
+    readBy: isRead ? [senderId] : [],
+    createdAt: new Date(timestamp),
+    updatedAt: new Date(timestamp),
+  };
+}
 
-    if (!conversation) return;
+function extractMatch(content: string, query: string): string {
+  const idx = content.toLowerCase().indexOf(query.toLowerCase());
+  if (idx === -1) return content.substring(0, 100);
+  const start = Math.max(0, idx - 50);
+  const end = Math.min(content.length, idx + query.length + 50);
+  return `...${content.substring(start, end)}...`;
+}
 
-    const field = conversation.landlord_id === senderId
-      ? 'tenant_unread_count'
-      : 'landlord_unread_count';
-
-    await supabase.rpc('increment_unread_count', {
-      conversation_id: conversationId,
-      field_name: field,
-    });
-  }
-
-  private async decrementUnreadCount(conversationId: string, userId: string): Promise<void> {
-    const { data: conversation } = await supabase
-      .from('conversations')
-      .select('landlord_id, tenant_id')
-      .eq('id', conversationId)
-      .single();
-
-    if (!conversation) return;
-
-    const field = conversation.landlord_id === userId
-      ? 'landlord_unread_count'
-      : 'tenant_unread_count';
-
-    await supabase.rpc('decrement_unread_count', {
-      conversation_id: conversationId,
-      field_name: field,
-    });
-  }
-
-  private async resetUnreadCount(conversationId: string, userId: string): Promise<void> {
-    const { data: conversation } = await supabase
-      .from('conversations')
-      .select('landlord_id, tenant_id')
-      .eq('id', conversationId)
-      .single();
-
-    if (!conversation) return;
-
-    const field = conversation.landlord_id === userId
-      ? 'landlord_unread_count'
-      : 'tenant_unread_count';
-
-    await supabase
-      .from('conversations')
-      .update({ [field]: 0 })
-      .eq('id', conversationId);
-  }
-
-  private formatMessage(data: MessageRow): Message {
-    return {
-      id: data.id,
-      conversationId: data.conversation_id,
-      senderId: data.sender_id,
-      senderRole: data.sender_role as 'landlord' | 'tenant',
-      content: data.content,
-      messageType: data.message_type as 'text' | 'file' | 'system',
-      attachmentUrl: data.attachment_url,
-      attachmentName: data.attachment_name,
-      attachmentType: data.attachment_type,
-      attachmentSize: data.attachment_size,
-      isRead: data.is_read,
-      readAt: data.read_at ? new Date(data.read_at) : undefined,
-      readBy: data.read_by || [],
-      createdAt: new Date(data.created_at),
-      updatedAt: new Date(data.updated_at),
-      deletedAt: data.deleted_at ? new Date(data.deleted_at) : undefined,
-      sender: data.sender ? {
-        id: data.sender.id,
-        name: `${data.sender.first_name} ${data.sender.last_name}`,
-        email: data.sender.email,
-        avatarUrl: data.sender.avatar_url,
-      } : undefined,
-    };
-  }
-
-  private extractMatchedText(content: string, query: string): string {
-    const index = content.toLowerCase().indexOf(query.toLowerCase());
-    if (index === -1) return content.substring(0, 100);
-
-    const start = Math.max(0, index - 50);
-    const end = Math.min(content.length, index + query.length + 50);
-    return '...' + content.substring(start, end) + '...';
-  }
+function delay(ms: number) {
+  return new Promise((res) => setTimeout(res, ms));
 }
 
 export const messageService = new MessageService();

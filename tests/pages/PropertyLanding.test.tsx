@@ -17,6 +17,12 @@ vi.mock('react-router-dom', async () => {
   };
 });
 
+// LandingHeader (rendered inside PropertyLanding) calls useAuth — stub it so
+// the AuthProvider isn't required in tests.
+vi.mock('@/hooks/useAuth', () => ({
+  useAuth: () => ({ profile: null }),
+}));
+
 // Real LandingHeader, FeaturedProperties and use-toast are rendered. Toaster is
 // mounted alongside so toast assertions hit real DOM (real app mounts it in
 // App.tsx; tests need their own instance).

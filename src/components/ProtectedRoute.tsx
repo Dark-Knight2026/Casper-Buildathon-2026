@@ -2,22 +2,23 @@ import React from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
+import { RouteRole, getDashboardRoute } from '@/types/user';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
-  allowedRoles: ('landlord' | 'tenant' | 'admin' | 'both')[];
+  allowedRoles: RouteRole[];
 }
 
 export default function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {
-  const { user, profile, loading, isAuthenticated } = useAuth();
+  const { profile, loading, isAuthenticated } = useAuth();
 
-  // Show loading spinner while checking authentication
+  // Show loading spinner while AuthContext is verifying the cookie-backed
+  // session via /auth/refresh on mount.
   if (loading) {
     return <LoadingSpinner fullScreen />;
   }
 
-  // Redirect to login if not authenticated
-  if (!isAuthenticated || !user || !profile) {
+  if (!isAuthenticated || !profile) {
     return <Navigate to="/auth/login" replace />;
   }
 
@@ -30,10 +31,8 @@ export default function ProtectedRoute({ children, allowedRoles }: ProtectedRout
   }
 
   // Check if user's role matches any of the allowed roles
-  if (!allowedRoles.includes(userRole)) {
-    // Redirect to appropriate dashboard based on user's role
-    const redirectPath = userRole === 'landlord' ? '/landlord/dashboard' : '/tenant/dashboard';
-    return <Navigate to={redirectPath} replace />;
+  if (!allowedRoles.includes(userRole as RouteRole)) {
+    return <Navigate to={getDashboardRoute(userRole)} replace />;
   }
 
   return <>{children}</>;

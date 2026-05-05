@@ -48,6 +48,14 @@ export interface User {
   specializations?: string[];
   createdAt: Date;
   lastLogin?: Date;
+  // Wallet-auth users carry their primary Casper public key here so the UI
+  // can show a recognisable identifier before the user completes their profile.
+  walletAddress?: string;
+  // Mirrors backend `users.is_profile_complete` (true once email + names + phone
+  // are populated). Used by the UI to nudge wallet-only users to fill in their
+  // profile and to suppress the "Wallet User" placeholder backend ships on
+  // first wallet login (see crates/api/src/services/auth/db.rs).
+  isProfileComplete?: boolean;
 }
 
 export interface UserProfile extends User {
@@ -106,38 +114,18 @@ export function getRoleDisplayName(role: UserRole): string {
   return roleNames[role] || role;
 }
 
-// Helper function to get dashboard route for role
+// Maps a role to its post-login dashboard path. Only `/tenant/dashboard`
+// and `/landlord/dashboard` exist in App.tsx today, so every non-tenant role
+// lands on the landlord dashboard until role-specific dashboards are added.
+// Paths must match the <Route path=...> declarations in App.tsx exactly,
+// otherwise the * catch-all swallows the redirect.
 export function getDashboardRoute(role: UserRole): string {
-  const routes: Record<UserRole, string> = {
-    buyer: '/buyer-dashboard',
-    seller: '/seller-dashboard',
-    agent: '/agent-dashboard',
-    broker: '/broker-dashboard',
-    landlord: '/landlord-dashboard',
-    tenant: '/tenant-dashboard',
-    mortgage_broker: '/agent-dashboard',
-    cpa: '/agent-dashboard',
-    real_estate_attorney: '/agent-dashboard',
-    insurance_agent: '/agent-dashboard',
-    stager: '/agent-dashboard',
-    photographer: '/agent-dashboard',
-    contractor: '/agent-dashboard',
-    listing_attorney: '/agent-dashboard',
-    hoa_manager: '/landlord-dashboard',
-    appraiser: '/agent-dashboard',
-    home_inspector: '/agent-dashboard',
-    pest_inspector: '/agent-dashboard',
-    surveyor: '/agent-dashboard',
-    environmental_specialist: '/agent-dashboard',
-    buyer_attorney: '/agent-dashboard',
-    seller_attorney: '/agent-dashboard',
-    title_officer: '/agent-dashboard',
-    escrow_officer: '/agent-dashboard',
-    notary: '/agent-dashboard',
-    admin: '/agent-dashboard'
-  };
-  return routes[role] || '/';
+  if (role === 'tenant') return '/tenant/dashboard';
+  return '/landlord/dashboard';
 }
+
+// Route-level role type (includes 'both' as a sentinel for landlord+tenant access)
+export type RouteRole = 'landlord' | 'tenant' | 'admin' | 'both';
 
 // Role categories for grouping
 export const CORE_ROLES: UserRole[] = ['buyer', 'seller', 'agent', 'broker', 'landlord', 'tenant'];

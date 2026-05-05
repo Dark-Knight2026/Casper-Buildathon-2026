@@ -51,29 +51,11 @@ class Logger {
     return `[${timestamp}] [${level.toUpperCase()}] ${message}${dataStr}`;
   }
 
-  private sendToRemote(level: LogLevel, message: string, data?: Record<string, unknown>): void {
-    // In production, send errors to error tracking service (e.g., Sentry)
+  private sendToRemote(_level: LogLevel, _message: string, _data?: Record<string, unknown>): void {
     if (!this.config.enableRemote) return;
 
-    // TODO: Integrate with error tracking service
-    // Example: Sentry.captureMessage(message, { level, extra: data });
-    
-    // For now, we'll just prepare the data structure
-    const logEntry = {
-      timestamp: new Date().toISOString(),
-      level,
-      message,
-      data,
-      userAgent: typeof window !== 'undefined' ? window.navigator.userAgent : 'server',
-      url: typeof window !== 'undefined' ? window.location.href : 'server',
-    };
-
-    // In production, this would be sent to a logging service
-    // DO NOT call logger methods here to avoid infinite recursion
-    if (level === 'error') {
-      // Critical errors should be tracked
-      console.error('Error logged:', logEntry);
-    }
+    // TODO: Integrate with error tracking service (e.g., Sentry).
+    // Example: Sentry.captureMessage(_message, { level: _level, extra: _data });
   }
 
   debug(message: string, data?: Record<string, unknown>): void {
@@ -105,13 +87,12 @@ class Logger {
   error(message: string, error?: Error | unknown): void {
     if (!this.shouldLog('error')) return;
 
-    const errorData = error instanceof Error
-      ? {
-          name: error.name,
-          message: error.message,
-          stack: error.stack,
-        }
-      : error;
+    const errorData: Record<string, unknown> | undefined =
+      error instanceof Error
+        ? { name: error.name, message: error.message, stack: error.stack }
+        : error !== undefined
+          ? { value: error }
+          : undefined;
 
     if (this.config.enableConsole) {
       console.error(this.formatMessage('error', message, errorData));

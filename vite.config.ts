@@ -5,6 +5,8 @@ import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 import { VitePWA } from 'vite-plugin-pwa';
+import basicSsl from '@vitejs/plugin-basic-ssl';
+import { nodePolyfills } from 'vite-plugin-node-polyfills';
 
 const wasmIntegrityPlugin = {
   name: 'wasm-integrity-check',
@@ -41,6 +43,11 @@ export default defineConfig(({ mode }) => {
     // wallet SDK which enforces a specific subdomain in the Host header.
     // localhost access still works: Vite unconditionally allows loopback (127.0.0.1)
     // connections regardless of allowedHosts.
+    //
+    // host: '127.0.0.1' forces IPv4 binding. Default 'localhost' resolves to ::1 (IPv6)
+    // on macOS, but lvh.me's DNS only returns an A record (127.0.0.1) — without this,
+    // browsers hitting http://lvh.me:5173 get ECONNREFUSED.
+    host: '127.0.0.1',
     allowedHosts: ['lvh.me'],
     proxy: {
       '/api/cspr-cloud': {
@@ -71,7 +78,26 @@ export default defineConfig(({ mode }) => {
     },
   },
   plugins: [
+    // CSPR.click wallet SDK requires a secure context (HTTPS) at runtime —
+    // WebCrypto APIs and the wallet provider's WSS handshake refuse to
+    // initialize over plain http://. basicSsl serves a self-signed cert in
+    // dev so the SDK can boot without standing up a real cert chain.
+    basicSsl(),
     wasmIntegrityPlugin,
+    nodePolyfills({
+      // Tradeoff: this ships ~Node-shim code into every prod chunk that touches
+      // the wallet/blockchain stack. Required because csprclick-web-sdk's
+      // transitive deps assume a Node runtime — eventsource uses util.inherits,
+      // casper-js-sdk pulls in buffer/stream/crypto. Without these polyfills
+      // Vite serves empty modules and pages crash silently with "util.inherits
+      // is not a function". The `include` list is intentionally narrow (only
+      // the built-ins the SDK actually touches) so we don't drag in the full
+      // polyfill bundle. Revisit if/when @make-software ships a browser-native
+      // build of the SDK.
+      include: ['util', 'buffer', 'stream', 'process', 'events', 'crypto', 'http', 'https', 'url'],
+      globals: { Buffer: true, global: true, process: true },
+      protocolImports: true,
+    }),
     react(),
     tailwindcss(),
     VitePWA({

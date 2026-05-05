@@ -8,14 +8,12 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { useAuth } from '@/hooks/useAuth';
-import { User } from '@/types/user';
+import type { User } from '@/types/user';
 import { 
   User as UserIcon, 
   Mail, 
   Phone, 
   Building, 
-  Award, 
-  Calendar,
   Edit3,
   Save,
   X,
@@ -32,22 +30,22 @@ interface UserProfileProps {
 }
 
 export default function UserProfile({ isOpen, onClose }: UserProfileProps) {
-  const { user, updateProfile } = useAuth();
+  const { profile, updateProfile } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState<Partial<User>>({});
 
-  if (!user) return null;
+  if (!profile) return null;
 
   const handleEdit = () => {
     setEditData({
-      firstName: user.firstName,
-      lastName: user.lastName,
-      phone: user.phone || '',
-      company: user.company || '',
-      bio: user.bio || '',
-      licenseNumber: user.licenseNumber || '',
-      yearsExperience: user.yearsExperience || 0,
-      specializations: user.specializations || []
+      firstName: profile.firstName,
+      lastName: profile.lastName,
+      phone: profile.phone || '',
+      company: profile.company || '',
+      bio: profile.bio || '',
+      licenseNumber: profile.licenseNumber || '',
+      yearsExperience: profile.yearsExperience || 0,
+      specializations: profile.specializations || []
     });
     setIsEditing(true);
   };
@@ -92,15 +90,15 @@ export default function UserProfile({ isOpen, onClose }: UserProfileProps) {
     }
   };
 
-  const RoleIcon = getRoleIcon(user.role);
+  const RoleIcon = getRoleIcon(profile.role);
 
   // Mock stats for demonstration
   const mockStats = {
-    propertiesListed: user.role === 'seller' ? 3 : user.role === 'agent' ? 15 : user.role === 'broker' ? 45 : 0,
-    propertiesSold: user.role === 'seller' ? 1 : user.role === 'agent' ? 8 : user.role === 'broker' ? 23 : 0,
-    totalTransactions: user.role === 'buyer' ? 2 : user.role === 'agent' ? 12 : user.role === 'broker' ? 35 : 1,
+    propertiesListed: profile.role === 'seller' ? 3 : profile.role === 'agent' ? 15 : profile.role === 'broker' ? 45 : 0,
+    propertiesSold: profile.role === 'seller' ? 1 : profile.role === 'agent' ? 8 : profile.role === 'broker' ? 23 : 0,
+    totalTransactions: profile.role === 'buyer' ? 2 : profile.role === 'agent' ? 12 : profile.role === 'broker' ? 35 : 1,
     averageRating: 4.7,
-    reviewCount: user.role === 'buyer' ? 3 : user.role === 'agent' ? 24 : user.role === 'broker' ? 67 : 5
+    reviewCount: profile.role === 'buyer' ? 3 : profile.role === 'agent' ? 24 : profile.role === 'broker' ? 67 : 5
   };
 
   return (
@@ -140,27 +138,27 @@ export default function UserProfile({ isOpen, onClose }: UserProfileProps) {
                 <div className="flex-1">
                   <div className="flex items-center space-x-3 mb-2">
                     <h2 className="text-2xl font-bold text-gray-900">
-                      {user.firstName} {user.lastName}
+                      {profile.firstName} {profile.lastName}
                     </h2>
-                    <Badge className={`${getRoleColor(user.role)} border`}>
-                      {getRoleLabel(user.role)}
+                    <Badge className={`${getRoleColor(profile.role)} border`}>
+                      {getRoleLabel(profile.role)}
                     </Badge>
                   </div>
                   <div className="flex items-center space-x-4 text-gray-600">
                     <div className="flex items-center space-x-1">
                       <Mail className="h-4 w-4" />
-                      <span>{user.email}</span>
+                      <span>{profile.email}</span>
                     </div>
-                    {user.phone && (
+                    {profile.phone && (
                       <div className="flex items-center space-x-1">
                         <Phone className="h-4 w-4" />
-                        <span>{user.phone}</span>
+                        <span>{profile.phone}</span>
                       </div>
                     )}
-                    {user.company && (
+                    {profile.company && (
                       <div className="flex items-center space-x-1">
                         <Building className="h-4 w-4" />
-                        <span>{user.company}</span>
+                        <span>{profile.company}</span>
                       </div>
                     )}
                   </div>
@@ -176,7 +174,7 @@ export default function UserProfile({ isOpen, onClose }: UserProfileProps) {
 
           {/* Stats Cards */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {user.role === 'seller' && (
+            {profile.role === 'seller' && (
               <>
                 <Card>
                   <CardHeader className="pb-2">
@@ -207,7 +205,7 @@ export default function UserProfile({ isOpen, onClose }: UserProfileProps) {
               </>
             )}
 
-            {user.role === 'buyer' && (
+            {profile.role === 'buyer' && (
               <>
                 <Card>
                   <CardHeader className="pb-2">
@@ -236,7 +234,7 @@ export default function UserProfile({ isOpen, onClose }: UserProfileProps) {
               </>
             )}
 
-            {(user.role === 'agent' || user.role === 'broker') && (
+            {(profile.role === 'agent' || profile.role === 'broker') && (
               <>
                 <Card>
                   <CardHeader className="pb-2">
@@ -302,7 +300,7 @@ export default function UserProfile({ isOpen, onClose }: UserProfileProps) {
                         onChange={(e) => setEditData(prev => ({ ...prev, phone: e.target.value }))}
                       />
                     </div>
-                    {(user.role === 'agent' || user.role === 'broker') && (
+                    {(profile.role === 'agent' || profile.role === 'broker') && (
                       <div className="space-y-2">
                         <Label htmlFor="edit-company">Company</Label>
                         <Input
@@ -314,7 +312,7 @@ export default function UserProfile({ isOpen, onClose }: UserProfileProps) {
                     )}
                   </div>
 
-                  {(user.role === 'agent' || user.role === 'broker') && (
+                  {(profile.role === 'agent' || profile.role === 'broker') && (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label htmlFor="edit-license">License Number</Label>
@@ -352,16 +350,16 @@ export default function UserProfile({ isOpen, onClose }: UserProfileProps) {
                     <div className="space-y-3">
                       <div>
                         <Label className="text-sm font-medium text-gray-600">Full Name</Label>
-                        <p className="text-gray-900">{user.firstName} {user.lastName}</p>
+                        <p className="text-gray-900">{profile.firstName} {profile.lastName}</p>
                       </div>
                       <div>
                         <Label className="text-sm font-medium text-gray-600">Email</Label>
-                        <p className="text-gray-900">{user.email}</p>
+                        <p className="text-gray-900">{profile.email}</p>
                       </div>
-                      {user.phone && (
+                      {profile.phone && (
                         <div>
                           <Label className="text-sm font-medium text-gray-600">Phone</Label>
-                          <p className="text-gray-900">{user.phone}</p>
+                          <p className="text-gray-900">{profile.phone}</p>
                         </div>
                       )}
                     </div>
@@ -369,36 +367,36 @@ export default function UserProfile({ isOpen, onClose }: UserProfileProps) {
                     <div className="space-y-3">
                       <div>
                         <Label className="text-sm font-medium text-gray-600">Role</Label>
-                        <p className="text-gray-900">{getRoleLabel(user.role)}</p>
+                        <p className="text-gray-900">{getRoleLabel(profile.role)}</p>
                       </div>
-                      {user.company && (
+                      {profile.company && (
                         <div>
                           <Label className="text-sm font-medium text-gray-600">Company</Label>
-                          <p className="text-gray-900">{user.company}</p>
+                          <p className="text-gray-900">{profile.company}</p>
                         </div>
                       )}
-                      {user.licenseNumber && (
+                      {profile.licenseNumber && (
                         <div>
                           <Label className="text-sm font-medium text-gray-600">License Number</Label>
-                          <p className="text-gray-900">{user.licenseNumber}</p>
+                          <p className="text-gray-900">{profile.licenseNumber}</p>
                         </div>
                       )}
-                      {user.yearsExperience && (
+                      {profile.yearsExperience && (
                         <div>
                           <Label className="text-sm font-medium text-gray-600">Years of Experience</Label>
-                          <p className="text-gray-900">{user.yearsExperience} years</p>
+                          <p className="text-gray-900">{profile.yearsExperience} years</p>
                         </div>
                       )}
                     </div>
                   </div>
 
-                  {user.specializations && user.specializations.length > 0 && (
+                  {profile.specializations && profile.specializations.length > 0 && (
                     <>
                       <Separator />
                       <div>
                         <Label className="text-sm font-medium text-gray-600 mb-2 block">Specializations</Label>
                         <div className="flex flex-wrap gap-2">
-                          {user.specializations.map((spec, index) => (
+                          {profile.specializations.map((spec: string, index: number) => (
                             <Badge key={index} variant="outline">
                               {spec}
                             </Badge>
@@ -408,12 +406,12 @@ export default function UserProfile({ isOpen, onClose }: UserProfileProps) {
                     </>
                   )}
 
-                  {user.bio && (
+                  {profile.bio && (
                     <>
                       <Separator />
                       <div>
                         <Label className="text-sm font-medium text-gray-600 mb-2 block">Bio</Label>
-                        <p className="text-gray-900 leading-relaxed">{user.bio}</p>
+                        <p className="text-gray-900 leading-relaxed">{profile.bio}</p>
                       </div>
                     </>
                   )}
@@ -422,12 +420,12 @@ export default function UserProfile({ isOpen, onClose }: UserProfileProps) {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm text-gray-600">
                     <div>
                       <Label className="text-sm font-medium text-gray-600">Member Since</Label>
-                      <p>{new Date(user.createdAt).toLocaleDateString()}</p>
+                      <p>{new Date(profile.createdAt).toLocaleDateString()}</p>
                     </div>
-                    {user.lastLogin && (
+                    {profile.lastLogin && (
                       <div>
                         <Label className="text-sm font-medium text-gray-600">Last Login</Label>
-                        <p>{new Date(user.lastLogin).toLocaleDateString()}</p>
+                        <p>{new Date(profile.lastLogin).toLocaleDateString()}</p>
                       </div>
                     )}
                   </div>

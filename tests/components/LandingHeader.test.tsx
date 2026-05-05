@@ -1,9 +1,20 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 
 import { MemoryRouter } from 'react-router-dom';
 
 import { LandingHeader } from '@/components/LandingHeader';
+
+const mockUseAuth = vi.fn(() => ({ profile: null as { role?: string } | null }));
+
+vi.mock('@/hooks/useAuth', () => ({
+  useAuth: () => mockUseAuth(),
+}));
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  mockUseAuth.mockReturnValue({ profile: null });
+});
 
 function renderHeader() {
   return render(
@@ -14,17 +25,20 @@ function renderHeader() {
 }
 
 describe('LandingHeader', () => {
-  describe('rendering', () => {
-    it('renders without crashing', () => {
+  describe('rendering (guest)', () => {
+    it('renders the brand', () => {
       renderHeader();
-      expect(screen.getByText('LeaseFi'), 'brand text "LeaseFi" should be visible').toBeInTheDocument();
+      expect(
+        screen.getByText('LeaseFi'),
+        'brand text "LeaseFi" should be visible'
+      ).toBeInTheDocument();
     });
 
     it('renders Sign In link', () => {
       renderHeader();
       expect(
         screen.getByRole('link', { name: /sign in/i }),
-        'Sign In CTA link should be rendered'
+        'guest header should expose the Sign In CTA'
       ).toBeInTheDocument();
     });
 
@@ -32,7 +46,7 @@ describe('LandingHeader', () => {
       renderHeader();
       expect(
         screen.getByRole('link', { name: /get started/i }),
-        'Get Started CTA link should be rendered'
+        'guest header should expose the Get Started CTA'
       ).toBeInTheDocument();
     });
 
@@ -72,10 +86,13 @@ describe('LandingHeader', () => {
   });
 
   describe('nav links', () => {
-    it('Properties link points to /listings', () => {
+    it('Properties link points to /properties', () => {
       renderHeader();
       const link = screen.getByRole('link', { name: /properties/i });
-      expect(link, 'Properties nav should link to /listings').toHaveAttribute('href', '/listings');
+      expect(link, 'Properties nav should link to /properties').toHaveAttribute(
+        'href',
+        '/properties'
+      );
     });
 
     it('Token Sale link points to /ico', () => {
@@ -85,7 +102,7 @@ describe('LandingHeader', () => {
     });
   });
 
-  describe('auth links', () => {
+  describe('auth links (guest)', () => {
     // Rendered as real <a href> so right-click "Open in new tab", middle-click,
     // and screen-reader "link" role all work — which onClick(navigate) would hide.
     it('Sign In link points to /auth/login', () => {
@@ -102,6 +119,41 @@ describe('LandingHeader', () => {
         screen.getByRole('link', { name: /get started/i }),
         'Get Started CTA should link to /auth/register'
       ).toHaveAttribute('href', '/auth/register');
+    });
+  });
+
+  describe('authenticated user', () => {
+    it('shows Dashboard link routed to /tenant/dashboard for tenant role', () => {
+      mockUseAuth.mockReturnValue({ profile: { role: 'tenant' } });
+      renderHeader();
+      const dashboard = screen.getByRole('link', { name: /dashboard/i });
+      expect(
+        dashboard,
+        'tenant Dashboard link should target /tenant/dashboard'
+      ).toHaveAttribute('href', '/tenant/dashboard');
+    });
+
+    it('shows Dashboard link routed to /landlord/dashboard for landlord role', () => {
+      mockUseAuth.mockReturnValue({ profile: { role: 'landlord' } });
+      renderHeader();
+      const dashboard = screen.getByRole('link', { name: /dashboard/i });
+      expect(
+        dashboard,
+        'landlord Dashboard link should target /landlord/dashboard'
+      ).toHaveAttribute('href', '/landlord/dashboard');
+    });
+
+    it('hides Sign In / Get Started CTAs when authenticated', () => {
+      mockUseAuth.mockReturnValue({ profile: { role: 'tenant' } });
+      renderHeader();
+      expect(
+        screen.queryByRole('link', { name: /sign in/i }),
+        'Sign In CTA must not render for authenticated users'
+      ).toBeNull();
+      expect(
+        screen.queryByRole('link', { name: /get started/i }),
+        'Get Started CTA must not render for authenticated users'
+      ).toBeNull();
     });
   });
 });

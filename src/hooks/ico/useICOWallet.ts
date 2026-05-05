@@ -19,6 +19,7 @@ export interface ICOWalletState {
 export interface UseICOWalletReturn extends ICOWalletState {
   connect: () => void;
   disconnect: () => void;
+  syncActiveAccount: () => Promise<void>;
   clickRef: ReturnType<typeof useClickRef>;
 }
 
@@ -126,12 +127,34 @@ export function useICOWallet(): UseICOWalletReturn {
       setState(prev => ({ ...prev, isConnecting: false }));
     };
 
+    // Social providers (csprclick-w3a-google, csprclick-w3a-apple) don't fire
+    // `csprclick:signed_in` and their `connect()` Promise may not resolve. They emit
+    // provider-specific `...:connected` events — on those we re-read the active account.
+    const handleSocialConnected = async (evt: unknown) => {
+      logger.debug('[useICOWallet] social provider connected event', { evt });
+      const active = await clickRef.getActiveAccountAsync();
+      logger.debug('[useICOWallet] active after social connect', { active });
+      if (!active) return;
+      setState({
+        isConnected: true,
+        account: {
+          publicKey: active.public_key,
+          accountHash: deriveAccountHash(active.public_key),
+          provider: active.provider,
+        },
+        isConnecting: false,
+        error: null,
+      });
+    };
+
     clickRef.on('csprclick:signed_in', handleSignedIn);
     clickRef.on('csprclick:switched_account', handleSwitchedAccount);
     clickRef.on('csprclick:signed_out', handleSignedOut);
     clickRef.on('csprclick:disconnected', handleDisconnected);
     clickRef.on('csprclick:ready', handleReady);
     clickRef.on('csprclick:cancelled', handleCancelled);
+    clickRef.on('csprclick-w3a-google:connected', handleSocialConnected);
+    clickRef.on('csprclick-w3a-apple:connected', handleSocialConnected);
 
     // Check if already connected (sync check)
     const activeAccount = clickRef.getActiveAccount();
@@ -157,6 +180,8 @@ export function useICOWallet(): UseICOWalletReturn {
       clickRef.off('csprclick:disconnected', handleDisconnected);
       clickRef.off('csprclick:ready', handleReady);
       clickRef.off('csprclick:cancelled', handleCancelled);
+      clickRef.off('csprclick-w3a-google:connected', handleSocialConnected);
+      clickRef.off('csprclick-w3a-apple:connected', handleSocialConnected);
     };
   }, [clickRef]);
 
@@ -180,10 +205,36 @@ export function useICOWallet(): UseICOWalletReturn {
     }
   }, [clickRef]);
 
+  // Social providers (csprclick-w3a-google, csprclick-w3a-apple) don't fire
+  // `csprclick:signed_in` — they use provider-specific events instead. After
+  // `clickRef.connect(...)` resolves we read the active account directly as a
+  // fallback path. Safe to call for wallet providers too (no-op if already synced).
+  const syncActiveAccount = useCallback(async () => {
+    if (!clickRef) return;
+    const active = await clickRef.getActiveAccountAsync();
+    // Log full payload so we can see what extra fields (email, avatar, JWT, custom)
+    // CSPR.click returns for each provider — useful for deciding what to forward
+    // to the backend beyond public_key. logger.debug is suppressed in production
+    // so this stays out of end-user consoles while remaining handy in dev tools.
+    logger.debug('[useICOWallet] getActiveAccountAsync', { active });
+    if (!active) return;
+    setState({
+      isConnected: true,
+      account: {
+        publicKey: active.public_key,
+        accountHash: deriveAccountHash(active.public_key),
+        provider: active.provider,
+      },
+      isConnecting: false,
+      error: null,
+    });
+  }, [clickRef]);
+
   return {
     ...state,
     connect,
     disconnect,
+    syncActiveAccount,
     clickRef,
   };
 }

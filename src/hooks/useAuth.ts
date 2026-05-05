@@ -7,11 +7,8 @@ export const useAuth = () => {
     throw new Error('useAuth must be used within an AuthProvider');
   }
 
-  // Add isAuthenticated derived state
-  const isAuthenticated = !!context.user && !!context.profile;
-
   return {
     ...context,
-    isAuthenticated,
+    isAuthenticated: !!context.profile,
   };
 };

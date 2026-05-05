@@ -1,187 +1,128 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { User } from '@supabase/supabase-js';
-import { supabase } from '@/lib/supabase/client';
+import { useCallback, useEffect, useState } from 'react';
 import { AuthContext } from './AuthContextDefinition';
-import { logger } from '@/utils/logger';
+import { backendClient } from '@/lib/api-client';
+import {
+  logoutSession,
+  refreshSession,
+  type ServerUserInfo,
+} from '@/services/ico/backendAuthService';
+import type { UserProfile, UserRole } from '@/types/user';
 
-interface UserProfile {
-  id: string;
-  email: string;
-  role: 'landlord' | 'tenant' | 'admin';
-  full_name?: string;
-  phone?: string;
-  avatar_url?: string;
+// Non-secret session marker. The actual auth tokens live in HttpOnly cookies
+// set by the backend at /auth/login; this localStorage entry is just a hint to
+// the UI that a session existed across page reload, so we can render the
+// signed-in view without flashing a login screen while the cookie-backed
+// refresh round-trip resolves. It carries no secret material.
+const SESSION_MARKER_KEY = 'leasefi_session';
+
+function mapServerUserInfo(info: ServerUserInfo): UserProfile {
+  return {
+    id: info.id,
+    role: info.role as UserRole,
+    email: info.email ?? '',
+    firstName: info.first_name,
+    lastName: info.last_name,
+    name: `${info.first_name} ${info.last_name}`.trim() || undefined,
+    phone: info.phone ?? undefined,
+    avatar: info.avatar_url ?? undefined,
+    profileImage: info.avatar_url ?? undefined,
+    bio: info.bio ?? undefined,
+    createdAt: new Date(info.created_at),
+    walletAddress: info.wallet_address ?? undefined,
+    isProfileComplete: info.is_profile_complete,
+  };
+}
+
+function loadSessionMarker(): UserProfile | null {
+  try {
+    const raw = localStorage.getItem(SESSION_MARKER_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Omit<UserProfile, 'createdAt'> & { createdAt: string };
+    return { ...parsed, createdAt: new Date(parsed.createdAt) };
+  } catch {
+    localStorage.removeItem(SESSION_MARKER_KEY);
+    return null;
+  }
+}
+
+function saveSessionMarker(profile: UserProfile): void {
+  try {
+    localStorage.setItem(SESSION_MARKER_KEY, JSON.stringify(profile));
+  } catch {
+    // Quota or private-mode failure — non-fatal.
+  }
+}
+
+function clearSessionMarker(): void {
+  try {
+    localStorage.removeItem(SESSION_MARKER_KEY);
+  } catch {
+    // see saveSessionMarker
+  }
 }
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [loading, setLoading] = useState(true);
+  // Optimistically restore the marker; the cookie-backed session is verified
+  // below via /auth/refresh on mount.
+  const [profile, setProfile] = useState<UserProfile | null>(loadSessionMarker);
+  const [loading, setLoading] = useState<boolean>(profile !== null);
 
-  /**
-   * Fetch user profile with retry logic
-   * @param userId - The user ID to fetch profile for
-   * @param retries - Number of retry attempts remaining
-   */
-  const fetchProfile = useCallback(async (userId: string, retries = 3): Promise<void> => {
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single();
-
-      if (error) {
-        // If profile not found and retries remaining, retry after delay
-        if (error.code === 'PGRST116' && retries > 0) {
-          logger.warn(`Profile not found, retrying... (${retries} attempts left)`);
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          return fetchProfile(userId, retries - 1);
-        }
-
-        // If other error and retries remaining, retry
-        if (retries > 0) {
-          logger.warn(`Error fetching profile, retrying... (${retries} attempts left)`, error);
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          return fetchProfile(userId, retries - 1);
-        }
-
-        // No more retries, throw error
-        throw error;
-      }
-
-      if (!data) {
-        logger.error('Profile data is null for user:', userId);
-        setProfile(null);
-        setLoading(false);
-        return;
-      }
-
-      logger.info('Profile fetched successfully for user:', userId);
-      setProfile(data as UserProfile);
-    } catch (error) {
-      logger.error('Error fetching profile after all retries:', error);
-      setProfile(null);
-    } finally {
+  // On mount, if we have a marker, ping the backend for a fresh access cookie
+  // so subsequent calls don't 401 mid-flow. If refresh fails, we clear the
+  // stale marker and treat the user as logged out.
+  useEffect(() => {
+    let cancelled = false;
+    if (profile === null) {
       setLoading(false);
+      return () => {
+        cancelled = true;
+      };
     }
+    (async () => {
+      try {
+        const ok = await refreshSession();
+        if (cancelled) return;
+        if (!ok) {
+          clearSessionMarker();
+          setProfile(null);
+        }
+      } catch {
+        // network blip — leave the marker in place; per-request 401 retry
+        // will deal with it later.
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Run once at mount; subsequent profile changes don't re-trigger refresh.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => {
-    // Check active session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchProfile(session.user.id);
-      } else {
-        setLoading(false);
-      }
-    });
+  const setWalletSession = useCallback((info: ServerUserInfo) => {
+    const next = mapServerUserInfo(info);
+    saveSessionMarker(next);
+    setProfile(next);
+  }, []);
 
-    // Listen for auth changes
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchProfile(session.user.id);
-      } else {
-        setProfile(null);
-        setLoading(false);
-      }
-    });
+  const updateProfile = useCallback(async (updates: Partial<UserProfile>) => {
+    const updated = await backendClient.put<ServerUserInfo>('/api/v1/users/me', updates);
+    const mapped = mapServerUserInfo(updated);
+    saveSessionMarker(mapped);
+    setProfile(mapped);
+  }, []);
 
-    return () => subscription.unsubscribe();
-  }, [fetchProfile]);
+  const walletSignOut = useCallback(() => {
+    clearSessionMarker();
+    setProfile(null);
+    // Best-effort server-side revocation; never throws.
+    void logoutSession();
+  }, []);
 
-  const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    if (error) throw error;
-  };
-
-  const signUp = async (email: string, password: string, role: 'landlord' | 'tenant') => {
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          role,
-        },
-      },
-    });
-
-    if (error) throw error;
-
-    // Create profile
-    if (data.user) {
-      const { error: profileError } = await supabase.from('profiles').insert({
-        id: data.user.id,
-        email,
-        role,
-      });
-
-      if (profileError) throw profileError;
-    }
-  };
-
-  const signInWithGoogle = async () => {
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
-      },
-    });
-
-    if (error) throw error;
-    return data;
-  };
-
-  const signInWithGithub = async () => {
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: 'github',
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
-      },
-    });
-
-    if (error) throw error;
-    return data;
-  };
-
-  const signOut = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) throw error;
-  };
-
-  const updateProfile = async (updates: Partial<UserProfile>) => {
-    if (!user) throw new Error('No user logged in');
-
-    const { error } = await supabase
-      .from('profiles')
-      .update(updates)
-      .eq('id', user.id);
-
-    if (error) throw error;
-
-    // Refresh profile
-    await fetchProfile(user.id);
-  };
-
-  const value = {
-    user,
-    profile,
-    loading,
-    signIn,
-    signUp,
-    signInWithGoogle,
-    signInWithGithub,
-    signOut,
-    updateProfile,
-  };
-
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={{ profile, loading, setWalletSession, updateProfile, walletSignOut }}>
+      {children}
+    </AuthContext.Provider>
+  );
 };

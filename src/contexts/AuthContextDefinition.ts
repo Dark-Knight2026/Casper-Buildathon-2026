@@ -1,23 +1,18 @@
 import { createContext } from 'react';
-import { User } from '@supabase/supabase-js';
-
-interface UserProfile {
-  id: string;
-  email: string;
-  role: 'landlord' | 'tenant' | 'admin';
-  full_name?: string;
-  phone?: string;
-  avatar_url?: string;
-}
+import type { UserProfile } from '@/types/user';
+import type { ServerUserInfo } from '@/services/ico/backendAuthService';
 
 export interface AuthContextType {
-  user: User | null;
   profile: UserProfile | null;
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string, role: 'landlord' | 'tenant') => Promise<void>;
-  signOut: () => Promise<void>;
+  /**
+   * Hydrate the AuthContext from a successful login response. Tokens are
+   * delivered as HttpOnly cookies by the backend, so this only takes the
+   * server's `UserInfo` payload.
+   */
+  setWalletSession: (user: ServerUserInfo) => void;
   updateProfile: (updates: Partial<UserProfile>) => Promise<void>;
+  walletSignOut: () => void;
 }
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);

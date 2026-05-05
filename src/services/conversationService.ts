@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase/client';
+// TODO: replace mock implementation with real Supabase calls when backend is ready
 import type {
   Conversation,
   ConversationWithParticipants,
@@ -6,332 +6,155 @@ import type {
   ConversationFilters,
 } from '@/types/message';
 
-interface ConversationRow {
-  id: string;
-  landlord_id: string;
-  tenant_id: string;
-  property_id?: string;
-  lease_id?: string;
-  maintenance_request_id?: string;
-  status: string;
-  last_message_at?: string;
-  last_message_preview?: string;
-  landlord_unread_count: number;
-  tenant_unread_count: number;
-  created_at: string;
-  updated_at: string;
-  landlord?: {
-    id: string;
-    first_name: string;
-    last_name: string;
-    email: string;
-    avatar_url?: string;
-    role: string;
-  };
-  tenant?: {
-    id: string;
-    first_name: string;
-    last_name: string;
-    email: string;
-    avatar_url?: string;
-    role: string;
-  };
-  property?: {
-    id: string;
-    address: string;
-  };
-}
+const MOCK_USER_ID = 'mock-tenant-1';
+
+// In-memory store — persists for the lifetime of the page session
+let mockConversations: ConversationWithParticipants[] = [
+  {
+    id: 'conv-1',
+    landlordId: 'mock-landlord-1',
+    tenantId: MOCK_USER_ID,
+    status: 'active',
+    lastMessageAt: new Date(Date.now() - 1000 * 60 * 5),
+    lastMessagePreview: 'Of course! The current no-pets clause can be updated with an additional deposit.',
+    landlordUnreadCount: 0,
+    tenantUnreadCount: 1,
+    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 7),
+    updatedAt: new Date(Date.now() - 1000 * 60 * 5),
+    property: { id: 'mock-prop-1', address: '123 Demo Street, New York, NY 10001' },
+    otherParticipant: {
+      id: 'mock-landlord-1',
+      firstName: 'John',
+      lastName: 'Smith',
+      email: 'landlord@demo.com',
+      role: 'landlord',
+    },
+    unreadCount: 1,
+  },
+  {
+    id: 'conv-2',
+    landlordId: 'mock-landlord-1',
+    tenantId: MOCK_USER_ID,
+    status: 'active',
+    lastMessageAt: new Date(Date.now() - 1000 * 60 * 60 * 23),
+    lastMessagePreview: 'Yes, I\'ll be home. Please ring the bell when you arrive.',
+    landlordUnreadCount: 0,
+    tenantUnreadCount: 0,
+    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 3),
+    updatedAt: new Date(Date.now() - 1000 * 60 * 60 * 23),
+    property: { id: 'mock-prop-1', address: '123 Demo Street, New York, NY 10001' },
+    otherParticipant: {
+      id: 'mock-vendor-1',
+      firstName: 'CoolAir',
+      lastName: 'Services',
+      email: 'vendor@coolair.com',
+      role: 'tenant', // vendor role maps to tenant in current type
+    },
+    unreadCount: 0,
+  },
+  {
+    id: 'conv-3',
+    landlordId: 'mock-landlord-1',
+    tenantId: MOCK_USER_ID,
+    status: 'archived',
+    lastMessageAt: new Date(Date.now() - 1000 * 60 * 60 * 70),
+    lastMessagePreview: 'Thank you! Everything looks great.',
+    landlordUnreadCount: 0,
+    tenantUnreadCount: 0,
+    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 14),
+    updatedAt: new Date(Date.now() - 1000 * 60 * 60 * 70),
+    property: { id: 'mock-prop-1', address: '123 Demo Street, New York, NY 10001' },
+    otherParticipant: {
+      id: 'mock-vendor-2',
+      firstName: 'Mike',
+      lastName: 'Johnson',
+      email: 'mike@plumbing.com',
+      role: 'tenant',
+    },
+    unreadCount: 0,
+  },
+];
+
+// No-op channel mock — matches the Supabase RealtimeChannel interface used by callers
+const mockChannel = { unsubscribe: () => {} };
 
 class ConversationService {
-  /**
-   * Get all conversations for the current user
-   */
   async getConversations(filters?: ConversationFilters): Promise<ConversationWithParticipants[]> {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('User not authenticated');
-
-      let query = supabase
-        .from('conversations')
-        .select(`
-          *,
-          landlord:users!landlord_id(id, first_name, last_name, email, avatar_url, role),
-          tenant:users!tenant_id(id, first_name, last_name, email, avatar_url, role),
-          property:properties(id, address)
-        `)
-        .or(`landlord_id.eq.${user.id},tenant_id.eq.${user.id}`)
-        .order('last_message_at', { ascending: false, nullsFirst: false });
-
-      if (filters?.status) {
-        query = query.eq('status', filters.status);
-      }
-
-      if (filters?.propertyId) {
-        query = query.eq('property_id', filters.propertyId);
-      }
-
-      const { data: conversations, error } = await query;
-
-      if (error) throw error;
-
-      // Format conversations with other participant info
-      return (conversations || []).map((conv) => {
-        const isLandlord = conv.landlord_id === user.id;
-        const otherParticipant = isLandlord ? conv.tenant : conv.landlord;
-        const unreadCount = isLandlord ? conv.landlord_unread_count : conv.tenant_unread_count;
-
-        return {
-          ...this.formatConversation(conv as ConversationRow),
-          otherParticipant: {
-            id: otherParticipant.id,
-            firstName: otherParticipant.first_name,
-            lastName: otherParticipant.last_name,
-            email: otherParticipant.email,
-            avatarUrl: otherParticipant.avatar_url,
-            role: otherParticipant.role as 'landlord' | 'tenant',
-          },
-          unreadCount,
-        };
-      }).filter((conv) => {
-        if (filters?.unreadOnly) {
-          return conv.unreadCount > 0;
-        }
-        return true;
-      });
-    } catch (error) {
-      console.error('Error getting conversations:', error);
-      throw error;
-    }
+    await delay(150);
+    return mockConversations.filter((c) => {
+      if (filters?.status && c.status !== filters.status) return false;
+      if (filters?.propertyId && c.propertyId !== filters.propertyId) return false;
+      if (filters?.unreadOnly && c.unreadCount === 0) return false;
+      return true;
+    });
   }
 
-  /**
-   * Get a single conversation by ID
-   */
   async getConversation(conversationId: string): Promise<Conversation> {
-    try {
-      const { data, error } = await supabase
-        .from('conversations')
-        .select(`
-          *,
-          landlord:users!landlord_id(id, first_name, last_name, email, avatar_url, role),
-          tenant:users!tenant_id(id, first_name, last_name, email, avatar_url, role),
-          property:properties(id, address)
-        `)
-        .eq('id', conversationId)
-        .single();
-
-      if (error) throw error;
-
-      return this.formatConversation(data as ConversationRow);
-    } catch (error) {
-      console.error('Error getting conversation:', error);
-      throw error;
-    }
+    await delay(100);
+    const conv = mockConversations.find((c) => c.id === conversationId);
+    if (!conv) throw new Error('Conversation not found');
+    return conv;
   }
 
-  /**
-   * Create a new conversation
-   */
   async createConversation(data: CreateConversationData): Promise<Conversation> {
-    try {
-      const conversationData = {
-        landlord_id: data.landlordId,
-        tenant_id: data.tenantId,
-        property_id: data.propertyId,
-        lease_id: data.leaseId,
-        maintenance_request_id: data.maintenanceRequestId,
-        status: 'active',
-        landlord_unread_count: 0,
-        tenant_unread_count: 0,
-      };
-
-      const { data: conversation, error } = await supabase
-        .from('conversations')
-        .insert(conversationData)
-        .select(`
-          *,
-          landlord:users!landlord_id(id, first_name, last_name, email, avatar_url, role),
-          tenant:users!tenant_id(id, first_name, last_name, email, avatar_url, role),
-          property:properties(id, address)
-        `)
-        .single();
-
-      if (error) throw error;
-
-      return this.formatConversation(conversation as ConversationRow);
-    } catch (error) {
-      console.error('Error creating conversation:', error);
-      throw error;
-    }
+    await delay(200);
+    const newConv: ConversationWithParticipants = {
+      id: `conv-${Date.now()}`,
+      landlordId: data.landlordId,
+      tenantId: data.tenantId,
+      propertyId: data.propertyId,
+      leaseId: data.leaseId,
+      maintenanceRequestId: data.maintenanceRequestId,
+      status: 'active',
+      landlordUnreadCount: 0,
+      tenantUnreadCount: 0,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      otherParticipant: {
+        id: data.landlordId,
+        firstName: 'New',
+        lastName: 'Conversation',
+        email: '',
+        role: 'landlord',
+      },
+      unreadCount: 0,
+    };
+    mockConversations.unshift(newConv);
+    return newConv;
   }
 
-  /**
-   * Find or create a conversation between two users
-   */
   async findOrCreateConversation(
     landlordId: string,
     tenantId: string,
     propertyId?: string
   ): Promise<Conversation> {
-    try {
-      // Try to find existing conversation
-      let query = supabase
-        .from('conversations')
-        .select(`
-          *,
-          landlord:users!landlord_id(id, first_name, last_name, email, avatar_url, role),
-          tenant:users!tenant_id(id, first_name, last_name, email, avatar_url, role),
-          property:properties(id, address)
-        `)
-        .eq('landlord_id', landlordId)
-        .eq('tenant_id', tenantId);
-
-      if (propertyId) {
-        query = query.eq('property_id', propertyId);
-      }
-
-      const { data: existing } = await query.maybeSingle();
-
-      if (existing) {
-        return this.formatConversation(existing as ConversationRow);
-      }
-
-      // Create new conversation
-      return await this.createConversation({
-        landlordId,
-        tenantId,
-        propertyId,
-      });
-    } catch (error) {
-      console.error('Error finding or creating conversation:', error);
-      throw error;
-    }
+    const existing = mockConversations.find(
+      (c) => c.landlordId === landlordId && c.tenantId === tenantId &&
+             (!propertyId || c.propertyId === propertyId)
+    );
+    if (existing) return existing;
+    return this.createConversation({ landlordId, tenantId, propertyId });
   }
 
-  /**
-   * Update conversation
-   */
-  async updateConversation(
-    conversationId: string,
-    updates: Partial<Conversation>
-  ): Promise<Conversation> {
-    try {
-      const { data, error } = await supabase
-        .from('conversations')
-        .update({
-          status: updates.status,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', conversationId)
-        .select(`
-          *,
-          landlord:users!landlord_id(id, first_name, last_name, email, avatar_url, role),
-          tenant:users!tenant_id(id, first_name, last_name, email, avatar_url, role),
-          property:properties(id, address)
-        `)
-        .single();
-
-      if (error) throw error;
-
-      return this.formatConversation(data as ConversationRow);
-    } catch (error) {
-      console.error('Error updating conversation:', error);
-      throw error;
-    }
+  async updateConversation(conversationId: string, updates: Partial<Conversation>): Promise<Conversation> {
+    await delay(100);
+    mockConversations = mockConversations.map((c) =>
+      c.id === conversationId ? { ...c, ...updates, updatedAt: new Date() } : c
+    );
+    return mockConversations.find((c) => c.id === conversationId)!;
   }
 
-  /**
-   * Archive a conversation
-   */
   async archiveConversation(conversationId: string): Promise<void> {
-    try {
-      await this.updateConversation(conversationId, { status: 'archived' });
-    } catch (error) {
-      console.error('Error archiving conversation:', error);
-      throw error;
-    }
+    await this.updateConversation(conversationId, { status: 'archived' });
   }
 
-  /**
-   * Subscribe to conversation updates
-   */
-  subscribeToConversations(callback: (conversation: Conversation) => void) {
-    const { data: { user } } = supabase.auth.getUser();
-    
-    return supabase
-      .channel('conversations')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'conversations',
-        },
-        async (payload) => {
-          const conv = payload.new as ConversationRow;
-          const currentUser = await user;
-          
-          // Only notify if user is part of the conversation
-          if (currentUser && (conv.landlord_id === currentUser.id || conv.tenant_id === currentUser.id)) {
-            const { data } = await supabase
-              .from('conversations')
-              .select(`
-                *,
-                landlord:users!landlord_id(id, first_name, last_name, email, avatar_url, role),
-                tenant:users!tenant_id(id, first_name, last_name, email, avatar_url, role),
-                property:properties(id, address)
-              `)
-              .eq('id', conv.id)
-              .single();
-
-            if (data) {
-              callback(this.formatConversation(data as ConversationRow));
-            }
-          }
-        }
-      )
-      .subscribe();
+  subscribeToConversations(_callback: (conversation: Conversation) => void) {
+    return mockChannel;
   }
+}
 
-  // Helper methods
-
-  private formatConversation(data: ConversationRow): Conversation {
-    return {
-      id: data.id,
-      landlordId: data.landlord_id,
-      tenantId: data.tenant_id,
-      propertyId: data.property_id,
-      leaseId: data.lease_id,
-      maintenanceRequestId: data.maintenance_request_id,
-      status: data.status as 'active' | 'archived' | 'closed',
-      lastMessageAt: data.last_message_at ? new Date(data.last_message_at) : undefined,
-      lastMessagePreview: data.last_message_preview,
-      landlordUnreadCount: data.landlord_unread_count,
-      tenantUnreadCount: data.tenant_unread_count,
-      createdAt: new Date(data.created_at),
-      updatedAt: new Date(data.updated_at),
-      landlord: data.landlord ? {
-        id: data.landlord.id,
-        firstName: data.landlord.first_name,
-        lastName: data.landlord.last_name,
-        email: data.landlord.email,
-        avatarUrl: data.landlord.avatar_url,
-        role: data.landlord.role as 'landlord' | 'tenant',
-      } : undefined,
-      tenant: data.tenant ? {
-        id: data.tenant.id,
-        firstName: data.tenant.first_name,
-        lastName: data.tenant.last_name,
-        email: data.tenant.email,
-        avatarUrl: data.tenant.avatar_url,
-        role: data.tenant.role as 'landlord' | 'tenant',
-      } : undefined,
-      property: data.property ? {
-        id: data.property.id,
-        address: data.property.address,
-      } : undefined,
-    };
-  }
+function delay(ms: number) {
+  return new Promise((res) => setTimeout(res, ms));
 }
 
 export const conversationService = new ConversationService();

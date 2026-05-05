@@ -31,7 +31,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { useAuthPrompt } from '@/hooks/useAuthPrompt';
-import { FavoriteButton } from '@/components/property/FavoriteButton';
+import { SavePropertyButton } from '@/components/property/SavePropertyButton';
 import { ContactLandlordModal } from '@/components/property/ContactLandlordModal';
 import { ScheduleViewingModal } from '@/components/property/ScheduleViewingModal';
 import { propertyService } from '@/services/propertyService';
@@ -41,6 +41,16 @@ import { logger } from '@/utils/logger';
 import type { Property } from '@/types/property';
 
 const APPLICATION_FEE = 50;
+
+// Returns a formatted date or `null` when the input cannot be parsed —
+// callers render a fallback ("—") instead of letting `format()` throw
+// `RangeError: Invalid time value` and unmount the whole page. Backend
+// `properties.available_date` is nullable, so this is reachable in practice.
+function formatDateSafe(value: Date | string | null | undefined, fmt: string): string | null {
+  if (value === null || value === undefined) return null;
+  const d = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(d.getTime()) ? null : format(d, fmt);
+}
 
 export default function PropertyDetail() {
   const { id } = useParams<{ id: string }>();
@@ -182,11 +192,7 @@ export default function PropertyDetail() {
                 <Share2 className="mr-2 h-4 w-4" />
                 Share
               </Button>
-              <FavoriteButton
-                propertyId={property.id}
-                variant="outline"
-                size="sm"
-              />
+              <SavePropertyButton variant="outline" size="sm" />
             </div>
           </div>
         </div>
@@ -329,7 +335,7 @@ export default function PropertyDetail() {
                     <div>
                       <p className="text-sm text-gray-500">Available</p>
                       <p className="font-semibold">
-                        {format(new Date(property.availableDate), 'MMM d')}
+                        {formatDateSafe(property.availableDate, 'MMM d') ?? '—'}
                       </p>
                     </div>
                   </div>
@@ -482,12 +488,7 @@ export default function PropertyDetail() {
 
                 {/* Favorite Button */}
                 <div className="flex justify-center pt-2">
-                  <FavoriteButton
-                    propertyId={property.id}
-                    variant="outline"
-                    size="default"
-                    className="w-full md:w-auto"
-                  />
+                  <SavePropertyButton variant="outline" size="default" className="w-full md:w-auto" />
                 </div>
               </CardContent>
             </Card>
@@ -527,7 +528,7 @@ export default function PropertyDetail() {
                 </Button>
 
                 <p className="text-xs text-center text-gray-500">
-                  Available {format(new Date(property.availableDate), 'MMMM d, yyyy')}
+                  Available {formatDateSafe(property.availableDate, 'MMMM d, yyyy') ?? 'TBD'}
                 </p>
               </CardContent>
             </Card>

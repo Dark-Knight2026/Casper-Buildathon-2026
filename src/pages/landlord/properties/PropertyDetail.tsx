@@ -16,6 +16,8 @@ import { useToast } from '@/hooks/use-toast';
 import { propertyService } from '@/services/propertyService';
 import { getCurrentUserId } from '@/lib/supabase/client';
 import type { Property, PropertyStatistics } from '@/types/property';
+import { getLeasesByProperty } from '@/data/tenantLeases';
+import { LandlordListingActions } from '@/components/landlord/LandlordListingActions';
 
 export default function PropertyDetail() {
   const { id } = useParams<{ id: string }>();
@@ -263,6 +265,21 @@ export default function PropertyDetail() {
           </Card>
         </div>
       )}
+
+      {/* Lease lifecycle actions — Task 5 demo (mock data) */}
+      {(() => {
+        const activeLease = property.id
+          ? getLeasesByProperty(property.id).find((l) => l.status === 'active')
+          : null;
+        return activeLease ? (
+          <div className="mb-4">
+            <LandlordListingActions
+              leaseId={activeLease.id}
+              endDate={activeLease.endDate}
+            />
+          </div>
+        ) : null;
+      })()}
 
       {/* Tabs */}
       <Tabs defaultValue="details" className="space-y-4">

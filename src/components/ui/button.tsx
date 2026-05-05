@@ -6,7 +6,7 @@ import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const buttonVariants = cva(
-  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0',
+  'inline-flex items-center py-2 justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 cursor-pointer [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0',
   {
     variants: {
       variant: {
@@ -45,6 +45,22 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     // Add aria-disabled when disabled or loading
     const ariaProps = (disabled || loading) ? { 'aria-disabled': true as const } : {};
     
+    // Slot (rendered when asChild=true) calls React.Children.only and
+    // therefore accepts exactly one React element. Adding the loading
+    // spinner alongside `children` breaks every `<Button asChild>` callsite
+    // (navigation Links, etc.) with "React.Children.only expected to receive
+    // a single React element child". The loading state only makes sense for
+    // real <button> form actions anyway — Slot consumers (Links) don't have
+    // an in-flight state to spin, so we silently skip the spinner there.
+    const content = asChild ? (
+      children
+    ) : (
+      <>
+        {loading && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+        {children}
+      </>
+    );
+
     return (
       <Comp
         className={cn(buttonVariants({ variant, size, className }))}
@@ -54,8 +70,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         {...ariaProps}
         {...props}
       >
-        {loading && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
-        {children}
+        {content}
       </Comp>
     );
   }
