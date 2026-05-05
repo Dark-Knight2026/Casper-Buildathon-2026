@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use axum::{
     Router,
-    http::{Method, header},
+    http::{Method, header::{HeaderValue, CONTENT_TYPE}},
 };
 use secrecy::ExposeSecret;
 use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
@@ -71,11 +71,17 @@ pub fn create_app(state: Arc<AppState>) -> Result<Router, ServerError> {
     let cors = CorsLayer::new()
         .allow_origin(
             cors_origin
-                .parse::<header::HeaderValue>()
+                .parse::<HeaderValue>()
                 .map_err(|e| ServerError::EnvVar(format!("Invalid CORS_ORIGIN: {e}")))?,
         )
-        .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE])
-        .allow_headers([header::CONTENT_TYPE])
+        .allow_methods([
+            Method::GET,
+            Method::POST,
+            Method::PUT,
+            Method::PATCH,
+            Method::DELETE,
+        ])
+        .allow_headers([CONTENT_TYPE])
         .allow_credentials(true);
 
     Ok(create_router(state)
