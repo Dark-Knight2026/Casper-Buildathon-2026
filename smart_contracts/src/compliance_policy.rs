@@ -103,9 +103,11 @@ impl CompliancePolicy {
     // Initialization
     // =============================================================================
 
-    pub fn init(&mut self, owner: Address) {
+    pub fn init(&mut self, owner: Address, investor_registry: Address, property_registry: Address) {
         self.access_control
             .unchecked_grant_role(&DEFAULT_ADMIN_ROLE, &owner);
+        self.investor_registry.set(investor_registry);
+        self.property_registry.set(property_registry);
     }
 
     // =============================================================================

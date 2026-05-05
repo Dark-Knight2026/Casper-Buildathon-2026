@@ -64,6 +64,8 @@ fn setup(env: HostEnv) -> Context {
         &env,
         CompliancePolicyInitArgs {
             owner: env.get_account(0),
+            investor_registry: investor_registry.address(),
+            property_registry: property_registry.address(),
         },
     );
 
