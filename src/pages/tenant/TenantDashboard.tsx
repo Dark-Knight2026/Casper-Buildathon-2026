@@ -26,6 +26,8 @@ import { ErrorBoundary } from '@/components/ui/error-boundary';
 import { LeaseExtensionBanner } from '@/components/tenant/LeaseExtensionBanner';
 import { LeaseDecisionBanner } from '@/components/tenant/LeaseDecisionBanner';
 import { RecommendedProperties } from '@/components/tenant/RecommendedProperties';
+import { TenantScoreCard } from '@/components/tenant/TenantScoreCard';
+import { useTenantScore } from '@/hooks/useTenantScore';
 import { CURRENT_TENANT_ID, getMyCurrentProperties } from '@/data/tenantLeases';
 
 // TODO: remove when backend /api/v1/leases is ready
@@ -71,6 +73,7 @@ export function TenantDashboard() {
   const recentPayments = MOCK_PAYMENTS;
 
   const navigate = useNavigate();
+  const { score: tenantScore } = useTenantScore();
 
   const getDaysUntilExpiration = (endDate: Date): number => {
     const today = new Date();
@@ -145,6 +148,13 @@ export function TenantDashboard() {
             />
           </div>
         )}
+
+        {/* Task 7 — Tenant Score (Phase 1, read-only). Sits above the
+            recommendations so the tenant sees their reputation metric
+            before scrolling into property listings. */}
+        <div className="mb-6">
+          <TenantScoreCard score={tenantScore} variant="compact" />
+        </div>
 
         {/* Task 6 — recommendations within 180 days of lease end. The dashboard's
             MOCK_LEASE is a stripped-down LeaseAgreement; for the recommendations
