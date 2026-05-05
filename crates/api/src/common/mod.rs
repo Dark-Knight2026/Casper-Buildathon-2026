@@ -14,6 +14,8 @@ pub mod models;
 pub mod pagination;
 /// Redis client wrapper.
 pub mod redis;
+/// Media-storage abstraction.
+pub mod storage;
 
 // Re-exports
 pub use config::{AppState, IcoFallback, ServerConfig, TOTAL_SUPPLY};
@@ -29,6 +31,7 @@ pub use models::{
 };
 pub use pagination::{Pageable, PaginatedResponse, Pagination};
 pub use redis::RedisStore;
+pub use storage::{MediaStorage, StorageError, StubMediaStorage};
 
 /// Validates and normalizes a Casper account hash (64 hex characters, no prefix).
 ///

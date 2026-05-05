@@ -9,7 +9,7 @@ use serde::Deserialize;
 
 use crate::{
     ServerError,
-    common::{EmailSender, RedisStore},
+    common::{EmailSender, MediaStorage, RedisStore},
 };
 
 /// Total BIG token supply (human-readable).
@@ -44,6 +44,13 @@ struct RawEnvConfig {
     /// Defaults to 5 billion if not set.
     #[serde(default)]
     total_supply: Option<f64>,
+    /// Base URL the dev/test stub media storage prefixes onto non-image
+    /// keys. Image keys (`avatars/...`) get a `data:image/svg+xml`
+    /// placeholder regardless of this value. Production deployments will
+    /// replace `StubMediaStorage` with an S3-backed implementation that
+    /// ignores this field entirely.
+    #[serde(default)]
+    media_stub_base_url: Option<String>,
 }
 
 const fn default_port() -> u16 {
@@ -94,6 +101,11 @@ pub struct ServerConfig {
     pub ico_fallback: Option<IcoFallback>,
     /// Total BIG token supply (human-readable). Defaults to 5 billion.
     pub total_supply: f64,
+    /// Base URL prepended to non-image keys by [`StubMediaStorage`]. `None`
+    /// falls back to the stub's built-in default. Has no effect on image
+    /// keys (which always render as a `data:` placeholder) or on
+    /// production S3-backed implementations.
+    pub media_stub_base_url: Option<String>,
 }
 
 impl ServerConfig {
@@ -151,6 +163,7 @@ impl ServerConfig {
             contract_big: raw.contract_big.map(|s| s.to_ascii_lowercase()),
             ico_fallback,
             total_supply: raw.total_supply.unwrap_or(TOTAL_SUPPLY),
+            media_stub_base_url: raw.media_stub_base_url,
         };
 
         config.validate()?;
@@ -194,6 +207,10 @@ pub struct AppState {
     /// `LoggingEmailSender` (dev/test) for an SMTP/transactional-API
     /// implementation in production without touching call sites.
     pub mailer: Arc<dyn EmailSender>,
+    /// Media-blob storage (avatars, property images, lease PDFs). Boxed-trait
+    /// so the bootstrap can swap `StubMediaStorage` (dev/test) for an
+    /// S3-compatible implementation in production without touching call sites.
+    pub media_storage: Arc<dyn MediaStorage>,
     /// Application configuration.
     pub config: ServerConfig,
 }
@@ -205,6 +222,7 @@ impl core::fmt::Debug for AppState {
             .field("db", &"PgPool")
             .field("redis", &"RedisStore")
             .field("mailer", &"EmailSender")
+            .field("media_storage", &"MediaStorage")
             .field("config", &self.config)
             .finish()
     }

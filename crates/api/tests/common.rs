@@ -35,8 +35,8 @@ use uuid::Uuid;
 use api::{
     AppState, Claims, IcoFallback, LoggingEmailSender, ServerConfig, UserId, UserRole,
     common::{
-        EmailSender, JWT_AUDIENCE, JWT_ISSUER, RedisStore, TOTAL_SUPPLY, TokenType,
-        VerificationLevel,
+        EmailSender, JWT_AUDIENCE, JWT_ISSUER, MediaStorage, RedisStore, StubMediaStorage,
+        TOTAL_SUPPLY, TokenType, VerificationLevel,
     },
     server,
 };
@@ -121,6 +121,12 @@ pub struct TestOverrides {
     /// `EmailError::Transport` so the rest of the handler can be observed
     /// without wiring up a real SMTP relay.
     pub mailer: Option<Arc<dyn EmailSender>>,
+    /// Custom media storage for the test (defaults to `StubMediaStorage`).
+    ///
+    /// The avatar upload tests use this to swap in fakes that return
+    /// `StorageError::Transport` so the handler's 500-mapping path can
+    /// be observed without wiring up a real S3 backend.
+    pub media_storage: Option<Arc<dyn MediaStorage>>,
 }
 
 impl core::fmt::Debug for TestOverrides {
@@ -130,6 +136,10 @@ impl core::fmt::Debug for TestOverrides {
             .field("contract_big", &self.contract_big)
             .field("ico_fallback", &self.ico_fallback)
             .field("mailer", &self.mailer.as_ref().map(|_| "EmailSender"))
+            .field(
+                "media_storage",
+                &self.media_storage.as_ref().map(|_| "MediaStorage"),
+            )
             .finish()
     }
 }
@@ -175,16 +185,21 @@ pub async fn setup_test_server_with(
         contract_big: overrides.contract_big,
         ico_fallback: overrides.ico_fallback,
         total_supply: TOTAL_SUPPLY,
+        media_stub_base_url: None,
     };
     let mailer = overrides
         .mailer
         .unwrap_or_else(|| Arc::new(LoggingEmailSender) as Arc<dyn EmailSender>);
+    let media_storage = overrides
+        .media_storage
+        .unwrap_or_else(|| Arc::new(StubMediaStorage::new(None)) as Arc<dyn MediaStorage>);
     let state = Arc::new(AppState {
         db: pool,
         redis: RedisStore::new(redis_client)
             .await
             .expect("Failed to connect to Redis"),
         mailer,
+        media_storage,
         config,
     });
 
