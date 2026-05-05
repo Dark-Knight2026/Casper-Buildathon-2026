@@ -102,6 +102,11 @@ impl InvestorRegistry {
             self.env().revert(Error::MissingIdentityHash);
         }
 
+        let mut record = record;
+        if let Some(existing) = self.records.get(&account) {
+            record.frozen = existing.frozen;
+        }
+
         self.env().emit_event(InvestorRecordSet {
             account,
             verified: record.verified,
