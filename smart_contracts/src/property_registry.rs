@@ -258,7 +258,7 @@ impl PropertyRegistry {
     pub fn is_property_active(&self, property_id: U256) -> bool {
         self.properties
             .get(&property_id)
-            .map_or(false, |r| matches!(r.status, PropertyStatus::Active))
+            .is_some_and(|r| matches!(r.status, PropertyStatus::Active))
     }
 
     // =============================================================================
