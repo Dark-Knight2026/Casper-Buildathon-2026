@@ -22,13 +22,81 @@ Backend service for processing high-load real estate operations, including tax c
 - **Status:** *Mock Implementation (Phase 1)*
 
 ### Authentication
+
+All authenticated endpoints accept the access token via the `access_token`
+cookie. The `Authorization: Bearer ...` header is no longer accepted.
+Tokens are delivered via `Set-Cookie` only and never appear in JSON
+response bodies. See `## 3. Security Requirements` for cookie attributes
+and TTLs.
+
 - **GET** `/api/v1/auth/nonce`
   - **Query:** `wallet_address` (Hex string)
   - **Response:** `{ "nonce": "...", "message": "Sign this..." }`
-  
+  - **Auth:** Public
+
 - **POST** `/api/v1/auth/login`
-  - **Input:** `{ "wallet_address": "...", "signature": "..." }`
-  - **Response:** `{ "token": "jwt...", "user": { ... } }`
+  - **Input:** `{ "wallet_address": "...", "signature": "...", "role"?: "tenant"|"landlord"|"agent" }`
+  - **Response (200):** `{ "user": UserInfo }` plus `Set-Cookie: access_token=...; refresh_token=...`
+  - **Errors:** 400 (invalid wallet/signature/role), 401 (expired nonce or signature mismatch), 403 (account not active), 429 (per-wallet rate limit), 500
+  - **Auth:** Public
+
+- **POST** `/api/v1/auth/refresh`
+  - **Input:** none (reads `refresh_token` cookie)
+  - **Response (204):** empty body; `Set-Cookie` rotates both `access_token` and `refresh_token`
+  - **Errors:** 401 (refresh cookie missing, expired, or revoked - including reuse-detection family revoke)
+  - **Auth:** Refresh cookie required
+
+- **POST** `/api/v1/auth/logout`
+  - **Input:** none (reads both auth cookies)
+  - **Response (204):** empty body; `Set-Cookie` clears both `access_token` and `refresh_token` (`Max-Age=0`)
+  - **Behavior:** idempotent; blocklists the access JWT's `jti` until natural expiry, revokes the refresh-token family. Missing or undecodable cookies still produce 204.
+  - **Auth:** Best-effort (no cookies still works)
+
+### Users
+
+UserInfo shape returned by `/users/me` and embedded in `LoginResponse.user`:
+```json
+{
+  "id": "uuid",
+  "role": "tenant|landlord|agent|admin|unknown",
+  "wallet_address": "01abc..." ,
+  "status": "active|inactive|suspended|pending_verification",
+  "email": "alice@example.com",
+  "first_name": "Alice",
+  "last_name": "Smith",
+  "phone": "+12025550123",
+  "avatar_url": "https://...",
+  "bio": "...",
+  "is_profile_complete": true,
+  "active_leases_count": 3,
+  "created_at": "2026-01-15T10:30:00Z",
+  "updated_at": "2026-04-22T14:22:01Z"
+}
+```
+
+- **GET** `/api/v1/users/me`
+  - **Response:** `UserInfo`
+  - **Errors:** 401 (no/invalid access cookie), 404 (user soft-deleted between JWT issue and call), 500
+  - **Auth:** Access cookie required
+
+- **PATCH** `/api/v1/users/me`
+  - **Input:** `{ "first_name"?, "last_name"?, "phone"?, "bio"?, "avatar_url"? }` (any subset; missing fields keep stored value)
+  - **Response:** updated `UserInfo`
+  - **Side effect:** writing a new `phone` distinct from the stored one resets `phone_verified` to `false`
+  - **Errors:** 400 (empty required fields, over-long values), 401, 404, 500
+  - **Auth:** Access cookie required
+
+- **POST** `/api/v1/users/me/email`
+  - **Input:** `{ "new_email": "..." }`
+  - **Response (202):** confirmation email queued; DB row not touched until confirm step
+  - **Errors:** 400 (malformed email), 401, 409 (email already in use), 429 (>3 requests / rolling 24h), 500
+  - **Auth:** Access cookie required
+
+- **POST** `/api/v1/users/me/email/confirm`
+  - **Input:** `{ "token": "<43 base64url-no-pad chars>" }`
+  - **Response:** updated `UserInfo` with `email = new_email` and `email_verified = true`; `verification_level` upgrades from `none` to `email` on first successful confirm
+  - **Errors:** 400 (malformed token shape), 401 (token missing/expired/wrong), 404, 409 (email taken in race), 500
+  - **Auth:** Access cookie required
 
 ### Transaction History
 
@@ -262,7 +330,12 @@ Backend service for processing high-load real estate operations, including tax c
 ```
 
 ## 3. Security Requirements
-- **Authentication:** JWT Bearer Token — issued locally via HS256 using `SUPABASE_JWT_SECRET`. Login uses Casper Wallet signature challenge-response (Ed25519 / Secp256k1). No Supabase Auth service call at validation time. Sign message format: `"Sign this message to login to LeaseFi. Nonce: <nonce>"`. JWT expiry: 24 h. Nonce TTL: 5 min (Redis).
+- **Authentication:** Cookie-based JWT delivery. Login uses Casper Wallet signature challenge-response (Ed25519 / Secp256k1) against a one-time nonce; on success the server emits two `Set-Cookie` headers and the JSON body carries only `UserInfo`. The `Authorization: Bearer ...` header is not accepted.
+  - `access_token` cookie: short-lived JWT (HS256, signed with `JWT_SECRET`). `HttpOnly`, `SameSite=Strict`, `Path=/`, `Secure` in any HTTPS deployment (configurable via `cookie_secure`). **TTL: 15 min.**
+  - `refresh_token` cookie: opaque 32-byte secret (base64url-no-pad, SHA-256 hash persisted in DB). `HttpOnly`, `SameSite=Strict`, `Path=/api/v1/auth`, `Secure` per env. **TTL: 14 days (sliding).** Rotated on every `/auth/refresh`; reuse of a revoked token revokes the entire family (reuse-detection).
+  - Logout blocklists the access JWT's `jti` in Redis until natural expiry and revokes the refresh-token family.
+  - Sign message format: `"Sign this message to login to LeaseFi. Nonce: <nonce>"`. Nonce TTL: 5 min (Redis), one-time use via `GETDEL`.
+  - Per-wallet rate limit on failed logins blunts nonce-DoS and signature brute-force probes.
 - **Database:** No direct SQL injection (checked via SQLx).
 
 ## 4. Error Handling Architecture
