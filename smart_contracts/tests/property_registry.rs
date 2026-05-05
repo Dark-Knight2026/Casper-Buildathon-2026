@@ -224,9 +224,69 @@ fn test_set_metadata_uri_should_update_metadata_uri_for_draft_property() {
         .emitted_event(&ctx.registry, PropertyMetadataSet { property_id }));
 }
 
+#[test]
+fn test_set_property_token_should_revert_if_caller_is_not_manager() {
+    let mut ctx = setup(odra_test::env());
+    let property_id = create_property(&mut ctx);
+
+    ctx.env.set_caller(ctx.env.get_account(9));
+    assert_eq!(
+        ctx.registry
+            .try_set_property_token(property_id, ctx.token)
+            .unwrap_err(),
+        Error::NotAuthorized.into(),
+        "Should revert if caller is not property manager",
+    );
+}
+
+#[test]
+fn test_set_revenue_distributor_should_revert_if_caller_is_not_manager() {
+    let mut ctx = setup(odra_test::env());
+    let property_id = create_property(&mut ctx);
+
+    ctx.env.set_caller(ctx.env.get_account(9));
+    assert_eq!(
+        ctx.registry
+            .try_set_revenue_distributor(property_id, ctx.revenue_distributor)
+            .unwrap_err(),
+        Error::NotAuthorized.into(),
+        "Should revert if caller is not property manager",
+    );
+}
+
+#[test]
+fn test_set_metadata_uri_should_revert_if_caller_is_not_manager() {
+    let mut ctx = setup(odra_test::env());
+    let property_id = create_property(&mut ctx);
+
+    ctx.env.set_caller(ctx.env.get_account(9));
+    assert_eq!(
+        ctx.registry
+            .try_set_metadata_uri(property_id, String::from("ipfs://new"))
+            .unwrap_err(),
+        Error::NotAuthorized.into(),
+        "Should revert if caller is not property manager",
+    );
+}
+
 // =============================================================================
 // set_property_status()
 // =============================================================================
+
+#[test]
+fn test_set_property_status_should_revert_if_caller_is_not_manager() {
+    let mut ctx = setup(odra_test::env());
+    let property_id = create_property(&mut ctx);
+
+    ctx.env.set_caller(ctx.env.get_account(9));
+    assert_eq!(
+        ctx.registry
+            .try_set_property_status(property_id, PropertyStatus::Active)
+            .unwrap_err(),
+        Error::NotAuthorized.into(),
+        "Should revert if caller is not property manager",
+    );
+}
 
 #[test]
 fn test_set_property_status_should_require_token_before_active_status() {
