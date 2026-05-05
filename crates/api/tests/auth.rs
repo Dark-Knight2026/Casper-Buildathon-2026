@@ -15,7 +15,7 @@ use uuid::Uuid;
 
 use api::{
     Claims, RedisStore, UserRole,
-    common::{CASPER_MESSAGE_PREFIX, JWT_AUDIENCE, JWT_ISSUER},
+    common::{CASPER_MESSAGE_PREFIX, JWT_AUDIENCE, JWT_ISSUER, TokenType},
     services::{AUTH_RATE_LIMIT_BURST, auth::UpsertOutcome},
 };
 
@@ -1589,5 +1589,130 @@ async fn login_refresh_revoke_and_insert_are_atomic(pool: PgPool) {
     assert!(
         predecessor_revoked.is_none(),
         "predecessor refresh-token must remain ACTIVE after a failed login: revoke + insert must be atomic, otherwise the user is locked out of their last live session by a transient INSERT failure; got revoked_at = {predecessor_revoked:?}",
+    );
+}
+
+/// Login with a privileged role (`admin`) must be rejected with 400 by
+/// the self-registration guard in `verify_login`. The guard runs AFTER
+/// signature verification, so this test needs the full nonce/sign dance
+/// to reach the `is_self_registerable()` check.
+///
+/// Pins two contracts:
+/// - The whitelist (`Tenant | Landlord | Agent`) is the single source of
+///   truth for what self-registration accepts. A future refactor that
+///   moves the check (e.g. into a serde validator earlier in the
+///   pipeline) must keep `admin` rejected with the same status.
+/// - The error path is 400 (`BadRequest`), not 401 (`Unauthorized`):
+///   the signature was valid, the request is just asking for a role the
+///   client is not entitled to assume during self-signup. Collapsing
+///   this into 401 would lose that distinction and let an attacker
+///   probe role names by status-code.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn login_with_admin_role_rejected_with_400(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), true).await;
+
+    let secret_key = SecretKey::ed25519_from_bytes([41u8; 32]).unwrap();
+    let public_key = PublicKey::from(&secret_key);
+    let wallet_address = public_key.to_hex();
+
+    let nonce_body = env
+        .server
+        .get("/api/v1/auth/nonce")
+        .add_query_param("wallet_address", &wallet_address)
+        .await
+        .json::<Value>();
+    let message = nonce_body["message"].as_str().unwrap();
+    let signature_hex = sign_with_prefix(message, &secret_key, &public_key);
+
+    let login_response = env
+        .server
+        .post("/api/v1/auth/login")
+        .json(&serde_json::json!({
+            "wallet_address": wallet_address,
+            "signature": signature_hex,
+            "role": "admin",
+        }))
+        .await;
+
+    assert_eq!(
+        login_response.status_code(),
+        StatusCode::BAD_REQUEST,
+        "self-registration with role=admin must 400; got {}",
+        login_response.status_code(),
+    );
+    assert!(
+        login_response.maybe_cookie("access_token").is_none(),
+        "no access_token cookie must be issued on a rejected role",
+    );
+    assert!(
+        login_response.maybe_cookie("refresh_token").is_none(),
+        "no refresh_token cookie must be issued on a rejected role",
+    );
+
+    let user_count: i64 = sqlx::query_scalar!(
+        r#"
+            SELECT COUNT(*) AS "count!"
+            FROM wallet_connections
+            WHERE wallet_address = $1
+        "#,
+        wallet_address.to_ascii_lowercase(),
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("count query failed");
+    assert_eq!(
+        user_count, 0,
+        "rejected admin self-registration must NOT create a wallet_connections row",
+    );
+}
+
+/// A JWT carrying `token_type = "refresh"` placed in the `access_token`
+/// cookie must be rejected with 401 by the `require_auth` middleware.
+///
+/// Pins the `WrongTokenType` branch in `AuthUser::from_request_parts`
+/// (services/auth/middleware.rs:50). Without this guard, a stolen
+/// refresh cookie that an attacker shifts into the access cookie slot
+/// would silently authorize protected requests for the full 14-day
+/// refresh TTL instead of the 15-minute access TTL.
+///
+/// Note that the JWT itself is otherwise valid (correct issuer,
+/// audience, signature, expiry); the rejection comes purely from the
+/// `token_type` field. Legacy tokens with `token_type = None` are still
+/// accepted by design (until they expire naturally) - that branch is
+/// covered by the existing `jwt_*_rejected` tests which all set
+/// `token_type: None`.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn refresh_token_in_access_cookie_rejected_with_401(pool: PgPool) {
+    let env = common::setup_test_server(pool, false).await;
+
+    let exp = usize::try_from((Utc::now() + Duration::hours(1)).timestamp().max(0)).unwrap();
+    let claims = Claims {
+        sub: Uuid::new_v4(),
+        role: UserRole::Tenant,
+        exp,
+        iss: JWT_ISSUER.to_owned(),
+        aud: JWT_AUDIENCE.to_owned(),
+        token_type: Some(TokenType::Refresh),
+        verification_level: None,
+        jti: Uuid::new_v4(),
+    };
+    let token = jsonwebtoken::encode(
+        &Header::default(),
+        &claims,
+        &EncodingKey::from_secret(env.jwt_secret.as_bytes()),
+    )
+    .unwrap();
+
+    let response = env
+        .server
+        .get("/api/v1/users/me")
+        .add_header(COOKIE, format!("access_token={token}"))
+        .await;
+
+    assert_eq!(
+        response.status_code(),
+        StatusCode::UNAUTHORIZED,
+        "refresh-typed JWT in access_token cookie must 401; got {}",
+        response.status_code(),
     );
 }
