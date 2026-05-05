@@ -17,6 +17,8 @@
 4. [Phase 3 — strategic](#4-phase-3--strategic)
 5. [Architectural decisions (locked at the meeting)](#5-architectural-decisions-locked-at-the-meeting)
 6. [Detailed spec: Portfolio Accounting](#6-detailed-spec-portfolio-accounting)
+7. [Open questions for the client](#7-open-questions-for-the-client)
+8. [Changelog](#8-changelog)
 
 ---
 
