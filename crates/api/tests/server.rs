@@ -181,3 +181,33 @@ async fn cors_preflight_does_not_allow_authorization_header(pool: PgPool) {
         "Authorization must not be advertised in allow-headers (cookie auth replaced Bearer); got: {allow_headers}",
     );
 }
+
+/// Regression: `PATCH` must be advertised in `Access-Control-Allow-Methods`.
+///
+/// `PATCH /api/v1/users/me` is the canonical profile-update endpoint. If
+/// the CORS preflight does not list `PATCH`, browsers reject the request
+/// with a CORS error before it ever reaches the handler, so cross-origin
+/// clients (the whole intended deployment topology, given
+/// `allow_credentials(true)`) cannot update their profile at all.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn cors_preflight_allows_patch_method(pool: PgPool) {
+    let env = common::setup_test_server(pool, false).await;
+
+    let response = env
+        .server
+        .method(Method::OPTIONS, "/api/v1/users/me")
+        .add_header(header::ORIGIN, common::TEST_CORS_ORIGIN)
+        .add_header(header::ACCESS_CONTROL_REQUEST_METHOD, "PATCH")
+        .await;
+
+    let allowed_methods = response
+        .header(header::ACCESS_CONTROL_ALLOW_METHODS)
+        .to_str()
+        .unwrap()
+        .to_ascii_uppercase();
+
+    assert!(
+        allowed_methods.contains("PATCH"),
+        "PATCH must be advertised in access-control-allow-methods (PATCH /users/me is a real endpoint); got: {allowed_methods}",
+    );
+}
