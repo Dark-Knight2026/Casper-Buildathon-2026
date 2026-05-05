@@ -5,7 +5,7 @@ mod common;
 use axum::http::{Method, StatusCode};
 use axum_test::{TestResponse, http::header::COOKIE};
 use casper_types::{AsymmetricType, PublicKey, SecretKey, crypto};
-use chrono::{Duration, Utc};
+use chrono::{DateTime, Duration, Utc};
 use jsonwebtoken::{EncodingKey, Header};
 use rand::Rng;
 use redis::AsyncCommands;
@@ -1486,5 +1486,108 @@ async fn login_blocked_for_suspended_user(pool: PgPool) {
     assert!(
         second.maybe_cookie("refresh_token").is_none(),
         "no refresh_token cookie must be set when login is rejected for status",
+    );
+}
+
+/// Regression: `issue_login_refresh_token` must revoke prior families and
+/// insert the new row atomically.
+///
+/// On buggy code the two operations run as separate statements - if the
+/// INSERT fails after the revoke succeeds, the user is left with zero
+/// active sessions: the prior family is dead and the new family was
+/// never persisted. The user must then request a fresh nonce and
+/// re-sign just to recover, even though the legitimate login produced a
+/// 5xx and looked retryable from the client side.
+///
+/// Forcing the INSERT failure deterministically: we install a
+/// `BEFORE INSERT` trigger on `refresh_tokens` whose plpgsql body
+/// always raises an exception. The trigger fires only on INSERT, so
+/// the UPDATE inside `revoke_all_active_refresh_tokens_for_user`
+/// proceeds normally - which is the precise sequence that exposes the
+/// bug. (A simpler `CHECK (false)` constraint would also fail UPDATEs
+/// and short-circuit the revoke, masking the atomicity gap.) Running
+/// inside the per-test isolated DB created by `#[sqlx::test]` keeps
+/// the trigger scoped to this test only.
+///
+/// On the fix the revoke and INSERT share one transaction, so the
+/// failure rolls back the revoke and the predecessor row stays active.
+/// On the bug the revoke commits first, the INSERT then fails, and the
+/// predecessor is permanently revoked.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn login_refresh_revoke_and_insert_are_atomic(pool: PgPool) {
+    let secret_key = SecretKey::ed25519_from_bytes([77u8; 32]).unwrap();
+    let public_key = PublicKey::from(&secret_key);
+    let wallet_address = public_key.to_hex().to_ascii_lowercase();
+    let placeholder_email = format!("wallet_{}@leasefi.local", &wallet_address[..40]);
+
+    let UpsertOutcome::Resolved(user) = api::services::auth::upsert_user_by_wallet(
+        &pool,
+        &placeholder_email,
+        &wallet_address,
+        UserRole::Tenant,
+    )
+    .await
+    .expect("seed user creation must succeed") else {
+        panic!("seed user must Resolve - fresh wallet upserts default to status='active'");
+    };
+
+    let predecessor_hash = b"atomicity_predecessor_hash_32____bytes";
+    let predecessor_family = Uuid::new_v4();
+    sqlx::query!(
+        r"
+            INSERT INTO refresh_tokens (user_id, token_hash, family_id, expires_at)
+            VALUES ($1, $2, $3, NOW() + INTERVAL '14 days')
+        ",
+        user.id,
+        &predecessor_hash[..],
+        predecessor_family,
+    )
+    .execute(&pool)
+    .await
+    .expect("predecessor refresh-token seeding must succeed");
+
+    sqlx::query(
+        "CREATE OR REPLACE FUNCTION block_refresh_inserts() RETURNS trigger AS $$
+         BEGIN RAISE EXCEPTION 'INSERT blocked by atomicity-test trigger'; END;
+         $$ LANGUAGE plpgsql",
+    )
+    .execute(&pool)
+    .await
+    .expect("creating the trigger function must succeed");
+
+    sqlx::query(
+        "CREATE TRIGGER block_inserts BEFORE INSERT ON refresh_tokens
+         FOR EACH ROW EXECUTE FUNCTION block_refresh_inserts()",
+    )
+    .execute(&pool)
+    .await
+    .expect("installing the BEFORE INSERT trigger must succeed");
+
+    let result = api::services::auth::issue_login_refresh_token(&pool, user.id).await;
+    assert!(
+        result.is_err(),
+        "issue_login_refresh_token must surface the INSERT failure as an error",
+    );
+
+    sqlx::query("DROP TRIGGER block_inserts ON refresh_tokens")
+        .execute(&pool)
+        .await
+        .expect("removing the temporary BEFORE INSERT trigger must succeed");
+
+    let predecessor_revoked: Option<DateTime<Utc>> = sqlx::query_scalar!(
+        r"
+            SELECT revoked_at
+            FROM refresh_tokens
+            WHERE token_hash = $1
+        ",
+        &predecessor_hash[..],
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("predecessor row must still exist - the failed login is not allowed to delete it");
+
+    assert!(
+        predecessor_revoked.is_none(),
+        "predecessor refresh-token must remain ACTIVE after a failed login: revoke + insert must be atomic, otherwise the user is locked out of their last live session by a transient INSERT failure; got revoked_at = {predecessor_revoked:?}",
     );
 }
