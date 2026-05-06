@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use axum::{
     Json,
-    extract::{Multipart, State},
+    extract::{Multipart, State, multipart::MultipartError},
     http::StatusCode,
 };
 use axum_extra::extract::CookieJar;
@@ -83,6 +83,26 @@ impl ImageKind {
         mime: "image/webp",
         ext: "webp",
     };
+}
+
+/// Maps an `axum::extract::multipart::MultipartError` into an [`ApiError`]
+/// preserving the size-vs-shape distinction.
+///
+/// `MultipartError::status()` returns 413 for `multer::ErrorKind::FieldSizeExceeded`
+/// and `StreamSizeExceeded` (the body-limit overflow path) and 400 for every
+/// shape/parser failure. The naive `.map_err(|err| ApiError::BadRequest(...))`
+/// pattern collapses both into 400, masking a legitimate 413 - this helper
+/// preserves the upstream classification so the avatar handler's documented
+/// 413 contract holds even when axum's stream-limited body fires before the
+/// outer `RequestBodyLimitLayer`'s eager Content-Length check.
+fn multipart_err_to_api(err: &MultipartError) -> ApiError {
+    if err.status() == StatusCode::PAYLOAD_TOO_LARGE {
+        ApiError::PayloadTooLarge(format!(
+            "Avatar payload exceeds {MAX_AVATAR_BYTES}-byte limit"
+        ))
+    } else {
+        ApiError::BadRequest(format!("Failed to read file: {err}"))
+    }
 }
 
 /// Sniffs the leading bytes of `payload` and returns the detected image
@@ -508,7 +528,7 @@ pub async fn upload_avatar(
     while let Some(field) = multipart
         .next_field()
         .await
-        .map_err(|err| ApiError::BadRequest(format!("Malformed multipart: {err}")))?
+        .map_err(|err| multipart_err_to_api(&err))?
     {
         // Only the first `file` field is honored. Extra fields (or a
         // duplicate `file`) are ignored rather than 400-rejected so a
@@ -524,7 +544,7 @@ pub async fn upload_avatar(
             let bytes = field
                 .bytes()
                 .await
-                .map_err(|err| ApiError::BadRequest(format!("Failed to read file: {err}")))?
+                .map_err(|err| multipart_err_to_api(&err))?
                 .to_vec();
             file_field = Some((declared_mime, bytes));
             break;
