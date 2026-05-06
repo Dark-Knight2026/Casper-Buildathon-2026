@@ -131,7 +131,7 @@ fn setup(env: HostEnv) -> Context {
 }
 
 // =============================================================================
-// Test Context
+// Helpers
 // =============================================================================
 
 fn active_investory_record(env: &HostEnv) -> InvestorRecord {
@@ -145,31 +145,32 @@ fn active_investory_record(env: &HostEnv) -> InvestorRecord {
 }
 
 fn verify_investor(ctx: &mut Context, account: Address) {
-  ctx.env.set_caller(ctx.verification_manager);
-  ctx.investor_registry.set_investor_record(account active_investor_record(&ctx.env));
+    ctx.env.set_caller(ctx.verification_manager);
+    ctx.investor_registry
+        .set_investor_record(account, active_investor_record(&ctx.env));
 }
 
 fn enable_transfers(ctx: &mut Context) {
-  ctx.env.set_caller(ctx.compliance_manager);
+    ctx.env.set_caller(ctx.compliance_manager);
 
-  ctx.compliance.set_compliance_config(
-    ctx.property_id,
-    ComplianceConfig {
-      transfers_enabled: true,
-    },
-  );
+    ctx.compliance.set_compliance_config(
+        ctx.property_id,
+        ComplianceConfig {
+            transfers_enabled: true,
+        },
+    );
 }
 
 fn set_transfer_exempt(ctx: &mut Context, account: Address, exempt: bool) {
-  ctx.env.set_caller(ctx.compliance_manager);
-  ctx.compliance.set_transfer_exempt(account, exempt);
+    ctx.env.set_caller(ctx.compliance_manager);
+    ctx.compliance.set_transfer_exempt(account, exempt);
 }
 
 fn enable_primary_distribution(ctx: &mut Context) {
-  let initial_holder = ctx.initial_holder;
+    let initial_holder = ctx.initial_holder;
 
-  enable_transfers(ctx);
-  set_transfer_exempt(ctx, initial_holder, true);
+    enable_transfers(ctx);
+    set_transfer_exempt(ctx, initial_holder, true);
 }
 
 fn init_args(
