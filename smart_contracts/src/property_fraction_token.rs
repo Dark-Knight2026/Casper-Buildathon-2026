@@ -146,6 +146,25 @@ impl PropertyFractionToken {
     }
 
     // =============================================================================
+    // View Functions
+    // =============================================================================
+
+    /// Returns the property ID represented by this token.
+    pub fn get_property_id(&self) -> U256 {
+        self.property_id.get_or_default()
+    }
+
+    /// Returns the compliance policy contract address
+    pub fn get_compliance_policy_contract(&self) -> Address {
+        *self.compliance_policy.address()
+    }
+
+    /// Returns the role hash for accounts allowed to manage token configuration
+    pub fn token_manager_role(&self) -> Role {
+        common::hash_role(ROLE_TOKEN_MANAGER)
+    }
+
+    // =============================================================================
     // Compliance-Aware Token Operations
     // =============================================================================
 
