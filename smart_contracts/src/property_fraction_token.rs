@@ -172,7 +172,7 @@ impl PropertyFractionToken {
     pub fn transfer(&mut self, recipient: &Address, amount: &U256) {
         let sender = self.env().caller();
 
-        self.assert_transfer_allowed(sender, *recipient, amount);
+        self.assert_transfer_allowed(sender, *recipient, *amount);
         self.token.transfer(recipient, amount);
     }
 }
