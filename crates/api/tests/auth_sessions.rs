@@ -11,79 +11,9 @@ mod common;
 
 use axum::http::StatusCode;
 use axum_test::http::header::COOKIE;
-use casper_types::{AsymmetricType, PublicKey, SecretKey, crypto};
-use rand::Rng;
 use serde_json::Value;
 use sqlx::PgPool;
 use uuid::Uuid;
-
-use api::common::CASPER_MESSAGE_PREFIX;
-use common::TestEnv;
-
-/// Sign the wallet-login challenge the same way the real client does.
-fn sign_with_prefix(message: &str, secret_key: &SecretKey, public_key: &PublicKey) -> String {
-    let prefixed = format!("{CASPER_MESSAGE_PREFIX}{message}");
-    crypto::sign(prefixed.as_bytes(), secret_key, public_key).to_hex()
-}
-
-/// Fresh ed25519 keypair per test so each invocation gets an isolated user
-/// row - critical for assertions on session-list cardinality.
-fn generate_random_ed25519() -> (SecretKey, PublicKey) {
-    let mut rng = rand::rng();
-    let mut bytes = [0u8; 32];
-    rng.fill_bytes(&mut bytes);
-    let secret_key = SecretKey::ed25519_from_bytes(bytes).unwrap();
-    let public_key = PublicKey::from(&secret_key);
-    (secret_key, public_key)
-}
-
-/// Auth artifacts returned by [`login_and_extract`]: enough to make any
-/// subsequent authenticated request and to find the new user's
-/// `refresh_tokens` row in the DB.
-struct LoggedIn {
-    user_id: Uuid,
-    access_token: String,
-    refresh_token: String,
-}
-
-/// Performs nonce -> sign -> login and pulls the access AND refresh
-/// cookies out of the response. The refresh cookie is what makes
-/// `is_current` work, so every test that asserts on it needs both.
-async fn login_and_extract(env: &TestEnv) -> LoggedIn {
-    let (secret_key, public_key) = generate_random_ed25519();
-    let wallet_address = public_key.to_hex();
-
-    let nonce_body = env
-        .server
-        .get("/api/v1/auth/nonce")
-        .add_query_param("wallet_address", &wallet_address)
-        .await
-        .json::<Value>();
-    let message = nonce_body["message"].as_str().unwrap();
-    let signature_hex = sign_with_prefix(message, &secret_key, &public_key);
-
-    let login_response = env
-        .server
-        .post("/api/v1/auth/login")
-        .json(&serde_json::json!({
-            "wallet_address": wallet_address,
-            "signature": signature_hex,
-        }))
-        .await;
-    assert_eq!(login_response.status_code(), StatusCode::OK);
-
-    let login_body = login_response.json::<Value>();
-    let user_id =
-        Uuid::parse_str(login_body["user"]["id"].as_str().unwrap()).expect("user id is a UUID");
-    let access_token = login_response.cookie("access_token").value().to_owned();
-    let refresh_token = login_response.cookie("refresh_token").value().to_owned();
-
-    LoggedIn {
-        user_id,
-        access_token,
-        refresh_token,
-    }
-}
 
 /// Happy path: the list contains exactly one entry (the login session
 /// itself), the entry is flagged `is_current = true`, and `expires_at`
@@ -91,7 +21,7 @@ async fn login_and_extract(env: &TestEnv) -> LoggedIn {
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn list_sessions_returns_current_only(pool: PgPool) {
     let env = common::setup_test_server(pool, true).await;
-    let session = login_and_extract(&env).await;
+    let session = common::login_and_extract(&env).await;
 
     let response = env
         .server
@@ -135,8 +65,8 @@ async fn list_sessions_returns_current_only(pool: PgPool) {
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn list_sessions_is_scoped_to_caller(pool: PgPool) {
     let env = common::setup_test_server(pool, true).await;
-    let alice = login_and_extract(&env).await;
-    let bob = login_and_extract(&env).await;
+    let alice = common::login_and_extract(&env).await;
+    let bob = common::login_and_extract(&env).await;
 
     let alice_response = env
         .server
@@ -189,7 +119,7 @@ async fn list_sessions_is_scoped_to_caller(pool: PgPool) {
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn revoke_own_session_returns_204_and_kills_refresh(pool: PgPool) {
     let env = common::setup_test_server(pool, true).await;
-    let session = login_and_extract(&env).await;
+    let session = common::login_and_extract(&env).await;
 
     let list_response = env
         .server
@@ -235,8 +165,8 @@ async fn revoke_own_session_returns_204_and_kills_refresh(pool: PgPool) {
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn revoke_other_users_session_returns_404(pool: PgPool) {
     let env = common::setup_test_server(pool.clone(), true).await;
-    let alice = login_and_extract(&env).await;
-    let bob = login_and_extract(&env).await;
+    let alice = common::login_and_extract(&env).await;
+    let bob = common::login_and_extract(&env).await;
 
     let bob_list = env
         .server

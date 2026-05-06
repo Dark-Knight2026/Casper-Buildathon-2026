@@ -14,61 +14,10 @@ use core::time::Duration;
 
 use axum::http::StatusCode;
 use axum_test::http::header::COOKIE;
-use casper_types::{AsymmetricType, PublicKey, SecretKey, crypto};
-use rand::Rng;
+use casper_types::AsymmetricType;
 use serde_json::Value;
 use sqlx::PgPool;
 use uuid::Uuid;
-
-use api::common::CASPER_MESSAGE_PREFIX;
-use common::TestEnv;
-
-fn sign_with_prefix(message: &str, secret_key: &SecretKey, public_key: &PublicKey) -> String {
-    let prefixed = format!("{CASPER_MESSAGE_PREFIX}{message}");
-    crypto::sign(prefixed.as_bytes(), secret_key, public_key).to_hex()
-}
-
-fn generate_random_ed25519() -> (SecretKey, PublicKey) {
-    let mut rng = rand::rng();
-    let mut bytes = [0u8; 32];
-    rng.fill_bytes(&mut bytes);
-    let secret_key = SecretKey::ed25519_from_bytes(bytes).unwrap();
-    let public_key = PublicKey::from(&secret_key);
-    (secret_key, public_key)
-}
-
-/// Performs nonce -> sign -> login and returns `(user_id, access_token)`
-/// for use in the assertions below.
-async fn login_and_extract(env: &TestEnv) -> (Uuid, String) {
-    let (secret_key, public_key) = generate_random_ed25519();
-    let wallet_address = public_key.to_hex();
-
-    let nonce_body = env
-        .server
-        .get("/api/v1/auth/nonce")
-        .add_query_param("wallet_address", &wallet_address)
-        .await
-        .json::<Value>();
-    let message = nonce_body["message"].as_str().unwrap();
-    let signature_hex = sign_with_prefix(message, &secret_key, &public_key);
-
-    let login_response = env
-        .server
-        .post("/api/v1/auth/login")
-        .json(&serde_json::json!({
-            "wallet_address": wallet_address,
-            "signature": signature_hex,
-        }))
-        .await;
-    assert_eq!(login_response.status_code(), StatusCode::OK);
-
-    let login_body = login_response.json::<Value>();
-    let user_id_str = login_body["user"]["id"].as_str().unwrap();
-    let user_id = Uuid::parse_str(user_id_str).unwrap();
-    let access_token = login_response.cookie("access_token").value().to_owned();
-
-    (user_id, access_token)
-}
 
 /// Baseline: a freshly issued access token works against `GET /me` when
 /// `users.jwt_invalidate_before IS NULL` (the default after `/auth/login`).
@@ -76,12 +25,12 @@ async fn login_and_extract(env: &TestEnv) -> (Uuid, String) {
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn null_jwt_invalidate_before_allows_request(pool: PgPool) {
     let env = common::setup_test_server(pool, true).await;
-    let (_, access_token) = login_and_extract(&env).await;
+    let session = common::login_and_extract(&env).await;
 
     let me_response = env
         .server
         .get("/api/v1/users/me")
-        .add_header(COOKIE, format!("access_token={access_token}"))
+        .add_header(COOKIE, format!("access_token={}", session.access_token))
         .await;
 
     assert_eq!(
@@ -98,7 +47,7 @@ async fn null_jwt_invalidate_before_allows_request(pool: PgPool) {
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn cutoff_in_past_does_not_invalidate_newer_token(pool: PgPool) {
     let env = common::setup_test_server(pool.clone(), true).await;
-    let (user_id, access_token) = login_and_extract(&env).await;
+    let session = common::login_and_extract(&env).await;
 
     // Set the cutoff 1 hour BEFORE login. Any token issued at login time
     // has `iat ~= NOW()`, so `iat > cutoff` and the token must be accepted.
@@ -108,7 +57,7 @@ async fn cutoff_in_past_does_not_invalidate_newer_token(pool: PgPool) {
             SET jwt_invalidate_before = NOW() - INTERVAL '1 hour'
             WHERE id = $1
         ",
-        user_id,
+        session.user_id,
     )
     .execute(&pool)
     .await
@@ -117,7 +66,7 @@ async fn cutoff_in_past_does_not_invalidate_newer_token(pool: PgPool) {
     let me_response = env
         .server
         .get("/api/v1/users/me")
-        .add_header(COOKIE, format!("access_token={access_token}"))
+        .add_header(COOKIE, format!("access_token={}", session.access_token))
         .await;
 
     assert_eq!(
@@ -136,7 +85,7 @@ async fn cutoff_in_past_does_not_invalidate_newer_token(pool: PgPool) {
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn cutoff_after_iat_invalidates_token(pool: PgPool) {
     let env = common::setup_test_server(pool.clone(), true).await;
-    let (user_id, access_token) = login_and_extract(&env).await;
+    let session = common::login_and_extract(&env).await;
 
     sqlx::query!(
         r"
@@ -144,7 +93,7 @@ async fn cutoff_after_iat_invalidates_token(pool: PgPool) {
             SET jwt_invalidate_before = NOW() + INTERVAL '5 seconds'
             WHERE id = $1
         ",
-        user_id,
+        session.user_id,
     )
     .execute(&pool)
     .await
@@ -153,7 +102,7 @@ async fn cutoff_after_iat_invalidates_token(pool: PgPool) {
     let me_response = env
         .server
         .get("/api/v1/users/me")
-        .add_header(COOKIE, format!("access_token={access_token}"))
+        .add_header(COOKIE, format!("access_token={}", session.access_token))
         .await;
 
     assert_eq!(
@@ -183,7 +132,7 @@ async fn cutoff_after_iat_invalidates_token(pool: PgPool) {
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn fresh_login_after_cutoff_succeeds(pool: PgPool) {
     let env = common::setup_test_server(pool.clone(), true).await;
-    let (secret_key, public_key) = generate_random_ed25519();
+    let (secret_key, public_key) = common::generate_random_ed25519();
     let wallet_address = public_key.to_hex();
 
     // First login.
@@ -193,7 +142,7 @@ async fn fresh_login_after_cutoff_succeeds(pool: PgPool) {
         .add_query_param("wallet_address", &wallet_address)
         .await
         .json::<Value>();
-    let signature_hex = sign_with_prefix(
+    let signature_hex = common::sign_with_prefix(
         nonce_body["message"].as_str().unwrap(),
         &secret_key,
         &public_key,
@@ -229,7 +178,7 @@ async fn fresh_login_after_cutoff_succeeds(pool: PgPool) {
         .add_query_param("wallet_address", &wallet_address)
         .await
         .json::<Value>();
-    let signature_hex = sign_with_prefix(
+    let signature_hex = common::sign_with_prefix(
         nonce_body["message"].as_str().unwrap(),
         &secret_key,
         &public_key,

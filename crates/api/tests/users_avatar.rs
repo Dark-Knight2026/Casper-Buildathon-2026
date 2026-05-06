@@ -17,11 +17,10 @@ use axum_test::{
     http::header::COOKIE,
     multipart::{MultipartForm, Part},
 };
-use casper_types::{AsymmetricType, PublicKey, SecretKey, crypto};
+use casper_types::{AsymmetricType, PublicKey, SecretKey};
 use serde_json::Value;
 use sqlx::PgPool;
 
-use api::common::CASPER_MESSAGE_PREFIX;
 use common::TestEnv;
 
 /// 8-byte PNG signature followed by 1 KB of zero padding.
@@ -36,19 +35,12 @@ fn fake_png_bytes() -> Vec<u8> {
     bytes
 }
 
-/// Sign the wallet-login challenge the same way the real client does.
-///
-/// Duplicated from the other integration test files rather than
-/// abstracted into `common.rs` because the helpers there already pull in
-/// every fixture (mailers, JWT builders) that the avatar tests do not
-/// need - the small duplication keeps the test module's blast radius
-/// narrow.
-fn sign_with_prefix(message: &str, secret_key: &SecretKey, public_key: &PublicKey) -> String {
-    let prefixed = format!("{CASPER_MESSAGE_PREFIX}{message}");
-    crypto::sign(prefixed.as_bytes(), secret_key, public_key).to_hex()
-}
-
-/// Boilerplate: hit `/auth/nonce`, sign it, exchange for an access cookie.
+/// Seed-based wallet login, kept local because the seed pins a
+/// deterministic wallet that some assertions rely on (e.g. tests that
+/// log the same wallet in twice and assert the second login resolves
+/// to the same `users` row). The general-purpose
+/// `common::login_and_extract` uses random keys and would defeat that
+/// invariant.
 async fn login_and_get_access_token(env: &TestEnv, secret_seed: u8) -> String {
     let secret_key = SecretKey::ed25519_from_bytes([secret_seed; 32]).unwrap();
     let public_key = PublicKey::from(&secret_key);
@@ -61,7 +53,7 @@ async fn login_and_get_access_token(env: &TestEnv, secret_seed: u8) -> String {
         .await
         .json::<Value>();
     let message = nonce_body["message"].as_str().unwrap();
-    let signature_hex = sign_with_prefix(message, &secret_key, &public_key);
+    let signature_hex = common::sign_with_prefix(message, &secret_key, &public_key);
 
     let login_response = env
         .server

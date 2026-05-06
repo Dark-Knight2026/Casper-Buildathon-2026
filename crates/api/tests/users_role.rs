@@ -17,76 +17,18 @@ use core::time::Duration as CoreDuration;
 
 use axum::http::StatusCode;
 use axum_test::http::header::COOKIE;
-use casper_types::{AsymmetricType, PublicKey, SecretKey, crypto};
+use casper_types::AsymmetricType;
 use chrono::{Duration as ChronoDuration, Utc};
 use jsonwebtoken::{EncodingKey, Header, encode};
-use rand::Rng;
 use serde_json::Value;
 use sqlx::PgPool;
 use uuid::Uuid;
 
 use api::{
     Claims, UserRole,
-    common::{
-        CASPER_MESSAGE_PREFIX, JWT_AUDIENCE, JWT_ISSUER, RedisStore, TokenType, VerificationLevel,
-    },
+    common::{JWT_AUDIENCE, JWT_ISSUER, RedisStore, TokenType, VerificationLevel},
 };
-use common::TestEnv;
-
-/// Sign the wallet-login challenge the same way the real client does.
-fn sign_with_prefix(message: &str, secret_key: &SecretKey, public_key: &PublicKey) -> String {
-    let prefixed = format!("{CASPER_MESSAGE_PREFIX}{message}");
-    crypto::sign(prefixed.as_bytes(), secret_key, public_key).to_hex()
-}
-
-/// Generates a fresh ed25519 keypair so each test gets an isolated
-/// wallet (and therefore an isolated user row, which matters for the
-/// rate-limit and audit assertions that bind to a specific `user_id`).
-fn generate_random_ed25519() -> (SecretKey, PublicKey) {
-    let mut rng = rand::rng();
-    let mut bytes = [0u8; 32];
-    rng.fill_bytes(&mut bytes);
-    let secret_key = SecretKey::ed25519_from_bytes(bytes).unwrap();
-    let public_key = PublicKey::from(&secret_key);
-    (secret_key, public_key)
-}
-
-/// Performs nonce -> sign -> login and returns `(user_id, access_token)`.
-///
-/// Reused across every authenticated test - keeping this duplicated
-/// across `users_avatar.rs` and `auth_invalidate_before.rs` rather than
-/// factoring into `common.rs` because each file scopes its own
-/// boilerplate without dragging in unrelated email/JWT helpers.
-async fn login_and_extract(env: &TestEnv) -> (Uuid, String) {
-    let (secret_key, public_key) = generate_random_ed25519();
-    let wallet_address = public_key.to_hex();
-
-    let nonce_body = env
-        .server
-        .get("/api/v1/auth/nonce")
-        .add_query_param("wallet_address", &wallet_address)
-        .await
-        .json::<Value>();
-    let message = nonce_body["message"].as_str().unwrap();
-    let signature_hex = sign_with_prefix(message, &secret_key, &public_key);
-
-    let login_response = env
-        .server
-        .post("/api/v1/auth/login")
-        .json(&serde_json::json!({
-            "wallet_address": wallet_address,
-            "signature": signature_hex,
-        }))
-        .await;
-    assert_eq!(login_response.status_code(), StatusCode::OK);
-
-    let login_body = login_response.json::<Value>();
-    let user_id_str = login_body["user"]["id"].as_str().unwrap();
-    let user_id = Uuid::parse_str(user_id_str).unwrap();
-    let access_token = login_response.cookie("access_token").value().to_owned();
-
-    (user_id, access_token)
-}
+use common::{LoggedSession, TestEnv};
 
 /// Re-logs in for the same wallet, returning a fresh access token.
 ///
@@ -94,27 +36,28 @@ async fn login_and_extract(env: &TestEnv) -> (Uuid, String) {
 /// first PATCH stamps `jwt_invalidate_before = NOW()`, which kills the
 /// original cookie. Without a re-login, the second PATCH would 401 long
 /// before reaching the gate the test wants to assert on.
-async fn relogin_with_keypair(
-    env: &TestEnv,
-    secret_key: &SecretKey,
-    public_key: &PublicKey,
-) -> String {
+///
+/// Takes the full [`LoggedSession`] (not bare keys) so the call site
+/// reads as "re-login the same session" and the helper has obvious
+/// access to whatever fields a future variant might need (e.g. an
+/// expected `user_id` assertion).
+async fn relogin_with_keypair(env: &TestEnv, session: &LoggedSession) -> String {
     // Clock has 1-second resolution, so sleep one tick to ensure the
     // new token's `iat` is strictly greater than the cutoff stamped by
     // the previous PATCH. Mirrors `auth_invalidate_before::fresh_login_after_cutoff_succeeds`.
     tokio::time::sleep(CoreDuration::from_secs(1)).await;
 
-    let wallet_address = public_key.to_hex();
+    let wallet_address = session.public_key.to_hex();
     let nonce_body = env
         .server
         .get("/api/v1/auth/nonce")
         .add_query_param("wallet_address", &wallet_address)
         .await
         .json::<Value>();
-    let signature_hex = sign_with_prefix(
+    let signature_hex = common::sign_with_prefix(
         nonce_body["message"].as_str().unwrap(),
-        secret_key,
-        public_key,
+        &session.secret_key,
+        &session.public_key,
     );
 
     let login_response = env
@@ -228,12 +171,12 @@ async fn seed_active_lease_as_landlord(pool: &PgPool, user_id: Uuid) {
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn role_change_happy_path_returns_200_and_revokes_session(pool: PgPool) {
     let env = common::setup_test_server(pool.clone(), true).await;
-    let (user_id, access_token) = login_and_extract(&env).await;
+    let session = common::login_and_extract(&env).await;
 
     let response = env
         .server
         .patch("/api/v1/users/me/role")
-        .add_header(COOKIE, format!("access_token={access_token}"))
+        .add_header(COOKIE, format!("access_token={}", session.access_token))
         .json(&serde_json::json!({ "role": "landlord" }))
         .await;
 
@@ -247,7 +190,7 @@ async fn role_change_happy_path_returns_200_and_revokes_session(pool: PgPool) {
 
     let row = sqlx::query!(
         r"SELECT role, jwt_invalidate_before FROM users WHERE id = $1",
-        user_id,
+        session.user_id,
     )
     .fetch_one(&pool)
     .await
@@ -261,7 +204,7 @@ async fn role_change_happy_path_returns_200_and_revokes_session(pool: PgPool) {
     // The refresh row created at login time must now be revoked.
     let revoked_count = sqlx::query!(
         r#"SELECT COUNT(*) AS "n!" FROM refresh_tokens WHERE user_id = $1 AND revoked_at IS NOT NULL"#,
-        user_id,
+        session.user_id,
     )
     .fetch_one(&pool)
     .await
@@ -276,7 +219,7 @@ async fn role_change_happy_path_returns_200_and_revokes_session(pool: PgPool) {
     let me = env
         .server
         .get("/api/v1/users/me")
-        .add_header(COOKIE, format!("access_token={access_token}"))
+        .add_header(COOKIE, format!("access_token={}", session.access_token))
         .await;
     assert_eq!(
         me.status_code(),
@@ -290,12 +233,12 @@ async fn role_change_happy_path_returns_200_and_revokes_session(pool: PgPool) {
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn role_change_writes_audit_log(pool: PgPool) {
     let env = common::setup_test_server(pool.clone(), true).await;
-    let (user_id, access_token) = login_and_extract(&env).await;
+    let session = common::login_and_extract(&env).await;
 
     let response = env
         .server
         .patch("/api/v1/users/me/role")
-        .add_header(COOKIE, format!("access_token={access_token}"))
+        .add_header(COOKIE, format!("access_token={}", session.access_token))
         .json(&serde_json::json!({ "role": "landlord" }))
         .await;
     assert_eq!(response.status_code(), StatusCode::OK);
@@ -308,7 +251,7 @@ async fn role_change_writes_audit_log(pool: PgPool) {
             ORDER BY created_at DESC
             LIMIT 1
         ",
-        user_id,
+        session.user_id,
     )
     .fetch_one(&pool)
     .await
@@ -316,7 +259,7 @@ async fn role_change_writes_audit_log(pool: PgPool) {
 
     assert_eq!(row.action, "change_role");
     assert_eq!(row.resource_type, "user");
-    assert_eq!(row.resource_id.unwrap(), user_id);
+    assert_eq!(row.resource_id.unwrap(), session.user_id);
     assert_eq!(row.status.as_deref(), Some("success"));
     assert_eq!(
         row.old_values.unwrap()["role"].as_str().unwrap(),
@@ -337,37 +280,12 @@ async fn role_change_writes_audit_log(pool: PgPool) {
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn role_change_bidirectional_after_redis_reset(pool: PgPool) {
     let env = common::setup_test_server(pool.clone(), true).await;
-    let (secret_key, public_key) = generate_random_ed25519();
-    let wallet_address = public_key.to_hex();
-
-    // First login + change.
-    let nonce_body = env
-        .server
-        .get("/api/v1/auth/nonce")
-        .add_query_param("wallet_address", &wallet_address)
-        .await
-        .json::<Value>();
-    let signature_hex = sign_with_prefix(
-        nonce_body["message"].as_str().unwrap(),
-        &secret_key,
-        &public_key,
-    );
-    let first_login = env
-        .server
-        .post("/api/v1/auth/login")
-        .json(&serde_json::json!({
-            "wallet_address": wallet_address,
-            "signature": signature_hex,
-        }))
-        .await;
-    let user_id =
-        Uuid::parse_str(first_login.json::<Value>()["user"]["id"].as_str().unwrap()).unwrap();
-    let first_access = first_login.cookie("access_token").value().to_owned();
+    let session = common::login_and_extract(&env).await;
 
     let first_change = env
         .server
         .patch("/api/v1/users/me/role")
-        .add_header(COOKIE, format!("access_token={first_access}"))
+        .add_header(COOKIE, format!("access_token={}", session.access_token))
         .json(&serde_json::json!({ "role": "landlord" }))
         .await;
     assert_eq!(first_change.status_code(), StatusCode::OK);
@@ -380,13 +298,13 @@ async fn role_change_bidirectional_after_redis_reset(pool: PgPool) {
         .await
         .unwrap();
     redis::cmd("DEL")
-        .arg(RedisStore::role_change_attempts_key(user_id))
+        .arg(RedisStore::role_change_attempts_key(session.user_id))
         .query_async::<()>(&mut conn)
         .await
         .unwrap();
 
     // Re-login (the previous access cookie is dead per `jwt_invalidate_before`).
-    let second_access = relogin_with_keypair(&env, &secret_key, &public_key).await;
+    let second_access = relogin_with_keypair(&env, &session).await;
 
     let second_change = env
         .server
@@ -413,13 +331,13 @@ async fn role_change_bidirectional_after_redis_reset(pool: PgPool) {
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn role_change_rejects_non_whitelist_values(pool: PgPool) {
     let env = common::setup_test_server(pool.clone(), true).await;
-    let (user_id, access_token) = login_and_extract(&env).await;
+    let session = common::login_and_extract(&env).await;
 
     for bad in ["admin", "property_manager", "unknown", "moderator"] {
         let response = env
             .server
             .patch("/api/v1/users/me/role")
-            .add_header(COOKIE, format!("access_token={access_token}"))
+            .add_header(COOKIE, format!("access_token={}", session.access_token))
             .json(&serde_json::json!({ "role": bad }))
             .await;
         assert_eq!(
@@ -433,7 +351,7 @@ async fn role_change_rejects_non_whitelist_values(pool: PgPool) {
     // Sanity: row stayed at `tenant`, jwt_invalidate_before still NULL.
     let row = sqlx::query!(
         r"SELECT role, jwt_invalidate_before FROM users WHERE id = $1",
-        user_id,
+        session.user_id,
     )
     .fetch_one(&pool)
     .await
@@ -453,11 +371,15 @@ async fn role_change_rejects_non_whitelist_values(pool: PgPool) {
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn role_change_with_stale_iat_returns_403(pool: PgPool) {
     let env = common::setup_test_server(pool.clone(), true).await;
-    let (user_id, _) = login_and_extract(&env).await;
+    let session = common::login_and_extract(&env).await;
 
     // 6 minutes > 5-minute window -> 403.
-    let stale_token =
-        mint_access_token_with_backdated_iat(user_id, UserRole::Tenant, &env.jwt_secret, 6 * 60);
+    let stale_token = mint_access_token_with_backdated_iat(
+        session.user_id,
+        UserRole::Tenant,
+        &env.jwt_secret,
+        6 * 60,
+    );
 
     let response = env
         .server
@@ -482,40 +404,18 @@ async fn role_change_with_stale_iat_returns_403(pool: PgPool) {
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn role_change_second_within_window_returns_429(pool: PgPool) {
     let env = common::setup_test_server(pool.clone(), true).await;
-    let (secret_key, public_key) = generate_random_ed25519();
-    let wallet_address = public_key.to_hex();
-
-    let nonce_body = env
-        .server
-        .get("/api/v1/auth/nonce")
-        .add_query_param("wallet_address", &wallet_address)
-        .await
-        .json::<Value>();
-    let signature_hex = sign_with_prefix(
-        nonce_body["message"].as_str().unwrap(),
-        &secret_key,
-        &public_key,
-    );
-    let first_login = env
-        .server
-        .post("/api/v1/auth/login")
-        .json(&serde_json::json!({
-            "wallet_address": wallet_address,
-            "signature": signature_hex,
-        }))
-        .await;
-    let first_access = first_login.cookie("access_token").value().to_owned();
+    let session = common::login_and_extract(&env).await;
 
     let first_change = env
         .server
         .patch("/api/v1/users/me/role")
-        .add_header(COOKIE, format!("access_token={first_access}"))
+        .add_header(COOKIE, format!("access_token={}", session.access_token))
         .json(&serde_json::json!({ "role": "landlord" }))
         .await;
     assert_eq!(first_change.status_code(), StatusCode::OK);
 
     // Re-login with a fresh `iat > cutoff`; do NOT clear the Redis slot.
-    let second_access = relogin_with_keypair(&env, &secret_key, &public_key).await;
+    let second_access = relogin_with_keypair(&env, &session).await;
 
     let second_change = env
         .server
@@ -539,7 +439,7 @@ async fn role_change_second_within_window_returns_429(pool: PgPool) {
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn role_change_noop_does_not_burn_rate_limit(pool: PgPool) {
     let env = common::setup_test_server(pool.clone(), true).await;
-    let (user_id, access_token) = login_and_extract(&env).await;
+    let session = common::login_and_extract(&env).await;
 
     // Two successive noops - the cookie stays valid because the noop
     // path does not stamp `jwt_invalidate_before`.
@@ -547,7 +447,7 @@ async fn role_change_noop_does_not_burn_rate_limit(pool: PgPool) {
         let response = env
             .server
             .patch("/api/v1/users/me/role")
-            .add_header(COOKIE, format!("access_token={access_token}"))
+            .add_header(COOKIE, format!("access_token={}", session.access_token))
             .json(&serde_json::json!({ "role": "tenant" }))
             .await;
         assert_eq!(
@@ -562,7 +462,7 @@ async fn role_change_noop_does_not_burn_rate_limit(pool: PgPool) {
     let real_change = env
         .server
         .patch("/api/v1/users/me/role")
-        .add_header(COOKIE, format!("access_token={access_token}"))
+        .add_header(COOKIE, format!("access_token={}", session.access_token))
         .json(&serde_json::json!({ "role": "landlord" }))
         .await;
     assert_eq!(
@@ -572,7 +472,7 @@ async fn role_change_noop_does_not_burn_rate_limit(pool: PgPool) {
     );
 
     // Sanity: row actually flipped now.
-    let role: String = sqlx::query_scalar!("SELECT role FROM users WHERE id = $1", user_id)
+    let role: String = sqlx::query_scalar!("SELECT role FROM users WHERE id = $1", session.user_id)
         .fetch_one(&pool)
         .await
         .unwrap();
@@ -587,13 +487,13 @@ async fn role_change_noop_does_not_burn_rate_limit(pool: PgPool) {
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn role_change_with_active_lease_returns_409(pool: PgPool) {
     let env = common::setup_test_server(pool.clone(), true).await;
-    let (user_id, access_token) = login_and_extract(&env).await;
-    seed_active_lease_as_landlord(&pool, user_id).await;
+    let session = common::login_and_extract(&env).await;
+    seed_active_lease_as_landlord(&pool, session.user_id).await;
 
     let response = env
         .server
         .patch("/api/v1/users/me/role")
-        .add_header(COOKIE, format!("access_token={access_token}"))
+        .add_header(COOKIE, format!("access_token={}", session.access_token))
         .json(&serde_json::json!({ "role": "landlord" }))
         .await;
 
@@ -605,7 +505,7 @@ async fn role_change_with_active_lease_returns_409(pool: PgPool) {
     // Redis slot empty (so a follow-up after lease termination still works).
     let row = sqlx::query!(
         r"SELECT role, jwt_invalidate_before FROM users WHERE id = $1",
-        user_id,
+        session.user_id,
     )
     .fetch_one(&pool)
     .await
@@ -620,7 +520,7 @@ async fn role_change_with_active_lease_returns_409(pool: PgPool) {
         .await
         .unwrap();
     let exists: i64 = redis::cmd("EXISTS")
-        .arg(RedisStore::role_change_attempts_key(user_id))
+        .arg(RedisStore::role_change_attempts_key(session.user_id))
         .query_async(&mut conn)
         .await
         .unwrap();

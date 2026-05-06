@@ -7,13 +7,13 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use axum::http::StatusCode;
 use axum_test::http::header::COOKIE;
-use casper_types::{AsymmetricType, PublicKey, SecretKey, crypto};
+use casper_types::{AsymmetricType, PublicKey, SecretKey};
 use redis::AsyncCommands;
 use serde_json::Value;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use api::common::{CASPER_MESSAGE_PREFIX, EmailError, EmailMessage, EmailSender};
+use api::common::{EmailError, EmailMessage, EmailSender};
 
 use crate::common::TestOverrides;
 
@@ -60,11 +60,6 @@ impl EmailSender for CapturingMailer {
     }
 }
 
-fn sign_with_prefix(message: &str, secret_key: &SecretKey, public_key: &PublicKey) -> String {
-    let prefixed = format!("{CASPER_MESSAGE_PREFIX}{message}");
-    crypto::sign(prefixed.as_bytes(), secret_key, public_key).to_hex()
-}
-
 /// Regression: when `mailer.send` fails inside `request_email_change`, the
 /// handler must roll back the Redis token slot and the rate-limit counter
 /// so the user can retry without burning one of their three daily attempts
@@ -96,7 +91,7 @@ async fn request_email_change_rolls_back_state_on_mailer_failure(pool: PgPool) {
         .await
         .json::<Value>();
     let message = nonce_body["message"].as_str().unwrap();
-    let signature_hex = sign_with_prefix(message, &secret_key, &public_key);
+    let signature_hex = common::sign_with_prefix(message, &secret_key, &public_key);
 
     let login_response = env
         .server
@@ -189,7 +184,7 @@ async fn confirm_email_change_with_wrong_token_returns_401(pool: PgPool) {
         .await
         .json::<Value>();
     let message = nonce_body["message"].as_str().unwrap();
-    let signature_hex = sign_with_prefix(message, &secret_key, &public_key);
+    let signature_hex = common::sign_with_prefix(message, &secret_key, &public_key);
 
     let login_response = env
         .server
@@ -255,7 +250,7 @@ async fn confirm_email_change_with_expired_token_returns_401(pool: PgPool) {
         .await
         .json::<Value>();
     let message = nonce_body["message"].as_str().unwrap();
-    let signature_hex = sign_with_prefix(message, &secret_key, &public_key);
+    let signature_hex = common::sign_with_prefix(message, &secret_key, &public_key);
 
     let login_response = env
         .server
@@ -341,7 +336,7 @@ async fn get_me_returns_authenticated_user_profile(pool: PgPool) {
         .await
         .json::<Value>();
     let message = nonce_body["message"].as_str().unwrap();
-    let signature_hex = sign_with_prefix(message, &secret_key, &public_key);
+    let signature_hex = common::sign_with_prefix(message, &secret_key, &public_key);
 
     let login_response = env
         .server
@@ -434,7 +429,7 @@ async fn patch_me_updates_editable_fields(pool: PgPool) {
         .await
         .json::<Value>();
     let message = nonce_body["message"].as_str().unwrap();
-    let signature_hex = sign_with_prefix(message, &secret_key, &public_key);
+    let signature_hex = common::sign_with_prefix(message, &secret_key, &public_key);
 
     let login_response = env
         .server
@@ -526,7 +521,7 @@ async fn patch_me_rejects_empty_required_fields(pool: PgPool) {
         .await
         .json::<Value>();
     let message = nonce_body["message"].as_str().unwrap();
-    let signature_hex = sign_with_prefix(message, &secret_key, &public_key);
+    let signature_hex = common::sign_with_prefix(message, &secret_key, &public_key);
 
     let login_response = env
         .server
@@ -613,7 +608,7 @@ async fn confirm_email_change_happy_path_upgrades_verification(pool: PgPool) {
         .await
         .json::<Value>();
     let message = nonce_body["message"].as_str().unwrap();
-    let signature_hex = sign_with_prefix(message, &secret_key, &public_key);
+    let signature_hex = common::sign_with_prefix(message, &secret_key, &public_key);
 
     let login_response = env
         .server

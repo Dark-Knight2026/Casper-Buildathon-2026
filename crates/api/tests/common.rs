@@ -18,9 +18,11 @@ use std::sync::Arc;
 
 use axum::http::{Method, StatusCode};
 use axum_test::{TestServer, TestServerConfig, Transport, http::header::COOKIE};
+use casper_types::{AsymmetricType, PublicKey, SecretKey, crypto};
 use chrono::{Duration, Utc};
 use core::net::SocketAddr;
 use jsonwebtoken::{EncodingKey, Header, encode};
+use rand::Rng;
 use secrecy::SecretString;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
@@ -35,8 +37,8 @@ use uuid::Uuid;
 use api::{
     AppState, Claims, IcoFallback, LoggingEmailSender, ServerConfig, UserId, UserRole,
     common::{
-        EmailSender, JWT_AUDIENCE, JWT_ISSUER, MediaStorage, RedisStore, StubMediaStorage,
-        TOTAL_SUPPLY, TokenType, VerificationLevel,
+        CASPER_MESSAGE_PREFIX, EmailSender, JWT_AUDIENCE, JWT_ISSUER, MediaStorage, RedisStore,
+        StubMediaStorage, TOTAL_SUPPLY, TokenType, VerificationLevel,
     },
     server,
 };
@@ -284,4 +286,123 @@ pub async fn authed_request<T: DeserializeOwned>(
     let body_result: Result<T, _> = serde_json::from_slice(response.as_bytes());
 
     (status, body_result.ok())
+}
+
+/// Signs a message using the Casper Wallet "Casper Message:\n" prefix,
+/// matching the byte sequence the browser extension produces. Every
+/// integration test that needs a wallet-login round-trip flows the
+/// nonce-message through this helper before posting it to
+/// `/api/v1/auth/login`; consolidating the prefix-handling here keeps
+/// the contract anchored in one place if Casper ever reshapes the
+/// signing envelope.
+#[inline]
+pub fn sign_with_prefix(message: &str, secret_key: &SecretKey, public_key: &PublicKey) -> String {
+    let prefixed = format!("{CASPER_MESSAGE_PREFIX}{message}");
+    crypto::sign(prefixed.as_bytes(), secret_key, public_key).to_hex()
+}
+
+/// Generates a fresh random ed25519 keypair, used by tests that need
+/// an isolated wallet (and therefore an isolated `users` row) per
+/// invocation. `#[sqlx::test]` already gives us an isolated schema, so
+/// random bytes are sufficient - we do not need a deterministic seed
+/// to keep tests reproducible.
+#[inline]
+pub fn generate_random_ed25519() -> (SecretKey, PublicKey) {
+    let mut rng = rand::rng();
+    let mut bytes = [0u8; 32];
+    rng.fill_bytes(&mut bytes);
+    let secret_key = SecretKey::ed25519_from_bytes(bytes).unwrap();
+    let public_key = PublicKey::from(&secret_key);
+    (secret_key, public_key)
+}
+
+/// Bundle returned by [`login_and_extract`].
+///
+/// Holds every artifact a test might need after a wallet login: the
+/// resolved `user_id`, both auth cookies' plaintext values, AND the
+/// keypair used to sign the nonce. The keypair is included so flows
+/// that need to re-login under the same wallet (the `relogin_with_keypair`
+/// pattern in `users_role.rs`, which exists because the role-change
+/// handler stamps `jwt_invalidate_before` and kills the original cookie)
+/// can do so without regenerating a fresh wallet that would create a
+/// different `users` row.
+///
+/// Tests that do not consume every field simply drop the unused ones -
+/// the file-level `#![allow(dead_code)]` covers the unused-field warnings.
+#[derive(Debug)]
+pub struct LoggedSession {
+    /// Primary key of the `users` row that owns the new session.
+    pub user_id: Uuid,
+    /// Plaintext of the `access_token` cookie. Pass back via the
+    /// `Cookie` request header to authenticate subsequent calls.
+    pub access_token: String,
+    /// Plaintext of the `refresh_token` cookie. Needed by the sessions
+    /// list test (for the `is_current` flag) and any test that exercises
+    /// `/auth/refresh`.
+    pub refresh_token: String,
+    /// ed25519 secret used to sign the original nonce. Tests that
+    /// re-login under the same wallet keep this around so the second
+    /// call resolves to the same `user_id`.
+    pub secret_key: SecretKey,
+    /// Matching public key (derivable from `secret_key` but cached here
+    /// to avoid repeating the `PublicKey::from(&secret_key)` boilerplate
+    /// at every call site that builds the wallet address).
+    pub public_key: PublicKey,
+}
+
+/// Performs a full nonce -> sign -> login round-trip and pulls every
+/// artifact a test might need out of the response.
+///
+/// Centralizes the boilerplate that previously lived (with three
+/// slightly different return types) in `auth_invalidate_before.rs`,
+/// `auth_sessions.rs`, and `users_role.rs`: each call site now takes
+/// only the fields it cares about and lets the rest fall on the floor.
+/// The helper deliberately does NOT cover seed-based logins
+/// (`auth.rs:login_with_seed`, `users_avatar.rs:login_and_get_access_token`)
+/// because those tests pin a deterministic wallet for cross-test
+/// collision tests and would lose meaning under random keys.
+///
+/// # Panics
+///
+/// Panics if any step of the login flow fails (nonce JSON malformed,
+/// login returns non-200, or the response cookies/body are missing the
+/// expected fields). Tests want a hard fail at the helper rather than a
+/// confusing assertion failure 30 lines downstream.
+#[inline]
+pub async fn login_and_extract(env: &TestEnv) -> LoggedSession {
+    let (secret_key, public_key) = generate_random_ed25519();
+    let wallet_address = public_key.to_hex();
+
+    let nonce_body = env
+        .server
+        .get("/api/v1/auth/nonce")
+        .add_query_param("wallet_address", &wallet_address)
+        .await
+        .json::<Value>();
+    let message = nonce_body["message"].as_str().unwrap();
+    let signature_hex = sign_with_prefix(message, &secret_key, &public_key);
+
+    let login_response = env
+        .server
+        .post("/api/v1/auth/login")
+        .json(&serde_json::json!({
+            "wallet_address": wallet_address,
+            "signature": signature_hex,
+        }))
+        .await;
+    assert_eq!(login_response.status_code(), StatusCode::OK);
+
+    let login_body = login_response.json::<Value>();
+    let user_id =
+        Uuid::parse_str(login_body["user"]["id"].as_str().unwrap()).expect("user id is a UUID");
+    let access_token = login_response.cookie("access_token").value().to_owned();
+    let refresh_token = login_response.cookie("refresh_token").value().to_owned();
+
+    LoggedSession {
+        user_id,
+        access_token,
+        refresh_token,
+        secret_key,
+        public_key,
+    }
 }
