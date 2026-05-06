@@ -11,8 +11,6 @@
 //     (which has fair-housing implications, Q8) is intentionally NOT built.
 // =============================================================================
 
-export type ScoreScale = 0 | 100; // bookend values; the score is any int in [0, 100]
-
 export type ScoreBand = 'excellent' | 'good' | 'fair' | 'poor';
 
 // Score components and their weights — the three signals the client called
@@ -33,8 +31,9 @@ export interface ScoreComponent {
 
 export interface TenantScore {
   tenantId: string;
-  // Aggregate 0..100. Null when the tenant has no events to score from yet.
-  // Renderers must check `status` before showing a number.
+  // Aggregate score, any integer in [0, 100]. Null when the tenant has no
+  // events to score from yet — renderers must check `status` before showing
+  // a number.
   overall: number | null;
   band: ScoreBand | null;
   status: 'scored' | 'unscored';

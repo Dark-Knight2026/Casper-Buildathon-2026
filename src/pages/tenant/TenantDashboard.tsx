@@ -116,6 +116,7 @@ export function TenantDashboard() {
 
   const daysUntilExpiration = getDaysUntilExpiration(currentLease.endDate);
   const showExpirationWarning = daysUntilExpiration <= 60;
+  const [firstCurrentProperty] = getMyCurrentProperties(CURRENT_TENANT_ID);
 
   return (
     <ErrorBoundary>
@@ -160,21 +161,17 @@ export function TenantDashboard() {
             MOCK_LEASE is a stripped-down LeaseAgreement; for the recommendations
             section we need a real Property object, so we source the first active
             tenant lease via getMyCurrentProperties (same demo seed as MyProperties). */}
-        {(() => {
-          const [firstCurrent] = getMyCurrentProperties(CURRENT_TENANT_ID);
-          if (!firstCurrent) return null;
-          return (
-            <div className="mb-8">
-              <RecommendedProperties
-                tenantId={CURRENT_TENANT_ID}
-                leaseEndDate={firstCurrent.lease.endDate}
-                monthlyRent={firstCurrent.lease.monthlyRent}
-                currentProperty={firstCurrent.property}
-                variant="compact"
-              />
-            </div>
-          );
-        })()}
+        {firstCurrentProperty && (
+          <div className="mb-8">
+            <RecommendedProperties
+              tenantId={CURRENT_TENANT_ID}
+              leaseEndDate={firstCurrentProperty.lease.endDate}
+              monthlyRent={firstCurrentProperty.lease.monthlyRent}
+              currentProperty={firstCurrentProperty.property}
+              variant="compact"
+            />
+          </div>
+        )}
 
         {/* Quick Stats */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
