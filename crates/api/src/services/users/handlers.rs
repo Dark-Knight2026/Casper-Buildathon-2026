@@ -7,16 +7,18 @@ use axum::{
     extract::{Multipart, State},
     http::StatusCode,
 };
+use axum_extra::extract::CookieJar;
+use chrono::Utc;
 
 use crate::{
     common::{ApiError, ApiResult, AppState, EmailMessage, StorageError, UserInfo},
     services::{
-        auth::AuthUser,
+        auth::{AuthUser, cookies},
         users::{
             db,
             models::{
                 AvatarUploadResponse, EmailChangeConfirmRequest, EmailChangeRequest,
-                UpdateProfileRequest,
+                UpdateProfileRequest, UpdateRoleRequest,
             },
             tokens,
         },
@@ -33,6 +35,17 @@ const MAX_AVATAR_BYTES: usize = 5 * 1024 * 1024;
 
 /// Multipart field name expected for the avatar payload.
 const AVATAR_FIELD_NAME: &str = "file";
+
+/// Maximum age (in seconds) of the access token's `iat` claim that the
+/// role-change handler accepts.
+///
+/// 5 minutes mirrors the standard "fresh-auth" window for sensitive
+/// flows: after this point, the user must re-login (which mints a new
+/// token with `iat = NOW()`) before the role change is admitted. This
+/// blocks a long-lived stolen access cookie from being repurposed as
+/// a privilege-flip primitive - by the time the attacker can replay
+/// it, the iat is already past the window and the request is 403'd.
+const ROLE_CHANGE_RECENT_AUTH_WINDOW_SECS: i64 = 5 * 60;
 
 /// Extensions the avatar handler may have produced for a given user
 /// historically. Used to delete stale objects under sibling extensions when
@@ -591,4 +604,155 @@ pub async fn upload_avatar(
     db::update_avatar_url(&state.db, user_id, &avatar_url).await?;
 
     Ok(Json(AvatarUploadResponse { avatar_url }))
+}
+
+// `PATCH /api/v1/users/me/role`
+//
+/// Switches the authenticated user's role to `request.role` and force-revokes
+/// every outstanding session.
+///
+/// Five gates run in strict order; a regression that re-orders any of them
+/// would surface as a different status code for the same request:
+///
+/// 1. **Whitelist validation** (400). Only `tenant`, `landlord`, `agent` are
+///    self-selectable. `admin` / `property_manager` and any unknown string
+///    are rejected before any DB or Redis I/O. Reuses the same gate as
+///    `LoginRequest.role` so the two surfaces cannot drift.
+/// 2. **Recent-auth check** (403, code `reauthentication_required`). The
+///    token's `iat` must be no older than [`ROLE_CHANGE_RECENT_AUTH_WINDOW_SECS`].
+///    Privilege change is sensitive enough to require a freshly
+///    authenticated session - a stolen access cookie cannot be
+///    repurposed for it once the window has elapsed.
+/// 3. **Idempotent shortcut**. The transaction's `SELECT ... FOR UPDATE`
+///    locks the row; if `old_role == new_role` the function commits and
+///    returns 200 WITHOUT touching Redis. This makes idempotent retries
+///    (and the bidirectional flow `tenant -> landlord -> tenant` after
+///    the rate-limit window) completely free in budget terms.
+/// 4. **Rate-limit** (429, code `rate_limited`). Only consulted when the
+///    role actually differs - so a noop never burns a slot. Threshold 1
+///    per 24h; any prior committed change blocks the next within the
+///    window. The transaction is rolled back implicitly when the handler
+///    returns the error (drop without commit).
+/// 5. **Active-leases pre-check** (409, code `active_leases_blocking`). A
+///    user bound to an active lease as `landlord` or `primary_tenant`
+///    cannot change role - the contractual counterparty would silently
+///    flip type. Runs inside the transaction so a lease created
+///    concurrently after our `FOR UPDATE` cannot slip through.
+///
+/// On success:
+///
+/// - `users.role` is rewritten and `jwt_invalidate_before = NOW()` is
+///   stamped, killing every outstanding access token (the auth middleware
+///   compares `iat <= cutoff`).
+/// - Every active refresh row is revoked.
+/// - An `audit_logs` row records `old_role -> new_role` with
+///   `status = 'success'`.
+/// - `record_role_change_attempt` bumps the rate-limit counter.
+/// - Both auth cookies are stamped expired in the response so the browser
+///   drops them on receipt - clients MUST re-login to obtain a token
+///   reflecting the new role.
+///
+/// The Redis bump runs AFTER `tx.commit()` succeeds. If Redis fails between
+/// commit and bump, the worst case is that one extra change can squeeze
+/// through before the limit kicks in - but the audit log already recorded
+/// the change, so accountability is preserved. The alternative (bump
+/// inside the transaction) would let a transient Redis hiccup roll back
+/// an otherwise-successful UPDATE the user already saw confirmation for.
+///
+/// The idempotent-shortcut return path returns an empty `CookieJar`: a
+/// noop change is not a logout event, no cookies need to be cleared,
+/// and the user's existing access token is still valid (we did not bump
+/// `jwt_invalidate_before` for them).
+///
+/// # Errors
+///
+/// - 400 (`BadRequest`) for non-whitelist roles.
+/// - 401 (`Unauthorized`) when the access cookie is missing or invalid
+///   (enforced upstream by `require_auth`).
+/// - 403 (`Forbidden`, code `reauthentication_required`) when
+///   `claims.iat` is older than [`ROLE_CHANGE_RECENT_AUTH_WINDOW_SECS`].
+/// - 404 (`NotFound`) if the user row was soft-deleted between JWT
+///   issue and this call.
+/// - 409 (`Conflict`, code `active_leases_blocking`) when active leases
+///   gate the change.
+/// - 429 (`TooManyRequests`, code `rate_limited`) when the user has
+///   already changed role within the rolling 24h window.
+/// - 500 for Redis or DB transport failures.
+#[utoipa::path(
+    patch,
+    path = "/me/role",
+    tag = "Users",
+    request_body = UpdateRoleRequest,
+    responses(
+        (status = 200, description = "Role changed; cookies cleared", body = UserInfo),
+        (status = 400, description = "Invalid role"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Re-authentication required"),
+        (status = 404, description = "User no longer exists"),
+        (status = 409, description = "Active leases block role change"),
+        (status = 429, description = "Too many role-change requests"),
+        (status = 500, description = "Internal server error"),
+    ),
+    security(
+        ("cookie_auth" = [])
+    )
+)]
+#[inline]
+pub async fn patch_me_role(
+    State(state): State<Arc<AppState>>,
+    auth_user: AuthUser,
+    Json(payload): Json<UpdateRoleRequest>,
+) -> ApiResult<(CookieJar, Json<UserInfo>)> {
+    let user_id = auth_user.0.sub;
+    let new_role = payload.into_validated()?;
+
+    // Recent-auth gate. Cast `iat` to i64 saturating-up so a corrupt token
+    // with `iat` past i64::MAX does not pass: such a token would yield a
+    // negative `now - iat` and skip the window check, but `i64::MAX` makes
+    // the subtraction underflow safely (clamped via `saturating_sub`).
+    let now_secs = Utc::now().timestamp();
+    let iat_secs = i64::try_from(auth_user.0.iat).unwrap_or(i64::MAX);
+    if now_secs.saturating_sub(iat_secs) > ROLE_CHANGE_RECENT_AUTH_WINDOW_SECS {
+        return Err(ApiError::Forbidden("reauthentication_required".to_owned()));
+    }
+
+    let mut tx = state.db.begin().await?;
+
+    let old_role = db::lock_user_role(tx.as_mut(), user_id).await?;
+
+    // Idempotent shortcut: a noop must not burn rate-limit budget. The
+    // commit here is intentional even though no rows changed - it
+    // releases the `FOR UPDATE` lock immediately rather than waiting
+    // for tx-drop, freeing concurrent reads on the row.
+    if old_role == new_role {
+        tx.commit().await?;
+        let profile = db::fetch_user_profile(&state.db, user_id).await?;
+        return Ok((CookieJar::new(), Json(UserInfo::from(profile))));
+    }
+
+    if state.redis.is_role_change_rate_limited(user_id).await? {
+        return Err(ApiError::TooManyRequests("rate_limited".to_owned()));
+    }
+
+    if db::has_blocking_leases(tx.as_mut(), user_id).await? {
+        return Err(ApiError::Conflict("active_leases_blocking".to_owned()));
+    }
+
+    let old_role_str = old_role.to_string();
+    let new_role_str = new_role.to_string();
+    db::apply_user_role_change(tx.as_mut(), user_id, &old_role_str, &new_role_str).await?;
+    tx.commit().await?;
+
+    // See module-level rationale: bumping AFTER commit trades a tiny
+    // liberal-on-Redis-fail window for never rolling back a UPDATE the
+    // user already saw confirmed.
+    state.redis.record_role_change_attempt(user_id).await?;
+
+    let profile = db::fetch_user_profile(&state.db, user_id).await?;
+
+    let clear_access = cookies::build_expired_access_cookie(state.config.cookie_secure);
+    let clear_refresh = cookies::build_expired_refresh_cookie(state.config.cookie_secure);
+    let jar = CookieJar::new().add(clear_access).add(clear_refresh);
+
+    Ok((jar, Json(UserInfo::from(profile))))
 }

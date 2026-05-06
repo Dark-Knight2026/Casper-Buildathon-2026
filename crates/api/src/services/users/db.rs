@@ -3,7 +3,7 @@
 use core::str::FromStr;
 
 use chrono::{DateTime, Utc};
-use sqlx::{Error, PgPool};
+use sqlx::{Error, PgConnection, PgPool};
 use uuid::Uuid;
 
 use crate::common::{UserInfo, UserRole, UserStatus, VerificationLevel};
@@ -309,6 +309,180 @@ pub async fn update_avatar_url(
     }
 
     fetch_user_profile(pool, user_id).await
+}
+
+/// Locks the user's row and returns the current role.
+///
+/// `SELECT ... FOR UPDATE` blocks any concurrent UPDATE on the same row
+/// until the surrounding transaction commits or rolls back. This is the
+/// only correct way to implement the idempotent shortcut in the role
+/// change flow: without the lock, two concurrent `PATCH`es could both
+/// observe `role = tenant`, both decide to bump, and both succeed -
+/// producing two `audit_logs` rows and burning two rate-limit slots for
+/// what should have been one logical change.
+///
+/// `from_str` falls back to `UserRole::Unknown` to mirror
+/// `From<UserProfileRecord>` for `UserInfo`: a stray DB value that does
+/// not parse cannot crash the handler, but it also cannot pass the
+/// self-registerable whitelist on the request side, so the caller still
+/// rejects it with a 400. Returning the typed enum (instead of the raw
+/// string) lets the caller compare against the validated request enum
+/// without re-parsing.
+///
+/// # Errors
+///
+/// - [`Error::RowNotFound`] when the user is missing or soft-deleted.
+/// - [`sqlx::Error`] for DB transport failures.
+#[inline]
+pub async fn lock_user_role(conn: &mut PgConnection, user_id: Uuid) -> Result<UserRole, Error> {
+    let row = sqlx::query!(
+        r"
+            SELECT role
+            FROM users
+            WHERE id = $1 AND deleted_at IS NULL
+            FOR UPDATE
+        ",
+        user_id,
+    )
+    .fetch_optional(&mut *conn)
+    .await?;
+
+    let row = row.ok_or(Error::RowNotFound)?;
+    Ok(UserRole::from_str(&row.role).unwrap_or(UserRole::Unknown))
+}
+
+/// Returns `true` when the user is bound to at least one currently-active
+/// lease as `landlord` or `primary_tenant`.
+///
+/// Other lease participations (`agent_id`, listed `tenant_ids[]`) are
+/// intentionally NOT included: an agent flipping to `landlord` does not
+/// invalidate the agency relationship, and a listed-but-not-primary
+/// tenant is not the responsible counterparty - blocking those would
+/// over-restrict role changes for users with peripheral involvement.
+/// The two roles that are checked are exactly the ones whose contractual
+/// obligations would change meaning under a role flip.
+///
+/// Reads from the legacy `leases` table (P6); when
+/// `app_1fa2dc8566_leases` becomes canonical, this query needs the table
+/// rename - the function signature stays the same so the call site
+/// does not need to change.
+///
+/// Runs inside the caller's transaction (`&mut PgConnection`) so the
+/// gate runs under the same row lock as the role UPDATE: a lease
+/// created concurrently between this check and the apply cannot slip
+/// through, because the lease-creation path takes its own row lock on
+/// the user and would block on us.
+///
+/// # Errors
+///
+/// Returns [`sqlx::Error`] for DB transport failures.
+#[inline]
+pub async fn has_blocking_leases(conn: &mut PgConnection, user_id: Uuid) -> Result<bool, Error> {
+    let row = sqlx::query!(
+        r#"
+            SELECT EXISTS(
+                SELECT 1 FROM leases
+                WHERE status = 'active'
+                  AND deleted_at IS NULL
+                  AND (landlord_id = $1 OR primary_tenant_id = $1)
+            ) AS "exists!"
+        "#,
+        user_id,
+    )
+    .fetch_one(&mut *conn)
+    .await?;
+    Ok(row.exists)
+}
+
+/// Applies a role change inside the caller's transaction.
+///
+/// Runs three statements as a single atomic unit (the caller is
+/// expected to have already opened the transaction and locked the row
+/// via [`lock_user_role`]):
+///
+/// 1. **`UPDATE users`** - rewrites `role`, stamps
+///    `jwt_invalidate_before = NOW()` so the auth middleware kills every
+///    outstanding access token, and bumps `updated_at` explicitly so the
+///    column moves even when the standard `updated_at` trigger is not
+///    deployed in tests.
+/// 2. **`UPDATE refresh_tokens`** - revokes every active refresh row
+///    for the user, forcing every device sharing the family to re-login.
+/// 3. **`INSERT INTO audit_logs`** - records `old_role -> new_role`
+///    with `status = 'success'`. We never insert from a failure path -
+///    a failed UPDATE rolls back the whole transaction along with this
+///    row, so the audit log can never disagree with the live `users`
+///    state.
+///
+/// Roles arrive as `&str` because `users.role` is plain TEXT - using
+/// the typed enum here would force a `to_string()` round-trip at the
+/// call site and add nothing but a cloned `String` per request.
+///
+/// # Errors
+///
+/// Returns [`sqlx::Error`] for any DB failure. No UNIQUE constraint
+/// touches `role`, so unique-violation cannot happen here; the caller
+/// maps any error directly to 500 via the existing `From<sqlx::Error>`.
+#[inline]
+pub async fn apply_user_role_change(
+    conn: &mut PgConnection,
+    user_id: Uuid,
+    old_role: &str,
+    new_role: &str,
+) -> Result<(), Error> {
+    sqlx::query!(
+        r"
+            UPDATE users
+            SET role = $2,
+                jwt_invalidate_before = NOW(),
+                updated_at = NOW()
+            WHERE id = $1
+        ",
+        user_id,
+        new_role,
+    )
+    .execute(&mut *conn)
+    .await?;
+
+    sqlx::query!(
+        r"
+            UPDATE refresh_tokens
+            SET revoked_at = NOW()
+            WHERE user_id = $1 AND revoked_at IS NULL
+        ",
+        user_id,
+    )
+    .execute(&mut *conn)
+    .await?;
+
+    sqlx::query!(
+        r"
+            INSERT INTO audit_logs (
+                user_id,
+                action,
+                resource_type,
+                resource_id,
+                old_values,
+                new_values,
+                status
+            )
+            VALUES (
+                $1,
+                'change_role',
+                'user',
+                $1,
+                jsonb_build_object('role', $2::text),
+                jsonb_build_object('role', $3::text),
+                'success'
+            )
+        ",
+        user_id,
+        old_role,
+        new_role,
+    )
+    .execute(&mut *conn)
+    .await?;
+
+    Ok(())
 }
 
 /// Returns `true` when `email` is already used by some active user other

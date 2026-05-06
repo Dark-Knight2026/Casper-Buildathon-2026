@@ -46,6 +46,26 @@ const AVATAR_UPLOAD_MAX_ATTEMPTS: u64 = 10;
 /// Rolling window for the avatar-upload rate limit (1 hour).
 const AVATAR_UPLOAD_RATE_WINDOW_SECS: u64 = 60 * 60;
 
+/// Rolling window for the role-change rate limit (24 hours).
+///
+/// Role changes are rare, auditable events - most users never trigger one,
+/// and the few who do should not be churning between roles. Capping at
+/// "one successful change per day" matches the audit/security expectation
+/// without locking a user out of recovery: a 24h wait is acceptable
+/// friction for a security-sensitive operation that also clears refresh
+/// tokens and forces a re-login.
+const ROLE_CHANGE_RATE_WINDOW_SECS: u64 = 24 * 60 * 60;
+
+/// Maximum role-change requests per user within
+/// [`ROLE_CHANGE_RATE_WINDOW_SECS`].
+///
+/// Threshold of 1 means: any prior successful change in the rolling 24h
+/// window blocks the next attempt. Two-way changes
+/// (tenant -> landlord -> tenant) require waiting out the window or an
+/// operator clearing the slot manually; the test surface uses
+/// [`RedisStore::role_change_attempts_key`] to reset between assertions.
+const ROLE_CHANGE_MAX_ATTEMPTS: u64 = 1;
+
 /// A convenience type alias for `Result` returned from Redis client.
 pub type RedisResult<T> = Result<T, RedisError>;
 
@@ -415,5 +435,60 @@ impl RedisStore {
     #[inline]
     fn avatar_upload_attempts_key(user_id: Uuid) -> String {
         format!("avatar_upload_attempts:{user_id}")
+    }
+
+    /// Returns `true` when the user has already exceeded
+    /// [`ROLE_CHANGE_MAX_ATTEMPTS`] within the rolling window.
+    ///
+    /// Mirrors the email-change and avatar-upload rate-limit pattern -
+    /// handlers `?`-propagate the Redis error so a transport outage
+    /// surfaces as 500 rather than silently bypassing the limit.
+    ///
+    /// # Errors
+    ///
+    /// Returns `RedisError` if the connection fails.
+    #[inline]
+    pub async fn is_role_change_rate_limited(&self, user_id: Uuid) -> RedisResult<bool> {
+        let mut conn = self.conn.clone();
+        let key = Self::role_change_attempts_key(user_id);
+        let count = conn.get::<_, Option<u64>>(&key).await?;
+        Ok(count.is_some_and(|c| c >= ROLE_CHANGE_MAX_ATTEMPTS))
+    }
+
+    /// Records one successful role change against the rolling window.
+    ///
+    /// `INCR` + conditional `EXPIRE` mirrors the other rate-limit
+    /// counters (login, email-change, avatar). No decrement counterpart
+    /// is provided because the role-change flow has no rollback path:
+    /// the counter only bumps after `tx.commit()` succeeds, so a
+    /// recorded attempt is by definition tied to a committed change.
+    ///
+    /// # Errors
+    ///
+    /// Returns `RedisError` if the connection fails.
+    #[inline]
+    pub async fn record_role_change_attempt(&self, user_id: Uuid) -> RedisResult<()> {
+        let mut conn = self.conn.clone();
+        let key = Self::role_change_attempts_key(user_id);
+        let count = conn.incr::<_, _, u64>(&key, 1u64).await?;
+        if count == 1 {
+            conn.expire::<_, ()>(&key, ROLE_CHANGE_RATE_WINDOW_SECS.cast_signed())
+                .await?;
+        }
+        Ok(())
+    }
+
+    /// Generates the Redis key for the role-change rate-limit counter.
+    ///
+    /// Exposed `pub` (rather than module-private) so integration tests
+    /// can reach the canonical key format - the `users_role.rs`
+    /// bidirectional test deletes this key between iterations to
+    /// simulate the 24h window having elapsed. Any future rename of
+    /// the key format then breaks tests at compile-time, not silently
+    /// at runtime.
+    #[inline]
+    #[must_use]
+    pub fn role_change_attempts_key(user_id: Uuid) -> String {
+        format!("role_change:{user_id}")
     }
 }

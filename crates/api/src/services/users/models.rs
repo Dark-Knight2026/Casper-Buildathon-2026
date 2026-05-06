@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 use crate::{
-    common::{ApiError, ApiResult},
+    common::{ApiError, ApiResult, UserRole},
     services::users::db::ProfilePatch,
 };
 
@@ -185,6 +185,50 @@ pub struct EmailChangeConfirmRequest {
     /// Opaque confirmation token (exactly 43 base64url-no-pad chars,
     /// `[A-Za-z0-9_-]`).
     pub token: String,
+}
+
+/// Request body for `PATCH /api/v1/users/me/role`.
+///
+/// Carries the role the authenticated user wants to switch to. Whitelist
+/// enforcement (`tenant`, `landlord`, `agent`) lives in
+/// [`UpdateRoleRequest::into_validated`] rather than at the serde layer:
+/// `UserRole` already maps any unknown string to its `Unknown` fallback
+/// variant, so the JSON layer is intentionally lenient and the `into_validated`
+/// gate produces a single, stable 400 wording for every non-whitelisted input
+/// (including `admin`, `property_manager`, and the serde fallback).
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct UpdateRoleRequest {
+    /// Desired role. Only the self-registerable subset is accepted; see
+    /// [`UpdateRoleRequest::into_validated`] for the rejection rationale.
+    pub role: UserRole,
+}
+
+impl UpdateRoleRequest {
+    /// Validates the requested role against the self-registerable whitelist.
+    ///
+    /// Reuses [`UserRole::is_self_registerable`] (the same gate the wallet
+    /// login path applies to its `LoginRequest.role` field) so the two
+    /// surfaces cannot drift: a future change to the whitelist propagates
+    /// automatically. Privileged roles (`admin`, `property_manager`) and
+    /// the `Unknown` fallback (any unrecognized string) are rejected here
+    /// rather than at the DB CHECK constraint - the constraint's failure
+    /// mode is a generic 500 with an opaque postgres error, while this
+    /// gate produces a clean 400 with a stable wording naming the
+    /// allowed values.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ApiError::BadRequest`] when the requested role is not on
+    /// the user-self-registerable whitelist.
+    #[inline]
+    pub fn into_validated(self) -> ApiResult<UserRole> {
+        if !self.role.is_self_registerable() {
+            return Err(ApiError::BadRequest(
+                "role must be one of: tenant, landlord, agent".to_owned(),
+            ));
+        }
+        Ok(self.role)
+    }
 }
 
 /// Response body for `POST /api/v1/users/me/avatar`.

@@ -48,6 +48,7 @@ use crate::{
             users::models::EmailChangeConfirmRequest,
             users::models::EmailChangeRequest,
             users::models::UpdateProfileRequest,
+            users::models::UpdateRoleRequest,
             // Health models
             health::models::ConnectionStatus,
             health::models::HealthResponse,
