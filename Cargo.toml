@@ -70,7 +70,7 @@ missing_docs_in_private_items = "allow"
 
 [workspace.dependencies]
 async-trait = "0.1"
-axum = { version = "0.8", features = ["macros"] }
+axum = { version = "0.8", features = ["macros", "multipart"] }
 axum-extra = { version = "0.12", features = ["cookie"] }
 axum-test = "20.0"
 base64 = "0.22"

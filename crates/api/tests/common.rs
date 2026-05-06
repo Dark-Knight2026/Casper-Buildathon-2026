@@ -129,9 +129,9 @@ pub struct TestOverrides {
     pub media_storage: Option<Arc<dyn MediaStorage>>,
 }
 
-impl core::fmt::Debug for TestOverrides {
+impl Debug for TestOverrides {
     #[inline]
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         f.debug_struct("TestOverrides")
             .field("contract_big", &self.contract_big)
             .field("ico_fallback", &self.ico_fallback)

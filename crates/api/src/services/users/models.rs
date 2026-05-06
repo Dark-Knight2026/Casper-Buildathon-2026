@@ -6,7 +6,7 @@
 //! [`crate::common::models`] because both `auth` and `users` produce it.
 
 use email_address::EmailAddress;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 use crate::{
@@ -185,6 +185,22 @@ pub struct EmailChangeConfirmRequest {
     /// Opaque confirmation token (exactly 43 base64url-no-pad chars,
     /// `[A-Za-z0-9_-]`).
     pub token: String,
+}
+
+/// Response body for `POST /api/v1/users/me/avatar`.
+///
+/// Carries only the URL the storage backend assigned to the freshly-uploaded
+/// blob. The full profile is intentionally NOT echoed: the user already has
+/// it from `GET /me`, and rebuilding the join (`active_leases_count`,
+/// `verification_level`) costs a second SQL trip that the avatar UI does not
+/// need to render. Clients that care about the joined shape can re-fetch
+/// `GET /me` after the upload completes.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct AvatarUploadResponse {
+    /// Public URL of the stored avatar. With `StubMediaStorage` this is a
+    /// `data:image/svg+xml;base64,...` placeholder; with the production
+    /// `S3MediaStorage` it is a CDN-shaped URL pointing at the bucket.
+    pub avatar_url: String,
 }
 
 impl EmailChangeConfirmRequest {

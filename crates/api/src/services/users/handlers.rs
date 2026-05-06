@@ -2,19 +2,109 @@
 
 use std::sync::Arc;
 
-use axum::{Json, extract::State, http::StatusCode};
+use axum::{
+    Json,
+    extract::{Multipart, State},
+    http::StatusCode,
+};
 
 use crate::{
-    common::{ApiError, ApiResult, AppState, EmailMessage, UserInfo},
+    common::{ApiError, ApiResult, AppState, EmailMessage, StorageError, UserInfo},
     services::{
         auth::AuthUser,
         users::{
             db,
-            models::{EmailChangeConfirmRequest, EmailChangeRequest, UpdateProfileRequest},
+            models::{
+                AvatarUploadResponse, EmailChangeConfirmRequest, EmailChangeRequest,
+                UpdateProfileRequest,
+            },
             tokens,
         },
     },
 };
+
+/// Maximum accepted avatar payload size (5 MB).
+///
+/// Validated in-handler against the byte buffer collected from the
+/// `multipart` field. The outer `RequestBodyLimitLayer` in
+/// [`crate::server`] is sized to match: anything larger is rejected by the
+/// transport layer before it reaches the handler.
+const MAX_AVATAR_BYTES: usize = 5 * 1024 * 1024;
+
+/// Multipart field name expected for the avatar payload.
+const AVATAR_FIELD_NAME: &str = "file";
+
+/// Extensions the avatar handler may have produced for a given user
+/// historically. Used to delete stale objects under sibling extensions when
+/// a user re-uploads with a different image format - without this sweep,
+/// changing format leaves the previous blob orphaned in the bucket.
+const AVATAR_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "webp"];
+
+/// Detected image format for an uploaded avatar.
+///
+/// Carries both the canonical MIME and the on-disk extension so the handler
+/// does not duplicate the lookup table at the call site. The extension is
+/// kept in sync with `AVATAR_EXTENSIONS`: a new variant here MUST be
+/// represented in the sweep set, otherwise the sibling cleanup will leave
+/// the previous blob orphaned.
+#[derive(Debug, Clone, Copy)]
+struct ImageKind {
+    /// Canonical IANA MIME type, used both as the storage `Content-Type`
+    /// metadata and the cross-check against the client-supplied
+    /// `Content-Type` header.
+    mime: &'static str,
+    /// Storage-key extension (no leading dot).
+    ext: &'static str,
+}
+
+impl ImageKind {
+    const PNG: Self = Self {
+        mime: "image/png",
+        ext: "png",
+    };
+    const JPEG: Self = Self {
+        mime: "image/jpeg",
+        ext: "jpg",
+    };
+    const WEBP: Self = Self {
+        mime: "image/webp",
+        ext: "webp",
+    };
+}
+
+/// Sniffs the leading bytes of `payload` and returns the detected image
+/// kind, or `None` if the payload does not match any whitelisted format.
+///
+/// The sniff is intentionally minimal:
+///
+/// - PNG: 8-byte signature `89 50 4E 47 0D 0A 1A 0A`.
+/// - JPEG: 3-byte SOI `FF D8 FF` (covers JFIF, EXIF, and bare-JFIF
+///   variants - the fourth byte distinguishes them but does not affect
+///   acceptance).
+/// - WEBP: 12-byte composite (`RIFF` + 4-byte size + `WEBP`). The 4-byte
+///   `RIFF` prefix alone collides with AVI/WAV, so the second tag is what
+///   actually pins the format.
+///
+/// Returning `None` is the only failure mode: the handler maps it to 415,
+/// which means a payload with a valid MIME header but bytes that do not
+/// match any whitelisted signature is rejected the same way as a payload
+/// with a disallowed MIME header. This is deliberate - it blocks
+/// MIME-spoofing where a client claims `image/png` but sends an executable.
+fn sniff_image_kind(payload: &[u8]) -> Option<ImageKind> {
+    const PNG_MAGIC: [u8; 8] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+    const JPEG_MAGIC: [u8; 3] = [0xFF, 0xD8, 0xFF];
+
+    if payload.len() >= PNG_MAGIC.len() && payload[..PNG_MAGIC.len()] == PNG_MAGIC {
+        return Some(ImageKind::PNG);
+    }
+    if payload.len() >= JPEG_MAGIC.len() && payload[..JPEG_MAGIC.len()] == JPEG_MAGIC {
+        return Some(ImageKind::JPEG);
+    }
+    if payload.len() >= 12 && &payload[0..4] == b"RIFF" && &payload[8..12] == b"WEBP" {
+        return Some(ImageKind::WEBP);
+    }
+    None
+}
 
 // `GET /api/v1/users/me`
 //
@@ -308,4 +398,197 @@ pub async fn confirm_email_change(
 
     let profile = db::apply_email_change(&state.db, user_id, &new_email).await?;
     Ok(Json(UserInfo::from(profile)))
+}
+
+// `POST /api/v1/users/me/avatar`
+//
+/// Stores a user-supplied avatar image and rewrites `users.avatar_url`.
+///
+/// Multipart form-data with a single field `file` carrying the image.
+/// Validation runs in-handler before any storage I/O so a malformed payload
+/// never reaches the backend:
+///
+/// 1. **Field present**: the multipart body must include a field named
+///    `file`. A missing field is 400.
+/// 2. **Size cap**: the buffered field bytes must not exceed
+///    [`MAX_AVATAR_BYTES`]. Oversize payloads return 413.
+/// 3. **MIME whitelist**: the field's `Content-Type` header must be one of
+///    `image/png`, `image/jpeg`, `image/webp`. Anything else returns 415.
+/// 4. **Magic-byte sniff**: the first 12 bytes must match the format the
+///    `Content-Type` claims. Mismatches (e.g. `Content-Type: image/png`
+///    with JPEG bytes, or `Content-Type: image/webp` with RIFF-header
+///    bytes that lack the `WEBP` tag) return 415. This blocks
+///    MIME-spoofing attacks where a client uploads an executable under an
+///    image MIME header.
+///
+/// Per-user rate limit: at most 10 uploads per rolling 1h window. Mirrors
+/// the email-change pattern so a stolen-cookie attacker cannot use the
+/// endpoint as a write-amplification primitive against the storage
+/// backend.
+///
+/// Storage layout: `avatars/{user_id}.{ext}`. Re-uploading with a
+/// different extension first sweeps every other extension in
+/// [`AVATAR_EXTENSIONS`] before writing the new key, so a format change
+/// (PNG -> JPG) does not leave the previous blob orphaned. Sweep failures
+/// are logged but not surfaced - the new upload still proceeds, because a
+/// failed delete is a billing/observability concern, not a correctness
+/// one.
+///
+/// On success, the storage backend's public URL is persisted to
+/// `users.avatar_url` and echoed in the response. The full profile is
+/// intentionally not echoed - clients that need the joined shape re-fetch
+/// `GET /me`.
+///
+/// Authorization: `AuthUser` (any logged-in user). Verification is not
+/// required - users must be able to set an avatar before completing other
+/// onboarding steps.
+///
+/// # Errors
+///
+/// - 400 (`BadRequest`) when the `file` field is missing or the multipart
+///   stream is malformed.
+/// - 401 (`Unauthorized`) when the access cookie is missing or invalid
+///   (enforced upstream by `require_auth`).
+/// - 413 (`PayloadTooLarge`) when the buffered field exceeds
+///   [`MAX_AVATAR_BYTES`].
+/// - 415 (`UnsupportedMediaType`) for a disallowed MIME header or a
+///   header/byte-content mismatch.
+/// - 429 (`TooManyRequests`) when the user exceeds 10 uploads per hour.
+/// - 500 for storage transport, Redis, or DB failures.
+#[utoipa::path(
+    post,
+    path = "/me/avatar",
+    tag = "Users",
+    request_body(
+        content = Vec<u8>,
+        content_type = "multipart/form-data",
+        description = "Multipart form with a single `file` field (PNG/JPEG/WebP, max 5 MB)",
+    ),
+    responses(
+        (status = 200, description = "Avatar stored", body = AvatarUploadResponse),
+        (status = 400, description = "Missing or malformed `file` field"),
+        (status = 401, description = "Unauthorized"),
+        (status = 413, description = "Payload too large (over 5 MB)"),
+        (status = 415, description = "Unsupported media type"),
+        (status = 429, description = "Too many avatar uploads"),
+        (status = 500, description = "Internal server error"),
+    ),
+    security(
+        ("cookie_auth" = [])
+    )
+)]
+#[inline]
+pub async fn upload_avatar(
+    State(state): State<Arc<AppState>>,
+    auth_user: AuthUser,
+    mut multipart: Multipart,
+) -> ApiResult<Json<AvatarUploadResponse>> {
+    let user_id = auth_user.0.sub;
+
+    if state.redis.is_avatar_upload_rate_limited(user_id).await? {
+        return Err(ApiError::TooManyRequests(
+            "Too many avatar uploads".to_owned(),
+        ));
+    }
+
+    let mut file_field = None;
+    while let Some(field) = multipart
+        .next_field()
+        .await
+        .map_err(|err| ApiError::BadRequest(format!("Malformed multipart: {err}")))?
+    {
+        // Only the first `file` field is honored. Extra fields (or a
+        // duplicate `file`) are ignored rather than 400-rejected so a
+        // future client that adds e.g. a `crop` field does not break this
+        // endpoint at the schema layer.
+        if field.name() == Some(AVATAR_FIELD_NAME) {
+            let declared_mime = field
+                .content_type()
+                .map(str::to_ascii_lowercase)
+                .ok_or_else(|| {
+                    ApiError::BadRequest("file field is missing Content-Type".to_owned())
+                })?;
+            let bytes = field
+                .bytes()
+                .await
+                .map_err(|err| ApiError::BadRequest(format!("Failed to read file: {err}")))?
+                .to_vec();
+            file_field = Some((declared_mime, bytes));
+            break;
+        }
+    }
+
+    let (declared_mime, bytes) =
+        file_field.ok_or_else(|| ApiError::BadRequest("Missing `file` field".to_owned()))?;
+
+    if bytes.len() > MAX_AVATAR_BYTES {
+        return Err(ApiError::PayloadTooLarge(format!(
+            "Avatar payload exceeds {MAX_AVATAR_BYTES}-byte limit"
+        )));
+    }
+
+    // The whitelist gate runs BEFORE the magic-byte sniff so an obviously
+    // wrong MIME header (e.g. `application/pdf`) is rejected without
+    // touching the bytes. The sniff then catches the spoofing case where
+    // the header is on the whitelist but the bytes do not match.
+    let mime_str = declared_mime.as_str();
+    if mime_str != ImageKind::PNG.mime
+        && mime_str != ImageKind::JPEG.mime
+        && mime_str != ImageKind::WEBP.mime
+    {
+        return Err(ApiError::UnsupportedMediaType(format!(
+            "Unsupported media type: {declared_mime}"
+        )));
+    }
+
+    let detected = sniff_image_kind(&bytes).ok_or_else(|| {
+        ApiError::UnsupportedMediaType(
+            "File bytes do not match a supported image format".to_owned(),
+        )
+    })?;
+
+    if detected.mime != mime_str {
+        return Err(ApiError::UnsupportedMediaType(format!(
+            "Content-Type {declared_mime} does not match detected image format {}",
+            detected.mime,
+        )));
+    }
+
+    // Sweep stale blobs under sibling extensions BEFORE writing the new
+    // key. Doing it after would leave a window where two objects exist for
+    // the same user. Failures here are downgraded to a warning - the new
+    // upload still proceeds, the orphan is a billing concern that a
+    // janitor sweep can clean up offline.
+    for old_ext in AVATAR_EXTENSIONS.iter().copied() {
+        if old_ext == detected.ext {
+            continue;
+        }
+        let old_key = format!("avatars/{user_id}.{old_ext}");
+        if let Err(err) = state.media_storage.delete(&old_key).await {
+            tracing::warn!(
+                error = %err,
+                user_id = %user_id,
+                key = %old_key,
+                "failed to sweep sibling avatar extension; orphan may persist",
+            );
+        }
+    }
+
+    let key = format!("avatars/{}.{}", user_id, detected.ext);
+    let avatar_url = state
+        .media_storage
+        .put(&key, bytes, detected.mime)
+        .await
+        .map_err(|err| match err {
+            StorageError::Transport(detail) => ApiError::Internal(detail),
+            StorageError::NotConfigured => {
+                ApiError::Internal("media storage not configured".to_owned())
+            }
+        })?;
+
+    state.redis.record_avatar_upload_attempt(user_id).await?;
+
+    db::update_avatar_url(&state.db, user_id, &avatar_url).await?;
+
+    Ok(Json(AvatarUploadResponse { avatar_url }))
 }

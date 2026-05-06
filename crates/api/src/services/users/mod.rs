@@ -17,8 +17,10 @@ pub mod tokens;
 // Re-exports
 pub use db::{
     ProfilePatch, UserProfileRecord, apply_email_change, fetch_user_profile, is_email_taken,
-    update_user_profile,
+    update_avatar_url, update_user_profile,
 };
-pub use handlers::{confirm_email_change, get_me, patch_me, request_email_change};
-pub use models::{EmailChangeConfirmRequest, EmailChangeRequest, UpdateProfileRequest};
+pub use handlers::{confirm_email_change, get_me, patch_me, request_email_change, upload_avatar};
+pub use models::{
+    AvatarUploadResponse, EmailChangeConfirmRequest, EmailChangeRequest, UpdateProfileRequest,
+};
 pub use routes::router;

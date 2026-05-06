@@ -50,8 +50,17 @@ pub fn create_router(state: Arc<AppState>) -> Router {
     router
 }
 
-/// Maximum request body size (1 MB).
-const REQUEST_BODY_LIMIT: usize = 1024 * 1024;
+/// Maximum request body size (5 MB).
+///
+/// Sized to accommodate the avatar-upload endpoint
+/// (`POST /api/v1/users/me/avatar`), which caps payloads at
+/// `MAX_AVATAR_BYTES = 5 MB` and validates size in-handler. Other endpoints
+/// accept JSON bodies that are orders of magnitude smaller, so this ceiling
+/// is a soft outer guard - per-handler validation remains the authoritative
+/// size check. `tower-http`'s `RequestBodyLimitLayer` is global; route-level
+/// `DefaultBodyLimit::max(...)` cannot widen an outer limit, only narrow it,
+/// which forces this constant to be the maximum any route needs.
+const REQUEST_BODY_LIMIT: usize = 5 * 1024 * 1024;
 
 /// Builds the full application router with production middleware (CORS, tracing, body limit).
 ///

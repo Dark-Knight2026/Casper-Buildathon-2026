@@ -32,6 +32,20 @@ const EMAIL_CHANGE_MAX_ATTEMPTS: u64 = 3;
 /// flood the new mailbox with confirmation emails.
 const EMAIL_CHANGE_RATE_WINDOW_SECS: u64 = 24 * 60 * 60;
 
+/// Maximum avatar uploads per user within
+/// [`AVATAR_UPLOAD_RATE_WINDOW_SECS`].
+///
+/// Sized to absorb a power-user iterating through several crops/variants
+/// (avatars get re-uploaded surprisingly often during onboarding) while
+/// still capping the bandwidth a single account can burn through the
+/// stub-or-S3 backend. The 10/h threshold also blocks a stolen-cookie
+/// attacker from using the endpoint as a write-amplification primitive
+/// against the storage backend.
+const AVATAR_UPLOAD_MAX_ATTEMPTS: u64 = 10;
+
+/// Rolling window for the avatar-upload rate limit (1 hour).
+const AVATAR_UPLOAD_RATE_WINDOW_SECS: u64 = 60 * 60;
+
 /// A convenience type alias for `Result` returned from Redis client.
 pub type RedisResult<T> = Result<T, RedisError>;
 
@@ -318,6 +332,48 @@ impl RedisStore {
         Ok(())
     }
 
+    /// Returns `true` when the user has already exceeded
+    /// [`AVATAR_UPLOAD_MAX_ATTEMPTS`] within the rolling window.
+    ///
+    /// Mirrors the email-change rate-limit pattern: handlers `?`-propagate
+    /// the Redis error so a transport outage surfaces as 500 rather than
+    /// silently bypassing the limit.
+    ///
+    /// # Errors
+    ///
+    /// Returns `RedisError` if the connection fails.
+    #[inline]
+    pub async fn is_avatar_upload_rate_limited(&self, user_id: Uuid) -> RedisResult<bool> {
+        let mut conn = self.conn.clone();
+        let key = Self::avatar_upload_attempts_key(user_id);
+        let count = conn.get::<_, Option<u64>>(&key).await?;
+        Ok(count.is_some_and(|c| c >= AVATAR_UPLOAD_MAX_ATTEMPTS))
+    }
+
+    /// Records one avatar-upload attempt against the rolling window.
+    ///
+    /// `INCR` + conditional `EXPIRE` mirrors `record_login_failure` and
+    /// `record_email_change_attempt`: the TTL is set only on the first
+    /// attempt so the window starts when the user begins, not on every
+    /// retry. No decrement counterpart is needed because the avatar
+    /// handler has no rollback path - either the upload completes (counter
+    /// stays bumped) or it fails before this is called.
+    ///
+    /// # Errors
+    ///
+    /// Returns `RedisError` if the connection fails.
+    #[inline]
+    pub async fn record_avatar_upload_attempt(&self, user_id: Uuid) -> RedisResult<()> {
+        let mut conn = self.conn.clone();
+        let key = Self::avatar_upload_attempts_key(user_id);
+        let count = conn.incr::<_, _, u64>(&key, 1u64).await?;
+        if count == 1 {
+            conn.expire::<_, ()>(&key, AVATAR_UPLOAD_RATE_WINDOW_SECS.cast_signed())
+                .await?;
+        }
+        Ok(())
+    }
+
     /// Generates the Redis key for a wallet address nonce.
     ///
     /// Exposed `pub` (rather than `pub(crate)`) so integration tests can
@@ -353,5 +409,11 @@ impl RedisStore {
     #[inline]
     fn email_change_attempts_key(user_id: Uuid) -> String {
         format!("email_change_attempts:{user_id}")
+    }
+
+    /// Generates the Redis key for the avatar-upload rate-limit counter.
+    #[inline]
+    fn avatar_upload_attempts_key(user_id: Uuid) -> String {
+        format!("avatar_upload_attempts:{user_id}")
     }
 }

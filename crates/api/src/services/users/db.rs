@@ -264,6 +264,53 @@ pub async fn update_user_profile(
     fetch_user_profile(pool, user_id).await
 }
 
+/// Rewrites `users.avatar_url` for `user_id` and returns the reloaded
+/// profile.
+///
+/// Called by `POST /me/avatar` after the storage backend has accepted the
+/// upload and produced a public URL. The two-step (storage put, then DB
+/// rewrite) is intentional: the URL is the only stable identifier of the
+/// stored object, so writing the column first would either require a
+/// rollback path on storage failure or leave the row pointing at a
+/// non-existent blob. Reload via [`fetch_user_profile`] keeps the response
+/// shape consistent with `GET /me` for any caller that opts to chain.
+///
+/// `updated_at` is bumped by the standard `updated_at` trigger; this query
+/// does not touch the column directly.
+///
+/// # Errors
+///
+/// - [`Error::RowNotFound`] when the user no longer exists (soft-deleted
+///   between JWT issue and this call - the access token outlives the row
+///   by up to 15 minutes).
+/// - [`sqlx::Error`] for any DB failure or column-decode error in the
+///   follow-up `fetch_user_profile`.
+#[inline]
+pub async fn update_avatar_url(
+    pool: &PgPool,
+    user_id: Uuid,
+    avatar_url: &str,
+) -> Result<UserProfileRecord, Error> {
+    let rows_affected = sqlx::query!(
+        r"
+            UPDATE users
+            SET avatar_url = $2
+            WHERE id = $1 AND deleted_at IS NULL
+        ",
+        user_id,
+        avatar_url,
+    )
+    .execute(pool)
+    .await?
+    .rows_affected();
+
+    if rows_affected == 0 {
+        return Err(Error::RowNotFound);
+    }
+
+    fetch_user_profile(pool, user_id).await
+}
+
 /// Returns `true` when `email` is already used by some active user other
 /// than `exclude_user_id`.
 ///
