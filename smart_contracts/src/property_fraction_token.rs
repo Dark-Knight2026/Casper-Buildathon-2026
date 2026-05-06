@@ -168,12 +168,28 @@ impl PropertyFractionToken {
     // Compliance-Aware Token Operations
     // =============================================================================
 
+    /// Transfers property ownership tokens from the caller to `recipient`.
+    /// @dev The transfer must pass `CompliancePolicy` before balances move.
     #[odra(reentrant)]
     pub fn transfer(&mut self, recipient: &Address, amount: &U256) {
         let sender = self.env().caller();
 
         self.assert_transfer_allowed(sender, *recipient, *amount);
         self.token.transfer(recipient, amount);
+    }
+
+    /// Transfers property ownership tokens using the caller's allowance.
+    /// @dev Compliance is checked between the beneficial sender `owner` and `recipient`.
+    ///      The spender is authorized by CEP-18 allowance mechanics.
+    #[odra(reentrant)]
+    pub fn transfer_from(&mut self, owner: &Address, recipient: &Address, amount: &U256) {
+        self.assert_transfer_allowed(*owner, *recipient, *amount);
+        self.token.transfer_from(owner, recipient, amount);
+    }
+
+    pub fn can_transfer(&self, from: Address, to: Address, amount: U256) -> bool {
+        self.compliance_policy
+            .can_transfer(self.get_property_id(), from, to, amount)
     }
 
     // =============================================================================
