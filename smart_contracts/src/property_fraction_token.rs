@@ -1,4 +1,4 @@
-use odra::{casper_types::U256, prelude::*, schema::casper_contract_schema::Access, ContractRef};
+use odra::{casper_types::U256, prelude::*, ContractRef};
 use odra_modules::{
     access::{AccessControl, Role, DEFAULT_ADMIN_ROLE},
     cep18_token::Cep18,
@@ -170,7 +170,7 @@ impl PropertyFractionToken {
 
     /// Transfers property ownership tokens from the caller to `recipient`.
     /// @dev The transfer must pass `CompliancePolicy` before balances move.
-    #[odra(reentrant)]
+    #[odra(non_reentrant)]
     pub fn transfer(&mut self, recipient: &Address, amount: &U256) {
         let sender = self.env().caller();
 
@@ -181,7 +181,7 @@ impl PropertyFractionToken {
     /// Transfers property ownership tokens using the caller's allowance.
     /// @dev Compliance is checked between the beneficial sender `owner` and `recipient`.
     ///      The spender is authorized by CEP-18 allowance mechanics.
-    #[odra(reentrant)]
+    #[odra(non_reentrant)]
     pub fn transfer_from(&mut self, owner: &Address, recipient: &Address, amount: &U256) {
         self.assert_transfer_allowed(*owner, *recipient, *amount);
         self.token.transfer_from(owner, recipient, amount);
