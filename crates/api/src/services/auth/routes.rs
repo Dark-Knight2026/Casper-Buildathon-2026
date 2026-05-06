@@ -11,7 +11,7 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 
 use crate::{
     common::AppState,
-    services::auth::{logout, refresh, wallet},
+    services::auth::{logout, refresh, sessions, wallet},
 };
 
 /// Builds the auth `OpenApiRouter`.
@@ -26,4 +26,6 @@ pub fn router() -> OpenApiRouter<Arc<AppState>> {
         .routes(routes!(wallet::login))
         .routes(routes!(refresh::rotate))
         .routes(routes!(logout::logout))
+        .routes(routes!(sessions::get_sessions))
+        .routes(routes!(sessions::revoke_session))
 }

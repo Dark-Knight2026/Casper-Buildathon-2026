@@ -591,3 +591,146 @@ pub async fn revoke_refresh_family_by_hash(
 
     Ok(())
 }
+
+/// One row of [`list_active_sessions`].
+///
+/// `token_hash` is intentionally exposed (instead of being hidden behind an
+/// `is_current` boolean computed in the db layer) so the handler can do a
+/// constant-time comparison against the SHA-256 of the request's refresh cookie
+/// WITHOUT a second SQL trip and without leaking either the cookie or the
+/// stored hashes back into a logged query parameter.
+#[derive(Debug)]
+pub struct ActiveSession {
+    /// Primary key of the `refresh_tokens` row.
+    pub id: Uuid,
+    /// Family id - all tokens rotated from the same login share it. The handler
+    /// does not currently expose this to the client (sessions UI shows one
+    /// entry per login, not per rotation), but db consumers running
+    /// `revoke-all` need it later in PR #6.
+    pub family_id: Uuid,
+    /// Wall-clock issuance timestamp.
+    pub issued_at: DateTime<Utc>,
+    /// Absolute expiration timestamp. Already past `NOW()` rows are excluded by
+    /// the SELECT, so this is always strictly in the future.
+    pub expires_at: DateTime<Utc>,
+    /// SHA-256 of the opaque refresh-token plaintext (BYTEA in schema).
+    /// Compared against `sha256(request_cookie_value)` in the handler to flag
+    /// the session that issued the current request.
+    pub token_hash: Vec<u8>,
+}
+
+/// Returns every currently-usable refresh-token row owned by `user_id`,
+/// newest issuance first.
+///
+/// "Currently-usable" means `revoked_at IS NULL AND expires_at > NOW()`.
+/// Already-revoked-but-not-yet-pruned rows are excluded so the sessions UI
+/// never shows a session the user just terminated, and expired-but-still-
+/// alive rows are excluded so we do not advertise dead handles to refresh.
+///
+/// Ordering by `issued_at DESC` puts the freshest row first, which is the
+/// only ordering the sessions list UI actually needs - clients render the
+/// rows top-down and the most-recent login is the most relevant entry.
+///
+/// # Errors
+///
+/// Returns [`Error`] for DB transport failures.
+#[inline]
+pub async fn list_active_sessions(
+    pool: &PgPool,
+    user_id: Uuid,
+) -> Result<Vec<ActiveSession>, Error> {
+    let rows = sqlx::query!(
+        r"
+            SELECT id, family_id, issued_at, expires_at, token_hash
+            FROM refresh_tokens
+            WHERE user_id = $1
+              AND revoked_at IS NULL
+              AND expires_at > NOW()
+            ORDER BY issued_at DESC
+        ",
+        user_id,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| ActiveSession {
+            id: row.id,
+            family_id: row.family_id,
+            issued_at: row.issued_at,
+            expires_at: row.expires_at,
+            token_hash: row.token_hash,
+        })
+        .collect())
+}
+
+/// Revokes a single refresh-token row owned by `user_id`.
+///
+/// Wrapped in a transaction with `SELECT ... FOR UPDATE` on the row so the
+/// revoke does not race with `rotate_refresh_token` (which holds the same
+/// `FOR UPDATE OF rt` lock on its predecessor): if a rotation is in flight
+/// for this exact id, our UPDATE blocks until the rotation commits, and we
+/// then either revoke the no-longer-active row (rotation already revoked
+/// it -> our UPDATE matches zero rows -> false) or we revoke a row the
+/// rotation chose not to rotate (also fine).
+///
+/// `user_id` is part of the WHERE clause so a forged path parameter from
+/// user A cannot revoke user B's session - the row simply does not match
+/// and the function returns `false` without leaking existence.
+///
+/// # Returns
+///
+/// `true` if exactly one row was revoked, `false` if no row matched
+/// (id unknown, already revoked, expired, or not owned by `user_id`).
+/// Handlers map `false` -> 404 to keep the contract uniform across the
+/// "session never existed" and "session already gone" cases.
+///
+/// # Errors
+///
+/// Returns [`Error`] for DB transport failures. Caller is expected
+/// to map via `From<sqlx::Error> for ApiError` (no special-casing needed).
+#[inline]
+pub async fn revoke_session_by_id(
+    pool: &PgPool,
+    user_id: Uuid,
+    session_id: Uuid,
+) -> Result<bool, Error> {
+    let mut tx = pool.begin().await?;
+
+    let locked = sqlx::query!(
+        r"
+            SELECT id
+            FROM refresh_tokens
+            WHERE id = $1
+              AND user_id = $2
+              AND revoked_at IS NULL
+            FOR UPDATE
+        ",
+        session_id,
+        user_id,
+    )
+    .fetch_optional(tx.as_mut())
+    .await?;
+
+    if locked.is_none() {
+        return Ok(false);
+    }
+
+    let rows_affected = sqlx::query!(
+        r"
+            UPDATE refresh_tokens
+            SET revoked_at = NOW()
+            WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL
+        ",
+        session_id,
+        user_id,
+    )
+    .execute(tx.as_mut())
+    .await?
+    .rows_affected();
+
+    tx.commit().await?;
+
+    Ok(rows_affected == 1)
+}
