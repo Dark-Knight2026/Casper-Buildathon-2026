@@ -6,13 +6,13 @@ use utoipa::{
     Modify, OpenApi as OpenApiDerive,
     openapi::{
         OpenApi,
-        security::{HttpAuthScheme, HttpBuilder, SecurityScheme},
+        security::{ApiKey, ApiKeyValue, SecurityScheme},
     },
 };
 
 use crate::{
     onchain::{ico, staking, transactions, vesting},
-    services::{analytics, auth, health, tax},
+    services::{analytics, auth, health, tax, users},
 };
 
 /// `OpenAPI` documentation configuration.
@@ -32,14 +32,21 @@ use crate::{
     components(
         schemas(
             // Common models
-            crate::common::UserRole,
             crate::common::Claims,
+            crate::common::TokenType,
+            crate::common::UserInfo,
+            crate::common::UserRole,
+            crate::common::UserStatus,
+            crate::common::VerificationLevel,
             // Auth models
-            auth::models::NonceRequest,
-            auth::models::NonceResponse,
             auth::models::LoginRequest,
             auth::models::LoginResponse,
-            auth::models::UserInfo,
+            auth::models::NonceRequest,
+            auth::models::NonceResponse,
+            // Users models
+            users::models::EmailChangeConfirmRequest,
+            users::models::EmailChangeRequest,
+            users::models::UpdateProfileRequest,
             // Health models
             health::models::ConnectionStatus,
             health::models::HealthResponse,
@@ -80,6 +87,7 @@ use crate::{
     tags(
         (name = "Health", description = "Health check endpoints"),
         (name = "Auth", description = "Authentication endpoints"),
+        (name = "Users", description = "Authenticated user-profile endpoints"),
         (name = "Tax", description = "Tax calculation endpoints"),
         (name = "Analytics", description = "Property analytics endpoints"),
         (name = "Transactions", description = "Transaction history endpoints"),
@@ -90,7 +98,9 @@ use crate::{
 )]
 pub struct ApiDoc;
 
-/// Adds JWT bearer authentication to the `OpenAPI` spec.
+/// Adds cookie-based JWT authentication (`access_token` cookie) to the
+/// `OpenAPI` spec. The previous bearer scheme was removed when the access
+/// token migrated from `Authorization: Bearer` to `Set-Cookie`.
 struct SecurityAddon;
 
 impl Modify for SecurityAddon {
@@ -98,13 +108,8 @@ impl Modify for SecurityAddon {
     fn modify(&self, openapi: &mut OpenApi) {
         let components = openapi.components.get_or_insert_with(Default::default);
         components.add_security_scheme(
-            "bearer_auth",
-            SecurityScheme::Http(
-                HttpBuilder::new()
-                    .scheme(HttpAuthScheme::Bearer)
-                    .bearer_format("JWT")
-                    .build(),
-            ),
+            "cookie_auth",
+            SecurityScheme::ApiKey(ApiKey::Cookie(ApiKeyValue::new("access_token"))),
         );
     }
 }

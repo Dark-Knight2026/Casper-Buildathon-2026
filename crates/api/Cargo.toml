@@ -10,11 +10,15 @@ workspace = true
 [features]
 default = ["enabled"]
 enabled = [
+    "dep:async-trait",
     "dep:axum",
+    "dep:axum-extra",
+    "dep:base64",
     "dep:casper-types",
     "dep:chrono",
     "dep:config",
     "dep:dotenv",
+    "dep:email_address",
     "dep:futures-util",
     "dep:hex",
     "dep:jsonwebtoken",
@@ -28,6 +32,7 @@ enabled = [
     "dep:sqlx",
     "dep:strum",
     "dep:thiserror",
+    "dep:time",
     "dep:tokio",
     "dep:tower-http",
     "dep:tower_governor",
@@ -42,11 +47,15 @@ full = ["enabled"]
 integration = []
 
 [dependencies]
+async-trait = { workspace = true, optional = true }
 axum = { workspace = true, optional = true }
+axum-extra = { workspace = true, optional = true }
+base64 = { workspace = true, optional = true }
 casper-types = { workspace = true, optional = true }
 chrono = { workspace = true, optional = true }
 config = { workspace = true, optional = true }
 dotenv = { workspace = true, optional = true }
+email_address = { workspace = true, optional = true }
 futures-util = { workspace = true, optional = true }
 hex = { workspace = true, optional = true }
 jsonwebtoken = { workspace = true, optional = true }
@@ -60,6 +69,7 @@ sha2 = { workspace = true, optional = true }
 sqlx = { workspace = true, optional = true }
 strum = { workspace = true, optional = true }
 thiserror = { workspace = true, optional = true }
+time = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true }
 tower-http = { workspace = true, optional = true }
 tower_governor = { workspace = true, optional = true }

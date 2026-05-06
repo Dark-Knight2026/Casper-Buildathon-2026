@@ -4,6 +4,7 @@
 //! - [`analytics`] - Property performance analytics
 //! - [`health`] - Health check endpoint
 //! - [`tax`] - Tax calculation endpoints
+//! - [`users`] - Authenticated user-profile endpoints
 
 use std::sync::Arc;
 
@@ -11,7 +12,7 @@ use crate::AppState;
 use tower_governor::{
     GovernorLayer, governor::GovernorConfigBuilder, key_extractor::SmartIpKeyExtractor,
 };
-use utoipa_axum::{router::OpenApiRouter, routes};
+use utoipa_axum::router::OpenApiRouter;
 
 /// Property analytics feature module.
 pub mod analytics;
@@ -21,6 +22,8 @@ pub mod auth;
 pub mod health;
 /// Tax calculation feature module.
 pub mod tax;
+/// Authenticated user-profile feature module.
+pub mod users;
 
 /// Rate limit: requests allowed per second for auth endpoints.
 pub const AUTH_RATE_LIMIT_PER_SECOND: u64 = 1;
@@ -58,10 +61,7 @@ pub fn public_router() -> OpenApiRouter<Arc<AppState>> {
             .expect("auth rate-limit config is always valid: per_second > 0 and burst_size > 0"),
     );
 
-    OpenApiRouter::new()
-        .routes(routes!(auth::handlers::get_nonce))
-        .routes(routes!(auth::handlers::login))
-        .route_layer(GovernorLayer::new(rate_limit))
+    auth::router().route_layer(GovernorLayer::new(rate_limit))
 }
 
 /// Rate limit: requests allowed per second for protected (authenticated) endpoints.
@@ -98,8 +98,9 @@ pub fn protected_router(state: Arc<AppState>) -> OpenApiRouter<Arc<AppState>> {
     );
 
     OpenApiRouter::new()
-        .routes(routes!(tax::handlers::calculate_tax_liability))
-        .routes(routes!(analytics::handlers::get_property_performance))
+        .nest("/tax", tax::routes::router())
+        .nest("/analytics", analytics::routes::router())
+        .nest("/users", users::routes::router())
         .route_layer(GovernorLayer::new(rate_limit))
         .route_layer(axum::middleware::from_fn_with_state(
             state,

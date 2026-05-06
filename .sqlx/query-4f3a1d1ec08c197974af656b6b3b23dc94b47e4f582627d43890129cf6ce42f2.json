@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                    UPDATE wallet_connections\n                    SET last_used_at = NOW()\n                    WHERE user_id = $1 AND wallet_address = $2\n                ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "4f3a1d1ec08c197974af656b6b3b23dc94b47e4f582627d43890129cf6ce42f2"
+}

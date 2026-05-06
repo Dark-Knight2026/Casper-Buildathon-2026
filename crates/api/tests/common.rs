@@ -13,12 +13,11 @@
 #![allow(clippy::missing_panics_doc)]
 #![allow(clippy::must_use_candidate)]
 
+use core::fmt::{Debug, Formatter, Result as FmtResult};
 use std::sync::Arc;
 
 use axum::http::{Method, StatusCode};
-use axum_test::{
-    TestResponse, TestServer, TestServerConfig, Transport, http::header::AUTHORIZATION,
-};
+use axum_test::{TestServer, TestServerConfig, Transport, http::header::COOKIE};
 use chrono::{Duration, Utc};
 use core::net::SocketAddr;
 use jsonwebtoken::{EncodingKey, Header, encode};
@@ -31,10 +30,14 @@ use testcontainers::{
     core::{IntoContainerPort, WaitFor},
     runners::AsyncRunner,
 };
+use uuid::Uuid;
 
 use api::{
-    AppState, Claims, IcoFallback, ServerConfig, UserId, UserRole,
-    common::{JWT_AUDIENCE, JWT_ISSUER, RedisStore, TOTAL_SUPPLY},
+    AppState, Claims, IcoFallback, LoggingEmailSender, ServerConfig, UserId, UserRole,
+    common::{
+        EmailSender, JWT_AUDIENCE, JWT_ISSUER, RedisStore, TOTAL_SUPPLY, TokenType,
+        VerificationLevel,
+    },
     server,
 };
 
@@ -58,9 +61,9 @@ pub struct RedisTestEnv {
     _container: ContainerAsync<GenericImage>,
 }
 
-impl core::fmt::Debug for RedisTestEnv {
+impl Debug for RedisTestEnv {
     #[inline]
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         f.debug_struct("RedisTestEnv")
             .field("client", &"redis::Client")
             .field("url", &self.url)
@@ -105,12 +108,30 @@ pub struct TestEnv {
 }
 
 /// Optional overrides for test server configuration.
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct TestOverrides {
     /// BIG token contract hash (enables `/transactions/token/big`).
     pub contract_big: Option<String>,
     /// ICO fallback config (used when `ico_schedules` table is empty).
     pub ico_fallback: Option<IcoFallback>,
+    /// Custom mailer for the test (defaults to `LoggingEmailSender`).
+    ///
+    /// Tests that exercise `mailer.send` failure paths (e.g. the
+    /// email-change rollback) supply a fake here that returns
+    /// `EmailError::Transport` so the rest of the handler can be observed
+    /// without wiring up a real SMTP relay.
+    pub mailer: Option<Arc<dyn EmailSender>>,
+}
+
+impl core::fmt::Debug for TestOverrides {
+    #[inline]
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("TestOverrides")
+            .field("contract_big", &self.contract_big)
+            .field("ico_fallback", &self.ico_fallback)
+            .field("mailer", &self.mailer.as_ref().map(|_| "EmailSender"))
+            .finish()
+    }
 }
 
 /// Creates a test server using a pool from `#[sqlx::test]`.
@@ -150,15 +171,20 @@ pub async fn setup_test_server_with(
         jwt_secret: SecretString::from(jwt_secret.clone()),
         port: 0,
         cors_origin: TEST_CORS_ORIGIN.to_owned(),
+        cookie_secure: false,
         contract_big: overrides.contract_big,
         ico_fallback: overrides.ico_fallback,
         total_supply: TOTAL_SUPPLY,
     };
+    let mailer = overrides
+        .mailer
+        .unwrap_or_else(|| Arc::new(LoggingEmailSender) as Arc<dyn EmailSender>);
     let state = Arc::new(AppState {
         db: pool,
         redis: RedisStore::new(redis_client)
             .await
             .expect("Failed to connect to Redis"),
+        mailer,
         config,
     });
 
@@ -179,7 +205,7 @@ pub async fn setup_test_server_with(
     }
 }
 
-/// Creates a test JWT token.
+/// Creates a test JWT access token populated with the full typed-claim schema.
 #[inline]
 pub fn create_test_jwt(user_id: UserId, role: UserRole, secret: &str) -> String {
     let expiration = Utc::now()
@@ -193,6 +219,9 @@ pub fn create_test_jwt(user_id: UserId, role: UserRole, secret: &str) -> String 
         exp,
         iss: JWT_ISSUER.to_owned(),
         aud: JWT_AUDIENCE.to_owned(),
+        token_type: Some(TokenType::Access),
+        verification_level: Some(VerificationLevel::None),
+        jti: Uuid::new_v4(),
     };
     encode(
         &Header::default(),
@@ -202,7 +231,8 @@ pub fn create_test_jwt(user_id: UserId, role: UserRole, secret: &str) -> String 
     .expect("Failed to create test JWT")
 }
 
-/// Makes an authenticated request.
+/// Makes an authenticated request by attaching the JWT as the
+/// `access_token` cookie (the transport the middleware now expects).
 #[inline]
 pub async fn authed_request<T: DeserializeOwned>(
     server: &TestServer,
@@ -211,33 +241,24 @@ pub async fn authed_request<T: DeserializeOwned>(
     token: &str,
     body: &Value,
 ) -> (StatusCode, Option<T>) {
-    let response: TestResponse = match *method {
-        Method::GET => {
-            server
-                .get(uri)
-                .add_header(AUTHORIZATION, format!("Bearer {token}"))
-                .await
-        }
+    let cookie_header = format!("access_token={token}");
+    let response = match *method {
+        Method::GET => server.get(uri).add_header(COOKIE, &cookie_header).await,
         Method::POST => {
             server
                 .post(uri)
-                .add_header(AUTHORIZATION, format!("Bearer {token}"))
+                .add_header(COOKIE, &cookie_header)
                 .json(&body)
                 .await
         }
         Method::PUT => {
             server
                 .put(uri)
-                .add_header(AUTHORIZATION, format!("Bearer {token}"))
+                .add_header(COOKIE, &cookie_header)
                 .json(&body)
                 .await
         }
-        Method::DELETE => {
-            server
-                .delete(uri)
-                .add_header(AUTHORIZATION, format!("Bearer {token}"))
-                .await
-        }
+        Method::DELETE => server.delete(uri).add_header(COOKIE, &cookie_header).await,
         _ => panic!("Unsupported HTTP method: {method}"),
     };
 

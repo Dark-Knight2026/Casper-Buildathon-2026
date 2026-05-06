@@ -1,10 +1,17 @@
-//! Request and response models for authentication endpoints.
+//! Request/response models for authentication endpoints.
+//!
+//! Hosts the wallet-flow shapes (nonce challenge, login). Future password and
+//! OAuth modules will add their own shapes here. The cross-module profile
+//! shape `UserInfo` lives in [`crate::common::models`] because both `auth` and
+//! `users` produce it.
 
 use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
-use crate::common::{UserId, UserRole};
+use crate::common::{UserInfo, UserRole};
+
+// Wallet ----------------------------------------------------------------------
 
 /// Request payload for generating a login nonce.
 #[derive(Debug, Deserialize, ToSchema)]
@@ -31,23 +38,22 @@ pub struct LoginRequest {
     /// The cryptographic signature of the nonce message.
     #[schema(value_type = String)]
     pub signature: SecretString,
+    /// Optional role chosen by the user at first login. Honored only when
+    /// creating a new user record; ignored on subsequent logins. Allowed
+    /// values: `tenant`, `landlord`, `agent`. Defaults to `tenant`.
+    #[serde(default)]
+    pub role: Option<UserRole>,
 }
 
-/// Response returned upon successful login.
+/// Response body returned upon successful login.
+///
+/// Tokens are NOT in this body - they are delivered via `Set-Cookie`
+/// headers (`access_token` and `refresh_token`, both `HttpOnly`). The
+/// frontend never reads token material from JS; the browser attaches the
+/// cookies automatically on subsequent requests. This closes the XSS
+/// exfiltration vector that a body-returned JWT would have.
 #[derive(Debug, Serialize, ToSchema)]
 pub struct LoginResponse {
-    /// Use this JSON Web Token (JWT) for authenticating subsequent requests.
-    pub token: String,
-    /// Basic information about the authenticated user.
+    /// Profile of the authenticated user.
     pub user: UserInfo,
-}
-
-/// Basic user information.
-#[derive(Debug, Serialize, ToSchema)]
-pub struct UserInfo {
-    /// The unique identifier of the user in the database.
-    #[schema(value_type = uuid::Uuid)]
-    pub id: UserId,
-    /// The user's role (e.g., "tenant", "landlord").
-    pub role: UserRole,
 }

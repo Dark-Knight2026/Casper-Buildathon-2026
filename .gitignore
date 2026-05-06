@@ -51,6 +51,7 @@ CLAUDE.md
 .*
 !.github/
 !.secret/
+!.sqlx/
 
 # Terraform
 **/.terraform/

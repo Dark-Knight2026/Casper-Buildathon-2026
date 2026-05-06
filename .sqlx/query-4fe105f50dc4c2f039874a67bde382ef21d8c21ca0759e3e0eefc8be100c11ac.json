@@ -1,0 +1,35 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                INSERT INTO users (email, role, first_name, last_name, auth_id, status, last_login_at)\n                VALUES ($1, $2, 'Wallet', 'User', NULL, 'active', NOW())\n                ON CONFLICT (email) WHERE email IS NOT NULL AND deleted_at IS NULL DO NOTHING\n                RETURNING id, role, verification_level\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "role",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "verification_level",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Varchar"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "4fe105f50dc4c2f039874a67bde382ef21d8c21ca0759e3e0eefc8be100c11ac"
+}

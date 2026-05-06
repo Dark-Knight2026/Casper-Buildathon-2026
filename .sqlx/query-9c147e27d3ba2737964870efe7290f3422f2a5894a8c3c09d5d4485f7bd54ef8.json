@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE users\n            SET\n                first_name = COALESCE($2, first_name),\n                last_name  = COALESCE($3, last_name),\n                phone      = COALESCE($4, phone),\n                phone_verified = CASE\n                    WHEN $4::text IS NOT NULL AND $4 IS DISTINCT FROM phone\n                    THEN false\n                    ELSE phone_verified\n                END,\n                bio        = COALESCE($5, bio),\n                avatar_url = COALESCE($6, avatar_url)\n            WHERE id = $1 AND deleted_at IS NULL\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9c147e27d3ba2737964870efe7290f3422f2a5894a8c3c09d5d4485f7bd54ef8"
+}

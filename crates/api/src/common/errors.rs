@@ -1,5 +1,7 @@
 //! Application-level error types.
 
+use std::env::VarError;
+
 use axum::{
     Json,
     http::StatusCode,
@@ -8,7 +10,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
-use crate::services::auth::AuthError;
+use crate::{common::EmailError, services::auth::AuthError};
 
 /// Represents errors that can occur at the application level (e.g., startup).
 /// These are not intended to be converted into API responses but are for logging
@@ -35,9 +37,9 @@ pub enum ServerError {
     Queue(String),
 }
 
-impl From<std::env::VarError> for ServerError {
+impl From<VarError> for ServerError {
     #[inline]
-    fn from(err: std::env::VarError) -> Self {
+    fn from(err: VarError) -> Self {
         Self::EnvVar(err.to_string())
     }
 }
@@ -80,27 +82,14 @@ pub struct ErrorResponse {
     pub error: String,
 }
 
-/// Maps an `AuthError` to an HTTP status code and message.
-fn auth_error_response(err: &AuthError) -> (StatusCode, String) {
-    match err {
-        AuthError::MissingCredentials => {
-            (StatusCode::UNAUTHORIZED, "Missing credentials".to_owned())
-        }
-        AuthError::InvalidToken(jwt_err) => {
-            tracing::warn!(error = %jwt_err, "JWT validation failed");
-            (
-                StatusCode::UNAUTHORIZED,
-                "Invalid or expired token".to_owned(),
-            )
-        }
-    }
-}
-
 impl IntoResponse for ApiError {
     #[inline]
     fn into_response(self) -> Response {
         let (status, error_message) = match &self {
-            ApiError::Auth(err) => auth_error_response(err),
+            ApiError::Auth(err) => {
+                let (status, code) = err.status_and_code();
+                (status, code.to_owned())
+            }
             ApiError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg.clone()),
             ApiError::Unauthorized(msg) => (StatusCode::UNAUTHORIZED, msg.clone()),
             ApiError::Forbidden(msg) => (StatusCode::FORBIDDEN, msg.clone()),
@@ -157,5 +146,38 @@ impl From<sqlx::Error> for ApiError {
             }
             _ => ApiError::Database(err),
         }
+    }
+}
+
+impl From<EmailError> for ApiError {
+    /// Maps email-transport failures to a generic 500.
+    ///
+    /// The provider-side message goes into [`ApiError::Internal`], which
+    /// `IntoResponse` logs but does NOT echo into the response body - the
+    /// client gets a flat "internal server error" so SMTP hostnames,
+    /// rate-limit hints, or quota details cannot leak. A future variant
+    /// `ApiError::Email(EmailError)` is justified only when handlers need
+    /// differentiated responses (e.g. 503 + `Retry-After` for provider
+    /// rate-limits); until then this stringly-typed wrap is enough.
+    #[inline]
+    fn from(err: EmailError) -> Self {
+        Self::Internal(err.to_string())
+    }
+}
+
+impl From<redis::RedisError> for ApiError {
+    /// Maps Redis transport failures to the existing `Queue` variant.
+    ///
+    /// Most existing call sites handle Redis errors inline because they
+    /// have specific recovery semantics (auth-middleware fail-open,
+    /// wallet-failure log-and-ignore). The newer email-change handlers
+    /// instead need fail-stop propagation through `?`: without Redis
+    /// neither rate-limit nor token storage works, so 500 is the only
+    /// safe answer. `IntoResponse` for `Queue` already logs the error
+    /// server-side and emits a flat "Internal system error" body, so no
+    /// transport details leak to the client.
+    #[inline]
+    fn from(err: redis::RedisError) -> Self {
+        Self::Queue(err.to_string())
     }
 }

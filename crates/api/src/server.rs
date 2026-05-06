@@ -6,7 +6,10 @@ use std::sync::Arc;
 
 use axum::{
     Router,
-    http::{Method, header},
+    http::{
+        Method,
+        header::{CONTENT_TYPE, HeaderValue},
+    },
 };
 use secrecy::ExposeSecret;
 use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
@@ -23,7 +26,10 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 #[cfg(debug_assertions)]
 use utoipa_swagger_ui::SwaggerUi;
 
-use crate::{ApiDoc, AppState, RedisStore, ServerConfig, ServerError, onchain, services};
+use crate::{
+    ApiDoc, AppState, EmailSender, LoggingEmailSender, RedisStore, ServerConfig, ServerError,
+    onchain, services,
+};
 
 /// Creates the full application router combining public and protected routes.
 #[inline]
@@ -51,20 +57,35 @@ const REQUEST_BODY_LIMIT: usize = 1024 * 1024;
 ///
 /// # Errors
 ///
-/// Returns `ServerError::EnvVar` if `CORS_ORIGIN` is not a valid HTTP header value.
+/// Returns `ServerError::EnvVar` when:
+/// - `CORS_ORIGIN` is the wildcard `*` (incompatible with cookie auth: the
+///   browser refuses `Access-Control-Allow-Origin: *` together with
+///   `Access-Control-Allow-Credentials: true`, so the wildcard would
+///   silently break the entire authenticated surface);
+/// - `CORS_ORIGIN` is not a valid HTTP header value.
 #[inline]
 pub fn create_app(state: Arc<AppState>) -> Result<Router, ServerError> {
+    let cors_origin = state.config.cors_origin.trim();
+    if cors_origin == "*" {
+        return Err(ServerError::EnvVar(
+            "CORS_ORIGIN must be an explicit origin (wildcard `*` is rejected by browsers when allow_credentials=true)".to_owned(),
+        ));
+    }
     let cors = CorsLayer::new()
         .allow_origin(
-            state
-                .config
-                .cors_origin
-                .parse::<header::HeaderValue>()
+            cors_origin
+                .parse::<HeaderValue>()
                 .map_err(|e| ServerError::EnvVar(format!("Invalid CORS_ORIGIN: {e}")))?,
         )
-        .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE])
-        .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION])
-        .allow_credentials(false);
+        .allow_methods([
+            Method::GET,
+            Method::POST,
+            Method::PUT,
+            Method::PATCH,
+            Method::DELETE,
+        ])
+        .allow_headers([CONTENT_TYPE])
+        .allow_credentials(true);
 
     Ok(create_router(state)
         .layer(cors)
@@ -125,10 +146,17 @@ pub async fn main() -> Result<(), ServerError> {
         ServerError::EnvVar("Redis connection failed".to_owned())
     })?;
 
+    // Bootstrap a no-delivery mailer. Real-provider impls (SMTP, SES) are
+    // a follow-up: they will be selected here based on env config without
+    // changes to handlers, since AppState holds the mailer behind the
+    // `EmailSender` trait object.
+    let mailer: Arc<dyn EmailSender> = Arc::new(LoggingEmailSender);
+
     // 3. Build application state
     let state = Arc::new(AppState {
         db: pool,
         redis: redis_store,
+        mailer,
         config: config.clone(),
     });
 
@@ -150,17 +178,29 @@ pub async fn main() -> Result<(), ServerError> {
 /// Awaits a shutdown signal (e.g., Ctrl+C) to gracefully shut down the server.
 async fn shutdown_signal() {
     let ctrl_c = async {
-        signal::ctrl_c()
-            .await
-            .expect("Failed to install Ctrl+C handler - OS may not support graceful shutdown");
+        if let Err(err) = signal::ctrl_c().await {
+            tracing::warn!(
+                error = %err,
+                "Ctrl+C handler unavailable - graceful shutdown via Ctrl+C disabled",
+            );
+            core::future::pending::<()>().await;
+        }
     };
 
     #[cfg(unix)]
     let terminate = async {
-        unix::signal(SignalKind::terminate())
-            .expect("Failed to install SIGTERM handler - OS may not support graceful shutdown")
-            .recv()
-            .await;
+        match unix::signal(SignalKind::terminate()) {
+            Ok(mut sig) => {
+                sig.recv().await;
+            }
+            Err(err) => {
+                tracing::warn!(
+                    error = %err,
+                    "SIGTERM handler unavailable - graceful shutdown via SIGTERM disabled",
+                );
+                core::future::pending::<()>().await;
+            }
+        }
     };
 
     #[cfg(not(unix))]

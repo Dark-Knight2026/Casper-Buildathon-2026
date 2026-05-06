@@ -119,3 +119,95 @@ async fn cors_origin_does_not_match_unauthorized_request(pool: PgPool) {
         "CORS origin must not match unauthorized origin (browser will block)"
     );
 }
+
+/// Regression: cookie auth requires `Access-Control-Allow-Credentials: true`
+/// in the preflight response.
+///
+/// Without this header the browser silently drops the `access_token` and
+/// `refresh_token` cookies on cross-origin XHR/fetch even when the server
+/// itself sets them with `Set-Cookie`. The whole login flow appears to
+/// "work" until the next protected request, which then gets a 401.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn cors_preflight_allows_credentials(pool: PgPool) {
+    let env = common::setup_test_server(pool, false).await;
+
+    let response = env
+        .server
+        .method(Method::OPTIONS, "/api/v1/auth/login")
+        .add_header(header::ORIGIN, common::TEST_CORS_ORIGIN)
+        .add_header(header::ACCESS_CONTROL_REQUEST_METHOD, "POST")
+        .await;
+
+    let credentials = response
+        .header(header::ACCESS_CONTROL_ALLOW_CREDENTIALS)
+        .to_str()
+        .unwrap()
+        .to_string();
+
+    assert_eq!(
+        credentials, "true",
+        "preflight must advertise allow-credentials=true so browsers send cookies cross-origin",
+    );
+}
+
+/// Regression: `Access-Control-Allow-Headers` must not include
+/// `Authorization` once Bearer auth has been removed.
+///
+/// The header lingered after the cookie-auth migration. Keeping it
+/// in the allow-list signals to clients that the API still accepts
+/// `Authorization: Bearer ...`, which it does not - any such request
+/// is silently ignored by the cookie-only `require_auth` middleware
+/// and the user gets a confusing 401.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn cors_preflight_does_not_allow_authorization_header(pool: PgPool) {
+    let env = common::setup_test_server(pool, false).await;
+
+    let response = env
+        .server
+        .method(Method::OPTIONS, "/api/v1/auth/login")
+        .add_header(header::ORIGIN, common::TEST_CORS_ORIGIN)
+        .add_header(header::ACCESS_CONTROL_REQUEST_METHOD, "POST")
+        .add_header(header::ACCESS_CONTROL_REQUEST_HEADERS, "authorization")
+        .await;
+
+    let allow_headers = response
+        .header(header::ACCESS_CONTROL_ALLOW_HEADERS)
+        .to_str()
+        .unwrap()
+        .to_ascii_lowercase();
+
+    assert!(
+        !allow_headers.contains("authorization"),
+        "Authorization must not be advertised in allow-headers (cookie auth replaced Bearer); got: {allow_headers}",
+    );
+}
+
+/// Regression: `PATCH` must be advertised in `Access-Control-Allow-Methods`.
+///
+/// `PATCH /api/v1/users/me` is the canonical profile-update endpoint. If
+/// the CORS preflight does not list `PATCH`, browsers reject the request
+/// with a CORS error before it ever reaches the handler, so cross-origin
+/// clients (the whole intended deployment topology, given
+/// `allow_credentials(true)`) cannot update their profile at all.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn cors_preflight_allows_patch_method(pool: PgPool) {
+    let env = common::setup_test_server(pool, false).await;
+
+    let response = env
+        .server
+        .method(Method::OPTIONS, "/api/v1/users/me")
+        .add_header(header::ORIGIN, common::TEST_CORS_ORIGIN)
+        .add_header(header::ACCESS_CONTROL_REQUEST_METHOD, "PATCH")
+        .await;
+
+    let allowed_methods = response
+        .header(header::ACCESS_CONTROL_ALLOW_METHODS)
+        .to_str()
+        .unwrap()
+        .to_ascii_uppercase();
+
+    assert!(
+        allowed_methods.contains("PATCH"),
+        "PATCH must be advertised in access-control-allow-methods (PATCH /users/me is a real endpoint); got: {allowed_methods}",
+    );
+}

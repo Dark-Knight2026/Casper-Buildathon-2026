@@ -3,20 +3,35 @@
 //! Provides nonce generation, login with signature verification,
 //! and JWT-based authentication middleware.
 
+/// Auth-cookie names and builders shared by login/refresh/logout.
+pub mod cookies;
 /// Database operations for authentication.
 pub mod db;
-/// HTTP request handlers for authentication.
-pub mod handlers;
+/// JWT encoding/decoding primitives.
+pub mod jwt;
+/// Logout handler: clears auth cookies and revokes refresh-family + jti blocklist.
+pub mod logout;
 /// Authentication middleware and extractors.
 pub mod middleware;
-/// Request and response models for authentication endpoints.
+/// Request/response models for authentication endpoints.
 pub mod models;
+/// Refresh-token issuance helpers.
+pub mod refresh;
 /// Router configuration for authentication endpoints.
 pub mod routes;
+/// Wallet-based authentication: nonce + signature login.
+pub mod wallet;
 
 // Re-exports
-pub use db::upsert_user_by_wallet;
-pub use handlers::{get_nonce, login};
+pub use cookies::{
+    ACCESS_TOKEN_COOKIE, REFRESH_COOKIE_PATH, REFRESH_TOKEN_COOKIE, build_access_cookie,
+    build_refresh_cookie,
+};
+pub use db::{UpsertOutcome, insert_refresh_token, upsert_user_by_wallet};
+pub use jwt::{ACCESS_TOKEN_TTL, EncodedAccessToken, decode_token, encode_access_token};
+pub use logout::logout;
 pub use middleware::{AuthError, AuthUser};
-pub use models::{LoginRequest, LoginResponse, NonceRequest, NonceResponse, UserInfo};
+pub use models::{LoginRequest, LoginResponse, NonceRequest, NonceResponse};
+pub use refresh::{IssuedRefreshToken, REFRESH_TOKEN_TTL, issue_login_refresh_token, rotate};
 pub use routes::router;
+pub use wallet::{get_nonce, login};

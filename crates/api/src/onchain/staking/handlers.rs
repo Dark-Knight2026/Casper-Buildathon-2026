@@ -30,7 +30,7 @@ const PRICE_DECIMALS: u32 = 6;
 /// Parse period string into number of months to look back.
 /// Supported: `1m`, `3m`, `6m`, `1y`, `all`.
 #[inline]
-fn parse_period_months(period: &str) -> Result<Option<u32>, ApiError> {
+fn parse_period_months(period: &str) -> ApiResult<Option<u32>> {
     match period {
         "1m" => Ok(Some(1)),
         "3m" => Ok(Some(3)),
