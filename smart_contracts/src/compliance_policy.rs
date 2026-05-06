@@ -193,6 +193,7 @@ impl CompliancePolicy {
     // Compliance Checks
     // =========================================================================
 
+    #[odra(non_reentrant)]
     pub fn can_transfer(
         &self,
         property_id: U256,
@@ -204,6 +205,7 @@ impl CompliancePolicy {
             .is_none()
     }
 
+    #[odra(non_reentrant)]
     pub fn assert_can_transfer(&self, property_id: U256, from: Address, to: Address, amount: U256) {
         if let Some(error) = self.get_transfer_error(property_id, from, to, amount) {
             self.env().revert(error);
@@ -247,7 +249,7 @@ impl CompliancePolicy {
         }
     }
 
-    pub fn get_transfer_error(
+    fn get_transfer_error(
         &self,
         property_id: U256,
         from: Address,
