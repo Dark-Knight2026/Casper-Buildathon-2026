@@ -6,7 +6,7 @@ import {
   refreshSession,
   type ServerUserInfo,
 } from '@/services/ico/backendAuthService';
-import type { UserProfile, UserRole } from '@/types/user';
+import type { UserProfile, UserRole, UserStatus } from '@/types/user';
 
 // Non-secret session marker. The actual auth tokens live in HttpOnly cookies
 // set by the backend at /auth/login; this localStorage entry is just a hint to
@@ -14,6 +14,21 @@ import type { UserProfile, UserRole } from '@/types/user';
 // signed-in view without flashing a login screen while the cookie-backed
 // refresh round-trip resolves. It carries no secret material.
 const SESSION_MARKER_KEY = 'leasefi_session';
+
+// Whitelist of `users.status` values the UI knows how to render. An unknown
+// value is dropped to `undefined` so consumers fall through to the safe
+// default branch instead of trying to switch on a string we have no copy for.
+const KNOWN_USER_STATUSES: ReadonlySet<UserStatus> = new Set<UserStatus>([
+  'active',
+  'inactive',
+  'suspended',
+  'pending_verification',
+]);
+
+function mapUserStatus(raw: string | null): UserStatus | undefined {
+  if (raw === null) return undefined;
+  return KNOWN_USER_STATUSES.has(raw as UserStatus) ? (raw as UserStatus) : undefined;
+}
 
 function mapServerUserInfo(info: ServerUserInfo): UserProfile {
   return {
@@ -28,8 +43,11 @@ function mapServerUserInfo(info: ServerUserInfo): UserProfile {
     profileImage: info.avatar_url ?? undefined,
     bio: info.bio ?? undefined,
     createdAt: new Date(info.created_at),
+    updatedAt: new Date(info.updated_at),
     walletAddress: info.wallet_address ?? undefined,
     isProfileComplete: info.is_profile_complete,
+    status: mapUserStatus(info.status),
+    activeLeasesCount: info.active_leases_count,
   };
 }
 
@@ -37,8 +55,15 @@ function loadSessionMarker(): UserProfile | null {
   try {
     const raw = localStorage.getItem(SESSION_MARKER_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as Omit<UserProfile, 'createdAt'> & { createdAt: string };
-    return { ...parsed, createdAt: new Date(parsed.createdAt) };
+    const parsed = JSON.parse(raw) as Omit<UserProfile, 'createdAt' | 'updatedAt'> & {
+      createdAt: string;
+      updatedAt?: string;
+    };
+    return {
+      ...parsed,
+      createdAt: new Date(parsed.createdAt),
+      updatedAt: parsed.updatedAt ? new Date(parsed.updatedAt) : undefined,
+    };
   } catch {
     localStorage.removeItem(SESSION_MARKER_KEY);
     return null;

@@ -1288,6 +1288,92 @@ Response → Service → Hook → Component → UI Update
 - Resend (email)
 - Google Maps (location)
 
+### 4.6 Profile Management Integration
+
+**Base URL:** `${VITE_BACKEND_URL}/api/v1`. All requests carry the HttpOnly
+`access_token` cookie via `credentials: 'include'` (see `src/lib/api-client.ts`).
+401s trigger one transparent refresh + replay before the original error
+propagates.
+
+**Error wire format:** every non-2xx response body is `{ "error": string }`
+(see `crates/api/src/common/errors.rs` `ErrorResponse`). Some endpoints emit
+machine-readable tokens (e.g. `reauthentication_required`); others emit
+human-readable prose (avatar). UI maps on the token where one exists, else
+on HTTP status.
+
+#### `UserInfo` (response shape)
+
+```json
+{
+  "id": "uuid",
+  "role": "tenant|landlord|agent|admin|unknown",
+  "wallet_address": "01abc...",
+  "status": "active|inactive|suspended|pending_verification",
+  "email": "alice@example.com",
+  "first_name": "Alice",
+  "last_name": "Smith",
+  "phone": "+12025550123",
+  "avatar_url": "https://...",
+  "bio": "...",
+  "is_profile_complete": true,
+  "active_leases_count": 3,
+  "created_at": "2026-01-15T10:30:00Z",
+  "updated_at": "2026-04-22T14:22:01Z"
+}
+```
+
+Mapped to camelCase `UserProfile` via `mapServerUserInfo` in
+`src/contexts/AuthContext.tsx`.
+
+#### Endpoints
+
+| Method | Path                                | Purpose                              |
+| ------ | ----------------------------------- | ------------------------------------ |
+| GET    | `/users/me`                         | Fetch current profile                |
+| PATCH  | `/users/me`                         | Update first/last name, phone, bio   |
+| POST   | `/users/me/email`                   | Request email change (sends token)   |
+| POST   | `/users/me/email/confirm`           | Confirm email change with token      |
+| POST   | `/users/me/avatar`                  | Multipart avatar upload (PNG/JPEG/WebP, ≤ 5 MB) |
+| PATCH  | `/users/me/role`                    | Switch role; revokes all sessions    |
+
+The following are described in the backend PR but **not yet present on the
+backend `feat/user-profile` branch as of this writing** — UI wiring blocked
+until they ship: `GET/DELETE /users/me/sessions`, `DELETE /users/me/sessions/:id`,
+`POST /users/me/sessions/revoke-all`, `DELETE /users/me`.
+
+#### Recent-auth gate (5-minute window)
+
+`PATCH /users/me/role` (and the future `DELETE /users/me`) require the
+access token to have `iat > NOW() - 5min`. On miss the backend returns
+`403 { "error": "reauthentication_required" }`. UI must intercept this code
+and prompt the user to re-sign with the wallet (see CSPR.click
+`signInWithAccount`), then replay the original request. Window constant:
+`ROLE_CHANGE_RECENT_AUTH_WINDOW_SECS = 300` in
+`crates/api/src/services/users/handlers.rs`.
+
+#### Endpoint-specific contracts
+
+**`PATCH /users/me`** — body is any subset of `{ first_name, last_name, phone, bio, avatar_url }`. Missing fields keep stored value. Writing a different `phone` resets `phone_verified` to `false`. Errors: 400 (over-long values), 401, 404, 500.
+
+**`POST /users/me/email`** — body `{ "new_email": string }`. 202 on queued. Errors: 400 (malformed), 409 (taken), 429 (>3 / 24h).
+
+**`POST /users/me/email/confirm`** — body `{ "token": string (43 base64url chars) }`. 200 returns `UserInfo` with `email = new_email`, `email_verified = true`. Errors: 400 (malformed token shape), 401 (token missing/expired), 409 (email taken in race).
+
+**`POST /users/me/avatar`** — `multipart/form-data` with single field `file`. Constraints: PNG/JPEG/WebP only, magic-byte sniff on server, ≤ 5 MB. Per-user limit 10/h. Response: `{ "avatar_url": string }` (currently a stub URL until real storage lands). Errors: 400 (missing field), 413 (oversize), 415 (MIME mismatch — covers both disallowed type and spoofed bytes), 429.
+
+**`PATCH /users/me/role`** — body `{ "role": "tenant"|"landlord"|"agent" }`. Five gates run in order; same input may surface different statuses depending on which gate trips:
+1. 400 — role outside whitelist
+2. 403 — `reauthentication_required` (token > 5 min old)
+3. 429 — `rate_limited` (1 change / 24h)
+4. 409 — `active_leases_blocking` (active leases prevent switch)
+5. 200 — success: response is updated `UserInfo`, `Set-Cookie` clears both auth cookies (UI must redirect to login)
+
+#### Frontend-side concerns
+
+- **Avatar pre-flight on client.** Reject > 5 MB and unsupported MIME locally to avoid wasted network round-trips, but treat the server response as authoritative (it does magic-byte sniffing client cannot reliably replicate).
+- **Role switch redirects to login.** Cookies are cleared server-side, so any in-flight request after the switch will 401. UI must clear `leasefi_session` localStorage marker and route to `/auth/login`.
+- **Type safety.** Profile endpoints return snake_case; conversion happens once in `mapServerUserInfo`. Add new fields there, not at call sites, to keep the wire-format boundary single.
+
 ---
 
 ## 5. TECHNICAL SPECIFICATIONS
