@@ -5,7 +5,7 @@ import {
   refreshSession,
   type ServerUserInfo,
 } from '@/services/ico/backendAuthService';
-import { patchMe, type PatchProfileBody } from '@/services/ico/userProfileService';
+import { getMe, patchMe, type PatchProfileBody } from '@/services/ico/userProfileService';
 import type { UserProfile, UserRole, UserStatus } from '@/types/user';
 
 // Non-secret session marker. The actual auth tokens live in HttpOnly cookies
@@ -157,6 +157,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setProfile(mapped);
   }, []);
 
+  const refreshProfile = useCallback(async () => {
+    const fresh = await getMe();
+    const mapped = mapServerUserInfo(fresh);
+    saveSessionMarker(mapped);
+    setProfile(mapped);
+  }, []);
+
   const walletSignOut = useCallback(() => {
     clearSessionMarker();
     setProfile(null);
@@ -165,7 +172,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   return (
-    <AuthContext.Provider value={{ profile, loading, setWalletSession, updateProfile, walletSignOut }}>
+    <AuthContext.Provider value={{ profile, loading, setWalletSession, updateProfile, refreshProfile, walletSignOut }}>
       {children}
     </AuthContext.Provider>
   );

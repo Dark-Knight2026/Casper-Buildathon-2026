@@ -3,7 +3,7 @@
  * View and edit tenant profile information
  */
 
-import { useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { User, Mail, Phone, Home, Calendar, Save, Loader2, Sliders } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -17,76 +17,185 @@ import { useAuth } from '@/hooks/useAuth';
 import { useTenantPreferences } from '@/hooks/useTenantPreferences';
 import { TenantPreferencesDialog } from '@/components/tenant/TenantPreferencesDialog';
 import { countActivePreferences, ALL_MATCH_CATEGORIES } from '@/types/tenantPreferences';
+import { uploadAvatar } from '@/services/ico/userProfileService';
+import { ApiError } from '@/lib/api-client';
+import { AvatarStatus } from '@/lib/api-errors';
 
-interface UserProfile {
-  id: string;
-  email: string;
-  fullName: string;
-  phone: string;
-  role: string;
-  status: string;
-  bio: string;
-  avatarUrl: string | null;
-  activeLeaseCount: number;
-  createdAt: Date;
-}
-
-// TODO: remove when GET /api/v1/users/me is ready
-const MOCK_PROFILE: UserProfile = {
-  id: 'mock-tenant-1',
-  email: 'tenant@demo.com',
-  fullName: 'Jane Doe',
-  phone: '+1 (555) 234-5678',
-  role: 'tenant',
-  status: 'active',
-  bio: 'Looking for a long-term rental in downtown area. Responsible tenant with good references.',
-  avatarUrl: null,
-  activeLeaseCount: 1,
-  createdAt: new Date('2024-06-15'),
-};
+/**
+ * Client-side avatar constraints. Mirrored on the server (`upload_avatar` in
+ * `crates/api/src/services/users/handlers.rs`) — the server is authoritative;
+ * the values here exist only to short-circuit obviously-bad selections so the
+ * user gets feedback before a wasted multipart round-trip.
+ */
+const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
+const ACCEPTED_AVATAR_MIME = new Set(['image/png', 'image/jpeg', 'image/webp']);
+const AVATAR_ACCEPT_ATTR = Array.from(ACCEPTED_AVATAR_MIME).join(',');
 
 const formatDate = (date: Date): string =>
   new Intl.DateTimeFormat('en-US', { year: 'numeric', month: 'long', day: 'numeric' }).format(new Date(date));
 
 export function TenantProfile() {
-  const { profile: authProfile } = useAuth();
+  const { profile: authProfile, refreshProfile, updateProfile } = useAuth();
+  const { toast } = useToast();
 
-  // TODO: replace with GET /api/v1/users/me when backend is ready
-  const profile: UserProfile = {
-    ...MOCK_PROFILE,
-    id: authProfile?.id ?? MOCK_PROFILE.id,
-    email: authProfile?.email ?? MOCK_PROFILE.email,
-    fullName: authProfile?.firstName
-      ? `${authProfile.firstName} ${authProfile.lastName ?? ''}`.trim()
-      : MOCK_PROFILE.fullName,
-  };
+  // Run a single getMe() round-trip on mount so the page shows whatever the
+  // backend currently has (the AuthContext marker may be older than the
+  // server-side state — e.g. avatar updated from another device). Errors are
+  // swallowed: AuthContext already drives a logout on 401, anything else is
+  // benign for a read.
+  useEffect(() => {
+    void refreshProfile().catch(() => {
+      // Non-fatal: caller falls back to whatever AuthContext already had.
+    });
+  }, [refreshProfile]);
+
+  const fullName = useMemo(() => {
+    if (!authProfile) return '';
+    const first = authProfile.firstName ?? '';
+    const last = authProfile.lastName ?? '';
+    return `${first} ${last}`.trim();
+  }, [authProfile]);
 
   const [saving, setSaving] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  // Object URL displayed instantly after the user picks a file, before the
+  // server round-trip resolves. Cleared (and revoked) once the refreshed
+  // profile carries the canonical `avatar_url`.
+  const [optimisticAvatar, setOptimisticAvatar] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [formData, setFormData] = useState({
-    fullName: profile.fullName,
-    phone: profile.phone,
-    bio: profile.bio,
+    firstName: authProfile?.firstName ?? '',
+    lastName: authProfile?.lastName ?? '',
+    phone: authProfile?.phone ?? '',
+    bio: authProfile?.bio ?? '',
   });
-  const { toast } = useToast();
+
+  // Revoke the in-flight blob URL on unmount; otherwise the browser keeps the
+  // file in memory for the lifetime of the document.
+  useEffect(() => {
+    return () => {
+      if (optimisticAvatar) URL.revokeObjectURL(optimisticAvatar);
+    };
+  }, [optimisticAvatar]);
+
+  // Re-sync the form when the underlying profile shifts (initial fetch,
+  // external refresh after an avatar upload, etc.).
+  useEffect(() => {
+    setFormData({
+      firstName: authProfile?.firstName ?? '',
+      lastName: authProfile?.lastName ?? '',
+      phone: authProfile?.phone ?? '',
+      bio: authProfile?.bio ?? '',
+    });
+  }, [authProfile?.firstName, authProfile?.lastName, authProfile?.phone, authProfile?.bio]);
 
   const {
     preferences,
     hasExplicitPreferences,
     updatePreferences,
-  } = useTenantPreferences(profile.id);
+  } = useTenantPreferences(authProfile?.id ?? '');
   const [preferencesOpen, setPreferencesOpen] = useState(false);
   const activeCount = countActivePreferences(preferences);
 
-  // TODO: replace with PATCH /api/v1/users/me when backend is ready
   const handleSave = async () => {
     setSaving(true);
-    await new Promise(res => setTimeout(res, 600));
-    toast({ title: 'Profile updated', description: 'Your profile has been saved (mock)' });
-    setSaving(false);
+    try {
+      await updateProfile({
+        firstName: formData.firstName.trim(),
+        lastName: formData.lastName.trim(),
+        phone: formData.phone,
+        bio: formData.bio,
+      });
+      toast({ title: 'Profile updated', description: 'Your changes have been saved.' });
+    } catch (err) {
+      toast({
+        title: 'Could not save profile',
+        description: err instanceof Error ? err.message : 'Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleCancel = () => {
-    setFormData({ fullName: profile.fullName, phone: profile.phone, bio: profile.bio });
+    setFormData({
+      firstName: authProfile?.firstName ?? '',
+      lastName: authProfile?.lastName ?? '',
+      phone: authProfile?.phone ?? '',
+      bio: authProfile?.bio ?? '',
+    });
+  };
+
+  /**
+   * Translate the upload failure into a user-facing toast. 413/415/429 have
+   * specific copy; everything else falls back to the server message because
+   * the avatar handler emits prose strings (no machine-readable token), so
+   * surfacing them as-is gives the user the most accurate hint.
+   */
+  const describeAvatarError = (err: unknown): string => {
+    if (err instanceof ApiError) {
+      if (err.statusCode === AvatarStatus.PayloadTooLarge) return 'Image is too large (max 5 MB).';
+      if (err.statusCode === AvatarStatus.UnsupportedMediaType)
+        return 'Only PNG, JPEG, or WebP images are supported.';
+      if (err.statusCode === AvatarStatus.TooManyRequests)
+        return 'Too many uploads — please try again in an hour.';
+      return err.message;
+    }
+    return err instanceof Error ? err.message : 'Please try again.';
+  };
+
+  const handleAvatarChange = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    // Reset the input so re-selecting the same file fires `change` again.
+    e.target.value = '';
+    if (!file) return;
+
+    if (!ACCEPTED_AVATAR_MIME.has(file.type)) {
+      toast({
+        title: 'Unsupported image format',
+        description: 'Choose a PNG, JPEG, or WebP file.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (file.size > MAX_AVATAR_BYTES) {
+      toast({
+        title: 'Image too large',
+        description: 'Choose a file under 5 MB.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const previewUrl = URL.createObjectURL(file);
+    // Replace any prior in-flight blob URL — only one preview at a time.
+    setOptimisticAvatar(prev => {
+      if (prev) URL.revokeObjectURL(prev);
+      return previewUrl;
+    });
+    setUploadingAvatar(true);
+
+    try {
+      await uploadAvatar(file);
+      // Refresh AuthContext so the new `avatar_url` propagates to the Navbar
+      // and any other consumer; the optimistic blob URL is dropped after the
+      // server-side URL is in place.
+      await refreshProfile();
+      setOptimisticAvatar(null);
+      URL.revokeObjectURL(previewUrl);
+      toast({ title: 'Photo updated', description: 'Your new avatar is saved.' });
+    } catch (err) {
+      setOptimisticAvatar(null);
+      URL.revokeObjectURL(previewUrl);
+      toast({
+        title: 'Could not upload photo',
+        description: describeAvatarError(err),
+        variant: 'destructive',
+      });
+    } finally {
+      setUploadingAvatar(false);
+    }
   };
 
   return (
@@ -104,32 +213,53 @@ export function TenantProfile() {
             <CardContent className="pt-6 space-y-4">
               {/* Avatar */}
               <div className="flex flex-col items-center">
-                {profile.avatarUrl ? (
-                  <img
-                    src={profile.avatarUrl}
-                    alt={profile.fullName}
-                    className="h-24 w-24 rounded-full object-cover mb-4 ring-2 ring-border"
-                  />
-                ) : (
-                  <div className="h-24 w-24 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-                    <User className="h-12 w-12 text-primary" />
-                  </div>
-                )}
-                {/* TODO: wire to POST /api/v1/users/me/avatar */}
-                <Button variant="outline" size="sm" disabled className="text-xs">
-                  Change photo
+                {(() => {
+                  const src = optimisticAvatar ?? authProfile?.avatar;
+                  return src ? (
+                    <img
+                      src={src}
+                      alt={fullName || 'Profile avatar'}
+                      className="h-24 w-24 rounded-full object-cover mb-4 ring-2 ring-border"
+                    />
+                  ) : (
+                    <div className="h-24 w-24 rounded-full bg-primary/10 flex items-center justify-center mb-4">
+                      <User className="h-12 w-12 text-primary" />
+                    </div>
+                  );
+                })()}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept={AVATAR_ACCEPT_ATTR}
+                  className="hidden"
+                  onChange={handleAvatarChange}
+                  aria-hidden="true"
+                  tabIndex={-1}
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-xs"
+                  disabled={uploadingAvatar}
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  {uploadingAvatar ? (
+                    <><Loader2 className="mr-2 h-3 w-3 animate-spin" />Uploading…</>
+                  ) : (
+                    'Change photo'
+                  )}
                 </Button>
               </div>
 
               <Separator />
 
               <div>
-                <h3 className="text-lg font-semibold text-foreground">{profile.fullName}</h3>
-                <p className="text-sm text-muted-foreground capitalize">{profile.role}</p>
+                <h3 className="text-lg font-semibold text-foreground">{fullName || '—'}</h3>
+                <p className="text-sm text-muted-foreground capitalize">{authProfile?.role ?? ''}</p>
               </div>
 
-              {profile.bio && (
-                <p className="text-sm text-muted-foreground leading-relaxed">{profile.bio}</p>
+              {authProfile?.bio && (
+                <p className="text-sm text-muted-foreground leading-relaxed">{authProfile.bio}</p>
               )}
 
               <Separator />
@@ -139,16 +269,16 @@ export function TenantProfile() {
                   <Mail className="h-4 w-4 text-muted-foreground shrink-0" />
                   <div className="min-w-0">
                     <p className="text-xs text-muted-foreground">Email</p>
-                    <p className="text-sm text-foreground truncate">{profile.email}</p>
+                    <p className="text-sm text-foreground truncate">{authProfile?.email ?? ''}</p>
                   </div>
                 </div>
 
-                {profile.phone && (
+                {authProfile?.phone && (
                   <div className="flex items-center gap-3">
                     <Phone className="h-4 w-4 text-muted-foreground shrink-0" />
                     <div>
                       <p className="text-xs text-muted-foreground">Phone</p>
-                      <p className="text-sm text-foreground">{profile.phone}</p>
+                      <p className="text-sm text-foreground">{authProfile.phone}</p>
                     </div>
                   </div>
                 )}
@@ -157,17 +287,19 @@ export function TenantProfile() {
                   <Home className="h-4 w-4 text-muted-foreground shrink-0" />
                   <div>
                     <p className="text-xs text-muted-foreground">Active Leases</p>
-                    <p className="text-sm text-foreground">{profile.activeLeaseCount}</p>
+                    <p className="text-sm text-foreground">{authProfile?.activeLeasesCount ?? 0}</p>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3">
-                  <Calendar className="h-4 w-4 text-muted-foreground shrink-0" />
-                  <div>
-                    <p className="text-xs text-muted-foreground">Member Since</p>
-                    <p className="text-sm text-foreground">{formatDate(profile.createdAt)}</p>
+                {authProfile?.createdAt && (
+                  <div className="flex items-center gap-3">
+                    <Calendar className="h-4 w-4 text-muted-foreground shrink-0" />
+                    <div>
+                      <p className="text-xs text-muted-foreground">Member Since</p>
+                      <p className="text-sm text-foreground">{formatDate(authProfile.createdAt)}</p>
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -180,11 +312,11 @@ export function TenantProfile() {
             <CardContent className="space-y-3">
               <div className="flex justify-between">
                 <p className="text-sm text-muted-foreground">Status</p>
-                <p className="text-sm font-medium text-foreground capitalize">{profile.status}</p>
+                <p className="text-sm font-medium text-foreground capitalize">{authProfile?.status ?? '—'}</p>
               </div>
               <div className="flex justify-between">
                 <p className="text-sm text-muted-foreground">Account Type</p>
-                <p className="text-sm font-medium text-foreground capitalize">{profile.role}</p>
+                <p className="text-sm font-medium text-foreground capitalize">{authProfile?.role ?? ''}</p>
               </div>
             </CardContent>
           </Card>
@@ -200,14 +332,25 @@ export function TenantProfile() {
               <CardDescription>Update your personal details</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="fullName">Full Name</Label>
-                <Input
-                  id="fullName"
-                  value={formData.fullName}
-                  onChange={(e) => setFormData(prev => ({ ...prev, fullName: e.target.value }))}
-                  placeholder="Enter your full name"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="firstName">First Name</Label>
+                  <Input
+                    id="firstName"
+                    value={formData.firstName}
+                    onChange={(e) => setFormData(prev => ({ ...prev, firstName: e.target.value }))}
+                    placeholder="Jane"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="lastName">Last Name</Label>
+                  <Input
+                    id="lastName"
+                    value={formData.lastName}
+                    onChange={(e) => setFormData(prev => ({ ...prev, lastName: e.target.value }))}
+                    placeholder="Doe"
+                  />
+                </div>
               </div>
 
               <div className="space-y-2">
@@ -296,7 +439,7 @@ export function TenantProfile() {
               <div className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-3 min-w-0">
                   <Mail className="h-4 w-4 text-muted-foreground shrink-0" />
-                  <p className="text-sm text-foreground truncate">{profile.email}</p>
+                  <p className="text-sm text-foreground truncate">{authProfile?.email ?? ''}</p>
                 </div>
                 {/* TODO: open email change flow → PATCH /api/v1/users/me/email */}
                 <Button variant="outline" size="sm" disabled>
