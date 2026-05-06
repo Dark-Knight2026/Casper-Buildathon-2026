@@ -17,7 +17,6 @@ use crate::{
 const MAX_NAME_LEN: usize = 100;
 const MAX_PHONE_LEN: usize = 20;
 const MAX_BIO_LEN: usize = 1024;
-const MAX_AVATAR_URL_LEN: usize = 2048;
 
 /// RFC 5321 hard limit on the full email address length.
 ///
@@ -56,8 +55,6 @@ pub struct UpdateProfileRequest {
     pub phone: Option<String>,
     /// Free-form bio (up to 1024 chars after trim).
     pub bio: Option<String>,
-    /// Avatar URL (up to 2048 chars after trim).
-    pub avatar_url: Option<String>,
 }
 
 impl UpdateProfileRequest {
@@ -82,7 +79,6 @@ impl UpdateProfileRequest {
             last_name: trim_required("last_name", self.last_name, MAX_NAME_LEN)?,
             phone: trim_required("phone", self.phone, MAX_PHONE_LEN)?,
             bio: trim_optional("bio", self.bio, MAX_BIO_LEN)?,
-            avatar_url: trim_optional("avatar_url", self.avatar_url, MAX_AVATAR_URL_LEN)?,
         })
     }
 }
@@ -108,8 +104,7 @@ fn trim_required(field: &str, value: Option<String>, max_len: usize) -> ApiResul
     Ok(Some(trimmed.to_owned()))
 }
 
-/// Normalizes input for a column where empty input is acceptable
-/// (`bio`, `avatar_url`).
+/// Normalizes input for a column where empty input is acceptable (`bio`).
 ///
 /// Trimmed-empty is treated as "leave unchanged" rather than "clear column".
 /// The current SQL uses `COALESCE($n, col)` and cannot distinguish "skip

@@ -190,10 +190,14 @@ pub async fn get_me(
 //
 /// Patches the editable subset of the authenticated user's profile.
 ///
-/// Editable fields: `first_name`, `last_name`, `phone`, `bio`, `avatar_url`.
-/// Fields owned by other flows (`email`, `role`, `status`,
-/// `verification_level`) are not exposed and silently ignored if a client
-/// includes them - serde drops unknown JSON keys by default.
+/// Editable fields: `first_name`, `last_name`, `phone`, `bio`. Fields owned
+/// by other flows (`email`, `role`, `status`, `verification_level`,
+/// `avatar_url`) are not exposed and silently ignored if a client includes
+/// them - serde drops unknown JSON keys by default. `avatar_url` in
+/// particular is rewritten only via `POST /me/avatar`, which owns the
+/// upload+storage round-trip; allowing it here would let a client parallel
+/// race the two endpoints and clobber the URL the storage backend just
+/// wrote.
 ///
 /// Side effect: changing `phone` to a value distinct from the stored one
 /// resets `phone_verified` to `false` in the same UPDATE statement (atomic

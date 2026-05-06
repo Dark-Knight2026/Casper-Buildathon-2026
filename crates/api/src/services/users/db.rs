@@ -191,8 +191,6 @@ pub struct ProfilePatch {
     pub phone: Option<String>,
     /// New bio, or `None` to keep the existing value.
     pub bio: Option<String>,
-    /// New avatar URL, or `None` to keep the existing value.
-    pub avatar_url: Option<String>,
 }
 
 /// Patches the editable subset of a user's profile.
@@ -238,8 +236,7 @@ pub async fn update_user_profile(
                     THEN false
                     ELSE phone_verified
                 END,
-                bio        = COALESCE($5, bio),
-                avatar_url = COALESCE($6, avatar_url)
+                bio        = COALESCE($5, bio)
             WHERE id = $1 AND deleted_at IS NULL
         ",
         user_id,
@@ -247,7 +244,6 @@ pub async fn update_user_profile(
         patch.last_name,
         patch.phone,
         patch.bio,
-        patch.avatar_url,
     )
     .execute(pool)
     .await?

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT first_name, last_name, phone, bio, avatar_url, phone_verified\n            FROM users\n            WHERE id = $1\n        ",
+  "query": "\n            SELECT first_name, last_name, phone, bio, phone_verified\n            FROM users\n            WHERE id = $1\n        ",
   "describe": {
     "columns": [
       {
@@ -25,11 +25,6 @@
       },
       {
         "ordinal": 4,
-        "name": "avatar_url",
-        "type_info": "Text"
-      },
-      {
-        "ordinal": 5,
         "name": "phone_verified",
         "type_info": "Bool"
       }
@@ -44,9 +39,8 @@
       false,
       true,
       true,
-      true,
       true
     ]
   },
-  "hash": "c70d64fac0371a9919994af650b3928a17d3fe0d855714907933abfd2b62b648"
+  "hash": "350cec0b0b05c4de63248b228c34d5490e3a12007980284274b45f60ff3fef6f"
 }
