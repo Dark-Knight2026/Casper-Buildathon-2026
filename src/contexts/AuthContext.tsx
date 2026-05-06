@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AuthContext } from './AuthContextDefinition';
-import { backendClient } from '@/lib/api-client';
 import {
   logoutSession,
   refreshSession,
   type ServerUserInfo,
 } from '@/services/ico/backendAuthService';
+import { patchMe, type PatchProfileBody } from '@/services/ico/userProfileService';
 import type { UserProfile, UserRole, UserStatus } from '@/types/user';
 
 // Non-secret session marker. The actual auth tokens live in HttpOnly cookies
@@ -28,6 +28,25 @@ const KNOWN_USER_STATUSES: ReadonlySet<UserStatus> = new Set<UserStatus>([
 function mapUserStatus(raw: string | null): UserStatus | undefined {
   if (raw === null) return undefined;
   return KNOWN_USER_STATUSES.has(raw as UserStatus) ? (raw as UserStatus) : undefined;
+}
+
+/**
+ * Inverse of `mapServerUserInfo` for the subset of fields that
+ * `PATCH /users/me` accepts. Only writes a key when the caller actually
+ * supplied one, so a partial update never accidentally clears a stored
+ * field by sending `undefined`.
+ */
+function toPatchProfileBody(updates: Partial<UserProfile>): PatchProfileBody {
+  const body: PatchProfileBody = {};
+  if (updates.firstName !== undefined) body.first_name = updates.firstName;
+  if (updates.lastName !== undefined) body.last_name = updates.lastName;
+  if (updates.phone !== undefined) body.phone = updates.phone;
+  if (updates.bio !== undefined) body.bio = updates.bio;
+  // `avatar` is the camelCase alias used across the UI; map it to the
+  // wire-format `avatar_url` so callers that already have a URL (e.g. a
+  // previously-uploaded asset being re-applied) can use the same patch path.
+  if (updates.avatar !== undefined) body.avatar_url = updates.avatar;
+  return body;
 }
 
 function mapServerUserInfo(info: ServerUserInfo): UserProfile {
@@ -132,7 +151,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const updateProfile = useCallback(async (updates: Partial<UserProfile>) => {
-    const updated = await backendClient.put<ServerUserInfo>('/api/v1/users/me', updates);
+    const updated = await patchMe(toPatchProfileBody(updates));
     const mapped = mapServerUserInfo(updated);
     saveSessionMarker(mapped);
     setProfile(mapped);

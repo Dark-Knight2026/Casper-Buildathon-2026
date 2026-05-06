@@ -4,6 +4,7 @@
  */
 
 import { retryAsync, getUserFriendlyError, isNetworkError, isAuthError } from './validation';
+import { parseProfileApiErrorBody } from './api-errors';
 import { logger } from '@/utils/logger';
 
 export interface ApiClientOptions {
@@ -39,14 +40,64 @@ export interface RequestOptions extends RequestInit {
 }
 
 export class ApiError extends Error {
+  /**
+   * Machine-readable error token from the backend's `{ "error": string }`
+   * response envelope. Populated by `handleResponse` when the body is
+   * parseable; absent for transport errors and for endpoints that emit prose
+   * (e.g. avatar upload). Callers should switch on `code` first and fall
+   * back to `statusCode` when it is undefined.
+   */
+  public readonly code?: string;
+
   constructor(
     message: string,
     public statusCode?: number,
-    public originalError?: unknown
+    public originalError?: unknown,
+    code?: string,
   ) {
     super(message);
     this.name = 'ApiError';
+    this.code = code;
   }
+}
+
+/**
+ * Builds the `body` and `headers` for a request that may carry JSON or
+ * `FormData`. `FormData` must travel without a manually-set `Content-Type`
+ * so the browser can attach the multipart boundary; passing it through
+ * `JSON.stringify` would emit the literal `"[object FormData]"` string and
+ * silently corrupt avatar uploads.
+ */
+function buildRequestBody(
+  data: unknown,
+  callerHeaders: HeadersInit | undefined,
+): { body: BodyInit | undefined; headers: HeadersInit } {
+  if (data === undefined || data === null) {
+    return { body: undefined, headers: { ...(callerHeaders ?? {}) } };
+  }
+  if (typeof FormData !== 'undefined' && data instanceof FormData) {
+    return { body: data, headers: { ...(callerHeaders ?? {}) } };
+  }
+  return {
+    body: JSON.stringify(data),
+    headers: { 'Content-Type': 'application/json', ...(callerHeaders ?? {}) },
+  };
+}
+
+/**
+ * Default copy for status codes when the response body did not carry a
+ * machine-readable token. Kept as a flat lookup rather than per-status
+ * branches inline so adding a new status (e.g. 413, 415) is a one-liner.
+ */
+function defaultStatusMessage(status: number): string {
+  if (status === 401) return 'Unauthorized';
+  if (status === 403) return 'Forbidden';
+  if (status === 404) return 'Not Found';
+  if (status === 413) return 'Payload Too Large';
+  if (status === 415) return 'Unsupported Media Type';
+  if (status === 429) return 'Too Many Requests';
+  if (status >= 500) return 'Internal Server Error';
+  return `Request failed with status ${status}`;
 }
 
 export class ApiClient {
@@ -136,33 +187,22 @@ export class ApiClient {
   }
 
   /**
-   * Handle API response
+   * Handle API response.
+   *
+   * Non-2xx responses are converted to `ApiError`. The body is read at most
+   * once: if it parses as the backend's `{ "error": string }` envelope the
+   * token is attached to `ApiError.code` so callers can switch on
+   * machine-readable values like `reauthentication_required`. Bodies that
+   * fail to parse fall back to a status-driven message — the request still
+   * fails, only the discriminator is coarser.
    */
   private async handleResponse<T>(response: Response): Promise<T> {
-    // Handle authentication errors
-    if (response.status === 401) {
-      throw new ApiError('Unauthorized', 401);
-    }
-
-    // Handle forbidden errors
-    if (response.status === 403) {
-      throw new ApiError('Forbidden', 403);
-    }
-
-    // Handle not found errors
-    if (response.status === 404) {
-      throw new ApiError('Not Found', 404);
-    }
-
-    // Handle server errors
-    if (response.status >= 500) {
-      throw new ApiError('Internal Server Error', response.status);
-    }
-
-    // Handle client errors
     if (!response.ok) {
-      const errorText = await response.text().catch(() => 'Unknown error');
-      throw new ApiError(errorText, response.status);
+      const rawBody = await response.text().catch(() => '');
+      const envelope = parseProfileApiErrorBody(rawBody);
+      const code = envelope?.error;
+      const message = envelope?.error ?? (rawBody || defaultStatusMessage(response.status));
+      throw new ApiError(message, response.status, undefined, code);
     }
 
     // Parse JSON response
@@ -252,14 +292,12 @@ export class ApiClient {
     const maxRetries = options.maxRetries || this.maxRetries;
 
     const makeRequest = async () => {
+      const { body, headers } = buildRequestBody(data, options.headers);
       const response = await this.fetchWithTimeout(fullUrl, {
         ...options,
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...options.headers,
-        },
-        body: data ? JSON.stringify(data) : undefined,
+        headers,
+        body,
       });
       return this.handleResponse<T>(response);
     };
@@ -290,14 +328,12 @@ export class ApiClient {
     const maxRetries = options.maxRetries || this.maxRetries;
 
     const makeRequest = async () => {
+      const { body, headers } = buildRequestBody(data, options.headers);
       const response = await this.fetchWithTimeout(fullUrl, {
         ...options,
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          ...options.headers,
-        },
-        body: data ? JSON.stringify(data) : undefined,
+        headers,
+        body,
       });
       return this.handleResponse<T>(response);
     };
@@ -311,6 +347,42 @@ export class ApiClient {
         backoff: true,
         onRetry: (attempt, error) => {
           logger.warn(`Retry attempt ${attempt} for PUT ${url}:`, { error: error.message });
+        },
+      });
+    }
+
+    return wrapped();
+  }
+
+  /**
+   * Make PATCH request. Same shape as PUT — partial updates default to no
+   * retry so a transient error does not double-apply a delta.
+   */
+  async patch<T>(url: string, data?: unknown, options: RequestOptions = {}): Promise<T> {
+    const fullUrl = `${this.baseUrl}${url}`;
+    const shouldRetry = options.retry === true;
+    const maxRetries = options.maxRetries || this.maxRetries;
+
+    const makeRequest = async () => {
+      const { body, headers } = buildRequestBody(data, options.headers);
+      const response = await this.fetchWithTimeout(fullUrl, {
+        ...options,
+        method: 'PATCH',
+        headers,
+        body,
+      });
+      return this.handleResponse<T>(response);
+    };
+
+    const wrapped = () => this.withAuthRetry(makeRequest, options);
+
+    if (shouldRetry) {
+      return retryAsync(wrapped, {
+        maxAttempts: maxRetries,
+        delayMs: this.retryDelay,
+        backoff: true,
+        onRetry: (attempt, error) => {
+          logger.warn(`Retry attempt ${attempt} for PATCH ${url}:`, { error: error.message });
         },
       });
     }

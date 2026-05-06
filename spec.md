@@ -1338,8 +1338,10 @@ Mapped to camelCase `UserProfile` via `mapServerUserInfo` in
 
 The following are described in the backend PR but **not yet present on the
 backend `feat/user-profile` branch as of this writing** — UI wiring blocked
-until they ship: `GET/DELETE /users/me/sessions`, `DELETE /users/me/sessions/:id`,
-`POST /users/me/sessions/revoke-all`, `DELETE /users/me`.
+until they ship: `GET /auth/sessions`, `DELETE /auth/sessions/:id`,
+`POST /auth/sessions/revoke-all`, `DELETE /users/me`. Note: sessions live
+under `/auth/`, not `/users/me/`, since they describe auth state rather than
+profile state.
 
 #### Recent-auth gate (5-minute window)
 
