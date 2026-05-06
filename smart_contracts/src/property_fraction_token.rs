@@ -148,6 +148,14 @@ impl PropertyFractionToken {
     // =============================================================================
     // Compliance-Aware Token Operations
     // =============================================================================
+
+    #[odra(reentrant)]
+    pub fn transfer(&mut self, recipient: &Address, amount: &U256) {
+        let sender = self.env().caller();
+
+        self.assert_transfer_allowed(sender, *recipient, amount);
+        self.token.transfer(recipient, amount);
+    }
 }
 
 // =============================================================================
@@ -179,5 +187,10 @@ impl PropertyFractionToken {
         if !self.access_control.has_role(&role, &self.env().caller()) {
             self.env().revert(Error::NotAuthorized);
         }
+    }
+
+    fn assert_transfer_allowed(&self, from: Address, to: Address, amount: U256) {
+        self.compliance_policy
+            .assert_can_transfer(self.get_property_id(), from, to, amount);
     }
 }
