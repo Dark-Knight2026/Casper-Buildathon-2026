@@ -175,6 +175,32 @@ impl PropertyFractionToken {
         self.assert_transfer_allowed(sender, *recipient, *amount);
         self.token.transfer(recipient, amount);
     }
+
+    // =============================================================================
+    // CEP-18 Delegation
+    // =============================================================================
+
+    delegate! {
+        to self.token {
+            fn approve(&mut self, spender: &Address, amount: &U256);
+            fn decrease_allowance(&mut self, spender: &Address, decr_by: &U256);
+            fn increase_allowance(&mut self, spender: &Address, inc_by: &U256);
+            fn name(&self) -> String;
+            fn symbol(&self) -> String;
+            fn decimals(&self) -> u8;
+            fn total_supply(&self) -> U256;
+            fn balance_of(&self, address: &Address) -> U256;
+            fn allowance(&self, owner: &Address, spender: &Address) -> U256;
+        }
+
+        to self.access_control {
+            fn has_role(&self, role: &Role, address: &Address) -> bool;
+            fn get_role_admin(&self, role: &Role) -> Role;
+            fn grant_role(&mut self, role: &Role, address: &Address);
+            fn revoke_role(&mut self, role: &Role, address: &Address);
+            fn renounce_role(&mut self, role: &Role, address: &Address);
+        }
+    }
 }
 
 // =============================================================================
