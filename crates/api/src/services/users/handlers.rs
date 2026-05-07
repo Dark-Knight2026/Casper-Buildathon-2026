@@ -748,9 +748,16 @@ pub async fn upload_avatar(
             }
         })?;
 
-    state.redis.record_avatar_upload_attempt(user_id).await?;
-
+    // DB write before the rate-limit bump: a `RowNotFound` (or any
+    // other DB failure) here aborts before `record_avatar_upload_attempt`
+    // runs, so the user does not lose a rate-limit slot for an upload
+    // that the client never observed as successful. The storage blob
+    // written above may linger as an orphan, but that is a billing
+    // concern (already documented in the sweep section) and not a
+    // correctness/UX issue.
     db::update_avatar_url(&state.db, user_id, &avatar_url).await?;
+
+    state.redis.record_avatar_upload_attempt(user_id).await?;
 
     Ok(Json(AvatarUploadResponse { avatar_url }))
 }
