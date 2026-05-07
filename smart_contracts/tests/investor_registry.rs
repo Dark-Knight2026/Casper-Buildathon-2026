@@ -111,6 +111,29 @@ fn test_verified_record_should_expire() {
 }
 
 #[test]
+fn test_is_verified_boundary_conditions() {
+    let mut ctx = setup(odra_test::env());
+    let mut record = active_record(&ctx.env);
+    let now = ctx.env.block_time();
+
+    // Condition 1: verified_until == block_time() -> true
+    record.verified_until = now;
+    ctx.env.set_caller(ctx.verification_manager);
+    ctx.registry.set_investor_record(ctx.investor, record);
+    assert!(
+        ctx.registry.is_verified(ctx.investor),
+        "Should be verified exactly at expiry time"
+    );
+
+    // Condition 2: verified_until == block_time() - 1 -> false
+    ctx.env.advance_block_time(1);
+    assert!(
+        !ctx.registry.is_verified(ctx.investor),
+        "Should be expired 1ms after expiry time"
+    );
+}
+
+#[test]
 fn test_frozen_investor_should_not_be_verified() {
     let mut ctx = setup(odra_test::env());
 

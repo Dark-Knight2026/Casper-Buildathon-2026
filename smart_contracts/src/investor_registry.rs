@@ -169,7 +169,7 @@ impl InvestorRegistry {
                 record.verified
                     && !record.frozen
                     && !record.identity_hash.is_empty()
-                    && record.verified_until > self.env().get_block_time()
+                    && record.verified_until >= self.env().get_block_time()
             })
             .unwrap_or(false)
     }
