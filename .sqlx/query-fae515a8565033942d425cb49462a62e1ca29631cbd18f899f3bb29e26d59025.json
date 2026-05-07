@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO audit_logs (\n                user_id, action, resource_type, resource_id, status\n            )\n            VALUES ($1, 'self_delete_user', 'user', $1, 'success')\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "fae515a8565033942d425cb49462a62e1ca29631cbd18f899f3bb29e26d59025"
+}

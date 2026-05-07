@@ -31,6 +31,14 @@ const MAX_EMAIL_LEN: usize = 254;
 /// round-trip happens.
 const EMAIL_CHANGE_TOKEN_LEN: usize = 43;
 
+/// Magic string a client must send in the body to confirm self-deletion.
+///
+/// Matched verbatim by [`DeleteAccountRequest::into_validated`]. The value
+/// is part of the public contract, so changing it later requires a docs
+/// pass on `docs/auth/spec.md` and a coordinated client update -
+/// otherwise every existing client would silently 400 on `DELETE /me`.
+pub const ACCOUNT_DELETE_CONFIRMATION: &str = "delete-my-account";
+
 /// Patch payload for `PATCH /api/v1/users/me`.
 ///
 /// Each field is optional; a missing field leaves the underlying column
@@ -269,5 +277,58 @@ impl EmailChangeConfirmRequest {
             return Err(ApiError::BadRequest("Invalid token format".to_owned()));
         }
         Ok(trimmed.to_owned())
+    }
+}
+
+/// Request body for `DELETE /api/v1/users/me`.
+///
+/// Carries an explicit confirmation string so a stray client (e.g. an
+/// over-eager retry that posts an empty body) cannot accidentally soft-delete
+/// the user. The string is matched verbatim against
+/// [`ACCOUNT_DELETE_CONFIRMATION`]; any other value 400's. The flow is "magic
+/// constant in the body" rather than "extra header" because the body is what
+/// the operator sees in their request log when investigating a deletion - the
+/// confirmation string travels with the row, not with transport-level metadata
+/// that gets stripped on the way to the audit trail.
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct DeleteAccountRequest {
+    /// Must equal [`ACCOUNT_DELETE_CONFIRMATION`] verbatim. Trimming is NOT
+    /// performed: a client that sends `" delete-my-account "` almost certainly
+    /// has a UI bug, and we want them to surface the 400 immediately rather
+    /// than silently accepting whitespace as equivalent.
+    ///
+    /// `#[serde(default)]` keeps the failure mode uniform: a missing field
+    /// deserializes to `""` which fails the equality check below and yields
+    /// the same 400 with the same wording as a wrong value. Without
+    /// `default`, axum 0.8 surfaces the missing-field path as 422
+    /// (`JsonDataError`), splitting the contract into two status codes for
+    /// what is, from the client's perspective, the same "you forgot the
+    /// confirmation string" mistake.
+    #[serde(default)]
+    pub confirm: String,
+}
+
+impl DeleteAccountRequest {
+    /// Validates the confirmation string against
+    /// [`ACCOUNT_DELETE_CONFIRMATION`].
+    ///
+    /// Returns `()` because the only useful information in the request is
+    /// whether the gate passes - there is no normalized value to hand back to
+    /// the handler. The handler reads `user_id` from the JWT, not from the
+    /// request body, so no client-supplied identity can sneak through this
+    /// gate.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ApiError::BadRequest`] when `confirm` does not match the
+    /// expected magic string.
+    #[inline]
+    pub fn into_validated(self) -> ApiResult<()> {
+        if self.confirm != ACCOUNT_DELETE_CONFIRMATION {
+            return Err(ApiError::BadRequest(format!(
+                "confirm must equal '{ACCOUNT_DELETE_CONFIRMATION}'"
+            )));
+        }
+        Ok(())
     }
 }

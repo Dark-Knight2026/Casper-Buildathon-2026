@@ -572,3 +572,150 @@ pub async fn apply_email_change(
 
     fetch_user_profile(pool, user_id).await
 }
+
+/// Returns `true` when the user is bound to at least one currently-active lease
+/// as `landlord_id` or `primary_tenant_id`.
+///
+/// Mirrors [`has_blocking_leases`] but kept as a separate function so the
+/// role-change gate and the self-deletion gate can evolve independently:
+/// extending the role-change predicate (e.g. to also block agents) must not
+/// auto-broaden the deletion predicate, and vice versa. The two flows have
+/// different "what does a contractual counterparty mean" semantics even when
+/// the SQL happens to match today.
+///
+/// `deleted_at IS NULL` excludes already-soft-deleted leases so a stale row
+/// from a previous tenancy does not lock the user out of leaving.
+///
+/// Runs as a plain `&PgPool` query rather than inside the soft-delete
+/// transaction. A lease created concurrently between this check and the UPDATE
+/// would in the worst case leave the lease pointing at a soft-deleted user -
+/// the lease is itself paused (`deleted_at` cascades no further than the user
+/// row), and the lease-creation path's own row lock on the user already
+/// short-circuits via `lock_user_role`-style guards in the lease flow. The
+/// simpler outer ordering (check, then soft-delete) reads more cleanly than a
+/// multi-statement transaction here.
+///
+/// # Errors
+///
+/// Returns [`sqlx::Error`] for DB transport failures.
+#[inline]
+pub async fn has_active_lease_participation(pool: &PgPool, user_id: Uuid) -> Result<bool, Error> {
+    let row = sqlx::query!(
+        r#"
+            SELECT EXISTS(
+                SELECT 1 FROM leases
+                WHERE status = 'active'
+                  AND deleted_at IS NULL
+                  AND (landlord_id = $1 OR primary_tenant_id = $1)
+            ) AS "exists!"
+        "#,
+        user_id,
+    )
+    .fetch_one(pool)
+    .await?;
+    Ok(row.exists)
+}
+
+/// Soft-deletes a user account in a single transaction.
+///
+/// Runs four statements as one atomic unit so a partial failure cannot leave
+/// the user with a half-deleted row (e.g. revoked refresh tokens but
+/// `deleted_at` still NULL):
+///
+/// 1. **`DELETE FROM wallet_connections`** - removes every wallet binding
+///    for the user. The AFTER-trigger
+///    `trg_wallet_connections_sync_cache` recomputes
+///    `users.wallet_address` to NULL automatically; we do NOT write the
+///    cache column directly because that would race with the trigger
+///    (and either duplicate the work or fight the trigger's UPDATE).
+/// 2. **`UPDATE users`** - stamps `deleted_at = NOW()`, rewrites
+///    `email` to a per-user placeholder
+///    (`deleted-{uuid}@deleted.local`), bumps
+///    `jwt_invalidate_before = NOW()` so the auth middleware kills every
+///    outstanding access token, and refreshes `updated_at` explicitly
+///    so the column moves even when the standard `updated_at` trigger is
+///    not deployed in tests. The placeholder is generated DB-side
+///    (`'deleted-' || $1::text || '@deleted.local'`) so the value
+///    cannot drift between the call site's formatter and the schema's
+///    UNIQUE expectation. It satisfies both the active
+///    `users_email_unique` partial index (each user gets a distinct
+///    address; soft-deleted rows are already excluded by the index's
+///    own predicate) AND any future re-instatement of `email NOT NULL`,
+///    so the column is never left in an "implicitly NULL" state.
+/// 3. **`UPDATE refresh_tokens`** - revokes every active refresh row
+///    for the user, mirroring the role-change path: every device
+///    sharing the family is cut at the same instant the access
+///    cookie's cutoff is bumped, no rotating chain survives.
+/// 4. **`INSERT INTO audit_logs`** - records `self_delete_user` so a
+///    moderator investigating a re-instatement request can prove the
+///    deletion was self-initiated (vs. an admin action, which uses a
+///    different `action` literal).
+///
+/// Returns [`Error::RowNotFound`] when the row is already soft-deleted
+/// (or never existed). The JWT path makes the latter unreachable, so
+/// the handler maps this to 404.
+///
+/// # Errors
+///
+/// - [`Error::RowNotFound`] when the user is already soft-deleted.
+/// - [`sqlx::Error`] for DB transport failures.
+#[inline]
+pub async fn soft_delete_user(pool: &PgPool, user_id: Uuid) -> Result<(), Error> {
+    let mut tx = pool.begin().await?;
+
+    sqlx::query!(
+        r"
+            DELETE FROM wallet_connections
+            WHERE user_id = $1
+        ",
+        user_id,
+    )
+    .execute(tx.as_mut())
+    .await?;
+
+    let rows_affected = sqlx::query!(
+        r"
+            UPDATE users
+            SET deleted_at = NOW(),
+                email = 'deleted-' || $1::text || '@deleted.local',
+                jwt_invalidate_before = NOW(),
+                updated_at = NOW()
+            WHERE id = $1 AND deleted_at IS NULL
+        ",
+        user_id,
+    )
+    .execute(tx.as_mut())
+    .await?
+    .rows_affected();
+
+    if rows_affected == 0 {
+        return Err(Error::RowNotFound);
+    }
+
+    sqlx::query!(
+        r"
+            UPDATE refresh_tokens
+            SET revoked_at = NOW()
+            WHERE user_id = $1 AND revoked_at IS NULL
+        ",
+        user_id,
+    )
+    .execute(tx.as_mut())
+    .await?;
+
+    sqlx::query!(
+        r"
+            INSERT INTO audit_logs (
+                user_id, action, resource_type, resource_id, status
+            )
+            VALUES ($1, 'self_delete_user', 'user', $1, 'success')
+        ",
+        user_id,
+    )
+    .execute(tx.as_mut())
+    .await?;
+
+    tx.commit().await?;
+
+    Ok(())
+}

@@ -17,8 +17,8 @@ use crate::{
         users::{
             db,
             models::{
-                AvatarUploadResponse, EmailChangeConfirmRequest, EmailChangeRequest,
-                UpdateProfileRequest, UpdateRoleRequest,
+                AvatarUploadResponse, DeleteAccountRequest, EmailChangeConfirmRequest,
+                EmailChangeRequest, UpdateProfileRequest, UpdateRoleRequest,
             },
             tokens,
         },
@@ -46,6 +46,18 @@ const AVATAR_FIELD_NAME: &str = "file";
 /// a privilege-flip primitive - by the time the attacker can replay
 /// it, the iat is already past the window and the request is 403'd.
 const ROLE_CHANGE_RECENT_AUTH_WINDOW_SECS: i64 = 5 * 60;
+
+/// Maximum age (in seconds) of the access token's `iat` claim that the
+/// self-deletion handler accepts.
+///
+/// Same window and rationale as
+/// [`ROLE_CHANGE_RECENT_AUTH_WINDOW_SECS`]: account deletion is
+/// destructive and must require a freshly-authenticated session so a
+/// stolen, long-lived access cookie cannot be the only credential
+/// behind a wipe. The two constants are intentionally separate so a
+/// future tightening of one window (e.g. 60 seconds for deletion) does
+/// not auto-tighten the other and surprise role-change clients.
+const DELETE_ACCOUNT_RECENT_AUTH_WINDOW_SECS: i64 = 5 * 60;
 
 /// Extensions the avatar handler may have produced for a given user
 /// historically. Used to delete stale objects under sibling extensions when
@@ -252,6 +264,117 @@ pub async fn patch_me(
     let patch = payload.into_patch()?;
     let profile = db::update_user_profile(&state.db, auth_user.0.sub, patch).await?;
     Ok(Json(UserInfo::from(profile)))
+}
+
+// `DELETE /api/v1/users/me`
+//
+/// Soft-deletes the authenticated user's account.
+///
+/// Three gates run in strict order before any DB write; a regression
+/// that re-orders them surfaces as a different status code:
+///
+/// 1. **Confirmation string** (400). The body must include
+///    `confirm = "delete-my-account"` verbatim. The magic constant
+///    blocks accidental zero-body retries from wiping the account; an
+///    extra header would be invisible in the audit logs the operator
+///    sees later.
+/// 2. **Recent-auth check** (403, code `reauthentication_required`).
+///    The token's `iat` must be no older than
+///    [`DELETE_ACCOUNT_RECENT_AUTH_WINDOW_SECS`]. A stolen, long-lived
+///    access cookie cannot be repurposed for an account wipe once the
+///    window has elapsed - the attacker must produce a fresh login,
+///    which requires the wallet's signing key.
+/// 3. **Active-leases pre-check** (409, code `active_leases_blocking`).
+///    A user bound to an active lease as `landlord_id` or
+///    `primary_tenant_id` cannot self-delete: the contractual
+///    counterparty would be left pointing at a soft-deleted user with
+///    no clean way to renegotiate. The lease flow's own row locks
+///    keep a lease-creation race after the check from corrupting state
+///    - the worst case is a lease landing on a now-deleted user, which
+///    a moderator can resolve via the lease-termination flow.
+///
+/// On success [`db::soft_delete_user`] runs four statements in one
+/// transaction:
+///
+/// - `wallet_connections` for the user are deleted (the
+///   `trg_wallet_connections_sync_cache` trigger zeros out
+///   `users.wallet_address` automatically).
+/// - `users.deleted_at = NOW()`, `email = 'deleted-{uuid}@deleted.local'`,
+///   and `jwt_invalidate_before = NOW()` are stamped together; the
+///   middleware kills every outstanding access token from this point.
+/// - All active refresh-token rows are revoked.
+/// - One `audit_logs` row records `action = 'self_delete_user'`.
+///
+/// Both auth cookies are cleared in the response so the browser drops
+/// them on receipt - the access token is also rejected by the
+/// middleware via `jwt_invalidate_before`, but stamping
+/// `Max-Age=0` short-circuits the rejection round-trip and avoids
+/// confusing the user with a "logged in but everything 401's" state.
+///
+/// Authorization: `AuthUser` extractor (any logged-in user). Verified
+/// status is intentionally NOT required - a partially-onboarded user
+/// must be able to walk away from their account.
+///
+/// # Errors
+///
+/// - 400 (`BadRequest`) when `confirm` is missing or wrong.
+/// - 401 (`Unauthorized`) when the access cookie is missing or invalid
+///   (enforced upstream by `require_auth`).
+/// - 403 (`Forbidden`, code `reauthentication_required`) when
+///   `claims.iat` is older than [`DELETE_ACCOUNT_RECENT_AUTH_WINDOW_SECS`].
+/// - 404 (`NotFound`) if the user row was already soft-deleted between
+///   JWT issue and this call.
+/// - 409 (`Conflict`, code `active_leases_blocking`) when active leases
+///   gate the deletion.
+/// - 500 for DB transport failures.
+#[utoipa::path(
+    delete,
+    path = "/me",
+    tag = "Users",
+    request_body = DeleteAccountRequest,
+    responses(
+        (status = 204, description = "Account soft-deleted; cookies cleared"),
+        (status = 400, description = "Missing or wrong confirmation string"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Re-authentication required"),
+        (status = 404, description = "User no longer exists"),
+        (status = 409, description = "Active leases block account deletion"),
+        (status = 500, description = "Internal server error"),
+    ),
+    security(
+        ("cookie_auth" = [])
+    )
+)]
+#[inline]
+pub async fn delete_me(
+    State(state): State<Arc<AppState>>,
+    auth_user: AuthUser,
+    Json(payload): Json<DeleteAccountRequest>,
+) -> ApiResult<(CookieJar, StatusCode)> {
+    let user_id = auth_user.0.sub;
+    payload.into_validated()?;
+
+    // Recent-auth gate. Same `i64::try_from` saturation pattern as the
+    // role-change handler: a corrupt token with `iat` past i64::MAX
+    // clamps to MAX so the subtraction underflows safely, and the gate
+    // still admits the request only when `iat` is within the window.
+    let now_secs = Utc::now().timestamp();
+    let iat_secs = i64::try_from(auth_user.0.iat).unwrap_or(i64::MAX);
+    if now_secs.saturating_sub(iat_secs) > DELETE_ACCOUNT_RECENT_AUTH_WINDOW_SECS {
+        return Err(ApiError::Forbidden("reauthentication_required".to_owned()));
+    }
+
+    if db::has_active_lease_participation(&state.db, user_id).await? {
+        return Err(ApiError::Conflict("active_leases_blocking".to_owned()));
+    }
+
+    db::soft_delete_user(&state.db, user_id).await?;
+
+    let clear_access = cookies::build_expired_access_cookie(state.config.cookie_secure);
+    let clear_refresh = cookies::build_expired_refresh_cookie(state.config.cookie_secure);
+    let jar = CookieJar::new().add(clear_access).add(clear_refresh);
+
+    Ok((jar, StatusCode::NO_CONTENT))
 }
 
 // `POST /api/v1/users/me/email`

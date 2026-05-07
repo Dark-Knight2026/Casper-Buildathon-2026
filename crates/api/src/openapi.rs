@@ -48,6 +48,7 @@ use crate::{
             auth::models::SessionResponse,
             // Users models
             users::models::AvatarUploadResponse,
+            users::models::DeleteAccountRequest,
             users::models::EmailChangeConfirmRequest,
             users::models::EmailChangeRequest,
             users::models::UpdateProfileRequest,
