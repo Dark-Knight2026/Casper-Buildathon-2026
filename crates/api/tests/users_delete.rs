@@ -467,3 +467,97 @@ async fn delete_me_with_active_lease_returns_409(pool: PgPool) {
         "409 must not have soft-deleted the user when the gate blocks",
     );
 }
+
+/// Race-condition regression: an active lease created in the window
+/// between the handler's outer `has_active_lease_participation` check
+/// and the inner `soft_delete_user` transaction must NOT be ignored.
+///
+/// The bug: `delete_me` runs the lease gate against the pool directly
+/// (no transaction isolation) and `soft_delete_user` opens its own tx
+/// without re-checking, so a concurrent lease INSERT in the window
+/// silently bypasses the gate - the user gets soft-deleted while an
+/// active lease still references them as `landlord_id`. Because
+/// soft-delete is irreversible, this leaves the contractual
+/// counterparty pointing at a tombstone with no way to renegotiate.
+///
+/// The test reproduces the race deterministically by mirroring the
+/// handler's two-step sequence at the db layer with a manual lease
+/// insertion in the gap. The fix must move the lease check inside the
+/// soft-delete transaction (matching the `patch_me_role` pattern of
+/// `lock_user_role` + `has_blocking_leases` under one tx), so the
+/// post-fix behavior is: `soft_delete_user` returns an error AND
+/// `users.deleted_at` stays NULL when an active lease exists.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn delete_me_concurrent_lease_does_not_orphan_user(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), true).await;
+    let session = common::login_and_extract(&env).await;
+    let user_id = session.user_id;
+
+    // Step 1: outer lease gate passes (no lease yet) - this mirrors
+    // `delete_me`'s `has_active_lease_participation(&state.db, ...)`
+    // call against the pool, outside any transaction.
+    let blocked_before = api::services::users::has_active_lease_participation(&pool, user_id)
+        .await
+        .expect("lease check must succeed");
+    assert!(
+        !blocked_before,
+        "precondition: no active lease yet, so the outer gate would let the handler through",
+    );
+
+    // Step 2: a parallel `POST /api/v1/leases` lands in the window
+    // between the gate and `soft_delete_user`. Simulated by direct
+    // INSERT to keep the timing deterministic.
+    seed_active_lease_as_landlord(&pool, user_id).await;
+
+    // Step 3: `soft_delete_user` is invoked - same call the handler
+    // makes after the gate passes. With the bug, it commits without
+    // re-checking and the user gets soft-deleted with the active
+    // lease still pointing at them.
+    let delete_outcome = api::services::users::soft_delete_user(&pool, user_id).await;
+
+    // Post-fix invariant: the inner transaction must catch the
+    // newly-created lease and refuse to commit.
+    assert!(
+        delete_outcome.is_err(),
+        "soft_delete_user must refuse to commit when an active lease was created during the operation; got Ok(())",
+    );
+
+    // Post-fix invariant: the user row stays alive. Pre-fix, this is
+    // where the test fails - `deleted_at` is stamped despite the
+    // lease, leaving an unrecoverable inconsistency.
+    let row = sqlx::query!(
+        r"
+            SELECT deleted_at
+            FROM users
+            WHERE id = $1
+        ",
+        user_id,
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("user row must exist");
+    assert!(
+        row.deleted_at.is_none(),
+        "user must not be soft-deleted while an active lease still references them as landlord_id",
+    );
+
+    // Sanity: the lease itself is still active and still points at
+    // the user. If the user got dangling-deleted under the bug, this
+    // is the row that would be the orphaned counterparty.
+    let active_leases: i64 = sqlx::query_scalar!(
+        r#"
+            SELECT COUNT(*) AS "n!" FROM leases
+            WHERE status = 'active'
+              AND deleted_at IS NULL
+              AND (landlord_id = $1 OR primary_tenant_id = $1)
+        "#,
+        user_id,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        active_leases, 1,
+        "the concurrently-created lease must still be active, untouched by the failed delete",
+    );
+}
