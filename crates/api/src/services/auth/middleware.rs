@@ -3,6 +3,60 @@
 //! Access-token transport: `access_token` cookie (HttpOnly; Secure; SameSite=Strict).
 //! The previous `Authorization: Bearer` flow has been removed - the frontend
 //! reads the token from a cookie set at login time.
+//!
+//! # Per-request cost of the force-revoke check
+//!
+//! Every protected request now issues `SELECT jwt_invalidate_before FROM
+//! users WHERE id = $1 AND deleted_at IS NULL` against the primary
+//! database in addition to the existing Redis blocklist lookup. The auth
+//! hot path therefore touches both Postgres and Redis on every call -
+//! deliberate trade-off, captured here so a future profiler-driven
+//! refactor knows what was considered:
+//!
+//! - **Why a DB read at all?** The cutoff has to be enforced
+//!   server-side: a JWT remains cryptographically valid until its 15-
+//!   minute `exp`, but role changes, panic-logout, and self-deletion
+//!   need to invalidate every outstanding token *immediately*. Stamping
+//!   `users.jwt_invalidate_before = NOW()` and rejecting any token with
+//!   `claims.iat <= cutoff` on the next request is the cheapest
+//!   correctness primitive available to us.
+//!
+//! - **Why fail-closed on DB error?** If the lookup fails, we cannot
+//!   tell whether the token has been force-revoked. Failing open would
+//!   let an attacker who can disrupt our DB for a few seconds bypass
+//!   force-revoke entirely; failing closed costs availability under a
+//!   DB outage but never silently admits an invalidated token. Redis
+//!   errors on the blocklist check, by contrast, are fail-open: the
+//!   15-minute access-token TTL caps the worst-case replay window even
+//!   if the blocklist temporarily disappears.
+//!
+//! - **Why not cache the cutoff in Redis?** A short-TTL key
+//!   `force_revoke:<user_id>` (TTL <= the 15-minute access-token TTL)
+//!   would collapse the steady-state cost to "Redis only" in the
+//!   common case where no force-revoke event has fired. We accept the
+//!   per-request DB read for now because:
+//!   1. The cache adds an invalidation contract: every flow that
+//!      stamps `jwt_invalidate_before` (`POST /auth/sessions/revoke-all`
+//!      with `keep_current = false`, `PATCH /users/me/role`,
+//!      `DELETE /users/me`) would need to also `DEL` the cache key
+//!      under the same transaction, and a missed hook leaves a
+//!      revoked token live for up to one TTL. Three hooks today, more
+//!      whenever a new force-revoke trigger lands.
+//!   2. The fail-closed semantics interact subtly with the cache: a
+//!      Redis miss can mean "no cutoff exists" or "cache expired";
+//!      distinguishing requires a DB fallback, which puts us back to
+//!      the steady-state behavior we have now under the steady-state
+//!      load that matters (the cold-cache path).
+//!   3. Postgres handles a single-row primary-key SELECT cheaply, and
+//!      the protected-route surface is bounded by JWT validity (15 min)
+//!      so the QPS upper bound is predictable.
+//!
+//!   When the system has measured evidence that this lookup is the hot
+//!   spot worth optimizing - sustained P99 dominated by the auth path,
+//!   or a Postgres connection-pool ceiling - the cache is the
+//!   recommended next step. Wire the invalidation hooks first, then
+//!   add the cache; the fail-closed read becomes the slow path that
+//!   only fires when the cache misses.
 
 use std::sync::Arc;
 
