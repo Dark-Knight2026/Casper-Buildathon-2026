@@ -379,3 +379,23 @@ fn test_draft_only_fields_should_revert_after_property_is_active() {
         "Should not allow metadata URI changes after activation",
     );
 }
+
+#[test]
+fn test_set_property_status_should_revert_if_transitioning_from_active_to_draft() {
+    let mut ctx = setup(odra_test::env());
+    let property_id = create_property(&mut ctx);
+
+    ctx.registry.set_property_token(property_id, ctx.token);
+    ctx.registry
+        .set_revenue_distributor(property_id, ctx.revenue_distributor);
+    ctx.registry
+        .set_property_status(property_id, PropertyStatus::Active);
+
+    assert_eq!(
+        ctx.registry
+            .try_set_property_status(property_id, PropertyStatus::Draft)
+            .unwrap_err(),
+        Error::InvalidStatusTransition.into(),
+        "Should not allow transition from Active back to Draft",
+    );
+}

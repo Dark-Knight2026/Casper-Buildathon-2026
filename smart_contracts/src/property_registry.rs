@@ -109,6 +109,7 @@ pub mod errors {
         PropertyNotDraft = 904,
         MissingPropertyToken = 905,
         MissingRevenueDistributor = 906,
+        InvalidStatusTransition = 907,
     }
 }
 
@@ -205,6 +206,15 @@ impl PropertyRegistry {
         self.assert_role(ROLE_PROPERTY_MANAGER);
 
         let mut property = self.get_property(property_id);
+
+        // Prevent demoting a property back to Draft status.
+        // Draft status allows modification of immutable-once-active fields (like the token address);
+        // allowing this transition would enable silent token replacement on live properties.
+        if !matches!(property.status, PropertyStatus::Draft)
+            && matches!(status, PropertyStatus::Draft)
+        {
+            self.env().revert(Error::InvalidStatusTransition);
+        }
 
         if let PropertyStatus::Active = status {
             if property.token.is_none() {

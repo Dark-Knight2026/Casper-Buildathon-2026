@@ -126,20 +126,20 @@ fqn = "staking::Staking"
 
 The following deployable contracts are part of the current project surface:
 
-| Contract           | Module Path                              | Responsibility                                                |
-| ------------------ | ---------------------------------------- | ------------------------------------------------------------- |
-| `BigCoin`          | `big_coin::BigCoin`                      | CEP-18 protocol token used for payments, staking, and rewards |
-| `Roles`            | `roles::Roles`                           | Shared role management for actors such as landlords and agents |
-| `Escrow`           | `escrow::Escrow`                         | Invoice payment and conditional fund release                  |
-| `Treasury`         | `treasury::Treasury`                     | Protocol reserves and staking reward deposits                 |
-| `NFT`              | `nft::NFT`                               | CEP-95 assets, certificates, and lease-related NFTs           |
-| `Lease`            | `lease::Lease`                           | Lease lifecycle and invoice creation                          |
-| `Staking`          | `staking::Staking`                       | BIG staking, unbonding, and reward claims                     |
-| `ICO`              | `ico::ICO`                               | BIG token sale schedules and purchase flow                    |
-| `Vesting`          | `vesting::Vesting`                       | Time-based BIG vesting and optional staking integration       |
-| `InvestorRegistry` | `investor_registry::InvestorRegistry`    | On-chain investor eligibility, expiry, and freeze status      |
-| `PropertyRegistry` | `property_registry::PropertyRegistry`    | Tokenized property records and lifecycle status               |
-| `CompliancePolicy` | `compliance_policy::CompliancePolicy`    | Minimal transfer compliance gate for property tokens          |
+| Contract           | Module Path                           | Responsibility                                                 |
+| ------------------ | ------------------------------------- | -------------------------------------------------------------- |
+| `BigCoin`          | `big_coin::BigCoin`                   | CEP-18 protocol token used for payments, staking, and rewards  |
+| `Roles`            | `roles::Roles`                        | Shared role management for actors such as landlords and agents |
+| `Escrow`           | `escrow::Escrow`                      | Invoice payment and conditional fund release                   |
+| `Treasury`         | `treasury::Treasury`                  | Protocol reserves and staking reward deposits                  |
+| `NFT`              | `nft::NFT`                            | CEP-95 assets, certificates, and lease-related NFTs            |
+| `Lease`            | `lease::Lease`                        | Lease lifecycle and invoice creation                           |
+| `Staking`          | `staking::Staking`                    | BIG staking, unbonding, and reward claims                      |
+| `ICO`              | `ico::ICO`                            | BIG token sale schedules and purchase flow                     |
+| `Vesting`          | `vesting::Vesting`                    | Time-based BIG vesting and optional staking integration        |
+| `InvestorRegistry` | `investor_registry::InvestorRegistry` | On-chain investor eligibility, expiry, and freeze status       |
+| `PropertyRegistry` | `property_registry::PropertyRegistry` | Tokenized property records and lifecycle status                |
+| `CompliancePolicy` | `compliance_policy::CompliancePolicy` | Minimal transfer compliance gate for property tokens           |
 
 `InvestorRegistry`, `PropertyRegistry`, and `CompliancePolicy` form the compliance foundation for tokenized property
 ownership. `InvestorRegistry` stores only on-chain eligibility facts from off-chain KYC/compliance review. It must never
@@ -978,15 +978,15 @@ The following table lists all current error discriminant range assignments acros
 | **Staking**          | `600–699`   | 600  | 14          | `BigCoinContractIsNotSet = 601` | `CallerNotAuthorizedToManageLocks = 614`       |
 | **Vesting**          | `700–799`   | 700  | 8           | `CallerNotWhitelisted = 701`    | `ClaimBlockedByActiveUnbonding = 708`          |
 | **InvestorRegistry** | `800–899`   | 800  | 2           | `NotAuthorized = 800`           | `MissingIdentityHash = 801`                    |
-| **PropertyRegistry** | `900–999`   | 900  | 7           | `NotAuthorized = 900`           | `MissingRevenueDistributor = 906`              |
+| **PropertyRegistry** | `900–999`   | 900  | 8           | `NotAuthorized = 900`           | `InvalidStatusTransition = 907`                |
 | **CompliancePolicy** | `1000–1099` | 1000 | 6           | `NotAuthorized = 1000`          | `RecipientNotVerified = 1005`                  |
 
 #### Available Ranges (unassigned)
 
-| Range     | Status                                                            |
-| --------- | ----------------------------------------------------------------- |
-| `0–99`    | ⚠️ Reserved (do not use — conflicts with Odra framework defaults) |
-| `1100+`   | ✅ Available (use sparingly; prefer contiguous ranges)            |
+| Range   | Status                                                            |
+| ------- | ----------------------------------------------------------------- |
+| `0–99`  | ⚠️ Reserved (do not use — conflicts with Odra framework defaults) |
+| `1100+` | ✅ Available (use sparingly; prefer contiguous ranges)            |
 
 #### Rules for Adding New Discriminants
 
