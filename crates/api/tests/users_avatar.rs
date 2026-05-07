@@ -18,6 +18,7 @@ use axum_test::{
     multipart::{MultipartForm, Part},
 };
 use casper_types::{AsymmetricType, PublicKey, SecretKey};
+use redis::AsyncCommands;
 use serde_json::Value;
 use sqlx::PgPool;
 
@@ -297,5 +298,96 @@ async fn upload_avatar_rate_limit_blocks_eleventh_attempt(pool: PgPool) {
         response.status_code(),
         StatusCode::TOO_MANY_REQUESTS,
         "the 11th upload within the rolling hour must be blocked",
+    );
+}
+
+/// Rate-limit accounting regression: when the trailing DB write
+/// (`update_avatar_url`) fails, the rate-limit slot must NOT be
+/// consumed. The bug was the operation order
+/// `storage.put -> redis.record_attempt -> db.update_avatar_url`:
+/// a DB failure after the Redis INCR leaves the user with an orphan
+/// blob (billing concern) AND a burned rate-limit slot for an upload
+/// that the client sees as a 5xx/4xx (correctness concern). The fix
+/// reorders to `storage.put -> db.update_avatar_url -> redis.record_attempt`
+/// so a DB failure aborts before the counter is touched.
+///
+/// Repro lever: soft-delete the user via direct UPDATE (bypassing the
+/// `delete_me` gates) right before the upload. The auth middleware
+/// still admits the JWT (`fetch_jwt_invalidate_before` filters on
+/// `deleted_at IS NULL` and reports "no cutoff" for soft-deleted
+/// users, so the cookie passes through), but
+/// `db::update_avatar_url`'s `WHERE id = $1 AND deleted_at IS NULL`
+/// matches zero rows and returns `RowNotFound`. The handler maps
+/// that to 404 - and the rate-limit accounting is whatever happened
+/// before the `update_avatar_url` call.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn upload_avatar_db_failure_does_not_consume_rate_limit_slot(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), true).await;
+    let session = common::login_and_extract(&env).await;
+
+    // Direct UPDATE soft-deletes the user without going through the
+    // `DELETE /me` gates. Mirrors the production failure mode where
+    // the JWT outlives the row by up to 15 minutes.
+    sqlx::query!(
+        r"
+            UPDATE users
+            SET deleted_at = NOW()
+            WHERE id = $1
+        ",
+        session.user_id,
+    )
+    .execute(&pool)
+    .await
+    .expect("soft-delete user");
+
+    let form = MultipartForm::new().add_part(
+        "file",
+        Part::bytes(fake_png_bytes())
+            .mime_type("image/png")
+            .file_name("avatar.png"),
+    );
+
+    let response = env
+        .server
+        .post("/api/v1/users/me/avatar")
+        .add_header(COOKIE, format!("access_token={}", session.access_token))
+        .multipart(form)
+        .await;
+
+    // The DB UPDATE in `update_avatar_url` finds zero rows (the
+    // `deleted_at IS NULL` filter excludes the just-soft-deleted row)
+    // and the handler maps `Error::RowNotFound` to 404. Pre- and
+    // post-fix this is the same; the discriminator is the Redis
+    // counter checked below.
+    assert_eq!(
+        response.status_code(),
+        StatusCode::NOT_FOUND,
+        "soft-deleted user must hit the 404 path that proves the DB write failed",
+    );
+
+    // Load-bearing assertion: the rate-limit counter must NOT have
+    // been incremented for an upload the client never observed as
+    // successful. Pre-fix, `record_avatar_upload_attempt` ran before
+    // `update_avatar_url` so this counter is at 1; post-fix the
+    // counter is untouched (key absent).
+    let redis_env = env
+        .redis
+        .as_ref()
+        .expect("redis env required for this test");
+    let mut conn = redis_env
+        .client
+        .get_multiplexed_async_connection()
+        .await
+        .expect("connect to test redis");
+
+    let key = format!("avatar_upload_attempts:{}", session.user_id);
+    let count = conn
+        .get::<_, Option<u64>>(&key)
+        .await
+        .expect("read avatar_upload_attempts counter");
+
+    assert!(
+        count.is_none(),
+        "DB-failed avatar upload must not consume a rate-limit slot; got counter = {count:?} for key {key}",
     );
 }
