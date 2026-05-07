@@ -16,7 +16,7 @@ pub mod tokens;
 
 // Re-exports
 pub use db::{
-    ProfilePatch, UserProfileRecord, apply_email_change, apply_user_role_change,
+    ProfilePatch, SoftDeleteOutcome, UserProfileRecord, apply_email_change, apply_user_role_change,
     fetch_user_profile, has_active_lease_participation, has_blocking_leases, is_email_taken,
     lock_user_role, soft_delete_user, update_avatar_url, update_user_profile,
 };

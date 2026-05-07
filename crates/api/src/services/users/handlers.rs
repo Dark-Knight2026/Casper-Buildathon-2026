@@ -15,7 +15,7 @@ use crate::{
     services::{
         auth::{AuthUser, cookies},
         users::{
-            db,
+            db::{self, SoftDeleteOutcome},
             models::{
                 AvatarUploadResponse, DeleteAccountRequest, EmailChangeConfirmRequest,
                 EmailChangeRequest, UpdateProfileRequest, UpdateRoleRequest,
@@ -284,14 +284,15 @@ pub async fn patch_me(
 ///    access cookie cannot be repurposed for an account wipe once the
 ///    window has elapsed - the attacker must produce a fresh login,
 ///    which requires the wallet's signing key.
-/// 3. **Active-leases pre-check** (409, code `active_leases_blocking`).
+/// 3. **Active-leases gate** (409, code `active_leases_blocking`).
 ///    A user bound to an active lease as `landlord_id` or
 ///    `primary_tenant_id` cannot self-delete: the contractual
 ///    counterparty would be left pointing at a soft-deleted user with
-///    no clean way to renegotiate. The lease flow's own row locks
-///    keep a lease-creation race after the check from corrupting state
-///    - the worst case is a lease landing on a now-deleted user, which
-///    a moderator can resolve via the lease-termination flow.
+///    no clean way to renegotiate. Runs inside the
+///    [`db::soft_delete_user`] transaction (after `SELECT ... FOR
+///    UPDATE` on the user row), matching the [`patch_me_role`]
+///    pattern - a lease created concurrently after the lock cannot
+///    slip through.
 ///
 /// On success [`db::soft_delete_user`] runs four statements in one
 /// transaction:
@@ -364,11 +365,12 @@ pub async fn delete_me(
         return Err(ApiError::Forbidden("reauthentication_required".to_owned()));
     }
 
-    if db::has_active_lease_participation(&state.db, user_id).await? {
-        return Err(ApiError::Conflict("active_leases_blocking".to_owned()));
+    match db::soft_delete_user(&state.db, user_id).await? {
+        SoftDeleteOutcome::Deleted => {}
+        SoftDeleteOutcome::LeaseBlocking => {
+            return Err(ApiError::Conflict("active_leases_blocking".to_owned()));
+        }
     }
-
-    db::soft_delete_user(&state.db, user_id).await?;
 
     let clear_access = cookies::build_expired_access_cookie(state.config.cookie_secure);
     let clear_refresh = cookies::build_expired_refresh_cookie(state.config.cookie_secure);

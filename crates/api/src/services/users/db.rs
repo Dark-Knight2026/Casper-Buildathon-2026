@@ -616,19 +616,52 @@ pub async fn has_active_lease_participation(pool: &PgPool, user_id: Uuid) -> Res
     Ok(row.exists)
 }
 
+/// Outcome of [`soft_delete_user`].
+///
+/// Distinguishes "the user was deleted" from "the deletion was refused
+/// because an active lease still references the user". The third state
+/// (user already soft-deleted) is reported as [`Error::RowNotFound`]
+/// from the inner `SELECT ... FOR UPDATE`, mirroring the existing 404
+/// path.
+#[derive(Debug, Eq, PartialEq)]
+pub enum SoftDeleteOutcome {
+    /// The user row was soft-deleted and every documented side effect
+    /// (wallet wipe, refresh-token revocation, audit log) committed.
+    Deleted,
+    /// The user has at least one currently-active lease as
+    /// `landlord_id` or `primary_tenant_id`. Maps to 409
+    /// `active_leases_blocking` at the handler boundary.
+    LeaseBlocking,
+}
+
 /// Soft-deletes a user account in a single transaction.
 ///
-/// Runs four statements as one atomic unit so a partial failure cannot leave
+/// Runs five statements as one atomic unit so a partial failure cannot leave
 /// the user with a half-deleted row (e.g. revoked refresh tokens but
-/// `deleted_at` still NULL):
+/// `deleted_at` still NULL), AND so the lease-blocking gate cannot be
+/// bypassed by a lease created concurrently with the delete:
 ///
-/// 1. **`DELETE FROM wallet_connections`** - removes every wallet binding
+/// 1. **`SELECT id FROM users ... FOR UPDATE`** - locks the user row.
+///    Mirrors the [`lock_user_role`] pattern in the role-change path:
+///    serializes against any concurrent flow that takes the same lock
+///    (notably the lease-creation path, which must lock the
+///    counterparty before INSERT to be safe). Returns
+///    [`Error::RowNotFound`] when the row is already soft-deleted (or
+///    never existed) - the handler maps this to 404.
+/// 2. **Lease re-check** under the lock via [`has_blocking_leases`]. The
+///    handler's earlier check ran against the pool with no isolation,
+///    so a lease created in the window between that check and this
+///    transaction would otherwise slip through and leave the
+///    contractual counterparty pointing at a tombstone. Returning
+///    [`SoftDeleteOutcome::LeaseBlocking`] aborts the tx without
+///    side effects.
+/// 3. **`DELETE FROM wallet_connections`** - removes every wallet binding
 ///    for the user. The AFTER-trigger
 ///    `trg_wallet_connections_sync_cache` recomputes
 ///    `users.wallet_address` to NULL automatically; we do NOT write the
 ///    cache column directly because that would race with the trigger
 ///    (and either duplicate the work or fight the trigger's UPDATE).
-/// 2. **`UPDATE users`** - stamps `deleted_at = NOW()`, rewrites
+/// 4. **`UPDATE users`** - stamps `deleted_at = NOW()`, rewrites
 ///    `email` to a per-user placeholder
 ///    (`deleted-{uuid}@deleted.local`), bumps
 ///    `jwt_invalidate_before = NOW()` so the auth middleware kills every
@@ -642,26 +675,38 @@ pub async fn has_active_lease_participation(pool: &PgPool, user_id: Uuid) -> Res
 ///    address; soft-deleted rows are already excluded by the index's
 ///    own predicate) AND any future re-instatement of `email NOT NULL`,
 ///    so the column is never left in an "implicitly NULL" state.
-/// 3. **`UPDATE refresh_tokens`** - revokes every active refresh row
+/// 5. **`UPDATE refresh_tokens`** - revokes every active refresh row
 ///    for the user, mirroring the role-change path: every device
 ///    sharing the family is cut at the same instant the access
 ///    cookie's cutoff is bumped, no rotating chain survives.
-/// 4. **`INSERT INTO audit_logs`** - records `self_delete_user` so a
+/// 6. **`INSERT INTO audit_logs`** - records `self_delete_user` so a
 ///    moderator investigating a re-instatement request can prove the
 ///    deletion was self-initiated (vs. an admin action, which uses a
 ///    different `action` literal).
-///
-/// Returns [`Error::RowNotFound`] when the row is already soft-deleted
-/// (or never existed). The JWT path makes the latter unreachable, so
-/// the handler maps this to 404.
 ///
 /// # Errors
 ///
 /// - [`Error::RowNotFound`] when the user is already soft-deleted.
 /// - [`sqlx::Error`] for DB transport failures.
 #[inline]
-pub async fn soft_delete_user(pool: &PgPool, user_id: Uuid) -> Result<(), Error> {
+pub async fn soft_delete_user(pool: &PgPool, user_id: Uuid) -> Result<SoftDeleteOutcome, Error> {
     let mut tx = pool.begin().await?;
+
+    sqlx::query_scalar!(
+        r"
+            SELECT id
+            FROM users
+            WHERE id = $1 AND deleted_at IS NULL
+            FOR UPDATE
+        ",
+        user_id,
+    )
+    .fetch_one(tx.as_mut())
+    .await?;
+
+    if has_blocking_leases(tx.as_mut(), user_id).await? {
+        return Ok(SoftDeleteOutcome::LeaseBlocking);
+    }
 
     sqlx::query!(
         r"
@@ -673,7 +718,7 @@ pub async fn soft_delete_user(pool: &PgPool, user_id: Uuid) -> Result<(), Error>
     .execute(tx.as_mut())
     .await?;
 
-    let rows_affected = sqlx::query!(
+    sqlx::query!(
         r"
             UPDATE users
             SET deleted_at = NOW(),
@@ -685,12 +730,7 @@ pub async fn soft_delete_user(pool: &PgPool, user_id: Uuid) -> Result<(), Error>
         user_id,
     )
     .execute(tx.as_mut())
-    .await?
-    .rows_affected();
-
-    if rows_affected == 0 {
-        return Err(Error::RowNotFound);
-    }
+    .await?;
 
     sqlx::query!(
         r"
@@ -717,5 +757,5 @@ pub async fn soft_delete_user(pool: &PgPool, user_id: Uuid) -> Result<(), Error>
 
     tx.commit().await?;
 
-    Ok(())
+    Ok(SoftDeleteOutcome::Deleted)
 }

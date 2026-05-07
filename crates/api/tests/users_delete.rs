@@ -512,15 +512,12 @@ async fn delete_me_concurrent_lease_does_not_orphan_user(pool: PgPool) {
     // Step 3: `soft_delete_user` is invoked - same call the handler
     // makes after the gate passes. With the bug, it commits without
     // re-checking and the user gets soft-deleted with the active
-    // lease still pointing at them.
-    let delete_outcome = api::services::users::soft_delete_user(&pool, user_id).await;
-
-    // Post-fix invariant: the inner transaction must catch the
-    // newly-created lease and refuse to commit.
-    assert!(
-        delete_outcome.is_err(),
-        "soft_delete_user must refuse to commit when an active lease was created during the operation; got Ok(())",
-    );
+    // lease still pointing at them. The return value is intentionally
+    // discarded: the post-fix contract may surface "blocked" as
+    // either `Err(...)` or `Ok(SoftDeleteOutcome::LeaseBlocking)`,
+    // and the load-bearing invariant is asserted below on
+    // `users.deleted_at`, not on the result shape.
+    let _ = api::services::users::soft_delete_user(&pool, user_id).await;
 
     // Post-fix invariant: the user row stays alive. Pre-fix, this is
     // where the test fails - `deleted_at` is stamped despite the
