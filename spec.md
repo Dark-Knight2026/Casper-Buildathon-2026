@@ -1335,13 +1335,16 @@ Mapped to camelCase `UserProfile` via `mapServerUserInfo` in
 | POST   | `/users/me/email/confirm`           | Confirm email change with token      |
 | POST   | `/users/me/avatar`                  | Multipart avatar upload (PNG/JPEG/WebP, ≤ 5 MB) |
 | PATCH  | `/users/me/role`                    | Switch role; revokes all sessions    |
+| GET    | `/auth/sessions`                    | List active refresh-token rows for the user |
+| DELETE | `/auth/sessions/{id}`               | Revoke a single session by row id    |
 
-The following are described in the backend PR but **not yet present on the
-backend `feat/user-profile` branch as of this writing** — UI wiring blocked
-until they ship: `GET /auth/sessions`, `DELETE /auth/sessions/:id`,
-`POST /auth/sessions/revoke-all`, `DELETE /users/me`. Note: sessions live
-under `/auth/`, not `/users/me/`, since they describe auth state rather than
-profile state.
+Sessions live under `/auth/` (not `/users/me/`) because they describe auth
+state, and the route needs the `refresh_token` cookie which is scoped to
+`Path=/api/v1/auth`.
+
+Still pending on backend `feat/user-profile` branch — UI wiring blocked
+until they ship: `POST /auth/sessions/revoke-all` (logout from all devices)
+and `DELETE /users/me` (self-deactivation).
 
 #### Recent-auth gate (5-minute window)
 
@@ -1355,7 +1358,7 @@ and prompt the user to re-sign with the wallet (see CSPR.click
 
 #### Endpoint-specific contracts
 
-**`PATCH /users/me`** — body is any subset of `{ first_name, last_name, phone, bio, avatar_url }`. Missing fields keep stored value. Writing a different `phone` resets `phone_verified` to `false`. Errors: 400 (over-long values), 401, 404, 500.
+**`PATCH /users/me`** — body is any subset of `{ first_name, last_name, phone, bio }`. Missing fields keep stored value. Writing a different `phone` resets `phone_verified` to `false`. Avatar updates are NOT accepted here — use `POST /users/me/avatar` (multipart). Errors: 400 (over-long values), 401, 404, 500.
 
 **`POST /users/me/email`** — body `{ "new_email": string }`. 202 on queued. Errors: 400 (malformed), 409 (taken), 429 (>3 / 24h).
 
@@ -1369,6 +1372,21 @@ and prompt the user to re-sign with the wallet (see CSPR.click
 3. 429 — `rate_limited` (1 change / 24h)
 4. 409 — `active_leases_blocking` (active leases prevent switch)
 5. 200 — success: response is updated `UserInfo`, `Set-Cookie` clears both auth cookies (UI must redirect to login)
+
+**`GET /auth/sessions`** — returns `Array<SessionResponse>` filtered server-side to `revoked_at IS NULL AND expires_at > NOW()`:
+
+```json
+{
+  "id": "uuid",
+  "issued_at": "2026-04-22T10:30:00Z",
+  "expires_at": "2026-05-06T10:30:00Z",
+  "is_current": true
+}
+```
+
+`is_current` is computed against the request's `refresh_token` cookie hash; a request without that cookie returns `false` for every row (correct fallback). The shape carries no User-Agent / IP / device hints — UI can render only timestamps and a "this device" pill.
+
+**`DELETE /auth/sessions/{id}`** — revokes a single session row by id. Authorization is scoped server-side via `WHERE user_id = $current_user_id`, so passing another user's id returns 404, not 403. Errors: 401, 404, 500.
 
 #### Frontend-side concerns
 

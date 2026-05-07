@@ -22,17 +22,15 @@ const USERS_ME = '/api/v1/users/me';
  * the stored value. Writing a `phone` that differs from the stored one
  * resets `phone_verified` to `false` server-side.
  *
- * `avatar_url` is here because the spec lists it, but the canonical write
- * path is `POST /users/me/avatar` (multipart). Set this field only when the
- * caller already has a known-good URL (e.g. a previously-uploaded avatar
- * being re-applied).
+ * Avatar is intentionally NOT writable here — the canonical (and only) write
+ * path is `POST /users/me/avatar` (multipart). The server rejects requests
+ * that include `avatar_url` in this payload.
  */
 export interface PatchProfileBody {
   first_name?: string;
   last_name?: string;
   phone?: string;
   bio?: string;
-  avatar_url?: string;
 }
 
 export interface EmailChangeRequestBody {

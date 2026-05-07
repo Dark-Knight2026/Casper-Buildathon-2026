@@ -17,6 +17,32 @@ export default function Login() {
     handleConnectProvider, login, disconnect,
   } = useWalletConnect();
 
+  // Always-available escape hatch. The inline "Use a different account"
+  // button below only renders while `isConnected && account` is true; when
+  // the CSPR.click SDK realises its session expired (401 from
+  // `accounts.cspr.click/api/authenticate/me`) it flips `isConnected` to
+  // false, which is exactly the moment the user most needs a way out — the
+  // SDK shows its own "session expired" modal but offers no clear way to
+  // get back to a clean state. This footer link covers that gap.
+  //
+  // `signOut()` alone leaves `csprclick:account` (and any other
+  // `csprclick:`-prefixed key) on disk, so on the very next reload the SDK
+  // re-reads them and re-validates against the dead accounts.cspr.click
+  // session, looping straight back into the same modal. Stripping every
+  // `csprclick:` key before the reload is what actually breaks the loop.
+  const handleResetConnection = () => {
+    disconnect();
+    try {
+      localStorage.removeItem('leasefi_session');
+      Object.keys(localStorage).forEach(key => {
+        if (key.startsWith('csprclick:')) localStorage.removeItem(key);
+      });
+    } catch {
+      // localStorage may be disabled (private mode, embedded webview).
+    }
+    window.location.reload();
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4 py-8">
       <Card className="w-full max-w-md">
@@ -79,13 +105,20 @@ export default function Login() {
           )}
         </CardContent>
 
-        <CardFooter className="justify-center">
+        <CardFooter className="flex flex-col items-center gap-2">
           <p className="text-sm text-gray-600">
             Don't have an account?{' '}
             <Link to="/auth/register" className="text-primary hover:underline font-medium">
               Sign up
             </Link>
           </p>
+          <button
+            type="button"
+            onClick={handleResetConnection}
+            className="text-xs text-muted-foreground hover:text-foreground hover:underline"
+          >
+            Trouble signing in? Reset connection
+          </button>
         </CardFooter>
       </Card>
     </div>

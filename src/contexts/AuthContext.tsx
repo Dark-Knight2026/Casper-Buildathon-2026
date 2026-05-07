@@ -35,6 +35,9 @@ function mapUserStatus(raw: string | null): UserStatus | undefined {
  * `PATCH /users/me` accepts. Only writes a key when the caller actually
  * supplied one, so a partial update never accidentally clears a stored
  * field by sending `undefined`.
+ *
+ * Avatar updates do NOT flow through here — the server rejects `avatar_url`
+ * in this payload. Use `uploadAvatar` (multipart) instead.
  */
 function toPatchProfileBody(updates: Partial<UserProfile>): PatchProfileBody {
   const body: PatchProfileBody = {};
@@ -42,10 +45,6 @@ function toPatchProfileBody(updates: Partial<UserProfile>): PatchProfileBody {
   if (updates.lastName !== undefined) body.last_name = updates.lastName;
   if (updates.phone !== undefined) body.phone = updates.phone;
   if (updates.bio !== undefined) body.bio = updates.bio;
-  // `avatar` is the camelCase alias used across the UI; map it to the
-  // wire-format `avatar_url` so callers that already have a URL (e.g. a
-  // previously-uploaded asset being re-applied) can use the same patch path.
-  if (updates.avatar !== undefined) body.avatar_url = updates.avatar;
   return body;
 }
 

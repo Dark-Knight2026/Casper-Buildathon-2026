@@ -62,6 +62,10 @@ export function TenantProfile() {
   // server round-trip resolves. Cleared (and revoked) once the refreshed
   // profile carries the canonical `avatar_url`.
   const [optimisticAvatar, setOptimisticAvatar] = useState<string | null>(null);
+  // If the canonical avatar URL fails to load (CDN miss, expired presigned link,
+  // backend returning a path the browser can't resolve), fall back to initials
+  // instead of letting the browser render the broken-image alt text.
+  const [avatarLoadFailed, setAvatarLoadFailed] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [formData, setFormData] = useState({
     firstName: authProfile?.firstName ?? '',
@@ -88,6 +92,12 @@ export function TenantProfile() {
       bio: authProfile?.bio ?? '',
     });
   }, [authProfile?.firstName, authProfile?.lastName, authProfile?.phone, authProfile?.bio]);
+
+  // Reset the load-failed flag when the URL changes — a fresh upload should
+  // get a fresh chance to render before falling back to initials.
+  useEffect(() => {
+    setAvatarLoadFailed(false);
+  }, [authProfile?.avatar]);
 
   const {
     preferences,
@@ -214,16 +224,28 @@ export function TenantProfile() {
               {/* Avatar */}
               <div className="flex flex-col items-center">
                 {(() => {
-                  const src = optimisticAvatar ?? authProfile?.avatar;
-                  return src ? (
-                    <img
-                      src={src}
-                      alt={fullName || 'Profile avatar'}
-                      className="h-24 w-24 rounded-full object-cover mb-4 ring-2 ring-border"
-                    />
-                  ) : (
+                  const src = optimisticAvatar ?? (avatarLoadFailed ? null : authProfile?.avatar);
+                  if (src) {
+                    return (
+                      <img
+                        src={src}
+                        alt={fullName || 'Profile avatar'}
+                        onError={() => setAvatarLoadFailed(true)}
+                        className="h-24 w-24 rounded-full object-cover mb-4 ring-2 ring-border"
+                      />
+                    );
+                  }
+                  const initials = [authProfile?.firstName?.[0], authProfile?.lastName?.[0]]
+                    .filter(Boolean)
+                    .join('')
+                    .toUpperCase();
+                  return (
                     <div className="h-24 w-24 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-                      <User className="h-12 w-12 text-primary" />
+                      {initials ? (
+                        <span className="text-3xl font-semibold text-primary">{initials}</span>
+                      ) : (
+                        <User className="h-12 w-12 text-primary" />
+                      )}
                     </div>
                   );
                 })()}

@@ -88,6 +88,10 @@ export default function UserMenu() {
   if (!user) return null;
 
   const currentRoleConfig = roleConfig[user.role];
+  const initials = [user.firstName?.[0], user.lastName?.[0]]
+    .filter(Boolean)
+    .join('')
+    .toUpperCase();
 
   return (
     <DropdownMenu>
@@ -96,7 +100,7 @@ export default function UserMenu() {
           <Avatar className="h-8 w-8">
             <AvatarImage src={user.avatar} alt={user.name} />
             <AvatarFallback>
-              <User className="h-4 w-4" />
+              {initials || <User className="h-4 w-4" />}
             </AvatarFallback>
           </Avatar>
         </Button>
