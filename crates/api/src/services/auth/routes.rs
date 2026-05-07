@@ -14,6 +14,8 @@ use crate::{
     services::auth::{logout, refresh, sessions, wallet},
 };
 
+// `/api/v1/auth/...`
+//
 /// Builds the auth `OpenApiRouter`.
 ///
 /// Returned router has no rate-limiter or middleware applied; the caller
@@ -28,4 +30,5 @@ pub fn router() -> OpenApiRouter<Arc<AppState>> {
         .routes(routes!(logout::logout))
         .routes(routes!(sessions::get_sessions))
         .routes(routes!(sessions::revoke_session))
+        .routes(routes!(sessions::revoke_all_sessions))
 }

@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT (revoked_at IS NULL) AS active\n            FROM refresh_tokens\n            WHERE token_hash = $1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "active",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "5da8e9b4d1a5504d715f665213288886cad2e4d66b4e9612adcc2d7e711bd50b"
+}

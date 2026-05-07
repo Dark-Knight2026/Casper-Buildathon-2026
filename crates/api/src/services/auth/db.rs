@@ -734,3 +734,104 @@ pub async fn revoke_session_by_id(
 
     Ok(rows_affected == 1)
 }
+
+/// Revokes every active refresh-token row for `user_id`, optionally
+/// preserving the row identified by `keep_token_hash`, and conditionally
+/// stamps `users.jwt_invalidate_before` to invalidate every outstanding
+/// access token.
+///
+/// All side effects run inside one transaction: an audit-log INSERT
+/// failure rolls the revoke and the cutoff bump back together, so the
+/// audit trail can never disagree with the live state.
+///
+/// Two orthogonal axes:
+///
+/// - `keep_token_hash = Some(hash)` -> rows whose `token_hash` matches
+///   the supplied bytes are preserved. The handler passes the SHA-256 of
+///   the caller's refresh cookie here when running the "log out other
+///   devices" mode, so the caller's session keeps working. `None`
+///   revokes every active row including the caller's.
+/// - `keep_current` -> drives both the `users.jwt_invalidate_before`
+///   bump (skipped when `true`, stamped when `false`) and the boolean
+///   echoed verbatim into `audit_logs.metadata`. Two orthogonal flags
+///   instead of one let a future surface ask for "keep one refresh row
+///   AND still bump the cutoff" if needed; today the handler always
+///   pairs `Some(...) + true` or `None + false`.
+///
+/// Returns the number of refresh rows actually transitioned from active
+/// to revoked - already-revoked rows in the user's account are not
+/// counted. The handler echoes this in the response so the UI can
+/// render "n other devices signed out" without a follow-up read.
+///
+/// # Errors
+///
+/// Returns [`Error`] for DB transport failures.
+#[inline]
+pub async fn revoke_all_sessions_for_user(
+    pool: &PgPool,
+    user_id: Uuid,
+    keep_token_hash: Option<&[u8]>,
+    keep_current: bool,
+) -> Result<u64, Error> {
+    let mut tx = pool.begin().await?;
+
+    let revoked = sqlx::query!(
+        r"
+            UPDATE refresh_tokens
+            SET revoked_at = NOW()
+            WHERE user_id = $1
+              AND revoked_at IS NULL
+              AND ($2::bytea IS NULL OR token_hash != $2)
+        ",
+        user_id,
+        keep_token_hash,
+    )
+    .execute(tx.as_mut())
+    .await?
+    .rows_affected();
+
+    if !keep_current {
+        // `updated_at = NOW()` is bumped explicitly so the column moves
+        // even when the standard `updated_at` trigger is not deployed in
+        // tests - same rationale as `apply_user_role_change`.
+        sqlx::query!(
+            r"
+                UPDATE users
+                SET jwt_invalidate_before = NOW(), updated_at = NOW()
+                WHERE id = $1 AND deleted_at IS NULL
+            ",
+            user_id,
+        )
+        .execute(tx.as_mut())
+        .await?;
+    }
+
+    sqlx::query!(
+        r"
+            INSERT INTO audit_logs (
+                user_id,
+                action,
+                resource_type,
+                resource_id,
+                metadata,
+                status
+            )
+            VALUES (
+                $1,
+                'revoke_all_sessions',
+                'user',
+                $1,
+                jsonb_build_object('keep_current', $2::bool),
+                'success'
+            )
+        ",
+        user_id,
+        keep_current,
+    )
+    .execute(tx.as_mut())
+    .await?;
+
+    tx.commit().await?;
+
+    Ok(revoked)
+}

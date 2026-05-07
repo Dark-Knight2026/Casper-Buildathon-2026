@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                UPDATE users\n                SET jwt_invalidate_before = NOW(), updated_at = NOW()\n                WHERE id = $1 AND deleted_at IS NULL\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d801bfb8b780acbc78d538001bceba1ecc489b1954d4da2b055e93093dfc6385"
+}

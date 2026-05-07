@@ -43,6 +43,9 @@ use crate::{
             auth::models::LoginResponse,
             auth::models::NonceRequest,
             auth::models::NonceResponse,
+            auth::models::RevokeAllSessionsRequest,
+            auth::models::RevokeAllSessionsResponse,
+            auth::models::SessionResponse,
             // Users models
             users::models::AvatarUploadResponse,
             users::models::EmailChangeConfirmRequest,

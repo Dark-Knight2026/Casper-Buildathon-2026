@@ -17,43 +17,18 @@ use axum::{
     http::StatusCode,
 };
 use axum_extra::extract::CookieJar;
-use chrono::{DateTime, Utc};
-use serde::Serialize;
 use sha2::{Digest, Sha256};
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::{
     common::{ApiError, ApiResult, AppState},
-    services::auth::{AuthUser, cookies::REFRESH_TOKEN_COOKIE, db},
+    services::auth::{
+        AuthUser,
+        cookies::{self, REFRESH_TOKEN_COOKIE},
+        db,
+        models::{RevokeAllSessionsRequest, RevokeAllSessionsResponse, SessionResponse},
+    },
 };
-
-/// One row of the response from `GET /api/v1/auth/sessions`.
-///
-/// `family_id` is intentionally NOT exposed: rotations within a family
-/// are an implementation detail of the refresh flow, and surfacing the
-/// id would tempt clients to build their own rotation UI on top of it.
-/// `token_hash` is also not exposed - the handler computes `is_current`
-/// against the request cookie and discards the hash before serializing.
-#[derive(Debug, Serialize, ToSchema)]
-pub struct SessionResponse {
-    /// Stable identifier for the session row. Pass back to
-    /// `DELETE /api/v1/auth/sessions/{id}` to terminate this session.
-    pub id: Uuid,
-    /// Wall-clock timestamp the session was issued (login time, or the
-    /// time of the last refresh-rotation that produced this row).
-    pub issued_at: DateTime<Utc>,
-    /// Absolute expiration timestamp; rows whose `expires_at` is past
-    /// `NOW()` are filtered out at the db layer, so this value is
-    /// always strictly in the future at response time.
-    pub expires_at: DateTime<Utc>,
-    /// `true` if the row's `token_hash` matches `sha256(request_cookie)`,
-    /// i.e. the session that issued the access cookie used to load this
-    /// list. Clients use it to render a "this device" pill and to gate
-    /// the "log out other sessions" button without picking the row that
-    /// would log the current user out.
-    pub is_current: bool,
-}
 
 // `GET /api/v1/auth/sessions`
 //
@@ -191,4 +166,111 @@ pub async fn revoke_session(
         return Err(ApiError::NotFound("session not found".to_owned()));
     }
     Ok(StatusCode::NO_CONTENT)
+}
+
+// `POST /api/v1/auth/sessions/revoke-all`
+//
+/// Revokes every active refresh-token row for the authenticated user
+/// and, optionally, kills every outstanding access token by stamping
+/// `users.jwt_invalidate_before`.
+///
+/// Two operating modes selected by `request.keep_current`:
+///
+/// - **`keep_current = true`** (default - the "log out other devices"
+///   button): the row whose `token_hash` matches `sha256(request_cookie)`
+///   is preserved, and `jwt_invalidate_before` is NOT touched. The
+///   caller's own session keeps working; every other refresh row is
+///   stamped revoked. If the request arrived without a refresh cookie
+///   (so the row to keep cannot be located), every row is revoked - we
+///   do not silently no-op when the "keep" target is missing, because
+///   the user already decided their other devices should go away.
+/// - **`keep_current = false`** (the "panic logout" path): every refresh
+///   row for the user is revoked AND `jwt_invalidate_before = NOW()` is
+///   stamped, so the auth middleware kills every outstanding access
+///   token (including the caller's own). The handler clears both auth
+///   cookies in the response so the browser drops them on receipt.
+///
+/// All side effects run in one DB transaction (see
+/// [`db::revoke_all_sessions_for_user`]) so an audit-log INSERT failure
+/// cannot leave the user with revoked sessions but no audit trail.
+///
+/// Authorization: `AuthUser` extractor (same as the rest of this
+/// module). The handler does not require recent-auth even though it is
+/// destructive: a stolen-cookie attacker who has already signed the user
+/// out everywhere has not gained anything (the user's data is unchanged),
+/// while a legitimate user reacting to a "suspicious activity" alert
+/// must be able to nuke their sessions without a re-login round-trip.
+///
+/// # Errors
+///
+/// - 400 (`BadRequest`) when the body is empty or malformed JSON.
+/// - 401 (`Unauthorized`) when the access cookie is missing or invalid
+///   (enforced by the `AuthUser` extractor).
+/// - 500 for DB transport failures.
+#[utoipa::path(
+    post,
+    path = "/sessions/revoke-all",
+    tag = "Auth",
+    request_body = RevokeAllSessionsRequest,
+    responses(
+        (status = 200, description = "Sessions revoked", body = RevokeAllSessionsResponse),
+        (status = 400, description = "Malformed request body"),
+        (status = 401, description = "Unauthorized"),
+        (status = 500, description = "Internal server error"),
+    ),
+    security(
+        ("cookie_auth" = [])
+    )
+)]
+#[inline]
+pub async fn revoke_all_sessions(
+    State(state): State<Arc<AppState>>,
+    auth_user: AuthUser,
+    jar: CookieJar,
+    Json(payload): Json<RevokeAllSessionsRequest>,
+) -> ApiResult<(CookieJar, Json<RevokeAllSessionsResponse>)> {
+    let user_id = auth_user.0.sub;
+
+    // The hash of the caller's refresh cookie identifies the row to
+    // keep. In the `keep_current = false` branch the field is unused -
+    // the db function gets `None` and revokes everything. In the
+    // `keep_current = true` branch a missing cookie also yields `None`,
+    // i.e. revoke everything; the cutoff bump is still skipped via
+    // `keep_current` so the caller's access token survives even though
+    // their refresh row did not.
+    let keep_token_hash = if payload.keep_current {
+        jar.get(REFRESH_TOKEN_COOKIE)
+            .map(|cookie| Sha256::digest(cookie.value().as_bytes()))
+    } else {
+        None
+    };
+
+    let revoked = db::revoke_all_sessions_for_user(
+        &state.db,
+        user_id,
+        keep_token_hash.as_deref(),
+        payload.keep_current,
+    )
+    .await?;
+
+    let response_jar = if payload.keep_current {
+        // Caller stays signed in - leave their cookies intact. An empty
+        // jar emits no Set-Cookie headers, so the browser keeps the
+        // cookies it already has.
+        CookieJar::new()
+    } else {
+        // Panic-logout: clear both cookies so the browser drops them on
+        // receipt. The refresh row is already revoked, and the access
+        // token will be rejected by the middleware on the next request
+        // thanks to the `jwt_invalidate_before` bump.
+        CookieJar::new()
+            .add(cookies::build_expired_access_cookie(
+                state.config.cookie_secure,
+            ))
+            .add(cookies::build_expired_refresh_cookie(
+                state.config.cookie_secure,
+            ))
+    };
+
+    Ok((response_jar, Json(RevokeAllSessionsResponse { revoked })))
 }
