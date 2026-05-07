@@ -3,6 +3,7 @@ import { Link, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useICOWallet } from '@/hooks/ico/useICOWallet';
 import { Button } from '@/components/ui/button';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ProfileNudgeDialog } from '@/components/auth/ProfileNudgeDialog';
 import {
   LayoutDashboard,
@@ -23,23 +24,38 @@ import type { User as UserType } from '@/types/user';
 
 // The placeholder backend stamps onto wallet-only rows on first login
 // (see crates/api/src/services/auth/db.rs — `INSERT … 'Wallet', 'User'`).
-// We treat this exact pair as "no real name yet" and prefer the wallet
-// address instead, so every wallet-only user does not appear as "Wallet".
+// We treat this exact pair as "no real name yet" so the avatar shows a
+// neutral icon instead of misleading "WU" initials.
 const PLACEHOLDER_FIRST = 'Wallet';
 const PLACEHOLDER_LAST = 'User';
 
-function shortenWallet(address: string): string {
-  if (address.length <= 4) return address;
-  return `${address.slice(0, 2)}..${address.slice(-2)}`;
-}
-
-function headerDisplayName(profile: UserType): string {
+function headerInitials(profile: UserType): string {
   const isPlaceholder =
     profile.firstName === PLACEHOLDER_FIRST && profile.lastName === PLACEHOLDER_LAST;
-  if (!isPlaceholder && profile.firstName) return profile.firstName;
-  if (profile.walletAddress) return shortenWallet(profile.walletAddress);
-  if (profile.email) return profile.email;
-  return 'Account';
+  if (isPlaceholder) return '';
+  return [profile.firstName?.[0], profile.lastName?.[0]]
+    .filter(Boolean)
+    .join('')
+    .toUpperCase();
+}
+
+function HeaderAvatar({ profile, onNavigate }: { profile: UserType; onNavigate?: () => void }) {
+  const initials = headerInitials(profile);
+  return (
+    <Link
+      to="/tenant/profile"
+      onClick={onNavigate}
+      aria-label="Open profile"
+      className="inline-flex shrink-0 rounded-full ring-2 ring-border transition hover:ring-primary focus:outline-none focus-visible:ring-primary"
+    >
+      <Avatar className="h-8 w-8">
+        <AvatarImage src={profile.avatar} alt="" />
+        <AvatarFallback className="bg-primary/10 text-xs font-semibold text-primary">
+          {initials || <User className="h-4 w-4" />}
+        </AvatarFallback>
+      </Avatar>
+    </Link>
+  );
 }
 
 const NAV_LINKS = [
@@ -51,7 +67,6 @@ const NAV_LINKS = [
   { to: '/tenant/maintenance',     label: 'Maintenance',  icon: Wrench },
   { to: '/tenant/renewals',        label: 'Renewals',     icon: RefreshCw },
   { to: '/tenant/messages',         label: 'Messages',     icon: MessageSquare },
-  { to: '/tenant/profile',         label: 'Profile',      icon: User },
 ];
 
 export default function TenantLayout() {
@@ -110,11 +125,6 @@ export default function TenantLayout() {
 
           {/* Desktop right side */}
           <div className="hidden lg:flex items-center gap-3">
-            {profile && (
-              <span className="text-sm text-muted-foreground">
-                {headerDisplayName(profile)}
-              </span>
-            )}
             <Link
               to="/help"
               className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground transition-colors"
@@ -127,6 +137,7 @@ export default function TenantLayout() {
               <LogOut className="h-4 w-4 mr-1.5" />
               Sign Out
             </Button>
+            {profile && <HeaderAvatar profile={profile} />}
           </div>
 
           {/* Burger — visible on mobile & tablet, wrapper handles hiding on desktop */}
@@ -162,20 +173,20 @@ export default function TenantLayout() {
             ))}
           </nav>
           <div className="mt-6 pt-4 border-t border-border space-y-3">
-            {profile && (
-              <span className="block text-sm text-muted-foreground">
-                {headerDisplayName(profile)}
-              </span>
-            )}
             <div className="flex items-center justify-between gap-3">
-              <Link
-                to="/help"
-                onClick={() => setMobileOpen(false)}
-                className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <HelpCircle className="h-4 w-4 mr-1.5" />
-                Help
-              </Link>
+              <div className="flex items-center gap-3">
+                {profile && (
+                  <HeaderAvatar profile={profile} onNavigate={() => setMobileOpen(false)} />
+                )}
+                <Link
+                  to="/help"
+                  onClick={() => setMobileOpen(false)}
+                  className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <HelpCircle className="h-4 w-4 mr-1.5" />
+                  Help
+                </Link>
+              </div>
               <Button variant="ghost" size="sm" onClick={handleSignOut}>
                 <LogOut className="h-4 w-4 mr-1.5" />
                 Sign Out

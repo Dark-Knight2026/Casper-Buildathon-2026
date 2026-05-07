@@ -107,13 +107,24 @@ export function TenantProfile() {
   const [preferencesOpen, setPreferencesOpen] = useState(false);
   const activeCount = countActivePreferences(preferences);
 
+  // Server-side validators on `PATCH /users/me` reject empty/whitespace values
+  // for first_name, last_name and phone with a 400. Mirror the rule client-side
+  // so the Save button is disabled before the user wastes a round-trip.
+  const canSave =
+    formData.firstName.trim().length > 0 &&
+    formData.lastName.trim().length > 0;
+
   const handleSave = async () => {
+    if (!canSave) return;
     setSaving(true);
     try {
+      const trimmedPhone = formData.phone.trim();
       await updateProfile({
         firstName: formData.firstName.trim(),
         lastName: formData.lastName.trim(),
-        phone: formData.phone,
+        // Omit phone when blank — the server treats `''` as an attempt to wipe
+        // the column (rejected) rather than "leave unchanged".
+        ...(trimmedPhone ? { phone: trimmedPhone } : {}),
         bio: formData.bio,
       });
       toast({ title: 'Profile updated', description: 'Your changes have been saved.' });
@@ -340,6 +351,14 @@ export function TenantProfile() {
                 <p className="text-sm text-muted-foreground">Account Type</p>
                 <p className="text-sm font-medium text-foreground capitalize">{authProfile?.role ?? ''}</p>
               </div>
+              {authProfile?.walletAddress && (
+                <div className="space-y-1">
+                  <p className="text-sm text-muted-foreground">Wallet</p>
+                  <p className="text-xs font-mono text-foreground break-all leading-relaxed select-all">
+                    {authProfile.walletAddress}
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -356,21 +375,25 @@ export function TenantProfile() {
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="firstName">First Name</Label>
+                  <Label htmlFor="firstName">First Name *</Label>
                   <Input
                     id="firstName"
                     value={formData.firstName}
                     onChange={(e) => setFormData(prev => ({ ...prev, firstName: e.target.value }))}
                     placeholder="Jane"
+                    aria-required="true"
+                    aria-invalid={formData.firstName.trim().length === 0}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="lastName">Last Name</Label>
+                  <Label htmlFor="lastName">Last Name *</Label>
                   <Input
                     id="lastName"
                     value={formData.lastName}
                     onChange={(e) => setFormData(prev => ({ ...prev, lastName: e.target.value }))}
                     placeholder="Doe"
+                    aria-required="true"
+                    aria-invalid={formData.lastName.trim().length === 0}
                   />
                 </div>
               </div>
@@ -401,7 +424,7 @@ export function TenantProfile() {
                 <Button variant="outline" onClick={handleCancel} disabled={saving}>
                   Cancel
                 </Button>
-                <Button onClick={handleSave} disabled={saving}>
+                <Button onClick={handleSave} disabled={saving || !canSave}>
                   {saving ? (
                     <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Saving...</>
                   ) : (
