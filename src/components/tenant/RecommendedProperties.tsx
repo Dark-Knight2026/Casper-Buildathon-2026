@@ -58,6 +58,15 @@ export function RecommendedProperties({
     return derivePreferencesFromLease(monthlyRent, currentProperty);
   }, [hasExplicitPreferences, preferences, monthlyRent, currentProperty]);
 
+  // Stable reference for the implicit-prefs case. Without this, the spread
+  // creates a new object on every parent render, and the dialog's
+  // `useEffect([open, initialPreferences])` resets the user's in-progress
+  // edits whenever a parent re-render happens while the dialog is open.
+  const implicitPreferences = useMemo(
+    () => ({ ...EMPTY_PREFERENCES, ...prefillPayload }),
+    [prefillPayload],
+  );
+
   const [dialogOpen, setDialogOpen] = useState(false);
 
   // Don't render anything while the lease isn't within the 180-day window —
@@ -173,7 +182,7 @@ export function RecommendedProperties({
       <TenantPreferencesDialog
         open={dialogOpen}
         onOpenChange={setDialogOpen}
-        initialPreferences={hasExplicitPreferences ? preferences : { ...EMPTY_PREFERENCES, ...prefillPayload }}
+        initialPreferences={hasExplicitPreferences ? preferences : implicitPreferences}
         onSave={updatePreferences}
       />
     </section>
