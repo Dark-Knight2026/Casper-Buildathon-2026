@@ -103,6 +103,46 @@ async fn upload_avatar_happy_path_returns_url(pool: PgPool) {
     );
 }
 
+/// Parameterized `Content-Type` (RFC 2045) must NOT be rejected by the
+/// MIME whitelist. The handler historically compared the raw declared
+/// MIME against the literal whitelist with `!=`, so a header like
+/// `image/jpeg; charset=binary` (which some HTTP clients append
+/// automatically) collapsed to a 415 even when the bytes were a valid
+/// JPEG/PNG/WebP. The fix strips parameters before the comparison and
+/// before the `detected.mime != mime_str` cross-check; both gates must
+/// agree, otherwise the cross-check would 415 the very payloads the
+/// whitelist now accepts.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn upload_avatar_parameterized_content_type_is_accepted(pool: PgPool) {
+    let env = common::setup_test_server(pool, true).await;
+    let access_token = login_and_get_access_token(&env, 0x4D).await;
+
+    let form = MultipartForm::new().add_part(
+        "file",
+        Part::bytes(fake_png_bytes())
+            .mime_type("image/png; charset=binary")
+            .file_name("avatar.png"),
+    );
+
+    let response = env
+        .server
+        .post("/api/v1/users/me/avatar")
+        .add_header(COOKIE, format!("access_token={access_token}"))
+        .multipart(form)
+        .await;
+
+    assert_eq!(
+        response.status_code(),
+        StatusCode::OK,
+        "RFC 2045 parameters on Content-Type must not break the whitelist gate",
+    );
+    let body = response.json::<Value>();
+    assert!(
+        body["avatar_url"].as_str().is_some(),
+        "successful upload must echo avatar_url",
+    );
+}
+
 /// Anonymous request must 401 - the protected-router middleware rejects
 /// the call before any multipart parsing or Redis traffic happens. Pins
 /// the wiring: a future regression that mounts `/me/avatar` outside the
