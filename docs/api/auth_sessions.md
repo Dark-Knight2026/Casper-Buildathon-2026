@@ -1,10 +1,6 @@
 # Auth Sessions API
 
-Endpoints for listing the authenticated user's active refresh-token
-sessions and revoking them individually or in bulk. The `access_token`
-cookie is required by every endpoint here; the `refresh_token` cookie
-is optional and only consulted to compute `is_current` and to preserve
-the caller's row in `revoke-all { keep_current = true }`.
+Endpoints for listing the authenticated user's active refresh-token sessions and revoking them individually or in bulk. The `access_token` cookie is required by every endpoint here; the `refresh_token` cookie is optional and only consulted to compute `is_current` and to preserve the caller's row in `revoke-all { keep_current = true }`.
 
 ## GET `/api/v1/auth/sessions`
 

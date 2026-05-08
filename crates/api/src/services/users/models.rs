@@ -35,7 +35,7 @@ const EMAIL_CHANGE_TOKEN_LEN: usize = 43;
 ///
 /// Matched verbatim by [`DeleteAccountRequest::into_validated`]. The value
 /// is part of the public contract, so changing it later requires a docs
-/// pass on `docs/auth/spec.md` and a coordinated client update -
+/// pass on `docs/api/users.md` and a coordinated client update -
 /// otherwise every existing client would silently 400 on `DELETE /me`.
 pub const ACCOUNT_DELETE_CONFIRMATION: &str = "delete-my-account";
 

@@ -4,10 +4,9 @@
 
 | Document                           | Responsibility                                                              |
 |------------------------------------|-----------------------------------------------------------------------------|
-| `../SPEC.md`                       | API contract, functional requirements, and security standards               |
-| `api/auth_sessions.md`             | Auth sessions API: list active sessions, delete one, revoke-all             |
-| `api/users.md`                     | Users self-management API: avatar upload, role change, self-delete          |
-| `feature/force_revoke.md`          | Force-revoke cutoff (`users.jwt_invalidate_before`) feature spec            |
+| `../SPEC.md`                       | Project overview and entry-point index into the doc-entity tree             |
+| `api/readme.md`                    | Responsibility matrix for the api/ subdirectory (per-resource endpoint specs) |
+| `feature/readme.md`                | Responsibility matrix for the feature/ subdirectory (cross-cutting specs)   |
 | `casper_integration_prd.md`        | Product requirements for Casper Blockchain integration                      |
 | `CASPER_INTEGRATION_README.md`     | Technical guide for blockchain services and SDKs                            |
 | `design/readme.md`                 | Responsibility matrix for the design/ subdirectory                          |

@@ -1,10 +1,57 @@
-# Users API (self-management)
+# Users API
 
-Endpoints under `/api/v1/users/me` for managing the authenticated
-user's avatar, role, and account. The base profile endpoints
-(`GET /me`, `PATCH /me`, `POST /me/email[/confirm]`) and the
-`UserInfo` shape itself remain in `spec.md` until the broader
-spec migration lands.
+Endpoints under `/api/v1/users/me` for reading and managing the authenticated user's profile, email, avatar, role, and account.
+
+## UserInfo schema
+
+Returned by `/users/me` and embedded in `LoginResponse.user`:
+
+```json
+{
+  "id": "uuid",
+  "role": "tenant|landlord|agent|admin|unknown",
+  "wallet_address": "01abc..." ,
+  "status": "active|inactive|suspended|pending_verification",
+  "email": "alice@example.com",
+  "first_name": "Alice",
+  "last_name": "Smith",
+  "phone": "+12025550123",
+  "avatar_url": "https://...",
+  "bio": "...",
+  "is_profile_complete": true,
+  "active_leases_count": 3,
+  "created_at": "2026-01-15T10:30:00Z",
+  "updated_at": "2026-04-22T14:22:01Z"
+}
+```
+
+## GET `/api/v1/users/me`
+
+- **Response:** `UserInfo`
+- **Errors:** 401 (no/invalid access cookie), 404 (user soft-deleted between JWT issue and call), 500
+- **Auth:** Access cookie required
+
+## PATCH `/api/v1/users/me`
+
+- **Input:** `{ "first_name"?, "last_name"?, "phone"?, "bio"?, "avatar_url"? }` (any subset; missing fields keep stored value)
+- **Response:** updated `UserInfo`
+- **Side effect:** writing a new `phone` distinct from the stored one resets `phone_verified` to `false`
+- **Errors:** 400 (empty required fields, over-long values), 401, 404, 500
+- **Auth:** Access cookie required
+
+## POST `/api/v1/users/me/email`
+
+- **Input:** `{ "new_email": "..." }`
+- **Response (202):** confirmation email queued; DB row not touched until confirm step
+- **Errors:** 400 (malformed email), 401, 409 (email already in use), 429 (>3 requests / rolling 24h), 500
+- **Auth:** Access cookie required
+
+## POST `/api/v1/users/me/email/confirm`
+
+- **Input:** `{ "token": "<43 base64url-no-pad chars>" }`
+- **Response:** updated `UserInfo` with `email = new_email` and `email_verified = true`; `verification_level` upgrades from `none` to `email` on first successful confirm
+- **Errors:** 400 (malformed token shape), 401 (token missing/expired/wrong), 404, 409 (email taken in race), 500
+- **Auth:** Access cookie required
 
 ## POST `/api/v1/users/me/avatar`
 
