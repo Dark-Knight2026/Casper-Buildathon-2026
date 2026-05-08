@@ -20,14 +20,15 @@ pub const ROLE_FREEZER: &str = "FREEZER";
 // =============================================================================
 
 pub mod types {
-    use odra::{odra_type, prelude::*};
+    use odra::odra_type;
+
     #[odra_type]
     pub struct InvestorRecord {
         pub verified: bool,
         pub frozen: bool,
         pub verified_until: u64,
         pub jurisdiction: u64,
-        pub identity_hash: String,
+        pub identity_hash: [u8; 32],
     }
 }
 
@@ -98,7 +99,7 @@ impl InvestorRegistry {
     pub fn set_investor_record(&mut self, account: Address, record: InvestorRecord) {
         self.assert_role(ROLE_VERIFICATION_MANAGER);
 
-        if record.verified && record.identity_hash.is_empty() {
+        if record.verified && record.identity_hash == [0u8; 32] {
             self.env().revert(Error::MissingIdentityHash);
         }
 
@@ -132,7 +133,7 @@ impl InvestorRegistry {
             frozen: false,
             verified_until: 0,
             jurisdiction: 0,
-            identity_hash: String::new(),
+            identity_hash: [0u8; 32],
         });
 
         record.frozen = frozen;
@@ -155,7 +156,7 @@ impl InvestorRegistry {
     pub fn is_registered(&self, account: Address) -> bool {
         self.records
             .get(&account)
-            .map(|record| !record.identity_hash.is_empty())
+            .map(|record| record.identity_hash != [0u8; 32])
             .unwrap_or(false)
     }
 
@@ -168,7 +169,7 @@ impl InvestorRegistry {
             .map(|record| {
                 record.verified
                     && !record.frozen
-                    && !record.identity_hash.is_empty()
+                    && record.identity_hash != [0u8; 32]
                     && record.verified_until >= self.env().get_block_time()
             })
             .unwrap_or(false)

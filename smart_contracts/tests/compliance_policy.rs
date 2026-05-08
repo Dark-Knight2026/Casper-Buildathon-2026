@@ -110,7 +110,7 @@ fn active_investor_record(env: &HostEnv) -> InvestorRecord {
         frozen: false,
         verified_until: env.block_time() + 1_000,
         jurisdiction: 840,
-        identity_hash: String::from("kyc-hash"),
+        identity_hash: [1u8; 32],
     }
 }
 

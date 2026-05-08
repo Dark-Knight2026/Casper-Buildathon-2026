@@ -53,7 +53,7 @@ fn active_record(env: &HostEnv) -> InvestorRecord {
         frozen: false,
         verified_until: env.block_time() + 1_000,
         jurisdiction: 840,
-        identity_hash: String::from("kyc-hash-1"),
+        identity_hash: [1u8; 32],
     }
 }
 
@@ -160,7 +160,7 @@ fn test_frozen_investor_should_not_be_verified() {
 fn test_verified_record_should_require_identity_hash() {
     let mut ctx = setup(odra_test::env());
     let mut record = active_record(&ctx.env);
-    record.identity_hash = String::new();
+    record.identity_hash = [0u8; 32];
 
     ctx.env.set_caller(ctx.verification_manager);
 
