@@ -693,10 +693,18 @@ pub async fn upload_avatar(
     // wrong MIME header (e.g. `application/pdf`) is rejected without
     // touching the bytes. The sniff then catches the spoofing case where
     // the header is on the whitelist but the bytes do not match.
+    //
+    // RFC 2045 permits parameters on Content-Type (e.g.
+    // `image/jpeg; charset=binary`) and some HTTP libraries append them
+    // automatically, so the comparison strips everything from the first
+    // `;` before matching. The same `mime_base` is reused for the
+    // cross-check below; otherwise the cross-check would 415 the
+    // payloads the whitelist just accepted.
     let mime_str = declared_mime.as_str();
-    if mime_str != ImageKind::PNG.mime
-        && mime_str != ImageKind::JPEG.mime
-        && mime_str != ImageKind::WEBP.mime
+    let mime_base = mime_str.split(';').next().unwrap_or("").trim();
+    if mime_base != ImageKind::PNG.mime
+        && mime_base != ImageKind::JPEG.mime
+        && mime_base != ImageKind::WEBP.mime
     {
         return Err(ApiError::UnsupportedMediaType(format!(
             "Unsupported media type: {declared_mime}"
@@ -709,7 +717,7 @@ pub async fn upload_avatar(
         )
     })?;
 
-    if detected.mime != mime_str {
+    if detected.mime != mime_base {
         return Err(ApiError::UnsupportedMediaType(format!(
             "Content-Type {declared_mime} does not match detected image format {}",
             detected.mime,
