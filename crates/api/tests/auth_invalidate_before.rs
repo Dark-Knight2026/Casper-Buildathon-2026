@@ -208,3 +208,92 @@ async fn fresh_login_after_cutoff_succeeds(pool: PgPool) {
         "Token issued after cutoff must be accepted",
     );
 }
+
+/// Regression: a soft-deleted user's stale access cookie must NOT pass
+/// the middleware on `AuthUser`-protected endpoints that do not load
+/// the user profile.
+///
+/// `soft_delete_user` stamps both `users.deleted_at = NOW()` and
+/// `users.jwt_invalidate_before = NOW()` in the same UPDATE. The
+/// middleware's `fetch_jwt_invalidate_before` historically filtered
+/// `WHERE deleted_at IS NULL`, which masked the cutoff for deleted
+/// users: the SELECT returned `Ok(None)` ("no cutoff"), and the JWT
+/// passed through. The original design leaned on the assumption that
+/// every protected endpoint loads the profile downstream and would
+/// surface a 404 there - but `tax::calculate_tax_liability` and
+/// `analytics::get_property_performance` only take `_user: AuthUser`
+/// and never touch the `users` row, so the soft-deleted user kept
+/// full API access to those endpoints until the JWT's natural 15-min
+/// expiry.
+///
+/// The fix removes `AND deleted_at IS NULL` from the middleware
+/// query. Post-fix, deleted users still have a non-NULL cutoff, the
+/// `claims.iat <= cutoff` check fires, and the middleware rejects
+/// the JWT with 401 `invalid_token` regardless of whether the
+/// downstream handler reads the user row.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn deleted_user_cutoff_blocks_non_profile_endpoint(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), true).await;
+    let session = common::login_and_extract(&env).await;
+
+    // Soft-delete via the public endpoint so the production code path
+    // (handler -> `soft_delete_user` -> stamp `jwt_invalidate_before`)
+    // is exercised end-to-end, not simulated by a direct UPDATE.
+    let delete_response = env
+        .server
+        .delete("/api/v1/users/me")
+        .add_header(COOKIE, format!("access_token={}", session.access_token))
+        .json(&serde_json::json!({ "confirm": "delete-my-account" }))
+        .await;
+    assert_eq!(
+        delete_response.status_code(),
+        StatusCode::NO_CONTENT,
+        "precondition: self-delete must succeed and stamp the cutoff",
+    );
+
+    // Sanity: the cutoff really did land on the row. If this assertion
+    // fails, the rest of the test would be testing a different bug.
+    let cutoff_set: bool = sqlx::query_scalar!(
+        r#"
+            SELECT (jwt_invalidate_before IS NOT NULL) AS "stamped!"
+            FROM users
+            WHERE id = $1
+        "#,
+        session.user_id,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert!(
+        cutoff_set,
+        "precondition: soft_delete_user must have stamped jwt_invalidate_before",
+    );
+
+    // The stale access cookie hits an `AuthUser` endpoint that does
+    // NOT load the user profile. Pre-fix the middleware accepts the
+    // token (200), post-fix it rejects with 401 `invalid_token`.
+    let response = env
+        .server
+        .post("/api/v1/tax/calculate-liability")
+        .add_header(COOKIE, format!("access_token={}", session.access_token))
+        .json(&serde_json::json!({
+            "fiscal_year": 2024,
+            "property_ids": [],
+            "include_depreciation": false
+        }))
+        .await;
+
+    assert_eq!(
+        response.status_code(),
+        StatusCode::UNAUTHORIZED,
+        "deleted user's stale JWT must be rejected by the force-revoke cutoff, \
+         even on AuthUser endpoints that do not load the profile",
+    );
+
+    let body = response.json::<Value>();
+    assert_eq!(
+        body["error"].as_str().unwrap(),
+        "invalid_token",
+        "force-revoke must surface as the generic invalid_token code",
+    );
+}
