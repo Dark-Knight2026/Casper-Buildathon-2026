@@ -76,6 +76,7 @@ pub mod errors {
         TransfersDisabled = 1003,
         SenderNotVerified = 1004,
         RecipientNotVerified = 1005,
+        InvalidPropertyToken = 1006,
     }
 }
 
@@ -258,6 +259,15 @@ impl CompliancePolicy {
     ) -> Option<Error> {
         if amount.is_zero() {
             return Some(Error::ZeroAmount);
+        }
+
+        // Only the registered token for a property can receive a passing transfer approval for that property.
+        if self
+            .property_registry
+            .get_property_id_by_token(self.env().caller())
+            != Some(property_id)
+        {
+            return Some(Error::InvalidPropertyToken);
         }
 
         if !self.property_registry.is_property_active(property_id) {

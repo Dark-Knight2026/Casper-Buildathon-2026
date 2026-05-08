@@ -110,6 +110,7 @@ pub mod errors {
         MissingPropertyToken = 905,
         MissingRevenueDistributor = 906,
         InvalidStatusTransition = 907,
+        PropertyTokenAlreadyRegistered = 908,
     }
 }
 
@@ -128,6 +129,7 @@ pub struct PropertyRegistry {
     access_control: SubModule<AccessControl>,
     properties: Mapping<U256, PropertyRecord>,
     properties_count: Var<U256>,
+    token_to_property_id: Mapping<Address, Option<U256>>,
 }
 
 #[odra::module]
@@ -155,8 +157,23 @@ impl PropertyRegistry {
         let mut property = self.get_property(property_id);
         self.assert_draft(&property);
 
+        // Prevent the same token address from being assigned to two different properties.
+        if let Some(existing_property_id) = self.get_property_id_by_token(token) {
+            if existing_property_id != property_id {
+                self.env().revert(Error::PropertyTokenAlreadyRegistered);
+            }
+        }
+
+        // If this draft property already had a different token, clear the stale reverse lookup.
+        if let Some(old_token) = property.token {
+            if old_token != token {
+                self.token_to_property_id.set(&old_token, None);
+            }
+        }
+
         property.token = Some(token);
         self.properties.set(&property_id, property);
+        self.token_to_property_id.set(&token, Some(property_id));
 
         self.env()
             .emit_event(PropertyTokenSet { property_id, token });
@@ -255,6 +272,11 @@ impl PropertyRegistry {
         self.get_property(property_id)
             .token
             .unwrap_or_revert_with(&self.env(), Error::MissingPropertyToken)
+    }
+
+    /// Returns the property Id associated with the token address.
+    pub fn get_property_id_by_token(&self, token: Address) -> Option<U256> {
+        self.token_to_property_id.get(&token).unwrap_or(None)
     }
 
     /// Returns the property revenue distributor address

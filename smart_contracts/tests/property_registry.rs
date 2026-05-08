@@ -240,6 +240,75 @@ fn test_set_property_token_should_revert_if_caller_is_not_manager() {
 }
 
 #[test]
+fn test_set_property_token_should_set_reverse_lookup() {
+    let mut ctx = setup(odra_test::env());
+    let property_id = create_property(&mut ctx);
+
+    ctx.registry.set_property_token(property_id, ctx.token);
+
+    assert_eq!(
+        ctx.registry.get_property_id_by_token(ctx.token),
+        Some(property_id),
+        "Invalid reverse token lookup",
+    );
+
+    assert_eq!(
+        ctx.registry
+            .get_property_id_by_token(ctx.env.get_account(5)),
+        None,
+        "Unknown token should not resolve to a property",
+    );
+}
+
+#[test]
+fn test_set_property_token_should_clear_old_reverse_lookup_when_replaced() {
+    let mut ctx = setup(odra_test::env());
+    let property_id = create_property(&mut ctx);
+    let old_token = ctx.token;
+    let new_token = ctx.env.get_account(5);
+
+    ctx.registry.set_property_token(property_id, old_token);
+    ctx.registry.set_property_token(property_id, new_token);
+
+    assert_eq!(
+        ctx.registry.get_property_token(property_id),
+        new_token,
+        "Property should point to new token",
+    );
+
+    assert_eq!(
+        ctx.registry.get_property_id_by_token(old_token),
+        None,
+        "Old token reverse lookup should be cleared",
+    );
+
+    assert_eq!(
+        ctx.registry.get_property_id_by_token(new_token),
+        Some(property_id),
+        "New token should resolve to property",
+    );
+}
+
+#[test]
+fn test_set_property_token_should_revert_if_token_is_registered_to_another_property() {
+    let mut ctx = setup(odra_test::env());
+
+    let first_property_id = create_property(&mut ctx);
+    let second_property_id = create_property(&mut ctx);
+
+    ctx.registry
+        .set_property_token(first_property_id, ctx.token);
+
+    assert_eq!(
+        ctx.registry
+            .try_set_property_token(second_property_id, ctx.token)
+            .unwrap_err(),
+        Error::PropertyTokenAlreadyRegistered.into(),
+        "Should not allow one token to represent two properties",
+    );
+}
+
+#[test]
 fn test_set_revenue_distributor_should_revert_if_caller_is_not_manager() {
     let mut ctx = setup(odra_test::env());
     let property_id = create_property(&mut ctx);
