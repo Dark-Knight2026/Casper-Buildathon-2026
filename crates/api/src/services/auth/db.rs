@@ -522,11 +522,17 @@ pub async fn rotate_refresh_token(
 /// even though its `exp` is still in the future and its `jti` is not in
 /// the logout blocklist.
 ///
-/// `Ok(None)` covers two cases that the middleware treats identically -
-/// "user has no cutoff set" and "user no longer exists" both mean "this
-/// JWT carries no force-revoke signal." A deleted-user JWT will fail the
-/// downstream handler's profile load (`fetch_user_profile` -> 404), so
-/// the middleware does not need to discriminate them here.
+/// The query intentionally does NOT filter on `deleted_at IS NULL`.
+/// `soft_delete_user` stamps `deleted_at` AND `jwt_invalidate_before`
+/// in the same UPDATE, so a soft-deleted user's row carries a non-NULL
+/// cutoff that must reach the middleware. Filtering deleted rows here
+/// would mask the cutoff and let the JWT through on `AuthUser` endpoints
+/// that never load the user profile (`tax::calculate_tax_liability`,
+/// `analytics::get_property_performance`) - the soft-deleted user would
+/// retain full access to those endpoints until the JWT's natural expiry.
+///
+/// `Ok(None)` therefore means exactly one thing: no force-revoke event
+/// has ever been recorded for this user (or the row is absent entirely).
 ///
 /// # Errors
 ///
@@ -541,7 +547,7 @@ pub async fn fetch_jwt_invalidate_before(
         r"
             SELECT jwt_invalidate_before
             FROM users
-            WHERE id = $1 AND deleted_at IS NULL
+            WHERE id = $1
         ",
         user_id,
     )

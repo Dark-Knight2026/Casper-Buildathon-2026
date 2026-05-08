@@ -257,15 +257,15 @@ async fn delete_me_happy_path_revokes_session_and_clears_state(pool: PgPool) {
         "every active refresh row must be revoked after self-delete",
     );
 
-    // Old access token is now rejected on the next call. The exact
-    // status is 404 (not 401) by design: `fetch_jwt_invalidate_before`
-    // filters on `deleted_at IS NULL`, so for a soft-deleted user the
-    // middleware sees `Ok(None)` ("no cutoff") and lets the JWT through
-    // - the rejection happens one step later, when `fetch_user_profile`
-    // (also `WHERE deleted_at IS NULL`) returns RowNotFound. The
-    // middleware comment in `auth/db.rs::fetch_jwt_invalidate_before`
-    // calls this out explicitly, framing the deleted-user case as
-    // "delegated to the handler's profile load."
+    // Old access token is now rejected on the next call by the auth
+    // middleware. `soft_delete_user` stamped `jwt_invalidate_before =
+    // NOW()`, and `fetch_jwt_invalidate_before` no longer filters out
+    // deleted rows, so the cutoff reaches the middleware and the
+    // `claims.iat <= cutoff` check fires. This rejection is uniform
+    // across every `AuthUser`-protected endpoint, including those that
+    // do not load the user profile (`tax`, `analytics`) - see the
+    // regression test `deleted_user_cutoff_blocks_non_profile_endpoint`
+    // in `auth_invalidate_before.rs`.
     let me = env
         .server
         .get("/api/v1/users/me")
@@ -273,8 +273,8 @@ async fn delete_me_happy_path_revokes_session_and_clears_state(pool: PgPool) {
         .await;
     assert_eq!(
         me.status_code(),
-        StatusCode::NOT_FOUND,
-        "deleted user's access cookie must yield 404 on the next protected call",
+        StatusCode::UNAUTHORIZED,
+        "deleted user's access cookie must yield 401 on the next protected call",
     );
 }
 

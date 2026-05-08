@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT jwt_invalidate_before\n            FROM users\n            WHERE id = $1 AND deleted_at IS NULL\n        ",
+  "query": "\n            SELECT jwt_invalidate_before\n            FROM users\n            WHERE id = $1\n        ",
   "describe": {
     "columns": [
       {
@@ -18,5 +18,5 @@
       true
     ]
   },
-  "hash": "26bf9ea06ff0ea049a9d1bdf6fe60ec006fd6f35b28f3df39f9cbac770ace6d9"
+  "hash": "4c7cc79403b8b16066f9248b35c59f0153b51c42336dbe36fe24bc1ccc1d7ef8"
 }

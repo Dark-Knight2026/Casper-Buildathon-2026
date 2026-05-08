@@ -311,11 +311,12 @@ async fn upload_avatar_rate_limit_blocks_eleventh_attempt(pool: PgPool) {
 /// reorders to `storage.put -> db.update_avatar_url -> redis.record_attempt`
 /// so a DB failure aborts before the counter is touched.
 ///
-/// Repro lever: soft-delete the user via direct UPDATE (bypassing the
-/// `delete_me` gates) right before the upload. The auth middleware
-/// still admits the JWT (`fetch_jwt_invalidate_before` filters on
-/// `deleted_at IS NULL` and reports "no cutoff" for soft-deleted
-/// users, so the cookie passes through), but
+/// Repro lever: soft-delete the user via direct UPDATE on `deleted_at`
+/// only (bypassing both the `delete_me` gates AND the production
+/// `soft_delete_user` path that would also stamp `jwt_invalidate_before`).
+/// The auth middleware admits the JWT because `jwt_invalidate_before`
+/// stays NULL after this stripped-down UPDATE - the cutoff check
+/// reports "no cutoff" and the cookie passes through. Then
 /// `db::update_avatar_url`'s `WHERE id = $1 AND deleted_at IS NULL`
 /// matches zero rows and returns `RowNotFound`. The handler maps
 /// that to 404 - and the rate-limit accounting is whatever happened

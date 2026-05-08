@@ -159,7 +159,7 @@ UserInfo shape returned by `/users/me` and embedded in `LoginResponse.user`:
     - `users.deleted_at = NOW()`, `email = 'deleted-{uuid}@deleted.local'` (the placeholder satisfies the `users_email_unique` partial index, which excludes `deleted_at IS NOT NULL` rows so the original address is freed for reuse), and `jwt_invalidate_before = NOW()` are stamped together.
     - Every active refresh-token row is revoked.
     - One `audit_logs` row records `action = 'self_delete_user'`.
-  - **Note on stale-cookie semantics:** subsequent calls under the soft-deleted user's stale access cookie return 404, not 401. By design: the middleware's `fetch_jwt_invalidate_before` filters on `deleted_at IS NULL` and reports "no cutoff" for soft-deleted users, so the JWT passes the middleware and is rejected one step later when the handler's `fetch_user_profile` (also `WHERE deleted_at IS NULL`) returns RowNotFound. Clients should treat 404 on `GET /me` after a self-delete the same way as 401 - the account is gone.
+  - **Note on stale-cookie semantics:** subsequent calls under the soft-deleted user's stale access cookie return 401 `invalid_token`. `soft_delete_user` stamps `users.jwt_invalidate_before = NOW()`, the middleware's `fetch_jwt_invalidate_before` reads the cutoff regardless of `deleted_at`, and `claims.iat <= cutoff` rejects the JWT. The rejection is uniform across every `AuthUser`-protected endpoint (including `tax`, `analytics`, and other handlers that do not load the user profile).
   - **Errors:** 400 (missing/wrong confirm), 401, 403 (recent-auth), 404 (already soft-deleted), 409 (active leases), 500
   - **Auth:** Access cookie required
 
@@ -404,7 +404,7 @@ UserInfo shape returned by `/users/me` and embedded in `LoginResponse.user`:
     - `PATCH /api/v1/users/me/role` (privilege change must invalidate every old token).
     - `DELETE /api/v1/users/me` (account deletion - paired with `deleted_at` and the email placeholder).
 
-    DB column resolution is microseconds; JWT `iat` is integer seconds, so a token issued in the same wall-clock second as the cutoff is also rejected (`iat <= cutoff`, not `<`). The middleware's lookup filters on `deleted_at IS NULL`: for a soft-deleted user the SELECT returns "no cutoff" and the rejection is delegated to the handler's profile load, which yields 404. This is intentional (clients treat post-delete 404 the same way as 401), but operators inspecting access logs should know not to expect 401 for the deleted-user case.
+    DB column resolution is microseconds; JWT `iat` is integer seconds, so a token issued in the same wall-clock second as the cutoff is also rejected (`iat <= cutoff`, not `<`). The middleware's lookup does NOT filter on `deleted_at`: a soft-deleted user's row carries a non-NULL cutoff (stamped by `soft_delete_user`) that must reach the middleware. Filtering deleted rows would mask the cutoff and let the JWT through on `AuthUser` endpoints that never load the profile (`tax`, `analytics`); rejection by the middleware is uniform across all protected endpoints.
   - Sign message format: `"Sign this message to login to LeaseFi. Nonce: <nonce>"`. Nonce TTL: 5 min (Redis), one-time use via `GETDEL`.
   - Per-wallet rate limit on failed logins blunts nonce-DoS and signature brute-force probes.
 - **Database:** No direct SQL injection (checked via SQLx).

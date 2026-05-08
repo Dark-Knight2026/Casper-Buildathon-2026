@@ -7,8 +7,12 @@
 //! # Per-request cost of the force-revoke check
 //!
 //! Every protected request now issues `SELECT jwt_invalidate_before FROM
-//! users WHERE id = $1 AND deleted_at IS NULL` against the primary
-//! database in addition to the existing Redis blocklist lookup. The auth
+//! users WHERE id = $1` against the primary database in addition to the
+//! existing Redis blocklist lookup. The query intentionally does not
+//! filter on `deleted_at` so the cutoff stamped by `soft_delete_user`
+//! reaches the middleware (otherwise a soft-deleted user's stale JWT
+//! would slip through on `AuthUser` endpoints that never load the
+//! profile - see `auth/db.rs::fetch_jwt_invalidate_before`). The auth
 //! hot path therefore touches both Postgres and Redis on every call -
 //! deliberate trade-off, captured here so a future profiler-driven
 //! refactor knows what was considered:
