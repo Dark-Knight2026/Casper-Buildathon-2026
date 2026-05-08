@@ -1057,6 +1057,113 @@ interface MaintenanceRequest {
 
 ---
 
+### 2.3 New Tasks from Client Meeting (2026-05-07)
+
+Captured during the LeaseFi recurring Thursday meeting with Anthony Batten and Chris. These items are scoped for the current MVP iteration unless explicitly marked as backlog.
+
+#### 2.3.1 User Onboarding Tour
+
+**Purpose:** Guide first-time users through the dashboard immediately after registration / first login.
+
+**Status:** Approved by Anthony ("go for it") on 2026-05-07.
+
+**Functional Requirements:**
+
+1. **Trigger**
+   - Activates automatically on first authenticated session after registration
+   - Skippable at any step; "Don't show again" persists per user
+   - Re-launchable from the Help page
+
+2. **Tour Mechanics**
+   - Step-by-step tooltips / modals attached to key interface elements
+   - Each step explains: what the section is, what action the user can perform, why it matters
+   - Highlights the active element (spotlight / dimmed background)
+   - Keyboard navigation (Esc to skip, Enter / arrows to advance)
+
+3. **Coverage (per role)**
+   - Tenant: dashboard summary, Tenant Score, Recommendations block, Profile, Help
+   - Landlord: properties list, lease creation entry point, Profile, Help
+   - Other roles: dashboard + Profile + Help (extend as those flows mature)
+
+4. **Persistence**
+   - Completion state stored per user via backend profile flag
+   - Per-step completion tracked so a partial tour can resume
+
+#### 2.3.2 Extended Property Search Filters (Amenities + Surrounding Area)
+
+**Purpose:** Let tenants filter properties by both in-unit amenities and what is nearby, with per-category proximity controls.
+
+**Functional Requirements:**
+
+1. **Two filter groups**
+   - **In-home amenities** (boolean toggles): heating, AC, natural light, pool, garage, in-building gym, pet-friendly, in-unit laundry, dishwasher, etc.
+   - **Surrounding area** (toggle + per-category mile-range slider): hospital, school, gym, airport, park, grocery store, public transit
+
+2. **Surrounding-area UX**
+   - Each enabled category exposes its own mile slider (e.g., "Hospital within 20 mi")
+   - Default radius per category is configurable; user changes are remembered per session
+   - Results list shows the matched POI distance per property card
+
+3. **Data source**
+   - Landlord populates surrounding-area POIs when listing the property (see 2.3.4)
+   - Tenants always see a verification disclaimer (see 2.3.3)
+
+4. **Out of scope for v1:** automatic POI lookup via maps API — landlord-entered values only.
+
+#### 2.3.3 Property Page — Verification Disclaimer
+
+**Purpose:** Limit liability on landlord-supplied amenity / proximity data and prompt tenants to verify independently. Requested by Chris on 2026-05-07.
+
+**Functional Requirements:**
+
+1. Visible disclaimer block on every property detail page near the amenities / surrounding-area sections
+2. Copy: short, plain English — "Amenities and proximity information are provided by the landlord. Please verify independently before signing a lease."
+3. Always visible (not dismissible) so it cannot be missed by a first-time visitor
+4. Styled as an informational notice (not an error / warning state)
+
+#### 2.3.4 Landlord-Owned Surrounding-Area Data Entry
+
+**Purpose:** Capture surrounding-area POIs from the landlord at listing time so the tenant filter (2.3.2) has data to query.
+
+**Status:** Pending alignment with Anthony — confirm landlord is the source of truth for these inputs and that tenant-side verification (2.3.3) is sufficient.
+
+**Functional Requirements:**
+
+1. Property creation / edit form gains a "Surrounding area" section
+2. Landlord can add POIs by category (hospital, school, gym, airport, park, grocery, transit) with name + distance
+3. Validation: distance is numeric; category is from a controlled list
+4. Persisted with the property record; surfaced on the property detail page and used by the tenant filter
+
+#### 2.3.5 Terminology Pass — "Tokens" → "Equity"
+
+**Purpose:** Align all user-facing copy with real-estate terminology. Anthony emphasized that on-chain "tokens" must be presented as "equity" / "ownership share" to the end user.
+
+**Constraints:**
+
+- No blockchain jargon ("token", "supply", "1M tokens", "wallet address") in user-facing copy
+- Internal types / variables can keep technical names; the change is presentation-layer only
+- Apply to property pages, lease flows, dashboard widgets, marketing copy, tooltips, and empty states
+
+**Acceptance:**
+
+- Audit confirms zero occurrences of `Token`, `tokens`, `supply` in rendered UI strings (excluding CSPR.click SDK surfaces, which are wallet-level)
+- Equivalent equity-framed copy exists for every replaced phrase
+
+#### 2.3.6 Equity Gating — Tenant–Landlord Lease Option Only
+
+**Purpose:** Prevent equity from being offered outside an approved tenant–landlord lease option agreement. Anthony: outside that scope it becomes a security and triggers SEC / DAO licensing concerns the platform is not yet covered for.
+
+**Functional Requirements:**
+
+1. Equity controls are hidden by default on every property
+2. They unlock only when:
+   - The landlord has enabled "Rent to own" / lease option on the property, AND
+   - The current viewer is the tenant on the active lease for that property
+3. Any other viewer sees a "Not available" state (no marketplace, no public buy-in) — confirmed deferred to backlog (see 8.3)
+4. UI surfaces use "equity" / "ownership share" wording per 2.3.5
+
+---
+
 ## 3. NON-FUNCTIONAL REQUIREMENTS
 
 ### 3.1 Performance
@@ -1584,6 +1691,9 @@ pnpm run test:integration
 - Blockchain integration (production-ready)
 - Multi-language support (i18n)
 - Native mobile apps
+- **Tenant ↔ Landlord review / feedback system** — bidirectional ratings (Uber / Airbnb model). Captured 2026-05-07; Anthony confirmed this is post-MVP.
+- **Admin moderation panel** for reviews — supreme rights to remove non-value / spam reviews (paired with the review system above).
+- **Equities marketplace UI** — public buy-in, secondary market, crowdfunding of equity percentage. Blocked on SEC licensing and DAO-structure decisions; out of scope until then.
 
 **Phase 3 (Future):**
 - API marketplace for third-party integrations

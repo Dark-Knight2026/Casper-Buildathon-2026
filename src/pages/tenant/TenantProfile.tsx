@@ -460,8 +460,16 @@ export function TenantProfile() {
                 </p>
               )}
               <div className="flex justify-end">
-                <Button variant="outline" size="sm" onClick={() => setPreferencesOpen(true)}>
-                  {hasExplicitPreferences ? 'Edit preferences' : 'Set preferences'}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPreferencesOpen(true)}
+                  aria-label={hasExplicitPreferences ? 'Edit preferences' : 'Set preferences'}
+                >
+                  <Sliders className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
+                  <span className="hidden sm:inline">
+                    {hasExplicitPreferences ? 'Edit preferences' : 'Set preferences'}
+                  </span>
                 </Button>
               </div>
             </CardContent>

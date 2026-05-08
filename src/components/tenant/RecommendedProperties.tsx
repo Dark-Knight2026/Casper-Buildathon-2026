@@ -87,9 +87,14 @@ export function RecommendedProperties({
         </div>
 
         {hasExplicitPreferences && (
-          <Button variant="outline" size="sm" onClick={() => setDialogOpen(true)}>
-            <Sliders className="mr-1.5 h-4 w-4" aria-hidden="true" />
-            Edit preferences
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setDialogOpen(true)}
+            aria-label="Edit preferences"
+          >
+            <Sliders className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
+            <span className="hidden sm:inline">Edit preferences</span>
           </Button>
         )}
       </header>

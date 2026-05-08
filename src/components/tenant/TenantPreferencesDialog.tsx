@@ -290,7 +290,7 @@ export function TenantPreferencesDialog({
 
           <fieldset className="space-y-3">
             <legend className="text-sm font-medium">Property types</legend>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               {SELECTABLE_PROPERTY_TYPES.map((type) => {
                 const checked = draft.propertyTypes.includes(type);
                 return (
