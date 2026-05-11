@@ -11,13 +11,13 @@ import {
 } from '@/data/tenantPreferences';
 import type { RentalPreferences } from '@/types/tenantPreferences';
 
-interface UseTenantPreferencesResult {
+interface UseTenantPreferencesReturn {
   preferences: RentalPreferences;
   hasExplicitPreferences: boolean;
   updatePreferences: (next: RentalPreferences) => void;
 }
 
-export function useTenantPreferences(tenantId: string): UseTenantPreferencesResult {
+export function useTenantPreferences(tenantId: string): UseTenantPreferencesReturn {
   const [stored, setStored] = useState<RentalPreferences | null>(() =>
     getStoredPreferences(tenantId)
   );

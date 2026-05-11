@@ -19,7 +19,7 @@ interface UseRecommendationsArgs {
   limit?: number;
 }
 
-interface UseRecommendationsResult {
+interface UseRecommendationsReturn {
   recommendations: RecommendedProperty[];
   isInWindow: boolean;
   hasExplicitPreferences: boolean;
@@ -30,7 +30,7 @@ export function useRecommendations({
   leaseEndDate,
   currentProperty,
   limit,
-}: UseRecommendationsArgs): UseRecommendationsResult {
+}: UseRecommendationsArgs): UseRecommendationsReturn {
   const { hasExplicitPreferences } = useTenantPreferences(tenantId);
   const isInWindow = isInRecommendationWindow(leaseEndDate);
 

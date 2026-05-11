@@ -1,30 +1,28 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 
-const toastMock = vi.fn();
-vi.mock('@/hooks/use-toast', () => ({
-  useToast: () => ({ toast: toastMock }),
-}));
-
 import { TenantPreferencesDialog } from '@/components/tenant/TenantPreferencesDialog';
+import { Toaster } from '@/components/ui/toaster';
 import { EMPTY_PREFERENCES } from '@/data/tenantPreferences';
 import type { RentalPreferences } from '@/types/tenantPreferences';
 
-beforeEach(() => {
-  toastMock.mockClear();
-});
-
+// Toaster is mounted alongside the dialog so toast assertions hit real DOM
+// (real app mounts it in App.tsx; tests need their own instance). use-toast
+// is project-owned, so it is rendered for real rather than mocked.
 function renderDialog(overrides: Partial<RentalPreferences> = {}) {
   const onSave = vi.fn();
   const onOpenChange = vi.fn();
   const initial: RentalPreferences = { ...EMPTY_PREFERENCES, ...overrides };
   render(
-    <TenantPreferencesDialog
-      open
-      onOpenChange={onOpenChange}
-      initialPreferences={initial}
-      onSave={onSave}
-    />
+    <>
+      <TenantPreferencesDialog
+        open
+        onOpenChange={onOpenChange}
+        initialPreferences={initial}
+        onSave={onSave}
+      />
+      <Toaster />
+    </>
   );
   return { onSave, onOpenChange };
 }
@@ -50,7 +48,7 @@ describe('TenantPreferencesDialog', () => {
       ).toHaveBeenCalledWith(false);
     });
 
-    it('blocks saving when min exceeds max and surfaces an error toast', () => {
+    it('blocks saving when min exceeds max and surfaces an error toast', async () => {
       const { onSave, onOpenChange } = renderDialog();
 
       fireEvent.change(screen.getByLabelText(/^min$/i), { target: { value: '3000' } });
@@ -63,11 +61,9 @@ describe('TenantPreferencesDialog', () => {
       ).not.toHaveBeenCalled();
       expect(onOpenChange, 'dialog stays open so the user can correct the range').not.toHaveBeenCalledWith(false);
       expect(
-        toastMock,
-        'destructive toast must explain why save was rejected'
-      ).toHaveBeenCalledWith(
-        expect.objectContaining({ variant: 'destructive' })
-      );
+        await screen.findByText(/budget range is invalid/i),
+        'rejection toast must surface so the user knows why save was blocked'
+      ).toBeInTheDocument();
     });
   });
 
