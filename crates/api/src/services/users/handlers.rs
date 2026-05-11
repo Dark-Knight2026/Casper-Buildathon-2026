@@ -71,19 +71,12 @@ const ROLE_CHANGE_RECENT_AUTH_WINDOW_SECS: i64 = 5 * 60;
 /// not auto-tighten the other and surprise role-change clients.
 const DELETE_ACCOUNT_RECENT_AUTH_WINDOW_SECS: i64 = 5 * 60;
 
-/// Extensions the avatar handler may have produced for a given user
-/// historically. Used to delete stale objects under sibling extensions when
-/// a user re-uploads with a different image format - without this sweep,
-/// changing format leaves the previous blob orphaned in the bucket.
-const AVATAR_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "webp"];
-
 /// Detected image format for an uploaded avatar.
 ///
 /// Carries both the canonical MIME and the on-disk extension so the handler
-/// does not duplicate the lookup table at the call site. The extension is
-/// kept in sync with `AVATAR_EXTENSIONS`: a new variant here MUST be
-/// represented in the sweep set, otherwise the sibling cleanup will leave
-/// the previous blob orphaned.
+/// does not duplicate the lookup table at the call site. [`AVATAR_EXTENSIONS`]
+/// is derived from the `ext` field of each variant below, so adding a new
+/// variant automatically lands in the sibling-sweep set.
 #[derive(Debug, Clone, Copy)]
 struct ImageKind {
     /// Canonical IANA MIME type, used both as the storage `Content-Type`
@@ -108,6 +101,23 @@ impl ImageKind {
         ext: "webp",
     };
 }
+
+/// Extensions the avatar handler may have produced for a given user
+/// historically. Used to delete stale objects under sibling extensions when
+/// a user re-uploads with a different image format - without this sweep,
+/// changing format leaves the previous blob orphaned in the bucket.
+///
+/// Derived from the [`ImageKind`] variants so the sweep set is always
+/// the exact set of extensions the handler can write. A previous
+/// hard-coded list also carried `"jpeg"` which the handler never writes
+/// (the JPEG variant's `ext` is `"jpg"`) - that produced a spurious
+/// `failed to sweep sibling avatar extension` warning on every
+/// format-change upload.
+const AVATAR_EXTENSIONS: &[&str] = &[
+    ImageKind::PNG.ext,
+    ImageKind::JPEG.ext,
+    ImageKind::WEBP.ext,
+];
 
 /// Maps an `axum::extract::multipart::MultipartError` into an [`ApiError`]
 /// preserving the size-vs-shape distinction.
