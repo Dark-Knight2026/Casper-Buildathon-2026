@@ -18,16 +18,10 @@ use core::time::Duration as CoreDuration;
 use axum::http::StatusCode;
 use axum_test::http::header::COOKIE;
 use casper_types::AsymmetricType;
-use chrono::{Duration as ChronoDuration, Utc};
-use jsonwebtoken::{EncodingKey, Header, encode};
 use serde_json::Value;
 use sqlx::PgPool;
-use uuid::Uuid;
 
-use api::{
-    Claims, UserRole,
-    common::{JWT_AUDIENCE, JWT_ISSUER, RedisStore, TokenType, VerificationLevel},
-};
+use api::{UserRole, common::RedisStore};
 use common::{LoggedSession, TestEnv};
 
 /// Re-logs in for the same wallet, returning a fresh access token.
@@ -70,98 +64,6 @@ async fn relogin_with_keypair(env: &TestEnv, session: &LoggedSession) -> String 
         .await;
     assert_eq!(login_response.status_code(), StatusCode::OK);
     login_response.cookie("access_token").value().to_owned()
-}
-
-/// Mints a JWT with a custom `iat` offset (in seconds) into the past.
-///
-/// The avatar/email tests do not need this because they do not gate on
-/// `iat` freshness; here we need it specifically to drive the 403 test
-/// (`iat <= NOW() - 6 minutes`) without sleeping for 5 minutes in CI.
-fn mint_access_token_with_backdated_iat(
-    user_id: Uuid,
-    role: UserRole,
-    secret: &str,
-    iat_offset_secs: i64,
-) -> String {
-    let now = Utc::now();
-    let exp = now
-        .checked_add_signed(ChronoDuration::hours(24))
-        .expect("Valid expiration")
-        .timestamp();
-    let exp_usize = usize::try_from(exp.max(0)).expect("Valid expiration timestamp");
-
-    let backdated = now.timestamp() - iat_offset_secs;
-    let iat_usize = usize::try_from(backdated.max(0)).expect("Valid iat");
-
-    let claims = Claims {
-        sub: user_id,
-        role,
-        exp: exp_usize,
-        iss: JWT_ISSUER.to_owned(),
-        aud: JWT_AUDIENCE.to_owned(),
-        token_type: Some(TokenType::Access),
-        verification_level: Some(VerificationLevel::None),
-        jti: Uuid::new_v4(),
-        iat: iat_usize,
-    };
-    encode(
-        &Header::default(),
-        &claims,
-        &EncodingKey::from_secret(secret.as_bytes()),
-    )
-    .expect("Failed to mint backdated JWT")
-}
-
-/// Seeds an `active` lease where `landlord_id = user_id`, returning its
-/// new `id`.
-///
-/// Inserts the minimal `properties` row required as a foreign key
-/// (NOT NULL columns: `landlord_id`, `property_type`, `address_line1`,
-/// `city`, `state`, `zip_code`) and the minimal `leases` row (NOT NULL
-/// columns: `landlord_id`, `property_id`, `tenant_ids[]`,
-/// `primary_tenant_id`, `type`, `start_date`, `end_date`,
-/// `monthly_rent`, `security_deposit`, `created_by`).
-///
-/// `primary_tenant_id` and `tenant_ids[0]` are intentionally set to
-/// `landlord_id` because the `users` table only has one row in this
-/// scenario - the FK constraints accept self-references and the test
-/// asserts on the `landlord_id` branch of the EXISTS predicate, not the
-/// `primary_tenant_id` branch.
-async fn seed_active_lease_as_landlord(pool: &PgPool, user_id: Uuid) {
-    let property_id = sqlx::query!(
-        r"
-            INSERT INTO properties (
-                landlord_id, property_type, address_line1, city, state, zip_code
-            )
-            VALUES ($1, 'single_family', '1 Test St', 'Testville', 'CA', '00000')
-            RETURNING id
-        ",
-        user_id,
-    )
-    .fetch_one(pool)
-    .await
-    .expect("seed property")
-    .id;
-
-    sqlx::query!(
-        r"
-            INSERT INTO leases (
-                landlord_id, property_id, agent_id, tenant_ids, primary_tenant_id,
-                type, status, start_date, end_date, monthly_rent, security_deposit,
-                created_by
-            )
-            VALUES (
-                $1, $2, NULL, ARRAY[$1]::uuid[], $1,
-                'fixed_term', 'active', CURRENT_DATE, CURRENT_DATE + INTERVAL '1 year',
-                1000.00, 1000.00, $1
-            )
-        ",
-        user_id,
-        property_id,
-    )
-    .execute(pool)
-    .await
-    .expect("seed lease");
 }
 
 /// Happy path: tenant -> landlord returns 200, role flips, refresh
@@ -374,7 +276,7 @@ async fn role_change_with_stale_iat_returns_403(pool: PgPool) {
     let session = common::login_and_extract(&env).await;
 
     // 6 minutes > 5-minute window -> 403.
-    let stale_token = mint_access_token_with_backdated_iat(
+    let stale_token = common::mint_access_token_with_backdated_iat(
         session.user_id,
         UserRole::Tenant,
         &env.jwt_secret,
@@ -488,7 +390,7 @@ async fn role_change_noop_does_not_burn_rate_limit(pool: PgPool) {
 async fn role_change_with_active_lease_returns_409(pool: PgPool) {
     let env = common::setup_test_server(pool.clone(), true).await;
     let session = common::login_and_extract(&env).await;
-    seed_active_lease_as_landlord(&pool, session.user_id).await;
+    common::seed_active_lease_as_landlord(&pool, session.user_id).await;
 
     let response = env
         .server

@@ -256,6 +256,100 @@ pub fn create_test_jwt(user_id: UserId, role: UserRole, secret: &str) -> String 
     .expect("Failed to create test JWT")
 }
 
+/// Mints an access JWT with a custom `iat` offset (in seconds) into the past.
+///
+/// Used by recent-auth gate tests (role-change, account-delete) that need
+/// to drive `iat <= NOW() - window` deterministically without sleeping for
+/// the full window in CI. The token is otherwise indistinguishable from
+/// one produced by `create_test_jwt`.
+#[inline]
+pub fn mint_access_token_with_backdated_iat(
+    user_id: Uuid,
+    role: UserRole,
+    secret: &str,
+    iat_offset_secs: i64,
+) -> String {
+    let now = Utc::now();
+    let exp = now
+        .checked_add_signed(Duration::hours(24))
+        .expect("Valid expiration")
+        .timestamp();
+    let exp_usize = usize::try_from(exp.max(0)).expect("Valid expiration timestamp");
+
+    let backdated = now.timestamp() - iat_offset_secs;
+    let iat_usize = usize::try_from(backdated.max(0)).expect("Valid iat");
+
+    let claims = Claims {
+        sub: user_id,
+        role,
+        exp: exp_usize,
+        iss: JWT_ISSUER.to_owned(),
+        aud: JWT_AUDIENCE.to_owned(),
+        token_type: Some(TokenType::Access),
+        verification_level: Some(VerificationLevel::None),
+        jti: Uuid::new_v4(),
+        iat: iat_usize,
+    };
+    encode(
+        &Header::default(),
+        &claims,
+        &EncodingKey::from_secret(secret.as_bytes()),
+    )
+    .expect("Failed to mint backdated JWT")
+}
+
+/// Seeds an `active` lease where `landlord_id = user_id`.
+///
+/// Inserts the minimal `properties` row required as a foreign key
+/// (NOT NULL columns: `landlord_id`, `property_type`, `address_line1`,
+/// `city`, `state`, `zip_code`) and the minimal `leases` row (NOT NULL
+/// columns: `landlord_id`, `property_id`, `tenant_ids[]`,
+/// `primary_tenant_id`, `type`, `start_date`, `end_date`,
+/// `monthly_rent`, `security_deposit`, `created_by`).
+///
+/// `primary_tenant_id` and `tenant_ids[0]` are intentionally set to
+/// `landlord_id` because the `users` table only has one row in this
+/// scenario - the FK constraints accept self-references and the
+/// callers assert on the `landlord_id` branch of the EXISTS predicate,
+/// not the `primary_tenant_id` branch.
+#[inline]
+pub async fn seed_active_lease_as_landlord(pool: &PgPool, user_id: Uuid) {
+    let property_id = sqlx::query!(
+        r"
+            INSERT INTO properties (
+                landlord_id, property_type, address_line1, city, state, zip_code
+            )
+            VALUES ($1, 'single_family', '1 Test St', 'Testville', 'CA', '00000')
+            RETURNING id
+        ",
+        user_id,
+    )
+    .fetch_one(pool)
+    .await
+    .expect("seed property")
+    .id;
+
+    sqlx::query!(
+        r"
+            INSERT INTO leases (
+                landlord_id, property_id, agent_id, tenant_ids, primary_tenant_id,
+                type, status, start_date, end_date, monthly_rent, security_deposit,
+                created_by
+            )
+            VALUES (
+                $1, $2, NULL, ARRAY[$1]::uuid[], $1,
+                'fixed_term', 'active', CURRENT_DATE, CURRENT_DATE + INTERVAL '1 year',
+                1000.00, 1000.00, $1
+            )
+        ",
+        user_id,
+        property_id,
+    )
+    .execute(pool)
+    .await
+    .expect("seed lease");
+}
+
 /// Makes an authenticated request by attaching the JWT as the
 /// `access_token` cookie (the transport the middleware now expects).
 #[inline]
