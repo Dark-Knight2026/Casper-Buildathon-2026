@@ -65,6 +65,7 @@ pub mod errors {
     pub enum Error {
         NotAuthorized = 800,
         MissingIdentityHash = 801,
+        AccountNotRegistered = 802,
     }
 }
 
@@ -122,18 +123,15 @@ impl InvestorRegistry {
         });
     }
 
-    /// Freezes or unfreezes an investor wallet
+    /// Freezes or unfreezes an investor wallet.
     /// Restricted to `FREEZER`.
-    /// @dev A frozen wallet remains registered, but `is_verified()` returns false while the wallet is frozen.
+    /// @dev The account must be registered first via `set_investor_record`.
+    ///      A frozen wallet remains registered, but `is_verified()` returns false while the wallet is frozen.
     pub fn set_frozen(&mut self, account: Address, frozen: bool) {
         self.assert_role(ROLE_FREEZER);
 
-        let mut record = self.records.get(&account).unwrap_or(InvestorRecord {
-            verified: false,
-            frozen: false,
-            verified_until: 0,
-            jurisdiction: 0,
-            identity_hash: [0u8; 32],
+        let mut record = self.records.get(&account).unwrap_or_else(|| {
+            self.env().revert(Error::AccountNotRegistered);
         });
 
         record.frozen = frozen;

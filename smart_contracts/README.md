@@ -49,7 +49,7 @@ Each contract is modular, upgradeable, and interacts with others through well-de
     KYC and does not store personal data. Off-chain verification providers such as Sumsub are expected to produce a
     final approval result, and an authorized `VERIFICATION_MANAGER` writes only the wallet's verification status,
     expiry, jurisdiction code, and opaque identity hash. A separate `FREEZER` role can freeze or unfreeze investor
-    wallets.
+    wallets that have already been registered.
 
 11. `PropertyRegistry` - stores tokenized property records. Each property starts in `Draft` status, then a property
     manager sets the property ownership token address and revenue distributor address before activating it. The registry
