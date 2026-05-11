@@ -33,6 +33,18 @@ use crate::{
 /// transport layer before it reaches the handler.
 const MAX_AVATAR_BYTES: usize = 5 * 1024 * 1024;
 
+/// Minimum accepted avatar payload size.
+///
+/// No whitelisted image format can be valid below this threshold - even
+/// the smallest 1x1 PNG/JPEG/WebP weighs in well above 100 bytes (the
+/// minimal PNG runs ~67B, but a real-world 1x1 JPEG needs SOI + APP0 +
+/// quantization/Huffman tables + SOS + EOI which adds up past 100). The
+/// guard runs before the magic-byte sniff: without it, a 3-byte JPEG
+/// SOI (`FF D8 FF`) passes the whitelist, passes the
+/// `payload.len() >= JPEG_MAGIC.len()` sniff check, and reaches the
+/// storage write as a "broken image" with a 200 response.
+const MIN_AVATAR_BYTES: usize = 100;
+
 /// Multipart field name expected for the avatar payload.
 const AVATAR_FIELD_NAME: &str = "file";
 
@@ -574,9 +586,13 @@ pub async fn confirm_email_change(
 ///    `file`. A missing field is 400.
 /// 2. **Size cap**: the buffered field bytes must not exceed
 ///    [`MAX_AVATAR_BYTES`]. Oversize payloads return 413.
-/// 3. **MIME whitelist**: the field's `Content-Type` header must be one of
+/// 3. **Minimum-size guard**: the buffered field bytes must be at least
+///    [`MIN_AVATAR_BYTES`]. Truncated payloads (e.g. a 3-byte JPEG SOI)
+///    return 415 - they would otherwise satisfy the whitelist and the
+///    magic-byte prefix check while being unrenderable.
+/// 4. **MIME whitelist**: the field's `Content-Type` header must be one of
 ///    `image/png`, `image/jpeg`, `image/webp`. Anything else returns 415.
-/// 4. **Magic-byte sniff**: the first 12 bytes must match the format the
+/// 5. **Magic-byte sniff**: the first 12 bytes must match the format the
 ///    `Content-Type` claims. Mismatches (e.g. `Content-Type: image/png`
 ///    with JPEG bytes, or `Content-Type: image/webp` with RIFF-header
 ///    bytes that lack the `WEBP` tag) return 415. This blocks
@@ -686,6 +702,17 @@ pub async fn upload_avatar(
     if bytes.len() > MAX_AVATAR_BYTES {
         return Err(ApiError::PayloadTooLarge(format!(
             "Avatar payload exceeds {MAX_AVATAR_BYTES}-byte limit"
+        )));
+    }
+
+    // Reject truncated payloads before the whitelist + sniff combo. A
+    // 3-byte body `[0xFF, 0xD8, 0xFF]` would otherwise satisfy both the
+    // `image/jpeg` whitelist and the SOI-prefix sniff while being
+    // unrenderable - producing a 200 response and a broken object in
+    // storage.
+    if bytes.len() < MIN_AVATAR_BYTES {
+        return Err(ApiError::UnsupportedMediaType(format!(
+            "Avatar payload below {MIN_AVATAR_BYTES}-byte minimum"
         )));
     }
 
