@@ -157,6 +157,37 @@ fn test_frozen_investor_should_not_be_verified() {
 }
 
 #[test]
+fn test_set_investor_record_should_preserve_frozen_status() {
+    let mut ctx = setup(odra_test::env());
+    let mut record = active_record(&ctx.env);
+
+    // Register and then freeze the investor
+    ctx.env.set_caller(ctx.verification_manager);
+    ctx.registry
+        .set_investor_record(ctx.investor, record.clone());
+
+    ctx.env.set_caller(ctx.freezer);
+    ctx.registry.set_frozen(ctx.investor, true);
+    assert!(ctx.registry.is_frozen(ctx.investor));
+
+    // Update the record via set_investor_record (e.g. update jurisdiction)
+    record.jurisdiction = 123;
+    ctx.env.set_caller(ctx.verification_manager);
+    ctx.registry.set_investor_record(ctx.investor, record);
+
+    // Assert frozen status is preserved
+    assert!(ctx.registry.is_frozen(ctx.investor));
+    assert!(
+        !ctx.registry.is_verified(ctx.investor),
+        "Frozen investor should not be verified even after record update"
+    );
+
+    let updated_record = ctx.registry.get_investor_record(ctx.investor).unwrap();
+    assert_eq!(updated_record.jurisdiction, 123);
+    assert!(updated_record.frozen);
+}
+
+#[test]
 fn test_set_frozen_should_revert_if_account_is_not_registered() {
     let mut ctx = setup(odra_test::env());
 
