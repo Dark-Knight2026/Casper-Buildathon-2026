@@ -226,6 +226,36 @@ fn test_set_compliance_config_should_revert_if_caller_is_not_manager() {
 }
 
 #[test]
+fn test_set_investor_registry_should_revert_if_caller_is_not_manager() {
+    let mut ctx = setup(odra_test::env());
+
+    ctx.env.set_caller(ctx.env.get_account(9));
+
+    assert_eq!(
+        ctx.compliance
+            .try_set_investor_registry(ctx.env.get_account(10))
+            .unwrap_err(),
+        ComplianceError::NotAuthorized.into(),
+        "Should revert if caller is not compliance manager",
+    );
+}
+
+#[test]
+fn test_set_property_registry_should_revert_if_caller_is_not_manager() {
+    let mut ctx = setup(odra_test::env());
+
+    ctx.env.set_caller(ctx.env.get_account(9));
+
+    assert_eq!(
+        ctx.compliance
+            .try_set_property_registry(ctx.env.get_account(10))
+            .unwrap_err(),
+        ComplianceError::NotAuthorized.into(),
+        "Should revert if caller is not compliance manager",
+    );
+}
+
+#[test]
 fn test_set_transfer_exempt_should_store_exemption() {
     let mut ctx = setup(odra_test::env());
 
