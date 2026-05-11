@@ -33,7 +33,7 @@ Returned by `/users/me` and embedded in `LoginResponse.user`:
 
 ## PATCH `/api/v1/users/me`
 
-- **Input:** `{ "first_name"?, "last_name"?, "phone"?, "bio"?, "avatar_url"? }` (any subset; missing fields keep stored value)
+- **Input:** `{ "first_name"?, "last_name"?, "phone"?, "bio"? }` (any subset; missing fields keep stored value). The avatar is owned by [`POST /api/v1/users/me/avatar`](#post-apiv1usersmeavatar) and is NOT accepted here - any client-supplied `avatar_url` is silently dropped by serde, so this endpoint cannot be used to update it.
 - **Response:** updated `UserInfo`
 - **Side effect:** writing a new `phone` distinct from the stored one resets `phone_verified` to `false`
 - **Errors:** 400 (empty required fields, over-long values), 401, 404, 500
