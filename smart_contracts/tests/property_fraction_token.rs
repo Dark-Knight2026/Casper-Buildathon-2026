@@ -60,11 +60,11 @@ fn setup(env: HostEnv) -> Context {
     let initial_supply = U256::from(1_000_000);
 
     let mut investor_registry = InvestorRegistry::deploy(&env, InvestorRegistryInitArgs { owner });
-    let mut property_registry = PropertyRegistry::deploy(&env, PropertyRegsitryInitArgs { owner });
+    let mut property_registry = PropertyRegistry::deploy(&env, PropertyRegistryInitArgs { owner });
 
-    let compliance = CompliancePolicy::deploy(
+    let mut compliance = CompliancePolicy::deploy(
         &env,
-        ComplianceInitArgs {
+        CompliancePolicyInitArgs {
             owner,
             investor_registry: investor_registry.address(),
             property_registry: property_registry.address(),
@@ -80,6 +80,8 @@ fn setup(env: HostEnv) -> Context {
         &property_registry.property_manager_role(),
         &property_manager,
     );
+
+    compliance.grant_role(&compliance.compliance_manager_role(), &compliance_manager);
 
     env.set_caller(property_manager);
     let property_id = property_registry.create_property(CreatePropertyParams {
@@ -107,6 +109,7 @@ fn setup(env: HostEnv) -> Context {
     env.set_caller(owner);
     token.grant_role(&token.token_manager_role(), &token_manager);
 
+    env.set_caller(property_manager);
     property_registry.set_property_token(property_id, token.address());
     property_registry.set_revenue_distributor(property_id, revenue_distributor);
     property_registry.set_property_status(property_id, PropertyStatus::Active);
@@ -134,13 +137,13 @@ fn setup(env: HostEnv) -> Context {
 // Helpers
 // =============================================================================
 
-fn active_investory_record(env: &HostEnv) -> InvestorRecord {
+fn active_investor_record(env: &HostEnv) -> InvestorRecord {
     InvestorRecord {
         verified: true,
         frozen: false,
         verified_until: env.block_time() + 1_000,
         jurisdiction: 840,
-        identity_hash: String::from("kyc-hash"),
+        identity_hash: [1u8; 32],
     }
 }
 
@@ -192,4 +195,34 @@ fn init_args(
             initial_holder: env.get_account(5),
         },
     }
+}
+
+// =============================================================================
+// transfer()
+// =============================================================================
+
+#[test]
+fn test_transfer_should_move_tokens_when_compliance_passes() {
+    let mut ctx = setup(odra_test::env());
+    let initial_holder = ctx.initial_holder;
+    let recipient = ctx.recipient;
+    let amount = U256::from(250);
+
+    enable_primary_distribution(&mut ctx);
+    verify_investor(&mut ctx, recipient);
+
+    ctx.env.set_caller(initial_holder);
+    ctx.token.transfer(&recipient, &amount);
+
+    assert_eq!(
+        ctx.token.balance_of(&initial_holder),
+        ctx.initial_supply - amount,
+        "Invalid sender balance",
+    );
+
+    assert_eq!(
+        ctx.token.balance_of(&recipient),
+        amount,
+        "Invalid recipient balance",
+    );
 }
