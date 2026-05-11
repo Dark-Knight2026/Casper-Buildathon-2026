@@ -226,3 +226,55 @@ fn test_transfer_should_move_tokens_when_compliance_passes() {
         "Invalid recipient balance",
     );
 }
+
+#[test]
+fn test_transfer_should_revert_if_transfers_are_disabled() {
+    let mut ctx = setup(odra_test::env());
+    let initial_holder = ctx.initial_holder;
+    let recipient = ctx.recipient;
+    let amount = U256::from(100);
+
+    set_transfer_exempt(&mut ctx, initial_holder, true);
+    verify_investor(&mut ctx, recipient);
+
+    ctx.env.set_caller(initial_holder);
+
+    assert_eq!(
+        ctx.token.try_transfer(&recipient, &amount).unwrap_err(),
+        ComplianceError::TransfersDisabled.into(),
+        "Should revert when property transfers are disabled",
+    );
+}
+
+#[test]
+fn test_transfer_should_revert_if_sender_is_not_verified_or_exempt() {
+    let mut ctx = setup(odra_test::env());
+    let initial_holder = ctx.initial_holder;
+    let recipient = ctx.recipient;
+    let amount = U256::from(100);
+
+    enable_transfers(&mut ctx);
+    verify_investor(&mut ctx, recipient);
+
+    ctx.env.set_caller(initial_holder);
+
+    assert_eq!(
+        ctx.token.try_transfer(&recipient, &amount).unwrap_err(),
+        ComplianceError::SenderNotVerified.into(),
+        "Should revert when sender is not verified or exempt",
+    );
+}
+
+#[test]
+fn test_transfer_should_revert_if_recipient_is_not_verified_or_exempt() {
+    let mut ctx = setup(odra_test::env());
+    let initial_holder = ctx.initial_holder;
+    let recipient = ctx.recipient;
+    let amount = U256::from(100);
+
+    enable_primary_distribution(&mut ctx);
+
+    ctx.env.set_caller(initial_holder);
+
+    
+}
