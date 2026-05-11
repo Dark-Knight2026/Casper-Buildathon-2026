@@ -7,6 +7,7 @@
 | analytics.rs              | Tests analytics module: request deserialization, endpoint response structure                        |
 | auth.rs                   | Tests authentication: nonce, login, E2E flow, cryptographic signature verification                  |
 | auth_invalidate_before.rs | Tests jwt_invalidate_before middleware cutoff: NULL/past allow, future/deleted-user block           |
+| auth_middleware_cache.rs  | Tests AuthUser extensions cache: from_request_parts short-circuits DB lookup on a cached entry      |
 | auth_revoke_all.rs        | Tests POST /auth/sessions/revoke-all: keep_current default and panic-logout flows                   |
 | auth_sessions.rs          | Tests GET /auth/sessions list and DELETE /auth/sessions/{id}: is_current flag, owner gate           |
 | common.rs                 | Shared test utilities: server setup, Redis/PostgreSQL containers, JWT helpers                       |

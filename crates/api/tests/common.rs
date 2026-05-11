@@ -107,6 +107,10 @@ pub struct TestEnv {
     pub jwt_secret: String,
     /// Redis environment (keeps container alive, provides client for assertions).
     pub redis: Option<RedisTestEnv>,
+    /// Shared application state. Exposed for tests that need to call
+    /// extractors (e.g. `AuthUser::from_request_parts`) directly rather
+    /// than through the HTTP surface.
+    pub state: Arc<AppState>,
 }
 
 /// Optional overrides for test server configuration.
@@ -207,7 +211,7 @@ pub async fn setup_test_server_with(
 
     // Use real HTTP transport so ConnectInfo works for rate limiting (GovernorLayer).
     // create_app applies production middleware (CORS, tracing, body limit).
-    let app = server::create_app(state)
+    let app = server::create_app(Arc::clone(&state))
         .expect("Failed to build app")
         .into_make_service_with_connect_info::<SocketAddr>();
     let config = TestServerConfig {
@@ -219,6 +223,7 @@ pub async fn setup_test_server_with(
         server: TestServer::new_with_config(app, config),
         jwt_secret,
         redis: redis_env,
+        state,
     }
 }
 

@@ -81,7 +81,13 @@ use crate::{
 };
 
 /// Authenticated user extracted from the `access_token` JWT cookie.
-#[derive(Debug)]
+///
+/// `Clone` is required so the validated `AuthUser` can be stashed into
+/// `request.extensions` by `require_auth` and handed back to downstream
+/// handler extractors without re-running the JWT decode + DB cutoff
+/// lookup. `Claims` is already `Clone`, so the implementation is a
+/// trivial field clone.
+#[derive(Debug, Clone)]
 pub struct AuthUser(pub Claims);
 
 impl FromRequestParts<Arc<AppState>> for AuthUser {
