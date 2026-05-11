@@ -432,3 +432,36 @@ async fn upload_avatar_db_failure_does_not_consume_rate_limit_slot(pool: PgPool)
         "DB-failed avatar upload must not consume a rate-limit slot; got counter = {count:?} for key {key}",
     );
 }
+
+/// Minimum-payload-size guard for the magic-byte sniff. Submitting only
+/// the 3-byte JPEG SOI (`FF D8 FF`) with `Content-Type: image/jpeg` used
+/// to pass: the whitelist accepted the header, the sniff checked
+/// `payload.len() >= JPEG_MAGIC.len() == 3` and the cross-check matched,
+/// so a 3-byte body was written to storage as a "valid JPEG" with a 200
+/// response. A real JPEG cannot fit in three bytes (SOI alone is not a
+/// renderable image), so this must 415 before any storage write.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn upload_avatar_truncated_jpeg_soi_returns_415(pool: PgPool) {
+    let env = common::setup_test_server(pool, true).await;
+    let access_token = login_and_get_access_token(&env, 0x47).await;
+
+    let form = MultipartForm::new().add_part(
+        "file",
+        Part::bytes(vec![0xFF, 0xD8, 0xFF])
+            .mime_type("image/jpeg")
+            .file_name("tiny.jpg"),
+    );
+
+    let response = env
+        .server
+        .post("/api/v1/users/me/avatar")
+        .add_header(COOKIE, format!("access_token={access_token}"))
+        .multipart(form)
+        .await;
+
+    assert_eq!(
+        response.status_code(),
+        StatusCode::UNSUPPORTED_MEDIA_TYPE,
+        "3-byte SOI is not a renderable JPEG and must be rejected before storage write",
+    );
+}

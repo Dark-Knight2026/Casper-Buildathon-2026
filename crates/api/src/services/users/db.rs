@@ -745,9 +745,7 @@ pub async fn soft_delete_user(pool: &PgPool, user_id: Uuid) -> Result<SoftDelete
 
     sqlx::query!(
         r"
-            INSERT INTO audit_logs (
-                user_id, action, resource_type, resource_id, status
-            )
+            INSERT INTO audit_logs ( user_id, action, resource_type, resource_id, status)
             VALUES ($1, 'self_delete_user', 'user', $1, 'success')
         ",
         user_id,
