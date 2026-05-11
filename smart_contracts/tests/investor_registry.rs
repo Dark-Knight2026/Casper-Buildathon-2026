@@ -169,6 +169,18 @@ fn test_set_frozen_should_revert_if_account_is_not_registered() {
 }
 
 #[test]
+fn test_set_frozen_should_revert_if_caller_is_not_freezer() {
+    let mut ctx = setup(odra_test::env());
+
+    ctx.env.set_caller(ctx.env.get_account(9));
+
+    assert_eq!(
+        ctx.registry.try_set_frozen(ctx.investor, true).unwrap_err(),
+        Error::NotAuthorized.into()
+    );
+}
+
+#[test]
 fn test_verified_record_should_require_identity_hash() {
     let mut ctx = setup(odra_test::env());
     let mut record = active_record(&ctx.env);
