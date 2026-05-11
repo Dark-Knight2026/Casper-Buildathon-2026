@@ -128,7 +128,7 @@ pub mod errors {
 pub struct PropertyRegistry {
     access_control: SubModule<AccessControl>,
     properties: Mapping<U256, PropertyRecord>,
-    properties_count: Var<U256>,
+    properties_count: Sequence<U256>,
     token_to_property_id: Mapping<Address, Option<U256>>,
 }
 
@@ -262,11 +262,6 @@ impl PropertyRegistry {
             .unwrap_or_revert_with(&self.env(), Error::InvalidPropertyId)
     }
 
-    /// Returns the number of property records created.
-    pub fn get_properties_count(&self) -> U256 {
-        self.properties_count.get_or_default()
-    }
-
     /// Returns the property token address
     pub fn get_property_token(&self, property_id: U256) -> Address {
         self.get_property(property_id)
@@ -310,7 +305,7 @@ impl PropertyRegistry {
             self.env().revert(Error::EmptyMetadataUri);
         }
 
-        let property_id = self.get_properties_count();
+        let property_id = self.properties_count.next_value();
         let issuer = params.issuer;
         let total_supply = params.total_supply;
 
@@ -325,8 +320,6 @@ impl PropertyRegistry {
                 status: PropertyStatus::Draft,
             },
         );
-
-        self.properties_count.set(property_id + 1);
 
         self.env().emit_event(PropertyCreated {
             property_id,

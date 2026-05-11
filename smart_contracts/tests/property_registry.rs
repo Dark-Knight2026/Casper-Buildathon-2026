@@ -83,11 +83,6 @@ fn test_create_property_should_create_draft_properly() {
     let property = ctx.registry.get_property(property_id);
 
     assert_eq!(property_id, expected_property_id, "Invalid Property ID");
-    assert_eq!(
-        ctx.registry.get_properties_count(),
-        U256::from(1),
-        "Invalid property count",
-    );
     assert_eq!(property.issuer, ctx.issuer, "Invalid issuer");
     assert_eq!(property.total_supply, U256::from(1_000_000));
     assert_eq!(
