@@ -432,8 +432,17 @@ impl RedisStore {
     }
 
     /// Generates the Redis key for the avatar-upload rate-limit counter.
+    ///
+    /// Exposed `pub` (rather than module-private) so integration tests
+    /// can reach the canonical key format - matches the
+    /// [`role_change_attempts_key`] pattern. Any future rename of the
+    /// key format then breaks tests at compile-time, not silently at
+    /// runtime against a stale hardcoded string.
+    ///
+    /// [`role_change_attempts_key`]: Self::role_change_attempts_key
     #[inline]
-    fn avatar_upload_attempts_key(user_id: Uuid) -> String {
+    #[must_use]
+    pub fn avatar_upload_attempts_key(user_id: Uuid) -> String {
         format!("avatar_upload_attempts:{user_id}")
     }
 

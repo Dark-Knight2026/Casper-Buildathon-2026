@@ -22,6 +22,7 @@ use redis::AsyncCommands;
 use serde_json::Value;
 use sqlx::PgPool;
 
+use api::common::RedisStore;
 use common::TestEnv;
 
 /// 8-byte PNG signature followed by 1 KB of zero padding.
@@ -421,7 +422,7 @@ async fn upload_avatar_db_failure_does_not_consume_rate_limit_slot(pool: PgPool)
         .await
         .expect("connect to test redis");
 
-    let key = format!("avatar_upload_attempts:{}", session.user_id);
+    let key = RedisStore::avatar_upload_attempts_key(session.user_id);
     let count = conn
         .get::<_, Option<u64>>(&key)
         .await
