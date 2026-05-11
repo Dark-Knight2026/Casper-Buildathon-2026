@@ -7,7 +7,6 @@ use axum_test::{TestResponse, http::header::COOKIE};
 use casper_types::{AsymmetricType, PublicKey, SecretKey, crypto};
 use chrono::{DateTime, Duration, Utc};
 use jsonwebtoken::{EncodingKey, Header};
-use rand::Rng;
 use redis::AsyncCommands;
 use serde_json::Value;
 use sqlx::{Error, PgPool};
@@ -15,25 +14,9 @@ use uuid::Uuid;
 
 use api::{
     Claims, RedisStore, UserRole,
-    common::{CASPER_MESSAGE_PREFIX, JWT_AUDIENCE, JWT_ISSUER, TokenType},
+    common::{JWT_AUDIENCE, JWT_ISSUER, TokenType},
     services::{AUTH_RATE_LIMIT_BURST, auth::UpsertOutcome},
 };
-
-/// Signs a message with the Casper Wallet prefix, matching browser extension behavior.
-fn sign_with_prefix(message: &str, secret_key: &SecretKey, public_key: &PublicKey) -> String {
-    let prefixed = format!("{CASPER_MESSAGE_PREFIX}{message}");
-    crypto::sign(prefixed.as_bytes(), secret_key, public_key).to_hex()
-}
-
-fn generate_random_ed25519() -> (SecretKey, PublicKey) {
-    let mut rng = rand::rng();
-    let mut bytes = [0u8; 32];
-    rng.fill_bytes(&mut bytes);
-
-    let secret_key = SecretKey::ed25519_from_bytes(bytes).unwrap();
-    let public_key = PublicKey::from(&secret_key);
-    (secret_key, public_key)
-}
 
 /// Performs a full nonce -> sign -> login round-trip and returns the login
 /// response so the caller can pluck the rotated cookies out.
@@ -49,7 +32,7 @@ async fn login_with_seed(env: &common::TestEnv, secret_seed: [u8; 32]) -> TestRe
         .await
         .json::<Value>();
     let message = nonce_body["message"].as_str().unwrap();
-    let signature_hex = sign_with_prefix(message, &secret_key, &public_key);
+    let signature_hex = common::sign_with_prefix(message, &secret_key, &public_key);
 
     env.server
         .post("/api/v1/auth/login")
@@ -219,7 +202,7 @@ async fn full_auth_flow_nonce_sign_login(pool: PgPool) {
         .expect("message field required");
 
     // 3. Sign the message with the private key (with Casper Wallet prefix)
-    let signature_hex = sign_with_prefix(message, &secret_key, &public_key);
+    let signature_hex = common::sign_with_prefix(message, &secret_key, &public_key);
 
     // 4. Login
     let login_response = env
@@ -271,7 +254,7 @@ async fn replay_attack_prevention(pool: PgPool) {
         .await
         .json::<Value>();
     let message = nonce_body["message"].as_str().unwrap();
-    let signature_hex = sign_with_prefix(message, &secret_key, &public_key);
+    let signature_hex = common::sign_with_prefix(message, &secret_key, &public_key);
 
     // First login succeeds
     let first = env
@@ -325,7 +308,7 @@ async fn concurrent_nonce_overwrites_previous(pool: PgPool) {
         .await
         .json::<Value>();
     let second_message = second_body["message"].as_str().unwrap();
-    let second_sig = sign_with_prefix(second_message, &secret_key, &public_key);
+    let second_sig = common::sign_with_prefix(second_message, &secret_key, &public_key);
 
     // Login with latest nonce succeeds (first nonce was overwritten)
     let fresh = env
@@ -358,7 +341,7 @@ async fn failed_login_consumes_nonce(pool: PgPool) {
         .await
         .json::<Value>();
     let message = nonce_body["message"].as_str().unwrap();
-    let correct_sig = sign_with_prefix(message, &secret_key, &public_key);
+    let correct_sig = common::sign_with_prefix(message, &secret_key, &public_key);
 
     // First attempt with a wrong signature consumes the nonce
     let bad = env
@@ -402,7 +385,7 @@ async fn login_without_nonce_is_rejected(pool: PgPool) {
 
     // Sign an arbitrary message (no nonce was ever stored)
     let fake_message = "Sign this message to login to LeaseFi. Nonce: nonexistent";
-    let signature_hex = sign_with_prefix(fake_message, &secret_key, &public_key);
+    let signature_hex = common::sign_with_prefix(fake_message, &secret_key, &public_key);
 
     let response = env
         .server
@@ -456,10 +439,10 @@ async fn nonce_has_ttl_set_in_redis(pool: PgPool) {
 
 #[test]
 fn verify_valid_signature() {
-    let (secret_key, public_key) = generate_random_ed25519();
+    let (secret_key, public_key) = common::generate_random_ed25519();
 
     let message = "Login to LeaseFi";
-    let sig_hex = sign_with_prefix(message, &secret_key, &public_key);
+    let sig_hex = common::sign_with_prefix(message, &secret_key, &public_key);
     let pk_hex = public_key.to_hex();
 
     let result = api::common::verify_casper_signature(&pk_hex, &sig_hex, message);
@@ -474,10 +457,10 @@ fn verify_valid_signature() {
 
 #[test]
 fn verify_invalid_message() {
-    let (secret_key, public_key) = generate_random_ed25519();
+    let (secret_key, public_key) = common::generate_random_ed25519();
 
     let message = "Original Message";
-    let sig_hex = sign_with_prefix(message, &secret_key, &public_key);
+    let sig_hex = common::sign_with_prefix(message, &secret_key, &public_key);
     let pk_hex = public_key.to_hex();
 
     let result = api::common::verify_casper_signature(&pk_hex, &sig_hex, "Fake Message");
@@ -489,34 +472,13 @@ fn verify_invalid_message() {
     );
 }
 
-#[test]
-#[ignore = "utility: run manually to regenerate test vector data"]
-fn generate_data_for_local_tests() {
-    let fixed_bytes = [1u8; 32];
-    let secret_key = SecretKey::ed25519_from_bytes(fixed_bytes).unwrap();
-    let public_key = PublicKey::from(&secret_key);
-
-    let wallet_address = public_key.to_hex();
-
-    let message_from_server = "Sign this message to login to LeaseFi. Nonce: XJyoR9G2a4HQfjdx";
-    let signature_hex = sign_with_prefix(message_from_server, &secret_key, &public_key);
-
-    println!("\n============================================");
-    println!("1. Wallet Address:");
-    println!("{wallet_address}");
-    println!("--------------------------------------------");
-    println!("2. Signature:");
-    println!("{signature_hex}");
-    println!("============================================\n");
-}
-
 /// Signature signed WITHOUT the `CASPER_MESSAGE_PREFIX` must be rejected.
 ///
 /// Regression: `verify_casper_signature` prepends the prefix before verification,
 /// so a raw (unprefixed) signature must not pass.
 #[test]
 fn verify_signature_without_prefix_is_rejected() {
-    let (secret_key, public_key) = generate_random_ed25519();
+    let (secret_key, public_key) = common::generate_random_ed25519();
 
     let message = "Login to LeaseFi";
     // Sign the raw message directly - without CASPER_MESSAGE_PREFIX
@@ -603,7 +565,7 @@ async fn full_auth_flow_secp256k1(pool: PgPool) {
         .expect("message field required");
 
     // Sign with Casper Wallet prefix
-    let signature_hex = sign_with_prefix(message, &secret_key, &public_key);
+    let signature_hex = common::sign_with_prefix(message, &secret_key, &public_key);
 
     // Login
     let login_response = env
@@ -654,6 +616,7 @@ async fn jwt_wrong_issuer_rejected(pool: PgPool) {
         token_type: None,
         verification_level: None,
         jti: Uuid::new_v4(),
+        iat: 0,
     };
     let token = jsonwebtoken::encode(
         &Header::default(),
@@ -693,6 +656,7 @@ async fn jwt_wrong_audience_rejected(pool: PgPool) {
         token_type: None,
         verification_level: None,
         jti: Uuid::new_v4(),
+        iat: 0,
     };
     let token = jsonwebtoken::encode(
         &Header::default(),
@@ -782,6 +746,7 @@ async fn jwt_with_expired_exp_rejected(pool: PgPool) {
         token_type: None,
         verification_level: None,
         jti: Uuid::new_v4(),
+        iat: 0,
     };
     let token = jsonwebtoken::encode(
         &Header::default(),
@@ -824,6 +789,7 @@ async fn jwt_signed_with_wrong_secret_rejected(pool: PgPool) {
         token_type: None,
         verification_level: None,
         jti: Uuid::new_v4(),
+        iat: 0,
     };
     // Sign with a *different* secret than the one the server is using.
     let token = jsonwebtoken::encode(
@@ -1622,7 +1588,7 @@ async fn login_with_admin_role_rejected_with_400(pool: PgPool) {
         .await
         .json::<Value>();
     let message = nonce_body["message"].as_str().unwrap();
-    let signature_hex = sign_with_prefix(message, &secret_key, &public_key);
+    let signature_hex = common::sign_with_prefix(message, &secret_key, &public_key);
 
     let login_response = env
         .server
@@ -1695,6 +1661,7 @@ async fn refresh_token_in_access_cookie_rejected_with_401(pool: PgPool) {
         token_type: Some(TokenType::Refresh),
         verification_level: None,
         jti: Uuid::new_v4(),
+        iat: 0,
     };
     let token = jsonwebtoken::encode(
         &Header::default(),

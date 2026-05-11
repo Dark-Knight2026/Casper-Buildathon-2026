@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO audit_logs (\n                user_id,\n                action,\n                resource_type,\n                resource_id,\n                old_values,\n                new_values,\n                status\n            )\n            VALUES (\n                $1,\n                'change_role',\n                'user',\n                $1,\n                jsonb_build_object('role', $2::text),\n                jsonb_build_object('role', $3::text),\n                'success'\n            )\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6dae9a9480bfeb2d20ab8045df7b75633d72dca0fa532e0d8e479a7bc789e1e3"
+}

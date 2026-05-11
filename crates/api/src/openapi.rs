@@ -43,10 +43,16 @@ use crate::{
             auth::models::LoginResponse,
             auth::models::NonceRequest,
             auth::models::NonceResponse,
+            auth::models::RevokeAllSessionsRequest,
+            auth::models::RevokeAllSessionsResponse,
+            auth::models::SessionResponse,
             // Users models
+            users::models::AvatarUploadResponse,
+            users::models::DeleteAccountRequest,
             users::models::EmailChangeConfirmRequest,
             users::models::EmailChangeRequest,
             users::models::UpdateProfileRequest,
+            users::models::UpdateRoleRequest,
             // Health models
             health::models::ConnectionStatus,
             health::models::HealthResponse,

@@ -19,6 +19,8 @@ pub mod models;
 pub mod refresh;
 /// Router configuration for authentication endpoints.
 pub mod routes;
+/// Session-management handlers: list and revoke active refresh tokens.
+pub mod sessions;
 /// Wallet-based authentication: nonce + signature login.
 pub mod wallet;
 
@@ -27,11 +29,18 @@ pub use cookies::{
     ACCESS_TOKEN_COOKIE, REFRESH_COOKIE_PATH, REFRESH_TOKEN_COOKIE, build_access_cookie,
     build_refresh_cookie,
 };
-pub use db::{UpsertOutcome, insert_refresh_token, upsert_user_by_wallet};
+pub use db::{
+    ActiveSession, UpsertOutcome, insert_refresh_token, list_active_sessions,
+    revoke_all_sessions_for_user, revoke_session_by_id, upsert_user_by_wallet,
+};
 pub use jwt::{ACCESS_TOKEN_TTL, EncodedAccessToken, decode_token, encode_access_token};
 pub use logout::logout;
 pub use middleware::{AuthError, AuthUser};
-pub use models::{LoginRequest, LoginResponse, NonceRequest, NonceResponse};
+pub use models::{
+    LoginRequest, LoginResponse, NonceRequest, NonceResponse, RevokeAllSessionsRequest,
+    RevokeAllSessionsResponse, SessionResponse,
+};
 pub use refresh::{IssuedRefreshToken, REFRESH_TOKEN_TTL, issue_login_refresh_token, rotate};
 pub use routes::router;
+pub use sessions::{get_sessions, revoke_all_sessions, revoke_session};
 pub use wallet::{get_nonce, login};

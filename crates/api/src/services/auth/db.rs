@@ -515,6 +515,48 @@ pub async fn rotate_refresh_token(
     }))
 }
 
+/// Returns the `users.jwt_invalidate_before` value for the given user, if set.
+///
+/// Used by the auth middleware to enforce force-revoke flows: any access
+/// token whose `iat` claim is at or below this cutoff must be rejected,
+/// even though its `exp` is still in the future and its `jti` is not in
+/// the logout blocklist.
+///
+/// The query intentionally does NOT filter on `deleted_at IS NULL`.
+/// `soft_delete_user` stamps `deleted_at` AND `jwt_invalidate_before`
+/// in the same UPDATE, so a soft-deleted user's row carries a non-NULL
+/// cutoff that must reach the middleware. Filtering deleted rows here
+/// would mask the cutoff and let the JWT through on `AuthUser` endpoints
+/// that never load the user profile (`tax::calculate_tax_liability`,
+/// `analytics::get_property_performance`) - the soft-deleted user would
+/// retain full access to those endpoints until the JWT's natural expiry.
+///
+/// `Ok(None)` therefore means exactly one thing: no force-revoke event
+/// has ever been recorded for this user (or the row is absent entirely).
+///
+/// # Errors
+///
+/// Returns `sqlx::Error` on infrastructure failure. Upstream maps `?` to
+/// `ApiError::Internal` so the middleware fails closed on DB outages.
+#[inline]
+pub async fn fetch_jwt_invalidate_before(
+    pool: &PgPool,
+    user_id: Uuid,
+) -> Result<Option<DateTime<Utc>>, Error> {
+    let row = sqlx::query!(
+        r"
+            SELECT jwt_invalidate_before
+            FROM users
+            WHERE id = $1
+        ",
+        user_id,
+    )
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(row.and_then(|r| r.jwt_invalidate_before))
+}
+
 /// Revokes every active row in the family that contains `presented_hash`.
 ///
 /// Idempotent and tolerant by design - the logout handler calls this with a
@@ -554,4 +596,248 @@ pub async fn revoke_refresh_family_by_hash(
     .await?;
 
     Ok(())
+}
+
+/// One row of [`list_active_sessions`].
+///
+/// `token_hash` is intentionally exposed (instead of being hidden behind an
+/// `is_current` boolean computed in the db layer) so the handler can do a
+/// constant-time comparison against the SHA-256 of the request's refresh cookie
+/// WITHOUT a second SQL trip and without leaking either the cookie or the
+/// stored hashes back into a logged query parameter.
+#[derive(Debug)]
+pub struct ActiveSession {
+    /// Primary key of the `refresh_tokens` row.
+    pub id: Uuid,
+    /// Family id - all tokens rotated from the same login share it. The handler
+    /// does not currently expose this to the client (sessions UI shows one
+    /// entry per login, not per rotation), but db consumers running
+    /// `revoke-all` need it later in PR #6.
+    pub family_id: Uuid,
+    /// Wall-clock issuance timestamp.
+    pub issued_at: DateTime<Utc>,
+    /// Absolute expiration timestamp. Already past `NOW()` rows are excluded by
+    /// the SELECT, so this is always strictly in the future.
+    pub expires_at: DateTime<Utc>,
+    /// SHA-256 of the opaque refresh-token plaintext (BYTEA in schema).
+    /// Compared against `sha256(request_cookie_value)` in the handler to flag
+    /// the session that issued the current request.
+    pub token_hash: Vec<u8>,
+}
+
+/// Returns every currently-usable refresh-token row owned by `user_id`,
+/// newest issuance first.
+///
+/// "Currently-usable" means `revoked_at IS NULL AND expires_at > NOW()`.
+/// Already-revoked-but-not-yet-pruned rows are excluded so the sessions UI
+/// never shows a session the user just terminated, and expired-but-still-
+/// alive rows are excluded so we do not advertise dead handles to refresh.
+///
+/// Ordering by `issued_at DESC` puts the freshest row first, which is the
+/// only ordering the sessions list UI actually needs - clients render the
+/// rows top-down and the most-recent login is the most relevant entry.
+///
+/// # Errors
+///
+/// Returns [`Error`] for DB transport failures.
+#[inline]
+pub async fn list_active_sessions(
+    pool: &PgPool,
+    user_id: Uuid,
+) -> Result<Vec<ActiveSession>, Error> {
+    let rows = sqlx::query!(
+        r"
+            SELECT id, family_id, issued_at, expires_at, token_hash
+            FROM refresh_tokens
+            WHERE user_id = $1
+              AND revoked_at IS NULL
+              AND expires_at > NOW()
+            ORDER BY issued_at DESC
+        ",
+        user_id,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| ActiveSession {
+            id: row.id,
+            family_id: row.family_id,
+            issued_at: row.issued_at,
+            expires_at: row.expires_at,
+            token_hash: row.token_hash,
+        })
+        .collect())
+}
+
+/// Revokes a single refresh-token row owned by `user_id`.
+///
+/// Wrapped in a transaction with `SELECT ... FOR UPDATE` on the row so the
+/// revoke does not race with `rotate_refresh_token` (which holds the same
+/// `FOR UPDATE OF rt` lock on its predecessor): if a rotation is in flight
+/// for this exact id, our UPDATE blocks until the rotation commits, and we
+/// then either revoke the no-longer-active row (rotation already revoked
+/// it -> our UPDATE matches zero rows -> false) or we revoke a row the
+/// rotation chose not to rotate (also fine).
+///
+/// `user_id` is part of the WHERE clause so a forged path parameter from
+/// user A cannot revoke user B's session - the row simply does not match
+/// and the function returns `false` without leaking existence.
+///
+/// # Returns
+///
+/// `true` if exactly one row was revoked, `false` if no row matched
+/// (id unknown, already revoked, expired, or not owned by `user_id`).
+/// Handlers map `false` -> 404 to keep the contract uniform across the
+/// "session never existed" and "session already gone" cases.
+///
+/// # Errors
+///
+/// Returns [`Error`] for DB transport failures. Caller is expected
+/// to map via `From<sqlx::Error> for ApiError` (no special-casing needed).
+#[inline]
+pub async fn revoke_session_by_id(
+    pool: &PgPool,
+    user_id: Uuid,
+    session_id: Uuid,
+) -> Result<bool, Error> {
+    let mut tx = pool.begin().await?;
+
+    let locked = sqlx::query!(
+        r"
+            SELECT id
+            FROM refresh_tokens
+            WHERE id = $1
+              AND user_id = $2
+              AND revoked_at IS NULL
+            FOR UPDATE
+        ",
+        session_id,
+        user_id,
+    )
+    .fetch_optional(tx.as_mut())
+    .await?;
+
+    if locked.is_none() {
+        return Ok(false);
+    }
+
+    let rows_affected = sqlx::query!(
+        r"
+            UPDATE refresh_tokens
+            SET revoked_at = NOW()
+            WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL
+        ",
+        session_id,
+        user_id,
+    )
+    .execute(tx.as_mut())
+    .await?
+    .rows_affected();
+
+    tx.commit().await?;
+
+    Ok(rows_affected == 1)
+}
+
+/// Revokes every active refresh-token row for `user_id`, optionally
+/// preserving the row identified by `keep_token_hash`, and conditionally
+/// stamps `users.jwt_invalidate_before` to invalidate every outstanding
+/// access token.
+///
+/// All side effects run inside one transaction: an audit-log INSERT
+/// failure rolls the revoke and the cutoff bump back together, so the
+/// audit trail can never disagree with the live state.
+///
+/// Two orthogonal axes:
+///
+/// - `keep_token_hash = Some(hash)` -> rows whose `token_hash` matches
+///   the supplied bytes are preserved. The handler passes the SHA-256 of
+///   the caller's refresh cookie here when running the "log out other
+///   devices" mode, so the caller's session keeps working. `None`
+///   revokes every active row including the caller's.
+/// - `keep_current` -> drives both the `users.jwt_invalidate_before`
+///   bump (skipped when `true`, stamped when `false`) and the boolean
+///   echoed verbatim into `audit_logs.metadata`. Two orthogonal flags
+///   instead of one let a future surface ask for "keep one refresh row
+///   AND still bump the cutoff" if needed; today the handler always
+///   pairs `Some(...) + true` or `None + false`.
+///
+/// Returns the number of refresh rows actually transitioned from active
+/// to revoked - already-revoked rows in the user's account are not
+/// counted. The handler echoes this in the response so the UI can
+/// render "n other devices signed out" without a follow-up read.
+///
+/// # Errors
+///
+/// Returns [`Error`] for DB transport failures.
+#[inline]
+pub async fn revoke_all_sessions_for_user(
+    pool: &PgPool,
+    user_id: Uuid,
+    keep_token_hash: Option<&[u8]>,
+    keep_current: bool,
+) -> Result<u64, Error> {
+    let mut tx = pool.begin().await?;
+
+    let revoked = sqlx::query!(
+        r"
+            UPDATE refresh_tokens
+            SET revoked_at = NOW()
+            WHERE user_id = $1
+              AND revoked_at IS NULL
+              AND ($2::bytea IS NULL OR token_hash != $2)
+        ",
+        user_id,
+        keep_token_hash,
+    )
+    .execute(tx.as_mut())
+    .await?
+    .rows_affected();
+
+    if !keep_current {
+        // `updated_at = NOW()` is bumped explicitly so the column moves
+        // even when the standard `updated_at` trigger is not deployed in
+        // tests - same rationale as `apply_user_role_change`.
+        sqlx::query!(
+            r"
+                UPDATE users
+                SET jwt_invalidate_before = NOW(), updated_at = NOW()
+                WHERE id = $1 AND deleted_at IS NULL
+            ",
+            user_id,
+        )
+        .execute(tx.as_mut())
+        .await?;
+    }
+
+    sqlx::query!(
+        r"
+            INSERT INTO audit_logs (
+                user_id,
+                action,
+                resource_type,
+                resource_id,
+                metadata,
+                status
+            )
+            VALUES (
+                $1,
+                'revoke_all_sessions',
+                'user',
+                $1,
+                jsonb_build_object('keep_current', $2::bool),
+                'success'
+            )
+        ",
+        user_id,
+        keep_current,
+    )
+    .execute(tx.as_mut())
+    .await?;
+
+    tx.commit().await?;
+
+    Ok(revoked)
 }

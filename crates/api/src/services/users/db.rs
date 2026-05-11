@@ -3,7 +3,7 @@
 use core::str::FromStr;
 
 use chrono::{DateTime, Utc};
-use sqlx::{Error, PgPool};
+use sqlx::{Error, PgConnection, PgPool};
 use uuid::Uuid;
 
 use crate::common::{UserInfo, UserRole, UserStatus, VerificationLevel};
@@ -191,8 +191,6 @@ pub struct ProfilePatch {
     pub phone: Option<String>,
     /// New bio, or `None` to keep the existing value.
     pub bio: Option<String>,
-    /// New avatar URL, or `None` to keep the existing value.
-    pub avatar_url: Option<String>,
 }
 
 /// Patches the editable subset of a user's profile.
@@ -238,8 +236,7 @@ pub async fn update_user_profile(
                     THEN false
                     ELSE phone_verified
                 END,
-                bio        = COALESCE($5, bio),
-                avatar_url = COALESCE($6, avatar_url)
+                bio        = COALESCE($5, bio)
             WHERE id = $1 AND deleted_at IS NULL
         ",
         user_id,
@@ -247,7 +244,6 @@ pub async fn update_user_profile(
         patch.last_name,
         patch.phone,
         patch.bio,
-        patch.avatar_url,
     )
     .execute(pool)
     .await?
@@ -262,6 +258,227 @@ pub async fn update_user_profile(
     }
 
     fetch_user_profile(pool, user_id).await
+}
+
+/// Rewrites `users.avatar_url` for `user_id` and returns the reloaded
+/// profile.
+///
+/// Called by `POST /me/avatar` after the storage backend has accepted the
+/// upload and produced a public URL. The two-step (storage put, then DB
+/// rewrite) is intentional: the URL is the only stable identifier of the
+/// stored object, so writing the column first would either require a
+/// rollback path on storage failure or leave the row pointing at a
+/// non-existent blob. Reload via [`fetch_user_profile`] keeps the response
+/// shape consistent with `GET /me` for any caller that opts to chain.
+///
+/// `updated_at` is bumped by the standard `updated_at` trigger; this query
+/// does not touch the column directly.
+///
+/// # Errors
+///
+/// - [`Error::RowNotFound`] when the user no longer exists (soft-deleted
+///   between JWT issue and this call - the access token outlives the row
+///   by up to 15 minutes).
+/// - [`sqlx::Error`] for any DB failure or column-decode error in the
+///   follow-up `fetch_user_profile`.
+#[inline]
+pub async fn update_avatar_url(
+    pool: &PgPool,
+    user_id: Uuid,
+    avatar_url: &str,
+) -> Result<UserProfileRecord, Error> {
+    let rows_affected = sqlx::query!(
+        r"
+            UPDATE users
+            SET avatar_url = $2
+            WHERE id = $1 AND deleted_at IS NULL
+        ",
+        user_id,
+        avatar_url,
+    )
+    .execute(pool)
+    .await?
+    .rows_affected();
+
+    if rows_affected == 0 {
+        return Err(Error::RowNotFound);
+    }
+
+    fetch_user_profile(pool, user_id).await
+}
+
+/// Locks the user's row and returns the current role.
+///
+/// `SELECT ... FOR UPDATE` blocks any concurrent UPDATE on the same row
+/// until the surrounding transaction commits or rolls back. This is the
+/// only correct way to implement the idempotent shortcut in the role
+/// change flow: without the lock, two concurrent `PATCH`es could both
+/// observe `role = tenant`, both decide to bump, and both succeed -
+/// producing two `audit_logs` rows and burning two rate-limit slots for
+/// what should have been one logical change.
+///
+/// `from_str` falls back to `UserRole::Unknown` to mirror
+/// `From<UserProfileRecord>` for `UserInfo`: a stray DB value that does
+/// not parse cannot crash the handler, but it also cannot pass the
+/// self-registerable whitelist on the request side, so the caller still
+/// rejects it with a 400. Returning the typed enum (instead of the raw
+/// string) lets the caller compare against the validated request enum
+/// without re-parsing.
+///
+/// # Errors
+///
+/// - [`Error::RowNotFound`] when the user is missing or soft-deleted.
+/// - [`sqlx::Error`] for DB transport failures.
+#[inline]
+pub async fn lock_user_role(conn: &mut PgConnection, user_id: Uuid) -> Result<UserRole, Error> {
+    let row = sqlx::query!(
+        r"
+            SELECT role
+            FROM users
+            WHERE id = $1 AND deleted_at IS NULL
+            FOR UPDATE
+        ",
+        user_id,
+    )
+    .fetch_optional(&mut *conn)
+    .await?;
+
+    let row = row.ok_or(Error::RowNotFound)?;
+    Ok(UserRole::from_str(&row.role).unwrap_or(UserRole::Unknown))
+}
+
+/// Returns `true` when the user is bound to at least one currently-active
+/// lease as `landlord` or `primary_tenant`.
+///
+/// Other lease participations (`agent_id`, listed `tenant_ids[]`) are
+/// intentionally NOT included: an agent flipping to `landlord` does not
+/// invalidate the agency relationship, and a listed-but-not-primary
+/// tenant is not the responsible counterparty - blocking those would
+/// over-restrict role changes for users with peripheral involvement.
+/// The two roles that are checked are exactly the ones whose contractual
+/// obligations would change meaning under a role flip.
+///
+/// Reads from the legacy `leases` table (P6); when
+/// `app_1fa2dc8566_leases` becomes canonical, this query needs the table
+/// rename - the function signature stays the same so the call site
+/// does not need to change.
+///
+/// Runs inside the caller's transaction (`&mut PgConnection`) so the
+/// gate runs under the same row lock as the role UPDATE: a lease
+/// created concurrently between this check and the apply cannot slip
+/// through, because the lease-creation path takes its own row lock on
+/// the user and would block on us.
+///
+/// # Errors
+///
+/// Returns [`sqlx::Error`] for DB transport failures.
+#[inline]
+pub async fn has_blocking_leases(conn: &mut PgConnection, user_id: Uuid) -> Result<bool, Error> {
+    let row = sqlx::query!(
+        r#"
+            SELECT EXISTS(
+                SELECT 1 FROM leases
+                WHERE status = 'active'
+                  AND deleted_at IS NULL
+                  AND (landlord_id = $1 OR primary_tenant_id = $1)
+            ) AS "exists!"
+        "#,
+        user_id,
+    )
+    .fetch_one(&mut *conn)
+    .await?;
+    Ok(row.exists)
+}
+
+/// Applies a role change inside the caller's transaction.
+///
+/// Runs three statements as a single atomic unit (the caller is
+/// expected to have already opened the transaction and locked the row
+/// via [`lock_user_role`]):
+///
+/// 1. **`UPDATE users`** - rewrites `role`, stamps
+///    `jwt_invalidate_before = NOW()` so the auth middleware kills every
+///    outstanding access token, and bumps `updated_at` explicitly so the
+///    column moves even when the standard `updated_at` trigger is not
+///    deployed in tests.
+/// 2. **`UPDATE refresh_tokens`** - revokes every active refresh row
+///    for the user, forcing every device sharing the family to re-login.
+/// 3. **`INSERT INTO audit_logs`** - records `old_role -> new_role`
+///    with `status = 'success'`. We never insert from a failure path -
+///    a failed UPDATE rolls back the whole transaction along with this
+///    row, so the audit log can never disagree with the live `users`
+///    state.
+///
+/// Roles arrive as `&str` because `users.role` is plain TEXT - using
+/// the typed enum here would force a `to_string()` round-trip at the
+/// call site and add nothing but a cloned `String` per request.
+///
+/// # Errors
+///
+/// Returns [`sqlx::Error`] for any DB failure. No UNIQUE constraint
+/// touches `role`, so unique-violation cannot happen here; the caller
+/// maps any error directly to 500 via the existing `From<sqlx::Error>`.
+#[inline]
+pub async fn apply_user_role_change(
+    conn: &mut PgConnection,
+    user_id: Uuid,
+    old_role: &str,
+    new_role: &str,
+) -> Result<(), Error> {
+    sqlx::query!(
+        r"
+            UPDATE users
+            SET role = $2,
+                jwt_invalidate_before = NOW(),
+                updated_at = NOW()
+            WHERE id = $1
+        ",
+        user_id,
+        new_role,
+    )
+    .execute(&mut *conn)
+    .await?;
+
+    sqlx::query!(
+        r"
+            UPDATE refresh_tokens
+            SET revoked_at = NOW()
+            WHERE user_id = $1 AND revoked_at IS NULL
+        ",
+        user_id,
+    )
+    .execute(&mut *conn)
+    .await?;
+
+    sqlx::query!(
+        r"
+            INSERT INTO audit_logs (
+                user_id,
+                action,
+                resource_type,
+                resource_id,
+                old_values,
+                new_values,
+                status
+            )
+            VALUES (
+                $1,
+                'change_role',
+                'user',
+                $1,
+                jsonb_build_object('role', $2::text),
+                jsonb_build_object('role', $3::text),
+                'success'
+            )
+        ",
+        user_id,
+        old_role,
+        new_role,
+    )
+    .execute(&mut *conn)
+    .await?;
+
+    Ok(())
 }
 
 /// Returns `true` when `email` is already used by some active user other
@@ -354,4 +571,146 @@ pub async fn apply_email_change(
     }
 
     fetch_user_profile(pool, user_id).await
+}
+
+/// Outcome of [`soft_delete_user`].
+///
+/// Distinguishes "the user was deleted" from "the deletion was refused
+/// because an active lease still references the user". The third state
+/// (user already soft-deleted) is reported as [`Error::RowNotFound`]
+/// from the inner `SELECT ... FOR UPDATE`, mirroring the existing 404
+/// path.
+#[derive(Debug, Eq, PartialEq)]
+pub enum SoftDeleteOutcome {
+    /// The user row was soft-deleted and every documented side effect
+    /// (wallet wipe, refresh-token revocation, audit log) committed.
+    Deleted,
+    /// The user has at least one currently-active lease as
+    /// `landlord_id` or `primary_tenant_id`. Maps to 409
+    /// `active_leases_blocking` at the handler boundary.
+    LeaseBlocking,
+}
+
+/// Soft-deletes a user account in a single transaction.
+///
+/// Runs five statements as one atomic unit so a partial failure cannot leave
+/// the user with a half-deleted row (e.g. revoked refresh tokens but
+/// `deleted_at` still NULL), AND so the lease-blocking gate cannot be
+/// bypassed by a lease created concurrently with the delete:
+///
+/// 1. **`SELECT id FROM users ... FOR UPDATE`** - locks the user row.
+///    Mirrors the [`lock_user_role`] pattern in the role-change path:
+///    serializes against any concurrent flow that takes the same lock
+///    (notably the lease-creation path, which must lock the
+///    counterparty before INSERT to be safe). Returns
+///    [`Error::RowNotFound`] when the row is already soft-deleted (or
+///    never existed) - the handler maps this to 404.
+/// 2. **Lease re-check** under the lock via [`has_blocking_leases`]. The
+///    handler's earlier check ran against the pool with no isolation,
+///    so a lease created in the window between that check and this
+///    transaction would otherwise slip through and leave the
+///    contractual counterparty pointing at a tombstone. Returning
+///    [`SoftDeleteOutcome::LeaseBlocking`] aborts the tx without
+///    side effects.
+/// 3. **`DELETE FROM wallet_connections`** - removes every wallet binding
+///    for the user. The AFTER-trigger
+///    `trg_wallet_connections_sync_cache` recomputes
+///    `users.wallet_address` to NULL automatically; we do NOT write the
+///    cache column directly because that would race with the trigger
+///    (and either duplicate the work or fight the trigger's UPDATE).
+/// 4. **`UPDATE users`** - stamps `deleted_at = NOW()`, rewrites
+///    `email` to a per-user placeholder
+///    (`deleted-{uuid}@deleted.local`), bumps
+///    `jwt_invalidate_before = NOW()` so the auth middleware kills every
+///    outstanding access token, and refreshes `updated_at` explicitly
+///    so the column moves even when the standard `updated_at` trigger is
+///    not deployed in tests. The placeholder is generated DB-side
+///    (`'deleted-' || $1::text || '@deleted.local'`) so the value
+///    cannot drift between the call site's formatter and the schema's
+///    UNIQUE expectation. It satisfies both the active
+///    `users_email_unique` partial index (each user gets a distinct
+///    address; soft-deleted rows are already excluded by the index's
+///    own predicate) AND any future re-instatement of `email NOT NULL`,
+///    so the column is never left in an "implicitly NULL" state.
+/// 5. **`UPDATE refresh_tokens`** - revokes every active refresh row
+///    for the user, mirroring the role-change path: every device
+///    sharing the family is cut at the same instant the access
+///    cookie's cutoff is bumped, no rotating chain survives.
+/// 6. **`INSERT INTO audit_logs`** - records `self_delete_user` so a
+///    moderator investigating a re-instatement request can prove the
+///    deletion was self-initiated (vs. an admin action, which uses a
+///    different `action` literal).
+///
+/// # Errors
+///
+/// - [`Error::RowNotFound`] when the user is already soft-deleted.
+/// - [`sqlx::Error`] for DB transport failures.
+#[inline]
+pub async fn soft_delete_user(pool: &PgPool, user_id: Uuid) -> Result<SoftDeleteOutcome, Error> {
+    let mut tx = pool.begin().await?;
+
+    sqlx::query_scalar!(
+        r"
+            SELECT id
+            FROM users
+            WHERE id = $1 AND deleted_at IS NULL
+            FOR UPDATE
+        ",
+        user_id,
+    )
+    .fetch_one(tx.as_mut())
+    .await?;
+
+    if has_blocking_leases(tx.as_mut(), user_id).await? {
+        return Ok(SoftDeleteOutcome::LeaseBlocking);
+    }
+
+    sqlx::query!(
+        r"
+            DELETE FROM wallet_connections
+            WHERE user_id = $1
+        ",
+        user_id,
+    )
+    .execute(tx.as_mut())
+    .await?;
+
+    sqlx::query!(
+        r"
+            UPDATE users
+            SET deleted_at = NOW(),
+                email = 'deleted-' || $1::text || '@deleted.local',
+                jwt_invalidate_before = NOW(),
+                updated_at = NOW()
+            WHERE id = $1 AND deleted_at IS NULL
+        ",
+        user_id,
+    )
+    .execute(tx.as_mut())
+    .await?;
+
+    sqlx::query!(
+        r"
+            UPDATE refresh_tokens
+            SET revoked_at = NOW()
+            WHERE user_id = $1 AND revoked_at IS NULL
+        ",
+        user_id,
+    )
+    .execute(tx.as_mut())
+    .await?;
+
+    sqlx::query!(
+        r"
+            INSERT INTO audit_logs ( user_id, action, resource_type, resource_id, status)
+            VALUES ($1, 'self_delete_user', 'user', $1, 'success')
+        ",
+        user_id,
+    )
+    .execute(tx.as_mut())
+    .await?;
+
+    tx.commit().await?;
+
+    Ok(SoftDeleteOutcome::Deleted)
 }

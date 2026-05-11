@@ -6,18 +6,17 @@
 //! [`crate::common::models`] because both `auth` and `users` produce it.
 
 use email_address::EmailAddress;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 use crate::{
-    common::{ApiError, ApiResult},
+    common::{ApiError, ApiResult, UserRole},
     services::users::db::ProfilePatch,
 };
 
 const MAX_NAME_LEN: usize = 100;
 const MAX_PHONE_LEN: usize = 20;
 const MAX_BIO_LEN: usize = 1024;
-const MAX_AVATAR_URL_LEN: usize = 2048;
 
 /// RFC 5321 hard limit on the full email address length.
 ///
@@ -31,6 +30,14 @@ const MAX_EMAIL_LEN: usize = 254;
 /// truncation attack or a copy-paste error and must 400 before any Redis
 /// round-trip happens.
 const EMAIL_CHANGE_TOKEN_LEN: usize = 43;
+
+/// Magic string a client must send in the body to confirm self-deletion.
+///
+/// Matched verbatim by [`DeleteAccountRequest::into_validated`]. The value
+/// is part of the public contract, so changing it later requires a docs
+/// pass on `docs/api/users.md` and a coordinated client update -
+/// otherwise every existing client would silently 400 on `DELETE /me`.
+pub const ACCOUNT_DELETE_CONFIRMATION: &str = "delete-my-account";
 
 /// Patch payload for `PATCH /api/v1/users/me`.
 ///
@@ -56,8 +63,6 @@ pub struct UpdateProfileRequest {
     pub phone: Option<String>,
     /// Free-form bio (up to 1024 chars after trim).
     pub bio: Option<String>,
-    /// Avatar URL (up to 2048 chars after trim).
-    pub avatar_url: Option<String>,
 }
 
 impl UpdateProfileRequest {
@@ -82,7 +87,6 @@ impl UpdateProfileRequest {
             last_name: trim_required("last_name", self.last_name, MAX_NAME_LEN)?,
             phone: trim_required("phone", self.phone, MAX_PHONE_LEN)?,
             bio: trim_optional("bio", self.bio, MAX_BIO_LEN)?,
-            avatar_url: trim_optional("avatar_url", self.avatar_url, MAX_AVATAR_URL_LEN)?,
         })
     }
 }
@@ -108,8 +112,7 @@ fn trim_required(field: &str, value: Option<String>, max_len: usize) -> ApiResul
     Ok(Some(trimmed.to_owned()))
 }
 
-/// Normalizes input for a column where empty input is acceptable
-/// (`bio`, `avatar_url`).
+/// Normalizes input for a column where empty input is acceptable (`bio`).
 ///
 /// Trimmed-empty is treated as "leave unchanged" rather than "clear column".
 /// The current SQL uses `COALESCE($n, col)` and cannot distinguish "skip
@@ -187,6 +190,66 @@ pub struct EmailChangeConfirmRequest {
     pub token: String,
 }
 
+/// Request body for `PATCH /api/v1/users/me/role`.
+///
+/// Carries the role the authenticated user wants to switch to. Whitelist
+/// enforcement (`tenant`, `landlord`, `agent`) lives in
+/// [`UpdateRoleRequest::into_validated`] rather than at the serde layer:
+/// `UserRole` already maps any unknown string to its `Unknown` fallback
+/// variant, so the JSON layer is intentionally lenient and the `into_validated`
+/// gate produces a single, stable 400 wording for every non-whitelisted input
+/// (including `admin`, `property_manager`, and the serde fallback).
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct UpdateRoleRequest {
+    /// Desired role. Only the self-registerable subset is accepted; see
+    /// [`UpdateRoleRequest::into_validated`] for the rejection rationale.
+    pub role: UserRole,
+}
+
+impl UpdateRoleRequest {
+    /// Validates the requested role against the self-registerable whitelist.
+    ///
+    /// Reuses [`UserRole::is_self_registerable`] (the same gate the wallet
+    /// login path applies to its `LoginRequest.role` field) so the two
+    /// surfaces cannot drift: a future change to the whitelist propagates
+    /// automatically. Privileged roles (`admin`, `property_manager`) and
+    /// the `Unknown` fallback (any unrecognized string) are rejected here
+    /// rather than at the DB CHECK constraint - the constraint's failure
+    /// mode is a generic 500 with an opaque postgres error, while this
+    /// gate produces a clean 400 with a stable wording naming the
+    /// allowed values.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ApiError::BadRequest`] when the requested role is not on
+    /// the user-self-registerable whitelist.
+    #[inline]
+    pub fn into_validated(self) -> ApiResult<UserRole> {
+        if !self.role.is_self_registerable() {
+            return Err(ApiError::BadRequest(
+                "role must be one of: tenant, landlord, agent".to_owned(),
+            ));
+        }
+        Ok(self.role)
+    }
+}
+
+/// Response body for `POST /api/v1/users/me/avatar`.
+///
+/// Carries only the URL the storage backend assigned to the freshly-uploaded
+/// blob. The full profile is intentionally NOT echoed: the user already has
+/// it from `GET /me`, and rebuilding the join (`active_leases_count`,
+/// `verification_level`) costs a second SQL trip that the avatar UI does not
+/// need to render. Clients that care about the joined shape can re-fetch
+/// `GET /me` after the upload completes.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct AvatarUploadResponse {
+    /// Public URL of the stored avatar. With `StubMediaStorage` this is a
+    /// `data:image/svg+xml;base64,...` placeholder; with the production
+    /// `S3MediaStorage` it is a CDN-shaped URL pointing at the bucket.
+    pub avatar_url: String,
+}
+
 impl EmailChangeConfirmRequest {
     /// Validates the token shape before any Redis lookup.
     ///
@@ -214,5 +277,58 @@ impl EmailChangeConfirmRequest {
             return Err(ApiError::BadRequest("Invalid token format".to_owned()));
         }
         Ok(trimmed.to_owned())
+    }
+}
+
+/// Request body for `DELETE /api/v1/users/me`.
+///
+/// Carries an explicit confirmation string so a stray client (e.g. an
+/// over-eager retry that posts an empty body) cannot accidentally soft-delete
+/// the user. The string is matched verbatim against
+/// [`ACCOUNT_DELETE_CONFIRMATION`]; any other value 400's. The flow is "magic
+/// constant in the body" rather than "extra header" because the body is what
+/// the operator sees in their request log when investigating a deletion - the
+/// confirmation string travels with the row, not with transport-level metadata
+/// that gets stripped on the way to the audit trail.
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct DeleteAccountRequest {
+    /// Must equal [`ACCOUNT_DELETE_CONFIRMATION`] verbatim. Trimming is NOT
+    /// performed: a client that sends `" delete-my-account "` almost certainly
+    /// has a UI bug, and we want them to surface the 400 immediately rather
+    /// than silently accepting whitespace as equivalent.
+    ///
+    /// `#[serde(default)]` keeps the failure mode uniform: a missing field
+    /// deserializes to `""` which fails the equality check below and yields
+    /// the same 400 with the same wording as a wrong value. Without
+    /// `default`, axum 0.8 surfaces the missing-field path as 422
+    /// (`JsonDataError`), splitting the contract into two status codes for
+    /// what is, from the client's perspective, the same "you forgot the
+    /// confirmation string" mistake.
+    #[serde(default)]
+    pub confirm: String,
+}
+
+impl DeleteAccountRequest {
+    /// Validates the confirmation string against
+    /// [`ACCOUNT_DELETE_CONFIRMATION`].
+    ///
+    /// Returns `()` because the only useful information in the request is
+    /// whether the gate passes - there is no normalized value to hand back to
+    /// the handler. The handler reads `user_id` from the JWT, not from the
+    /// request body, so no client-supplied identity can sneak through this
+    /// gate.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ApiError::BadRequest`] when `confirm` does not match the
+    /// expected magic string.
+    #[inline]
+    pub fn into_validated(self) -> ApiResult<()> {
+        if self.confirm != ACCOUNT_DELETE_CONFIRMATION {
+            return Err(ApiError::BadRequest(format!(
+                "confirm must equal '{ACCOUNT_DELETE_CONFIRMATION}'"
+            )));
+        }
+        Ok(())
     }
 }

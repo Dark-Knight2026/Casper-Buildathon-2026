@@ -3,6 +3,64 @@
 //! Access-token transport: `access_token` cookie (HttpOnly; Secure; SameSite=Strict).
 //! The previous `Authorization: Bearer` flow has been removed - the frontend
 //! reads the token from a cookie set at login time.
+//!
+//! # Per-request cost of the force-revoke check
+//!
+//! Every protected request now issues `SELECT jwt_invalidate_before FROM
+//! users WHERE id = $1` against the primary database in addition to the
+//! existing Redis blocklist lookup. The query intentionally does not
+//! filter on `deleted_at` so the cutoff stamped by `soft_delete_user`
+//! reaches the middleware (otherwise a soft-deleted user's stale JWT
+//! would slip through on `AuthUser` endpoints that never load the
+//! profile - see `auth/db.rs::fetch_jwt_invalidate_before`). The auth
+//! hot path therefore touches both Postgres and Redis on every call -
+//! deliberate trade-off, captured here so a future profiler-driven
+//! refactor knows what was considered:
+//!
+//! - **Why a DB read at all?** The cutoff has to be enforced
+//!   server-side: a JWT remains cryptographically valid until its 15-
+//!   minute `exp`, but role changes, panic-logout, and self-deletion
+//!   need to invalidate every outstanding token *immediately*. Stamping
+//!   `users.jwt_invalidate_before = NOW()` and rejecting any token with
+//!   `claims.iat <= cutoff` on the next request is the cheapest
+//!   correctness primitive available to us.
+//!
+//! - **Why fail-closed on DB error?** If the lookup fails, we cannot
+//!   tell whether the token has been force-revoked. Failing open would
+//!   let an attacker who can disrupt our DB for a few seconds bypass
+//!   force-revoke entirely; failing closed costs availability under a
+//!   DB outage but never silently admits an invalidated token. Redis
+//!   errors on the blocklist check, by contrast, are fail-open: the
+//!   15-minute access-token TTL caps the worst-case replay window even
+//!   if the blocklist temporarily disappears.
+//!
+//! - **Why not cache the cutoff in Redis?** A short-TTL key
+//!   `force_revoke:<user_id>` (TTL <= the 15-minute access-token TTL)
+//!   would collapse the steady-state cost to "Redis only" in the
+//!   common case where no force-revoke event has fired. We accept the
+//!   per-request DB read for now because:
+//!   1. The cache adds an invalidation contract: every flow that
+//!      stamps `jwt_invalidate_before` (`POST /auth/sessions/revoke-all`
+//!      with `keep_current = false`, `PATCH /users/me/role`,
+//!      `DELETE /users/me`) would need to also `DEL` the cache key
+//!      under the same transaction, and a missed hook leaves a
+//!      revoked token live for up to one TTL. Three hooks today, more
+//!      whenever a new force-revoke trigger lands.
+//!   2. The fail-closed semantics interact subtly with the cache: a
+//!      Redis miss can mean "no cutoff exists" or "cache expired";
+//!      distinguishing requires a DB fallback, which puts us back to
+//!      the steady-state behavior we have now under the steady-state
+//!      load that matters (the cold-cache path).
+//!   3. Postgres handles a single-row primary-key SELECT cheaply, and
+//!      the protected-route surface is bounded by JWT validity (15 min)
+//!      so the QPS upper bound is predictable.
+//!
+//!   When the system has measured evidence that this lookup is the hot
+//!   spot worth optimizing - sustained P99 dominated by the auth path,
+//!   or a Postgres connection-pool ceiling - the cache is the
+//!   recommended next step. Wire the invalidation hooks first, then
+//!   add the cache; the fail-closed read becomes the slow path that
+//!   only fires when the cache misses.
 
 use std::sync::Arc;
 
@@ -19,11 +77,17 @@ use thiserror::Error;
 
 use crate::{
     common::{AppState, Claims, ErrorResponse, TokenType},
-    services::auth::{cookies::ACCESS_TOKEN_COOKIE, jwt},
+    services::auth::{cookies::ACCESS_TOKEN_COOKIE, db, jwt},
 };
 
 /// Authenticated user extracted from the `access_token` JWT cookie.
-#[derive(Debug)]
+///
+/// `Clone` is required so the validated `AuthUser` can be stashed into
+/// `request.extensions` by `require_auth` and handed back to downstream
+/// handler extractors without re-running the JWT decode + DB cutoff
+/// lookup. `Claims` is already `Clone`, so the implementation is a
+/// trivial field clone.
+#[derive(Debug, Clone)]
 pub struct AuthUser(pub Claims);
 
 impl FromRequestParts<Arc<AppState>> for AuthUser {
@@ -34,6 +98,17 @@ impl FromRequestParts<Arc<AppState>> for AuthUser {
         parts: &mut Parts,
         state: &Arc<AppState>,
     ) -> Result<Self, Self::Rejection> {
+        // Cache hit: `require_auth` already validated this request and
+        // stashed the resulting `AuthUser` here. Re-running JWT decode
+        // + the `jwt_invalidate_before` DB lookup would just duplicate
+        // work and double the auth-hot-path DB pressure documented at
+        // the top of this module. Handlers that take multiple
+        // `AuthUser`-derived extractors (or call `from_request_parts`
+        // indirectly) collapse to a single validated read this way.
+        if let Some(cached) = parts.extensions.get::<AuthUser>() {
+            return Ok(cached.clone());
+        }
+
         let jar = CookieJar::from_headers(&parts.headers);
         let token = jar
             .get(ACCESS_TOKEN_COOKIE)
@@ -49,6 +124,23 @@ impl FromRequestParts<Arc<AppState>> for AuthUser {
         // until they expire naturally.
         if matches!(claims.token_type, Some(TokenType::Refresh)) {
             return Err(AuthError::WrongTokenType);
+        }
+
+        // Force-revoke check. `users.jwt_invalidate_before` is set by flows
+        // that need to kill outstanding access tokens before their natural
+        // `exp` (role change, revoke-all-sessions, self-delete). DB errors
+        // here surface as `AuthError::Database` -> 500 (fail-closed): the
+        // alternative would let an attacker who can disrupt our DB for a
+        // few seconds bypass force-revoke entirely. Legacy tokens issued
+        // before the `iat` claim was added decode with `iat = 0`, which is
+        // `<= NOW()` for any non-NULL cutoff, so they are correctly killed
+        // by the same code path.
+        let cutoff = db::fetch_jwt_invalidate_before(&state.db, claims.sub).await?;
+        if let Some(cutoff_at) = cutoff {
+            let cutoff_ts = usize::try_from(cutoff_at.timestamp().max(0)).unwrap_or(usize::MAX);
+            if claims.iat <= cutoff_ts {
+                return Err(AuthError::TokenInvalidated);
+            }
         }
 
         // Logout-blocklist check. Redis errors are fail-open (warn + allow):
@@ -89,7 +181,14 @@ pub async fn require_auth(
     next: Next,
 ) -> Result<Response, AuthError> {
     let (mut parts, body) = request.into_parts();
-    let _user = AuthUser::from_request_parts(&mut parts, &state).await?;
+    let user = AuthUser::from_request_parts(&mut parts, &state).await?;
+    // Stash the validated user into request extensions so downstream
+    // `AuthUser` extractors short-circuit on the cached entry instead
+    // of re-issuing the JWT decode + `jwt_invalidate_before` DB
+    // lookup. Without this, every handler under the protected nest
+    // pays the auth-hot-path cost twice per request (once in this
+    // middleware, once in each `AuthUser`-typed extractor it takes).
+    parts.extensions.insert(user);
     Ok(next.run(Request::from_parts(parts, body)).await)
 }
 
@@ -108,6 +207,17 @@ pub enum AuthError {
     /// The token's `jti` is on the logout blocklist.
     #[error("Token revoked")]
     TokenRevoked,
+    /// The token's `iat` is at or below `users.jwt_invalidate_before`,
+    /// meaning a force-revoke flow (role change, revoke-all-sessions,
+    /// self-delete) ran since this token was issued.
+    #[error("Token invalidated by force-revoke")]
+    TokenInvalidated,
+    /// Database lookup of `jwt_invalidate_before` failed. Fail-closed:
+    /// without this read we cannot tell whether the token has been
+    /// force-revoked, so we refuse the request rather than risk admitting
+    /// an invalidated token.
+    #[error("Auth DB error: {0}")]
+    Database(#[from] sqlx::Error),
 }
 
 impl AuthError {
@@ -137,6 +247,16 @@ impl AuthError {
             Self::TokenRevoked => {
                 tracing::warn!("Blocklisted access token presented");
                 (StatusCode::UNAUTHORIZED, "invalid_token")
+            }
+            Self::TokenInvalidated => {
+                tracing::warn!(
+                    "Force-revoked access token presented (iat <= jwt_invalidate_before)"
+                );
+                (StatusCode::UNAUTHORIZED, "invalid_token")
+            }
+            Self::Database(err) => {
+                tracing::error!(error = %err, "Auth DB lookup failed; failing closed");
+                (StatusCode::INTERNAL_SERVER_ERROR, "internal_error")
             }
         }
     }

@@ -70,6 +70,19 @@ pub enum ApiError {
     Database(sqlx::Error),
     /// Queue/Redis related error.
     Queue(String),
+    /// Returned when the request body is over the per-endpoint cap.
+    ///
+    /// Distinct from `BadRequest` so a client that uploaded a 6 MB avatar
+    /// gets the standard `413` semantic (clear the file picker, ask the
+    /// user to compress) instead of the generic 400 funnel that other
+    /// validation failures share.
+    PayloadTooLarge(String),
+    /// Returned when the request body's MIME type is not on the
+    /// per-endpoint whitelist, or when the bytes do not match the declared
+    /// type. Used by the avatar handler for both the disallowed-MIME and
+    /// MIME-spoofing cases so clients can map the failure to a single
+    /// "your file format is not supported" message.
+    UnsupportedMediaType(String),
     /// Generic internal server error.
     Internal(String),
 }
@@ -96,6 +109,13 @@ impl IntoResponse for ApiError {
             ApiError::NotFound(msg) => (StatusCode::NOT_FOUND, msg.clone()),
             ApiError::Conflict(msg) => (StatusCode::CONFLICT, msg.clone()),
             ApiError::TooManyRequests(msg) => (StatusCode::TOO_MANY_REQUESTS, msg.clone()),
+            ApiError::Database(err) => {
+                tracing::error!("Database error: {:?}", err);
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "An internal server error occurred".to_owned(),
+                )
+            }
             ApiError::Queue(msg) => {
                 tracing::error!("Queue error: {}", msg);
                 (
@@ -103,15 +123,12 @@ impl IntoResponse for ApiError {
                     "Internal system error".to_owned(),
                 )
             }
+            ApiError::PayloadTooLarge(msg) => (StatusCode::PAYLOAD_TOO_LARGE, msg.clone()),
+            ApiError::UnsupportedMediaType(msg) => {
+                (StatusCode::UNSUPPORTED_MEDIA_TYPE, msg.clone())
+            }
             ApiError::Internal(msg) => {
                 tracing::error!("Internal error: {}", msg);
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "An internal server error occurred".to_owned(),
-                )
-            }
-            ApiError::Database(err) => {
-                tracing::error!("Database error: {:?}", err);
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "An internal server error occurred".to_owned(),

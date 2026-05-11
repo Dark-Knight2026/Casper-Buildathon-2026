@@ -15,6 +15,8 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 
 use crate::{common::AppState, services::users::handlers};
 
+// `/api/v1/users/...`
+//
 /// Builds the users `OpenApiRouter`.
 ///
 /// Returned router has no auth or rate-limiter middleware applied; the caller
@@ -24,7 +26,13 @@ use crate::{common::AppState, services::users::handlers};
 #[must_use]
 pub fn router() -> OpenApiRouter<Arc<AppState>> {
     OpenApiRouter::new()
-        .routes(routes!(handlers::get_me, handlers::patch_me))
+        .routes(routes!(
+            handlers::get_me,
+            handlers::patch_me,
+            handlers::delete_me
+        ))
         .routes(routes!(handlers::request_email_change))
         .routes(routes!(handlers::confirm_email_change))
+        .routes(routes!(handlers::upload_avatar))
+        .routes(routes!(handlers::patch_me_role))
 }

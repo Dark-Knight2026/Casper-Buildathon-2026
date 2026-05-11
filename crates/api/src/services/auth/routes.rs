@@ -11,9 +11,11 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 
 use crate::{
     common::AppState,
-    services::auth::{logout, refresh, wallet},
+    services::auth::{logout, refresh, sessions, wallet},
 };
 
+// `/api/v1/auth/...`
+//
 /// Builds the auth `OpenApiRouter`.
 ///
 /// Returned router has no rate-limiter or middleware applied; the caller
@@ -26,4 +28,7 @@ pub fn router() -> OpenApiRouter<Arc<AppState>> {
         .routes(routes!(wallet::login))
         .routes(routes!(refresh::rotate))
         .routes(routes!(logout::logout))
+        .routes(routes!(sessions::get_sessions))
+        .routes(routes!(sessions::revoke_session))
+        .routes(routes!(sessions::revoke_all_sessions))
 }

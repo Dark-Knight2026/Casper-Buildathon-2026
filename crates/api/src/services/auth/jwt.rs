@@ -55,13 +55,14 @@ pub fn encode_access_token(
     verification_level: VerificationLevel,
     secret: &SecretString,
 ) -> ApiResult<EncodedAccessToken> {
-    let exp_at = Utc::now()
-        .checked_add_signed(ACCESS_TOKEN_TTL)
-        .ok_or_else(|| {
-            ApiError::Internal("Timestamp overflow calculating JWT expiration".to_owned())
-        })?;
+    let now = Utc::now();
+    let exp_at = now.checked_add_signed(ACCESS_TOKEN_TTL).ok_or_else(|| {
+        ApiError::Internal("Timestamp overflow calculating JWT expiration".to_owned())
+    })?;
     let exp = usize::try_from(exp_at.timestamp().max(0))
         .map_err(|_| ApiError::Internal("JWT expiration timestamp overflow".to_owned()))?;
+    let iat = usize::try_from(now.timestamp().max(0))
+        .map_err(|_| ApiError::Internal("JWT issued-at timestamp overflow".to_owned()))?;
     let jti = Uuid::new_v4();
     let claims = Claims {
         sub: user_id,
@@ -72,6 +73,7 @@ pub fn encode_access_token(
         token_type: Some(TokenType::Access),
         verification_level: Some(verification_level),
         jti,
+        iat,
     };
     let token = jsonwebtoken::encode(
         &Header::new(Algorithm::HS256),

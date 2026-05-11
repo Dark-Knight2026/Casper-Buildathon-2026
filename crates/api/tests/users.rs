@@ -7,13 +7,13 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use axum::http::StatusCode;
 use axum_test::http::header::COOKIE;
-use casper_types::{AsymmetricType, PublicKey, SecretKey, crypto};
+use casper_types::{AsymmetricType, PublicKey, SecretKey};
 use redis::AsyncCommands;
 use serde_json::Value;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use api::common::{CASPER_MESSAGE_PREFIX, EmailError, EmailMessage, EmailSender};
+use api::common::{EmailError, EmailMessage, EmailSender};
 
 use crate::common::TestOverrides;
 
@@ -60,11 +60,6 @@ impl EmailSender for CapturingMailer {
     }
 }
 
-fn sign_with_prefix(message: &str, secret_key: &SecretKey, public_key: &PublicKey) -> String {
-    let prefixed = format!("{CASPER_MESSAGE_PREFIX}{message}");
-    crypto::sign(prefixed.as_bytes(), secret_key, public_key).to_hex()
-}
-
 /// Regression: when `mailer.send` fails inside `request_email_change`, the
 /// handler must roll back the Redis token slot and the rate-limit counter
 /// so the user can retry without burning one of their three daily attempts
@@ -96,7 +91,7 @@ async fn request_email_change_rolls_back_state_on_mailer_failure(pool: PgPool) {
         .await
         .json::<Value>();
     let message = nonce_body["message"].as_str().unwrap();
-    let signature_hex = sign_with_prefix(message, &secret_key, &public_key);
+    let signature_hex = common::sign_with_prefix(message, &secret_key, &public_key);
 
     let login_response = env
         .server
@@ -189,7 +184,7 @@ async fn confirm_email_change_with_wrong_token_returns_401(pool: PgPool) {
         .await
         .json::<Value>();
     let message = nonce_body["message"].as_str().unwrap();
-    let signature_hex = sign_with_prefix(message, &secret_key, &public_key);
+    let signature_hex = common::sign_with_prefix(message, &secret_key, &public_key);
 
     let login_response = env
         .server
@@ -255,7 +250,7 @@ async fn confirm_email_change_with_expired_token_returns_401(pool: PgPool) {
         .await
         .json::<Value>();
     let message = nonce_body["message"].as_str().unwrap();
-    let signature_hex = sign_with_prefix(message, &secret_key, &public_key);
+    let signature_hex = common::sign_with_prefix(message, &secret_key, &public_key);
 
     let login_response = env
         .server
@@ -341,7 +336,7 @@ async fn get_me_returns_authenticated_user_profile(pool: PgPool) {
         .await
         .json::<Value>();
     let message = nonce_body["message"].as_str().unwrap();
-    let signature_hex = sign_with_prefix(message, &secret_key, &public_key);
+    let signature_hex = common::sign_with_prefix(message, &secret_key, &public_key);
 
     let login_response = env
         .server
@@ -410,8 +405,9 @@ async fn get_me_without_authentication_returns_401(pool: PgPool) {
 }
 
 /// `PATCH /api/v1/users/me` happy path: the editable subset
-/// (`first_name`, `last_name`, `phone`, `bio`, `avatar_url`) is rewritten
-/// atomically and the response reflects the post-update state.
+/// (`first_name`, `last_name`, `phone`, `bio`) is rewritten atomically and
+/// the response reflects the post-update state. `avatar_url` is owned by
+/// `POST /me/avatar` and is not part of this payload.
 ///
 /// Verifies (a) the response body shape matches the post-update profile,
 /// (b) the row in `users` carries the new values (catches a future
@@ -434,7 +430,7 @@ async fn patch_me_updates_editable_fields(pool: PgPool) {
         .await
         .json::<Value>();
     let message = nonce_body["message"].as_str().unwrap();
-    let signature_hex = sign_with_prefix(message, &secret_key, &public_key);
+    let signature_hex = common::sign_with_prefix(message, &secret_key, &public_key);
 
     let login_response = env
         .server
@@ -461,7 +457,6 @@ async fn patch_me_updates_editable_fields(pool: PgPool) {
             "last_name": "Smith",
             "phone": "+12025550123",
             "bio": "Casper hodler",
-            "avatar_url": "https://example.com/a.png",
         }))
         .await;
     assert_eq!(patch_response.status_code(), StatusCode::OK);
@@ -475,14 +470,10 @@ async fn patch_me_updates_editable_fields(pool: PgPool) {
     assert_eq!(patched["last_name"].as_str().unwrap(), "Smith");
     assert_eq!(patched["phone"].as_str().unwrap(), "+12025550123");
     assert_eq!(patched["bio"].as_str().unwrap(), "Casper hodler");
-    assert_eq!(
-        patched["avatar_url"].as_str().unwrap(),
-        "https://example.com/a.png",
-    );
 
     let row = sqlx::query!(
         r"
-            SELECT first_name, last_name, phone, bio, avatar_url, phone_verified
+            SELECT first_name, last_name, phone, bio, phone_verified
             FROM users
             WHERE id = $1
         ",
@@ -496,7 +487,6 @@ async fn patch_me_updates_editable_fields(pool: PgPool) {
     assert_eq!(row.last_name, "Smith");
     assert_eq!(row.phone.as_deref(), Some("+12025550123"));
     assert_eq!(row.bio.as_deref(), Some("Casper hodler"));
-    assert_eq!(row.avatar_url.as_deref(), Some("https://example.com/a.png"));
     assert!(
         !row.phone_verified.unwrap_or(false),
         "phone_verified must be false after writing a phone distinct from the stored value",
@@ -526,7 +516,7 @@ async fn patch_me_rejects_empty_required_fields(pool: PgPool) {
         .await
         .json::<Value>();
     let message = nonce_body["message"].as_str().unwrap();
-    let signature_hex = sign_with_prefix(message, &secret_key, &public_key);
+    let signature_hex = common::sign_with_prefix(message, &secret_key, &public_key);
 
     let login_response = env
         .server
@@ -613,7 +603,7 @@ async fn confirm_email_change_happy_path_upgrades_verification(pool: PgPool) {
         .await
         .json::<Value>();
     let message = nonce_body["message"].as_str().unwrap();
-    let signature_hex = sign_with_prefix(message, &secret_key, &public_key);
+    let signature_hex = common::sign_with_prefix(message, &secret_key, &public_key);
 
     let login_response = env
         .server
