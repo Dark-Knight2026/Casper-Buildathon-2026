@@ -113,11 +113,7 @@ impl ImageKind {
 /// (the JPEG variant's `ext` is `"jpg"`) - that produced a spurious
 /// `failed to sweep sibling avatar extension` warning on every
 /// format-change upload.
-const AVATAR_EXTENSIONS: &[&str] = &[
-    ImageKind::PNG.ext,
-    ImageKind::JPEG.ext,
-    ImageKind::WEBP.ext,
-];
+const AVATAR_EXTENSIONS: &[&str] = &[ImageKind::PNG.ext, ImageKind::JPEG.ext, ImageKind::WEBP.ext];
 
 /// Maps an `axum::extract::multipart::MultipartError` into an [`ApiError`]
 /// preserving the size-vs-shape distinction.

@@ -4,7 +4,6 @@
 
 | Document                           | Responsibility                                                              |
 |------------------------------------|-----------------------------------------------------------------------------|
-| `../SPEC.md`                       | Project overview and entry-point index into the doc-entity tree             |
 | `api/readme.md`                    | Responsibility matrix for the api/ subdirectory (per-resource endpoint specs) |
 | `feature/readme.md`                | Responsibility matrix for the feature/ subdirectory (cross-cutting specs)   |
 | `casper_integration_prd.md`        | Product requirements for Casper Blockchain integration                      |
