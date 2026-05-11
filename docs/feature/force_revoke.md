@@ -18,6 +18,15 @@ DB column resolution is microseconds; JWT `iat` is integer seconds, so a token i
 
 The middleware's lookup does NOT filter on `deleted_at`: a soft-deleted user's row carries a non-NULL cutoff (stamped by `soft_delete_user`) that must reach the middleware. Filtering deleted rows would mask the cutoff and let the JWT through on `AuthUser` endpoints that never load the profile (`tax`, `analytics`); rejection by the middleware is uniform across all protected endpoints.
 
+## Hard-delete assumption
+
+`fetch_jwt_invalidate_before` uses `fetch_optional` and returns `Ok(None)` when the `users` row is absent entirely. The middleware treats `None` as "no force-revoke event has ever fired for this user", which is the correct semantic for new accounts but unsafe under a future data-retention job that physically deletes rows: an outstanding access JWT for a hard-deleted user would observe `None`, skip the `iat <= cutoff` check, and remain admitted until its natural 15-minute `exp`. Soft-delete (`users.deleted_at = NOW()` paired with `jwt_invalidate_before = NOW()`) is the supported deletion path precisely because it preserves the cutoff for the lookup to read.
+
+Until the lookup is reworked to fail closed on a missing row, the retention contract is: **no hard `DELETE FROM users` while any outstanding access JWT may still be live**. Any future retention job must either:
+
+1. Wait until all access tokens issued before the soft-delete timestamp have naturally expired (15 minutes after `jwt_invalidate_before`), THEN hard-delete; or
+2. Tombstone the row (keep `id` + `jwt_invalidate_before`, drop the rest) instead of issuing `DELETE`.
+
 ## Implementation pointers
 
 - Query: `auth/db.rs::fetch_jwt_invalidate_before`
