@@ -506,6 +506,27 @@ fn test_assert_can_transfer_should_revert_if_recipient_is_not_verified() {
 }
 
 #[test]
+fn test_assert_can_transfer_should_revert_if_recipient_is_not_verified_with_exempt_sender() {
+    let mut ctx = setup(odra_test::env());
+    let property_id = create_active_property(&mut ctx);
+
+    enable_transfers(&mut ctx, property_id);
+
+    // Set sender as exempt (unverified)
+    ctx.env.set_caller(ctx.compliance_manager);
+    ctx.compliance.set_transfer_exempt(ctx.sender, true);
+
+    call_as_property_token(&mut ctx);
+    assert_eq!(
+        ctx.compliance
+            .try_assert_can_transfer(property_id, ctx.sender, ctx.recipient, U256::from(100))
+            .unwrap_err(),
+        ComplianceError::RecipientNotVerified.into(),
+        "Should revert when recipient is not verified even with exempt sender",
+    );
+}
+
+#[test]
 fn test_assert_can_transfer_should_revert_if_caller_is_not_registered_property_token() {
     let mut ctx = setup(odra_test::env());
     let property_id = create_active_property(&mut ctx);
