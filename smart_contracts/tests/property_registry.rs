@@ -154,6 +154,20 @@ fn test_create_property_should_revert_if_metadata_uri_is_empty() {
 }
 
 // =============================================================================
+// View Functions
+// =============================================================================
+
+#[test]
+fn test_get_property_should_revert_for_invalid_id() {
+    let ctx = setup(odra_test::env());
+    assert_eq!(
+        ctx.registry.try_get_property(U256::from(999)).unwrap_err(),
+        Error::InvalidPropertyId.into(),
+        "Should revert for non-existent property ID"
+    );
+}
+
+// =============================================================================
 // Draft Configuration
 // =============================================================================
 
