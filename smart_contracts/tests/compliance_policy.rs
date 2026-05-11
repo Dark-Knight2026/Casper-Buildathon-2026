@@ -353,6 +353,30 @@ fn test_can_transfer_should_allow_unverified_exempt_sender() {
 }
 
 #[test]
+fn test_can_transfer_should_allow_unverified_exempt_recipient() {
+    let mut ctx = setup(odra_test::env());
+    let property_id = create_active_property(&mut ctx);
+
+    enable_transfers(&mut ctx, property_id);
+
+    // Verify only the sender. Recipient remains unverified.
+    let sender = ctx.sender;
+    verify_investor(&mut ctx, sender);
+
+    // Set recipient as exempt
+    ctx.env.set_caller(ctx.compliance_manager);
+    let recipient = ctx.recipient;
+    ctx.compliance.set_transfer_exempt(recipient, true);
+
+    call_as_property_token(&mut ctx);
+    assert!(
+        ctx.compliance
+            .can_transfer(property_id, sender, recipient, U256::from(100),),
+        "Transfer should be allowed to unverified but exempt recipient"
+    );
+}
+
+#[test]
 fn test_can_transfer_with_nonexistent_property_id_should_return_false() {
     let mut ctx = setup(odra_test::env());
     let property_id = U256::from(9999);
