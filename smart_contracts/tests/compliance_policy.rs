@@ -340,6 +340,23 @@ fn test_can_transfer_with_nonexistent_property_id_should_return_false() {
 // =============================================================================
 
 #[test]
+fn test_assert_can_transfer_should_succeed_for_valid_transfer() {
+    let mut ctx = setup(odra_test::env());
+    let property_id = create_active_property(&mut ctx);
+
+    enable_transfers(&mut ctx, property_id);
+    verify_sender_and_recipient(&mut ctx);
+
+    call_as_property_token(&mut ctx);
+    assert!(
+        ctx.compliance
+            .try_assert_can_transfer(property_id, ctx.sender, ctx.recipient, U256::from(100))
+            .is_ok(),
+        "Valid transfer should not revert",
+    );
+}
+
+#[test]
 fn test_assert_can_transfer_should_revert_if_amount_is_zero() {
     let mut ctx = setup(odra_test::env());
     let property_id = create_active_property(&mut ctx);
