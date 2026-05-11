@@ -832,13 +832,16 @@ pub async fn upload_avatar(
 /// 4. **Rate-limit** (429, code `rate_limited`). Only consulted when the
 ///    role actually differs - so a noop never burns a slot. Threshold 1
 ///    per 24h; any prior committed change blocks the next within the
-///    window. The transaction is rolled back implicitly when the handler
-///    returns the error (drop without commit).
+///    window. The error path explicitly `drop(tx)`s before returning so
+///    the `FOR UPDATE` row lock is released eagerly rather than at
+///    end-of-scope async-drop.
 /// 5. **Active-leases pre-check** (409, code `active_leases_blocking`). A
 ///    user bound to an active lease as `landlord` or `primary_tenant`
 ///    cannot change role - the contractual counterparty would silently
 ///    flip type. Runs inside the transaction so a lease created
-///    concurrently after our `FOR UPDATE` cannot slip through.
+///    concurrently after our `FOR UPDATE` cannot slip through. The
+///    blocking-leases error path uses the same explicit `drop(tx)`
+///    pattern as the rate-limit branch.
 ///
 /// On success:
 ///
@@ -932,10 +935,18 @@ pub async fn patch_me_role(
     }
 
     if state.redis.is_role_change_rate_limited(user_id).await? {
+        // Release the `FOR UPDATE` lock eagerly rather than waiting for
+        // the implicit tx-drop at end-of-scope - mirrors the explicit
+        // `tx.commit()` in the idempotent shortcut above. Without this,
+        // concurrent readers on the same user row would block on our
+        // dropped-but-not-yet-rolled-back transaction for as long as the
+        // async-drop rollback takes to complete.
+        drop(tx);
         return Err(ApiError::TooManyRequests("rate_limited".to_owned()));
     }
 
     if db::has_blocking_leases(tx.as_mut(), user_id).await? {
+        drop(tx);
         return Err(ApiError::Conflict("active_leases_blocking".to_owned()));
     }
 
