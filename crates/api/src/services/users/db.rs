@@ -573,49 +573,6 @@ pub async fn apply_email_change(
     fetch_user_profile(pool, user_id).await
 }
 
-/// Returns `true` when the user is bound to at least one currently-active lease
-/// as `landlord_id` or `primary_tenant_id`.
-///
-/// Mirrors [`has_blocking_leases`] but kept as a separate function so the
-/// role-change gate and the self-deletion gate can evolve independently:
-/// extending the role-change predicate (e.g. to also block agents) must not
-/// auto-broaden the deletion predicate, and vice versa. The two flows have
-/// different "what does a contractual counterparty mean" semantics even when
-/// the SQL happens to match today.
-///
-/// `deleted_at IS NULL` excludes already-soft-deleted leases so a stale row
-/// from a previous tenancy does not lock the user out of leaving.
-///
-/// Runs as a plain `&PgPool` query rather than inside the soft-delete
-/// transaction. A lease created concurrently between this check and the UPDATE
-/// would in the worst case leave the lease pointing at a soft-deleted user -
-/// the lease is itself paused (`deleted_at` cascades no further than the user
-/// row), and the lease-creation path's own row lock on the user already
-/// short-circuits via `lock_user_role`-style guards in the lease flow. The
-/// simpler outer ordering (check, then soft-delete) reads more cleanly than a
-/// multi-statement transaction here.
-///
-/// # Errors
-///
-/// Returns [`sqlx::Error`] for DB transport failures.
-#[inline]
-pub async fn has_active_lease_participation(pool: &PgPool, user_id: Uuid) -> Result<bool, Error> {
-    let row = sqlx::query!(
-        r#"
-            SELECT EXISTS(
-                SELECT 1 FROM leases
-                WHERE status = 'active'
-                  AND deleted_at IS NULL
-                  AND (landlord_id = $1 OR primary_tenant_id = $1)
-            ) AS "exists!"
-        "#,
-        user_id,
-    )
-    .fetch_one(pool)
-    .await?;
-    Ok(row.exists)
-}
-
 /// Outcome of [`soft_delete_user`].
 ///
 /// Distinguishes "the user was deleted" from "the deletion was refused
