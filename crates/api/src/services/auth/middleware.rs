@@ -98,6 +98,17 @@ impl FromRequestParts<Arc<AppState>> for AuthUser {
         parts: &mut Parts,
         state: &Arc<AppState>,
     ) -> Result<Self, Self::Rejection> {
+        // Cache hit: `require_auth` already validated this request and
+        // stashed the resulting `AuthUser` here. Re-running JWT decode
+        // + the `jwt_invalidate_before` DB lookup would just duplicate
+        // work and double the auth-hot-path DB pressure documented at
+        // the top of this module. Handlers that take multiple
+        // `AuthUser`-derived extractors (or call `from_request_parts`
+        // indirectly) collapse to a single validated read this way.
+        if let Some(cached) = parts.extensions.get::<AuthUser>() {
+            return Ok(cached.clone());
+        }
+
         let jar = CookieJar::from_headers(&parts.headers);
         let token = jar
             .get(ACCESS_TOKEN_COOKIE)
@@ -170,7 +181,14 @@ pub async fn require_auth(
     next: Next,
 ) -> Result<Response, AuthError> {
     let (mut parts, body) = request.into_parts();
-    let _user = AuthUser::from_request_parts(&mut parts, &state).await?;
+    let user = AuthUser::from_request_parts(&mut parts, &state).await?;
+    // Stash the validated user into request extensions so downstream
+    // `AuthUser` extractors short-circuit on the cached entry instead
+    // of re-issuing the JWT decode + `jwt_invalidate_before` DB
+    // lookup. Without this, every handler under the protected nest
+    // pays the auth-hot-path cost twice per request (once in this
+    // middleware, once in each `AuthUser`-typed extractor it takes).
+    parts.extensions.insert(user);
     Ok(next.run(Request::from_parts(parts, body)).await)
 }
 
