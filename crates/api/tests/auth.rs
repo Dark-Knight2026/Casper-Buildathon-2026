@@ -472,27 +472,6 @@ fn verify_invalid_message() {
     );
 }
 
-#[test]
-#[ignore = "utility: run manually to regenerate test vector data"]
-fn generate_data_for_local_tests() {
-    let fixed_bytes = [1u8; 32];
-    let secret_key = SecretKey::ed25519_from_bytes(fixed_bytes).unwrap();
-    let public_key = PublicKey::from(&secret_key);
-
-    let wallet_address = public_key.to_hex();
-
-    let message_from_server = "Sign this message to login to LeaseFi. Nonce: XJyoR9G2a4HQfjdx";
-    let signature_hex = common::sign_with_prefix(message_from_server, &secret_key, &public_key);
-
-    println!("\n============================================");
-    println!("1. Wallet Address:");
-    println!("{wallet_address}");
-    println!("--------------------------------------------");
-    println!("2. Signature:");
-    println!("{signature_hex}");
-    println!("============================================\n");
-}
-
 /// Signature signed WITHOUT the `CASPER_MESSAGE_PREFIX` must be rejected.
 ///
 /// Regression: `verify_casper_signature` prepends the prefix before verification,
