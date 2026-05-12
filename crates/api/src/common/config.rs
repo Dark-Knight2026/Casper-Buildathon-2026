@@ -52,6 +52,27 @@ struct RawEnvConfig {
     /// ignores this field entirely.
     #[serde(default)]
     media_stub_base_url: Option<String>,
+    /// S3 bucket name. When set, enables S3-backed `MediaStorage` and
+    /// requires the rest of the `S3_*` block (region, endpoint, access
+    /// key, secret key). When unset, bootstrap falls back to
+    /// `StubMediaStorage` regardless of the other `S3_*` values.
+    #[serde(default)]
+    s3_bucket: Option<String>,
+    #[serde(default)]
+    s3_region: Option<String>,
+    #[serde(default)]
+    s3_endpoint: Option<String>,
+    #[serde(default)]
+    s3_access_key: Option<SecretString>,
+    #[serde(default)]
+    s3_secret_key: Option<SecretString>,
+    /// Public URL prefix prepended to S3 keys to form fetchable URLs.
+    /// Falls back to `{S3_ENDPOINT}/{S3_BUCKET}` when unset; that default
+    /// is correct for MinIO and AWS path-style (the `with_path_style()`
+    /// flag we set), but a virtual-hosted-style bucket
+    /// (`{bucket}.s3.{region}.amazonaws.com`) MUST set this explicitly.
+    #[serde(default)]
+    s3_public_url_base: Option<String>,
 }
 
 const fn default_port() -> u16 {
@@ -75,6 +96,33 @@ pub struct IcoFallback {
     pub price_usd: Decimal,
     /// Total allocation in minimal units (U256 as string, decimals=18).
     pub total_allocation: String,
+}
+
+/// S3-compatible media-storage configuration loaded from `S3_*` env vars.
+///
+/// Present when `S3_BUCKET` is configured; bootstrap uses this block to
+/// instantiate [`S3MediaStorage`](crate::providers::S3MediaStorage). When
+/// absent, bootstrap falls back to
+/// [`StubMediaStorage`](crate::providers::StubMediaStorage) and the rest
+/// of the `S3_*` env vars (if any) are ignored.
+#[derive(Debug, Clone)]
+pub struct S3Config {
+    /// Bucket name (e.g. `media-prod`).
+    pub bucket: String,
+    /// Region identifier (e.g. `us-east-1` for AWS, `auto` for R2,
+    /// arbitrary for MinIO since path-style is forced).
+    pub region: String,
+    /// S3 endpoint URL (e.g. `https://s3.us-east-1.amazonaws.com`,
+    /// `https://<account>.r2.cloudflarestorage.com`, `http://minio:9000`).
+    pub endpoint: String,
+    /// Access key, kept out of `Debug`/logs via `SecretString`.
+    pub access_key: SecretString,
+    /// Secret key, kept out of `Debug`/logs via `SecretString`.
+    pub secret_key: SecretString,
+    /// Public URL prefix prepended to object keys to form fetchable URLs.
+    /// Defaults to `{endpoint}/{bucket}` (path-style); override via
+    /// `S3_PUBLIC_URL_BASE` for CDN-fronted or virtual-hosted-style setups.
+    pub public_url_base: String,
 }
 
 /// Server application configuration loaded from environment variables.
@@ -107,6 +155,10 @@ pub struct ServerConfig {
     /// keys (which always render as a `data:` placeholder) or on
     /// production S3-backed implementations.
     pub media_stub_base_url: Option<String>,
+    /// S3-compatible media storage. `Some` enables the production media
+    /// backend; `None` falls back to `StubMediaStorage`. Populated by
+    /// `from_env` only when the full `S3_*` block is provided.
+    pub s3: Option<S3Config>,
 }
 
 impl ServerConfig {
@@ -154,6 +206,35 @@ impl ServerConfig {
             (None, None) => None,
         };
 
+        let s3 = match raw.s3_bucket {
+            Some(bucket) => {
+                let region = raw.s3_region.ok_or_else(|| {
+                    ServerError::EnvVar("S3_BUCKET set but S3_REGION missing".to_owned())
+                })?;
+                let endpoint = raw.s3_endpoint.ok_or_else(|| {
+                    ServerError::EnvVar("S3_BUCKET set but S3_ENDPOINT missing".to_owned())
+                })?;
+                let access_key = raw.s3_access_key.ok_or_else(|| {
+                    ServerError::EnvVar("S3_BUCKET set but S3_ACCESS_KEY missing".to_owned())
+                })?;
+                let secret_key = raw.s3_secret_key.ok_or_else(|| {
+                    ServerError::EnvVar("S3_BUCKET set but S3_SECRET_KEY missing".to_owned())
+                })?;
+                let public_url_base = raw
+                    .s3_public_url_base
+                    .unwrap_or_else(|| format!("{endpoint}/{bucket}"));
+                Some(S3Config {
+                    bucket,
+                    region,
+                    endpoint,
+                    access_key,
+                    secret_key,
+                    public_url_base,
+                })
+            }
+            None => None,
+        };
+
         let config = Self {
             database_url: raw.database_url,
             redis_url: raw.redis_url,
@@ -165,6 +246,7 @@ impl ServerConfig {
             ico_fallback,
             total_supply: raw.total_supply.unwrap_or(TOTAL_SUPPLY),
             media_stub_base_url: raw.media_stub_base_url,
+            s3,
         };
 
         config.validate()?;

@@ -28,8 +28,8 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 use utoipa_swagger_ui::SwaggerUi;
 
 use crate::{
-    ApiDoc, AppState, EmailSender, LoggingEmailSender, RedisStore, ServerConfig, ServerError,
-    SharedMediaStorage, StubMediaStorage, onchain, services,
+    ApiDoc, AppState, EmailSender, LoggingEmailSender, RedisStore, S3MediaStorage, ServerConfig,
+    ServerError, SharedMediaStorage, StubMediaStorage, onchain, services,
 };
 
 /// Creates the full application router combining public and protected routes.
@@ -183,12 +183,29 @@ pub async fn main() -> Result<(), ServerError> {
     // `EmailSender` trait object.
     let mailer: Arc<dyn EmailSender> = Arc::new(LoggingEmailSender);
 
-    // Bootstrap a stub media storage. Real-backend impls (S3, R2, MinIO)
-    // are a follow-up: they will be selected here based on env config
-    // without changes to handlers, since AppState holds the storage
-    // behind the `MediaStorage` trait object.
-    let media_storage: SharedMediaStorage =
-        Arc::new(StubMediaStorage::new(config.media_stub_base_url.clone()));
+    // Select media storage based on env config: `S3_BUCKET` set -> S3
+    // backend, unset -> `StubMediaStorage` with a warning log. AppState
+    // holds the storage behind the `MediaStorage` trait object, so
+    // handlers do not branch on the concrete backend.
+    let media_storage: SharedMediaStorage = match &config.s3 {
+        Some(s3) => Arc::new(S3MediaStorage::new(
+            &s3.bucket,
+            s3.region.clone(),
+            s3.endpoint.clone(),
+            s3.access_key.expose_secret(),
+            s3.secret_key.expose_secret(),
+            s3.public_url_base.clone(),
+        )?),
+        None => {
+            tracing::warn!(
+                event = "media_storage_stub",
+                "S3_BUCKET unset - using StubMediaStorage. \
+                 Production MUST configure S3_BUCKET + S3_REGION + S3_ENDPOINT \
+                 + S3_ACCESS_KEY + S3_SECRET_KEY."
+            );
+            Arc::new(StubMediaStorage::new(config.media_stub_base_url.clone()))
+        }
+    };
 
     // 3. Build application state
     let state = Arc::new(AppState {

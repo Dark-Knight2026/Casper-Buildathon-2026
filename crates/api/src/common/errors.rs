@@ -10,7 +10,10 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
-use crate::{providers::EmailError, services::auth::AuthError};
+use crate::{
+    providers::{EmailError, StorageError},
+    services::auth::AuthError,
+};
 
 /// Represents errors that can occur at the application level (e.g., startup).
 /// These are not intended to be converted into API responses but are for logging
@@ -35,6 +38,9 @@ pub enum ServerError {
     /// Queue/Redis related error.
     #[error("Queue error: {0}")]
     Queue(String),
+    /// Media-storage initialization or transport error during startup.
+    #[error("Storage error: {0}")]
+    Storage(#[from] StorageError),
 }
 
 impl From<VarError> for ServerError {
