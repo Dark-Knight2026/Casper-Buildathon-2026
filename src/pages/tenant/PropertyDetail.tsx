@@ -1,8 +1,3 @@
-/**
- * Property Detail Page for Tenants
- * Displays detailed information about a property with authentication-gated actions
- */
-
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, useLocation, Navigate } from 'react-router-dom';
 
@@ -82,7 +77,6 @@ export default function PropertyDetail() {
       const data = await propertyService.getPropertyById(id);
       if (data) {
         setProperty(data);
-        // Increment view count
         await propertyService.incrementPropertyViews(id);
       } else {
         toast({
@@ -176,7 +170,6 @@ export default function PropertyDetail() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
       <div className="bg-white border-b sticky top-0 z-10">
         <div className="container mx-auto px-4 py-4">
           <div className="flex justify-between items-center">
@@ -200,9 +193,7 @@ export default function PropertyDetail() {
 
       <div className="container mx-auto px-4 py-6">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Main Content */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Image Gallery */}
             <Card>
               <CardContent className="p-0">
                 <div className="relative">

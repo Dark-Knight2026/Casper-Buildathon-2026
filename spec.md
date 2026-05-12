@@ -1164,6 +1164,71 @@ Captured during the LeaseFi recurring Thursday meeting with Anthony Batten and C
 
 ---
 
+### 2.4 Backlog — patterns salvaged from removed startup-template code
+
+Captured when `src/components/Navbar.tsx` and `src/components/UserMenu.tsx` were
+deleted (initial Vite/Lovable template, branded "KeyChain", referencing the
+old `useAuth` API and 27 B2B role variants the LeaseFi backend does not
+support). The components themselves were dead code, but a few patterns inside
+them have product value for the current tenant/landlord/agent flow and are
+worth re-introducing intentionally when the surrounding feature lands.
+
+History reference: see the deletion commit if details of the original
+implementation are needed. The original template imported `useFavorites`,
+`useMessaging`, and `useNotifications` — those hooks still live in
+`src/hooks/` and `src/contexts/` and are the integration points to reuse.
+
+#### 2.4.1 Global Search — Cmd/Ctrl+K shortcut
+
+**Purpose:** Open the existing `GlobalSearch` dialog
+(`src/components/search/GlobalSearch.tsx`, already implemented) from anywhere
+in the tenant / landlord / agent shells without going through a button.
+
+**Functional Requirements:**
+
+1. Keyboard listener on `window` for `(Cmd|Ctrl) + K`; `preventDefault` and
+   open the dialog
+2. Trigger button in the layout header reads `⌘K` in a `<kbd>` to make the
+   shortcut discoverable
+3. Lives inside the layout component (`TenantLayout` / future
+   `LandlordLayout` / `AgentLayout`) so the shortcut is global within the
+   authenticated app, not per-page
+4. Escape closes the dialog (already handled by the shadcn `Dialog`
+   primitive — verify, do not re-implement)
+
+**Out of scope for v1:** custom shortcuts per role, recently-searched
+persistence (separate task once analytics ships).
+
+#### 2.4.2 Header Notification + Message Bells
+
+**Purpose:** Inline access to unread notifications and messages from the
+header without leaving the current page. Both hooks (`useNotifications`,
+`useMessaging`) already track `unreadCount`; `NotificationCenter` and
+`MessageCenter` components already exist — the gap is the header-level
+entry point.
+
+**Functional Requirements:**
+
+1. Bell icon button + envelope icon button in the layout header, between
+   the nav links and the user avatar
+2. Each shows a badge with `unreadCount` when > 0; badge omitted at zero
+   (no "0" badge)
+3. Click opens the respective center inside a `Dialog`, not a route — keeps
+   the user in context
+4. Mobile menu mirrors the same actions as labeled rows with the same
+   badge
+
+**Acceptance:**
+
+- Tenant header surfaces both bells; clicking does not change the URL
+- Badge count updates reactively as new items land via the existing hooks
+- Both dialogs close on outside-click and on Escape
+
+**Out of scope for v1:** push notifications / browser Notification API;
+notification preferences UI (separate spec section).
+
+---
+
 ## 3. NON-FUNCTIONAL REQUIREMENTS
 
 ### 3.1 Performance
