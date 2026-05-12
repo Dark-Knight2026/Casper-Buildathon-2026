@@ -13,7 +13,10 @@ use crate::{
     escrow::EscrowContractRef,
     lease::{
         errors::Error,
-        events::{LeaseAgreementCreated, LeaseAgreementFinished, LeaseAgreementProlonged},
+        events::{
+            EquityEligibilityGranted, LeaseAgreementCreated, LeaseAgreementFinished,
+            LeaseAgreementProlonged,
+        },
         types::{CreateLeaseAgreementParams, LeaseAgreement},
     },
     nft::NFTContractRef,
@@ -84,6 +87,12 @@ pub mod events {
         pub lease_agreement_id: U256,
         pub prolonged_at: u64,
     }
+
+    #[odra::event]
+    pub struct EquityEligibilityGranted {
+        pub property_id: U256,
+        pub account: Address,
+    }
 }
 
 // =============================================================================
@@ -114,7 +123,8 @@ pub mod errors {
 #[odra::module(errors = Error, events = [
   LeaseAgreementCreated,
   LeaseAgreementFinished,
-  LeaseAgreementProlonged
+  LeaseAgreementProlonged,
+  EquityEligibilityGranted,
 ])]
 pub struct Lease {
     ownable: SubModule<Ownable>,
@@ -277,11 +287,16 @@ impl Lease {
         let token_id = self.nft.mint(params.tenant, metadata);
         self.nft.set_frozen_tokens(&token_id, true);
 
+        // Mark the tenant as eligible for property equity
         if let Some(equity_option) = &params.equity_option {
             self.equity_eligible.set(
                 &self.equity_key(equity_option.property_id, params.tenant),
                 true,
             );
+            self.env().emit_event(EquityEligibilityGranted {
+                property_id: equity_option.property_id,
+                account: params.tenant,
+            });
         }
 
         let lease_agreement = LeaseAgreement {

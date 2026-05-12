@@ -14,7 +14,10 @@ use leasefi_contracts::escrow::{
 };
 use leasefi_contracts::lease::{
     errors::Error,
-    events::{LeaseAgreementCreated, LeaseAgreementFinished, LeaseAgreementProlonged},
+    events::{
+        EquityEligibilityGranted, LeaseAgreementCreated, LeaseAgreementFinished,
+        LeaseAgreementProlonged,
+    },
     types::{CreateLeaseAgreementParams, LeaseAgreement},
     Lease, LeaseHostRef, LeaseInitArgs,
 };
@@ -529,6 +532,14 @@ fn test_create_lease_agreement_with_equity_option_should_mark_tenant_equity_elig
             .is_equity_eligible(property_id, params.tenant),
         "Tenant should be equity eligible for the property",
     );
+
+    assert!(test_data.env.emitted_event(
+        &test_data.lease,
+        EquityEligibilityGranted {
+            property_id,
+            account: params.tenant,
+        }
+    ));
 
     assert!(
         !test_data
