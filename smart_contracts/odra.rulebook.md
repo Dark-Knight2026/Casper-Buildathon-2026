@@ -979,7 +979,7 @@ The following table lists all current error discriminant range assignments acros
 | **Vesting**          | `700–799`   | 700  | 8           | `CallerNotWhitelisted = 701`    | `ClaimBlockedByActiveUnbonding = 708`          |
 | **InvestorRegistry** | `800–899`   | 800  | 3           | `NotAuthorized = 800`           | `AccountNotRegistered = 802`                   |
 | **PropertyRegistry** | `900–999`   | 900  | 9           | `NotAuthorized = 900`           | `PropertyTokenAlreadyRegistered = 908`         |
-| **CompliancePolicy** | `1000–1099` | 1000 | 7           | `NotAuthorized = 1000`          | `InvalidPropertyToken = 1006`                  |
+| **CompliancePolicy** | `1000–1099` | 1000 | 8           | `NotAuthorized = 1000`          | `RecipientNotEquityEligible = 1007`            |
 
 #### Available Ranges (unassigned)
 

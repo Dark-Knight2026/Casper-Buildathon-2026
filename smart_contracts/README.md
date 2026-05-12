@@ -73,10 +73,12 @@ The tokenization contracts introduced in this PR are intentionally small and com
 3. The `PROPERTY_MANAGER` activates the property. Activation fails unless the token and revenue distributor addresses
    are already configured.
 4. A `COMPLIANCE_MANAGER` wires `CompliancePolicy` to the deployed `InvestorRegistry` and `PropertyRegistry` contracts.
-5. The `COMPLIANCE_MANAGER` enables transfers for a property by setting its `ComplianceConfig`.
+5. The `COMPLIANCE_MANAGER` enables transfers for a property by setting its `ComplianceConfig`. This
+   can optionally include an `equity_distribution_requires_lease_option` rule for primary distributions.
 6. A future `PropertyFractionToken` contract calls `CompliancePolicy.assert_can_transfer(property_id, from, to, amount)`
    before moving ownership balances. The transfer is rejected if the property is inactive, transfers are disabled, the
-   amount is zero, or either non-exempt party is not currently verified.
+   amount is zero, either non-exempt party is not currently verified, or if it's an equity distribution to a recipient
+   without a valid lease equity option (when that rule is enabled).
 
 Example transfer pre-check:
 
