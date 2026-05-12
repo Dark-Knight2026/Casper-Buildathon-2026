@@ -14,8 +14,8 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
+import { daysUntil } from '@/lib/date-utils';
 import {
-  daysUntil,
   getTenantDecision,
   isInDecisionWindow,
   submitTenantDecision,

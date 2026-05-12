@@ -106,6 +106,8 @@
 //
 // =============================================================================
 
+import { daysUntil } from '@/lib/date-utils';
+
 export const EXTENSION_WINDOW_DAYS = 180;
 // Tenant has until T-91 to submit an intent; below that the flow switches
 // to the parallel renew/move-out + list-for-rent/sale path (Task 5).
@@ -121,10 +123,6 @@ export interface ExtensionIntent {
 }
 
 const intents = new Map<string, ExtensionIntent>();
-
-export function daysUntil(endDate: Date): number {
-  return Math.ceil((endDate.getTime() - Date.now()) / 86400000);
-}
 
 export function isInExtensionWindow(endDate: Date): boolean {
   const days = daysUntil(endDate);

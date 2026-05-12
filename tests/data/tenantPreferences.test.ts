@@ -5,7 +5,6 @@ import {
   IMPLICIT_BUDGET_TOLERANCE,
   RECOMMENDATION_WINDOW_DAYS,
   clearStoredPreferences,
-  daysUntil,
   derivePreferencesFromLease,
   firstOfLeaseEndMonth,
   getMockRecommendations,
@@ -13,6 +12,7 @@ import {
   isInRecommendationWindow,
   setStoredPreferences,
 } from '@/data/tenantPreferences';
+import { daysUntil } from '@/lib/date-utils';
 import { FEATURED_PROPERTIES } from '@/data/featuredProperties';
 import type { Property } from '@/types/property';
 

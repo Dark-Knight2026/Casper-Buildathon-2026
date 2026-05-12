@@ -32,6 +32,7 @@
 // =============================================================================
 
 import type { Property, PropertyType } from '@/types/property';
+import { daysUntil } from '@/lib/date-utils';
 import { FEATURED_PROPERTIES } from './featuredProperties';
 import type {
   PreferredLocation,
@@ -78,15 +79,6 @@ export function setStoredPreferences(tenantId: string, prefs: RentalPreferences)
 
 export function clearStoredPreferences(tenantId: string): void {
   preferenceStore.delete(tenantId);
-}
-
-// Days remaining until lease end. Same shape as leaseExtensions.daysUntil
-// — duplicated rather than imported to keep this module standalone for
-// the eventual cleanup when leaseExtensions is replaced by real data.
-// TODO(BE-swap): remove this duplicate once leaseExtensions is replaced
-// by the real backend data source and a shared util can be imported.
-export function daysUntil(endDate: Date): number {
-  return Math.ceil((endDate.getTime() - Date.now()) / 86400000);
 }
 
 export function isInRecommendationWindow(endDate: Date): boolean {
