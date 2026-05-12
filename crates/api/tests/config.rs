@@ -11,13 +11,38 @@ use serial_test::serial;
 use api::ServerConfig;
 
 /// Env var keys used by `Config::from_env()`.
-const CONFIG_ENV_VARS: [&str; 5] = [
+const CONFIG_ENV_VARS: [&str; 11] = [
     "DATABASE_URL",
     "REDIS_URL",
     "SUPABASE_JWT_SECRET",
     "PORT",
     "CORS_ORIGIN",
+    "S3_BUCKET",
+    "S3_REGION",
+    "S3_ENDPOINT",
+    "S3_ACCESS_KEY",
+    "S3_SECRET_KEY",
+    "S3_PUBLIC_URL_BASE",
 ];
+
+/// Default test values for every `S3_*` variable. Sets the full block
+/// so individual tests can `remove_var` only the field they want to
+/// assert on. Reused across the S3 fail-fast cases.
+///
+/// # Safety
+///
+/// Must only be called when no other threads read these env vars
+/// (ensured by `#[serial]`).
+unsafe fn set_all_s3_env_vars() {
+    // SAFETY: #[serial] ensures no concurrent env var access.
+    unsafe {
+        std::env::set_var("S3_BUCKET", "test-bucket");
+        std::env::set_var("S3_REGION", "us-east-1");
+        std::env::set_var("S3_ENDPOINT", "http://localhost:9000");
+        std::env::set_var("S3_ACCESS_KEY", "minioadmin");
+        std::env::set_var("S3_SECRET_KEY", "minioadmin");
+    }
+}
 
 /// Removes all config-related env vars to ensure test isolation.
 ///
@@ -194,4 +219,133 @@ fn from_env_rejects_invalid_port() {
 
     let err = ServerConfig::from_env().unwrap_err();
     assert!(err.to_string().contains("port"), "Unexpected error: {err}");
+}
+
+#[test]
+#[serial]
+fn from_env_leaves_s3_unset_when_bucket_missing() {
+    // SAFETY: #[serial] ensures no concurrent env var access.
+    unsafe {
+        clear_all_config_env_vars();
+        set_required_env_vars();
+    }
+
+    let config = ServerConfig::from_env().expect("Should succeed without any S3 vars");
+    assert!(
+        config.s3.is_none(),
+        "config.s3 must be None when S3_BUCKET is unset",
+    );
+}
+
+#[test]
+#[serial]
+fn from_env_populates_s3_when_full_block_present() {
+    // SAFETY: #[serial] ensures no concurrent env var access.
+    unsafe {
+        clear_all_config_env_vars();
+        set_required_env_vars();
+        set_all_s3_env_vars();
+    }
+
+    let config = ServerConfig::from_env().expect("Should succeed with full S3 block");
+    let s3 = config.s3.expect("config.s3 must be populated");
+    assert_eq!(s3.bucket, "test-bucket");
+    assert_eq!(s3.region, "us-east-1");
+    assert_eq!(s3.endpoint, "http://localhost:9000");
+    assert_eq!(s3.access_key.expose_secret(), "minioadmin");
+    assert_eq!(s3.secret_key.expose_secret(), "minioadmin");
+    assert_eq!(
+        s3.public_url_base, "http://localhost:9000/test-bucket",
+        "public_url_base must default to {{endpoint}}/{{bucket}}",
+    );
+}
+
+#[test]
+#[serial]
+fn from_env_uses_explicit_public_url_base_when_set() {
+    // SAFETY: #[serial] ensures no concurrent env var access.
+    unsafe {
+        clear_all_config_env_vars();
+        set_required_env_vars();
+        set_all_s3_env_vars();
+        std::env::set_var("S3_PUBLIC_URL_BASE", "https://cdn.example.com/media");
+    }
+
+    let s3 = ServerConfig::from_env()
+        .expect("Should succeed")
+        .s3
+        .expect("config.s3 must be populated");
+    assert_eq!(s3.public_url_base, "https://cdn.example.com/media");
+}
+
+#[test]
+#[serial]
+fn from_env_fails_when_s3_bucket_set_without_region() {
+    // SAFETY: #[serial] ensures no concurrent env var access.
+    unsafe {
+        clear_all_config_env_vars();
+        set_required_env_vars();
+        set_all_s3_env_vars();
+        std::env::remove_var("S3_REGION");
+    }
+
+    let err = ServerConfig::from_env().unwrap_err();
+    assert!(
+        err.to_string().contains("S3_REGION missing"),
+        "Unexpected error: {err}",
+    );
+}
+
+#[test]
+#[serial]
+fn from_env_fails_when_s3_bucket_set_without_endpoint() {
+    // SAFETY: #[serial] ensures no concurrent env var access.
+    unsafe {
+        clear_all_config_env_vars();
+        set_required_env_vars();
+        set_all_s3_env_vars();
+        std::env::remove_var("S3_ENDPOINT");
+    }
+
+    let err = ServerConfig::from_env().unwrap_err();
+    assert!(
+        err.to_string().contains("S3_ENDPOINT missing"),
+        "Unexpected error: {err}",
+    );
+}
+
+#[test]
+#[serial]
+fn from_env_fails_when_s3_bucket_set_without_access_key() {
+    // SAFETY: #[serial] ensures no concurrent env var access.
+    unsafe {
+        clear_all_config_env_vars();
+        set_required_env_vars();
+        set_all_s3_env_vars();
+        std::env::remove_var("S3_ACCESS_KEY");
+    }
+
+    let err = ServerConfig::from_env().unwrap_err();
+    assert!(
+        err.to_string().contains("S3_ACCESS_KEY missing"),
+        "Unexpected error: {err}",
+    );
+}
+
+#[test]
+#[serial]
+fn from_env_fails_when_s3_bucket_set_without_secret_key() {
+    // SAFETY: #[serial] ensures no concurrent env var access.
+    unsafe {
+        clear_all_config_env_vars();
+        set_required_env_vars();
+        set_all_s3_env_vars();
+        std::env::remove_var("S3_SECRET_KEY");
+    }
+
+    let err = ServerConfig::from_env().unwrap_err();
+    assert!(
+        err.to_string().contains("S3_SECRET_KEY missing"),
+        "Unexpected error: {err}",
+    );
 }

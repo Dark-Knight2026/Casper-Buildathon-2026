@@ -23,19 +23,20 @@ use chrono::{Duration, Utc};
 use core::net::SocketAddr;
 use jsonwebtoken::{EncodingKey, Header, encode};
 use rand::Rng;
+use s3::{Bucket, BucketConfiguration, Region, creds::Credentials};
 use secrecy::SecretString;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 use sqlx::{PgPool, migrate::Migrator};
 use testcontainers::{
-    ContainerAsync, GenericImage,
+    ContainerAsync, GenericImage, ImageExt,
     core::{IntoContainerPort, WaitFor},
     runners::AsyncRunner,
 };
 use uuid::Uuid;
 
 use api::{
-    AppState, Claims, IcoFallback, LoggingEmailSender, ServerConfig, UserId, UserRole,
+    AppState, Claims, IcoFallback, LoggingEmailSender, S3Config, ServerConfig, UserId, UserRole,
     common::{
         CASPER_MESSAGE_PREFIX, JWT_AUDIENCE, JWT_ISSUER, RedisStore, TOTAL_SUPPLY, TokenType,
         VerificationLevel,
@@ -226,6 +227,29 @@ pub async fn setup_test_server_with(
         redis: redis_env,
         state,
     }
+}
+
+/// 8-byte PNG signature followed by zero padding to 1 KB.
+///
+/// The avatar handler's magic-byte sniff inspects only the first 8
+/// bytes, so any payload that starts with the canonical PNG magic is
+/// accepted regardless of what follows. 1 KB is enough headroom for
+/// size-related assertions without bloating the binary.
+#[inline]
+pub fn fake_png_bytes() -> Vec<u8> {
+    let mut bytes = vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+    bytes.extend(core::iter::repeat_n(0u8, 1024 - bytes.len()));
+    bytes
+}
+
+/// 3-byte JPEG SOI marker (`FF D8 FF`) followed by zero padding to 1 KB.
+/// Matches the sniff contract: the handler only looks at the first few
+/// bytes, so any tail is acceptable.
+#[inline]
+pub fn fake_jpg_bytes() -> Vec<u8> {
+    let mut bytes = vec![0xFF, 0xD8, 0xFF];
+    bytes.extend(core::iter::repeat_n(0u8, 1024 - bytes.len()));
+    bytes
 }
 
 /// Creates a test JWT access token populated with the full typed-claim schema.
@@ -504,5 +528,127 @@ pub async fn login_and_extract(env: &TestEnv) -> LoggedSession {
         refresh_token,
         secret_key,
         public_key,
+    }
+}
+
+/// Default `MinIO` root credentials used for ephemeral test buckets.
+/// `MinIO` requires `MINIO_ROOT_PASSWORD` to be at least 8 chars; the test
+/// fixture uses the documented `MinIO` defaults so the container starts
+/// without bespoke env tuning.
+const MINIO_TEST_ACCESS_KEY: &str = "minioadmin";
+const MINIO_TEST_SECRET_KEY: &str = "minioadmin";
+const MINIO_TEST_REGION: &str = "us-east-1";
+const MINIO_TEST_BUCKET: &str = "leasefi-test";
+
+/// Holds a running `MinIO` container and an [`S3Config`] bound to its
+/// freshly-created bucket. The bucket is created during `start()` so
+/// callers can immediately point `S3MediaStorage::new(...)` at the
+/// returned config without an extra round-trip.
+///
+/// The bucket policy is left at the `MinIO` default (private). Tests
+/// that need to verify the public-fetch behaviour of the production
+/// stack use the returned `bucket` handle directly (`bucket.get_object`)
+/// instead of `reqwest::get(public_url)` - `MinIO` obeys `x-amz-acl:
+/// public-read` only when the bucket policy is `download`, and the
+/// extra wiring would just retest `MinIO`, not our code.
+pub struct MinioTestEnv {
+    /// S3 configuration ready to inject into [`ServerConfig`]'s `s3`
+    /// field or to pass to `S3MediaStorage::new(...)`.
+    pub config: S3Config,
+    /// Direct bucket handle for read-back assertions in tests
+    /// (`bucket.get_object(key)` after a put through the handler).
+    pub bucket: Box<Bucket>,
+    /// Keeps the container alive for the duration of the test.
+    container: ContainerAsync<GenericImage>,
+}
+
+impl Debug for MinioTestEnv {
+    #[inline]
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        f.debug_struct("MinioTestEnv")
+            .field("endpoint", &self.config.endpoint)
+            .field("bucket", &self.config.bucket)
+            .finish_non_exhaustive()
+    }
+}
+
+impl MinioTestEnv {
+    /// Starts a `MinIO` container, creates a fresh test bucket, and
+    /// returns the populated environment.
+    ///
+    /// Container startup takes ~3-5 seconds on Linux runners; tests
+    /// using this fixture are gated behind `#[ignore]` so the default
+    /// `cargo test` run (without Docker) stays green.
+    #[inline]
+    pub async fn start() -> Self {
+        // `server /data` is the canonical MinIO entrypoint; the path
+        // does not need to exist beforehand, the daemon creates it.
+        let image = GenericImage::new("minio/minio", "latest")
+            .with_exposed_port(9000.tcp())
+            .with_wait_for(WaitFor::message_on_stderr("API:"))
+            .with_env_var("MINIO_ROOT_USER", MINIO_TEST_ACCESS_KEY)
+            .with_env_var("MINIO_ROOT_PASSWORD", MINIO_TEST_SECRET_KEY)
+            .with_cmd(["server".to_owned(), "/data".to_owned()]);
+
+        let container = image.start().await.expect("Failed to start MinIO");
+        let port = container
+            .get_host_port_ipv4(9000)
+            .await
+            .expect("Failed to get MinIO port");
+
+        let endpoint = format!("http://127.0.0.1:{port}");
+        let region = Region::Custom {
+            region: MINIO_TEST_REGION.to_owned(),
+            endpoint: endpoint.clone(),
+        };
+        let credentials = Credentials::new(
+            Some(MINIO_TEST_ACCESS_KEY),
+            Some(MINIO_TEST_SECRET_KEY),
+            None,
+            None,
+            None,
+        )
+        .expect("MinIO credentials init");
+
+        // Path-style is mandatory for MinIO. `create_with_path_style`
+        // both creates the bucket via the path-style PUT and returns a
+        // ready-to-use `Bucket` handle - one round-trip, no second
+        // `Bucket::new(...).with_path_style()` dance.
+        Bucket::create_with_path_style(
+            MINIO_TEST_BUCKET,
+            region.clone(),
+            credentials.clone(),
+            BucketConfiguration::default(),
+        )
+        .await
+        .expect("MinIO create bucket");
+
+        let bucket = Bucket::new(MINIO_TEST_BUCKET, region, credentials)
+            .expect("MinIO bucket handle")
+            .with_path_style();
+
+        let config = S3Config {
+            bucket: MINIO_TEST_BUCKET.to_owned(),
+            region: MINIO_TEST_REGION.to_owned(),
+            endpoint: endpoint.clone(),
+            access_key: SecretString::from(MINIO_TEST_ACCESS_KEY),
+            secret_key: SecretString::from(MINIO_TEST_SECRET_KEY),
+            public_url_base: format!("{endpoint}/{MINIO_TEST_BUCKET}"),
+        };
+
+        Self {
+            config,
+            bucket,
+            container,
+        }
+    }
+
+    /// Stops the underlying `MinIO` container so subsequent `S3MediaStorage`
+    /// calls observe a transport failure. Used by the 5xx-mapping test
+    /// that pins the handler's "do not leak storage details in response
+    /// body" contract.
+    #[inline]
+    pub async fn stop(&self) {
+        self.container.stop().await.expect("MinIO stop");
     }
 }
