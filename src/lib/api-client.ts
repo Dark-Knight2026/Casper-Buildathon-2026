@@ -198,10 +198,16 @@ export class ApiClient {
    */
   private async handleResponse<T>(response: Response): Promise<T> {
     if (!response.ok) {
+      // Parse the body only as an error envelope. Never fall back to the raw
+      // body for the user-facing `message`: a misconfigured backend could
+      // respond with an HTML error page, a stack trace, or an internal path,
+      // and that content propagates into toasts and observability tooling
+      // The status-driven fallback already covers every HTTP code with safe,
+      // user-facing copy.
       const rawBody = await response.text().catch(() => '');
       const envelope = parseProfileApiErrorBody(rawBody);
       const code = envelope?.error;
-      const message = envelope?.error ?? (rawBody || defaultStatusMessage(response.status));
+      const message = envelope?.error ?? defaultStatusMessage(response.status);
       throw new ApiError(message, response.status, undefined, code);
     }
 

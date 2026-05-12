@@ -150,8 +150,11 @@ describe('Login', () => {
     it('disables Sign in while signing or already authenticated', () => {
       setWalletConnect({ isConnected: true, account, isSigningIn: true });
       renderLogin();
+      // Anchor the regex: the page also renders a "Trouble signing in? Reset
+      // connection" footer button whose accessible name otherwise matches
+      // /signing in/i and makes the selector ambiguous.
       expect(
-        screen.getByRole('button', { name: /signing in/i }),
+        screen.getByRole('button', { name: /^Signing in/i }),
         'Sign in button must show in-flight state and be disabled to prevent double-submit'
       ).toBeDisabled();
     });
