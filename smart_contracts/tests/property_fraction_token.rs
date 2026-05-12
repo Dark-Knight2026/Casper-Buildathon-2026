@@ -353,3 +353,35 @@ fn test_transfer_from_should_revert_before_allowance_check_if_compliance_fails()
         "Should run compliance before CEP-18 allowance transfer"
     )
 }
+
+// =============================================================================
+// can_transfer()
+// =============================================================================
+
+#[test]
+fn test_can_transfer_should_return_true_when_policy_allows_transfer() {
+    let mut ctx = setup(odra_test::env());
+    let initial_holder = ctx.initial_holder;
+    let recipient = ctx.recipient;
+    let amount = U256::from(100);
+
+    enable_primary_distribution(&mut ctx);
+    verify_investor(&mut ctx, recipient);
+
+    assert!(
+        ctx.token.can_transfer(initial_holder, recipient, amount),
+        "Transfer should be allowed",
+    );
+}
+
+#[test]
+fn test_can_transfer_should_return_false_when_policy_blocks_transfer() {
+    let ctx = setup(odra_test::env());
+    let amount = U256::from(100);
+
+    assert!(
+        !ctx.token
+            .can_transfer(ctx.initial_holder, ctx.recipient, amount),
+        "Transfer should be blocked before compliance is configured",
+    )
+}
