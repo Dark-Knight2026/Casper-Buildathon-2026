@@ -276,5 +276,80 @@ fn test_transfer_should_revert_if_recipient_is_not_verified_or_exempt() {
 
     ctx.env.set_caller(initial_holder);
 
-    
+    assert_eq!(
+        ctx.token.try_transfer(&recipient, &amount).unwrap_err(),
+        ComplianceError::RecipientNotVerified.into(),
+        "Should revert when recipient is not verified or exempt",
+    );
+}
+
+#[test]
+fn test_transfer_should_revert_if_amount_is_zero() {
+    let mut ctx = setup(odra_test::env());
+    let initial_holder = ctx.initial_holder;
+    let recipient = ctx.recipient;
+    let amount = U256::zero();
+
+    ctx.env.set_caller(initial_holder);
+
+    assert_eq!(
+        ctx.token.try_transfer(&recipient, &amount).unwrap_err(),
+        ComplianceError::ZeroAmount.into(),
+        "Should revert before CEP-18 zero-transfer behaviour can bypass compliance",
+    );
+}
+
+// =============================================================================
+// transfer_from()
+// =============================================================================
+
+#[test]
+fn test_transfer_from_should_move_tokens_when_allowance_and_compliance_pass() {
+    let mut ctx = setup(odra_test::env());
+    let initial_holder = ctx.initial_holder;
+    let recipient = ctx.recipient;
+    let spender = ctx.spender;
+    let amount = U256::from(400);
+
+    enable_primary_distribution(&mut ctx);
+    verify_investor(&mut ctx, recipient);
+
+    ctx.env.set_caller(initial_holder);
+    ctx.token.approve(&spender, &amount);
+
+    ctx.env.set_caller(spender);
+    ctx.token
+        .transfer_from(&initial_holder, &recipient, &amount);
+
+    assert_eq!(
+        ctx.token.balance_of(&initial_holder),
+        ctx.initial_supply - amount,
+        "Invalid owner balance",
+    );
+
+    assert_eq!(
+        ctx.token.balance_of(&recipient),
+        amount,
+        "Invalid recipient balance",
+    );
+}
+
+#[test]
+fn test_transfer_from_should_revert_before_allowance_check_if_compliance_fails() {
+    let mut ctx = setup(odra_test::env());
+    let initial_holder = ctx.initial_holder;
+    let recipient = ctx.recipient;
+    let spender = ctx.spender;
+    let amount = U256::from(400);
+
+    ctx.env.set_caller(initial_holder);
+    ctx.token.approve(&spender, &amount);
+
+    assert_eq!(
+        ctx.token
+            .try_transfer_from(&initial_holder, &recipient, &amount)
+            .unwrap_err(),
+        ComplianceError::TransfersDisabled.into(),
+        "Should run compliance before CEP-18 allowance transfer"
+    )
 }
