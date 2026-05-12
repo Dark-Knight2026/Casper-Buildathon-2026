@@ -16,6 +16,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { useTenantPreferences } from '@/hooks/useTenantPreferences';
 import { TenantPreferencesDialog } from '@/components/tenant/TenantPreferencesDialog';
+import { RoleSwitchDialog } from '@/components/profile/RoleSwitchDialog';
 import { countActivePreferences, ALL_MATCH_CATEGORIES } from '@/types/tenantPreferences';
 import { uploadAvatar } from '@/services/ico/userProfileService';
 import { ApiError } from '@/lib/api-client';
@@ -105,6 +106,7 @@ export function TenantProfile() {
     updatePreferences,
   } = useTenantPreferences(authProfile?.id ?? '');
   const [preferencesOpen, setPreferencesOpen] = useState(false);
+  const [roleSwitchOpen, setRoleSwitchOpen] = useState(false);
   const activeCount = countActivePreferences(preferences);
 
   // Server-side validators on `PATCH /users/me` reject empty/whitespace values
@@ -347,9 +349,19 @@ export function TenantProfile() {
                 <p className="text-sm text-muted-foreground">Status</p>
                 <p className="text-sm font-medium text-foreground capitalize">{authProfile?.status ?? '—'}</p>
               </div>
-              <div className="flex justify-between">
+              <div className="flex items-center justify-between gap-2">
                 <p className="text-sm text-muted-foreground">Account Type</p>
-                <p className="text-sm font-medium text-foreground capitalize">{authProfile?.role ?? ''}</p>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-medium text-foreground capitalize">{authProfile?.role ?? ''}</p>
+                  <Button
+                    variant="link"
+                    size="sm"
+                    className="h-auto p-0 text-xs"
+                    onClick={() => setRoleSwitchOpen(true)}
+                  >
+                    Switch
+                  </Button>
+                </div>
               </div>
               {authProfile?.walletAddress && (
                 <div className="space-y-1">
@@ -480,6 +492,12 @@ export function TenantProfile() {
             onOpenChange={setPreferencesOpen}
             initialPreferences={preferences}
             onSave={updatePreferences}
+          />
+
+          <RoleSwitchDialog
+            open={roleSwitchOpen}
+            onOpenChange={setRoleSwitchOpen}
+            currentRole={authProfile?.role}
           />
 
           {/* Email — separate verification flow */}
