@@ -978,8 +978,8 @@ The following table lists all current error discriminant range assignments acros
 | **Staking**          | `600–699`   | 600  | 14          | `BigCoinContractIsNotSet = 601` | `CallerNotAuthorizedToManageLocks = 614`       |
 | **Vesting**          | `700–799`   | 700  | 8           | `CallerNotWhitelisted = 701`    | `ClaimBlockedByActiveUnbonding = 708`          |
 | **InvestorRegistry** | `800–899`   | 800  | 3           | `NotAuthorized = 800`           | `AccountNotRegistered = 802`                   |
-| **PropertyRegistry** | `900–999`   | 900  | 8           | `NotAuthorized = 900`           | `InvalidStatusTransition = 907`                |
-| **CompliancePolicy** | `1000–1099` | 1000 | 6           | `NotAuthorized = 1000`          | `RecipientNotVerified = 1005`                  |
+| **PropertyRegistry** | `900–999`   | 900  | 9           | `NotAuthorized = 900`           | `PropertyTokenAlreadyRegistered = 908`         |
+| **CompliancePolicy** | `1000–1099` | 1000 | 7           | `NotAuthorized = 1000`          | `InvalidPropertyToken = 1006`                  |
 
 #### Available Ranges (unassigned)
 
