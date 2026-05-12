@@ -10,6 +10,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle, CheckCircle } from 'lucide-react';
+import { VerificationDisclaimer } from '@/components/property/VerificationDisclaimer';
 
 export default function ApplicationForm() {
   const navigate = useNavigate();
@@ -146,6 +147,9 @@ export default function ApplicationForm() {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-6">
+              {/* Task 10 — Verification Disclaimer (compact, no map link — form doesn't carry coords) */}
+              <VerificationDisclaimer compact />
+
               {error && (
                 <Alert variant="destructive">
                   <AlertCircle className="h-4 w-4" />

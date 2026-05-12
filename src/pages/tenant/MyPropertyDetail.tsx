@@ -26,6 +26,7 @@ import {
 } from '@/components/tenant/property-detail';
 import { LeaseExtensionBanner } from '@/components/tenant/LeaseExtensionBanner';
 import { LeaseDecisionBanner } from '@/components/tenant/LeaseDecisionBanner';
+import { VerificationDisclaimer } from '@/components/property/VerificationDisclaimer';
 import { formatCurrency, formatDateLong } from '@/components/tenant/property-detail/shared';
 
 export default function MyPropertyDetail() {
@@ -143,6 +144,13 @@ export default function MyPropertyDetail() {
                 />
               </>
             )}
+
+            {/* Task 10 — Verification Disclaimer */}
+            <VerificationDisclaimer
+              latitude={property.latitude}
+              longitude={property.longitude}
+              address={propertyAddress}
+            />
             <Card>
               <CardContent className="p-6 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                 <div>

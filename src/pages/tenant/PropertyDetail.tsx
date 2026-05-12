@@ -29,6 +29,7 @@ import { useAuthPrompt } from '@/hooks/useAuthPrompt';
 import { SavePropertyButton } from '@/components/property/SavePropertyButton';
 import { ContactLandlordModal } from '@/components/property/ContactLandlordModal';
 import { ScheduleViewingModal } from '@/components/property/ScheduleViewingModal';
+import { VerificationDisclaimer } from '@/components/property/VerificationDisclaimer';
 import { propertyService } from '@/services/propertyService';
 import { FEATURED_PROPERTIES } from '@/data/featuredProperties';
 import { cn } from '@/lib/utils';
@@ -338,6 +339,14 @@ export default function PropertyDetail() {
                     <p className="text-gray-700 whitespace-pre-line">{property.description}</p>
                   </div>
                 )}
+
+                {/* Task 10 — Verification Disclaimer */}
+                <VerificationDisclaimer
+                  latitude={property.latitude}
+                  longitude={property.longitude}
+                  address={`${property.address}, ${property.city}, ${property.state} ${property.zipCode}`}
+                  className="mb-4"
+                />
 
                 <Tabs defaultValue="amenities" className="w-full">
                   <TabsList className="grid w-full grid-cols-3">
