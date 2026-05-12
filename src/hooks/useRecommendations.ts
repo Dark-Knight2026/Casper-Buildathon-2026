@@ -22,7 +22,6 @@ interface UseRecommendationsArgs {
 interface UseRecommendationsReturn {
   recommendations: RecommendedProperty[];
   isInWindow: boolean;
-  hasExplicitPreferences: boolean;
 }
 
 export function useRecommendations({
@@ -54,5 +53,5 @@ export function useRecommendations({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leaseEndTimestamp, currentProperty.id, hasExplicitPreferences, limit]);
 
-  return { recommendations, isInWindow, hasExplicitPreferences };
+  return { recommendations, isInWindow };
 }
