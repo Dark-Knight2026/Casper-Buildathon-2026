@@ -272,6 +272,46 @@ fn test_init_should_initialize_fixed_supply_property_token() {
 }
 
 // =============================================================================
+// Admin Configuration
+// =============================================================================
+
+#[test]
+fn test_set_compliance_policy_should_update_policy_for_token_manager() {
+    let mut ctx = setup(odra_test::env());
+    let new_policy = ctx.env.get_account(10);
+
+    ctx.env.set_caller(ctx.token_manager);
+    ctx.token.set_compliance_policy(new_policy);
+
+    assert_eq!(
+        ctx.token.get_compliance_policy_contract(),
+        new_policy,
+        "Invalid updated compliance policy addres",
+    );
+
+    assert!(ctx.env.emitted_event(
+        &ctx.token,
+        CompliancePolicySet {
+            compliance_policy: new_policy
+        }
+    ),);
+}
+
+#[test]
+fn test_set_compliance_policy_should_revert_if_caller_is_not_token_manager() {
+    let mut ctx = setup(odra_test::env());
+    let new_policy = ctx.env.get_account(10);
+
+    ctx.env.set_caller(ctx.recipient);
+
+    assert_eq!(
+        ctx.token.try_set_compliance_policy(new_policy).unwrap_err(),
+        TokenError::NotAuthorized.into(),
+        "Should revert if caller lacks TOKEN_MANAGER role",
+    )
+}
+
+// =============================================================================
 // transfer()
 // =============================================================================
 
