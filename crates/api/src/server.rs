@@ -201,7 +201,7 @@ pub async fn main() -> Result<(), ServerError> {
             event = "media_storage_stub",
             "S3_BUCKET unset - using StubMediaStorage. Production MUST configure S3_BUCKET + S3_REGION + S3_ENDPOINT + S3_ACCESS_KEY + S3_SECRET_KEY."
         );
-        Arc::new(StubMediaStorage::new(config.media_stub_base_url.clone()))
+        Arc::new(StubMediaStorage::new())
     };
 
     // 3. Build application state

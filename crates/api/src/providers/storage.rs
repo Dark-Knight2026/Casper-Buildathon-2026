@@ -103,9 +103,12 @@ pub type SharedMediaStorage = Arc<dyn MediaStorage>;
 
 // -----------------------------------------------------------------------------
 
-/// Default base URL for non-image stub uploads when `MEDIA_STUB_BASE_URL`
-/// is unset. Uses the IANA `example.com` domain so the URL is syntactically
-/// valid but obviously not a real CDN.
+/// Base URL prepended to non-image stub uploads to form a synthetic
+/// (non-fetchable) URL. Uses the IANA `example.com` domain so the URL is
+/// syntactically valid but obviously not a real CDN. Hardcoded rather
+/// than env-configurable: until a non-avatar media handler ships, an
+/// env-driven knob would be dormant; reintroduce one alongside the
+/// handler that actually needs it.
 const DEFAULT_STUB_BASE_URL: &str = "https://example.com/media-stub";
 
 /// 256x256 grey square SVG with "AVATAR" text, embedded as a `data:` URI.
@@ -129,27 +132,16 @@ const AVATAR_PLACEHOLDER_DATA_URI: &str = "data:image/svg+xml;base64,PHN2ZyB4bWx
 /// MUST NOT be installed in any environment where users could reasonably
 /// expect their uploaded media to persist - the bytes are dropped on the
 /// floor.
-#[derive(Debug, Clone)]
-pub struct StubMediaStorage {
-    base_url: String,
-}
+#[derive(Debug, Clone, Default)]
+pub struct StubMediaStorage;
 
 impl StubMediaStorage {
-    /// Builds a stub backed by `base_url` for non-image keys. Pass `None`
-    /// to use [`DEFAULT_STUB_BASE_URL`].
+    /// Constructs the stub. Non-image keys form a synthetic URL with the
+    /// hardcoded [`DEFAULT_STUB_BASE_URL`] prefix.
     #[inline]
     #[must_use]
-    pub fn new(base_url: Option<String>) -> Self {
-        Self {
-            base_url: base_url.unwrap_or_else(|| DEFAULT_STUB_BASE_URL.to_owned()),
-        }
-    }
-}
-
-impl Default for StubMediaStorage {
-    #[inline]
-    fn default() -> Self {
-        Self::new(None)
+    pub const fn new() -> Self {
+        Self
     }
 }
 
@@ -170,7 +162,7 @@ impl MediaStorage for StubMediaStorage {
         if key.starts_with("avatars/") {
             Ok(AVATAR_PLACEHOLDER_DATA_URI.to_owned())
         } else {
-            Ok(format!("{}/{}", self.base_url, key))
+            Ok(format!("{DEFAULT_STUB_BASE_URL}/{key}"))
         }
     }
 

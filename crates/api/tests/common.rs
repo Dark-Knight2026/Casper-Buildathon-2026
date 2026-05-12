@@ -192,7 +192,6 @@ pub async fn setup_test_server_with(
         contract_big: overrides.contract_big,
         ico_fallback: overrides.ico_fallback,
         total_supply: TOTAL_SUPPLY,
-        media_stub_base_url: None,
         s3: None,
     };
     let mailer = overrides
@@ -200,7 +199,7 @@ pub async fn setup_test_server_with(
         .unwrap_or_else(|| Arc::new(LoggingEmailSender) as Arc<dyn EmailSender>);
     let media_storage = overrides
         .media_storage
-        .unwrap_or_else(|| Arc::new(StubMediaStorage::new(None)) as Arc<dyn MediaStorage>);
+        .unwrap_or_else(|| Arc::new(StubMediaStorage::new()) as Arc<dyn MediaStorage>);
     let state = Arc::new(AppState {
         db: pool,
         redis: RedisStore::new(redis_client)

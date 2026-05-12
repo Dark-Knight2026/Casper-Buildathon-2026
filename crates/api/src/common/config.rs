@@ -45,13 +45,6 @@ struct RawEnvConfig {
     /// Defaults to 5 billion if not set.
     #[serde(default)]
     total_supply: Option<f64>,
-    /// Base URL the dev/test stub media storage prefixes onto non-image
-    /// keys. Image keys (`avatars/...`) get a `data:image/svg+xml`
-    /// placeholder regardless of this value. Production deployments will
-    /// replace `StubMediaStorage` with an S3-backed implementation that
-    /// ignores this field entirely.
-    #[serde(default)]
-    media_stub_base_url: Option<String>,
     /// S3 bucket name. When set, enables S3-backed `MediaStorage` and
     /// requires the rest of the `S3_*` block (region, endpoint, access
     /// key, secret key). When unset, bootstrap falls back to
@@ -150,11 +143,6 @@ pub struct ServerConfig {
     pub ico_fallback: Option<IcoFallback>,
     /// Total BIG token supply (human-readable). Defaults to 5 billion.
     pub total_supply: f64,
-    /// Base URL prepended to non-image keys by [`StubMediaStorage`]. `None`
-    /// falls back to the stub's built-in default. Has no effect on image
-    /// keys (which always render as a `data:` placeholder) or on
-    /// production S3-backed implementations.
-    pub media_stub_base_url: Option<String>,
     /// S3-compatible media storage. `Some` enables the production media
     /// backend; `None` falls back to `StubMediaStorage`. Populated by
     /// `from_env` only when the full `S3_*` block is provided.
@@ -245,7 +233,6 @@ impl ServerConfig {
             contract_big: raw.contract_big.map(|s| s.to_ascii_lowercase()),
             ico_fallback,
             total_supply: raw.total_supply.unwrap_or(TOTAL_SUPPLY),
-            media_stub_base_url: raw.media_stub_base_url,
             s3,
         };
 
