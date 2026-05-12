@@ -20,7 +20,7 @@ use leasefi_contracts::{
         types::{CreatePropertyParams, PropertyStatus},
         PropertyRegistry, PropertyRegistryHostRef, PropertyRegistryInitArgs,
     },
-    roles::{Roles, RolesHostRef, RolesInitArgs},
+    roles::{Roles, RolesInitArgs},
 };
 use odra::{
     casper_types::U256,
@@ -28,7 +28,7 @@ use odra::{
     prelude::*,
 };
 
-use crate::nft::{NFTHostRef, NFTInitArgs};
+use crate::nft::NFTInitArgs;
 
 // =============================================================================
 // Test Context
@@ -40,9 +40,7 @@ struct Context {
     investor_registry: InvestorRegistryHostRef,
     property_registry: PropertyRegistryHostRef,
     lease: LeaseHostRef,
-    roles: RolesHostRef,
     escrow: EscrowHostRef,
-    nft: NFTHostRef,
     compliance_manager: Address,
     verification_manager: Address,
     property_manager: Address,
@@ -164,9 +162,7 @@ fn setup(env: HostEnv) -> Context {
         investor_registry,
         property_registry,
         lease,
-        roles,
         escrow,
-        nft,
         compliance_manager,
         verification_manager,
         property_manager,
