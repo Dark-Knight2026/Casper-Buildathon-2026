@@ -14,7 +14,7 @@ use leasefi_contracts::{
     },
     property_registry::{
         types::{CreatePropertyParams, PropertyStatus},
-        PropertyRegistry, PropertyRegistryHostRef, PropertyRegistryInitArgs,
+        PropertyRegistry, PropertyRegistryInitArgs,
     },
 };
 use odra::{
@@ -33,12 +33,10 @@ struct Context {
     token: PropertyFractionTokenHostRef,
     compliance: CompliancePolicyHostRef,
     investor_registry: InvestorRegistryHostRef,
-    property_registry: PropertyRegistryHostRef,
     owner: Address,
     token_manager: Address,
     compliance_manager: Address,
     verification_manager: Address,
-    property_manager: Address,
     initial_holder: Address,
     recipient: Address,
     spender: Address,
@@ -119,12 +117,10 @@ fn setup(env: HostEnv) -> Context {
         token,
         compliance,
         investor_registry,
-        property_registry,
         owner,
         token_manager,
         compliance_manager,
         verification_manager,
-        property_manager,
         initial_holder,
         recipient,
         spender,
@@ -174,27 +170,6 @@ fn enable_primary_distribution(ctx: &mut Context) {
 
     enable_transfers(ctx);
     set_transfer_exempt(ctx, initial_holder, true);
-}
-
-fn init_args(
-    env: &HostEnv,
-    name: String,
-    symbol: String,
-    decimals: u8,
-    initial_supply: U256,
-) -> PropertyFractionTokenInitArgs {
-    PropertyFractionTokenInitArgs {
-        params: PropertyFractionTokenInitParams {
-            owner: env.get_account(0),
-            property_id: U256::zero(),
-            compliance_policy: env.get_account(9),
-            symbol,
-            name,
-            decimals,
-            initial_supply,
-            initial_holder: env.get_account(5),
-        },
-    }
 }
 
 // =============================================================================
