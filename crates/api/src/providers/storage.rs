@@ -13,6 +13,7 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use s3::{Bucket, Region, creds::Credentials};
 
 /// Errors produced by [`MediaStorage`] implementations.
 ///
@@ -39,6 +40,13 @@ pub enum StorageError {
     #[error("storage not configured")]
     NotConfigured,
 }
+
+/// Result alias for fallible [`MediaStorage`] operations.
+///
+/// Shorthand for `Result<T, StorageError>` used in trait signatures and
+/// implementations. The error half is fixed; only the success half varies
+/// (`String` for `put`, `()` for `delete`).
+pub type StorageResult<T> = Result<T, StorageError>;
 
 /// Capability to store and remove opaque media blobs (avatars, property
 /// images, lease PDFs) under string keys.
@@ -69,12 +77,7 @@ pub trait MediaStorage: Send + Sync {
     /// rejects the write (network failure, permission denied, quota
     /// exhausted). Validation errors (oversize `bytes`, bad MIME) are the
     /// caller's responsibility and are not represented here.
-    async fn put(
-        &self,
-        key: &str,
-        bytes: Vec<u8>,
-        content_type: &str,
-    ) -> Result<String, StorageError>;
+    async fn put(&self, key: &str, bytes: &[u8], content_type: &str) -> StorageResult<String>;
 
     /// Removes the object at `key`. Idempotent: deleting a non-existent
     /// key is `Ok(())`, not an error - callers that pre-check existence
@@ -85,7 +88,7 @@ pub trait MediaStorage: Send + Sync {
     /// Returns [`StorageError::Transport`] when the backend itself fails
     /// (auth, network). Returning anything else from a "key not found"
     /// outcome would force every caller to write match-and-ignore code.
-    async fn delete(&self, key: &str) -> Result<(), StorageError>;
+    async fn delete(&self, key: &str) -> StorageResult<()>;
 }
 
 /// Shared, type-erased handle to a [`MediaStorage`] implementation.
@@ -153,12 +156,7 @@ impl Default for StubMediaStorage {
 #[async_trait]
 impl MediaStorage for StubMediaStorage {
     #[inline]
-    async fn put(
-        &self,
-        key: &str,
-        bytes: Vec<u8>,
-        content_type: &str,
-    ) -> Result<String, StorageError> {
+    async fn put(&self, key: &str, bytes: &[u8], content_type: &str) -> StorageResult<String> {
         tracing::info!(
             event = "media_put_stub",
             key = %key,
@@ -177,12 +175,99 @@ impl MediaStorage for StubMediaStorage {
     }
 
     #[inline]
-    async fn delete(&self, key: &str) -> Result<(), StorageError> {
+    async fn delete(&self, key: &str) -> StorageResult<()> {
         tracing::info!(
             event = "media_delete_stub",
             key = %key,
             "Media delete logged (no real storage configured)"
         );
+        Ok(())
+    }
+}
+
+// -----------------------------------------------------------------------------
+
+/// S3-compatible [`MediaStorage`] backed by AWS S3, Cloudflare R2, or `MinIO`.
+///
+/// All three providers share the S3 wire protocol; the only difference at
+/// runtime is the `endpoint` URL. `with_path_style()` is mandatory for
+/// `MinIO` (which only supports path-style addressing) and harmless for
+/// AWS/R2 (which support both styles).
+///
+/// Objects are uploaded with `x-amz-acl: public-read` so the URL returned
+/// by [`MediaStorage::put`] is directly fetchable without signed-URL
+/// machinery. Buckets that disallow public-read ACLs MUST be paired with
+/// a different implementation that returns pre-signed URLs instead -
+/// this one will fail at upload time.
+#[derive(Debug, Clone)]
+pub struct S3MediaStorage {
+    bucket: Arc<Bucket>,
+    public_url_base: String,
+}
+
+impl S3MediaStorage {
+    /// Builds an instance from explicit configuration.
+    ///
+    /// The caller (typically [`ServerConfig`](crate::common::ServerConfig)
+    /// at bootstrap) sources the values; this constructor stays
+    /// env-agnostic so integration tests can inject a testcontainer-backed
+    /// bucket without going through env variables.
+    ///
+    /// `public_url_base` is the prefix prepended to the object `key` to
+    /// form the public URL returned by [`MediaStorage::put`]. For AWS S3
+    /// this is typically `https://<bucket>.s3.<region>.amazonaws.com`; for
+    /// `MinIO` behind a reverse proxy it might be `https://cdn.example.com`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StorageError::Transport`] when `rust-s3` rejects the
+    /// credentials or bucket-initialization parameters (malformed access
+    /// key, invalid endpoint URL). Network reachability is NOT checked
+    /// here - the first network failure surfaces from the first
+    /// `put`/`delete` call.
+    #[inline]
+    pub fn new(
+        bucket_name: &str,
+        region: String,
+        endpoint: String,
+        access_key: &str,
+        secret_key: &str,
+        public_url_base: String,
+    ) -> Result<Self, StorageError> {
+        let region = Region::Custom { region, endpoint };
+        let credentials = Credentials::new(Some(access_key), Some(secret_key), None, None, None)
+            .map_err(|e| StorageError::Transport(format!("credentials init: {e}")))?;
+        let bucket = Bucket::new(bucket_name, region, credentials)
+            .map_err(|e| StorageError::Transport(format!("bucket init: {e}")))?
+            .with_path_style();
+        Ok(Self {
+            bucket: Arc::new(*bucket),
+            public_url_base,
+        })
+    }
+}
+
+#[async_trait]
+impl MediaStorage for S3MediaStorage {
+    #[inline]
+    async fn put(&self, key: &str, bytes: &[u8], content_type: &str) -> StorageResult<String> {
+        self.bucket
+            .put_object_builder(key, bytes)
+            .with_content_type(content_type)
+            .with_header("x-amz-acl", "public-read")
+            .map_err(|e| StorageError::Transport(format!("acl header: {e}")))?
+            .execute()
+            .await
+            .map_err(|e| StorageError::Transport(format!("put failed: {e}")))?;
+        Ok(format!("{}/{}", self.public_url_base, key))
+    }
+
+    #[inline]
+    async fn delete(&self, key: &str) -> StorageResult<()> {
+        self.bucket
+            .delete_object(key)
+            .await
+            .map_err(|e| StorageError::Transport(format!("delete failed: {e}")))?;
         Ok(())
     }
 }

@@ -9,7 +9,7 @@
 //! - [`email`] - transactional email delivery (`EmailSender`,
 //!   `LoggingEmailSender`).
 //! - [`storage`] - opaque media-blob storage (`MediaStorage`,
-//!   `StubMediaStorage`, future S3-backed impl).
+//!   `StubMediaStorage`, `S3MediaStorage`).
 //!
 //! New external-service adapters (KYC, SMS, payment processors) belong
 //! here, not in [`common`](crate::common): `common` is reserved for
@@ -22,4 +22,6 @@ pub mod email;
 pub mod storage;
 
 pub use email::{EmailError, EmailMessage, EmailSender, LoggingEmailSender};
-pub use storage::{MediaStorage, SharedMediaStorage, StorageError, StubMediaStorage};
+pub use storage::{
+    MediaStorage, S3MediaStorage, SharedMediaStorage, StorageError, StubMediaStorage,
+};

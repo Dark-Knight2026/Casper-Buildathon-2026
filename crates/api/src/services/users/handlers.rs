@@ -781,7 +781,7 @@ pub async fn upload_avatar(
     let key = format!("avatars/{}.{}", user_id, detected.ext);
     let avatar_url = state
         .media_storage
-        .put(&key, bytes, detected.mime)
+        .put(&key, &bytes, detected.mime)
         .await
         .map_err(|err| match err {
             StorageError::Transport(detail) => ApiError::Internal(detail),
