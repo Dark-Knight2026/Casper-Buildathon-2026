@@ -31,6 +31,17 @@ export const FEATURED_PROPERTIES: FeaturedProperty[] = [
     views: 142,
     createdAt: new Date('2026-03-01'),
     updatedAt: new Date('2026-04-01'),
+    // TODO(backend, Task 11): replace mock POIs with landlord-entered data
+    // from GET /api/v1/properties/:id.
+    surroundingArea: [
+      { category: 'hospital', name: "Sentara Virginia Beach General", distanceMiles: 8 },
+      { category: 'school', name: 'Cape Henry Collegiate', distanceMiles: 2 },
+      { category: 'gym', name: 'Onelife Fitness', distanceMiles: 4 },
+      { category: 'airport', name: 'Norfolk International (ORF)', distanceMiles: 15 },
+      { category: 'park', name: 'First Landing State Park', distanceMiles: 1 },
+      { category: 'grocery', name: 'Harris Teeter', distanceMiles: 2 },
+      { category: 'transit', name: 'HRT Route 20 stop', distanceMiles: 5 },
+    ],
     priceChange: '+2.5%', rating: 4.8, daysOnMarket: 12, photoCount: 24,
   },
   {
@@ -63,6 +74,15 @@ export const FEATURED_PROPERTIES: FeaturedProperty[] = [
     views: 98,
     createdAt: new Date('2026-03-10'),
     updatedAt: new Date('2026-04-02'),
+    surroundingArea: [
+      { category: 'hospital', name: 'Sentara Norfolk General', distanceMiles: 1 },
+      { category: 'school', name: 'Norfolk Academy', distanceMiles: 1 },
+      { category: 'gym', name: 'Crunch Fitness Downtown', distanceMiles: 0.5 },
+      { category: 'airport', name: 'Norfolk International (ORF)', distanceMiles: 8 },
+      { category: 'park', name: 'Town Point Park', distanceMiles: 1 },
+      { category: 'grocery', name: 'Whole Foods Granby', distanceMiles: 0.3 },
+      { category: 'transit', name: 'Norfolk Tide MacArthur Sq stop', distanceMiles: 0.2 },
+    ],
     priceChange: '+1.8%', rating: 4.6, daysOnMarket: 8, photoCount: 18,
   },
   {
@@ -95,6 +115,15 @@ export const FEATURED_PROPERTIES: FeaturedProperty[] = [
     views: 76,
     createdAt: new Date('2026-03-05'),
     updatedAt: new Date('2026-03-25'),
+    surroundingArea: [
+      { category: 'hospital', name: 'Chesapeake Regional Medical Center', distanceMiles: 6 },
+      { category: 'school', name: 'Greenbrier Primary School', distanceMiles: 1 },
+      { category: 'gym', name: 'YMCA of South Hampton Roads', distanceMiles: 3 },
+      { category: 'airport', name: 'Norfolk International (ORF)', distanceMiles: 18 },
+      { category: 'park', name: 'Chesapeake City Park', distanceMiles: 2 },
+      { category: 'grocery', name: 'Food Lion', distanceMiles: 1.5 },
+      { category: 'transit', name: 'HRT Route 33 stop', distanceMiles: 4 },
+    ],
     priceChange: '+3.2%', rating: 4.7, daysOnMarket: 15, photoCount: 21,
   },
   {
@@ -127,6 +156,15 @@ export const FEATURED_PROPERTIES: FeaturedProperty[] = [
     views: 203,
     createdAt: new Date('2026-02-15'),
     updatedAt: new Date('2026-03-30'),
+    surroundingArea: [
+      { category: 'hospital', name: 'Sentara Princess Anne Hospital', distanceMiles: 12 },
+      { category: 'school', name: 'Cox High School', distanceMiles: 5 },
+      { category: 'gym', name: 'Onelife Fitness', distanceMiles: 8 },
+      { category: 'airport', name: 'Norfolk International (ORF)', distanceMiles: 25 },
+      { category: 'park', name: 'Red Wing Park', distanceMiles: 4 },
+      { category: 'grocery', name: 'Wegmans Virginia Beach', distanceMiles: 3 },
+      { category: 'transit', name: 'HRT Route 36 stop', distanceMiles: 15, note: 'limited service' },
+    ],
     priceChange: '+1.2%', rating: 4.9, daysOnMarket: 22, photoCount: 32,
   },
   {
@@ -159,6 +197,15 @@ export const FEATURED_PROPERTIES: FeaturedProperty[] = [
     views: 54,
     createdAt: new Date('2026-03-20'),
     updatedAt: new Date('2026-04-05'),
+    surroundingArea: [
+      { category: 'hospital', name: 'Bon Secours Maryview Medical Center', distanceMiles: 3 },
+      { category: 'school', name: 'Norfolk Highlands Primary', distanceMiles: 2 },
+      { category: 'gym', name: 'YMCA Portsmouth Family Branch', distanceMiles: 1 },
+      { category: 'airport', name: 'Norfolk International (ORF)', distanceMiles: 10 },
+      { category: 'park', name: 'High Street Landing Park', distanceMiles: 1 },
+      { category: 'grocery', name: 'Harris Teeter', distanceMiles: 0.5 },
+      { category: 'transit', name: 'HRT Ferry — Portsmouth Landing', distanceMiles: 0.4 },
+    ],
     priceChange: '+4.1%', rating: 4.5, daysOnMarket: 18, photoCount: 16,
   },
   {
@@ -191,6 +238,15 @@ export const FEATURED_PROPERTIES: FeaturedProperty[] = [
     views: 117,
     createdAt: new Date('2026-04-01'),
     updatedAt: new Date('2026-04-06'),
+    surroundingArea: [
+      { category: 'hospital', name: 'Sentara Norfolk General', distanceMiles: 2 },
+      { category: 'school', name: 'Maury High School', distanceMiles: 1 },
+      { category: 'gym', name: 'OrangeTheory Norfolk', distanceMiles: 0.3 },
+      { category: 'airport', name: 'Norfolk International (ORF)', distanceMiles: 7 },
+      { category: 'park', name: 'NEON District green', distanceMiles: 0.8 },
+      { category: 'grocery', name: 'Whole Foods Granby', distanceMiles: 0.2 },
+      { category: 'transit', name: 'Norfolk Tide NEON stop', distanceMiles: 0.1 },
+    ],
     priceChange: '+2.8%', rating: 4.8, daysOnMarket: 6, photoCount: 19,
   },
 ];

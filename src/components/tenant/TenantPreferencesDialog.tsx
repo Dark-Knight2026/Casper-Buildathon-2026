@@ -19,6 +19,7 @@ import { ALL_AMENITIES } from '@/types/property';
 import type { PropertyType } from '@/types/property';
 import type { PreferredLocation, RentalPreferences } from '@/types/tenantPreferences';
 import { EMPTY_PREFERENCES } from '@/data/tenantPreferences';
+import { SurroundingAreaFilter } from '@/components/search/SurroundingAreaFilter';
 
 // Subset of the wider PropertyType union exposed in the form. The lowercase
 // variants in the union are legacy aliases — not surfaced to users.
@@ -330,6 +331,24 @@ export function TenantPreferencesDialog({
                 );
               })}
             </div>
+          </fieldset>
+
+          {/*
+            Task 9 — surrounding-area must-haves.
+            TODO(backend, Task 6 matcher): include these constraints in
+            GET /api/v1/properties/recommended ranking + the response's
+            matchedCategories[] (new 'surrounding' MatchCategory).
+          */}
+          <fieldset className="space-y-3">
+            <SurroundingAreaFilter
+              value={draft.surroundingArea as Record<string, number> | undefined}
+              onChange={(next) =>
+                setDraft((d) => ({
+                  ...d,
+                  surroundingArea: next as RentalPreferences['surroundingArea'],
+                }))
+              }
+            />
           </fieldset>
         </div>
 

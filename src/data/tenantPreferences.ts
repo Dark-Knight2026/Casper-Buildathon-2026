@@ -62,6 +62,7 @@ export const EMPTY_PREFERENCES: RentalPreferences = {
   locations: [],
   propertyTypes: [],
   amenities: [],
+  surroundingArea: undefined,
 };
 
 export function getStoredPreferences(tenantId: string): RentalPreferences | null {

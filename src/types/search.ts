@@ -36,7 +36,21 @@ export interface SearchFilters {
   bedroomRange?: { min?: number; max?: number };
   bathroomRange?: { min?: number; max?: number };
   location?: string[];
-  
+
+  // Task 9 — In-home amenities (boolean toggles).
+  // Values come from IN_HOME_AMENITIES in src/data/amenityCategories.ts.
+  // TODO(backend): serialise as `amenity_in_home[]` repeating query params
+  //   on GET /api/v1/properties/search. AND semantics across entries.
+  amenitiesInHome?: string[];
+
+  // Task 9 — Surrounding-area filters.
+  // Key = SurroundingCategory; value = max distance in miles.
+  // Categories come from SURROUNDING_CATEGORIES.
+  // TODO(backend): serialise as `amenity_nearby[<category>]=<miles>` repeating
+  //   query params; server filters POIs via haversine (or PostGIS ST_DWithin)
+  //   on property.surroundingArea entries.
+  amenitiesNearby?: Record<string, number>;
+
   // Tenant filters
   tenantStatus?: string[];
   leaseStatus?: string[];

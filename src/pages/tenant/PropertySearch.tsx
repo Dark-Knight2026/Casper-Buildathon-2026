@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FEATURED_PROPERTIES } from '@/data/featuredProperties';
 import { Button } from '@/components/ui/button';
@@ -7,6 +7,9 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Slider } from '@/components/ui/slider';
 import { PropertyCard } from '@/components/property/PropertyCard';
+import { InHomeAmenitiesFilter } from '@/components/search/InHomeAmenitiesFilter';
+import { SurroundingAreaFilter } from '@/components/search/SurroundingAreaFilter';
+import { applyExtendedSearchFilters } from '@/lib/extendedSearchFilter';
 import {
   Select,
   SelectContent,
@@ -200,13 +203,25 @@ export default function PropertySearch() {
   const [propertyType, setPropertyType] = useState('all');
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
 
+  // Task 9 — extended search state (in-home amenities + surrounding area).
+  // TODO(backend): pass these straight through as query params on
+  // GET /api/v1/properties/search and drop the client-side helper below.
+  const [amenitiesInHome, setAmenitiesInHome] = useState<string[] | undefined>(undefined);
+  const [amenitiesNearby, setAmenitiesNearby] = useState<
+    Record<string, number> | undefined
+  >(undefined);
+
   const isPriceFiltered =
     priceRange[0] !== PRICE_DEFAULT[0] || priceRange[1] !== PRICE_DEFAULT[1];
+  const extendedFiltersCount =
+    (amenitiesInHome && amenitiesInHome.length > 0 ? 1 : 0) +
+    (amenitiesNearby && Object.keys(amenitiesNearby).length > 0 ? 1 : 0);
   const activeFilters =
     (isPriceFiltered ? 1 : 0) +
     (bedrooms > 0 ? 1 : 0) +
     (bathrooms > 0 ? 1 : 0) +
-    [squareFeet, propertyType].filter((f) => f !== 'all').length;
+    [squareFeet, propertyType].filter((f) => f !== 'all').length +
+    extendedFiltersCount;
 
   const resetFilters = () => {
     setSearchTerm('');
@@ -215,7 +230,23 @@ export default function PropertySearch() {
     setBathrooms(0);
     setSquareFeet('all');
     setPropertyType('all');
+    setAmenitiesInHome(undefined);
+    setAmenitiesNearby(undefined);
   };
+
+  // Task 9 demo matcher — runs against FEATURED_PROPERTIES (which retains the
+  // full Property shape incl. surroundingArea) and yields the set of allowed
+  // property ids. The other filters below operate on the local mapped
+  // properties. Becomes a server call once /properties/search supports the
+  // amenity_in_home[]/amenity_nearby[] params.
+  const allowedByExtended = useMemo<Set<string> | null>(() => {
+    if (extendedFiltersCount === 0) return null;
+    const matches = applyExtendedSearchFilters(FEATURED_PROPERTIES, {
+      amenitiesInHome,
+      amenitiesNearby,
+    });
+    return new Set(matches.map((m) => m.property.id));
+  }, [amenitiesInHome, amenitiesNearby, extendedFiltersCount]);
 
   const filteredProperties = properties.filter((property) => {
     if (searchTerm) {
@@ -241,6 +272,8 @@ export default function PropertySearch() {
     }
 
     if (propertyType !== 'all' && property.property_type !== propertyType) return false;
+
+    if (allowedByExtended && !allowedByExtended.has(property.id)) return false;
 
     return true;
   });
@@ -276,11 +309,12 @@ export default function PropertySearch() {
                   )}
                 </Button>
               </DialogTrigger>
-              <DialogContent className="sm:max-w-md">
+              <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
                 <DialogHeader>
                   <DialogTitle>Filters</DialogTitle>
                   <DialogDescription>
-                    Refine results by price, size, and property type.
+                    Refine results by price, size, property type, and what's
+                    inside the unit or nearby.
                   </DialogDescription>
                 </DialogHeader>
 
@@ -383,6 +417,22 @@ export default function PropertySearch() {
                     placeholder="Property Type"
                     options={PROPERTY_TYPE_OPTIONS}
                   />
+
+                  {/* Task 9 — in-home amenities */}
+                  <div className="pt-2 border-t">
+                    <InHomeAmenitiesFilter
+                      value={amenitiesInHome}
+                      onChange={setAmenitiesInHome}
+                    />
+                  </div>
+
+                  {/* Task 9 — surrounding-area filters */}
+                  <div className="pt-2 border-t">
+                    <SurroundingAreaFilter
+                      value={amenitiesNearby}
+                      onChange={setAmenitiesNearby}
+                    />
+                  </div>
                 </div>
 
                 <DialogFooter className="gap-2 sm:gap-0">

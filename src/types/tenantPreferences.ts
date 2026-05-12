@@ -1,4 +1,4 @@
-import type { Property, PropertyType } from '@/types/property';
+import type { Property, PropertyType, SurroundingCategory } from '@/types/property';
 
 // Profile-level rental preferences. All fields optional (nullable) so a
 // half-filled form is valid — tenant can save what they know and refine later.
@@ -11,6 +11,14 @@ export interface RentalPreferences {
   locations: PreferredLocation[];
   propertyTypes: PropertyType[];
   amenities: string[];
+  // Task 9 — must-have surrounding-area POIs.
+  // Key = SurroundingCategory; value = max distance in miles.
+  // Empty/undefined = no constraint.
+  // TODO(backend, Task 6 matcher): when this is non-empty, the
+  // GET /api/v1/properties/recommended matcher must also rank/filter by POI
+  // distance. Until that lands, recommendations ignore this field; only the
+  // PropertySearch page applies it client-side.
+  surroundingArea?: Partial<Record<SurroundingCategory, number>>;
 }
 
 export interface PreferredLocation {
@@ -39,7 +47,11 @@ export type MatchCategory =
   | 'sqft'
   | 'location'
   | 'type'
-  | 'amenities';
+  | 'amenities'
+  // Task 9 — added so recommendations can also score surrounding-area
+  // match. Backend matcher must update its `matchedCategories[]` to include
+  // this when relevant.
+  | 'surrounding';
 
 export type RecommendationSource = 'preferences' | 'implicit-current-lease';
 
@@ -54,6 +66,7 @@ export const ALL_MATCH_CATEGORIES: readonly MatchCategory[] = [
   'location',
   'type',
   'amenities',
+  'surrounding',
 ] as const;
 
 export function isPreferenceSet(prefs: RentalPreferences, category: MatchCategory): boolean {
@@ -72,6 +85,8 @@ export function isPreferenceSet(prefs: RentalPreferences, category: MatchCategor
       return prefs.propertyTypes.length > 0;
     case 'amenities':
       return prefs.amenities.length > 0;
+    case 'surrounding':
+      return !!prefs.surroundingArea && Object.keys(prefs.surroundingArea).length > 0;
   }
 }
 
