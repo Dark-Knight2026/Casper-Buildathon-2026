@@ -198,6 +198,80 @@ fn init_args(
 }
 
 // =============================================================================
+// init()
+// =============================================================================
+
+#[test]
+fn test_init_should_initialize_fixed_supply_property_token() {
+    let ctx = setup(odra_test::env());
+
+    assert!(
+        ctx.token.has_role(&DEFAULT_ADMIN_ROLE, &ctx.owner),
+        "Owner should have DEFAULT_ADMIN_ROLE",
+    );
+
+    assert!(
+        ctx.token
+            .has_role(&ctx.token.token_manager_role(), &ctx.token_manager),
+        "Token manager should have TOKEN_MANAGER role",
+    );
+
+    assert_eq!(
+        ctx.token.get_property_id(),
+        ctx.property_id,
+        "Invalid property ID",
+    );
+
+    assert_eq!(
+        ctx.token.get_compliance_policy_contract(),
+        ctx.compliance.address(),
+        "Invalid compliance policy address",
+    );
+
+    assert_eq!(
+        ctx.token.name(),
+        String::from("LeaseFi Property Fraction"),
+        "Invalid token name",
+    );
+
+    assert_eq!(
+        ctx.token.symbol(),
+        String::from("LFPROP"),
+        "Invalid token symbol",
+    );
+    assert_eq!(ctx.token.decimals(), 18, "Invalid decimals");
+
+    assert_eq!(
+        ctx.token.total_supply(),
+        ctx.initial_supply,
+        "Invalid total supply",
+    );
+
+    assert_eq!(
+        ctx.token.balance_of(&ctx.initial_holder),
+        ctx.initial_supply,
+        "Initial holder should receive the full supply",
+    );
+
+    assert!(ctx.env.emitted_event(
+        &ctx.token,
+        CompliancePolicySet {
+            compliance_policy: ctx.compliance.address(),
+        }
+    ));
+
+    assert!(ctx.env.emitted_event(
+        &ctx.token,
+        PropertyFractionTokenInitialized {
+            property_id: ctx.property_id,
+            initial_holder: ctx.initial_holder,
+            initial_supply: ctx.initial_supply,
+            compliance_policy: ctx.compliance.address(),
+        }
+    ));
+}
+
+// =============================================================================
 // transfer()
 // =============================================================================
 
