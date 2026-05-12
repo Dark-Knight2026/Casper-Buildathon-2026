@@ -21,7 +21,10 @@ use leasefi_contracts::lease::{
 use leasefi_contracts::nft::{errors::Error as NftError, types::NFTInitParams};
 use leasefi_contracts::roles::{Roles, RolesHostRef, RolesInitArgs};
 
-use crate::nft::{NFTHostRef, NFTInitArgs, NFT};
+use crate::{
+    lease::types::LeaseEquityOption,
+    nft::{NFTHostRef, NFTInitArgs, NFT},
+};
 
 // =============================================================================
 // Test Context
@@ -111,6 +114,7 @@ fn setup(env: HostEnv) -> TestData {
 fn generate_lease_agreement_creation_params(test_data: &TestData) -> CreateLeaseAgreementParams {
     CreateLeaseAgreementParams {
         tenant: test_data.env.get_account(0),
+        equity_option: None,
         monthly_rent: CurrencyAmount::new(None, U256::from_dec_str("250000000000000000").unwrap()),
         security_deposit: CurrencyAmount::new(
             None,
@@ -452,6 +456,7 @@ fn test_create_lease_agreement_should_create_lease_agreement_properly() {
         LeaseAgreement {
             tenant: params.tenant,
             landlord: test_data.landlord,
+            equity_option: None,
             monthly_rent: params.monthly_rent,
             security_deposit: params.security_deposit,
             invoices_ids: (0..=12).map(U256::from).collect(),
@@ -498,6 +503,70 @@ fn test_create_lease_agreement_should_create_lease_agreement_properly() {
             i
         );
     }
+}
+
+#[test]
+fn test_create_lease_agreement_with_equity_option_should_mark_tenant_equity_eligible() {
+    let mut test_data = setup(odra_test::env());
+    let mut params = generate_lease_agreement_creation_params(&test_data);
+    let property_id = U256::from(77);
+
+    params.equity_option = Some(LeaseEquityOption { property_id });
+
+    let lease_agreement_id = test_data.lease.create_lease_agreement(params.clone());
+    let lease_agreement = test_data
+        .lease
+        .get_lease_agreement_by_id(&lease_agreement_id);
+
+    assert_eq!(
+        lease_agreement.equity_option, params.equity_option,
+        "Lease should store the equity option",
+    );
+
+    assert!(
+        test_data
+            .lease
+            .is_equity_eligible(property_id, params.tenant),
+        "Tenant should be equity eligible for the property",
+    );
+
+    assert!(
+        !test_data
+            .lease
+            .is_equity_eligible(property_id + U256::one(), params.tenant),
+        "Tenant should not be equity eligible for a different property",
+    );
+
+    assert!(
+        !test_data
+            .lease
+            .is_equity_eligible(property_id, test_data.env.get_account(1)),
+        "A different account should not be equity eligible",
+    );
+}
+
+#[test]
+fn test_create_lease_agreement_without_equity_option_should_not_mark_tenant_equity_eligible() {
+    let mut test_data = setup(odra_test::env());
+    let params = generate_lease_agreement_creation_params(&test_data);
+    let property_id = U256::from(77);
+
+    let lease_agreement_id = test_data.lease.create_lease_agreement(params.clone());
+    let lease_agreement = test_data
+        .lease
+        .get_lease_agreement_by_id(&lease_agreement_id);
+
+    assert_eq!(
+        lease_agreement.equity_option, None,
+        "Lease should not store an equity options",
+    );
+
+    assert!(
+        !test_data
+            .lease
+            .is_equity_eligible(property_id, params.tenant),
+        "Tenant should not be equity eligible without an equity options",
+    );
 }
 
 // =============================================================================

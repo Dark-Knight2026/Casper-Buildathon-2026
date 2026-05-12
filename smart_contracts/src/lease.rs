@@ -1,5 +1,11 @@
-use odra::{casper_types::U256, prelude::*, uints::ToU512, ContractRef};
+use odra::{
+    casper_types::{bytesrepr::ToBytes, U256},
+    prelude::*,
+    uints::ToU512,
+    ContractRef,
+};
 use odra_modules::{access::Ownable, cep18_token::Cep18ContractRef};
+use sha3::{Digest, Keccak256};
 
 use crate::{
     common::CurrencyAmount,
@@ -24,9 +30,15 @@ pub mod types {
     use crate::common::CurrencyAmount;
 
     #[odra::odra_type]
+    pub struct LeaseEquityOption {
+        pub property_id: U256,
+    }
+
+    #[odra::odra_type]
     pub struct LeaseAgreement {
         pub tenant: Address,
         pub landlord: Address,
+        pub equity_option: Option<LeaseEquityOption>,
         pub monthly_rent: CurrencyAmount,
         pub security_deposit: CurrencyAmount,
         pub invoices_ids: Vec<U256>,
@@ -39,6 +51,7 @@ pub mod types {
     #[odra::odra_type]
     pub struct CreateLeaseAgreementParams {
         pub tenant: Address,
+        pub equity_option: Option<LeaseEquityOption>,
         pub monthly_rent: CurrencyAmount,
         pub security_deposit: CurrencyAmount,
         pub start: u64,
@@ -109,6 +122,7 @@ pub struct Lease {
     escrow: External<EscrowContractRef>,
     nft: External<NFTContractRef>,
     leases: Mapping<U256, LeaseAgreement>,
+    equity_eligible: Mapping<[u8; 32], bool>,
     leases_count: Var<U256>,
 }
 
@@ -198,6 +212,11 @@ impl Lease {
         true
     }
 
+    pub fn is_equity_eligible(&self, property_id: U256, account: Address) -> bool {
+        self.equity_eligible
+            .get_or_default(&self.equity_key(property_id, account))
+    }
+
     // =========================================================================
     // Lease Management
     // =========================================================================
@@ -258,9 +277,17 @@ impl Lease {
         let token_id = self.nft.mint(params.tenant, metadata);
         self.nft.set_frozen_tokens(&token_id, true);
 
+        if let Some(equity_option) = &params.equity_option {
+            self.equity_eligible.set(
+                &self.equity_key(equity_option.property_id, params.tenant),
+                true,
+            );
+        }
+
         let lease_agreement = LeaseAgreement {
             tenant: params.tenant,
             landlord,
+            equity_option: params.equity_option,
             monthly_rent,
             security_deposit: params.security_deposit,
             invoices_ids,
@@ -446,5 +473,14 @@ impl Lease {
                 tenant,
             );
         }
+    }
+
+    fn equity_key(&self, property_id: U256, account: Address) -> [u8; 32] {
+        let mut hasher = Keccak256::default();
+
+        hasher.update(property_id.to_bytes().unwrap_or_revert(self));
+        hasher.update(account.to_bytes().unwrap_or_revert(self));
+
+        hasher.finalize().into()
     }
 }
