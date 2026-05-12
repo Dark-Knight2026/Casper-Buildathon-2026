@@ -6,11 +6,13 @@ use crate::{
     compliance_policy::{
         errors::Error,
         events::{
-            ComplianceConfigSet, InvestorRegistrySet, PropertyRegistrySet, TransferExemptSet,
+            ComplianceConfigSet, InvestorRegistrySet, LeaseSet, PropertyRegistrySet,
+            TransferExemptSet,
         },
         types::ComplianceConfig,
     },
     investor_registry::InvestorRegistryContractRef,
+    lease::LeaseContractRef,
     property_registry::PropertyRegistryContractRef,
 };
 
@@ -27,7 +29,14 @@ pub const ROLE_COMPLIANCE_MANAGER: &str = "COMPLIANCE_MANAGER";
 pub mod types {
     #[odra::odra_type]
     pub struct ComplianceConfig {
+        /// Enables normal transfers for this property.
+        /// @dev The property must still be active in `PropertyRegistry`.
         pub transfers_enabled: bool,
+        /// Requires issuer/landlord/protocol equity distributions to go only to tenants
+        /// with an equity-option lease for this property
+        /// @dev This applies only when the sender is transfer-exempt and the recipient is not.
+        ///      Secondary investor-to-investor tranfers still use normal KYC/compliance checks.
+        pub equity_distribution_requires_lease_option: bool,
     }
 }
 
@@ -52,12 +61,18 @@ pub mod events {
     pub struct ComplianceConfigSet {
         pub property_id: U256,
         pub transfers_enabled: bool,
+        pub equity_distribution_requires_lease_option: bool,
     }
 
     #[odra::event]
     pub struct TransferExemptSet {
         pub account: Address,
         pub exempt: bool,
+    }
+
+    #[odra::event]
+    pub struct LeaseSet {
+        pub lease: Address,
     }
 }
 
@@ -77,6 +92,7 @@ pub mod errors {
         SenderNotVerified = 1004,
         RecipientNotVerified = 1005,
         InvalidPropertyToken = 1006,
+        RecipientNotEquityEligible = 1007,
     }
 }
 
@@ -89,11 +105,13 @@ pub mod errors {
   PropertyRegistrySet,
   ComplianceConfigSet,
   TransferExemptSet,
+  LeaseSet,
 ])]
 pub struct CompliancePolicy {
     access_control: SubModule<AccessControl>,
     investor_registry: External<InvestorRegistryContractRef>,
     property_registry: External<PropertyRegistryContractRef>,
+    lease: External<LeaseContractRef>,
     configs: Mapping<U256, ComplianceConfig>,
     transfer_exempt_accounts: Mapping<Address, bool>,
 }
@@ -104,11 +122,18 @@ impl CompliancePolicy {
     // Initialization
     // =============================================================================
 
-    pub fn init(&mut self, owner: Address, investor_registry: Address, property_registry: Address) {
+    pub fn init(
+        &mut self,
+        owner: Address,
+        investor_registry: Address,
+        property_registry: Address,
+        lease: Address,
+    ) {
         self.access_control
             .unchecked_grant_role(&DEFAULT_ADMIN_ROLE, &owner);
         self.investor_registry.set(investor_registry);
         self.property_registry.set(property_registry);
+        self.lease.set(lease);
     }
 
     // =============================================================================
@@ -147,6 +172,21 @@ impl CompliancePolicy {
             .emit_event(PropertyRegistrySet { property_registry });
     }
 
+    /// Sets the lease contract used for equity-option elgibility checks.
+    /// @dev Restricted to `DEFAULT_ADMIN_ROLE`
+    pub fn set_lease(&mut self, lease: Address) {
+        if !self
+            .access_control
+            .has_role(&DEFAULT_ADMIN_ROLE, &self.env().caller())
+        {
+            self.env().revert(Error::NotAuthorized);
+        }
+
+        self.lease.set(lease);
+
+        self.env().emit_event(LeaseSet { lease });
+    }
+
     /// Sets the transfer configuration for a property
     /// Restricted to the `COMPLIANCE_MANAGER`.
     /// @dev Transfers are disabled by default. A property must also be active in `PropertyRegistry`
@@ -155,12 +195,15 @@ impl CompliancePolicy {
         self.assert_role(ROLE_COMPLIANCE_MANAGER);
 
         let transfers_enabled = config.transfers_enabled;
+        let equity_distribution_requires_lease_option =
+            config.equity_distribution_requires_lease_option;
 
         self.configs.set(&property_id, config);
 
         self.env().emit_event(ComplianceConfigSet {
             property_id,
             transfers_enabled,
+            equity_distribution_requires_lease_option,
         });
     }
 
@@ -190,10 +233,16 @@ impl CompliancePolicy {
         *self.property_registry.address()
     }
 
+    /// Returns the lease contract address.
+    pub fn get_lease_contract(&self) -> Address {
+        *self.lease.address()
+    }
+
     /// Returns the compliance config for a property
     pub fn get_compliance_config(&self, property_id: U256) -> ComplianceConfig {
         self.configs.get(&property_id).unwrap_or(ComplianceConfig {
             transfers_enabled: false,
+            equity_distribution_requires_lease_option: false,
         })
     }
 
@@ -285,7 +334,9 @@ impl CompliancePolicy {
             return Some(Error::PropertyNotActive);
         }
 
-        if !self.get_compliance_config(property_id).transfers_enabled {
+        let config = self.get_compliance_config(property_id);
+
+        if !config.transfers_enabled {
             return Some(Error::TransfersDisabled);
         }
 
@@ -295,6 +346,15 @@ impl CompliancePolicy {
 
         if !self.is_transfer_exempt(to) && !self.investor_registry.is_verified(to) {
             return Some(Error::RecipientNotVerified);
+        }
+
+        let is_equity_distribution = self.is_transfer_exempt(from) && !self.is_transfer_exempt(to);
+
+        if is_equity_distribution
+            && config.equity_distribution_requires_lease_option
+            && !self.lease.is_equity_eligible(property_id, to)
+        {
+            return Some(Error::RecipientNotEquityEligible);
         }
 
         None
