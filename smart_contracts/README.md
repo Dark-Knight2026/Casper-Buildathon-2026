@@ -28,7 +28,9 @@ Each contract is modular, upgradeable, and interacts with others through well-de
 
 6. `Lease` - implements the property leasing logic. Key features include creation and lifecycle management of lease
    agreements, validation of lease periods and payment schedules, integration with the `Escrow` contract for invoice
-   generation and payments, emission of lease-related events. Acts as the core contract coordinating leasing mechanics.
+   generation and payments, emission of lease-related events. Supports optional equity options that grant tenants
+   eligibility for property-token distributions, emitting `EquityEligibilityGranted` events. Acts as the core contract
+   coordinating leasing mechanics.
 
 7. `Staking` - allows users to stake the `BigCoin` token to earn rewards in the `BigCoin` token. This
    contract provides: stake/unstake functionality, rewards calculation and distribution, integration with the `Treasury`

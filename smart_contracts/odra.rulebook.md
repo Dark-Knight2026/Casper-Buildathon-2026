@@ -973,7 +973,7 @@ The following table lists all current error discriminant range assignments acros
 | **NFT**              | `100–199`   | 100  | 7           | `CallerNotMinter = 100`         | `NotAuthorized = 106`                          |
 | **Treasury**         | `200–299`   | 200  | 6           | `BigCoinContractIsNotSet = 200` | `InsufficientWithdrawalTokenAmount = 205`      |
 | **Escrow**           | `300–399`   | 300  | 11          | `CallerNotLeaseContract = 300`  | `EqualBuyerAndSeller = 310`                    |
-| **Lease**            | `400–499`   | 400  | 8           | `CallerNotLandlord = 400`       | `SecurityDepositChargeIsTooHigh = 408`         |
+| **Lease**            | `400–499`   | 400  | 9           | `CallerNotLandlord = 400`       | `SecurityDepositChargeIsTooHigh = 408`         |
 | **ICO**              | `500–599`   | 500  | 15          | `InvalidICOScheduleId = 500`    | `ICOScheduleCliffExceedsVestingDuration = 514` |
 | **Staking**          | `600–699`   | 600  | 14          | `BigCoinContractIsNotSet = 601` | `CallerNotAuthorizedToManageLocks = 614`       |
 | **Vesting**          | `700–799`   | 700  | 8           | `CallerNotWhitelisted = 701`    | `ClaimBlockedByActiveUnbonding = 708`          |
