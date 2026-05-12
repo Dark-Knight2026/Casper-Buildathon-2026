@@ -481,7 +481,15 @@ export default function PropertySearch() {
                 daysOnMarket: property.daysOnMarket,
                 photoCount: property.photoCount,
               }}
-              onClick={() => navigate(`/properties/${property.id}`, { state: { property } })}
+              onClick={() => {
+                // PropertyDetail reads camelCase fields (rent, latitude, zipCode,
+                // securityDeposit) off router state; the local `property` here
+                // is the snake_case PropertyCard projection (price/zip_code/
+                // square_feet) and lacks rent/lat/lng. Resolve the original
+                // FeaturedProperty so PropertyDetail gets a complete object.
+                const original = FEATURED_PROPERTIES.find((p) => p.id === property.id);
+                navigate(`/properties/${property.id}`, { state: { property: original ?? null } });
+              }}
             />
           ))}
         </div>
