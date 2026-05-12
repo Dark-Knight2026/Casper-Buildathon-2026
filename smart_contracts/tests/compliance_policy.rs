@@ -1,23 +1,34 @@
 use leasefi_contracts::{
+    common::CurrencyAmount,
     compliance_policy::{
         errors::Error as ComplianceError,
-        events::{ComplianceConfigSet, TransferExemptSet},
+        events::{ComplianceConfigSet, LeaseSet, TransferExemptSet},
         types::ComplianceConfig,
         CompliancePolicy, CompliancePolicyHostRef, CompliancePolicyInitArgs,
     },
+    constants::ONE_MONTH_IN_SECONDS,
+    escrow::{Escrow, EscrowHostRef, EscrowInitArgs},
     investor_registry::{
         types::InvestorRecord, InvestorRegistry, InvestorRegistryHostRef, InvestorRegistryInitArgs,
     },
+    lease::{
+        types::{CreateLeaseAgreementParams, LeaseEquityOption},
+        Lease, LeaseHostRef, LeaseInitArgs,
+    },
+    nft::{types::NFTInitParams, NFT},
     property_registry::{
         types::{CreatePropertyParams, PropertyStatus},
         PropertyRegistry, PropertyRegistryHostRef, PropertyRegistryInitArgs,
     },
+    roles::{Roles, RolesHostRef, RolesInitArgs},
 };
 use odra::{
     casper_types::U256,
     host::{Deployer, HostEnv},
     prelude::*,
 };
+
+use crate::nft::{NFTHostRef, NFTInitArgs};
 
 // =============================================================================
 // Test Context
@@ -28,6 +39,10 @@ struct Context {
     compliance: CompliancePolicyHostRef,
     investor_registry: InvestorRegistryHostRef,
     property_registry: PropertyRegistryHostRef,
+    lease: LeaseHostRef,
+    roles: RolesHostRef,
+    escrow: EscrowHostRef,
+    nft: NFTHostRef,
     compliance_manager: Address,
     verification_manager: Address,
     property_manager: Address,
@@ -35,6 +50,7 @@ struct Context {
     recipient: Address,
     property_token: Address,
     revenue_distributor: Address,
+    landlord: Address,
 }
 
 fn setup(env: HostEnv) -> Context {
@@ -45,6 +61,14 @@ fn setup(env: HostEnv) -> Context {
     let recipient = env.get_account(5);
     let property_token = env.get_account(6);
     let revenue_distributor = env.get_account(7);
+    let landlord = env.get_account(8);
+
+    let mut roles = Roles::deploy(
+        &env,
+        RolesInitArgs {
+            admin: env.get_account(0),
+        },
+    );
 
     let mut investor_registry = InvestorRegistry::deploy(
         &env,
@@ -60,14 +84,56 @@ fn setup(env: HostEnv) -> Context {
         },
     );
 
+    let mut escrow = Escrow::deploy(
+        &env,
+        EscrowInitArgs {
+            owner: env.get_account(0),
+            min_deadline: 5 * 60,
+        },
+    );
+
+    let mut lease = Lease::deploy(
+        &env,
+        LeaseInitArgs {
+            owner: env.get_account(0),
+        },
+    );
+
+    let mut nft = NFT::deploy(
+        &env,
+        NFTInitArgs {
+            params: NFTInitParams {
+                owner: env.get_account(0),
+                symbol: String::from("LEASE"),
+                name: String::from("LEASE"),
+                minters: vec![lease.address()],
+                burners: vec![],
+                whitelist_managers: vec![env.get_account(0)],
+                freezers: vec![lease.address()],
+                force_transferers: vec![],
+            },
+        },
+    );
+
     let mut compliance = CompliancePolicy::deploy(
         &env,
         CompliancePolicyInitArgs {
             owner: env.get_account(0),
             investor_registry: investor_registry.address(),
             property_registry: property_registry.address(),
+            lease: lease.address(),
         },
     );
+
+    lease.set_escrow(escrow.address());
+    lease.set_roles(roles.address());
+    lease.set_nft(nft.address());
+
+    escrow.set_lease(lease.address());
+    escrow.set_treasury(env.get_account(19));
+
+    nft.add_to_whitelist(&env.get_account(0));
+    nft.add_to_whitelist(&recipient);
 
     investor_registry.grant_role(
         &investor_registry.verification_manager_role(),
@@ -79,17 +145,28 @@ fn setup(env: HostEnv) -> Context {
         &property_manager,
     );
 
+    roles.grant_role(
+        &roles.get_role_admin(&roles.get_landlord_role()),
+        &env.get_account(0),
+    );
+    roles.grant_role(&roles.get_landlord_role(), &landlord);
+
     compliance.grant_role(&compliance.compliance_manager_role(), &compliance_manager);
 
     env.set_caller(env.get_account(0)); // Owner
     compliance.set_investor_registry(investor_registry.address());
     compliance.set_property_registry(property_registry.address());
+    compliance.set_lease(lease.address());
 
     Context {
         env,
         compliance,
         investor_registry,
         property_registry,
+        lease,
+        roles,
+        escrow,
+        nft,
         compliance_manager,
         verification_manager,
         property_manager,
@@ -97,6 +174,7 @@ fn setup(env: HostEnv) -> Context {
         recipient,
         property_token,
         revenue_distributor,
+        landlord,
     }
 }
 
@@ -164,6 +242,7 @@ fn enable_transfers(ctx: &mut Context, property_id: U256) {
         property_id,
         ComplianceConfig {
             transfers_enabled: true,
+            equity_distribution_requires_lease_option: false,
         },
     );
 
@@ -171,7 +250,8 @@ fn enable_transfers(ctx: &mut Context, property_id: U256) {
         &ctx.compliance,
         ComplianceConfigSet {
             property_id,
-            transfers_enabled: true
+            transfers_enabled: true,
+            equity_distribution_requires_lease_option: false,
         }
     ));
 }
@@ -217,6 +297,7 @@ fn test_set_compliance_config_should_revert_if_caller_is_not_manager() {
                 property_id,
                 ComplianceConfig {
                     transfers_enabled: true,
+                    equity_distribution_requires_lease_option: false,
                 }
             )
             .unwrap_err(),
@@ -255,6 +336,39 @@ fn test_set_property_registry_should_revert_if_caller_is_not_admin() {
         ComplianceError::NotAuthorized.into(),
         "Should revert if caller is not admin (even if they are compliance manager)",
     );
+}
+
+#[test]
+fn test_set_lease_should_revert_if_caller_is_not_admin() {
+    let mut ctx = setup(odra_test::env());
+
+    // compliance_manager has ROLE_COMPLIANCE_MANAGER but not DEFAULT_ADMIN_ROLE
+    ctx.env.set_caller(ctx.compliance_manager);
+
+    assert_eq!(
+        ctx.compliance
+            .try_set_lease(ctx.env.get_account(10))
+            .unwrap_err(),
+        ComplianceError::NotAuthorized.into(),
+        "Should revert if caller is not admin (even if they are compliance manager)",
+    );
+}
+
+#[test]
+fn test_set_lease_should_set_lease_properly() {
+    let mut ctx = setup(odra_test::env());
+    let lease = ctx.env.get_account(10);
+
+    ctx.env.set_caller(ctx.env.get_account(0));
+    ctx.compliance.set_lease(lease);
+
+    assert_eq!(
+        ctx.compliance.get_lease_contract(),
+        lease,
+        "Invalid Lease contract address"
+    );
+
+    assert!(ctx.env.emitted_event(&ctx.compliance, LeaseSet { lease }));
 }
 
 #[test]
@@ -544,5 +658,146 @@ fn test_assert_can_transfer_should_revert_if_caller_is_not_registered_property_t
             .unwrap_err(),
         ComplianceError::InvalidPropertyToken.into(),
         "Only the registered property token should receive transfer approval",
+    );
+}
+
+#[test]
+fn test_assert_can_transfer_should_revert_if_equity_distribution_requires_lease_and_recipient_not_eligible(
+) {
+    let mut ctx = setup(odra_test::env());
+    let property_id = create_active_property(&mut ctx);
+
+    // Set config to require lease option
+    ctx.env.set_caller(ctx.compliance_manager);
+    ctx.compliance.set_compliance_config(
+        property_id,
+        ComplianceConfig {
+            transfers_enabled: true,
+            equity_distribution_requires_lease_option: true,
+        },
+    );
+
+    // Set sender as exempt (equity distributor)
+    ctx.compliance.set_transfer_exempt(ctx.sender, true);
+
+    // Verify recipient
+    let recipient = ctx.recipient;
+    verify_investor(&mut ctx, recipient);
+
+    // Recipient is NOT equity eligible for this property
+    call_as_property_token(&mut ctx);
+    assert_eq!(
+        ctx.compliance
+            .try_assert_can_transfer(property_id, ctx.sender, ctx.recipient, U256::from(100))
+            .unwrap_err(),
+        ComplianceError::RecipientNotEquityEligible.into(),
+        "Should revert if equity distribution requires lease option and recipient is not eligible",
+    );
+}
+
+#[test]
+fn test_assert_can_transfer_should_succeed_if_equity_distribution_requires_lease_and_recipient_is_eligible(
+) {
+    let mut ctx = setup(odra_test::env());
+    let property_id = create_active_property(&mut ctx);
+
+    // Set config to require lease option
+    ctx.env.set_caller(ctx.compliance_manager);
+    ctx.compliance.set_compliance_config(
+        property_id,
+        ComplianceConfig {
+            transfers_enabled: true,
+            equity_distribution_requires_lease_option: true,
+        },
+    );
+
+    // Set sender as exempt (equity distributor)
+    ctx.compliance.set_transfer_exempt(ctx.sender, true);
+
+    // Verify recipient
+    let recipient = ctx.recipient;
+    verify_investor(&mut ctx, recipient);
+
+    // Mark recipient as equity eligible in Lease contract
+    ctx.env.set_caller(ctx.landlord);
+    ctx.lease
+        .create_lease_agreement(CreateLeaseAgreementParams {
+            tenant: ctx.recipient,
+            equity_option: Some(LeaseEquityOption { property_id }),
+            monthly_rent: CurrencyAmount::new(None, U256::from(100)),
+            security_deposit: CurrencyAmount::new(None, U256::from(500)),
+            start: ctx.env.block_time(),
+            end: ctx.env.block_time() + ONE_MONTH_IN_SECONDS,
+            invoice_validity_duration: ctx.escrow.get_min_deadline(),
+        });
+
+    call_as_property_token(&mut ctx);
+    assert!(
+        ctx.compliance
+            .try_assert_can_transfer(property_id, ctx.sender, ctx.recipient, U256::from(100))
+            .is_ok(),
+        "Equity distribution should succeed if recipient is eligible",
+    );
+}
+
+#[test]
+fn test_assert_can_transfer_should_succeed_for_secondary_transfer_even_if_equity_rule_is_active() {
+    let mut ctx = setup(odra_test::env());
+    let property_id = create_active_property(&mut ctx);
+
+    // Set config to require lease option (only for equity distributions)
+    ctx.env.set_caller(ctx.compliance_manager);
+    ctx.compliance.set_compliance_config(
+        property_id,
+        ComplianceConfig {
+            transfers_enabled: true,
+            equity_distribution_requires_lease_option: true,
+        },
+    );
+
+    // Normal verified sender (NOT exempt)
+    let sender = ctx.sender;
+    let recipient = ctx.recipient;
+    verify_investor(&mut ctx, sender);
+    verify_investor(&mut ctx, recipient);
+
+    // Recipient is NOT equity eligible, but it shouldn't matter for secondary transfers
+    call_as_property_token(&mut ctx);
+    assert!(
+        ctx.compliance
+            .try_assert_can_transfer(property_id, ctx.sender, ctx.recipient, U256::from(100))
+            .is_ok(),
+        "Secondary transfer should succeed regardless of equity eligibility rule",
+    );
+}
+
+#[test]
+fn test_assert_can_transfer_kyc_check_takes_precedence_over_equity_eligibility() {
+    let mut ctx = setup(odra_test::env());
+    let property_id = create_active_property(&mut ctx);
+
+    // Set config to require lease option
+    ctx.env.set_caller(ctx.compliance_manager);
+    ctx.compliance.set_compliance_config(
+        property_id,
+        ComplianceConfig {
+            transfers_enabled: true,
+            equity_distribution_requires_lease_option: true,
+        },
+    );
+
+    // Set sender as exempt (equity distributor)
+    ctx.compliance.set_transfer_exempt(ctx.sender, true);
+
+    // Recipient is UNVERIFIED
+    // Recipient is also NOT equity eligible
+
+    call_as_property_token(&mut ctx);
+    assert_eq!(
+        ctx.compliance
+            .try_assert_can_transfer(property_id, ctx.sender, ctx.recipient, U256::from(100))
+            .unwrap_err(),
+        ComplianceError::RecipientNotVerified.into(),
+        "RecipientNotVerified should take precedence over RecipientNotEquityEligible",
     );
 }
