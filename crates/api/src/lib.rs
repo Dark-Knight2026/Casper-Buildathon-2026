@@ -43,7 +43,8 @@ pub use common::{
 pub use openapi::ApiDoc;
 #[cfg(feature = "enabled")]
 pub use providers::{
-    EmailError, EmailMessage, EmailSender, LoggingEmailSender, MediaStorage, StubMediaStorage,
+    EmailError, EmailMessage, EmailSender, LoggingEmailSender, MediaStorage, SharedMediaStorage,
+    StubMediaStorage,
 };
 #[cfg(feature = "enabled")]
 pub use services::auth::AuthUser;

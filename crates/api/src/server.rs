@@ -28,8 +28,8 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 use utoipa_swagger_ui::SwaggerUi;
 
 use crate::{
-    ApiDoc, AppState, EmailSender, LoggingEmailSender, MediaStorage, RedisStore, ServerConfig,
-    ServerError, StubMediaStorage, onchain, services,
+    ApiDoc, AppState, EmailSender, LoggingEmailSender, RedisStore, ServerConfig, ServerError,
+    SharedMediaStorage, StubMediaStorage, onchain, services,
 };
 
 /// Creates the full application router combining public and protected routes.
@@ -187,7 +187,7 @@ pub async fn main() -> Result<(), ServerError> {
     // are a follow-up: they will be selected here based on env config
     // without changes to handlers, since AppState holds the storage
     // behind the `MediaStorage` trait object.
-    let media_storage: Arc<dyn MediaStorage> =
+    let media_storage: SharedMediaStorage =
         Arc::new(StubMediaStorage::new(config.media_stub_base_url.clone()));
 
     // 3. Build application state

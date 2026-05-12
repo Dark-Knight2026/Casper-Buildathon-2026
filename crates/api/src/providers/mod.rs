@@ -22,4 +22,4 @@ pub mod email;
 pub mod storage;
 
 pub use email::{EmailError, EmailMessage, EmailSender, LoggingEmailSender};
-pub use storage::{MediaStorage, StorageError, StubMediaStorage};
+pub use storage::{MediaStorage, SharedMediaStorage, StorageError, StubMediaStorage};

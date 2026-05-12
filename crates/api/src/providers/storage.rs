@@ -10,6 +10,8 @@
 //! Mirrors the [`EmailSender`](crate::providers::EmailSender) abstraction in
 //! shape, motivation, and lifecycle.
 
+use std::sync::Arc;
+
 use async_trait::async_trait;
 
 /// Errors produced by [`MediaStorage`] implementations.
@@ -86,6 +88,23 @@ pub trait MediaStorage: Send + Sync {
     async fn delete(&self, key: &str) -> Result<(), StorageError>;
 }
 
+/// Shared, type-erased handle to a [`MediaStorage`] implementation.
+///
+/// Stand-in for the verbose `Arc<dyn MediaStorage>` at call sites that pass
+/// the storage around (server bootstrap, [`AppState`](crate::common::AppState)
+/// field, future test fixtures). The alias is intentionally backend-agnostic:
+/// the concrete value behind it may be [`StubMediaStorage`], a future
+/// `S3MediaStorage`, or any other implementation - the name says only that
+/// it is shared (`Arc`) and erased (`dyn`).
+pub type SharedMediaStorage = Arc<dyn MediaStorage>;
+
+// -----------------------------------------------------------------------------
+
+/// Default base URL for non-image stub uploads when `MEDIA_STUB_BASE_URL`
+/// is unset. Uses the IANA `example.com` domain so the URL is syntactically
+/// valid but obviously not a real CDN.
+const DEFAULT_STUB_BASE_URL: &str = "https://example.com/media-stub";
+
 /// 256x256 grey square SVG with "AVATAR" text, embedded as a `data:` URI.
 ///
 /// Returned by [`StubMediaStorage::put`] for image keys so frontend devs
@@ -94,11 +113,6 @@ pub trait MediaStorage: Send + Sync {
 /// URL is stable across restarts, which simplifies snapshot tests on the
 /// frontend.
 const AVATAR_PLACEHOLDER_DATA_URI: &str = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNTYiIGhlaWdodD0iMjU2IiB2aWV3Qm94PSIwIDAgMjU2IDI1NiI+PHJlY3Qgd2lkdGg9IjI1NiIgaGVpZ2h0PSIyNTYiIGZpbGw9IiNlMmU4ZjAiLz48dGV4dCB4PSIxMjgiIHk9IjEzNiIgZm9udC1mYW1pbHk9InNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMjQiIGZpbGw9IiM0YTU1NjgiIHRleHQtYW5jaG9yPSJtaWRkbGUiPkFWQVRBUjwvdGV4dD48L3N2Zz4=";
-
-/// Default base URL for non-image stub uploads when `MEDIA_STUB_BASE_URL`
-/// is unset. Uses the IANA `example.com` domain so the URL is syntactically
-/// valid but obviously not a real CDN.
-const DEFAULT_STUB_BASE_URL: &str = "https://example.com/media-stub";
 
 /// No-delivery implementation that emits the upload as a `tracing` event
 /// and returns a deterministic placeholder URL.
