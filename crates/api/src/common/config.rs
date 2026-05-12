@@ -68,7 +68,7 @@ struct RawEnvConfig {
     s3_secret_key: Option<SecretString>,
     /// Public URL prefix prepended to S3 keys to form fetchable URLs.
     /// Falls back to `{S3_ENDPOINT}/{S3_BUCKET}` when unset; that default
-    /// is correct for MinIO and AWS path-style (the `with_path_style()`
+    /// is correct for `MinIO` and AWS path-style (the `with_path_style()`
     /// flag we set), but a virtual-hosted-style bucket
     /// (`{bucket}.s3.{region}.amazonaws.com`) MUST set this explicitly.
     #[serde(default)]
@@ -110,7 +110,7 @@ pub struct S3Config {
     /// Bucket name (e.g. `media-prod`).
     pub bucket: String,
     /// Region identifier (e.g. `us-east-1` for AWS, `auto` for R2,
-    /// arbitrary for MinIO since path-style is forced).
+    /// arbitrary for `MinIO` since path-style is forced).
     pub region: String,
     /// S3 endpoint URL (e.g. `https://s3.us-east-1.amazonaws.com`,
     /// `https://<account>.r2.cloudflarestorage.com`, `http://minio:9000`).
