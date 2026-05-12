@@ -7,7 +7,7 @@
 //! touching call sites: handlers depend on the trait, not on the concrete
 //! backend.
 //!
-//! Mirrors the [`EmailSender`](crate::common::EmailSender) abstraction in
+//! Mirrors the [`EmailSender`](crate::providers::EmailSender) abstraction in
 //! shape, motivation, and lifecycle.
 
 use async_trait::async_trait;

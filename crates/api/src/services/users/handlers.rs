@@ -11,7 +11,8 @@ use axum_extra::extract::CookieJar;
 use chrono::Utc;
 
 use crate::{
-    common::{ApiError, ApiResult, AppState, EmailMessage, StorageError, UserInfo},
+    common::{ApiError, ApiResult, AppState, UserInfo},
+    providers::{EmailMessage, StorageError},
     services::{
         auth::{AuthUser, cookies},
         users::{

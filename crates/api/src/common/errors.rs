@@ -10,7 +10,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
-use crate::{common::EmailError, services::auth::AuthError};
+use crate::{providers::EmailError, services::auth::AuthError};
 
 /// Represents errors that can occur at the application level (e.g., startup).
 /// These are not intended to be converted into API responses but are for logging

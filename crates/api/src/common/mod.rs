@@ -4,8 +4,6 @@
 pub mod config;
 /// Cryptographic utilities for signature verification.
 pub mod crypto;
-/// Email-sending abstraction.
-pub mod email;
 /// Error types for the application.
 pub mod errors;
 /// Shared data models and type definitions.
@@ -14,8 +12,6 @@ pub mod models;
 pub mod pagination;
 /// Redis client wrapper.
 pub mod redis;
-/// Media-storage abstraction.
-pub mod storage;
 
 // Re-exports
 pub use config::{AppState, IcoFallback, ServerConfig, TOTAL_SUPPLY};
@@ -23,7 +19,6 @@ pub use crypto::{
     CASPER_ED25519_PUBKEY_HEX_LEN, CASPER_MESSAGE_PREFIX, CASPER_SECP256K1_PUBKEY_HEX_LEN,
     CryptoError, verify_casper_signature,
 };
-pub use email::{EmailError, EmailMessage, EmailSender, LoggingEmailSender};
 pub use errors::{ApiError, ApiResult, ErrorResponse, ServerError};
 pub use models::{
     Claims, JWT_AUDIENCE, JWT_ISSUER, PropertyId, TokenType, UserId, UserInfo, UserRole,
@@ -31,7 +26,6 @@ pub use models::{
 };
 pub use pagination::{Pageable, PaginatedResponse, Pagination};
 pub use redis::RedisStore;
-pub use storage::{MediaStorage, StorageError, StubMediaStorage};
 
 /// Validates and normalizes a Casper account hash (64 hex characters, no prefix).
 ///

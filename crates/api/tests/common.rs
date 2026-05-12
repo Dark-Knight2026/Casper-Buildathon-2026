@@ -37,9 +37,10 @@ use uuid::Uuid;
 use api::{
     AppState, Claims, IcoFallback, LoggingEmailSender, ServerConfig, UserId, UserRole,
     common::{
-        CASPER_MESSAGE_PREFIX, EmailSender, JWT_AUDIENCE, JWT_ISSUER, MediaStorage, RedisStore,
-        StubMediaStorage, TOTAL_SUPPLY, TokenType, VerificationLevel,
+        CASPER_MESSAGE_PREFIX, JWT_AUDIENCE, JWT_ISSUER, RedisStore, TOTAL_SUPPLY, TokenType,
+        VerificationLevel,
     },
+    providers::{EmailSender, MediaStorage, StubMediaStorage},
     server,
 };
 

@@ -9,7 +9,8 @@ use serde::Deserialize;
 
 use crate::{
     ServerError,
-    common::{EmailSender, MediaStorage, RedisStore},
+    common::RedisStore,
+    providers::{EmailSender, MediaStorage},
 };
 
 /// Total BIG token supply (human-readable).
