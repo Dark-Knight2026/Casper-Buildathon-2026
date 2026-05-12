@@ -32,17 +32,27 @@ export function useRecommendations({
   limit,
 }: UseRecommendationsArgs): UseRecommendationsReturn {
   const { hasExplicitPreferences } = useTenantPreferences(tenantId);
-  const isInWindow = isInRecommendationWindow(leaseEndDate);
 
-  const recommendations = useMemo(() => {
-    if (!isInWindow) return [];
+  // Primitive timestamp instead of the Date object: a caller that constructs
+  // `new Date(...)` inline on each render would otherwise hand us a fresh
+  // reference every time and bust the memo even when the underlying day
+  // hasn't changed.
+  const leaseEndTimestamp = leaseEndDate.getTime();
+
+  const { recommendations, isInWindow } = useMemo(() => {
+    const inWindow = isInRecommendationWindow(leaseEndDate);
+    if (!inWindow) return { recommendations: [] as RecommendedProperty[], isInWindow: false };
     const all = getMockRecommendations(
       leaseEndDate,
       currentProperty.id,
       hasExplicitPreferences ? 'preferences' : 'implicit-current-lease'
     );
-    return typeof limit === 'number' ? all.slice(0, limit) : all;
-  }, [isInWindow, leaseEndDate, currentProperty.id, hasExplicitPreferences, limit]);
+    const sliced = typeof limit === 'number' ? all.slice(0, limit) : all;
+    return { recommendations: sliced, isInWindow: true };
+    // leaseEndDate intentionally excluded — leaseEndTimestamp is the primitive
+    // mirror that drives reactivity.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [leaseEndTimestamp, currentProperty.id, hasExplicitPreferences, limit]);
 
   return { recommendations, isInWindow, hasExplicitPreferences };
 }
