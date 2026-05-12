@@ -20,9 +20,7 @@ pub const ROLE_FREEZER: &str = "FREEZER";
 // =============================================================================
 
 pub mod types {
-    use odra::odra_type;
-
-    #[odra_type]
+    #[odra::odra_type]
     pub struct InvestorRecord {
         pub verified: bool,
         pub frozen: bool,
@@ -37,9 +35,9 @@ pub mod types {
 // =============================================================================
 
 pub mod events {
-    use odra::{event, prelude::*};
+    use odra::prelude::*;
 
-    #[event]
+    #[odra::event]
     pub struct InvestorRecordSet {
         pub account: Address,
         pub verified: bool,
@@ -47,7 +45,7 @@ pub mod events {
         pub jurisdiction: u64,
     }
 
-    #[event]
+    #[odra::event]
     pub struct InvestorFrozen {
         pub account: Address,
         pub frozen: bool,
