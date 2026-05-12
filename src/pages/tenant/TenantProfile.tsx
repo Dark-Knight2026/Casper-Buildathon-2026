@@ -18,7 +18,7 @@ import { useTenantPreferences } from '@/hooks/useTenantPreferences';
 import { TenantPreferencesDialog } from '@/components/tenant/TenantPreferencesDialog';
 import { RoleSwitchDialog } from '@/components/profile/RoleSwitchDialog';
 import { countActivePreferences, ALL_MATCH_CATEGORIES } from '@/types/tenantPreferences';
-import { uploadAvatar } from '@/services/ico/userProfileService';
+import { uploadAvatar } from '@/services/userProfileService';
 import { ApiError } from '@/lib/api-client';
 import { AvatarStatus } from '@/lib/api-errors';
 

@@ -13,4 +13,3 @@ This directory contains services for interacting with the ICO smart contract on 
 | icoPurchaseService.ts | Execute ICO purchase transactions on blockchain |
 | index.ts | Export all service modules |
 | odraStorage.ts | Manage Odra contract storage schema parsing |
-| userProfileService.ts | REST wrapper around `/api/v1/users/me` (GET, PATCH profile fields, email change request/confirm, role switch, avatar upload). Lives here for now to share types with `backendAuthService`; not Casper/ICO-specific. |

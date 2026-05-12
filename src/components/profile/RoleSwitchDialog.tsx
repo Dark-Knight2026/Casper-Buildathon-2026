@@ -21,7 +21,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { useSensitiveAction } from '@/hooks/auth/useSensitiveAction';
 import { ApiError } from '@/lib/api-client';
-import { patchMyRole } from '@/services/ico/userProfileService';
+import { patchMyRole } from '@/services/userProfileService';
 import type { SelfRegisterableRole } from '@/services/ico/backendAuthService';
 
 const ROLE_OPTIONS: ReadonlyArray<{ value: SelfRegisterableRole; label: string }> = [

@@ -5,7 +5,7 @@ import {
   refreshSession,
   type ServerUserInfo,
 } from '@/services/ico/backendAuthService';
-import { getMe, patchMe, type PatchProfileBody } from '@/services/ico/userProfileService';
+import { getMe, patchMe, type PatchProfileBody } from '@/services/userProfileService';
 import type { UserProfile, UserRole, UserStatus } from '@/types/user';
 
 // Non-secret session marker. The actual auth tokens live in HttpOnly cookies

@@ -1,5 +1,8 @@
 import { backendClient } from '@/lib/api-client';
-import { type ServerUserInfo, type SelfRegisterableRole } from './backendAuthService';
+import {
+  type ServerUserInfo,
+  type SelfRegisterableRole,
+} from '@/services/ico/backendAuthService';
 
 /**
  * Profile-management API surface.
@@ -13,6 +16,12 @@ import { type ServerUserInfo, type SelfRegisterableRole } from './backendAuthSer
  * Errors propagate as `ApiError`. When the backend emitted a machine-readable
  * envelope (`{ "error": "reauthentication_required" }` etc.), the token is on
  * `error.code` — see `src/lib/api-errors.ts` for the constant set.
+ *
+ * `ServerUserInfo` and `SelfRegisterableRole` are re-used from
+ * `src/services/ico/backendAuthService.ts` for now. Those types describe the
+ * REST envelope, not anything Casper-specific — promoting them to a neutral
+ * location (`src/types/serverUser.ts`) is a clean follow-up that lets the
+ * `ico/` import drop entirely.
  */
 
 const USERS_ME = '/api/v1/users/me';
