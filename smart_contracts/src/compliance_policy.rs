@@ -116,9 +116,14 @@ impl CompliancePolicy {
     // =============================================================================
 
     /// Sets the investor registry used for wallet verifications checks
-    /// @dev Restricted to `COMPLIANCE_MANAGER`
+    /// @dev Restricted to `DEFAULT_ADMIN_ROLE`
     pub fn set_investor_registry(&mut self, investor_registry: Address) {
-        self.assert_role(ROLE_COMPLIANCE_MANAGER);
+        if !self
+            .access_control
+            .has_role(&DEFAULT_ADMIN_ROLE, &self.env().caller())
+        {
+            self.env().revert(Error::NotAuthorized);
+        }
 
         self.investor_registry.set(investor_registry);
 
@@ -127,8 +132,14 @@ impl CompliancePolicy {
     }
 
     /// Sets the property registry used for property lifecycle checks
+    /// @dev Restricted to `DEFAULT_ADMIN_ROLE`
     pub fn set_property_registry(&mut self, property_registry: Address) {
-        self.assert_role(ROLE_COMPLIANCE_MANAGER);
+        if !self
+            .access_control
+            .has_role(&DEFAULT_ADMIN_ROLE, &self.env().caller())
+        {
+            self.env().revert(Error::NotAuthorized);
+        }
 
         self.property_registry.set(property_registry);
 

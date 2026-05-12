@@ -81,7 +81,7 @@ fn setup(env: HostEnv) -> Context {
 
     compliance.grant_role(&compliance.compliance_manager_role(), &compliance_manager);
 
-    env.set_caller(compliance_manager);
+    env.set_caller(env.get_account(0)); // Owner
     compliance.set_investor_registry(investor_registry.address());
     compliance.set_property_registry(property_registry.address());
 
@@ -226,32 +226,34 @@ fn test_set_compliance_config_should_revert_if_caller_is_not_manager() {
 }
 
 #[test]
-fn test_set_investor_registry_should_revert_if_caller_is_not_manager() {
+fn test_set_investor_registry_should_revert_if_caller_is_not_admin() {
     let mut ctx = setup(odra_test::env());
 
-    ctx.env.set_caller(ctx.env.get_account(9));
+    // compliance_manager has ROLE_COMPLIANCE_MANAGER but NOT DEFAULT_ADMIN_ROLE
+    ctx.env.set_caller(ctx.compliance_manager);
 
     assert_eq!(
         ctx.compliance
             .try_set_investor_registry(ctx.env.get_account(10))
             .unwrap_err(),
         ComplianceError::NotAuthorized.into(),
-        "Should revert if caller is not compliance manager",
+        "Should revert if caller is not admin (even if they are compliance manager)",
     );
 }
 
 #[test]
-fn test_set_property_registry_should_revert_if_caller_is_not_manager() {
+fn test_set_property_registry_should_revert_if_caller_is_not_admin() {
     let mut ctx = setup(odra_test::env());
 
-    ctx.env.set_caller(ctx.env.get_account(9));
+    // compliance_manager has ROLE_COMPLIANCE_MANAGER but NOT DEFAULT_ADMIN_ROLE
+    ctx.env.set_caller(ctx.compliance_manager);
 
     assert_eq!(
         ctx.compliance
             .try_set_property_registry(ctx.env.get_account(10))
             .unwrap_err(),
         ComplianceError::NotAuthorized.into(),
-        "Should revert if caller is not compliance manager",
+        "Should revert if caller is not admin (even if they are compliance manager)",
     );
 }
 
