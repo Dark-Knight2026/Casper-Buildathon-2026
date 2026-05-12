@@ -10,4 +10,4 @@ Unit tests for top-level pages in `src/pages/`.
 | auth/Register.test.tsx | Tests the /auth/register page — RoleSelector default + Landlord switch, role propagation to login(), `?role=` deep-link pre-selection (landlord/tenant/unsupported fallback), disconnected ProviderList, "Use a different wallet" disconnect+reload |
 | auth/RoleSelector.test.tsx | Tests the role radio selector — controlled value, onChange, disabled state, post-connect lock hint |
 
-The `ico/` subdirectory documents its own test files in its own `readme.md`.
+The `ico/`, `auth/`, and `tenant/` subdirectories document their own test files in their own `readme.md`.

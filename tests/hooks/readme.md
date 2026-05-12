@@ -13,3 +13,5 @@
 | useCSPRPrice.test.ts | Test CSPR price fetching, stale-threshold logic, and polling interval — uses `vi.useFakeTimers()` |
 | useContractDeploys.test.ts | Test BIG token FT-action fetching and pagination from CSPR Cloud |
 | useUserTokenActions.test.ts | Test BigInt token amount math, non-integer input handling, disabled state for empty publicKey, and API error surfacing |
+
+The `auth/` subdirectory documents its own test files in its own `readme.md`.

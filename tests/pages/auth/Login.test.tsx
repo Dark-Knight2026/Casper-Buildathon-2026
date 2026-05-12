@@ -204,4 +204,59 @@ describe('Login', () => {
       ).toHaveAttribute('href', '/auth/register');
     });
   });
+
+  describe('reset connection footer', () => {
+    // The footer is the always-available escape hatch when CSPR.click's
+    // "session expired" modal flips `isConnected` to false and the inline
+    // "Use a different account" link disappears — see the rationale block in
+    // Login.tsx above handleResetConnection.
+
+    it('renders the footer button even in the disconnected state', () => {
+      renderLogin();
+      expect(
+        screen.getByRole('button', { name: /trouble signing in\?\s*reset connection/i }),
+        'reset-connection footer must NOT be gated on isConnected — that is the whole point of having it'
+      ).toBeInTheDocument();
+    });
+
+    it('click invokes disconnect, strips csprclick:* + leasefi_session, then reloads', () => {
+      const disconnect = vi.fn();
+      const reloadSpy = vi.fn();
+      Object.defineProperty(window, 'location', {
+        configurable: true,
+        value: { ...window.location, reload: reloadSpy },
+      });
+
+      // Seed localStorage with three keys: one LeaseFi session marker, two
+      // CSPR.click-prefixed entries, and one foreign key that must survive.
+      localStorage.clear();
+      localStorage.setItem('leasefi_session', '{"id":"1"}');
+      localStorage.setItem('csprclick:account', '0x123');
+      localStorage.setItem('csprclick:nonce', 'abc');
+      localStorage.setItem('foreign:other', 'keep-me');
+
+      setWalletConnect({ disconnect });
+      renderLogin();
+      fireEvent.click(screen.getByRole('button', { name: /trouble signing in/i }));
+
+      expect(disconnect, 'reset flow must release the wallet session via the SDK').toHaveBeenCalledTimes(1);
+      expect(
+        localStorage.getItem('leasefi_session'),
+        'session marker must go — otherwise ProtectedRoute keeps showing a stale signed-in UI'
+      ).toBeNull();
+      expect(
+        localStorage.getItem('csprclick:account'),
+        'csprclick:* keys cause the SDK to re-validate against the dead session on reload (see Login.tsx rationale)'
+      ).toBeNull();
+      expect(localStorage.getItem('csprclick:nonce'), 'every csprclick:* key, not just account').toBeNull();
+      expect(
+        localStorage.getItem('foreign:other'),
+        'only `csprclick:` prefix is stripped — unrelated keys must survive'
+      ).toBe('keep-me');
+      expect(
+        reloadSpy,
+        'hard reload is what actually rebuilds AuthContext and the SDK from a clean slate'
+      ).toHaveBeenCalledTimes(1);
+    });
+  });
 });
