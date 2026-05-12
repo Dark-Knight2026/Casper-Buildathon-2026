@@ -477,3 +477,73 @@ fn test_set_property_status_should_revert_if_transitioning_from_active_to_draft(
         "Should not allow transition from Active back to Draft",
     );
 }
+
+#[test]
+fn test_set_property_status_should_revert_if_transitioning_from_terminal_states() {
+    let mut ctx = setup(odra_test::env());
+    let property_id = create_property(&mut ctx);
+
+    ctx.registry.set_property_token(property_id, ctx.token);
+    ctx.registry
+        .set_revenue_distributor(property_id, ctx.revenue_distributor);
+
+    // Test Sold is terminal
+    ctx.registry
+        .set_property_status(property_id, PropertyStatus::Sold);
+    assert_eq!(
+        ctx.registry
+            .try_set_property_status(property_id, PropertyStatus::Active)
+            .unwrap_err(),
+        Error::InvalidStatusTransition.into(),
+        "Should not allow transition from Sold back to Active",
+    );
+
+    // Test Closed is terminal
+    let property_id_2 = create_property(&mut ctx);
+    let token_2 = ctx.env.get_account(10);
+    ctx.registry.set_property_token(property_id_2, token_2);
+    ctx.registry
+        .set_revenue_distributor(property_id_2, ctx.revenue_distributor);
+    ctx.registry
+        .set_property_status(property_id_2, PropertyStatus::Closed);
+    assert_eq!(
+        ctx.registry
+            .try_set_property_status(property_id_2, PropertyStatus::Active)
+            .unwrap_err(),
+        Error::InvalidStatusTransition.into(),
+        "Should not allow transition from Closed back to Active",
+    );
+}
+
+#[test]
+fn test_set_property_status_liquidating_transitions() {
+    let mut ctx = setup(odra_test::env());
+    let property_id = create_property(&mut ctx);
+
+    ctx.registry.set_property_token(property_id, ctx.token);
+    ctx.registry
+        .set_revenue_distributor(property_id, ctx.revenue_distributor);
+
+    ctx.registry
+        .set_property_status(property_id, PropertyStatus::Liquidating);
+
+    // Liquidating -> Active should fail
+    assert_eq!(
+        ctx.registry
+            .try_set_property_status(property_id, PropertyStatus::Active)
+            .unwrap_err(),
+        Error::InvalidStatusTransition.into(),
+        "Should not allow transition from Liquidating back to Active",
+    );
+
+    // Liquidating -> Closed should succeed
+    ctx.registry
+        .set_property_status(property_id, PropertyStatus::Closed);
+    assert!(
+        matches!(
+            ctx.registry.get_property(property_id).status,
+            PropertyStatus::Closed
+        ),
+        "Should allow transition from Liquidating to Closed"
+    );
+}

@@ -233,6 +233,19 @@ impl PropertyRegistry {
             self.env().revert(Error::InvalidStatusTransition);
         }
 
+        // Terminal state guards
+        match property.status {
+            PropertyStatus::Sold | PropertyStatus::Closed => {
+                self.env().revert(Error::InvalidStatusTransition);
+            }
+            PropertyStatus::Liquidating => {
+                if !matches!(status, PropertyStatus::Closed) {
+                    self.env().revert(Error::InvalidStatusTransition);
+                }
+            }
+            _ => {}
+        }
+
         if let PropertyStatus::Active = status {
             if property.token.is_none() {
                 self.env().revert(Error::MissingPropertyToken);
