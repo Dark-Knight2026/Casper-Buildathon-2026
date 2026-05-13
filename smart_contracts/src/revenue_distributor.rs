@@ -10,6 +10,11 @@ use crate::{
     investor_registry::InvestorRegistryContractRef,
     property_fraction_token::PropertyFractionTokenContractRef,
     property_registry::PropertyRegistryContractRef,
+    revenue_distributor::{
+        errors::Error,
+        events::RevenueDistributorInitialized,
+        types::{HolderRevenueState, RevenueDistributorInitParams},
+    },
 };
 
 // =============================================================================
@@ -28,7 +33,7 @@ pub mod types {
         /// Registry used to confirm property lifecycle and distributor assignment.
         pub property_registry: Address,
         /// Registry used to verify whether a holder may claim revenue.
-        pub investory_registry: Address,
+        pub investor_registry: Address,
         /// Revenue payout currency
         /// @dev `None` means native CSPR. `Some(address)` means CEP-18 token such as BIG.
         pub payout_currency: Option<Address>,
@@ -47,10 +52,67 @@ pub mod types {
 // Events
 // =============================================================================
 
+pub mod events {
+    use odra::{casper_types::U256, prelude::*};
+
+    #[odra::event]
+    pub struct RevenueDistributorInitialized {
+        pub property_id: U256,
+        pub property_token: Address,
+        pub property_registry: Address,
+        pub investor_registry: Address,
+        pub payout_currency: Option<Address>,
+    }
+}
+
 // =============================================================================
 // Errors
 // =============================================================================
 
+pub mod errors {
+    use odra::prelude::*;
+
+    #[odra::odra_error]
+    pub enum Error {}
+}
+
 // =============================================================================
 // Contract
 // =============================================================================
+
+#[odra::module(
+  errors = Error,
+  events = []
+)]
+pub struct RevenueDistributor {
+    property_id: Var<U256>,
+    payout_currency: Var<Option<Address>>,
+    property_token: External<PropertyFractionTokenContractRef>,
+    property_registry: External<PropertyRegistryContractRef>,
+    investor_registry: External<InvestorRegistryContractRef>,
+    holder_revenue: Mapping<Address, HolderRevenueState>,
+    revenue_per_token_stored: Var<U256>,
+}
+
+#[odra::module]
+impl RevenueDistributor {
+    // =============================================================================
+    // Initialization
+    // =============================================================================
+
+    pub fn init(&mut self, params: RevenueDistributorInitParams) {
+        self.property_id.set(params.property_id);
+        self.payout_currency.set(params.payout_currency);
+        self.property_token.set(params.property_token);
+        self.property_registry.set(params.property_registry);
+        self.investor_registry.set(params.investor_registry);
+
+        self.env().emit_event(RevenueDistributorInitialized {
+            property_id: params.property_id,
+            property_token: params.property_token,
+            property_registry: params.property_registry,
+            investor_registry: params.investor_registry,
+            payout_currency: params.payout_currency,
+        });
+    }
+}
