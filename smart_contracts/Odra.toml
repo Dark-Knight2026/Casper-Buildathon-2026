@@ -36,3 +36,6 @@ fqn = "compliance_policy::CompliancePolicy"
 
 [[contracts]]
 fqn = "property_fraction_token::PropertyFractionToken"
+
+[[contracts]]
+fqn = "revenue_distributor::RevenueDistributor"
