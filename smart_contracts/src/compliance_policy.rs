@@ -35,7 +35,7 @@ pub mod types {
         /// Requires issuer/landlord/protocol equity distributions to go only to tenants
         /// with an equity-option lease for this property
         /// @dev This applies only when the sender is transfer-exempt and the recipient is not.
-        ///      Secondary investor-to-investor tranfers still use normal KYC/compliance checks.
+        ///      Secondary investor-to-investor transfers still use normal KYC/compliance checks.
         pub equity_distribution_requires_lease_option: bool,
     }
 }
@@ -172,7 +172,7 @@ impl CompliancePolicy {
             .emit_event(PropertyRegistrySet { property_registry });
     }
 
-    /// Sets the lease contract used for equity-option elgibility checks.
+    /// Sets the lease contract used for equity-option eligibility checks.
     /// @dev Restricted to `DEFAULT_ADMIN_ROLE`
     pub fn set_lease(&mut self, lease: Address) {
         if !self
