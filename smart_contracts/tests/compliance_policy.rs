@@ -155,7 +155,6 @@ fn setup(env: HostEnv) -> Context {
     env.set_caller(env.get_account(0)); // Owner
     compliance.set_investor_registry(investor_registry.address());
     compliance.set_property_registry(property_registry.address());
-    compliance.set_lease(lease.address());
 
     Context {
         env,
