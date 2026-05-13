@@ -6,7 +6,7 @@ use leasefi_contracts::{
     investor_registry::{
         types::InvestorRecord, InvestorRegistry, InvestorRegistryHostRef, InvestorRegistryInitArgs,
     },
-    lease::{Lease, LeaseContractRef, LeaseInitArgs},
+    lease::{Lease, LeaseInitArgs},
     property_fraction_token::{
         errors::Error as TokenError,
         events::{CompliancePolicySet, PropertyFractionTokenInitialized},
