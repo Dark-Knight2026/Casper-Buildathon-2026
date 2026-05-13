@@ -769,6 +769,31 @@ fn test_assert_can_transfer_should_succeed_for_secondary_transfer_even_if_equity
 }
 
 #[test]
+fn test_assert_can_transfer_should_succeed_if_equity_rule_is_disabled_even_without_lease_option() {
+    let mut ctx = setup(odra_test::env());
+    let property_id = create_active_property(&mut ctx);
+
+    // Set config with equity_distribution_requires_lease_option = false (disabled)
+    enable_transfers(&mut ctx, property_id);
+
+    // Set sender as exempt (equity distributor)
+    ctx.env.set_caller(ctx.compliance_manager);
+    ctx.compliance.set_transfer_exempt(ctx.sender, true);
+
+    // Verify recipient (but recipient is NOT equity eligible)
+    let recipient = ctx.recipient;
+    verify_investor(&mut ctx, recipient);
+
+    call_as_property_token(&mut ctx);
+    assert!(
+        ctx.compliance
+            .try_assert_can_transfer(property_id, ctx.sender, ctx.recipient, U256::from(100))
+            .is_ok(),
+        "Equity distribution should succeed when equity rule is disabled, even if recipient has no lease option",
+    );
+}
+
+#[test]
 fn test_assert_can_transfer_kyc_check_takes_precedence_over_equity_eligibility() {
     let mut ctx = setup(odra_test::env());
     let property_id = create_active_property(&mut ctx);
