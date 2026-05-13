@@ -6,6 +6,7 @@ use leasefi_contracts::{
     investor_registry::{
         types::InvestorRecord, InvestorRegistry, InvestorRegistryHostRef, InvestorRegistryInitArgs,
     },
+    lease::{Lease, LeaseContractRef, LeaseInitArgs},
     property_fraction_token::{
         errors::Error as TokenError,
         events::{CompliancePolicySet, PropertyFractionTokenInitialized},
@@ -59,6 +60,7 @@ fn setup(env: HostEnv) -> Context {
 
     let mut investor_registry = InvestorRegistry::deploy(&env, InvestorRegistryInitArgs { owner });
     let mut property_registry = PropertyRegistry::deploy(&env, PropertyRegistryInitArgs { owner });
+    let mut lease = Lease::deploy(&env, LeaseInitArgs { owner });
 
     let mut compliance = CompliancePolicy::deploy(
         &env,
@@ -66,6 +68,7 @@ fn setup(env: HostEnv) -> Context {
             owner,
             investor_registry: investor_registry.address(),
             property_registry: property_registry.address(),
+            lease: lease.address(),
         },
     );
 
@@ -156,6 +159,7 @@ fn enable_transfers(ctx: &mut Context) {
         ctx.property_id,
         ComplianceConfig {
             transfers_enabled: true,
+            equity_distribution_requires_lease_option: false,
         },
     );
 }
