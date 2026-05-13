@@ -27,17 +27,17 @@ Edit `.env` - the following variables require your own values:
 | `CORS_ORIGIN`          | Frontend URL (e.g. `http://localhost:3000`)           |
 | `CASPER_SECRET_KEY`    | Path to `.pem` file (only for manual testnet tests)   |
 
-The rest (contract hashes, start blocks, Redis/DB URLs) have working defaults for the Casper testnet.
+The rest (contract hashes, start blocks, Redis/DB URLs, S3/MinIO credentials) have working defaults for the Casper testnet and local MinIO.
 
 ### 2. Start infrastructure
 
-Start Supabase (Postgres + Auth + Storage) and Redis:
+Start Supabase (Postgres + Auth + Storage), Redis, and MinIO:
 
 ```bash
 make env-up
 ```
 
-This runs `supabase start` and `docker compose up -d redis`.
+This runs `supabase start` and `docker compose up -d redis minio minio-init`. MinIO is an S3-compatible blob backend for avatar uploads; `minio-init` creates the default bucket on first run. For backend configuration details (AWS S3 / R2 / MinIO) see [`docs/feature/media_storage.md`](docs/feature/media_storage.md).
 
 ### 3. Apply database migrations
 

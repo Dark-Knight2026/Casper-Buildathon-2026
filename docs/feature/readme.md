@@ -8,5 +8,6 @@ Cross-cutting feature documentation that applies across multiple endpoints or mo
 |-------------------|----------------------------------------------------------------------|
 | error_handling.md | ApiError enum, conversions, usage pattern, reverse-proxy requirement |
 | force_revoke.md   | `users.jwt_invalidate_before` per-user cutoff feature spec           |
+| media_storage.md  | S3-compatible media backend: env vars, AWS/R2/MinIO matrix, ACL, addressing |
 | performance.md    | Performance goals (container size, SQLx compile-time verification)   |
 | security.md       | Authentication cookie attributes, TTLs, force-revoke pointer         |
