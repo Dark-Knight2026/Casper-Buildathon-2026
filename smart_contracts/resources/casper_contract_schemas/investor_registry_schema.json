@@ -53,7 +53,9 @@
           {
             "name": "identity_hash",
             "description": null,
-            "ty": "String"
+            "ty": {
+              "ByteArray": 32
+            }
           }
         ]
       }
@@ -168,6 +170,11 @@
   ],
   "errors": [
     {
+      "name": "AccountNotRegistered",
+      "description": "",
+      "discriminant": 802
+    },
+    {
       "name": "CallerNotTheNewOwner",
       "description": "The caller is not the new owner.",
       "discriminant": 20002
@@ -228,7 +235,7 @@
     },
     {
       "name": "set_frozen",
-      "description": "Freezes or unfreezes an investor wallet",
+      "description": "Freezes or unfreezes an investor wallet.",
       "is_mutable": true,
       "arguments": [
         {

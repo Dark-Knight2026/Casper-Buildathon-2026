@@ -18,6 +18,13 @@
             "ty": "Key"
           },
           {
+            "name": "equity_option",
+            "description": null,
+            "ty": {
+              "Option": "LeaseEquityOption"
+            }
+          },
+          {
             "name": "monthly_rent",
             "description": null,
             "ty": "CurrencyAmount"
@@ -67,6 +74,24 @@
     },
     {
       "struct": {
+        "name": "EquityEligibilityGranted",
+        "description": null,
+        "members": [
+          {
+            "name": "property_id",
+            "description": null,
+            "ty": "U256"
+          },
+          {
+            "name": "account",
+            "description": null,
+            "ty": "Key"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
         "name": "LeaseAgreement",
         "description": null,
         "members": [
@@ -79,6 +104,13 @@
             "name": "landlord",
             "description": null,
             "ty": "Key"
+          },
+          {
+            "name": "equity_option",
+            "description": null,
+            "ty": {
+              "Option": "LeaseEquityOption"
+            }
           },
           {
             "name": "monthly_rent",
@@ -176,6 +208,19 @@
     },
     {
       "struct": {
+        "name": "LeaseEquityOption",
+        "description": null,
+        "members": [
+          {
+            "name": "property_id",
+            "description": null,
+            "ty": "U256"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
         "name": "OwnershipTransferred",
         "description": null,
         "members": [
@@ -227,6 +272,16 @@
       "name": "InvalidLeaseAgreementId",
       "description": "",
       "discriminant": 401
+    },
+    {
+      "name": "InvalidPropertyIssuer",
+      "description": "",
+      "discriminant": 410
+    },
+    {
+      "name": "InvalidPropertyStatus",
+      "description": "",
+      "discriminant": 409
     },
     {
       "name": "InvalidTimeframes",
@@ -319,6 +374,22 @@
       "access": "public"
     },
     {
+      "name": "set_property_registry",
+      "description": "Sets the PropertyRegistry contract address by the owner",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "property_registry",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        }
+      ],
+      "return_ty": "Unit",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
       "name": "get_roles_contract_address",
       "description": "Returns the Roles contract address",
       "is_mutable": false,
@@ -339,6 +410,15 @@
     {
       "name": "get_nft_contract_address",
       "description": "Returns the NFT contract address",
+      "is_mutable": false,
+      "arguments": [],
+      "return_ty": "Key",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "get_property_registry_contract_address",
+      "description": "Returns the PropertyRegistry contract address",
       "is_mutable": false,
       "arguments": [],
       "return_ty": "Key",
@@ -395,6 +475,28 @@
           "name": "lease_agreement_id",
           "description": null,
           "ty": "U256",
+          "optional": false
+        }
+      ],
+      "return_ty": "Bool",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "is_equity_eligible",
+      "description": "",
+      "is_mutable": false,
+      "arguments": [
+        {
+          "name": "property_id",
+          "description": null,
+          "ty": "U256",
+          "optional": false
+        },
+        {
+          "name": "account",
+          "description": null,
+          "ty": "Key",
           "optional": false
         }
       ],
@@ -504,6 +606,10 @@
     }
   ],
   "events": [
+    {
+      "name": "EquityEligibilityGranted",
+      "ty": "EquityEligibilityGranted"
+    },
     {
       "name": "LeaseAgreementCreated",
       "ty": "LeaseAgreementCreated"

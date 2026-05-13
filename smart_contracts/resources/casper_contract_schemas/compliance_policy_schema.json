@@ -16,6 +16,11 @@
             "name": "transfers_enabled",
             "description": null,
             "ty": "Bool"
+          },
+          {
+            "name": "equity_distribution_requires_lease_option",
+            "description": null,
+            "ty": "Bool"
           }
         ]
       }
@@ -34,6 +39,11 @@
             "name": "transfers_enabled",
             "description": null,
             "ty": "Bool"
+          },
+          {
+            "name": "equity_distribution_requires_lease_option",
+            "description": null,
+            "ty": "Bool"
           }
         ]
       }
@@ -45,6 +55,19 @@
         "members": [
           {
             "name": "investor_registry",
+            "description": null,
+            "ty": "Key"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
+        "name": "LeaseSet",
+        "description": null,
+        "members": [
+          {
+            "name": "lease",
             "description": null,
             "ty": "Key"
           }
@@ -174,6 +197,11 @@
       "discriminant": 20001
     },
     {
+      "name": "InvalidPropertyToken",
+      "description": "",
+      "discriminant": 1006
+    },
+    {
       "name": "MissingRole",
       "description": "The role is missing.",
       "discriminant": 20003
@@ -192,6 +220,11 @@
       "name": "PropertyNotActive",
       "description": "",
       "discriminant": 1002
+    },
+    {
+      "name": "RecipientNotEquityEligible",
+      "description": "",
+      "discriminant": 1007
     },
     {
       "name": "RecipientNotVerified",
@@ -243,6 +276,22 @@
       "arguments": [
         {
           "name": "property_registry",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        }
+      ],
+      "return_ty": "Unit",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "set_lease",
+      "description": "Sets the lease contract used for equity-option eligibility checks.",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "lease",
           "description": null,
           "ty": "Key",
           "optional": false
@@ -308,6 +357,15 @@
     {
       "name": "get_property_registry_contract",
       "description": "Returns the property registry contract address.",
+      "is_mutable": false,
+      "arguments": [],
+      "return_ty": "Key",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "get_lease_contract",
+      "description": "Returns the lease contract address.",
       "is_mutable": false,
       "arguments": [],
       "return_ty": "Key",
@@ -552,6 +610,10 @@
       "ty": "InvestorRegistrySet"
     },
     {
+      "name": "LeaseSet",
+      "ty": "LeaseSet"
+    },
+    {
       "name": "PropertyRegistrySet",
       "ty": "PropertyRegistrySet"
     },
@@ -602,6 +664,24 @@
       },
       {
         "name": "owner",
+        "description": null,
+        "ty": "Key",
+        "optional": false
+      },
+      {
+        "name": "investor_registry",
+        "description": null,
+        "ty": "Key",
+        "optional": false
+      },
+      {
+        "name": "property_registry",
+        "description": null,
+        "ty": "Key",
+        "optional": false
+      },
+      {
+        "name": "lease",
         "description": null,
         "ty": "Key",
         "optional": false

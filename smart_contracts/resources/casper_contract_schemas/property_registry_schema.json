@@ -308,6 +308,11 @@
       "discriminant": 901
     },
     {
+      "name": "InvalidStatusTransition",
+      "description": "",
+      "discriminant": 907
+    },
+    {
       "name": "MissingPropertyToken",
       "description": "",
       "discriminant": 905
@@ -336,6 +341,11 @@
       "name": "PropertyNotDraft",
       "description": "",
       "discriminant": 904
+    },
+    {
+      "name": "PropertyTokenAlreadyRegistered",
+      "description": "",
+      "discriminant": 908
     },
     {
       "name": "RoleRenounceForAnotherAddress",
@@ -454,15 +464,6 @@
       "access": "public"
     },
     {
-      "name": "get_properties_count",
-      "description": "Returns the number of property records created.",
-      "is_mutable": false,
-      "arguments": [],
-      "return_ty": "U256",
-      "is_contract_context": true,
-      "access": "public"
-    },
-    {
       "name": "get_property_token",
       "description": "Returns the property token address",
       "is_mutable": false,
@@ -475,6 +476,24 @@
         }
       ],
       "return_ty": "Key",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "get_property_id_by_token",
+      "description": "Returns the property Id associated with the token address.",
+      "is_mutable": false,
+      "arguments": [
+        {
+          "name": "token",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        }
+      ],
+      "return_ty": {
+        "Option": "U256"
+      },
       "is_contract_context": true,
       "access": "public"
     },
