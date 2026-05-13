@@ -77,10 +77,14 @@ jobs:
         CSPR_CLOUD_REST_URL: ${{ secrets.CSPR_CLOUD_REST_URL }}
         CSPR_CLOUD_WSS_URL: ${{ secrets.CSPR_CLOUD_WSS_URL }}
         CASPER_NODE_RPC_URL: ${{ secrets.CASPER_NODE_RPC_URL }}
+        S3_ACCESS_KEY: ${{ secrets.S3_ACCESS_KEY }}
+        S3_SECRET_KEY: ${{ secrets.S3_SECRET_KEY }}
         DEPLOYMENT_MODE: ${{ vars.DEPLOYMENT_MODE }}
         PROJECT_NAME: ${{ vars.PROJECT_NAME }}
         PROJECT_DOMAIN: ${{ vars.PROJECT_DOMAIN }}
         RUN_MIGRATIONS: ${{ vars.RUN_MIGRATIONS }}
+        S3_BUCKET: ${{ vars.S3_BUCKET }}
+        S3_REGION: ${{ vars.S3_REGION }}
         
         CONTRACT_USDC: ${{ vars.CONTRACT_USDC }}
         CONTRACT_USDT: ${{ vars.CONTRACT_USDT }}
@@ -104,7 +108,8 @@ jobs:
                   "$CF_DNS_API_TOKEN" "$GOOGLE_APPLICATION_PROJECT_ID" "$GOOGLE_APPLICATION_REGION" \
                   "$GOOGLE_ENCRYPTION_KEY" "$HOST_SERVER_NAME" "$HETZNER_CLOUD_TOKEN" \
                   "$SUPABASE_JWT_SECRET" "$CSPR_CLOUD_API_TOKEN" "$CSPR_CLOUD_REST_URL" \
-                  "$CSPR_CLOUD_WSS_URL" "$CASPER_NODE_RPC_URL"; do
+                  "$CSPR_CLOUD_WSS_URL" "$CASPER_NODE_RPC_URL" \
+                  "$S3_ACCESS_KEY" "$S3_SECRET_KEY"; do
           echo "::add-mask::$v"
         done
         install -m 600 /dev/null .secret/-secret.sh
@@ -146,7 +151,11 @@ jobs:
           printf 'START_BLOCK_CONTRACT_ICO=%s\n'       "$START_BLOCK_CONTRACT_ICO"
           printf 'START_BLOCK_CONTRACT_VESTING=%s\n'   "$START_BLOCK_CONTRACT_VESTING"
           printf 'START_BLOCK_CONTRACT_STAKING=%s\n'   "$START_BLOCK_CONTRACT_STAKING"
-          printf 'ALLOW_DB_RESET=%s\n'                  "$ALLOW_DB_RESET"
+          printf 'ALLOW_DB_RESET=%s\n'                 "$ALLOW_DB_RESET"
+          printf 'S3_BUCKET=%s\n'                      "$S3_BUCKET"
+          printf 'S3_REGION=%s\n'                      "$S3_REGION"
+          printf 'S3_ACCESS_KEY=%s\n'                  "$S3_ACCESS_KEY"
+          printf 'S3_SECRET_KEY=%s\n'                  "$S3_SECRET_KEY"
         } >> .secret/-secret.sh
 
     - name: 'Build the image, push and deploy' 

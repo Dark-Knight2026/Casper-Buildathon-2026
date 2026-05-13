@@ -116,6 +116,11 @@ VERSION ?= $(shell printf '%s-%s' "$$(git rev-parse --short HEAD 2>/dev/null || 
 export VERSION
 TAG := $(GOOGLE_APPLICATION_REGION)-docker.pkg.dev/$(GOOGLE_APPLICATION_PROJECT_ID)/$(ARTIFACT_REPO_NAME)/$(PROJECT_NAME)
 
+# Internal compose-network endpoint (backend container -> minio service DNS name).
+# Public reads go through nginx /media/ proxy and use S3_PUBLIC_URL_BASE below.
+S3_ENDPOINT := http://minio:9000
+S3_PUBLIC_URL_BASE := https://$(PROJECT_DOMAIN)/media
+
 # ------------------------------------------------------------
 # Automatically export TF_VAR_* from existing Make variables
 # ------------------------------------------------------------
@@ -159,7 +164,13 @@ PROJECT_ENV_VARS := \
 	START_BLOCK_CONTRACT_ICO \
 	START_BLOCK_CONTRACT_VESTING \
 	START_BLOCK_CONTRACT_STAKING \
-	ALLOW_DB_RESET
+	ALLOW_DB_RESET \
+	S3_BUCKET \
+	S3_REGION \
+	S3_ENDPOINT \
+	S3_ACCESS_KEY \
+	S3_SECRET_KEY \
+	S3_PUBLIC_URL_BASE
 
 # !!!!!! NEW PROJECT VARS ADD HERE
 
