@@ -39,12 +39,13 @@ pub mod types {
         pub payout_currency: Option<Address>,
     }
 
+    #[derive(Default)]
     #[odra::odra_type]
     pub struct HolderRevenueState {
         /// Revenue accrued but not yet claimed
         pub pending_revenue: U256,
         /// Holder snapshot of the global revenue-per-token accumulator.
-        pub revenue_per_token: U256,
+        pub revenue_per_token_paid: U256,
     }
 }
 
@@ -92,6 +93,7 @@ pub struct RevenueDistributor {
     investor_registry: External<InvestorRegistryContractRef>,
     holder_revenue: Mapping<Address, HolderRevenueState>,
     revenue_per_token_stored: Var<U256>,
+    // TODO: Should we be adding the BIG token contract ref here?
 }
 
 #[odra::module]
@@ -115,4 +117,45 @@ impl RevenueDistributor {
             payout_currency: params.payout_currency,
         });
     }
+
+    // =============================================================================
+    // View Functions
+    // =============================================================================
+
+    /// Returns the property ID this distributor serves.
+    pub fn get_property_id(&self) -> U256 {
+        self.property_id.get_or_default()
+    }
+
+    /// Returns the property token contract address.
+    pub fn get_property_token_contract(&self) -> Address {
+        *self.property_token.address()
+    }
+
+    /// Returns the property registry contract address.
+    pub fn get_property_registry_contract(&self) -> Address {
+        *self.property_registry.address()
+    }
+
+    /// Returns the investor registry contract address.
+    pub fn get_investor_registry_contract(&self) -> Address {
+        *self.investor_registry.address()
+    }
+
+    /// Returns the payout currency.
+    /// @dev `None` means native CSPR. `Some(address) means CEP-18 token.
+    pub fn get_payout_currency(&self) -> Option<Address> {
+        self.payout_currency.get_or_default()
+    }
+
+    /// Returns the global revenue-per-token accumulator.
+    pub fn get_revenue_per_token_stored(&self) -> U256 {
+        self.revenue_per_token_stored.get_or_default()
+    }
+
+    /// Returns stored revenue state for `account`.
+    pub fn get_holder_revenue(&self, account: Address) -> HolderRevenueState {
+        self.holder_revenue.get_or_default(&account)
+    }
+
 }
