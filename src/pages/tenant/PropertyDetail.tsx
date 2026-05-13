@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate, useLocation, Navigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation, Navigate, Link } from 'react-router-dom';
 
 import { format } from 'date-fns';
 import {
@@ -18,10 +18,11 @@ import {
   Car,
   Loader2,
   FileText,
+  Lock,
 } from 'lucide-react';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
@@ -53,7 +54,7 @@ export default function PropertyDetail() {
   const navigate = useNavigate();
   const location = useLocation();
   const { toast } = useToast();
-  const { requireAuth } = useAuthPrompt();
+  const { requireAuth, isAuthenticated } = useAuthPrompt();
 
   const stateProperty = (location.state?.property as Property) ?? null;
   // Hydrate from FEATURED_PROPERTIES on direct URL access (refresh, bookmark,
@@ -350,10 +351,10 @@ export default function PropertyDetail() {
                 />
 
                 <Tabs defaultValue="amenities" className="w-full">
-                  <TabsList className="grid w-full grid-cols-3">
+                  <TabsList className={`grid w-full ${isAuthenticated ? 'grid-cols-3' : 'grid-cols-2'}`}>
                     <TabsTrigger value="amenities">Amenities</TabsTrigger>
                     <TabsTrigger value="policies">Policies</TabsTrigger>
-                    <TabsTrigger value="lease">Lease Terms</TabsTrigger>
+                    {isAuthenticated && <TabsTrigger value="lease">Lease Terms</TabsTrigger>}
                   </TabsList>
                   
                   <TabsContent value="amenities" className="space-y-4">
@@ -426,26 +427,28 @@ export default function PropertyDetail() {
                     </div>
                   </TabsContent>
 
-                  <TabsContent value="lease" className="space-y-4">
-                    <div className="space-y-3">
-                      <div className="flex justify-between">
-                        <span className="text-sm font-medium">Security Deposit</span>
-                        <span className="text-sm">{formatCurrency(property.securityDeposit)}</span>
-                      </div>
-                      {property.leaseTerms && property.leaseTerms.length > 0 && (
-                        <div>
-                          <span className="text-sm font-medium block mb-2">Available Lease Terms</span>
-                          <div className="flex flex-wrap gap-2">
-                            {property.leaseTerms.map((term, index) => (
-                              <Badge key={index} variant="outline">
-                                {term}
-                              </Badge>
-                            ))}
-                          </div>
+                  {isAuthenticated && (
+                    <TabsContent value="lease" className="space-y-4">
+                      <div className="space-y-3">
+                        <div className="flex justify-between">
+                          <span className="text-sm font-medium">Security Deposit</span>
+                          <span className="text-sm">{formatCurrency(property.securityDeposit)}</span>
                         </div>
-                      )}
-                    </div>
-                  </TabsContent>
+                        {property.leaseTerms && property.leaseTerms.length > 0 && (
+                          <div>
+                            <span className="text-sm font-medium block mb-2">Available Lease Terms</span>
+                            <div className="flex flex-wrap gap-2">
+                              {property.leaseTerms.map((term, index) => (
+                                <Badge key={index} variant="outline">
+                                  {term}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </TabsContent>
+                  )}
                 </Tabs>
               </CardContent>
             </Card>
@@ -497,42 +500,77 @@ export default function PropertyDetail() {
 
           {/* Sidebar */}
           <div className="space-y-6">
-            {/* Apply Card */}
-            <Card className="sticky top-24">
-              <CardHeader>
-                <CardTitle>Move-in Costs</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Monthly Rent</span>
-                    <span className="font-semibold">{formatCurrency(property.rent)}</span>
+            {/* Move-in Costs — gated. Guests see a sign-in prompt instead of
+                a pricing breakdown they can't act on (Apply is auth-gated). */}
+            {isAuthenticated ? (
+              <Card className="sticky top-24">
+                <CardHeader>
+                  <CardTitle>Move-in Costs</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Monthly Rent</span>
+                      <span className="font-semibold">{formatCurrency(property.rent)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Security Deposit</span>
+                      <span className="font-semibold">{formatCurrency(property.securityDeposit)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Application Fee</span>
+                      <span className="font-semibold">{formatCurrency(APPLICATION_FEE)}</span>
+                    </div>
+                    <div className="border-t pt-2 flex justify-between">
+                      <span className="font-semibold">Total Move-in Cost</span>
+                      <span className="font-bold text-lg">
+                        {formatCurrency(property.rent + property.securityDeposit + APPLICATION_FEE)}
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Security Deposit</span>
-                    <span className="font-semibold">{formatCurrency(property.securityDeposit)}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Application Fee</span>
-                    <span className="font-semibold">{formatCurrency(APPLICATION_FEE)}</span>
-                  </div>
-                  <div className="border-t pt-2 flex justify-between">
-                    <span className="font-semibold">Total Move-in Cost</span>
-                    <span className="font-bold text-lg">
-                      {formatCurrency(property.rent + property.securityDeposit + APPLICATION_FEE)}
-                    </span>
-                  </div>
-                </div>
 
-                <Button onClick={handleApply} className="w-full" size="lg">
-                  Apply Now
-                </Button>
+                  <Button onClick={handleApply} className="w-full" size="lg">
+                    Apply Now
+                  </Button>
 
-                <p className="text-xs text-center text-gray-500">
-                  Available {formatDateSafe(property.availableDate, 'MMMM d, yyyy') ?? 'TBD'}
-                </p>
-              </CardContent>
-            </Card>
+                  <p className="text-xs text-center text-gray-500">
+                    Available {formatDateSafe(property.availableDate, 'MMMM d, yyyy') ?? 'TBD'}
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              <Card className="sticky top-24">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Lock className="h-5 w-5 text-muted-foreground" />
+                    Pricing &amp; Lease Terms
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <p className="text-sm text-muted-foreground">
+                    Sign in to see the full cost breakdown (rent, deposit, application fee),
+                    available lease terms, and apply for this property.
+                  </p>
+                  <div className="space-y-2">
+                    <Link
+                      to="/auth/register"
+                      className={buttonVariants({ size: 'lg', className: 'w-full' })}
+                    >
+                      Create account
+                    </Link>
+                    <Link
+                      to="/auth/login"
+                      className={buttonVariants({ variant: 'outline', size: 'lg', className: 'w-full' })}
+                    >
+                      Sign in
+                    </Link>
+                  </div>
+                  <p className="text-xs text-center text-gray-500">
+                    Available {formatDateSafe(property.availableDate, 'MMMM d, yyyy') ?? 'TBD'}
+                  </p>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Contact Card */}
             <Card>
