@@ -340,15 +340,18 @@ impl CompliancePolicy {
             return Some(Error::TransfersDisabled);
         }
 
-        if !self.is_transfer_exempt(from) && !self.investor_registry.is_verified(from) {
+        let from_exempt = self.is_transfer_exempt(from);
+        let to_exempt = self.is_transfer_exempt(to);
+
+        if !from_exempt && !self.investor_registry.is_verified(from) {
             return Some(Error::SenderNotVerified);
         }
 
-        if !self.is_transfer_exempt(to) && !self.investor_registry.is_verified(to) {
+        if !to_exempt && !self.investor_registry.is_verified(to) {
             return Some(Error::RecipientNotVerified);
         }
 
-        let is_equity_distribution = self.is_transfer_exempt(from) && !self.is_transfer_exempt(to);
+        let is_equity_distribution = from_exempt && !to_exempt;
 
         if is_equity_distribution
             && config.equity_distribution_requires_lease_option
