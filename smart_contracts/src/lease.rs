@@ -14,6 +14,7 @@ use crate::{
         types::{CreateLeaseAgreementParams, LeaseAgreement},
     },
     nft::NFTContractRef,
+    property_registry::PropertyRegistryContractRef,
     roles::RolesContractRef,
 };
 
@@ -107,6 +108,8 @@ pub mod errors {
         LeaseAgreementHasNotFinishedYet = 406,
         NotAllInvoicesArePaid = 407,
         SecurityDepositChargeIsTooHigh = 408,
+        InvalidPropertyStatus = 409,
+        InvalidPropertyIssuer = 410,
     }
 }
 
@@ -125,6 +128,7 @@ pub struct Lease {
     roles: External<RolesContractRef>,
     escrow: External<EscrowContractRef>,
     nft: External<NFTContractRef>,
+    property_registry: External<PropertyRegistryContractRef>,
     leases: Mapping<U256, LeaseAgreement>,
     equity_eligible: Mapping<(U256, Address), bool>,
     leases_count: Var<U256>,
@@ -162,6 +166,12 @@ impl Lease {
         self.nft.set(nft);
     }
 
+    /// Sets the PropertyRegistry contract address by the owner
+    pub fn set_property_registry(&mut self, property_registry: Address) {
+        self.assert_owner();
+        self.property_registry.set(property_registry);
+    }
+
     // =========================================================================
     // View Functions
     // =========================================================================
@@ -179,6 +189,11 @@ impl Lease {
     /// Returns the NFT contract address
     pub fn get_nft_contract_address(&self) -> Address {
         *self.nft.address()
+    }
+
+    /// Returns the PropertyRegistry contract address
+    pub fn get_property_registry_contract_address(&self) -> Address {
+        *self.property_registry.address()
     }
 
     /// Returns lease agreement by its ID
@@ -282,11 +297,26 @@ impl Lease {
 
         // Mark the tenant as eligible for property equity
         if let Some(equity_option) = &params.equity_option {
+            let property_id = equity_option.property_id;
+
+            let property = self.property_registry.get_property(property_id);
+
+            if !matches!(
+                property.status,
+                crate::property_registry::types::PropertyStatus::Active
+            ) {
+                self.env().revert(Error::InvalidPropertyStatus);
+            }
+
+            if property.issuer != landlord {
+                self.env().revert(Error::InvalidPropertyIssuer);
+            }
+
             self.equity_eligible
-                .set(&(equity_option.property_id, params.tenant), true);
+                .set(&(property_id, params.tenant), true);
 
             self.env().emit_event(EquityEligibilityGranted {
-                property_id: equity_option.property_id,
+                property_id,
                 account: params.tenant,
             });
         }

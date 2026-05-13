@@ -22,6 +22,10 @@ use leasefi_contracts::lease::{
     Lease, LeaseHostRef, LeaseInitArgs,
 };
 use leasefi_contracts::nft::{errors::Error as NftError, types::NFTInitParams};
+use leasefi_contracts::property_registry::{
+    types::{CreatePropertyParams, PropertyStatus},
+    PropertyRegistry, PropertyRegistryHostRef, PropertyRegistryInitArgs,
+};
 use leasefi_contracts::roles::{Roles, RolesHostRef, RolesInitArgs};
 
 use crate::{
@@ -39,6 +43,7 @@ struct TestData {
     lease: LeaseHostRef,
     escrow: EscrowHostRef,
     nft: NFTHostRef,
+    property_registry: PropertyRegistryHostRef,
     landlord: Address,
 }
 
@@ -81,11 +86,19 @@ fn setup(env: HostEnv) -> TestData {
         },
     );
 
+    let mut property_registry = PropertyRegistry::deploy(
+        &env,
+        PropertyRegistryInitArgs {
+            owner: env.get_account(0),
+        },
+    );
+
     let landlord = env.get_account(14);
 
     lease.set_escrow(escrow.address());
     lease.set_roles(roles.address());
     lease.set_nft(nft.address());
+    lease.set_property_registry(property_registry.address());
 
     escrow.set_lease(lease.address());
     escrow.set_treasury(env.get_account(19));
@@ -98,6 +111,12 @@ fn setup(env: HostEnv) -> TestData {
     );
     roles.grant_role(&roles.get_landlord_role(), &landlord);
 
+    env.set_caller(env.get_account(0));
+    property_registry.grant_role(
+        &property_registry.property_manager_role(),
+        &env.get_account(0),
+    );
+
     env.set_caller(landlord);
 
     TestData {
@@ -106,6 +125,7 @@ fn setup(env: HostEnv) -> TestData {
         lease,
         escrow,
         nft,
+        property_registry,
         landlord,
     }
 }
@@ -157,6 +177,30 @@ fn pay_all_lease_agreement_invoices(test_data: &mut TestData, lease_agreement_id
         test_data.lease.is_all_invoices_paid(lease_agreement_id),
         "All invoices should been paid"
     );
+}
+
+fn create_active_property(test_data: &mut TestData, issuer: Address) -> U256 {
+    test_data.env.set_caller(test_data.env.get_account(0));
+    let property_id = test_data
+        .property_registry
+        .create_property(CreatePropertyParams {
+            issuer,
+            total_supply: U256::from(1_000_000),
+            metadata_uri: String::from("ipfs://property-1"),
+        });
+
+    test_data
+        .property_registry
+        .set_property_token(property_id, test_data.env.get_account(2));
+    test_data
+        .property_registry
+        .set_revenue_distributor(property_id, test_data.env.get_account(3));
+    test_data
+        .property_registry
+        .set_property_status(property_id, PropertyStatus::Active);
+
+    test_data.env.set_caller(test_data.landlord);
+    property_id
 }
 
 // =============================================================================
@@ -512,7 +556,8 @@ fn test_create_lease_agreement_should_create_lease_agreement_properly() {
 fn test_create_lease_agreement_with_equity_option_should_mark_tenant_equity_eligible() {
     let mut test_data = setup(odra_test::env());
     let mut params = generate_lease_agreement_creation_params(&test_data);
-    let property_id = U256::from(77);
+    let landlord = test_data.landlord;
+    let property_id = create_active_property(&mut test_data, landlord);
 
     params.equity_option = Some(LeaseEquityOption { property_id });
 
@@ -557,10 +602,59 @@ fn test_create_lease_agreement_with_equity_option_should_mark_tenant_equity_elig
 }
 
 #[test]
+fn test_create_lease_agreement_should_fail_if_property_is_not_active() {
+    let mut test_data = setup(odra_test::env());
+    let mut params = generate_lease_agreement_creation_params(&test_data);
+
+    test_data.env.set_caller(test_data.env.get_account(0));
+    let property_id = test_data
+        .property_registry
+        .create_property(CreatePropertyParams {
+            issuer: test_data.landlord,
+            total_supply: U256::from(1_000_000),
+            metadata_uri: String::from("ipfs://property-1"),
+        });
+
+    test_data.env.set_caller(test_data.landlord);
+    params.equity_option = Some(LeaseEquityOption { property_id });
+
+    assert_eq!(
+        test_data
+            .lease
+            .try_create_lease_agreement(params)
+            .unwrap_err(),
+        Error::InvalidPropertyStatus.into(),
+        "Should revert if property is not active"
+    );
+}
+
+#[test]
+fn test_create_lease_agreement_should_fail_if_landlord_is_not_issuer() {
+    let mut test_data = setup(odra_test::env());
+    let mut params = generate_lease_agreement_creation_params(&test_data);
+
+    let other_issuer = test_data.env.get_account(15);
+    // Property issuer is different from landlord
+    let property_id = create_active_property(&mut test_data, other_issuer);
+
+    params.equity_option = Some(LeaseEquityOption { property_id });
+
+    assert_eq!(
+        test_data
+            .lease
+            .try_create_lease_agreement(params)
+            .unwrap_err(),
+        Error::InvalidPropertyIssuer.into(),
+        "Should revert if landlord is not property issuer"
+    );
+}
+
+#[test]
 fn test_create_lease_agreement_without_equity_option_should_not_mark_tenant_equity_eligible() {
     let mut test_data = setup(odra_test::env());
     let params = generate_lease_agreement_creation_params(&test_data);
-    let property_id = U256::from(77);
+    let landlord = test_data.landlord;
+    let property_id = create_active_property(&mut test_data, landlord);
 
     let lease_agreement_id = test_data.lease.create_lease_agreement(params.clone());
     let lease_agreement = test_data
@@ -572,10 +666,11 @@ fn test_create_lease_agreement_without_equity_option_should_not_mark_tenant_equi
         "Lease should not store an equity options",
     );
 
+    let is_eligible = test_data
+        .lease
+        .is_equity_eligible(property_id, params.tenant);
     assert!(
-        !test_data
-            .lease
-            .is_equity_eligible(property_id, params.tenant),
+        !is_eligible,
         "Tenant should not be equity eligible without an equity options",
     );
 }
@@ -688,7 +783,8 @@ fn test_finalize_lease_agreement_should_finalize_properly_when_all_invoices_paid
 fn test_equity_eligibility_is_revoked_after_lease_finalization() {
     let mut test_data = setup(odra_test::env());
     let mut params = generate_lease_agreement_creation_params(&test_data);
-    let property_id = U256::from(77);
+    let landlord = test_data.landlord;
+    let property_id = create_active_property(&mut test_data, landlord);
     params.equity_option = Some(LeaseEquityOption { property_id });
 
     let lease_agreement_id = test_data.lease.create_lease_agreement(params.clone());

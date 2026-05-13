@@ -126,6 +126,7 @@ fn setup(env: HostEnv) -> Context {
     lease.set_escrow(escrow.address());
     lease.set_roles(roles.address());
     lease.set_nft(nft.address());
+    lease.set_property_registry(property_registry.address());
 
     escrow.set_lease(lease.address());
     escrow.set_treasury(env.get_account(19));
