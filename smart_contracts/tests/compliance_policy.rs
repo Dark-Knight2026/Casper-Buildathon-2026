@@ -793,6 +793,36 @@ fn test_assert_can_transfer_should_succeed_if_equity_rule_is_disabled_even_witho
 }
 
 #[test]
+fn test_assert_can_transfer_should_succeed_for_exempt_to_exempt_transfer_even_if_equity_rule_is_active(
+) {
+    let mut ctx = setup(odra_test::env());
+    let property_id = create_active_property(&mut ctx);
+
+    // Set config to require lease option (gate active)
+    ctx.env.set_caller(ctx.compliance_manager);
+    ctx.compliance.set_compliance_config(
+        property_id,
+        ComplianceConfig {
+            transfers_enabled: true,
+            equity_distribution_requires_lease_option: true,
+        },
+    );
+
+    // Both sender and recipient are exempt (institutional transfer)
+    ctx.compliance.set_transfer_exempt(ctx.sender, true);
+    ctx.compliance.set_transfer_exempt(ctx.recipient, true);
+
+    // Neither party has a lease option; gate must not fire for exempt-to-exempt
+    call_as_property_token(&mut ctx);
+    assert!(
+        ctx.compliance
+            .try_assert_can_transfer(property_id, ctx.sender, ctx.recipient, U256::from(100))
+            .is_ok(),
+        "Exempt-to-exempt transfer should succeed regardless of equity eligibility rule",
+    );
+}
+
+#[test]
 fn test_assert_can_transfer_kyc_check_takes_precedence_over_equity_eligibility() {
     let mut ctx = setup(odra_test::env());
     let property_id = create_active_property(&mut ctx);
