@@ -124,8 +124,8 @@ export function RoleSwitchDialog({ open, onOpenChange, currentRole }: RoleSwitch
         </DialogHeader>
 
         <div className="space-y-4 py-2">
-          <div className="space-y-1.5">
-            <label htmlFor="role-select" className="text-sm font-medium">
+          <div className="space-y-3">
+            <label htmlFor="role-select" className="text-sm font-medium block">
               New role
             </label>
             <Select
@@ -133,10 +133,10 @@ export function RoleSwitchDialog({ open, onOpenChange, currentRole }: RoleSwitch
               onValueChange={(value) => setSelected(value as SelfRegisterableRole)}
               disabled={awaitingSignature || replaying || submitting}
             >
-              <SelectTrigger id="role-select">
+              <SelectTrigger id="role-select" className="w-full">
                 <SelectValue placeholder="Choose a role" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent position="popper" sideOffset={4}>
                 {ROLE_OPTIONS.map((opt) => (
                   <SelectItem key={opt.value} value={opt.value}>
                     {opt.label}
