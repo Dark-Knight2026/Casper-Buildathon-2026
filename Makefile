@@ -1,25 +1,11 @@
 SHELL := /bin/bash
 
-.PHONY:   \
- help     \
- env-up   \
- env-down \
- migrate  \
- restart  \
- check    \
- validate \
- fmt      \
- lint     \
- openapi  \
- prepare  \
- test     \
- test-one \
- test-in  \
- test-not \
- run      \
- index    \
- clean    \
- deploy   \
+.PHONY: \
+ help \
+ env-up env-down migrate restart  \
+ check validate fmt lint openapi prepare \
+ test test-one test-in test-not \
+ run index clean deploy \
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z0-9_.-]+:.*?## ' Makefile | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  make %-10s %s\n", $$1, $$2}'
@@ -112,8 +98,7 @@ clean: ## Clean build artifacts
 	@echo "[*] Cleaning build artifacts..."
 	@cargo clean
 
-# =====================================================================================================
-# Deployment
+# Deployment ===================================================================
 
 ## Deploys using tools from the container
 deploy:

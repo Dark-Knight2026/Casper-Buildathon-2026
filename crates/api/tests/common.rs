@@ -1,13 +1,15 @@
 //! Common test utilities.
 //!
-//! ## Database strategy
+//! ## Backend strategy
 //!
 //! - **`PostgreSQL`**: Single container via docker-compose, isolated DBs via `#[sqlx::test]`
-//! - **Redis**: Testcontainers per test (needs full isolation for nonce storage)
+//! - **`MinIO`**: Single container via docker-compose, isolated buckets via UUID suffix
+//! - **`Redis`**: Testcontainers per test (no per-test namespace primitive - separate
+//!   keyspace would require ubiquitous per-test prefixes on every key)
 //!
 //! Alternatives considered:
-//! - Testcontainers for both — slower (~10s per test for PG startup)
-//! - Shared Redis — breaks parallel test isolation
+//! - Testcontainers for everything - slower (~10s PG, ~3-5s `MinIO` startup per test)
+//! - Shared Redis - breaks parallel test isolation
 
 #![allow(dead_code)]
 #![allow(clippy::missing_panics_doc)]
@@ -29,7 +31,7 @@ use serde::de::DeserializeOwned;
 use serde_json::Value;
 use sqlx::{PgPool, migrate::Migrator};
 use testcontainers::{
-    ContainerAsync, GenericImage, ImageExt,
+    ContainerAsync, GenericImage,
     core::{IntoContainerPort, WaitFor},
     runners::AsyncRunner,
 };
@@ -41,7 +43,7 @@ use api::{
         CASPER_MESSAGE_PREFIX, JWT_AUDIENCE, JWT_ISSUER, RedisStore, TOTAL_SUPPLY, TokenType,
         VerificationLevel,
     },
-    providers::{EmailSender, MediaStorage, SharedMediaStorage, StubMediaStorage},
+    providers::{EmailSender, SharedMediaStorage, StubMediaStorage},
     server,
 };
 
@@ -200,7 +202,7 @@ pub async fn setup_test_server_with(
         .unwrap_or_else(|| Arc::new(LoggingEmailSender) as Arc<dyn EmailSender>);
     let media_storage = overrides
         .media_storage
-        .unwrap_or_else(|| Arc::new(StubMediaStorage::new()) as Arc<dyn MediaStorage>);
+        .unwrap_or_else(|| Arc::new(StubMediaStorage::new()) as SharedMediaStorage);
     let state = Arc::new(AppState {
         db: pool,
         redis: RedisStore::new(redis_client)
@@ -532,18 +534,26 @@ pub async fn login_and_extract(env: &TestEnv) -> LoggedSession {
 }
 
 /// Default `MinIO` root credentials used for ephemeral test buckets.
-/// `MinIO` requires `MINIO_ROOT_PASSWORD` to be at least 8 chars; the test
-/// fixture uses the documented `MinIO` defaults so the container starts
-/// without bespoke env tuning.
+/// `MinIO` requires `MINIO_ROOT_PASSWORD` to be at least 8 chars; the
+/// test fixture uses the documented `MinIO` defaults that match the
+/// `minio-test` service in `docker-compose.test.yml`.
 const MINIO_TEST_ACCESS_KEY: &str = "minioadmin";
 const MINIO_TEST_SECRET_KEY: &str = "minioadmin";
 const MINIO_TEST_REGION: &str = "us-east-1";
-const MINIO_TEST_BUCKET: &str = "leasefi-test";
+/// Host endpoint of the shared `MinIO` container from
+/// `docker-compose.test.yml`. Port 9100 (not 9000) so the test stack
+/// can run alongside the dev stack without colliding.
+const MINIO_TEST_ENDPOINT: &str = "http://127.0.0.1:9100";
+/// Per-test bucket name is `{prefix}-{uuid}` so parallel `nextest`
+/// workers stay isolated on the shared `MinIO`.
+const MINIO_TEST_BUCKET_PREFIX: &str = "leasefi-test";
 
-/// Holds a running `MinIO` container and an [`S3Config`] bound to its
-/// freshly-created bucket. The bucket is created during `start()` so
-/// callers can immediately point `S3MediaStorage::new(...)` at the
-/// returned config without an extra round-trip.
+/// Holds a freshly-created bucket on the shared `MinIO` container
+/// (`minio-test` in `docker-compose.test.yml`) and an [`S3Config`]
+/// bound to it. The bucket name is suffixed with a UUID per test, so
+/// parallel workers do not collide on object keys; the bucket itself
+/// is not torn down at end-of-test - the entire `MinIO /data` mount
+/// is `tmpfs`, so accumulated buckets disappear on `make env-down`.
 ///
 /// The bucket policy is left at the `MinIO` default (private). Tests
 /// that need to verify the public-fetch behaviour of the production
@@ -558,8 +568,6 @@ pub struct MinioTestEnv {
     /// Direct bucket handle for read-back assertions in tests
     /// (`bucket.get_object(key)` after a put through the handler).
     pub bucket: Box<Bucket>,
-    /// Keeps the container alive for the duration of the test.
-    container: ContainerAsync<GenericImage>,
 }
 
 impl Debug for MinioTestEnv {
@@ -573,33 +581,18 @@ impl Debug for MinioTestEnv {
 }
 
 impl MinioTestEnv {
-    /// Starts a `MinIO` container, creates a fresh test bucket, and
-    /// returns the populated environment.
+    /// Creates a fresh per-test bucket on the shared `MinIO` container
+    /// and returns the populated environment.
     ///
-    /// Container startup takes ~3-5 seconds on Linux runners; tests
-    /// using this fixture are gated behind `#[ignore]` so the default
-    /// `cargo test` run (without Docker) stays green.
+    /// Assumes `minio-test` is up (started by `make test` via
+    /// `docker-compose.test.yml`). Bucket creation is ~50ms per test,
+    /// vs ~3-5s for a per-test container startup.
     #[inline]
     pub async fn start() -> Self {
-        // `server /data` is the canonical MinIO entrypoint; the path
-        // does not need to exist beforehand, the daemon creates it.
-        let image = GenericImage::new("minio/minio", "latest")
-            .with_exposed_port(9000.tcp())
-            .with_wait_for(WaitFor::message_on_stderr("API:"))
-            .with_env_var("MINIO_ROOT_USER", MINIO_TEST_ACCESS_KEY)
-            .with_env_var("MINIO_ROOT_PASSWORD", MINIO_TEST_SECRET_KEY)
-            .with_cmd(["server".to_owned(), "/data".to_owned()]);
-
-        let container = image.start().await.expect("Failed to start MinIO");
-        let port = container
-            .get_host_port_ipv4(9000)
-            .await
-            .expect("Failed to get MinIO port");
-
-        let endpoint = format!("http://127.0.0.1:{port}");
+        let bucket_name = format!("{MINIO_TEST_BUCKET_PREFIX}-{}", Uuid::new_v4());
         let region = Region::Custom {
             region: MINIO_TEST_REGION.to_owned(),
-            endpoint: endpoint.clone(),
+            endpoint: MINIO_TEST_ENDPOINT.to_owned(),
         };
         let credentials = Credentials::new(
             Some(MINIO_TEST_ACCESS_KEY),
@@ -615,7 +608,7 @@ impl MinioTestEnv {
         // ready-to-use `Bucket` handle - one round-trip, no second
         // `Bucket::new(...).with_path_style()` dance.
         Bucket::create_with_path_style(
-            MINIO_TEST_BUCKET,
+            &bucket_name,
             region.clone(),
             credentials.clone(),
             BucketConfiguration::default(),
@@ -623,32 +616,19 @@ impl MinioTestEnv {
         .await
         .expect("MinIO create bucket");
 
-        let bucket = Bucket::new(MINIO_TEST_BUCKET, region, credentials)
+        let bucket = Bucket::new(&bucket_name, region, credentials)
             .expect("MinIO bucket handle")
             .with_path_style();
 
         let config = S3Config {
-            bucket: MINIO_TEST_BUCKET.to_owned(),
+            bucket: bucket_name.clone(),
             region: MINIO_TEST_REGION.to_owned(),
-            endpoint: endpoint.clone(),
+            endpoint: MINIO_TEST_ENDPOINT.to_owned(),
             access_key: SecretString::from(MINIO_TEST_ACCESS_KEY),
             secret_key: SecretString::from(MINIO_TEST_SECRET_KEY),
-            public_url_base: format!("{endpoint}/{MINIO_TEST_BUCKET}"),
+            public_url_base: format!("{MINIO_TEST_ENDPOINT}/{bucket_name}"),
         };
 
-        Self {
-            config,
-            bucket,
-            container,
-        }
-    }
-
-    /// Stops the underlying `MinIO` container so subsequent `S3MediaStorage`
-    /// calls observe a transport failure. Used by the 5xx-mapping test
-    /// that pins the handler's "do not leak storage details in response
-    /// body" contract.
-    #[inline]
-    pub async fn stop(&self) {
-        self.container.stop().await.expect("MinIO stop");
+        Self { config, bucket }
     }
 }

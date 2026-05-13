@@ -16,10 +16,12 @@
 //!    does NOT leak bucket name, endpoint, or credentials.
 //!
 //! The whole file is gated behind the `integration` feature so the
-//! default `cargo test -p api` run (without Docker) stays green. Run
-//! these cases with `cargo nextest run -p api --features integration
-//! --test users_avatar_s3` locally or in a CI job that mounts
-//! `/var/run/docker.sock`.
+//! default `cargo test -p api` run (without Docker) stays green.
+//! `make test` enables the feature via `--all-features` and brings up
+//! the shared `minio-test` container from `docker-compose.test.yml`,
+//! so the standard flow just works; ad-hoc runs need `cargo nextest
+//! run -p api --features integration --test users_avatar_s3` against
+//! an already-running test compose stack.
 
 #![cfg(feature = "integration")]
 
@@ -36,7 +38,7 @@ use secrecy::ExposeSecret;
 use serde_json::Value;
 use sqlx::PgPool;
 
-use api::{MediaStorage, S3MediaStorage};
+use api::{S3MediaStorage, SharedMediaStorage};
 use common::{MinioTestEnv, TestEnv, TestOverrides};
 
 /// Starts a `MinIO` container, wires its config into an `S3MediaStorage`,
@@ -60,7 +62,7 @@ async fn setup_with_minio(pool: PgPool) -> (TestEnv, MinioTestEnv) {
             minio.config.public_url_base.clone(),
         )
         .expect("S3MediaStorage init"),
-    ) as Arc<dyn MediaStorage>;
+    ) as SharedMediaStorage;
     let env = common::setup_test_server_with(
         pool,
         true,
@@ -196,20 +198,39 @@ async fn avatar_reupload_deletes_previous_extension(pool: PgPool) {
 /// since the underlying `StorageError::Transport(...)` message contains
 /// all of them and a naive `format!("{e}")` into the API response
 /// would leak the lot to any caller.
+///
+/// Points `S3MediaStorage` at port 1 (RFC 6335 reserved) so the TCP
+/// connect fails immediately. Doing so in-test, rather than stopping a
+/// shared container, keeps the rest of the suite running and lets the
+/// assertions probe for fake bucket/endpoint/key strings that we
+/// authored on the spot.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn avatar_upload_with_dead_storage_returns_generic_500(pool: PgPool) {
-    let (env, minio) = setup_with_minio(pool).await;
+    let fake_bucket = "fake-bucket";
+    let fake_endpoint = "http://127.0.0.1:1";
+    let fake_access_key = "FAKEACCESSKEY";
+    let fake_secret_key = "fakesecret";
+    let storage = Arc::new(
+        S3MediaStorage::new(
+            fake_bucket,
+            "us-east-1".to_owned(),
+            fake_endpoint.to_owned(),
+            fake_access_key,
+            fake_secret_key,
+            format!("{fake_endpoint}/{fake_bucket}"),
+        )
+        .expect("S3MediaStorage init"),
+    ) as SharedMediaStorage;
+    let env = common::setup_test_server_with(
+        pool,
+        true,
+        TestOverrides {
+            media_storage: Some(storage),
+            ..TestOverrides::default()
+        },
+    )
+    .await;
     let session = common::login_and_extract(&env).await;
-
-    let host_port = minio
-        .config
-        .endpoint
-        .trim_start_matches("http://")
-        .to_owned();
-    let bucket_name = minio.config.bucket.clone();
-    let access_key = minio.config.access_key.expose_secret().to_owned();
-
-    minio.stop().await;
 
     let form = MultipartForm::new().add_part(
         "file",
@@ -227,15 +248,15 @@ async fn avatar_upload_with_dead_storage_returns_generic_500(pool: PgPool) {
     assert_eq!(response.status_code(), StatusCode::INTERNAL_SERVER_ERROR);
     let body_text = response.text();
     assert!(
-        !body_text.contains(&access_key),
+        !body_text.contains(fake_access_key),
         "access key MUST NOT leak in response body: {body_text}",
     );
     assert!(
-        !body_text.contains(&host_port),
+        !body_text.contains("127.0.0.1:1"),
         "endpoint host:port MUST NOT leak in response body: {body_text}",
     );
     assert!(
-        !body_text.contains(&bucket_name),
+        !body_text.contains(fake_bucket),
         "bucket name MUST NOT leak in response body: {body_text}",
     );
 }
