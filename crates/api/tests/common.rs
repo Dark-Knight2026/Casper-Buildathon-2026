@@ -41,7 +41,7 @@ use api::{
         CASPER_MESSAGE_PREFIX, JWT_AUDIENCE, JWT_ISSUER, RedisStore, TOTAL_SUPPLY, TokenType,
         VerificationLevel,
     },
-    providers::{EmailSender, MediaStorage, StubMediaStorage},
+    providers::{EmailSender, MediaStorage, SharedMediaStorage, StubMediaStorage},
     server,
 };
 
@@ -134,7 +134,7 @@ pub struct TestOverrides {
     /// The avatar upload tests use this to swap in fakes that return
     /// `StorageError::Transport` so the handler's 500-mapping path can
     /// be observed without wiring up a real S3 backend.
-    pub media_storage: Option<Arc<dyn MediaStorage>>,
+    pub media_storage: Option<SharedMediaStorage>,
 }
 
 impl Debug for TestOverrides {

@@ -123,8 +123,60 @@ services:
       - leasefi_net
     logging: *default-logging
 
+  minio:
+    image: minio/minio:latest
+    container_name: leasefi_minio
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+          cpus: "0.50"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      # `mc` inside the minio image is preconfigured with a `local` alias
+      # derived from MINIO_ROOT_USER/PASSWORD, so `mc ready` works without
+      # an explicit `mc alias set` first.
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - leasefi_net
+    logging: *default-logging
+
+  # One-shot bucket bootstrap. Creates the configured bucket and opens
+  # anonymous downloads on it (MinIO's equivalent of the `x-amz-acl:
+  # public-read` header the app sets on each PUT). Exits 0 on success
+  # so backend can gate on `service_completed_successfully`.
+  minio-init:
+    image: minio/mc:latest
+    container_name: leasefi_minio_init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 ${MINIO_ROOT_USER:-minioadmin} ${MINIO_ROOT_PASSWORD:-minioadmin};
+      mc mb --ignore-existing local/${S3_BUCKET:-leasefi-media};
+      mc anonymous set download local/${S3_BUCKET:-leasefi-media};
+      exit 0;
+      "
+    networks:
+      - leasefi_net
+    logging: *default-logging
+
 volumes:
   redis_data:
+  minio_data:
 
 networks:
   leasefi_net:
