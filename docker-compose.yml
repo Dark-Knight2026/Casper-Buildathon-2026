@@ -31,8 +31,48 @@ services:
     networks:
       - leasefi_net
 
+  minio:
+    image: minio/minio:latest
+    container_name: leasefi_minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - leasefi_net
+
+  # One-shot bucket bootstrap so `make run` works out-of-box: creates
+  # the configured bucket and opens anonymous downloads (MinIO's
+  # equivalent of `x-amz-acl: public-read` that the app sets per PUT).
+  minio-init:
+    image: minio/mc:latest
+    container_name: leasefi_minio_init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 ${MINIO_ROOT_USER:-minioadmin} ${MINIO_ROOT_PASSWORD:-minioadmin};
+      mc mb --ignore-existing local/${S3_BUCKET:-leasefi-media};
+      mc anonymous set download local/${S3_BUCKET:-leasefi-media};
+      exit 0;
+      "
+    networks:
+      - leasefi_net
+
 volumes:
   redis_data:
+  minio_data:
 
 networks:
   leasefi_net:
