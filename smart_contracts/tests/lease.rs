@@ -684,6 +684,41 @@ fn test_finalize_lease_agreement_should_finalize_properly_when_all_invoices_paid
     ));
 }
 
+#[test]
+fn test_equity_eligibility_is_revoked_after_lease_finalization() {
+    let mut test_data = setup(odra_test::env());
+    let mut params = generate_lease_agreement_creation_params(&test_data);
+    let property_id = U256::from(77);
+    params.equity_option = Some(LeaseEquityOption { property_id });
+
+    let lease_agreement_id = test_data.lease.create_lease_agreement(params.clone());
+
+    // Verify initial eligibility
+    assert!(
+        test_data
+            .lease
+            .is_equity_eligible(property_id, params.tenant),
+        "Tenant should be equity eligible initially"
+    );
+
+    pay_all_lease_agreement_invoices(&mut test_data, &lease_agreement_id);
+
+    test_data
+        .env
+        .advance_block_time(test_data.env.block_time() + (ONE_MONTH_IN_SECONDS * 12));
+    test_data
+        .lease
+        .finalize_lease_agreement(&lease_agreement_id, &U256::zero());
+
+    // Verify revocation
+    assert!(
+        !test_data
+            .lease
+            .is_equity_eligible(property_id, params.tenant),
+        "Tenant equity eligibility should be revoked after finalization"
+    );
+}
+
 // =============================================================================
 // prolong_lease_agreement()
 // =============================================================================

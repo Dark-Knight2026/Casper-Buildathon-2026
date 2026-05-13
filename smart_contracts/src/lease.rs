@@ -340,8 +340,15 @@ impl Lease {
             security_deposit_charge,
         );
 
+        // Clear the `equity_eligible` entry that was set at lease creation
+        if let Some(ref equity_option) = lease_agreement.equity_option {
+            self.equity_eligible
+                .set(&(equity_option.property_id, lease_agreement.tenant), false);
+        }
+
         // The lease NFT remains frozen (set at creation) to prevent unauthorized transfers.
         lease_agreement.is_finished = true;
+
         self.leases.set(lease_agreement_id, lease_agreement);
 
         self.env().emit_event(LeaseAgreementFinished {
