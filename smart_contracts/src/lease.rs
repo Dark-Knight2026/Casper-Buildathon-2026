@@ -1,11 +1,5 @@
-use odra::{
-    casper_types::{bytesrepr::ToBytes, U256},
-    prelude::*,
-    uints::ToU512,
-    ContractRef,
-};
+use odra::{casper_types::U256, prelude::*, uints::ToU512, ContractRef};
 use odra_modules::{access::Ownable, cep18_token::Cep18ContractRef};
-use sha3::{Digest, Keccak256};
 
 use crate::{
     common::CurrencyAmount,
@@ -132,7 +126,7 @@ pub struct Lease {
     escrow: External<EscrowContractRef>,
     nft: External<NFTContractRef>,
     leases: Mapping<U256, LeaseAgreement>,
-    equity_eligible: Mapping<[u8; 32], bool>,
+    equity_eligible: Mapping<(U256, Address), bool>,
     leases_count: Var<U256>,
 }
 
@@ -223,8 +217,7 @@ impl Lease {
     }
 
     pub fn is_equity_eligible(&self, property_id: U256, account: Address) -> bool {
-        self.equity_eligible
-            .get_or_default(&self.equity_key(property_id, account))
+        self.equity_eligible.get_or_default(&(property_id, account))
     }
 
     // =========================================================================
@@ -289,10 +282,9 @@ impl Lease {
 
         // Mark the tenant as eligible for property equity
         if let Some(equity_option) = &params.equity_option {
-            self.equity_eligible.set(
-                &self.equity_key(equity_option.property_id, params.tenant),
-                true,
-            );
+            self.equity_eligible
+                .set(&(equity_option.property_id, params.tenant), true);
+
             self.env().emit_event(EquityEligibilityGranted {
                 property_id: equity_option.property_id,
                 account: params.tenant,
@@ -488,14 +480,5 @@ impl Lease {
                 tenant,
             );
         }
-    }
-
-    fn equity_key(&self, property_id: U256, account: Address) -> [u8; 32] {
-        let mut hasher = Keccak256::default();
-
-        hasher.update(property_id.to_bytes().unwrap_or_revert(self));
-        hasher.update(account.to_bytes().unwrap_or_revert(self));
-
-        hasher.finalize().into()
     }
 }
