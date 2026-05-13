@@ -60,7 +60,7 @@ fn setup(env: HostEnv) -> Context {
 
     let mut investor_registry = InvestorRegistry::deploy(&env, InvestorRegistryInitArgs { owner });
     let mut property_registry = PropertyRegistry::deploy(&env, PropertyRegistryInitArgs { owner });
-    let mut lease = Lease::deploy(&env, LeaseInitArgs { owner });
+    let lease = Lease::deploy(&env, LeaseInitArgs { owner });
 
     let mut compliance = CompliancePolicy::deploy(
         &env,
