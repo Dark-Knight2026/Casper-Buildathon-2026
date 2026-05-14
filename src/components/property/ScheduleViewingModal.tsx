@@ -112,8 +112,8 @@ export function ScheduleViewingModal({
               </Alert>
             )}
 
-            <div className="space-y-2">
-              <Label>Select Date</Label>
+            <div className="space-y-3">
+              <Label className="block">Select Date</Label>
               <Calendar
                 mode="single"
                 selected={selectedDate}
@@ -123,10 +123,10 @@ export function ScheduleViewingModal({
               />
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="time">Select Time</Label>
+            <div className="space-y-3">
+              <Label htmlFor="time" className="block">Select Time</Label>
               <Select value={selectedTime} onValueChange={setSelectedTime}>
-                <SelectTrigger>
+                <SelectTrigger id="time" className="w-full">
                   <SelectValue placeholder="Choose a time slot" />
                 </SelectTrigger>
                 <SelectContent>
@@ -139,7 +139,7 @@ export function ScheduleViewingModal({
               </Select>
             </div>
 
-            <DialogFooter>
+            <DialogFooter className="gap-2 sm:gap-0">
               <Button type="button" variant="outline" onClick={onClose}>
                 Cancel
               </Button>

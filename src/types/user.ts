@@ -144,6 +144,18 @@ export function getDashboardRoute(role: UserRole): string {
   return '/landlord/dashboard';
 }
 
+// Maps a role (or undefined for guest) to the appropriate "search / property
+// list" landing — used by Back-to-Search buttons and similar nav. Guests go
+// to the public `/properties` page; tenants browse via their search page;
+// landlords see their own listings. Add new roles here so callers don't
+// need their own branching.
+export function getSearchRoute(role: UserRole | undefined): string {
+  if (!role) return '/properties';
+  if (role === 'tenant') return '/tenant/property-search';
+  if (role === 'landlord') return '/landlord/properties';
+  return '/properties';
+}
+
 // Route-level role type (includes 'both' as a sentinel for landlord+tenant access)
 export type RouteRole = 'landlord' | 'tenant' | 'admin' | 'both';
 

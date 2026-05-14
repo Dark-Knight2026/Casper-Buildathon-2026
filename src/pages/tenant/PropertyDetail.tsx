@@ -27,10 +27,13 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { useAuthPrompt } from '@/hooks/useAuthPrompt';
+import { useAuth } from '@/hooks/useAuth';
+import { getSearchRoute } from '@/types/user';
 import { SavePropertyButton } from '@/components/property/SavePropertyButton';
 import { ContactLandlordModal } from '@/components/property/ContactLandlordModal';
 import { ScheduleViewingModal } from '@/components/property/ScheduleViewingModal';
 import { VerificationDisclaimer } from '@/components/property/VerificationDisclaimer';
+import { AuthPromptModal } from '@/components/auth/AuthPromptModal';
 import { propertyService } from '@/services/propertyService';
 import { FEATURED_PROPERTIES } from '@/data/featuredProperties';
 import { cn } from '@/lib/utils';
@@ -54,7 +57,19 @@ export default function PropertyDetail() {
   const navigate = useNavigate();
   const location = useLocation();
   const { toast } = useToast();
-  const { requireAuth, isAuthenticated } = useAuthPrompt();
+  const {
+    requireAuth,
+    isAuthenticated,
+    isPromptOpen,
+    promptContext,
+    closePrompt,
+    goToSignUp,
+    goToLogin,
+  } = useAuthPrompt();
+  const { profile } = useAuth();
+  // Role-aware back path — see getSearchRoute() for the mapping. Pass
+  // undefined for guests so the helper returns the public search.
+  const backToSearchPath = getSearchRoute(isAuthenticated ? profile?.role : undefined);
 
   const stateProperty = (location.state?.property as Property) ?? null;
   // Hydrate from FEATURED_PROPERTIES on direct URL access (refresh, bookmark,
@@ -178,17 +193,17 @@ export default function PropertyDetail() {
           <div className="flex justify-between items-center">
             <Button
               variant="ghost"
-              onClick={() => navigate('/tenant/properties')}
+              onClick={() => navigate(backToSearchPath)}
             >
               <ArrowLeft className="mr-2 h-4 w-4" />
               Back to Search
             </Button>
             <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={handleShare}>
-                <Share2 className="mr-2 h-4 w-4" />
-                Share
+              <Button variant="outline" size="sm" onClick={handleShare} aria-label="Share property">
+                <Share2 className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Share</span>
               </Button>
-              <SavePropertyButton variant="outline" size="sm" />
+              <SavePropertyButton variant="outline" size="sm" hideTextOnMobile />
             </div>
           </div>
         </div>
@@ -283,16 +298,18 @@ export default function PropertyDetail() {
             {/* Property Info */}
             <Card>
               <CardHeader>
-                <div className="flex justify-between items-start">
-                  <div>
-                    <CardTitle className="text-2xl mb-2">{property.title}</CardTitle>
-                    <p className="text-gray-600 flex items-center">
-                      <MapPin className="h-4 w-4 mr-1" />
-                      {property.address}, {property.city}, {property.state} {property.zipCode}
+                <div className="flex flex-col md:flex-row justify-between items-start gap-3">
+                  <div className="min-w-0">
+                    <CardTitle className="text-xl sm:text-2xl mb-2">{property.title}</CardTitle>
+                    <p className="text-gray-600 flex items-center text-sm sm:text-base">
+                      <MapPin className="h-4 w-4 mr-1 shrink-0" />
+                      <span className=" sm:whitespace-normal">
+                        {property.address}, {property.city}, {property.state} {property.zipCode}
+                      </span>
                     </p>
                   </div>
-                  <div className="text-right">
-                    <p className="text-3xl font-bold text-primary">
+                  <div className="text-right shrink-0">
+                    <p className="text-2xl sm:text-3xl font-bold text-primary whitespace-nowrap">
                       {formatCurrency(property.rent)}
                       <span className="text-sm text-gray-500 font-normal">/mo</span>
                     </p>
@@ -613,6 +630,17 @@ export default function PropertyDetail() {
         onClose={() => setShowScheduleModal(false)}
         propertyId={property.id}
         propertyAddress={`${property.address}, ${property.city}, ${property.state}`}
+      />
+
+      {/* Guest auth prompt — opens whenever requireAuth() is called by a
+          guest. Without this mount the modal state on useAuthPrompt would
+          go nowhere and the action buttons would appear unresponsive. */}
+      <AuthPromptModal
+        isOpen={isPromptOpen}
+        onClose={closePrompt}
+        onSignUp={goToSignUp}
+        onLogin={goToLogin}
+        action={promptContext?.action}
       />
     </div>
   );

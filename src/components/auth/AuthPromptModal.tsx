@@ -11,7 +11,6 @@
  * - Smooth transitions and animations
  */
 
-import React from 'react';
 import {
   Dialog,
   DialogContent,
@@ -20,7 +19,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { UserPlus, LogIn, X, Lock, Heart, FileText, Bell } from 'lucide-react';
+import { UserPlus, LogIn, X, Lock } from 'lucide-react';
 
 interface AuthPromptModalProps {
   isOpen: boolean;
@@ -37,37 +36,33 @@ export function AuthPromptModal({
   onLogin,
   action = 'continue',
 }: AuthPromptModalProps) {
-  // Determine icon and messaging based on action
+  // Determine messaging based on action (icons removed per design decision —
+  // see AuthPromptModal usages, header now shows title + description only).
   const getActionContext = () => {
     const actionLower = action.toLowerCase();
-    
+
     if (actionLower.includes('save') || actionLower.includes('favorite')) {
       return {
-        icon: <Heart className="h-12 w-12 text-red-500" />,
         title: 'Save Your Favorites',
         description: 'Create an account to save properties and access them anytime.',
       };
     }
-    
+
     if (actionLower.includes('apply') || actionLower.includes('application')) {
       return {
-        icon: <FileText className="h-12 w-12 text-blue-500" />,
         title: 'Submit Your Application',
         description: 'Sign up to submit rental applications and track their status.',
       };
     }
-    
+
     if (actionLower.includes('contact') || actionLower.includes('message')) {
       return {
-        icon: <Bell className="h-12 w-12 text-green-500" />,
         title: 'Contact Property Owner',
         description: 'Create an account to message property owners and schedule viewings.',
       };
     }
-    
-    // Default
+
     return {
-      icon: <Lock className="h-12 w-12 text-purple-500" />,
       title: 'Sign Up to Continue',
       description: 'Create a free account to access all features and save your progress.',
     };
@@ -86,10 +81,7 @@ export function AuthPromptModal({
           <X className="h-4 w-4" />
         </button>
 
-        <DialogHeader className="text-center space-y-4">
-          <div className="flex justify-center">
-            {context.icon}
-          </div>
+        <DialogHeader className="text-center space-y-3 pt-6 sm:pt-2">
           <DialogTitle className="text-2xl font-bold">
             {context.title}
           </DialogTitle>

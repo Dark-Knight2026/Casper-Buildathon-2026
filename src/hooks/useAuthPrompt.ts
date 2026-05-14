@@ -90,7 +90,7 @@ export function useAuthPrompt() {
    */
   const goToSignUp = useCallback(() => {
     const action = promptContext?.action || 'continue';
-    navigate(`/auth/signup?intent=${encodeURIComponent(action)}`);
+    navigate(`/auth/register?intent=${encodeURIComponent(action)}`);
   }, [promptContext, navigate]);
 
   /**
