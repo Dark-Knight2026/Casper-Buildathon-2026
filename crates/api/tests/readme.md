@@ -20,5 +20,6 @@
 | transactions.rs           | Tests transaction history: response structure, pagination, address validation, BIG token filtering  |
 | users.rs                  | Tests GET/PATCH /users/me profile: shape, partial updates, email-change confirmation                |
 | users_avatar.rs           | Tests POST /users/me/avatar: MIME whitelist, magic-byte sniff, rate limit, oversize                 |
+| users_avatar_s3.rs        | Tests POST /me/avatar against MinIO: upload, delete, transport-failure leak guard                   |
 | users_delete.rs           | Tests DELETE /users/me: confirmation, recent-auth, active-leases gates, side effects                |
 | users_role.rs             | Tests PATCH /users/me/role: whitelist, recent-auth, rate limit, lease pre-check, audit log          |

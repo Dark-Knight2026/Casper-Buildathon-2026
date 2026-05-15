@@ -14,14 +14,14 @@ Bootstrap in `server.rs` builds the storage trait object from `ServerConfig.s3` 
 
 `S3_BUCKET` is the master gate: when set, all other `S3_*` (except `S3_PUBLIC_URL_BASE`) become required and missing values fail-fast at startup.
 
-| Variable | Required | Description |
-|---|---|---|
-| `S3_BUCKET` | gate | Unset -> Stub fallback. |
-| `S3_REGION` | yes | `us-east-1` (AWS), `auto` (R2), any (MinIO). |
-| `S3_ENDPOINT` | yes | S3 API URL. See backend matrix. |
-| `S3_ACCESS_KEY` | yes | API access key (`SecretString`). |
-| `S3_SECRET_KEY` | yes | API secret key (`SecretString`). |
-| `S3_PUBLIC_URL_BASE` | no | URL prefix for `users.avatar_url`. Default: `${endpoint}/${bucket}`. |
+| Variable             | Required | Description                                                          |
+| -------------------- | -------- | -------------------------------------------------------------------- |
+| `S3_BUCKET`          | gate     | Unset -> Stub fallback.                                              |
+| `S3_REGION`          | yes      | `us-east-1` (AWS), `auto` (R2), any (MinIO).                         |
+| `S3_ENDPOINT`        | yes      | S3 API URL. See backend matrix.                                      |
+| `S3_ACCESS_KEY`      | yes      | API access key (`SecretString`).                                     |
+| `S3_SECRET_KEY`      | yes      | API secret key (`SecretString`).                                     |
+| `S3_PUBLIC_URL_BASE` | no       | URL prefix for `users.avatar_url`. Default: `${endpoint}/${bucket}`. |
 
 ## Backend matrix
 
@@ -70,6 +70,7 @@ The local-dev and production deploys reuse the S3 access/secret pair as MinIO ro
 `S3MediaStorage::new` (`crates/api/src/providers/storage.rs`) calls `Bucket::create_with_path_style`, which forces **path-style URLs** (`http://endpoint/bucket/key`). Virtual-hosted-style addressing (`http://bucket.endpoint/key`) is NOT used for the API call regardless of backend.
 
 Implications:
+
 - MinIO works out of the box (it does not support virtual-hosted-style without DNS wildcards).
 - AWS S3 path-style is being deprecated for new buckets but is still functional and signs correctly with SIGv4.
 - R2 accepts both styles for the API; path-style was chosen for uniformity.
