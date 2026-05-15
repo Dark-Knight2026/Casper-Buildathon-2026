@@ -20,9 +20,11 @@ function isSupportedRole(value: string | null): value is SupportedRole {
 
 export default function Register() {
   const [searchParams] = useSearchParams();
-  // Honor ?role=… deep-links from the help hub. Unsupported values
-  // (e.g. property_manager) silently fall back to tenant — the role isn't
-  // wired into the backend role contract yet.
+  // Honor ?role=… deep-links from HelpHub. Unsupported values
+  // (e.g. 'property_manager', shown as "Coming Soon" in HelpHub) silently
+  // fall back to 'tenant' — the role isn't wired into the backend role
+  // contract yet, so this is a product decision rather than a TODO.
+  // See: src/pages/HelpHub.tsx (QuickActionCard links emit these deep-links).
   const rawRole = searchParams.get('role');
   const [role, setRole] = useState<SupportedRole>(
     isSupportedRole(rawRole) ? rawRole : 'tenant'

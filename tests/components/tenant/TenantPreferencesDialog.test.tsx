@@ -185,4 +185,57 @@ describe('TenantPreferencesDialog', () => {
       );
     });
   });
+
+  describe('edge cases', () => {
+    it('saves an all-blank payload without rejecting — no fields are required', () => {
+      const { onSave, onOpenChange } = renderDialog();
+
+      // No interactions before save — the form opens against EMPTY_PREFERENCES
+      // and the tenant just clicks Save. This must succeed because
+      // RentalPreferences fields are intentionally all nullable / empty-list
+      // tolerant (a half-filled form is a valid state).
+      fireEvent.click(screen.getByRole('button', { name: /save preferences/i }));
+
+      expect(
+        onSave,
+        'all-blank save must produce EMPTY_PREFERENCES — drives the implicit-fallback branch downstream'
+      ).toHaveBeenCalledWith(EMPTY_PREFERENCES);
+      expect(onOpenChange, 'successful blank save still closes the dialog').toHaveBeenCalledWith(false);
+    });
+
+    it('saves a partial payload with only budget filled, leaving every other field empty', () => {
+      const { onSave } = renderDialog();
+
+      fireEvent.change(screen.getByLabelText(/^min$/i), { target: { value: '1500' } });
+      fireEvent.change(screen.getByLabelText(/^max$/i), { target: { value: '2500' } });
+      fireEvent.click(screen.getByRole('button', { name: /save preferences/i }));
+
+      expect(
+        onSave,
+        'partial preferences must persist exactly what the tenant entered — no auto-fill from defaults'
+      ).toHaveBeenCalledWith({
+        ...EMPTY_PREFERENCES,
+        budgetMin: 1500,
+        budgetMax: 2500,
+      });
+    });
+
+    it('does not add a duplicate location chip when the same city/state is entered twice', () => {
+      const { onSave } = renderDialog({ locations: [{ city: 'Norfolk', state: 'VA' }] });
+
+      fireEvent.change(screen.getByLabelText(/^city$/i), { target: { value: 'Norfolk' } });
+      fireEvent.change(screen.getByLabelText(/^state$/i), { target: { value: 'VA' } });
+      fireEvent.click(screen.getByRole('button', { name: /add location/i }));
+      fireEvent.click(screen.getByRole('button', { name: /save preferences/i }));
+
+      expect(
+        onSave,
+        'duplicate location must be deduped — adding the same chip twice would double-weight the BE matcher'
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({
+          locations: [{ city: 'Norfolk', state: 'VA' }],
+        })
+      );
+    });
+  });
 });

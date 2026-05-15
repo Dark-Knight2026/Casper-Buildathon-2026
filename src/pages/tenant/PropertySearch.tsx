@@ -229,6 +229,9 @@ export default function PropertySearch() {
     }
 
     if (property.price < priceRange[0]) return false;
+    // When the slider sits at PRICE_MAX, treat the upper bound as open-ended
+    // ("no upper limit") and skip the check — otherwise properties priced
+    // above PRICE_MAX would be filtered out even though the user wants all.
     if (priceRange[1] < PRICE_MAX && property.price > priceRange[1]) return false;
 
     if (bedrooms > 0 && property.bedrooms < bedrooms) return false;

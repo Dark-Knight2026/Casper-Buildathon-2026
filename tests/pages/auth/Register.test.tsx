@@ -258,6 +258,18 @@ describe('Register', () => {
       ).toBeChecked();
     });
 
+    it('rejects admin role in deep-link and falls back to tenant', () => {
+      // SelfRegisterableRole intentionally excludes 'admin' — accepting it
+      // from a URL would be a role-injection escalation path. The fallback
+      // is the same as for unknown roles, but the security boundary is
+      // worth its own assertion.
+      renderRegisterAt('/auth/register?role=admin');
+      expect(
+        screen.getByRole('radio', { name: /tenant/i }),
+        'admin must fall back to tenant — role injection via URL must be blocked'
+      ).toBeChecked();
+    });
+
     it('defaults to tenant when ?role= is absent', () => {
       renderRegisterAt('/auth/register');
       expect(

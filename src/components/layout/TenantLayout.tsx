@@ -124,7 +124,7 @@ export default function TenantLayout() {
               className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground transition-colors"
               aria-label="Help and onboarding"
             >
-              <HelpCircle className="h-4 w-4 mr-1.5" />
+              <HelpCircle className="h-4 w-4 mr-1.5" aria-hidden="true" />
               Help
             </Link>
             <Button variant="ghost" size="sm" onClick={handleSignOut}>
@@ -165,6 +165,9 @@ export default function TenantLayout() {
               </Link>
             ))}
           </nav>
+          {/* Footer: profile name on top, then Help left / Sign Out right —
+              gap-3 is intentional for mobile tap-target spacing (≥44px between
+              targets per WCAG 2.5.5); shrinking it would cluster touch points. */}
           <div className="mt-6 pt-4 border-t border-border space-y-3">
             {profile && (
               <span className="block text-sm text-muted-foreground">
@@ -175,9 +178,10 @@ export default function TenantLayout() {
               <Link
                 to="/help"
                 onClick={() => setMobileOpen(false)}
+                aria-label="Help and onboarding"
                 className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground transition-colors"
               >
-                <HelpCircle className="h-4 w-4 mr-1.5" />
+                <HelpCircle className="h-4 w-4 mr-1.5" aria-hidden="true" />
                 Help
               </Link>
               <Button variant="ghost" size="sm" onClick={handleSignOut}>
