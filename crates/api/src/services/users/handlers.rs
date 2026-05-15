@@ -12,7 +12,7 @@ use chrono::Utc;
 
 use crate::{
     common::{ApiError, ApiResult, AppState, UserInfo},
-    providers::{EmailMessage, StorageError},
+    providers::EmailMessage,
     services::{
         auth::{AuthUser, cookies},
         users::{
@@ -758,6 +758,17 @@ pub async fn upload_avatar(
         )));
     }
 
+    // `user_id` is a `Uuid` rendered into the object key. UUIDs cannot
+    // contain `/` or `..`, but the invariant is load-bearing for the
+    // `avatars/{user_id}.{ext}` prefix: if a future type change ever
+    // widens this to a free-form `String`, a slash in the value would
+    // traverse out of the bucket prefix. Cheap debug_assert documents
+    // and pins the constraint at the only place where it matters.
+    debug_assert!(
+        !user_id.to_string().contains('/'),
+        "user_id must not contain path separators",
+    );
+
     // Sweep stale blobs under sibling extensions BEFORE writing the new
     // key. Doing it after would leave a window where two objects exist for
     // the same user. Failures here are downgraded to a warning - the new
@@ -783,11 +794,16 @@ pub async fn upload_avatar(
         .media_storage
         .put(&key, &bytes, detected.mime)
         .await
-        .map_err(|err| match err {
-            StorageError::Transport(detail) => ApiError::Internal(detail),
-            StorageError::NotConfigured => {
-                ApiError::Internal("media storage not configured".to_owned())
-            }
+        .map_err(|err| {
+            // Provider detail (bucket, endpoint, signed-URL fragments) goes
+            // to logs via a structured `error` field; the `ApiError::Internal`
+            // payload carries only a generic operator-facing message. The
+            // `IntoResponse` impl already replaces any `Internal` payload
+            // with a flat "An internal server error occurred" body, so
+            // this is defence-in-depth against a future change that
+            // accidentally echoes the payload to the client.
+            tracing::error!(error = %err, "media storage put failed");
+            ApiError::Internal("media storage operation failed".to_owned())
         })?;
 
     // DB write before the rate-limit bump: a `RowNotFound` (or any

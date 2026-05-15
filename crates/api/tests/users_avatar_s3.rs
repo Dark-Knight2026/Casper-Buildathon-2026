@@ -252,11 +252,27 @@ async fn avatar_upload_with_dead_storage_returns_generic_500(pool: PgPool) {
         "access key MUST NOT leak in response body: {body_text}",
     );
     assert!(
+        !body_text.contains(fake_secret_key),
+        "secret key MUST NOT leak in response body: {body_text}",
+    );
+    assert!(
         !body_text.contains("127.0.0.1:1"),
         "endpoint host:port MUST NOT leak in response body: {body_text}",
     );
     assert!(
         !body_text.contains(fake_bucket),
         "bucket name MUST NOT leak in response body: {body_text}",
+    );
+    // The handler maps every `StorageError` variant to a generic
+    // operator-facing message through `tracing::error!(error = %err, ...)`
+    // and `ApiError::Internal("media storage operation failed")`. The
+    // `IntoResponse` impl then replaces that payload with a flat
+    // "An internal server error occurred" body. Asserting both prefixes
+    // are absent locks the leak guard at two layers - a regression in
+    // either one surfaces here rather than waiting for a production
+    // incident.
+    assert!(
+        !body_text.contains("put failed:") && !body_text.contains("delete failed:"),
+        "raw rust-s3 transport detail MUST NOT leak in response body: {body_text}",
     );
 }
