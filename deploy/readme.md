@@ -268,6 +268,41 @@ docker compose --project-directory /opt/<PROJECT_NAME>/deploy \
 bash /opt/<PROJECT_NAME>/deploy/redeploy.sh
 ```
 
+## Media storage operations
+
+The production compose runs MinIO as the S3 backend. Day-to-day ops below; full backend matrix and env-var contract live in [`docs/feature/media_storage.md`](../docs/feature/media_storage.md).
+
+### Switching to AWS S3 or Cloudflare R2
+
+To swap MinIO for a managed backend, change only the `S3_*` block in `-secret.sh` and remove the `minio` + `minio-init` services from `docker-compose.yml` (the nginx `/media/` proxy is no longer needed - serve directly from the cloud bucket and point `users.avatar_url` at the cloud public URL).
+
+| Backend | `S3_REGION`     | `S3_ENDPOINT`                                 | `S3_PUBLIC_URL_BASE`                                  |
+| ------- | --------------- | --------------------------------------------- | ----------------------------------------------------- |
+| AWS S3  | `us-east-1`     | `https://s3.us-east-1.amazonaws.com`          | `https://<bucket>.s3.us-east-1.amazonaws.com`         |
+| R2      | `auto`          | `https://<account-id>.r2.cloudflarestorage.com` | `https://pub-<bucket-id>.r2.dev`                    |
+| MinIO   | `us-east-1`     | `http://minio:9000` (compose-internal)        | `https://${PROJECT_DOMAIN}/media` (nginx-fronted)     |
+
+The backend constructor (`S3MediaStorage::new`) auto-selects path-style vs virtual-hosted addressing per endpoint, so the code path is identical across providers.
+
+### Backup
+
+MinIO data lives in the Docker named volume `minio_data` on the host. Two recovery strategies:
+
+- **Live mirror (recommended)**: schedule `mc mirror --watch local/<bucket> s3/<offsite-bucket>` from inside the `minio` container (or a sidecar) to a managed S3 / R2 / B2 bucket. Re-running `mc mirror` on disaster recovery rehydrates the original bucket in minutes.
+- **Volume snapshot**: `docker run --rm -v <project>_minio_data:/data -v $PWD:/backup alpine tar -czf /backup/minio-$(date +%F).tar.gz -C /data .` captures the volume contents. Stop MinIO before snapshotting to avoid torn writes; restore by extracting into the empty volume before `docker compose up`.
+
+There is currently NO automated backup configured - explicit choice, since avatars are user-replaceable. Lease PDFs / identity documents (future media surfaces) MUST flip on `mc mirror` before they ship.
+
+### Disk full
+
+The MinIO container shares the host disk; there is no separate quota. Symptoms when the disk fills:
+
+- New PUTs from the backend return `500 Internal Server Error` (the handler maps any `StorageError::Transport` to a generic 500; the underlying error in logs is `XMinioStorageFull`).
+- Existing GETs continue serving because reads do not allocate.
+- Cron / Docker logs may fail to rotate, compounding the problem.
+
+Mitigation in order of preference: prune unused Docker images (`docker image prune -af` on the host), evict the oldest objects (`mc rm --older-than 365d local/<bucket>`), then resize the Hetzner volume from the dashboard. The server is single-disk, so resize requires a reboot.
+
 ## SSL / HTTPS
 
 Cloudflare is set to **Full (Strict)** mode:

@@ -67,14 +67,23 @@ The local-dev and production deploys reuse the S3 access/secret pair as MinIO ro
 
 ## Endpoint addressing
 
-`S3MediaStorage::new` (`crates/api/src/providers/storage.rs`) calls `Bucket::create_with_path_style`, which forces **path-style URLs** (`http://endpoint/bucket/key`). Virtual-hosted-style addressing (`http://bucket.endpoint/key`) is NOT used for the API call regardless of backend.
+`S3MediaStorage::new` (`crates/api/src/providers/storage.rs`) inspects `endpoint.contains("amazonaws.com")` at construction time and picks the addressing style per-backend:
 
-Implications:
-
-- MinIO works out of the box (it does not support virtual-hosted-style without DNS wildcards).
-- AWS S3 path-style is being deprecated for new buckets but is still functional and signs correctly with SIGv4.
-- R2 accepts both styles for the API; path-style was chosen for uniformity.
+- **AWS** (`*.amazonaws.com`) -> virtual-hosted-style (`https://bucket.s3.region.amazonaws.com/key`). AWS has been deprecating path-style since 2020 and new regions reject it outright, so we cannot afford to force it.
+- **MinIO / R2 / non-AWS** -> path-style (`http://endpoint/bucket/key`). MinIO does not support virtual-hosted without DNS wildcards, and R2's API endpoint accepts both styles - path-style was chosen for symmetry with MinIO.
+- The selection is observable at runtime through `S3MediaStorage::is_path_style()`; log it at boot when triaging routing issues.
 - The browser-facing URL (in `users.avatar_url`) is independent of the API call style - it is whatever `S3_PUBLIC_URL_BASE` prescribes.
+
+## Troubleshooting: uploads succeed but images don't load
+
+The handler returns 200 with an `avatar_url`, but opening that URL in a browser returns 403/404/connection-refused. Things to check in order:
+
+- **403 from AWS S3 even with `x-amz-acl: public-read`**: the bucket has no `s3:GetObject` policy for `Principal: "*"`. The per-object ACL alone is not enough on a private bucket - add a bucket policy or enable "Block Public Access" exceptions in the bucket settings.
+- **403 from R2 with the same symptom**: R2 ignores `x-amz-acl` headers; flip the bucket's "Public Bucket" setting in the Cloudflare dashboard. Confirm `S3_PUBLIC_URL_BASE` points at `pub-<bucket-id>.r2.dev`, not the API endpoint - the API endpoint does NOT serve public objects.
+- **403 from MinIO**: the bucket lacks `mc anonymous set download local/<bucket>`. The `minio-init` one-shot in the dev compose sets this on first boot; in production the `deploy/redeploy.sh` script re-runs it on every deploy. If the volume was wiped without re-running init, anonymous GET breaks.
+- **404 with a `//` in the URL**: `S3_ENDPOINT` has a trailing slash and the default `S3_PUBLIC_URL_BASE` was computed as `${endpoint}//${bucket}`. As of commit `fix(config): trim trailing slash...` the trim happens at config load; older deploys may need a manual rebuild.
+- **Connection refused / browser hangs**: the public URL points at an internal hostname. Production must NOT use `http://minio:9000` in `S3_PUBLIC_URL_BASE` - that hostname only resolves inside the compose network. Use the nginx-fronted `https://${PROJECT_DOMAIN}/media`.
+- **Image renders for one user, broken for another**: the response was cached at the CDN under a URL containing a double slash (or with `http://` vs `https://` mismatch). Purge the CDN's cache for `/media/*` and verify the public URL is canonical going forward.
 
 ## Object ACL
 
