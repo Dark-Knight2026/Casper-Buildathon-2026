@@ -262,6 +262,36 @@ impl ServerConfig {
                 "SUPABASE_JWT_SECRET must be at least 64 bytes for HS256 security, got {secret_len}"
             )));
         }
+        if let Some(s3) = &self.s3 {
+            // Reject any value that lacks an explicit scheme - bare hosts
+            // (`s3.amazonaws.com`) and bare paths bubble up as opaque SDK
+            // errors at first PUT, long after the process is past startup.
+            // Catching them in `validate()` turns a runtime mystery into a
+            // fail-fast EnvVar error the operator sees in the boot log.
+            //
+            // `rust-s3` itself accepts unscoped strings and treats them as
+            // path components, so this guard is the only line of defence.
+            let endpoint = &s3.endpoint;
+            if !endpoint.starts_with("http://") && !endpoint.starts_with("https://") {
+                return Err(ServerError::EnvVar(format!(
+                    "S3_ENDPOINT must start with http:// or https://, got \"{endpoint}\""
+                )));
+            }
+            // `http://` is fine for loopback (compose dev, integration tests)
+            // but transmits credentials and avatar bytes in plaintext over
+            // any other route. A `warn!` here keeps the misconfiguration
+            // observable without breaking known-good local setups.
+            if endpoint.starts_with("http://")
+                && !endpoint.contains("localhost")
+                && !endpoint.contains("127.0.0.1")
+                && !endpoint.contains("minio")
+            {
+                tracing::warn!(
+                    endpoint = %endpoint,
+                    "S3_ENDPOINT uses http:// on a non-loopback host; credentials and uploads transit in plaintext",
+                );
+            }
+        }
         Ok(())
     }
 }

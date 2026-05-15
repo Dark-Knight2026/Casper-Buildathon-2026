@@ -10,7 +10,9 @@ use serial_test::serial;
 
 use api::ServerConfig;
 
-/// Env var keys used by `Config::from_env()`.
+/// Env var keys used by `Config::from_env()`. Drives the clear-all phase
+/// of [`set_env_vars`] so individual tests do not need to enumerate which
+/// keys to scrub.
 const CONFIG_ENV_VARS: [&str; 11] = [
     "DATABASE_URL",
     "REDIS_URL",
@@ -25,62 +27,56 @@ const CONFIG_ENV_VARS: [&str; 11] = [
     "S3_PUBLIC_URL_BASE",
 ];
 
-/// Default test values for every `S3_*` variable. Sets the full block
-/// so individual tests can `remove_var` only the field they want to
-/// assert on. Reused across the S3 fail-fast cases.
-///
-/// # Safety
-///
-/// Must only be called when no other threads read these env vars
-/// (ensured by `#[serial]`).
-unsafe fn set_all_s3_env_vars() {
-    // SAFETY: #[serial] ensures no concurrent env var access.
-    unsafe {
-        std::env::set_var("S3_BUCKET", "test-bucket");
-        std::env::set_var("S3_REGION", "us-east-1");
-        std::env::set_var("S3_ENDPOINT", "http://localhost:9000");
-        std::env::set_var("S3_ACCESS_KEY", "minioadmin");
-        std::env::set_var("S3_SECRET_KEY", "minioadmin");
-    }
-}
+/// Canonical "everything required by `from_env`" set. Reused as the base
+/// group by every test that just needs a happy starting point and then
+/// overrides one knob.
+const REQUIRED_ENV: &[(&str, &str)] = &[
+    ("DATABASE_URL", "postgres://localhost/test"),
+    ("REDIS_URL", "redis://127.0.0.1:6379"),
+    (
+        "SUPABASE_JWT_SECRET",
+        "test-secret-that-is-at-least-sixty-four-bytes-long-for-HS256-security!",
+    ),
+];
 
-/// Removes all config-related env vars to ensure test isolation.
-///
-/// # Safety
-///
-/// Must only be called when no other threads read these env vars (ensured by `#[serial]`).
-unsafe fn clear_all_config_env_vars() {
-    for key in CONFIG_ENV_VARS {
-        // SAFETY: #[serial] ensures no concurrent env var access.
-        unsafe { std::env::remove_var(key) };
-    }
-}
+/// Canonical full S3 block. Composed with [`REQUIRED_ENV`] for tests that
+/// exercise S3 happy paths or the `validate()` scheme guard.
+const FULL_S3_ENV: &[(&str, &str)] = &[
+    ("S3_BUCKET", "test-bucket"),
+    ("S3_REGION", "us-east-1"),
+    ("S3_ENDPOINT", "http://localhost:9000"),
+    ("S3_ACCESS_KEY", "minioadmin"),
+    ("S3_SECRET_KEY", "minioadmin"),
+];
 
-/// Sets the three required env vars with valid values.
+/// Clears every key in [`CONFIG_ENV_VARS`], then applies each `(key, value)`
+/// pair from the supplied groups in order. Groups are concatenated, which
+/// lets a test compose a base set with overrides without an intermediate
+/// `.concat()` allocation at the call site.
 ///
-/// # Safety
-///
-/// Must only be called when no other threads read these env vars (ensured by `#[serial]`).
-unsafe fn set_required_env_vars() {
-    // SAFETY: #[serial] ensures no concurrent env var access.
+/// The single `unsafe` block lives here so test bodies stay plain `fn`:
+/// the safety contract (no concurrent reads of process env) is enforced
+/// by `#[serial]` on each `#[test]`.
+fn set_env_vars(groups: &[&[(&str, &str)]]) {
+    // SAFETY: every `#[test]` is also `#[serial]`, so the
+    // `serial_test` lock guarantees that no other thread observes
+    // these env vars while we are mutating them.
     unsafe {
-        std::env::set_var("DATABASE_URL", "postgres://localhost/test");
-        std::env::set_var("REDIS_URL", "redis://127.0.0.1:6379");
-        std::env::set_var(
-            "SUPABASE_JWT_SECRET",
-            "test-secret-that-is-at-least-sixty-four-bytes-long-for-HS256-security!",
-        );
+        for key in CONFIG_ENV_VARS {
+            std::env::remove_var(key);
+        }
+        for group in groups {
+            for &(key, value) in *group {
+                std::env::set_var(key, value);
+            }
+        }
     }
 }
 
 #[test]
 #[serial]
 fn from_env_succeeds_with_all_required_vars() {
-    // SAFETY: #[serial] ensures no concurrent env var access.
-    unsafe {
-        clear_all_config_env_vars();
-        set_required_env_vars();
-    }
+    set_env_vars(&[REQUIRED_ENV]);
 
     let config = ServerConfig::from_env().expect("Should succeed with all required vars");
 
@@ -99,15 +95,13 @@ fn from_env_succeeds_with_all_required_vars() {
 #[test]
 #[serial]
 fn from_env_fails_without_database_url() {
-    // SAFETY: #[serial] ensures no concurrent env var access.
-    unsafe {
-        clear_all_config_env_vars();
-        std::env::set_var("REDIS_URL", "redis://127.0.0.1:6379");
-        std::env::set_var(
+    set_env_vars(&[&[
+        ("REDIS_URL", "redis://127.0.0.1:6379"),
+        (
             "SUPABASE_JWT_SECRET",
             "test-secret-that-is-at-least-sixty-four-bytes-long-for-HS256-security!",
-        );
-    }
+        ),
+    ]]);
 
     let err = ServerConfig::from_env().unwrap_err();
     assert!(
@@ -119,15 +113,13 @@ fn from_env_fails_without_database_url() {
 #[test]
 #[serial]
 fn from_env_fails_without_redis_url() {
-    // SAFETY: #[serial] ensures no concurrent env var access.
-    unsafe {
-        clear_all_config_env_vars();
-        std::env::set_var("DATABASE_URL", "postgres://localhost/test");
-        std::env::set_var(
+    set_env_vars(&[&[
+        ("DATABASE_URL", "postgres://localhost/test"),
+        (
             "SUPABASE_JWT_SECRET",
             "test-secret-that-is-at-least-sixty-four-bytes-long-for-HS256-security!",
-        );
-    }
+        ),
+    ]]);
 
     let err = ServerConfig::from_env().unwrap_err();
     assert!(
@@ -139,12 +131,7 @@ fn from_env_fails_without_redis_url() {
 #[test]
 #[serial]
 fn from_env_fails_with_invalid_redis_url_scheme() {
-    // SAFETY: #[serial] ensures no concurrent env var access.
-    unsafe {
-        clear_all_config_env_vars();
-        set_required_env_vars();
-        std::env::set_var("REDIS_URL", "http://127.0.0.1:6379");
-    }
+    set_env_vars(&[REQUIRED_ENV, &[("REDIS_URL", "http://127.0.0.1:6379")]]);
 
     let err = ServerConfig::from_env().unwrap_err();
     assert!(
@@ -157,12 +144,7 @@ fn from_env_fails_with_invalid_redis_url_scheme() {
 #[test]
 #[serial]
 fn from_env_validates_cors_origin_scheme() {
-    // SAFETY: #[serial] ensures no concurrent env var access.
-    unsafe {
-        clear_all_config_env_vars();
-        set_required_env_vars();
-        std::env::set_var("CORS_ORIGIN", "ftp://invalid.com");
-    }
+    set_env_vars(&[REQUIRED_ENV, &[("CORS_ORIGIN", "ftp://invalid.com")]]);
 
     let err = ServerConfig::from_env().unwrap_err();
     assert!(
@@ -175,12 +157,7 @@ fn from_env_validates_cors_origin_scheme() {
 #[test]
 #[serial]
 fn from_env_rejects_port_zero() {
-    // SAFETY: #[serial] ensures no concurrent env var access.
-    unsafe {
-        clear_all_config_env_vars();
-        set_required_env_vars();
-        std::env::set_var("PORT", "0");
-    }
+    set_env_vars(&[REQUIRED_ENV, &[("PORT", "0")]]);
 
     let err = ServerConfig::from_env().unwrap_err();
     assert!(
@@ -192,12 +169,7 @@ fn from_env_rejects_port_zero() {
 #[test]
 #[serial]
 fn from_env_rejects_short_jwt_secret() {
-    // SAFETY: #[serial] ensures no concurrent env var access.
-    unsafe {
-        clear_all_config_env_vars();
-        set_required_env_vars();
-        std::env::set_var("SUPABASE_JWT_SECRET", "too-short");
-    }
+    set_env_vars(&[REQUIRED_ENV, &[("SUPABASE_JWT_SECRET", "too-short")]]);
 
     let err = ServerConfig::from_env().unwrap_err();
     assert!(
@@ -210,12 +182,7 @@ fn from_env_rejects_short_jwt_secret() {
 #[test]
 #[serial]
 fn from_env_rejects_invalid_port() {
-    // SAFETY: #[serial] ensures no concurrent env var access.
-    unsafe {
-        clear_all_config_env_vars();
-        set_required_env_vars();
-        std::env::set_var("PORT", "not_a_number");
-    }
+    set_env_vars(&[REQUIRED_ENV, &[("PORT", "not_a_number")]]);
 
     let err = ServerConfig::from_env().unwrap_err();
     assert!(err.to_string().contains("port"), "Unexpected error: {err}");
@@ -224,11 +191,7 @@ fn from_env_rejects_invalid_port() {
 #[test]
 #[serial]
 fn from_env_leaves_s3_unset_when_bucket_missing() {
-    // SAFETY: #[serial] ensures no concurrent env var access.
-    unsafe {
-        clear_all_config_env_vars();
-        set_required_env_vars();
-    }
+    set_env_vars(&[REQUIRED_ENV]);
 
     let config = ServerConfig::from_env().expect("Should succeed without any S3 vars");
     assert!(
@@ -240,12 +203,7 @@ fn from_env_leaves_s3_unset_when_bucket_missing() {
 #[test]
 #[serial]
 fn from_env_populates_s3_when_full_block_present() {
-    // SAFETY: #[serial] ensures no concurrent env var access.
-    unsafe {
-        clear_all_config_env_vars();
-        set_required_env_vars();
-        set_all_s3_env_vars();
-    }
+    set_env_vars(&[REQUIRED_ENV, FULL_S3_ENV]);
 
     let config = ServerConfig::from_env().expect("Should succeed with full S3 block");
     let s3 = config.s3.expect("config.s3 must be populated");
@@ -263,13 +221,11 @@ fn from_env_populates_s3_when_full_block_present() {
 #[test]
 #[serial]
 fn from_env_uses_explicit_public_url_base_when_set() {
-    // SAFETY: #[serial] ensures no concurrent env var access.
-    unsafe {
-        clear_all_config_env_vars();
-        set_required_env_vars();
-        set_all_s3_env_vars();
-        std::env::set_var("S3_PUBLIC_URL_BASE", "https://cdn.example.com/media");
-    }
+    set_env_vars(&[
+        REQUIRED_ENV,
+        FULL_S3_ENV,
+        &[("S3_PUBLIC_URL_BASE", "https://cdn.example.com/media")],
+    ]);
 
     let s3 = ServerConfig::from_env()
         .expect("Should succeed")
@@ -281,13 +237,15 @@ fn from_env_uses_explicit_public_url_base_when_set() {
 #[test]
 #[serial]
 fn from_env_fails_when_s3_bucket_set_without_region() {
-    // SAFETY: #[serial] ensures no concurrent env var access.
-    unsafe {
-        clear_all_config_env_vars();
-        set_required_env_vars();
-        set_all_s3_env_vars();
-        std::env::remove_var("S3_REGION");
-    }
+    set_env_vars(&[
+        REQUIRED_ENV,
+        &[
+            ("S3_BUCKET", "test-bucket"),
+            ("S3_ENDPOINT", "http://localhost:9000"),
+            ("S3_ACCESS_KEY", "minioadmin"),
+            ("S3_SECRET_KEY", "minioadmin"),
+        ],
+    ]);
 
     let err = ServerConfig::from_env().unwrap_err();
     assert!(
@@ -299,13 +257,15 @@ fn from_env_fails_when_s3_bucket_set_without_region() {
 #[test]
 #[serial]
 fn from_env_fails_when_s3_bucket_set_without_endpoint() {
-    // SAFETY: #[serial] ensures no concurrent env var access.
-    unsafe {
-        clear_all_config_env_vars();
-        set_required_env_vars();
-        set_all_s3_env_vars();
-        std::env::remove_var("S3_ENDPOINT");
-    }
+    set_env_vars(&[
+        REQUIRED_ENV,
+        &[
+            ("S3_BUCKET", "test-bucket"),
+            ("S3_REGION", "us-east-1"),
+            ("S3_ACCESS_KEY", "minioadmin"),
+            ("S3_SECRET_KEY", "minioadmin"),
+        ],
+    ]);
 
     let err = ServerConfig::from_env().unwrap_err();
     assert!(
@@ -317,13 +277,15 @@ fn from_env_fails_when_s3_bucket_set_without_endpoint() {
 #[test]
 #[serial]
 fn from_env_fails_when_s3_bucket_set_without_access_key() {
-    // SAFETY: #[serial] ensures no concurrent env var access.
-    unsafe {
-        clear_all_config_env_vars();
-        set_required_env_vars();
-        set_all_s3_env_vars();
-        std::env::remove_var("S3_ACCESS_KEY");
-    }
+    set_env_vars(&[
+        REQUIRED_ENV,
+        &[
+            ("S3_BUCKET", "test-bucket"),
+            ("S3_REGION", "us-east-1"),
+            ("S3_ENDPOINT", "http://localhost:9000"),
+            ("S3_SECRET_KEY", "minioadmin"),
+        ],
+    ]);
 
     let err = ServerConfig::from_env().unwrap_err();
     assert!(
@@ -335,17 +297,68 @@ fn from_env_fails_when_s3_bucket_set_without_access_key() {
 #[test]
 #[serial]
 fn from_env_fails_when_s3_bucket_set_without_secret_key() {
-    // SAFETY: #[serial] ensures no concurrent env var access.
-    unsafe {
-        clear_all_config_env_vars();
-        set_required_env_vars();
-        set_all_s3_env_vars();
-        std::env::remove_var("S3_SECRET_KEY");
-    }
+    set_env_vars(&[
+        REQUIRED_ENV,
+        &[
+            ("S3_BUCKET", "test-bucket"),
+            ("S3_REGION", "us-east-1"),
+            ("S3_ENDPOINT", "http://localhost:9000"),
+            ("S3_ACCESS_KEY", "minioadmin"),
+        ],
+    ]);
 
     let err = ServerConfig::from_env().unwrap_err();
     assert!(
         err.to_string().contains("S3_SECRET_KEY missing"),
         "Unexpected error: {err}",
     );
+}
+
+#[test]
+#[serial]
+fn from_env_fails_when_s3_endpoint_has_no_scheme() {
+    set_env_vars(&[
+        REQUIRED_ENV,
+        FULL_S3_ENV,
+        &[("S3_ENDPOINT", "s3.amazonaws.com")],
+    ]);
+
+    let err = ServerConfig::from_env().unwrap_err();
+    assert!(
+        err.to_string()
+            .contains("S3_ENDPOINT must start with http:// or https://"),
+        "Unexpected error: {err}",
+    );
+}
+
+#[test]
+#[serial]
+fn from_env_accepts_https_s3_endpoint() {
+    set_env_vars(&[
+        REQUIRED_ENV,
+        FULL_S3_ENV,
+        &[("S3_ENDPOINT", "https://s3.us-east-1.amazonaws.com")],
+    ]);
+
+    let s3 = ServerConfig::from_env()
+        .expect("https endpoint must be accepted")
+        .s3
+        .expect("config.s3 must be populated");
+    assert_eq!(s3.endpoint, "https://s3.us-east-1.amazonaws.com");
+}
+
+#[test]
+#[serial]
+fn from_env_accepts_http_localhost_s3_endpoint() {
+    set_env_vars(&[
+        REQUIRED_ENV,
+        FULL_S3_ENV,
+        &[("S3_ENDPOINT", "http://localhost:9000")],
+    ]);
+
+    let s3 = ServerConfig::from_env()
+        .expect("http://localhost must be accepted")
+        .s3
+        .expect("config.s3 must be populated");
+    assert_eq!(s3.endpoint, "http://localhost:9000");
 }
