@@ -182,9 +182,12 @@ impl MediaStorage for StubMediaStorage {
 /// S3-compatible [`MediaStorage`] backed by AWS S3, Cloudflare R2, or `MinIO`.
 ///
 /// All three providers share the S3 wire protocol; the only difference at
-/// runtime is the `endpoint` URL. `with_path_style()` is mandatory for
-/// `MinIO` (which only supports path-style addressing) and harmless for
-/// AWS/R2 (which support both styles).
+/// runtime is the `endpoint` URL. Addressing style is selected per-endpoint
+/// inside [`Self::new`]: `MinIO` and any non-AWS backend use path-style
+/// (`https://endpoint/bucket/key`), while AWS endpoints (`*.amazonaws.com`)
+/// use virtual-hosted-style (`https://bucket.s3.region.amazonaws.com/key`)
+/// because AWS has been deprecating path-style since 2020 and new regions
+/// no longer support it at all.
 ///
 /// Objects are uploaded with `x-amz-acl: public-read` so the URL returned
 /// by [`MediaStorage::put`] is directly fetchable without signed-URL
@@ -226,12 +229,25 @@ impl S3MediaStorage {
         secret_key: &str,
         public_url_base: String,
     ) -> Result<Self, StorageError> {
+        // AWS endpoints (`*.amazonaws.com`) drive virtual-hosted-style:
+        // path-style is deprecated there, and new AWS regions reject
+        // it outright. Everything else (MinIO, Cloudflare R2 on its
+        // R2 endpoint, on-prem Ceph) must stay on path-style because
+        // DNS for `<bucket>.<endpoint>` does not resolve. Detect by
+        // hostname substring rather than parsing the URL: `Region::Custom`
+        // already accepted the endpoint string as-is, and a substring
+        // check stays correct for any scheme/port permutation.
+        let is_aws_endpoint = endpoint.contains("amazonaws.com");
         let region = Region::Custom { region, endpoint };
         let credentials = Credentials::new(Some(access_key), Some(secret_key), None, None, None)
             .map_err(|e| StorageError::Transport(format!("credentials init: {e}")))?;
         let bucket = Bucket::new(bucket_name, region, credentials)
-            .map_err(|e| StorageError::Transport(format!("bucket init: {e}")))?
-            .with_path_style();
+            .map_err(|e| StorageError::Transport(format!("bucket init: {e}")))?;
+        let bucket = if is_aws_endpoint {
+            bucket
+        } else {
+            bucket.with_path_style()
+        };
         Ok(Self {
             bucket: Arc::new(*bucket),
             public_url_base,
