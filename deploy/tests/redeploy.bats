@@ -10,7 +10,13 @@ setup() {
   cp "$BATS_TEST_DIRNAME/../redeploy.sh" "$BASE/deploy/redeploy.sh"
   chmod +x "$BASE/deploy/redeploy.sh"
 
-  # Default .env consumed by the script
+  # Default .env consumed by the script.
+  # S3_BUCKET is mandatory once `redeploy.sh` reaches its envsubst step
+  # (it feeds the nginx `/media/` proxy template); tests that expect a
+  # successful pre-flight, or that target a failure AFTER the S3 guard,
+  # MUST set it. Tests that target an earlier failure (invalid VERSION,
+  # missing PROJECT_DOMAIN, invalid DEPLOYMENT_MODE) override this default
+  # `.env` and may omit S3_BUCKET on purpose.
   cat > "$BASE/deploy/.env" <<EOF
 DEPLOYMENT_MODE=dev
 TAG=registry.example.com/myapp
@@ -19,6 +25,7 @@ PROJECT_DOMAIN=test.example.com
 DATABASE_URL=postgres://postgres:postgres@localhost:54322/postgres
 ALLOW_DB_RESET=true
 REDIS_PASSWORD=testpass123
+S3_BUCKET=test-bucket
 EOF
 
   # https.conf.template — required by pre-flight check; must be non-empty so envsubst
@@ -176,6 +183,7 @@ DEPLOYMENT_MODE=staging
 TAG=registry.example.com/myapp
 VERSION=1.0.0
 PROJECT_DOMAIN=test.example.com
+S3_BUCKET=test-bucket
 EOF
 
   run -0 run_deploy
@@ -189,6 +197,7 @@ DEPLOYMENT_MODE=production
 TAG=registry.example.com/myapp
 VERSION=1.0.0
 PROJECT_DOMAIN=test.example.com
+S3_BUCKET=test-bucket
 EOF
 
   run -0 run_deploy
@@ -377,6 +386,7 @@ VERSION=1.0.0
 PROJECT_DOMAIN=test.example.com
 DATABASE_URL=postgres://postgres:postgres@localhost:54322/postgres
 REDIS_PASSWORD=testpass123
+S3_BUCKET=test-bucket
 EOF
 
   run -0 run_deploy
@@ -391,6 +401,7 @@ DEPLOYMENT_MODE=staging
 TAG=registry.example.com/myapp
 VERSION=1.0.0
 PROJECT_DOMAIN=test.example.com
+S3_BUCKET=test-bucket
 EOF
 
   run -0 run_deploy
@@ -405,6 +416,7 @@ DEPLOYMENT_MODE=production
 TAG=registry.example.com/myapp
 VERSION=1.0.0
 PROJECT_DOMAIN=test.example.com
+S3_BUCKET=test-bucket
 EOF
 
   run -0 run_deploy
