@@ -141,28 +141,25 @@ deploy/
 | `START_BLOCK_CONTRACT_STAKING` | Indexer start block for Staking contract |
 | `S3_BUCKET` | Media bucket name; created by `minio-init` on first boot (e.g. `leasefi-media`) |
 | `S3_REGION` | S3 region label (MinIO ignores it; backend signs requests with it, e.g. `us-east-1`) |
-| `S3_ENDPOINT` | Internal compose-network endpoint for backend PUTs/DELETEs (computed: `http://minio:9000`) |
+| `S3_ENDPOINT` | S3 API endpoint the backend PUTs/DELETEs to (e.g. `http://minio:9000` for MinIO behind nginx); sourced from GitHub Variables |
 | `S3_ACCESS_KEY` | MinIO root user AND backend access key (one source of truth) |
 | `S3_SECRET_KEY` | MinIO root password AND backend secret key |
-| `S3_PUBLIC_URL_BASE` | Public URL prefix stored in `users.avatar_url` (computed: `https://${PROJECT_DOMAIN}/media`) |
+| `S3_PUBLIC_URL_BASE` | Public URL prefix stored in `users.avatar_url` (e.g. `https://${PROJECT_DOMAIN}/media` for MinIO behind nginx); sourced from GitHub Variables |
 
 ### GitHub Settings (`Settings > Secrets and variables > Actions`)
 
-`.github/workflows/deploy.yaml` reads project env from a mix of GitHub
-**variables** (non-sensitive, plain-text) and **secrets** (masked in logs).
-Before merging to `master`, configure:
+`.github/workflows/deploy.yaml` reads project env from a mix of GitHub **variables** (non-sensitive, plain-text) and **secrets** (masked in logs). Before merging to `master`, configure:
 
 | Type | Name | Example | Purpose |
 |------|------|---------|---------|
 | Variable | `S3_BUCKET` | `leasefi-media` | Bucket name; created by `minio-init` |
 | Variable | `S3_REGION` | `us-east-1` | S3 region label (MinIO ignores; backend signs with it) |
+| Variable | `S3_ENDPOINT` | `http://minio:9000` | S3 API endpoint the backend container PUTs/DELETEs to; per-backend value (see [Switching backends](#switching-to-aws-s3-or-cloudflare-r2)) |
+| Variable | `S3_PUBLIC_URL_BASE` | `https://api.leasefi.com/media` | Public URL prefix stored in `users.avatar_url`; per-backend value (see [Switching backends](#switching-to-aws-s3-or-cloudflare-r2)) |
 | Secret | `S3_ACCESS_KEY` | random 32+ chars | MinIO root user AND backend access key |
 | Secret | `S3_SECRET_KEY` | random 32+ chars | MinIO root password AND backend secret key |
 
-`S3_ENDPOINT` and `S3_PUBLIC_URL_BASE` are computed in
-`deploy/Makefile.deploy` from `PROJECT_DOMAIN` and the compose-internal
-hostname `minio` - do NOT add them to GitHub Settings (single source of
-truth lives in Makefile).
+All four non-secret S3 values are GitHub Variables (not Secrets) - they are not sensitive on their own, and keeping them out of the Secret store keeps the masking budget for actual credentials. Swapping backends (MinIO -> AWS S3 -> R2) requires only editing these four variables; no Makefile or workflow edit is needed.
 
 ## Makefile Targets
 

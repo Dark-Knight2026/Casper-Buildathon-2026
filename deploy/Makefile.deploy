@@ -116,10 +116,21 @@ VERSION ?= $(shell printf '%s-%s' "$$(git rev-parse --short HEAD 2>/dev/null || 
 export VERSION
 TAG := $(GOOGLE_APPLICATION_REGION)-docker.pkg.dev/$(GOOGLE_APPLICATION_PROJECT_ID)/$(ARTIFACT_REPO_NAME)/$(PROJECT_NAME)
 
-# Internal compose-network endpoint (backend container -> minio service DNS name).
-# Public reads go through nginx /media/ proxy and use S3_PUBLIC_URL_BASE below.
-S3_ENDPOINT := http://minio:9000
-S3_PUBLIC_URL_BASE := https://$(PROJECT_DOMAIN)/media
+# S3_ENDPOINT and S3_PUBLIC_URL_BASE are sourced from GitHub Repository
+# Variables (Settings > Secrets and variables > Actions > Variables) via the
+# workflow's `Create secret.sh file` step. Both values change when the storage
+# backend changes (MinIO -> AWS S3
+# -> R2), and hardcoding them here would force a Makefile edit on
+# every backend swap. Define them in GitHub instead:
+# - MinIO behind nginx: `http://minio:9000` and
+#   `https://${PROJECT_DOMAIN}/media`
+# - AWS S3 path-style:  `https://s3.<region>.amazonaws.com` and
+#   `https://<bucket>.s3.<region>.amazonaws.com`
+# - Cloudflare R2:      `https://<account-id>.r2.cloudflarestorage.com` and
+#   `https://pub-<bucket-id>.r2.dev`
+# The `$(foreach v,$(PROJECT_ENV_VARS),...)` validator below fails fast if
+# either is missing, so the only failure mode is "operator forgot to set the
+# variable" - caught at make-time, never at runtime.
 
 # ------------------------------------------------------------
 # Automatically export TF_VAR_* from existing Make variables
