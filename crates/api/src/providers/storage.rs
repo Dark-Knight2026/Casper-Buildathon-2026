@@ -31,14 +31,6 @@ pub enum StorageError {
     /// details, internal hostnames, or signed-URL parameters).
     #[error("storage transport error: {0}")]
     Transport(String),
-    /// The implementation has no usable backend - typically the
-    /// [`StubMediaStorage`] receiving a `delete` for a key that was never
-    /// stored, or a real implementation called before its credentials were
-    /// loaded. Callers SHOULD treat this as a 500-class failure but the
-    /// distinct variant lets observability dashboards separate
-    /// misconfiguration from genuine transport flakes.
-    #[error("storage not configured")]
-    NotConfigured,
 }
 
 /// Result alias for fallible [`MediaStorage`] operations.
@@ -118,6 +110,17 @@ const DEFAULT_STUB_BASE_URL: &str = "https://example.com/media-stub";
 /// icon. The browser renders this without any network round-trip and the
 /// URL is stable across restarts, which simplifies snapshot tests on the
 /// frontend.
+///
+/// The base64 payload below decodes to the following SVG. Re-generating
+/// it from this source is a stable round-trip
+/// (`echo -n '<svg ...>' | base64`); editing the base64 directly is not.
+///
+/// ```svg
+/// <svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+///   <rect width="256" height="256" fill="#e2e8f0"/>
+///   <text x="128" y="136" font-family="sans-serif" font-size="24" fill="#4a5568" text-anchor="middle">AVATAR</text>
+/// </svg>
+/// ```
 const AVATAR_PLACEHOLDER_DATA_URI: &str = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNTYiIGhlaWdodD0iMjU2IiB2aWV3Qm94PSIwIDAgMjU2IDI1NiI+PHJlY3Qgd2lkdGg9IjI1NiIgaGVpZ2h0PSIyNTYiIGZpbGw9IiNlMmU4ZjAiLz48dGV4dCB4PSIxMjgiIHk9IjEzNiIgZm9udC1mYW1pbHk9InNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMjQiIGZpbGw9IiM0YTU1NjgiIHRleHQtYW5jaG9yPSJtaWRkbGUiPkFWQVRBUjwvdGV4dD48L3N2Zz4=";
 
 /// No-delivery implementation that emits the upload as a `tracing` event
@@ -230,13 +233,13 @@ impl S3MediaStorage {
         public_url_base: String,
     ) -> Result<Self, StorageError> {
         // AWS endpoints (`*.amazonaws.com`) drive virtual-hosted-style:
-        // path-style is deprecated there, and new AWS regions reject
-        // it outright. Everything else (MinIO, Cloudflare R2 on its
-        // R2 endpoint, on-prem Ceph) must stay on path-style because
-        // DNS for `<bucket>.<endpoint>` does not resolve. Detect by
-        // hostname substring rather than parsing the URL: `Region::Custom`
-        // already accepted the endpoint string as-is, and a substring
-        // check stays correct for any scheme/port permutation.
+        // path-style is deprecated there, and new AWS regions reject it
+        // outright. Everything else (MinIO, Cloudflare R2 on its R2 endpoint,
+        // on-prem Ceph) must stay on path-style because DNS for
+        // `<bucket>.<endpoint>` does not resolve. Detect by hostname substring
+        // rather than parsing the URL: `Region::Custom` already accepted the
+        // endpoint string as-is, and a substring check stays correct for any
+        // scheme/port permutation.
         let is_aws_endpoint = endpoint.contains("amazonaws.com");
         let region = Region::Custom { region, endpoint };
         let credentials = Credentials::new(Some(access_key), Some(secret_key), None, None, None)
