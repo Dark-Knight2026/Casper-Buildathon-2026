@@ -2,7 +2,7 @@ name: Deploy CI
 
 on:
   push:
-    branches: [ "master" ]
+    branches: ["master"]
 
   workflow_dispatch:
     inputs:
@@ -25,157 +25,167 @@ jobs:
         || inputs.environment
       }}
     steps:
-    - name: Mask SSH credentials
-      env:
-        SSH_PRIVATE_KEY: ${{ secrets.SECRET_RSA_PRIVATE_KEY }}
-        SSH_PUBLIC_KEY: ${{ secrets.SECRET_RSA_PUBLIC_KEY }}
-      run: |
-        while IFS= read -r line; do
-          [ -n "$line" ] && echo "::add-mask::$line"
-        done <<< "${SSH_PRIVATE_KEY}"
-        while IFS= read -r line; do
-          [ -n "$line" ] && echo "::add-mask::$line"
-        done <<< "${SSH_PUBLIC_KEY}"
+      - name: Mask SSH credentials
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SECRET_RSA_PRIVATE_KEY }}
+          SSH_PUBLIC_KEY: ${{ secrets.SECRET_RSA_PUBLIC_KEY }}
+        run: |
+          while IFS= read -r line; do
+            [ -n "$line" ] && echo "::add-mask::$line"
+          done <<< "${SSH_PRIVATE_KEY}"
+          while IFS= read -r line; do
+            [ -n "$line" ] && echo "::add-mask::$line"
+          done <<< "${SSH_PUBLIC_KEY}"
 
-    - uses: actions/checkout@v4
+      - name: Mask S3 secrets
+        env:
+          S3_ACCESS_KEY: ${{ secrets.S3_ACCESS_KEY }}
+          S3_SECRET_KEY: ${{ secrets.S3_SECRET_KEY }}
+        run: |
+          echo "::add-mask::${S3_ACCESS_KEY}"
+          echo "::add-mask::${S3_SECRET_KEY}"
 
-    - name: Decode service account credentials
-      env:
-        GCP_CREDS_B64: ${{ secrets.SECRET_GCP_CREDENTIALS }}
-      run: |
-        echo "::add-mask::${GCP_CREDS_B64}"
-        printf '%s' "${GCP_CREDS_B64}" | base64 --decode > "./.secret/gcp_creds.json"
-        if [ ! -s "./.secret/gcp_creds.json" ]; then
-          echo "ERROR: Failed to decode service account credentials"
-          exit 1
-        fi
-        chmod 600 "./.secret/gcp_creds.json"
+      - uses: actions/checkout@v4
 
-    - name: Create key files
-      env:
-        SSH_PRIVATE_KEY: ${{ secrets.SECRET_RSA_PRIVATE_KEY }}
-        SSH_PUBLIC_KEY: ${{ secrets.SECRET_RSA_PUBLIC_KEY }}
-      run: |
-        printf '%s\n' "${SSH_PRIVATE_KEY}" | install -m 600 /dev/stdin "./.secret/ssh_key"
-        printf '%s\n' "${SSH_PUBLIC_KEY}" | install -m 644 /dev/stdin "./.secret/ssh_key.pub"
+      - name: Decode service account credentials
+        env:
+          GCP_CREDS_B64: ${{ secrets.SECRET_GCP_CREDENTIALS }}
+        run: |
+          echo "::add-mask::${GCP_CREDS_B64}"
+          printf '%s' "${GCP_CREDS_B64}" | base64 --decode > "./.secret/gcp_creds.json"
+          if [ ! -s "./.secret/gcp_creds.json" ]; then
+            echo "ERROR: Failed to decode service account credentials"
+            exit 1
+          fi
+          chmod 600 "./.secret/gcp_creds.json"
 
-    - name: Create secret.sh file
-      env:
-        REDIS_URL: ${{ secrets.REDIS_URL }}
-        REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
-        CORS_ORIGIN: ${{ secrets.CORS_ORIGIN }}
-        DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        CERTBOT_EMAIL: ${{ secrets.CERTBOT_EMAIL }}
-        CF_DNS_API_TOKEN: ${{ secrets.CF_DNS_API_TOKEN }}
-        GOOGLE_APPLICATION_PROJECT_ID: ${{ secrets.GOOGLE_APPLICATION_PROJECT_ID }}
-        GOOGLE_APPLICATION_REGION: ${{ secrets.GOOGLE_APPLICATION_REGION }}
-        GOOGLE_ENCRYPTION_KEY: ${{ secrets.GOOGLE_ENCRYPTION_KEY }}
-        HOST_SERVER_NAME: ${{ secrets.HOST_SERVER_NAME }}
-        HETZNER_CLOUD_TOKEN: ${{ secrets.HETZNER_CLOUD_TOKEN }}
-        SUPABASE_JWT_SECRET: ${{ secrets.SUPABASE_JWT_SECRET }}
-        CSPR_CLOUD_API_TOKEN: ${{ secrets.CSPR_CLOUD_API_TOKEN }}
-        CSPR_CLOUD_REST_URL: ${{ secrets.CSPR_CLOUD_REST_URL }}
-        CSPR_CLOUD_WSS_URL: ${{ secrets.CSPR_CLOUD_WSS_URL }}
-        CASPER_NODE_RPC_URL: ${{ secrets.CASPER_NODE_RPC_URL }}
-        S3_ACCESS_KEY: ${{ secrets.S3_ACCESS_KEY }}
-        S3_SECRET_KEY: ${{ secrets.S3_SECRET_KEY }}
-        DEPLOYMENT_MODE: ${{ vars.DEPLOYMENT_MODE }}
-        PROJECT_NAME: ${{ vars.PROJECT_NAME }}
-        PROJECT_DOMAIN: ${{ vars.PROJECT_DOMAIN }}
-        RUN_MIGRATIONS: ${{ vars.RUN_MIGRATIONS }}
-        S3_BUCKET: ${{ vars.S3_BUCKET }}
-        S3_REGION: ${{ vars.S3_REGION }}
-        
-        CONTRACT_USDC: ${{ vars.CONTRACT_USDC }}
-        CONTRACT_USDT: ${{ vars.CONTRACT_USDT }}
-        CONTRACT_BIG: ${{ vars.CONTRACT_BIG }}
-        CONTRACT_TREASURY: ${{ vars.CONTRACT_TREASURY }}
-        CONTRACT_ICO: ${{ vars.CONTRACT_ICO }}
-        CONTRACT_VESTING: ${{ vars.CONTRACT_VESTING }}
-        CONTRACT_STAKING: ${{ vars.CONTRACT_STAKING }}
+      - name: Create key files
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SECRET_RSA_PRIVATE_KEY }}
+          SSH_PUBLIC_KEY: ${{ secrets.SECRET_RSA_PUBLIC_KEY }}
+        run: |
+          printf '%s\n' "${SSH_PRIVATE_KEY}" | install -m 600 /dev/stdin "./.secret/ssh_key"
+          printf '%s\n' "${SSH_PUBLIC_KEY}" | install -m 644 /dev/stdin "./.secret/ssh_key.pub"
 
-        START_BLOCK_CONTRACT_USDC: ${{ vars.START_BLOCK_CONTRACT_USDC }}
-        START_BLOCK_CONTRACT_USDT: ${{ vars.START_BLOCK_CONTRACT_USDT }}
-        START_BLOCK_CONTRACT_BIG: ${{ vars.START_BLOCK_CONTRACT_BIG }}
-        START_BLOCK_CONTRACT_TREASURY: ${{ vars.START_BLOCK_CONTRACT_TREASURY }}
-        START_BLOCK_CONTRACT_ICO: ${{ vars.START_BLOCK_CONTRACT_ICO }}
-        START_BLOCK_CONTRACT_VESTING: ${{ vars.START_BLOCK_CONTRACT_VESTING }}
-        START_BLOCK_CONTRACT_STAKING: ${{ vars.START_BLOCK_CONTRACT_STAKING }}
-        
-        ALLOW_DB_RESET: ${{ vars.ALLOW_DB_RESET }}
-      run: |
-        for v in "$REDIS_URL" "$REDIS_PASSWORD" "$CORS_ORIGIN" "$DATABASE_URL" "$CERTBOT_EMAIL" \
-                  "$CF_DNS_API_TOKEN" "$GOOGLE_APPLICATION_PROJECT_ID" "$GOOGLE_APPLICATION_REGION" \
-                  "$GOOGLE_ENCRYPTION_KEY" "$HOST_SERVER_NAME" "$HETZNER_CLOUD_TOKEN" \
-                  "$SUPABASE_JWT_SECRET" "$CSPR_CLOUD_API_TOKEN" "$CSPR_CLOUD_REST_URL" \
-                  "$CSPR_CLOUD_WSS_URL" "$CASPER_NODE_RPC_URL" \
-                  "$S3_ACCESS_KEY" "$S3_SECRET_KEY"; do
-          echo "::add-mask::$v"
-        done
-        install -m 600 /dev/null .secret/-secret.sh
-        {
-          printf 'GOOGLE_APPLICATION_CREDENTIALS=%s\n' './.secret/gcp_creds.json'
-          printf 'GOOGLE_APPLICATION_PROJECT_ID=%s\n'  "$GOOGLE_APPLICATION_PROJECT_ID"
-          printf 'GOOGLE_APPLICATION_REGION=%s\n'      "$GOOGLE_APPLICATION_REGION"
-          printf 'GOOGLE_ENCRYPTION_KEY=%s\n'          "$GOOGLE_ENCRYPTION_KEY"
-          printf 'SSH_PRIVATE_KEY_PATH=%s\n'           './.secret/ssh_key'
-          printf 'SSH_PUBLIC_KEY_PATH=%s\n'            './.secret/ssh_key.pub'
-          printf 'HOST_SERVER_NAME=%s\n'               "$HOST_SERVER_NAME"
-          printf 'HETZNER_CLOUD_TOKEN=%s\n'            "$HETZNER_CLOUD_TOKEN"
-          printf 'SUPABASE_JWT_SECRET=%s\n'            "$SUPABASE_JWT_SECRET"
-          printf 'DEPLOYMENT_MODE=%s\n'                "$DEPLOYMENT_MODE"
-          printf 'RUN_MIGRATIONS=%s\n'                 "$RUN_MIGRATIONS"
-          printf 'PROJECT_NAME=%s\n'                   "$PROJECT_NAME"
-          printf 'PROJECT_DOMAIN=%s\n'                 "$PROJECT_DOMAIN"
-          printf 'DATABASE_URL=%s\n'                   "$DATABASE_URL"
-          printf 'CORS_ORIGIN=%s\n'                    "$CORS_ORIGIN"
-          printf 'CSPR_CLOUD_API_TOKEN=%s\n'           "$CSPR_CLOUD_API_TOKEN"
-          printf 'CSPR_CLOUD_REST_URL=%s\n'            "$CSPR_CLOUD_REST_URL"
-          printf 'CSPR_CLOUD_WSS_URL=%s\n'             "$CSPR_CLOUD_WSS_URL"
-          printf 'CASPER_NODE_RPC_URL=%s\n'            "$CASPER_NODE_RPC_URL"
-          printf 'REDIS_URL=%s\n'                      "$REDIS_URL"
-          printf 'REDIS_PASSWORD=%s\n'                 "$REDIS_PASSWORD"
-          printf 'CERTBOT_EMAIL=%s\n'                  "$CERTBOT_EMAIL"
-          printf 'CF_DNS_API_TOKEN=%s\n'               "$CF_DNS_API_TOKEN"
-          printf 'CONTRACT_USDC=%s\n'                  "$CONTRACT_USDC"
-          printf 'CONTRACT_USDT=%s\n'                  "$CONTRACT_USDT"
-          printf 'CONTRACT_BIG=%s\n'                   "$CONTRACT_BIG"
-          printf 'CONTRACT_TREASURY=%s\n'              "$CONTRACT_TREASURY"
-          printf 'CONTRACT_ICO=%s\n'                   "$CONTRACT_ICO"
-          printf 'CONTRACT_VESTING=%s\n'               "$CONTRACT_VESTING"
-          printf 'CONTRACT_STAKING=%s\n'               "$CONTRACT_STAKING"
-          printf 'START_BLOCK_CONTRACT_USDC=%s\n'      "$START_BLOCK_CONTRACT_USDC"
-          printf 'START_BLOCK_CONTRACT_USDT=%s\n'      "$START_BLOCK_CONTRACT_USDT"
-          printf 'START_BLOCK_CONTRACT_BIG=%s\n'       "$START_BLOCK_CONTRACT_BIG"
-          printf 'START_BLOCK_CONTRACT_TREASURY=%s\n'  "$START_BLOCK_CONTRACT_TREASURY"
-          printf 'START_BLOCK_CONTRACT_ICO=%s\n'       "$START_BLOCK_CONTRACT_ICO"
-          printf 'START_BLOCK_CONTRACT_VESTING=%s\n'   "$START_BLOCK_CONTRACT_VESTING"
-          printf 'START_BLOCK_CONTRACT_STAKING=%s\n'   "$START_BLOCK_CONTRACT_STAKING"
-          printf 'ALLOW_DB_RESET=%s\n'                 "$ALLOW_DB_RESET"
-          printf 'S3_BUCKET=%s\n'                      "$S3_BUCKET"
-          printf 'S3_REGION=%s\n'                      "$S3_REGION"
-          printf 'S3_ACCESS_KEY=%s\n'                  "$S3_ACCESS_KEY"
-          printf 'S3_SECRET_KEY=%s\n'                  "$S3_SECRET_KEY"
-        } >> .secret/-secret.sh
+      - name: Create secret.sh file
+        env:
+          REDIS_URL: ${{ secrets.REDIS_URL }}
+          REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
+          CORS_ORIGIN: ${{ secrets.CORS_ORIGIN }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          CERTBOT_EMAIL: ${{ secrets.CERTBOT_EMAIL }}
+          CF_DNS_API_TOKEN: ${{ secrets.CF_DNS_API_TOKEN }}
+          GOOGLE_APPLICATION_PROJECT_ID: ${{ secrets.GOOGLE_APPLICATION_PROJECT_ID }}
+          GOOGLE_APPLICATION_REGION: ${{ secrets.GOOGLE_APPLICATION_REGION }}
+          GOOGLE_ENCRYPTION_KEY: ${{ secrets.GOOGLE_ENCRYPTION_KEY }}
+          HOST_SERVER_NAME: ${{ secrets.HOST_SERVER_NAME }}
+          HETZNER_CLOUD_TOKEN: ${{ secrets.HETZNER_CLOUD_TOKEN }}
+          SUPABASE_JWT_SECRET: ${{ secrets.SUPABASE_JWT_SECRET }}
+          CSPR_CLOUD_API_TOKEN: ${{ secrets.CSPR_CLOUD_API_TOKEN }}
+          CSPR_CLOUD_REST_URL: ${{ secrets.CSPR_CLOUD_REST_URL }}
+          CSPR_CLOUD_WSS_URL: ${{ secrets.CSPR_CLOUD_WSS_URL }}
+          CASPER_NODE_RPC_URL: ${{ secrets.CASPER_NODE_RPC_URL }}
+          S3_ACCESS_KEY: ${{ secrets.S3_ACCESS_KEY }}
+          S3_SECRET_KEY: ${{ secrets.S3_SECRET_KEY }}
+          DEPLOYMENT_MODE: ${{ vars.DEPLOYMENT_MODE }}
+          PROJECT_NAME: ${{ vars.PROJECT_NAME }}
+          PROJECT_DOMAIN: ${{ vars.PROJECT_DOMAIN }}
+          RUN_MIGRATIONS: ${{ vars.RUN_MIGRATIONS }}
+          S3_BUCKET: ${{ vars.S3_BUCKET }}
+          S3_REGION: ${{ vars.S3_REGION }}
 
-    - name: 'Build the image, push and deploy' 
-      run: 'make deploy'
+          CONTRACT_USDC: ${{ vars.CONTRACT_USDC }}
+          CONTRACT_USDT: ${{ vars.CONTRACT_USDT }}
+          CONTRACT_BIG: ${{ vars.CONTRACT_BIG }}
+          CONTRACT_TREASURY: ${{ vars.CONTRACT_TREASURY }}
+          CONTRACT_ICO: ${{ vars.CONTRACT_ICO }}
+          CONTRACT_VESTING: ${{ vars.CONTRACT_VESTING }}
+          CONTRACT_STAKING: ${{ vars.CONTRACT_STAKING }}
 
-    - name: Cleanup secrets
-      if: always()
-      run: |
-        if [ -f .secret/-secret.sh ]; then
-          shred -fz -n 3 .secret/-secret.sh
-        fi
-        if [ -f "./.secret/gcp_creds.json" ]; then
-          shred -fz -n 3 "./.secret/gcp_creds.json"
-        fi
-        if [ -f "./.secret/ssh_key" ]; then
-          shred -fz -n 3 "./.secret/ssh_key"
-        fi
-        if [ -f "./.secret/ssh_key.pub" ]; then
-          shred -fz -n 3 "./.secret/ssh_key.pub"
-        fi
-        for f in "$GITHUB_WORKSPACE"/.secret/env.*.tfvars; do
-          [ -f "$f" ] && shred -fz -n 3 "$f"
-        done
+          START_BLOCK_CONTRACT_USDC: ${{ vars.START_BLOCK_CONTRACT_USDC }}
+          START_BLOCK_CONTRACT_USDT: ${{ vars.START_BLOCK_CONTRACT_USDT }}
+          START_BLOCK_CONTRACT_BIG: ${{ vars.START_BLOCK_CONTRACT_BIG }}
+          START_BLOCK_CONTRACT_TREASURY: ${{ vars.START_BLOCK_CONTRACT_TREASURY }}
+          START_BLOCK_CONTRACT_ICO: ${{ vars.START_BLOCK_CONTRACT_ICO }}
+          START_BLOCK_CONTRACT_VESTING: ${{ vars.START_BLOCK_CONTRACT_VESTING }}
+          START_BLOCK_CONTRACT_STAKING: ${{ vars.START_BLOCK_CONTRACT_STAKING }}
+
+          ALLOW_DB_RESET: ${{ vars.ALLOW_DB_RESET }}
+        run: |
+          # S3_ACCESS_KEY / S3_SECRET_KEY are masked in the dedicated
+          # `Mask S3 secrets` pre-step above; not re-listed here to keep
+          # the source of truth for S3-secret masking in one place.
+          for v in "$REDIS_URL" "$REDIS_PASSWORD" "$CORS_ORIGIN" "$DATABASE_URL" "$CERTBOT_EMAIL" \
+                    "$CF_DNS_API_TOKEN" "$GOOGLE_APPLICATION_PROJECT_ID" "$GOOGLE_APPLICATION_REGION" \
+                    "$GOOGLE_ENCRYPTION_KEY" "$HOST_SERVER_NAME" "$HETZNER_CLOUD_TOKEN" \
+                    "$SUPABASE_JWT_SECRET" "$CSPR_CLOUD_API_TOKEN" "$CSPR_CLOUD_REST_URL" \
+                    "$CSPR_CLOUD_WSS_URL" "$CASPER_NODE_RPC_URL"; do
+            echo "::add-mask::$v"
+          done
+          install -m 600 /dev/null .secret/-secret.sh
+          {
+            printf 'GOOGLE_APPLICATION_CREDENTIALS=%s\n' './.secret/gcp_creds.json'
+            printf 'GOOGLE_APPLICATION_PROJECT_ID=%s\n'  "$GOOGLE_APPLICATION_PROJECT_ID"
+            printf 'GOOGLE_APPLICATION_REGION=%s\n'      "$GOOGLE_APPLICATION_REGION"
+            printf 'GOOGLE_ENCRYPTION_KEY=%s\n'          "$GOOGLE_ENCRYPTION_KEY"
+            printf 'SSH_PRIVATE_KEY_PATH=%s\n'           './.secret/ssh_key'
+            printf 'SSH_PUBLIC_KEY_PATH=%s\n'            './.secret/ssh_key.pub'
+            printf 'HOST_SERVER_NAME=%s\n'               "$HOST_SERVER_NAME"
+            printf 'HETZNER_CLOUD_TOKEN=%s\n'            "$HETZNER_CLOUD_TOKEN"
+            printf 'SUPABASE_JWT_SECRET=%s\n'            "$SUPABASE_JWT_SECRET"
+            printf 'DEPLOYMENT_MODE=%s\n'                "$DEPLOYMENT_MODE"
+            printf 'RUN_MIGRATIONS=%s\n'                 "$RUN_MIGRATIONS"
+            printf 'PROJECT_NAME=%s\n'                   "$PROJECT_NAME"
+            printf 'PROJECT_DOMAIN=%s\n'                 "$PROJECT_DOMAIN"
+            printf 'DATABASE_URL=%s\n'                   "$DATABASE_URL"
+            printf 'CORS_ORIGIN=%s\n'                    "$CORS_ORIGIN"
+            printf 'CSPR_CLOUD_API_TOKEN=%s\n'           "$CSPR_CLOUD_API_TOKEN"
+            printf 'CSPR_CLOUD_REST_URL=%s\n'            "$CSPR_CLOUD_REST_URL"
+            printf 'CSPR_CLOUD_WSS_URL=%s\n'             "$CSPR_CLOUD_WSS_URL"
+            printf 'CASPER_NODE_RPC_URL=%s\n'            "$CASPER_NODE_RPC_URL"
+            printf 'REDIS_URL=%s\n'                      "$REDIS_URL"
+            printf 'REDIS_PASSWORD=%s\n'                 "$REDIS_PASSWORD"
+            printf 'CERTBOT_EMAIL=%s\n'                  "$CERTBOT_EMAIL"
+            printf 'CF_DNS_API_TOKEN=%s\n'               "$CF_DNS_API_TOKEN"
+            printf 'CONTRACT_USDC=%s\n'                  "$CONTRACT_USDC"
+            printf 'CONTRACT_USDT=%s\n'                  "$CONTRACT_USDT"
+            printf 'CONTRACT_BIG=%s\n'                   "$CONTRACT_BIG"
+            printf 'CONTRACT_TREASURY=%s\n'              "$CONTRACT_TREASURY"
+            printf 'CONTRACT_ICO=%s\n'                   "$CONTRACT_ICO"
+            printf 'CONTRACT_VESTING=%s\n'               "$CONTRACT_VESTING"
+            printf 'CONTRACT_STAKING=%s\n'               "$CONTRACT_STAKING"
+            printf 'START_BLOCK_CONTRACT_USDC=%s\n'      "$START_BLOCK_CONTRACT_USDC"
+            printf 'START_BLOCK_CONTRACT_USDT=%s\n'      "$START_BLOCK_CONTRACT_USDT"
+            printf 'START_BLOCK_CONTRACT_BIG=%s\n'       "$START_BLOCK_CONTRACT_BIG"
+            printf 'START_BLOCK_CONTRACT_TREASURY=%s\n'  "$START_BLOCK_CONTRACT_TREASURY"
+            printf 'START_BLOCK_CONTRACT_ICO=%s\n'       "$START_BLOCK_CONTRACT_ICO"
+            printf 'START_BLOCK_CONTRACT_VESTING=%s\n'   "$START_BLOCK_CONTRACT_VESTING"
+            printf 'START_BLOCK_CONTRACT_STAKING=%s\n'   "$START_BLOCK_CONTRACT_STAKING"
+            printf 'ALLOW_DB_RESET=%s\n'                 "$ALLOW_DB_RESET"
+            printf 'S3_BUCKET=%s\n'                      "$S3_BUCKET"
+            printf 'S3_REGION=%s\n'                      "$S3_REGION"
+            printf 'S3_ACCESS_KEY=%s\n'                  "$S3_ACCESS_KEY"
+            printf 'S3_SECRET_KEY=%s\n'                  "$S3_SECRET_KEY"
+          } >> .secret/-secret.sh
+
+      - name: "Build the image, push and deploy"
+        run: "make deploy"
+
+      - name: Cleanup secrets
+        if: always()
+        run: |
+          if [ -f .secret/-secret.sh ]; then
+            shred -fz -n 3 .secret/-secret.sh
+          fi
+          if [ -f "./.secret/gcp_creds.json" ]; then
+            shred -fz -n 3 "./.secret/gcp_creds.json"
+          fi
+          if [ -f "./.secret/ssh_key" ]; then
+            shred -fz -n 3 "./.secret/ssh_key"
+          fi
+          if [ -f "./.secret/ssh_key.pub" ]; then
+            shred -fz -n 3 "./.secret/ssh_key.pub"
+          fi
+          for f in "$GITHUB_WORKSPACE"/.secret/env.*.tfvars; do
+            [ -f "$f" ] && shred -fz -n 3 "$f"
+          done
