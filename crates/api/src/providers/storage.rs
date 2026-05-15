@@ -237,6 +237,21 @@ impl S3MediaStorage {
             public_url_base,
         })
     }
+
+    /// Returns `true` if the underlying `Bucket` is using path-style
+    /// addressing (`https://endpoint/bucket/key`) versus virtual-hosted
+    /// (`https://bucket.endpoint/key`).
+    ///
+    /// Exposed as a public diagnostic so operators can log the
+    /// effective addressing mode at boot when triaging routing issues
+    /// (e.g. AWS rejecting path-style on a newly created region), and
+    /// so unit tests can pin the constructor's per-endpoint behavior
+    /// without performing a real `put`/`delete`.
+    #[inline]
+    #[must_use]
+    pub fn is_path_style(&self) -> bool {
+        self.bucket.is_path_style()
+    }
 }
 
 #[async_trait]
