@@ -200,6 +200,34 @@ fn from_env_leaves_s3_unset_when_bucket_missing() {
     );
 }
 
+/// `S3_BUCKET` is the gate that opens the whole S3 block. With it unset, the
+/// other `S3_*` vars (region, endpoint, credentials, public URL base) MUST be
+/// inert - `from_env` neither reads them for validation nor populates
+/// `config.s3` from them. This pins that "all-or-nothing" semantic so a future
+/// refactor cannot silently start partial-loading S3 from leftover env vars
+/// after an operator removes `S3_BUCKET` to roll back to stub storage.
+#[test]
+#[serial]
+fn from_env_ignores_s3_vars_when_bucket_unset() {
+    set_env_vars(&[
+        REQUIRED_ENV,
+        &[
+            ("S3_REGION", "us-east-1"),
+            ("S3_ENDPOINT", "http://localhost:9000"),
+            ("S3_ACCESS_KEY", "minioadmin"),
+            ("S3_SECRET_KEY", "minioadmin"),
+            ("S3_PUBLIC_URL_BASE", "https://cdn.example.com/media"),
+        ],
+    ]);
+
+    let config = ServerConfig::from_env()
+        .expect("Partial S3 block without S3_BUCKET must NOT fail validation");
+    assert!(
+        config.s3.is_none(),
+        "config.s3 must remain None when S3_BUCKET is unset, even if other S3_* vars are present",
+    );
+}
+
 #[test]
 #[serial]
 fn from_env_populates_s3_when_full_block_present() {

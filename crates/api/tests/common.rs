@@ -254,6 +254,21 @@ pub fn fake_jpg_bytes() -> Vec<u8> {
     bytes
 }
 
+/// 12-byte WebP RIFF container (`RIFF` + 4-byte length + `WEBP`) followed by
+/// zero padding to 1 KB. The handler's sniff inspects bytes 0..4 and
+/// 8..12 (per `services/users/handlers.rs:167`); the intervening 4-byte length
+///   field is opaque to that check, so we fill it with the minimum valid 4-byte
+///   payload size and move on.
+#[inline]
+pub fn fake_webp_bytes() -> Vec<u8> {
+    let mut bytes = Vec::with_capacity(1024);
+    bytes.extend_from_slice(b"RIFF");
+    bytes.extend_from_slice(&1024_u32.to_le_bytes());
+    bytes.extend_from_slice(b"WEBP");
+    bytes.extend(core::iter::repeat_n(0u8, 1024 - bytes.len()));
+    bytes
+}
+
 /// Creates a test JWT access token populated with the full typed-claim schema.
 #[inline]
 pub fn create_test_jwt(user_id: UserId, role: UserRole, secret: &str) -> String {
