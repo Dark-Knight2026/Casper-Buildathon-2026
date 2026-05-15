@@ -210,7 +210,7 @@ impl ServerConfig {
                 })?;
                 let public_url_base = raw
                     .s3_public_url_base
-                    .unwrap_or_else(|| format!("{endpoint}/{bucket}"));
+                    .unwrap_or_else(|| format!("{}/{bucket}", endpoint.trim_end_matches('/')));
                 Some(S3Config {
                     bucket,
                     region,

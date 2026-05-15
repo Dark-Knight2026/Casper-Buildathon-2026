@@ -362,3 +362,55 @@ fn from_env_accepts_http_localhost_s3_endpoint() {
         .expect("config.s3 must be populated");
     assert_eq!(s3.endpoint, "http://localhost:9000");
 }
+
+/// Regression guard for the `//bucket` double-slash bug in the default
+/// `public_url_base`.
+///
+/// Loading with `S3_ENDPOINT=http://localhost:9000/` (note the
+/// trailing slash) used to build the default as
+/// `format!("{endpoint}/{bucket}")` literally, producing
+/// `http://localhost:9000//test-bucket`. Both `MinIO` and AWS
+/// path-style endpoints normalize that on the wire (the object can
+/// still be PUT), but the returned `avatar_url` carries the double
+/// slash all the way to the frontend, where some CDNs (Cloudflare,
+/// Fastly) and some browser caches treat `//key` as a different
+/// resource from `/key`, breaking cache hits across upload sessions.
+///
+/// The fix normalizes by stripping the trailing slash. This test
+/// covers BOTH variants:
+/// 1. trailing slash in `S3_ENDPOINT` -> default must NOT double-slash.
+/// 2. no trailing slash -> default stays correct (regression guard
+///    against an over-eager trimmer that strips real path segments).
+///
+/// Expected to FAIL on the pre-fix code at variant 1.
+#[test]
+#[serial]
+fn from_env_normalizes_trailing_slash_in_default_public_url_base() {
+    set_env_vars(&[
+        REQUIRED_ENV,
+        FULL_S3_ENV,
+        &[("S3_ENDPOINT", "http://localhost:9000/")],
+    ]);
+    let s3 = ServerConfig::from_env()
+        .expect("trailing-slash endpoint must still be accepted")
+        .s3
+        .expect("config.s3 must be populated");
+    assert_eq!(
+        s3.public_url_base, "http://localhost:9000/test-bucket",
+        "trailing slash in S3_ENDPOINT must NOT produce a double slash in the default public_url_base",
+    );
+
+    set_env_vars(&[
+        REQUIRED_ENV,
+        FULL_S3_ENV,
+        &[("S3_ENDPOINT", "http://localhost:9000")],
+    ]);
+    let s3 = ServerConfig::from_env()
+        .expect("no-trailing-slash endpoint must be accepted")
+        .s3
+        .expect("config.s3 must be populated");
+    assert_eq!(
+        s3.public_url_base, "http://localhost:9000/test-bucket",
+        "without a trailing slash, default public_url_base must remain unchanged",
+    );
+}
