@@ -10,6 +10,7 @@
 //! Mirrors the [`EmailSender`](crate::providers::EmailSender) abstraction in
 //! shape, motivation, and lifecycle.
 
+use core::time::Duration;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -203,6 +204,17 @@ pub struct S3MediaStorage {
     public_url_base: String,
 }
 
+/// Hard ceiling on a single S3 wire operation (PUT or DELETE).
+///
+/// Without this bound, an unresponsive S3 endpoint (TCP black-hole, DNS hang,
+/// TLS handshake stall behind a misconfigured proxy) leaves the request task
+/// pinned indefinitely on the tokio worker. Avatar upload then blocks the
+/// user's tab until the browser itself gives up, and the server-side
+/// `tower-http` limit-layer keeps the request slot live for the entire stall.
+/// 30 s comfortably covers a healthy AWS/R2/MinIO PUT of a 5 MB avatar
+/// (typical: 200-800 ms) while still capping the worst-case blast radius.
+const S3_OPERATION_TIMEOUT: Duration = Duration::from_secs(30);
+
 impl S3MediaStorage {
     /// Builds an instance from explicit configuration.
     ///
@@ -277,22 +289,24 @@ impl S3MediaStorage {
 impl MediaStorage for S3MediaStorage {
     #[inline]
     async fn put(&self, key: &str, bytes: &[u8], content_type: &str) -> StorageResult<String> {
-        self.bucket
+        let request = self
+            .bucket
             .put_object_builder(key, bytes)
             .with_content_type(content_type)
             .with_header("x-amz-acl", "public-read")
-            .map_err(|e| StorageError::Transport(format!("acl header: {e}")))?
-            .execute()
+            .map_err(|e| StorageError::Transport(format!("acl header: {e}")))?;
+        tokio::time::timeout(S3_OPERATION_TIMEOUT, request.execute())
             .await
+            .map_err(|_elapsed| StorageError::Transport("S3 put timed out".to_owned()))?
             .map_err(|e| StorageError::Transport(format!("put failed: {e}")))?;
         Ok(format!("{}/{}", self.public_url_base, key))
     }
 
     #[inline]
     async fn delete(&self, key: &str) -> StorageResult<()> {
-        self.bucket
-            .delete_object(key)
+        tokio::time::timeout(S3_OPERATION_TIMEOUT, self.bucket.delete_object(key))
             .await
+            .map_err(|_elapsed| StorageError::Transport("S3 delete timed out".to_owned()))?
             .map_err(|e| StorageError::Transport(format!("delete failed: {e}")))?;
         Ok(())
     }
