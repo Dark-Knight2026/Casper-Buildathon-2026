@@ -31,9 +31,11 @@
 // can call with `?fallback=true` and the same logic.
 // =============================================================================
 
-import type { Property } from '@/types/property';
+import type { Property, PropertyType } from '@/types/property';
+import { daysUntil } from '@/lib/date-utils';
 import { FEATURED_PROPERTIES } from './featuredProperties';
 import type {
+  PreferredLocation,
   RentalPreferences,
   RecommendedProperty,
   RecommendationSource,
@@ -53,17 +55,20 @@ export const IMPLICIT_BUDGET_TOLERANCE = 0.15;
 // replacement is `GET /api/v1/users/me/preferences`.
 const preferenceStore = new Map<string, RentalPreferences>();
 
-export const EMPTY_PREFERENCES: RentalPreferences = {
+// Frozen so the shared default cannot be mutated by accident — a shallow
+// spread copies the top level but keeps these inner arrays by reference,
+// and a stray `.push` would corrupt every subsequent reader.
+export const EMPTY_PREFERENCES: RentalPreferences = Object.freeze({
   budgetMin: null,
   budgetMax: null,
   bedroomsMin: null,
   bathroomsMin: null,
   squareFeetMin: null,
-  locations: [],
-  propertyTypes: [],
-  amenities: [],
+  locations: Object.freeze([] as PreferredLocation[]),
+  propertyTypes: Object.freeze([] as PropertyType[]),
+  amenities: Object.freeze([] as string[]),
   surroundingArea: undefined,
-};
+}) as unknown as RentalPreferences;
 
 export function getStoredPreferences(tenantId: string): RentalPreferences | null {
   return preferenceStore.get(tenantId) ?? null;
@@ -75,13 +80,6 @@ export function setStoredPreferences(tenantId: string, prefs: RentalPreferences)
 
 export function clearStoredPreferences(tenantId: string): void {
   preferenceStore.delete(tenantId);
-}
-
-// Days remaining until lease end. Same shape as leaseExtensions.daysUntil
-// — duplicated rather than imported to keep this module standalone for
-// the eventual cleanup when leaseExtensions is replaced by real data.
-export function daysUntil(endDate: Date): number {
-  return Math.ceil((endDate.getTime() - Date.now()) / 86400000);
 }
 
 export function isInRecommendationWindow(endDate: Date): boolean {

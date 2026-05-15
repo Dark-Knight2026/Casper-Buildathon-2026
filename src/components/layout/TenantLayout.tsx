@@ -58,6 +58,10 @@ function HeaderAvatar({ profile, onNavigate }: { profile: UserType; onNavigate?:
   );
 }
 
+// /tenant/score and /tenant/recommended are intentionally absent: they are
+// reached only via the dashboard widgets (TenantScoreCard "View details",
+// RecommendedProperties "See all") so the sidebar stays focused on the
+// core tenant workflow surfaces.
 const NAV_LINKS = [
   { to: '/tenant/dashboard',       label: 'Dashboard',    icon: LayoutDashboard },
   { to: '/tenant/properties',      label: 'My Properties', icon: Home },

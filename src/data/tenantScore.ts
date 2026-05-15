@@ -38,9 +38,12 @@ export const DEMO_TENANT_ID = 'mock-tenant-1';
 // default; we picked it over "neutral 70" for transparency.)
 export const MIN_EVENTS_TO_SCORE = 3;
 
-const NOW = new Date();
+// `Date.now()` evaluated per call — capturing once at module scope would
+// freeze every mock event date to the moment the module was first imported,
+// which drifts further from "today" the longer the process lives (and traps
+// test runs against a stale baseline).
 function daysAgo(n: number): Date {
-  return new Date(NOW.getTime() - n * 86400000);
+  return new Date(Date.now() - n * 86400000);
 }
 
 // ── Scenario seeds ───────────────────────────────────────────────────────────

@@ -10,15 +10,17 @@ import {
 } from '@/data/tenantScore';
 import type { ScoreEvent, TenantScore } from '@/types/tenantScore';
 
-interface UseTenantScoreResult {
+interface UseTenantScoreReturn {
   score: TenantScore;
   events: ScoreEvent[];
 }
 
-export function useTenantScore(): UseTenantScoreResult {
+export function useTenantScore(): UseTenantScoreReturn {
   // useMemo is a lightweight stand-in for useQuery — keeps callers stable
   // and removes the temptation to compute the score on every render once
-  // the BE swap lands.
+  // the BE swap lands. `getMock*` are module-level stubs (stable references),
+  // so the empty deps array mirrors useQuery's mount-once semantics rather
+  // than being an oversight — swap this whole block when the endpoint lands.
   return useMemo(
     () => ({
       score: getMockScore(),

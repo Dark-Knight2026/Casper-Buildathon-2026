@@ -2,10 +2,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
-vi.mock('@/hooks/use-toast', () => ({
-  useToast: () => ({ toast: vi.fn() }),
-}));
-
 import { RecommendedProperties } from '@/components/tenant/RecommendedProperties';
 import { FEATURED_PROPERTIES } from '@/data/featuredProperties';
 import { clearStoredPreferences, setStoredPreferences } from '@/data/tenantPreferences';
