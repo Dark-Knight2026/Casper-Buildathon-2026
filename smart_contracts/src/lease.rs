@@ -160,24 +160,32 @@ impl Lease {
     // =========================================================================
 
     /// Sets the Roles contract address by the owner
+    /// @dev No zero-address guard is applied per the project's `odra.rulebook.md`
+    ///      (Security: Address Handling), as Odra addresses have no default/zero value.
     pub fn set_roles(&mut self, roles: Address) {
         self.assert_owner();
         self.roles.set(roles);
     }
 
     /// Sets the Escrow contract address by the owner
+    /// @dev No zero-address guard is applied per the project's `odra.rulebook.md`
+    ///      (Security: Address Handling), as Odra addresses have no default/zero value.
     pub fn set_escrow(&mut self, escrow: Address) {
         self.assert_owner();
         self.escrow.set(escrow);
     }
 
     /// Sets the NFT contract address by the owner
+    /// @dev No zero-address guard is applied per the project's `odra.rulebook.md`
+    ///      (Security: Address Handling), as Odra addresses have no default/zero value.
     pub fn set_nft(&mut self, nft: Address) {
         self.assert_owner();
         self.nft.set(nft);
     }
 
     /// Sets the PropertyRegistry contract address by the owner
+    /// @dev No zero-address guard is applied per the project's `odra.rulebook.md`
+    ///      (Security: Address Handling), as Odra addresses have no default/zero value.
     pub fn set_property_registry(&mut self, property_registry: Address) {
         self.assert_owner();
         self.property_registry.set(property_registry);
@@ -308,6 +316,10 @@ impl Lease {
 
         // Mark the tenant as eligible for property equity
         if let Some(equity_option) = &params.equity_option {
+            if *self.property_registry.address() == Address::zero() {
+                self.env().revert(Error::PropertyRegistryNotSet);
+            }
+
             let property_id = equity_option.property_id;
 
             let property = self.property_registry.get_property(property_id);

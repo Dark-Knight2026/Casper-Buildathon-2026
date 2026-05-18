@@ -141,7 +141,9 @@ impl CompliancePolicy {
     // =============================================================================
 
     /// Sets the investor registry used for wallet verifications checks
-    /// @dev Restricted to `DEFAULT_ADMIN_ROLE`
+    /// @dev Restricted to `DEFAULT_ADMIN_ROLE`. No zero-address guard is applied
+    ///      per the project's `odra.rulebook.md` (Security: Address Handling),
+    ///      as Odra addresses have no default/zero value.
     pub fn set_investor_registry(&mut self, investor_registry: Address) {
         if !self
             .access_control
@@ -157,7 +159,9 @@ impl CompliancePolicy {
     }
 
     /// Sets the property registry used for property lifecycle checks
-    /// @dev Restricted to `DEFAULT_ADMIN_ROLE`
+    /// @dev Restricted to `DEFAULT_ADMIN_ROLE`. No zero-address guard is applied
+    ///      per the project's `odra.rulebook.md` (Security: Address Handling),
+    ///      as Odra addresses have no default/zero value.
     pub fn set_property_registry(&mut self, property_registry: Address) {
         if !self
             .access_control
@@ -173,7 +177,9 @@ impl CompliancePolicy {
     }
 
     /// Sets the lease contract used for equity-option eligibility checks.
-    /// @dev Restricted to `DEFAULT_ADMIN_ROLE`
+    /// @dev Restricted to `DEFAULT_ADMIN_ROLE`. No zero-address guard is applied
+    ///      per the project's `odra.rulebook.md` (Security: Address Handling),
+    ///      as Odra addresses have no default/zero value.
     pub fn set_lease(&mut self, lease: Address) {
         if !self
             .access_control
