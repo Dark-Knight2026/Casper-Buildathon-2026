@@ -17,6 +17,7 @@ import {
   Menu,
   X,
   LogOut,
+  HelpCircle,
 } from 'lucide-react';
 import type { User as UserType } from '@/types/user';
 
@@ -41,6 +42,10 @@ function headerDisplayName(profile: UserType): string {
   return 'Account';
 }
 
+// /tenant/score and /tenant/recommended are intentionally absent: they are
+// reached only via the dashboard widgets (TenantScoreCard "View details",
+// RecommendedProperties "See all") so the sidebar stays focused on the
+// core tenant workflow surfaces.
 const NAV_LINKS = [
   { to: '/tenant/dashboard',       label: 'Dashboard',    icon: LayoutDashboard },
   { to: '/tenant/properties',      label: 'My Properties', icon: Home },
@@ -114,6 +119,14 @@ export default function TenantLayout() {
                 {headerDisplayName(profile)}
               </span>
             )}
+            <Link
+              to="/help"
+              className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground transition-colors"
+              aria-label="Help and onboarding"
+            >
+              <HelpCircle className="h-4 w-4 mr-1.5" aria-hidden="true" />
+              Help
+            </Link>
             <Button variant="ghost" size="sm" onClick={handleSignOut}>
               <LogOut className="h-4 w-4 mr-1.5" />
               Sign Out
@@ -152,16 +165,30 @@ export default function TenantLayout() {
               </Link>
             ))}
           </nav>
-          <div className="mt-6 pt-4 border-t border-border flex items-center justify-between">
+          {/* Footer: profile name on top, then Help left / Sign Out right —
+              gap-3 is intentional for mobile tap-target spacing (≥44px between
+              targets per WCAG 2.5.5); shrinking it would cluster touch points. */}
+          <div className="mt-6 pt-4 border-t border-border space-y-3">
             {profile && (
-              <span className="text-sm text-muted-foreground">
+              <span className="block text-sm text-muted-foreground">
                 {headerDisplayName(profile)}
               </span>
             )}
-            <Button variant="ghost" size="sm" onClick={handleSignOut}>
-              <LogOut className="h-4 w-4 mr-1.5" />
-              Sign Out
-            </Button>
+            <div className="flex items-center justify-between gap-3">
+              <Link
+                to="/help"
+                onClick={() => setMobileOpen(false)}
+                aria-label="Help and onboarding"
+                className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <HelpCircle className="h-4 w-4 mr-1.5" aria-hidden="true" />
+                Help
+              </Link>
+              <Button variant="ghost" size="sm" onClick={handleSignOut}>
+                <LogOut className="h-4 w-4 mr-1.5" />
+                Sign Out
+              </Button>
+            </div>
           </div>
         </div>
       )}

@@ -9,6 +9,9 @@ This directory contains all test files for the LeaseFi application, organized by
 | `fixtures/` | Test data files and mock assets for integration and E2E tests (PDFs, images, text files) |
 | `constants/` | Unit tests for application-wide constants |
 | `constants/ico.test.ts` | Tests for ICO-related constants (schedules, token config, phase definitions) |
+| `data/` | Unit tests for static data modules and demo seeds in `src/data/` |
+| `data/tenantPreferences.test.ts` | Tests preference store, `daysUntil`, recommendation-window predicates, implicit lease-derived defaults, mock recommendation matching |
+| `data/tenantScore.test.ts` | Tests score scenarios, weighted-average rollup, band thresholds, scenario switching for the tenant-score demo |
 | `hooks/` | Unit tests for custom React hooks |
 | `hooks/useFinancialDashboard.test.ts` | Tests for commission and financial summary calculations |
 | `hooks/useICOSchedules.test.ts` | Tests for ICO schedule derivation and phase timing logic |
@@ -23,6 +26,7 @@ This directory contains all test files for the LeaseFi application, organized by
 | `pages/` | Unit tests for top-level page components |
 | `pages/ico/ICOPage.test.tsx` | Tests for ICO page rendering and routing behavior |
 | `pages/PropertyLanding.test.tsx` | Tests for landing page (hero, stats, CTAs, FeaturedProperties + LandingHeader integration) |
+| `pages/HelpHub.test.tsx` | Tests for /help page (heading, FAQ accordion, QuickActionCard grid, support contact block) |
 | `services/` | Unit tests for service layer (API interactions, data fetching) |
 | `services/casperClient.test.ts` | Tests for Casper RPC client initialization and query methods |
 | `services/cep18Service.test.ts` | Tests for CEP-18 token contract interactions (balance, allowance, approve) |
@@ -35,6 +39,12 @@ This directory contains all test files for the LeaseFi application, organized by
 | `components/` | Unit tests for reusable UI components |
 | `components/FeaturedProperties.test.tsx` | Tests for featured property cards (rendering, navigation, keyboard a11y, favorite button) |
 | `components/LandingHeader.test.tsx` | Tests for public landing page header (logo, nav links, auth CTAs) |
+| `components/help/` | Unit tests for help-page components (see `components/help/readme.md`) |
+| `components/help/QuickActionCard.test.tsx` | Tests help-hub action card (disabled vs enabled mode, link rendering, slot content) |
+| `components/tenant/` | Unit tests for tenant-facing feature components (see `components/tenant/readme.md`) |
+| `components/tenant/RecommendedProperties.test.tsx` | Tests recommendation list (window gating, implicit/explicit preferences, match-category badges) |
+| `components/tenant/TenantPreferencesDialog.test.tsx` | Tests preferences modal (form state, validation, save/cancel callbacks, toast feedback) |
+| `components/tenant/TenantScoreCard.test.tsx` | Tests tenant score card (scored/unscored states, band copy, compact/full variants) |
 | `components/ui/` | Unit tests for shadcn-based UI primitives (see `components/ui/readme.md`) |
 | `components/ui/badge.test.tsx` | Tests for Badge variants (default, secondary, destructive, outline, success, info) |
 | `components/ui/button.test.tsx` | Tests white variant classes and loading/disabled behavior |

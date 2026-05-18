@@ -5,10 +5,12 @@ import { PropertyCard } from '@/components/property/PropertyCard';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorBoundary } from '@/components/ui/error-boundary';
 import {
+  CURRENT_TENANT_ID,
   getMyCurrentProperties,
   getMyPastProperties,
   type LeasedProperty,
 } from '@/data/tenantLeases';
+import { RecommendedProperties } from '@/components/tenant/RecommendedProperties';
 
 const formatDate = (d: Date) =>
   new Intl.DateTimeFormat('en-US', { year: 'numeric', month: 'short' }).format(d);
@@ -22,7 +24,7 @@ function LeasedPropertyCard({
 }) {
   const { lease, property } = item;
   return (
-    <div className="space-y-2 w-full [&>div]:w-full">
+    <div className="flex h-full w-full flex-col gap-2 [&>div]:w-full">
       <PropertyCard
         property={{
           id: property.id,
@@ -39,6 +41,7 @@ function LeasedPropertyCard({
         }}
         onClick={onClick}
         showSave={false}
+        className="h-full w-full"
       />
       <p className="text-xs text-muted-foreground px-1">
         Leased {formatDate(lease.startDate)} – {formatDate(lease.endDate)}
@@ -100,13 +103,23 @@ export default function MyProperties() {
               You don't have an active lease right now.
             </p>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid auto-rows-fr grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {current.map((item) => (
                 <LeasedPropertyCard key={item.lease.id} item={item} onClick={() => goToDetail(item)} />
               ))}
             </div>
           )}
         </section>
+
+        {current[0] && (
+          <RecommendedProperties
+            tenantId={CURRENT_TENANT_ID}
+            leaseEndDate={current[0].lease.endDate}
+            monthlyRent={current[0].lease.monthlyRent}
+            currentProperty={current[0].property}
+            variant="full"
+          />
+        )}
 
         <section className="space-y-4">
           <div className="flex items-baseline justify-between">
@@ -118,7 +131,7 @@ export default function MyProperties() {
           {past.length === 0 ? (
             <p className="text-sm text-muted-foreground italic">No past leases.</p>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid auto-rows-fr grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {past.map((item) => (
                 <LeasedPropertyCard key={item.lease.id} item={item} onClick={() => goToDetail(item)} />
               ))}

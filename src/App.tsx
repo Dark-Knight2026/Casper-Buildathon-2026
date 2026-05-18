@@ -20,6 +20,7 @@ import PropertyLanding from '@/pages/PropertyLanding';
 // Lazy load auth pages
 const MFASetup = lazy(() => import('@/pages/auth/MFASetup'));
 const MFAVerify = lazy(() => import('@/pages/auth/MFAVerify'));
+const HelpHub = lazy(() => import('@/pages/HelpHub'));
 
 import TenantLayout from '@/components/layout/TenantLayout';
 import PublicLayout from '@/components/layout/PublicLayout';
@@ -36,6 +37,8 @@ const TenantMaintenanceDetail = lazy(() => import('@/pages/tenant/TenantMaintena
 const TenantRenewals = lazy(() => import('@/pages/tenant/TenantRenewals'));
 const TenantRenewalDetail = lazy(() => import('@/pages/tenant/TenantRenewalDetail'));
 const TenantProfile = lazy(() => import('@/pages/tenant/TenantProfile').then(m => ({ default: m.TenantProfile })));
+const TenantRecommended = lazy(() => import('@/pages/tenant/TenantRecommended'));
+const TenantScore = lazy(() => import('@/pages/tenant/TenantScore'));
 
 // Lazy load tenant property search pages (PUBLIC ACCESS for browsing)
 const PropertySearch = lazy(() => import('@/pages/tenant/PropertySearch'));
@@ -162,7 +165,10 @@ function App() {
               
               {/* Landing Page - Default route for all visitors */}
               <Route path="/" element={<PropertyLanding />} />
-              
+
+              {/* Onboarding hub — public, role-agnostic entry point for new users. */}
+              <Route path="/help" element={<HelpHub />} />
+
               {/* Property Browsing - Public access for exploration, wrapped with the
                   same landing header so navigation persists across browse/detail views. */}
               <Route element={<PublicLayout />}>
@@ -215,6 +221,8 @@ function App() {
                 <Route path="property-search"       element={<PropertySearch />} />
                 <Route path="properties"            element={<MyProperties />} />
                 <Route path="properties/:id"        element={<MyPropertyDetail />} />
+                <Route path="recommended"           element={<TenantRecommended />} />
+                <Route path="score"                 element={<TenantScore />} />
                 <Route path="saved-properties"      element={<SavedProperties />} />
                 <Route path="my-applications"       element={<MyApplications />} />
                 <Route path="my-viewings"           element={<MyViewings />} />

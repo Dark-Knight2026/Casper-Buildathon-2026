@@ -25,6 +25,11 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorBoundary } from '@/components/ui/error-boundary';
 import { LeaseExtensionBanner } from '@/components/tenant/LeaseExtensionBanner';
 import { LeaseDecisionBanner } from '@/components/tenant/LeaseDecisionBanner';
+import { RecommendedProperties } from '@/components/tenant/RecommendedProperties';
+import { TenantScoreCard } from '@/components/tenant/TenantScoreCard';
+import { useTenantScore } from '@/hooks/useTenantScore';
+import { CURRENT_TENANT_ID, getMyCurrentProperties } from '@/data/tenantLeases';
+import { daysUntil } from '@/lib/date-utils';
 
 // TODO: remove when backend /api/v1/leases is ready
 const MOCK_LEASE: LeaseAgreement & { propertyAddress: string; paymentDueDay: number } = {
@@ -55,6 +60,15 @@ const MOCK_LEASE: LeaseAgreement & { propertyAddress: string; paymentDueDay: num
   complianceScore: 100,
   complianceIssues: [],
   stateSpecificRules: [],
+  versionHistory: [],
+  currentVersion: 1,
+  comments: [],
+  signingWorkflow: {} as LeaseAgreement['signingWorkflow'],
+  signatures: [],
+  createdAt: new Date('2025-09-15'),
+  updatedAt: new Date('2025-10-01'),
+  createdBy: 'mock-landlord-1',
+  lastModifiedBy: 'mock-landlord-1',
 };
 
 const MOCK_PAYMENTS: Payment[] = [
@@ -69,13 +83,7 @@ export function TenantDashboard() {
   const recentPayments = MOCK_PAYMENTS;
 
   const navigate = useNavigate();
-
-  const getDaysUntilExpiration = (endDate: Date): number => {
-    const today = new Date();
-    const end = new Date(endDate);
-    const diffTime = end.getTime() - today.getTime();
-    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-  };
+  const { score: tenantScore } = useTenantScore();
 
   const formatCurrency = (amount: number): string => {
     return new Intl.NumberFormat('en-US', {
@@ -109,8 +117,9 @@ export function TenantDashboard() {
     );
   };
 
-  const daysUntilExpiration = getDaysUntilExpiration(currentLease.endDate);
+  const daysUntilExpiration = daysUntil(currentLease.endDate);
   const showExpirationWarning = daysUntilExpiration <= 60;
+  const [firstCurrentProperty] = getMyCurrentProperties(CURRENT_TENANT_ID);
 
   return (
     <ErrorBoundary>
@@ -140,6 +149,29 @@ export function TenantDashboard() {
               leaseId={currentLease.id}
               endDate={currentLease.endDate}
               propertyAddress={currentLease.propertyAddress}
+            />
+          </div>
+        )}
+
+        {/* Task 7 — Tenant Score (Phase 1, read-only). Sits above the
+            recommendations so the tenant sees their reputation metric
+            before scrolling into property listings. */}
+        <div className="mb-6">
+          <TenantScoreCard score={tenantScore} variant="compact" />
+        </div>
+
+        {/* Task 6 — recommendations within 180 days of lease end. The dashboard's
+            MOCK_LEASE is a stripped-down LeaseAgreement; for the recommendations
+            section we need a real Property object, so we source the first active
+            tenant lease via getMyCurrentProperties (same demo seed as MyProperties). */}
+        {firstCurrentProperty && (
+          <div className="mb-8">
+            <RecommendedProperties
+              tenantId={CURRENT_TENANT_ID}
+              leaseEndDate={firstCurrentProperty.lease.endDate}
+              monthlyRent={firstCurrentProperty.lease.monthlyRent}
+              currentProperty={firstCurrentProperty.property}
+              variant="compact"
             />
           </div>
         )}

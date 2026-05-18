@@ -133,6 +133,14 @@ export function isFutureDate(date: Date | string | null | undefined): boolean {
 }
 
 /**
+ * Whole days remaining until `endDate`. Rounds up so partial days count as
+ * a remaining day (e.g. 12 h left → 1, not 0). Negative if the date is past.
+ */
+export function daysUntil(endDate: Date): number {
+  return Math.ceil((endDate.getTime() - Date.now()) / 86400000);
+}
+
+/**
  * Check if date is today
  */
 export function isToday(date: Date | string | null | undefined): boolean {

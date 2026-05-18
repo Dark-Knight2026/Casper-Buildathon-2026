@@ -229,6 +229,9 @@ export default function PropertySearch() {
     }
 
     if (property.price < priceRange[0]) return false;
+    // When the slider sits at PRICE_MAX, treat the upper bound as open-ended
+    // ("no upper limit") and skip the check — otherwise properties priced
+    // above PRICE_MAX would be filtered out even though the user wants all.
     if (priceRange[1] < PRICE_MAX && property.price > priceRange[1]) return false;
 
     if (bedrooms > 0 && property.bedrooms < bedrooms) return false;
@@ -300,6 +303,62 @@ export default function PropertySearch() {
                       onValueChange={(v) => setPriceRange([v[0], v[1]] as [number, number])}
                       className="pt-2"
                     />
+                    <div className="grid grid-cols-2 gap-2 pt-1">
+                      <div className="space-y-1">
+                        <Label htmlFor="price-min" className="text-xs text-muted-foreground">
+                          Min ($)
+                        </Label>
+                        <Input
+                          id="price-min"
+                          type="number"
+                          inputMode="numeric"
+                          min={PRICE_MIN}
+                          max={priceRange[1]}
+                          step={1}
+                          value={priceRange[0]}
+                          onChange={(e) => {
+                            const raw = e.target.value;
+                            if (raw === '') {
+                              setPriceRange([PRICE_MIN, priceRange[1]]);
+                              return;
+                            }
+                            const v = Number(raw);
+                            if (!Number.isFinite(v)) return;
+                            const clamped = Math.max(PRICE_MIN, Math.min(v, priceRange[1]));
+                            setPriceRange([clamped, priceRange[1]]);
+                          }}
+                          placeholder={String(PRICE_MIN)}
+                          aria-label="Minimum price"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="price-max" className="text-xs text-muted-foreground">
+                          Max ($)
+                        </Label>
+                        <Input
+                          id="price-max"
+                          type="number"
+                          inputMode="numeric"
+                          min={priceRange[0]}
+                          max={PRICE_MAX}
+                          step={1}
+                          value={priceRange[1]}
+                          onChange={(e) => {
+                            const raw = e.target.value;
+                            if (raw === '') {
+                              setPriceRange([priceRange[0], PRICE_MAX]);
+                              return;
+                            }
+                            const v = Number(raw);
+                            if (!Number.isFinite(v)) return;
+                            const clamped = Math.min(PRICE_MAX, Math.max(v, priceRange[0]));
+                            setPriceRange([priceRange[0], clamped]);
+                          }}
+                          placeholder={String(PRICE_MAX)}
+                          aria-label="Maximum price"
+                        />
+                      </div>
+                    </div>
                   </div>
                   <Stepper
                     label="Bedrooms"

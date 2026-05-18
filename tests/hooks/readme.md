@@ -13,3 +13,7 @@
 | useCSPRPrice.test.ts | Test CSPR price fetching, stale-threshold logic, and polling interval — uses `vi.useFakeTimers()` |
 | useContractDeploys.test.ts | Test BIG token FT-action fetching and pagination from CSPR Cloud |
 | useUserTokenActions.test.ts | Test BigInt token amount math, non-integer input handling, disabled state for empty publicKey, and API error surfacing |
+| useTenantScore.test.ts | Tests `useTenantScore` — scenario switching (excellent/average/unscored), scored/unscored field shape, memoization stability |
+| useTenantPreferences.test.ts | Tests `useTenantPreferences` — storage lifecycle, `tenantId` switching, `updatePreferences` round-trip |
+| useRecommendations.test.ts | Tests `useRecommendations` — 180-day window gate, `limit` slicing, memoization under stable inputs |
+| auth/useSensitiveAction.test.ts | Tests `useSensitiveAction` — post-reauth cleanup (walletSignOut, `csprclick:*` localStorage strip, `/auth/login` redirect), failure path, forwarded state/reset |

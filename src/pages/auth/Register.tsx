@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 
 import { Home, Loader2, AlertCircle } from 'lucide-react';
 
@@ -11,8 +11,24 @@ import { useWalletConnect } from '@/hooks/auth/useWalletConnect';
 import { RoleSelector } from './register/RoleSelector';
 import { ProviderList } from './register/ProviderList';
 
+type SupportedRole = 'tenant' | 'landlord';
+const SUPPORTED_ROLES: readonly SupportedRole[] = ['tenant', 'landlord'];
+
+function isSupportedRole(value: string | null): value is SupportedRole {
+  return value !== null && (SUPPORTED_ROLES as readonly string[]).includes(value);
+}
+
 export default function Register() {
-  const [role, setRole] = useState<'tenant' | 'landlord'>('tenant');
+  const [searchParams] = useSearchParams();
+  // Honor ?role=… deep-links from HelpHub. Unsupported values
+  // (e.g. 'property_manager', shown as "Coming Soon" in HelpHub) silently
+  // fall back to 'tenant' — the role isn't wired into the backend role
+  // contract yet, so this is a product decision rather than a TODO.
+  // See: src/pages/HelpHub.tsx (QuickActionCard links emit these deep-links).
+  const rawRole = searchParams.get('role');
+  const [role, setRole] = useState<SupportedRole>(
+    isSupportedRole(rawRole) ? rawRole : 'tenant'
+  );
 
   const {
     isConnected, account, isAuthenticated, isSigningIn,

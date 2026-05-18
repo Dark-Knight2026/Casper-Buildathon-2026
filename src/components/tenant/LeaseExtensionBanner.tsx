@@ -14,9 +14,9 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
+import { daysUntil } from '@/lib/date-utils';
 import {
   EXTENSION_TERM_MONTHS,
-  daysUntil,
   getExtensionIntent,
   isInExtensionWindow,
   submitExtensionIntent,

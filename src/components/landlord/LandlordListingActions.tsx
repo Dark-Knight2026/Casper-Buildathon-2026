@@ -14,10 +14,10 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
+import { daysUntil } from '@/lib/date-utils';
 import {
   LANDLORD_LISTING_DAYS,
   canLandlordList,
-  daysUntil,
   getExtensionIntent,
   getTenantDecision,
 } from '@/data/leaseExtensions';
