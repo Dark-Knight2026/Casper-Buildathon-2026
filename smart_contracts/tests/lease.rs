@@ -55,34 +55,11 @@ fn setup(env: HostEnv) -> TestData {
         },
     );
 
-    let mut lease = Lease::deploy(
-        &env,
-        LeaseInitArgs {
-            owner: env.get_account(0),
-        },
-    );
-
     let mut escrow = Escrow::deploy(
         &env,
         EscrowInitArgs {
             owner: env.get_account(0),
             min_deadline: 5 * 60, // 5 minutes
-        },
-    );
-
-    let mut nft = NFT::deploy(
-        &env,
-        NFTInitArgs {
-            params: NFTInitParams {
-                owner: env.get_account(0),
-                symbol: String::from("LEASE"),
-                name: String::from("LEASE"),
-                minters: vec![lease.address()],
-                burners: vec![],
-                whitelist_managers: vec![env.get_account(0)],
-                freezers: vec![lease.address()],
-                force_transferers: vec![],
-            },
         },
     );
 
@@ -93,15 +70,40 @@ fn setup(env: HostEnv) -> TestData {
         },
     );
 
-    let landlord = env.get_account(14);
+    let mut nft = NFT::deploy(
+        &env,
+        NFTInitArgs {
+            params: NFTInitParams {
+                owner: env.get_account(0),
+                symbol: String::from("LEASE"),
+                name: String::from("LEASE"),
+                minters: vec![],
+                burners: vec![],
+                whitelist_managers: vec![env.get_account(0)],
+                freezers: vec![],
+                force_transferers: vec![],
+            },
+        },
+    );
 
-    lease.set_escrow(escrow.address());
-    lease.set_roles(roles.address());
-    lease.set_nft(nft.address());
-    lease.set_property_registry(property_registry.address());
+    let lease = Lease::deploy(
+        &env,
+        LeaseInitArgs {
+            owner: env.get_account(0),
+            roles: roles.address(),
+            escrow: escrow.address(),
+            nft: nft.address(),
+            property_registry: property_registry.address(),
+        },
+    );
+
+    let landlord = env.get_account(14);
 
     escrow.set_lease(lease.address());
     escrow.set_treasury(env.get_account(19));
+
+    nft.add_minter(&lease.address());
+    nft.add_freezer(&lease.address());
 
     nft.add_to_whitelist(&env.get_account(0));
 

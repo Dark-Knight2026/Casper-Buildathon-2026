@@ -90,13 +90,6 @@ fn setup(env: HostEnv) -> Context {
         },
     );
 
-    let mut lease = Lease::deploy(
-        &env,
-        LeaseInitArgs {
-            owner: env.get_account(0),
-        },
-    );
-
     let mut nft = NFT::deploy(
         &env,
         NFTInitArgs {
@@ -104,12 +97,23 @@ fn setup(env: HostEnv) -> Context {
                 owner: env.get_account(0),
                 symbol: String::from("LEASE"),
                 name: String::from("LEASE"),
-                minters: vec![lease.address()],
+                minters: vec![],
                 burners: vec![],
                 whitelist_managers: vec![env.get_account(0)],
-                freezers: vec![lease.address()],
+                freezers: vec![],
                 force_transferers: vec![],
             },
+        },
+    );
+
+    let lease = Lease::deploy(
+        &env,
+        LeaseInitArgs {
+            owner: env.get_account(0),
+            roles: roles.address(),
+            escrow: escrow.address(),
+            nft: nft.address(),
+            property_registry: property_registry.address(),
         },
     );
 
@@ -123,13 +127,11 @@ fn setup(env: HostEnv) -> Context {
         },
     );
 
-    lease.set_escrow(escrow.address());
-    lease.set_roles(roles.address());
-    lease.set_nft(nft.address());
-    lease.set_property_registry(property_registry.address());
-
     escrow.set_lease(lease.address());
     escrow.set_treasury(env.get_account(19));
+
+    nft.add_minter(&lease.address());
+    nft.add_freezer(&lease.address());
 
     nft.add_to_whitelist(&env.get_account(0));
     nft.add_to_whitelist(&recipient);

@@ -9,14 +9,17 @@ use odra_modules::access::DEFAULT_ADMIN_ROLE;
 
 use leasefi_contracts::{
     big_coin::{BigCoin, BigCoinInitArgs},
+    compliance_policy::{CompliancePolicy, CompliancePolicyInitArgs},
     constants::{PRIVATE_SALE_CLIFF_DURATION, PRIVATE_SALE_VESTING_DURATION},
     escrow::{Escrow, EscrowInitArgs},
     ico::{
         types::{Currency, ICOScheduleCreateParams},
         ICOInitArgs, ICO,
     },
+    investor_registry::{InvestorRegistry, InvestorRegistryInitArgs},
     lease::{Lease, LeaseInitArgs},
     nft::{types::NFTInitParams, NFTInitArgs, NFT},
+    property_registry::{PropertyRegistry, PropertyRegistryInitArgs},
     roles::{Roles, RolesInitArgs},
     staking::{Staking, StakingInitArgs},
     treasury::{Treasury, TreasuryInitArgs},
@@ -122,13 +125,50 @@ impl DeployScript for LeasefiDeployScript {
             container,
             400_000_000_000,
         )?;
+        let mut property_registry = PropertyRegistry::load_or_deploy_with_cfg(
+            env,
+            None,
+            PropertyRegistryInitArgs {
+                owner: env.caller(),
+            },
+            InstallConfig::upgradable::<PropertyRegistry>(),
+            container,
+            400_000_000_000,
+        )?;
+        let mut investor_registry = InvestorRegistry::load_or_deploy_with_cfg(
+            env,
+            None,
+            InvestorRegistryInitArgs {
+                owner: env.caller(),
+            },
+            InstallConfig::upgradable::<InvestorRegistry>(),
+            container,
+            400_000_000_000,
+        )?;
         let mut lease = Lease::load_or_deploy_with_cfg(
             env,
             None,
             LeaseInitArgs {
                 owner: env.caller(),
+                roles: roles.address(),
+                escrow: escrow.address(),
+                nft: nft.address(),
+                property_registry: property_registry.address(),
             },
             InstallConfig::upgradable::<Lease>(),
+            container,
+            400_000_000_000,
+        )?;
+        let mut compliance = CompliancePolicy::load_or_deploy_with_cfg(
+            env,
+            None,
+            CompliancePolicyInitArgs {
+                owner: env.caller(),
+                investor_registry: investor_registry.address(),
+                property_registry: property_registry.address(),
+                lease: lease.address(),
+            },
+            InstallConfig::upgradable::<CompliancePolicy>(),
             container,
             400_000_000_000,
         )?;
@@ -180,9 +220,7 @@ impl DeployScript for LeasefiDeployScript {
         vesting.set_staking(staking.address());
 
         // Setup Lease
-        lease.set_roles(roles.address());
-        lease.set_escrow(escrow.address());
-        lease.set_nft(nft.address());
+        // Redundant as Lease::init now sets these
 
         // Setup NFT
         nft.add_minter(&lease.address());
@@ -233,6 +271,12 @@ impl DeployScript for LeasefiDeployScript {
         vesting.transfer_ownership(&new_owner);
         staking.transfer_ownership(&new_owner);
         ico.transfer_ownership(&new_owner);
+        property_registry.grant_role(&DEFAULT_ADMIN_ROLE, &new_owner);
+        property_registry.revoke_role(&DEFAULT_ADMIN_ROLE, &env.caller());
+        investor_registry.grant_role(&DEFAULT_ADMIN_ROLE, &new_owner);
+        investor_registry.revoke_role(&DEFAULT_ADMIN_ROLE, &env.caller());
+        compliance.grant_role(&DEFAULT_ADMIN_ROLE, &new_owner);
+        compliance.revoke_role(&DEFAULT_ADMIN_ROLE, &env.caller());
 
         Ok(())
     }
@@ -251,6 +295,9 @@ pub fn main() {
         .contract::<Staking>()
         .contract::<Vesting>()
         .contract::<ICO>()
+        .contract::<PropertyRegistry>()
+        .contract::<InvestorRegistry>()
+        .contract::<CompliancePolicy>()
         .build()
         .run();
 }

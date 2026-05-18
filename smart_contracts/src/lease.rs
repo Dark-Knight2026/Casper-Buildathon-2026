@@ -140,8 +140,19 @@ impl Lease {
     // Initialization
     // =========================================================================
 
-    pub fn init(&mut self, owner: Address) {
+    pub fn init(
+        &mut self,
+        owner: Address,
+        roles: Address,
+        escrow: Address,
+        nft: Address,
+        property_registry: Address,
+    ) {
         self.ownable.init(owner);
+        self.roles.set(roles);
+        self.escrow.set(escrow);
+        self.nft.set(nft);
+        self.property_registry.set(property_registry);
     }
 
     // =========================================================================
