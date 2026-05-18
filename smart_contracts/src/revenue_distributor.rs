@@ -158,4 +158,15 @@ impl RevenueDistributor {
         self.holder_revenue.get_or_default(&account)
     }
 
+    /// Returns revenue currently claimable by `account`
+    pub fn claimable_revenue(&self, account: Address) -> U256 {
+        let state = self.holder_revenue.get_or_default(&account);
+        let balance = self.property_token.balance_of(&account);
+
+        state.pending_revenue + self.accrued_revenue(balance, state.revenue_per_token_paid)
+    }
 }
+
+// =============================================================================
+// Internal Helpers
+// =============================================================================
