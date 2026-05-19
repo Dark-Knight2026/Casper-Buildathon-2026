@@ -160,13 +160,21 @@ pub mod errors {
   EquityEligibilityRevoked,
 ])]
 pub struct Lease {
+    /// Ownership control for contract configuration.
     ownable: SubModule<Ownable>,
+    /// Roles contract used to verify landlord permissions.
     roles: External<RolesContractRef>,
+    /// Escrow contract used to create and inspect lease invoices.
     escrow: External<EscrowContractRef>,
+    /// NFT contract used to mint frozen lease NFTs to tenants.
     nft: External<NFTContractRef>,
+    /// Property registry used to validate lease equity options.
     property_registry: External<PropertyRegistryContractRef>,
+    /// Lease agreements keyed by lease agreement ID.
     leases: Mapping<U256, LeaseAgreement>,
+    /// Equity Eligibility keyed by property ID and tenant wallet.
     equity_eligible: Mapping<(U256, Address), bool>,
+    /// Number of lease agreements created.
     leases_count: Var<U256>,
 }
 
