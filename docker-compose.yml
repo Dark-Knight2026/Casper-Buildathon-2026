@@ -15,7 +15,10 @@ services:
       - REDIS_URL=redis://redis:6379
 
     depends_on:
-      - redis
+      redis:
+        condition: service_started
+      minio-init:
+        condition: service_completed_successfully
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
