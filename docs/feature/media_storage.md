@@ -93,6 +93,8 @@ Every `PUT` issued by `S3MediaStorage` carries `x-amz-acl: public-read`. This is
 - R2: bucket-level "Public Bucket" setting; the ACL header is silently ignored.
 - MinIO: `mc anonymous set download <alias>/<bucket>` makes the bucket publicly readable; `minio-init` does this on first boot for the dev compose.
 
+> **DO NOT store sensitive media in this bucket.** `S3MediaStorage::put` unconditionally tags every object with `x-amz-acl: public-read` and the dev MinIO bootstrap additionally opens **bucket-wide anonymous list and download** via `mc anonymous set download local/<bucket>`. The combination means any object written through this backend is reachable by URL **and** discoverable through bucket listing. Future features that need to store lease PDFs, KYC documents, identity scans, or any non-public content MUST use one of: (a) a separate bucket whose policy is private and whose `S3_*` config does not flow through `S3MediaStorage`, (b) a per-call ACL parameter on the trait that the avatar handler keeps at `public-read` while sensitive handlers pass `private`, or (c) presigned-GET URLs with short TTLs delivered alongside a private bucket. Do not "temporarily" reuse the avatar bucket - once an object is written here it is world-readable, even after later deletion if a CDN cached it.
+
 Future private-media flows (lease PDFs, identity documents) will switch from public-read ACL to presigned-GET URLs with short TTLs. Avatar uploads stay public for performance - rendering a feed of N users is N image tags, not N presign roundtrips.
 
 ## Transport-failure handling

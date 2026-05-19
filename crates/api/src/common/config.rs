@@ -208,10 +208,10 @@ impl ServerConfig {
                 let secret_key = raw.s3_secret_key.ok_or_else(|| {
                     ServerError::EnvVar("S3_BUCKET set but S3_SECRET_KEY missing".to_owned())
                 })?;
-                let public_url_base = raw
-                    .s3_public_url_base
-                    .map(|s| s.trim_end_matches('/').to_owned())
-                    .unwrap_or_else(|| format!("{}/{bucket}", endpoint.trim_end_matches('/')));
+                let public_url_base = raw.s3_public_url_base.map_or_else(
+                    || format!("{}/{bucket}", endpoint.trim_end_matches('/')),
+                    |s| s.trim_end_matches('/').to_owned(),
+                );
                 Some(S3Config {
                     bucket,
                     region,
