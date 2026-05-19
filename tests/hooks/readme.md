@@ -16,6 +16,5 @@
 | useTenantScore.test.ts | Tests `useTenantScore` — scenario switching (excellent/average/unscored), scored/unscored field shape, memoization stability |
 | useTenantPreferences.test.ts | Tests `useTenantPreferences` — storage lifecycle, `tenantId` switching, `updatePreferences` round-trip |
 | useRecommendations.test.ts | Tests `useRecommendations` — 180-day window gate, `limit` slicing, memoization under stable inputs |
-| auth/useSensitiveAction.test.ts | Tests `useSensitiveAction` — post-reauth cleanup (walletSignOut, `csprclick:*` localStorage strip, `/auth/login` redirect), failure path, forwarded state/reset |
 
 The `auth/` subdirectory documents its own test files in its own `readme.md`.
