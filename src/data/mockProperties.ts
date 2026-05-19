@@ -10,7 +10,7 @@ export const mockProperties: Property[] = [
     bedrooms: 2,
     bathrooms: 2,
     sqft: 1200,
-    propertyType: 'apartment',
+    propertyType: 'Apartment',
     images: [
       '/images/Apartment.jpg',
       '/images/photo1765085650.jpg',
@@ -43,7 +43,7 @@ export const mockProperties: Property[] = [
     bedrooms: 3,
     bathrooms: 2.5,
     sqft: 2000,
-    propertyType: 'house',
+    propertyType: 'House',
     images: [
       '/images/photo1765085648.jpg',
       '/images/photo1765085650.jpg',
@@ -75,7 +75,7 @@ export const mockProperties: Property[] = [
     bedrooms: 3,
     bathrooms: 3,
     sqft: 2500,
-    propertyType: 'condo',
+    propertyType: 'Condo',
     images: [
       '/images/Condo.jpg',
       '/images/Condo.jpg',
@@ -108,7 +108,7 @@ export const mockProperties: Property[] = [
     bedrooms: 1,
     bathrooms: 1,
     sqft: 600,
-    propertyType: 'apartment',
+    propertyType: 'Apartment',
     images: [
       '/images/Apartment.jpg',
       '/images/photo1765085649.jpg',
@@ -138,7 +138,7 @@ export const mockProperties: Property[] = [
     bedrooms: 4,
     bathrooms: 4,
     sqft: 3500,
-    propertyType: 'house',
+    propertyType: 'House',
     images: [
       '/images/MalibuHouse.jpg',
       '/images/MalibuHouse.jpg',
@@ -171,7 +171,7 @@ export const mockProperties: Property[] = [
     bedrooms: 2,
     bathrooms: 1.5,
     sqft: 1400,
-    propertyType: 'loft',
+    propertyType: 'Loft',
     images: [
       '/images/Loft.jpg',
       '/images/Loft.jpg',
@@ -203,7 +203,7 @@ export const mockProperties: Property[] = [
     bedrooms: 2,
     bathrooms: 2,
     sqft: 1100,
-    propertyType: 'apartment',
+    propertyType: 'Apartment',
     images: [
       '/images/Apartment.jpg',
       '/images/Apartment.jpg',
@@ -235,7 +235,7 @@ export const mockProperties: Property[] = [
     bedrooms: 3,
     bathrooms: 2,
     sqft: 1800,
-    propertyType: 'house',
+    propertyType: 'House',
     images: [
       '/assets/property-2_variant_1.jpg',
       '/assets/property-3_variant_1.jpg',
@@ -267,7 +267,7 @@ export const mockProperties: Property[] = [
     bedrooms: 3,
     bathrooms: 3,
     sqft: 2200,
-    propertyType: 'townhouse',
+    propertyType: 'Townhouse',
     images: [
       '/assets/property-5_variant_1.jpg',
       '/assets/property-6_variant_1.jpg',
@@ -299,7 +299,7 @@ export const mockProperties: Property[] = [
     bedrooms: 4,
     bathrooms: 2.5,
     sqft: 2400,
-    propertyType: 'house',
+    propertyType: 'House',
     images: [
       '/assets/property-8_variant_1.jpg',
       '/assets/property-9_variant_1.jpg',

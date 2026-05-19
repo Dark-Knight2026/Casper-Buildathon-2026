@@ -86,10 +86,10 @@ export default function LandlordDashboard() {
           </div>
           <div className="flex flex-col gap-2 sm:flex-row">
             <Button asChild className="w-full sm:w-auto">
-              <Link to="/landlord/properties/new">Add Property</Link>
+              <Link to="/landlord/properties/create">Add Property</Link>
             </Button>
             <Button asChild variant="outline" className="w-full sm:w-auto">
-              <Link to="/landlord/leases/new">Create Lease</Link>
+              <Link to="/landlord/leases/create">Create Lease</Link>
             </Button>
           </div>
         </div>
@@ -223,7 +223,7 @@ export default function LandlordDashboard() {
                 description="Activity from your properties will appear here. Get started by adding properties and creating leases."
                 action={{
                   label: 'Add Property',
-                  onClick: () => window.location.href = '/landlord/properties/new'
+                  onClick: () => window.location.href = '/landlord/properties/create'
                 }}
               />
             ) : (
@@ -272,7 +272,7 @@ export default function LandlordDashboard() {
           <CardContent>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
               <Button asChild variant="outline" className="h-auto py-4">
-                <Link to="/landlord/properties/new" className="flex flex-col items-center gap-2">
+                <Link to="/landlord/properties/create" className="flex flex-col items-center gap-2">
                   <Building2 className="h-6 w-6" aria-hidden="true" />
                   <span>Add Property</span>
                 </Link>
@@ -284,7 +284,7 @@ export default function LandlordDashboard() {
                 </Link>
               </Button>
               <Button asChild variant="outline" className="h-auto py-4">
-                <Link to="/landlord/leases/new" className="flex flex-col items-center gap-2">
+                <Link to="/landlord/leases/create" className="flex flex-col items-center gap-2">
                   <FileText className="h-6 w-6" aria-hidden="true" />
                   <span>Create Lease</span>
                 </Link>

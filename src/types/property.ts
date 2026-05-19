@@ -50,7 +50,11 @@ export interface PropertySearchParams {
   search?: string;
 }
 
-export type PropertyType = 'apartment' | 'house' | 'condo' | 'townhouse' | 'studio' | 'Apartment' | 'House' | 'Condo' | 'Townhouse' | 'Studio' | 'Loft';
+// Canonical, single-case set. Capitalized is the source of truth across the
+// property flow (zod schema, PROPERTY_TYPES, featuredProperties demo data,
+// tenant preferences). The former lowercase aliases were legacy cruft and
+// have been removed — fix data at its source instead of widening this union.
+export type PropertyType = 'Apartment' | 'House' | 'Condo' | 'Townhouse' | 'Studio' | 'Loft';
 
 // Property form data
 export interface PropertyFormData {
@@ -69,6 +73,11 @@ export interface PropertyFormData {
   availableDate: string;
   leaseTerms: string[];
   amenities: string[];
+  // Landlord-entered nearby points of interest (parity with the tenant
+  // surrounding-area search). Same shape the tenant flow consumes. Optional
+  // to match `Property.surroundingArea?` and avoid forcing every existing
+  // PropertyFormData producer (PropertyEdit, service) to set it.
+  surroundingArea?: SurroundingPOI[];
   utilitiesIncluded: string[];
   petPolicy: string;
   petsAllowed: boolean;
@@ -126,7 +135,10 @@ export interface Property {
   squareFeet: number | null;
   rent: number;
   securityDeposit: number;
-  availableDate: Date;
+  // ISO date-only string `YYYY-MM-DD` (single calendar day). Kept as a string
+  // to match the form/DTO shape (`PropertyFormData.availableDate`) and avoid
+  // string⇄Date conversion bugs at the form boundary.
+  availableDate: string;
   leaseTerms: string[];
   amenities: string[];
   petPolicy: string;

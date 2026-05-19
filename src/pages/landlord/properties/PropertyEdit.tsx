@@ -11,7 +11,7 @@ import * as z from 'zod';
 import { ArrowLeft, Save, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -122,7 +122,9 @@ export default function PropertyEdit() {
         squareFeet: data.squareFeet,
         rent: data.rent,
         securityDeposit: data.securityDeposit,
-        availableDate: data.availableDate.toISOString().split('T')[0],
+        // availableDate is a `YYYY-MM-DD` string (see Property type). Slice
+        // defensively in case the service returns a full ISO timestamp.
+        availableDate: String(data.availableDate).slice(0, 10),
         leaseTerms: data.leaseTerms,
         amenities: data.amenities,
         utilitiesIncluded: data.utilitiesIncluded,
