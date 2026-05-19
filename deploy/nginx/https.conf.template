@@ -58,4 +58,33 @@ server {
     proxy_set_header X-Forwarded-For $remote_addr;
     proxy_set_header X-Forwarded-Proto $scheme;
   }
+
+  # Public read-only proxy for media uploads stored in MinIO.
+  # MinIO itself is not exposed on the public network (no ports published in
+  # docker-compose.dev.yml); nginx is the only path that reaches it from
+  # outside the compose network. The trailing slash in proxy_pass rewrites
+  # `/media/<key>` to `/${S3_BUCKET}/<key>` on the MinIO side.
+  #
+  # No CORS headers are emitted here because `${PROJECT_DOMAIN}` serves both
+  # the SPA and the `/media/` route, so avatar fetches are same-origin and
+  # the browser does not preflight. If you ever split media onto a separate
+  # host (e.g. `cdn.${PROJECT_DOMAIN}`) the browser will start sending
+  # `Origin:` on `<img>` GETs and may refuse to render the response without
+  # an `Access-Control-Allow-Origin: ${PROJECT_DOMAIN}` (or `*` for fully
+  # public assets) header here. Add it at that point, not before.
+  location /media/ {
+    set $minio "minio:9000";
+    proxy_pass http://$minio/${S3_BUCKET}/;
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $remote_addr;
+    proxy_set_header X-Forwarded-Proto $scheme;
+
+    # Avatars are immutable per upload (filename includes user_id +
+    # extension), so a day of browser/CDN caching is safe; re-uploads
+    # change the extension and thus the URL.
+    add_header Cache-Control "public, max-age=86400" always;
+  }
 }

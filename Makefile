@@ -1,37 +1,23 @@
 SHELL := /bin/bash
 
-.PHONY:   \
- help     \
- env-up   \
- env-down \
- migrate  \
- restart  \
- check    \
- validate \
- fmt      \
- lint     \
- openapi  \
- prepare  \
- test     \
- test-one \
- test-in  \
- test-not \
- run      \
- index    \
- clean    \
- deploy   \
+.PHONY: \
+ help \
+ env-up env-down migrate restart  \
+ check validate fmt lint openapi prepare \
+ test test-one test-in test-not \
+ run index clean deploy \
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z0-9_.-]+:.*?## ' Makefile | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  make %-10s %s\n", $$1, $$2}'
 
-env-up: ## Start Supabase and Redis
+env-up: ## Start Supabase, Redis, and MinIO
 	@echo "[*] Starting Supabase..."
 	@supabase start
-	@echo "[*] Starting Redis..."
-	@docker compose up -d redis
+	@echo "[*] Starting Redis and MinIO..."
+	@docker compose up -d redis minio minio-init
 
-env-down: ## Stop Supabase, Redis, and test database
-	@echo "[*] Stopping Redis..."
+env-down: ## Stop Supabase, Redis, MinIO, and test database
+	@echo "[*] Stopping Redis and MinIO..."
 	@docker compose down --volumes
 	@echo "[*] Stopping test database..."
 	@docker compose -p leasefi-test -f docker-compose.test.yml down --volumes
@@ -112,8 +98,7 @@ clean: ## Clean build artifacts
 	@echo "[*] Cleaning build artifacts..."
 	@cargo clean
 
-# =====================================================================================================
-# Deployment
+# Deployment ===================================================================
 
 ## Deploys using tools from the container
 deploy:

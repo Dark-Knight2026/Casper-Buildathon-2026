@@ -25,18 +25,6 @@ use sqlx::PgPool;
 use api::common::RedisStore;
 use common::TestEnv;
 
-/// 8-byte PNG signature followed by 1 KB of zero padding.
-///
-/// The sniff only inspects the first 8 bytes, so any payload that starts
-/// with the canonical PNG magic is accepted regardless of what follows.
-/// Padding to 1 KB so the size assertion in the happy path has something
-/// to compare against beyond the bare signature.
-fn fake_png_bytes() -> Vec<u8> {
-    let mut bytes = vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
-    bytes.extend(core::iter::repeat_n(0u8, 1024 - bytes.len()));
-    bytes
-}
-
 /// Seed-based wallet login, kept local because the seed pins a
 /// deterministic wallet that some assertions rely on (e.g. tests that
 /// log the same wallet in twice and assert the second login resolves
@@ -81,7 +69,7 @@ async fn upload_avatar_happy_path_returns_url(pool: PgPool) {
 
     let form = MultipartForm::new().add_part(
         "file",
-        Part::bytes(fake_png_bytes())
+        Part::bytes(common::fake_png_bytes())
             .mime_type("image/png")
             .file_name("avatar.png"),
     );
@@ -120,7 +108,7 @@ async fn upload_avatar_parameterized_content_type_is_accepted(pool: PgPool) {
 
     let form = MultipartForm::new().add_part(
         "file",
-        Part::bytes(fake_png_bytes())
+        Part::bytes(common::fake_png_bytes())
             .mime_type("image/png; charset=binary")
             .file_name("avatar.png"),
     );
@@ -152,8 +140,10 @@ async fn upload_avatar_parameterized_content_type_is_accepted(pool: PgPool) {
 async fn upload_avatar_without_authentication_returns_401(pool: PgPool) {
     let env = common::setup_test_server(pool, false).await;
 
-    let form =
-        MultipartForm::new().add_part("file", Part::bytes(fake_png_bytes()).mime_type("image/png"));
+    let form = MultipartForm::new().add_part(
+        "file",
+        Part::bytes(common::fake_png_bytes()).mime_type("image/png"),
+    );
 
     let response = env
         .server
@@ -238,7 +228,7 @@ async fn upload_avatar_png_bytes_with_pdf_mime_returns_415(pool: PgPool) {
 
     let form = MultipartForm::new().add_part(
         "file",
-        Part::bytes(fake_png_bytes())
+        Part::bytes(common::fake_png_bytes())
             .mime_type("application/pdf")
             .file_name("spoofed.pdf"),
     );
@@ -304,7 +294,7 @@ async fn upload_avatar_rate_limit_blocks_eleventh_attempt(pool: PgPool) {
     for i in 0..10 {
         let form = MultipartForm::new().add_part(
             "file",
-            Part::bytes(fake_png_bytes())
+            Part::bytes(common::fake_png_bytes())
                 .mime_type("image/png")
                 .file_name("a.png"),
         );
@@ -325,7 +315,7 @@ async fn upload_avatar_rate_limit_blocks_eleventh_attempt(pool: PgPool) {
 
     let form = MultipartForm::new().add_part(
         "file",
-        Part::bytes(fake_png_bytes())
+        Part::bytes(common::fake_png_bytes())
             .mime_type("image/png")
             .file_name("a.png"),
     );
@@ -384,7 +374,7 @@ async fn upload_avatar_db_failure_does_not_consume_rate_limit_slot(pool: PgPool)
 
     let form = MultipartForm::new().add_part(
         "file",
-        Part::bytes(fake_png_bytes())
+        Part::bytes(common::fake_png_bytes())
             .mime_type("image/png")
             .file_name("avatar.png"),
     );

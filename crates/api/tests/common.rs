@@ -1,13 +1,15 @@
 //! Common test utilities.
 //!
-//! ## Database strategy
+//! ## Backend strategy
 //!
 //! - **`PostgreSQL`**: Single container via docker-compose, isolated DBs via `#[sqlx::test]`
-//! - **Redis**: Testcontainers per test (needs full isolation for nonce storage)
+//! - **`MinIO`**: Single container via docker-compose, isolated buckets via UUID suffix
+//! - **`Redis`**: Testcontainers per test (no per-test namespace primitive - separate
+//!   keyspace would require ubiquitous per-test prefixes on every key)
 //!
 //! Alternatives considered:
-//! - Testcontainers for both — slower (~10s per test for PG startup)
-//! - Shared Redis — breaks parallel test isolation
+//! - Testcontainers for everything - slower (~10s PG, ~3-5s `MinIO` startup per test)
+//! - Shared Redis - breaks parallel test isolation
 
 #![allow(dead_code)]
 #![allow(clippy::missing_panics_doc)]
@@ -23,6 +25,7 @@ use chrono::{Duration, Utc};
 use core::net::SocketAddr;
 use jsonwebtoken::{EncodingKey, Header, encode};
 use rand::Rng;
+use s3::{Bucket, BucketConfiguration, Region, creds::Credentials};
 use secrecy::SecretString;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
@@ -35,11 +38,12 @@ use testcontainers::{
 use uuid::Uuid;
 
 use api::{
-    AppState, Claims, IcoFallback, LoggingEmailSender, ServerConfig, UserId, UserRole,
+    AppState, Claims, IcoFallback, LoggingEmailSender, S3Config, ServerConfig, UserId, UserRole,
     common::{
-        CASPER_MESSAGE_PREFIX, EmailSender, JWT_AUDIENCE, JWT_ISSUER, MediaStorage, RedisStore,
-        StubMediaStorage, TOTAL_SUPPLY, TokenType, VerificationLevel,
+        CASPER_MESSAGE_PREFIX, JWT_AUDIENCE, JWT_ISSUER, RedisStore, TOTAL_SUPPLY, TokenType,
+        VerificationLevel,
     },
+    providers::{EmailSender, SharedMediaStorage, StubMediaStorage},
     server,
 };
 
@@ -132,7 +136,7 @@ pub struct TestOverrides {
     /// The avatar upload tests use this to swap in fakes that return
     /// `StorageError::Transport` so the handler's 500-mapping path can
     /// be observed without wiring up a real S3 backend.
-    pub media_storage: Option<Arc<dyn MediaStorage>>,
+    pub media_storage: Option<SharedMediaStorage>,
 }
 
 impl Debug for TestOverrides {
@@ -191,14 +195,14 @@ pub async fn setup_test_server_with(
         contract_big: overrides.contract_big,
         ico_fallback: overrides.ico_fallback,
         total_supply: TOTAL_SUPPLY,
-        media_stub_base_url: None,
+        s3: None,
     };
     let mailer = overrides
         .mailer
         .unwrap_or_else(|| Arc::new(LoggingEmailSender) as Arc<dyn EmailSender>);
     let media_storage = overrides
         .media_storage
-        .unwrap_or_else(|| Arc::new(StubMediaStorage::new(None)) as Arc<dyn MediaStorage>);
+        .unwrap_or_else(|| Arc::new(StubMediaStorage::new()) as SharedMediaStorage);
     let state = Arc::new(AppState {
         db: pool,
         redis: RedisStore::new(redis_client)
@@ -225,6 +229,44 @@ pub async fn setup_test_server_with(
         redis: redis_env,
         state,
     }
+}
+
+/// 8-byte PNG signature followed by zero padding to 1 KB.
+///
+/// The avatar handler's magic-byte sniff inspects only the first 8
+/// bytes, so any payload that starts with the canonical PNG magic is
+/// accepted regardless of what follows. 1 KB is enough headroom for
+/// size-related assertions without bloating the binary.
+#[inline]
+pub fn fake_png_bytes() -> Vec<u8> {
+    let mut bytes = vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+    bytes.extend(core::iter::repeat_n(0u8, 1024 - bytes.len()));
+    bytes
+}
+
+/// 3-byte JPEG SOI marker (`FF D8 FF`) followed by zero padding to 1 KB.
+/// Matches the sniff contract: the handler only looks at the first few
+/// bytes, so any tail is acceptable.
+#[inline]
+pub fn fake_jpg_bytes() -> Vec<u8> {
+    let mut bytes = vec![0xFF, 0xD8, 0xFF];
+    bytes.extend(core::iter::repeat_n(0u8, 1024 - bytes.len()));
+    bytes
+}
+
+/// 12-byte WebP RIFF container (`RIFF` + 4-byte length + `WEBP`) followed by
+/// zero padding to 1 KB. The handler's sniff inspects bytes 0..4 and
+/// 8..12 (per `services/users/handlers.rs:167`); the intervening 4-byte length
+///   field is opaque to that check, so we fill it with the minimum valid 4-byte
+///   payload size and move on.
+#[inline]
+pub fn fake_webp_bytes() -> Vec<u8> {
+    let mut bytes = Vec::with_capacity(1024);
+    bytes.extend_from_slice(b"RIFF");
+    bytes.extend_from_slice(&1024_u32.to_le_bytes());
+    bytes.extend_from_slice(b"WEBP");
+    bytes.extend(core::iter::repeat_n(0u8, 1024 - bytes.len()));
+    bytes
 }
 
 /// Creates a test JWT access token populated with the full typed-claim schema.
@@ -503,5 +545,105 @@ pub async fn login_and_extract(env: &TestEnv) -> LoggedSession {
         refresh_token,
         secret_key,
         public_key,
+    }
+}
+
+/// Default `MinIO` root credentials used for ephemeral test buckets.
+/// `MinIO` requires `MINIO_ROOT_PASSWORD` to be at least 8 chars; the
+/// test fixture uses the documented `MinIO` defaults that match the
+/// `minio-test` service in `docker-compose.test.yml`.
+const MINIO_TEST_ACCESS_KEY: &str = "minioadmin";
+const MINIO_TEST_SECRET_KEY: &str = "minioadmin";
+const MINIO_TEST_REGION: &str = "us-east-1";
+/// Host endpoint of the shared `MinIO` container from
+/// `docker-compose.test.yml`. Port 9100 (not 9000) so the test stack
+/// can run alongside the dev stack without colliding.
+const MINIO_TEST_ENDPOINT: &str = "http://127.0.0.1:9100";
+/// Per-test bucket name is `{prefix}-{uuid}` so parallel `nextest`
+/// workers stay isolated on the shared `MinIO`.
+const MINIO_TEST_BUCKET_PREFIX: &str = "leasefi-test";
+
+/// Holds a freshly-created bucket on the shared `MinIO` container
+/// (`minio-test` in `docker-compose.test.yml`) and an [`S3Config`]
+/// bound to it. The bucket name is suffixed with a UUID per test, so
+/// parallel workers do not collide on object keys; the bucket itself
+/// is not torn down at end-of-test - the entire `MinIO /data` mount
+/// is `tmpfs`, so accumulated buckets disappear on `make env-down`.
+///
+/// The bucket policy is left at the `MinIO` default (private). Tests
+/// that need to verify the public-fetch behaviour of the production
+/// stack use the returned `bucket` handle directly (`bucket.get_object`)
+/// instead of `reqwest::get(public_url)` - `MinIO` obeys `x-amz-acl:
+/// public-read` only when the bucket policy is `download`, and the
+/// extra wiring would just retest `MinIO`, not our code.
+pub struct MinioTestEnv {
+    /// S3 configuration ready to inject into [`ServerConfig`]'s `s3`
+    /// field or to pass to `S3MediaStorage::new(...)`.
+    pub config: S3Config,
+    /// Direct bucket handle for read-back assertions in tests
+    /// (`bucket.get_object(key)` after a put through the handler).
+    pub bucket: Box<Bucket>,
+}
+
+impl Debug for MinioTestEnv {
+    #[inline]
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        f.debug_struct("MinioTestEnv")
+            .field("endpoint", &self.config.endpoint)
+            .field("bucket", &self.config.bucket)
+            .finish_non_exhaustive()
+    }
+}
+
+impl MinioTestEnv {
+    /// Creates a fresh per-test bucket on the shared `MinIO` container
+    /// and returns the populated environment.
+    ///
+    /// Assumes `minio-test` is up (started by `make test` via
+    /// `docker-compose.test.yml`). Bucket creation is ~50ms per test,
+    /// vs ~3-5s for a per-test container startup.
+    #[inline]
+    pub async fn start() -> Self {
+        let bucket_name = format!("{MINIO_TEST_BUCKET_PREFIX}-{}", Uuid::new_v4());
+        let region = Region::Custom {
+            region: MINIO_TEST_REGION.to_owned(),
+            endpoint: MINIO_TEST_ENDPOINT.to_owned(),
+        };
+        let credentials = Credentials::new(
+            Some(MINIO_TEST_ACCESS_KEY),
+            Some(MINIO_TEST_SECRET_KEY),
+            None,
+            None,
+            None,
+        )
+        .expect("MinIO credentials init");
+
+        // Path-style is mandatory for MinIO. `create_with_path_style`
+        // both creates the bucket via the path-style PUT and returns a
+        // ready-to-use `Bucket` handle - one round-trip, no second
+        // `Bucket::new(...).with_path_style()` dance.
+        Bucket::create_with_path_style(
+            &bucket_name,
+            region.clone(),
+            credentials.clone(),
+            BucketConfiguration::default(),
+        )
+        .await
+        .expect("MinIO create bucket");
+
+        let bucket = Bucket::new(&bucket_name, region, credentials)
+            .expect("MinIO bucket handle")
+            .with_path_style();
+
+        let config = S3Config {
+            bucket: bucket_name.clone(),
+            region: MINIO_TEST_REGION.to_owned(),
+            endpoint: MINIO_TEST_ENDPOINT.to_owned(),
+            access_key: SecretString::from(MINIO_TEST_ACCESS_KEY),
+            secret_key: SecretString::from(MINIO_TEST_SECRET_KEY),
+            public_url_base: format!("{MINIO_TEST_ENDPOINT}/{bucket_name}"),
+        };
+
+        Self { config, bucket }
     }
 }

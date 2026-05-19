@@ -25,6 +25,7 @@ enabled = [
     "dep:rand",
     "dep:redis",
     "dep:rust_decimal",
+    "dep:rust-s3",
     "dep:secrecy",
     "dep:serde",
     "dep:serde_json",
@@ -62,6 +63,7 @@ jsonwebtoken = { workspace = true, optional = true }
 rand = { workspace = true, optional = true }
 redis = { workspace = true, optional = true }
 rust_decimal = { workspace = true, optional = true }
+rust-s3 = { workspace = true, optional = true }
 secrecy = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }

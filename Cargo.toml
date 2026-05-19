@@ -87,6 +87,9 @@ redis = { version = "1.0.2", features = ["tokio-comp", "connection-manager"] }
 reqwest = { version = "0.13", default-features = false, features = ["json", "rustls"] }
 rustls = { version = "0.23", features = ["ring"] }
 rust_decimal = { version = "1", features = ["serde"] }
+# FIXME(media-storage): exact pin - rust-s3 0.37.x links reqwest 0.12
+# alongside our direct reqwest 0.13. Migrate to aws-sdk-s3.
+rust-s3 = { version = "=0.37.2", default-features = false, features = ["tokio-rustls-tls"] }
 secrecy = { version = "0.10", features = ["serde"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

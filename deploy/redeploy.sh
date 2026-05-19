@@ -99,6 +99,17 @@ if [[ ! "${PROJECT_DOMAIN}" =~ ^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a
   exit 1
 fi
 
+# S3_BUCKET is consumed by envsubst in the nginx /media/ proxy location.
+# AWS S3 bucket-name rules: lowercase letters, digits, dots, hyphens; 3-63 chars.
+if [[ -z "${S3_BUCKET:-}" ]]; then
+  __msg_error "S3_BUCKET is not set in .env"
+  exit 1
+fi
+if [[ ! "${S3_BUCKET}" =~ ^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$ ]]; then
+  __msg_error "S3_BUCKET '${S3_BUCKET}' is not a valid bucket name"
+  exit 1
+fi
+
 if [[ ! -f "${OPT_DIR}/nginx/https.conf.template" ]]; then
   __msg_error "File ${OPT_DIR}/nginx/https.conf.template not found"
   exit 1
@@ -110,10 +121,11 @@ if [[ ! -f "${OPT_DIR}/deploy/redis.conf.template" ]]; then
 fi
 
 # Generate nginx https.conf from template.
-# CRITICAL: single-quoted variable list restricts envsubst to PROJECT_DOMAIN only —
-# nginx runtime vars ($host, $uri, $scheme, etc.) are NOT substituted.
-__msg_info "Generating nginx https.conf (PROJECT_DOMAIN=${PROJECT_DOMAIN})"
-envsubst '${PROJECT_DOMAIN}' \
+# CRITICAL: single-quoted variable list restricts envsubst to PROJECT_DOMAIN and
+# S3_BUCKET only - nginx runtime vars ($host, $uri, $scheme, etc.) are NOT
+# substituted (otherwise nginx would see empty strings and 502 every request).
+__msg_info "Generating nginx https.conf (PROJECT_DOMAIN=${PROJECT_DOMAIN}, S3_BUCKET=${S3_BUCKET})"
+envsubst '${PROJECT_DOMAIN} ${S3_BUCKET}' \
   < "${OPT_DIR}/nginx/https.conf.template" \
   > "${OPT_DIR}/nginx/https.conf" \
   || { __msg_error "envsubst failed"; exit 1; }

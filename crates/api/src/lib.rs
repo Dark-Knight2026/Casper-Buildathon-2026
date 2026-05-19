@@ -8,6 +8,7 @@
 //! - [`services`] - Business logic: auth, tax, analytics, health
 //! - [`onchain`] - On-chain data: ICO, staking, transactions, vesting
 //! - [`common`] - Shared utilities (config, errors, crypto, models)
+//! - [`providers`] - External-integration adapters (email, storage)
 //! - [`openapi`] - `OpenAPI` documentation configuration
 //! - [`server`] - Server startup logic
 
@@ -22,6 +23,9 @@ pub mod onchain;
 /// OpenAPI documentation configuration.
 #[cfg(feature = "enabled")]
 pub mod openapi;
+/// External-integration adapters (email, storage, ...).
+#[cfg(feature = "enabled")]
+pub mod providers;
 /// Server implementation and startup logic.
 #[cfg(feature = "enabled")]
 pub mod server;
@@ -32,11 +36,15 @@ pub mod services;
 // Re-exports
 #[cfg(feature = "enabled")]
 pub use common::{
-    AppState, Claims, EmailError, EmailMessage, EmailSender, IcoFallback, LoggingEmailSender,
-    MediaStorage, Pageable, PaginatedResponse, Pagination, PropertyId, RedisStore, ServerConfig,
-    ServerError, StubMediaStorage, UserId, UserRole,
+    AppState, Claims, IcoFallback, Pageable, PaginatedResponse, Pagination, PropertyId, RedisStore,
+    S3Config, ServerConfig, ServerError, UserId, UserRole,
 };
 #[cfg(feature = "enabled")]
 pub use openapi::ApiDoc;
+#[cfg(feature = "enabled")]
+pub use providers::{
+    EmailError, EmailMessage, EmailSender, LoggingEmailSender, MediaStorage, S3MediaStorage,
+    SharedMediaStorage, StubMediaStorage,
+};
 #[cfg(feature = "enabled")]
 pub use services::auth::AuthUser;

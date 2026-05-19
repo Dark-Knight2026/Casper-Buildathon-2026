@@ -13,9 +13,8 @@ use serde_json::Value;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use api::common::{EmailError, EmailMessage, EmailSender};
-
 use crate::common::TestOverrides;
+use api::providers::{EmailError, EmailMessage, EmailSender};
 
 /// Mailer that always fails delivery.
 ///

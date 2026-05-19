@@ -9,7 +9,8 @@ use serde::Deserialize;
 
 use crate::{
     ServerError,
-    common::{EmailSender, MediaStorage, RedisStore},
+    common::RedisStore,
+    providers::{EmailSender, MediaStorage},
 };
 
 /// Total BIG token supply (human-readable).
@@ -44,13 +45,27 @@ struct RawEnvConfig {
     /// Defaults to 5 billion if not set.
     #[serde(default)]
     total_supply: Option<f64>,
-    /// Base URL the dev/test stub media storage prefixes onto non-image
-    /// keys. Image keys (`avatars/...`) get a `data:image/svg+xml`
-    /// placeholder regardless of this value. Production deployments will
-    /// replace `StubMediaStorage` with an S3-backed implementation that
-    /// ignores this field entirely.
+    /// S3 bucket name. When set, enables S3-backed `MediaStorage` and
+    /// requires the rest of the `S3_*` block (region, endpoint, access
+    /// key, secret key). When unset, bootstrap falls back to
+    /// `StubMediaStorage` regardless of the other `S3_*` values.
     #[serde(default)]
-    media_stub_base_url: Option<String>,
+    s3_bucket: Option<String>,
+    #[serde(default)]
+    s3_region: Option<String>,
+    #[serde(default)]
+    s3_endpoint: Option<String>,
+    #[serde(default)]
+    s3_access_key: Option<SecretString>,
+    #[serde(default)]
+    s3_secret_key: Option<SecretString>,
+    /// Public URL prefix prepended to S3 keys to form fetchable URLs.
+    /// Falls back to `{S3_ENDPOINT}/{S3_BUCKET}` when unset; that default
+    /// is correct for `MinIO` and AWS path-style (the `with_path_style()`
+    /// flag we set), but a virtual-hosted-style bucket
+    /// (`{bucket}.s3.{region}.amazonaws.com`) MUST set this explicitly.
+    #[serde(default)]
+    s3_public_url_base: Option<String>,
 }
 
 const fn default_port() -> u16 {
@@ -74,6 +89,33 @@ pub struct IcoFallback {
     pub price_usd: Decimal,
     /// Total allocation in minimal units (U256 as string, decimals=18).
     pub total_allocation: String,
+}
+
+/// S3-compatible media-storage configuration loaded from `S3_*` env vars.
+///
+/// Present when `S3_BUCKET` is configured; bootstrap uses this block to
+/// instantiate [`S3MediaStorage`](crate::providers::S3MediaStorage). When
+/// absent, bootstrap falls back to
+/// [`StubMediaStorage`](crate::providers::StubMediaStorage) and the rest
+/// of the `S3_*` env vars (if any) are ignored.
+#[derive(Debug, Clone)]
+pub struct S3Config {
+    /// Bucket name (e.g. `media-prod`).
+    pub bucket: String,
+    /// Region identifier (e.g. `us-east-1` for AWS, `auto` for R2,
+    /// arbitrary for `MinIO` since path-style is forced).
+    pub region: String,
+    /// S3 endpoint URL (e.g. `https://s3.us-east-1.amazonaws.com`,
+    /// `https://<account>.r2.cloudflarestorage.com`, `http://minio:9000`).
+    pub endpoint: String,
+    /// Access key, kept out of `Debug`/logs via `SecretString`.
+    pub access_key: SecretString,
+    /// Secret key, kept out of `Debug`/logs via `SecretString`.
+    pub secret_key: SecretString,
+    /// Public URL prefix prepended to object keys to form fetchable URLs.
+    /// Defaults to `{endpoint}/{bucket}` (path-style); override via
+    /// `S3_PUBLIC_URL_BASE` for CDN-fronted or virtual-hosted-style setups.
+    pub public_url_base: String,
 }
 
 /// Server application configuration loaded from environment variables.
@@ -101,11 +143,10 @@ pub struct ServerConfig {
     pub ico_fallback: Option<IcoFallback>,
     /// Total BIG token supply (human-readable). Defaults to 5 billion.
     pub total_supply: f64,
-    /// Base URL prepended to non-image keys by [`StubMediaStorage`]. `None`
-    /// falls back to the stub's built-in default. Has no effect on image
-    /// keys (which always render as a `data:` placeholder) or on
-    /// production S3-backed implementations.
-    pub media_stub_base_url: Option<String>,
+    /// S3-compatible media storage. `Some` enables the production media
+    /// backend; `None` falls back to `StubMediaStorage`. Populated by
+    /// `from_env` only when the full `S3_*` block is provided.
+    pub s3: Option<S3Config>,
 }
 
 impl ServerConfig {
@@ -153,6 +194,36 @@ impl ServerConfig {
             (None, None) => None,
         };
 
+        let s3 = match raw.s3_bucket {
+            Some(bucket) => {
+                let region = raw.s3_region.ok_or_else(|| {
+                    ServerError::EnvVar("S3_BUCKET set but S3_REGION missing".to_owned())
+                })?;
+                let endpoint = raw.s3_endpoint.ok_or_else(|| {
+                    ServerError::EnvVar("S3_BUCKET set but S3_ENDPOINT missing".to_owned())
+                })?;
+                let access_key = raw.s3_access_key.ok_or_else(|| {
+                    ServerError::EnvVar("S3_BUCKET set but S3_ACCESS_KEY missing".to_owned())
+                })?;
+                let secret_key = raw.s3_secret_key.ok_or_else(|| {
+                    ServerError::EnvVar("S3_BUCKET set but S3_SECRET_KEY missing".to_owned())
+                })?;
+                let public_url_base = raw.s3_public_url_base.map_or_else(
+                    || format!("{}/{bucket}", endpoint.trim_end_matches('/')),
+                    |s| s.trim_end_matches('/').to_owned(),
+                );
+                Some(S3Config {
+                    bucket,
+                    region,
+                    endpoint,
+                    access_key,
+                    secret_key,
+                    public_url_base,
+                })
+            }
+            None => None,
+        };
+
         let config = Self {
             database_url: raw.database_url,
             redis_url: raw.redis_url,
@@ -163,7 +234,7 @@ impl ServerConfig {
             contract_big: raw.contract_big.map(|s| s.to_ascii_lowercase()),
             ico_fallback,
             total_supply: raw.total_supply.unwrap_or(TOTAL_SUPPLY),
-            media_stub_base_url: raw.media_stub_base_url,
+            s3,
         };
 
         config.validate()?;
@@ -191,6 +262,36 @@ impl ServerConfig {
             return Err(ServerError::EnvVar(format!(
                 "SUPABASE_JWT_SECRET must be at least 64 bytes for HS256 security, got {secret_len}"
             )));
+        }
+        if let Some(s3) = &self.s3 {
+            // Reject any value that lacks an explicit scheme - bare hosts
+            // (`s3.amazonaws.com`) and bare paths bubble up as opaque SDK
+            // errors at first PUT, long after the process is past startup.
+            // Catching them in `validate()` turns a runtime mystery into a
+            // fail-fast EnvVar error the operator sees in the boot log.
+            //
+            // `rust-s3` itself accepts unscoped strings and treats them as
+            // path components, so this guard is the only line of defence.
+            let endpoint = &s3.endpoint;
+            if !endpoint.starts_with("http://") && !endpoint.starts_with("https://") {
+                return Err(ServerError::EnvVar(format!(
+                    "S3_ENDPOINT must start with http:// or https://, got \"{endpoint}\""
+                )));
+            }
+            // `http://` is fine for loopback (compose dev, integration tests)
+            // but transmits credentials and avatar bytes in plaintext over
+            // any other route. A `warn!` here keeps the misconfiguration
+            // observable without breaking known-good local setups.
+            if endpoint.starts_with("http://")
+                && !endpoint.contains("localhost")
+                && !endpoint.contains("127.0.0.1")
+                && !endpoint.contains("minio")
+            {
+                tracing::warn!(
+                    endpoint = %endpoint,
+                    "S3_ENDPOINT uses http:// on a non-loopback host; credentials and uploads transit in plaintext",
+                );
+            }
         }
         Ok(())
     }
