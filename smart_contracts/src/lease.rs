@@ -407,6 +407,7 @@ impl Lease {
         let lease_agreement = LeaseAgreement {
             tenant: params.tenant,
             landlord,
+            rent_distribution_terms: params.rent_distribution_terms,
             equity_option: params.equity_option,
             monthly_rent,
             security_deposit: params.security_deposit,
