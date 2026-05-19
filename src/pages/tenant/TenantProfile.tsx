@@ -512,8 +512,14 @@ export function TenantProfile() {
                   <Mail className="h-4 w-4 text-muted-foreground shrink-0" />
                   <p className="text-sm text-foreground truncate">{authProfile?.email ?? ''}</p>
                 </div>
-                {/* TODO: open email change flow → PATCH /api/v1/users/me/email */}
-                <Button variant="outline" size="sm" disabled>
+                {/* Disabled until the change-email dialog is wired up. The
+                    service layer is ready — requestEmailChange() /
+                    confirmEmailChange() in userProfileService.ts implement the
+                    two-step PATCH /api/v1/users/me/email flow — only the UI
+                    dialog that calls them is missing. Keep the button visible
+                    (disabled) so the feature is discoverable; enable it once
+                    the dialog component lands. */}
+                <Button variant="outline" size="sm" disabled title="Coming soon">
                   Change email
                 </Button>
               </div>

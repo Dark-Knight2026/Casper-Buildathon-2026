@@ -3,7 +3,6 @@ import * as DialogPrimitive from "@radix-ui/react-dialog"
 import { X } from "lucide-react"
 
 import { cn } from "@/lib/utils"
-import { useFocusTrap } from "@/hooks/useFocusTrap"
 
 const Dialog = DialogPrimitive.Root
 
@@ -32,22 +31,16 @@ const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
 >(({ className, children, ...props }, ref) => {
-  const focusTrapRef = useFocusTrap({ enabled: true, returnFocus: true });
-
+  // Focus trapping, Tab cycling, and focus restoration on close are core
+  // guarantees of Radix DialogPrimitive.Content — do not layer a second
+  // trap over it (two competing keydown handlers regress every dialog).
+  // If a specific dialog needs custom focus behavior, apply it at that
+  // call site, not in this shared primitive.
   return (
     <DialogPortal>
       <DialogOverlay />
       <DialogPrimitive.Content
-        ref={(node) => {
-          if (typeof ref === 'function') {
-            ref(node);
-          } else if (ref) {
-            ref.current = node;
-          }
-          if (node) {
-            (focusTrapRef as React.MutableRefObject<HTMLElement | null>).current = node;
-          }
-        }}
+        ref={ref}
         className={cn(
           // Mobile (default): full-screen — covers viewport, scrolls if content
           // overflows, no rounded corners, simple fade animation.

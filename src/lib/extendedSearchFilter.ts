@@ -31,7 +31,7 @@ const isInHomeAmenitySatisfied = (
   required: string[]
 ): boolean => {
   if (required.length === 0) return true;
-  const have = new Set(property.amenities.map((a) => a.toLowerCase()));
+  const have = new Set((property.amenities ?? []).map((a) => a.toLowerCase()));
   return required.every((a) => have.has(a.toLowerCase()));
 };
 
