@@ -28,33 +28,60 @@ pub mod types {
     use crate::common::CurrencyAmount;
 
     #[odra::odra_type]
-    pub struct LeaseEquityOption {
-        pub property_id: U256,
-    }
-
-    #[odra::odra_type]
     pub struct LeaseAgreement {
+        /// Tenant wallet responsible for paying rent and lease invoices.
         pub tenant: Address,
+        /// Landlord wallet that created and owns the lease relationship.
         pub landlord: Address,
+        /// Rent split rules used when lease invoice payments are distributed.
+        pub rent_distribution_terms: RentDistributionTerms,
+        /// Optional lease-to-own terms that make the tenant eligible for property equity.
         pub equity_option: Option<LeaseEquityOption>,
+        /// Required monthly base rent.
         pub monthly_rent: CurrencyAmount,
+        /// Security deposit held until lease finalization.
         pub security_deposit: CurrencyAmount,
+        /// Escrow invoice IDs created for the security deposit and monthly rent payments.
         pub invoices_ids: Vec<U256>,
+        /// Lease start timestamp.
         pub start: u64,
+        /// Lease end timestamp.
         pub end: u64,
+        /// Whether the lease has been finalized.
         pub is_finished: bool,
+        /// Frozen lease NFT token ID minted to the tenant.
         pub token_id: U256,
     }
 
     #[odra::odra_type]
     pub struct CreateLeaseAgreementParams {
         pub tenant: Address,
+        pub rent_distribution_terms: RentDistributionTerms,
         pub equity_option: Option<LeaseEquityOption>,
         pub monthly_rent: CurrencyAmount,
         pub security_deposit: CurrencyAmount,
         pub start: u64,
         pub end: u64,
+        /// Duration added to the invoice creation time to calculate invoice deadlines.
         pub invoice_validity_duration: u64,
+    }
+
+    #[odra::odra_type]
+    pub struct RentDistributionTerms {
+        /// Optional property manager that receives a percentage of the base rent
+        /// @dev This applies to the rent, not security deposits or equity top-ups
+        pub property_manager: Option<Address>,
+        /// Property manager rent share in basis points
+        /// @dev 10_000 = 10%. Must be zero when `property_manager` is `None`.
+        pub property_manager_bps: u32,
+    }
+
+    #[odra::odra_type]
+    pub struct LeaseEquityOption {
+        /// Property for which the tenant receives equity eligibility
+        pub property_id: U256,
+        /// Monthly amount above base rent applied toward tenant equity or mortgage contribution.
+        pub monthly_equity_amount: U256,
     }
 }
 
