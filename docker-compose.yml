@@ -62,10 +62,10 @@ services:
         condition: service_healthy
     entrypoint: >
       /bin/sh -c "
+      set -e;
       mc alias set local http://minio:9000 ${S3_ACCESS_KEY:?S3_ACCESS_KEY is required} ${S3_SECRET_KEY:?S3_SECRET_KEY is required};
       mc mb --ignore-existing local/${S3_BUCKET:?S3_BUCKET is required};
       mc anonymous set download local/${S3_BUCKET:?S3_BUCKET is required};
-      exit 0;
       "
     networks:
       - leasefi_net
