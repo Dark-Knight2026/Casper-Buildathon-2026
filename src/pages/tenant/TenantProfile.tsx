@@ -354,9 +354,8 @@ export function TenantProfile() {
                 <div className="flex items-center gap-2">
                   <p className="text-sm font-medium text-foreground capitalize">{authProfile?.role ?? ''}</p>
                   <Button
-                    variant="link"
+                    variant="outline"
                     size="sm"
-                    className="h-auto p-0 text-xs"
                     onClick={() => setRoleSwitchOpen(true)}
                   >
                     Switch
@@ -507,10 +506,14 @@ export function TenantProfile() {
               <CardDescription>Changing email requires verification</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex items-center justify-between gap-4">
-                <div className="flex items-center gap-3 min-w-0">
-                  <Mail className="h-4 w-4 text-muted-foreground shrink-0" />
-                  <p className="text-sm text-foreground truncate">{authProfile?.email ?? ''}</p>
+              {/* Mobile: stacked column, right-aligned, email wraps. ≥sm:
+                  original row (email left, button right, single line). */}
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+                <div className="flex items-start gap-3 min-w-0 justify-end sm:items-center sm:justify-start">
+                  <Mail className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5 sm:mt-0" />
+                  <p className="text-sm text-foreground min-w-0 wrap-break-word text-right sm:text-left">
+                    {authProfile?.email ?? ''}
+                  </p>
                 </div>
                 {/* Disabled until the change-email dialog is wired up. The
                     service layer is ready — requestEmailChange() /
