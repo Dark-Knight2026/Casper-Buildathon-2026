@@ -262,6 +262,54 @@ fn from_env_uses_explicit_public_url_base_when_set() {
     assert_eq!(s3.public_url_base, "https://cdn.example.com/media");
 }
 
+/// Regression guard for the trailing-slash bug in the EXPLICIT
+/// `S3_PUBLIC_URL_BASE` branch.
+///
+/// `from_env_normalizes_trailing_slash_in_default_public_url_base` above only
+/// covers the auto-derived `unwrap_or_else` branch, which already trims via
+/// `endpoint.trim_end_matches('/')`. The other branch - operator sets
+/// `S3_PUBLIC_URL_BASE` explicitly - stored the value verbatim, so a value like
+/// `http://localhost:9000/leasefi-media/` propagated all the way through
+/// `S3MediaStorage::put`, which builds `format!("{public_url_base}/{key}")` and
+/// produced `http://.../leasefi-media//avatars/<file>` (double slash).
+///
+/// The fix normalizes both branches identically. This test pins that the
+/// explicit value loses its trailing slash, while a value without one is
+/// unchanged.
+///
+/// Expected to FAIL on the pre-fix code at the first assertion.
+#[test]
+#[serial]
+fn from_env_normalizes_trailing_slash_in_explicit_public_url_base() {
+    set_env_vars(&[
+        REQUIRED_ENV,
+        FULL_S3_ENV,
+        &[("S3_PUBLIC_URL_BASE", "http://localhost:9000/leasefi-media/")],
+    ]);
+    let s3 = ServerConfig::from_env()
+        .expect("trailing-slash explicit public_url_base must still be accepted")
+        .s3
+        .expect("config.s3 must be populated");
+    assert_eq!(
+        s3.public_url_base, "http://localhost:9000/leasefi-media",
+        "trailing slash in S3_PUBLIC_URL_BASE must be trimmed to prevent double-slash object URLs",
+    );
+
+    set_env_vars(&[
+        REQUIRED_ENV,
+        FULL_S3_ENV,
+        &[("S3_PUBLIC_URL_BASE", "https://cdn.example.com/media")],
+    ]);
+    let s3 = ServerConfig::from_env()
+        .expect("no-trailing-slash explicit public_url_base must be accepted")
+        .s3
+        .expect("config.s3 must be populated");
+    assert_eq!(
+        s3.public_url_base, "https://cdn.example.com/media",
+        "without a trailing slash, explicit public_url_base must remain byte-identical",
+    );
+}
+
 #[test]
 #[serial]
 fn from_env_fails_when_s3_bucket_set_without_region() {
