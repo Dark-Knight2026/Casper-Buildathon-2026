@@ -77,16 +77,18 @@ export default function LandlordDashboard() {
   return (
     <ErrorBoundary>
       <div className="container mx-auto p-6 space-y-6">
-        <div className="flex justify-between items-center">
+        {/* Mobile: title block on top, actions stacked below in a column.
+            ≥sm: original single row (title left, actions right). */}
+        <div className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center">
           <div>
             <h1 className="text-3xl font-bold">Landlord Dashboard</h1>
             <p className="text-muted-foreground">Overview of your properties and tenants</p>
           </div>
-          <div className="flex gap-2">
-            <Button asChild>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Button asChild className="w-full sm:w-auto">
               <Link to="/landlord/properties/new">Add Property</Link>
             </Button>
-            <Button asChild variant="outline">
+            <Button asChild variant="outline" className="w-full sm:w-auto">
               <Link to="/landlord/leases/new">Create Lease</Link>
             </Button>
           </div>
