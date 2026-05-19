@@ -11,8 +11,6 @@ pub mod handlers;
 pub mod models;
 /// Router configuration for user-profile endpoints.
 pub mod routes;
-/// Email-change opaque-token generation and verification.
-pub mod tokens;
 
 // Re-exports
 pub use db::{

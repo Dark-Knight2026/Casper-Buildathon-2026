@@ -11,7 +11,7 @@ use axum_extra::extract::CookieJar;
 use chrono::Utc;
 
 use crate::{
-    common::{ApiError, ApiResult, AppState, UserInfo},
+    common::{ApiError, ApiResult, AppState, UserInfo, tokens},
     providers::EmailMessage,
     services::{
         auth::{AuthUser, cookies},
@@ -21,7 +21,6 @@ use crate::{
                 AvatarUploadResponse, DeleteAccountRequest, EmailChangeConfirmRequest,
                 EmailChangeRequest, UpdateProfileRequest, UpdateRoleRequest,
             },
-            tokens,
         },
     },
 };
