@@ -15,9 +15,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useToast } from '@/hooks/use-toast';
-import { propertyService } from '@/services/propertyService';
-import { getCurrentUserId } from '@/lib/supabase/client';
+import { FEATURED_PROPERTIES } from '@/data/featuredProperties';
 import type { Property, PropertySearchParams, PropertyStatus, PropertyType } from '@/types/property';
 
 const PROPERTY_TYPES: PropertyType[] = ['Apartment', 'House', 'Condo', 'Townhouse', 'Studio', 'Loft'];
@@ -26,7 +24,6 @@ const PROPERTY_STATUSES: PropertyStatus[] = ['active', 'pending', 'rented', 'ina
 export default function PropertyList() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { toast } = useToast();
 
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
@@ -57,67 +54,74 @@ export default function PropertyList() {
 
   const limit = 20;
 
-  const loadProperties = useCallback(async () => {
-    try {
-      setLoading(true);
-      const landlordId = await getCurrentUserId();
-      if (!landlordId) {
-        toast({
-          title: 'Error',
-          description: 'You must be logged in to view properties',
-          variant: 'destructive'
-        });
-        return;
+  // TODO(BE): replace with GET /api/v1/landlord/properties — BE-blocked
+  // (LeaseFi MVP spec §3.3). Filter/sort/paginate the shared mock fixture
+  // client-side so the page works on localhost without Supabase (same
+  // intentional demo pattern as LandlordDashboard).
+  const loadProperties = useCallback(() => {
+    setLoading(true);
+    const timer = setTimeout(() => {
+      let result: Property[] = [...FEATURED_PROPERTIES];
+
+      if (search) {
+        const q = search.toLowerCase();
+        result = result.filter(
+          (p) => p.title.toLowerCase().includes(q) || p.address.toLowerCase().includes(q),
+        );
+      }
+      if (selectedStatuses.length > 0) {
+        result = result.filter((p) => selectedStatuses.some((s) => s === p.status));
+      }
+      if (selectedTypes.length > 0) {
+        result = result.filter((p) => selectedTypes.some((t) => t === p.propertyType));
+      }
+      if (selectedCities.length > 0) {
+        result = result.filter((p) => selectedCities.includes(p.city));
+      }
+      if (minRent) result = result.filter((p) => p.rent >= Number(minRent));
+      if (maxRent) result = result.filter((p) => p.rent <= Number(maxRent));
+      if (minBedrooms) result = result.filter((p) => p.bedrooms >= Number(minBedrooms));
+      if (petsAllowed !== undefined) result = result.filter((p) => p.petsAllowed === petsAllowed);
+      if (furnished !== undefined) result = result.filter((p) => p.furnished === furnished);
+      if (parkingAvailable !== undefined) {
+        result = result.filter((p) => p.parkingAvailable === parkingAvailable);
       }
 
-      const params: PropertySearchParams = {
-        page,
-        limit,
-        sortBy,
-        sortOrder,
-        search: search || undefined,
-        status: selectedStatuses.length > 0 ? selectedStatuses : undefined,
-        propertyType: selectedTypes.length > 0 ? selectedTypes : undefined,
-        city: selectedCities.length > 0 ? selectedCities : undefined,
-        minRent: minRent ? Number(minRent) : undefined,
-        maxRent: maxRent ? Number(maxRent) : undefined,
-        minBedrooms: minBedrooms ? Number(minBedrooms) : undefined,
-        petsAllowed,
-        furnished,
-        parkingAvailable
-      };
-
-      const response = await propertyService.getProperties(landlordId, params);
-      setProperties(response.properties);
-      setTotal(response.total);
-      setTotalPages(response.totalPages);
-    } catch (error) {
-      console.error('Error loading properties:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to load properties',
-        variant: 'destructive'
+      const dir = sortOrder === 'asc' ? 1 : -1;
+      result.sort((a, b) => {
+        switch (sortBy) {
+          case 'rent':
+            return (a.rent - b.rent) * dir;
+          case 'views':
+            return (a.views - b.views) * dir;
+          case 'availableDate':
+            return String(a.availableDate).localeCompare(String(b.availableDate)) * dir;
+          case 'updatedAt':
+            return (new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime()) * dir;
+          case 'createdAt':
+          default:
+            return (new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()) * dir;
+        }
       });
-    } finally {
+
+      const totalCount = result.length;
+      const start = (page - 1) * limit;
+      setProperties(result.slice(start, start + limit));
+      setTotal(totalCount);
+      setTotalPages(Math.max(1, Math.ceil(totalCount / limit)));
       setLoading(false);
-    }
-  }, [page, sortBy, sortOrder, search, selectedStatuses, selectedTypes, selectedCities, minRent, maxRent, minBedrooms, petsAllowed, furnished, parkingAvailable, toast]);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [page, sortBy, sortOrder, search, selectedStatuses, selectedTypes, selectedCities, minRent, maxRent, minBedrooms, petsAllowed, furnished, parkingAvailable]);
 
-  const loadCities = useCallback(async () => {
-    try {
-      const landlordId = await getCurrentUserId();
-      if (!landlordId) return;
-
-      const citiesList = await propertyService.getCities(landlordId);
-      setCities(citiesList);
-    } catch (error) {
-      console.error('Error loading cities:', error);
-    }
+  const loadCities = useCallback(() => {
+    setCities([...new Set(FEATURED_PROPERTIES.map((p) => p.city))].sort());
   }, []);
 
   useEffect(() => {
-    loadProperties();
+    const cleanup = loadProperties();
     loadCities();
+    return cleanup;
   }, [loadProperties, loadCities]);
 
   const handleSearch = () => {
