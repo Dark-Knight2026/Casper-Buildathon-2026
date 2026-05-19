@@ -15,6 +15,68 @@ use crate::{
     },
 };
 
+// =============================================================================
+// Escrow Types
+// =============================================================================
+
+pub mod types {
+    use odra::{casper_types::U256, prelude::*};
+
+    use crate::common::CurrencyAmount;
+
+    #[odra::odra_type]
+    pub enum InvoiceKind {
+        SecurityDeposit,
+        Lease,
+    }
+
+    #[odra::odra_type]
+    pub struct Invoice {
+        /// Invoice category.
+        pub kind: InvoiceKind,
+        /// Wallet required to pay the invoice.
+        pub buyer: Address,
+        /// Primary recipient of the invoice.
+        /// @dev For lease invoices, this is the landlord. For security deposits, this is the lease contract.
+        pub seller: Address,
+        /// Total amount due for this invoice.
+        /// @dev For lease invoices, this equals base rent plus equity amount.
+        pub amount_due: CurrencyAmount,
+        /// Required base rent amount for lease invoices.
+        /// @dev Zero for security deposit invoices.
+        pub rent_amount: U256,
+        /// Required lease-to-own amount for lease invoices.
+        /// @dev Zero for security deposit invoices.
+        pub equity_amount: U256,
+        /// Base rent amount already paid.
+        /// @dev This will be used by partial payment logic.
+        pub rent_paid: U256,
+        /// Equity amount already paid.
+        /// @dev This will be used by partial payment logic.
+        pub equity_apid: U256,
+        /// Optional property manager that receives a percentage of base rent.
+        pub property_manager: Option<Address>,
+        /// Property manager rent share in basis points.
+        // TODO: I need to figure out exactly why I can't use u16 here but we can use u16 for constants.
+        pub property_manager_bps: u32,
+        /// Timestamp after which the invoice can no longer be paid.
+        pub deadline: u64,
+        /// Whether the invoice has been fully paid.
+        pub is_paid: bool,
+    }
+
+    #[odra::odra_type]
+    pub struct CreateLeaseInvoiceParams {
+        pub tenant: Address,
+        pub landlord: Address,
+        pub rent: CurrencyAmount,
+        pub equity_amount: U256,
+        pub property_manager: Option<Address>,
+        pub property_manager_bps: u32,
+        pub deadline: u64,
+    }
+}
+
 #[odra::module(errors = Error, events = [MinDeadlineSet, InvoiceCreated, InvoicePaid])]
 pub struct Escrow {
     ownable: SubModule<Ownable>,
@@ -269,27 +331,5 @@ pub mod errors {
         InvoiceIsExpired = 308,
         InvalidAmountAttached = 309,
         EqualBuyerAndSeller = 310,
-    }
-}
-
-pub mod types {
-    use odra::prelude::*;
-
-    use crate::common::CurrencyAmount;
-
-    #[odra::odra_type]
-    pub enum InvoiceKind {
-        SecurityDeposit,
-        Lease,
-    }
-
-    #[odra::odra_type]
-    pub struct Invoice {
-        pub kind: InvoiceKind,
-        pub buyer: Address,
-        pub seller: Address,
-        pub amount_due: CurrencyAmount,
-        pub deadline: u64,
-        pub is_paid: bool,
     }
 }
