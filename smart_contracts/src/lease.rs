@@ -3,7 +3,7 @@ use odra_modules::{access::Ownable, cep18_token::Cep18ContractRef};
 
 use crate::{
     common::CurrencyAmount,
-    constants::ONE_MONTH_IN_SECONDS,
+    constants::{ONE_HUNDRED_PERCENT_BPS, ONE_MONTH_IN_SECONDS},
     escrow::EscrowContractRef,
     lease::{
         errors::Error,
@@ -11,7 +11,9 @@ use crate::{
             EquityEligibilityGranted, EquityEligibilityRevoked, LeaseAgreementCreated,
             LeaseAgreementFinished, LeaseAgreementProlonged,
         },
-        types::{CreateLeaseAgreementParams, LeaseAgreement},
+        types::{
+            CreateLeaseAgreementParams, LeaseAgreement, LeaseEquityOption, RentDistributionTerms,
+        },
     },
     nft::NFTContractRef,
     property_registry::PropertyRegistryContractRef,
@@ -317,6 +319,13 @@ impl Lease {
             self.env().revert(Error::EqualTenantAndLandlord);
         }
 
+        self.validate_rent_distribution_terms(
+            &params.rent_distribution_terms,
+            params.tenant,
+            landlord,
+        );
+        self.validate_equity_option(&params.equity_option);
+
         if params.start >= params.end {
             self.env().revert(Error::InvalidTimeframes);
         }
@@ -609,6 +618,39 @@ impl Lease {
                 &mut CurrencyAmount::new(*security_deposit.currency(), *security_deposit.amount()),
                 tenant,
             );
+        }
+    }
+
+    fn validate_rent_distribution_terms(
+        &self,
+        terms: &RentDistributionTerms,
+        tenant: Address,
+        landlord: Address,
+    ) {
+        // TODO: Can't use u16 for property_maanger_bps. Find out why and determine if we really need to type cast the constant to u32
+        if terms.property_manager_bps > ONE_HUNDRED_PERCENT_BPS as u32 {
+            self.env().revert(Error::InvalidPropertyManagerBps);
+        }
+
+        match terms.property_manager {
+            Some(property_manager) => {
+                if property_manager == tenant || property_manager == landlord {
+                    self.env().revert(Error::InvalidPropertyManager)
+                }
+            }
+            None => {
+                if terms.property_manager_bps > 0 {
+                    self.env().revert(Error::InvalidPropertyManager)
+                }
+            }
+        }
+    }
+
+    fn validate_equity_option(&self, equity_option: &Option<LeaseEquityOption>) {
+        if let Some(equity_option) = equity_option {
+            if equity_option.monthly_equity_amount.is_zero() {
+                self.env().revert(Error::InvalidEquityAmount);
+            }
         }
     }
 }
