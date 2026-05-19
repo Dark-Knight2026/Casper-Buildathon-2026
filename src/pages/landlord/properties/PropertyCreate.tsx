@@ -262,7 +262,18 @@ export default function PropertyCreate() {
 
       {/* Form */}
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        <form
+          onSubmit={form.handleSubmit(onSubmit)}
+          // Multi-step form: never submit on Enter (it would skip the Photos
+          // step and redirect). Advance only via the Next / Create Property
+          // buttons. Textareas keep Enter for newlines.
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !(e.target instanceof HTMLTextAreaElement)) {
+              e.preventDefault();
+            }
+          }}
+          className="space-y-6"
+        >
           {/* Step 1: Basic Info */}
           {currentStep === 1 && (
             <Card>
@@ -520,7 +531,7 @@ export default function PropertyCreate() {
                   render={() => (
                     <FormItem className="flex flex-col gap-1 space-y-1">
                       <FormLabel>Lease Terms (select all that apply)</FormLabel>
-                      <div className="grid grid-cols-3 gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         {LEASE_TERMS.map((term) => (
                           <FormField
                             key={term}
@@ -870,12 +881,23 @@ export default function PropertyCreate() {
             </Button>
 
             {currentStep < STEPS.length ? (
-              <Button type="button" onClick={handleNext}>
+              // Distinct `key` so React mounts a fresh node instead of
+              // reusing the same <button> when this flips to the final
+              // action — reusing it would let a "Next" click land as a
+              // submit after the type changed mid-click.
+              <Button key="next" type="button" onClick={handleNext}>
                 Next
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             ) : (
-              <Button type="submit" disabled={uploading}>
+              // type="button" (not "submit"): submit only via this explicit
+              // click so reaching the Photos step never auto-submits.
+              <Button
+                key="submit"
+                type="button"
+                disabled={uploading}
+                onClick={form.handleSubmit(onSubmit)}
+              >
                 {uploading ? 'Creating...' : 'Create Property'}
               </Button>
             )}

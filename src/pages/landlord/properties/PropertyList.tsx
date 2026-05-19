@@ -5,7 +5,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Plus, Search, Filter, X, Home, MapPin, DollarSign, Bed, Bath } from 'lucide-react';
+import { Plus, Search, Filter, X, Home, MapPin, Bed, Bath, ArrowUpDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -13,13 +13,13 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { FEATURED_PROPERTIES } from '@/data/featuredProperties';
-import type { Property, PropertySearchParams, PropertyStatus, PropertyType } from '@/types/property';
+import type { Property, PropertySearchParams, PropertyType } from '@/types/property';
 
 const PROPERTY_TYPES: PropertyType[] = ['Apartment', 'House', 'Condo', 'Townhouse', 'Studio', 'Loft'];
-const PROPERTY_STATUSES: PropertyStatus[] = ['active', 'pending', 'rented', 'inactive'];
+const PROPERTY_STATUSES: Property['status'][] = ['active', 'pending', 'rented', 'inactive'];
 
 export default function PropertyList() {
   const navigate = useNavigate();
@@ -32,8 +32,9 @@ export default function PropertyList() {
   const [cities, setCities] = useState<string[]>([]);
 
   // Filter state
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [search, setSearch] = useState(searchParams.get('search') || '');
-  const [selectedStatuses, setSelectedStatuses] = useState<PropertyStatus[]>([]);
+  const [selectedStatuses, setSelectedStatuses] = useState<Property['status'][]>([]);
   const [selectedTypes, setSelectedTypes] = useState<PropertyType[]>([]);
   const [selectedCities, setSelectedCities] = useState<string[]>([]);
   const [minRent, setMinRent] = useState<string>('');
@@ -47,9 +48,6 @@ export default function PropertyList() {
   const [page, setPage] = useState(Number(searchParams.get('page')) || 1);
   const [sortBy, setSortBy] = useState<PropertySearchParams['sortBy']>(
     (searchParams.get('sortBy') as PropertySearchParams['sortBy']) || 'createdAt'
-  );
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>(
-    (searchParams.get('sortOrder') as 'asc' | 'desc') || 'desc'
   );
 
   const limit = 20;
@@ -87,7 +85,7 @@ export default function PropertyList() {
         result = result.filter((p) => p.parkingAvailable === parkingAvailable);
       }
 
-      const dir = sortOrder === 'asc' ? 1 : -1;
+      const dir = -1; // always newest / highest first (descending)
       result.sort((a, b) => {
         switch (sortBy) {
           case 'rent':
@@ -112,7 +110,7 @@ export default function PropertyList() {
       setLoading(false);
     }, 500);
     return () => clearTimeout(timer);
-  }, [page, sortBy, sortOrder, search, selectedStatuses, selectedTypes, selectedCities, minRent, maxRent, minBedrooms, petsAllowed, furnished, parkingAvailable]);
+  }, [page, sortBy, search, selectedStatuses, selectedTypes, selectedCities, minRent, maxRent, minBedrooms, petsAllowed, furnished, parkingAvailable]);
 
   const loadCities = useCallback(() => {
     setCities([...new Set(FEATURED_PROPERTIES.map((p) => p.city))].sort());
@@ -150,12 +148,11 @@ export default function PropertyList() {
     const params: Record<string, string> = {};
     if (search) params.search = search;
     if (page > 1) params.page = page.toString();
-    if (sortBy !== 'createdAt') params.sortBy = sortBy;
-    if (sortOrder !== 'desc') params.sortOrder = sortOrder;
+    if (sortBy && sortBy !== 'createdAt') params.sortBy = sortBy;
     setSearchParams(params);
   };
 
-  const getStatusColor = (status: PropertyStatus) => {
+  const getStatusColor = (status: Property['status']) => {
     switch (status) {
       case 'active': return 'bg-green-500';
       case 'pending': return 'bg-yellow-500';
@@ -176,15 +173,18 @@ export default function PropertyList() {
 
   return (
     <div className="container mx-auto py-8 px-4">
-      {/* Header */}
-      <div className="flex justify-between items-center mb-8">
+      {/* Header — mobile: title on top, action stacked below; ≥sm: row */}
+      <div className="flex flex-col gap-4 mb-8 sm:flex-row sm:justify-between sm:items-center">
         <div>
           <h1 className="text-3xl font-bold">My Properties</h1>
           <p className="text-muted-foreground mt-1">
             Manage your property listings
           </p>
         </div>
-        <Button onClick={() => navigate('/landlord/properties/create')}>
+        <Button
+          onClick={() => navigate('/landlord/properties/create')}
+          className="w-full sm:w-auto"
+        >
           <Plus className="mr-2 h-4 w-4" />
           Add Property
         </Button>
@@ -200,31 +200,34 @@ export default function PropertyList() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-              className="pl-10"
+              className="pl-10 h-11"
             />
           </div>
-          <Button onClick={handleSearch}>Search</Button>
+          <Button onClick={handleSearch}>
+            <Search className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Search</span>
+          </Button>
         </div>
 
-        <Sheet>
-          <SheetTrigger asChild>
+        <Dialog open={filtersOpen} onOpenChange={setFiltersOpen}>
+          <DialogTrigger asChild>
             <Button variant="outline">
-              <Filter className="mr-2 h-4 w-4" />
-              Filters
+              <Filter className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Filters</span>
               {(selectedStatuses.length > 0 || selectedTypes.length > 0 || selectedCities.length > 0) && (
                 <Badge variant="secondary" className="ml-2">
                   {selectedStatuses.length + selectedTypes.length + selectedCities.length}
                 </Badge>
               )}
             </Button>
-          </SheetTrigger>
-          <SheetContent>
-            <SheetHeader>
-              <SheetTitle>Filter Properties</SheetTitle>
-              <SheetDescription>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Filter Properties</DialogTitle>
+              <DialogDescription>
                 Refine your property search with filters
-              </SheetDescription>
-            </SheetHeader>
+              </DialogDescription>
+            </DialogHeader>
 
             <div className="space-y-6 mt-6">
               {/* Status Filter */}
@@ -369,21 +372,30 @@ export default function PropertyList() {
               </div>
 
               {/* Action Buttons */}
-              <div className="flex gap-2 pt-4">
-                <Button onClick={handleSearch} className="flex-1">
+              <DialogFooter className="gap-2 sm:gap-0">
+                <Button
+                  onClick={() => { handleSearch(); setFiltersOpen(false); }}
+                  className="flex-1"
+                >
                   Apply Filters
                 </Button>
-                <Button onClick={handleClearFilters} variant="outline">
+                <Button
+                  onClick={() => { handleClearFilters(); setFiltersOpen(false); }}
+                  variant="outline"
+                >
                   <X className="h-4 w-4" />
                 </Button>
-              </div>
+              </DialogFooter>
             </div>
-          </SheetContent>
-        </Sheet>
+          </DialogContent>
+        </Dialog>
 
         <Select value={sortBy} onValueChange={(value) => setSortBy(value as PropertySearchParams['sortBy'])}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Sort by" />
+          <SelectTrigger className="w-auto sm:w-45" aria-label="Sort by">
+            <ArrowUpDown className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">
+              <SelectValue placeholder="Sort by" />
+            </span>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="createdAt">Date Created</SelectItem>
@@ -391,16 +403,6 @@ export default function PropertyList() {
             <SelectItem value="rent">Rent</SelectItem>
             <SelectItem value="views">Views</SelectItem>
             <SelectItem value="availableDate">Available Date</SelectItem>
-          </SelectContent>
-        </Select>
-
-        <Select value={sortOrder} onValueChange={(value) => setSortOrder(value as 'asc' | 'desc')}>
-          <SelectTrigger className="w-[120px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="desc">Descending</SelectItem>
-            <SelectItem value="asc">Ascending</SelectItem>
           </SelectContent>
         </Select>
       </div>
