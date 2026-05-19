@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Loader2, ShieldAlert } from 'lucide-react';
 
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -18,9 +19,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { ToastAction } from '@/components/ui/toast';
 import { useToast } from '@/hooks/use-toast';
 import { useSensitiveAction } from '@/hooks/auth/useSensitiveAction';
 import { ApiError } from '@/lib/api-client';
+import { ProfileApiErrorCode } from '@/lib/api-errors';
 import { patchMyRole } from '@/services/userProfileService';
 import type { SelfRegisterableRole } from '@/services/ico/backendAuthService';
 
@@ -44,6 +47,17 @@ const REAUTH_ERROR_COPY: Record<
     'The session is still blocked after re-signing. Sign out completely and log in again.',
 };
 
+// Deep-link target for the "active leases block this change" CTA. Only
+// tenant and landlord have a leases surface; agents (and any unknown role)
+// get the explanatory copy without a dead-end button.
+const leasesPathForRole = (
+  role: SelfRegisterableRole | string | undefined
+): string | null => {
+  if (role === 'tenant') return '/tenant/leases';
+  if (role === 'landlord') return '/landlord/leases';
+  return null;
+};
+
 interface RoleSwitchDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -52,6 +66,7 @@ interface RoleSwitchDialogProps {
 
 export function RoleSwitchDialog({ open, onOpenChange, currentRole }: RoleSwitchDialogProps) {
   const { toast } = useToast();
+  const navigate = useNavigate();
   const { runAndReauth, state: reauthState, reset } = useSensitiveAction();
 
   const [selected, setSelected] = useState<SelfRegisterableRole | null>(null);
@@ -100,13 +115,40 @@ export function RoleSwitchDialog({ open, onOpenChange, currentRole }: RoleSwitch
       // Errors fall into two buckets:
       //   - Reauth-gate error states (cancelled / no-wallet / login-failed /
       //     still-blocked) are already surfaced inline via `reauthError`.
-      //   - Anything else is a server error (validation, role-not-allowed,
-      //     transport) — surface it as a destructive toast so the user
-      //     does not silently sit on a stale form.
+      //   - Anything else is a server error. Map the known machine-readable
+      //     codes to human copy; never surface `err.message` — it is the raw
+      //     envelope token verbatim (e.g. "rate_limited") or backend prose.
       if (reauthState.status !== 'error') {
-        const message =
-          err instanceof ApiError ? err.message : 'Could not switch role. Please try again.';
-        toast({ variant: 'destructive', title: 'Role switch failed', description: message });
+        const code = err instanceof ApiError ? err.code : undefined;
+        if (code === ProfileApiErrorCode.RateLimited) {
+          toast({
+            variant: 'destructive',
+            title: 'Role switch unavailable',
+            description: 'You can only change your role once per 24 hours.',
+          });
+        } else if (code === ProfileApiErrorCode.ActiveLeasesBlocking) {
+          const leasesPath = leasesPathForRole(currentRole);
+          toast({
+            variant: 'destructive',
+            title: 'Active leases block this change',
+            description:
+              'Resolve or end your active leases before switching roles.',
+            action: leasesPath ? (
+              <ToastAction
+                altText="Review your leases"
+                onClick={() => navigate(leasesPath)}
+              >
+                Review leases
+              </ToastAction>
+            ) : undefined,
+          });
+        } else {
+          toast({
+            variant: 'destructive',
+            title: 'Role switch failed',
+            description: 'Could not switch role. Please try again.',
+          });
+        }
       }
     } finally {
       setSubmitting(false);
