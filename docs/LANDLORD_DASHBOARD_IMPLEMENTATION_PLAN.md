@@ -1,11 +1,3 @@
----
-author: Anastasia
-version: 0.1.0
-created: 2026-05-19T08:37:23Z
-last-modified: 2026-05-19T08:37:23Z
-version-updated: 2026-05-19T08:37:23Z
----
-
 # Landlord Dashboard — Implementation Plan
 
 **Objective:** Give the landlord flow a shared navigation header (like the tenant
@@ -144,7 +136,7 @@ loading/error UI; keep existing state shapes and JSX untouched; add
 
 **Page checklist (all confirmed direct-Supabase):**
 
-- [ ] `pages/landlord/LandlordDashboard.tsx`
+- [x] `pages/landlord/LandlordDashboard.tsx` — done; mock via new `src/data/landlordMockData.ts` (single source for landlord fixtures)
 - [ ] `pages/landlord/LandlordProperties.tsx`
 - [ ] `pages/landlord/LandlordLeases.tsx`
 - [ ] `pages/landlord/LandlordPayments.tsx`
