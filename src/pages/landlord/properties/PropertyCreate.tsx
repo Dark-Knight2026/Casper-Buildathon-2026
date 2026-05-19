@@ -18,9 +18,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
-import { propertyService } from '@/services/propertyService';
-import { getCurrentUserId } from '@/lib/supabase/client';
-import { ALL_AMENITIES, UTILITIES, LEASE_TERMS, PET_POLICIES, US_STATES, type PropertyFormData, type PropertyType, type SurroundingCategory } from '@/types/property';
+import { ALL_AMENITIES, UTILITIES, LEASE_TERMS, PET_POLICIES, US_STATES, type PropertyType, type SurroundingCategory } from '@/types/property';
 
 const PROPERTY_TYPES: PropertyType[] = ['Apartment', 'House', 'Condo', 'Townhouse', 'Studio', 'Loft'];
 
@@ -186,44 +184,23 @@ export default function PropertyCreate() {
     setImagePreviews(newPreviews);
   };
 
-  const onSubmit = async (data: PropertyFormValues) => {
-    try {
-      setUploading(true);
-      const landlordId = await getCurrentUserId();
-      if (!landlordId) {
-        toast({
-          title: 'Error',
-          description: 'You must be logged in to create a property',
-          variant: 'destructive'
-        });
-        return;
-      }
-
-      // Create property
-      const property = await propertyService.createProperty(landlordId, data);
-
-      // Upload images if any
-      if (uploadedImages.length > 0) {
-        const imageUrls = await propertyService.uploadPropertyImages(property.id, uploadedImages);
-        await propertyService.updatePropertyImages(property.id, landlordId, imageUrls);
-      }
-
-      toast({
-        title: 'Success',
-        description: 'Property created successfully'
-      });
-
-      navigate('/landlord/properties');
-    } catch (error) {
-      console.error('Error creating property:', error);
-      toast({
-        title: 'Error',
-        description: error instanceof Error ? error.message : 'Failed to create property',
-        variant: 'destructive'
-      });
-    } finally {
+  const onSubmit = (data: PropertyFormValues) => {
+    setUploading(true);
+    // TODO(BE): replace with POST /api/v1/landlord/properties (+ image
+    // upload) — BE-blocked (LeaseFi MVP spec §3.3). Mock the create so the
+    // landlord happy-path works on localhost without Supabase (same
+    // intentional demo pattern as LandlordDashboard / landlordMockData).
+    setTimeout(() => {
       setUploading(false);
-    }
+      toast({
+        title: 'Property created',
+        description:
+          uploadedImages.length > 0
+            ? `"${data.title}" saved with ${uploadedImages.length} photo(s).`
+            : `"${data.title}" saved.`,
+      });
+      navigate('/landlord/properties');
+    }, 600);
   };
 
   return (
