@@ -20,6 +20,7 @@ use tokio::{
         self,
         unix::{self, SignalKind},
     },
+    sync::broadcast::{self, Sender},
 };
 use tower_http::{cors::CorsLayer, limit::RequestBodyLimitLayer, trace::TraceLayer};
 use utoipa::OpenApi;
@@ -218,14 +219,31 @@ pub async fn main() -> Result<(), ServerError> {
     let addr = SocketAddr::from(([0, 0, 0, 0], config.port));
     tracing::info!(address = %addr, "Server listening");
     let listener = TcpListener::bind(addr).await?;
+
+    // Shutdown broadcast fans out to background workers; real subscribers
+    // are added at spawn time via `shutdown_tx.subscribe()`.
+    let (shutdown_tx, _) = broadcast::channel::<()>(1);
+
     axum::serve(
         listener,
         app.into_make_service_with_connect_info::<SocketAddr>(),
     )
-    .with_graceful_shutdown(shutdown_signal())
+    .with_graceful_shutdown(wait_and_notify_shutdown(shutdown_tx))
     .await?;
 
     Ok(())
+}
+
+/// Composes signal-wait + worker-broadcast into the single future that
+/// `axum::serve.with_graceful_shutdown` consumes.
+///
+/// Order matters: HTTP server starts draining the moment this future resolves,
+/// so the broadcast is sent *before* the await completes - otherwise workers
+/// would only learn about shutdown after `axum::serve` has already returned,
+/// defeating the point of graceful coordination.
+async fn wait_and_notify_shutdown(tx: Sender<()>) {
+    shutdown_signal().await;
+    notify_workers(&tx);
 }
 
 /// Awaits a shutdown signal (e.g., Ctrl+C) to gracefully shut down the server.
@@ -265,4 +283,20 @@ async fn shutdown_signal() {
     }
 
     tracing::info!("Shutting down gracefully...");
+}
+
+/// Fan-out of the shutdown edge to every active background subscriber.
+///
+/// `Err(SendError)` means no subscribers - not a failure, just a deployment
+/// without background workers.
+#[inline]
+pub fn notify_workers(tx: &Sender<()>) {
+    match tx.send(()) {
+        Ok(subscribers) => {
+            tracing::debug!(subscribers, "shutdown broadcast delivered");
+        }
+        Err(_) => {
+            tracing::debug!("shutdown broadcast had no subscribers");
+        }
+    }
 }
