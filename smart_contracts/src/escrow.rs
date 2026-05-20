@@ -339,6 +339,10 @@ impl Escrow {
     }
 }
 
+// =============================================================================
+// Internal Helpers
+// =============================================================================
+
 impl Escrow {
     fn create_invoice(&mut self, mut invoice: Invoice) -> U256 {
         if invoice.buyer == invoice.seller {
