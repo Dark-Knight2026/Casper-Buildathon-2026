@@ -110,6 +110,11 @@ pub trait EmailSender: Send + Sync {
 /// flows that depend on email delivery (login, password reset, email change).
 /// Such flows will succeed on the server side but the user will never see
 /// the follow-up message.
+///
+/// Worker-side invariant: `send` MUST NOT return [`EmailError::Transient`].
+/// The retry-queue worker is only spawned when a real provider is active,
+/// so any row that landed in `email_send_retries` under this sender would
+/// stay `pending` forever.
 #[derive(Debug, Default)]
 pub struct LoggingEmailSender;
 

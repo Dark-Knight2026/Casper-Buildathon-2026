@@ -32,6 +32,9 @@ pub mod server;
 /// Business logic services.
 #[cfg(feature = "enabled")]
 pub mod services;
+/// Background workers (retry queues, scheduled cleanup, etc.).
+#[cfg(feature = "enabled")]
+pub mod workers;
 
 // Re-exports
 #[cfg(feature = "enabled")]

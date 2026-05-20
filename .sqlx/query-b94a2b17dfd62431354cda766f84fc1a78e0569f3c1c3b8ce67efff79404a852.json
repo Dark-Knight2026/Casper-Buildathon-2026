@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO email_send_retries (to_address, subject, body, status, completed_at)\n            VALUES\n                ('old@example.com',     's', 'b', 'completed', NOW() - INTERVAL '40 days'),\n                ('recent@example.com',  's', 'b', 'completed', NOW() - INTERVAL '5 days'),\n                ('pending@example.com', 's', 'b', 'pending',   NULL)\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "b94a2b17dfd62431354cda766f84fc1a78e0569f3c1c3b8ce67efff79404a852"
+}

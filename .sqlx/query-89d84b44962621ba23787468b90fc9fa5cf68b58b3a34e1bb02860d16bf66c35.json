@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO email_send_retries (to_address, subject, body, status, completed_at)\n            VALUES\n                ('done@example.com', 's', 'b', 'completed', NOW()),\n                ('dead@example.com', 's', 'b', 'failed', NOW())\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "89d84b44962621ba23787468b90fc9fa5cf68b58b3a34e1bb02860d16bf66c35"
+}
