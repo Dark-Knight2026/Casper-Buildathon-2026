@@ -128,7 +128,7 @@ pub struct TestOverrides {
     ///
     /// Tests that exercise `mailer.send` failure paths (e.g. the
     /// email-change rollback) supply a fake here that returns
-    /// `EmailError::Transport` so the rest of the handler can be observed
+    /// `EmailError::Transient` so the rest of the handler can be observed
     /// without wiring up a real SMTP relay.
     pub mailer: Option<Arc<dyn EmailSender>>,
     /// Custom media storage for the test (defaults to `StubMediaStorage`).

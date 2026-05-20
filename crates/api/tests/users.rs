@@ -26,7 +26,7 @@ struct FailingMailer;
 #[async_trait]
 impl EmailSender for FailingMailer {
     async fn send(&self, _message: EmailMessage) -> Result<(), EmailError> {
-        Err(EmailError::Transport(
+        Err(EmailError::Transient(
             "failing mailer (test fixture)".to_owned(),
         ))
     }

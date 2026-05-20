@@ -8,22 +8,22 @@
 
 use async_trait::async_trait;
 
-/// Errors produced by [`EmailSender`] implementations.
+/// Split on retryability so the retry-queue worker can route a failure
+/// straight from `mailer.send` without re-classifying provider codes.
 ///
-/// Marked `#[non_exhaustive]` because future implementations (SMTP, AWS SES,
-/// Mailgun) will likely surface provider-specific failure modes (rate limits,
-/// quota exhaustion, transient network) and we want to add variants without
-/// a breaking-change downstream.
+/// `#[non_exhaustive]` keeps future axes (e.g. `RateLimited` with
+/// `Retry-After`) non-breaking. Payload strings are operator-only:
+/// never echo them to API clients - they can carry provider hostnames
+/// or rate-limit headers.
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum EmailError {
-    /// Underlying transport (SMTP, HTTP API, etc.) failed to deliver the
-    /// message. The string is operator-readable and carries enough context
-    /// to triage from logs; it MUST NOT be returned verbatim to API clients
-    /// (it can leak provider details, internal hostnames, or rate-limit
-    /// headers).
-    #[error("email transport error: {0}")]
-    Transport(String),
+    /// Recoverable: same payload may succeed on retry.
+    #[error("transient email transport error: {0}")]
+    Transient(String),
+    /// Permanent: same payload will keep failing.
+    #[error("permanent email transport error: {0}")]
+    Permanent(String),
 }
 
 /// Plain transactional email message.
