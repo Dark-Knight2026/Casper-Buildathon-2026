@@ -53,7 +53,7 @@ pub mod types {
         pub rent_paid: U256,
         /// Equity amount already paid.
         /// @dev This will be used by partial payment logic.
-        pub equity_apid: U256,
+        pub equity_paid: U256,
         /// Optional property manager that receives a percentage of base rent.
         pub property_manager: Option<Address>,
         /// Property manager rent share in basis points.
@@ -77,6 +77,60 @@ pub mod types {
     }
 }
 
+// =============================================================================
+// Events
+// =============================================================================
+
+pub mod events {
+    use odra::{casper_types::U256, prelude::*};
+
+    #[odra::event]
+    pub struct MinDeadlineSet {
+        pub old_min_deadline: u64,
+        pub new_min_deadline: u64,
+    }
+
+    #[odra::event]
+    pub struct InvoiceCreated {
+        pub invoice_id: U256,
+        pub created_at: u64,
+    }
+
+    #[odra::event]
+    pub struct InvoicePaid {
+        pub invoice_id: U256,
+        pub paid_at: u64,
+    }
+}
+
+// =============================================================================
+// Errors
+// =============================================================================
+
+pub mod errors {
+    use odra::prelude::*;
+
+    #[odra::odra_error]
+    pub enum Error {
+        CallerNotLeaseContract = 300,
+        LeaseContractIsNotSet = 301,
+        TreasuryContractIsNotSet = 302,
+        ZeroAmount = 303,
+        InvalidDeadline = 304,
+        InvalidInvoiceId = 305,
+        CallerIsNotBuyer = 306,
+        InvoiceIsAlreadyPaid = 307,
+        InvoiceIsExpired = 308,
+        InvalidAmountAttached = 309,
+        EqualBuyerAndSeller = 310,
+    }
+}
+
+// =============================================================================
+// Contract
+// =============================================================================
+
+
 #[odra::module(errors = Error, events = [MinDeadlineSet, InvoiceCreated, InvoicePaid])]
 pub struct Escrow {
     ownable: SubModule<Ownable>,
@@ -89,6 +143,11 @@ pub struct Escrow {
 
 #[odra::module]
 impl Escrow {
+
+   // =========================================================================
+   // Initialization
+   // =========================================================================
+
     pub fn init(&mut self, owner: Address, min_deadline: u64) {
         self.ownable.init(owner);
         self.set_min_deadline(min_deadline);
@@ -108,6 +167,10 @@ impl Escrow {
         });
     }
 
+    // =========================================================================
+    // Owner-only configuration
+    // =========================================================================
+
     /// Sets the Lease contract address by the owner
     pub fn set_lease(&mut self, lease: Address) {
         self.assert_owner();
@@ -119,6 +182,42 @@ impl Escrow {
         self.assert_owner();
         self.treasury.set(treasury);
     }
+
+    // =========================================================================
+    // View Functions
+    // =========================================================================
+
+    /// Returns the Lease contract address
+    pub fn get_lease_contract_address(&self) -> Address {
+        self.lease.get_or_revert_with(Error::LeaseContractIsNotSet)
+    }
+
+    /// Returns the Treasury contract address
+    pub fn get_treasury_contract_address(&self) -> Address {
+        self.treasury
+            .get_or_revert_with(Error::TreasuryContractIsNotSet)
+    }
+
+    /// Returns invoice by its ID
+    pub fn get_invoice_by_id(&self, invoice_id: U256) -> Invoice {
+        self.invoices
+            .get(&invoice_id)
+            .unwrap_or_revert_with(&self.env(), Error::InvalidInvoiceId)
+    }
+
+    /// Returns number of invoices created through this contract
+    pub fn get_invoices_count(&self) -> U256 {
+        self.invoices_count.get_or_default()
+    }
+
+    /// Returns the minimum invoice deadline
+    pub fn get_min_deadline(&self) -> u64 {
+        self.min_deadline.get_or_default()
+    }
+
+    // =========================================================================
+    // Invoice Management
+    // =========================================================================
 
     /// Allows to create a lease invoice by the Lease contract
     #[odra(non_reentrant)]
@@ -201,33 +300,9 @@ impl Escrow {
         });
     }
 
-    /// Returns the Lease contract address
-    pub fn get_lease_contract_address(&self) -> Address {
-        self.lease.get_or_revert_with(Error::LeaseContractIsNotSet)
-    }
-
-    /// Returns the Treasury contract address
-    pub fn get_treasury_contract_address(&self) -> Address {
-        self.treasury
-            .get_or_revert_with(Error::TreasuryContractIsNotSet)
-    }
-
-    /// Returns invoice by its ID
-    pub fn get_invoice_by_id(&self, invoice_id: U256) -> Invoice {
-        self.invoices
-            .get(&invoice_id)
-            .unwrap_or_revert_with(&self.env(), Error::InvalidInvoiceId)
-    }
-
-    /// Returns number of invoices created through this contract
-    pub fn get_invoices_count(&self) -> U256 {
-        self.invoices_count.get_or_default()
-    }
-
-    /// Returns the minimum invoice deadline
-    pub fn get_min_deadline(&self) -> u64 {
-        self.min_deadline.get_or_default()
-    }
+    // =========================================================================
+    // Ownable delegation
+    // =========================================================================
 
     delegate! {
         to self.ownable {
@@ -265,6 +340,12 @@ impl Escrow {
             buyer,
             seller,
             amount_due,
+            rent_amount: ,
+            equity_amount: ,
+            rent_paid: U256::zero(),
+            equity_paid: U256::zero(),
+            property_manager: ,
+            property_manager_bps: ,
             deadline,
             is_paid: false,
         };
@@ -290,46 +371,5 @@ impl Escrow {
         if self.env().caller() != self.get_lease_contract_address() {
             self.env().revert(Error::CallerNotLeaseContract);
         }
-    }
-}
-
-pub mod events {
-    use odra::{casper_types::U256, prelude::*};
-
-    #[odra::event]
-    pub struct MinDeadlineSet {
-        pub old_min_deadline: u64,
-        pub new_min_deadline: u64,
-    }
-
-    #[odra::event]
-    pub struct InvoiceCreated {
-        pub invoice_id: U256,
-        pub created_at: u64,
-    }
-
-    #[odra::event]
-    pub struct InvoicePaid {
-        pub invoice_id: U256,
-        pub paid_at: u64,
-    }
-}
-
-pub mod errors {
-    use odra::prelude::*;
-
-    #[odra::odra_error]
-    pub enum Error {
-        CallerNotLeaseContract = 300,
-        LeaseContractIsNotSet = 301,
-        TreasuryContractIsNotSet = 302,
-        ZeroAmount = 303,
-        InvalidDeadline = 304,
-        InvalidInvoiceId = 305,
-        CallerIsNotBuyer = 306,
-        InvoiceIsAlreadyPaid = 307,
-        InvoiceIsExpired = 308,
-        InvalidAmountAttached = 309,
-        EqualBuyerAndSeller = 310,
     }
 }
