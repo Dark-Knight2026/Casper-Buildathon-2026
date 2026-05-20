@@ -4,7 +4,7 @@ use odra_modules::{access::Ownable, cep18_token::Cep18ContractRef};
 use crate::{
     common::CurrencyAmount,
     constants::{ONE_HUNDRED_PERCENT_BPS, ONE_MONTH_IN_SECONDS},
-    escrow::EscrowContractRef,
+    escrow::{types::CreateLeaseInvoiceParams, EscrowContractRef},
     lease::{
         errors::Error,
         events::{
@@ -349,13 +349,23 @@ impl Lease {
             block_timestamp + params.invoice_validity_duration,
         )];
 
+        let equity_amount = params
+            .equity_option
+            .as_ref()
+            .map_or(U256::zero(), |option| option.monthly_equity_amount);
+
         for i in 0..(lease_duration / ONE_MONTH_IN_SECONDS) {
-            invoices_ids.push(self.escrow.create_lease_invoice(
-                params.tenant,
+            invoices_ids.push(self.escrow.create_lease_invoice(CreateLeaseInvoiceParams {
+                tenant: params.tenant,
                 landlord,
-                monthly_rent,
-                block_timestamp + (ONE_MONTH_IN_SECONDS * i) + params.invoice_validity_duration,
-            ));
+                rent: monthly_rent,
+                equity_amount,
+                property_manager: params.rent_distribution_terms.property_manager,
+                property_manager_bps: params.rent_distribution_terms.property_manager_bps,
+                deadline: block_timestamp
+                    + (ONE_MONTH_IN_SECONDS * i)
+                    + params.invoice_validity_duration,
+            }));
         }
 
         let lease_agreement_id = self.get_lease_agreements_count();
@@ -523,15 +533,26 @@ impl Lease {
 
         let block_timestamp = self.env().get_block_time();
 
+        let equity_amount = lease_agreement
+            .equity_option
+            .as_ref()
+            .map_or(U256::zero(), |option| option.monthly_equity_amount);
+
         for i in 0..(lease_duration / ONE_MONTH_IN_SECONDS) {
             lease_agreement
                 .invoices_ids
-                .push(self.escrow.create_lease_invoice(
-                    lease_agreement.tenant,
-                    lease_agreement.landlord,
-                    lease_agreement.monthly_rent,
-                    block_timestamp + (ONE_MONTH_IN_SECONDS * i) + invoice_validity_duration,
-                ));
+                .push(self.escrow.create_lease_invoice(CreateLeaseInvoiceParams {
+                    tenant: lease_agreement.tenant,
+                    landlord: lease_agreement.landlord,
+                    rent: lease_agreement.monthly_rent,
+                    equity_amount,
+                    property_manager: lease_agreement.rent_distribution_terms.property_manager,
+                    property_manager_bps:
+                        lease_agreement.rent_distribution_terms.property_manager_bps,
+                    deadline: block_timestamp
+                        + (ONE_MONTH_IN_SECONDS * i)
+                        + invoice_validity_duration,
+                }));
         }
 
         lease_agreement.end = new_end;

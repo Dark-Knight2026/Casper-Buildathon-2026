@@ -11,8 +11,9 @@ use crate::{
     escrow::{
         errors::Error,
         events::{InvoiceCreated, InvoicePaid, MinDeadlineSet},
-        types::{Invoice, InvoiceKind},
+        types::{CreateLeaseInvoiceParams, Invoice, InvoiceKind},
     },
+    lease::types::CreateLeaseAgreementParams,
 };
 
 // =============================================================================
@@ -130,7 +131,6 @@ pub mod errors {
 // Contract
 // =============================================================================
 
-
 #[odra::module(errors = Error, events = [MinDeadlineSet, InvoiceCreated, InvoicePaid])]
 pub struct Escrow {
     ownable: SubModule<Ownable>,
@@ -143,10 +143,9 @@ pub struct Escrow {
 
 #[odra::module]
 impl Escrow {
-
-   // =========================================================================
-   // Initialization
-   // =========================================================================
+    // =========================================================================
+    // Initialization
+    // =========================================================================
 
     pub fn init(&mut self, owner: Address, min_deadline: u64) {
         self.ownable.init(owner);
@@ -219,17 +218,36 @@ impl Escrow {
     // Invoice Management
     // =========================================================================
 
-    /// Allows to create a lease invoice by the Lease contract
+    /// Allows the Lease contract to create a monthly lease invoice.
+    /// @dev Lease invoices track base rent and optional equity separately so payment
+    ///            distribution can always satisfy rent before equity.
     #[odra(non_reentrant)]
-    pub fn create_lease_invoice(
-        &mut self,
-        tenant: Address,
-        landlord: Address,
-        amount_due: CurrencyAmount,
-        deadline: u64,
-    ) -> U256 {
+    pub fn create_lease_invoice(&mut self, params: CreateLeaseInvoiceParams) -> U256 {
         self.assert_lease();
-        self.create_invoice(InvoiceKind::Lease, tenant, landlord, amount_due, deadline)
+
+        let mut rent = params.rent;
+        let rent_amount = *rent.amount();
+
+        if rent_amount.is_zero() {
+            self.env().revert(Error::ZeroAmount);
+        }
+
+        let amount_due = CurrencyAmount::new(*rent.currency(), rent_amount + params.equity_amount);
+
+        self.create_invoice(Invoice {
+            kind: InvoiceKind::Lease,
+            buyer: params.tenant,
+            seller: params.landlord,
+            amount_due,
+            rent_amount,
+            equity_amount: params.equity_amount,
+            rent_paid: U256::zero(),
+            equity_paid: U256::zero(),
+            property_manager: params.property_manager,
+            property_manager_bps: params.property_manager_bps,
+            deadline: params.deadline,
+            is_paid: false,
+        })
     }
 
     /// Allows to create a security deposit invoice by the Lease contract
@@ -241,13 +259,21 @@ impl Escrow {
         deadline: u64,
     ) -> U256 {
         self.assert_lease();
-        self.create_invoice(
-            InvoiceKind::SecurityDeposit,
-            tenant,
-            self.get_lease_contract_address(),
+
+        self.create_invoice(Invoice {
+            kind: InvoiceKind::SecurityDeposit,
+            buyer: tenant,
+            seller: self.get_lease_contract_address(),
             amount_due,
+            rent_amount: U256::zero(),
+            equity_amount: U256::zero(),
+            rent_paid: U256::zero(),
+            equity_paid: U256::zero(),
+            property_manager: None,
+            property_manager_bps: 0,
             deadline,
-        )
+            is_paid: false,
+        })
     }
 
     /// Allows to pay any invoice created earlier
@@ -314,41 +340,20 @@ impl Escrow {
 }
 
 impl Escrow {
-    fn create_invoice(
-        &mut self,
-        kind: InvoiceKind,
-        buyer: Address,
-        seller: Address,
-        mut amount_due: CurrencyAmount,
-        deadline: u64,
-    ) -> U256 {
-        if buyer == seller {
+    fn create_invoice(&mut self, mut invoice: Invoice) -> U256 {
+        if invoice.buyer == invoice.seller {
             self.env().revert(Error::EqualBuyerAndSeller)
         }
 
-        if *amount_due.amount() == U256::zero() {
+        if *invoice.amount_due.amount() == U256::zero() {
             self.env().revert(Error::ZeroAmount);
         }
 
-        if deadline < self.env().get_block_time() + self.min_deadline.get_or_default() {
+        if invoice.deadline < self.env().get_block_time() + self.min_deadline.get_or_default() {
             self.env().revert(Error::InvalidDeadline);
         }
 
         let invoice_id = self.get_invoices_count();
-        let invoice = Invoice {
-            kind,
-            buyer,
-            seller,
-            amount_due,
-            rent_amount: ,
-            equity_amount: ,
-            rent_paid: U256::zero(),
-            equity_paid: U256::zero(),
-            property_manager: ,
-            property_manager_bps: ,
-            deadline,
-            is_paid: false,
-        };
 
         self.invoices.set(&invoice_id, invoice);
         self.invoices_count.set(invoice_id + 1);
