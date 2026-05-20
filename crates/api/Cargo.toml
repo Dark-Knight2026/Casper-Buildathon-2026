@@ -22,6 +22,7 @@ enabled = [
     "dep:futures-util",
     "dep:hex",
     "dep:jsonwebtoken",
+    "dep:postmark",
     "dep:rand",
     "dep:redis",
     "dep:rust_decimal",
@@ -60,6 +61,7 @@ email_address = { workspace = true, optional = true }
 futures-util = { workspace = true, optional = true }
 hex = { workspace = true, optional = true }
 jsonwebtoken = { workspace = true, optional = true }
+postmark = { workspace = true, optional = true }
 rand = { workspace = true, optional = true }
 redis = { workspace = true, optional = true }
 rust_decimal = { workspace = true, optional = true }

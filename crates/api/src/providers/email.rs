@@ -7,6 +7,13 @@
 //! depend on the trait, not on the concrete sender.
 
 use async_trait::async_trait;
+use axum::http::StatusCode;
+use postmark::{
+    Query, QueryError,
+    api::{Body, email::SendEmailRequest},
+    reqwest::{PostmarkClient, PostmarkClientError},
+};
+use secrecy::{ExposeSecret, SecretString};
 
 /// Split on retryability so the retry-queue worker can route a failure
 /// straight from `mailer.send` without re-classifying provider codes.
@@ -24,6 +31,24 @@ pub enum EmailError {
     /// Permanent: same payload will keep failing.
     #[error("permanent email transport error: {0}")]
     Permanent(String),
+}
+
+impl From<PostmarkClientError> for EmailError {
+    /// Network errors -> Transient. Bad token / bad URL -> Permanent.
+    #[inline]
+    fn from(err: PostmarkClientError) -> Self {
+        let summary = err.to_string();
+        match err {
+            PostmarkClientError::AuthError { .. }
+            | PostmarkClientError::UrlParseError { .. }
+            | PostmarkClientError::InvalidUri { .. } => {
+                Self::Permanent(format!("postmark config: {summary}"))
+            }
+            PostmarkClientError::Communication { .. } | PostmarkClientError::Http { .. } => {
+                Self::Transient(format!("postmark transport: {summary}"))
+            }
+        }
+    }
 }
 
 /// Plain transactional email message.
@@ -70,6 +95,8 @@ pub trait EmailSender: Send + Sync {
     async fn send(&self, message: EmailMessage) -> Result<(), EmailError>;
 }
 
+// -----------------------------------------------------------------------------
+
 /// No-delivery implementation that emits the email as a `tracing` event.
 ///
 /// Used in local dev and tests where wiring up an SMTP relay or a paid
@@ -98,5 +125,123 @@ impl EmailSender for LoggingEmailSender {
             "Email logged (no real delivery configured)"
         );
         Ok(())
+    }
+}
+
+// -----------------------------------------------------------------------------
+
+/// Production [`EmailSender`] backed by Postmark.
+///
+/// Pre-builds [`PostmarkClient`] once so the underlying `reqwest::Client`
+/// pools connections across `send` calls. Maps provider failures onto
+/// [`EmailError::Transient`] / [`EmailError::Permanent`] so the
+/// retry-queue worker can route without re-classifying provider codes.
+#[derive(Debug, Clone)]
+pub struct PostmarkSender {
+    client: PostmarkClient,
+    from: String,
+}
+
+impl PostmarkSender {
+    /// Binds the sender to a Postmark Server Token and a verified sender.
+    ///
+    /// `from` MUST match a confirmed Postmark sender signature -
+    /// otherwise every send produces a `Permanent` failure.
+    #[inline]
+    #[must_use]
+    pub fn new(server_token: &SecretString, from: &str) -> Self {
+        let client = PostmarkClient::builder()
+            .server_token(server_token.expose_secret())
+            .build();
+        Self {
+            client,
+            from: from.to_owned(),
+        }
+    }
+}
+
+#[async_trait]
+impl EmailSender for PostmarkSender {
+    #[inline]
+    async fn send(&self, message: EmailMessage) -> Result<(), EmailError> {
+        let request = SendEmailRequest::builder()
+            .from(self.from.clone())
+            .to(message.to)
+            .subject(message.subject)
+            .body(Body::text(message.body))
+            .build();
+
+        match request.execute(&self.client).await {
+            Ok(response) => response.error_for_status().map(|_| ()).map_err(|failed| {
+                classify_postmark_failure(None, Some(failed.error_code), &failed.message)
+            }),
+            Err(QueryError::Api {
+                status,
+                error_code,
+                message,
+                ..
+            }) => Err(classify_postmark_failure(
+                Some(status),
+                error_code,
+                message.as_deref().unwrap_or("(no message)"),
+            )),
+            Err(QueryError::Client { source }) => Err(source.into()),
+            Err(QueryError::Json { source }) => Err(EmailError::Transient(format!(
+                "postmark response parse: {source}"
+            ))),
+            Err(QueryError::Body { source }) => Err(EmailError::Transient(format!(
+                "postmark request build: {source}"
+            ))),
+        }
+    }
+}
+
+/// Postmark `ErrorCode` values that mean "do not retry".
+///
+/// `postmark` crate exposes only `ApiErrorCode = i64`. See
+/// <https://postmarkapp.com/developer/api/overview#error-codes>.
+const PM_BAD_SERVER_TOKEN: i64 = 10;
+const PM_INVALID_FROM_ADDRESS: i64 = 300;
+const PM_SENDER_SIGNATURE_NOT_FOUND: i64 = 400;
+const PM_SENDER_SIGNATURE_NOT_CONFIRMED: i64 = 401;
+const PM_SERVER_NOT_ALLOWED: i64 = 405;
+const PM_INACTIVE_RECIPIENT: i64 = 406;
+const PM_ACCOUNT_PENDING_APPROVAL: i64 = 412;
+
+/// Routes a Postmark API failure onto a retry classification.
+///
+/// HTTP 429 / 5xx -> Transient. Known `PM_*` -> Permanent. Unknown ->
+/// Transient (a spurious retry is cheaper than a silently dropped mail).
+fn classify_postmark_failure(
+    http_status: Option<StatusCode>,
+    error_code: Option<i64>,
+    message: &str,
+) -> EmailError {
+    let code = error_code.unwrap_or_default();
+    let summary = match http_status {
+        Some(status) => format!("postmark http={} code={code}: {message}", status.as_u16()),
+        None => format!("postmark code={code}: {message}"),
+    };
+
+    if http_status.is_some_and(|s| s == StatusCode::TOO_MANY_REQUESTS || s.is_server_error()) {
+        return EmailError::Transient(summary);
+    }
+    match code {
+        PM_BAD_SERVER_TOKEN
+        | PM_INVALID_FROM_ADDRESS
+        | PM_SENDER_SIGNATURE_NOT_FOUND
+        | PM_SENDER_SIGNATURE_NOT_CONFIRMED
+        | PM_SERVER_NOT_ALLOWED
+        | PM_INACTIVE_RECIPIENT
+        | PM_ACCOUNT_PENDING_APPROVAL => EmailError::Permanent(summary),
+        _ => {
+            tracing::warn!(
+                http_status = ?http_status,
+                postmark_error_code = code,
+                postmark_message = message,
+                "unexpected postmark failure - defaulting to Transient",
+            );
+            EmailError::Transient(summary)
+        }
     }
 }

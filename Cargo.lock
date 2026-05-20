@@ -66,6 +66,7 @@ dependencies = [
  "futures-util",
  "hex",
  "jsonwebtoken",
+ "postmark",
  "rand 0.10.0",
  "redis",
  "rust-s3",
@@ -2869,6 +2870,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c33a9471896f1c69cecef8d20cbe2f7accd12527ce60845ff44c153bb2a21b49"
 
 [[package]]
+name = "postmark"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dad20afb971cd9f0df8dbe53ddd8827eecef6530743991d703c4c920a8441afb"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "http",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "time",
+ "typed-builder",
+ "url",
+]
+
+[[package]]
 name = "potential_utf"
 version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4928,6 +4947,26 @@ dependencies = [
  "rustls-pki-types",
  "sha1",
  "thiserror 2.0.18",
+]
+
+[[package]]
+name = "typed-builder"
+version = "0.21.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fef81aec2ca29576f9f6ae8755108640d0a86dd3161b2e8bca6cfa554e98f77d"
+dependencies = [
+ "typed-builder-macro",
+]
+
+[[package]]
+name = "typed-builder-macro"
+version = "0.21.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1ecb9ecf7799210407c14a8cfdfe0173365780968dc57973ed082211958e0b18"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.117",
 ]
 
 [[package]]
