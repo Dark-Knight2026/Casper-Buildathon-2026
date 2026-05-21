@@ -8,12 +8,12 @@ use odra_modules::{access::Ownable, cep18_token::Cep18ContractRef};
 
 use crate::{
     common::CurrencyAmount,
+    constants::LEASEFI_TRANSACTION_FEE_BPS,
     escrow::{
         errors::Error,
-        events::{InvoiceCreated, InvoicePaid, MinDeadlineSet},
+        events::{InvoiceCreated, InvoicePaid, InvoicePaymentApplied, MinDeadlineSet},
         types::{CreateLeaseInvoiceParams, Invoice, InvoiceKind},
     },
-    lease::types::CreateLeaseAgreementParams,
 };
 
 // =============================================================================
@@ -26,6 +26,7 @@ pub mod types {
     use crate::common::CurrencyAmount;
 
     #[odra::odra_type]
+    #[derive(Copy)]
     pub enum InvoiceKind {
         SecurityDeposit,
         Lease,
@@ -102,6 +103,16 @@ pub mod events {
         pub invoice_id: U256,
         pub paid_at: u64,
     }
+
+    #[odra::event]
+    pub struct InvoicePaymentApplied {
+        pub invoice_id: U256,
+        pub payer: Address,
+        pub amount: U256,
+        pub protocol_fee: U256,
+        pub rent_paid: U256,
+        pub equity_paid: U256,
+    }
 }
 
 // =============================================================================
@@ -124,6 +135,8 @@ pub mod errors {
         InvoiceIsExpired = 308,
         InvalidAmountAttached = 309,
         EqualBuyerAndSeller = 310,
+        InvalidPaymentAmount = 311,
+        PaymentExceedsAmountDue = 312,
     }
 }
 
@@ -131,7 +144,9 @@ pub mod errors {
 // Contract
 // =============================================================================
 
-#[odra::module(errors = Error, events = [MinDeadlineSet, InvoiceCreated, InvoicePaid])]
+#[odra::module(errors = Error, events = [
+  MinDeadlineSet, InvoiceCreated, InvoicePaid, InvoicePaymentApplied
+])]
 pub struct Escrow {
     ownable: SubModule<Ownable>,
     lease: Var<Address>,
@@ -251,6 +266,7 @@ impl Escrow {
     }
 
     /// Allows to create a security deposit invoice by the Lease contract
+    // TODO: Per client call, we need to actually store the security deposit in the escrow contract. The currency for the security deposit should ONLY be USDC.
     #[odra(non_reentrant)]
     pub fn create_security_deposit_invoice(
         &mut self,
@@ -277,53 +293,27 @@ impl Escrow {
     }
 
     /// Allows to pay any invoice created earlier
+    // TODO: Does the security deposit get paid with the pay_invoice function?
     #[odra(payable)]
     #[odra(non_reentrant)]
-    pub fn pay_invoice(&mut self, invoice_id: U256) {
+    pub fn pay_invoice(&mut self, invoice_id: U256, amount: U256) {
         let mut invoice = self
             .invoices
             .get(&invoice_id)
             .unwrap_or_revert_with(&self.env(), Error::InvalidInvoiceId);
 
-        if self.env().caller() != invoice.buyer {
-            self.env().revert(Error::CallerIsNotBuyer);
-        }
+        self.assert_invoice_payable(&invoice, amount);
 
-        if invoice.is_paid {
-            self.env().revert(Error::InvoiceIsAlreadyPaid);
-        }
-
-        if self.env().get_block_time() > invoice.deadline {
-            self.env().revert(Error::InvoiceIsExpired);
-        }
-
-        let attached_value = self.env().attached_value();
-        let recipient = invoice.seller;
-
-        // TODO charge 2% fee for every payment, and accumulate unless TailorCoin (BIG) token pool is deployed
-
-        if invoice.amount_due.currency().is_none() {
-            if attached_value != invoice.amount_due.amount().to_u512() {
-                self.env().revert(Error::InvalidAmountAttached);
+        match invoice.kind {
+            InvoiceKind::SecurityDeposit => {
+                self.pay_security_deposit_invoice(&mut invoice, amount);
             }
-
-            self.env().transfer_tokens(&recipient, &attached_value);
-        } else {
-            if attached_value > U512::zero() {
-                self.env().revert(Error::InvalidAmountAttached);
+            InvoiceKind::Lease => {
+                self.pay_lease_invoice(invoice_id, &mut invoice, amount);
             }
-
-            Cep18ContractRef::new(self.env(), invoice.amount_due.currency().unwrap())
-                .transfer_from(&invoice.buyer, &recipient, invoice.amount_due.amount());
         }
 
-        invoice.is_paid = true;
         self.invoices.set(&invoice_id, invoice);
-
-        self.env().emit_event(InvoicePaid {
-            invoice_id,
-            paid_at: self.env().get_block_time(),
-        });
     }
 
     // =========================================================================
@@ -380,5 +370,63 @@ impl Escrow {
         if self.env().caller() != self.get_lease_contract_address() {
             self.env().revert(Error::CallerNotLeaseContract);
         }
+    }
+
+    #[inline]
+    fn assert_invoice_payable(&self, invoice: &Invoice, amount: U256) {
+        if self.env().caller() != invoice.buyer {
+            self.env().revert(Error::CallerIsNotBuyer);
+        }
+
+        if invoice.is_paid {
+            self.env().revert(Error::InvoiceIsAlreadyPaid);
+        }
+
+        if self.env().get_block_time() > invoice.deadline {
+            self.env().revert(Error::InvoiceIsExpired);
+        }
+
+        if amount.is_zero() {
+            self.env().revert(Error::ZeroAmount);
+        }
+
+        self.assert_valid_payment_value(invoice, amount);
+    }
+
+    fn pay_security_deposit_invoice(&mut self, invoice: &mut Invoice, amount: U256) {
+        if amount != *invoice.amount_due.amount() {
+            self.env().revert(Error::InvalidPaymentAmount);
+        }
+
+        self.transfer_payment(
+            *invoice.amount_due.currency(),
+            invoice.buyer,
+            invoice.seller,
+            amount,
+        );
+
+        invoice.is_paid = true;
+    }
+
+    fn pay_lease_invoice(&self, invoice_id: U256, invoice: &mut Invoice, amount: U256) {
+        let protocol_fee = self.calculate_bps_amount(amount, LEASEFI_TRANSACTION_FEE_BPS);
+        let distributable_amount = amount - protocol_fee;
+
+        let rent_allocation = Self::min(distributable_amount, self.remaining_rent(invoice));
+        let remaining_after_rent = distributable_amount - rent_allocation;
+        let equity_allocation = Self::min(remaining_after_rent, self.remaining_equity(invoice));
+
+        if remaining_after_rent > equity_allocation {
+            self.env().revert(Error::PaymentExceedsAmountDue);
+        }
+
+        let currency = *&invoice.amount_due.currency();
+
+        self.transfer_payment(
+            currency,
+            invoice.buyer,
+            self.get_treasury_contract_address(),
+            protocol_fee,
+        );
     }
 }
