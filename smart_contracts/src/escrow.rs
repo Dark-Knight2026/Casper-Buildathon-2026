@@ -8,7 +8,7 @@ use odra_modules::{access::Ownable, cep18_token::Cep18ContractRef};
 
 use crate::{
     common::CurrencyAmount,
-    constants::LEASEFI_TRANSACTION_FEE_BPS,
+    constants::{LEASEFI_TRANSACTION_FEE_BPS, ONE_HUNDRED_PERCENT_BPS},
     escrow::{
         errors::Error,
         events::{InvoiceCreated, InvoicePaid, InvoicePaymentApplied, MinDeadlineSet},
@@ -505,6 +505,26 @@ impl Escrow {
                 Cep18ContractRef::new(self.env(), token)
                     .transfer_from(&sender, &recipient, &amount);
             }
+        }
+    }
+
+    fn remaining_rent(&self, invoice: &Invoice) -> U256 {
+        invoice.rent_amount - invoice.rent_paid
+    }
+
+    fn remaining_equity(&self, invoice: &Invoice) -> U256 {
+        invoice.equity_amount - invoice.equity_paid
+    }
+
+    fn calculate_bps_amount(&self, amount: U256, bps: u32) -> U256 {
+        amount * U256::from(bps) / U256::from(ONE_HUNDRED_PERCENT_BPS)
+    }
+
+    fn min(left: U256, right: U256) -> U256 {
+        if left < right {
+            left
+        } else {
+            right
         }
     }
 }
