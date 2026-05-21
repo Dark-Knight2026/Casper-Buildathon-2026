@@ -428,5 +428,83 @@ impl Escrow {
             self.get_treasury_contract_address(),
             protocol_fee,
         );
+
+        invoice.rent_paid += rent_allocation;
+        invoice.equity_paid += equity_allocation;
+        invoice.is_paid =
+            self.remaining_rent(invoice).is_zero() && self.remaining_equity(invoice).is_zero();
+
+        self.env().emit_event(InvoicePaymentApplied {
+            invoice_id,
+            payer: invoice.buyer,
+            amount,
+            protocol_fee,
+            rent_paid: invoice.rent_paid,
+            equity_paid: invoice.equity_paid,
+        });
+
+        if invoice.is_paid {
+            self.env().emit_event(InvoicePaid {
+                invoice_id,
+                paid_at: self.env().get_block_time(),
+            });
+        }
+    }
+
+    fn distribute_rent(&mut self, invoice: &Invoice, currency: Option<Address>, rent_amount: U256) {
+        if rent_amount.is_zero() {
+            return;
+        }
+
+        let property_manager_amount =
+            self.calculate_bps_amount(rent_amount, invoice.property_manager_bps);
+        let landlord_amount = rent_amount - property_manager_amount;
+
+        if let Some(property_manager) = invoice.property_manager {
+            self.transfer_payment(
+                currency,
+                invoice.buyer,
+                property_manager,
+                property_manager_amount,
+            );
+        }
+
+        self.transfer_payment(currency, invoice.buyer, invoice.seller, landlord_amount);
+    }
+
+    fn assert_valid_payment_value(&self, invoice: &Invoice, amount: U256) {
+        let mut amount_due = invoice.amount_due;
+        match amount_due.currency() {
+            None => {
+                if self.env().attached_value() != amount.to_u512() {
+                    self.env().revert(Error::InvalidAmountAttached);
+                }
+            }
+            Some(_) => {
+                if self.env().attached_value() != U512::zero() {
+                    self.env().revert(Error::InvalidAmountAttached);
+                }
+            }
+        }
+    }
+
+    fn transfer_payment(
+        &mut self,
+        currency: Option<Address>,
+        sender: Address,
+        recipient: Address,
+        amount: U256,
+    ) {
+        if amount.is_zero() {
+            return;
+        }
+
+        match currency {
+            None => self.env().transfer_tokens(&recipient, &amount.to_u512()),
+            Some(token) => {
+                Cep18ContractRef::new(self.env(), token)
+                    .transfer_from(&sender, &recipient, &amount);
+            }
+        }
     }
 }
