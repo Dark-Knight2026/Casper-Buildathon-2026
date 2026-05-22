@@ -15,7 +15,6 @@ pub mod lease;
 pub mod nft;
 pub mod property_fraction_token;
 pub mod property_registry;
-pub mod revenue_distributor;
 pub mod roles;
 pub mod staking;
 pub mod treasury;
