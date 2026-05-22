@@ -11,8 +11,11 @@ use crate::{
     constants::{LEASEFI_TRANSACTION_FEE_BPS, ONE_HUNDRED_PERCENT_BPS},
     escrow::{
         errors::Error,
-        events::{InvoiceCreated, InvoicePaid, InvoicePaymentApplied, MinDeadlineSet},
-        types::{CreateLeaseInvoiceParams, Invoice, InvoiceKind},
+        events::{
+            InvoiceCreated, InvoicePaid, InvoicePaymentApplied, MinDeadlineSet,
+            SecurityDepositHeld, SecurityDepositReleased, SecurityDepositTokenSet,
+        },
+        types::{CreateLeaseInvoiceParams, Invoice, InvoiceKind, SecurityDepositRecord},
     },
 };
 
@@ -128,6 +131,13 @@ pub mod events {
     }
 
     #[odra::event]
+    pub struct SecurityDepositHeld {
+        pub invoice_id: U256,
+        pub tenant: Address,
+        pub amount: U256,
+    }
+
+    #[odra::event]
     pub struct SecurityDepositReleased {
         pub invoice_id: U256,
         pub landlord: Address,
@@ -173,14 +183,30 @@ pub mod errors {
 // =============================================================================
 
 #[odra::module(errors = Error, events = [
-  MinDeadlineSet, InvoiceCreated, InvoicePaid, InvoicePaymentApplied
+    MinDeadlineSet,
+    SecurityDepositTokenSet,
+    InvoiceCreated,
+    InvoicePaymentApplied,
+    InvoicePaid,
+    SecurityDepositHeld,
+    SecurityDepositReleased,
 ])]
 pub struct Escrow {
+    /// Ownership control for contract configuration.
     ownable: SubModule<Ownable>,
+    /// Lease contract allowed to create invoices and release security deposits.
     lease: Var<Address>,
+    /// Treasury wallet/contract receiving LeaseFi transaction fees.
     treasury: Var<Address>,
+    /// USDC CEP-18 token used for all security deposits.
+    security_deposit_token: Var<Address>,
+    /// Invoices keyed by invoice ID.
     invoices: Mapping<U256, Invoice>,
+    /// Security deposit records keyed by security deposit invoice ID.
+    security_deposits: Mapping<U256, SecurityDepositRecord>,
+    /// Number of invoices created.
     invoices_count: Var<U256>,
+    /// Minimum delay required between invoice creation and deadline.
     min_deadline: Var<u64>,
 }
 
@@ -194,6 +220,10 @@ impl Escrow {
         self.ownable.init(owner);
         self.set_min_deadline(min_deadline);
     }
+
+    // =========================================================================
+    // Owner-only configuration
+    // =========================================================================
 
     /// Sets the minimum possible invoice deadline by the owner
     pub fn set_min_deadline(&mut self, new_min_deadline: u64) {
@@ -209,10 +239,6 @@ impl Escrow {
         });
     }
 
-    // =========================================================================
-    // Owner-only configuration
-    // =========================================================================
-
     /// Sets the Lease contract address by the owner
     pub fn set_lease(&mut self, lease: Address) {
         self.assert_owner();
@@ -223,6 +249,13 @@ impl Escrow {
     pub fn set_treasury(&mut self, treasury: Address) {
         self.assert_owner();
         self.treasury.set(treasury);
+    }
+
+    pub fn set_security_deposit_token(&mut self, token: Address) {
+        self.assert_owner();
+        self.security_deposit_token.set(token);
+
+        self.env().emit_event(SecurityDepositTokenSet { token });
     }
 
     // =========================================================================
@@ -238,6 +271,12 @@ impl Escrow {
     pub fn get_treasury_contract_address(&self) -> Address {
         self.treasury
             .get_or_revert_with(Error::TreasuryContractIsNotSet)
+    }
+
+    /// Returns the USDC token used for security deposits
+    pub fn get_security_deposit_token_address(&self) -> Address {
+        self.security_deposit_token
+            .get_or_revert_with(Error::SecurityDepositTokenIsNotSet)
     }
 
     /// Returns invoice by its ID
