@@ -300,7 +300,7 @@ impl Escrow {
     // Invoice Management
     // =========================================================================
 
-    /// Allows the Lease contract to create a monthly lease invoice.
+    /// Allows the Lease contract to create a rent invoice.
     /// @dev Lease invoices track base rent and optional equity separately so payment
     ///            distribution can always satisfy rent before equity.
     #[odra(non_reentrant)]
@@ -314,17 +314,13 @@ impl Escrow {
             self.env().revert(Error::ZeroAmount);
         }
 
-        let amount_due = CurrencyAmount::new(*rent.currency(), rent_amount + params.equity_amount);
-
         self.create_invoice(Invoice {
             kind: InvoiceKind::Lease,
             buyer: params.tenant,
             seller: params.landlord,
-            amount_due,
+            amount_due: CurrencyAmount::new(*rent.currency(), rent_amount),
             rent_amount,
-            equity_amount: params.equity_amount,
             rent_paid: U256::zero(),
-            equity_paid: U256::zero(),
             property_manager: params.property_manager,
             property_manager_bps: params.property_manager_bps,
             deadline: params.deadline,
@@ -332,16 +328,20 @@ impl Escrow {
         })
     }
 
-    /// Allows to create a security deposit invoice by the Lease contract
-    // TODO: Per client call, we need to actually store the security deposit in the escrow contract. The currency for the security deposit should ONLY be USDC.
+    /// Allows the Lease contract to create a USDC security deposit invoice.
+    /// @dev The deposit is paid into this Escrow contract and held until Lease releases it.
     #[odra(non_reentrant)]
     pub fn create_security_deposit_invoice(
         &mut self,
         tenant: Address,
-        amount_due: CurrencyAmount,
+        mut amount_due: CurrencyAmount,
         deadline: u64,
     ) -> U256 {
         self.assert_lease();
+
+        if *amount_due.currency() != Some(self.get_security_deposit_token_address()) {
+            self.env().revert(Error::InvalidSecurityDepositCurrency);
+        }
 
         self.create_invoice(Invoice {
             kind: InvoiceKind::SecurityDeposit,
@@ -349,9 +349,7 @@ impl Escrow {
             seller: self.get_lease_contract_address(),
             amount_due,
             rent_amount: U256::zero(),
-            equity_amount: U256::zero(),
             rent_paid: U256::zero(),
-            equity_paid: U256::zero(),
             property_manager: None,
             property_manager_bps: 0,
             deadline,
@@ -576,10 +574,6 @@ impl Escrow {
 
     fn remaining_rent(&self, invoice: &Invoice) -> U256 {
         invoice.rent_amount - invoice.rent_paid
-    }
-
-    fn remaining_equity(&self, invoice: &Invoice) -> U256 {
-        invoice.equity_amount - invoice.equity_paid
     }
 
     fn calculate_bps_amount(&self, amount: U256, bps: u32) -> U256 {
