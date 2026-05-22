@@ -18,7 +18,7 @@ export interface ICOWalletState {
 
 export interface UseICOWalletReturn extends ICOWalletState {
   connect: () => void;
-  disconnect: () => void;
+  disconnect: () => Promise<void>;
   syncActiveAccount: () => Promise<void>;
   clickRef: ReturnType<typeof useClickRef>;
 }
@@ -104,22 +104,38 @@ export function useICOWallet(): UseICOWalletReturn {
       });
     };
 
-    // Handle SDK ready event (important for mobile redirect flow)
-    const handleReady = () => {
-      const activeAccount = clickRef.getActiveAccount();
-      if (activeAccount) {
-        const publicKey = activeAccount.public_key;
-        setState({
-          isConnected: true,
-          account: {
-            publicKey,
-            accountHash: deriveAccountHash(publicKey),
-            provider: activeAccount.provider,
-          },
-          isConnecting: false,
-          error: null,
-        });
+    // Handle SDK ready event (important for mobile redirect flow).
+    // Use the async variant so the SDK has a chance to verify the cached
+    // account against accounts.cspr.click before we trust it. The sync
+    // `getActiveAccount()` returns from localStorage only and will report
+    // a "connected" account even after the iframe session has expired —
+    // that's the state that lands the user on SDK's "Session expired"
+    // modal at sign-in. If the async check returns null, the localStorage
+    // entries are stale; we strip them so the SDK doesn't keep re-trying
+    // the dead session on subsequent mounts.
+    const handleReady = async () => {
+      const activeAccount = await clickRef.getActiveAccountAsync();
+      if (!activeAccount) {
+        try {
+          Object.keys(localStorage).forEach(key => {
+            if (key.startsWith('csprclick:')) localStorage.removeItem(key);
+          });
+        } catch {
+          // localStorage may be unavailable (private mode, embedded webview).
+        }
+        return;
       }
+      const publicKey = activeAccount.public_key;
+      setState({
+        isConnected: true,
+        account: {
+          publicKey,
+          accountHash: deriveAccountHash(publicKey),
+          provider: activeAccount.provider,
+        },
+        isConnecting: false,
+        error: null,
+      });
     };
 
     // Handle modal/popup closed without completing sign-in
@@ -147,6 +163,21 @@ export function useICOWallet(): UseICOWalletReturn {
       });
     };
 
+    // Per official csprclick-react example: when the SDK reports an
+    // unsolicited account change (e.g. user switched wallets externally),
+    // restore the session with the new account via signInWithAccount.
+    // Without this, the SDK and our React state can drift out of sync,
+    // leading to /api/authenticate/me 401s on subsequent signMessage calls.
+    // Source: https://github.com/make-software/csprclick-examples/blob/master/csprclick-react/src/App.tsx
+    const handleUnsolicitedAccountChange = async (evt: { account: { provider: string; public_key: string } }) => {
+      logger.debug('[useICOWallet] unsolicited account change', { evt });
+      try {
+        await clickRef.signInWithAccount(evt.account as never);
+      } catch (e) {
+        logger.error('[useICOWallet] signInWithAccount after unsolicited change failed', { error: e });
+      }
+    };
+
     clickRef.on('csprclick:signed_in', handleSignedIn);
     clickRef.on('csprclick:switched_account', handleSwitchedAccount);
     clickRef.on('csprclick:signed_out', handleSignedOut);
@@ -155,10 +186,26 @@ export function useICOWallet(): UseICOWalletReturn {
     clickRef.on('csprclick:cancelled', handleCancelled);
     clickRef.on('csprclick-w3a-google:connected', handleSocialConnected);
     clickRef.on('csprclick-w3a-apple:connected', handleSocialConnected);
+    clickRef.on('csprclick:unsolicited_account_change', handleUnsolicitedAccountChange);
 
-    // Check if already connected (sync check)
-    const activeAccount = clickRef.getActiveAccount();
-    if (activeAccount) {
+    // Check if already connected. If getActiveAccountAsync returns null we
+    // clear stale `csprclick:*` localStorage entries so the SDK doesn't keep
+    // re-trying a dead session on subsequent mounts.
+    // `cancelled` guards against the unmount-during-await race.
+    let cancelled = false;
+    void (async () => {
+      const activeAccount = await clickRef.getActiveAccountAsync();
+      if (cancelled) return;
+      if (!activeAccount) {
+        try {
+          Object.keys(localStorage).forEach(key => {
+            if (key.startsWith('csprclick:')) localStorage.removeItem(key);
+          });
+        } catch {
+          // localStorage may be unavailable (private mode, embedded webview).
+        }
+        return;
+      }
       const publicKey = activeAccount.public_key;
       setState({
         isConnected: true,
@@ -170,10 +217,11 @@ export function useICOWallet(): UseICOWalletReturn {
         isConnecting: false,
         error: null,
       });
-    }
+    })();
 
     // Cleanup: remove event listeners to prevent memory leaks
     return () => {
+      cancelled = true;
       clickRef.off('csprclick:signed_in', handleSignedIn);
       clickRef.off('csprclick:switched_account', handleSwitchedAccount);
       clickRef.off('csprclick:signed_out', handleSignedOut);
@@ -182,6 +230,7 @@ export function useICOWallet(): UseICOWalletReturn {
       clickRef.off('csprclick:cancelled', handleCancelled);
       clickRef.off('csprclick-w3a-google:connected', handleSocialConnected);
       clickRef.off('csprclick-w3a-apple:connected', handleSocialConnected);
+      clickRef.off('csprclick:unsolicited_account_change', handleUnsolicitedAccountChange);
     };
   }, [clickRef]);
 
@@ -196,10 +245,23 @@ export function useICOWallet(): UseICOWalletReturn {
     }
   }, [clickRef]);
 
-  const disconnect = useCallback(() => {
+  const disconnect = useCallback(async () => {
     if (!clickRef) return;
     try {
+      // Resolve the currently connected provider BEFORE signOut clears state.
+      // disconnect() requires the provider key as its first argument.
+      const active = await clickRef.getActiveAccountAsync();
+      // signOut() is sync (returns void): closes the app-side SDK session.
       clickRef.signOut();
+      // disconnect(provider) is the hard release of the wallet ↔
+      // accounts.cspr.click iframe link. Without this the iframe cookies
+      // survive and the next signIn() lands the user on SDK's
+      // "Session expired" modal instead of a signing prompt. Both calls are
+      // required: signOut alone is a soft logout that leaves the iframe
+      // bond intact.
+      if (active?.provider) {
+        await clickRef.disconnect(active.provider);
+      }
     } catch (error) {
       logger.error('Failed to disconnect:', error);
     }

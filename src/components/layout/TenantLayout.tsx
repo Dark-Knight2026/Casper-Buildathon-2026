@@ -80,14 +80,14 @@ export default function TenantLayout() {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   // Sign out fully — both our backend session AND the CSPR.click wallet
-  // session. We use a hard `location.assign` instead of `navigate` because
-  // `clickRef.signOut()` is asynchronous: a soft React-Router navigation
-  // would mount the next page while the SDK still has the previous account
-  // cached, and useWalletConnect's auto-login effect would immediately
-  // trigger a fresh signMessage popup. Reloading the page nukes the in-memory
-  // SDK state so the next page (landing) starts from a clean slate.
-  const handleSignOut = () => {
-    disconnect();
+  // session. We `await` disconnect() so the SDK's hard `disconnect(provider)`
+  // completes and releases the iframe link to accounts.cspr.click; otherwise
+  // the iframe cookies survive the reload and the next sign-in lands on
+  // SDK's "Session expired" modal instead of a signing prompt. We still use
+  // a hard `location.assign` after — that nukes any in-memory SDK state so
+  // the landing page starts from a clean slate.
+  const handleSignOut = async () => {
+    await disconnect();
     walletSignOut();
     window.location.assign('/');
   };

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 
 import { Home, Loader2, AlertCircle } from 'lucide-react';
@@ -34,8 +34,26 @@ export default function Register() {
     isConnected, account, isAuthenticated, isSigningIn,
     connectingProvider, setConnectingProvider,
     error, isLoading,
-    handleConnectProvider, login, disconnect,
+    handleConnectProvider, login, disconnect, clickRef,
   } = useWalletConnect();
+
+  // Force a fresh SDK state on every visit to /auth/register — see Login.tsx
+  // for the full rationale. Calling signOut() clears the SDK's cached
+  // active-account, and wiping `csprclick:*` localStorage prevents the SDK
+  // from re-reading stale entries on the next init. This puts the SDK into
+  // an incognito-equivalent state so the first provider click triggers a
+  // genuine fresh OAuth instead of a poisoned signInWithAccount restore.
+  useEffect(() => {
+    if (!clickRef) return;
+    clickRef.signOut();
+    try {
+      Object.keys(localStorage).forEach(key => {
+        if (key.startsWith('csprclick:')) localStorage.removeItem(key);
+      });
+    } catch {
+      // localStorage unavailable.
+    }
+  }, [clickRef]);
 
   // See Login.tsx for rationale — the inline "Use a different account"
   // button is gated on `isConnected`, but a stuck CSPR.click session
@@ -43,8 +61,8 @@ export default function Register() {
   // footer link is the always-visible recovery path. Stripping
   // `csprclick:`-prefixed keys is essential: leaving `csprclick:account`
   // on disk loops the user back into the same "Session expired" modal.
-  const handleResetConnection = () => {
-    disconnect();
+  const handleResetConnection = async () => {
+    await disconnect();
     try {
       localStorage.removeItem('leasefi_session');
       Object.keys(localStorage).forEach(key => {
@@ -116,12 +134,13 @@ export default function Register() {
               </Button>
               <button
                 type="button"
-                onClick={() => {
-                  // signOut() clears SDK state but the CSPR.click iframe
-                  // (accounts.cspr.click) holds its own cookies that survive
-                  // — without a hard reload the next connect silently re-uses
-                  // the cached account regardless of selectAccount:true.
-                  disconnect();
+                onClick={async () => {
+                  // `await` so the SDK's hard disconnect(provider) finishes
+                  // releasing the iframe link before we reload — otherwise
+                  // the accounts.cspr.click cookies survive and the next
+                  // connect silently re-uses the cached account regardless
+                  // of selectAccount:true.
+                  await disconnect();
                   window.location.reload();
                 }}
                 disabled={isSigningIn || isAuthenticated}
