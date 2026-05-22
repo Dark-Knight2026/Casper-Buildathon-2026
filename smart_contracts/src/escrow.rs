@@ -42,24 +42,18 @@ pub mod types {
         /// @dev For lease invoices, this is the landlord. For security deposits, this is the lease contract.
         pub seller: Address,
         /// Total amount due for this invoice.
-        /// @dev For lease invoices, this equals base rent plus equity amount.
+        /// @dev Lease invoices are rent-only. Security deposits must use the configured USDC token.
         pub amount_due: CurrencyAmount,
         /// Required base rent amount for lease invoices.
         /// @dev Zero for security deposit invoices.
         pub rent_amount: U256,
-        /// Required lease-to-own amount for lease invoices.
-        /// @dev Zero for security deposit invoices.
-        pub equity_amount: U256,
         /// Base rent amount already paid.
-        /// @dev This will be used by partial payment logic.
+        /// @dev Used for partial lease payments.
         pub rent_paid: U256,
-        /// Equity amount already paid.
-        /// @dev This will be used by partial payment logic.
-        pub equity_paid: U256,
         /// Optional property manager that receives a percentage of base rent.
         pub property_manager: Option<Address>,
         /// Property manager rent share in basis points.
-        // TODO: I need to figure out exactly why I can't use u16 here but we can use u16 for constants.
+        /// @dev 10_000 = 100%.
         pub property_manager_bps: u32,
         /// Timestamp after which the invoice can no longer be paid.
         pub deadline: u64,
@@ -77,6 +71,21 @@ pub mod types {
         pub property_manager_bps: u32,
         pub deadline: u64,
     }
+
+    #[odra::odra_type]
+    #[derive(Default)]
+    pub struct SecurityDepositRecord {
+        /// Amount of USDC held by Escrow for this deposit.
+        pub amount: U256,
+        /// Whether the tenant has deposited the funds into Escrow.
+        pub paid: bool,
+        /// Whether the deposit has already been released.
+        pub released: bool,
+        /// Amount released to the landlord at finalization.
+        pub landlord_charge: U256,
+        /// Amount refunded to the tenant at finalization.
+        pub tenant_refund: U256,
+    }
 }
 
 // =============================================================================
@@ -93,15 +102,14 @@ pub mod events {
     }
 
     #[odra::event]
-    pub struct InvoiceCreated {
-        pub invoice_id: U256,
-        pub created_at: u64,
+    pub struct SecurityDepositTokenSet {
+        pub token: Address,
     }
 
     #[odra::event]
-    pub struct InvoicePaid {
+    pub struct InvoiceCreated {
         pub invoice_id: U256,
-        pub paid_at: u64,
+        pub created_at: u64,
     }
 
     #[odra::event]
@@ -111,7 +119,21 @@ pub mod events {
         pub amount: U256,
         pub protocol_fee: U256,
         pub rent_paid: U256,
-        pub equity_paid: U256,
+    }
+
+    #[odra::event]
+    pub struct InvoicePaid {
+        pub invoice_id: U256,
+        pub paid_at: u64,
+    }
+
+    #[odra::event]
+    pub struct SecurityDepositReleased {
+        pub invoice_id: U256,
+        pub landlord: Address,
+        pub tenant: Address,
+        pub landlord_charge: U256,
+        pub tenant_refund: U256,
     }
 }
 
@@ -137,6 +159,12 @@ pub mod errors {
         EqualBuyerAndSeller = 310,
         InvalidPaymentAmount = 311,
         PaymentExceedsAmountDue = 312,
+        InvalidInvoiceKind = 313,
+        SecurityDepositTokenIsNotSet = 314,
+        InvalidSecurityDepositCurrency = 315,
+        SecurityDepositNotPaid = 316,
+        SecurityDepositAlreadyReleased = 317,
+        SecurityDepositChargeTooHigh = 318,
     }
 }
 
@@ -293,7 +321,6 @@ impl Escrow {
     }
 
     /// Allows to pay any invoice created earlier
-    // TODO: Does the security deposit get paid with the pay_invoice function?
     #[odra(payable)]
     #[odra(non_reentrant)]
     pub fn pay_invoice(&mut self, invoice_id: U256, amount: U256) {
