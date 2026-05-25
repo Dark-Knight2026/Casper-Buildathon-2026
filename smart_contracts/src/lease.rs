@@ -316,10 +316,6 @@ impl Lease {
 
         // Mark the tenant as eligible for property equity
         if let Some(equity_option) = &params.equity_option {
-            if *self.property_registry.address() == Address::zero() {
-                self.env().revert(Error::PropertyRegistryNotSet);
-            }
-
             let property_id = equity_option.property_id;
 
             let property = self.property_registry.get_property(property_id);
