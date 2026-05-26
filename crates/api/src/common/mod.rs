@@ -38,7 +38,7 @@ pub use redis::RedisStore;
 pub fn validate_account(account: &str) -> ApiResult<String> {
     let account = account.to_ascii_lowercase();
     if account.len() != 64 || !account.chars().all(|c| c.is_ascii_hexdigit()) {
-        return Err(errors::ApiError::BadRequest(
+        return Err(ApiError::BadRequest(
             "Address must be 64 hex characters (account hash without prefix)".to_owned(),
         ));
     }

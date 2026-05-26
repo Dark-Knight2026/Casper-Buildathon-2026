@@ -52,22 +52,22 @@ impl EventType {
 
         match contract_type {
             ContractType::Ico => event_name
-                .parse::<ico::IcoEventType>()
+                .parse::<IcoEventType>()
                 .map(Self::Ico)
                 .map_err(|_| unknown()),
 
             ContractType::Big | ContractType::Usdc | ContractType::Usdt => event_name
-                .parse::<cep18::Cep18EventType>()
+                .parse::<Cep18EventType>()
                 .map(Self::Cep18)
                 .map_err(|_| unknown()),
 
             ContractType::Vesting => event_name
-                .parse::<vesting::VestingEventType>()
+                .parse::<VestingEventType>()
                 .map(Self::Vesting)
                 .map_err(|_| unknown()),
 
             ContractType::Staking => event_name
-                .parse::<staking::StakingEventType>()
+                .parse::<StakingEventType>()
                 .map(Self::Staking)
                 .map_err(|_| unknown()),
 

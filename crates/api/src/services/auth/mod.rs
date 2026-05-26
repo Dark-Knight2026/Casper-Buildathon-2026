@@ -34,7 +34,6 @@ pub use db::{
     revoke_all_sessions_for_user, revoke_session_by_id, upsert_user_by_wallet,
 };
 pub use jwt::{ACCESS_TOKEN_TTL, EncodedAccessToken, decode_token, encode_access_token};
-pub use logout::logout;
 pub use middleware::{AuthError, AuthUser};
 pub use models::{
     LoginRequest, LoginResponse, NonceRequest, NonceResponse, RevokeAllSessionsRequest,

@@ -66,6 +66,14 @@ struct RawEnvConfig {
     /// (`{bucket}.s3.{region}.amazonaws.com`) MUST set this explicitly.
     #[serde(default)]
     s3_public_url_base: Option<String>,
+    /// Postmark Server Token. When set, enables the Postmark-backed mailer
+    /// and the retry-queue worker; requires `POSTMARK_FROM_EMAIL`. When
+    /// unset, bootstrap falls back to `LoggingEmailSender` (no delivery).
+    #[serde(default)]
+    postmark_server_token: Option<SecretString>,
+    /// Verified Postmark sender signature used as the `From` address.
+    #[serde(default)]
+    postmark_from_email: Option<String>,
 }
 
 const fn default_port() -> u16 {
@@ -118,6 +126,22 @@ pub struct S3Config {
     pub public_url_base: String,
 }
 
+/// Postmark transactional-email configuration loaded from `POSTMARK_*` env vars.
+///
+/// Present when `POSTMARK_SERVER_TOKEN` is configured; bootstrap uses this
+/// block to instantiate [`PostmarkSender`](crate::providers::PostmarkSender)
+/// and to gate the retry-queue worker. When absent, bootstrap falls back to
+/// [`LoggingEmailSender`](crate::providers::LoggingEmailSender) and the worker
+/// is not spawned (a logger never fails, so the queue would never drain).
+#[derive(Debug, Clone)]
+pub struct PostmarkConfig {
+    /// Postmark Server Token, kept out of `Debug`/logs via `SecretString`.
+    pub server_token: SecretString,
+    /// Verified Postmark sender signature used as the `From` address. An
+    /// unverified address turns every send into a `Permanent` failure.
+    pub from_email: String,
+}
+
 /// Server application configuration loaded from environment variables.
 #[derive(Debug, Clone)]
 pub struct ServerConfig {
@@ -147,6 +171,11 @@ pub struct ServerConfig {
     /// backend; `None` falls back to `StubMediaStorage`. Populated by
     /// `from_env` only when the full `S3_*` block is provided.
     pub s3: Option<S3Config>,
+    /// Postmark mailer config. `Some` enables the Postmark-backed
+    /// `EmailSender` and the retry-queue worker; `None` falls back to
+    /// `LoggingEmailSender`. Populated by `from_env` only when
+    /// `POSTMARK_SERVER_TOKEN` (and `POSTMARK_FROM_EMAIL`) are provided.
+    pub postmark: Option<PostmarkConfig>,
 }
 
 impl ServerConfig {
@@ -224,6 +253,21 @@ impl ServerConfig {
             None => None,
         };
 
+        let postmark = match raw.postmark_server_token {
+            Some(server_token) => {
+                let from_email = raw.postmark_from_email.ok_or_else(|| {
+                    ServerError::EnvVar(
+                        "POSTMARK_SERVER_TOKEN set but POSTMARK_FROM_EMAIL missing".to_owned(),
+                    )
+                })?;
+                Some(PostmarkConfig {
+                    server_token,
+                    from_email,
+                })
+            }
+            None => None,
+        };
+
         let config = Self {
             database_url: raw.database_url,
             redis_url: raw.redis_url,
@@ -235,6 +279,7 @@ impl ServerConfig {
             ico_fallback,
             total_supply: raw.total_supply.unwrap_or(TOTAL_SUPPLY),
             s3,
+            postmark,
         };
 
         config.validate()?;

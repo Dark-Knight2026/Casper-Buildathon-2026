@@ -297,7 +297,7 @@ async fn avatar_upload_with_dead_storage_returns_generic_500(pool: PgPool) {
 async fn s3_media_storage_delete_nonexistent_key_is_ok(pool: PgPool) {
     let _ = pool; // shared compose Postgres not needed for this test, but the
     // `#[sqlx::test]` macro requires the parameter.
-    let minio = common::MinioTestEnv::start().await;
+    let minio = MinioTestEnv::start().await;
     let storage = S3MediaStorage::new(
         &minio.config.bucket,
         minio.config.region.clone(),

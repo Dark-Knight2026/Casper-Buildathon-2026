@@ -196,6 +196,7 @@ pub async fn setup_test_server_with(
         ico_fallback: overrides.ico_fallback,
         total_supply: TOTAL_SUPPLY,
         s3: None,
+        postmark: None,
     };
     let mailer = overrides
         .mailer
