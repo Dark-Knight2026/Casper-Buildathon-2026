@@ -32,5 +32,6 @@ pub fn router() -> OpenApiRouter<Arc<AppState>> {
         .routes(routes!(sessions::revoke_session))
         .routes(routes!(sessions::revoke_all_sessions))
         .routes(routes!(verify::send_verify_email))
+        .routes(routes!(verify::resend_verify_email))
         .routes(routes!(verify::confirm_verify_email))
 }

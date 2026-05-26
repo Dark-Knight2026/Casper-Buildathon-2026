@@ -1,9 +1,12 @@
 //! Email-verification endpoints.
 //!
 //! `POST /auth/verify/email/send` issues a one-time verification link to the
-//! authenticated user's stored email; `POST /auth/verify/email/confirm`
-//! redeems the link, flips `email_verified`, and re-issues the token pair so
-//! the bumped `verification_level` reaches the access claim immediately.
+//! authenticated user's stored email; `POST /auth/verify/email/resend` is an
+//! alias onto the same handler so the front-end can present "send" and
+//! "resend" as distinct affordances while sharing one rate-limit slot.
+//! `POST /auth/verify/email/confirm` redeems the link, flips `email_verified`,
+//! and re-issues the token pair so the bumped `verification_level` reaches the
+//! access claim immediately.
 //!
 //! Authorization mirrors the rest of the auth service: the routes are mounted
 //! under the public router but guarded per-handler by the [`AuthUser`]
@@ -24,6 +27,7 @@ use serde::{Deserialize, Serialize};
 use subtle::ConstantTimeEq;
 use time::Duration as CookieDuration;
 use utoipa::ToSchema;
+use uuid::Uuid;
 
 use crate::{
     common::{ApiError, ApiResult, AppState, UserInfo, UserRole, tokens},
@@ -59,9 +63,10 @@ impl VerifySendResponse {
 //
 /// Issues a verification link to the authenticated user's stored email.
 ///
-/// The order is deliberate: the read-only rate-limit check and the
-/// `email IS NULL` guard both run *before* the counter is incremented, so a
-/// wallet-only user who taps the button never burns their hourly slot.
+/// Thin wrapper over [`send_or_resend_verify_email`]; see there for the flow
+/// and ordering guarantees. `/send` and `/resend` run the same logic - the
+/// split exists only so the front-end can present "send" (first request) and
+/// "resend" (try again) as distinct affordances.
 ///
 /// # Errors
 ///
@@ -90,8 +95,54 @@ pub async fn send_verify_email(
     State(state): State<Arc<AppState>>,
     auth_user: AuthUser,
 ) -> ApiResult<Json<VerifySendResponse>> {
-    let user_id = auth_user.0.sub;
+    send_or_resend_verify_email(&state, auth_user.0.sub).await
+}
 
+// `POST /api/v1/auth/verify/email/resend`
+//
+/// Re-issues a verification link - identical behaviour to
+/// [`send_verify_email`], sharing the same rate-limit counter and token slot.
+///
+/// A separate route (rather than reusing `/send`) lets the client express the
+/// "resend" intent without the back-end tracking whether a previous send
+/// happened; the rate limiter already enforces the once-per-window cap across
+/// both paths.
+///
+/// # Errors
+///
+/// Identical to [`send_verify_email`].
+#[utoipa::path(
+    post,
+    path = "/verify/email/resend",
+    tag = "Auth",
+    responses(
+        (status = 200, description = "Verification email sent or queued for retry", body = VerifySendResponse),
+        (status = 400, description = "email_not_set - user has no email to verify"),
+        (status = 401, description = "Unauthorized"),
+        (status = 429, description = "rate_limited"),
+        (status = 500, description = "email_send_failed"),
+    ),
+    security(
+        ("cookie_auth" = [])
+    )
+)]
+#[inline]
+pub async fn resend_verify_email(
+    State(state): State<Arc<AppState>>,
+    auth_user: AuthUser,
+) -> ApiResult<Json<VerifySendResponse>> {
+    send_or_resend_verify_email(&state, auth_user.0.sub).await
+}
+
+/// Shared send/resend implementation.
+///
+/// The order is deliberate: the read-only rate-limit check and the
+/// `email IS NULL` guard both run *before* the counter is incremented, so a
+/// wallet-only user who taps the button never burns their hourly slot.
+async fn send_or_resend_verify_email(
+    state: &Arc<AppState>,
+    user_id: Uuid,
+) -> ApiResult<Json<VerifySendResponse>> {
     // Read-only rate-limit check - does NOT increment.
     if state
         .redis
