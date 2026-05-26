@@ -50,7 +50,14 @@ export interface PropertySearchParams {
   search?: string;
 }
 
-export type PropertyType = 'apartment' | 'house' | 'condo' | 'townhouse' | 'studio' | 'Apartment' | 'House' | 'Condo' | 'Townhouse' | 'Studio' | 'Loft';
+// Canonical PropertyType union. All identifiers are lowercase by TypeScript
+// convention; capitalize via formatPropertyType() for display.
+export type PropertyType = 'apartment' | 'house' | 'condo' | 'townhouse' | 'studio' | 'loft';
+
+// Title-Case label for UI rendering ("apartment" → "Apartment").
+export function formatPropertyType(type: PropertyType): string {
+  return type.charAt(0).toUpperCase() + type.slice(1);
+}
 
 // Property form data
 export interface PropertyFormData {

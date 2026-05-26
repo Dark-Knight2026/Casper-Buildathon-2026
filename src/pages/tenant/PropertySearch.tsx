@@ -51,12 +51,12 @@ const SQUARE_FEET_RANGES: FilterOption[] = [
 
 const PROPERTY_TYPE_OPTIONS: FilterOption[] = [
   { value: 'all', label: 'All Types' },
-  { value: 'House', label: 'House' },
-  { value: 'Condo', label: 'Condo' },
-  { value: 'Townhouse', label: 'Townhouse' },
-  { value: 'Apartment', label: 'Apartment' },
-  { value: 'Studio', label: 'Studio' },
-  { value: 'Loft', label: 'Loft' },
+  { value: 'house', label: 'House' },
+  { value: 'condo', label: 'Condo' },
+  { value: 'townhouse', label: 'Townhouse' },
+  { value: 'apartment', label: 'Apartment' },
+  { value: 'studio', label: 'Studio' },
+  { value: 'loft', label: 'Loft' },
 ];
 
 function Stepper({
