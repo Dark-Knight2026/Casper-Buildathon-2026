@@ -531,8 +531,8 @@ pub async fn is_email_taken(
 /// would force a redundant second round-trip.
 ///
 /// `verification_level` is NOT written explicitly: the
-/// `trg_users_profile_complete` BEFORE-trigger recomputes it from the
-/// atomic-bool columns (`email_verified`, `phone_verified`, ...) on every
+/// `trg_users_sync_verification_level` BEFORE-trigger recomputes it from the
+/// atomic-bool columns (`email_verified`, `identity_verified`) on every
 /// UPDATE, so the aggregate is always consistent without handler code
 /// touching it.
 ///

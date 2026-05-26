@@ -871,3 +871,115 @@ pub async fn revoke_all_sessions_for_user(
 
     Ok(revoked)
 }
+
+/// Outcome of [`confirm_email_verification`].
+///
+/// The two arms drive different handler behaviour, so this is an enum
+/// rather than a `bool`: only the `Verified` transition warrants a fresh
+/// access/refresh pair. `AlreadyVerified` means another path (admin manual
+/// set, or a duplicate confirm tap) flipped the flag first - re-issuing
+/// there would revoke the user's other live sessions for a no-op action,
+/// so the handler returns the current profile without touching cookies.
+#[derive(Debug, Eq, PartialEq)]
+pub enum VerifyConfirmOutcome {
+    /// `email_verified` transitioned `false -> true` in this call. The
+    /// handler must re-issue tokens so the bumped `verification_level`
+    /// reaches the access claim immediately.
+    Verified,
+    /// The user was already `email_verified = true` (or soft-deleted) when
+    /// the UPDATE ran, so it matched zero rows. No audit row is written and
+    /// no tokens are re-issued.
+    AlreadyVerified,
+}
+
+/// Marks the user's email verified and records the audit trail, atomically.
+///
+/// The UPDATE is guarded by `email_verified = FALSE` so a concurrent admin
+/// set or a double-submit collapses to zero rows and
+/// [`VerifyConfirmOutcome::AlreadyVerified`] instead of writing a spurious
+/// second audit entry. The `trg_users_sync_verification_level` BEFORE-trigger
+/// recomputes `verification_level` inside the same statement, so the audit
+/// row's `new_values` reads the already-upgraded level straight from the
+/// row rather than recomputing it in Rust.
+///
+/// The audit INSERT uses `INSERT ... SELECT FROM users` to pull
+/// `email`/`role`/`verification_level` from the just-updated row in one
+/// trip; `$2::text::inet` lets the caller pass the client IP as a plain
+/// string (sqlx is built without the `inet` type feature) while Postgres
+/// parses it into the `inet` column. Both the UPDATE and the INSERT share
+/// one transaction so the verified flag and its audit record commit together
+/// or not at all.
+///
+/// # Errors
+///
+/// Returns `sqlx::Error` on any DB failure; both writes roll back together.
+#[inline]
+pub async fn confirm_email_verification(
+    pool: &PgPool,
+    user_id: Uuid,
+    ip_address: Option<&str>,
+    user_agent: Option<&str>,
+) -> Result<VerifyConfirmOutcome, Error> {
+    let mut tx = pool.begin().await?;
+
+    let updated = sqlx::query!(
+        r"
+            UPDATE users
+            SET email_verified = TRUE
+            WHERE id = $1 AND email_verified = FALSE AND deleted_at IS NULL
+            RETURNING id
+        ",
+        user_id,
+    )
+    .fetch_optional(tx.as_mut())
+    .await?;
+
+    if updated.is_none() {
+        // Nothing mutated; the transaction rolls back on drop. No audit row
+        // for a no-op confirm.
+        return Ok(VerifyConfirmOutcome::AlreadyVerified);
+    }
+
+    sqlx::query!(
+        r"
+            INSERT INTO audit_logs (
+                user_id,
+                user_email,
+                user_role,
+                action,
+                resource_type,
+                resource_id,
+                new_values,
+                status,
+                ip_address,
+                user_agent,
+                request_method,
+                request_path
+            )
+            SELECT
+                u.id,
+                u.email,
+                u.role,
+                'verify_email',
+                'user',
+                u.id,
+                jsonb_build_object('verification_level', u.verification_level),
+                'success',
+                $2::text::inet,
+                $3,
+                'POST',
+                '/auth/verify/email/confirm'
+            FROM users u
+            WHERE u.id = $1
+        ",
+        user_id,
+        ip_address,
+        user_agent,
+    )
+    .execute(tx.as_mut())
+    .await?;
+
+    tx.commit().await?;
+
+    Ok(VerifyConfirmOutcome::Verified)
+}

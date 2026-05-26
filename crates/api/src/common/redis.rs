@@ -458,7 +458,7 @@ impl RedisStore {
     ///
     /// Read-only (no `INCR`): the send handler calls this as a pre-flight
     /// check before the `email IS NULL` guard, so a wallet-only user who
-    /// taps the button never burns a counter slot (A3). The `OR` across
+    /// taps the button never burns a counter slot. The `OR` across
     /// both windows is the point - the per-minute guard catches bursts the
     /// hourly cap alone would let through.
     ///
@@ -523,7 +523,7 @@ impl RedisStore {
     /// [`decrement_email_change_attempt`]. Only called on
     /// [`EmailError::Permanent`](crate::providers::EmailError::Permanent):
     /// a transient failure keeps the counters bumped because the queued
-    /// retry will still deliver the mail (A3).
+    /// retry will still deliver the mail.
     ///
     /// [`decrement_email_change_attempt`]: Self::decrement_email_change_attempt
     ///

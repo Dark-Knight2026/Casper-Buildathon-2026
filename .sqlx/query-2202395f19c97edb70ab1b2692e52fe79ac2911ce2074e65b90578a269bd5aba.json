@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO audit_logs (\n                user_id,\n                user_email,\n                user_role,\n                action,\n                resource_type,\n                resource_id,\n                new_values,\n                status,\n                ip_address,\n                user_agent,\n                request_method,\n                request_path\n            )\n            SELECT\n                u.id,\n                u.email,\n                u.role,\n                'verify_email',\n                'user',\n                u.id,\n                jsonb_build_object('verification_level', u.verification_level),\n                'success',\n                $2::text::inet,\n                $3,\n                'POST',\n                '/auth/verify/email/confirm'\n            FROM users u\n            WHERE u.id = $1\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "2202395f19c97edb70ab1b2692e52fe79ac2911ce2074e65b90578a269bd5aba"
+}

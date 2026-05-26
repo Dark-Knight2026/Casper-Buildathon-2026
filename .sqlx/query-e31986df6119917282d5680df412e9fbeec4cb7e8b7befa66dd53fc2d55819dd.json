@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE users\n            SET email_verified = TRUE\n            WHERE id = $1 AND email_verified = FALSE AND deleted_at IS NULL\n            RETURNING id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "e31986df6119917282d5680df412e9fbeec4cb7e8b7befa66dd53fc2d55819dd"
+}

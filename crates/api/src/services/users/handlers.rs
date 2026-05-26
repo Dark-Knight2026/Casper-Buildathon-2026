@@ -512,8 +512,8 @@ pub async fn request_email_change(
 /// Looks up the pending request via atomic `GETDEL` keyed on `user_id`,
 /// compares the SHA-256 of the presented token against the stored hash,
 /// and on match rewrites `email = new_email, email_verified = TRUE` in a
-/// single UPDATE. The `trg_users_profile_complete` trigger recomputes the
-/// aggregate `verification_level` automatically.
+/// single UPDATE. The `trg_users_sync_verification_level` trigger recomputes
+/// the aggregate `verification_level` automatically.
 ///
 /// Failure modes:
 ///
