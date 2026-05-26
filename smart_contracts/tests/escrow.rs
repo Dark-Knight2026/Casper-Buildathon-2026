@@ -6,14 +6,14 @@ use odra::{
 };
 use odra_modules::access::errors::Error as AccessError;
 
+use leasefi_contracts::big_coin::{BigCoin, BigCoinHostRef, BigCoinInitArgs};
 use leasefi_contracts::common::CurrencyAmount;
 use leasefi_contracts::escrow::{
     errors::Error,
     events::{InvoiceCreated, InvoicePaid, MinDeadlineSet},
-    types::{Invoice, InvoiceKind},
+    types::{CreateLeaseInvoiceParams, Invoice, InvoiceKind},
     Escrow, EscrowHostRef, EscrowInitArgs,
 };
-use leasefi_contracts::big_coin::{BigCoin, BigCoinHostRef, BigCoinInitArgs};
 
 const MIN_DEADLINE: u64 = 5 * 60; // 5 minutes
 
@@ -162,12 +162,14 @@ fn test_create_lease_invoice_should_fail_if_not_lease_contract_is_calling() {
     assert_eq!(
         test_data
             .escrow
-            .try_create_lease_invoice(
-                test_data.env.get_account(0),
-                test_data.env.get_account(0),
-                CurrencyAmount::new(None, U256::zero()),
-                0
-            )
+            .try_create_lease_invoice(CreateLeaseInvoiceParams {
+                tenant: test_data.env.get_account(0),
+                landlord: test_data.env.get_account(0),
+                rent: CurrencyAmount::new(None, U256::zero()),
+                property_manager: None,
+                property_manager_bps: 0,
+                deadline: 0,
+            })
             .unwrap_err(),
         Error::CallerNotLeaseContract.into(),
         "Should revert when is called by not the Lease contract"
@@ -185,12 +187,14 @@ fn test_create_lease_invoice_should_fail_if_buyer_is_equal_to_seller() {
     assert_eq!(
         test_data
             .escrow
-            .try_create_lease_invoice(
-                test_data.env.get_account(0),
-                test_data.env.get_account(0),
-                CurrencyAmount::new(None, U256::zero()),
-                0
-            )
+            .try_create_lease_invoice(CreateLeaseInvoiceParams {
+                tenant: test_data.env.get_account(0),
+                landlord: test_data.env.get_account(0),
+                rent: CurrencyAmount::new(None, U256::zero()),
+                property_manager: None,
+                property_manager_bps: 0,
+                deadline: 0,
+            })
             .unwrap_err(),
         Error::EqualBuyerAndSeller.into(),
         "Should revert when buyer is the same as seller"
@@ -208,12 +212,14 @@ fn test_create_lease_invoice_should_fail_if_amount_is_zero() {
     assert_eq!(
         test_data
             .escrow
-            .try_create_lease_invoice(
-                test_data.env.get_account(0),
-                test_data.env.get_account(1),
-                CurrencyAmount::new(None, U256::zero()),
-                0
-            )
+            .try_create_lease_invoice(CreateLeaseInvoiceParams {
+                tenant: test_data.env.get_account(0),
+                landlord: test_data.env.get_account(1),
+                rent: CurrencyAmount::new(None, U256::zero()),
+                property_manager: None,
+                property_manager_bps: 0,
+                deadline: 0,
+            })
             .unwrap_err(),
         Error::ZeroAmount.into(),
         "Should revert when is called with zero amount"
@@ -231,12 +237,14 @@ fn test_create_lease_invoice_should_fail_if_deadline_is_sooner_than_min_deadline
     assert_eq!(
         test_data
             .escrow
-            .try_create_lease_invoice(
-                test_data.env.get_account(0),
-                test_data.env.get_account(1),
-                CurrencyAmount::new(None, U256::one()),
-                test_data.env.block_time() + test_data.escrow.get_min_deadline() - 1
-            )
+            .try_create_lease_invoice(CreateLeaseInvoiceParams {
+                tenant: test_data.env.get_account(0),
+                landlord: test_data.env.get_account(1),
+                rent: CurrencyAmount::new(None, U256::one()),
+                property_manager: None,
+                property_manager_bps: 0,
+                deadline: test_data.env.block_time() + test_data.escrow.get_min_deadline() - 1,
+            })
             .unwrap_err(),
         Error::InvalidDeadline.into(),
         "Should revert when deadline is sooner than block.time + minimum deadline"
@@ -257,7 +265,10 @@ fn test_pay_invoice_should_fail_if_invoice_does_not_exist() {
     let mut test_data = setup(odra_test::env());
 
     assert_eq!(
-        test_data.escrow.try_pay_invoice(U256::zero()).unwrap_err(),
+        test_data
+            .escrow
+            .try_pay_invoice(U256::zero(), U256::zero())
+            .unwrap_err(),
         Error::InvalidInvoiceId.into(),
         "Should revert when invoice does not exist"
     );
@@ -272,7 +283,10 @@ fn test_pay_invoice_should_fail_if_not_buyer_is_trying_to_pay_invoice() {
     test_data.env.set_caller(params.landlord);
 
     assert_eq!(
-        test_data.escrow.try_pay_invoice(invoice_id).unwrap_err(),
+        test_data
+            .escrow
+            .try_pay_invoice(invoice_id, U256::zero())
+            .unwrap_err(),
         Error::CallerIsNotBuyer.into(),
         "Should revert when caller is not buyer"
     );
@@ -287,10 +301,13 @@ fn test_pay_invoice_should_fail_if_invoice_is_already_paid() {
     test_data
         .escrow
         .with_tokens(params.amount_due.amount().to_u512())
-        .pay_invoice(invoice_id);
+        .pay_invoice(invoice_id, *params.amount_due.amount());
 
     assert_eq!(
-        test_data.escrow.try_pay_invoice(invoice_id).unwrap_err(),
+        test_data
+            .escrow
+            .try_pay_invoice(invoice_id, U256::zero())
+            .unwrap_err(),
         Error::InvoiceIsAlreadyPaid.into(),
         "Should revert when invoice is already paid"
     );
@@ -307,7 +324,10 @@ fn test_pay_invoice_should_fail_if_invoice_is_expired() {
         .advance_block_time(test_data.escrow.get_invoice_by_id(invoice_id).deadline + 1);
 
     assert_eq!(
-        test_data.escrow.try_pay_invoice(invoice_id).unwrap_err(),
+        test_data
+            .escrow
+            .try_pay_invoice(invoice_id, U256::zero())
+            .unwrap_err(),
         Error::InvoiceIsExpired.into(),
         "Should revert when invoice is expired"
     );
@@ -323,7 +343,7 @@ fn test_pay_invoice_should_fail_if_attached_cspr_value_is_invalid_for_invoice_in
         test_data
             .escrow
             .with_tokens(params.amount_due.amount().to_u512() - 1)
-            .try_pay_invoice(invoice_id)
+            .try_pay_invoice(invoice_id, *params.amount_due.amount())
             .unwrap_err(),
         Error::InvalidAmountAttached.into(),
         "Should revert when attached CSPR value is invalid - 1"
@@ -332,7 +352,7 @@ fn test_pay_invoice_should_fail_if_attached_cspr_value_is_invalid_for_invoice_in
         test_data
             .escrow
             .with_tokens(params.amount_due.amount().to_u512() + 1)
-            .try_pay_invoice(invoice_id)
+            .try_pay_invoice(invoice_id, *params.amount_due.amount())
             .unwrap_err(),
         Error::InvalidAmountAttached.into(),
         "Should revert when attached CSPR value is invalid - 2"
@@ -352,7 +372,7 @@ fn test_pay_invoice_should_fail_if_attached_cspr_value_is_invalid_for_invoice_in
         test_data
             .escrow
             .with_tokens(U512::one())
-            .try_pay_invoice(invoice_id)
+            .try_pay_invoice(invoice_id, *params.amount_due.amount())
             .unwrap_err(),
         Error::InvalidAmountAttached.into(),
         "Should revert when attached CSPR value is invalid"
@@ -369,7 +389,7 @@ fn test_pay_invoice_should_pay_invoice_in_native_token_properly() {
     test_data
         .escrow
         .with_tokens(params.amount_due.amount().to_u512())
-        .pay_invoice(invoice_id);
+        .pay_invoice(invoice_id, *params.amount_due.amount());
 
     let curr_recipient_token_balance = test_data.env.balance_of(&params.landlord);
 
@@ -404,7 +424,9 @@ fn test_pay_invoice_should_pay_invoice_in_cep18_token_properly() {
     test_data
         .mock_cep18
         .approve(&test_data.escrow.address(), params.amount_due.amount());
-    test_data.escrow.pay_invoice(invoice_id);
+    test_data
+        .escrow
+        .pay_invoice(invoice_id, *params.amount_due.amount());
 
     let curr_recipient_token_balance = test_data.mock_cep18.balance_of(&params.landlord);
 
@@ -468,12 +490,16 @@ fn create_lease_invoice(test_data: &mut TestData, params: &InvoiceParams) -> U25
         .env
         .set_caller(test_data.escrow.get_lease_contract_address());
 
-    let invoice_id = test_data.escrow.create_lease_invoice(
-        params.tenant,
-        params.landlord,
-        params.amount_due,
-        params.deadline,
-    );
+    let invoice_id = test_data
+        .escrow
+        .create_lease_invoice(CreateLeaseInvoiceParams {
+            tenant: params.tenant,
+            landlord: params.landlord,
+            rent: params.amount_due,
+            property_manager: None,
+            property_manager_bps: 0,
+            deadline: params.deadline,
+        });
 
     test_data.env.set_caller(test_data.env.get_account(0));
 
@@ -484,6 +510,8 @@ fn create_lease_invoice(test_data: &mut TestData, params: &InvoiceParams) -> U25
             created_at: test_data.env.block_time(),
         }
     ));
+
+    let mut amount_due = params.amount_due;
     assert_eq!(
         test_data.escrow.get_invoice_by_id(invoice_id),
         Invoice {
@@ -491,6 +519,10 @@ fn create_lease_invoice(test_data: &mut TestData, params: &InvoiceParams) -> U25
             buyer: params.tenant,
             seller: params.landlord,
             amount_due: params.amount_due,
+            rent_amount: *amount_due.amount(),
+            rent_paid: U256::zero(),
+            property_manager: None,
+            property_manager_bps: 0,
             deadline: params.deadline,
             is_paid: false
         },
