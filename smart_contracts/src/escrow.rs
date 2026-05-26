@@ -66,12 +66,18 @@ pub mod types {
 
     #[odra::odra_type]
     pub struct CreateLeaseInvoiceParams {
+        /// Tenant wallet responsible for paying rent.
         pub tenant: Address,
+        /// Landlord wallet receiving rent after protocol fee and manager split.
         pub landlord: Address,
+        /// Rent amount and currency for this invoice.
         pub rent: CurrencyAmount,
-        pub equity_amount: U256,
+        /// Optional property manager receiving a perentage of rent.
         pub property_manager: Option<Address>,
+        /// Property manager rent share in basis points.
+        /// @dev 10_000 = 100%
         pub property_manager_bps: u32,
+        /// Timestamp after which the invoice can longer be paid.
         pub deadline: u64,
     }
 
@@ -275,6 +281,10 @@ impl Escrow {
     /// Returns the USDC token used for security deposits
     pub fn get_security_deposit_token_address(&self) -> Address {
         *self.security_deposit_token.address()
+    }
+
+    pub fn get_security_deposit(&self, invoice_id: U256) -> SecurityDepositRecord {
+        self.security_deposits.get_or_default(&invoice_id)
     }
 
     /// Returns invoice by its ID

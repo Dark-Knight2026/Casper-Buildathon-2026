@@ -1,8 +1,7 @@
-use odra::{casper_types::U256, prelude::*, uints::ToU512, ContractRef};
-use odra_modules::{access::Ownable, cep18_token::Cep18ContractRef};
+use odra::{casper_types::U256, prelude::*, ContractRef};
+use odra_modules::access::Ownable;
 
 use crate::{
-    common::CurrencyAmount,
     constants::{ONE_HUNDRED_PERCENT_BPS, ONE_MONTH_IN_SECONDS},
     escrow::{types::CreateLeaseInvoiceParams, EscrowContractRef},
     lease::{
@@ -11,9 +10,7 @@ use crate::{
             EquityEligibilityGranted, EquityEligibilityRevoked, LeaseAgreementCreated,
             LeaseAgreementFinished, LeaseAgreementProlonged,
         },
-        types::{
-            CreateLeaseAgreementParams, LeaseAgreement, LeaseEquityOption, RentDistributionTerms,
-        },
+        types::{CreateLeaseAgreementParams, LeaseAgreement, RentDistributionTerms},
     },
     nft::NFTContractRef,
     property_registry::PropertyRegistryContractRef,
@@ -74,16 +71,15 @@ pub mod types {
         /// @dev This applies to the rent, not security deposits or equity top-ups
         pub property_manager: Option<Address>,
         /// Property manager rent share in basis points
-        /// @dev 10_000 = 10%. Must be zero when `property_manager` is `None`.
+        /// @dev 10_000 = 100%. Must be zero when `property_manager` is `None`.
         pub property_manager_bps: u32,
     }
 
     #[odra::odra_type]
     pub struct LeaseEquityOption {
         /// Property for which the tenant receives equity eligibility
+        /// @dev This only gates future property-token distribution. It does not create an equity payment schedule in phase 1/MVP.
         pub property_id: U256,
-        /// Monthly amount above base rent applied toward tenant equity or mortgage contribution.
-        pub monthly_equity_amount: U256,
     }
 }
 
@@ -324,7 +320,6 @@ impl Lease {
             params.tenant,
             landlord,
         );
-        self.validate_equity_option(&params.equity_option);
 
         if params.start >= params.end {
             self.env().revert(Error::InvalidTimeframes);
@@ -349,17 +344,11 @@ impl Lease {
             block_timestamp + params.invoice_validity_duration,
         )];
 
-        let equity_amount = params
-            .equity_option
-            .as_ref()
-            .map_or(U256::zero(), |option| option.monthly_equity_amount);
-
         for i in 0..(lease_duration / ONE_MONTH_IN_SECONDS) {
             invoices_ids.push(self.escrow.create_lease_invoice(CreateLeaseInvoiceParams {
                 tenant: params.tenant,
                 landlord,
                 rent: monthly_rent,
-                equity_amount,
                 property_manager: params.rent_distribution_terms.property_manager,
                 property_manager_bps: params.rent_distribution_terms.property_manager_bps,
                 deadline: block_timestamp
@@ -466,11 +455,10 @@ impl Lease {
         }
 
         self.assert_all_invoices_paid(lease_agreement_id);
-        self.release_security_deposit(
-            &lease_agreement.tenant,
-            &lease_agreement.landlord,
-            &mut lease_agreement.security_deposit,
-            security_deposit_charge,
+        self.escrow.release_security_deposit(
+            lease_agreement.invoices_ids[0],
+            lease_agreement.landlord,
+            *security_deposit_charge,
         );
 
         // Clear the `equity_eligible` entry that was set at lease creation
@@ -533,11 +521,6 @@ impl Lease {
 
         let block_timestamp = self.env().get_block_time();
 
-        let equity_amount = lease_agreement
-            .equity_option
-            .as_ref()
-            .map_or(U256::zero(), |option| option.monthly_equity_amount);
-
         for i in 0..(lease_duration / ONE_MONTH_IN_SECONDS) {
             lease_agreement
                 .invoices_ids
@@ -545,7 +528,6 @@ impl Lease {
                     tenant: lease_agreement.tenant,
                     landlord: lease_agreement.landlord,
                     rent: lease_agreement.monthly_rent,
-                    equity_amount,
                     property_manager: lease_agreement.rent_distribution_terms.property_manager,
                     property_manager_bps:
                         lease_agreement.rent_distribution_terms.property_manager_bps,
@@ -596,50 +578,10 @@ impl Lease {
         }
     }
 
+    #[inline]
     fn assert_all_invoices_paid(&self, lease_agreement_id: &U256) {
         if !self.is_all_invoices_paid(lease_agreement_id) {
             self.env().revert(Error::NotAllInvoicesArePaid);
-        }
-    }
-
-    fn transfer_currency_amount(&self, currency_amount: &mut CurrencyAmount, recipient: &Address) {
-        if currency_amount.currency().is_none() {
-            self.env()
-                .transfer_tokens(recipient, &currency_amount.amount().to_u512());
-        } else {
-            Cep18ContractRef::new(self.env(), currency_amount.currency().unwrap())
-                .transfer(recipient, currency_amount.amount());
-        }
-    }
-
-    fn release_security_deposit(
-        &self,
-        tenant: &Address,
-        landlord: &Address,
-        security_deposit: &mut CurrencyAmount,
-        security_deposit_charge: &U256,
-    ) {
-        if security_deposit_charge > security_deposit.amount() {
-            self.env().revert(Error::SecurityDepositChargeIsTooHigh);
-        }
-
-        if *security_deposit_charge > U256::zero() {
-            self.transfer_currency_amount(
-                &mut CurrencyAmount::new(*security_deposit.currency(), *security_deposit_charge),
-                landlord,
-            );
-            self.transfer_currency_amount(
-                &mut CurrencyAmount::new(
-                    *security_deposit.currency(),
-                    *security_deposit.amount() - *security_deposit_charge,
-                ),
-                tenant,
-            );
-        } else {
-            self.transfer_currency_amount(
-                &mut CurrencyAmount::new(*security_deposit.currency(), *security_deposit.amount()),
-                tenant,
-            );
         }
     }
 
@@ -664,14 +606,6 @@ impl Lease {
                 if terms.property_manager_bps > 0 {
                     self.env().revert(Error::InvalidPropertyManager)
                 }
-            }
-        }
-    }
-
-    fn validate_equity_option(&self, equity_option: &Option<LeaseEquityOption>) {
-        if let Some(equity_option) = equity_option {
-            if equity_option.monthly_equity_amount.is_zero() {
-                self.env().revert(Error::InvalidEquityAmount);
             }
         }
     }
