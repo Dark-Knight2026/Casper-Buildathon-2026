@@ -199,7 +199,8 @@ pub struct Escrow {
     /// Treasury wallet/contract receiving LeaseFi transaction fees.
     treasury: Var<Address>,
     /// USDC CEP-18 token used for all security deposits.
-    security_deposit_token: Var<Address>,
+    // Q: Instead of using the Var<Address> here, I would rather make an external contract ref.
+    security_deposit_token: External<Cep18ContractRef>,
     /// Invoices keyed by invoice ID.
     invoices: Mapping<U256, Invoice>,
     /// Security deposit records keyed by security deposit invoice ID.
@@ -275,8 +276,7 @@ impl Escrow {
 
     /// Returns the USDC token used for security deposits
     pub fn get_security_deposit_token_address(&self) -> Address {
-        self.security_deposit_token
-            .get_or_revert_with(Error::SecurityDepositTokenIsNotSet)
+        *self.security_deposit_token.address()
     }
 
     /// Returns invoice by its ID
@@ -357,7 +357,8 @@ impl Escrow {
         })
     }
 
-    /// Allows to pay any invoice created earlier
+    /// Pays an invoice created earlier.
+    /// @dev Security deposits are held in Escrow. Rent invoices support partial payments.
     #[odra(payable)]
     #[odra(non_reentrant)]
     pub fn pay_invoice(&mut self, invoice_id: U256, amount: U256) {
@@ -380,6 +381,52 @@ impl Escrow {
         self.invoices.set(&invoice_id, invoice);
     }
 
+    pub fn release_security_deposit(
+        &mut self,
+        invoice_id: U256,
+        landlord: Address,
+        security_deposit_charge: U256,
+    ) {
+        self.assert_lease();
+
+        let invoice = self.get_invoice_by_id(invoice_id);
+
+        if !matches!(invoice.kind, InvoiceKind::SecurityDeposit) {
+            self.env().revert(Error::InvalidInvoiceKind);
+        }
+
+        let mut deposit = self.security_deposits.get_or_default(&invoice_id);
+
+        if !deposit.paid {
+            self.env().revert(Error::SecurityDepositNotPaid);
+        }
+
+        if deposit.released {
+            self.env().revert(Error::SecurityDepositAlreadyReleased);
+        }
+
+        if security_deposit_charge > deposit.amount {
+            self.env().revert(Error::SecurityDepositChargeTooHigh);
+        }
+
+        let tenant_refund = deposit.amount - security_deposit_charge;
+
+        self.transfer_from_escrow(landlord, security_deposit_charge);
+        self.transfer_from_escrow(invoice.buyer, tenant_refund);
+
+        deposit.released = true;
+        deposit.landlord_charge = security_deposit_charge;
+        deposit.tenant_refund = tenant_refund;
+
+        self.env().emit_event(SecurityDepositReleased {
+            invoice_id,
+            landlord,
+            tenant: invoice.buyer,
+            landlord_charge: security_deposit_charge,
+            tenant_refund,
+        });
+    }
+
     // =========================================================================
     // Ownable delegation
     // =========================================================================
@@ -398,31 +445,9 @@ impl Escrow {
 // =============================================================================
 
 impl Escrow {
-    fn create_invoice(&mut self, mut invoice: Invoice) -> U256 {
-        if invoice.buyer == invoice.seller {
-            self.env().revert(Error::EqualBuyerAndSeller)
-        }
-
-        if *invoice.amount_due.amount() == U256::zero() {
-            self.env().revert(Error::ZeroAmount);
-        }
-
-        if invoice.deadline < self.env().get_block_time() + self.min_deadline.get_or_default() {
-            self.env().revert(Error::InvalidDeadline);
-        }
-
-        let invoice_id = self.get_invoices_count();
-
-        self.invoices.set(&invoice_id, invoice);
-        self.invoices_count.set(invoice_id + 1);
-
-        self.env().emit_event(InvoiceCreated {
-            invoice_id,
-            created_at: self.env().get_block_time(),
-        });
-
-        invoice_id
-    }
+    // =============================================================================
+    // Asserts
+    // =============================================================================
 
     #[inline]
     fn assert_owner(&self) {
@@ -457,6 +482,53 @@ impl Escrow {
         self.assert_valid_payment_value(invoice, amount);
     }
 
+    #[inline]
+    fn assert_valid_payment_value(&self, invoice: &Invoice, amount: U256) {
+        let mut amount_due = invoice.amount_due;
+        match amount_due.currency() {
+            None => {
+                if self.env().attached_value() != amount.to_u512() {
+                    self.env().revert(Error::InvalidAmountAttached);
+                }
+            }
+            Some(_) => {
+                if self.env().attached_value() != U512::zero() {
+                    self.env().revert(Error::InvalidAmountAttached);
+                }
+            }
+        }
+    }
+
+    // =============================================================================
+    // Invoices
+    // =============================================================================
+
+    fn create_invoice(&mut self, mut invoice: Invoice) -> U256 {
+        if invoice.buyer == invoice.seller {
+            self.env().revert(Error::EqualBuyerAndSeller)
+        }
+
+        if *invoice.amount_due.amount() == U256::zero() {
+            self.env().revert(Error::ZeroAmount);
+        }
+
+        if invoice.deadline < self.env().get_block_time() + self.min_deadline.get_or_default() {
+            self.env().revert(Error::InvalidDeadline);
+        }
+
+        let invoice_id = self.get_invoices_count();
+
+        self.invoices.set(&invoice_id, invoice);
+        self.invoices_count.set(invoice_id + 1);
+
+        self.env().emit_event(InvoiceCreated {
+            invoice_id,
+            created_at: self.env().get_block_time(),
+        });
+
+        invoice_id
+    }
+
     fn pay_security_deposit_invoice(&mut self, invoice: &mut Invoice, amount: U256) {
         if amount != *invoice.amount_due.amount() {
             self.env().revert(Error::InvalidPaymentAmount);
@@ -477,12 +549,6 @@ impl Escrow {
         let distributable_amount = amount - protocol_fee;
 
         let rent_allocation = Self::min(distributable_amount, self.remaining_rent(invoice));
-        let remaining_after_rent = distributable_amount - rent_allocation;
-        let equity_allocation = Self::min(remaining_after_rent, self.remaining_equity(invoice));
-
-        if remaining_after_rent > equity_allocation {
-            self.env().revert(Error::PaymentExceedsAmountDue);
-        }
 
         let currency = *invoice.amount_due.currency();
 
@@ -494,9 +560,7 @@ impl Escrow {
         );
 
         invoice.rent_paid += rent_allocation;
-        invoice.equity_paid += equity_allocation;
-        invoice.is_paid =
-            self.remaining_rent(invoice).is_zero() && self.remaining_equity(invoice).is_zero();
+        invoice.is_paid = self.remaining_rent(invoice).is_zero();
 
         self.env().emit_event(InvoicePaymentApplied {
             invoice_id,
@@ -504,7 +568,6 @@ impl Escrow {
             amount,
             protocol_fee,
             rent_paid: invoice.rent_paid,
-            equity_paid: invoice.equity_paid,
         });
 
         if invoice.is_paid {
@@ -514,6 +577,10 @@ impl Escrow {
             });
         }
     }
+
+    // =============================================================================
+    // Transfers
+    // =============================================================================
 
     fn distribute_rent(&mut self, invoice: &Invoice, currency: Option<Address>, rent_amount: U256) {
         if rent_amount.is_zero() {
@@ -536,22 +603,6 @@ impl Escrow {
         self.transfer_payment(currency, invoice.buyer, invoice.seller, landlord_amount);
     }
 
-    fn assert_valid_payment_value(&self, invoice: &Invoice, amount: U256) {
-        let mut amount_due = invoice.amount_due;
-        match amount_due.currency() {
-            None => {
-                if self.env().attached_value() != amount.to_u512() {
-                    self.env().revert(Error::InvalidAmountAttached);
-                }
-            }
-            Some(_) => {
-                if self.env().attached_value() != U512::zero() {
-                    self.env().revert(Error::InvalidAmountAttached);
-                }
-            }
-        }
-    }
-
     fn transfer_payment(
         &mut self,
         currency: Option<Address>,
@@ -566,11 +617,24 @@ impl Escrow {
         match currency {
             None => self.env().transfer_tokens(&recipient, &amount.to_u512()),
             Some(token) => {
+                // Q: Can i just make this a transfer from the security deposit token instead? I rather not isnstantiate a new contract ref.
                 Cep18ContractRef::new(self.env(), token)
                     .transfer_from(&sender, &recipient, &amount);
             }
         }
     }
+
+    fn transfer_from_escrow(&mut self, recipient: Address, amount: U256) {
+        if amount.is_zero() {
+            return;
+        }
+
+        self.security_deposit_token.transfer(&recipient, &amount);
+    }
+
+    // =============================================================================
+    // Helpers
+    // =============================================================================
 
     fn remaining_rent(&self, invoice: &Invoice) -> U256 {
         invoice.rent_amount - invoice.rent_paid
