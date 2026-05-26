@@ -141,60 +141,12 @@ function FilterSelect({
   );
 }
 
-interface Property {
-  id: string;
-  landlord_id: string;
-  title: string;
-  description?: string;
-  address: string;
-  city: string;
-  state: string;
-  zip_code: string;
-  price: number;
-  bedrooms: number;
-  bathrooms: number;
-  square_feet?: number;
-  property_type: string;
-  amenities?: string[];
-  images?: string[];
-  available_from?: string;
-  is_available: boolean;
-  created_at: string;
-  updated_at: string;
-  rating?: number;
-  priceChange?: string;
-  daysOnMarket?: number;
-  photoCount?: number;
-}
-
 export default function PropertySearch() {
   const navigate = useNavigate();
 
-  const MOCK_PROPERTIES: Property[] = FEATURED_PROPERTIES.map((p) => ({
-    id: p.id,
-    landlord_id: p.landlordId,
-    title: p.title,
-    description: p.description,
-    address: p.address,
-    city: p.city,
-    state: p.state,
-    zip_code: p.zipCode,
-    price: p.rent,
-    bedrooms: p.bedrooms,
-    bathrooms: p.bathrooms,
-    square_feet: p.squareFeet ?? undefined,
-    property_type: p.propertyType,
-    images: p.images,
-    is_available: p.status === 'active',
-    created_at: p.createdAt.toISOString(),
-    updated_at: p.updatedAt.toISOString(),
-    rating: p.rating,
-    priceChange: p.priceChange,
-    daysOnMarket: p.daysOnMarket,
-    photoCount: p.photoCount,
-  }));
-
-  const [properties] = useState<Property[]>(MOCK_PROPERTIES);
+  // Source data is FeaturedProperty[] (extends canonical Property). When the
+  // backend /properties/search endpoint ships, swap this for the response.
+  const [properties] = useState<FeaturedProperty[]>(FEATURED_PROPERTIES);
   const loading = false;
   const [searchTerm, setSearchTerm] = useState('');
   const [priceRange, setPriceRange] = useState<[number, number]>(PRICE_DEFAULT);
@@ -262,22 +214,22 @@ export default function PropertySearch() {
       if (!matchesSearch) return false;
     }
 
-    if (property.price < priceRange[0]) return false;
+    if (property.rent < priceRange[0]) return false;
     // When the slider sits at PRICE_MAX, treat the upper bound as open-ended
     // ("no upper limit") and skip the check — otherwise properties priced
     // above PRICE_MAX would be filtered out even though the user wants all.
-    if (priceRange[1] < PRICE_MAX && property.price > priceRange[1]) return false;
+    if (priceRange[1] < PRICE_MAX && property.rent > priceRange[1]) return false;
 
     if (bedrooms > 0 && property.bedrooms < bedrooms) return false;
     if (bathrooms > 0 && property.bathrooms < bathrooms) return false;
 
     if (squareFeet !== 'all') {
       const [min, max] = squareFeet.split('-').map(Number);
-      const sqft = property.square_feet ?? 0;
+      const sqft = property.squareFeet ?? 0;
       if (sqft < min || (max && sqft > max)) return false;
     }
 
-    if (propertyType !== 'all' && property.property_type !== propertyType) return false;
+    if (propertyType !== 'all' && property.propertyType !== propertyType) return false;
 
     if (extendedMatches && !extendedMatches.has(property.id)) return false;
 
@@ -476,12 +428,12 @@ export default function PropertySearch() {
                 address: property.address,
                 city: property.city,
                 state: property.state,
-                price: property.price,
+                price: property.rent,
                 bedrooms: property.bedrooms,
                 bathrooms: property.bathrooms,
-                squareFeet: property.square_feet,
-                images: property.images ?? [],
-                status: property.is_available ? 'active' : 'inactive',
+                squareFeet: property.squareFeet ?? undefined,
+                images: property.images,
+                status: property.status,
                 priceChange: property.priceChange,
                 rating: property.rating,
                 daysOnMarket: property.daysOnMarket,
@@ -489,13 +441,7 @@ export default function PropertySearch() {
               }}
               nearestByCategory={extendedMatches?.get(property.id)?.nearestByCategory}
               onClick={() => {
-                // PropertyDetail reads camelCase fields (rent, latitude, zipCode,
-                // securityDeposit) off router state; the local `property` here
-                // is the snake_case PropertyCard projection (price/zip_code/
-                // square_feet) and lacks rent/lat/lng. Resolve the original
-                // FeaturedProperty so PropertyDetail gets a complete object.
-                const original = FEATURED_PROPERTIES.find((p) => p.id === property.id);
-                navigate(`/properties/${property.id}`, { state: { property: original ?? null } });
+                navigate(`/properties/${property.id}`, { state: { property } });
               }}
             />
           ))}
