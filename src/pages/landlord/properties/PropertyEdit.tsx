@@ -20,9 +20,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import { propertyService } from '@/services/propertyService';
 import { getCurrentUserId } from '@/lib/supabase/client';
-import { ALL_AMENITIES, UTILITIES, LEASE_TERMS, PET_POLICIES, US_STATES, type PropertyFormData, type PropertyType, type Property } from '@/types/property';
+import { ALL_AMENITIES, UTILITIES, LEASE_TERMS, PET_POLICIES, US_STATES, formatPropertyType, type PropertyFormData, type PropertyType, type Property } from '@/types/property';
 
-const PROPERTY_TYPES: PropertyType[] = ['Apartment', 'House', 'Condo', 'Townhouse', 'Studio', 'Loft'];
+const PROPERTY_TYPES: PropertyType[] = ['apartment', 'house', 'condo', 'townhouse', 'studio', 'loft'];
 
 const propertyFormSchema = z.object({
   title: z.string().min(5, 'Title must be at least 5 characters'),
@@ -31,7 +31,7 @@ const propertyFormSchema = z.object({
   city: z.string().min(2, 'City is required'),
   state: z.string().length(2, 'State must be 2 characters'),
   zipCode: z.string().regex(/^\d{5}(-\d{4})?$/, 'Invalid ZIP code'),
-  propertyType: z.enum(['Apartment', 'House', 'Condo', 'Townhouse', 'Studio', 'Loft']),
+  propertyType: z.enum(['apartment', 'house', 'condo', 'townhouse', 'studio', 'loft']),
   bedrooms: z.coerce.number().min(0, 'Bedrooms must be 0 or more'),
   bathrooms: z.coerce.number().min(0.5, 'Bathrooms must be at least 0.5').step(0.5),
   squareFeet: z.coerce.number().min(100, 'Square feet must be at least 100').nullable(),
@@ -71,7 +71,7 @@ export default function PropertyEdit() {
       city: '',
       state: '',
       zipCode: '',
-      propertyType: 'Apartment',
+      propertyType: 'apartment',
       bedrooms: 1,
       bathrooms: 1,
       squareFeet: null,
@@ -312,7 +312,7 @@ export default function PropertyEdit() {
                       <SelectContent>
                         {PROPERTY_TYPES.map((type) => (
                           <SelectItem key={type} value={type}>
-                            {type}
+                            {formatPropertyType(type)}
                           </SelectItem>
                         ))}
                       </SelectContent>

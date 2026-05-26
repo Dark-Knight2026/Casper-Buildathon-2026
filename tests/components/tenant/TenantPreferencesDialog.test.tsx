@@ -127,7 +127,7 @@ describe('TenantPreferencesDialog', () => {
         onSave,
         'clicking the type checkbox must add it to propertyTypes'
       ).toHaveBeenCalledWith(
-        expect.objectContaining({ propertyTypes: ['Condo'] })
+        expect.objectContaining({ propertyTypes: ['condo'] })
       );
     });
   });
@@ -139,7 +139,7 @@ describe('TenantPreferencesDialog', () => {
         budgetMax: 2000,
         bedroomsMin: 2,
         locations: [{ city: 'Norfolk', state: 'VA' }],
-        propertyTypes: ['Condo'],
+        propertyTypes: ['condo'],
       });
 
       fireEvent.click(screen.getByRole('button', { name: /clear all/i }));

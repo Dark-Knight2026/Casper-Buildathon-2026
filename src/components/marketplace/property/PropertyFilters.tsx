@@ -24,6 +24,7 @@ import {
   PawPrint
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { formatPropertyType, type PropertyType } from '@/types/property';
 
 export interface PropertyFilterState {
   priceRange: [number, number];
@@ -49,13 +50,13 @@ interface PropertyFiltersProps {
   onToggleCollapse?: () => void;
 }
 
-const PROPERTY_TYPES = [
-  'Apartment',
-  'House',
-  'Condo',
-  'Townhouse',
-  'Studio',
-  'Loft'
+const PROPERTY_TYPES: PropertyType[] = [
+  'apartment',
+  'house',
+  'condo',
+  'townhouse',
+  'studio',
+  'loft',
 ];
 
 const AMENITIES = [
@@ -282,7 +283,7 @@ export function PropertyFilters({
                     htmlFor={`type-${type}`}
                     className="text-sm cursor-pointer"
                   >
-                    {type}
+                    {formatPropertyType(type)}
                   </label>
                 </div>
               ))}

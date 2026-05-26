@@ -18,9 +18,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
-import { ALL_AMENITIES, UTILITIES, LEASE_TERMS, PET_POLICIES, US_STATES, type PropertyType, type SurroundingCategory } from '@/types/property';
+import { ALL_AMENITIES, UTILITIES, LEASE_TERMS, PET_POLICIES, US_STATES, formatPropertyType, type PropertyType, type SurroundingCategory } from '@/types/property';
 
-const PROPERTY_TYPES: PropertyType[] = ['Apartment', 'House', 'Condo', 'Townhouse', 'Studio', 'Loft'];
+const PROPERTY_TYPES: PropertyType[] = ['apartment', 'house', 'condo', 'townhouse', 'studio', 'loft'];
 
 // Tenant-facing nearby categories. Free-text place name + per-place distance;
 // category is constrained to this list so the tenant surrounding-area filter
@@ -38,7 +38,7 @@ const propertyFormSchema = z.object({
   city: z.string().min(2, 'City is required'),
   state: z.string().length(2, 'State must be 2 characters'),
   zipCode: z.string().regex(/^\d{5}(-\d{4})?$/, 'Invalid ZIP code'),
-  propertyType: z.enum(['Apartment', 'House', 'Condo', 'Townhouse', 'Studio', 'Loft']),
+  propertyType: z.enum(['apartment', 'house', 'condo', 'townhouse', 'studio', 'loft']),
   
   // Step 2: Details
   bedrooms: z.coerce.number().min(0, 'Bedrooms must be 0 or more'),
@@ -90,7 +90,7 @@ export default function PropertyCreate() {
       city: '',
       state: '',
       zipCode: '',
-      propertyType: 'Apartment',
+      propertyType: 'apartment',
       bedrooms: 1,
       bathrooms: 1,
       squareFeet: null,
@@ -337,7 +337,7 @@ export default function PropertyCreate() {
                         <SelectContent>
                           {PROPERTY_TYPES.map((type) => (
                             <SelectItem key={type} value={type}>
-                              {type}
+                              {formatPropertyType(type)}
                             </SelectItem>
                           ))}
                         </SelectContent>
