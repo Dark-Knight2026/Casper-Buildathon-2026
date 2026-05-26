@@ -18,7 +18,7 @@ use leasefi_contracts::lease::{
         EquityEligibilityGranted, EquityEligibilityRevoked, LeaseAgreementCreated,
         LeaseAgreementFinished, LeaseAgreementProlonged,
     },
-    types::{CreateLeaseAgreementParams, LeaseAgreement},
+    types::{CreateLeaseAgreementParams, LeaseAgreement, RentDistributionTerms},
     Lease, LeaseHostRef, LeaseInitArgs,
 };
 use leasefi_contracts::nft::{errors::Error as NftError, types::NFTInitParams};
@@ -139,6 +139,10 @@ fn setup(env: HostEnv) -> TestData {
 fn generate_lease_agreement_creation_params(test_data: &TestData) -> CreateLeaseAgreementParams {
     CreateLeaseAgreementParams {
         tenant: test_data.env.get_account(0),
+        rent_distribution_terms: RentDistributionTerms {
+            property_manager: None,
+            property_manager_bps: 0,
+        },
         equity_option: None,
         monthly_rent: CurrencyAmount::new(None, U256::from_dec_str("250000000000000000").unwrap()),
         security_deposit: CurrencyAmount::new(
@@ -160,13 +164,16 @@ fn pay_all_lease_agreement_invoices(test_data: &mut TestData, lease_agreement_id
     test_data
         .escrow
         .with_tokens(lease_agreement.security_deposit.amount().to_u512())
-        .pay_invoice(lease_agreement.invoices_ids[0]);
+        .pay_invoice(
+            lease_agreement.invoices_ids[0],
+            *lease_agreement.security_deposit.amount(),
+        );
 
     for invoice_id in lease_agreement.invoices_ids.iter().skip(1) {
         test_data
             .escrow
             .with_tokens(lease_agreement.monthly_rent.amount().to_u512())
-            .pay_invoice(*invoice_id);
+            .pay_invoice(*invoice_id, *lease_agreement.monthly_rent.amount());
     }
 
     test_data.env.set_caller(lease_agreement.landlord);
@@ -455,7 +462,7 @@ fn test_create_lease_agreement_should_fail_if_monthly_rent_amount_is_zero() {
 #[test]
 fn test_create_lease_agreement_should_create_lease_agreement_properly() {
     let mut test_data = setup(odra_test::env());
-    let params = generate_lease_agreement_creation_params(&test_data);
+    let mut params = generate_lease_agreement_creation_params(&test_data);
 
     let expected_token_id = test_data.nft.get_tokens_count();
 
@@ -505,6 +512,7 @@ fn test_create_lease_agreement_should_create_lease_agreement_properly() {
         LeaseAgreement {
             tenant: params.tenant,
             landlord: test_data.landlord,
+            rent_distribution_terms: params.rent_distribution_terms,
             equity_option: None,
             monthly_rent: params.monthly_rent,
             security_deposit: params.security_deposit,
@@ -525,6 +533,10 @@ fn test_create_lease_agreement_should_create_lease_agreement_properly() {
             buyer: params.tenant,
             seller: test_data.lease.address(),
             amount_due: params.security_deposit,
+            rent_amount: U256::zero(),
+            rent_paid: U256::zero(),
+            property_manager: None,
+            property_manager_bps: 0,
             deadline: test_data.env.block_time() + params.invoice_validity_duration,
             is_paid: false
         },
@@ -543,6 +555,10 @@ fn test_create_lease_agreement_should_create_lease_agreement_properly() {
                 buyer: params.tenant,
                 seller: test_data.landlord,
                 amount_due: params.monthly_rent,
+                rent_amount: *params.monthly_rent.amount(),
+                rent_paid: U256::zero(),
+                property_manager: None,
+                property_manager_bps: 0,
                 deadline: test_data.env.block_time()
                     + (ONE_MONTH_IN_SECONDS * (i - 1) as u64)
                     + params.invoice_validity_duration,
@@ -1190,7 +1206,7 @@ fn test_prolong_lease_agreement_should_fail_if_new_lease_duration_is_not_even_to
 #[test]
 fn test_prolong_lease_agreement_should_prolong_lease_agreement_and_create_new_invoices() {
     let mut test_data = setup(odra_test::env());
-    let params = generate_lease_agreement_creation_params(&test_data);
+    let mut params = generate_lease_agreement_creation_params(&test_data);
     let lease_agreement_id = test_data.lease.create_lease_agreement(params.clone());
     let lease_agreement_before = test_data
         .lease
@@ -1243,6 +1259,10 @@ fn test_prolong_lease_agreement_should_prolong_lease_agreement_and_create_new_in
                 buyer: params.tenant,
                 seller: test_data.landlord,
                 amount_due: params.monthly_rent,
+                rent_amount: *params.monthly_rent.amount(),
+                rent_paid: U256::zero(),
+                property_manager: None,
+                property_manager_bps: 0,
                 deadline: test_data.env.block_time()
                     + (ONE_MONTH_IN_SECONDS * n as u64)
                     + params.invoice_validity_duration,
