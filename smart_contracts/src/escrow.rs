@@ -386,6 +386,8 @@ impl Escrow {
         self.invoices.set(&invoice_id, invoice);
     }
 
+    /// Releases a held security deposit when a lease is finalized.
+    /// @dev Only the Lease contract may call this. `security_deposit_charge` goes to the landlord and the remaining balance is refunded to the tenant.
     pub fn release_security_deposit(
         &mut self,
         invoice_id: U256,
