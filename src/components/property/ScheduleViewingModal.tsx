@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { propertyActionsService } from '@/services/propertyActionsService';
 import {
@@ -46,11 +46,46 @@ export function ScheduleViewingModal({
   const [success, setSuccess] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
   const [selectedTime, setSelectedTime] = useState('');
+  // Auto-close timer ref so unmount (parent route change, dialog dismiss)
+  // does not leave a stale setState callback firing on an unmounted tree.
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+  }, []);
 
-  const timeSlots = [
+  const ALL_TIME_SLOTS = [
     '9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM',
-    '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM'
+    '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM',
   ];
+
+  // When the user picks today's date, hide slots that have already passed —
+  // submitting a 9:00 AM viewing at 3:00 PM is a UX trap.
+  const timeSlots = useMemo(() => {
+    if (!selectedDate) return ALL_TIME_SLOTS;
+    const now = new Date();
+    const isToday =
+      selectedDate.getFullYear() === now.getFullYear() &&
+      selectedDate.getMonth() === now.getMonth() &&
+      selectedDate.getDate() === now.getDate();
+    if (!isToday) return ALL_TIME_SLOTS;
+    return ALL_TIME_SLOTS.filter((slot) => {
+      const [time, meridiem] = slot.split(' ');
+      const [hStr] = time.split(':');
+      let hour = parseInt(hStr, 10);
+      if (meridiem === 'PM' && hour !== 12) hour += 12;
+      if (meridiem === 'AM' && hour === 12) hour = 0;
+      const slotDate = new Date(selectedDate);
+      slotDate.setHours(hour, 0, 0, 0);
+      return slotDate > now;
+    });
+  }, [selectedDate]);
+
+  // Clear selectedTime if the active slot disappeared after date change.
+  useEffect(() => {
+    if (selectedTime && !timeSlots.includes(selectedTime)) {
+      setSelectedTime('');
+    }
+  }, [timeSlots, selectedTime]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -77,11 +112,12 @@ export function ScheduleViewingModal({
       });
 
       setSuccess(true);
-      setTimeout(() => {
+      closeTimerRef.current = setTimeout(() => {
         onClose();
         setSuccess(false);
         setSelectedDate(undefined);
         setSelectedTime('');
+        closeTimerRef.current = null;
       }, 2000);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to schedule viewing. Please try again.';

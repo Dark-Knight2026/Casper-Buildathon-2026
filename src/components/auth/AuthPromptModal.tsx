@@ -19,7 +19,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { UserPlus, LogIn, X, Lock } from 'lucide-react';
+import { UserPlus, LogIn, Lock } from 'lucide-react';
 
 interface AuthPromptModalProps {
   isOpen: boolean;
@@ -73,14 +73,6 @@ export function AuthPromptModal({
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-md">
-        <button
-          onClick={onClose}
-          className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none"
-          aria-label="Close"
-        >
-          <X className="h-4 w-4" />
-        </button>
-
         <DialogHeader className="text-center space-y-3 pt-6 sm:pt-2">
           <DialogTitle className="text-2xl font-bold">
             {context.title}

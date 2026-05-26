@@ -401,7 +401,10 @@ export class ApiClient {
    */
   async delete<T>(url: string, options: RequestOptions = {}): Promise<T> {
     const fullUrl = `${this.baseUrl}${url}`;
-    const shouldRetry = options.retry !== false;
+    // Opt-in retry like POST/PUT/PATCH (mutating verbs). Backends that return
+    // 404 on double-delete would surface as a retry-induced failure, so the
+    // caller must explicitly request retry when their endpoint is idempotent.
+    const shouldRetry = options.retry === true;
     const maxRetries = options.maxRetries || this.maxRetries;
 
     const makeRequest = async () => {
