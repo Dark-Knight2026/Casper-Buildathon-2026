@@ -170,11 +170,10 @@ pub mod errors {
         InvalidPaymentAmount = 311,
         PaymentExceedsAmountDue = 312,
         InvalidInvoiceKind = 313,
-        SecurityDepositTokenIsNotSet = 314,
-        InvalidSecurityDepositCurrency = 315,
-        SecurityDepositNotPaid = 316,
-        SecurityDepositAlreadyReleased = 317,
-        SecurityDepositChargeTooHigh = 318,
+        InvalidSecurityDepositCurrency = 314,
+        SecurityDepositNotPaid = 315,
+        SecurityDepositAlreadyReleased = 316,
+        SecurityDepositChargeTooHigh = 317,
     }
 }
 
@@ -199,7 +198,6 @@ pub struct Escrow {
     /// Treasury wallet/contract receiving LeaseFi transaction fees.
     treasury: Var<Address>,
     /// USDC CEP-18 token used for all security deposits.
-    // Q: Instead of using the Var<Address> here, I would rather make an external contract ref.
     security_deposit_token: External<Cep18ContractRef>,
     /// Invoices keyed by invoice ID.
     invoices: Mapping<U256, Invoice>,
@@ -338,10 +336,7 @@ impl Escrow {
         deadline: u64,
     ) -> U256 {
         self.assert_lease();
-
-        if *amount_due.currency() != Some(self.get_security_deposit_token_address()) {
-            self.env().revert(Error::InvalidSecurityDepositCurrency);
-        }
+        self.assert_security_deposit_currency(&mut amount_due);
 
         self.create_invoice(Invoice {
             kind: InvoiceKind::SecurityDeposit,
@@ -371,7 +366,7 @@ impl Escrow {
 
         match invoice.kind {
             InvoiceKind::SecurityDeposit => {
-                self.pay_security_deposit_invoice(&mut invoice, amount);
+                self.pay_security_deposit_invoice(invoice_id, &mut invoice, amount);
             }
             InvoiceKind::Lease => {
                 self.pay_lease_invoice(invoice_id, &mut invoice, amount);
@@ -417,6 +412,8 @@ impl Escrow {
         deposit.released = true;
         deposit.landlord_charge = security_deposit_charge;
         deposit.tenant_refund = tenant_refund;
+
+        self.security_deposits.set(&invoice_id, deposit);
 
         self.env().emit_event(SecurityDepositReleased {
             invoice_id,
@@ -496,6 +493,13 @@ impl Escrow {
                     self.env().revert(Error::InvalidAmountAttached);
                 }
             }
+        }
+    }
+
+    #[inline]
+    fn assert_security_deposit_currency(&self, amount_due: &mut CurrencyAmount) {
+        if *amount_due.currency() != Some(self.get_security_deposit_token_address()) {
+            self.env().revert(Error::InvalidSecurityDepositCurrency);
         }
     }
 
@@ -643,7 +647,6 @@ impl Escrow {
         match currency {
             None => self.env().transfer_tokens(&recipient, &amount.to_u512()),
             Some(token) => {
-                // Q: Can i just make this a transfer from the security deposit token instead? I rather not isnstantiate a new contract ref.
                 Cep18ContractRef::new(self.env(), token)
                     .transfer_from(&sender, &recipient, &amount);
             }
@@ -679,13 +682,5 @@ impl Escrow {
 
     fn calculate_bps_amount(&self, amount: U256, bps: u32) -> U256 {
         amount * U256::from(bps) / U256::from(ONE_HUNDRED_PERCENT_BPS)
-    }
-
-    fn min(left: U256, right: U256) -> U256 {
-        if left < right {
-            left
-        } else {
-            right
-        }
     }
 }
