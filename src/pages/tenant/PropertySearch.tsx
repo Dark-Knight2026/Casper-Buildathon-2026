@@ -9,7 +9,8 @@ import { Slider } from '@/components/ui/slider';
 import { PropertyCard } from '@/components/property/PropertyCard';
 import { InHomeAmenitiesFilter } from '@/components/search/InHomeAmenitiesFilter';
 import { SurroundingAreaFilter } from '@/components/search/SurroundingAreaFilter';
-import { applyExtendedSearchFilters } from '@/lib/extendedSearchFilter';
+import { applyExtendedSearchFilters, type ExtendedSearchMatch } from '@/lib/extendedSearchFilter';
+import type { FeaturedProperty } from '@/types/property';
 import {
   Select,
   SelectContent,
@@ -239,13 +240,15 @@ export default function PropertySearch() {
   // property ids. The other filters below operate on the local mapped
   // properties. Becomes a server call once /properties/search supports the
   // amenity_in_home[]/amenity_nearby[] params.
-  const allowedByExtended = useMemo<Set<string> | null>(() => {
+  // BLK-3: keep the full match (id → nearestByCategory) so PropertyCard can
+  // render per-category distance chips below the address (spec §2.3.2).
+  const extendedMatches = useMemo<Map<string, ExtendedSearchMatch<FeaturedProperty>> | null>(() => {
     if (extendedFiltersCount === 0) return null;
     const matches = applyExtendedSearchFilters(FEATURED_PROPERTIES, {
       amenitiesInHome,
       amenitiesNearby,
     });
-    return new Set(matches.map((m) => m.property.id));
+    return new Map(matches.map((m) => [m.property.id, m]));
   }, [amenitiesInHome, amenitiesNearby, extendedFiltersCount]);
 
   const filteredProperties = properties.filter((property) => {
@@ -276,7 +279,7 @@ export default function PropertySearch() {
 
     if (propertyType !== 'all' && property.property_type !== propertyType) return false;
 
-    if (allowedByExtended && !allowedByExtended.has(property.id)) return false;
+    if (extendedMatches && !extendedMatches.has(property.id)) return false;
 
     return true;
   });
@@ -484,6 +487,7 @@ export default function PropertySearch() {
                 daysOnMarket: property.daysOnMarket,
                 photoCount: property.photoCount,
               }}
+              nearestByCategory={extendedMatches?.get(property.id)?.nearestByCategory}
               onClick={() => {
                 // PropertyDetail reads camelCase fields (rent, latitude, zipCode,
                 // securityDeposit) off router state; the local `property` here
