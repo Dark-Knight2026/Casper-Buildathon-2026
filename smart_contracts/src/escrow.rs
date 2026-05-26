@@ -529,26 +529,50 @@ impl Escrow {
         invoice_id
     }
 
-    fn pay_security_deposit_invoice(&mut self, invoice: &mut Invoice, amount: U256) {
+    fn pay_security_deposit_invoice(
+        &mut self,
+        invoice_id: U256,
+        invoice: &mut Invoice,
+        amount: U256,
+    ) {
         if amount != *invoice.amount_due.amount() {
             self.env().revert(Error::InvalidPaymentAmount);
         }
 
-        self.transfer_payment(
-            *invoice.amount_due.currency(),
-            invoice.buyer,
-            invoice.seller,
-            amount,
+        self.transfer_to_escrow(invoice.buyer, amount);
+
+        self.security_deposits.set(
+            &invoice_id,
+            SecurityDepositRecord {
+                amount,
+                paid: true,
+                released: false,
+                landlord_charge: U256::zero(),
+                tenant_refund: U256::zero(),
+            },
         );
 
         invoice.is_paid = true;
+
+        self.env().emit_event(SecurityDepositHeld {
+            invoice_id,
+            tenant: invoice.buyer,
+            amount,
+        });
+
+        self.env().emit_event(InvoicePaid {
+            invoice_id,
+            paid_at: self.env().get_block_time(),
+        });
     }
 
     fn pay_lease_invoice(&mut self, invoice_id: U256, invoice: &mut Invoice, amount: U256) {
         let protocol_fee = self.calculate_bps_amount(amount, LEASEFI_TRANSACTION_FEE_BPS);
-        let distributable_amount = amount - protocol_fee;
+        let rent_allocation = amount - protocol_fee;
 
-        let rent_allocation = Self::min(distributable_amount, self.remaining_rent(invoice));
+        if rent_allocation > self.remaining_rent(invoice) {
+            self.env().revert(Error::PaymentExceedsAmountDue);
+        }
 
         let currency = *invoice.amount_due.currency();
 
@@ -558,6 +582,8 @@ impl Escrow {
             self.get_treasury_contract_address(),
             protocol_fee,
         );
+
+        self.distribute_rent(invoice, currency, rent_allocation);
 
         invoice.rent_paid += rent_allocation;
         invoice.is_paid = self.remaining_rent(invoice).is_zero();
@@ -622,6 +648,17 @@ impl Escrow {
                     .transfer_from(&sender, &recipient, &amount);
             }
         }
+    }
+
+    fn transfer_to_escrow(&mut self, sender: Address, amount: U256) {
+        if amount.is_zero() {
+            return;
+        }
+
+        let escrow_address = &self.env().self_address();
+
+        self.security_deposit_token
+            .transfer_from(&sender, escrow_address, &amount);
     }
 
     fn transfer_from_escrow(&mut self, recipient: Address, amount: U256) {
