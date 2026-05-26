@@ -30,7 +30,7 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::{
-    common::{ApiError, ApiResult, AppState, UserInfo, UserRole, tokens},
+    common::{ApiError, ApiResult, AppState, ErrorResponse, UserInfo, UserRole, tokens},
     providers::{EmailError, EmailMessage},
     services::{
         auth::{AuthUser, cookies, db, jwt, refresh},
@@ -81,10 +81,10 @@ impl VerifySendResponse {
     tag = "Auth",
     responses(
         (status = 200, description = "Verification email sent or queued for retry", body = VerifySendResponse),
-        (status = 400, description = "email_not_set - user has no email to verify"),
-        (status = 401, description = "Unauthorized"),
-        (status = 429, description = "rate_limited"),
-        (status = 500, description = "email_send_failed"),
+        (status = 400, description = "email_not_set - user has no email to verify", body = ErrorResponse),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 429, description = "rate_limited", body = ErrorResponse),
+        (status = 500, description = "email_send_failed", body = ErrorResponse),
     ),
     security(
         ("cookie_auth" = [])
@@ -117,10 +117,10 @@ pub async fn send_verify_email(
     tag = "Auth",
     responses(
         (status = 200, description = "Verification email sent or queued for retry", body = VerifySendResponse),
-        (status = 400, description = "email_not_set - user has no email to verify"),
-        (status = 401, description = "Unauthorized"),
-        (status = 429, description = "rate_limited"),
-        (status = 500, description = "email_send_failed"),
+        (status = 400, description = "email_not_set - user has no email to verify", body = ErrorResponse),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 429, description = "rate_limited", body = ErrorResponse),
+        (status = 500, description = "email_send_failed", body = ErrorResponse),
     ),
     security(
         ("cookie_auth" = [])
@@ -326,10 +326,10 @@ pub struct VerifyConfirmRequest {
     request_body = VerifyConfirmRequest,
     responses(
         (status = 200, description = "Email verified; tokens rotated via Set-Cookie", body = UserInfo),
-        (status = 400, description = "bad_token_format"),
-        (status = 401, description = "invalid_or_expired_token"),
-        (status = 404, description = "invalid_or_expired_token"),
-        (status = 500, description = "Internal server error"),
+        (status = 400, description = "bad_token_format", body = ErrorResponse),
+        (status = 401, description = "invalid_or_expired_token", body = ErrorResponse),
+        (status = 404, description = "invalid_or_expired_token", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse),
     ),
     security(
         ("cookie_auth" = [])
