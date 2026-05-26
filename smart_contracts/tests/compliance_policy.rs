@@ -12,7 +12,7 @@ use leasefi_contracts::{
         types::InvestorRecord, InvestorRegistry, InvestorRegistryHostRef, InvestorRegistryInitArgs,
     },
     lease::{
-        types::{CreateLeaseAgreementParams, LeaseEquityOption},
+        types::{CreateLeaseAgreementParams, LeaseEquityOption, RentDistributionTerms},
         Lease, LeaseHostRef, LeaseInitArgs,
     },
     nft::{types::NFTInitParams, NFT},
@@ -722,6 +722,10 @@ fn test_assert_can_transfer_should_succeed_if_equity_distribution_requires_lease
     ctx.lease
         .create_lease_agreement(CreateLeaseAgreementParams {
             tenant: ctx.recipient,
+            rent_distribution_terms: RentDistributionTerms {
+                property_manager: None,
+                property_manager_bps: 0,
+            },
             equity_option: Some(LeaseEquityOption { property_id }),
             monthly_rent: CurrencyAmount::new(None, U256::from(100)),
             security_deposit: CurrencyAmount::new(None, U256::from(500)),
