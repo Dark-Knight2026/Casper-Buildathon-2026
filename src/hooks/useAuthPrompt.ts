@@ -22,7 +22,7 @@ interface AuthPromptOptions {
 }
 
 export function useAuthPrompt() {
-  const { user, isAuthenticated } = useAuth();
+  const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const [isPromptOpen, setIsPromptOpen] = useState(false);
   const [promptContext, setPromptContext] = useState<AuthPromptOptions | null>(null);

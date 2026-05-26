@@ -5,17 +5,17 @@ import { Loader2 } from 'lucide-react';
 
 export function AuthCallback() {
   const navigate = useNavigate();
-  const { user, profile } = useAuth();
+  const { profile, loading } = useAuth();
 
   useEffect(() => {
-    if (user && profile) {
+    if (!loading && profile) {
       // Redirect based on user role
-      const redirectPath = profile.role === 'tenant' 
-        ? '/tenant/dashboard' 
+      const redirectPath = profile.role === 'tenant'
+        ? '/tenant/dashboard'
         : '/landlord/dashboard';
       navigate(redirectPath);
     }
-  }, [user, profile, navigate]);
+  }, [loading, profile, navigate]);
 
   return (
     <div className="min-h-screen flex items-center justify-center">

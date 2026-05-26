@@ -15,7 +15,7 @@ import { VerificationDisclaimer } from '@/components/property/VerificationDiscla
 export default function ApplicationForm() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user } = useAuth();
+  const { profile } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
@@ -27,7 +27,7 @@ export default function ApplicationForm() {
   const [formData, setFormData] = useState({
     // Personal Information
     fullName: '',
-    email: user?.email || '',
+    email: profile?.email || '',
     phone: '',
     dateOfBirth: '',
     
@@ -66,7 +66,7 @@ export default function ApplicationForm() {
       return;
     }
 
-    if (!user) {
+    if (!profile) {
       setError('You must be logged in to submit an application');
       return;
     }
@@ -79,7 +79,7 @@ export default function ApplicationForm() {
     setLoading(true);
 
     try {
-      await propertyActionsService.submitApplication(user.id, {
+      await propertyActionsService.submitApplication(profile.id, {
         propertyId,
         landlordId,
         fullName: formData.fullName,

@@ -37,7 +37,7 @@ export function ScheduleViewingModal({
   propertyAddress,
   landlordId = 'default-landlord-id', // TODO: Get from property data
 }: ScheduleViewingModalProps) {
-  const { user } = useAuth();
+  const { profile } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
@@ -58,7 +58,7 @@ export function ScheduleViewingModal({
       return;
     }
 
-    if (!user) {
+    if (!profile) {
       setError('You must be logged in to schedule a viewing');
       return;
     }
@@ -66,7 +66,7 @@ export function ScheduleViewingModal({
     setLoading(true);
 
     try {
-      await propertyActionsService.scheduleViewing(user.id, {
+      await propertyActionsService.scheduleViewing(profile.id, {
         propertyId,
         landlordId,
         viewingDate: selectedDate,
