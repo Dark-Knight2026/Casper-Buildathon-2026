@@ -19,7 +19,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import { propertyService } from '@/services/propertyService';
-import { getCurrentUserId } from '@/lib/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
 import { ALL_AMENITIES, UTILITIES, LEASE_TERMS, PET_POLICIES, US_STATES, formatPropertyType, type PropertyFormData, type PropertyType, type Property } from '@/types/property';
 
 const PROPERTY_TYPES: PropertyType[] = ['apartment', 'house', 'condo', 'townhouse', 'studio', 'loft'];
@@ -54,6 +54,10 @@ export default function PropertyEdit() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
+  // ProtectedRoute on /landlord/* guarantees `profile` is non-null when this
+  // component renders, but the guard below stays as defense-in-depth against
+  // a transient null during a re-render mid-logout.
+  const { profile } = useAuth();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -188,7 +192,7 @@ export default function PropertyEdit() {
   const onSubmit = async (data: PropertyFormValues) => {
     try {
       setSaving(true);
-      const landlordId = await getCurrentUserId();
+      const landlordId = profile?.id;
       if (!landlordId || !id) return;
 
       // Update property
