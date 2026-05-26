@@ -7,6 +7,7 @@ import {
 } from '@/services/ico/backendAuthService';
 import { getMe, patchMe, type PatchProfileBody } from '@/services/userProfileService';
 import type { UserProfile, UserRole, UserStatus } from '@/types/user';
+import { logger } from '@/utils/logger';
 
 // Non-secret session marker. The actual auth tokens live in HttpOnly cookies
 // set by the backend at /auth/login; this localStorage entry is just a hint to
@@ -30,6 +31,24 @@ function mapUserStatus(raw: string | null): UserStatus | undefined {
   return KNOWN_USER_STATUSES.has(raw as UserStatus) ? (raw as UserStatus) : undefined;
 }
 
+// Whitelist of `users.role` values the UI knows how to route. An unknown
+// value (new backend role, tampered payload) returns `undefined` so the
+// caller can refuse to seat the profile rather than letting ProtectedRoute
+// branch on a string with no defined behaviour.
+const KNOWN_USER_ROLES: ReadonlySet<UserRole> = new Set<UserRole>([
+  'buyer', 'seller', 'agent', 'broker', 'landlord', 'tenant',
+  'mortgage_broker', 'cpa', 'real_estate_attorney', 'insurance_agent',
+  'stager', 'photographer', 'contractor', 'listing_attorney', 'hoa_manager',
+  'appraiser', 'home_inspector', 'pest_inspector', 'surveyor',
+  'environmental_specialist', 'buyer_attorney', 'seller_attorney',
+  'title_officer', 'escrow_officer', 'notary', 'admin',
+]);
+
+function mapUserRole(raw: string | null | undefined): UserRole | undefined {
+  if (raw == null) return undefined;
+  return KNOWN_USER_ROLES.has(raw as UserRole) ? (raw as UserRole) : undefined;
+}
+
 /**
  * Inverse of `mapServerUserInfo` for the subset of fields that
  * `PATCH /users/me` accepts. Only writes a key when the caller actually
@@ -49,9 +68,14 @@ function toPatchProfileBody(updates: Partial<UserProfile>): PatchProfileBody {
 }
 
 function mapServerUserInfo(info: ServerUserInfo): UserProfile {
+  const role = mapUserRole(info.role);
+  if (!role) {
+    logger.error('[AuthContext] Unrecognized role from backend:', info.role);
+    throw new Error(`Unrecognized user role: ${info.role}`);
+  }
   return {
     id: info.id,
-    role: info.role as UserRole,
+    role,
     email: info.email ?? '',
     firstName: info.first_name,
     lastName: info.last_name,
@@ -77,8 +101,17 @@ function loadSessionMarker(): UserProfile | null {
       createdAt: string;
       updatedAt?: string;
     };
+    // Validate the restored role before any routing decision — a tampered or
+    // outdated marker must not seat the profile with a role ProtectedRoute
+    // can't reason about.
+    const role = mapUserRole(parsed.role);
+    if (!role) {
+      localStorage.removeItem(SESSION_MARKER_KEY);
+      return null;
+    }
     return {
       ...parsed,
+      role,
       createdAt: new Date(parsed.createdAt),
       updatedAt: parsed.updatedAt ? new Date(parsed.updatedAt) : undefined,
     };
