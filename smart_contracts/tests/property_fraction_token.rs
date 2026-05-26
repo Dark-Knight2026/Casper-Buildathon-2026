@@ -3,10 +3,12 @@ use leasefi_contracts::{
         errors::Error as ComplianceError, types::ComplianceConfig, CompliancePolicy,
         CompliancePolicyHostRef, CompliancePolicyInitArgs,
     },
+    escrow::{Escrow, EscrowInitArgs},
     investor_registry::{
         types::InvestorRecord, InvestorRegistry, InvestorRegistryHostRef, InvestorRegistryInitArgs,
     },
     lease::{Lease, LeaseInitArgs},
+    nft::{types::NFTInitParams, NFT},
     property_fraction_token::{
         errors::Error as TokenError,
         events::{CompliancePolicySet, PropertyFractionTokenInitialized},
@@ -17,6 +19,7 @@ use leasefi_contracts::{
         types::{CreatePropertyParams, PropertyStatus},
         PropertyRegistry, PropertyRegistryInitArgs,
     },
+    roles::{Roles, RolesInitArgs},
 };
 use odra::{
     casper_types::U256,
@@ -24,6 +27,8 @@ use odra::{
     prelude::*,
 };
 use odra_modules::access::DEFAULT_ADMIN_ROLE;
+
+use crate::nft::NFTInitArgs;
 
 // =============================================================================
 // Test Context
@@ -58,9 +63,52 @@ fn setup(env: HostEnv) -> Context {
     let issuer = env.get_account(9);
     let initial_supply = U256::from(1_000_000);
 
+    let roles = Roles::deploy(&env, RolesInitArgs { admin: owner });
+
     let mut investor_registry = InvestorRegistry::deploy(&env, InvestorRegistryInitArgs { owner });
     let mut property_registry = PropertyRegistry::deploy(&env, PropertyRegistryInitArgs { owner });
-    let lease = Lease::deploy(&env, LeaseInitArgs { owner });
+    let mut escrow = Escrow::deploy(
+        &env,
+        EscrowInitArgs {
+            owner,
+            min_deadline: 5 * 60,
+        },
+    );
+
+    let mut nft = NFT::deploy(
+        &env,
+        NFTInitArgs {
+            params: NFTInitParams {
+                owner,
+                symbol: String::from("LEASE"),
+                name: String::from("LEASE"),
+                minters: vec![],
+                burners: vec![],
+                whitelist_managers: vec![owner],
+                freezers: vec![],
+                force_transferers: vec![],
+            },
+        },
+    );
+
+    let lease = Lease::deploy(
+        &env,
+        LeaseInitArgs {
+            owner,
+            roles: roles.address(),
+            escrow: escrow.address(),
+            nft: nft.address(),
+            property_registry: property_registry.address(),
+        },
+    );
+
+    escrow.set_lease(lease.address());
+    escrow.set_treasury(env.get_account(19));
+
+    nft.add_minter(&lease.address());
+    nft.add_freezer(&lease.address());
+
+    nft.add_to_whitelist(&owner);
 
     let mut compliance = CompliancePolicy::deploy(
         &env,
