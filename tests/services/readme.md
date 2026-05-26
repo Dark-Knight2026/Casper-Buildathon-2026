@@ -13,3 +13,4 @@
 | backendAuthService.test.ts | Tests backend nonce/signature authentication flow |
 | vestingClaimService.test.ts | Tests vesting claim transaction building and error parsing |
 | userProfileService.test.ts | Tests `/api/v1/users/me` REST wrappers — URLs, snake_case bodies, FormData avatar upload, error propagation |
+| withdrawUnbondedService.test.ts | Tests staking-contract `withdraw_unbonded` transaction building and contract-hash resolution from env |
