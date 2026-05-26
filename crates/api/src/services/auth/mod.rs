@@ -21,6 +21,8 @@ pub mod refresh;
 pub mod routes;
 /// Session-management handlers: list and revoke active refresh tokens.
 pub mod sessions;
+/// Email-verification handlers: send/confirm/resend verification links.
+pub mod verify;
 /// Wallet-based authentication: nonce + signature login.
 pub mod wallet;
 
@@ -42,4 +44,5 @@ pub use models::{
 pub use refresh::{IssuedRefreshToken, REFRESH_TOKEN_TTL, issue_login_refresh_token, rotate};
 pub use routes::router;
 pub use sessions::{get_sessions, revoke_all_sessions, revoke_session};
+pub use verify::send_verify_email;
 pub use wallet::{get_nonce, login};

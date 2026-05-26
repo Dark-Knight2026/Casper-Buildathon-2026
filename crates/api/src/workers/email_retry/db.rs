@@ -10,6 +10,8 @@ use chrono::{DateTime, Utc};
 use sqlx::{Error, PgPool};
 use uuid::Uuid;
 
+use crate::EmailMessage;
+
 /// Row returned by [`claim_pending_retries`].
 ///
 /// `attempts` is the value **after** the claim-time increment - i.e. the
@@ -28,6 +30,36 @@ pub struct ClaimedRetry {
     pub body: String,
     /// Delivery-attempt counter after the claim-time increment.
     pub attempts: i32,
+}
+
+/// Enqueues a message for later delivery after a transient send failure.
+///
+/// The send handler calls this on [`EmailError::Transient`]: the user is
+/// told the mail is on its way, the row lands `pending` with
+/// `next_retry_at = NOW()` (DDL default), and the next retry tick claims it.
+/// `attempts = 0` and `status = 'pending'` also come from the table defaults,
+/// so this insert only carries the payload columns.
+///
+/// [`EmailError::Transient`]: crate::providers::EmailError::Transient
+///
+/// # Errors
+///
+/// Propagates `sqlx::Error` from the database (connection, query).
+#[inline]
+pub async fn insert_retry(pool: &PgPool, message: &EmailMessage) -> Result<Uuid, Error> {
+    let row = sqlx::query!(
+        r"
+            INSERT INTO email_send_retries (to_address, subject, body)
+            VALUES ($1, $2, $3)
+            RETURNING id
+        ",
+        message.to,
+        message.subject,
+        message.body,
+    )
+    .fetch_one(pool)
+    .await?;
+    Ok(row.id)
 }
 
 /// Atomically claims due rows: SELECT eligible ids under

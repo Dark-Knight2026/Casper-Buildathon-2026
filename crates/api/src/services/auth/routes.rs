@@ -11,7 +11,7 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 
 use crate::{
     common::AppState,
-    services::auth::{logout, refresh, sessions, wallet},
+    services::auth::{logout, refresh, sessions, verify, wallet},
 };
 
 // `/api/v1/auth/...`
@@ -31,4 +31,5 @@ pub fn router() -> OpenApiRouter<Arc<AppState>> {
         .routes(routes!(sessions::get_sessions))
         .routes(routes!(sessions::revoke_session))
         .routes(routes!(sessions::revoke_all_sessions))
+        .routes(routes!(verify::send_verify_email))
 }

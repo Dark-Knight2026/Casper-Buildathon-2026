@@ -26,6 +26,12 @@ struct RawEnvConfig {
     port: u16,
     #[serde(default = "default_cors_origin")]
     cors_origin: String,
+    /// Base URL of the frontend app, used to build links embedded in
+    /// transactional emails (e.g. the email-verification deep link).
+    /// Independent of the mailer backend - even `LoggingEmailSender` logs
+    /// a link, so this is required regardless of Postmark config.
+    #[serde(default = "default_frontend_url")]
+    frontend_url: String,
     /// `Secure` flag toggle for auth cookies. Production/staging deploys must
     /// set `COOKIE_SECURE=true` so HTTPS-only delivery is enforced.
     #[serde(default)]
@@ -81,6 +87,9 @@ const fn default_port() -> u16 {
 }
 fn default_cors_origin() -> String {
     "http://localhost:8080".to_owned()
+}
+fn default_frontend_url() -> String {
+    "http://localhost:3000".to_owned()
 }
 
 /// Fallback ICO configuration from `ICO_PRICE_USD` and `ICO_TOTAL_ALLOCATION` env vars.
@@ -155,6 +164,9 @@ pub struct ServerConfig {
     pub port: u16,
     /// Allowed CORS origin.
     pub cors_origin: String,
+    /// Base URL of the frontend app, used to build links embedded in
+    /// transactional emails. Defaults to `http://localhost:3000` for dev.
+    pub frontend_url: String,
     /// Whether auth cookies are issued with the `Secure` flag. Must be `true`
     /// in any HTTPS deployment, must be `false` for plain-HTTP local dev (the
     /// browser silently drops `Secure` cookies on `http://`, which would break
@@ -274,6 +286,7 @@ impl ServerConfig {
             jwt_secret: raw.supabase_jwt_secret,
             port: raw.port,
             cors_origin: raw.cors_origin,
+            frontend_url: raw.frontend_url,
             cookie_secure: raw.cookie_secure,
             contract_big: raw.contract_big.map(|s| s.to_ascii_lowercase()),
             ico_fallback,

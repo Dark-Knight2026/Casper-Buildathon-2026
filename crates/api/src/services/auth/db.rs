@@ -557,6 +557,36 @@ pub async fn fetch_jwt_invalidate_before(
     Ok(row.and_then(|r| r.jwt_invalidate_before))
 }
 
+/// Fetches the user's email for the verification-send flow.
+///
+/// Returns `Ok(None)` when the user has no email set (`users.email` is
+/// nullable - wallet-only accounts exist), which the send handler maps to
+/// `400 email_not_set`. A missing row collapses to the same `None`; a token
+/// that passed `AuthUser` always corresponds to a real user, so in practice
+/// `None` means "email not set", not "user gone".
+///
+/// # Errors
+///
+/// Returns `sqlx::Error` on infrastructure failure (connection, decode).
+#[inline]
+pub async fn fetch_user_email_for_verify(
+    pool: &PgPool,
+    user_id: Uuid,
+) -> Result<Option<String>, Error> {
+    let row = sqlx::query!(
+        r"
+            SELECT email
+            FROM users
+            WHERE id = $1
+        ",
+        user_id,
+    )
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(row.and_then(|r| r.email))
+}
+
 /// Revokes every active row in the family that contains `presented_hash`.
 ///
 /// Idempotent and tolerant by design - the logout handler calls this with a
