@@ -20,9 +20,12 @@ export default function ApplicationForm() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
 
-  // Get propertyId from location state or query params
+  // Get propertyId and landlordId from location state or query params.
+  // landlordId must come from the property record (the listing page passes it
+  // via navigate state); a placeholder here corrupts every persisted
+  // application, so the submit guard below refuses to fire without it.
   const propertyId = location.state?.propertyId || new URLSearchParams(location.search).get('propertyId') || '';
-  const landlordId = 'default-landlord-id'; // TODO: Get from property data
+  const landlordId = location.state?.landlordId || new URLSearchParams(location.search).get('landlordId') || '';
 
   const [formData, setFormData] = useState({
     // Personal Information
@@ -73,6 +76,11 @@ export default function ApplicationForm() {
 
     if (!propertyId) {
       setError('Property ID is missing. Please return to the property page and try again.');
+      return;
+    }
+
+    if (!landlordId) {
+      setError('Landlord information is missing. Please return to the property page and try again.');
       return;
     }
 

@@ -27,7 +27,10 @@ interface ScheduleViewingModalProps {
   onClose: () => void;
   propertyId: string;
   propertyAddress: string;
-  landlordId?: string;
+  // Required: must come from the property record (`property.landlordId`).
+  // The viewing request is recorded against this id, so a placeholder here
+  // silently corrupts every persisted row.
+  landlordId: string;
 }
 
 export function ScheduleViewingModal({
@@ -35,7 +38,7 @@ export function ScheduleViewingModal({
   onClose,
   propertyId,
   propertyAddress,
-  landlordId = 'default-landlord-id', // TODO: Get from property data
+  landlordId,
 }: ScheduleViewingModalProps) {
   const { profile } = useAuth();
   const [loading, setLoading] = useState(false);
