@@ -16,6 +16,20 @@ import { logger } from '@/utils/logger';
 // refresh round-trip resolves. It carries no secret material.
 const SESSION_MARKER_KEY = 'leasefi_session';
 
+// Persisted shape of the session marker — deliberately narrow. localStorage is
+// readable by any same-origin script (browser extensions with storage perms,
+// XSS payloads) and survives browser restart, so PII (email, phone, names,
+// bio) must not be cached there. The four fields below are the minimum needed
+// to render the signed-in shell (role for routing, isProfileComplete for the
+// nudge, status for moderation banners) until /auth/refresh resolves and
+// populates the full profile via refreshProfile().
+interface SessionHint {
+  id: string;
+  role: UserRole;
+  isProfileComplete?: boolean;
+  status?: UserStatus;
+}
+
 // Whitelist of `users.status` values the UI knows how to render. An unknown
 // value is dropped to `undefined` so consumers fall through to the safe
 // default branch instead of trying to switch on a string we have no copy for.
@@ -97,23 +111,28 @@ function loadSessionMarker(): UserProfile | null {
   try {
     const raw = localStorage.getItem(SESSION_MARKER_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as Omit<UserProfile, 'createdAt' | 'updatedAt'> & {
-      createdAt: string;
-      updatedAt?: string;
-    };
-    // Validate the restored role before any routing decision — a tampered or
+    const parsed = JSON.parse(raw) as Partial<SessionHint>;
+    // Validate id + role before any routing decision — a tampered or
     // outdated marker must not seat the profile with a role ProtectedRoute
-    // can't reason about.
+    // can't reason about, or without a stable id consumers can key off.
     const role = mapUserRole(parsed.role);
-    if (!role) {
+    if (!role || typeof parsed.id !== 'string' || parsed.id.length === 0) {
       localStorage.removeItem(SESSION_MARKER_KEY);
       return null;
     }
+    // Construct a skeleton UserProfile from the hint. PII fields (email,
+    // names, phone, bio, walletAddress, avatar) intentionally stay empty
+    // until refreshProfile() populates them — consumers should gate any PII
+    // display on `loading === false`.
     return {
-      ...parsed,
+      id: parsed.id,
       role,
-      createdAt: new Date(parsed.createdAt),
-      updatedAt: parsed.updatedAt ? new Date(parsed.updatedAt) : undefined,
+      isProfileComplete: parsed.isProfileComplete,
+      status: parsed.status,
+      email: '',
+      firstName: '',
+      lastName: '',
+      createdAt: new Date(0),
     };
   } catch {
     localStorage.removeItem(SESSION_MARKER_KEY);
@@ -123,7 +142,14 @@ function loadSessionMarker(): UserProfile | null {
 
 function saveSessionMarker(profile: UserProfile): void {
   try {
-    localStorage.setItem(SESSION_MARKER_KEY, JSON.stringify(profile));
+    // Persist only the narrow SessionHint — see SESSION_MARKER_KEY comment.
+    const hint: SessionHint = {
+      id: profile.id,
+      role: profile.role,
+      isProfileComplete: profile.isProfileComplete,
+      status: profile.status,
+    };
+    localStorage.setItem(SESSION_MARKER_KEY, JSON.stringify(hint));
   } catch {
     // Quota or private-mode failure — non-fatal.
   }
