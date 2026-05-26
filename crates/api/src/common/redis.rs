@@ -32,6 +32,34 @@ const EMAIL_CHANGE_MAX_ATTEMPTS: u64 = 3;
 /// flood the new mailbox with confirmation emails.
 const EMAIL_CHANGE_RATE_WINDOW_SECS: u64 = 24 * 60 * 60;
 
+/// Time-to-live for a pending email-verification token (24 hours).
+///
+/// Mirrors [`EMAIL_CHANGE_TTL`] for the same reason: the link arrives by
+/// email and may sit unread for hours before the user clicks it. A shorter
+/// window would 404 good-faith confirmations.
+const VERIFY_EMAIL_TTL: u64 = 24 * 60 * 60;
+
+/// Maximum verify-email send requests per user within
+/// [`VERIFY_EMAIL_SEND_PER_MINUTE_WINDOW_SECS`].
+///
+/// Tight burst guard: one send per minute stops a user (or a stolen cookie)
+/// from hammering the resend button and flooding the mailbox.
+const VERIFY_EMAIL_SEND_PER_MINUTE_MAX: u64 = 1;
+
+/// Short rolling window for the verify-email send rate limit (60 seconds).
+const VERIFY_EMAIL_SEND_PER_MINUTE_WINDOW_SECS: u64 = 60;
+
+/// Maximum verify-email send requests per user within
+/// [`VERIFY_EMAIL_SEND_PER_HOUR_WINDOW_SECS`].
+///
+/// Hourly cap layered over the per-minute guard: absorbs a handful of
+/// legitimate retries (typo'd address, lost mail) while still bounding the
+/// total volume one account can trigger in an hour.
+const VERIFY_EMAIL_SEND_PER_HOUR_MAX: u64 = 5;
+
+/// Long rolling window for the verify-email send rate limit (1 hour).
+const VERIFY_EMAIL_SEND_PER_HOUR_WINDOW_SECS: u64 = 60 * 60;
+
 /// Maximum avatar uploads per user within
 /// [`AVATAR_UPLOAD_RATE_WINDOW_SECS`].
 ///
@@ -352,6 +380,174 @@ impl RedisStore {
         Ok(())
     }
 
+    /// Persists a pending email-verification token keyed by `user_id`.
+    ///
+    /// Mirrors [`save_email_change_token`] but stores only `hex(token_hash)`
+    /// with no trailing payload: verification does not carry a new email,
+    /// it just flips `email_verified`. Hashing means a Redis dump never
+    /// exposes a usable confirmation token.
+    ///
+    /// Keying on `user_id` (not the hash) means a fresh send atomically
+    /// overwrites the previous slot, instantly invalidating the old link -
+    /// consistent with email-change.
+    ///
+    /// [`save_email_change_token`]: Self::save_email_change_token
+    ///
+    /// # Errors
+    ///
+    /// Returns `RedisError` if the connection fails.
+    #[inline]
+    pub async fn save_verify_email_token(
+        &self,
+        user_id: Uuid,
+        token_hash: &[u8; 32],
+    ) -> RedisResult<()> {
+        let mut conn = self.conn.clone();
+        let key = Self::verify_email_key(user_id);
+        conn.set_ex(&key, hex::encode(token_hash), VERIFY_EMAIL_TTL)
+            .await
+    }
+
+    /// Atomically retrieves and deletes the pending verification token for
+    /// `user_id`, returning the stored 32-byte hash.
+    ///
+    /// Uses `GETDEL` to close the TOCTOU window: a malformed retry cannot
+    /// consume the slot twice. Returns `Ok(None)` when the slot is empty
+    /// (no pending request, already consumed, or expired) or when the
+    /// stored value fails to decode - the handler treats a corrupt payload
+    /// identically to a missing one (404).
+    ///
+    /// # Errors
+    ///
+    /// Returns `RedisError` if the connection fails.
+    #[inline]
+    pub async fn take_verify_email_token(&self, user_id: Uuid) -> RedisResult<Option<[u8; 32]>> {
+        let mut conn = self.conn.clone();
+        let key = Self::verify_email_key(user_id);
+        let raw = redis::cmd("GETDEL")
+            .arg(&key)
+            .query_async::<Option<String>>(&mut conn)
+            .await?;
+        Ok(raw.and_then(|hex_hash| {
+            let mut hash = [0u8; 32];
+            hex::decode_to_slice(&hex_hash, &mut hash).ok()?;
+            Some(hash)
+        }))
+    }
+
+    /// Drops a pending verification token without consuming it through the
+    /// confirm path.
+    ///
+    /// Used by the send handler to roll the slot back when `mailer.send`
+    /// fails permanently: the user never received the link, so leaving the
+    /// token live for 24 hours just keeps the slot hostage.
+    ///
+    /// # Errors
+    ///
+    /// Returns `RedisError` if the connection fails. Callers treat this as
+    /// best-effort and log-warn rather than masking the upstream failure.
+    #[inline]
+    pub async fn clear_verify_email_token(&self, user_id: Uuid) -> RedisResult<()> {
+        let mut conn = self.conn.clone();
+        let key = Self::verify_email_key(user_id);
+        conn.del::<_, ()>(&key).await
+    }
+
+    /// Returns `true` when the user has exceeded *either* the per-minute or
+    /// the per-hour verify-email send limit.
+    ///
+    /// Read-only (no `INCR`): the send handler calls this as a pre-flight
+    /// check before the `email IS NULL` guard, so a wallet-only user who
+    /// taps the button never burns a counter slot (A3). The `OR` across
+    /// both windows is the point - the per-minute guard catches bursts the
+    /// hourly cap alone would let through.
+    ///
+    /// # Errors
+    ///
+    /// Returns `RedisError` if the connection fails.
+    #[inline]
+    pub async fn is_verify_email_send_rate_limited(&self, user_id: Uuid) -> RedisResult<bool> {
+        let mut conn = self.conn.clone();
+        let minute_key = Self::verify_email_send_minute_key(user_id);
+        let hour_key = Self::verify_email_send_hour_key(user_id);
+        let minute_count = conn.get::<_, Option<u64>>(&minute_key).await?;
+        let hour_count = conn.get::<_, Option<u64>>(&hour_key).await?;
+        Ok(
+            minute_count.is_some_and(|c| c >= VERIFY_EMAIL_SEND_PER_MINUTE_MAX)
+                || hour_count.is_some_and(|c| c >= VERIFY_EMAIL_SEND_PER_HOUR_MAX),
+        )
+    }
+
+    /// Records one verify-email send attempt against *both* rolling windows.
+    ///
+    /// `INCR` + conditional `EXPIRE` per key mirrors
+    /// [`record_email_change_attempt`], applied to the minute and hour
+    /// counters in turn: the TTL is set only on the first increment so each
+    /// window starts when the user begins, not on every retry.
+    ///
+    /// [`record_email_change_attempt`]: Self::record_email_change_attempt
+    ///
+    /// # Errors
+    ///
+    /// Returns `RedisError` if the connection fails.
+    #[inline]
+    pub async fn record_verify_email_send_attempt(&self, user_id: Uuid) -> RedisResult<()> {
+        let mut conn = self.conn.clone();
+        let minute_key = Self::verify_email_send_minute_key(user_id);
+        let hour_key = Self::verify_email_send_hour_key(user_id);
+        let minute_count = conn.incr::<_, _, u64>(&minute_key, 1u64).await?;
+        if minute_count == 1 {
+            conn.expire::<_, ()>(
+                &minute_key,
+                VERIFY_EMAIL_SEND_PER_MINUTE_WINDOW_SECS.cast_signed(),
+            )
+            .await?;
+        }
+        let hour_count = conn.incr::<_, _, u64>(&hour_key, 1u64).await?;
+        if hour_count == 1 {
+            conn.expire::<_, ()>(
+                &hour_key,
+                VERIFY_EMAIL_SEND_PER_HOUR_WINDOW_SECS.cast_signed(),
+            )
+            .await?;
+        }
+        Ok(())
+    }
+
+    /// Reverses a previous `record_verify_email_send_attempt` after the
+    /// downstream send fails permanently.
+    ///
+    /// `DECR` on both counters; a counter that drops to zero (or below,
+    /// defensively) is deleted so the next attempt starts a fresh window
+    /// rather than inheriting a shrunken TTL - mirrors
+    /// [`decrement_email_change_attempt`]. Only called on
+    /// [`EmailError::Permanent`](crate::providers::EmailError::Permanent):
+    /// a transient failure keeps the counters bumped because the queued
+    /// retry will still deliver the mail (A3).
+    ///
+    /// [`decrement_email_change_attempt`]: Self::decrement_email_change_attempt
+    ///
+    /// # Errors
+    ///
+    /// Returns `RedisError` if the connection fails. Callers treat this as
+    /// best-effort: the overcounting it cleans up is a UX issue, not a
+    /// security one.
+    #[inline]
+    pub async fn decrement_verify_email_send_attempt(&self, user_id: Uuid) -> RedisResult<()> {
+        let mut conn = self.conn.clone();
+        let minute_key = Self::verify_email_send_minute_key(user_id);
+        let hour_key = Self::verify_email_send_hour_key(user_id);
+        let minute_count = conn.decr::<_, _, i64>(&minute_key, 1i64).await?;
+        if minute_count <= 0 {
+            conn.del::<_, ()>(&minute_key).await?;
+        }
+        let hour_count = conn.decr::<_, _, i64>(&hour_key, 1i64).await?;
+        if hour_count <= 0 {
+            conn.del::<_, ()>(&hour_key).await?;
+        }
+        Ok(())
+    }
+
     /// Returns `true` when the user has already exceeded
     /// [`AVATAR_UPLOAD_MAX_ATTEMPTS`] within the rolling window.
     ///
@@ -429,6 +625,38 @@ impl RedisStore {
     #[inline]
     fn email_change_attempts_key(user_id: Uuid) -> String {
         format!("email_change_attempts:{user_id}")
+    }
+
+    /// Generates the Redis key for a pending email-verification token.
+    ///
+    /// Exposed `pub` (rather than module-private) so integration tests can
+    /// reach the canonical key format - the verify-flow tests assert TTL
+    /// and overwrite behaviour directly. Any future rename then breaks
+    /// tests at compile-time, not silently at runtime.
+    #[inline]
+    #[must_use]
+    pub fn verify_email_key(user_id: Uuid) -> String {
+        format!("verify:email:{user_id}")
+    }
+
+    /// Generates the Redis key for the per-minute verify-email send counter.
+    ///
+    /// Exposed `pub` so the rate-limit tests can delete it to simulate the
+    /// 60-second window having elapsed without sleeping in the test.
+    #[inline]
+    #[must_use]
+    pub fn verify_email_send_minute_key(user_id: Uuid) -> String {
+        format!("verify:email:send:1m:{user_id}")
+    }
+
+    /// Generates the Redis key for the per-hour verify-email send counter.
+    ///
+    /// Exposed `pub` so the rate-limit tests can delete it to simulate the
+    /// 1-hour window having elapsed without sleeping in the test.
+    #[inline]
+    #[must_use]
+    pub fn verify_email_send_hour_key(user_id: Uuid) -> String {
+        format!("verify:email:send:1h:{user_id}")
     }
 
     /// Generates the Redis key for the avatar-upload rate-limit counter.
