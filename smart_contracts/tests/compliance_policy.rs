@@ -1,4 +1,5 @@
 use leasefi_contracts::{
+    big_coin::{BigCoin, BigCoinHostRef, BigCoinInitArgs},
     common::CurrencyAmount,
     compliance_policy::{
         errors::Error as ComplianceError,
@@ -50,6 +51,7 @@ struct Context {
     property_token: Address,
     revenue_distributor: Address,
     landlord: Address,
+    security_deposit_token: BigCoinHostRef,
 }
 
 fn setup(env: HostEnv) -> Context {
@@ -128,8 +130,19 @@ fn setup(env: HostEnv) -> Context {
         },
     );
 
+    let security_deposit_token = BigCoin::deploy(
+        &env,
+        BigCoinInitArgs {
+            symbol: String::from("USDC"),
+            name: String::from("USDC"),
+            decimals: 18,
+            initial_supply: U256::from_dec_str("5000000000000000000000000000000").unwrap(),
+        },
+    );
+
     escrow.set_lease(lease.address());
     escrow.set_treasury(env.get_account(19));
+    escrow.set_security_deposit_token(security_deposit_token.address());
 
     nft.add_minter(&lease.address());
     nft.add_freezer(&lease.address());
@@ -174,6 +187,7 @@ fn setup(env: HostEnv) -> Context {
         property_token,
         revenue_distributor,
         landlord,
+        security_deposit_token,
     }
 }
 
@@ -728,7 +742,10 @@ fn test_assert_can_transfer_should_succeed_if_equity_distribution_requires_lease
             },
             equity_option: Some(LeaseEquityOption { property_id }),
             monthly_rent: CurrencyAmount::new(None, U256::from(100)),
-            security_deposit: CurrencyAmount::new(None, U256::from(500)),
+            security_deposit: CurrencyAmount::new(
+                Some(ctx.security_deposit_token.address()),
+                U256::from(500),
+            ),
             start: ctx.env.block_time(),
             end: ctx.env.block_time() + ONE_MONTH_IN_SECONDS,
             invoice_validity_duration: ctx.escrow.get_min_deadline(),
