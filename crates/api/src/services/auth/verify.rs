@@ -36,7 +36,7 @@ use crate::{
             models::{VerifyConfirmRequest, VerifySendResponse},
             refresh,
         },
-        users::db as users_db,
+        users,
     },
     workers::email_retry,
 };
@@ -372,7 +372,7 @@ pub async fn confirm_verify_email(
 
     // The profile is needed for the response body in both branches; a
     // soft-deleted user surfaces here as `404` via the `RowNotFound` mapping.
-    let profile = users_db::fetch_user_profile(&state.db, user_id).await?;
+    let profile = users::db::fetch_user_profile(&state.db, user_id).await?;
     let role = UserRole::from_str(&profile.role).unwrap_or(UserRole::Unknown);
     let verification_level = profile.verification_level;
     let user_info = UserInfo::from(profile);

@@ -18,6 +18,7 @@
 use core::fmt::{Debug, Formatter, Result as FmtResult};
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use axum::http::{Method, StatusCode};
 use axum_test::{TestServer, TestServerConfig, Transport, http::header::COOKIE};
 use casper_types::{AsymmetricType, PublicKey, SecretKey, crypto};
@@ -43,7 +44,7 @@ use api::{
         CASPER_MESSAGE_PREFIX, JWT_AUDIENCE, JWT_ISSUER, RedisStore, TOTAL_SUPPLY, TokenType,
         VerificationLevel,
     },
-    providers::{EmailSender, SharedMediaStorage, StubMediaStorage},
+    providers::{EmailError, EmailMessage, EmailSender, SharedMediaStorage, StubMediaStorage},
     server,
 };
 
@@ -230,6 +231,42 @@ pub async fn setup_test_server_with(
         jwt_secret,
         redis: redis_env,
         state,
+    }
+}
+
+/// Fake mailer whose `send` always fails transiently.
+///
+/// Drives the queue-for-retry branch: the handler still answers `200`, the
+/// message lands in `email_send_retries`, and the rate-limit counter is NOT
+/// compensated (the mail will still be delivered by the worker).
+#[derive(Debug, Default)]
+pub struct TransientMailer;
+
+#[async_trait]
+impl EmailSender for TransientMailer {
+    #[inline]
+    async fn send(&self, _message: EmailMessage) -> Result<(), EmailError> {
+        Err(EmailError::Transient(
+            "transient mailer (test fixture)".to_owned(),
+        ))
+    }
+}
+
+/// Fake mailer whose `send` always fails permanently.
+///
+/// Drives the rollback branch: the token slot is cleared, the rate-limit
+/// counter is decremented, and the handler answers `500` so a dead send never
+/// blocks the user from retrying.
+#[derive(Debug, Default)]
+pub struct PermanentMailer;
+
+#[async_trait]
+impl EmailSender for PermanentMailer {
+    #[inline]
+    async fn send(&self, _message: EmailMessage) -> Result<(), EmailError> {
+        Err(EmailError::Permanent(
+            "permanent mailer (test fixture)".to_owned(),
+        ))
     }
 }
 

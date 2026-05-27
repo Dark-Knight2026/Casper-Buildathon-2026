@@ -16,22 +16,6 @@ use uuid::Uuid;
 use crate::common::TestOverrides;
 use api::providers::{EmailError, EmailMessage, EmailSender};
 
-/// Mailer that always fails delivery.
-///
-/// Used to assert that `request_email_change` rolls back the Redis token
-/// slot and the rate-limit counter when the transport step blows up.
-#[derive(Debug, Default)]
-struct FailingMailer;
-
-#[async_trait]
-impl EmailSender for FailingMailer {
-    async fn send(&self, _message: EmailMessage) -> Result<(), EmailError> {
-        Err(EmailError::Transient(
-            "failing mailer (test fixture)".to_owned(),
-        ))
-    }
-}
-
 /// Mailer that records every successfully-sent message in memory.
 ///
 /// Used by the email-change happy-path test to recover the plaintext
@@ -73,7 +57,7 @@ async fn request_email_change_rolls_back_state_on_mailer_failure(pool: PgPool) {
         pool.clone(),
         true,
         TestOverrides {
-            mailer: Some(Arc::new(FailingMailer)),
+            mailer: Some(Arc::new(common::TransientMailer)),
             ..TestOverrides::default()
         },
     )

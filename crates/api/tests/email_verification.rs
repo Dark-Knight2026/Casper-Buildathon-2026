@@ -16,13 +16,19 @@
 
 mod common;
 
+use std::sync::Arc;
+
 use axum::http::StatusCode;
-use axum_test::http::header::COOKIE;
+use axum_test::{TestResponse, http::header::COOKIE};
 use serde_json::{Value, json};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use common::{TestEnv, login_and_extract, setup_test_server};
+use api::common::RedisStore;
+use common::{
+    PermanentMailer, TestEnv, TestOverrides, TransientMailer, login_and_extract, setup_test_server,
+    setup_test_server_with,
+};
 
 /// HTTP path of the verify-email send endpoint.
 const SEND_URI: &str = "/api/v1/auth/verify/email/send";
@@ -49,14 +55,36 @@ async fn seed_email(pool: &PgPool, user_id: Uuid) -> String {
     email
 }
 
+/// Posts to the send endpoint with the given access cookie, returning the raw
+/// response so callers can assert any status (200 / 429 / 500).
+async fn post_send(env: &TestEnv, access_token: &str) -> TestResponse {
+    env.server
+        .post(SEND_URI)
+        .add_header(COOKIE, format!("access_token={access_token}"))
+        .await
+}
+
+/// Deletes the per-minute send counter to simulate the 1-minute window having
+/// elapsed, without sleeping in CI. The hourly counter is left untouched, so
+/// callers can still drive the 5/hour cap.
+async fn clear_minute_window(env: &TestEnv, user_id: Uuid) {
+    let redis_env = env.redis.as_ref().expect("redis env");
+    let mut conn = redis_env
+        .client
+        .get_multiplexed_async_connection()
+        .await
+        .expect("redis connection");
+    redis::cmd("DEL")
+        .arg(RedisStore::verify_email_send_minute_key(user_id))
+        .query_async::<()>(&mut conn)
+        .await
+        .expect("DEL minute key");
+}
+
 /// Calls send and returns the plaintext token surfaced by the dev escape
 /// hatch. Asserts the `200` so callers can assume a usable token.
 async fn send_and_take_token(env: &TestEnv, access_token: &str) -> String {
-    let response = env
-        .server
-        .post(SEND_URI)
-        .add_header(COOKIE, format!("access_token={access_token}"))
-        .await;
+    let response = post_send(env, access_token).await;
     assert_eq!(response.status_code(), StatusCode::OK, "send must succeed");
     response.json::<Value>()["dev_verification_token"]
         .as_str()
@@ -277,4 +305,153 @@ async fn confirm_without_auth_returns_401(pool: PgPool) {
         .json(&json!({ "token": "A".repeat(43) }))
         .await;
     assert_eq!(confirm.status_code(), StatusCode::UNAUTHORIZED);
+}
+
+// Rate limiting and failure-path compensation ---------------------------------
+
+/// First send succeeds; an immediate second hits the per-minute cap (1/min).
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn send_rate_limited_after_first_within_minute(pool: PgPool) {
+    let env = setup_test_server(pool, true).await;
+    let session = login_and_extract(&env).await;
+    seed_email(&env.state.db, session.user_id).await;
+
+    let first = post_send(&env, &session.access_token).await;
+    assert_eq!(first.status_code(), StatusCode::OK);
+
+    let second = post_send(&env, &session.access_token).await;
+    assert_eq!(second.status_code(), StatusCode::TOO_MANY_REQUESTS);
+    assert_eq!(
+        second.json::<Value>()["error"].as_str(),
+        Some("rate_limited")
+    );
+}
+
+/// Once the per-minute window elapses, a send is allowed again - the hourly
+/// cap of 5 is not yet reached.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn send_succeeds_again_after_minute_window(pool: PgPool) {
+    let env = setup_test_server(pool, true).await;
+    let session = login_and_extract(&env).await;
+    seed_email(&env.state.db, session.user_id).await;
+
+    assert_eq!(
+        post_send(&env, &session.access_token).await.status_code(),
+        StatusCode::OK
+    );
+    assert_eq!(
+        post_send(&env, &session.access_token).await.status_code(),
+        StatusCode::TOO_MANY_REQUESTS
+    );
+
+    clear_minute_window(&env, session.user_id).await;
+
+    assert_eq!(
+        post_send(&env, &session.access_token).await.status_code(),
+        StatusCode::OK,
+        "a fresh minute window allows another send"
+    );
+}
+
+/// The hourly cap (5) blocks the sixth send even when each minute window is
+/// cleared between requests.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn send_hour_cap_blocks_sixth_request(pool: PgPool) {
+    let env = setup_test_server(pool, true).await;
+    let session = login_and_extract(&env).await;
+    seed_email(&env.state.db, session.user_id).await;
+
+    for i in 0..5 {
+        let resp = post_send(&env, &session.access_token).await;
+        assert_eq!(
+            resp.status_code(),
+            StatusCode::OK,
+            "send {i} is within the hourly cap"
+        );
+        // Clear only the minute slot so the next request is not blocked by the
+        // 1/min cap before we reach the 5/hour cap.
+        clear_minute_window(&env, session.user_id).await;
+    }
+
+    let sixth = post_send(&env, &session.access_token).await;
+    assert_eq!(
+        sixth.status_code(),
+        StatusCode::TOO_MANY_REQUESTS,
+        "the sixth send within the hour is capped"
+    );
+}
+
+/// A permanent mailer failure rolls back the rate-limit counter: the next send
+/// is NOT `429`. Since the same mailer fails again, the proof of compensation
+/// is that the second request reaches the mailer (500) rather than being
+/// rejected by the limiter (429).
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn permanent_failure_compensates_send_counter(pool: PgPool) {
+    let env = setup_test_server_with(
+        pool,
+        true,
+        TestOverrides {
+            mailer: Some(Arc::new(PermanentMailer)),
+            ..TestOverrides::default()
+        },
+    )
+    .await;
+    let session = login_and_extract(&env).await;
+    seed_email(&env.state.db, session.user_id).await;
+
+    let first = post_send(&env, &session.access_token).await;
+    // A 500 here is necessarily the send-failure branch - the only 500 send
+    // can produce. The internal `email_send_failed` code is deliberately not
+    // leaked into the body (it maps to a generic message), so we assert on the
+    // status, not on the error string.
+    assert_eq!(first.status_code(), StatusCode::INTERNAL_SERVER_ERROR);
+
+    let second = post_send(&env, &session.access_token).await;
+    assert_eq!(
+        second.status_code(),
+        StatusCode::INTERNAL_SERVER_ERROR,
+        "the compensated counter lets the request reach the mailer, not the limiter"
+    );
+}
+
+/// A transient failure does NOT compensate: the mail is queued, the user still
+/// gets `200`, and the counter stays spent - so an immediate retry is `429`.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn transient_failure_queues_and_keeps_counter(pool: PgPool) {
+    let env = setup_test_server_with(
+        pool,
+        true,
+        TestOverrides {
+            mailer: Some(Arc::new(TransientMailer)),
+            ..TestOverrides::default()
+        },
+    )
+    .await;
+    let session = login_and_extract(&env).await;
+    seed_email(&env.state.db, session.user_id).await;
+
+    let first = post_send(&env, &session.access_token).await;
+    assert_eq!(
+        first.status_code(),
+        StatusCode::OK,
+        "transient failure still answers sent"
+    );
+
+    // The message was queued for background retry rather than rolled back.
+    let queued = sqlx::query_scalar!(
+        r"
+            SELECT COUNT(*) FROM email_send_retries WHERE status = 'pending'
+        ",
+    )
+    .fetch_one(&env.state.db)
+    .await
+    .expect("count queued rows");
+    assert_eq!(queued, Some(1), "transient failure enqueues one retry row");
+
+    let second = post_send(&env, &session.access_token).await;
+    assert_eq!(
+        second.status_code(),
+        StatusCode::TOO_MANY_REQUESTS,
+        "transient does not refund the rate-limit slot"
+    );
 }
