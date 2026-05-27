@@ -21,7 +21,7 @@ import { getFeaturedImage } from '@/utils/propertyImages';
 
 interface MobileComparisonViewProps {
   properties: Property[];
-  onRemoveProperty: (propertyId: number) => void;
+  onRemoveProperty: (propertyId: string) => void;
   onViewDetails: (property: Property) => void;
   className?: string;
 }

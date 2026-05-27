@@ -20,7 +20,7 @@ export default function MobileOptimizedListings() {
   const [displayedProperties, setDisplayedProperties] = useState<Property[]>([]);
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
   const [isPropertyModalOpen, setIsPropertyModalOpen] = useState(false);
-  const [favorites, setFavorites] = useState<number[]>([]);
+  const [favorites, setFavorites] = useState<string[]>([]);
   const [comparisonList, setComparisonList] = useState<Property[]>([]);
   const [currentView, setCurrentView] = useState<'list' | 'comparison'>('list');
   const [page, setPage] = useState(1);
@@ -109,7 +109,7 @@ export default function MobileOptimizedListings() {
     if (filters) {
       if (filters.priceRange && (filters.priceRange[0] > 0 || filters.priceRange[1] < 10000)) {
         filtered = filtered.filter(p =>
-          p.price >= filters.priceRange[0] && p.price <= filters.priceRange[1]
+          p.rent >= filters.priceRange[0] && p.rent <= filters.priceRange[1]
         );
       }
 
@@ -139,9 +139,8 @@ export default function MobileOptimizedListings() {
         );
       }
 
-      if (filters.rating && filters.rating > 0) {
-        filtered = filtered.filter(p => p.rating >= filters.rating);
-      }
+      // Rating filter: canonical `Property` has no `rating` — skip on this
+      // dead route until/if a buyer rating signal is introduced server-side.
     }
 
     setFilteredProperties(filtered);
@@ -153,7 +152,7 @@ export default function MobileOptimizedListings() {
     setIsPropertyModalOpen(true);
   };
 
-  const handleFavorite = (propertyId: number) => {
+  const handleFavorite = (propertyId: string) => {
     setFavorites(prev =>
       prev.includes(propertyId)
         ? prev.filter(id => id !== propertyId)
@@ -170,7 +169,7 @@ export default function MobileOptimizedListings() {
     }
   };
 
-  const handleRemoveFromComparison = (propertyId: number) => {
+  const handleRemoveFromComparison = (propertyId: string) => {
     setComparisonList(prev => prev.filter(p => p.id !== propertyId));
   };
 

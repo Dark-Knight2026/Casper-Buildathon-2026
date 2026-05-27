@@ -17,19 +17,19 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { ALL_AMENITIES } from '@/types/property';
 import type { PropertyType } from '@/types/property';
+import { formatPropertyType } from '@/types/property';
 import type { PreferredLocation, RentalPreferences } from '@/types/tenantPreferences';
 import { EMPTY_PREFERENCES } from '@/data/tenantPreferences';
 import { SurroundingAreaFilter } from '@/components/search/SurroundingAreaFilter';
 
-// Subset of the wider PropertyType union exposed in the form. The lowercase
-// variants in the union are legacy aliases — not surfaced to users.
+// Subset of the wider PropertyType union exposed in the form.
 const SELECTABLE_PROPERTY_TYPES: PropertyType[] = [
-  'Apartment',
-  'House',
-  'Condo',
-  'Townhouse',
-  'Studio',
-  'Loft',
+  'apartment',
+  'house',
+  'condo',
+  'townhouse',
+  'studio',
+  'loft',
 ];
 
 interface TenantPreferencesDialogProps {
@@ -302,9 +302,9 @@ export function TenantPreferencesDialog({
                     <Checkbox
                       checked={checked}
                       onCheckedChange={() => togglePropertyType(type)}
-                      aria-label={type}
+                      aria-label={formatPropertyType(type)}
                     />
-                    <span>{type}</span>
+                    <span>{formatPropertyType(type)}</span>
                   </label>
                 );
               })}

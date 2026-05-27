@@ -1,21 +1,31 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
+import { getDashboardRoute } from '@/types/user';
 import { Loader2 } from 'lucide-react';
 
 export function AuthCallback() {
   const navigate = useNavigate();
-  const { user, profile } = useAuth();
+  const { profile, loading } = useAuth();
 
   useEffect(() => {
-    if (user && profile) {
-      // Redirect based on user role
-      const redirectPath = profile.role === 'tenant' 
-        ? '/tenant/dashboard' 
-        : '/landlord/dashboard';
-      navigate(redirectPath);
+    if (!loading && profile) {
+      // If the user clicked a protected action before signing in,
+      // useAuthPrompt stored the original destination. Honour it after OAuth
+      // so they don't have to navigate back manually. Validate against the
+      // same allowlist as useAuthPrompt: same-origin relative path only.
+      // localStorage is writable by any same-origin script, so an absolute
+      // or protocol-relative path here would be an open-redirect vector.
+      const intent = localStorage.getItem('auth_redirect_intent');
+      localStorage.removeItem('auth_redirect_intent');
+      localStorage.removeItem('auth_action_intent');
+      if (intent && intent.startsWith('/') && !intent.startsWith('//')) {
+        navigate(intent);
+        return;
+      }
+      navigate(getDashboardRoute(profile.role));
     }
-  }, [user, profile, navigate]);
+  }, [loading, profile, navigate]);
 
   return (
     <div className="min-h-screen flex items-center justify-center">

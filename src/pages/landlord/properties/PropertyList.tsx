@@ -16,9 +16,9 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { FEATURED_PROPERTIES } from '@/data/featuredProperties';
-import type { Property, PropertySearchParams, PropertyType } from '@/types/property';
+import { formatPropertyType, type Property, type PropertySearchParams, type PropertyType } from '@/types/property';
 
-const PROPERTY_TYPES: PropertyType[] = ['Apartment', 'House', 'Condo', 'Townhouse', 'Studio', 'Loft'];
+const PROPERTY_TYPES: PropertyType[] = ['apartment', 'house', 'condo', 'townhouse', 'studio', 'loft'];
 const PROPERTY_STATUSES: Property['status'][] = ['active', 'pending', 'rented', 'inactive'];
 
 export default function PropertyList() {
@@ -273,7 +273,7 @@ export default function PropertyList() {
                         }}
                       />
                       <label htmlFor={`type-${type}`} className="ml-2 text-sm cursor-pointer">
-                        {type}
+                        {formatPropertyType(type)}
                       </label>
                     </div>
                   ))}
@@ -501,7 +501,7 @@ export default function PropertyList() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <Badge variant="outline">{property.propertyType}</Badge>
+                    <Badge variant="outline">{formatPropertyType(property.propertyType)}</Badge>
                     {property.furnished && <Badge variant="outline">Furnished</Badge>}
                     {property.petsAllowed && <Badge variant="outline">Pets OK</Badge>}
                   </div>

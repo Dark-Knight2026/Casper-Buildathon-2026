@@ -11,7 +11,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
 import type { PropertySearchParams, PropertyType } from '@/types/property';
-import { ALL_AMENITIES, PET_POLICIES } from '@/types/property';
+import { ALL_AMENITIES, PET_POLICIES, formatPropertyType } from '@/types/property';
 import { X } from 'lucide-react';
 
 interface PropertyFiltersProps {
@@ -20,7 +20,7 @@ interface PropertyFiltersProps {
   onReset: () => void;
 }
 
-const PROPERTY_TYPES: PropertyType[] = ['Apartment', 'House', 'Condo', 'Townhouse', 'Studio', 'Loft'];
+const PROPERTY_TYPES: PropertyType[] = ['apartment', 'house', 'condo', 'townhouse', 'studio', 'loft'];
 
 type SortByOption = 'rent' | 'createdAt' | 'updatedAt' | 'views' | 'availableDate';
 
@@ -155,7 +155,7 @@ export function PropertyFilters({ filters, onFilterChange, onReset }: PropertyFi
                   htmlFor={`type-${type}`}
                   className="ml-2 text-sm cursor-pointer"
                 >
-                  {type}
+                  {formatPropertyType(type)}
                 </label>
               </div>
             ))}

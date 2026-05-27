@@ -54,6 +54,7 @@ const MyViewings = lazy(() => import('@/pages/tenant/MyViewings'));
 
 // Lazy load tenant application pages
 const TenantApplication = lazy(() => import('@/pages/tenant/application/TenantApplication'));
+const ApplicationForm = lazy(() => import('@/pages/tenant/ApplicationForm'));
 
 // Lazy load tenant maintenance pages
 const MaintenanceRequestCreate = lazy(() => import('@/pages/tenant/maintenance/MaintenanceRequestCreate'));
@@ -67,6 +68,7 @@ const TenantRenewalNegotiation = lazy(() => import('@/pages/tenant/renewals/Tena
 
 // Lazy load landlord pages
 const LandlordDashboard = lazy(() => import('@/pages/landlord/LandlordDashboard'));
+const LandlordProfile = lazy(() => import('@/pages/landlord/LandlordProfile').then(m => ({ default: m.LandlordProfile })));
 const LandlordTenants = lazy(() => import('@/pages/landlord/LandlordTenants'));
 const LandlordLeases = lazy(() => import('@/pages/landlord/LandlordLeases'));
 const LandlordPayments = lazy(() => import('@/pages/landlord/LandlordPayments'));
@@ -228,6 +230,7 @@ function App() {
                 <Route path="my-applications"       element={<MyApplications />} />
                 <Route path="my-viewings"           element={<MyViewings />} />
                 <Route path="apply"                 element={<TenantApplication />} />
+                <Route path="application"           element={<ApplicationForm />} />
                 <Route path="leases"                element={<TenantLeases />} />
                 <Route path="leases/:leaseId"       element={<TenantLeaseDetail />} />
                 <Route path="payments"              element={<TenantPayments />} />
@@ -351,8 +354,7 @@ function App() {
                 <Route path="financial"              element={<FinancialDashboard />} />
                 {/* Shared CommunicationCenter stub (plan decision #2). */}
                 <Route path="messages"               element={<CommunicationCenter />} />
-                {/* TODO(Part C): add <Route path="profile" element={<LandlordProfile />} />
-                    once src/pages/landlord/LandlordProfile.tsx is built. */}
+                <Route path="profile"                element={<LandlordProfile />} />
               </Route>
               
               {/* Dashboard routes - Protected (accessible by both roles) */}

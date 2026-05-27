@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { propertyActionsService } from '@/services/propertyActionsService';
 import {
@@ -27,7 +27,10 @@ interface ScheduleViewingModalProps {
   onClose: () => void;
   propertyId: string;
   propertyAddress: string;
-  landlordId?: string;
+  // Required: must come from the property record (`property.landlordId`).
+  // The viewing request is recorded against this id, so a placeholder here
+  // silently corrupts every persisted row.
+  landlordId: string;
 }
 
 export function ScheduleViewingModal({
@@ -35,19 +38,54 @@ export function ScheduleViewingModal({
   onClose,
   propertyId,
   propertyAddress,
-  landlordId = 'default-landlord-id', // TODO: Get from property data
+  landlordId,
 }: ScheduleViewingModalProps) {
-  const { user } = useAuth();
+  const { profile } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
   const [selectedTime, setSelectedTime] = useState('');
+  // Auto-close timer ref so unmount (parent route change, dialog dismiss)
+  // does not leave a stale setState callback firing on an unmounted tree.
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+  }, []);
 
-  const timeSlots = [
+  const ALL_TIME_SLOTS = [
     '9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM',
-    '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM'
+    '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM',
   ];
+
+  // When the user picks today's date, hide slots that have already passed —
+  // submitting a 9:00 AM viewing at 3:00 PM is a UX trap.
+  const timeSlots = useMemo(() => {
+    if (!selectedDate) return ALL_TIME_SLOTS;
+    const now = new Date();
+    const isToday =
+      selectedDate.getFullYear() === now.getFullYear() &&
+      selectedDate.getMonth() === now.getMonth() &&
+      selectedDate.getDate() === now.getDate();
+    if (!isToday) return ALL_TIME_SLOTS;
+    return ALL_TIME_SLOTS.filter((slot) => {
+      const [time, meridiem] = slot.split(' ');
+      const [hStr] = time.split(':');
+      let hour = parseInt(hStr, 10);
+      if (meridiem === 'PM' && hour !== 12) hour += 12;
+      if (meridiem === 'AM' && hour === 12) hour = 0;
+      const slotDate = new Date(selectedDate);
+      slotDate.setHours(hour, 0, 0, 0);
+      return slotDate > now;
+    });
+  }, [selectedDate]);
+
+  // Clear selectedTime if the active slot disappeared after date change.
+  useEffect(() => {
+    if (selectedTime && !timeSlots.includes(selectedTime)) {
+      setSelectedTime('');
+    }
+  }, [timeSlots, selectedTime]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -58,7 +96,7 @@ export function ScheduleViewingModal({
       return;
     }
 
-    if (!user) {
+    if (!profile) {
       setError('You must be logged in to schedule a viewing');
       return;
     }
@@ -66,7 +104,7 @@ export function ScheduleViewingModal({
     setLoading(true);
 
     try {
-      await propertyActionsService.scheduleViewing(user.id, {
+      await propertyActionsService.scheduleViewing(profile.id, {
         propertyId,
         landlordId,
         viewingDate: selectedDate,
@@ -74,11 +112,12 @@ export function ScheduleViewingModal({
       });
 
       setSuccess(true);
-      setTimeout(() => {
+      closeTimerRef.current = setTimeout(() => {
         onClose();
         setSuccess(false);
         setSelectedDate(undefined);
         setSelectedTime('');
+        closeTimerRef.current = null;
       }, 2000);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to schedule viewing. Please try again.';

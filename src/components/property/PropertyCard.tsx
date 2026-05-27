@@ -3,6 +3,8 @@ import { Badge } from '@/components/ui/badge';
 import { SavePropertyButton } from '@/components/property/SavePropertyButton';
 import { MapPin, Bed, Bath, Square, TrendingUp, Star, Camera } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import type { SurroundingCategory } from '@/types/property';
+import { SURROUNDING_CATEGORIES } from '@/data/amenityCategories';
 
 type PropertyStatus = 'active' | 'pending' | 'rented' | 'inactive' | 'archived';
 
@@ -37,12 +39,35 @@ interface PropertyCardProps {
   onClick: () => void;
   showSave?: boolean;
   className?: string;
+  // Per-category POI distance chips (spec §2.3.2). Populated only when the
+  // card is rendered as part of an extended search result — undefined values
+  // mean the category has no nearby POI for this property.
+  nearestByCategory?: Partial<Record<SurroundingCategory, number>>;
 }
+
+const CATEGORY_LABEL: Record<SurroundingCategory, string> = SURROUNDING_CATEGORIES
+  .reduce(
+    (acc, c) => ({ ...acc, [c.category]: c.label }),
+    {} as Record<SurroundingCategory, string>,
+  );
+
+const formatDistance = (miles: number): string =>
+  miles < 1 ? `${(miles * 5280).toFixed(0)}ft` : `${miles.toFixed(1)}mi`;
 
 const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=800';
 
-export function PropertyCard({ property, onClick, showSave = true, className }: PropertyCardProps) {
+export function PropertyCard({
+  property,
+  onClick,
+  showSave = true,
+  className,
+  nearestByCategory,
+}: PropertyCardProps) {
   const image = property.images?.[0] ?? FALLBACK_IMAGE;
+  const distanceEntries = nearestByCategory
+    ? (Object.entries(nearestByCategory) as Array<[SurroundingCategory, number]>)
+        .filter(([, miles]) => typeof miles === 'number')
+    : [];
 
   return (
     <Card
@@ -97,6 +122,23 @@ export function PropertyCard({ property, onClick, showSave = true, className }: 
           <MapPin className="h-4 w-4 shrink-0" />
           {property.address}, {property.city}, {property.state}
         </p>
+
+        {distanceEntries.length > 0 && (
+          <div
+            className="flex flex-wrap gap-1 mb-4"
+            aria-label="Nearby points of interest"
+          >
+            {distanceEntries.map(([category, miles]) => (
+              <Badge
+                key={category}
+                variant="secondary"
+                className="text-xs font-normal"
+              >
+                {CATEGORY_LABEL[category]} {formatDistance(miles)}
+              </Badge>
+            ))}
+          </div>
+        )}
 
         <div className="flex items-center justify-between mb-4">
           <div className="text-2xl font-bold text-primary">
