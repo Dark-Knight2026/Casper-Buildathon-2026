@@ -151,10 +151,10 @@ loading/error UI; keep existing state shapes and JSX untouched; add
 - [ ] `pages/landlord/LandlordMaintenance.tsx`
 - [ ] `pages/landlord/LandlordRenewals.tsx`
 - [ ] `pages/landlord/LandlordTenants.tsx`
-- [ ] `pages/landlord/properties/PropertyList.tsx`
-- [ ] `pages/landlord/properties/PropertyCreate.tsx`
+- [x] `pages/landlord/properties/PropertyList.tsx` — done; Supabase removed, `useAuth().profile?.id` for ownership
+- [x] `pages/landlord/properties/PropertyCreate.tsx` — done; Supabase removed
 - [ ] `pages/landlord/properties/PropertyDetail.tsx`
-- [ ] `pages/landlord/properties/PropertyEdit.tsx`
+- [x] `pages/landlord/properties/PropertyEdit.tsx` — done; Supabase removed, `useAuth().profile?.id` (Review #4 Quality finding)
 - [ ] `pages/landlord/applications/ApplicationList.tsx`, `ApplicationDetail.tsx` (via `applicationService` → Supabase)
 - [ ] Vendors page (via `vendorService` → Supabase)
 - [ ] Financial Dashboard (via `financialDataService`/`analyticsService` → Supabase)
