@@ -54,6 +54,7 @@ const MyViewings = lazy(() => import('@/pages/tenant/MyViewings'));
 
 // Lazy load tenant application pages
 const TenantApplication = lazy(() => import('@/pages/tenant/application/TenantApplication'));
+const ApplicationForm = lazy(() => import('@/pages/tenant/ApplicationForm'));
 
 // Lazy load tenant maintenance pages
 const MaintenanceRequestCreate = lazy(() => import('@/pages/tenant/maintenance/MaintenanceRequestCreate'));
@@ -228,6 +229,7 @@ function App() {
                 <Route path="my-applications"       element={<MyApplications />} />
                 <Route path="my-viewings"           element={<MyViewings />} />
                 <Route path="apply"                 element={<TenantApplication />} />
+                <Route path="application"           element={<ApplicationForm />} />
                 <Route path="leases"                element={<TenantLeases />} />
                 <Route path="leases/:leaseId"       element={<TenantLeaseDetail />} />
                 <Route path="payments"              element={<TenantPayments />} />

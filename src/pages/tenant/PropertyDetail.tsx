@@ -17,7 +17,6 @@ import {
   Home,
   Car,
   Loader2,
-  FileText,
   Lock,
 } from 'lucide-react';
 
@@ -497,19 +496,8 @@ export default function PropertyDetail() {
                     Schedule Viewing
                   </Button>
 
-                  {/* Apply Now Button */}
-                  <Button
-                    onClick={handleApply}
-                    className="w-full"
-                  >
-                    <FileText className="mr-2 h-5 w-5" />
-                    Apply Now
-                  </Button>
-                </div>
-
-                {/* Favorite Button */}
-                <div className="flex justify-center pt-2">
-                  <SavePropertyButton variant="outline" size="default" className="w-full md:w-auto" />
+                  {/* Favorite Button */}
+                  <SavePropertyButton variant="outline" size="default" className="w-full" />
                 </div>
               </CardContent>
             </Card>
