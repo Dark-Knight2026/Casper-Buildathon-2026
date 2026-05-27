@@ -29,7 +29,7 @@ import PropertyImageGallery from '../PropertyImageGallery';
 
 interface PropertyComparisonProps {
   properties: Property[];
-  onRemoveProperty: (propertyId: number) => void;
+  onRemoveProperty: (propertyId: string) => void;
   onAddProperty?: () => void;
   maxProperties?: number;
   className?: string;

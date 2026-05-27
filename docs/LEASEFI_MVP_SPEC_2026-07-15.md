@@ -56,7 +56,7 @@ The list of items that **must work** in production by release date. This is also
 ### 3.3 Properties
 - [ ] CRUD operations for properties (landlord/PM only)
 - [ ] `declared_mortgage_value` numeric field on a property (groundwork that does not depend on the storage decision)
-- [ ] Upload of mortgage documentation — mandatory to enable lease option (file upload blocked until the storage backend decision in §6; numeric field above is sufficient until then)
+- [ ] Upload of mortgage documentation — mandatory to enable lease option. Stored on IPFS via `/api/v1/ipfs/pin` (BE-proxied), with client-side encryption for PII-bearing content (see §5.2).
 - [ ] Property search + filtering
 - [ ] Property detail page with Google Maps link
 - [ ] Disclaimer block
@@ -98,10 +98,22 @@ The list of items that **must work** in production by release date. This is also
 - [ ] Audit trail for key actions (lease create / sign / pay / terminate)
 
 ### 3.9 Production deployment
-- [ ] Hosting selected (DevOps recommendation by 2026-05-22)
+- [ ] Hosting: AWS us-east-1 — ECS Fargate (BE, indexer), managed Postgres (Supabase), ElastiCache Redis, Secrets Manager. FE on Vercel/Amplify, CDN-fronted. (Per Off-Chain Architecture §9.)
 - [ ] CI/CD to production
 - [ ] FE + BE + indexer deployed
-- [ ] Smart contracts deployed to Casper testnet (mainnet — TBD with the client)
+- [ ] Smart contracts deployed to Casper **testnet at MVP launch**. **Mainnet target Q4 2026, post-audit** (per PreFlight Checklist §1.4). Engineering goal for 2026-07-15 is a stable testnet build that passes UAT.
+
+### 3.10 Geographic Pilot (Phase 1 — adopted from client docs)
+> **Source:** `CO/GC Onboarding Pack §4.5`, `PRD §4.4.3 (L315-322)`, `Smart Contract Spec §3.3`. Phase 1 state pilot adopted into MVP scope. Out-of-pilot states deferred to Phase 1.1+; California deferred to Phase 4 (DFPI MTL required).
+
+- [ ] State selection is a required field at sign-up (tenant, landlord, PM)
+- [ ] Sign-up allowed only from pilot states: **Florida, Texas, Tennessee**
+- [ ] Virginia gated — CSV-allowed only after Compliance Officer approval (out of MVP unless CO role lands; see §3.2 / §6 OQ#1)
+- [ ] **California explicitly blocked** at sign-up with an explanatory screen ("Not yet available in California — Phase 4")
+- [ ] All other US states blocked with a generic "Coming soon" screen
+- [ ] Property creation blocked unless the property is located in a pilot state
+- [ ] Lease creation blocked unless landlord, tenant, and property are all in pilot states (FE pre-check + BE re-validation)
+- [ ] State value is stored on user profile and on property; flows into BE on every signup / property / lease write for defense-in-depth validation
 
 ---
 
@@ -138,7 +150,7 @@ The following is **not included** in the 2026-07-15 MVP and is **not estimated**
 - **No PII on-chain.** Names, emails, profile metadata — in Supabase Postgres with access control. On-chain — hashes only.
 - **KYC documents (passport, selfie, proof of address) — stored at Sumsub, NOT in our database.** We keep only `sumsub_applicant_id`, `kyc_status`, and timestamp. This removes the GDPR/AML compliance burden for the documents themselves from us. **Integration shape:** BE creates applicants and handles the verification webhook; FE embeds the Sumsub widget so documents flow browser → Sumsub directly without passing through our infrastructure.
 - **Avatar** is stored in S3 (our storage, with access control).
-- **Mortgage documents and other property-related files** (property photos) — storage backend for MVP is **TBD** (see §6 open question). Until the decision is made, we **do not store** any file in these categories in our infrastructure or on-chain; the mortgage file upload deliverable in §3.3 is blocked until the decision lands.
+- **Mortgage documents, signed lease PDFs, and other property-related files** (property photos) — stored on **IPFS via a BE-proxied pin endpoint** `/api/v1/ipfs/pin` (per Off-Chain Architecture §7.3, PreFlight §12.5). Pinning provider TBD with DevOps (Pinata / web3.storage / Filebase). **Client-side encryption is mandatory** for any file containing PII (signed lease PDFs, mortgage statements with personal data, applicant docs). Only the encrypted blob + sha256 hash anchor go on public IPFS; the decryption key lives in our backend, gated by role-based access. On-chain we store only the IPFS CID + hash. Property *photos* (no PII) may be pinned without encryption. Avatars remain in S3.
 - **Tenant identity is not accessible to external parties.** Public chain queries, other platform users, third-party scrapers via our API — cannot link a tenant identity to a specific property / lease. On-chain references use only hashes or wallet addresses, with no PII payload. (Landlord knows the tenant from physical interaction — this is outside our control; we guarantee only that **our platform** does not publish PII and does not give external parties a queryable identity.)
 - The avatar may obscure the user's real-world appearance.
 
@@ -184,12 +196,14 @@ lease_option_total_sale_price ≤ declared_mortgage_value × 1.20
 - **Indexer:** a separate Rust service that pulls on-chain events and caches them in the same Supabase Postgres.
 - **Payments:** Stripe (basic SDK + Stripe Connect for split payments).
 - **KYC:** Sumsub (privacy details — §5.2).
-- **Property docs storage:** **TBD** (mortgage docs / property photos — storage backend not yet decided, see §6). Until the decision is made, we do not store any file in these categories. Avatar storage is already decided (S3).
+- **Property docs storage:** IPFS pin via BE-proxied `/api/v1/ipfs/pin` endpoint (Pinata / web3.storage / Filebase — pinning provider TBD with DevOps). Mandatory client-side encryption for PII-bearing files (see §5.2). Avatars in S3.
+- **Hosting:** AWS us-east-1 — ECS Fargate for BE + indexer, Supabase managed Postgres, ElastiCache Redis, Secrets Manager. FE on Vercel/Amplify (CDN-fronted).
 
-### 5.6 Casper Manifest — open considerations
+### 5.6 Casper signing mechanism
+
 - Casper plans its own EVM — for future integrations.
 - **HTTP 402** mechanism — coming online.
-- **Lease signing mechanism — TBD.** EIP-2612 / EIP-712 is one possible option, but the Manifest has not been read yet. Kenneth + Anastasia must review the Manifest and record the chosen signing mechanism here (native Casper signature / EIP-712-style typed signing / other) before lease-signing implementation begins. **Fallback** if no adequate mechanism is found: two sequential Casper transactions, one signed by each party.
+- **Lease signing mechanism: EIP-712 typed signing** via the `casper-eip-712` crate (per Smart Contract Spec v1.4.4 §18.1, PreFlight §4.10, Off-Chain Architecture §6). Both parties sign typed data via CSPR.click. Schemas defined for: `LeaseAgreement` (incl. execution fee, currency, protocol fee bps), `TerminationNotice`, `BuyoutAgreement`, `DepositReleaseAuthorization`, `PMAuthorization`, `Authentication`. FE consumes the EIP-712 builders from the shared `@leasefi/types` package codegen'd from Rust — no hand-rolled typed-data builders on FE. Sibling-sweep CI job enforces Rust↔TS schema parity.
 
 ### 5.7 Money rail in MVP (fiat-first) — critical decision
 
@@ -207,13 +221,15 @@ Items that fall outside this fiat-first model (multi-currency payout UI, fiat↔
 ## §6. Open Questions / Risks / Dependencies
 
 ### Open Questions
-1. **Property docs storage backend** — where do we store mortgage docs and property photos? Options: Sumsub additional docs, Pinata + client-side encryption, our S3 (as for avatars), other. **Constraint:** no option may violate §5.2 (PII does not go into public storage without encryption). **Blocks:** the mortgage upload deliverable in §3.3. Avatar storage is already decided (S3) and is out of scope of this question.
-2. **Production hosting** — AWS / GCP / decentralized hybrid (e.g. Filecoin for storage + traditional cloud for compute)? DevOps recommendation due 2026-05-22.
-3. **Mainnet vs Testnet deployment** — at 2026-07-15, do we deploy to Casper testnet or mainnet? Depends on the client's decision and funding.
-4. **Lease signing mechanism on Casper** — which mechanism do we use for the cryptographic signing of the lease by both parties? EIP-712, native Casper signature, or other? Depends on what the Casper Manifest offers. In any case, two-party signing is mandatory for MVP.
-5. **Tokenomics recalculation** — after the Clarity Act, founder ≤ 20%. Who does the new split, and when? *(Outside the engineering scope, but blocks the token sale release.)*
-6. **Mortgage document authenticity** — how do we verify that an uploaded mortgage doc is genuine? Manual review? A third party (e.g., Sumsub additional docs)? In MVP — potentially manual (depends on the resolution of open question #1).
-7. **Private sale for accredited investors** — awaiting the client's legal counsel. Does not block MVP.
+1. **Mortgage document authenticity** — how do we verify that an uploaded mortgage doc is genuine? Manual review by ops? Sumsub additional docs? Client docs (CO/GC §5.2) imply Compliance Officer review against state licensing databases, but the CO role itself is not in the MVP §2 personas list — needs a decision on who performs the review in MVP if no CO is hired.
+2. **Private sale for accredited investors** — awaiting the client's legal counsel. Phase 4 in client docs (CO/GC §6.1 KYC Tier 3). Does not block MVP.
+
+### Resolved (2026-05-21, from client doc set)
+- ~~**Property docs storage backend**~~ → IPFS pin via BE-proxied `/api/v1/ipfs/pin` endpoint with mandatory client-side encryption for PII-bearing files. See §5.2, §5.5. *(Source: Off-Chain Architecture §7.3, PreFlight §12.5.)*
+- ~~**Production hosting**~~ → AWS us-east-1 (ECS Fargate for BE/indexer; Vercel/Amplify for FE). See §3.9, §5.5. *(Source: Off-Chain Architecture §9.)*
+- ~~**Mainnet vs Testnet deployment**~~ → Casper testnet at MVP launch (2026-07-15); mainnet Q4 2026 post-audit. See §3.9. *(Source: PreFlight §1.4.)*
+- ~~**Lease signing mechanism**~~ → EIP-712 typed signing via `casper-eip-712` crate, schemas codegen'd into shared `@leasefi/types` package. See §5.6. *(Source: SC Spec §18.1, PreFlight §4.10, Off-Chain Arch §6.)*
+- ~~**Tokenomics recalculation**~~ → Phase 2 token architecture (FeeDistributor, staking sequencing, liquidity provisioning) fully scoped in Whitepaper v4.5.4 + PreFlight Appendix A.1-A.3. *(Outside engineering scope; does not block MVP delivery.)*
 
 ### Risks
 - **R-1 Funding shortage.** ICO blocked by the Clarity Act, project budget is limited. Mitigation: keep MVP scope tight, no creep.

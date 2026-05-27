@@ -30,7 +30,7 @@ export default function EnhancedSearchPage() {
   const [filteredProperties, setFilteredProperties] = useState<Property[]>(mockProperties);
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
   const [isPropertyModalOpen, setIsPropertyModalOpen] = useState(false);
-  const [favorites, setFavorites] = useState<number[]>([]);
+  const [favorites, setFavorites] = useState<string[]>([]);
   const [comparisonList, setComparisonList] = useState<Property[]>([]);
   const [currentView, setCurrentView] = useState<'list' | 'map' | 'comparison'>('list');
   const [isFiltersCollapsed, setIsFiltersCollapsed] = useState(false);
@@ -42,13 +42,15 @@ export default function EnhancedSearchPage() {
     
     switch (sortBy) {
       case 'price-asc':
-        return sorted.sort((a, b) => a.price - b.price);
+        return sorted.sort((a, b) => a.rent - b.rent);
       case 'price-desc':
-        return sorted.sort((a, b) => b.price - a.price);
+        return sorted.sort((a, b) => b.rent - a.rent);
       case 'rating':
-        return sorted.sort((a, b) => b.rating - a.rating);
+        // Canonical Property has no `rating` — fall back to newest so the UI
+        // option still does something deterministic on this dead route.
+        return sorted.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
       case 'newest':
-        return sorted.sort((a, b) => b.id - a.id);
+        return sorted.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
       default:
         return sorted;
     }
@@ -60,8 +62,8 @@ export default function EnhancedSearchPage() {
 
     // Price range filter
     if (filters.priceRange && (filters.priceRange[0] > 0 || filters.priceRange[1] < 10000)) {
-      filtered = filtered.filter(p => 
-        p.price >= filters.priceRange[0] && p.price <= filters.priceRange[1]
+      filtered = filtered.filter(p =>
+        p.rent >= filters.priceRange[0] && p.rent <= filters.priceRange[1]
       );
     }
 
@@ -86,9 +88,10 @@ export default function EnhancedSearchPage() {
 
     // Square footage filter
     if (filters.sqftRange && (filters.sqftRange[0] > 0 || filters.sqftRange[1] < 5000)) {
-      filtered = filtered.filter(p => 
-        p.sqft >= filters.sqftRange[0] && p.sqft <= filters.sqftRange[1]
-      );
+      filtered = filtered.filter(p => {
+        const sqft = p.squareFeet ?? 0;
+        return sqft >= filters.sqftRange[0] && sqft <= filters.sqftRange[1];
+      });
     }
 
     // Amenities filter
@@ -110,10 +113,8 @@ export default function EnhancedSearchPage() {
       );
     }
 
-    // Rating filter
-    if (filters.rating && filters.rating > 0) {
-      filtered = filtered.filter(p => p.rating >= filters.rating);
-    }
+    // Rating filter: canonical `Property` has no `rating` — skip on this
+    // dead route until/if a buyer rating signal is introduced server-side.
 
     // Keywords filter
     if (filters.keywords) {
@@ -160,9 +161,9 @@ export default function EnhancedSearchPage() {
     setIsPropertyModalOpen(true);
   };
 
-  const handleFavorite = (propertyId: number) => {
-    setFavorites(prev => 
-      prev.includes(propertyId) 
+  const handleFavorite = (propertyId: string) => {
+    setFavorites(prev =>
+      prev.includes(propertyId)
         ? prev.filter(id => id !== propertyId)
         : [...prev, propertyId]
     );
@@ -175,7 +176,7 @@ export default function EnhancedSearchPage() {
     setComparisonList(prev => [...prev, property]);
   };
 
-  const handleRemoveFromComparison = (propertyId: number) => {
+  const handleRemoveFromComparison = (propertyId: string) => {
     setComparisonList(prev => prev.filter(p => p.id !== propertyId));
   };
 

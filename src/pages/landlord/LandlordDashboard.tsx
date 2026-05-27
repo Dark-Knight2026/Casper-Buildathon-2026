@@ -3,36 +3,21 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { supabase } from '@/lib/supabase/client';
 import { Building2, Users, FileText, DollarSign, Wrench, TrendingUp, AlertCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { DashboardSkeleton } from '@/components/ui/loading-skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
-import { useToast } from '@/hooks/use-toast';
 import { ErrorBoundary } from '@/components/ui/error-boundary';
-
-interface DashboardStats {
-  totalProperties: number;
-  occupiedProperties: number;
-  totalTenants: number;
-  activeLeases: number;
-  monthlyRevenue: number;
-  pendingMaintenance: number;
-  overduePayments: number;
-  expiringLeases: number;
-}
-
-interface RecentActivity {
-  id: string;
-  type: 'payment' | 'maintenance' | 'lease';
-  title: string;
-  description: string;
-  timestamp: string;
-  status: string;
-}
+import {
+  MOCK_LANDLORD_DASHBOARD_STATS,
+  MOCK_LANDLORD_RECENT_ACTIVITIES,
+  MOCK_LANDLORD_LOAD_MS,
+  type LandlordDashboardStats,
+  type LandlordRecentActivity,
+} from '@/data/landlordMockData';
 
 export default function LandlordDashboard() {
-  const [stats, setStats] = useState<DashboardStats>({
+  const [stats, setStats] = useState<LandlordDashboardStats>({
     totalProperties: 0,
     occupiedProperties: 0,
     totalTenants: 0,
@@ -42,167 +27,30 @@ export default function LandlordDashboard() {
     overduePayments: 0,
     expiringLeases: 0,
   });
-  const [recentActivities, setRecentActivities] = useState<RecentActivity[]>([]);
+  const [recentActivities, setRecentActivities] = useState<LandlordRecentActivity[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const { toast } = useToast();
 
-  const fetchDashboardData = useCallback(async () => {
-    let isMounted = true;
+  // TODO(BE): replace MOCK_* with GET /api/v1/landlord/dashboard — BE-blocked
+  // (LeaseFi MVP spec §3.7). The loading/error states are kept intact so the
+  // real fetch drops straight in. Mock data shipped here is intentional
+  // demo/preview content (same accepted pattern as the tenant pages), not a
+  // deferred bug.
+  const loadDashboardData = useCallback(() => {
     setLoading(true);
     setError(null);
-
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      // Fetch properties
-      const { data: properties } = await supabase
-        .from('properties')
-        .select('*')
-        .eq('landlord_id', user.id);
-
-      // Fetch leases
-      const { data: leases } = await supabase
-        .from('leases')
-        .select('*, properties(*)')
-        .eq('properties.landlord_id', user.id)
-        .eq('status', 'active');
-
-      // Fetch payments
-      const currentMonth = new Date().toISOString().slice(0, 7);
-      const { data: payments } = await supabase
-        .from('payments')
-        .select('*, leases!inner(*, properties!inner(*))')
-        .eq('leases.properties.landlord_id', user.id)
-        .gte('payment_date', `${currentMonth}-01`);
-
-      // Fetch maintenance requests
-      const { data: maintenance } = await supabase
-        .from('maintenance_requests')
-        .select('*, properties!inner(*)')
-        .eq('properties.landlord_id', user.id)
-        .eq('status', 'pending');
-
-      if (!isMounted) return;
-
-      // Calculate stats
-      const totalProperties = properties?.length || 0;
-      const occupiedProperties = leases?.length || 0;
-      const activeLeases = leases?.length || 0;
-      const monthlyRevenue = payments?.reduce((sum, p) => sum + (p.amount || 0), 0) || 0;
-      const pendingMaintenance = maintenance?.length || 0;
-
-      // Overdue payments
-      const today = new Date().toISOString().split('T')[0];
-      const { data: overduePayments } = await supabase
-        .from('payments')
-        .select('*, leases!inner(*, properties!inner(*))')
-        .eq('leases.properties.landlord_id', user.id)
-        .eq('status', 'pending')
-        .lt('due_date', today);
-
-      // Expiring leases (next 60 days)
-      const sixtyDaysFromNow = new Date();
-      sixtyDaysFromNow.setDate(sixtyDaysFromNow.getDate() + 60);
-      const { data: expiringLeases } = await supabase
-        .from('leases')
-        .select('*, properties!inner(*)')
-        .eq('properties.landlord_id', user.id)
-        .eq('status', 'active')
-        .lte('end_date', sixtyDaysFromNow.toISOString().split('T')[0]);
-
-      if (!isMounted) return;
-
-      setStats({
-        totalProperties,
-        occupiedProperties,
-        totalTenants: activeLeases,
-        activeLeases,
-        monthlyRevenue,
-        pendingMaintenance,
-        overduePayments: overduePayments?.length || 0,
-        expiringLeases: expiringLeases?.length || 0,
-      });
-
-      // Fetch recent activities
-      const activities: RecentActivity[] = [];
-
-      // Recent payments
-      const { data: recentPayments } = await supabase
-        .from('payments')
-        .select('*, leases!inner(*, tenants(*), properties(*))')
-        .eq('leases.properties.landlord_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(5);
-
-      recentPayments?.forEach(payment => {
-        activities.push({
-          id: payment.id,
-          type: 'payment',
-          title: `Payment ${payment.status}`,
-          description: `$${payment.amount} from ${payment.leases?.tenants?.full_name || 'Tenant'}`,
-          timestamp: payment.created_at,
-          status: payment.status,
-        });
-      });
-
-      // Recent maintenance
-      const { data: recentMaintenance } = await supabase
-        .from('maintenance_requests')
-        .select('*, properties(*)')
-        .eq('properties.landlord_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(5);
-
-      recentMaintenance?.forEach(request => {
-        activities.push({
-          id: request.id,
-          type: 'maintenance',
-          title: `Maintenance: ${request.category}`,
-          description: request.description.substring(0, 50) + '...',
-          timestamp: request.created_at,
-          status: request.status,
-        });
-      });
-
-      // Sort by timestamp
-      activities.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-      
-      if (isMounted) {
-        setRecentActivities(activities.slice(0, 10));
-        toast({
-          variant: 'success',
-          title: 'Dashboard loaded',
-          description: 'Your dashboard data has been updated',
-        });
-      }
-
-    } catch (error) {
-      console.error('Error fetching dashboard data:', error);
-      if (isMounted) {
-        const errorMessage = error instanceof Error ? error.message : 'Failed to load dashboard';
-        setError(errorMessage);
-        toast({
-          variant: 'destructive',
-          title: 'Error loading dashboard',
-          description: errorMessage,
-        });
-      }
-    } finally {
-      if (isMounted) {
-        setLoading(false);
-      }
-    }
-
-    return () => {
-      isMounted = false;
-    };
-  }, [toast]);
+    const timer = setTimeout(() => {
+      setStats(MOCK_LANDLORD_DASHBOARD_STATS);
+      setRecentActivities(MOCK_LANDLORD_RECENT_ACTIVITIES);
+      setLoading(false);
+    }, MOCK_LANDLORD_LOAD_MS);
+    return () => clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
-    fetchDashboardData();
-  }, [fetchDashboardData]);
+    const cleanup = loadDashboardData();
+    return cleanup;
+  }, [loadDashboardData]);
 
   if (loading) {
     return <DashboardSkeleton />;
@@ -217,7 +65,7 @@ export default function LandlordDashboard() {
             <AlertDescription>{error}</AlertDescription>
           </Alert>
           <div className="mt-4">
-            <Button onClick={fetchDashboardData} aria-label="Retry loading dashboard">
+            <Button onClick={loadDashboardData} aria-label="Retry loading dashboard">
               Try Again
             </Button>
           </div>
@@ -229,17 +77,19 @@ export default function LandlordDashboard() {
   return (
     <ErrorBoundary>
       <div className="container mx-auto p-6 space-y-6">
-        <div className="flex justify-between items-center">
+        {/* Mobile: title block on top, actions stacked below in a column.
+            ≥sm: original single row (title left, actions right). */}
+        <div className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center">
           <div>
             <h1 className="text-3xl font-bold">Landlord Dashboard</h1>
             <p className="text-muted-foreground">Overview of your properties and tenants</p>
           </div>
-          <div className="flex gap-2">
-            <Button asChild>
-              <Link to="/landlord/properties/new">Add Property</Link>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Button asChild className="w-full sm:w-auto">
+              <Link to="/landlord/properties/create">Add Property</Link>
             </Button>
-            <Button asChild variant="outline">
-              <Link to="/landlord/leases/new">Create Lease</Link>
+            <Button asChild variant="outline" className="w-full sm:w-auto">
+              <Link to="/landlord/leases/create">Create Lease</Link>
             </Button>
           </div>
         </div>
@@ -373,14 +223,14 @@ export default function LandlordDashboard() {
                 description="Activity from your properties will appear here. Get started by adding properties and creating leases."
                 action={{
                   label: 'Add Property',
-                  onClick: () => window.location.href = '/landlord/properties/new'
+                  onClick: () => window.location.href = '/landlord/properties/create'
                 }}
               />
             ) : (
               <div className="space-y-4">
                 {recentActivities.map((activity) => (
-                  <div 
-                    key={activity.id} 
+                  <div
+                    key={activity.id}
                     className="flex items-start justify-between border-b pb-4 last:border-0"
                     role="article"
                     aria-label={`${activity.title}: ${activity.description}`}
@@ -422,7 +272,7 @@ export default function LandlordDashboard() {
           <CardContent>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
               <Button asChild variant="outline" className="h-auto py-4">
-                <Link to="/landlord/properties/new" className="flex flex-col items-center gap-2">
+                <Link to="/landlord/properties/create" className="flex flex-col items-center gap-2">
                   <Building2 className="h-6 w-6" aria-hidden="true" />
                   <span>Add Property</span>
                 </Link>
@@ -434,7 +284,7 @@ export default function LandlordDashboard() {
                 </Link>
               </Button>
               <Button asChild variant="outline" className="h-auto py-4">
-                <Link to="/landlord/leases/new" className="flex flex-col items-center gap-2">
+                <Link to="/landlord/leases/create" className="flex flex-col items-center gap-2">
                   <FileText className="h-6 w-6" aria-hidden="true" />
                   <span>Create Lease</span>
                 </Link>

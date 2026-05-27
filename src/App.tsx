@@ -23,6 +23,7 @@ const MFAVerify = lazy(() => import('@/pages/auth/MFAVerify'));
 const HelpHub = lazy(() => import('@/pages/HelpHub'));
 
 import TenantLayout from '@/components/layout/TenantLayout';
+import LandlordLayout from '@/components/layout/LandlordLayout';
 import PublicLayout from '@/components/layout/PublicLayout';
 
 // Lazy load tenant pages
@@ -67,6 +68,7 @@ const TenantRenewalNegotiation = lazy(() => import('@/pages/tenant/renewals/Tena
 
 // Lazy load landlord pages
 const LandlordDashboard = lazy(() => import('@/pages/landlord/LandlordDashboard'));
+const LandlordProfile = lazy(() => import('@/pages/landlord/LandlordProfile').then(m => ({ default: m.LandlordProfile })));
 const LandlordTenants = lazy(() => import('@/pages/landlord/LandlordTenants'));
 const LandlordLeases = lazy(() => import('@/pages/landlord/LandlordLeases'));
 const LandlordPayments = lazy(() => import('@/pages/landlord/LandlordPayments'));
@@ -268,16 +270,6 @@ function App() {
                 } 
               />
               
-              {/* Financial Dashboard - Accessible by landlords only */}
-              <Route 
-                path="/financial/dashboard" 
-                element={
-                  <ProtectedRoute allowedRoles={['landlord']}>
-                    <FinancialDashboard />
-                  </ProtectedRoute>
-                } 
-              />
-              
               {/* Payment History - Accessible by both roles */}
               <Route 
                 path="/payments/history" 
@@ -318,180 +310,51 @@ function App() {
                 } 
               />
               
-              {/* Vendor Management - Accessible by landlords only */}
-              <Route 
-                path="/landlord/vendors" 
-                element={
-                  <ProtectedRoute allowedRoles={['landlord']}>
-                    <VendorDirectory />
-                  </ProtectedRoute>
-                } 
-              />
-              
               {/* 
                 LANDLORD ROUTES - Protected
                 Requires authentication and landlord role
               */}
-              <Route path="/landlord">
+              {/*
+                Single ProtectedRoute on the parent — LandlordLayout renders
+                the shared header + <Outlet />. Mirrors the tenant block.
+                Child paths unchanged; vendors/financial moved in (plan
+                decision #3), messages stub added (decision #2).
+              */}
+              <Route
+                path="/landlord"
+                element={
+                  <ProtectedRoute allowedRoles={['landlord']}>
+                    <LandlordLayout />
+                  </ProtectedRoute>
+                }
+              >
                 <Route index element={<Navigate to="/landlord/dashboard" replace />} />
-                <Route 
-                  path="dashboard" 
-                  element={
-                    <ProtectedRoute allowedRoles={['landlord']}>
-                      <LandlordDashboard />
-                    </ProtectedRoute>
-                  } 
-                />
-                <Route 
-                  path="properties" 
-                  element={
-                    <ProtectedRoute allowedRoles={['landlord']}>
-                      <PropertyList />
-                    </ProtectedRoute>
-                  } 
-                />
-                <Route 
-                  path="properties/create" 
-                  element={
-                    <ProtectedRoute allowedRoles={['landlord']}>
-                      <PropertyCreate />
-                    </ProtectedRoute>
-                  } 
-                />
-                <Route 
-                  path="properties/:id" 
-                  element={
-                    <ProtectedRoute allowedRoles={['landlord']}>
-                      <PropertyDetail />
-                    </ProtectedRoute>
-                  } 
-                />
-                <Route 
-                  path="properties/:id/edit" 
-                  element={
-                    <ProtectedRoute allowedRoles={['landlord']}>
-                      <PropertyEdit />
-                    </ProtectedRoute>
-                  } 
-                />
-                
-                {/* Landlord Application Routes */}
-                <Route 
-                  path="applications" 
-                  element={
-                    <ProtectedRoute allowedRoles={['landlord']}>
-                      <ApplicationList />
-                    </ProtectedRoute>
-                  } 
-                />
-                <Route 
-                  path="applications/:id" 
-                  element={
-                    <ProtectedRoute allowedRoles={['landlord']}>
-                      <ApplicationDetail />
-                    </ProtectedRoute>
-                  } 
-                />
-                
-                <Route 
-                  path="tenants" 
-                  element={
-                    <ProtectedRoute allowedRoles={['landlord']}>
-                      <LandlordTenants />
-                    </ProtectedRoute>
-                  } 
-                />
-                <Route 
-                  path="tenants/:tenantId" 
-                  element={
-                    <ProtectedRoute allowedRoles={['landlord']}>
-                      <LandlordTenants />
-                    </ProtectedRoute>
-                  } 
-                />
-                
-                {/* Landlord Lease Routes */}
-                <Route 
-                  path="leases" 
-                  element={
-                    <ProtectedRoute allowedRoles={['landlord']}>
-                      <LandlordLeases />
-                    </ProtectedRoute>
-                  } 
-                />
-                <Route 
-                  path="leases/create" 
-                  element={
-                    <ProtectedRoute allowedRoles={['landlord']}>
-                      <LeaseCreationWizard />
-                    </ProtectedRoute>
-                  } 
-                />
-                <Route 
-                  path="leases/:leaseId" 
-                  element={
-                    <ProtectedRoute allowedRoles={['landlord']}>
-                      <LandlordLeases />
-                    </ProtectedRoute>
-                  } 
-                />
-                
-                <Route 
-                  path="payments" 
-                  element={
-                    <ProtectedRoute allowedRoles={['landlord']}>
-                      <LandlordPayments />
-                    </ProtectedRoute>
-                  } 
-                />
-                <Route 
-                  path="maintenance" 
-                  element={
-                    <ProtectedRoute allowedRoles={['landlord']}>
-                      <MaintenanceRequestDashboard />
-                    </ProtectedRoute>
-                  } 
-                />
-                <Route 
-                  path="maintenance/:id" 
-                  element={
-                    <ProtectedRoute allowedRoles={['landlord']}>
-                      <LandlordMaintenanceRequestDetail />
-                    </ProtectedRoute>
-                  } 
-                />
-                <Route 
-                  path="renewals" 
-                  element={
-                    <ProtectedRoute allowedRoles={['landlord']}>
-                      <RenewalOfferList />
-                    </ProtectedRoute>
-                  } 
-                />
-                <Route 
-                  path="renewals/create" 
-                  element={
-                    <ProtectedRoute allowedRoles={['landlord']}>
-                      <RenewalOfferCreate />
-                    </ProtectedRoute>
-                  } 
-                />
-                <Route 
-                  path="renewals/:id" 
-                  element={
-                    <ProtectedRoute allowedRoles={['landlord']}>
-                      <LandlordRenewalDetailPage />
-                    </ProtectedRoute>
-                  } 
-                />
-                <Route 
-                  path="renewals/:id/negotiate" 
-                  element={
-                    <ProtectedRoute allowedRoles={['landlord']}>
-                      <LandlordRenewalNegotiation />
-                    </ProtectedRoute>
-                  } 
-                />
+                <Route path="dashboard"              element={<LandlordDashboard />} />
+                <Route path="properties"             element={<PropertyList />} />
+                <Route path="properties/create"      element={<PropertyCreate />} />
+                <Route path="properties/:id"         element={<PropertyDetail />} />
+                <Route path="properties/:id/edit"    element={<PropertyEdit />} />
+                <Route path="applications"           element={<ApplicationList />} />
+                <Route path="applications/:id"       element={<ApplicationDetail />} />
+                <Route path="tenants"                element={<LandlordTenants />} />
+                <Route path="tenants/:tenantId"      element={<LandlordTenants />} />
+                <Route path="leases"                 element={<LandlordLeases />} />
+                <Route path="leases/create"          element={<LeaseCreationWizard />} />
+                <Route path="leases/:leaseId"        element={<LandlordLeases />} />
+                <Route path="payments"               element={<LandlordPayments />} />
+                <Route path="maintenance"            element={<MaintenanceRequestDashboard />} />
+                <Route path="maintenance/:id"        element={<LandlordMaintenanceRequestDetail />} />
+                <Route path="renewals"               element={<RenewalOfferList />} />
+                <Route path="renewals/create"        element={<RenewalOfferCreate />} />
+                <Route path="renewals/:id"           element={<LandlordRenewalDetailPage />} />
+                <Route path="renewals/:id/negotiate" element={<LandlordRenewalNegotiation />} />
+                {/* Moved under the layout (plan decision #3): /landlord/vendors
+                    keeps its URL; financial moves to /landlord/financial. */}
+                <Route path="vendors"                element={<VendorDirectory />} />
+                <Route path="financial"              element={<FinancialDashboard />} />
+                {/* Shared CommunicationCenter stub (plan decision #2). */}
+                <Route path="messages"               element={<CommunicationCenter />} />
+                <Route path="profile"                element={<LandlordProfile />} />
               </Route>
               
               {/* Dashboard routes - Protected (accessible by both roles) */}

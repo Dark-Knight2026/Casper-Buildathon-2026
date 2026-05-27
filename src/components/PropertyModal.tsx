@@ -30,7 +30,7 @@ interface PropertyModalProps {
   property: Property | null;
   isOpen: boolean;
   onClose: () => void;
-  onFavorite: (propertyId: number) => void;
+  onFavorite: (propertyId: string) => void;
   isFavorited?: boolean;
 }
 

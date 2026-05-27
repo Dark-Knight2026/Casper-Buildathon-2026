@@ -1,52 +1,63 @@
 /**
- * Tenant Profile Page
- * View and edit tenant profile information
+ * Landlord Profile Page (spec §3.2; plan Part C)
+ *
+ * Mirrors TenantProfile for the shared basics (avatar, name/phone/bio, email
+ * block, role switch). Adds a small portfolio overview stitched from the
+ * shared landlord mock fixtures — `// TODO(BE)` until the Rust backend ships
+ * `GET /api/v1/landlord/*` per spec §3.7.
  */
 
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
-import { User, Mail, Phone, Home, Calendar, Save, Loader2, Sliders } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import {
+  User,
+  Mail,
+  Phone,
+  Calendar,
+  Save,
+  Loader2,
+  Building2,
+  DollarSign,
+  FileText,
+  Users,
+} from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
-import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
-import { useTenantPreferences } from '@/hooks/useTenantPreferences';
-import { TenantPreferencesDialog } from '@/components/tenant/TenantPreferencesDialog';
 import { RoleSwitchDialog } from '@/components/profile/RoleSwitchDialog';
-import { countActivePreferences, ALL_MATCH_CATEGORIES } from '@/types/tenantPreferences';
 import { uploadAvatar } from '@/services/userProfileService';
 import { ApiError } from '@/lib/api-client';
 import { AvatarStatus } from '@/lib/api-errors';
+import { MOCK_LANDLORD_DASHBOARD_STATS } from '@/data/landlordMockData';
 
-/**
- * Client-side avatar constraints. Mirrored on the server (`upload_avatar` in
- * `crates/api/src/services/users/handlers.rs`) — the server is authoritative;
- * the values here exist only to short-circuit obviously-bad selections so the
- * user gets feedback before a wasted multipart round-trip.
- */
+// Mirrors TenantProfile constants — server is authoritative on the same
+// thresholds; the client values exist only to short-circuit obviously-bad
+// selections before a wasted multipart round-trip.
 const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
 const ACCEPTED_AVATAR_MIME = new Set(['image/png', 'image/jpeg', 'image/webp']);
 const AVATAR_ACCEPT_ATTR = Array.from(ACCEPTED_AVATAR_MIME).join(',');
 
 const formatDate = (date: Date): string =>
-  new Intl.DateTimeFormat('en-US', { year: 'numeric', month: 'long', day: 'numeric' }).format(new Date(date));
+  new Intl.DateTimeFormat('en-US', { year: 'numeric', month: 'long', day: 'numeric' }).format(
+    new Date(date),
+  );
 
-export function TenantProfile() {
+export function LandlordProfile() {
   const { profile: authProfile, refreshProfile, updateProfile } = useAuth();
   const { toast } = useToast();
 
-  // Run a single getMe() round-trip on mount so the page shows whatever the
+  // Single getMe() round-trip on mount so the page reflects whatever the
   // backend currently has (the AuthContext marker may be older than the
   // server-side state — e.g. avatar updated from another device). Errors are
-  // swallowed: AuthContext already drives a logout on 401, anything else is
-  // benign for a read.
+  // swallowed: AuthContext drives logout on 401, anything else is benign.
   useEffect(() => {
     void refreshProfile().catch(() => {
-      // Non-fatal: caller falls back to whatever AuthContext already had.
+      /* non-fatal: caller falls back to whatever AuthContext already had. */
     });
   }, [refreshProfile]);
 
@@ -59,15 +70,10 @@ export function TenantProfile() {
 
   const [saving, setSaving] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
-  // Object URL displayed instantly after the user picks a file, before the
-  // server round-trip resolves. Cleared (and revoked) once the refreshed
-  // profile carries the canonical `avatar_url`.
   const [optimisticAvatar, setOptimisticAvatar] = useState<string | null>(null);
-  // If the canonical avatar URL fails to load (CDN miss, expired presigned link,
-  // backend returning a path the browser can't resolve), fall back to initials
-  // instead of letting the browser render the broken-image alt text.
   const [avatarLoadFailed, setAvatarLoadFailed] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [roleSwitchOpen, setRoleSwitchOpen] = useState(false);
   const [formData, setFormData] = useState({
     firstName: authProfile?.firstName ?? '',
     lastName: authProfile?.lastName ?? '',
@@ -75,16 +81,12 @@ export function TenantProfile() {
     bio: authProfile?.bio ?? '',
   });
 
-  // Revoke the in-flight blob URL on unmount; otherwise the browser keeps the
-  // file in memory for the lifetime of the document.
   useEffect(() => {
     return () => {
       if (optimisticAvatar) URL.revokeObjectURL(optimisticAvatar);
     };
   }, [optimisticAvatar]);
 
-  // Re-sync the form when the underlying profile shifts (initial fetch,
-  // external refresh after an avatar upload, etc.).
   useEffect(() => {
     setFormData({
       firstName: authProfile?.firstName ?? '',
@@ -94,27 +96,15 @@ export function TenantProfile() {
     });
   }, [authProfile?.firstName, authProfile?.lastName, authProfile?.phone, authProfile?.bio]);
 
-  // Reset the load-failed flag when the URL changes — a fresh upload should
-  // get a fresh chance to render before falling back to initials.
   useEffect(() => {
     setAvatarLoadFailed(false);
   }, [authProfile?.avatar]);
 
-  const {
-    preferences,
-    hasExplicitPreferences,
-    updatePreferences,
-  } = useTenantPreferences(authProfile?.id ?? '');
-  const [preferencesOpen, setPreferencesOpen] = useState(false);
-  const [roleSwitchOpen, setRoleSwitchOpen] = useState(false);
-  const activeCount = countActivePreferences(preferences);
-
-  // Server-side validators on `PATCH /users/me` reject empty/whitespace values
-  // for first_name, last_name and phone with a 400. Mirror the rule client-side
-  // so the Save button is disabled before the user wastes a round-trip.
+  // Server validators on `PATCH /users/me` reject empty/whitespace values for
+  // first_name and last_name with a 400. Mirror the rule client-side so Save
+  // is disabled before the round-trip.
   const canSave =
-    formData.firstName.trim().length > 0 &&
-    formData.lastName.trim().length > 0;
+    formData.firstName.trim().length > 0 && formData.lastName.trim().length > 0;
 
   const handleSave = async () => {
     if (!canSave) return;
@@ -124,8 +114,8 @@ export function TenantProfile() {
       await updateProfile({
         firstName: formData.firstName.trim(),
         lastName: formData.lastName.trim(),
-        // Omit phone when blank — the server treats `''` as an attempt to wipe
-        // the column (rejected) rather than "leave unchanged".
+        // Omit phone when blank — the server treats `''` as wipe-attempt (400),
+        // not "leave unchanged".
         ...(trimmedPhone ? { phone: trimmedPhone } : {}),
         bio: formData.bio,
       });
@@ -150,12 +140,6 @@ export function TenantProfile() {
     });
   };
 
-  /**
-   * Translate the upload failure into a user-facing toast. 413/415/429 have
-   * specific copy; everything else falls back to the server message because
-   * the avatar handler emits prose strings (no machine-readable token), so
-   * surfacing them as-is gives the user the most accurate hint.
-   */
   const describeAvatarError = (err: unknown): string => {
     if (err instanceof ApiError) {
       if (err.statusCode === AvatarStatus.PayloadTooLarge) return 'Image is too large (max 5 MB).';
@@ -170,7 +154,6 @@ export function TenantProfile() {
 
   const handleAvatarChange = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    // Reset the input so re-selecting the same file fires `change` again.
     e.target.value = '';
     if (!file) return;
 
@@ -192,7 +175,6 @@ export function TenantProfile() {
     }
 
     const previewUrl = URL.createObjectURL(file);
-    // Replace any prior in-flight blob URL — only one preview at a time.
     setOptimisticAvatar(prev => {
       if (prev) URL.revokeObjectURL(prev);
       return previewUrl;
@@ -201,9 +183,6 @@ export function TenantProfile() {
 
     try {
       await uploadAvatar(file);
-      // Refresh AuthContext so the new `avatar_url` propagates to the Navbar
-      // and any other consumer; the optimistic blob URL is dropped after the
-      // server-side URL is in place.
       await refreshProfile();
       setOptimisticAvatar(null);
       URL.revokeObjectURL(previewUrl);
@@ -221,6 +200,11 @@ export function TenantProfile() {
     }
   };
 
+  // TODO(BE): replace MOCK_LANDLORD_DASHBOARD_STATS with
+  // GET /api/v1/landlord/stats once the contract exists — BE-blocked
+  // (LeaseFi MVP spec §3.7).
+  const stats = MOCK_LANDLORD_DASHBOARD_STATS;
+
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="mb-8">
@@ -229,12 +213,10 @@ export function TenantProfile() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
         {/* Left column — overview */}
         <div className="lg:col-span-1 space-y-6">
           <Card>
             <CardContent className="pt-6 space-y-4">
-              {/* Avatar */}
               <div className="flex flex-col items-center">
                 {(() => {
                   const src = optimisticAvatar ?? (avatarLoadFailed ? null : authProfile?.avatar);
@@ -279,7 +261,9 @@ export function TenantProfile() {
                   onClick={() => fileInputRef.current?.click()}
                 >
                   {uploadingAvatar ? (
-                    <><Loader2 className="mr-2 h-3 w-3 animate-spin" />Uploading…</>
+                    <>
+                      <Loader2 className="mr-2 h-3 w-3 animate-spin" />Uploading…
+                    </>
                   ) : (
                     'Change photo'
                   )}
@@ -318,14 +302,6 @@ export function TenantProfile() {
                   </div>
                 )}
 
-                <div className="flex items-center gap-3">
-                  <Home className="h-4 w-4 text-muted-foreground shrink-0" />
-                  <div>
-                    <p className="text-xs text-muted-foreground">Active Leases</p>
-                    <p className="text-sm text-foreground">{authProfile?.activeLeasesCount ?? 0}</p>
-                  </div>
-                </div>
-
                 {authProfile?.createdAt && (
                   <div className="flex items-center gap-3">
                     <Calendar className="h-4 w-4 text-muted-foreground shrink-0" />
@@ -339,7 +315,6 @@ export function TenantProfile() {
             </CardContent>
           </Card>
 
-          {/* Account status */}
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Account Status</CardTitle>
@@ -347,17 +322,17 @@ export function TenantProfile() {
             <CardContent className="space-y-3">
               <div className="flex justify-between">
                 <p className="text-sm text-muted-foreground">Status</p>
-                <p className="text-sm font-medium text-foreground capitalize">{authProfile?.status ?? '—'}</p>
+                <p className="text-sm font-medium text-foreground capitalize">
+                  {authProfile?.status ?? '—'}
+                </p>
               </div>
               <div className="flex items-center justify-between gap-2">
                 <p className="text-sm text-muted-foreground">Account Type</p>
                 <div className="flex items-center gap-2">
-                  <p className="text-sm font-medium text-foreground capitalize">{authProfile?.role ?? ''}</p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setRoleSwitchOpen(true)}
-                  >
+                  <p className="text-sm font-medium text-foreground capitalize">
+                    {authProfile?.role ?? ''}
+                  </p>
+                  <Button variant="outline" size="sm" onClick={() => setRoleSwitchOpen(true)}>
                     Switch
                   </Button>
                 </div>
@@ -374,10 +349,8 @@ export function TenantProfile() {
           </Card>
         </div>
 
-        {/* Right column — edit forms */}
+        {/* Right column — edit + portfolio */}
         <div className="lg:col-span-2 space-y-6">
-
-          {/* Personal information */}
           <Card>
             <CardHeader>
               <CardTitle>Personal Information</CardTitle>
@@ -390,7 +363,9 @@ export function TenantProfile() {
                   <Input
                     id="firstName"
                     value={formData.firstName}
-                    onChange={(e) => setFormData(prev => ({ ...prev, firstName: e.target.value }))}
+                    onChange={(e) =>
+                      setFormData(prev => ({ ...prev, firstName: e.target.value }))
+                    }
                     placeholder="Jane"
                     aria-required="true"
                     aria-invalid={formData.firstName.trim().length === 0}
@@ -401,7 +376,9 @@ export function TenantProfile() {
                   <Input
                     id="lastName"
                     value={formData.lastName}
-                    onChange={(e) => setFormData(prev => ({ ...prev, lastName: e.target.value }))}
+                    onChange={(e) =>
+                      setFormData(prev => ({ ...prev, lastName: e.target.value }))
+                    }
                     placeholder="Doe"
                     aria-required="true"
                     aria-invalid={formData.lastName.trim().length === 0}
@@ -426,7 +403,7 @@ export function TenantProfile() {
                   id="bio"
                   value={formData.bio}
                   onChange={(e) => setFormData(prev => ({ ...prev, bio: e.target.value }))}
-                  placeholder="Tell landlords a bit about yourself..."
+                  placeholder="A short bio shown to tenants browsing your listings…"
                   rows={3}
                 />
               </div>
@@ -437,61 +414,75 @@ export function TenantProfile() {
                 </Button>
                 <Button onClick={handleSave} disabled={saving || !canSave}>
                   {saving ? (
-                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Saving...</>
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />Saving...
+                    </>
                   ) : (
-                    <><Save className="mr-2 h-4 w-4" />Save Changes</>
+                    <>
+                      <Save className="mr-2 h-4 w-4" />Save Changes
+                    </>
                   )}
                 </Button>
               </div>
             </CardContent>
           </Card>
 
-          {/* Rental Preferences — drives Task 6 recommendations */}
+          {/* Portfolio overview — spec §3.2: owned properties, active leases,
+              received rent. Demo content while BE wiring is pending. */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Sliders className="h-4 w-4" />
-                Rental Preferences
-              </CardTitle>
+              <CardTitle>Portfolio Overview</CardTitle>
               <CardDescription>
-                Used to recommend properties as your lease nears its end.
+                A quick read of your current rental footprint.{' '}
+                <Link to="/landlord/dashboard" className="text-primary hover:underline">
+                  View full dashboard →
+                </Link>
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-3">
-              {hasExplicitPreferences ? (
-                <p className="text-sm text-muted-foreground">
-                  <Badge variant="secondary" className="mr-2">
-                    {activeCount}/{ALL_MATCH_CATEGORIES.length}
-                  </Badge>
-                  preference categories set. Edit to refine your matches.
-                </p>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  No preferences yet — we'll use your current home as a starting point.
-                </p>
-              )}
-              <div className="flex justify-end">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setPreferencesOpen(true)}
-                  aria-label={hasExplicitPreferences ? 'Edit preferences' : 'Set preferences'}
-                >
-                  <Sliders className="h-4 w-4 sm:mr-1.5" aria-hidden="true" />
-                  <span className="hidden sm:inline">
-                    {hasExplicitPreferences ? 'Edit preferences' : 'Set preferences'}
-                  </span>
-                </Button>
+            <CardContent>
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                <div className="rounded-md border bg-card p-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-muted-foreground">Properties</p>
+                    <Building2 className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                  </div>
+                  <p className="mt-1 text-2xl font-bold text-foreground">{stats.totalProperties}</p>
+                  <p className="text-xs text-muted-foreground">{stats.occupiedProperties} occupied</p>
+                </div>
+
+                <div className="rounded-md border bg-card p-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-muted-foreground">Active Leases</p>
+                    <FileText className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                  </div>
+                  <p className="mt-1 text-2xl font-bold text-foreground">{stats.activeLeases}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {stats.expiringLeases} expiring soon
+                  </p>
+                </div>
+
+                <div className="rounded-md border bg-card p-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-muted-foreground">Tenants</p>
+                    <Users className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                  </div>
+                  <p className="mt-1 text-2xl font-bold text-foreground">{stats.totalTenants}</p>
+                  <p className="text-xs text-muted-foreground">Across all properties</p>
+                </div>
+
+                <div className="rounded-md border bg-card p-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-muted-foreground">Monthly Revenue</p>
+                    <DollarSign className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                  </div>
+                  <p className="mt-1 text-2xl font-bold text-foreground">
+                    ${stats.monthlyRevenue.toLocaleString()}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Current month</p>
+                </div>
               </div>
             </CardContent>
           </Card>
-
-          <TenantPreferencesDialog
-            open={preferencesOpen}
-            onOpenChange={setPreferencesOpen}
-            initialPreferences={preferences}
-            onSave={updatePreferences}
-          />
 
           <RoleSwitchDialog
             open={roleSwitchOpen}
@@ -499,7 +490,6 @@ export function TenantProfile() {
             currentRole={authProfile?.role}
           />
 
-          {/* Email — separate verification flow */}
           <Card>
             <CardHeader>
               <CardTitle>Email Address</CardTitle>
@@ -507,7 +497,8 @@ export function TenantProfile() {
             </CardHeader>
             <CardContent className="space-y-4">
               {/* Mobile: stacked column, right-aligned, email wraps. ≥sm:
-                  original row (email left, button right, single line). */}
+                  row (email left, button right, single line). Mirrors
+                  TenantProfile so layouts stay parallel. */}
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                 <div className="flex items-start gap-3 min-w-0 justify-end sm:items-center sm:justify-start">
                   <Mail className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5 sm:mt-0" />
@@ -515,13 +506,9 @@ export function TenantProfile() {
                     {authProfile?.email ?? ''}
                   </p>
                 </div>
-                {/* Disabled until the change-email dialog is wired up. The
-                    service layer is ready — requestEmailChange() /
-                    confirmEmailChange() in userProfileService.ts implement the
-                    two-step PATCH /api/v1/users/me/email flow — only the UI
-                    dialog that calls them is missing. Keep the button visible
-                    (disabled) so the feature is discoverable; enable it once
-                    the dialog component lands. */}
+                {/* Disabled until the change-email dialog ships — service
+                    layer exists (requestEmailChange / confirmEmailChange in
+                    userProfileService.ts); only the dialog is missing. */}
                 <Button variant="outline" size="sm" disabled title="Coming soon">
                   Change email
                 </Button>
@@ -531,7 +518,6 @@ export function TenantProfile() {
               </p>
             </CardContent>
           </Card>
-
         </div>
       </div>
     </div>

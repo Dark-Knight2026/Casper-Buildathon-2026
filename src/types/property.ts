@@ -76,6 +76,11 @@ export interface PropertyFormData {
   availableDate: string;
   leaseTerms: string[];
   amenities: string[];
+  // Landlord-entered nearby points of interest (parity with the tenant
+  // surrounding-area search). Same shape the tenant flow consumes. Optional
+  // to match `Property.surroundingArea?` and avoid forcing every existing
+  // PropertyFormData producer (PropertyEdit, service) to set it.
+  surroundingArea?: SurroundingPOI[];
   utilitiesIncluded: string[];
   petPolicy: string;
   petsAllowed: boolean;
@@ -133,7 +138,10 @@ export interface Property {
   squareFeet: number | null;
   rent: number;
   securityDeposit: number;
-  availableDate: Date;
+  // ISO date-only string `YYYY-MM-DD` (single calendar day). Kept as a string
+  // to match the form/DTO shape (`PropertyFormData.availableDate`) and avoid
+  // string⇄Date conversion bugs at the form boundary.
+  availableDate: string;
   leaseTerms: string[];
   amenities: string[];
   petPolicy: string;
