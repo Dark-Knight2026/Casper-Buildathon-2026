@@ -15,8 +15,8 @@ use leasefi_contracts::escrow::{
 use leasefi_contracts::lease::{
     errors::Error,
     events::{
-        EquityEligibilityGranted, LeaseAgreementCreated, LeaseAgreementFinished,
-        LeaseAgreementProlonged,
+        EquityEligibilityGranted, EquityEligibilityRevoked, LeaseAgreementCreated,
+        LeaseAgreementFinished, LeaseAgreementProlonged,
     },
     types::{CreateLeaseAgreementParams, LeaseAgreement},
     Lease, LeaseHostRef, LeaseInitArgs,
@@ -320,7 +320,7 @@ fn test_set_nft_should_revert_if_not_owner_is_calling() {
 }
 
 #[test]
-fn test_set_nft_should_set_escrow_properly() {
+fn test_set_nft_should_set_nft_properly() {
     let mut test_data = setup(odra_test::env());
     let nft = test_data.env.get_account(10);
 
@@ -880,6 +880,14 @@ fn test_equity_eligibility_is_revoked_after_lease_finalization() {
             .is_equity_eligible(property_id, params.tenant),
         "Tenant equity eligibility should be revoked after finalization"
     );
+
+    assert!(test_data.env.emitted_event(
+        &test_data.lease,
+        EquityEligibilityRevoked {
+            property_id,
+            account: params.tenant,
+        }
+    ));
 }
 
 #[test]

@@ -92,6 +92,24 @@
     },
     {
       "struct": {
+        "name": "EquityEligibilityRevoked",
+        "description": null,
+        "members": [
+          {
+            "name": "property_id",
+            "description": null,
+            "ty": "U256"
+          },
+          {
+            "name": "account",
+            "description": null,
+            "ty": "Key"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
         "name": "LeaseAgreement",
         "description": null,
         "members": [
@@ -294,6 +312,11 @@
       "discriminant": 406
     },
     {
+      "name": "LeaseAlreadyFinalized",
+      "description": "",
+      "discriminant": 411
+    },
+    {
       "name": "MissingRole",
       "description": "The role is missing.",
       "discriminant": 20003
@@ -317,6 +340,11 @@
       "name": "SecurityDepositChargeIsTooHigh",
       "description": "",
       "discriminant": 408
+    },
+    {
+      "name": "TenantAlreadyEquityEligible",
+      "description": "",
+      "discriminant": 412
     },
     {
       "name": "ZeroAmount",
@@ -484,7 +512,7 @@
     },
     {
       "name": "is_equity_eligible",
-      "description": "",
+      "description": "@dev Eligibility is not automatically time-bounded. It persists until the",
       "is_mutable": false,
       "arguments": [
         {
@@ -611,6 +639,10 @@
       "ty": "EquityEligibilityGranted"
     },
     {
+      "name": "EquityEligibilityRevoked",
+      "ty": "EquityEligibilityRevoked"
+    },
+    {
       "name": "LeaseAgreementCreated",
       "ty": "LeaseAgreementCreated"
     },
@@ -657,6 +689,30 @@
       },
       {
         "name": "owner",
+        "description": null,
+        "ty": "Key",
+        "optional": false
+      },
+      {
+        "name": "roles",
+        "description": null,
+        "ty": "Key",
+        "optional": false
+      },
+      {
+        "name": "escrow",
+        "description": null,
+        "ty": "Key",
+        "optional": false
+      },
+      {
+        "name": "nft",
+        "description": null,
+        "ty": "Key",
+        "optional": false
+      },
+      {
+        "name": "property_registry",
         "description": null,
         "ty": "Key",
         "optional": false

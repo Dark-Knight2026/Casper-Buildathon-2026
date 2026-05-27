@@ -8,8 +8,8 @@ use crate::{
     lease::{
         errors::Error,
         events::{
-            EquityEligibilityGranted, LeaseAgreementCreated, LeaseAgreementFinished,
-            LeaseAgreementProlonged,
+            EquityEligibilityGranted, EquityEligibilityRevoked, LeaseAgreementCreated,
+            LeaseAgreementFinished, LeaseAgreementProlonged,
         },
         types::{CreateLeaseAgreementParams, LeaseAgreement},
     },
@@ -88,6 +88,12 @@ pub mod events {
         pub property_id: U256,
         pub account: Address,
     }
+
+    #[odra::event]
+    pub struct EquityEligibilityRevoked {
+        pub property_id: U256,
+        pub account: Address,
+    }
 }
 
 // =============================================================================
@@ -124,6 +130,7 @@ pub mod errors {
   LeaseAgreementFinished,
   LeaseAgreementProlonged,
   EquityEligibilityGranted,
+  EquityEligibilityRevoked,
 ])]
 pub struct Lease {
     ownable: SubModule<Ownable>,
@@ -412,8 +419,14 @@ impl Lease {
 
         // Clear the `equity_eligible` entry that was set at lease creation
         if let Some(ref equity_option) = lease_agreement.equity_option {
-            self.equity_eligible
-                .set(&(equity_option.property_id, lease_agreement.tenant), false);
+            let property_id = equity_option.property_id;
+            let tenant = lease_agreement.tenant;
+            self.equity_eligible.set(&(property_id, tenant), false);
+
+            self.env().emit_event(EquityEligibilityRevoked {
+                property_id,
+                account: tenant,
+            });
         }
 
         // The lease NFT remains frozen (set at creation) to prevent unauthorized transfers.
