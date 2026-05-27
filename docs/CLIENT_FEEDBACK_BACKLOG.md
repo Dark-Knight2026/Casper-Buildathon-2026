@@ -35,6 +35,9 @@ Tasks 17–26 were captured on **2026-05-26** after Anthony shared
 | 24 | Dispute filing UI (§7)                                     | 🔲 pending⁵       |
 | 25 | `<TransactionStatus/>` shared state-machine (§8)           | 🔲 pending        |
 | 26 | `<KYCGate/>` minimal (email-only for MVP) (§10)            | 🔲 pending        |
+| 27 | ICO page rebrand — Token Sale → Big Token Dashboard       | 🔲 pending⁶       |
+| 28 | Apply Now duplicate on tenant Property Detail              | 🔲 pending        |
+| 29 | MVP role narrowing — purge buyer/seller/agent/broker UI    | 🔲 pending⁷       |
 
 ¹ Demo = UI is final, but the backend integration is mocked. Open product
 questions and required endpoints are documented at the top of
@@ -56,6 +59,17 @@ invisible-wallet UX**. See Task 17 for the verbatim exchange.
 ⁵ Phase-1 inclusion is unconfirmed — Kenneth's DisputeModule (ADR-005) lands
 on-chain in Phase 0, but the FE filing UI is not in the Critical 6 spine.
 Defer to Phase 1.1 unless Anthony explicitly pulls it forward.
+
+⁶ Driven by Anthony's 2026-05-20 recurring meeting (Clarity Act compliance):
+"sales" / "investor" / "ICO" terminology cannot remain in MVP-reachable
+copy without triggering securities classification. ICO page itself is
+**not deleted** — it is repurposed as a rewards dashboard surface.
+
+⁷ MVP audience is **tenant + landlord/PM only**. Buyer / seller / agent /
+broker (and the associated attorney / inspector / escrow / title / CPA /
+mortgage / insurance dashboards) are pre-LeaseFi-pivot scaffolding that
+remained in the tree. They are not deleted from the repo — they are
+unmounted from MVP routing and hidden from MVP navigation. See Task 29.
 
 ---
 
@@ -1487,6 +1501,346 @@ screening are explicitly out of scope for MVP.
 ### Estimated effort
 
 ~10 h for the wrapper itself + ~2 h per integration point.
+
+---
+
+## Task 27 — ICO Page Rebrand for Clarity Act Compliance
+
+### Source
+
+LeaseFi recurring meeting **2026-05-20**.
+Driven by US Clarity Act regulatory concerns: anything that names a
+"sale" or markets toward "investors" risks classification as a security,
+which LeaseFi explicitly does not want.
+
+### Goal
+
+Strip all sale-/investor-flavoured language from MVP-reachable copy,
+rename the surface from "Token Sale" to "Big Token Dashboard", and add
+the missing back-navigation so the page stops being a dead-end.
+Repurpose the dashboard from a buy-in surface to a rewards / balance
+surface.
+
+### Acceptance criteria
+
+**Renames (global grep + replace, MVP-reachable copy only):**
+
+- `Token Sale` / `Pre-sale` / `Presale` → **`Big Token Dashboard`**
+- `ICO` (user-facing) → drop the term entirely; internal code paths
+  under `src/pages/ico/`, `src/services/ico/`, `src/hooks/ico/` keep
+  their folder names (they are internal identifiers and renaming them
+  is out of scope here — see Open Q #3).
+
+**Copy purge (MVP-reachable surfaces only — Navbar, ICO page, marketing
+sections still mounted in `App.tsx`):**
+
+- `sale` / `for sale` (in token context) — removed
+- `investor` / `investors` — removed (note: §3.8 of `FRONTEND_MVP_TASKS.md`
+  already lists this as "Now backlog" #11; this task absorbs it)
+- `investment` / `investment vehicle` — removed
+- `profit` / `profits` / `capital gains` — removed
+- `trajectory` (in price-forecast sense) — removed
+- Allowed replacements: `commodity`, `utility token`, `reward token`,
+  `staking`, `transaction fees`, `rewards`, `private offering` (only on
+  the accredited-investor legal page, if it ships)
+
+**Navigation:**
+
+- Add a **`← Back to application`** link/button on the Big Token
+  Dashboard header (top-left, before the LeaseFi logo or right after
+  it). Target depends on auth + role:
+  - Logged-in tenant → `/tenant/dashboard`
+  - Logged-in landlord → `/landlord/dashboard`
+  - Guest → `/` (landing)
+- Verify there is also a path from the main app **to** the dashboard
+  (e.g. notification "You earned 50 BIG tokens — view dashboard").
+
+**Repurpose:**
+
+- Replace any "Buy now" / "Join the sale" CTAs with **balance widgets**:
+  - "Your BIG tokens" — wallet-connected balance display
+  - "Earned this month" — recent staking / transaction reward summary
+  - "How rewards work" — link to a 1-page explainer
+- Keep `ConnectWallet` action — but reframe copy from "Connect to buy"
+  → "Connect to view your tokens".
+- Remove `<TokenSaleProgress/>` or equivalent fundraising widgets from
+  the MVP path; either delete or hide behind a feature flag for
+  internal-only viewing.
+
+**File-level checklist (initial — refine during implementation):**
+
+- `src/pages/ico/ICOPage.tsx` — header rebrand, back-link, balance
+  widgets
+- `src/pages/ico/components/*` — remove sale-CTAs, repurpose sections
+- `src/components/landing/TestimonialsSection.tsx` — purge `investor`
+  testimonial copy (called out in `FRONTEND_MVP_TASKS.md` §3.8)
+- `src/components/landing/FractionalOwnership.tsx` — unlink from MVP
+  nav (out-of-MVP per `FRONTEND_MVP_TASKS.md` §3.8); confirm before
+  deleting
+- Navbar / footer links — drop `Token Sale` / `ICO` labels, repoint to
+  `Big Token Dashboard`
+- Any route alias like `/ico` / `/token-sale` — keep the URL but
+  update page title + breadcrumbs
+
+### Open product questions
+
+1. **USDT → USDC.** Anthony confirmed on the call that USDC is the move
+   (USDT pushed out of US compliance scope). If MVP-reachable copy
+   anywhere mentions USDT, swap to USDC. Quick grep needed; usually 0
+   hits but worth verifying.
+2. **Accredited-investor / "private offering" page.** Anthony hinted
+   a separate compliant path may exist for private offerings. Out of
+   MVP scope per his own 2026-05-20 framing ("ICO's gone"), but
+   confirm before we delete `FractionalOwnership.tsx`.
+3. **Internal code-path renames (`src/pages/ico/`, `src/services/ico/`,
+   `src/hooks/ico/`).** Folder names are not user-visible. Leaving them
+   keeps the diff small and preserves git blame. Confirm we agree to
+   skip; otherwise this is a separate ~6 h refactor with import-path
+   updates across 30+ files.
+4. **Reward feed source.** "Earned this month" widget needs a data
+   source — does BE have a `/api/v1/users/me/rewards` endpoint, or do
+   we infer from on-chain `LeaseFi` events? BE-blocked either way.
+5. **Notification → dashboard hand-off.** Anthony described an in-app
+   notification "You earned X BIG tokens — view dashboard". This depends
+   on the notification system (Task 8 has the broader plan; align
+   wording here).
+6. **Cross-link.** Three other items from the same 2026-05-20 call live
+   outside the ICO scope and are tracked separately: Apply-now duplicate
+   on Property Detail → **Task 28**; MVP role narrowing
+   (buyer / seller / agent / broker out of UI) → **Task 29**; the
+   `/tenant/application` route gap is already fixed on
+   `feat/landlord-dashboard`.
+
+### Backend endpoints required
+
+- `GET /api/v1/users/me/rewards` (or equivalent) — BIG-token balance +
+  recent reward events. BE-blocked; spec §3.7 placeholder.
+- No other BE work for the rename itself — it is pure FE copy + nav.
+
+### Demo files (when implemented)
+
+- `src/pages/ico/ICOPage.tsx` — main rebrand surface (existing)
+- `src/pages/ico/components/BigTokenDashboard/*` — new section components
+  (balance, recent rewards, explainer)
+- `src/pages/ico/components/legacy/*` — move sale-related components
+  here behind a feature flag (or delete after Anthony's sign-off)
+- `src/components/landing/TestimonialsSection.tsx` — copy purge
+- Navbar / footer / breadcrumb config files — link updates
+
+### Estimated effort
+
+~18 h total, broken down:
+
+- Global rename + copy purge (grep-driven): ~5 h
+- Back-navigation + role-aware target: ~1 h
+- Repurpose ICOPage into rewards dashboard layout (balance widget +
+  recent rewards + explainer): ~8 h
+- Cleanup `FractionalOwnership.tsx` / sale-CTA components: ~2 h
+- Manual QA pass on every MVP-reachable surface for residual
+  "investor"/"sale" mentions: ~2 h
+
+---
+
+## Task 28 — Apply Now Duplicate on Tenant Property Detail
+
+### Source
+
+LeaseFi recurring meeting **2026-05-20** — Anthony flagged that the
+tenant Property Detail page renders **two** `Apply Now` CTAs side by
+side, which is confusing and breaks the "one primary CTA per surface"
+rule established for the design-reference alignment (Task 18).
+
+### Goal
+
+Land on a single canonical `Apply Now` CTA on the tenant Property
+Detail page so the primary action is unambiguous. Keep the secondary
+context (cost breakdown) but stop double-rendering the button.
+
+### Current state
+
+`src/pages/tenant/PropertyDetail.tsx` mounts `Apply Now` twice for
+authenticated tenants:
+
+- **Line 500–507** — inside the action stack alongside
+  `Contact Landlord` + `Schedule Viewing` (main CTA column).
+- **Line 549–551** — inside the `Move-in Costs` sticky sidebar card
+  (gated behind `isAuthenticated`).
+
+Both call the same `handleApply` handler, so the duplication is
+purely visual.
+
+### Acceptance criteria
+
+- Exactly **one** `Apply Now` button is reachable on the tenant
+  Property Detail page at any time.
+- Canonical placement: **the `Move-in Costs` sticky sidebar card** —
+  the CTA stays directly adjacent to the cost it commits to (matches
+  the §3 Pay-rent pattern: action button labelled with the financial
+  consequence).
+- The main action column keeps `Contact Landlord` and
+  `Schedule Viewing` (secondary actions); `Apply Now` is removed from
+  that column.
+- Guest (unauthenticated) state continues to show the sign-in prompt
+  in place of `Move-in Costs` — no `Apply Now` is rendered for guests
+  on either surface (this already holds today; do not regress).
+- Mobile: the sticky sidebar collapses below the main column, so the
+  single `Apply Now` still lands above-the-fold on a typical
+  rent-search session. Sanity-check on a 375 × 667 viewport.
+
+### Open product questions
+
+1. **Cost-card placement on small screens.** On mobile, the `Move-in
+   Costs` card currently stacks below the action column. With the
+   button removed from the action column, mobile tenants must scroll
+   to apply. Acceptable, or do we hoist the cost card above the
+   action column on mobile only?
+2. **Cross-surface consistency.** `src/components/tenant/PropertyCard.tsx`
+   (line 127) and `src/pages/enhanced/EnhancedTenantOffers.tsx`
+   (line 312) also render `Apply Now`. Those are **list / card**
+   contexts, so the duplication rule does not apply — confirm we
+   leave them alone.
+
+### Backend endpoints required
+
+None — pure FE removal.
+
+### Demo files (when implemented)
+
+- `src/pages/tenant/PropertyDetail.tsx` — drop the line-500 button
+  block; keep the line-549 sidebar button as the canonical CTA.
+
+### Estimated effort
+
+~1 h. One-file edit + mobile-viewport sanity check.
+
+---
+
+## Task 29 — MVP Role Narrowing: Purge Buyer / Seller / Agent / Broker UI
+
+### Source
+
+LeaseFi recurring meeting **2026-05-20**. Anthony reiterated that
+MVP scope is **tenant and landlord/PM only**. The repo still carries
+substantial pre-LeaseFi-pivot scaffolding for residential-sale roles
+(buyer, seller, real-estate agent, mortgage broker, attorneys,
+inspectors, escrow, title, CPA, insurance). None of it is in the
+Critical 6; none of it should be reachable from MVP nav.
+
+### Goal
+
+Hide every non-tenant / non-landlord surface from MVP routing and
+navigation. **Do not delete the files** — they were inherited from
+earlier work and may be revisited post-MVP. Unmounting is enough to
+satisfy the scope decision without losing the codebase history.
+
+### Current state (initial inventory — refine during implementation)
+
+Folders under `src/pages/dashboard/` that are out-of-MVP roles:
+
+- `agent/` · `broker/` · `buyer/` · `seller/`
+- `insurance/` · `tax/` · `maintenance/` (the latter overlaps with
+  landlord PM scope — confirm)
+
+Top-level page files out-of-MVP:
+
+- `src/pages/AgentMarketplace.tsx`
+- `src/pages/BuyerAttorneyDashboard.tsx`
+- `src/pages/SellerAttorneyDashboard.tsx`
+- `src/pages/ListingAttorneyDashboard.tsx`
+- `src/pages/MortgageBrokerDashboard.tsx`
+- `src/pages/InsuranceAgentDashboard.tsx`
+- `src/pages/EscrowOfficerDashboard.tsx`
+- `src/pages/TitleOfficerDashboard.tsx`
+- `src/pages/CPADashboard.tsx`
+- `src/pages/HomeInspectorDashboard.tsx`
+- `src/pages/PestInspectorDashboard.tsx`
+- `src/pages/SavedAgents.tsx`
+- `src/pages/ClientDashboard.tsx` (verify scope)
+- `src/pages/MaintenanceMarketplace.tsx` (verify — may overlap with
+  landlord PM tools)
+- `src/pages/AIAgents.tsx` (verify — name overlaps with "real-estate
+  agent" but content may differ)
+
+Type files that may carry vestigial role enums:
+
+- `src/types/agent.ts` · `src/types/seller.ts` — audit for fields
+  that leak into shared types (`Property`, `Lease`).
+
+### Acceptance criteria
+
+- Out-of-MVP routes are **unregistered** from `src/App.tsx` (or
+  whatever router config the project uses). Direct URL access returns
+  the 404 page.
+- Navbar / sidebar / footer / dashboard switchers contain **zero**
+  links to out-of-MVP surfaces.
+- Role-switch UI (`RoleSwitchDialog`, role selectors on signup,
+  profile, etc.) offers only **tenant** and **landlord** options.
+- Shared types stay clean: any `UserRole` union or equivalent is
+  narrowed to `'tenant' | 'landlord' | 'pm'` (or whatever the MVP
+  canon is) **in the user-facing schema**. Internal/legacy enums
+  may retain other values if removing them breaks compilation of
+  unmounted pages — see Open Q #2.
+- Out-of-MVP page files **remain on disk**, untouched. They are
+  reachable only via direct file open in the IDE, not at runtime.
+- Add a one-line banner comment at the top of each unmounted page
+  file: `// UNMOUNTED — pre-LeaseFi-pivot surface, see Task 29` so
+  future contributors know why the file is dark code.
+
+### Open product questions
+
+1. **PM vs landlord.** The 2026-05-20 framing was "tenant + landlord/PM".
+   Confirm whether PM is a separate role with its own dashboard, or a
+   variant of landlord (per Task 19's "auto-detect on ≥2 leases as
+   landlord"). If separate, do **not** purge PM-specific folders.
+2. **Compilation strategy.** If unmounted pages import a shared
+   `UserRole` union and the union is narrowed, those files fail to
+   compile. Two options:
+   - Keep the union wide for now; add a runtime guard on every
+     role-switching surface (smaller diff, drifts further from
+     "MVP canon").
+   - Narrow the union and exclude unmounted pages from `tsconfig.json`
+     compilation (`exclude: ['src/pages/dashboard/buyer/**', …]`).
+     Cleaner long term; more upfront work.
+   Recommend option B if the unmounted set is large enough; confirm
+   with Anastasia before committing.
+3. **`AIAgents.tsx`.** Filename suggests AI assistants, not real-estate
+   agents. Read content before unmounting — may be MVP-relevant.
+4. **`MaintenanceMarketplace.tsx` / `dashboard/maintenance/`.**
+   Maintenance overlaps with landlord PM workflows. Confirm scope
+   before unmounting; it may belong in MVP under landlord.
+5. **Test files referencing unmounted pages.** Any tests under
+   `tests/pages/` that import unmounted pages should be skipped (not
+   deleted) with a `describe.skip(...)` and a `// UNMOUNTED — Task 29`
+   note, so re-mounting later is mechanical.
+6. **Search / link audit.** After unmounting, grep the codebase for
+   string references (`navigate('/buyer/...')`, hard-coded URLs in
+   copy, etc.) and prune. Easy to miss if relying only on router
+   removal.
+
+### Backend endpoints required
+
+None — pure FE unmount + nav cleanup.
+
+### Demo files (when implemented)
+
+- `src/App.tsx` — drop out-of-MVP route registrations
+- `src/components/layout/Navbar.tsx` (or equivalent) — purge links
+- `src/components/auth/RoleSwitchDialog.tsx` — narrow to tenant/landlord
+- `src/types/user.ts` (or equivalent) — narrow `UserRole` union per
+  Open Q #2
+- Unmounted page files: keep, add the one-line banner comment
+
+### Estimated effort
+
+~8 h, broken down:
+
+- Inventory pass + Anastasia/Anthony confirmation on edge cases
+  (Open Q #1, #3, #4): ~1.5 h
+- Route + nav unmount: ~2 h
+- Role-switcher narrowing + `UserRole` union strategy (Open Q #2):
+  ~2 h
+- Link-string audit + banner-comment pass: ~1.5 h
+- Manual smoke test on tenant + landlord journeys: ~1 h
 
 ---
 
