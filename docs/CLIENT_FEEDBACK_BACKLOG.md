@@ -35,8 +35,8 @@ Tasks 17–26 were captured on **2026-05-26** after Anthony shared
 | 24 | Dispute filing UI (§7)                                     | 🔲 pending⁵       |
 | 25 | `<TransactionStatus/>` shared state-machine (§8)           | 🔲 pending        |
 | 26 | `<KYCGate/>` minimal (email-only for MVP) (§10)            | 🔲 pending        |
-| 27 | ICO page rebrand — Token Sale → Big Token Dashboard       | 🔲 pending⁶       |
-| 28 | Apply Now duplicate on tenant Property Detail              | 🔲 pending        |
+| 27 | ICO page rebrand — Token Sale → Big Token Dashboard       | 🚧 partial⁶       |
+| 28 | Apply Now duplicate on tenant Property Detail              | ✅ shipped        |
 | 29 | MVP role narrowing — purge buyer/seller/agent/broker UI    | 🔲 pending⁷       |
 
 ¹ Demo = UI is final, but the backend integration is mocked. Open product
