@@ -10,7 +10,7 @@ use leasefi_contracts::big_coin::{BigCoin, BigCoinHostRef, BigCoinInitArgs};
 use leasefi_contracts::common::CurrencyAmount;
 use leasefi_contracts::escrow::{
     errors::Error,
-    events::{InvoiceCreated, InvoicePaid, MinDeadlineSet},
+    events::{InvoiceCreated, InvoicePaid, InvoicePaymentApplied, MinDeadlineSet},
     types::{CreateLeaseInvoiceParams, Invoice, InvoiceKind},
     Escrow, EscrowHostRef, EscrowInitArgs,
 };
@@ -190,7 +190,7 @@ fn test_create_lease_invoice_should_fail_if_buyer_is_equal_to_seller() {
             .try_create_lease_invoice(CreateLeaseInvoiceParams {
                 tenant: test_data.env.get_account(0),
                 landlord: test_data.env.get_account(0),
-                rent: CurrencyAmount::new(None, U256::zero()),
+                rent: CurrencyAmount::new(None, U256::one()),
                 property_manager: None,
                 property_manager_bps: 0,
                 deadline: 0,
@@ -298,10 +298,13 @@ fn test_pay_invoice_should_fail_if_invoice_is_already_paid() {
     let mut params = generate_invoice_params(&test_data);
     let invoice_id = create_lease_invoice(&mut test_data, &params);
 
+    let rent = *params.amount_due.amount();
+    let amount = rent + rent / U256::from(49u32);
+
     test_data
         .escrow
-        .with_tokens(params.amount_due.amount().to_u512())
-        .pay_invoice(invoice_id, *params.amount_due.amount());
+        .with_tokens(amount.to_u512())
+        .pay_invoice(invoice_id, amount);
 
     assert_eq!(
         test_data
@@ -339,11 +342,13 @@ fn test_pay_invoice_should_fail_if_attached_cspr_value_is_invalid_for_invoice_in
     let mut params = generate_invoice_params(&test_data);
     let invoice_id = create_lease_invoice(&mut test_data, &params);
 
+    let amount = *params.amount_due.amount();
+
     assert_eq!(
         test_data
             .escrow
-            .with_tokens(params.amount_due.amount().to_u512() - 1)
-            .try_pay_invoice(invoice_id, *params.amount_due.amount())
+            .with_tokens(U512::zero())
+            .try_pay_invoice(invoice_id, amount)
             .unwrap_err(),
         Error::InvalidAmountAttached.into(),
         "Should revert when attached CSPR value is invalid - 1"
@@ -351,8 +356,8 @@ fn test_pay_invoice_should_fail_if_attached_cspr_value_is_invalid_for_invoice_in
     assert_eq!(
         test_data
             .escrow
-            .with_tokens(params.amount_due.amount().to_u512() + 1)
-            .try_pay_invoice(invoice_id, *params.amount_due.amount())
+            .with_tokens(U512::zero())
+            .try_pay_invoice(invoice_id, U256::one())
             .unwrap_err(),
         Error::InvalidAmountAttached.into(),
         "Should revert when attached CSPR value is invalid - 2"
@@ -386,12 +391,29 @@ fn test_pay_invoice_should_pay_invoice_in_native_token_properly() {
     let invoice_id = create_lease_invoice(&mut test_data, &params);
     let prev_recipient_token_balance = test_data.env.balance_of(&params.landlord);
 
+    let rent = *params.amount_due.amount();
+    let amount = rent + rent / U256::from(49u32);
+
     test_data
         .escrow
-        .with_tokens(params.amount_due.amount().to_u512())
-        .pay_invoice(invoice_id, *params.amount_due.amount());
+        .with_tokens(amount.to_u512())
+        .pay_invoice(invoice_id, amount);
 
     let curr_recipient_token_balance = test_data.env.balance_of(&params.landlord);
+
+    let protocol_fee = amount * U256::from(200u32) / U256::from(10000u32);
+    let rent_allocation = amount - protocol_fee;
+
+    assert!(test_data.env.emitted_event(
+        &test_data.escrow,
+        InvoicePaymentApplied {
+            invoice_id,
+            payer: params.tenant,
+            amount,
+            protocol_fee,
+            rent_paid: rent_allocation,
+        }
+    ));
 
     assert!(test_data.env.emitted_event(
         &test_data.escrow,
@@ -400,11 +422,13 @@ fn test_pay_invoice_should_pay_invoice_in_native_token_properly() {
             paid_at: test_data.env.block_time(),
         }
     ));
+
     assert_eq!(
         curr_recipient_token_balance,
-        prev_recipient_token_balance + params.amount_due.amount().to_u512(),
+        prev_recipient_token_balance + rent_allocation.to_u512(),
         "Invalid current recipient balance"
     );
+
     assert!(
         test_data.escrow.get_invoice_by_id(invoice_id).is_paid,
         "Invoice should be marked as paid after successful payment"
@@ -421,15 +445,29 @@ fn test_pay_invoice_should_pay_invoice_in_cep18_token_properly() {
     let invoice_id = create_lease_invoice(&mut test_data, &params);
     let prev_recipient_token_balance = test_data.mock_cep18.balance_of(&params.landlord);
 
+    let rent = *params.amount_due.amount();
+    let amount = rent + rent / U256::from(49u32);
+
     test_data
         .mock_cep18
-        .approve(&test_data.escrow.address(), params.amount_due.amount());
-    test_data
-        .escrow
-        .pay_invoice(invoice_id, *params.amount_due.amount());
+        .approve(&test_data.escrow.address(), &amount);
+    test_data.escrow.pay_invoice(invoice_id, amount);
 
     let curr_recipient_token_balance = test_data.mock_cep18.balance_of(&params.landlord);
 
+    let protocol_fee = amount * U256::from(200u32) / U256::from(10000u32);
+    let rent_allocation = amount - protocol_fee;
+
+    assert!(test_data.env.emitted_event(
+        &test_data.escrow,
+        InvoicePaymentApplied {
+            invoice_id,
+            payer: params.tenant,
+            amount,
+            protocol_fee,
+            rent_paid: rent_allocation,
+        }
+    ));
     assert!(test_data.env.emitted_event(
         &test_data.escrow,
         InvoicePaid {
@@ -439,7 +477,7 @@ fn test_pay_invoice_should_pay_invoice_in_cep18_token_properly() {
     ));
     assert_eq!(
         curr_recipient_token_balance,
-        prev_recipient_token_balance + *params.amount_due.amount(),
+        prev_recipient_token_balance + rent_allocation,
         "Invalid current recipient balance"
     );
     assert!(
