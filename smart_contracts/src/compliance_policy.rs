@@ -252,6 +252,7 @@ impl CompliancePolicy {
         })
     }
 
+    /// Returns `true` if `account` is exempt from investor verification checks, `false` otherwise.
     pub fn is_transfer_exempt(&self, account: Address) -> bool {
         self.transfer_exempt_accounts.get(&account).unwrap_or(false)
     }

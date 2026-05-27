@@ -259,6 +259,7 @@ impl Lease {
         true
     }
 
+    /// Returns `true` if `account` is equity-eligible for `property_id`, `false` otherwise.
     /// @dev Eligibility is not automatically time-bounded. It persists until the
     /// landlord calls `finalize_lease_agreement` for the associated lease.
     /// Finalization is a protocol-level obligation after lease expiry.
