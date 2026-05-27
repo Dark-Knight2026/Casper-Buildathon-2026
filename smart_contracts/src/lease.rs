@@ -252,6 +252,9 @@ impl Lease {
         true
     }
 
+    /// @dev Eligibility is not automatically time-bounded. It persists until the
+    /// landlord calls `finalize_lease_agreement` for the associated lease.
+    /// Finalization is a protocol-level obligation after lease expiry.
     pub fn is_equity_eligible(&self, property_id: U256, account: Address) -> bool {
         self.equity_eligible.get_or_default(&(property_id, account))
     }
@@ -374,6 +377,11 @@ impl Lease {
     }
 
     /// Allows to finalize lease agreement between tenant and landlord when agreement has finished and won't be prolonged
+    ///
+    /// @dev Finalization is a protocol-level obligation after lease expiry. This
+    /// is the only mechanism that removes equity eligibility for the tenant.
+    /// Until this function is called, the tenant remains eligible regardless of
+    /// the lease end time.
     #[odra(non_reentrant)]
     pub fn finalize_lease_agreement(
         &mut self,
