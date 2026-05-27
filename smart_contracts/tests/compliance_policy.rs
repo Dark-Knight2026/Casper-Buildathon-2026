@@ -24,8 +24,9 @@ use leasefi_contracts::{
 };
 use odra::{
     casper_types::U256,
-    host::{Deployer, HostEnv},
+    host::{Deployer, HostEnv, HostRef},
     prelude::*,
+    uints::ToU512,
 };
 
 use crate::nft::NFTInitArgs;
@@ -852,5 +853,88 @@ fn test_assert_can_transfer_kyc_check_takes_precedence_over_equity_eligibility()
             .unwrap_err(),
         ComplianceError::RecipientNotVerified.into(),
         "RecipientNotVerified should take precedence over RecipientNotEquityEligible",
+    );
+}
+
+#[test]
+fn test_equity_lease_finalization_blocks_compliance_transfer() {
+    let mut ctx = setup(odra_test::env());
+    let property_id = create_active_property(&mut ctx);
+
+    // 1. Enable equity-distribution gate
+    ctx.env.set_caller(ctx.compliance_manager);
+    ctx.compliance.set_compliance_config(
+        property_id,
+        ComplianceConfig {
+            transfers_enabled: true,
+            equity_distribution_requires_lease_option: true,
+        },
+    );
+
+    // Set sender as exempt (equity distributor)
+    ctx.compliance.set_transfer_exempt(ctx.sender, true);
+
+    // Verify recipient
+    let recipient = ctx.recipient;
+    verify_investor(&mut ctx, recipient);
+
+    // 2. Create equity lease for tenant T
+    ctx.env.set_caller(ctx.landlord);
+    let lease_agreement_id = ctx
+        .lease
+        .create_lease_agreement(CreateLeaseAgreementParams {
+            tenant: ctx.recipient,
+            equity_option: Some(LeaseEquityOption { property_id }),
+            monthly_rent: CurrencyAmount::new(None, U256::from(100)),
+            security_deposit: CurrencyAmount::new(None, U256::from(500)),
+            start: ctx.env.block_time(),
+            end: ctx.env.block_time() + ONE_MONTH_IN_SECONDS,
+            invoice_validity_duration: ctx.escrow.get_min_deadline(),
+        });
+
+    // Transfer should be allowed while lease is active
+    call_as_property_token(&mut ctx);
+    assert!(
+        ctx.compliance
+            .try_assert_can_transfer(property_id, ctx.sender, ctx.recipient, U256::from(100))
+            .is_ok(),
+        "Equity distribution should succeed while lease is active",
+    );
+
+    // 3. Pay all invoices
+    let mut lease_agreement = ctx.lease.get_lease_agreement_by_id(&lease_agreement_id);
+    ctx.env.set_caller(ctx.recipient);
+    ctx.escrow
+        .with_tokens(lease_agreement.security_deposit.amount().to_u512())
+        .pay_invoice(lease_agreement.invoices_ids[0]);
+    for invoice_id in lease_agreement.invoices_ids.iter().skip(1) {
+        ctx.escrow
+            .with_tokens(lease_agreement.monthly_rent.amount().to_u512())
+            .pay_invoice(*invoice_id);
+    }
+
+    // 4. Finalize the lease
+    ctx.env.advance_block_time(lease_agreement.end);
+    ctx.env.set_caller(ctx.landlord);
+    ctx.lease
+        .finalize_lease_agreement(&lease_agreement_id, &U256::zero());
+
+    // Eligibility should be revoked
+    assert!(
+        !ctx.lease.is_equity_eligible(property_id, ctx.recipient),
+        "Tenant should no longer be equity eligible after lease finalization",
+    );
+
+    // Re-verify recipient (the original record expired during the lease term)
+    verify_investor(&mut ctx, recipient);
+
+    // 5. Assert compliance transfer is now blocked
+    call_as_property_token(&mut ctx);
+    assert_eq!(
+        ctx.compliance
+            .try_assert_can_transfer(property_id, ctx.sender, ctx.recipient, U256::from(100))
+            .unwrap_err(),
+        ComplianceError::RecipientNotEquityEligible.into(),
+        "Equity distribution should be blocked after lease finalization",
     );
 }
