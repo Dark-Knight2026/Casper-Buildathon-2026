@@ -19,7 +19,7 @@ function LoadingFallback() {
     <div className="flex items-center justify-center min-h-100">
       <div className="flex flex-col items-center gap-4">
         <div className="w-12 h-12 border-4 border-[hsl(var(--ico-brand-primary))] border-t-transparent rounded-full animate-spin" />
-        <p className="text-[hsl(var(--ico-text-secondary))]">Loading ICO data...</p>
+        <p className="text-[hsl(var(--ico-text-secondary))]">Loading dashboard data...</p>
       </div>
     </div>
   );
@@ -80,7 +80,7 @@ export function ICOPage() {
           <main className="container h-full mx-auto px-4 py-8">
             <div className="flex items-center justify-center min-h-100">
               <div className="text-center">
-                <p className="text-red-500 mb-2">Failed to load ICO data</p>
+                <p className="text-red-500 mb-2">Failed to load dashboard data</p>
                 <p className="text-[hsl(var(--ico-text-secondary))] text-sm">{error.message}</p>
               </div>
             </div>

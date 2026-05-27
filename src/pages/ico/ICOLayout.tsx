@@ -13,7 +13,7 @@ const theme = buildTheme(DefaultThemes.csprclick);
 const isMobile = typeof navigator !== 'undefined' && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
 const clickOptions: CsprClickInitOptions = {
-  appName: 'LeaseFi Token Sale',
+  appName: 'LeaseFi Big Token Dashboard',
   contentMode: CONTENT_MODE.IFRAME,
   providers: isMobile
     ? ['casper-wallet', 'csprclick-w3a-google', 'csprclick-w3a-apple']

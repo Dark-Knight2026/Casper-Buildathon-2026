@@ -25,7 +25,7 @@ export function ICOHeader() {
             <button
               onClick={handleLogoClick}
               className="w-20 h-20 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--ico-brand-primary))] rounded"
-              aria-label="Return to ICO overview"
+              aria-label="Return to dashboard overview"
             >
               <img src="/BIGLogoWB.png" alt="BIG Logo" />
             </button>
@@ -34,7 +34,7 @@ export function ICOHeader() {
                 {ICO_CONFIG.TOKEN.name}
               </h2>
               <p className="text-sm text-[hsl(var(--ico-text-secondary))]">
-                {ICO_CONFIG.TOKEN.symbol} Token Sale
+                {ICO_CONFIG.TOKEN.symbol} Dashboard
               </p>
             </div>
           </div>
