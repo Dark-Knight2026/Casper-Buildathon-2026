@@ -24,6 +24,16 @@ vi.mock('@/hooks/ico/useICOWallet', () => ({
   }),
 }));
 
+// ICOHeader uses useAuth() to compute role-aware back-link target
+// and useToast() for the copy-address feedback toast.
+vi.mock('@/hooks/useAuth', () => ({
+  useAuth: () => ({ profile: null, isAuthenticated: false }),
+}));
+
+vi.mock('@/hooks/use-toast', () => ({
+  useToast: () => ({ toast: vi.fn() }),
+}));
+
 describe('ICOHeader', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -42,16 +52,16 @@ describe('ICOHeader', () => {
       expect(screen.getByText(ICO_CONFIG.TOKEN.name)).toBeInTheDocument();
     });
 
-    it('should display token symbol with "Token Sale"', () => {
+    it('should display "Dashboard" subtitle', () => {
       render(<ICOHeader />);
 
-      expect(screen.getByText(`${ICO_CONFIG.TOKEN.symbol} Token Sale`)).toBeInTheDocument();
+      expect(screen.getByText('Dashboard')).toBeInTheDocument();
     });
 
     it('should render logo image', () => {
       render(<ICOHeader />);
 
-      const logo = screen.getByRole('button', { name: 'Return to ICO overview' });
+      const logo = screen.getByRole('button', { name: 'Return to dashboard overview' });
       const img = logo.querySelector('img');
       expect(img).toBeInTheDocument();
       expect(img).toHaveAttribute('src', '/BIGLogoWB.png');
@@ -74,19 +84,19 @@ describe('ICOHeader', () => {
   });
 
   describe('navigation', () => {
-    it('should navigate to /ico when logo is clicked', () => {
+    it('should navigate to /big-token when logo is clicked', () => {
       render(<ICOHeader />);
 
-      const logo = screen.getByRole('button', { name: 'Return to ICO overview' });
+      const logo = screen.getByRole('button', { name: 'Return to dashboard overview' });
       fireEvent.click(logo);
 
-      expect(mockNavigate).toHaveBeenCalledWith('/ico');
+      expect(mockNavigate).toHaveBeenCalledWith('/big-token');
     });
 
     it('should have cursor-pointer on logo', () => {
       render(<ICOHeader />);
 
-      const logo = screen.getByRole('button', { name: 'Return to ICO overview' });
+      const logo = screen.getByRole('button', { name: 'Return to dashboard overview' });
       expect(logo.className).toContain('cursor-pointer');
     });
   });

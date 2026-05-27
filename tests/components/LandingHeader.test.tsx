@@ -58,11 +58,11 @@ describe('LandingHeader', () => {
       ).toBeInTheDocument();
     });
 
-    it('renders Token Sale nav link', () => {
+    it('renders BIG Token nav link', () => {
       renderHeader();
       expect(
-        screen.getByRole('link', { name: /token sale/i }),
-        'Token Sale nav link should be rendered'
+        screen.getByRole('link', { name: /big token/i }),
+        'BIG Token nav link should be rendered'
       ).toBeInTheDocument();
     });
   });
@@ -95,10 +95,10 @@ describe('LandingHeader', () => {
       );
     });
 
-    it('Token Sale link points to /ico', () => {
+    it('BIG Token link points to /big-token', () => {
       renderHeader();
-      const link = screen.getByRole('link', { name: /token sale/i });
-      expect(link, 'Token Sale nav should link to /ico').toHaveAttribute('href', '/ico');
+      const link = screen.getByRole('link', { name: /big token/i });
+      expect(link, 'BIG Token nav should link to /big-token').toHaveAttribute('href', '/big-token');
     });
 
     it('Help link points to /help', () => {

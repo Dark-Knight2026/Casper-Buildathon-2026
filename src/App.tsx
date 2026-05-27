@@ -180,8 +180,8 @@ function App() {
               </Route>
 
               {/* ICO Pages - Public access for token sale, wrapped with Casper wallet provider */}
-              <Route path="/ico" element={<ICOLayout><ICOPage /></ICOLayout>} />
-              <Route path="/ico/whitepaper" element={<ICOLayout><ICOWhitepaperPage /></ICOLayout>} />
+              <Route path="/big-token" element={<ICOLayout><ICOPage /></ICOLayout>} />
+              <Route path="/big-token/whitepaper" element={<ICOLayout><ICOWhitepaperPage /></ICOLayout>} />
               
               {/* 
                 AUTHENTICATION ROUTES

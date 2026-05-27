@@ -29,7 +29,7 @@ export function ICOHeader() {
   const back = getBackTarget(profile?.role);
 
   const handleBack = () => navigate(back.path);
-  const handleLogoClick = () => navigate('/ico');
+  const handleLogoClick = () => navigate('/big-token');
 
   const handleCopyAddress = async () => {
     if (!account?.publicKey) return;

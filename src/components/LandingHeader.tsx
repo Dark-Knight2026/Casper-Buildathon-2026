@@ -6,7 +6,7 @@ import { useAuth } from '@/hooks/useAuth';
 
 const NAV_LINKS = [
   { to: '/properties', label: 'Properties' },
-  { to: '/ico', label: 'BIG Token' },
+  { to: '/big-token', label: 'BIG Token' },
   { to: '/help', label: 'Help' },
 ];
 
