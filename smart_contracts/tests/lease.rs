@@ -6,6 +6,7 @@ use odra::{
 };
 use odra_modules::access::errors::Error as AccessError;
 
+use leasefi_contracts::big_coin::{BigCoin, BigCoinHostRef, BigCoinInitArgs};
 use leasefi_contracts::common::CurrencyAmount;
 use leasefi_contracts::constants::ONE_MONTH_IN_SECONDS;
 use leasefi_contracts::escrow::{
@@ -44,6 +45,7 @@ struct TestData {
     escrow: EscrowHostRef,
     nft: NFTHostRef,
     property_registry: PropertyRegistryHostRef,
+    security_deposit_token: BigCoinHostRef,
     landlord: Address,
 }
 
@@ -60,6 +62,16 @@ fn setup(env: HostEnv) -> TestData {
         EscrowInitArgs {
             owner: env.get_account(0),
             min_deadline: 5 * 60, // 5 minutes
+        },
+    );
+
+    let security_deposit_token = BigCoin::deploy(
+        &env,
+        BigCoinInitArgs {
+            symbol: String::from("USDC"),
+            name: String::from("USDC"),
+            decimals: 18,
+            initial_supply: U256::from_dec_str("5000000000000000000000000000000").unwrap(),
         },
     );
 
@@ -101,6 +113,7 @@ fn setup(env: HostEnv) -> TestData {
 
     escrow.set_lease(lease.address());
     escrow.set_treasury(env.get_account(19));
+    escrow.set_security_deposit_token(security_deposit_token.address());
 
     nft.add_minter(&lease.address());
     nft.add_freezer(&lease.address());
@@ -128,6 +141,7 @@ fn setup(env: HostEnv) -> TestData {
         escrow,
         nft,
         property_registry,
+        security_deposit_token,
         landlord,
     }
 }
@@ -146,7 +160,7 @@ fn generate_lease_agreement_creation_params(test_data: &TestData) -> CreateLease
         equity_option: None,
         monthly_rent: CurrencyAmount::new(None, U256::from_dec_str("250000000000000000").unwrap()),
         security_deposit: CurrencyAmount::new(
-            None,
+            Some(test_data.security_deposit_token.address()),
             U256::from_dec_str("5000000000000000000").unwrap(),
         ),
         start: test_data.env.block_time(),
@@ -161,19 +175,26 @@ fn pay_all_lease_agreement_invoices(test_data: &mut TestData, lease_agreement_id
         .get_lease_agreement_by_id(lease_agreement_id);
 
     test_data.env.set_caller(lease_agreement.tenant);
-    test_data
-        .escrow
-        .with_tokens(lease_agreement.security_deposit.amount().to_u512())
-        .pay_invoice(
-            lease_agreement.invoices_ids[0],
-            *lease_agreement.security_deposit.amount(),
-        );
+
+    // Approve escrow to spend security deposit tokens
+    test_data.security_deposit_token.approve(
+        &test_data.escrow.address(),
+        lease_agreement.security_deposit.amount(),
+    );
+    test_data.escrow.pay_invoice(
+        lease_agreement.invoices_ids[0],
+        *lease_agreement.security_deposit.amount(),
+    );
 
     for invoice_id in lease_agreement.invoices_ids.iter().skip(1) {
+        let rent = *lease_agreement.monthly_rent.amount();
+        // Account for 2% protocol fee: need to pay rent * 50/49 so that
+        // rent_allocation = amount - protocol_fee equals rent_amount exactly
+        let amount = rent * U256::from(50u32) / U256::from(49u32);
         test_data
             .escrow
-            .with_tokens(lease_agreement.monthly_rent.amount().to_u512())
-            .pay_invoice(*invoice_id, *lease_agreement.monthly_rent.amount());
+            .with_tokens(amount.to_u512())
+            .pay_invoice(*invoice_id, amount);
     }
 
     test_data.env.set_caller(lease_agreement.landlord);
