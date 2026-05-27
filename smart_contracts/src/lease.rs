@@ -111,6 +111,7 @@ pub mod errors {
         InvalidPropertyStatus = 409,
         InvalidPropertyIssuer = 410,
         LeaseAlreadyFinalized = 411,
+        TenantAlreadyEquityEligible = 412,
     }
 }
 
@@ -318,6 +319,13 @@ impl Lease {
         // Mark the tenant as eligible for property equity
         if let Some(equity_option) = &params.equity_option {
             let property_id = equity_option.property_id;
+
+            if self
+                .equity_eligible
+                .get_or_default(&(property_id, params.tenant))
+            {
+                self.env().revert(Error::TenantAlreadyEquityEligible);
+            }
 
             let property = self.property_registry.get_property(property_id);
 
