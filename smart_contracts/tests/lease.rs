@@ -604,6 +604,34 @@ fn test_create_lease_agreement_with_equity_option_should_mark_tenant_equity_elig
 }
 
 #[test]
+fn test_create_two_equity_leases_same_property_same_tenant_should_revert() {
+    let mut test_data = setup(odra_test::env());
+    let mut params = generate_lease_agreement_creation_params(&test_data);
+    let landlord = test_data.landlord;
+    let property_id = create_active_property(&mut test_data, landlord);
+    params.equity_option = Some(LeaseEquityOption { property_id });
+
+    // First equity lease succeeds
+    let _lease_agreement_id = test_data.lease.create_lease_agreement(params.clone());
+    assert!(
+        test_data
+            .lease
+            .is_equity_eligible(property_id, params.tenant),
+        "Tenant should be equity eligible after first lease"
+    );
+
+    // Second equity lease for the same (property, tenant) should revert
+    assert_eq!(
+        test_data
+            .lease
+            .try_create_lease_agreement(params.clone())
+            .unwrap_err(),
+        Error::TenantAlreadyEquityEligible.into(),
+        "Should revert when tenant already has an active equity lease for this property"
+    );
+}
+
+#[test]
 fn test_create_lease_agreement_should_fail_if_property_is_not_active() {
     let mut test_data = setup(odra_test::env());
     let mut params = generate_lease_agreement_creation_params(&test_data);
