@@ -11,7 +11,8 @@ Modern real estate CRM platform built with React, TypeScript, and shadcn/ui.
 - **State Management**: React Context API
 - **Routing**: React Router
 - **Forms**: React Hook Form + Zod validation
-- **API Client**: Supabase Client
+- **API Client**: custom HTTP client (`src/lib/api-client.ts`) against the project's Rust backend. Supabase is **legacy** — never fully wired in production and being phased out as endpoints land on the Rust side.
+- **Auth / Wallet**: CSPR.click SDK (transparent wallet provisioning via social login — Google / Apple)
 - **Testing**: Vitest (unit tests) + Playwright (E2E tests)
 
 ## Project Structure
@@ -61,11 +62,25 @@ npm install
 cp .env.example .env
 ```
 
-2. Configure your environment variables in `.env`:
+2. Configure your environment variables in `.env` (the canonical list is in `.env.example`):
 ```env
-VITE_SUPABASE_URL=your_supabase_url
-VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
-VITE_GOOGLE_MAPS_API_KEY=your_google_maps_key
+# Rust backend (real source of truth for auth, profile, future endpoints)
+VITE_BACKEND_URL=https://leasefi.testingservernginx.win
+
+# CSPR.click — auth + wallet
+VITE_APP_ID=…
+VITE_CSPR_CLOUD_API_KEY=…
+VITE_CASPER_NETWORK=casper-test
+VITE_CASPER_RPC_URL=https://node.testnet.casper.network/rpc
+
+# Optional
+VITE_GOOGLE_MAPS_API_KEY=…
+
+# Legacy — Supabase was never wired in production. The vars exist only so
+# service files that still import the Supabase client compile during the
+# phase-out. Safe to point at any project URL; no real reads happen.
+VITE_SUPABASE_URL=…
+VITE_SUPABASE_ANON_KEY=…
 ```
 
 See [docs/ENVIRONMENT_SETUP.md](docs/ENVIRONMENT_SETUP.md) for detailed setup instructions.
@@ -128,42 +143,92 @@ pnpm run test:coverage
 pnpm run test:integration
 ```
 
-## Key Features
+## MVP Scope
 
-### Role-Based Dashboards
-- **Landlord Dashboard**: Property management, lease tracking, financial reports
-- **Tenant Dashboard**: Lease information, payment history, maintenance requests
-- **Agent Dashboard**: Listings management, client interactions, commission tracking
-- **Broker Dashboard**: Team oversight, performance analytics, marketplace access
+The frontend is mid-rebuild against the project's own Rust backend. Older roles
+(Agent / Broker / various service-professional dashboards) live in the codebase
+as legacy scaffolding but are **not in the MVP scope** (see
+[`docs/LEASEFI_MVP_SPEC_2026-07-15.md`](docs/LEASEFI_MVP_SPEC_2026-07-15.md) §3).
 
-### Core Functionality
-- Property listing and management
-- Lease creation and tracking
-- Payment processing and history
-- Maintenance request system
-- Document storage and e-signatures
-- Real-time notifications
-- Analytics and reporting
-- Tax center integration
-- Agent marketplace
+### MVP roles
+- **Tenant** — lease, payments, recommendations, profile.
+- **Landlord** — properties, leases, dashboard, profile.
+- **Property Manager** — aggregated landlord-style view (in progress).
+
+### Out of MVP
+- Agent / Broker / service-professional dashboards (legacy scaffolding only).
+- Marketplace / equities / public buy-in (Phase 2 — blocked on legal,
+  see `CLIENT_FEEDBACK_BACKLOG.md` Task 16).
+- Casper-name purchase (moved to Phase 2 on 2026-05-20).
+
+## Current Implementation Status (2026-05-27)
+
+### Ready in production
+- **Auth & registration** — CSPR.click social login (Google / Apple),
+  fully wired to the Rust backend `/api/v1/auth/*`.
+- **User profile** — read/update + avatar upload via `/api/v1/users/me*`.
+  `RoleSwitchDialog` wired with reauth gate.
+- **Tenant Dashboard** — overview screen (UI complete; lease/payment data
+  still runs on `MOCK_*` fixtures until backend endpoints land).
+- **Landlord layout + nav** — shared header for every landlord route.
+- **Landlord Dashboard** — overview page with KPI tiles + recent-activity
+  feed, driven by `src/data/landlordMockData.ts`.
+- **Properties (landlord)** — list page with filters, add-property
+  multi-step form, edit page. Currently against mock data; service-layer
+  Supabase imports remain only to satisfy TypeScript and are inert.
+- **Landlord Profile** — basic profile + portfolio overview card.
+
+### Not yet wired to the real backend
+Properties CRUD/search, leases (create/sign/finalize/terminate), payments
+& Stripe, dashboard data (rent received, paid/overdue/partial), KYC,
+disputes, audit trail, termination. Every surface above either runs on
+intentional mock fixtures (demo mode) or shows a `<ComingSoon/>` panel
+behind a feature flag. See
+[`docs/FRONTEND_MVP_TASKS.md`](docs/FRONTEND_MVP_TASKS.md) for the
+per-section status (🟢 REAL / 🟠 MOCK / 🟡 SUPABASE→REWIRE / 🔴 MISSING /
+⛔ BE-BLOCKED).
 
 ## Backend Integration
 
-This frontend application integrates with backend services through API calls.
+The application is being migrated to a **custom Rust backend**. Supabase
+was the original integration target but **never reached production wiring**;
+it is treated as legacy and removed file-by-file as Rust endpoints arrive.
 
-### Vercel Deployment & Backend URL
+### Real backend (Rust)
+- Base URL: `leasefi.testingservernginx.win`
+  (hardcoded in `vercel.json`'s `/api/v1/*` rewrite — the "testing" prefix
+  is a legacy naming artifact; this is the production target across all
+  Vercel environments).
+- HTTP client: `src/lib/api-client.ts` (typed wrapper with retry logic).
+- Auth client: `src/services/ico/backendAuthService.ts`
+- Profile client: `src/services/userProfileService.ts`
+- **Currently shipped endpoints:** `/api/v1/auth/*`, `/api/v1/users/me*`
+  (read / patch / avatar / email-change / role-switch).
+- Everything else is ⛔ BE-BLOCKED — UIs render mock data behind feature
+  flags until the contract lands.
 
-The `/api/v1/*` rewrite in `vercel.json` points to `leasefi.testingservernginx.win` — this is the **production backend**. The "testing" in the hostname is a legacy naming convention; this server is used across all Vercel environments (preview and production).
+> `vercel.json` does not support environment variable substitution, so the
+> backend URL is hardcoded intentionally. To change the backend target,
+> update `vercel.json` directly.
 
-> Note: `vercel.json` does not support environment variable substitution, so the URL is hardcoded intentionally. To change the backend target, update `vercel.json` directly.
+### CSPR.click (auth + wallet)
+- Transparent wallet provisioning via social login. The user does **not**
+  see "connect wallet" UI — the wallet is provisioned during sign-up.
+- Provider list configured via the CSPR.click app dashboard (currently
+  Google / Apple per the registration UI). Keep copy provider-agnostic
+  per [`docs/STYLE_GUIDE.md`](docs/STYLE_GUIDE.md).
+
+### Supabase (legacy — being removed)
+Some service files (`propertyService.ts`, `leaseManagementService.ts`,
+`eSignatureService.ts`, etc.) still import `@supabase/supabase-js`. These
+files exist for compile-time only — the imports are inert in production
+because the corresponding UI runs on mocks behind feature flags. As each
+endpoint lands on the Rust side, the matching service file is rewritten
+and the Supabase import is dropped.
 
 ### API Documentation
-See [docs/api/rust_service.md](docs/api/rust_service.md) for backend API endpoint documentation.
-
-### Key Integration Points
-- **Supabase**: Database, authentication, real-time subscriptions, storage
-- **Rust Microservice**: Tax calculations, complex analytics
-- **Edge Functions**: Email/SMS notifications, payment processing, workflows
+See [docs/api/rust_service.md](docs/api/rust_service.md) for backend API
+endpoint documentation.
 
 ## Architecture
 
@@ -197,7 +262,7 @@ See [unified_dashboard_arch.plantuml](unified_dashboard_arch.plantuml) for visua
 - [Vite Documentation](https://vitejs.dev/)
 - [shadcn/ui Documentation](https://ui.shadcn.com/)
 - [Tailwind CSS Documentation](https://tailwindcss.com/)
-- [Supabase Documentation](https://supabase.com/docs)
+- [CSPR.click Documentation](https://docs.cspr.click/)
 
 ## Development Notes
 

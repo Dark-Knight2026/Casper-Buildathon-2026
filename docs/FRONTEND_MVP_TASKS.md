@@ -1,9 +1,9 @@
 ---
 author: Anastasia
-version: 0.3.0
+version: 0.4.0
 created: 2026-05-18T08:08:02Z
-last-modified: 2026-05-18T08:23:37Z
-version-updated: 2026-05-18T08:23:37Z
+last-modified: 2026-05-27T00:00:00Z
+version-updated: 2026-05-27T00:00:00Z
 ---
 
 # LeaseFi — Frontend MVP Task Tracker
@@ -26,6 +26,8 @@ version-updated: 2026-05-18T08:23:37Z
 | ⏸ SPEC-OPEN | Blocked by an open spec question (§6) — decision is not on FE |
 
 > **Integration reality as of 2026-05-18:** the backend serves **only** `/api/v1/auth/*` and `/api/v1/users/me*`. Everything else (properties, leases, payments, KYC, termination, dashboard data) is ⛔ BE-BLOCKED until a contract exists.
+
+> **Design-reference alignment (2026-05-26):** Anthony confirmed via Slack that we take **information / flow / copy** from `docs/client-doc/leasefi-design-reference.html` and keep our existing **header layout, palette, fonts, icons, and invisible-wallet UX**. Implementation work derived from the reference is tracked as **Tasks 17–26** in [`CLIENT_FEEDBACK_BACKLOG.md`](./CLIENT_FEEDBACK_BACKLOG.md). Cross-references appear inline in the relevant §3.x sections below.
 
 ---
 
@@ -65,6 +67,8 @@ version-updated: 2026-05-18T08:23:37Z
 - [x] **Profile editable (avatar, personal data)** — 🟢 REAL
   - `src/pages/tenant/TenantProfile.tsx` → `AuthContext.updateProfile` (`PATCH /api/v1/users/me`) + `uploadAvatar` (`POST /api/v1/users/me/avatar`, S3). `RoleSwitchDialog` → `patchMyRole` with reauth gate.
   - ⚠️ This is the tenant profile page. No dedicated landlord/PM profile-edit pages (see §3.2).
+
+> _Design-reference cross-cut:_ **Task 26** — `<KYCGate/>` minimal wrapper (email-only for MVP) gates sensitive actions. AML/CDD/biometric explicitly out of scope per Anthony 2026-05-20.
 
 ## §3.2 Profiles (3 roles)
 
@@ -107,6 +111,8 @@ version-updated: 2026-05-18T08:23:37Z
 - [ ] **Lease parameters immutable after signing** — ⛔ BE-BLOCKED
   - Invariant on BE/contract. FE: render parameters read-only post-sign, hide edit actions.
 
+> _Design-reference cross-cut:_ **Task 22** (`/invite/:token` pre-auth landing), **Task 23** (landlord wizard + tenant counter-sign journey, 8 sub-screens — highest-complexity Critical 6 flow), **Task 21** (`<PreSignatureConfirmation/>` invoked at sign step).
+
 ## §3.5 Payments & Disbursement (fiat-first)
 
 - [ ] **Basic Stripe integration (payment intent + webhook)** — 🟡 SUPABASE→REWIRE + ⛔ BE (feature flag OFF)
@@ -120,6 +126,8 @@ version-updated: 2026-05-18T08:23:37Z
 - [ ] **Order: rent FIRST → mortgage SECOND (UI display)** — ⛔ BE-BLOCKED
   - FE part: transparent payment breakdown (rent vs mortgage) from backend calc — uses shared component (see §3.7).
 
+> _Design-reference cross-cut:_ **Task 20** (`<FeeDisplay/>` canonical breakdown — also reused in late fee, buyout, deposit funding, dispute filing), **Task 21** (`<PreSignatureConfirmation/>` before submit), **Task 25** (`<TransactionStatus/>` confirming pill). USDC only — not USDT.
+
 ## §3.6 Termination
 
 - [ ] **Tenant or landlord initiates move-out** — 🔴 MISSING + ⛔ BE
@@ -129,6 +137,8 @@ version-updated: 2026-05-18T08:23:37Z
 - [ ] **Lease → TERMINATED status (on-chain)** — ⛔ BE-BLOCKED
   - FE: render `terminated` status (already in lists) after backend confirmation.
 - [ ] **Dashboards update after termination** — ⛔ BE-BLOCKED (depends on §3.7)
+
+> _Design-reference cross-cut:_ **Task 21** parameterizes `<PreSignatureConfirmation/>` for the `TerminationNotice` EIP-712 ceremony. Termination UI itself is not in the Critical 6 spine — track here, build alongside §3.4.
 
 ## §3.7 Dashboards & Accounting
 
@@ -140,6 +150,8 @@ version-updated: 2026-05-18T08:23:37Z
   - No PM role (§3.2). Needs aggregated dashboard across managed properties + per-property drill-down.
 - [ ] **Full transparency of all amounts (principal/interest/equity, no hidden fees)** — 🔴 MISSING + ⛔ BE
   - Shared, reusable cost-breakdown component used across tenant/landlord/PM; data from backend.
+
+> _Design-reference cross-cut:_ **Task 18** (Tenant home — single primary CTA, status-forward `Active lease` hero, auto-detection 0–1 vs 2+ leases), **Task 19** (Landlord/PM dashboard — 4 hero metrics, sortable portfolio table, clickable status pills as deep-links), **Task 25** (`<TransactionStatus/>` header pill mounted in both layouts).
 
 ## §3.8 Compliance & Privacy (FE part)
 
@@ -153,6 +165,8 @@ version-updated: 2026-05-18T08:23:37Z
   - Avatar → S3 via `uploadAvatar` 🟢. Property docs blocked by §6 #1 (do not store until decided).
 - [ ] **Audit trail of key actions (create/sign/pay/terminate)** — ⛔ BE-BLOCKED
   - Audit logic on BE/contract. FE part: render the audit feed once an endpoint exists.
+
+> _Design-reference cross-cut:_ §9 "Compliance failure surface" (BSA §314) from the reference is **explicitly out of MVP scope** per Anthony 2026-05-20 (no AML/CDD/sanctions screening/biometric). See Task 17 Open Q #1.
 
 ## §3.9 Production deployment (FE part)
 
@@ -176,6 +190,12 @@ version-updated: 2026-05-18T08:23:37Z
 9. `property_manager` role plumbing (enum/route/context).
 10. `company tag` slot in the profile.
 11. "investor" MVP-copy cleanup.
+12. `<PreSignatureConfirmation/>` shared modal — parameterized for 6 EIP-712 ceremonies, pure FE (Task 21).
+13. `<TransactionStatus/>` state machine + header pill — stub with mock states, integration later (Task 25).
+14. `<FeeDisplay/>` shared breakdown component + canonical button-label format (Task 20).
+15. `<KYCGate/>` wrapper + `useKYCGate()` hook signature, placeholder request — wire to Postmark once Ivan ships (Task 26).
+16. Tenant-home restructure with hero `Active lease` + recent-activity list — keep on existing `MOCK_LEASE`/`MOCK_PAYMENTS` until §3.7 BE lands (Task 18).
+17. PM dashboard portfolio table + status-pill deep-links — runs on `MOCK_LANDLORD_*` fixtures (Task 19).
 
 ## Blocked by backend (only auth + profile ready)
 
