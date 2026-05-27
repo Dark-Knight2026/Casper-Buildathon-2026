@@ -817,6 +817,46 @@ fn test_equity_eligibility_is_revoked_after_lease_finalization() {
     );
 }
 
+#[test]
+fn test_prolong_lease_with_equity_option_preserves_eligibility() {
+    let mut test_data = setup(odra_test::env());
+    let mut params = generate_lease_agreement_creation_params(&test_data);
+    let landlord = test_data.landlord;
+    let property_id = create_active_property(&mut test_data, landlord);
+    params.equity_option = Some(LeaseEquityOption { property_id });
+
+    let lease_agreement_id = test_data.lease.create_lease_agreement(params.clone());
+
+    // Verify initial eligibility
+    assert!(
+        test_data
+            .lease
+            .is_equity_eligible(property_id, params.tenant),
+        "Tenant should be equity eligible initially"
+    );
+
+    pay_all_lease_agreement_invoices(&mut test_data, &lease_agreement_id);
+
+    test_data
+        .env
+        .advance_block_time(test_data.env.block_time() + (ONE_MONTH_IN_SECONDS * 12));
+
+    let new_end = params.end + (ONE_MONTH_IN_SECONDS * 6);
+    test_data.lease.prolong_lease_agreement(
+        &lease_agreement_id,
+        new_end,
+        test_data.escrow.get_min_deadline(),
+    );
+
+    // Eligibility should be preserved after prolongation
+    assert!(
+        test_data
+            .lease
+            .is_equity_eligible(property_id, params.tenant),
+        "Tenant equity eligibility should be preserved after lease prolongation"
+    );
+}
+
 // =============================================================================
 // prolong_lease_agreement()
 // =============================================================================
