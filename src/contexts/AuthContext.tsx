@@ -66,6 +66,7 @@ function mapServerUserInfo(info: ServerUserInfo): UserProfile {
     isProfileComplete: info.is_profile_complete,
     status: mapUserStatus(info.status),
     activeLeasesCount: info.active_leases_count,
+    verificationLevel: info.verification_level,
   };
 }
 

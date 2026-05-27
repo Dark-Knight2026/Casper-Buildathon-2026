@@ -20,6 +20,8 @@ import PropertyLanding from '@/pages/PropertyLanding';
 // Lazy load auth pages
 const MFASetup = lazy(() => import('@/pages/auth/MFASetup'));
 const MFAVerify = lazy(() => import('@/pages/auth/MFAVerify'));
+const VerifyEmail = lazy(() => import('@/pages/auth/VerifyEmail'));
+const ConfirmEmailChange = lazy(() => import('@/pages/auth/ConfirmEmailChange'));
 const HelpHub = lazy(() => import('@/pages/HelpHub'));
 
 import TenantLayout from '@/components/layout/TenantLayout';
@@ -205,6 +207,16 @@ function App() {
                     : <ComingSoon title="MFA coming soon" description="Multi-factor authentication will be available once the backend enrollment flow is finalized." />
                 }
               />
+              {/* Email verification — backend sends the link as
+                  ${FRONTEND_URL}/verify-email?token=…; route is intentionally
+                  outside ProtectedRoute because the link may land on a fresh
+                  browser. VerifyEmail handles the not-authenticated case. */}
+              <Route path="/verify-email" element={<VerifyEmail />} />
+              {/* Email-change confirmation — symmetric to /verify-email; the
+                  backend's change-email template should point here. Outside
+                  ProtectedRoute for the same reason (link may land on a fresh
+                  browser). */}
+              <Route path="/confirm-email-change" element={<ConfirmEmailChange />} />
               
               {/*
                 TENANT ROUTES - Protected

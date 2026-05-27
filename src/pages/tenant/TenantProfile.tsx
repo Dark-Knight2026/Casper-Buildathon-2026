@@ -17,6 +17,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { useTenantPreferences } from '@/hooks/useTenantPreferences';
 import { TenantPreferencesDialog } from '@/components/tenant/TenantPreferencesDialog';
 import { RoleSwitchDialog } from '@/components/profile/RoleSwitchDialog';
+import { EmailVerificationCard } from '@/components/profile/EmailVerificationCard';
+import { ChangeEmailDialog } from '@/components/profile/ChangeEmailDialog';
 import { countActivePreferences, ALL_MATCH_CATEGORIES } from '@/types/tenantPreferences';
 import { uploadAvatar } from '@/services/userProfileService';
 import { ApiError } from '@/lib/api-client';
@@ -107,6 +109,7 @@ export function TenantProfile() {
   } = useTenantPreferences(authProfile?.id ?? '');
   const [preferencesOpen, setPreferencesOpen] = useState(false);
   const [roleSwitchOpen, setRoleSwitchOpen] = useState(false);
+  const [changeEmailOpen, setChangeEmailOpen] = useState(false);
   const activeCount = countActivePreferences(preferences);
 
   // Server-side validators on `PATCH /users/me` reject empty/whitespace values
@@ -226,6 +229,10 @@ export function TenantProfile() {
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-foreground mb-2">My Profile</h1>
         <p className="text-muted-foreground">Manage your account information</p>
+      </div>
+
+      <div className="mb-6">
+        <EmailVerificationCard />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -515,14 +522,11 @@ export function TenantProfile() {
                     {authProfile?.email ?? ''}
                   </p>
                 </div>
-                {/* Disabled until the change-email dialog is wired up. The
-                    service layer is ready — requestEmailChange() /
-                    confirmEmailChange() in userProfileService.ts implement the
-                    two-step PATCH /api/v1/users/me/email flow — only the UI
-                    dialog that calls them is missing. Keep the button visible
-                    (disabled) so the feature is discoverable; enable it once
-                    the dialog component lands. */}
-                <Button variant="outline" size="sm" disabled title="Coming soon">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setChangeEmailOpen(true)}
+                >
                   Change email
                 </Button>
               </div>
@@ -534,6 +538,12 @@ export function TenantProfile() {
 
         </div>
       </div>
+
+      <ChangeEmailDialog
+        open={changeEmailOpen}
+        onOpenChange={setChangeEmailOpen}
+        currentEmail={authProfile?.email}
+      />
     </div>
   );
 }
