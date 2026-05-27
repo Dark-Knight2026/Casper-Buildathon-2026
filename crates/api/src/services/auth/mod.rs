@@ -7,6 +7,8 @@
 pub mod cookies;
 /// Database operations for authentication.
 pub mod db;
+/// Verification- and role-gating extractors (`VerifiedUser`, `RoleUser`).
+pub mod extractors;
 /// JWT encoding/decoding primitives.
 pub mod jwt;
 /// Logout handler: clears auth cookies and revokes refresh-family + jti blocklist.
@@ -34,6 +36,11 @@ pub use cookies::{
 pub use db::{
     ActiveSession, UpsertOutcome, insert_refresh_token, list_active_sessions,
     revoke_all_sessions_for_user, revoke_session_by_id, upsert_user_by_wallet,
+};
+pub use extractors::{
+    AdminRole, AgentRole, AuthGateError, EmailVerified, IdentityVerified, LandlordRole, RoleMarker,
+    RoleRequiredResponse, RoleUser, TenantRole, VerificationMarker, VerificationRequiredResponse,
+    VerifiedUser,
 };
 pub use jwt::{ACCESS_TOKEN_TTL, EncodedAccessToken, decode_token, encode_access_token};
 pub use middleware::{AuthError, AuthUser};

@@ -93,8 +93,24 @@ pub enum UserStatus {
 ///
 /// Encoded into access-token claims so authorization extractors can gate
 /// endpoints by verification without re-querying the database on every request.
+///
+/// The variants are declared in ascending order of strength, and the derived
+/// `Ord` relies on that order: the `VerifiedUser<V>` extractor compares
+/// `level < V::MIN_LEVEL` to enforce a monotonic gate (a `full` user satisfies
+/// an `email` requirement). Do not reorder the variants.
 #[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, EnumString, Display, ToSchema,
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Serialize,
+    Deserialize,
+    EnumString,
+    Display,
+    ToSchema,
 )]
 #[serde(rename_all = "snake_case")]
 #[strum(serialize_all = "snake_case")]
