@@ -36,3 +36,10 @@ test-results/
 .vercel/
 .vite/
 
+# Client-shared drafts in flux — only the design reference
+   is stable enough
+  # to commit. Everything else here is being revised; add
+  explicit exceptions
+  # as docs stabilize.
+  docs/client-doc/*
+  !docs/client-doc/leasefi-design-reference.html
