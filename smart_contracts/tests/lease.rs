@@ -634,19 +634,22 @@ fn test_create_two_equity_leases_same_property_same_tenant_should_revert() {
 #[test]
 fn test_create_lease_agreement_should_fail_if_property_is_not_active() {
     let mut test_data = setup(odra_test::env());
-    let mut params = generate_lease_agreement_creation_params(&test_data);
 
+    // Test Draft status (default after create_property)
+    let mut params = generate_lease_agreement_creation_params(&test_data);
     test_data.env.set_caller(test_data.env.get_account(0));
-    let property_id = test_data
+    let draft_property_id = test_data
         .property_registry
         .create_property(CreatePropertyParams {
             issuer: test_data.landlord,
             total_supply: U256::from(1_000_000),
-            metadata_uri: String::from("ipfs://property-1"),
+            metadata_uri: String::from("ipfs://property-draft"),
         });
 
     test_data.env.set_caller(test_data.landlord);
-    params.equity_option = Some(LeaseEquityOption { property_id });
+    params.equity_option = Some(LeaseEquityOption {
+        property_id: draft_property_id,
+    });
 
     assert_eq!(
         test_data
@@ -654,7 +657,41 @@ fn test_create_lease_agreement_should_fail_if_property_is_not_active() {
             .try_create_lease_agreement(params)
             .unwrap_err(),
         Error::InvalidPropertyStatus.into(),
-        "Should revert if property is not active"
+        "Should revert if property is Draft"
+    );
+
+    // Test Paused status
+    let mut params = generate_lease_agreement_creation_params(&test_data);
+    test_data.env.set_caller(test_data.env.get_account(0));
+    let paused_property_id = test_data
+        .property_registry
+        .create_property(CreatePropertyParams {
+            issuer: test_data.landlord,
+            total_supply: U256::from(1_000_000),
+            metadata_uri: String::from("ipfs://property-paused"),
+        });
+    test_data
+        .property_registry
+        .set_property_token(paused_property_id, test_data.env.get_account(2));
+    test_data
+        .property_registry
+        .set_revenue_distributor(paused_property_id, test_data.env.get_account(3));
+    test_data
+        .property_registry
+        .set_property_status(paused_property_id, PropertyStatus::Paused);
+
+    test_data.env.set_caller(test_data.landlord);
+    params.equity_option = Some(LeaseEquityOption {
+        property_id: paused_property_id,
+    });
+
+    assert_eq!(
+        test_data
+            .lease
+            .try_create_lease_agreement(params)
+            .unwrap_err(),
+        Error::InvalidPropertyStatus.into(),
+        "Should revert if property is Paused"
     );
 }
 
