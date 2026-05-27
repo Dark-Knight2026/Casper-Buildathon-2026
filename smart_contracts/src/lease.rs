@@ -110,6 +110,7 @@ pub mod errors {
         SecurityDepositChargeIsTooHigh = 408,
         InvalidPropertyStatus = 409,
         InvalidPropertyIssuer = 410,
+        LeaseAlreadyFinalized = 411,
     }
 }
 
@@ -372,6 +373,10 @@ impl Lease {
         security_deposit_charge: &U256,
     ) {
         let mut lease_agreement = self.get_lease_agreement_by_id(lease_agreement_id);
+
+        if lease_agreement.is_finished {
+            self.env().revert(Error::LeaseAlreadyFinalized);
+        }
 
         if lease_agreement.landlord != self.env().caller() {
             self.env().revert(Error::InvalidLandlord);
