@@ -1,10 +1,5 @@
-/**
- * Property Detail Page for Tenants
- * Displays detailed information about a property with authentication-gated actions
- */
-
 import { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate, useLocation, Navigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation, Navigate, Link } from 'react-router-dom';
 
 import { format } from 'date-fns';
 import {
@@ -23,17 +18,22 @@ import {
   Car,
   Loader2,
   FileText,
+  Lock,
 } from 'lucide-react';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { useAuthPrompt } from '@/hooks/useAuthPrompt';
+import { useAuth } from '@/hooks/useAuth';
+import { getSearchRoute } from '@/types/user';
 import { SavePropertyButton } from '@/components/property/SavePropertyButton';
 import { ContactLandlordModal } from '@/components/property/ContactLandlordModal';
 import { ScheduleViewingModal } from '@/components/property/ScheduleViewingModal';
+import { VerificationDisclaimer } from '@/components/property/VerificationDisclaimer';
+import { AuthPromptModal } from '@/components/auth/AuthPromptModal';
 import { propertyService } from '@/services/propertyService';
 import { FEATURED_PROPERTIES } from '@/data/featuredProperties';
 import { cn } from '@/lib/utils';
@@ -57,14 +57,27 @@ export default function PropertyDetail() {
   const navigate = useNavigate();
   const location = useLocation();
   const { toast } = useToast();
-  const { requireAuth } = useAuthPrompt();
+  const {
+    requireAuth,
+    isAuthenticated,
+    isPromptOpen,
+    promptContext,
+    closePrompt,
+    goToSignUp,
+    goToLogin,
+  } = useAuthPrompt();
+  const { profile } = useAuth();
+  // Role-aware back path — see getSearchRoute() for the mapping. Pass
+  // undefined for guests so the helper returns the public search.
+  const backToSearchPath = getSearchRoute(isAuthenticated ? profile?.role : undefined);
 
   const stateProperty = (location.state?.property as Property) ?? null;
   // Hydrate from FEATURED_PROPERTIES on direct URL access (refresh, bookmark,
   // shared link) so demo IDs `prop-1`...`prop-6` work without router state.
-  // Dev-only — in production these IDs route to mock-landlord-1, which would
-  // silently misroute contact requests.
-  const demoFallback = import.meta.env.DEV && !stateProperty && id
+  // Active in production too — backend endpoints for property fetch don't
+  // exist yet, so without this fallback direct URLs render `$NaN/mo` and a
+  // mapless disclaimer. Once /api/v1/properties/:id ships, drop this.
+  const demoFallback = !stateProperty && id
     ? FEATURED_PROPERTIES.find(p => p.id === id) ?? null
     : null;
   const initialProperty = stateProperty ?? demoFallback;
@@ -82,7 +95,6 @@ export default function PropertyDetail() {
       const data = await propertyService.getPropertyById(id);
       if (data) {
         setProperty(data);
-        // Increment view count
         await propertyService.incrementPropertyViews(id);
       } else {
         toast({
@@ -142,7 +154,9 @@ export default function PropertyDetail() {
       redirectPath: window.location.pathname,
     });
     if (canProceed && property) {
-      navigate('/tenant/application', { state: { propertyId: property.id } });
+      navigate('/tenant/application', {
+        state: { propertyId: property.id, landlordId: property.landlordId },
+      });
     }
   };
 
@@ -176,23 +190,22 @@ export default function PropertyDetail() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
       <div className="bg-white border-b sticky top-0 z-10">
         <div className="container mx-auto px-4 py-4">
           <div className="flex justify-between items-center">
             <Button
               variant="ghost"
-              onClick={() => navigate('/tenant/properties')}
+              onClick={() => navigate(backToSearchPath)}
             >
               <ArrowLeft className="mr-2 h-4 w-4" />
               Back to Search
             </Button>
             <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={handleShare}>
-                <Share2 className="mr-2 h-4 w-4" />
-                Share
+              <Button variant="outline" size="sm" onClick={handleShare} aria-label="Share property">
+                <Share2 className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Share</span>
               </Button>
-              <SavePropertyButton variant="outline" size="sm" />
+              <SavePropertyButton variant="outline" size="sm" hideTextOnMobile />
             </div>
           </div>
         </div>
@@ -200,9 +213,7 @@ export default function PropertyDetail() {
 
       <div className="container mx-auto px-4 py-6">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Main Content */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Image Gallery */}
             <Card>
               <CardContent className="p-0">
                 <div className="relative">
@@ -289,16 +300,18 @@ export default function PropertyDetail() {
             {/* Property Info */}
             <Card>
               <CardHeader>
-                <div className="flex justify-between items-start">
-                  <div>
-                    <CardTitle className="text-2xl mb-2">{property.title}</CardTitle>
-                    <p className="text-gray-600 flex items-center">
-                      <MapPin className="h-4 w-4 mr-1" />
-                      {property.address}, {property.city}, {property.state} {property.zipCode}
+                <div className="flex flex-col md:flex-row justify-between items-start gap-3">
+                  <div className="min-w-0">
+                    <CardTitle className="text-xl sm:text-2xl mb-2">{property.title}</CardTitle>
+                    <p className="text-gray-600 flex items-center text-sm sm:text-base">
+                      <MapPin className="h-4 w-4 mr-1 shrink-0" />
+                      <span className=" sm:whitespace-normal">
+                        {property.address}, {property.city}, {property.state} {property.zipCode}
+                      </span>
                     </p>
                   </div>
-                  <div className="text-right">
-                    <p className="text-3xl font-bold text-primary">
+                  <div className="text-right shrink-0">
+                    <p className="text-2xl sm:text-3xl font-bold text-primary whitespace-nowrap">
                       {formatCurrency(property.rent)}
                       <span className="text-sm text-gray-500 font-normal">/mo</span>
                     </p>
@@ -348,11 +361,19 @@ export default function PropertyDetail() {
                   </div>
                 )}
 
+                {/* Task 10 — Verification Disclaimer */}
+                <VerificationDisclaimer
+                  latitude={property.latitude}
+                  longitude={property.longitude}
+                  address={`${property.address}, ${property.city}, ${property.state} ${property.zipCode}`}
+                  className="mb-4"
+                />
+
                 <Tabs defaultValue="amenities" className="w-full">
-                  <TabsList className="grid w-full grid-cols-3">
+                  <TabsList className={`grid w-full ${isAuthenticated ? 'grid-cols-3' : 'grid-cols-2'}`}>
                     <TabsTrigger value="amenities">Amenities</TabsTrigger>
                     <TabsTrigger value="policies">Policies</TabsTrigger>
-                    <TabsTrigger value="lease">Lease Terms</TabsTrigger>
+                    {isAuthenticated && <TabsTrigger value="lease">Lease Terms</TabsTrigger>}
                   </TabsList>
                   
                   <TabsContent value="amenities" className="space-y-4">
@@ -425,26 +446,28 @@ export default function PropertyDetail() {
                     </div>
                   </TabsContent>
 
-                  <TabsContent value="lease" className="space-y-4">
-                    <div className="space-y-3">
-                      <div className="flex justify-between">
-                        <span className="text-sm font-medium">Security Deposit</span>
-                        <span className="text-sm">{formatCurrency(property.securityDeposit)}</span>
-                      </div>
-                      {property.leaseTerms && property.leaseTerms.length > 0 && (
-                        <div>
-                          <span className="text-sm font-medium block mb-2">Available Lease Terms</span>
-                          <div className="flex flex-wrap gap-2">
-                            {property.leaseTerms.map((term, index) => (
-                              <Badge key={index} variant="outline">
-                                {term}
-                              </Badge>
-                            ))}
-                          </div>
+                  {isAuthenticated && (
+                    <TabsContent value="lease" className="space-y-4">
+                      <div className="space-y-3">
+                        <div className="flex justify-between">
+                          <span className="text-sm font-medium">Security Deposit</span>
+                          <span className="text-sm">{formatCurrency(property.securityDeposit)}</span>
                         </div>
-                      )}
-                    </div>
-                  </TabsContent>
+                        {property.leaseTerms && property.leaseTerms.length > 0 && (
+                          <div>
+                            <span className="text-sm font-medium block mb-2">Available Lease Terms</span>
+                            <div className="flex flex-wrap gap-2">
+                              {property.leaseTerms.map((term, index) => (
+                                <Badge key={index} variant="outline">
+                                  {term}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </TabsContent>
+                  )}
                 </Tabs>
               </CardContent>
             </Card>
@@ -496,42 +519,77 @@ export default function PropertyDetail() {
 
           {/* Sidebar */}
           <div className="space-y-6">
-            {/* Apply Card */}
-            <Card className="sticky top-24">
-              <CardHeader>
-                <CardTitle>Move-in Costs</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Monthly Rent</span>
-                    <span className="font-semibold">{formatCurrency(property.rent)}</span>
+            {/* Move-in Costs — gated. Guests see a sign-in prompt instead of
+                a pricing breakdown they can't act on (Apply is auth-gated). */}
+            {isAuthenticated ? (
+              <Card className="sticky top-24">
+                <CardHeader>
+                  <CardTitle>Move-in Costs</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Monthly Rent</span>
+                      <span className="font-semibold">{formatCurrency(property.rent)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Security Deposit</span>
+                      <span className="font-semibold">{formatCurrency(property.securityDeposit)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Application Fee</span>
+                      <span className="font-semibold">{formatCurrency(APPLICATION_FEE)}</span>
+                    </div>
+                    <div className="border-t pt-2 flex justify-between">
+                      <span className="font-semibold">Total Move-in Cost</span>
+                      <span className="font-bold text-lg">
+                        {formatCurrency(property.rent + property.securityDeposit + APPLICATION_FEE)}
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Security Deposit</span>
-                    <span className="font-semibold">{formatCurrency(property.securityDeposit)}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Application Fee</span>
-                    <span className="font-semibold">{formatCurrency(APPLICATION_FEE)}</span>
-                  </div>
-                  <div className="border-t pt-2 flex justify-between">
-                    <span className="font-semibold">Total Move-in Cost</span>
-                    <span className="font-bold text-lg">
-                      {formatCurrency(property.rent + property.securityDeposit + APPLICATION_FEE)}
-                    </span>
-                  </div>
-                </div>
 
-                <Button onClick={handleApply} className="w-full" size="lg">
-                  Apply Now
-                </Button>
+                  <Button onClick={handleApply} className="w-full" size="lg">
+                    Apply Now
+                  </Button>
 
-                <p className="text-xs text-center text-gray-500">
-                  Available {formatDateSafe(property.availableDate, 'MMMM d, yyyy') ?? 'TBD'}
-                </p>
-              </CardContent>
-            </Card>
+                  <p className="text-xs text-center text-gray-500">
+                    Available {formatDateSafe(property.availableDate, 'MMMM d, yyyy') ?? 'TBD'}
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              <Card className="sticky top-24">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Lock className="h-5 w-5 text-muted-foreground" />
+                    Pricing &amp; Lease Terms
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <p className="text-sm text-muted-foreground">
+                    Sign in to see the full cost breakdown (rent, deposit, application fee),
+                    available lease terms, and apply for this property.
+                  </p>
+                  <div className="space-y-2">
+                    <Link
+                      to="/auth/register"
+                      className={buttonVariants({ size: 'lg', className: 'w-full' })}
+                    >
+                      Create account
+                    </Link>
+                    <Link
+                      to="/auth/login"
+                      className={buttonVariants({ variant: 'outline', size: 'lg', className: 'w-full' })}
+                    >
+                      Sign in
+                    </Link>
+                  </div>
+                  <p className="text-xs text-center text-gray-500">
+                    Available {formatDateSafe(property.availableDate, 'MMMM d, yyyy') ?? 'TBD'}
+                  </p>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Contact Card */}
             <Card>
@@ -574,6 +632,18 @@ export default function PropertyDetail() {
         onClose={() => setShowScheduleModal(false)}
         propertyId={property.id}
         propertyAddress={`${property.address}, ${property.city}, ${property.state}`}
+        landlordId={property.landlordId}
+      />
+
+      {/* Guest auth prompt — opens whenever requireAuth() is called by a
+          guest. Without this mount the modal state on useAuthPrompt would
+          go nowhere and the action buttons would appear unresponsive. */}
+      <AuthPromptModal
+        isOpen={isPromptOpen}
+        onClose={closePrompt}
+        onSignUp={goToSignUp}
+        onLogin={goToLogin}
+        action={promptContext?.action}
       />
     </div>
   );

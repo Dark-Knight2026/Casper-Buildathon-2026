@@ -12,6 +12,14 @@ export interface AuthContextType {
    */
   setWalletSession: (user: ServerUserInfo) => void;
   updateProfile: (updates: Partial<UserProfile>) => Promise<void>;
+  /**
+   * Re-fetch the authenticated profile from the backend and overwrite the
+   * cached state + session marker. Use this after operations that mutate
+   * server-side state outside of `updateProfile` (avatar upload, email
+   * confirmation, role switch) so consumers like the Navbar pick up fresh
+   * fields without a page reload.
+   */
+  refreshProfile: () => Promise<void>;
   walletSignOut: () => void;
 }
 

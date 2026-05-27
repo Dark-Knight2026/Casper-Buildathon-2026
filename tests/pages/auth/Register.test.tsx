@@ -175,8 +175,11 @@ describe('Register', () => {
     it('disables Sign in while signing or already authenticated', () => {
       setWalletConnect({ isConnected: true, account, isSigningIn: true });
       renderRegister();
+      // Anchor the regex: the page also renders a "Trouble signing in? Reset
+      // connection" footer button whose accessible name otherwise matches
+      // /signing in/i and makes the selector ambiguous.
       expect(
-        screen.getByRole('button', { name: /signing in/i }),
+        screen.getByRole('button', { name: /^Signing in/i }),
         'Sign in button must reflect in-flight state and be disabled to prevent double-submit'
       ).toBeDisabled();
     });
@@ -276,6 +279,54 @@ describe('Register', () => {
         screen.getByRole('radio', { name: /tenant/i }),
         'no query param means the standard Tenant default'
       ).toBeChecked();
+    });
+  });
+
+  describe('reset connection footer', () => {
+    // Same recovery hatch as on Login — when CSPR.click's session-expired
+    // modal flips `isConnected` off, this is the user's only way out.
+
+    it('renders the footer button in the disconnected state', () => {
+      renderRegister();
+      expect(
+        screen.getByRole('button', { name: /trouble signing in\?\s*reset connection/i }),
+        'reset-connection footer must NOT be gated on isConnected — it covers exactly the case where isConnected went stale'
+      ).toBeInTheDocument();
+    });
+
+    it('click invokes disconnect, strips csprclick:* + leasefi_session, then reloads', () => {
+      const disconnect = vi.fn();
+      const reloadSpy = vi.fn();
+      Object.defineProperty(window, 'location', {
+        configurable: true,
+        value: { ...window.location, reload: reloadSpy },
+      });
+
+      localStorage.clear();
+      localStorage.setItem('leasefi_session', '{"id":"1"}');
+      localStorage.setItem('csprclick:account', '0x123');
+      localStorage.setItem('csprclick:nonce', 'abc');
+      localStorage.setItem('foreign:other', 'keep-me');
+
+      setWalletConnect({ disconnect });
+      renderRegister();
+      fireEvent.click(screen.getByRole('button', { name: /trouble signing in/i }));
+
+      expect(disconnect, 'reset flow must release the wallet session via the SDK').toHaveBeenCalledTimes(1);
+      expect(
+        localStorage.getItem('leasefi_session'),
+        'session marker must go — otherwise ProtectedRoute keeps showing a stale signed-in UI'
+      ).toBeNull();
+      expect(localStorage.getItem('csprclick:account'), 'csprclick:* prefix is the loop-causing one').toBeNull();
+      expect(localStorage.getItem('csprclick:nonce'), 'every csprclick:* key, not just account').toBeNull();
+      expect(
+        localStorage.getItem('foreign:other'),
+        'only `csprclick:` prefix is stripped — unrelated keys must survive'
+      ).toBe('keep-me');
+      expect(
+        reloadSpy,
+        'hard reload is what actually rebuilds AuthContext and the SDK from a clean slate'
+      ).toHaveBeenCalledTimes(1);
     });
   });
 });

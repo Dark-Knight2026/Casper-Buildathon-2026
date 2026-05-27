@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FEATURED_PROPERTIES } from '@/data/featuredProperties';
 import { Button } from '@/components/ui/button';
@@ -7,6 +7,10 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Slider } from '@/components/ui/slider';
 import { PropertyCard } from '@/components/property/PropertyCard';
+import { InHomeAmenitiesFilter } from '@/components/search/InHomeAmenitiesFilter';
+import { SurroundingAreaFilter } from '@/components/search/SurroundingAreaFilter';
+import { applyExtendedSearchFilters, type ExtendedSearchMatch } from '@/lib/extendedSearchFilter';
+import type { FeaturedProperty } from '@/types/property';
 import {
   Select,
   SelectContent,
@@ -47,12 +51,12 @@ const SQUARE_FEET_RANGES: FilterOption[] = [
 
 const PROPERTY_TYPE_OPTIONS: FilterOption[] = [
   { value: 'all', label: 'All Types' },
-  { value: 'House', label: 'House' },
-  { value: 'Condo', label: 'Condo' },
-  { value: 'Townhouse', label: 'Townhouse' },
-  { value: 'Apartment', label: 'Apartment' },
-  { value: 'Studio', label: 'Studio' },
-  { value: 'Loft', label: 'Loft' },
+  { value: 'house', label: 'House' },
+  { value: 'condo', label: 'Condo' },
+  { value: 'townhouse', label: 'Townhouse' },
+  { value: 'apartment', label: 'Apartment' },
+  { value: 'studio', label: 'Studio' },
+  { value: 'loft', label: 'Loft' },
 ];
 
 function Stepper({
@@ -137,60 +141,12 @@ function FilterSelect({
   );
 }
 
-interface Property {
-  id: string;
-  landlord_id: string;
-  title: string;
-  description?: string;
-  address: string;
-  city: string;
-  state: string;
-  zip_code: string;
-  price: number;
-  bedrooms: number;
-  bathrooms: number;
-  square_feet?: number;
-  property_type: string;
-  amenities?: string[];
-  images?: string[];
-  available_from?: string;
-  is_available: boolean;
-  created_at: string;
-  updated_at: string;
-  rating?: number;
-  priceChange?: string;
-  daysOnMarket?: number;
-  photoCount?: number;
-}
-
 export default function PropertySearch() {
   const navigate = useNavigate();
 
-  const MOCK_PROPERTIES: Property[] = FEATURED_PROPERTIES.map((p) => ({
-    id: p.id,
-    landlord_id: p.landlordId,
-    title: p.title,
-    description: p.description,
-    address: p.address,
-    city: p.city,
-    state: p.state,
-    zip_code: p.zipCode,
-    price: p.rent,
-    bedrooms: p.bedrooms,
-    bathrooms: p.bathrooms,
-    square_feet: p.squareFeet ?? undefined,
-    property_type: p.propertyType,
-    images: p.images,
-    is_available: p.status === 'active',
-    created_at: p.createdAt.toISOString(),
-    updated_at: p.updatedAt.toISOString(),
-    rating: p.rating,
-    priceChange: p.priceChange,
-    daysOnMarket: p.daysOnMarket,
-    photoCount: p.photoCount,
-  }));
-
-  const [properties] = useState<Property[]>(MOCK_PROPERTIES);
+  // Source data is FeaturedProperty[] (extends canonical Property). When the
+  // backend /properties/search endpoint ships, swap this for the response.
+  const [properties] = useState<FeaturedProperty[]>(FEATURED_PROPERTIES);
   const loading = false;
   const [searchTerm, setSearchTerm] = useState('');
   const [priceRange, setPriceRange] = useState<[number, number]>(PRICE_DEFAULT);
@@ -200,13 +156,25 @@ export default function PropertySearch() {
   const [propertyType, setPropertyType] = useState('all');
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
 
+  // Task 9 — extended search state (in-home amenities + surrounding area).
+  // TODO(backend): pass these straight through as query params on
+  // GET /api/v1/properties/search and drop the client-side helper below.
+  const [amenitiesInHome, setAmenitiesInHome] = useState<string[] | undefined>(undefined);
+  const [amenitiesNearby, setAmenitiesNearby] = useState<
+    Record<string, number> | undefined
+  >(undefined);
+
   const isPriceFiltered =
     priceRange[0] !== PRICE_DEFAULT[0] || priceRange[1] !== PRICE_DEFAULT[1];
+  const extendedFiltersCount =
+    (amenitiesInHome && amenitiesInHome.length > 0 ? 1 : 0) +
+    (amenitiesNearby && Object.keys(amenitiesNearby).length > 0 ? 1 : 0);
   const activeFilters =
     (isPriceFiltered ? 1 : 0) +
     (bedrooms > 0 ? 1 : 0) +
     (bathrooms > 0 ? 1 : 0) +
-    [squareFeet, propertyType].filter((f) => f !== 'all').length;
+    [squareFeet, propertyType].filter((f) => f !== 'all').length +
+    extendedFiltersCount;
 
   const resetFilters = () => {
     setSearchTerm('');
@@ -215,7 +183,25 @@ export default function PropertySearch() {
     setBathrooms(0);
     setSquareFeet('all');
     setPropertyType('all');
+    setAmenitiesInHome(undefined);
+    setAmenitiesNearby(undefined);
   };
+
+  // Task 9 demo matcher — runs against FEATURED_PROPERTIES (which retains the
+  // full Property shape incl. surroundingArea) and yields the set of allowed
+  // property ids. The other filters below operate on the local mapped
+  // properties. Becomes a server call once /properties/search supports the
+  // amenity_in_home[]/amenity_nearby[] params.
+  // BLK-3: keep the full match (id → nearestByCategory) so PropertyCard can
+  // render per-category distance chips below the address (spec §2.3.2).
+  const extendedMatches = useMemo<Map<string, ExtendedSearchMatch<FeaturedProperty>> | null>(() => {
+    if (extendedFiltersCount === 0) return null;
+    const matches = applyExtendedSearchFilters(FEATURED_PROPERTIES, {
+      amenitiesInHome,
+      amenitiesNearby,
+    });
+    return new Map(matches.map((m) => [m.property.id, m]));
+  }, [amenitiesInHome, amenitiesNearby, extendedFiltersCount]);
 
   const filteredProperties = properties.filter((property) => {
     if (searchTerm) {
@@ -228,22 +214,24 @@ export default function PropertySearch() {
       if (!matchesSearch) return false;
     }
 
-    if (property.price < priceRange[0]) return false;
+    if (property.rent < priceRange[0]) return false;
     // When the slider sits at PRICE_MAX, treat the upper bound as open-ended
     // ("no upper limit") and skip the check — otherwise properties priced
     // above PRICE_MAX would be filtered out even though the user wants all.
-    if (priceRange[1] < PRICE_MAX && property.price > priceRange[1]) return false;
+    if (priceRange[1] < PRICE_MAX && property.rent > priceRange[1]) return false;
 
     if (bedrooms > 0 && property.bedrooms < bedrooms) return false;
     if (bathrooms > 0 && property.bathrooms < bathrooms) return false;
 
     if (squareFeet !== 'all') {
       const [min, max] = squareFeet.split('-').map(Number);
-      const sqft = property.square_feet ?? 0;
+      const sqft = property.squareFeet ?? 0;
       if (sqft < min || (max && sqft > max)) return false;
     }
 
-    if (propertyType !== 'all' && property.property_type !== propertyType) return false;
+    if (propertyType !== 'all' && property.propertyType !== propertyType) return false;
+
+    if (extendedMatches && !extendedMatches.has(property.id)) return false;
 
     return true;
   });
@@ -279,11 +267,12 @@ export default function PropertySearch() {
                   )}
                 </Button>
               </DialogTrigger>
-              <DialogContent className="sm:max-w-md">
+              <DialogContent className="sm:max-w-2xl">
                 <DialogHeader>
                   <DialogTitle>Filters</DialogTitle>
                   <DialogDescription>
-                    Refine results by price, size, and property type.
+                    Refine results by price, size, property type, and what's
+                    inside the unit or nearby.
                   </DialogDescription>
                 </DialogHeader>
 
@@ -386,6 +375,22 @@ export default function PropertySearch() {
                     placeholder="Property Type"
                     options={PROPERTY_TYPE_OPTIONS}
                   />
+
+                  {/* Task 9 — in-home amenities */}
+                  <div className="pt-2 border-t">
+                    <InHomeAmenitiesFilter
+                      value={amenitiesInHome}
+                      onChange={setAmenitiesInHome}
+                    />
+                  </div>
+
+                  {/* Task 9 — surrounding-area filters */}
+                  <div className="pt-2 border-t">
+                    <SurroundingAreaFilter
+                      value={amenitiesNearby}
+                      onChange={setAmenitiesNearby}
+                    />
+                  </div>
                 </div>
 
                 <DialogFooter className="gap-2 sm:gap-0">
@@ -423,18 +428,21 @@ export default function PropertySearch() {
                 address: property.address,
                 city: property.city,
                 state: property.state,
-                price: property.price,
+                price: property.rent,
                 bedrooms: property.bedrooms,
                 bathrooms: property.bathrooms,
-                squareFeet: property.square_feet,
-                images: property.images ?? [],
-                status: property.is_available ? 'active' : 'inactive',
+                squareFeet: property.squareFeet ?? undefined,
+                images: property.images,
+                status: property.status,
                 priceChange: property.priceChange,
                 rating: property.rating,
                 daysOnMarket: property.daysOnMarket,
                 photoCount: property.photoCount,
               }}
-              onClick={() => navigate(`/properties/${property.id}`, { state: { property } })}
+              nearestByCategory={extendedMatches?.get(property.id)?.nearestByCategory}
+              onClick={() => {
+                navigate(`/properties/${property.id}`, { state: { property } });
+              }}
             />
           ))}
         </div>

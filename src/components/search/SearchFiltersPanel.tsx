@@ -15,6 +15,8 @@ import {
 } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { InHomeAmenitiesFilter } from './InHomeAmenitiesFilter';
+import { SurroundingAreaFilter } from './SurroundingAreaFilter';
 
 interface SearchFiltersPanelProps {
   filters: SearchFilters;
@@ -177,6 +179,24 @@ export function SearchFiltersPanel({
                 />
               </div>
             </div>
+          </div>
+
+          {/* Task 9 — In-home amenities (boolean toggles) */}
+          <div className="space-y-4 pt-2 border-t">
+            <h4 className="font-medium text-sm text-gray-700">In-home amenities</h4>
+            <InHomeAmenitiesFilter
+              value={filters.amenitiesInHome}
+              onChange={(next) => updateFilter('amenitiesInHome', next)}
+            />
+          </div>
+
+          {/* Task 9 — Surrounding-area filters (per-category mile slider) */}
+          <div className="space-y-4 pt-2 border-t">
+            <h4 className="font-medium text-sm text-gray-700">Surrounding area</h4>
+            <SurroundingAreaFilter
+              value={filters.amenitiesNearby}
+              onChange={(next) => updateFilter('amenitiesNearby', next)}
+            />
           </div>
 
           {/* Tenant Filters */}

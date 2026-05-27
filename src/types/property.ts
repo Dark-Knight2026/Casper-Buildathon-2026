@@ -50,7 +50,14 @@ export interface PropertySearchParams {
   search?: string;
 }
 
-export type PropertyType = 'apartment' | 'house' | 'condo' | 'townhouse' | 'studio' | 'Apartment' | 'House' | 'Condo' | 'Townhouse' | 'Studio' | 'Loft';
+// Canonical PropertyType union. All identifiers are lowercase by TypeScript
+// convention; capitalize via formatPropertyType() for display.
+export type PropertyType = 'apartment' | 'house' | 'condo' | 'townhouse' | 'studio' | 'loft';
+
+// Title-Case label for UI rendering ("apartment" → "Apartment").
+export function formatPropertyType(type: PropertyType): string {
+  return type.charAt(0).toUpperCase() + type.slice(1);
+}
 
 // Property form data
 export interface PropertyFormData {
@@ -86,6 +93,28 @@ export interface HistoricalDataCount {
   hasHistoricalData: boolean;
 }
 
+// Surrounding-area POI categories (Task 9 / Task 11)
+// Controlled list — keep in sync with SURROUNDING_CATEGORIES in
+// src/data/amenityCategories.ts.
+export type SurroundingCategory =
+  | 'hospital'
+  | 'school'
+  | 'gym'
+  | 'airport'
+  | 'park'
+  | 'grocery'
+  | 'transit';
+
+// A nearby point of interest attached to a property.
+// Currently landlord-entered (Task 11). In phase 2 these may be auto-suggested
+// from a maps API (Google Places / Mapbox / OSM) — see open question Q4.
+export interface SurroundingPOI {
+  category: SurroundingCategory;
+  name: string;
+  distanceMiles: number;
+  note?: string;
+}
+
 // Property interface
 export interface Property {
   id: string;
@@ -117,6 +146,10 @@ export interface Property {
   views: number;
   createdAt: Date;
   updatedAt: Date;
+  // TODO(backend, Task 11): populated server-side from
+  // GET /api/v1/properties/:id (landlord-supplied POIs persisted with the
+  // property record). Optional until Task 11 ships.
+  surroundingArea?: SurroundingPOI[];
 }
 
 // Featured property (landing-page demo data with marketing extras)

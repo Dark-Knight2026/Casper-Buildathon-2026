@@ -67,6 +67,7 @@ export const EMPTY_PREFERENCES: RentalPreferences = Object.freeze({
   locations: Object.freeze([] as PreferredLocation[]),
   propertyTypes: Object.freeze([] as PropertyType[]),
   amenities: Object.freeze([] as string[]),
+  surroundingArea: undefined,
 }) as unknown as RentalPreferences;
 
 export function getStoredPreferences(tenantId: string): RentalPreferences | null {

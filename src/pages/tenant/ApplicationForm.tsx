@@ -10,23 +10,27 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle, CheckCircle } from 'lucide-react';
+import { VerificationDisclaimer } from '@/components/property/VerificationDisclaimer';
 
 export default function ApplicationForm() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user } = useAuth();
+  const { profile } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
 
-  // Get propertyId from location state or query params
+  // Get propertyId and landlordId from location state or query params.
+  // landlordId must come from the property record (the listing page passes it
+  // via navigate state); a placeholder here corrupts every persisted
+  // application, so the submit guard below refuses to fire without it.
   const propertyId = location.state?.propertyId || new URLSearchParams(location.search).get('propertyId') || '';
-  const landlordId = 'default-landlord-id'; // TODO: Get from property data
+  const landlordId = location.state?.landlordId || new URLSearchParams(location.search).get('landlordId') || '';
 
   const [formData, setFormData] = useState({
     // Personal Information
     fullName: '',
-    email: user?.email || '',
+    email: profile?.email || '',
     phone: '',
     dateOfBirth: '',
     
@@ -65,7 +69,7 @@ export default function ApplicationForm() {
       return;
     }
 
-    if (!user) {
+    if (!profile) {
       setError('You must be logged in to submit an application');
       return;
     }
@@ -75,10 +79,15 @@ export default function ApplicationForm() {
       return;
     }
 
+    if (!landlordId) {
+      setError('Landlord information is missing. Please return to the property page and try again.');
+      return;
+    }
+
     setLoading(true);
 
     try {
-      await propertyActionsService.submitApplication(user.id, {
+      await propertyActionsService.submitApplication(profile.id, {
         propertyId,
         landlordId,
         fullName: formData.fullName,
@@ -146,6 +155,9 @@ export default function ApplicationForm() {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-6">
+              {/* Task 10 — Verification Disclaimer (compact, no map link — form doesn't carry coords) */}
+              <VerificationDisclaimer compact />
+
               {error && (
                 <Alert variant="destructive">
                   <AlertCircle className="h-4 w-4" />

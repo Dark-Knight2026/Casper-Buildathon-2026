@@ -17,18 +17,19 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { ALL_AMENITIES } from '@/types/property';
 import type { PropertyType } from '@/types/property';
+import { formatPropertyType } from '@/types/property';
 import type { PreferredLocation, RentalPreferences } from '@/types/tenantPreferences';
 import { EMPTY_PREFERENCES } from '@/data/tenantPreferences';
+import { SurroundingAreaFilter } from '@/components/search/SurroundingAreaFilter';
 
-// Subset of the wider PropertyType union exposed in the form. The lowercase
-// variants in the union are legacy aliases — not surfaced to users.
+// Subset of the wider PropertyType union exposed in the form.
 const SELECTABLE_PROPERTY_TYPES: PropertyType[] = [
-  'Apartment',
-  'House',
-  'Condo',
-  'Townhouse',
-  'Studio',
-  'Loft',
+  'apartment',
+  'house',
+  'condo',
+  'townhouse',
+  'studio',
+  'loft',
 ];
 
 interface TenantPreferencesDialogProps {
@@ -130,7 +131,7 @@ export function TenantPreferencesDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Rental Preferences</DialogTitle>
           <DialogDescription>
@@ -290,7 +291,7 @@ export function TenantPreferencesDialog({
 
           <fieldset className="space-y-3">
             <legend className="text-sm font-medium">Property types</legend>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               {SELECTABLE_PROPERTY_TYPES.map((type) => {
                 const checked = draft.propertyTypes.includes(type);
                 return (
@@ -301,9 +302,9 @@ export function TenantPreferencesDialog({
                     <Checkbox
                       checked={checked}
                       onCheckedChange={() => togglePropertyType(type)}
-                      aria-label={type}
+                      aria-label={formatPropertyType(type)}
                     />
-                    <span>{type}</span>
+                    <span>{formatPropertyType(type)}</span>
                   </label>
                 );
               })}
@@ -330,6 +331,24 @@ export function TenantPreferencesDialog({
                 );
               })}
             </div>
+          </fieldset>
+
+          {/*
+            Task 9 — surrounding-area must-haves.
+            TODO(backend, Task 6 matcher): include these constraints in
+            GET /api/v1/properties/recommended ranking + the response's
+            matchedCategories[] (new 'surrounding' MatchCategory).
+          */}
+          <fieldset className="space-y-3">
+            <SurroundingAreaFilter
+              value={draft.surroundingArea as Record<string, number> | undefined}
+              onChange={(next) =>
+                setDraft((d) => ({
+                  ...d,
+                  surroundingArea: next as RentalPreferences['surroundingArea'],
+                }))
+              }
+            />
           </fieldset>
         </div>
 

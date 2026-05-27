@@ -1057,6 +1057,178 @@ interface MaintenanceRequest {
 
 ---
 
+### 2.3 New Tasks from Client Meeting (2026-05-07)
+
+Captured during the LeaseFi recurring Thursday meeting with Anthony Batten and Chris. These items are scoped for the current MVP iteration unless explicitly marked as backlog.
+
+#### 2.3.1 User Onboarding Tour
+
+**Purpose:** Guide first-time users through the dashboard immediately after registration / first login.
+
+**Status:** Approved by Anthony ("go for it") on 2026-05-07.
+
+**Functional Requirements:**
+
+1. **Trigger**
+   - Activates automatically on first authenticated session after registration
+   - Skippable at any step; "Don't show again" persists per user
+   - Re-launchable from the Help page
+
+2. **Tour Mechanics**
+   - Step-by-step tooltips / modals attached to key interface elements
+   - Each step explains: what the section is, what action the user can perform, why it matters
+   - Highlights the active element (spotlight / dimmed background)
+   - Keyboard navigation (Esc to skip, Enter / arrows to advance)
+
+3. **Coverage (per role)**
+   - Tenant: dashboard summary, Tenant Score, Recommendations block, Profile, Help
+   - Landlord: properties list, lease creation entry point, Profile, Help
+   - Other roles: dashboard + Profile + Help (extend as those flows mature)
+
+4. **Persistence**
+   - Completion state stored per user via backend profile flag
+   - Per-step completion tracked so a partial tour can resume
+
+#### 2.3.2 Extended Property Search Filters (Amenities + Surrounding Area)
+
+**Purpose:** Let tenants filter properties by both in-unit amenities and what is nearby, with per-category proximity controls.
+
+**Functional Requirements:**
+
+1. **Two filter groups**
+   - **In-home amenities** (boolean toggles): heating, AC, natural light, pool, garage, in-building gym, pet-friendly, in-unit laundry, dishwasher, etc.
+   - **Surrounding area** (toggle + per-category mile-range slider): hospital, school, gym, airport, park, grocery store, public transit
+
+2. **Surrounding-area UX**
+   - Each enabled category exposes its own mile slider (e.g., "Hospital within 20 mi")
+   - Default radius per category is configurable; user changes are remembered per session
+   - Results list shows the matched POI distance per property card
+
+3. **Data source**
+   - Landlord populates surrounding-area POIs when listing the property (see 2.3.4)
+   - Tenants always see a verification disclaimer (see 2.3.3)
+
+4. **Out of scope for v1:** automatic POI lookup via maps API — landlord-entered values only.
+
+#### 2.3.3 Property Page — Verification Disclaimer
+
+**Purpose:** Limit liability on landlord-supplied amenity / proximity data and prompt tenants to verify independently. Requested by Chris on 2026-05-07.
+
+**Functional Requirements:**
+
+1. Visible disclaimer block on every property detail page near the amenities / surrounding-area sections
+2. Copy: short, plain English — "Amenities and proximity information are provided by the landlord. Please verify independently before signing a lease."
+3. Always visible (not dismissible) so it cannot be missed by a first-time visitor
+4. Styled as an informational notice (not an error / warning state)
+
+#### 2.3.4 Landlord-Owned Surrounding-Area Data Entry
+
+**Purpose:** Capture surrounding-area POIs from the landlord at listing time so the tenant filter (2.3.2) has data to query.
+
+**Status:** Pending alignment with Anthony — confirm landlord is the source of truth for these inputs and that tenant-side verification (2.3.3) is sufficient.
+
+**Functional Requirements:**
+
+1. Property creation / edit form gains a "Surrounding area" section
+2. Landlord can add POIs by category (hospital, school, gym, airport, park, grocery, transit) with name + distance
+3. Validation: distance is numeric; category is from a controlled list
+4. Persisted with the property record; surfaced on the property detail page and used by the tenant filter
+
+#### 2.3.5 Terminology Pass — "Tokens" → "Equity"
+
+**Purpose:** Align all user-facing copy with real-estate terminology. Anthony emphasized that on-chain "tokens" must be presented as "equity" / "ownership share" to the end user.
+
+**Constraints:**
+
+- No blockchain jargon ("token", "supply", "1M tokens", "wallet address") in user-facing copy
+- Internal types / variables can keep technical names; the change is presentation-layer only
+- Apply to property pages, lease flows, dashboard widgets, marketing copy, tooltips, and empty states
+
+**Acceptance:**
+
+- Audit confirms zero occurrences of `Token`, `tokens`, `supply` in rendered UI strings (excluding CSPR.click SDK surfaces, which are wallet-level)
+- Equivalent equity-framed copy exists for every replaced phrase
+
+#### 2.3.6 Equity Gating — Tenant–Landlord Lease Option Only
+
+**Purpose:** Prevent equity from being offered outside an approved tenant–landlord lease option agreement. Anthony: outside that scope it becomes a security and triggers SEC / DAO licensing concerns the platform is not yet covered for.
+
+**Functional Requirements:**
+
+1. Equity controls are hidden by default on every property
+2. They unlock only when:
+   - The landlord has enabled "Rent to own" / lease option on the property, AND
+   - The current viewer is the tenant on the active lease for that property
+3. Any other viewer sees a "Not available" state (no marketplace, no public buy-in) — confirmed deferred to backlog (see 8.3)
+4. UI surfaces use "equity" / "ownership share" wording per 2.3.5
+
+---
+
+### 2.4 Backlog — patterns salvaged from removed startup-template code
+
+Captured when `src/components/Navbar.tsx` and `src/components/UserMenu.tsx` were
+deleted (initial Vite/Lovable template, branded "KeyChain", referencing the
+old `useAuth` API and 27 B2B role variants the LeaseFi backend does not
+support). The components themselves were dead code, but a few patterns inside
+them have product value for the current tenant/landlord/agent flow and are
+worth re-introducing intentionally when the surrounding feature lands.
+
+History reference: see the deletion commit if details of the original
+implementation are needed. The original template imported `useFavorites`,
+`useMessaging`, and `useNotifications` — those hooks still live in
+`src/hooks/` and `src/contexts/` and are the integration points to reuse.
+
+#### 2.4.1 Global Search — Cmd/Ctrl+K shortcut
+
+**Purpose:** Open the existing `GlobalSearch` dialog
+(`src/components/search/GlobalSearch.tsx`, already implemented) from anywhere
+in the tenant / landlord / agent shells without going through a button.
+
+**Functional Requirements:**
+
+1. Keyboard listener on `window` for `(Cmd|Ctrl) + K`; `preventDefault` and
+   open the dialog
+2. Trigger button in the layout header reads `⌘K` in a `<kbd>` to make the
+   shortcut discoverable
+3. Lives inside the layout component (`TenantLayout` / future
+   `LandlordLayout` / `AgentLayout`) so the shortcut is global within the
+   authenticated app, not per-page
+4. Escape closes the dialog (already handled by the shadcn `Dialog`
+   primitive — verify, do not re-implement)
+
+**Out of scope for v1:** custom shortcuts per role, recently-searched
+persistence (separate task once analytics ships).
+
+#### 2.4.2 Header Notification + Message Bells
+
+**Purpose:** Inline access to unread notifications and messages from the
+header without leaving the current page. Both hooks (`useNotifications`,
+`useMessaging`) already track `unreadCount`; `NotificationCenter` and
+`MessageCenter` components already exist — the gap is the header-level
+entry point.
+
+**Functional Requirements:**
+
+1. Bell icon button + envelope icon button in the layout header, between
+   the nav links and the user avatar
+2. Each shows a badge with `unreadCount` when > 0; badge omitted at zero
+   (no "0" badge)
+3. Click opens the respective center inside a `Dialog`, not a route — keeps
+   the user in context
+4. Mobile menu mirrors the same actions as labeled rows with the same
+   badge
+
+**Acceptance:**
+
+- Tenant header surfaces both bells; clicking does not change the URL
+- Badge count updates reactively as new items land via the existing hooks
+- Both dialogs close on outside-click and on Escape
+
+**Out of scope for v1:** push notifications / browser Notification API;
+notification preferences UI (separate spec section).
+
+---
+
 ## 3. NON-FUNCTIONAL REQUIREMENTS
 
 ### 3.1 Performance
@@ -1288,6 +1460,112 @@ Response → Service → Hook → Component → UI Update
 - Resend (email)
 - Google Maps (location)
 
+### 4.6 Profile Management Integration
+
+**Base URL:** `${VITE_BACKEND_URL}/api/v1`. All requests carry the HttpOnly
+`access_token` cookie via `credentials: 'include'` (see `src/lib/api-client.ts`).
+401s trigger one transparent refresh + replay before the original error
+propagates.
+
+**Error wire format:** every non-2xx response body is `{ "error": string }`
+(see `crates/api/src/common/errors.rs` `ErrorResponse`). Some endpoints emit
+machine-readable tokens (e.g. `reauthentication_required`); others emit
+human-readable prose (avatar). UI maps on the token where one exists, else
+on HTTP status.
+
+#### `UserInfo` (response shape)
+
+```json
+{
+  "id": "uuid",
+  "role": "tenant|landlord|agent|admin|unknown",
+  "wallet_address": "01abc...",
+  "status": "active|inactive|suspended|pending_verification",
+  "email": "alice@example.com",
+  "first_name": "Alice",
+  "last_name": "Smith",
+  "phone": "+12025550123",
+  "avatar_url": "https://...",
+  "bio": "...",
+  "is_profile_complete": true,
+  "active_leases_count": 3,
+  "created_at": "2026-01-15T10:30:00Z",
+  "updated_at": "2026-04-22T14:22:01Z"
+}
+```
+
+Mapped to camelCase `UserProfile` via `mapServerUserInfo` in
+`src/contexts/AuthContext.tsx`.
+
+#### Endpoints
+
+| Method | Path                                | Purpose                              |
+| ------ | ----------------------------------- | ------------------------------------ |
+| GET    | `/users/me`                         | Fetch current profile                |
+| PATCH  | `/users/me`                         | Update first/last name, phone, bio   |
+| POST   | `/users/me/email`                   | Request email change (sends token)   |
+| POST   | `/users/me/email/confirm`           | Confirm email change with token      |
+| POST   | `/users/me/avatar`                  | Multipart avatar upload (PNG/JPEG/WebP, ≤ 5 MB) |
+| PATCH  | `/users/me/role`                    | Switch role; revokes all sessions    |
+| GET    | `/auth/sessions`                    | List active refresh-token rows for the user |
+| DELETE | `/auth/sessions/{id}`               | Revoke a single session by row id    |
+
+Sessions live under `/auth/` (not `/users/me/`) because they describe auth
+state, and the route needs the `refresh_token` cookie which is scoped to
+`Path=/api/v1/auth`.
+
+Still pending on backend `feat/user-profile` branch — UI wiring blocked
+until they ship: `POST /auth/sessions/revoke-all` (logout from all devices)
+and `DELETE /users/me` (self-deactivation).
+
+#### Recent-auth gate (5-minute window)
+
+`PATCH /users/me/role` (and the future `DELETE /users/me`) require the
+access token to have `iat > NOW() - 5min`. On miss the backend returns
+`403 { "error": "reauthentication_required" }`. UI must intercept this code
+and prompt the user to re-sign with the wallet (see CSPR.click
+`signInWithAccount`), then replay the original request. Window constant:
+`ROLE_CHANGE_RECENT_AUTH_WINDOW_SECS = 300` in
+`crates/api/src/services/users/handlers.rs`.
+
+#### Endpoint-specific contracts
+
+**`PATCH /users/me`** — body is any subset of `{ first_name, last_name, phone, bio }`. Missing fields keep stored value. Writing a different `phone` resets `phone_verified` to `false`. Avatar updates are NOT accepted here — use `POST /users/me/avatar` (multipart). Errors: 400 (over-long values), 401, 404, 500.
+
+**`POST /users/me/email`** — body `{ "new_email": string }`. 202 on queued. Errors: 400 (malformed), 409 (taken), 429 (>3 / 24h).
+
+**`POST /users/me/email/confirm`** — body `{ "token": string (43 base64url chars) }`. 200 returns `UserInfo` with `email = new_email`, `email_verified = true`. Errors: 400 (malformed token shape), 401 (token missing/expired), 409 (email taken in race).
+
+**`POST /users/me/avatar`** — `multipart/form-data` with single field `file`. Constraints: PNG/JPEG/WebP only, magic-byte sniff on server, ≤ 5 MB. Per-user limit 10/h. Response: `{ "avatar_url": string }` (currently a stub URL until real storage lands). Errors: 400 (missing field), 413 (oversize), 415 (MIME mismatch — covers both disallowed type and spoofed bytes), 429.
+
+**`PATCH /users/me/role`** — body `{ "role": "tenant"|"landlord"|"agent" }`. Five gates run in order; same input may surface different statuses depending on which gate trips:
+1. 400 — role outside whitelist
+2. 403 — `reauthentication_required` (token > 5 min old)
+3. 429 — `rate_limited` (1 change / 24h)
+4. 409 — `active_leases_blocking` (active leases prevent switch)
+5. 200 — success: response is updated `UserInfo`, `Set-Cookie` clears both auth cookies (UI must redirect to login)
+
+**`GET /auth/sessions`** — returns `Array<SessionResponse>` filtered server-side to `revoked_at IS NULL AND expires_at > NOW()`:
+
+```json
+{
+  "id": "uuid",
+  "issued_at": "2026-04-22T10:30:00Z",
+  "expires_at": "2026-05-06T10:30:00Z",
+  "is_current": true
+}
+```
+
+`is_current` is computed against the request's `refresh_token` cookie hash; a request without that cookie returns `false` for every row (correct fallback). The shape carries no User-Agent / IP / device hints — UI can render only timestamps and a "this device" pill.
+
+**`DELETE /auth/sessions/{id}`** — revokes a single session row by id. Authorization is scoped server-side via `WHERE user_id = $current_user_id`, so passing another user's id returns 404, not 403. Errors: 401, 404, 500.
+
+#### Frontend-side concerns
+
+- **Avatar pre-flight on client.** Reject > 5 MB and unsupported MIME locally to avoid wasted network round-trips, but treat the server response as authoritative (it does magic-byte sniffing client cannot reliably replicate).
+- **Role switch redirects to login.** Cookies are cleared server-side, so any in-flight request after the switch will 401. UI must clear `leasefi_session` localStorage marker and route to `/auth/login`.
+- **Type safety.** Profile endpoints return snake_case; conversion happens once in `mapServerUserInfo`. Add new fields there, not at call sites, to keep the wire-format boundary single.
+
 ---
 
 ## 5. TECHNICAL SPECIFICATIONS
@@ -1478,6 +1756,9 @@ pnpm run test:integration
 - Blockchain integration (production-ready)
 - Multi-language support (i18n)
 - Native mobile apps
+- **Tenant ↔ Landlord review / feedback system** — bidirectional ratings (Uber / Airbnb model). Captured 2026-05-07; Anthony confirmed this is post-MVP.
+- **Admin moderation panel** for reviews — supreme rights to remove non-value / spam reviews (paired with the review system above).
+- **Equities marketplace UI** — public buy-in, secondary market, crowdfunding of equity percentage. Blocked on SEC licensing and DAO-structure decisions; out of scope until then.
 
 **Phase 3 (Future):**
 - API marketplace for third-party integrations

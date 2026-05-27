@@ -30,6 +30,15 @@ export type UserRole =
   // Admin
   | 'admin';
 
+// Mirrors backend `users.status` enum. `unknown` is the local sentinel for
+// the rare case where the backend ships a value we have not added here yet —
+// keeps the union narrow without a generic `string` escape hatch.
+export type UserStatus =
+  | 'active'
+  | 'inactive'
+  | 'suspended'
+  | 'pending_verification';
+
 export interface User {
   id: string;
   email: string;
@@ -56,6 +65,17 @@ export interface User {
   // profile and to suppress the "Wallet User" placeholder backend ships on
   // first wallet login (see crates/api/src/services/auth/db.rs).
   isProfileComplete?: boolean;
+  // Mirrors backend `users.status`. `inactive` indicates a self-deactivated
+  // account; `suspended` is a moderation action; `pending_verification` is
+  // the bootstrap state for wallet-only users who have not confirmed email.
+  status?: UserStatus;
+  // Number of active leases the user is bound to. Drives the role-switch and
+  // account-deletion guards on the client (see backend
+  // `active_leases_blocking` 409 path).
+  activeLeasesCount?: number;
+  // Server timestamp of the last profile mutation. Used to detect concurrent
+  // edits and to invalidate cached UI state after PATCH /users/me.
+  updatedAt?: Date;
 }
 
 export interface UserProfile extends User {
@@ -122,6 +142,18 @@ export function getRoleDisplayName(role: UserRole): string {
 export function getDashboardRoute(role: UserRole): string {
   if (role === 'tenant') return '/tenant/dashboard';
   return '/landlord/dashboard';
+}
+
+// Maps a role (or undefined for guest) to the appropriate "search / property
+// list" landing — used by Back-to-Search buttons and similar nav. Guests go
+// to the public `/properties` page; tenants browse via their search page;
+// landlords see their own listings. Add new roles here so callers don't
+// need their own branching.
+export function getSearchRoute(role: UserRole | undefined): string {
+  if (!role) return '/properties';
+  if (role === 'tenant') return '/tenant/property-search';
+  if (role === 'landlord') return '/landlord/properties';
+  return '/properties';
 }
 
 // Route-level role type (includes 'both' as a sentinel for landlord+tenant access)
