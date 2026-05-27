@@ -39,14 +39,14 @@ pub use db::{
 };
 pub use extractors::{
     AdminRole, AgentRole, AuthGateError, EmailVerified, IdentityVerified, LandlordRole, RoleMarker,
-    RoleRequiredResponse, RoleUser, TenantRole, VerificationMarker, VerificationRequiredResponse,
-    VerifiedUser,
+    RoleUser, TenantRole, VerificationMarker, VerifiedUser,
 };
 pub use jwt::{ACCESS_TOKEN_TTL, EncodedAccessToken, decode_token, encode_access_token};
 pub use middleware::{AuthError, AuthUser};
 pub use models::{
     LoginRequest, LoginResponse, NonceRequest, NonceResponse, RevokeAllSessionsRequest,
-    RevokeAllSessionsResponse, SessionResponse,
+    RevokeAllSessionsResponse, RoleRequiredResponse, SessionResponse, VerificationRequiredResponse,
+    VerifyConfirmRequest, VerifySendResponse,
 };
 pub use refresh::{IssuedRefreshToken, REFRESH_TOKEN_TTL, issue_login_refresh_token, rotate};
 pub use routes::router;

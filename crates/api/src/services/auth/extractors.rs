@@ -29,13 +29,14 @@ use axum::{
     http::{StatusCode, request::Parts},
     response::{IntoResponse, Response},
 };
-use serde::Serialize;
 use thiserror::Error;
-use utoipa::ToSchema;
 
 use crate::{
     common::{AppState, Claims, UserRole, VerificationLevel},
-    services::auth::{AuthError, AuthUser},
+    services::auth::{
+        AuthError, AuthUser,
+        models::{RoleRequiredResponse, VerificationRequiredResponse},
+    },
 };
 
 /// Marker selecting the minimum [`VerificationLevel`] an endpoint requires.
@@ -159,26 +160,6 @@ impl<R: RoleMarker> FromRequestParts<Arc<AppState>> for RoleUser<R> {
         }
         Ok(Self(claims, PhantomData))
     }
-}
-
-/// 403 body returned when an endpoint requires a higher verification level.
-#[derive(Debug, Serialize, ToSchema)]
-pub struct VerificationRequiredResponse {
-    /// Stable client code; always `"verification_required"`.
-    #[schema(example = "verification_required")]
-    pub error: String,
-    /// The minimum level the caller must reach to access the endpoint.
-    pub required_level: VerificationLevel,
-}
-
-/// 403 body returned when an endpoint requires a specific role.
-#[derive(Debug, Serialize, ToSchema)]
-pub struct RoleRequiredResponse {
-    /// Stable client code; always `"role_required"`.
-    #[schema(example = "role_required")]
-    pub error: String,
-    /// The role the caller must have to access the endpoint.
-    pub required_role: UserRole,
 }
 
 /// Rejection produced by [`VerifiedUser`] / [`RoleUser`].

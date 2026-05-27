@@ -23,49 +23,28 @@ use axum::{
     http::{header::USER_AGENT, request::Parts},
 };
 use axum_extra::extract::CookieJar;
-use serde::{Deserialize, Serialize};
 use subtle::ConstantTimeEq;
 use time::Duration as CookieDuration;
-use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::{
     common::{ApiError, ApiResult, AppState, ErrorResponse, UserInfo, UserRole, tokens},
     providers::{EmailError, EmailMessage},
     services::{
-        auth::{AuthUser, cookies, db, jwt, refresh},
+        auth::{
+            AuthUser, cookies, db, jwt,
+            models::{VerifyConfirmRequest, VerifySendResponse},
+            refresh,
+        },
         users::db as users_db,
     },
     workers::email_retry,
 };
 
-/// Response body for a successful verify-email send.
-///
-/// `status` is always `"sent"`. A transient mailer failure still yields
-/// `"sent"` because the message is queued for background retry - the user
-/// has nothing to act on differently, so the status code carries no extra
-/// signal.
-#[derive(Debug, Serialize, ToSchema)]
-pub struct VerifySendResponse {
-    /// Always `"sent"`.
-    pub status: String,
-
-    /// WARN: DEV/MVP ESCAPE HATCH - present only while email delivery is
-    /// unconfigured (no Postmark token, so the mailer is the logging stub).
-    ///
-    /// TODO: (email-postmark) remove this field together with its population in
-    /// `send_or_resend_verify_email` once Postmark delivery is wired up. It
-    /// must never be returned in production - handing the token back over HTTP
-    /// defeats the email round-trip that proves address ownership.
-    ///
-    /// The verification token normally travels only inside the email; with no
-    /// real mailer there is no inbox to read it from, so the plaintext is
-    /// surfaced here to keep the confirm step exercisable during development.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub dev_verification_token: Option<String>,
-}
-
 impl VerifySendResponse {
+    /// Builds the `200` body. `status` is hard-wired to `"sent"`; the optional
+    /// `dev_verification_token` is the dev/MVP escape hatch documented on
+    /// [`VerifySendResponse`].
     fn sent(dev_verification_token: Option<String>) -> Json<Self> {
         Json(Self {
             status: "sent".to_owned(),
@@ -302,17 +281,6 @@ where
             .map(str::to_owned);
         Ok(Self { ip, user_agent })
     }
-}
-
-/// Request body for the verify-email confirm step.
-///
-/// Carries only the opaque token from the verification link. The user id is
-/// taken from the access cookie via [`AuthUser`], never from the body, so a
-/// forged payload cannot confirm someone else's email.
-#[derive(Debug, Deserialize, ToSchema)]
-pub struct VerifyConfirmRequest {
-    /// The 43-char base64url token delivered in the verification email.
-    pub token: String,
 }
 
 // `POST /api/v1/auth/verify/email/confirm`
