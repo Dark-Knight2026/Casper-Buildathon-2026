@@ -60,6 +60,14 @@ export function useICOWallet(): UseICOWalletReturn {
   useEffect(() => {
     if (!clickRef) return;
 
+    // Shared unmount guard. Async event handlers (handleReady,
+    // handleSocialConnected) and the mount IIFE all await
+    // `getActiveAccountAsync()` before calling setState; if the component
+    // unmounts mid-await, the cleanup below flips this to true so the
+    // post-await setState is skipped (React would otherwise warn about a
+    // state update on an unmounted component).
+    let cancelled = false;
+
     const handleSignedIn = (evt: { account: { public_key: string; provider: string } }) => {
       const publicKey = evt.account.public_key;
       setState({
@@ -115,6 +123,7 @@ export function useICOWallet(): UseICOWalletReturn {
     // the dead session on subsequent mounts.
     const handleReady = async () => {
       const activeAccount = await clickRef.getActiveAccountAsync();
+      if (cancelled) return;
       if (!activeAccount) {
         try {
           Object.keys(localStorage).forEach(key => {
@@ -149,6 +158,7 @@ export function useICOWallet(): UseICOWalletReturn {
     const handleSocialConnected = async (evt: unknown) => {
       logger.debug('[useICOWallet] social provider connected event', { evt });
       const active = await clickRef.getActiveAccountAsync();
+      if (cancelled) return;
       logger.debug('[useICOWallet] active after social connect', { active });
       if (!active) return;
       setState({
@@ -191,8 +201,8 @@ export function useICOWallet(): UseICOWalletReturn {
     // Check if already connected. If getActiveAccountAsync returns null we
     // clear stale `csprclick:*` localStorage entries so the SDK doesn't keep
     // re-trying a dead session on subsequent mounts.
-    // `cancelled` guards against the unmount-during-await race.
-    let cancelled = false;
+    // The shared `cancelled` flag (declared at the top of this useEffect)
+    // guards against the unmount-during-await race.
     void (async () => {
       const activeAccount = await clickRef.getActiveAccountAsync();
       if (cancelled) return;
