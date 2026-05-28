@@ -390,7 +390,7 @@
     },
     {
       "name": "is_transfer_exempt",
-      "description": "",
+      "description": "Returns `true` if `account` is exempt from investor verification checks, `false` otherwise.",
       "is_mutable": false,
       "arguments": [
         {

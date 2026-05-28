@@ -512,7 +512,7 @@
     },
     {
       "name": "is_equity_eligible",
-      "description": "@dev Eligibility is not automatically time-bounded. It persists until the",
+      "description": "Returns `true` if `account` is equity-eligible for `property_id`, `false` otherwise.",
       "is_mutable": false,
       "arguments": [
         {
