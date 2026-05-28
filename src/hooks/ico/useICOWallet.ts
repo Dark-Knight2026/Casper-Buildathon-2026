@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useClickRef } from '@make-software/csprclick-ui';
 import { deriveAccountHash } from '@/lib/blockchain/accountUtils';
+import { clearCsprClickStorage } from '@/lib/csprclick';
 import logger from '@/lib/logger';
 
 export interface ICOWalletAccount {
@@ -125,13 +126,7 @@ export function useICOWallet(): UseICOWalletReturn {
       const activeAccount = await clickRef.getActiveAccountAsync();
       if (cancelled) return;
       if (!activeAccount) {
-        try {
-          Object.keys(localStorage).forEach(key => {
-            if (key.startsWith('csprclick:')) localStorage.removeItem(key);
-          });
-        } catch {
-          // localStorage may be unavailable (private mode, embedded webview).
-        }
+        clearCsprClickStorage();
         return;
       }
       const publicKey = activeAccount.public_key;
@@ -207,13 +202,7 @@ export function useICOWallet(): UseICOWalletReturn {
       const activeAccount = await clickRef.getActiveAccountAsync();
       if (cancelled) return;
       if (!activeAccount) {
-        try {
-          Object.keys(localStorage).forEach(key => {
-            if (key.startsWith('csprclick:')) localStorage.removeItem(key);
-          });
-        } catch {
-          // localStorage may be unavailable (private mode, embedded webview).
-        }
+        clearCsprClickStorage();
         return;
       }
       const publicKey = activeAccount.public_key;
