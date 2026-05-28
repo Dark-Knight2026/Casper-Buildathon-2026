@@ -6,6 +6,17 @@
 import { z } from 'zod';
 import DOMPurify from 'dompurify';
 
+// Force `rel="noopener noreferrer"` on every <a target="_blank"> that
+// survives sanitisation. Without it the opened tab can reach back via
+// `window.opener` (tabnabbing). DOMPurify has no FORCE_ATTR option, so we
+// install a hook that runs after attribute sanitisation. The hook is
+// idempotent and registered once at module load.
+DOMPurify.addHook('afterSanitizeAttributes', (node) => {
+  if (node.tagName === 'A' && node.getAttribute('target') === '_blank') {
+    node.setAttribute('rel', 'noopener noreferrer');
+  }
+});
+
 // ============================================================================
 // Schema Definitions
 // ============================================================================

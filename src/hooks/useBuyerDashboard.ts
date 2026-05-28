@@ -21,17 +21,17 @@ import {
 const fetchBuyerProperties = async () => {
   await new Promise(resolve => setTimeout(resolve, 300));
   
+  // `buyerMockProperties` now follows the canonical `Property` shape
+  // (`@/types/property`); fields like `id`/`city`/`state`/`zipCode`/`squareFeet`
+  // come straight through. We still synthesize buyer-flow extras
+  // (`yearBuilt`, `lotSize`, `parking`, `features`, `virtualTourUrl`) here.
   return buyerMockProperties.map((prop) => ({
     ...prop,
-    id: prop.id.toString(),
-    city: prop.address.split(',')[1]?.trim() || '',
-    state: prop.address.split(',')[2]?.split(' ')[1] || 'CA',
-    zipCode: '90000',
     yearBuilt: 2020,
-    lotSize: prop.sqft * 2,
+    lotSize: (prop.squareFeet ?? 0) * 2,
     parking: 2,
     features: prop.amenities,
-    squareFeet: prop.sqft,
+    squareFeet: prop.squareFeet ?? 0,
     virtualTourUrl: '',
     status: 'active' as const,
   }));

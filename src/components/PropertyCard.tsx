@@ -26,7 +26,7 @@ import { getFeaturedImage, getPropertyImages } from '@/utils/propertyImages';
 interface PropertyCardProps {
   property: Property;
   onViewDetails: (property: Property) => void;
-  onFavorite: (propertyId: number) => void;
+  onFavorite: (propertyId: string) => void;
   isFavorited?: boolean;
 }
 

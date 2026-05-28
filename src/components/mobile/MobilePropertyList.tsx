@@ -6,9 +6,9 @@ import { Loader2, RefreshCw } from 'lucide-react';
 interface MobilePropertyListProps {
   properties: Property[];
   onViewDetails: (property: Property) => void;
-  onFavorite: (propertyId: number) => void;
+  onFavorite: (propertyId: string) => void;
   onCompare: (property: Property) => void;
-  favorites?: number[];
+  favorites?: string[];
   comparisonList?: Property[];
   onLoadMore?: () => void;
   hasMore?: boolean;

@@ -20,7 +20,7 @@ import { getFeaturedImage } from '@/utils/propertyImages';
 interface SwipeablePropertyCardProps {
   property: Property;
   onViewDetails: (property: Property) => void;
-  onFavorite: (propertyId: number) => void;
+  onFavorite: (propertyId: string) => void;
   onCompare: (property: Property) => void;
   isFavorited?: boolean;
   isInComparison?: boolean;
