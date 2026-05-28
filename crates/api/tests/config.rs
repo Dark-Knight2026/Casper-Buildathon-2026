@@ -13,7 +13,7 @@ use api::ServerConfig;
 /// Env var keys used by `Config::from_env()`. Drives the clear-all phase
 /// of [`set_env_vars`] so individual tests do not need to enumerate which
 /// keys to scrub.
-const CONFIG_ENV_VARS: [&str; 11] = [
+const CONFIG_ENV_VARS: [&str; 12] = [
     "DATABASE_URL",
     "REDIS_URL",
     "SUPABASE_JWT_SECRET",
@@ -25,6 +25,7 @@ const CONFIG_ENV_VARS: [&str; 11] = [
     "S3_ACCESS_KEY",
     "S3_SECRET_KEY",
     "S3_PUBLIC_URL_BASE",
+    "EMAIL_CHANGE_MAX_ATTEMPTS",
 ];
 
 /// Canonical "everything required by `from_env`" set. Reused as the base
@@ -186,6 +187,35 @@ fn from_env_rejects_invalid_port() {
 
     let err = ServerConfig::from_env().unwrap_err();
     assert!(err.to_string().contains("port"), "Unexpected error: {err}");
+}
+
+/// `EMAIL_CHANGE_MAX_ATTEMPTS` is honoured when set. Together with the
+/// integration test in `users.rs` this proves the value flows from env all
+/// the way into `RedisStore::is_email_change_rate_limited`.
+#[test]
+#[serial]
+fn from_env_reads_email_change_max_attempts_override() {
+    set_env_vars(&[REQUIRED_ENV, &[("EMAIL_CHANGE_MAX_ATTEMPTS", "10")]]);
+
+    let config = ServerConfig::from_env().expect("Should succeed with override");
+    assert_eq!(config.email_change_max_attempts, 10);
+}
+
+/// `EMAIL_CHANGE_MAX_ATTEMPTS=0` is rejected at startup. With the rate-limit
+/// gate firing as `count >= 0`, a zero cap would 429 every email-change
+/// request and lock every user out. Fail-fast at boot turns this from a
+/// production outage into a visible boot-log error.
+#[test]
+#[serial]
+fn from_env_rejects_email_change_max_attempts_zero() {
+    set_env_vars(&[REQUIRED_ENV, &[("EMAIL_CHANGE_MAX_ATTEMPTS", "0")]]);
+
+    let err = ServerConfig::from_env().unwrap_err();
+    assert!(
+        err.to_string()
+            .contains("EMAIL_CHANGE_MAX_ATTEMPTS cannot be 0"),
+        "Unexpected error: {err}",
+    );
 }
 
 #[test]

@@ -678,3 +678,53 @@ async fn confirm_email_change_happy_path_upgrades_verification(pool: PgPool) {
         "verification_level must upgrade from 'none' to 'email' via trg_users_sync_verification_level",
     );
 }
+
+/// Pins that `request_email_change` reads its attempt cap from
+/// `ServerConfig::email_change_max_attempts`, not a hardcoded `3`.
+///
+/// The test raises the cap to `5` via `TestOverrides`. With the
+/// configurable plumbing in place, the first five requests must each return
+/// `202` and the sixth must return `429`. A regression that re-introduces a
+/// hardcoded `3` would surface as a `429` on the fourth request, well
+/// before the configured limit.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn request_email_change_respects_configured_attempt_cap(pool: PgPool) {
+    let env = common::setup_test_server_with(
+        pool,
+        true,
+        TestOverrides {
+            email_change_max_attempts: Some(5),
+            ..TestOverrides::default()
+        },
+    )
+    .await;
+
+    let session = common::login_and_extract(&env).await;
+
+    for i in 0..5 {
+        let response = env
+            .server
+            .post("/api/v1/users/me/email")
+            .add_header(COOKIE, format!("access_token={}", session.access_token))
+            .json(&serde_json::json!({ "new_email": format!("rate-{i}@example.com") }))
+            .await;
+        assert_eq!(
+            response.status_code(),
+            StatusCode::ACCEPTED,
+            "request {} of 5 must succeed when cap is 5; a 429 here means the limit is still hardcoded below 5",
+            i + 1,
+        );
+    }
+
+    let blocked = env
+        .server
+        .post("/api/v1/users/me/email")
+        .add_header(COOKIE, format!("access_token={}", session.access_token))
+        .json(&serde_json::json!({ "new_email": "rate-overflow@example.com" }))
+        .await;
+    assert_eq!(
+        blocked.status_code(),
+        StatusCode::TOO_MANY_REQUESTS,
+        "sixth request must 429 once the configured cap of 5 is exhausted",
+    );
+}

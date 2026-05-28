@@ -138,6 +138,11 @@ pub struct TestOverrides {
     /// `StorageError::Transport` so the handler's 500-mapping path can
     /// be observed without wiring up a real S3 backend.
     pub media_storage: Option<SharedMediaStorage>,
+    /// Override for the per-user email-change attempt cap. `None` keeps the
+    /// production default (3). The rate-limit test sets this so it can drive
+    /// the limiter to its boundary in fewer requests than the wall-clock
+    /// window would otherwise force.
+    pub email_change_max_attempts: Option<u64>,
 }
 
 impl Debug for TestOverrides {
@@ -151,6 +156,7 @@ impl Debug for TestOverrides {
                 "media_storage",
                 &self.media_storage.as_ref().map(|_| "MediaStorage"),
             )
+            .field("email_change_max_attempts", &self.email_change_max_attempts)
             .finish()
     }
 }
@@ -199,6 +205,7 @@ pub async fn setup_test_server_with(
         total_supply: TOTAL_SUPPLY,
         s3: None,
         postmark: None,
+        email_change_max_attempts: overrides.email_change_max_attempts.unwrap_or(3),
     };
     let mailer = overrides
         .mailer
@@ -208,7 +215,7 @@ pub async fn setup_test_server_with(
         .unwrap_or_else(|| Arc::new(StubMediaStorage::new()) as SharedMediaStorage);
     let state = Arc::new(AppState {
         db: pool,
-        redis: RedisStore::new(redis_client)
+        redis: RedisStore::new(redis_client, config.email_change_max_attempts)
             .await
             .expect("Failed to connect to Redis"),
         mailer,
