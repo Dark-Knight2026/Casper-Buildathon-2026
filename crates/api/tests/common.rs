@@ -16,7 +16,7 @@
 #![allow(clippy::must_use_candidate)]
 
 use core::fmt::{Debug, Formatter, Result as FmtResult};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use axum::http::{Method, StatusCode};
@@ -267,6 +267,39 @@ impl EmailSender for PermanentMailer {
         Err(EmailError::Permanent(
             "permanent mailer (test fixture)".to_owned(),
         ))
+    }
+}
+
+/// Mailer that records every successfully-sent message in memory.
+///
+/// Used wherever a test needs the plaintext payload that travels only inside
+/// the outbound message: confirmation tokens never land in Redis (Redis stores
+/// only their SHA-256 hash) and are not echoed in the HTTP response under a
+/// real Postmark config, so the only path to that plaintext from a test
+/// harness is intercepting the message body before it would reach an SMTP
+/// relay. Clone the `sent` handle before moving the mailer into
+/// `Arc<dyn EmailSender>` to retain read-back access.
+///
+/// `std::sync::Mutex` (not `tokio::sync::Mutex`) is correct here because
+/// the `send` impl pushes-and-returns without crossing an `.await`; the
+/// lock is released before the future yields.
+#[derive(Debug, Default, Clone)]
+pub struct CapturingMailer {
+    /// Append-only log of every message accepted by `send`. Wrapped in `Arc`
+    /// so a test can clone a read-back handle before moving the mailer into
+    /// the `Arc<dyn EmailSender>` slot on `AppState`.
+    pub sent: Arc<Mutex<Vec<EmailMessage>>>,
+}
+
+#[async_trait]
+impl EmailSender for CapturingMailer {
+    #[inline]
+    async fn send(&self, message: EmailMessage) -> Result<(), EmailError> {
+        self.sent
+            .lock()
+            .expect("CapturingMailer mutex poisoned")
+            .push(message);
+        Ok(())
     }
 }
 

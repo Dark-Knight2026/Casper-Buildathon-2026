@@ -2,9 +2,8 @@
 
 mod common;
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
-use async_trait::async_trait;
 use axum::http::StatusCode;
 use axum_test::http::header::COOKIE;
 use casper_types::{AsymmetricType, PublicKey, SecretKey};
@@ -13,35 +12,8 @@ use serde_json::Value;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::common::TestOverrides;
-use api::providers::{EmailError, EmailMessage, EmailSender};
-
-/// Mailer that records every successfully-sent message in memory.
-///
-/// Used by the email-change happy-path test to recover the plaintext
-/// confirmation token: the token never lands in Redis (Redis stores only
-/// its SHA-256 hash) and is never echoed in the HTTP response, so the
-/// only path to it from a test harness is intercepting the outbound
-/// message body before it reaches a real SMTP relay.
-///
-/// `std::sync::Mutex` (not `tokio::sync::Mutex`) is correct here because
-/// the `send` impl pushes-and-returns without crossing an `.await`; the
-/// lock is released before the future yields.
-#[derive(Debug, Default, Clone)]
-struct CapturingMailer {
-    sent: Arc<Mutex<Vec<EmailMessage>>>,
-}
-
-#[async_trait]
-impl EmailSender for CapturingMailer {
-    async fn send(&self, message: EmailMessage) -> Result<(), EmailError> {
-        self.sent
-            .lock()
-            .expect("CapturingMailer mutex poisoned")
-            .push(message);
-        Ok(())
-    }
-}
+use crate::common::{CapturingMailer, TestOverrides};
+use api::providers::EmailSender;
 
 /// Regression: when `mailer.send` fails inside `request_email_change`, the
 /// handler must roll back the Redis token slot and the rate-limit counter
