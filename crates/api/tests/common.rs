@@ -379,6 +379,48 @@ pub fn mint_access_token_with_backdated_iat(
     .expect("Failed to mint backdated JWT")
 }
 
+/// Mints an access JWT with a caller-supplied `verification_level` claim,
+/// including the `None` (legacy pre-claim token) variant.
+///
+/// The `VerifiedUser<V>` extractor reads the level from the JWT, not from
+/// the user row, so this helper drives gating tests without having to
+/// mutate `users.verification_level` (which is in any case read-only - it
+/// is recomputed by `trg_users_sync_verification_level` from the flag
+/// columns).
+#[inline]
+pub fn mint_access_token_with_level(
+    user_id: UserId,
+    role: UserRole,
+    secret: &str,
+    verification_level: Option<VerificationLevel>,
+) -> String {
+    let now = Utc::now();
+    let exp = now
+        .checked_add_signed(Duration::hours(24))
+        .expect("Valid expiration")
+        .timestamp();
+    let exp_usize = usize::try_from(exp.max(0)).expect("Valid expiration timestamp");
+    let iat_usize = usize::try_from(now.timestamp().max(0)).expect("Valid iat");
+
+    let claims = Claims {
+        sub: user_id,
+        role,
+        exp: exp_usize,
+        iss: JWT_ISSUER.to_owned(),
+        aud: JWT_AUDIENCE.to_owned(),
+        token_type: Some(TokenType::Access),
+        verification_level,
+        jti: Uuid::new_v4(),
+        iat: iat_usize,
+    };
+    encode(
+        &Header::default(),
+        &claims,
+        &EncodingKey::from_secret(secret.as_bytes()),
+    )
+    .expect("Failed to mint JWT with custom level")
+}
+
 /// Seeds an `active` lease where `landlord_id = user_id`.
 ///
 /// Inserts the minimal `properties` row required as a foreign key
