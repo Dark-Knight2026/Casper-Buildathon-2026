@@ -80,6 +80,11 @@ struct RawEnvConfig {
     /// Verified Postmark sender signature used as the `From` address.
     #[serde(default)]
     postmark_from_email: Option<String>,
+    /// Per-user cap on email-change requests within the 24h rolling window.
+    /// Exposed as env so staging or integration runs can raise it without
+    /// recompiling. Pairs with the fixed 24h window enforced in `RedisStore`.
+    #[serde(default = "default_email_change_max_attempts")]
+    email_change_max_attempts: u64,
 }
 
 const fn default_port() -> u16 {
@@ -90,6 +95,9 @@ fn default_cors_origin() -> String {
 }
 fn default_frontend_url() -> String {
     "http://localhost:3000".to_owned()
+}
+const fn default_email_change_max_attempts() -> u64 {
+    3
 }
 
 /// Fallback ICO configuration from `ICO_PRICE_USD` and `ICO_TOTAL_ALLOCATION` env vars.
@@ -188,6 +196,10 @@ pub struct ServerConfig {
     /// `LoggingEmailSender`. Populated by `from_env` only when
     /// `POSTMARK_SERVER_TOKEN` (and `POSTMARK_FROM_EMAIL`) are provided.
     pub postmark: Option<PostmarkConfig>,
+    /// Per-user cap on email-change requests within the 24h rolling window.
+    /// Defaults to 3; raise via `EMAIL_CHANGE_MAX_ATTEMPTS` for staging or
+    /// integration runs. Rejected at startup if 0 (would lock every user out).
+    pub email_change_max_attempts: u64,
 }
 
 impl ServerConfig {
@@ -293,6 +305,7 @@ impl ServerConfig {
             total_supply: raw.total_supply.unwrap_or(TOTAL_SUPPLY),
             s3,
             postmark,
+            email_change_max_attempts: raw.email_change_max_attempts,
         };
 
         config.validate()?;
@@ -320,6 +333,11 @@ impl ServerConfig {
             return Err(ServerError::EnvVar(format!(
                 "SUPABASE_JWT_SECRET must be at least 64 bytes for HS256 security, got {secret_len}"
             )));
+        }
+        if self.email_change_max_attempts == 0 {
+            return Err(ServerError::EnvVar(
+                "EMAIL_CHANGE_MAX_ATTEMPTS cannot be 0 (would lock every user out)".to_owned(),
+            ));
         }
         if let Some(s3) = &self.s3 {
             // Reject any value that lacks an explicit scheme - bare hosts

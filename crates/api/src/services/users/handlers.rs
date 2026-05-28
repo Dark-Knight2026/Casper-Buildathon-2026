@@ -407,9 +407,10 @@ pub async fn delete_me(
 /// touched until the confirmation step succeeds, so a typo in the new
 /// address never leaves the user with a broken email column.
 ///
-/// Per-user rate limit: at most 3 requests per rolling 24h window. A
-/// fresh request from the same user atomically overwrites the previous
-/// pending slot, instantly invalidating the previously-emailed link.
+/// Per-user rate limit: configurable via `EMAIL_CHANGE_MAX_ATTEMPTS`
+/// (default 3) per rolling 24h window. A fresh request from the same
+/// user atomically overwrites the previous pending slot, instantly
+/// invalidating the previously-emailed link.
 ///
 /// Authorization: `AuthUser` (any logged-in user; verification not
 /// required - users must be able to fix typos in their email before

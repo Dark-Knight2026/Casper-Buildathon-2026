@@ -173,10 +173,12 @@ pub async fn main() -> Result<(), ServerError> {
         tracing::error!(error = %e, "Failed to parse REDIS_URL");
         ServerError::EnvVar("Invalid Redis URL".to_owned())
     })?;
-    let redis_store = RedisStore::new(redis_client).await.map_err(|e| {
-        tracing::error!(error = %e, "Failed to connect to Redis");
-        ServerError::EnvVar("Redis connection failed".to_owned())
-    })?;
+    let redis_store = RedisStore::new(redis_client, config.email_change_max_attempts)
+        .await
+        .map_err(|e| {
+            tracing::error!(error = %e, "Failed to connect to Redis");
+            ServerError::EnvVar("Redis connection failed".to_owned())
+        })?;
 
     // Select the mailer based on env config: `POSTMARK_SERVER_TOKEN` set ->
     // Postmark backend, unset -> `LoggingEmailSender` with a warning log.

@@ -21,10 +21,6 @@ const LOGIN_FAIL_WINDOW_SECS: u64 = 60;
 /// morning.
 const EMAIL_CHANGE_TTL: u64 = 24 * 60 * 60;
 
-/// Maximum email-change requests per user within
-/// [`EMAIL_CHANGE_RATE_WINDOW_SECS`].
-const EMAIL_CHANGE_MAX_ATTEMPTS: u64 = 3;
-
 /// Rolling window for the email-change rate limit (24 hours).
 ///
 /// Matches `EMAIL_CHANGE_TTL` so the user cannot churn the
@@ -101,6 +97,11 @@ pub type RedisResult<T> = Result<T, RedisError>;
 #[derive(Debug, Clone)]
 pub struct RedisStore {
     conn: ConnectionManager,
+    /// Per-user cap on email-change requests within the 24h rolling window.
+    ///
+    /// Sourced from `ServerConfig::email_change_max_attempts` so staging or
+    /// integration runs can raise it without recompiling. Default 3.
+    email_change_max_attempts: u64,
 }
 
 impl RedisStore {
@@ -110,9 +111,12 @@ impl RedisStore {
     ///
     /// Returns `RedisError` if the initial connection fails.
     #[inline]
-    pub async fn new(client: Client) -> RedisResult<Self> {
+    pub async fn new(client: Client, email_change_max_attempts: u64) -> RedisResult<Self> {
         let conn = client.get_connection_manager().await?;
-        Ok(Self { conn })
+        Ok(Self {
+            conn,
+            email_change_max_attempts,
+        })
     }
 
     /// Saves a nonce message for the given wallet address.
@@ -345,8 +349,8 @@ impl RedisStore {
         Ok(())
     }
 
-    /// Returns `true` when the user has already exceeded
-    /// [`EMAIL_CHANGE_MAX_ATTEMPTS`] within the rolling window.
+    /// Returns `true` when the user has already exceeded the configured
+    /// email-change attempt cap within the rolling window.
     ///
     /// # Errors
     ///
@@ -356,7 +360,7 @@ impl RedisStore {
         let mut conn = self.conn.clone();
         let key = Self::email_change_attempts_key(user_id);
         let count = conn.get::<_, Option<u64>>(&key).await?;
-        Ok(count.is_some_and(|c| c >= EMAIL_CHANGE_MAX_ATTEMPTS))
+        Ok(count.is_some_and(|c| c >= self.email_change_max_attempts))
     }
 
     /// Records one email-change attempt against the rolling window.
