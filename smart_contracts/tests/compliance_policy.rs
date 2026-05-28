@@ -130,7 +130,7 @@ fn setup(env: HostEnv) -> Context {
         },
     );
 
-    let security_deposit_token = BigCoin::deploy(
+    let mut security_deposit_token = BigCoin::deploy(
         &env,
         BigCoinInitArgs {
             symbol: String::from("USDC"),
@@ -139,6 +139,8 @@ fn setup(env: HostEnv) -> Context {
             initial_supply: U256::from_dec_str("5000000000000000000000000000000").unwrap(),
         },
     );
+    env.set_caller(env.get_account(0));
+    security_deposit_token.transfer(&recipient, &U256::from(10000));
 
     escrow.set_lease(lease.address());
     escrow.set_treasury(env.get_account(19));
@@ -905,9 +907,16 @@ fn test_equity_lease_finalization_blocks_compliance_transfer() {
         .lease
         .create_lease_agreement(CreateLeaseAgreementParams {
             tenant: ctx.recipient,
+            rent_distribution_terms: RentDistributionTerms {
+                property_manager: None,
+                property_manager_bps: 0,
+            },
             equity_option: Some(LeaseEquityOption { property_id }),
             monthly_rent: CurrencyAmount::new(None, U256::from(100)),
-            security_deposit: CurrencyAmount::new(None, U256::from(500)),
+            security_deposit: CurrencyAmount::new(
+                Some(ctx.security_deposit_token.address()),
+                U256::from(500),
+            ),
             start: ctx.env.block_time(),
             end: ctx.env.block_time() + ONE_MONTH_IN_SECONDS,
             invoice_validity_duration: ctx.escrow.get_min_deadline(),
@@ -925,13 +934,24 @@ fn test_equity_lease_finalization_blocks_compliance_transfer() {
     // 3. Pay all invoices
     let mut lease_agreement = ctx.lease.get_lease_agreement_by_id(&lease_agreement_id);
     ctx.env.set_caller(ctx.recipient);
-    ctx.escrow
-        .with_tokens(lease_agreement.security_deposit.amount().to_u512())
-        .pay_invoice(lease_agreement.invoices_ids[0]);
+
+    // Approve and pay security deposit (CEP-18 token)
+    ctx.security_deposit_token.approve(
+        &ctx.escrow.address(),
+        lease_agreement.security_deposit.amount(),
+    );
+    ctx.escrow.pay_invoice(
+        lease_agreement.invoices_ids[0],
+        *lease_agreement.security_deposit.amount(),
+    );
+
+    // Pay rent invoices (native CSPR), accounting for 2% protocol fee
     for invoice_id in lease_agreement.invoices_ids.iter().skip(1) {
+        let rent = *lease_agreement.monthly_rent.amount();
+        let amount = rent * U256::from(50u32) / U256::from(49u32);
         ctx.escrow
-            .with_tokens(lease_agreement.monthly_rent.amount().to_u512())
-            .pay_invoice(*invoice_id);
+            .with_tokens(amount.to_u512())
+            .pay_invoice(*invoice_id, amount);
     }
 
     // 4. Finalize the lease
