@@ -33,8 +33,11 @@ pub mod types {
         /// @dev The property must still be active in `PropertyRegistry`.
         pub transfers_enabled: bool,
         /// Requires issuer/landlord/protocol equity distributions to go only to tenants
-        /// with an equity-option lease for this property
-        /// @dev This applies only when the sender is transfer-exempt and the recipient is not.
+        /// with an equity-option lease for this property.
+        /// @dev When enabled, any transfer from a transfer-exempt sender to a non-exempt
+        ///      recipient is treated as an equity distribution and requires lease eligibility.
+        ///      Other exempt-to-non-exempt transfers (treasury refunds, vesting payouts, etc.)
+        ///      on the same token will be incorrectly blocked if the recipient has no equity lease.
         ///      Secondary investor-to-investor transfers still use normal KYC/compliance checks.
         pub equity_distribution_requires_lease_option: bool,
     }
