@@ -26,6 +26,12 @@ struct RawEnvConfig {
     port: u16,
     #[serde(default = "default_cors_origin")]
     cors_origin: String,
+    /// Outer request-body ceiling in MiB. Mirrored into nginx at deploy time
+    /// (see `deploy/nginx/https.conf.template`); both layers MUST stay in sync
+    /// so the per-handler 413 contract responds before either edge clips the
+    /// stream. Defaults to 8 MiB.
+    #[serde(default = "default_request_body_limit_mb")]
+    request_body_limit_mb: u32,
     /// `Secure` flag toggle for auth cookies. Production/staging deploys must
     /// set `COOKIE_SECURE=true` so HTTPS-only delivery is enforced.
     #[serde(default)]
@@ -73,6 +79,9 @@ const fn default_port() -> u16 {
 }
 fn default_cors_origin() -> String {
     "http://localhost:8080".to_owned()
+}
+const fn default_request_body_limit_mb() -> u32 {
+    8
 }
 
 /// Fallback ICO configuration from `ICO_PRICE_USD` and `ICO_TOTAL_ALLOCATION` env vars.
@@ -131,6 +140,16 @@ pub struct ServerConfig {
     pub port: u16,
     /// Allowed CORS origin.
     pub cors_origin: String,
+    /// Outer request-body ceiling in MiB, applied uniformly across the router
+    /// via `DefaultBodyLimit` and `RequestBodyLimitLayer` in [`crate::server::create_app`].
+    ///
+    /// Mirrored into nginx (`client_max_body_size`) at deploy time from the same
+    /// `REQUEST_BODY_LIMIT_MB` env var; the two layers MUST stay in sync. Per-handler
+    /// caps (e.g. `MAX_AVATAR_BYTES`) cut further inside the request lifecycle and
+    /// rely on ~3 MiB of multipart headroom above the largest of them, otherwise
+    /// `multer` surfaces an oversize body as `IncompleteFieldData -> 400` instead
+    /// of the documented `413`.
+    pub request_body_limit_mb: u32,
     /// Whether auth cookies are issued with the `Secure` flag. Must be `true`
     /// in any HTTPS deployment, must be `false` for plain-HTTP local dev (the
     /// browser silently drops `Secure` cookies on `http://`, which would break
@@ -230,6 +249,7 @@ impl ServerConfig {
             jwt_secret: raw.supabase_jwt_secret,
             port: raw.port,
             cors_origin: raw.cors_origin,
+            request_body_limit_mb: raw.request_body_limit_mb,
             cookie_secure: raw.cookie_secure,
             contract_big: raw.contract_big.map(|s| s.to_ascii_lowercase()),
             ico_fallback,
@@ -251,6 +271,11 @@ impl ServerConfig {
         }
         if self.port == 0 {
             return Err(ServerError::EnvVar("PORT cannot be 0".to_owned()));
+        }
+        if self.request_body_limit_mb == 0 {
+            return Err(ServerError::EnvVar(
+                "REQUEST_BODY_LIMIT_MB must be at least 1".to_owned(),
+            ));
         }
         if !self.cors_origin.starts_with("http://") && !self.cors_origin.starts_with("https://") {
             return Err(ServerError::EnvVar(

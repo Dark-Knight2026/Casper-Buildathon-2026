@@ -51,32 +51,6 @@ pub fn create_router(state: Arc<AppState>) -> Router {
     router
 }
 
-/// Maximum request body size (8 MB).
-///
-/// Sized with deliberate headroom over the avatar handler's
-/// `MAX_AVATAR_BYTES = 5 MB` per-field cap. The handler-level check
-/// (`if bytes.len() > MAX_AVATAR_BYTES`) is the authoritative gate; this
-/// outer layer only catches absurdly oversized requests so they cannot
-/// burn server memory on multipart parsing.
-///
-/// The headroom is required because of how `multer` classifies streaming
-/// errors. If this outer limit fires *mid-stream* during a field body
-/// read, `multer` produces `IncompleteFieldData` (its "the field's
-/// terminator never arrived" variant) which axum maps to `400 BadRequest`,
-/// not 413. With ~3 MB of headroom over `MAX_AVATAR_BYTES`, a legitimate
-/// 5-MB-cap upload (plus multipart overhead) parses end-to-end before
-/// the handler's `bytes.len()` check fires cleanly with the documented
-/// 413. Anything truly absurd (>8 MB) trips this outer layer and surfaces
-/// as a generic 400/500 - acceptable for the abuse path that the
-/// per-handler check is designed not to need to cover.
-///
-/// The same value is also wired into `axum::extract::DefaultBodyLimit::max`
-/// in [`create_app`]: axum's default (2 MB) would trip in the multipart
-/// extractor at 2 MB regardless of this outer cap, again surfacing as 400,
-/// pinning both layers to the same ceiling means only one knob controls
-/// the per-route headroom.
-const REQUEST_BODY_LIMIT: usize = 8 * 1024 * 1024;
-
 /// Builds the full application router with production middleware (CORS, tracing, body limit).
 ///
 /// # Errors
@@ -111,17 +85,19 @@ pub fn create_app(state: Arc<AppState>) -> Result<Router, ServerError> {
         .allow_headers([CONTENT_TYPE])
         .allow_credentials(true);
 
+    // Outer body cap (sized in MiB via `REQUEST_BODY_LIMIT_MB`, mirrored into
+    // nginx at deploy time so both edges share the same ceiling). Applied to
+    // BOTH `DefaultBodyLimit` and `RequestBodyLimitLayer`: axum's 2 MiB default
+    // would otherwise clip multipart streams above 2 MiB before the eager
+    // Content-Length check fires, surfacing as a `MultipartError -> 400`
+    // instead of the documented 413 from per-handler caps (e.g. `MAX_AVATAR_BYTES`).
+    let body_limit_bytes = (state.config.request_body_limit_mb as usize) * 1024 * 1024;
+
     Ok(create_router(state)
         .layer(cors)
         .layer(TraceLayer::new_for_http())
-        // Widen axum's default (2 MB) up to the same ceiling as tower's
-        // outer layer. Without this, multipart uploads above 2 MB trip
-        // axum's body limit during streaming before the outer layer's
-        // eager Content-Length check fires - the avatar handler then
-        // sees a `MultipartError` and surfaces a 400, never reaching
-        // the documented 413 contract for oversize payloads.
-        .layer(DefaultBodyLimit::max(REQUEST_BODY_LIMIT))
-        .layer(RequestBodyLimitLayer::new(REQUEST_BODY_LIMIT)))
+        .layer(DefaultBodyLimit::max(body_limit_bytes))
+        .layer(RequestBodyLimitLayer::new(body_limit_bytes)))
 }
 
 /// Starts the application server.
