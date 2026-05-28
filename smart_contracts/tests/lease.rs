@@ -891,6 +891,32 @@ fn test_equity_eligibility_is_revoked_after_lease_finalization() {
 }
 
 #[test]
+fn test_finalize_already_finalized_lease_should_revert() {
+    let mut test_data = setup(odra_test::env());
+    let params = generate_lease_agreement_creation_params(&test_data);
+    let lease_agreement_id = test_data.lease.create_lease_agreement(params.clone());
+
+    pay_all_lease_agreement_invoices(&mut test_data, &lease_agreement_id);
+
+    test_data
+        .env
+        .advance_block_time(test_data.env.block_time() + (ONE_MONTH_IN_SECONDS * 12));
+    test_data
+        .lease
+        .finalize_lease_agreement(&lease_agreement_id, &U256::zero());
+
+    // Second finalize should revert
+    assert_eq!(
+        test_data
+            .lease
+            .try_finalize_lease_agreement(&lease_agreement_id, &U256::zero())
+            .unwrap_err(),
+        Error::LeaseAlreadyFinalized.into(),
+        "Should revert when lease agreement is already finalized"
+    );
+}
+
+#[test]
 fn test_prolong_lease_with_equity_option_preserves_eligibility() {
     let mut test_data = setup(odra_test::env());
     let mut params = generate_lease_agreement_creation_params(&test_data);
@@ -1125,4 +1151,37 @@ fn test_prolong_lease_agreement_should_prolong_lease_agreement_and_create_new_in
             i
         );
     }
+}
+
+#[test]
+fn test_prolong_finalized_lease_should_revert() {
+    let mut test_data = setup(odra_test::env());
+    let params = generate_lease_agreement_creation_params(&test_data);
+    let lease_agreement_id = test_data.lease.create_lease_agreement(params.clone());
+    let lease_agreement = test_data
+        .lease
+        .get_lease_agreement_by_id(&lease_agreement_id);
+
+    pay_all_lease_agreement_invoices(&mut test_data, &lease_agreement_id);
+
+    test_data
+        .env
+        .advance_block_time(test_data.env.block_time() + (ONE_MONTH_IN_SECONDS * 12));
+    test_data
+        .lease
+        .finalize_lease_agreement(&lease_agreement_id, &U256::zero());
+
+    // Prolong after finalization should revert
+    assert_eq!(
+        test_data
+            .lease
+            .try_prolong_lease_agreement(
+                &lease_agreement_id,
+                lease_agreement.end + ONE_MONTH_IN_SECONDS,
+                test_data.escrow.get_min_deadline(),
+            )
+            .unwrap_err(),
+        Error::LeaseAlreadyFinalized.into(),
+        "Should revert when trying to prolong an already-finalized lease"
+    );
 }
