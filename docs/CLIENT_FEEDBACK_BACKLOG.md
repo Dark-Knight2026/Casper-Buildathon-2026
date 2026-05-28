@@ -34,7 +34,7 @@ Tasks 17–26 were captured on **2026-05-26** after Anthony shared
 | 23 | Lease signing journey — wizard + counter-sign (§6)         | 🔲 pending        |
 | 24 | Dispute filing UI (§7)                                     | 🔲 pending⁵       |
 | 25 | `<TransactionStatus/>` shared state-machine (§8)           | 🔲 pending        |
-| 26 | `<KYCGate/>` minimal (email-only for MVP) (§10)            | 🔲 pending        |
+| 26 | `<KYCGate/>` around Sumsub WebSDK (no extra compliance layers) (§10) | 🔲 pending        |
 
 ¹ Demo = UI is final, but the backend integration is mocked. Open product
 questions and required endpoints are documented at the top of
@@ -857,11 +857,15 @@ scope questions (palette swap, sidebar vs header, wallet visibility).
 2. **Dispute filing UI (§7).** Critical 6 spine includes it; Anthony has
    not explicitly pulled it into Phase 1. Kenneth is building the SC
    side. Confirm whether FE files in Phase 1 or Phase 1.1.
-3. **KYC scope (§10).** Anthony explicitly excluded AML / CDD / biometric.
-   What remains: email-verification (Ivan is wiring Postmark) and
-   possibly Casper-name purchase (moved to Phase 2 on 2026-05-20).
-   Confirm that `<KYCGate/>` for MVP reduces to email-verified gating
-   only.
+3. **KYC scope (§10).** Anthony's 2026-05-20 call: Sumsub is the sole
+   KYC service for MVP per ADR-002 (confirmed in Dev_Team_Brief item 4
+   and ADR-004 §Phase 0). What he excluded are **additional compliance
+   layers on top of Sumsub** — no separate AML / CDD list lookup, no
+   standalone OFAC sanctions API, no extra biometric handling beyond
+   what Sumsub does internally, no third-party screening. We hold only
+   `sumsub_applicant_id + kyc_status + timestamp` in our DB; documents
+   stream browser → Sumsub directly. Casper-name purchase as a separate
+   KYC step is Phase 2.
 
 ### Backend endpoints required
 
@@ -1428,65 +1432,89 @@ toast. Cross-cuts every on-chain flow.
 
 ---
 
-## Task 26 — `<KYCGate/>` Minimal (Design Reference §10)
+## Task 26 — `<KYCGate/>` around Sumsub WebSDK (Design Reference §10)
 
 ### Source
 
 `docs/client-doc/leasefi-design-reference.html` §10 "KYCGate &
-attestation-pending state". Scope inheritance: **Task 17** + Anthony's
-2026-05-20 call ("no AML/CDD/biometric handling").
+attestation-pending state". Scope inheritance: **Task 17** +
+Dev_Team_Brief item 4 (Sumsub accepted as MVP KYC provider, integration
+shape provider-agnostic, per ADR-002) + ADR-004 §Phase 0 (`Onboarding
+with Sumsub KYC at user onboarding`) + Anthony's 2026-05-20 call ("no
+AML/CDD/biometric handling **on top of Sumsub**").
 
 ### Goal
 
-A minimal wrapper that gates sensitive actions (sign lease, pay rent,
-fund deposit) on email verification only. AML / CDD / biometric / OFAC
-screening are explicitly out of scope for MVP.
+A wrapper that gates fee-bearing actions (sign lease, pay rent, fund
+deposit) on Sumsub-verified KYC status. Sumsub is the **sole** KYC
+service — no separate AML lookup, OFAC API, or biometric layer on top.
+Sumsub handles identity, document checks, and liveness internally; we
+only consume the `applicant_id + status + timestamp` triple via webhook.
 
 ### Acceptance criteria
 
-- New shared component `src/components/shared/KYCGate.tsx` with two states:
-  - `verify` — renders "Verify your identity" panel with a
-    `Resend code / Open inbox` CTA (delegates to Ivan's Postmark flow).
-  - `attestation-pending` — renders "Recording your verification"
-    with a spinner.
-- New hook `src/hooks/useKYCGate.ts` returning
-  `{ verified, pending, request }`. Wraps the email-verification
-  endpoints Ivan is wiring.
-- Integration points (each calls `useKYCGate()` and shows the gate UI
+- New shared component `src/components/shared/KYCGate.tsx` with two
+  states matching design reference §10:
+  - `kyc-required` (blocking) — renders "Verify your identity" panel
+    with `Start verification` CTA that opens the Sumsub WebSDK widget;
+    documents stream browser → Sumsub directly.
+  - `pending-attestation` (~30 s transient) — renders "Recording your
+    verification" with a progress indicator while the BE persists the
+    Sumsub webhook callback and (in later phases) writes the on-chain
+    attestation.
+- New hook `src/hooks/useKYCStatus.ts` returning
+  `{ status, tier, pending, openWidget }`. Provider-abstracted shape
+  (default `APIKYCSource`; future `AttestationKYCSource` swap-in
+  without product-code rewrite) — consume `useKYCStatus(address)` only,
+  never the source directly.
+- Integration points (each calls `useKYCStatus()` and shows the gate UI
   before the destructive action):
   - `MakePayment` (Task 20)
   - `LeaseWizard Step 6` (Task 23)
   - `Deposit funding` (Task 23 sub-screen Tx B)
   - `DisputeFile` (Task 24, if Phase 1)
-- No biometric, no document upload, no third-party screening. Email-only.
-- Casper-name purchase as a KYC step is **Phase 2** (Anthony, 2026-05-20).
+- **Out of scope on top of Sumsub** (per Anthony 2026-05-20): separate
+  AML / CDD list lookup, standalone OFAC sanctions screening, third-party
+  document-tampering services (Snappt etc.), additional biometric
+  liveness layers. Sumsub's built-in checks are the entire KYC surface
+  for MVP.
+- Casper-name purchase as a separate KYC step is **Phase 2** (Anthony,
+  2026-05-20).
+- Tier insufficiency (e.g. Tier 1 user attempting a Tier 2 action) is
+  NOT a compliance failure — show the actual reason ("Tier 2 required").
+  OFAC / sanctions / jurisdiction blocks collapse to the generic
+  `<ComplianceFailure/>` surface from §9 per BSA §314 (separate task,
+  out of MVP).
 
 ### Open product questions
 
-1. Re-verification cadence — does email verification expire (90 days)
-   or persist indefinitely until email changes? Reference doesn't say.
+1. Re-verification cadence — design reference says 30 d before expiry
+   → banner, 7 d → modal interrupt, day-of → hard block. Confirm we
+   adopt those thresholds 1:1, or relax for pilot.
 2. Multiple-action gating — if the user verifies once during the lease
    signing flow, does it pre-clear them for a same-session payment?
    Suggest yes — single gate per session.
-3. Block vs nudge — if email is unverified, do we hard-block the action
-   or soft-nudge with a "Verify to continue" inline banner? Hard-block
-   on EIP-712 ceremonies; nudge elsewhere.
+3. Wallet rotation — design reference §10 calls out that each wallet
+   KYCs independently as a Phase 1 limitation. Confirm we surface this
+   in copy rather than hide it.
 
 ### Backend endpoints required
 
-- `POST /api/v1/users/me/email/verify-send` — Ivan's Postmark queue.
-- `POST /api/v1/users/me/email/verify-confirm` — Ivan, with token.
-- `GET /api/v1/users/me/kyc-state` — `{ emailVerified, lastVerifiedAt }`.
+- BE creates Sumsub applicant on first sensitive-action attempt and
+  returns the widget access token.
+- BE handles the Sumsub verification webhook (status transitions:
+  `init` → `pending` → `completed`/`rejected`).
+- `GET /api/v1/users/me/kyc-state` — returns
+  `{ status, tier, lastVerifiedAt, applicantId }`. Persisted fields on
+  user: `sumsub_applicant_id`, `kyc_status`, `kyc_verified_at` — nothing
+  else from Sumsub leaves their infrastructure.
 
 ### Demo files (when implemented)
 
 - `src/components/shared/KYCGate.tsx` — new
-- `src/hooks/useKYCGate.ts` — new
+- `src/hooks/useKYCStatus.ts` — new
+- `src/lib/kyc/APIKYCSource.ts` — provider-agnostic source wrapper
 - Integration adapters in Tasks 20, 23, 24.
-
-### Estimated effort
-
-~10 h for the wrapper itself + ~2 h per integration point.
 
 ---
 

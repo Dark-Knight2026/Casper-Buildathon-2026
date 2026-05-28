@@ -68,7 +68,7 @@ version-updated: 2026-05-27T00:00:00Z
   - `src/pages/tenant/TenantProfile.tsx` → `AuthContext.updateProfile` (`PATCH /api/v1/users/me`) + `uploadAvatar` (`POST /api/v1/users/me/avatar`, S3). `RoleSwitchDialog` → `patchMyRole` with reauth gate.
   - ⚠️ This is the tenant profile page. No dedicated landlord/PM profile-edit pages (see §3.2).
 
-> _Design-reference cross-cut:_ **Task 26** — `<KYCGate/>` minimal wrapper (email-only for MVP) gates sensitive actions. AML/CDD/biometric explicitly out of scope per Anthony 2026-05-20.
+> _Design-reference cross-cut:_ **Task 26** — `<KYCGate/>` wrapper around the Sumsub WebSDK widget gates sensitive actions (sign lease, pay rent, fund deposit). Per Anthony 2026-05-20: Sumsub is the sole KYC service — no separate AML/CDD lookup, OFAC API, or extra biometric layer on top (Sumsub handles identity, document checks, and liveness internally). We store only `sumsub_applicant_id + kyc_status + timestamp`.
 
 ## §3.2 Profiles (3 roles)
 
@@ -193,7 +193,7 @@ version-updated: 2026-05-27T00:00:00Z
 12. `<PreSignatureConfirmation/>` shared modal — parameterized for 6 EIP-712 ceremonies, pure FE (Task 21).
 13. `<TransactionStatus/>` state machine + header pill — stub with mock states, integration later (Task 25).
 14. `<FeeDisplay/>` shared breakdown component + canonical button-label format (Task 20).
-15. `<KYCGate/>` wrapper + `useKYCGate()` hook signature, placeholder request — wire to Postmark once Ivan ships (Task 26).
+15. `<KYCGate/>` wrapper + `useKYCStatus()` hook signature around the Sumsub WebSDK widget — provider-agnostic shape (default `APIKYCSource`); wire to the live Sumsub webhook status once BE ships (Task 26).
 16. Tenant-home restructure with hero `Active lease` + recent-activity list — keep on existing `MOCK_LEASE`/`MOCK_PAYMENTS` until §3.7 BE lands (Task 18).
 17. PM dashboard portfolio table + status-pill deep-links — runs on `MOCK_LANDLORD_*` fixtures (Task 19).
 
