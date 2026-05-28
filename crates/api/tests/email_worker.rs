@@ -86,6 +86,14 @@ async fn force_due_now(pool: &PgPool, id: Uuid) {
     .expect("force row due now");
 }
 
+/// Wraps a sender in `Arc<dyn EmailSender>` so test sites read without `dyn`.
+///
+/// `process_retries` takes `&Arc<dyn EmailSender>`, and the `Arc<T> -> Arc<dyn
+/// Trait>` coercion only fires when the target type is visible at the
+/// construction site. Behind a borrow it does not, so a bare
+/// `Arc::new(OkMailer)` produces `Arc<OkMailer>` and the call site cannot pass
+/// it. Funnelling the trait-object cast through one helper keeps every test
+/// body free of the `dyn` noise.
 fn shared<S>(sender: S) -> Arc<dyn EmailSender>
 where
     S: EmailSender + 'static,
