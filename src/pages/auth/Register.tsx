@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useWalletConnect } from '@/hooks/auth/useWalletConnect';
+import { clearCsprClickStorage } from '@/lib/csprclick';
 
 import { RoleSelector } from './register/RoleSelector';
 import { ProviderList } from './register/ProviderList';
@@ -47,12 +48,14 @@ export default function Register() {
     if (!clickRef) return;
     clickRef.signOut();
     try {
-      Object.keys(localStorage).forEach(key => {
-        if (key.startsWith('csprclick:')) localStorage.removeItem(key);
-      });
+      // Mirror handleResetConnection: drop the leasefi_session marker so
+      // AuthContext's optimistic restore doesn't briefly report the user as
+      // signed in on a Register revisit (until the first 401 clears it).
+      localStorage.removeItem('leasefi_session');
     } catch {
       // localStorage unavailable.
     }
+    clearCsprClickStorage();
   }, [clickRef]);
 
   // See Login.tsx for rationale — the inline "Use a different account"
@@ -65,12 +68,10 @@ export default function Register() {
     await disconnect();
     try {
       localStorage.removeItem('leasefi_session');
-      Object.keys(localStorage).forEach(key => {
-        if (key.startsWith('csprclick:')) localStorage.removeItem(key);
-      });
     } catch {
       // localStorage may be disabled (private mode, embedded webview).
     }
+    clearCsprClickStorage();
     // AuthContext state is intentionally NOT reset here — `location.reload()`
     // unmounts the whole React tree, so the provider is rebuilt clean on the
     // next mount. If this is ever swapped for `navigate(...)` (soft routing),

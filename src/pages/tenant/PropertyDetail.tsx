@@ -153,7 +153,9 @@ export default function PropertyDetail() {
       redirectPath: window.location.pathname,
     });
     if (canProceed && property) {
-      navigate('/tenant/application', { state: { propertyId: property.id } });
+      navigate('/tenant/application', {
+        state: { propertyId: property.id, landlordId: property.landlordId },
+      });
     }
   };
 
@@ -618,6 +620,7 @@ export default function PropertyDetail() {
         onClose={() => setShowScheduleModal(false)}
         propertyId={property.id}
         propertyAddress={`${property.address}, ${property.city}, ${property.state}`}
+        landlordId={property.landlordId}
       />
 
       {/* Guest auth prompt — opens whenever requireAuth() is called by a

@@ -40,16 +40,22 @@ interface PropertyMarker extends Property {
   lng: number;
 }
 
-// Mock coordinates for demonstration - in real implementation, these would come from geocoding
+// Mock coordinates for demonstration. Prefer canonical `latitude`/`longitude`
+// when the property carries them; otherwise derive a deterministic placeholder
+// from a numeric hash of the (string) id so cards still scatter on the map.
 const generateMockCoordinates = (property: Property): { lat: number; lng: number } => {
-  // Generate coordinates based on property ID for consistency
+  if (property.latitude != null && property.longitude != null) {
+    return { lat: property.latitude, lng: property.longitude };
+  }
   const baseLatitudes = [40.7128, 34.0522, 41.8781, 29.7604, 39.7392]; // NYC, LA, Chicago, Houston, Denver
   const baseLongitudes = [-74.0060, -118.2437, -87.6298, -95.3698, -104.9903];
-  
-  const index = property.id % baseLatitudes.length;
-  const lat = baseLatitudes[index] + (Math.sin(property.id) * 0.1);
-  const lng = baseLongitudes[index] + (Math.cos(property.id) * 0.1);
-  
+  // Stable hash from the string id — sufficient determinism for demo purposes.
+  let hash = 0;
+  for (const ch of property.id) hash = (hash * 31 + ch.charCodeAt(0)) | 0;
+  const seed = Math.abs(hash);
+  const index = seed % baseLatitudes.length;
+  const lat = baseLatitudes[index] + (Math.sin(seed) * 0.1);
+  const lng = baseLongitudes[index] + (Math.cos(seed) * 0.1);
   return { lat, lng };
 };
 

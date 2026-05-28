@@ -3,6 +3,7 @@ import { render, screen, fireEvent, within } from '@testing-library/react';
 
 import { FeaturedProperties } from '@/components/FeaturedProperties';
 import { FEATURED_PROPERTIES } from '@/data/featuredProperties';
+import { AuthContext } from '@/contexts/AuthContextDefinition';
 
 const mockNavigate = vi.fn();
 
@@ -12,8 +13,25 @@ vi.mock('react-router-dom', () => ({
 
 const [first, second] = FEATURED_PROPERTIES;
 
+// PropertyCard renders SavePropertyButton → useAuthPrompt → useAuth, which
+// throws unless an AuthContext is present. Supply a guest value directly via
+// the context (real AuthProvider would also fire refreshSession on mount —
+// avoided here to keep the test free of network stubs).
+const guestAuthValue = {
+  profile: null,
+  loading: false,
+  setWalletSession: vi.fn(),
+  updateProfile: vi.fn().mockResolvedValue(undefined),
+  refreshProfile: vi.fn().mockResolvedValue(undefined),
+  walletSignOut: vi.fn(),
+};
+
 function renderComponent() {
-  return render(<FeaturedProperties />);
+  return render(
+    <AuthContext.Provider value={guestAuthValue}>
+      <FeaturedProperties />
+    </AuthContext.Provider>
+  );
 }
 
 describe('FeaturedProperties', () => {

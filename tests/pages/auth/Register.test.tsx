@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 const mockUseWalletConnect = vi.fn();
@@ -193,7 +193,7 @@ describe('Register', () => {
       ).toBeInTheDocument();
     });
 
-    it('"Use a different account" link calls disconnect and reloads', () => {
+    it('"Use a different account" link calls disconnect and reloads', async () => {
       const disconnect = vi.fn();
       const reloadSpy = vi.fn();
       Object.defineProperty(window, 'location', {
@@ -205,10 +205,14 @@ describe('Register', () => {
       renderRegister();
       fireEvent.click(screen.getByRole('button', { name: /use a different account/i }));
       expect(disconnect, 'switch flow must invoke useWalletConnect.disconnect').toHaveBeenCalled();
-      expect(
-        reloadSpy,
-        'switch flow must hard-reload to wipe in-memory CSPR.click SDK cache'
-      ).toHaveBeenCalled();
+      // handleResetConnection awaits disconnect() before calling reload — wait
+      // for the post-await side effects to flush.
+      await waitFor(() =>
+        expect(
+          reloadSpy,
+          'switch flow must hard-reload to wipe in-memory CSPR.click SDK cache'
+        ).toHaveBeenCalled()
+      );
     });
   });
 
@@ -294,7 +298,7 @@ describe('Register', () => {
       ).toBeInTheDocument();
     });
 
-    it('click invokes disconnect, strips csprclick:* + leasefi_session, then reloads', () => {
+    it('click invokes disconnect, strips csprclick:* + leasefi_session, then reloads', async () => {
       const disconnect = vi.fn();
       const reloadSpy = vi.fn();
       Object.defineProperty(window, 'location', {
@@ -313,6 +317,14 @@ describe('Register', () => {
       fireEvent.click(screen.getByRole('button', { name: /trouble signing in/i }));
 
       expect(disconnect, 'reset flow must release the wallet session via the SDK').toHaveBeenCalledTimes(1);
+      // handleResetConnection is async (await disconnect() then localStorage
+      // cleanup + reload) — wait for the post-await side effects to flush.
+      await waitFor(() =>
+        expect(
+          reloadSpy,
+          'hard reload is what actually rebuilds AuthContext and the SDK from a clean slate'
+        ).toHaveBeenCalledTimes(1)
+      );
       expect(
         localStorage.getItem('leasefi_session'),
         'session marker must go — otherwise ProtectedRoute keeps showing a stale signed-in UI'
@@ -323,10 +335,6 @@ describe('Register', () => {
         localStorage.getItem('foreign:other'),
         'only `csprclick:` prefix is stripped — unrelated keys must survive'
       ).toBe('keep-me');
-      expect(
-        reloadSpy,
-        'hard reload is what actually rebuilds AuthContext and the SDK from a clean slate'
-      ).toHaveBeenCalledTimes(1);
     });
   });
 });

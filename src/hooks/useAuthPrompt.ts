@@ -22,7 +22,7 @@ interface AuthPromptOptions {
 }
 
 export function useAuthPrompt() {
-  const { user, isAuthenticated } = useAuth();
+  const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const [isPromptOpen, setIsPromptOpen] = useState(false);
   const [promptContext, setPromptContext] = useState<AuthPromptOptions | null>(null);
@@ -79,8 +79,14 @@ export function useAuthPrompt() {
     // Close prompt
     closePrompt();
 
-    // Redirect if path was specified
-    if (redirectPath) {
+    // Redirect if path was specified — but only to a same-origin relative
+    // path. localStorage is writable by any same-origin script (extensions,
+    // injected XSS payloads) and the redirect happens after a privileged
+    // action (login), so unvalidated paths are an open-redirect vector.
+    // A protocol-relative `//evil.com/...` would be treated by react-router
+    // as a path under the current origin, but still surprises the user — we
+    // require a single leading `/` and reject `//`.
+    if (redirectPath && redirectPath.startsWith('/') && !redirectPath.startsWith('//')) {
       navigate(redirectPath);
     }
   }, [promptContext, navigate, closePrompt]);

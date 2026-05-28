@@ -54,9 +54,15 @@ Landlord-specific differences:
   - Maintenance `/landlord/maintenance`
   - Renewals `/landlord/renewals`
   - Messages `/landlord/messages` (added in Part B)
-- Header right-side actions: `[Add Property]` → `/landlord/properties/create`,
-  `[Create Lease]` → `/landlord/leases/new` (carry over the dashboard's primary
-  actions to every landlord page).
+- Header right-side actions: **Help**, **Sign Out**, **HeaderAvatar**.
+  The original plan called for `[Add Property]` / `[Create Lease]` action
+  buttons in the persistent header, but the desktop header at ≥1200 px already
+  carries the full primary nav (Dashboard, Properties, Applications, Tenants,
+  Leases, Payments, Maintenance, Renewals, Messages) — there isn't horizontal
+  room for two more action buttons without breaking the layout or hiding nav
+  links behind a menu. The two CTAs live on the **dashboard surface itself**
+  (`pages/landlord/LandlordDashboard.tsx`) instead, where they are
+  prominently visible without competing with the nav.
 - `HeaderAvatar` links to **`/landlord/profile`** (decision #1).
 - Reuse the `'Wallet'/'User'` placeholder-initials guard from `TenantLayout`.
 
@@ -110,9 +116,11 @@ the tenant pattern ("single `ProtectedRoute` on the parent"):
 - Add landlord-specific section per **spec §3.2** ("owned properties, active
   leases, received rent") — composed from existing widgets
   (`StatCard`, `DashboardCard`) with mock data (Part D).
-- Reuse `src/components/client/LandlordProfileForm.tsx` for landlord-only
-  fields where it fits; flag its `clientId`/ClientLandlord data-model nuance
-  for review rather than forcing it.
+- Skip `src/components/client/LandlordProfileForm.tsx` — it is built around
+  the agent CRM's `clientId`/ClientLandlord data model (not the auth
+  `UserProfile`), so reusing it would force a foreign data model onto the
+  self-service profile page. The few overlapping fields are cheaper to
+  inline.
 - No backend profile endpoint for landlords → mock + `// TODO(BE)` marker.
 
 ## Part D — de-Supabase + mock data (expanded scope)
@@ -143,14 +151,15 @@ loading/error UI; keep existing state shapes and JSX untouched; add
 - [ ] `pages/landlord/LandlordMaintenance.tsx`
 - [ ] `pages/landlord/LandlordRenewals.tsx`
 - [ ] `pages/landlord/LandlordTenants.tsx`
-- [ ] `pages/landlord/properties/PropertyList.tsx`
-- [ ] `pages/landlord/properties/PropertyCreate.tsx`
+- [x] `pages/landlord/properties/PropertyList.tsx` — done; Supabase removed, `useAuth().profile?.id` for ownership
+- [x] `pages/landlord/properties/PropertyCreate.tsx` — done; Supabase removed
 - [ ] `pages/landlord/properties/PropertyDetail.tsx`
-- [ ] `pages/landlord/properties/PropertyEdit.tsx`
+- [x] `pages/landlord/properties/PropertyEdit.tsx` — done; Supabase removed, `useAuth().profile?.id` (Review #4 Quality finding)
 - [ ] `pages/landlord/applications/ApplicationList.tsx`, `ApplicationDetail.tsx` (via `applicationService` → Supabase)
 - [ ] Vendors page (via `vendorService` → Supabase)
 - [ ] Financial Dashboard (via `financialDataService`/`analyticsService` → Supabase)
-- [ ] `pages/landlord/LandlordProfile.tsx` (new — mock from the start)
+- [x] `pages/landlord/LandlordProfile.tsx` (new — mock portfolio overview;
+  shared basics mirror `TenantProfile`)
 
 ## Component reuse map (no new primitives)
 

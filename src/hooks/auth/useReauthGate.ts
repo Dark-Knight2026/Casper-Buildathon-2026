@@ -57,6 +57,19 @@ export function useReauthGate(): UseReauthGate {
           // session in JS-space isn't available to produce one. Surface the
           // 403 so the page-level handler can route to the login flow
           // (clearing the stale session marker on the way).
+          //
+          // SCOPE DECISION (MVP, 2026-05-27): reauthentication is wallet-only.
+          // CSPR.click provisions a wallet for every user (including social
+          // Google / Apple login) during sign-up, so "no-wallet" here means
+          // the in-memory wallet session went stale after a page restore —
+          // not that the user is permanently wallet-less. Routing to the
+          // login flow rehydrates `clickRef` + `account` on the way back.
+          // Adding an email/password reauth branch (POST /auth/reauthenticate)
+          // is deferred — no BE endpoint, and the wallet-rehydration path
+          // covers the only first-class auth method we ship in MVP.
+          // Consumers surface this via the per-reason copy table (see
+          // RoleSwitchDialog.tsx — `'no-wallet': "Your wallet session is not
+          // available. Reconnect and try again."`).
           setState({ status: 'error', reason: 'no-wallet' });
           throw err;
         }

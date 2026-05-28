@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useClickRef } from '@make-software/csprclick-ui';
 import { deriveAccountHash } from '@/lib/blockchain/accountUtils';
+import { clearCsprClickStorage } from '@/lib/csprclick';
 import logger from '@/lib/logger';
 
 export interface ICOWalletAccount {
@@ -35,7 +36,7 @@ export interface UseICOWalletReturn extends ICOWalletState {
  * @returns {boolean} returns.isConnecting - Whether connection is in progress
  * @returns {string | null} returns.error - Error message if connection failed
  * @returns {() => void} returns.connect - Function to trigger wallet sign-in
- * @returns {() => void} returns.disconnect - Function to trigger wallet sign-out
+ * @returns {() => Promise<void>} returns.disconnect - Function to trigger wallet sign-out (must be awaited for full iframe cleanup)
  * @returns {Object} returns.clickRef - Direct access to CSPR.click SDK instance
  *
  * @example
@@ -59,6 +60,14 @@ export function useICOWallet(): UseICOWalletReturn {
   // Listen to CSPR.click events
   useEffect(() => {
     if (!clickRef) return;
+
+    // Shared unmount guard. Async event handlers (handleReady,
+    // handleSocialConnected) and the mount IIFE all await
+    // `getActiveAccountAsync()` before calling setState; if the component
+    // unmounts mid-await, the cleanup below flips this to true so the
+    // post-await setState is skipped (React would otherwise warn about a
+    // state update on an unmounted component).
+    let cancelled = false;
 
     const handleSignedIn = (evt: { account: { public_key: string; provider: string } }) => {
       const publicKey = evt.account.public_key;
@@ -115,14 +124,9 @@ export function useICOWallet(): UseICOWalletReturn {
     // the dead session on subsequent mounts.
     const handleReady = async () => {
       const activeAccount = await clickRef.getActiveAccountAsync();
+      if (cancelled) return;
       if (!activeAccount) {
-        try {
-          Object.keys(localStorage).forEach(key => {
-            if (key.startsWith('csprclick:')) localStorage.removeItem(key);
-          });
-        } catch {
-          // localStorage may be unavailable (private mode, embedded webview).
-        }
+        clearCsprClickStorage();
         return;
       }
       const publicKey = activeAccount.public_key;
@@ -149,6 +153,7 @@ export function useICOWallet(): UseICOWalletReturn {
     const handleSocialConnected = async (evt: unknown) => {
       logger.debug('[useICOWallet] social provider connected event', { evt });
       const active = await clickRef.getActiveAccountAsync();
+      if (cancelled) return;
       logger.debug('[useICOWallet] active after social connect', { active });
       if (!active) return;
       setState({
@@ -191,19 +196,13 @@ export function useICOWallet(): UseICOWalletReturn {
     // Check if already connected. If getActiveAccountAsync returns null we
     // clear stale `csprclick:*` localStorage entries so the SDK doesn't keep
     // re-trying a dead session on subsequent mounts.
-    // `cancelled` guards against the unmount-during-await race.
-    let cancelled = false;
+    // The shared `cancelled` flag (declared at the top of this useEffect)
+    // guards against the unmount-during-await race.
     void (async () => {
       const activeAccount = await clickRef.getActiveAccountAsync();
       if (cancelled) return;
       if (!activeAccount) {
-        try {
-          Object.keys(localStorage).forEach(key => {
-            if (key.startsWith('csprclick:')) localStorage.removeItem(key);
-          });
-        } catch {
-          // localStorage may be unavailable (private mode, embedded webview).
-        }
+        clearCsprClickStorage();
         return;
       }
       const publicKey = activeAccount.public_key;

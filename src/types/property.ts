@@ -50,11 +50,14 @@ export interface PropertySearchParams {
   search?: string;
 }
 
-// Canonical, single-case set. Capitalized is the source of truth across the
-// property flow (zod schema, PROPERTY_TYPES, featuredProperties demo data,
-// tenant preferences). The former lowercase aliases were legacy cruft and
-// have been removed — fix data at its source instead of widening this union.
-export type PropertyType = 'Apartment' | 'House' | 'Condo' | 'Townhouse' | 'Studio' | 'Loft';
+// Canonical PropertyType union. All identifiers are lowercase by TypeScript
+// convention; capitalize via formatPropertyType() for display.
+export type PropertyType = 'apartment' | 'house' | 'condo' | 'townhouse' | 'studio' | 'loft';
+
+// Title-Case label for UI rendering ("apartment" → "Apartment").
+export function formatPropertyType(type: PropertyType): string {
+  return type.charAt(0).toUpperCase() + type.slice(1);
+}
 
 // Property form data
 export interface PropertyFormData {
