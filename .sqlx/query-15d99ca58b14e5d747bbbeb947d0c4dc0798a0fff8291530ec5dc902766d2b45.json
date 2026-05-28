@@ -6,12 +6,24 @@
       {
         "ordinal": 0,
         "name": "staked_amount",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "staking_positions",
+            "name": "staked_amount"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "total_rewards_claimed",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "staking_positions",
+            "name": "total_rewards_claimed"
+          }
+        }
       }
     ],
     "parameters": {

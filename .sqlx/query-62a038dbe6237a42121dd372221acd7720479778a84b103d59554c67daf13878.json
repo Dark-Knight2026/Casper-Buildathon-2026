@@ -6,17 +6,35 @@
       {
         "ordinal": 0,
         "name": "status",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "email_send_retries",
+            "name": "status"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "next_retry_at",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "email_send_retries",
+            "name": "next_retry_at"
+          }
+        }
       },
       {
         "ordinal": 2,
         "name": "last_error",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "email_send_retries",
+            "name": "last_error"
+          }
+        }
       }
     ],
     "parameters": {

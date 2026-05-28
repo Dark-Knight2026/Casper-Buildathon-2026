@@ -6,7 +6,13 @@
       {
         "ordinal": 0,
         "name": "reward_per_token_stored",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "staking_reward_state",
+            "name": "reward_per_token_stored"
+          }
+        }
       }
     ],
     "parameters": {

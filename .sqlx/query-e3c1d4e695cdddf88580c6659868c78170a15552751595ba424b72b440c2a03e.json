@@ -6,12 +6,24 @@
       {
         "ordinal": 0,
         "name": "claimed_amount",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "vesting_schedules",
+            "name": "claimed_amount"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "total_amount",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "vesting_schedules",
+            "name": "total_amount"
+          }
+        }
       }
     ],
     "parameters": {

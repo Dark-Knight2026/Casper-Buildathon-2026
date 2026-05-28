@@ -6,17 +6,35 @@
       {
         "ordinal": 0,
         "name": "pending_rewards",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "staking_positions",
+            "name": "pending_rewards"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "reward_per_token_paid",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "staking_positions",
+            "name": "reward_per_token_paid"
+          }
+        }
       },
       {
         "ordinal": 2,
         "name": "snapshot_block_height",
-        "type_info": "Int8"
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "staking_positions",
+            "name": "snapshot_block_height"
+          }
+        }
       }
     ],
     "parameters": {

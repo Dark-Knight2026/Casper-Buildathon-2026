@@ -6,12 +6,24 @@
       {
         "ordinal": 0,
         "name": "role",
-        "type_info": "Varchar"
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "role"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "jwt_invalidate_before",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "jwt_invalidate_before"
+          }
+        }
       }
     ],
     "parameters": {
