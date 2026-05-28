@@ -81,27 +81,20 @@ export function useWalletConnect() {
     setConnectingProvider(providerKey);
     const isSocial = providerKey.startsWith('w3a-') || providerKey.startsWith('csprclick-') || providerKey === 'torus' || providerKey === 'customjwt';
     try {
-      // For social providers — prefer signInWithAccount() when the account is already
-      // known to CSPR.click (avoids the broken OAuth popup handoff). Fall back to
-      // connect() for first-time auth and for wallet providers.
-      if (isSocial) {
-        const opts = await clickRef.getSignInOptions();
-        const knownAccounts: Array<{ provider: string; public_key: string }> =
-          (opts && (opts.accounts || opts.knownAccounts)) || [];
-        const match = knownAccounts.find(a => a.provider === providerKey);
-        if (match) {
-          await clickRef.signInWithAccount(match as never);
-          await syncActiveAccount();
-          return;
-        }
-      }
-      // selectAccount=true forces CSPR.click to show the Google/social
-      // account picker instead of silently re-using the cached OAuth token.
-      // Without this, a user who logged in with account A can never sign
-      // in with account B from the same browser without manually clearing
-      // cookies on accounts.cspr.click. The trade-off: existing users
-      // with a single account see one extra "Continue as …" tap on every
-      // login — small UX cost in exchange for working multi-account.
+      // Always go through a fresh OAuth flow via connect(). We previously had
+      // a signInWithAccount shortcut for social providers when the SDK already
+      // knew the account, but it had two problems:
+      //   1. It silently fails when the iframe session on accounts.cspr.click
+      //      has expired — the Promise resolves but no live session exists,
+      //      and the SDK shows its own "Session expired" modal at signMessage.
+      //   2. The failed attempt appears to poison the SDK's iframe state in a
+      //      way that subsequent connect() calls can't recover from (verified
+      //      experimentally — same OAuth flow worked in incognito where the
+      //      shortcut was never attempted).
+      // Login.tsx / Register.tsx already call signOut() + clear `csprclick:*`
+      // localStorage on mount, so the SDK enters every Login flow in an
+      // incognito-equivalent state. selectAccount: true forces the Google/Apple
+      // picker so multi-account users can switch.
       const options = isSocial
         ? {
             chainName: import.meta.env.VITE_CASPER_NETWORK ?? 'casper-test',

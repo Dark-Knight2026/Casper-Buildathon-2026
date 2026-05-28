@@ -30,8 +30,15 @@ export function AuthWalletLayout({ children }: { children: React.ReactNode }) {
     <ClickProvider options={clickOptions}>
       <ThemeProvider theme={theme[ThemeModeType.light]}>
         {/* ClickUI mounts SDK's modal host. TopBar is styled compactly so it doesn't
-            dominate auth pages — the modal appears on clickRef.signIn(). */}
-        <ClickUI topBarSettings={{}} themeMode={ThemeModeType.light} />
+            dominate auth pages — the modal appears on clickRef.signIn().
+            show1ClickModal={false} suppresses the SDK's auto-shown "Choose an
+            account to sign in" popup (top-right CSPR.click branded picker that
+            lists acctmgr-known accounts). Default is true. We disable it
+            because clicking a cached account in that popup internally calls
+            signInWithAccount(stale_account) and lands on /api/authenticate/me
+            401. Users should always go through our own ProviderList → fresh
+            connect() instead. */}
+        <ClickUI topBarSettings={{}} themeMode={ThemeModeType.light} show1ClickModal={false} />
         {children}
       </ThemeProvider>
     </ClickProvider>

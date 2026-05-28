@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 
 import { Home, Loader2, AlertCircle } from 'lucide-react';
@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useWalletConnect } from '@/hooks/auth/useWalletConnect';
+import { clearCsprClickStorage } from '@/lib/csprclick';
 
 import { RoleSelector } from './register/RoleSelector';
 import { ProviderList } from './register/ProviderList';
@@ -34,8 +35,28 @@ export default function Register() {
     isConnected, account, isAuthenticated, isSigningIn,
     connectingProvider, setConnectingProvider,
     error, isLoading,
-    handleConnectProvider, login, disconnect,
+    handleConnectProvider, login, disconnect, clickRef,
   } = useWalletConnect();
+
+  // Force a fresh SDK state on every visit to /auth/register — see Login.tsx
+  // for the full rationale. Calling signOut() clears the SDK's cached
+  // active-account, and wiping `csprclick:*` localStorage prevents the SDK
+  // from re-reading stale entries on the next init. This puts the SDK into
+  // an incognito-equivalent state so the first provider click triggers a
+  // genuine fresh OAuth instead of a poisoned signInWithAccount restore.
+  useEffect(() => {
+    if (!clickRef) return;
+    clickRef.signOut();
+    try {
+      // Mirror handleResetConnection: drop the leasefi_session marker so
+      // AuthContext's optimistic restore doesn't briefly report the user as
+      // signed in on a Register revisit (until the first 401 clears it).
+      localStorage.removeItem('leasefi_session');
+    } catch {
+      // localStorage unavailable.
+    }
+    clearCsprClickStorage();
+  }, [clickRef]);
 
   // See Login.tsx for rationale — the inline "Use a different account"
   // button is gated on `isConnected`, but a stuck CSPR.click session
@@ -43,16 +64,14 @@ export default function Register() {
   // footer link is the always-visible recovery path. Stripping
   // `csprclick:`-prefixed keys is essential: leaving `csprclick:account`
   // on disk loops the user back into the same "Session expired" modal.
-  const handleResetConnection = () => {
-    disconnect();
+  const handleResetConnection = async () => {
+    await disconnect();
     try {
       localStorage.removeItem('leasefi_session');
-      Object.keys(localStorage).forEach(key => {
-        if (key.startsWith('csprclick:')) localStorage.removeItem(key);
-      });
     } catch {
       // localStorage may be disabled (private mode, embedded webview).
     }
+    clearCsprClickStorage();
     // AuthContext state is intentionally NOT reset here — `location.reload()`
     // unmounts the whole React tree, so the provider is rebuilt clean on the
     // next mount. If this is ever swapped for `navigate(...)` (soft routing),
@@ -116,12 +135,13 @@ export default function Register() {
               </Button>
               <button
                 type="button"
-                onClick={() => {
-                  // signOut() clears SDK state but the CSPR.click iframe
-                  // (accounts.cspr.click) holds its own cookies that survive
-                  // — without a hard reload the next connect silently re-uses
-                  // the cached account regardless of selectAccount:true.
-                  disconnect();
+                onClick={async () => {
+                  // `await` so the SDK's hard disconnect(provider) finishes
+                  // releasing the iframe link before we reload — otherwise
+                  // the accounts.cspr.click cookies survive and the next
+                  // connect silently re-uses the cached account regardless
+                  // of selectAccount:true.
+                  await disconnect();
                   window.location.reload();
                 }}
                 disabled={isSigningIn || isAuthenticated}

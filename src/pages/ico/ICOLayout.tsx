@@ -26,9 +26,11 @@ export function ICOLayout({ children }: { children: React.ReactNode }) {
   return (
     <ClickProvider options={clickOptions}>
       <ThemeProvider theme={theme[ThemeModeType.light]}>
-        {/* ClickUI renders modals for wallet connection; top bar is hidden */}
+        {/* ClickUI renders modals for wallet connection; top bar is hidden.
+            show1ClickModal={false} suppresses the SDK's auto-shown known
+            accounts picker — we drive provider selection from ICOHeader. */}
         <div className="hidden">
-          <ClickUI topBarSettings={{}} themeMode={ThemeModeType.light} />
+          <ClickUI topBarSettings={{}} themeMode={ThemeModeType.light} show1ClickModal={false} />
         </div>
         {children}
       </ThemeProvider>
