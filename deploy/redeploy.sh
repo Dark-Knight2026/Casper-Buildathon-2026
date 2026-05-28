@@ -110,6 +110,18 @@ if [[ ! "${S3_BUCKET}" =~ ^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$ ]]; then
   exit 1
 fi
 
+# REQUEST_BODY_LIMIT_MB caps the largest request body both nginx and axum
+# accept (must stay in sync across the two layers, see https.conf.template
+# and crates/api/src/common/config.rs). Optional in .env; defaults to 8 to
+# preserve historical behaviour. Positive integer only - nginx unit suffix
+# is appended in the template (`${REQUEST_BODY_LIMIT_MB}M`).
+: "${REQUEST_BODY_LIMIT_MB:=8}"
+if [[ ! "${REQUEST_BODY_LIMIT_MB}" =~ ^[1-9][0-9]*$ ]]; then
+  __msg_error "REQUEST_BODY_LIMIT_MB '${REQUEST_BODY_LIMIT_MB}' must be a positive integer (MiB)"
+  exit 1
+fi
+export REQUEST_BODY_LIMIT_MB
+
 if [[ ! -f "${OPT_DIR}/nginx/https.conf.template" ]]; then
   __msg_error "File ${OPT_DIR}/nginx/https.conf.template not found"
   exit 1
@@ -121,11 +133,11 @@ if [[ ! -f "${OPT_DIR}/deploy/redis.conf.template" ]]; then
 fi
 
 # Generate nginx https.conf from template.
-# CRITICAL: single-quoted variable list restricts envsubst to PROJECT_DOMAIN and
-# S3_BUCKET only - nginx runtime vars ($host, $uri, $scheme, etc.) are NOT
-# substituted (otherwise nginx would see empty strings and 502 every request).
-__msg_info "Generating nginx https.conf (PROJECT_DOMAIN=${PROJECT_DOMAIN}, S3_BUCKET=${S3_BUCKET})"
-envsubst '${PROJECT_DOMAIN} ${S3_BUCKET}' \
+# CRITICAL: single-quoted variable list restricts envsubst to the listed
+# deploy-time vars only - nginx runtime vars ($host, $uri, $scheme, etc.) are
+# NOT substituted (otherwise nginx would see empty strings and 502 every request).
+__msg_info "Generating nginx https.conf (PROJECT_DOMAIN=${PROJECT_DOMAIN}, S3_BUCKET=${S3_BUCKET}, REQUEST_BODY_LIMIT_MB=${REQUEST_BODY_LIMIT_MB})"
+envsubst '${PROJECT_DOMAIN} ${S3_BUCKET} ${REQUEST_BODY_LIMIT_MB}' \
   < "${OPT_DIR}/nginx/https.conf.template" \
   > "${OPT_DIR}/nginx/https.conf" \
   || { __msg_error "envsubst failed"; exit 1; }

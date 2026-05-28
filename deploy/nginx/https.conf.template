@@ -46,11 +46,14 @@ server {
   set_real_ip_from 2c0f:f248::/32;
   real_ip_header CF-Connecting-IP;
 
-  # Mirror `REQUEST_BODY_LIMIT` in crates/api/src/server.rs (8 MiB) so the
-  # per-handler 413 contract (e.g. avatar uploads capped at MAX_AVATAR_BYTES)
-  # fires as JSON from axum instead of being pre-empted by nginx's default
-  # 1 MiB cap, which would surface as an HTML error page.
-  client_max_body_size 8M;
+  # Single env-driven source of truth for the outer request-body ceiling.
+  # The same `REQUEST_BODY_LIMIT_MB` is consumed by axum's `ServerConfig`
+  # (see crates/api/src/common/config.rs) and applied to both
+  # `DefaultBodyLimit` and `RequestBodyLimitLayer`. If nginx were lower
+  # than axum, oversize requests would surface as an HTML 413 from nginx
+  # before per-handler 413 contracts (e.g. avatar uploads capped at
+  # MAX_AVATAR_BYTES) could respond with their documented JSON shape.
+  client_max_body_size ${REQUEST_BODY_LIMIT_MB}M;
 
   location / {
     limit_req zone=api burst=20 nodelay;
