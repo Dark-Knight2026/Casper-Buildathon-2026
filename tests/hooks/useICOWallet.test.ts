@@ -1,14 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderHook, act } from '@testing-library/react';
+import { renderHook, act, waitFor } from '@testing-library/react';
 import { useICOWallet } from '@/hooks/ico/useICOWallet';
 
-// Mock CSPR.click SDK
+// Mock CSPR.click SDK. The hook reads accounts via `getActiveAccountAsync`
+// (the SDK's async variant that verifies against accounts.cspr.click); the
+// sync `getActiveAccount` is no longer called. `disconnect` and
+// `signInWithAccount` are also mocked because the hook awaits them in the
+// disconnect / unsolicited-account-change paths.
 const mockClickRef = {
   on: vi.fn(),
   off: vi.fn(),
   signIn: vi.fn(),
   signOut: vi.fn(),
-  getActiveAccount: vi.fn(),
+  getActiveAccountAsync: vi.fn(),
+  disconnect: vi.fn(),
+  signInWithAccount: vi.fn(),
 };
 
 vi.mock('@make-software/csprclick-ui', () => ({
@@ -32,7 +38,9 @@ const mockProvider = 'casper-wallet';
 describe('useICOWallet', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockClickRef.getActiveAccount.mockReturnValue(null);
+    mockClickRef.getActiveAccountAsync.mockResolvedValue(null);
+    mockClickRef.disconnect.mockResolvedValue(undefined);
+    mockClickRef.signInWithAccount.mockResolvedValue(undefined);
   });
 
   // --- Initial state ---
@@ -47,28 +55,29 @@ describe('useICOWallet', () => {
       expect(result.current.error).toBeNull();
     });
 
-    it('should be connected if already signed in', () => {
-      mockClickRef.getActiveAccount.mockReturnValue({
+    it('should be connected if already signed in', async () => {
+      mockClickRef.getActiveAccountAsync.mockResolvedValue({
         public_key: mockPublicKey,
         provider: mockProvider,
       });
 
       const { result } = renderHook(() => useICOWallet());
 
-      expect(result.current.isConnected).toBe(true);
+      // Mount IIFE awaits getActiveAccountAsync — flush before asserting.
+      await waitFor(() => expect(result.current.isConnected).toBe(true));
       expect(result.current.account?.publicKey).toBe(mockPublicKey);
       expect(result.current.account?.provider).toBe(mockProvider);
     });
 
-    it('should derive account hash from public key', () => {
-      mockClickRef.getActiveAccount.mockReturnValue({
+    it('should derive account hash from public key', async () => {
+      mockClickRef.getActiveAccountAsync.mockResolvedValue({
         public_key: mockPublicKey,
         provider: mockProvider,
       });
 
       const { result } = renderHook(() => useICOWallet());
 
-      expect(result.current.account?.accountHash).toContain('account-hash-');
+      await waitFor(() => expect(result.current.account?.accountHash).toContain('account-hash-'));
     });
   });
 
@@ -124,7 +133,7 @@ describe('useICOWallet', () => {
     });
 
     it('should handle switched_account event', () => {
-      mockClickRef.getActiveAccount.mockReturnValue({
+      mockClickRef.getActiveAccountAsync.mockResolvedValue({
         public_key: mockPublicKey,
         provider: mockProvider,
       });
@@ -152,15 +161,15 @@ describe('useICOWallet', () => {
       expect(result.current.account?.provider).toBe('ledger');
     });
 
-    it('should handle signed_out event', () => {
-      mockClickRef.getActiveAccount.mockReturnValue({
+    it('should handle signed_out event', async () => {
+      mockClickRef.getActiveAccountAsync.mockResolvedValue({
         public_key: mockPublicKey,
         provider: mockProvider,
       });
 
       const { result } = renderHook(() => useICOWallet());
 
-      expect(result.current.isConnected).toBe(true);
+      await waitFor(() => expect(result.current.isConnected).toBe(true));
 
       // Get the signed_out handler
       const signedOutCall = mockClickRef.on.mock.calls.find(
@@ -177,7 +186,7 @@ describe('useICOWallet', () => {
     });
 
     it('should handle disconnected event', () => {
-      mockClickRef.getActiveAccount.mockReturnValue({
+      mockClickRef.getActiveAccountAsync.mockResolvedValue({
         public_key: mockPublicKey,
         provider: mockProvider,
       });
@@ -198,11 +207,11 @@ describe('useICOWallet', () => {
       expect(result.current.account).toBeNull();
     });
 
-    it('should handle ready event with active account (mobile redirect)', () => {
+    it('should handle ready event with active account (mobile redirect)', async () => {
       const { result } = renderHook(() => useICOWallet());
 
       // Simulate SDK becoming ready with an active account (mobile redirect flow)
-      mockClickRef.getActiveAccount.mockReturnValue({
+      mockClickRef.getActiveAccountAsync.mockResolvedValue({
         public_key: mockPublicKey,
         provider: mockProvider,
       });
@@ -212,8 +221,8 @@ describe('useICOWallet', () => {
       );
       const handleReady = readyCall?.[1];
 
-      act(() => {
-        handleReady?.();
+      await act(async () => {
+        await handleReady?.();
       });
 
       expect(result.current.isConnected).toBe(true);
@@ -227,7 +236,7 @@ describe('useICOWallet', () => {
       const { result } = renderHook(() => useICOWallet());
 
       // SDK ready but no account connected
-      mockClickRef.getActiveAccount.mockReturnValue(null);
+      mockClickRef.getActiveAccountAsync.mockResolvedValue(null);
 
       const readyCall = mockClickRef.on.mock.calls.find(
         (call) => call[0] === 'csprclick:ready'
@@ -299,16 +308,16 @@ describe('useICOWallet', () => {
   // --- Disconnect ---
 
   describe('disconnect', () => {
-    it('should call signOut on clickRef', () => {
-      mockClickRef.getActiveAccount.mockReturnValue({
+    it('should call signOut on clickRef', async () => {
+      mockClickRef.getActiveAccountAsync.mockResolvedValue({
         public_key: mockPublicKey,
         provider: mockProvider,
       });
 
       const { result } = renderHook(() => useICOWallet());
 
-      act(() => {
-        result.current.disconnect();
+      await act(async () => {
+        await result.current.disconnect();
       });
 
       expect(mockClickRef.signOut).toHaveBeenCalled();
