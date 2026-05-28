@@ -13,7 +13,7 @@ mod common;
 
 use axum::http::{StatusCode, header::USER_AGENT};
 use axum_test::http::header::COOKIE;
-use serde_json::{Value, json};
+use serde_json::json;
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -45,7 +45,7 @@ async fn seed_email(pool: &PgPool, user_id: Uuid) -> String {
 /// unauditable, so each field gets its own assertion.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn confirm_writes_verify_email_audit_row(pool: PgPool) {
-    let env = common::setup_test_server(pool.clone(), true).await;
+    let (env, mailer) = common::setup_test_server_capturing(pool.clone(), true).await;
     let session = common::login_and_extract(&env).await;
     let email = seed_email(&pool, session.user_id).await;
 
@@ -55,10 +55,7 @@ async fn confirm_writes_verify_email_audit_row(pool: PgPool) {
         .add_header(COOKIE, format!("access_token={}", session.access_token))
         .await;
     assert_eq!(send.status_code(), StatusCode::OK);
-    let token = send.json::<Value>()["dev_verification_token"]
-        .as_str()
-        .expect("dev_verification_token surfaced under no-Postmark harness")
-        .to_owned();
+    let token = common::extract_verify_token(&mailer);
 
     let confirm = env
         .server

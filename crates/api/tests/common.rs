@@ -303,6 +303,53 @@ impl EmailSender for CapturingMailer {
     }
 }
 
+/// Wires a `CapturingMailer` into the test server and returns a shared handle
+/// to its message log alongside the environment.
+///
+/// `CapturingMailer` is `Clone` over its inner `Arc`, so the returned mailer
+/// reads the same `Vec<EmailMessage>` that the one moved into
+/// `Arc<dyn EmailSender>` writes to. Use the returned handle with
+/// [`extract_verify_token`] to recover plaintext that travels only inside the
+/// outbound email body.
+#[inline]
+pub async fn setup_test_server_capturing(
+    pool: PgPool,
+    with_redis: bool,
+) -> (TestEnv, CapturingMailer) {
+    let mailer = CapturingMailer::default();
+    let handle = mailer.clone();
+    let env = setup_test_server_with(
+        pool,
+        with_redis,
+        TestOverrides {
+            mailer: Some(Arc::new(mailer) as Arc<dyn EmailSender>),
+            ..TestOverrides::default()
+        },
+    )
+    .await;
+    (env, handle)
+}
+
+/// Plaintext verification token parsed from the most recent message captured
+/// by a `CapturingMailer`.
+///
+/// The verify-email body is built by `verification_email` as a single link
+/// `{frontend_url}/verify-email?token={token}` terminated by `\n`, so the
+/// rightmost `?token=` substring isolates the plaintext. Panics if no message
+/// has been captured yet or the body does not carry a token query parameter -
+/// both indicate a miswired test, not a contract change.
+#[inline]
+pub fn extract_verify_token(mailer: &CapturingMailer) -> String {
+    let messages = mailer.sent.lock().expect("CapturingMailer mutex poisoned");
+    let body = &messages
+        .last()
+        .expect("no captured verification message yet")
+        .body;
+    body.rsplit_once("?token=")
+        .map(|(_, tail)| tail.trim_end().to_owned())
+        .expect("verification email body must carry a `?token=...` link")
+}
+
 /// 8-byte PNG signature followed by zero padding to 1 KB.
 ///
 /// The avatar handler's magic-byte sniff inspects only the first 8

@@ -3,10 +3,10 @@
 //!
 //! These drive the full round-trip over the real HTTP transport: send issues a
 //! token, confirm redeems it and rotates the token pair. The plaintext
-//! verification token is read back from the `dev_verification_token` escape
-//! hatch, which the test harness enables by configuring no Postmark token -
-//! Redis stores only the hash, so this is the only place a test can obtain the
-//! plaintext to feed into confirm.
+//! verification token is recovered from the body of the outbound message via
+//! a `CapturingMailer` test fixture - Redis stores only the SHA-256 hash, so
+//! intercepting the message before it would reach an SMTP relay is the only
+//! channel a test has to the plaintext.
 //!
 //! Verification-level *gating* (the `VerifiedUser` extractor) is covered
 //! separately: with no gated HTTP route mounted yet, it is exercised against
@@ -27,7 +27,8 @@ use uuid::Uuid;
 
 use api::common::RedisStore;
 use common::{
-    PermanentMailer, TestEnv, TestOverrides, TransientMailer, login_and_extract, setup_test_server,
+    CapturingMailer, PermanentMailer, TestEnv, TestOverrides, TransientMailer,
+    extract_verify_token, login_and_extract, setup_test_server, setup_test_server_capturing,
     setup_test_server_with,
 };
 
@@ -82,26 +83,28 @@ async fn clear_minute_window(env: &TestEnv, user_id: Uuid) {
         .expect("DEL minute key");
 }
 
-/// Calls send and returns the plaintext token surfaced by the dev escape
-/// hatch. Asserts the `200` so callers can assume a usable token.
-async fn send_and_take_token(env: &TestEnv, access_token: &str) -> String {
+/// Calls send and returns the plaintext token parsed out of the captured
+/// outbound message body. Asserts the `200` so callers can assume a usable
+/// token.
+async fn send_and_take_token(
+    env: &TestEnv,
+    mailer: &CapturingMailer,
+    access_token: &str,
+) -> String {
     let response = post_send(env, access_token).await;
     assert_eq!(response.status_code(), StatusCode::OK, "send must succeed");
-    response.json::<Value>()["dev_verification_token"]
-        .as_str()
-        .expect("dev_verification_token present (no Postmark token in tests)")
-        .to_owned()
+    extract_verify_token(mailer)
 }
 
 /// Happy path: send then confirm flips `email_verified`, lets the trigger
 /// raise `verification_level` to `email`, and rotates both auth cookies.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn send_then_confirm_verifies_email_and_rotates_tokens(pool: PgPool) {
-    let env = setup_test_server(pool, true).await;
+    let (env, mailer) = setup_test_server_capturing(pool, true).await;
     let session = login_and_extract(&env).await;
     seed_email(&env.state.db, session.user_id).await;
 
-    let token = send_and_take_token(&env, &session.access_token).await;
+    let token = send_and_take_token(&env, &mailer, &session.access_token).await;
 
     let confirm = env
         .server
@@ -140,10 +143,10 @@ async fn send_then_confirm_verifies_email_and_rotates_tokens(pool: PgPool) {
 /// revoked, while the one returned by confirm rotates cleanly.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn confirm_rotates_refresh_family_old_invalid_new_valid(pool: PgPool) {
-    let env = setup_test_server(pool, true).await;
+    let (env, mailer) = setup_test_server_capturing(pool, true).await;
     let session = login_and_extract(&env).await;
     seed_email(&env.state.db, session.user_id).await;
-    let token = send_and_take_token(&env, &session.access_token).await;
+    let token = send_and_take_token(&env, &mailer, &session.access_token).await;
 
     let confirm = env
         .server
@@ -183,10 +186,10 @@ async fn confirm_rotates_refresh_family_old_invalid_new_valid(pool: PgPool) {
 /// compare fails, so the genuine token can no longer be redeemed afterwards.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn confirm_with_wrong_token_consumes_slot(pool: PgPool) {
-    let env = setup_test_server(pool, true).await;
+    let (env, mailer) = setup_test_server_capturing(pool, true).await;
     let session = login_and_extract(&env).await;
     seed_email(&env.state.db, session.user_id).await;
-    let real_token = send_and_take_token(&env, &session.access_token).await;
+    let real_token = send_and_take_token(&env, &mailer, &session.access_token).await;
 
     // Valid 43-char base64url shape, guaranteed hash mismatch.
     let wrong_token = "A".repeat(43);
@@ -219,10 +222,10 @@ async fn confirm_with_wrong_token_consumes_slot(pool: PgPool) {
 /// A token is single-use: the second confirm with the same token misses.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn confirm_is_single_use(pool: PgPool) {
-    let env = setup_test_server(pool, true).await;
+    let (env, mailer) = setup_test_server_capturing(pool, true).await;
     let session = login_and_extract(&env).await;
     seed_email(&env.state.db, session.user_id).await;
-    let token = send_and_take_token(&env, &session.access_token).await;
+    let token = send_and_take_token(&env, &mailer, &session.access_token).await;
 
     let first = env
         .server
@@ -249,10 +252,10 @@ async fn confirm_is_single_use(pool: PgPool) {
 /// expiry) confirms as `404`, not a server error.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn confirm_expired_token_returns_404(pool: PgPool) {
-    let env = setup_test_server(pool, true).await;
+    let (env, mailer) = setup_test_server_capturing(pool, true).await;
     let session = login_and_extract(&env).await;
     seed_email(&env.state.db, session.user_id).await;
-    let token = send_and_take_token(&env, &session.access_token).await;
+    let token = send_and_take_token(&env, &mailer, &session.access_token).await;
 
     // Drop the slot the way a 24h TTL expiry eventually would.
     env.state
@@ -504,14 +507,14 @@ async fn send_without_auth_returns_401(pool: PgPool) {
 /// without leaving two redeemable tokens in flight.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn send_overwrites_previous_token_slot(pool: PgPool) {
-    let env = setup_test_server(pool, true).await;
+    let (env, mailer) = setup_test_server_capturing(pool, true).await;
     let session = login_and_extract(&env).await;
     seed_email(&env.state.db, session.user_id).await;
 
-    let first_token = send_and_take_token(&env, &session.access_token).await;
+    let first_token = send_and_take_token(&env, &mailer, &session.access_token).await;
     // Step past the 1/min cap so the second send is not rate-limited.
     clear_minute_window(&env, session.user_id).await;
-    let second_token = send_and_take_token(&env, &session.access_token).await;
+    let second_token = send_and_take_token(&env, &mailer, &session.access_token).await;
     assert_ne!(first_token, second_token, "each send mints fresh entropy");
 
     // GETDEL the slot directly: it must hold the hash of the *second* token,
