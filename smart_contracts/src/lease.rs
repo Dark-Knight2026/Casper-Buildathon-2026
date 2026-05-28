@@ -141,8 +141,10 @@ pub mod errors {
         SecurityDepositChargeIsTooHigh = 408,
         InvalidPropertyStatus = 409,
         InvalidPropertyIssuer = 410,
-        LeaseAlreadyFinalized = 411,
-        TenantAlreadyEquityEligible = 412,
+        InvalidPropertyManagerBps = 411,
+        InvalidPropertyManager = 412,
+        LeaseAlreadyFinalized = 413,
+        TenantAlreadyEquityEligible = 414,
     }
 }
 
