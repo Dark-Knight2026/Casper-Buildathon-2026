@@ -35,7 +35,7 @@ export interface UseICOWalletReturn extends ICOWalletState {
  * @returns {boolean} returns.isConnecting - Whether connection is in progress
  * @returns {string | null} returns.error - Error message if connection failed
  * @returns {() => void} returns.connect - Function to trigger wallet sign-in
- * @returns {() => void} returns.disconnect - Function to trigger wallet sign-out
+ * @returns {() => Promise<void>} returns.disconnect - Function to trigger wallet sign-out (must be awaited for full iframe cleanup)
  * @returns {Object} returns.clickRef - Direct access to CSPR.click SDK instance
  *
  * @example
