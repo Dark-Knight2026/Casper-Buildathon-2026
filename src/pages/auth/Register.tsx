@@ -47,6 +47,10 @@ export default function Register() {
     if (!clickRef) return;
     clickRef.signOut();
     try {
+      // Mirror handleResetConnection: drop the leasefi_session marker so
+      // AuthContext's optimistic restore doesn't briefly report the user as
+      // signed in on a Register revisit (until the first 401 clears it).
+      localStorage.removeItem('leasefi_session');
       Object.keys(localStorage).forEach(key => {
         if (key.startsWith('csprclick:')) localStorage.removeItem(key);
       });
