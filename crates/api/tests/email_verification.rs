@@ -21,6 +21,7 @@ use std::sync::Arc;
 use axum::http::StatusCode;
 use axum_test::{TestResponse, http::header::COOKIE};
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -454,4 +455,77 @@ async fn transient_failure_queues_and_keeps_counter(pool: PgPool) {
         StatusCode::TOO_MANY_REQUESTS,
         "transient does not refund the rate-limit slot"
     );
+}
+
+// Edge cases ------------------------------------------------------------------
+
+/// A user with no stored email cannot start the verify flow: the handler
+/// rejects before touching the rate-limit counter, so an unactionable request
+/// never burns a slot.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn send_returns_400_when_email_not_set(pool: PgPool) {
+    let env = setup_test_server(pool, true).await;
+    let session = login_and_extract(&env).await;
+    // Login synthesizes a placeholder `wallet_*@leasefi.local` email so that
+    // `users.email` is non-NULL after wallet sign-in. To exercise the
+    // `email_not_set` branch we explicitly clear it back to NULL.
+    sqlx::query!(
+        r"
+            UPDATE users
+            SET email = NULL
+            WHERE id = $1
+        ",
+        session.user_id,
+    )
+    .execute(&env.state.db)
+    .await
+    .expect("clear email");
+
+    let response = post_send(&env, &session.access_token).await;
+    assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
+    assert_eq!(
+        response.json::<Value>()["error"].as_str(),
+        Some("email_not_set"),
+    );
+}
+
+/// Send is behind `AuthUser`: an unauthenticated request never reaches the
+/// per-user counter or the mailer.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn send_without_auth_returns_401(pool: PgPool) {
+    let env = setup_test_server(pool, true).await;
+
+    let response = env.server.post(SEND_URI).await;
+    assert_eq!(response.status_code(), StatusCode::UNAUTHORIZED);
+}
+
+/// A second send while the first token is still live overwrites the slot:
+/// only the newest hash survives, so an interrupted flow can be restarted
+/// without leaving two redeemable tokens in flight.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn send_overwrites_previous_token_slot(pool: PgPool) {
+    let env = setup_test_server(pool, true).await;
+    let session = login_and_extract(&env).await;
+    seed_email(&env.state.db, session.user_id).await;
+
+    let first_token = send_and_take_token(&env, &session.access_token).await;
+    // Step past the 1/min cap so the second send is not rate-limited.
+    clear_minute_window(&env, session.user_id).await;
+    let second_token = send_and_take_token(&env, &session.access_token).await;
+    assert_ne!(first_token, second_token, "each send mints fresh entropy");
+
+    // GETDEL the slot directly: it must hold the hash of the *second* token,
+    // proving the second send replaced the first rather than appending.
+    let stored = env
+        .state
+        .redis
+        .take_verify_email_token(session.user_id)
+        .await
+        .expect("take token slot")
+        .expect("slot non-empty after send");
+
+    let first_hash = <[u8; 32]>::from(Sha256::digest(first_token.as_bytes()));
+    let second_hash = <[u8; 32]>::from(Sha256::digest(second_token.as_bytes()));
+    assert_eq!(stored, second_hash, "slot holds the latest token's hash");
+    assert_ne!(stored, first_hash, "the previous hash is gone");
 }
