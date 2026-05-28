@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO email_send_retries\n                (to_address, subject, body, attempts, status, completed_at, last_error)\n            VALUES ($1, 'subj', 'body', 5, 'failed', NOW(), 'pre-existing')\n            RETURNING id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "9e6c6609d55f8a650d570912afabf0baa8eb84c7324f0d5b3b3c3478fc5c4317"
+}

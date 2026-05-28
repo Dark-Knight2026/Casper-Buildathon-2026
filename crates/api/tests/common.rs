@@ -421,6 +421,28 @@ pub fn mint_access_token_with_level(
     .expect("Failed to mint JWT with custom level")
 }
 
+/// Inserts a `pending` row into `email_send_retries` with the DDL default
+/// `next_retry_at = NOW()` (immediately due) and returns its id.
+///
+/// Used by both the worker tests and the db-layer tests as the canonical
+/// seed for "there is a fresh transient delivery waiting for a tick". The
+/// payload columns are placeholders - the worker re-sends them verbatim, so
+/// the strings only have to be non-NULL.
+#[inline]
+pub async fn seed_pending_retry(pool: &PgPool, to: &str) -> Uuid {
+    sqlx::query_scalar!(
+        r"
+            INSERT INTO email_send_retries (to_address, subject, body)
+            VALUES ($1, 'subj', 'body')
+            RETURNING id
+        ",
+        to,
+    )
+    .fetch_one(pool)
+    .await
+    .expect("seed insert")
+}
+
 /// Seeds an `active` lease where `landlord_id = user_id`.
 ///
 /// Inserts the minimal `properties` row required as a foreign key

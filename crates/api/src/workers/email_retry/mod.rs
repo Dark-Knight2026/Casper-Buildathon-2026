@@ -16,7 +16,7 @@ use core::time::Duration;
 use std::sync::Arc;
 
 use chrono::Utc;
-use sqlx::PgPool;
+use sqlx::{PgPool, Result as SqlxResult};
 use tokio::{sync::broadcast, time};
 
 use crate::{EmailError, EmailMessage, EmailSender};
@@ -104,7 +104,17 @@ pub async fn run(
 /// Per-row failures are logged but never abort the batch: one Postmark hiccup
 /// must not strand the rest of the pending queue. Database failures propagate
 /// (caller logs at error level for tick visibility).
-async fn process_retries(pool: &PgPool, mailer: &Arc<dyn EmailSender>) -> Result<(), sqlx::Error> {
+///
+/// Public so tests can drive a single tick without waiting on the 60s
+/// `tokio::time::interval` inside [`run`]; the same entry point is convenient
+/// for operational manual replays as well.
+///
+/// # Errors
+///
+/// Propagates `sqlx::Error` from the claim CTE; individual per-row delivery
+/// failures are logged inside [`handle_row`] but do not abort the batch.
+#[inline]
+pub async fn process_retries(pool: &PgPool, mailer: &Arc<dyn EmailSender>) -> SqlxResult<()> {
     let batch = db::claim_pending_retries(pool, CLAIM_LIMIT).await?;
     for row in batch {
         handle_row(pool, mailer, row).await;

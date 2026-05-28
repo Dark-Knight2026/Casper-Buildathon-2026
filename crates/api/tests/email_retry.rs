@@ -15,30 +15,13 @@ use core::time::Duration;
 
 use chrono::{Duration as ChronoDuration, Utc};
 use sqlx::PgPool;
-use uuid::Uuid;
 
 use api::workers::email_retry;
-
-/// Inserts a `pending` row with `next_retry_at = NOW()` (immediately due)
-/// and returns its id. Used as the seed for most tests below.
-async fn seed_pending(pool: &PgPool, to: &str) -> Uuid {
-    sqlx::query_scalar!(
-        r"
-            INSERT INTO email_send_retries (to_address, subject, body)
-            VALUES ($1, 'subj', 'body')
-            RETURNING id
-        ",
-        to,
-    )
-    .fetch_one(pool)
-    .await
-    .expect("seed insert")
-}
 
 /// Claim returns due rows and bumps `attempts` to 1.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn claim_marks_attempt_and_returns_payload(pool: PgPool) {
-    let id = seed_pending(&pool, "user@example.com").await;
+    let id = common::seed_pending_retry(&pool, "user@example.com").await;
 
     let claimed = email_retry::db::claim_pending_retries(&pool, 10)
         .await
@@ -103,7 +86,7 @@ async fn claim_skips_terminal_rows(pool: PgPool) {
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn claim_respects_limit(pool: PgPool) {
     for i in 0..5 {
-        seed_pending(&pool, &format!("u{i}@example.com")).await;
+        common::seed_pending_retry(&pool, &format!("u{i}@example.com")).await;
     }
 
     let claimed = email_retry::db::claim_pending_retries(&pool, 2)
@@ -116,7 +99,7 @@ async fn claim_respects_limit(pool: PgPool) {
 /// `mark_completed` moves a row to terminal `completed` state.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn mark_completed_sets_status_and_completed_at(pool: PgPool) {
-    let id = seed_pending(&pool, "ok@example.com").await;
+    let id = common::seed_pending_retry(&pool, "ok@example.com").await;
 
     email_retry::db::mark_completed(&pool, id)
         .await
@@ -144,7 +127,7 @@ async fn mark_completed_sets_status_and_completed_at(pool: PgPool) {
 /// `mark_failed` records the reason and transitions to terminal `failed`.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn mark_failed_records_reason(pool: PgPool) {
-    let id = seed_pending(&pool, "bad@example.com").await;
+    let id = common::seed_pending_retry(&pool, "bad@example.com").await;
 
     email_retry::db::mark_failed(&pool, id, "permanent: bad recipient")
         .await
@@ -169,7 +152,7 @@ async fn mark_failed_records_reason(pool: PgPool) {
 /// `mark_transient_failure` reschedules without leaving `pending`.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn mark_transient_failure_keeps_pending_and_pushes_next_retry(pool: PgPool) {
-    let id = seed_pending(&pool, "retry@example.com").await;
+    let id = common::seed_pending_retry(&pool, "retry@example.com").await;
     let new_when = Utc::now() + ChronoDuration::minutes(5);
 
     email_retry::db::mark_transient_failure(&pool, id, new_when, "transient: timeout")
