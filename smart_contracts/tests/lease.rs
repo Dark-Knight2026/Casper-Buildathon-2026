@@ -693,6 +693,107 @@ fn test_create_lease_agreement_should_fail_if_property_is_not_active() {
         Error::InvalidPropertyStatus.into(),
         "Should revert if property is Paused"
     );
+
+    // Test Sold status
+    // Test Sold status
+    let mut params = generate_lease_agreement_creation_params(&test_data);
+    test_data.env.set_caller(test_data.env.get_account(0));
+    let sold_property_id = test_data
+        .property_registry
+        .create_property(CreatePropertyParams {
+            issuer: test_data.landlord,
+            total_supply: U256::from(1_000_000),
+            metadata_uri: String::from("ipfs://property-sold"),
+        });
+    test_data
+        .property_registry
+        .set_property_token(sold_property_id, test_data.env.get_account(4));
+    test_data
+        .property_registry
+        .set_revenue_distributor(sold_property_id, test_data.env.get_account(5));
+    test_data
+        .property_registry
+        .set_property_status(sold_property_id, PropertyStatus::Sold);
+
+    test_data.env.set_caller(test_data.landlord);
+    params.equity_option = Some(LeaseEquityOption {
+        property_id: sold_property_id,
+    });
+    assert_eq!(
+        test_data
+            .lease
+            .try_create_lease_agreement(params)
+            .unwrap_err(),
+        Error::InvalidPropertyStatus.into(),
+        "Should revert if property is Sold"
+    );
+
+    // Test Liquidating status
+    let mut params = generate_lease_agreement_creation_params(&test_data);
+    test_data.env.set_caller(test_data.env.get_account(0));
+    let liquidating_property_id =
+        test_data
+            .property_registry
+            .create_property(CreatePropertyParams {
+                issuer: test_data.landlord,
+                total_supply: U256::from(1_000_000),
+                metadata_uri: String::from("ipfs://property-liquidating"),
+            });
+    test_data
+        .property_registry
+        .set_property_token(liquidating_property_id, test_data.env.get_account(6));
+    test_data
+        .property_registry
+        .set_revenue_distributor(liquidating_property_id, test_data.env.get_account(7));
+    test_data
+        .property_registry
+        .set_property_status(liquidating_property_id, PropertyStatus::Liquidating);
+
+    test_data.env.set_caller(test_data.landlord);
+    params.equity_option = Some(LeaseEquityOption {
+        property_id: liquidating_property_id,
+    });
+    assert_eq!(
+        test_data
+            .lease
+            .try_create_lease_agreement(params)
+            .unwrap_err(),
+        Error::InvalidPropertyStatus.into(),
+        "Should revert if property is Liquidating"
+    );
+
+    // Test Closed status
+    let mut params = generate_lease_agreement_creation_params(&test_data);
+    test_data.env.set_caller(test_data.env.get_account(0));
+    let closed_property_id = test_data
+        .property_registry
+        .create_property(CreatePropertyParams {
+            issuer: test_data.landlord,
+            total_supply: U256::from(1_000_000),
+            metadata_uri: String::from("ipfs://property-closed"),
+        });
+    test_data
+        .property_registry
+        .set_property_token(closed_property_id, test_data.env.get_account(8));
+    test_data
+        .property_registry
+        .set_revenue_distributor(closed_property_id, test_data.env.get_account(9));
+    test_data
+        .property_registry
+        .set_property_status(closed_property_id, PropertyStatus::Closed);
+
+    test_data.env.set_caller(test_data.landlord);
+    params.equity_option = Some(LeaseEquityOption {
+        property_id: closed_property_id,
+    });
+    assert_eq!(
+        test_data
+            .lease
+            .try_create_lease_agreement(params)
+            .unwrap_err(),
+        Error::InvalidPropertyStatus.into(),
+        "Should revert if property is Closed"
+    );
 }
 
 #[test]
