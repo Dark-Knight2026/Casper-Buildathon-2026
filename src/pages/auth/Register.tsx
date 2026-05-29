@@ -9,6 +9,8 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useWalletConnect } from '@/hooks/auth/useWalletConnect';
 import { clearCsprClickStorage } from '@/lib/csprclick';
 
+import { SignInRecoveryNotice } from '@/components/auth/SignInRecoveryNotice';
+
 import { RoleSelector } from './register/RoleSelector';
 import { ProviderList } from './register/ProviderList';
 
@@ -113,6 +115,8 @@ export default function Register() {
             disabled={isLoading || isConnected}
             isConnected={isConnected}
           />
+
+          <SignInRecoveryNotice />
 
           {isConnected && account && (
             <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800">

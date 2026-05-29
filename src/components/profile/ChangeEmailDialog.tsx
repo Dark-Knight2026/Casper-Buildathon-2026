@@ -118,8 +118,8 @@ export function ChangeEmailDialog({ open, onOpenChange, currentEmail }: Props) {
                 <p className="text-sm break-all">{currentEmail}</p>
               </div>
             )}
-            <div className="space-y-1">
-              <Label htmlFor="change-email-new">New email</Label>
+            <div className="space-y-2">
+              <Label htmlFor="change-email-new" className="block">New email</Label>
               <Input
                 id="change-email-new"
                 type="email"

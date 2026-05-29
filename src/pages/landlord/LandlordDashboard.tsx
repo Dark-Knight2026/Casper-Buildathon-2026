@@ -8,6 +8,7 @@ import { Link } from 'react-router-dom';
 import { DashboardSkeleton } from '@/components/ui/loading-skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorBoundary } from '@/components/ui/error-boundary';
+import { SecurityRecoveryCard } from '@/components/auth/SecurityRecoveryCard';
 import {
   MOCK_LANDLORD_DASHBOARD_STATS,
   MOCK_LANDLORD_RECENT_ACTIVITIES,
@@ -93,6 +94,8 @@ export default function LandlordDashboard() {
             </Button>
           </div>
         </div>
+
+        <SecurityRecoveryCard />
 
         {/* Alert Cards */}
         {(stats.overduePayments > 0 || stats.expiringLeases > 0 || stats.pendingMaintenance > 0) && (
