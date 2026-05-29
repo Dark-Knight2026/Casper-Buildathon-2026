@@ -472,12 +472,16 @@ pub async fn request_email_change(
     // OLD email so the user can react to a misissued request even when
     // the new mailbox is not under their control. Deferred to a follow-up
     // commit to keep this one focused on the confirmation round-trip.
+    let link = format!(
+        "{}/confirm-email-change?token={}",
+        state.config.frontend_url.trim_end_matches('/'),
+        token.plaintext,
+    );
     let message = EmailMessage {
         to: new_email,
         subject: "Confirm your new email address".to_owned(),
         body: format!(
-            "Use this token within 24 hours to confirm the email change: {}",
-            token.plaintext,
+            "Click the link below to confirm your new email address. It expires in 24 hours.\n\n{link}\n",
         ),
     };
     if let Err(send_err) = state.mailer.send(message).await {

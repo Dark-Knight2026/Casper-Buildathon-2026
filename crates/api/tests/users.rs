@@ -607,10 +607,9 @@ async fn confirm_email_change_happy_path_upgrades_verification(pool: PgPool) {
     assert_eq!(request_response.status_code(), StatusCode::ACCEPTED);
 
     // Pull the plaintext token out of the captured email body. The
-    // handler formats the body as
-    // `"Use this token within 24 hours to confirm the email change: <TOKEN>"`,
-    // so `rsplit(": ").next()` gives the token and trims away any
-    // trailing whitespace defensively.
+    // handler formats the body as a single link
+    // `{frontend_url}/confirm-email-change?token=<TOKEN>` terminated by
+    // `\n`, so the rightmost `?token=` substring isolates the plaintext.
     let body = {
         let lock = captured.lock().expect("CapturingMailer mutex poisoned");
         assert_eq!(
@@ -627,10 +626,9 @@ async fn confirm_email_change_happy_path_upgrades_verification(pool: PgPool) {
         msg.body.clone()
     };
     let token = body
-        .rsplit(": ")
-        .next()
-        .expect("body must contain ': '")
-        .trim();
+        .rsplit_once("?token=")
+        .map(|(_, tail)| tail.trim_end())
+        .expect("body must carry a `?token=...` link");
     assert_eq!(
         token.len(),
         43,
