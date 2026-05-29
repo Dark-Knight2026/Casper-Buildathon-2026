@@ -6,6 +6,8 @@ during the LeaseFi recurring meeting on **2026-05-07** with Anthony Batten
 and Chris. Tasks 14–16 are explicitly post-MVP (phase 2 / blocked on legal).
 Tasks 17–26 were captured on **2026-05-26** after Anthony shared
 `docs/client-doc/leasefi-design-reference.html` and clarified scope via Slack.
+Task 30 was captured at the **2026-05-28** recurring meeting after a
+CSPR.click account lockout exposed the identity/wallet coupling problem.
 
 | #  | Task                                                       | Status            |
 |----|------------------------------------------------------------|-------------------|
@@ -38,6 +40,7 @@ Tasks 17–26 were captured on **2026-05-26** after Anthony shared
 | 27 | ICO page rebrand — Token Sale → Big Token Dashboard        | 🚧 partial⁶       |
 | 28 | Apply Now duplicate on tenant Property Detail              | ✅ shipped        |
 | 29 | MVP role narrowing — purge buyer/seller/agent/broker UI    | 🔲 pending⁷       |
+| 30 | Auth/wallet decoupling — backend identity + sign-time wallet| 🔲 pending⁸       |
 
 ¹ Demo = UI is final, but the backend integration is mocked. Open product
 questions and required endpoints are documented at the top of
@@ -70,6 +73,15 @@ broker (and the associated attorney / inspector / escrow / title / CPA /
 mortgage / insurance dashboards) are pre-LeaseFi-pivot scaffolding that
 remained in the tree. They are not deleted from the repo — they are
 unmounted from MVP routing and hidden from MVP navigation. See Task 29.
+
+⁸ Captured at the **2026-05-28** recurring meeting after Anastasia's
+CSPR.click lockout (forgot the wallet password → account inaccessible).
+**Amends Task 17's invisible-wallet decision:** identity moves to a
+backend-owned auth layer (own login, independent of any wallet); the
+wallet becomes a separate, on-demand *signing* concern attached to the
+profile. Backend login rewrite required (Ivan confirmed on the call).
+Confirm final scope with Anthony before implementation; the CSPR.click
+team question (Web3Auth factor mode per appId) is still open.
 
 ---
 
@@ -1869,6 +1881,162 @@ None — pure FE unmount + nav cleanup.
   ~2 h
 - Link-string audit + banner-comment pass: ~1.5 h
 - Manual smoke test on tenant + landlord journeys: ~1 h
+
+---
+
+## Task 30 — Auth/Wallet Decoupling: Backend Identity + Sign-Time Wallet
+
+### Source
+
+LeaseFi recurring meeting **2026-05-28**. Triggered by a real lockout:
+a forgotten CSPR.click embedded-wallet password cost access to the whole
+account, because today the **wallet public key *is* the backend
+identity** (`nonce → signMessage → login`, see
+`src/services/ico/backendAuthService.ts`).
+
+### Decisions (from the meeting)
+
+1. **Identity** lives in a backend-owned auth layer with its own login
+   (social / email), **independent of any wallet**. The profile survives
+   the loss of any wallet.
+2. **Wallet** is a separate, **on-demand signing concern** — requested
+   only when an on-chain action actually needs a signature, then bound
+   to the profile.
+3. At a signing step the user can either **connect an existing wallet**
+   or **have one created for them**.
+4. A profile can hold **multiple wallets** and the user can swap which
+   one signs; swapping must not affect the profile or past on-chain
+   records.
+5. This **amends Task 17** (invisible-wallet UX): the wallet is no longer
+   an invisible login mechanism — it becomes an explicit, optional,
+   sign-time attachment. Backend login is rewritten accordingly (email /
+   social login routes added; wallet moved out of the registration step
+   into a separate layer).
+
+### Goal
+
+Keep **CSPR.click as a wallet-only signing layer** (drop it as the
+identity layer) so that, at signing time, a user can connect an existing
+wallet or create one, and that wallet attaches to their
+already-authenticated profile.
+
+### Proposed implementation (CSPR.click, hybrid — minimal new work)
+
+CSPR.click already covers both scenarios in one SDK; the providers are
+already wired on the ICO surface (`src/pages/ico/ICOLayout.tsx`). Reuse
+them behind a sign-time "Add wallet" step.
+
+**Scenario 1 — user already has a wallet (connect existing)**
+
+| Option | Provider key | Recovery owner |
+|--------|--------------|----------------|
+| Casper Wallet (extension) | `casper-wallet` | user (seed phrase) |
+| Ledger | `ledger` | user (hardware seed) |
+| MetaMask Casper Snap | `metamask-snap` | user (MM seed) |
+| WalletConnect (mobile) | `walletConnect` init opt | wallet-side |
+
+All connect via the same `clickRef.connect(providerKey, options)` path
+already implemented in `src/hooks/auth/useWalletConnect.ts`. Recovery is
+**not our problem** for these — the wallet is user-owned.
+
+**Scenario 2 — no wallet yet (create for them)**
+
+- `clickRef.connect('csprclick-w3a-google' | 'csprclick-w3a-apple')`
+  provisions an embedded Casper wallet via CSPR.click (Web3Auth).
+- ⚠️ The embedded-wallet *funds* still carry the recovery caveat — the
+  Web3Auth factor mode is configured server-side per appId by CSPR.click
+  and is **not** exposed in `CsprClickInitOptions` (verified: only
+  `appName, appId, contentMode, casperNode?, chainName?, providers[],
+  walletConnect?`). But the **profile** is now safe regardless, since
+  identity is backend-owned.
+
+**Binding (proof-of-ownership)**
+
+Reuse the existing nonce flow, repurposed from *login* to *attach*:
+backend issues a nonce → `clickRef.signMessage(message, publicKey)` →
+backend verifies the signature → inserts the address into the profile's
+`user ↔ wallet[]` set. Same primitive already in
+`backendAuthService.getNonce` / `loginWithSignature`.
+
+### Acceptance criteria
+
+- Authenticating to LeaseFi **never requires a wallet**. A freshly
+  registered user with zero wallets can browse, apply, and manage their
+  profile end-to-end.
+- An "Add wallet" step appears only at the first action that needs an
+  on-chain signature (signing a lease, funding a deposit, paying rent),
+  matching the §3 / §4 pre-signature pattern (Tasks 20–21).
+- The step offers both **"I have a wallet"** (Casper Wallet / Ledger /
+  Snap / WalletConnect) and **"Create a wallet"** (Google / Apple
+  embedded) paths.
+- A connected wallet is bound to the profile via signed-nonce
+  proof-of-ownership before any signing proceeds.
+- A profile can hold **multiple** wallets; the user can mark one
+  **active for signing** and swap it (`switchAccount` / `forgetAccount`
+  + the backend `user ↔ wallet[]` table). Swapping does **not** affect
+  the profile or past on-chain records.
+- Losing a wallet never locks the profile. The user reconnects/creates a
+  new wallet and the binding updates. (Funds in a lost embedded wallet
+  may still be unrecoverable — surfaced via `SecurityRecoveryCard`.)
+- Copy stays provider-agnostic where the provider is irrelevant; name a
+  specific wallet only on the explicit choose-a-wallet step.
+- All wallet-as-login code paths are removed from the auth pages
+  (`src/components/auth/AuthWalletLayout.tsx`, the W3A-only
+  `SOCIAL_PROVIDERS` login flow) once the backend identity layer ships.
+
+### Future expansion (not committed — options only)
+
+Noted in case the embedded-wallet recovery gap or scale forces a change;
+none planned: own Web3Auth appId in single-factor mode, direct wallet
+integrations (Casper Wallet / Ledger / Snap / WalletConnect) without
+CSPR.click, account abstraction / sponsored gas, custodial signer.
+
+### Open product questions
+
+1. **CSPR.click factor mode (still open from research).** For our appId,
+   is the embedded social wallet non-MFA (Google alone recovers) or MFA
+   (recovery share required on a new device)? Can it be switched per
+   appId? Not exposed in the SDK — must ask the CSPR.click team. Answer
+   decides whether Future-expansion #1 is needed.
+2. **Identity provider for the backend auth layer.** Own email/password,
+   a social-OAuth library, or extract identity from the Web3Auth `token`
+   JWT CSPR.click returns? Backend call.
+3. **Active-wallet semantics.** One active signer at a time, or
+   per-action choice? A landlord payout wallet may need to be pinned per
+   property, not per session.
+4. **Migration.** Existing wallet-keyed accounts (created under the old
+   model) must map onto new backend identities without orphaning leases
+   / escrow tied to their current wallet.
+
+### Backend endpoints required
+
+- New identity/auth surface (own login) — BE-owned, **rewrite of the
+  current wallet-signature login**.
+- `POST /api/v1/wallets/nonce` → challenge for attaching a wallet.
+- `POST /api/v1/wallets` → verify signed nonce, attach address to profile.
+- `GET /api/v1/wallets` → list the profile's bound wallets.
+- `PATCH /api/v1/wallets/:address` → set active / relabel.
+- `DELETE /api/v1/wallets/:address` → detach.
+
+### Demo files (when implemented)
+
+- `src/components/wallet/AddWalletStep.tsx` — sign-time "connect or
+  create" chooser (reuses ICO provider list)
+- `src/components/wallet/WalletManager.tsx` — profile-level list / swap /
+  detach
+- `src/hooks/auth/useWalletConnect.ts` — repurpose from login to
+  attach-and-prove (existing)
+- `src/services/walletService.ts` — nonce / attach / list / active
+  (new; mirrors `backendAuthService` primitives)
+- `src/components/auth/AuthWalletLayout.tsx` — retire wallet-as-login
+  once backend identity ships
+- `src/components/auth/SecurityRecoveryCard.tsx` — keep; re-scope copy to
+  "this wallet's funds" rather than "your whole account"
+
+### Estimated effort
+
+FE: ~40 h. Gated on the backend identity/auth rewrite (separate track) —
+the FE attach/swap flow cannot be wired to real auth until that lands.
 
 ---
 
