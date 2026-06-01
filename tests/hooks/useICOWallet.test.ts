@@ -93,6 +93,9 @@ describe('useICOWallet', () => {
       expect(mockClickRef.on).toHaveBeenCalledWith('csprclick:disconnected', expect.any(Function));
       expect(mockClickRef.on).toHaveBeenCalledWith('csprclick:ready', expect.any(Function));
       expect(mockClickRef.on).toHaveBeenCalledWith('csprclick:cancelled', expect.any(Function));
+      expect(mockClickRef.on).toHaveBeenCalledWith('csprclick-w3a-google:connected', expect.any(Function));
+      expect(mockClickRef.on).toHaveBeenCalledWith('csprclick-w3a-apple:connected', expect.any(Function));
+      expect(mockClickRef.on).toHaveBeenCalledWith('csprclick:unsolicited_account_change', expect.any(Function));
     });
 
     it('should remove all event listeners on unmount', () => {
@@ -106,6 +109,9 @@ describe('useICOWallet', () => {
       expect(mockClickRef.off).toHaveBeenCalledWith('csprclick:disconnected', expect.any(Function));
       expect(mockClickRef.off).toHaveBeenCalledWith('csprclick:ready', expect.any(Function));
       expect(mockClickRef.off).toHaveBeenCalledWith('csprclick:cancelled', expect.any(Function));
+      expect(mockClickRef.off).toHaveBeenCalledWith('csprclick-w3a-google:connected', expect.any(Function));
+      expect(mockClickRef.off).toHaveBeenCalledWith('csprclick-w3a-apple:connected', expect.any(Function));
+      expect(mockClickRef.off).toHaveBeenCalledWith('csprclick:unsolicited_account_change', expect.any(Function));
     });
 
     it('should handle signed_in event', () => {
@@ -275,6 +281,48 @@ describe('useICOWallet', () => {
       expect(result.current.isConnected).toBe(false);
       expect(result.current.account).toBeNull();
     });
+
+    it('should handle social provider connected event by re-reading the active account', async () => {
+      const { result } = renderHook(() => useICOWallet());
+
+      // Social providers fire `...:connected` with no usable payload — the
+      // account is read back via getActiveAccountAsync.
+      const googleKey = '03abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789';
+      mockClickRef.getActiveAccountAsync.mockResolvedValue({
+        public_key: googleKey,
+        provider: 'csprclick-w3a-google',
+      });
+
+      const socialCall = mockClickRef.on.mock.calls.find(
+        (call) => call[0] === 'csprclick-w3a-google:connected'
+      );
+      const handleSocialConnected = socialCall?.[1];
+
+      await act(async () => {
+        await handleSocialConnected?.({});
+      });
+
+      expect(result.current.isConnected).toBe(true);
+      expect(result.current.account?.publicKey).toBe(googleKey);
+      expect(result.current.account?.provider).toBe('csprclick-w3a-google');
+    });
+
+    it('should restore the session on unsolicited account change', async () => {
+      renderHook(() => useICOWallet());
+
+      const evtAccount = { provider: mockProvider, public_key: mockPublicKey };
+
+      const unsolicitedCall = mockClickRef.on.mock.calls.find(
+        (call) => call[0] === 'csprclick:unsolicited_account_change'
+      );
+      const handleUnsolicited = unsolicitedCall?.[1];
+
+      await act(async () => {
+        await handleUnsolicited?.({ account: evtAccount });
+      });
+
+      expect(mockClickRef.signInWithAccount).toHaveBeenCalledWith(evtAccount);
+    });
   });
 
   // --- Connect ---
@@ -335,6 +383,40 @@ describe('useICOWallet', () => {
           result.current.disconnect();
         });
       }).not.toThrow();
+    });
+  });
+
+  // --- syncActiveAccount ---
+
+  describe('syncActiveAccount', () => {
+    it('should connect to the active account read from the SDK', async () => {
+      const { result } = renderHook(() => useICOWallet());
+
+      mockClickRef.getActiveAccountAsync.mockResolvedValue({
+        public_key: mockPublicKey,
+        provider: 'csprclick-w3a-google',
+      });
+
+      await act(async () => {
+        await result.current.syncActiveAccount();
+      });
+
+      expect(result.current.isConnected).toBe(true);
+      expect(result.current.account?.publicKey).toBe(mockPublicKey);
+      expect(result.current.account?.provider).toBe('csprclick-w3a-google');
+    });
+
+    it('should no-op when there is no active account', async () => {
+      const { result } = renderHook(() => useICOWallet());
+
+      mockClickRef.getActiveAccountAsync.mockResolvedValue(null);
+
+      await act(async () => {
+        await result.current.syncActiveAccount();
+      });
+
+      expect(result.current.isConnected).toBe(false);
+      expect(result.current.account).toBeNull();
     });
   });
 
