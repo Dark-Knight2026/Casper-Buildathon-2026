@@ -83,16 +83,22 @@ futures-util = "0.3"
 hex = "0.4"
 http = "1"
 jsonwebtoken = { version = "10.3", features = ["rust_crypto"] }
-# FIXME(email-postmark): exact pin - postmark 2.0.0 links reqwest 0.12
-# alongside our direct reqwest 0.13. Same pattern as rust-s3 (see below).
+# FIXME: (email-postmark) exact pin - postmark 2.0.0 links reqwest 0.12
+# alongside our direct reqwest 0.13. This is one of TWO independent 0.12
+# consumers (`cargo tree -i -p reqwest@0.12`): rust-s3 (below) is the other.
+# Dropping postmark alone (e.g. by hand-rolling the Postmark `POST /email`
+# call over reqwest 0.13) removes one consumer but does NOT collapse the dual
+# link - rust-s3 keeps 0.12 until it too migrates. Resolve both together.
 postmark = { version = "2.0.0", default-features = false, features = ["reqwest-rustls-tls"] }
 rand = "0.10.0"
 redis = { version = "1.0.2", features = ["tokio-comp", "connection-manager"] }
 reqwest = { version = "0.13", default-features = false, features = ["json", "rustls"] }
 rustls = { version = "0.23", features = ["ring"] }
 rust_decimal = { version = "1", features = ["serde"] }
-# FIXME(media-storage): exact pin - rust-s3 0.37.x links reqwest 0.12
-# alongside our direct reqwest 0.13. Migrate to aws-sdk-s3.
+# FIXME: (media-storage) exact pin - rust-s3 0.37.x links reqwest 0.12
+# alongside our direct reqwest 0.13. The other 0.12 consumer is postmark
+# (above); the dual link only collapses once BOTH are gone, so migrating
+# rust-s3 to aws-sdk-s3 is necessary but not sufficient on its own.
 rust-s3 = { version = "=0.37.2", default-features = false, features = ["tokio-rustls-tls"] }
 secrecy = { version = "0.10", features = ["serde"] }
 serde = { version = "1", features = ["derive"] }
