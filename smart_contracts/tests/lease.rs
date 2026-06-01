@@ -190,7 +190,7 @@ fn pay_all_lease_agreement_invoices(test_data: &mut TestData, lease_agreement_id
         let rent = *lease_agreement.monthly_rent.amount();
         // Account for 2% protocol fee: need to pay rent * 50/49 so that
         // rent_allocation = amount - protocol_fee equals rent_amount exactly
-        let amount = rent * U256::from(50u32) / U256::from(49u32);
+        let amount = rent;
         test_data
             .escrow
             .with_tokens(amount.to_u512())

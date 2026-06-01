@@ -947,8 +947,7 @@ fn test_equity_lease_finalization_blocks_compliance_transfer() {
 
     // Pay rent invoices (native CSPR), accounting for 2% protocol fee
     for invoice_id in lease_agreement.invoices_ids.iter().skip(1) {
-        let rent = *lease_agreement.monthly_rent.amount();
-        let amount = rent * U256::from(50u32) / U256::from(49u32);
+        let amount = *lease_agreement.monthly_rent.amount();
         ctx.escrow
             .with_tokens(amount.to_u512())
             .pay_invoice(*invoice_id, amount);
