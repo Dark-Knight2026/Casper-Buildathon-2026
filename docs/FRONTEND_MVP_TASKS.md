@@ -66,7 +66,7 @@ version-updated: 2026-05-27T00:00:00Z
   - FE work: request/confirm email screen + token-confirmation landing page.
 - [x] **Profile editable (avatar, personal data)** — 🟢 REAL
   - `src/pages/tenant/TenantProfile.tsx` → `AuthContext.updateProfile` (`PATCH /api/v1/users/me`) + `uploadAvatar` (`POST /api/v1/users/me/avatar`, S3). `RoleSwitchDialog` → `patchMyRole` with reauth gate.
-  - ⚠️ This is the tenant profile page. No dedicated landlord/PM profile-edit pages (see §3.2).
+  - ⚠️ This is the tenant profile page. Landlord profile-edit page now exists (`src/pages/landlord/LandlordProfile.tsx`); PM profile-edit page still missing (see §3.2).
 
 > _Design-reference cross-cut:_ **Task 26** — `<KYCGate/>` wrapper around the Sumsub WebSDK widget gates sensitive actions (sign lease, pay rent, fund deposit). Per Anthony 2026-05-20: Sumsub is the sole KYC service — no separate AML/CDD lookup, OFAC API, or extra biometric layer on top (Sumsub handles identity, document checks, and liveness internally). We store only `sumsub_applicant_id + kyc_status + timestamp`.
 
@@ -75,7 +75,8 @@ version-updated: 2026-05-27T00:00:00Z
 - [ ] **Tenant profile with lease history, payment history, equity balance** — 🟠 MOCK + ⛔ BE-BLOCKED
   - Profile identity is 🟢 REAL (`getMe`), but leases/payments/equity in `src/pages/tenant/TenantDashboard.tsx` = `MOCK_LEASE`/`MOCK_PAYMENTS` (TODO: "remove when /api/v1/leases ready").
 - [ ] **Landlord profile: properties, active leases, received rent** — 🟡 SUPABASE→REWIRE + ⛔ BE-BLOCKED
-  - `src/pages/landlord/LandlordDashboard.tsx` reads `supabase.from('properties'|'leases'|'payments')`. No dedicated landlord profile page.
+  - `src/pages/landlord/LandlordProfile.tsx` now exists (route `/landlord/profile`, `App.tsx:357`). Identity is 🟢 REAL (`getMe` + `uploadAvatar`); dashboard stats = `MOCK_LANDLORD_DASHBOARD_STATS` (TODO(BE): `GET /api/v1/landlord/stats`).
+  - `src/pages/landlord/LandlordDashboard.tsx` still reads `supabase.from('properties'|'leases'|'payments')`. Rewire both to the Rust API.
 - [ ] **Property Manager profile (aggregated view)** — 🔴 MISSING
   - No `property_manager` in `UserRole` (`src/types/user.ts`); only a stub template in `DashboardTemplates.tsx`. Needs role enum, route, context.
 - [ ] **`company tag` slot in all 3 profile types** — 🔴 MISSING
