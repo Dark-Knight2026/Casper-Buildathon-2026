@@ -667,3 +667,84 @@ fn test_pay_invoice_should_pay_invoice_in_cep18_token_properly() {
         "Invoice should be marked as paid after successful payment"
     );
 }
+
+// =============================================================================
+// create_security_deposit_invoice()
+// =============================================================================
+
+#[test]
+fn test_create_security_deposit_invoice_should_revert_if_not_lease_contract_is_calling() {
+    let mut test_data = setup(odra_test::env());
+    let mut params = generate_invoice_params(&test_data);
+
+    let amount_due = CurrencyAmount::new(
+        Some(test_data.mock_cep18.address()),
+        *params.amount_due.amount(),
+    );
+
+    assert_eq!(
+        test_data
+            .escrow
+            .try_create_security_deposit_invoice(params.tenant, amount_due, params.deadline,)
+            .unwrap_err(),
+        Error::CallerNotLeaseContract.into(),
+        "Should revert when caller is not the Lease contract",
+    );
+}
+
+#[test]
+fn test_create_security_deposit_invoice_should_revert_if_currency_is_not_security_deposit_token() {
+    let mut test_data = setup(odra_test::env());
+    let params = generate_invoice_params(&test_data);
+
+    test_data
+        .env
+        .set_caller(test_data.escrow.get_lease_contract_address());
+
+    assert_eq!(
+        test_data
+            .escrow
+            .try_create_security_deposit_invoice(params.tenant, params.amount_due, params.deadline,)
+            .unwrap_err(),
+        Error::InvalidSecurityDepositCurrency.into(),
+        "Should require configured security deposit token"
+    );
+}
+
+#[test]
+fn test_create_security_deposit_invoice_should_create_invoice_properly() {
+    let mut test_data = setup(odra_test::env());
+    let mut params = generate_invoice_params(&test_data);
+
+    let amount_due = CurrencyAmount::new(
+        Some(test_data.mock_cep18.address()),
+        *params.amount_due.amount(),
+    );
+
+    test_data
+        .env
+        .set_caller(test_data.escrow.get_lease_contract_address());
+
+    let invoice_id = test_data.escrow.create_security_deposit_invoice(
+        params.tenant,
+        amount_due,
+        params.deadline,
+    );
+
+    assert_eq!(
+        test_data.escrow.get_invoice_by_id(invoice_id),
+        Invoice {
+            kind: InvoiceKind::SecurityDeposit,
+            buyer: params.tenant,
+            seller: test_data.escrow.get_lease_contract_address(),
+            amount_due,
+            rent_amount: U256::zero(),
+            rent_paid: U256::zero(),
+            property_manager: None,
+            property_manager_bps: 0,
+            deadline: params.deadline,
+            is_paid: false,
+        },
+        "Invalid security deposit invoice"
+    );
+}
