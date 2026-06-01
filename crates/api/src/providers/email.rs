@@ -100,6 +100,21 @@ pub trait EmailSender: Send + Sync {
     /// fails. Validation errors (malformed `to`, oversize `body`) are the
     /// caller's responsibility and are not represented here.
     async fn send(&self, message: EmailMessage) -> Result<(), EmailError>;
+
+    /// Whether this sender can defer delivery into the retry queue by
+    /// returning [`EmailError::Transient`].
+    ///
+    /// The server spawns the retry-queue worker iff its mailer reports `true`,
+    /// so the spawn decision follows the *actual* mailer rather than a config
+    /// flag read independently. A stub that always succeeds (the default)
+    /// never enqueues a row, so draining it would be busy-work; a real
+    /// external provider that can fail transiently needs the worker to drain
+    /// what it enqueues. Defaults to `false` - only real delivery backends
+    /// override it.
+    #[inline]
+    fn uses_retry_queue(&self) -> bool {
+        false
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -119,9 +134,9 @@ pub trait EmailSender: Send + Sync {
 /// the follow-up message.
 ///
 /// Worker-side invariant: `send` MUST NOT return [`EmailError::Transient`].
-/// The retry-queue worker is only spawned when a real provider is active,
-/// so any row that landed in `email_send_retries` under this sender would
-/// stay `pending` forever.
+/// It leaves [`EmailSender::uses_retry_queue`] at the default `false`, so the
+/// retry-queue worker is not spawned for it; any row that somehow landed in
+/// `email_send_retries` under this sender would stay `pending` forever.
 #[derive(Debug, Default)]
 pub struct LoggingEmailSender;
 
@@ -174,6 +189,13 @@ impl PostmarkSender {
 
 #[async_trait]
 impl EmailSender for PostmarkSender {
+    /// Postmark can fail transiently (HTTP 429 / 5xx, network blips), so its
+    /// failures land in the retry queue and the worker must run to drain them.
+    #[inline]
+    fn uses_retry_queue(&self) -> bool {
+        true
+    }
+
     #[inline]
     async fn send(&self, message: EmailMessage) -> Result<(), EmailError> {
         let request = SendEmailRequest::builder()

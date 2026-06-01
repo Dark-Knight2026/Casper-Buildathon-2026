@@ -240,11 +240,15 @@ pub async fn main() -> Result<(), ServerError> {
     // sent exactly once.
     let (shutdown_tx, _) = broadcast::channel::<()>(1);
 
-    // Spawn background workers only when a real provider is wired in: under
-    // `LoggingEmailSender` no send ever fails, so the retry queue would never
-    // receive a row to drain. Clones are cheap - `db` is an Arc-backed pool and
-    // `mailer` is already a trait object behind `Arc`.
-    let worker_handles = if config.postmark.is_some() {
+    // Spawn background workers iff the selected mailer can enqueue retries.
+    // Deriving this from the mailer itself (rather than re-reading
+    // `config.postmark`) keeps the spawn decision in lockstep with the mailer
+    // selection above: whoever can fill the retry queue is the one that
+    // declares it needs the worker to drain it. Under a stub mailer no send
+    // ever fails, so the queue would never receive a row. Clones are cheap -
+    // `db` is an Arc-backed pool and `mailer` is already a trait object behind
+    // `Arc`.
+    let worker_handles = if state.mailer.uses_retry_queue() {
         workers::spawn_all(state.db.clone(), state.mailer.clone(), &shutdown_tx)
     } else {
         Vec::new()

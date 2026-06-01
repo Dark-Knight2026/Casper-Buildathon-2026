@@ -8,8 +8,9 @@
 
 use http::{Error, Request};
 use postmark::reqwest::PostmarkClientError;
+use secrecy::SecretString;
 
-use api::providers::EmailError;
+use api::providers::{EmailError, EmailSender, LoggingEmailSender, PostmarkSender};
 
 /// Builds a genuine `http::Error` by driving the `http` request builder with an
 /// invalid method: the builder defers the failure to `.body()`, which hands
@@ -32,5 +33,29 @@ fn postmark_http_error_classified_as_permanent() {
     assert!(
         matches!(classified, EmailError::Permanent(_)),
         "http::Error is a deterministic construction failure - must be Permanent, got {classified:?}",
+    );
+}
+
+/// The retry-queue worker is spawned iff the mailer reports `uses_retry_queue`,
+/// so the predicate must track the concrete backend: the logging stub never
+/// enqueues a retry (default `false`), while Postmark can fail transiently and
+/// must declare it needs the worker (`true`). Pins that the spawn decision in
+/// `server::run` stays coupled to the actual mailer, not a config flag.
+#[test]
+fn uses_retry_queue_follows_the_concrete_mailer() {
+    assert!(
+        !LoggingEmailSender.uses_retry_queue(),
+        "the logging stub never returns Transient, so it must not request a worker",
+    );
+
+    // `PostmarkSender::new` only builds the HTTP client; it performs no network
+    // I/O, so a throwaway token is enough to construct one.
+    let postmark = PostmarkSender::new(
+        &SecretString::from("test-token".to_owned()),
+        "from@example.com",
+    );
+    assert!(
+        postmark.uses_retry_queue(),
+        "a real provider can fail transiently and needs the retry worker",
     );
 }
