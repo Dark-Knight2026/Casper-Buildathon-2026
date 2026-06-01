@@ -114,7 +114,7 @@ jobs:
 
           ALLOW_DB_RESET: ${{ vars.ALLOW_DB_RESET }}
 
-          EMAIL_CHANGE_MAX_ATTEMPTS: ${{ vars.EMAIL_CHANGE_MAX_ATTEMPTS }}
+          REQUEST_BODY_LIMIT_MB: ${{ vars.REQUEST_BODY_LIMIT_MB }}
         run: |
           # S3_ACCESS_KEY / S3_SECRET_KEY are masked in the dedicated
           # `Mask S3 secrets` pre-step above; not re-listed here to keep
@@ -166,7 +166,7 @@ jobs:
             printf 'START_BLOCK_CONTRACT_VESTING=%s\n'   "$START_BLOCK_CONTRACT_VESTING"
             printf 'START_BLOCK_CONTRACT_STAKING=%s\n'   "$START_BLOCK_CONTRACT_STAKING"
             printf 'ALLOW_DB_RESET=%s\n'                 "$ALLOW_DB_RESET"
-            printf 'EMAIL_CHANGE_MAX_ATTEMPTS=%s\n'      "$EMAIL_CHANGE_MAX_ATTEMPTS"
+            printf 'REQUEST_BODY_LIMIT_MB=%s\n'          "$REQUEST_BODY_LIMIT_MB"
             printf 'S3_BUCKET=%s\n'                      "$S3_BUCKET"
             printf 'S3_REGION=%s\n'                      "$S3_REGION"
             printf 'S3_ENDPOINT=%s\n'                    "$S3_ENDPOINT"

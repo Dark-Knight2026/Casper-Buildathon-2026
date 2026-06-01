@@ -32,6 +32,12 @@ struct RawEnvConfig {
     /// a link, so this is required regardless of Postmark config.
     #[serde(default = "default_frontend_url")]
     frontend_url: String,
+    /// Outer request-body ceiling in MiB. Mirrored into nginx at deploy time
+    /// (see `deploy/nginx/https.conf.template`); both layers MUST stay in sync
+    /// so the per-handler 413 contract responds before either edge clips the
+    /// stream. Defaults to 8 MiB.
+    #[serde(default = "default_request_body_limit_mb")]
+    request_body_limit_mb: u32,
     /// `Secure` flag toggle for auth cookies. Production/staging deploys must
     /// set `COOKIE_SECURE=true` so HTTPS-only delivery is enforced.
     #[serde(default)]
@@ -95,6 +101,9 @@ fn default_cors_origin() -> String {
 }
 fn default_frontend_url() -> String {
     "http://localhost:3000".to_owned()
+}
+const fn default_request_body_limit_mb() -> u32 {
+    8
 }
 const fn default_email_change_max_attempts() -> u64 {
     3
@@ -175,6 +184,16 @@ pub struct ServerConfig {
     /// Base URL of the frontend app, used to build links embedded in
     /// transactional emails. Defaults to `http://localhost:3000` for dev.
     pub frontend_url: String,
+    /// Outer request-body ceiling in MiB, applied uniformly across the router
+    /// via `DefaultBodyLimit` and `RequestBodyLimitLayer` in [`crate::server::create_app`].
+    ///
+    /// Mirrored into nginx (`client_max_body_size`) at deploy time from the same
+    /// `REQUEST_BODY_LIMIT_MB` env var; the two layers MUST stay in sync. Per-handler
+    /// caps (e.g. `MAX_AVATAR_BYTES`) cut further inside the request lifecycle and
+    /// rely on ~3 MiB of multipart headroom above the largest of them, otherwise
+    /// `multer` surfaces an oversize body as `IncompleteFieldData -> 400` instead
+    /// of the documented `413`.
+    pub request_body_limit_mb: u32,
     /// Whether auth cookies are issued with the `Secure` flag. Must be `true`
     /// in any HTTPS deployment, must be `false` for plain-HTTP local dev (the
     /// browser silently drops `Secure` cookies on `http://`, which would break
@@ -299,6 +318,7 @@ impl ServerConfig {
             port: raw.port,
             cors_origin: raw.cors_origin,
             frontend_url: raw.frontend_url,
+            request_body_limit_mb: raw.request_body_limit_mb,
             cookie_secure: raw.cookie_secure,
             contract_big: raw.contract_big.map(|s| s.to_ascii_lowercase()),
             ico_fallback,
@@ -322,6 +342,24 @@ impl ServerConfig {
         }
         if self.port == 0 {
             return Err(ServerError::EnvVar("PORT cannot be 0".to_owned()));
+        }
+        if self.request_body_limit_mb < 8 {
+            return Err(ServerError::EnvVar(
+                "REQUEST_BODY_LIMIT_MB must be at least 8 MiB: 5 MiB MAX_AVATAR_BYTES \
+                 + 3 MiB multipart headroom (see server.rs), otherwise oversize \
+                 multipart bodies are cut mid-parse and surface as 400 instead of 413"
+                    .to_owned(),
+            ));
+        }
+        if self.request_body_limit_mb > 100 {
+            return Err(ServerError::EnvVar(
+                "REQUEST_BODY_LIMIT_MB must not exceed 100 MiB: the field is a u32 \
+                 mirrored into nginx and both axum body-limit layers, so a typo like \
+                 10000 silently configures a multi-GiB cap. The only multipart upload \
+                 is the 5 MiB avatar, so 100 MiB is ample headroom; a larger value is a \
+                 memory-exhaustion foot-gun, not a real requirement"
+                    .to_owned(),
+            ));
         }
         if !self.cors_origin.starts_with("http://") && !self.cors_origin.starts_with("https://") {
             return Err(ServerError::EnvVar(

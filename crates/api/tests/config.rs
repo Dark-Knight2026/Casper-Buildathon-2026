@@ -13,12 +13,23 @@ use api::ServerConfig;
 /// Env var keys used by `Config::from_env()`. Drives the clear-all phase
 /// of [`set_env_vars`] so individual tests do not need to enumerate which
 /// keys to scrub.
-const CONFIG_ENV_VARS: [&str; 12] = [
+///
+/// This MUST list every `#[serde(default)]` field of `RawEnvConfig`, not just
+/// the ones a test sets explicitly: any default-backed var left in the ambient
+/// CI environment (or set by a prior serial test) would otherwise leak into a
+/// test that assumes it is unset, making the suite order-dependent.
+const CONFIG_ENV_VARS: [&str; 18] = [
     "DATABASE_URL",
     "REDIS_URL",
     "SUPABASE_JWT_SECRET",
     "PORT",
     "CORS_ORIGIN",
+    "REQUEST_BODY_LIMIT_MB",
+    "COOKIE_SECURE",
+    "CONTRACT_BIG",
+    "ICO_PRICE_USD",
+    "ICO_TOTAL_ALLOCATION",
+    "TOTAL_SUPPLY",
     "S3_BUCKET",
     "S3_REGION",
     "S3_ENDPOINT",
@@ -189,33 +200,98 @@ fn from_env_rejects_invalid_port() {
     assert!(err.to_string().contains("port"), "Unexpected error: {err}");
 }
 
-/// `EMAIL_CHANGE_MAX_ATTEMPTS` is honoured when set. Together with the
-/// integration test in `users.rs` this proves the value flows from env all
-/// the way into `RedisStore::is_email_change_rate_limited`.
+/// Regression guard for the `REQUEST_BODY_LIMIT_MB` validation floor.
+///
+/// The outer body cap must leave ~3 MiB of multipart headroom above the
+/// largest per-handler cap (`MAX_AVATAR_BYTES` = 5 MiB), so the minimum safe
+/// value is 8 MiB. A value of 1-7 passes the old `== 0` guard but causes
+/// `RequestBodyLimitLayer` to cut the multipart stream mid-parse, surfacing as
+/// `IncompleteFieldData -> 400` instead of the documented `413`.
+///
+/// Expected to FAIL on the pre-fix code: the `== 0` guard accepts 4 and 7.
 #[test]
 #[serial]
-fn from_env_reads_email_change_max_attempts_override() {
-    set_env_vars(&[REQUIRED_ENV, &[("EMAIL_CHANGE_MAX_ATTEMPTS", "10")]]);
+fn from_env_rejects_body_limit_below_floor() {
+    for too_small in ["1", "4", "7"] {
+        set_env_vars(&[REQUIRED_ENV, &[("REQUEST_BODY_LIMIT_MB", too_small)]]);
+        let err = ServerConfig::from_env().unwrap_err();
+        assert!(
+            err.to_string().contains("REQUEST_BODY_LIMIT_MB"),
+            "{too_small} MiB must be rejected (below the 8 MiB floor), got: {err}",
+        );
+    }
 
-    let config = ServerConfig::from_env().expect("Should succeed with override");
-    assert_eq!(config.email_change_max_attempts, 10);
+    set_env_vars(&[REQUIRED_ENV, &[("REQUEST_BODY_LIMIT_MB", "8")]]);
+    ServerConfig::from_env().expect("8 MiB is the minimum valid body limit");
 }
 
-/// `EMAIL_CHANGE_MAX_ATTEMPTS=0` is rejected at startup. With the rate-limit
-/// gate firing as `count >= 0`, a zero cap would 429 every email-change
-/// request and lock every user out. Fail-fast at boot turns this from a
-/// production outage into a visible boot-log error.
+/// Regression guard for the missing `REQUEST_BODY_LIMIT_MB` validation ceiling.
+///
+/// The field is a `u32`, so without an upper bound a typo like `10000` is
+/// silently accepted and configures a ~9.8 GiB outer cap on both
+/// `DefaultBodyLimit` and `RequestBodyLimitLayer` - a memory-exhaustion / `DoS`
+/// foot-gun, since the only multipart upload is the 5 MiB avatar. 100 MiB is
+/// the documented ceiling: generous headroom over any legitimate upload.
+///
+/// Expected to FAIL on the pre-fix code: with only the `< 8` floor guard,
+/// `10000` passes validation.
 #[test]
 #[serial]
-fn from_env_rejects_email_change_max_attempts_zero() {
-    set_env_vars(&[REQUIRED_ENV, &[("EMAIL_CHANGE_MAX_ATTEMPTS", "0")]]);
+fn from_env_rejects_body_limit_above_ceiling() {
+    set_env_vars(&[REQUIRED_ENV, &[("REQUEST_BODY_LIMIT_MB", "10000")]]);
+    let err = ServerConfig::from_env().unwrap_err();
+    assert!(
+        err.to_string().contains("REQUEST_BODY_LIMIT_MB"),
+        "10000 MiB must be rejected (above the 100 MiB ceiling), got: {err}",
+    );
+
+    set_env_vars(&[REQUIRED_ENV, &[("REQUEST_BODY_LIMIT_MB", "100")]]);
+    ServerConfig::from_env().expect("100 MiB is the maximum valid body limit");
+}
+
+#[test]
+#[serial]
+fn from_env_defaults_body_limit_to_8_when_unset() {
+    set_env_vars(&[REQUIRED_ENV]);
+
+    let config = ServerConfig::from_env().expect("Should succeed with default body limit");
+    assert_eq!(
+        config.request_body_limit_mb, 8,
+        "REQUEST_BODY_LIMIT_MB must default to 8 when unset",
+    );
+}
+
+#[test]
+#[serial]
+fn from_env_rejects_body_limit_zero() {
+    set_env_vars(&[REQUIRED_ENV, &[("REQUEST_BODY_LIMIT_MB", "0")]]);
 
     let err = ServerConfig::from_env().unwrap_err();
     assert!(
-        err.to_string()
-            .contains("EMAIL_CHANGE_MAX_ATTEMPTS cannot be 0"),
+        err.to_string().contains("REQUEST_BODY_LIMIT_MB"),
         "Unexpected error: {err}",
     );
+}
+
+#[test]
+#[serial]
+fn from_env_rejects_non_integer_body_limit() {
+    set_env_vars(&[REQUIRED_ENV, &[("REQUEST_BODY_LIMIT_MB", "abc")]]);
+
+    let err = ServerConfig::from_env().unwrap_err();
+    assert!(
+        err.to_string().contains("request_body_limit_mb"),
+        "Unexpected error: {err}",
+    );
+}
+
+#[test]
+#[serial]
+fn from_env_accepts_valid_body_limit_override() {
+    set_env_vars(&[REQUIRED_ENV, &[("REQUEST_BODY_LIMIT_MB", "16")]]);
+
+    let config = ServerConfig::from_env().expect("16 MiB is a valid body limit");
+    assert_eq!(config.request_body_limit_mb, 16);
 }
 
 #[test]

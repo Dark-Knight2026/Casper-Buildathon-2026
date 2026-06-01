@@ -143,6 +143,13 @@ pub struct TestOverrides {
     /// the limiter to its boundary in fewer requests than the wall-clock
     /// window would otherwise force.
     pub email_change_max_attempts: Option<u64>,
+    /// Outer request-body cap in MiB (defaults to 8, matching production).
+    ///
+    /// Lowered by the layer-level 413 test so a payload above this cap but
+    /// below a real multi-MiB threshold is rejected by `RequestBodyLimitLayer`
+    /// before the handler runs, exercising the layer-level path distinct from
+    /// the handler's own `MAX_AVATAR_BYTES` guard.
+    pub request_body_limit_mb: Option<u32>,
 }
 
 impl Debug for TestOverrides {
@@ -157,6 +164,7 @@ impl Debug for TestOverrides {
                 &self.media_storage.as_ref().map(|_| "MediaStorage"),
             )
             .field("email_change_max_attempts", &self.email_change_max_attempts)
+            .field("request_body_limit_mb", &self.request_body_limit_mb)
             .finish()
     }
 }
@@ -199,6 +207,7 @@ pub async fn setup_test_server_with(
         port: 0,
         cors_origin: TEST_CORS_ORIGIN.to_owned(),
         frontend_url: "http://localhost:3000".to_owned(),
+        request_body_limit_mb: overrides.request_body_limit_mb.unwrap_or(8),
         cookie_secure: false,
         contract_big: overrides.contract_big,
         ico_fallback: overrides.ico_fallback,
