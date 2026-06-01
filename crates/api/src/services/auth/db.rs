@@ -922,10 +922,15 @@ pub async fn confirm_email_verification(
 ) -> Result<VerifyConfirmOutcome, Error> {
     let mut tx = pool.begin().await?;
 
+    // `updated_at = NOW()` is set explicitly as belt-and-suspenders: the
+    // `update_users_updated_at` BEFORE-UPDATE trigger already bumps it, but
+    // setting it here keeps the column correct even if the trigger is ever
+    // dropped or a deployment applies migrations partially - same as
+    // `revoke_all_sessions_for_user` / `apply_user_role_change`.
     let updated = sqlx::query!(
         r"
             UPDATE users
-            SET email_verified = TRUE
+            SET email_verified = TRUE, updated_at = NOW()
             WHERE id = $1 AND email_verified = FALSE AND deleted_at IS NULL
             RETURNING id
         ",

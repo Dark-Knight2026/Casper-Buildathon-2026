@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            UPDATE users\n            SET email_verified = TRUE\n            WHERE id = $1 AND email_verified = FALSE AND deleted_at IS NULL\n            RETURNING id\n        ",
+  "query": "\n            UPDATE users\n            SET email_verified = TRUE, updated_at = NOW()\n            WHERE id = $1 AND email_verified = FALSE AND deleted_at IS NULL\n            RETURNING id\n        ",
   "describe": {
     "columns": [
       {
@@ -24,5 +24,5 @@
       false
     ]
   },
-  "hash": "e31986df6119917282d5680df412e9fbeec4cb7e8b7befa66dd53fc2d55819dd"
+  "hash": "78ae4861f8ca7bec7cf1a686c2d66e157f9b44651ed0fef1d3e682b162dcb26d"
 }
