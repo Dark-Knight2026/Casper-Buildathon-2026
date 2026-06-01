@@ -157,15 +157,19 @@ async fn upload_avatar_without_authentication_returns_401(pool: PgPool) {
 /// Payload over `MAX_AVATAR_BYTES` (5 MiB) must 413. Two guards can fire,
 /// depending on size relative to the outer cap:
 /// - handler-level: `MAX_AVATAR_BYTES` < payload <= outer cap. The body
-///   passes `RequestBodyLimitLayer` and the handler rejects it.
+///   passes `RequestBodyLimitLayer` and the handler rejects it with a clean
+///   413.
 /// - layer-level: payload > outer cap. `RequestBodyLimitLayer` rejects it
-///   before the handler runs.
+///   before the handler runs - but only as a clean 413 when `Content-Length`
+///   is known up front. A streamed (chunked) body over the cap is instead
+///   truncated mid-parse and surfaces as a `MultipartError -> 400`, which is
+///   the very outcome the 8 MiB floor exists to keep out of reach for avatars.
+///   The layer-level 413 path is covered by
+///   `upload_avatar_above_outer_cap_returns_413_at_layer` below.
 ///
 /// `common::setup_test_server` sets `request_body_limit_mb: 8`, so this
 /// test's 6 MiB payload exercises the HANDLER-level path: 6 MiB < 8 MiB
-/// passes the layer, then 6 MiB > 5 MiB is rejected by the handler. Both
-/// paths produce the same 413 from the client's perspective, which is the
-/// contract.
+/// passes the layer, then 6 MiB > 5 MiB is rejected by the handler.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn upload_avatar_oversize_payload_returns_413(pool: PgPool) {
     let env = common::setup_test_server(pool, true).await;
@@ -186,6 +190,45 @@ async fn upload_avatar_oversize_payload_returns_413(pool: PgPool) {
         .post("/api/v1/users/me/avatar")
         .add_header(COOKIE, format!("access_token={access_token}"))
         .multipart(form)
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::PAYLOAD_TOO_LARGE);
+}
+
+/// Layer-level 413: a body whose `Content-Length` exceeds the outer cap is
+/// rejected by `RequestBodyLimitLayer` before the avatar handler ever runs.
+///
+/// The handler-level test above (with the production `request_body_limit_mb`
+/// of 8) only exercises the handler's own `MAX_AVATAR_BYTES` guard. Here we
+/// lower the outer cap to 6 MiB via `TestOverrides` and send a 7 MiB body.
+///
+/// Crucially this uses a fixed-size `bytes()` body, NOT the streaming
+/// `multipart()` builder: the latter sends `Transfer-Encoding: chunked` with no
+/// `Content-Length`, so the layer can only truncate the stream mid-parse, which
+/// surfaces as a `MultipartError -> 400` (exactly the failure the 8 MiB floor
+/// exists to avoid - see `server.rs`). A sized body carries `Content-Length`, so
+/// the layer's eager pre-check fires and returns a clean 413 before routing -
+/// the genuine layer-level path. The body bytes are never parsed, so any
+/// content type works.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn upload_avatar_above_outer_cap_returns_413_at_layer(pool: PgPool) {
+    let overrides = common::TestOverrides {
+        request_body_limit_mb: Some(6),
+        ..Default::default()
+    };
+    let env = common::setup_test_server_with(pool, true, overrides).await;
+    let access_token = login_and_get_access_token(&env, 0x48).await;
+
+    // 7 MiB sized body: Content-Length 7 MiB > 6 MiB cap, so the layer's eager
+    // check rejects it before the request is routed to the handler.
+    let oversized = vec![0u8; 7 * 1024 * 1024];
+
+    let response = env
+        .server
+        .post("/api/v1/users/me/avatar")
+        .add_header(COOKIE, format!("access_token={access_token}"))
+        .content_type("multipart/form-data")
+        .bytes(oversized.into())
         .await;
 
     assert_eq!(response.status_code(), StatusCode::PAYLOAD_TOO_LARGE);
