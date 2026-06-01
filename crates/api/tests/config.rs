@@ -13,13 +13,23 @@ use api::ServerConfig;
 /// Env var keys used by `Config::from_env()`. Drives the clear-all phase
 /// of [`set_env_vars`] so individual tests do not need to enumerate which
 /// keys to scrub.
-const CONFIG_ENV_VARS: [&str; 12] = [
+///
+/// This MUST list every `#[serde(default)]` field of `RawEnvConfig`, not just
+/// the ones a test sets explicitly: any default-backed var left in the ambient
+/// CI environment (or set by a prior serial test) would otherwise leak into a
+/// test that assumes it is unset, making the suite order-dependent.
+const CONFIG_ENV_VARS: [&str; 17] = [
     "DATABASE_URL",
     "REDIS_URL",
     "SUPABASE_JWT_SECRET",
     "PORT",
     "CORS_ORIGIN",
     "REQUEST_BODY_LIMIT_MB",
+    "COOKIE_SECURE",
+    "CONTRACT_BIG",
+    "ICO_PRICE_USD",
+    "ICO_TOTAL_ALLOCATION",
+    "TOTAL_SUPPLY",
     "S3_BUCKET",
     "S3_REGION",
     "S3_ENDPOINT",
