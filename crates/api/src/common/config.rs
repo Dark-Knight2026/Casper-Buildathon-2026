@@ -280,6 +280,16 @@ impl ServerConfig {
                     .to_owned(),
             ));
         }
+        if self.request_body_limit_mb > 100 {
+            return Err(ServerError::EnvVar(
+                "REQUEST_BODY_LIMIT_MB must not exceed 100 MiB: the field is a u32 \
+                 mirrored into nginx and both axum body-limit layers, so a typo like \
+                 10000 silently configures a multi-GiB cap. The only multipart upload \
+                 is the 5 MiB avatar, so 100 MiB is ample headroom; a larger value is a \
+                 memory-exhaustion foot-gun, not a real requirement"
+                    .to_owned(),
+            ));
+        }
         if !self.cors_origin.starts_with("http://") && !self.cors_origin.starts_with("https://") {
             return Err(ServerError::EnvVar(
                 "CORS_ORIGIN must start with http:// or https://".to_owned(),
