@@ -102,28 +102,23 @@ export default defineConfig(({ mode }) => {
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', '/images/RealEstate.jpg', '/images/RealEstate.jpg'],
+      includeAssets: ['favicon.ico', 'apple-touch-icon.png'],
       manifest: {
-        name: 'KeyChain Real Estate',
-        short_name: 'KeyChain',
-        description: 'Modern real estate management platform',
-        theme_color: '#ffffff',
+        name: 'LeaseFi',
+        short_name: 'LeaseFi',
+        description: 'LeaseFi — real estate leasing and property management platform',
+        theme_color: '#3b82f6',
+        background_color: '#ffffff',
         icons: [
           {
-            src: '/images/photo1765087143.jpg',
+            src: '/pwa-192x192.png',
             sizes: '192x192',
             type: 'image/png'
           },
           {
-            src: '/images/PWAIcon.jpg',
+            src: '/pwa-512x512.png',
             sizes: '512x512',
             type: 'image/png'
-          },
-          {
-            src: '/images/PWAIcon.jpg',
-            sizes: '512x512',
-            type: 'image/png',
-            purpose: 'any maskable'
           }
         ]
       },
