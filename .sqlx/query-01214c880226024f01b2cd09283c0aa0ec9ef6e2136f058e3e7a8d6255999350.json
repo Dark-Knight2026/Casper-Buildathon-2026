@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT\n                user_id,\n                user_email,\n                user_role,\n                action,\n                resource_type,\n                resource_id,\n                new_values,\n                status,\n                request_method,\n                request_path,\n                ip_address::text AS ip_text,\n                user_agent\n            FROM audit_logs\n            WHERE user_id = $1 AND action = 'verify_email'\n            ORDER BY created_at DESC\n            LIMIT 1\n        ",
+  "query": "\n            SELECT user_id, user_email, user_role, action, resource_type, resource_id, new_values, status, request_method, request_path, ip_address::text AS ip_text, user_agent\n            FROM audit_logs\n            WHERE user_id = $1 AND action = 'verify_email'\n            ORDER BY created_at DESC\n            LIMIT 1\n        ",
   "describe": {
     "columns": [
       {
@@ -151,5 +151,5 @@
       true
     ]
   },
-  "hash": "429a9727a95ed643226fcba7258eb4a7aa78d2e453de0ad9af16e9f851eba44a"
+  "hash": "01214c880226024f01b2cd09283c0aa0ec9ef6e2136f058e3e7a8d6255999350"
 }

@@ -72,19 +72,7 @@ async fn confirm_writes_verify_email_audit_row(pool: PgPool) {
     // row is expected.
     let row = sqlx::query!(
         r"
-            SELECT
-                user_id,
-                user_email,
-                user_role,
-                action,
-                resource_type,
-                resource_id,
-                new_values,
-                status,
-                request_method,
-                request_path,
-                ip_address::text AS ip_text,
-                user_agent
+            SELECT user_id, user_email, user_role, action, resource_type, resource_id, new_values, status, request_method, request_path, ip_address::text AS ip_text, user_agent
             FROM audit_logs
             WHERE user_id = $1 AND action = 'verify_email'
             ORDER BY created_at DESC
@@ -171,5 +159,53 @@ async fn idempotent_confirm_does_not_write_a_second_audit_row(pool: PgPool) {
         count,
         Some(1),
         "idempotent confirm must not append a second verify_email audit row",
+    );
+}
+
+/// A genuine verify transition leaves `users.updated_at` fresh. Two mechanisms
+/// guarantee it - the `update_users_updated_at` BEFORE-UPDATE trigger and the
+/// explicit `updated_at = NOW()` in the UPDATE - and this test pins the
+/// observable result so the column never silently goes stale if either is
+/// removed.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn confirm_bumps_updated_at(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), true).await;
+    let session = common::login_and_extract(&env).await;
+    seed_email(&pool, session.user_id).await;
+
+    // Back-date updated_at by an hour so a NOW() bump is unambiguous.
+    sqlx::query!(
+        r"
+            UPDATE users
+            SET updated_at = NOW() - INTERVAL '1 hour'
+            WHERE id = $1
+        ",
+        session.user_id,
+    )
+    .execute(&pool)
+    .await
+    .expect("back-date updated_at");
+
+    let outcome =
+        db::confirm_email_verification(&pool, session.user_id, Some("127.0.0.1"), Some("ua"))
+            .await
+            .expect("confirm");
+    assert_eq!(outcome, VerifyConfirmOutcome::Verified);
+
+    let recently_bumped = sqlx::query_scalar!(
+        r#"
+            SELECT updated_at > NOW() - INTERVAL '1 minute' AS "recently_bumped!"
+            FROM users
+            WHERE id = $1
+        "#,
+        session.user_id,
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("read updated_at freshness");
+
+    assert!(
+        recently_bumped,
+        "confirm must bump updated_at to NOW(); it is still the back-dated value",
     );
 }
