@@ -1505,6 +1505,9 @@ Mapped to camelCase `UserProfile` via `mapServerUserInfo` in
 | PATCH  | `/users/me`                         | Update first/last name, phone, bio   |
 | POST   | `/users/me/email`                   | Request email change (sends token)   |
 | POST   | `/users/me/email/confirm`           | Confirm email change with token      |
+| POST   | `/auth/verify/email/send`           | Send verification link to stored email |
+| POST   | `/auth/verify/email/resend`         | Re-send verification link (shared rate-limit) |
+| POST   | `/auth/verify/email/confirm`        | Redeem verification token; marks email verified, rotates session |
 | POST   | `/users/me/avatar`                  | Multipart avatar upload (PNG/JPEG/WebP, ≤ 5 MB) |
 | PATCH  | `/users/me/role`                    | Switch role; revokes all sessions    |
 | GET    | `/auth/sessions`                    | List active refresh-token rows for the user |
@@ -1535,6 +1538,14 @@ and prompt the user to re-sign with the wallet (see CSPR.click
 **`POST /users/me/email`** — body `{ "new_email": string }`. 202 on queued. Errors: 400 (malformed), 409 (taken), 429 (>3 / 24h).
 
 **`POST /users/me/email/confirm`** — body `{ "token": string (43 base64url chars) }`. 200 returns `UserInfo` with `email = new_email`, `email_verified = true`. Errors: 400 (malformed token shape), 401 (token missing/expired), 409 (email taken in race).
+
+> The three `/auth/verify/email/*` endpoints below verify the user's _existing_ email (proves ownership of an already-set address), distinct from the `/users/me/email*` pair above which _changes_ the address. They live under `/auth/` because confirming rotates the session cookies. Wired in `src/services/ico/backendAuthService.ts`.
+
+**`POST /auth/verify/email/send`** — no request body; targets the user's stored email. 200 returns `VerifySendResponse` `{ "status": string, "dev_verification_token": string | null }` — `dev_verification_token` is populated only in non-prod so the flow can be tested without a real inbox. Errors: 400 (`email_not_set` — e.g. a wallet-only user with no email yet), 401, 429 (`rate_limited`), 500 (`email_send_failed`).
+
+**`POST /auth/verify/email/resend`** — identical contract and behaviour to `/send`; shares the same rate-limit counter and verification-token slot (re-sending does not mint a second concurrently-valid token).
+
+**`POST /auth/verify/email/confirm`** — body `{ "token": string }` (the token from the verification link). 200 marks the email verified and rotates the session via `Set-Cookie`; response body is `UserInfo`. Errors: 400 (`bad_token_format`), 401/404 (`invalid_or_expired_token`), 500.
 
 **`POST /users/me/avatar`** — `multipart/form-data` with single field `file`. Constraints: PNG/JPEG/WebP only, magic-byte sniff on server, ≤ 5 MB. Per-user limit 10/h. Response: `{ "avatar_url": string }` (currently a stub URL until real storage lands). Errors: 400 (missing field), 413 (oversize), 415 (MIME mismatch — covers both disallowed type and spoofed bytes), 429.
 
