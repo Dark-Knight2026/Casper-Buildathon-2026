@@ -34,6 +34,9 @@ use common::{
 
 /// HTTP path of the verify-email send endpoint.
 const SEND_URI: &str = "/api/v1/auth/verify/email/send";
+/// HTTP path of the verify-email resend endpoint (alias onto the send handler,
+/// sharing the same rate-limit slot and token slot).
+const RESEND_URI: &str = "/api/v1/auth/verify/email/resend";
 /// HTTP path of the verify-email confirm endpoint.
 const CONFIRM_URI: &str = "/api/v1/auth/verify/email/confirm";
 
@@ -62,6 +65,16 @@ async fn seed_email(pool: &PgPool, user_id: Uuid) -> String {
 async fn post_send(env: &TestEnv, access_token: &str) -> TestResponse {
     env.server
         .post(SEND_URI)
+        .add_header(COOKIE, format!("access_token={access_token}"))
+        .await
+}
+
+/// Posts to the resend endpoint with the given access cookie. Mirrors
+/// [`post_send`] so the two paths can be driven interchangeably in tests that
+/// assert they share a counter and token slot.
+async fn post_resend(env: &TestEnv, access_token: &str) -> TestResponse {
+    env.server
+        .post(RESEND_URI)
         .add_header(COOKIE, format!("access_token={access_token}"))
         .await
 }
@@ -311,6 +324,75 @@ async fn confirm_without_auth_returns_401(pool: PgPool) {
     assert_eq!(confirm.status_code(), StatusCode::UNAUTHORIZED);
 }
 
+/// Confirm against a row already flipped to `email_verified = TRUE` out of band
+/// takes the `AlreadyVerified` branch: it answers `200` with the current
+/// profile but issues NO `Set-Cookie`. The token slot is live and the hash
+/// matches, so the only thing short-circuiting the re-issue is the
+/// `WHERE email_verified = FALSE` guard inside `confirm_email_verification` -
+/// re-minting tokens for a no-op would silently sign the user out of their
+/// other devices.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn confirm_already_verified_returns_200_without_cookies(pool: PgPool) {
+    let (env, mailer) = setup_test_server_capturing(pool, true).await;
+    let session = login_and_extract(&env).await;
+    let email = seed_email(&env.state.db, session.user_id).await;
+    let token = send_and_take_token(&env, &mailer, &session.access_token).await;
+
+    // Flip the flag behind the handler's back, leaving the token slot intact.
+    // This reproduces the "verified by another path between send and confirm"
+    // race without needing two concurrent requests.
+    sqlx::query!(
+        r"
+            UPDATE users
+            SET email_verified = TRUE
+            WHERE id = $1
+        ",
+        session.user_id,
+    )
+    .execute(&env.state.db)
+    .await
+    .expect("pre-verify out of band");
+
+    let confirm = env
+        .server
+        .post(CONFIRM_URI)
+        .add_header(COOKIE, format!("access_token={}", session.access_token))
+        .json(&json!({ "token": token }))
+        .await;
+    assert_eq!(confirm.status_code(), StatusCode::OK);
+
+    // The body is the current profile, not an error envelope.
+    let body = confirm.json::<Value>();
+    assert_eq!(
+        body["id"].as_str(),
+        Some(session.user_id.to_string().as_str())
+    );
+    assert_eq!(body["email"].as_str(), Some(email.as_str()));
+
+    // The defining contract: a no-op confirm must NOT rotate the token pair.
+    assert!(
+        confirm.maybe_cookie("access_token").is_none(),
+        "AlreadyVerified must not re-issue the access cookie",
+    );
+    assert!(
+        confirm.maybe_cookie("refresh_token").is_none(),
+        "AlreadyVerified must not re-issue the refresh cookie",
+    );
+
+    // The pre-confirm refresh family is therefore still valid - the user was
+    // not logged out elsewhere.
+    let refresh = env
+        .server
+        .post("/api/v1/auth/refresh")
+        .add_header(COOKIE, format!("refresh_token={}", session.refresh_token))
+        .await;
+    assert_eq!(
+        refresh.status_code(),
+        StatusCode::NO_CONTENT,
+        "no-op confirm leaves the existing session intact",
+    );
+}
+
 // Rate limiting and failure-path compensation ---------------------------------
 
 /// First send succeeds; an immediate second hits the per-minute cap (1/min).
@@ -531,4 +613,92 @@ async fn send_overwrites_previous_token_slot(pool: PgPool) {
     let second_hash = <[u8; 32]>::from(Sha256::digest(second_token.as_bytes()));
     assert_eq!(stored, second_hash, "slot holds the latest token's hash");
     assert_ne!(stored, first_hash, "the previous hash is gone");
+}
+
+// /resend endpoint ------------------------------------------------------------
+//
+// `/resend` is a thin alias onto the send handler. These pin that the alias is
+// wired up (mints a real, redeemable token) and that it is NOT a second
+// independent quota - it shares both the rate-limit counter and the token slot
+// with `/send`.
+
+/// `/resend` on its own issues a usable verification token: the link it mints
+/// confirms end-to-end, proving the alias routes into the real send logic
+/// rather than a stub.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn resend_issues_a_usable_token(pool: PgPool) {
+    let (env, mailer) = setup_test_server_capturing(pool, true).await;
+    let session = login_and_extract(&env).await;
+    seed_email(&env.state.db, session.user_id).await;
+
+    let resend = post_resend(&env, &session.access_token).await;
+    assert_eq!(resend.status_code(), StatusCode::OK, "resend must succeed");
+    let token = extract_verify_token(&mailer);
+
+    let confirm = env
+        .server
+        .post(CONFIRM_URI)
+        .add_header(COOKIE, format!("access_token={}", session.access_token))
+        .json(&json!({ "token": token }))
+        .await;
+    assert_eq!(
+        confirm.status_code(),
+        StatusCode::OK,
+        "a token minted by /resend redeems like a /send one",
+    );
+}
+
+/// `/send` then `/resend` within the same minute hits the shared 1/min cap:
+/// the resend is `429`, proving the two routes increment one counter rather
+/// than each having its own quota.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn resend_shares_rate_limit_with_send(pool: PgPool) {
+    let env = setup_test_server(pool, true).await;
+    let session = login_and_extract(&env).await;
+    seed_email(&env.state.db, session.user_id).await;
+
+    let send = post_send(&env, &session.access_token).await;
+    assert_eq!(send.status_code(), StatusCode::OK);
+
+    let resend = post_resend(&env, &session.access_token).await;
+    assert_eq!(
+        resend.status_code(),
+        StatusCode::TOO_MANY_REQUESTS,
+        "resend draws from the same per-minute slot as send",
+    );
+    assert_eq!(
+        resend.json::<Value>()["error"].as_str(),
+        Some("rate_limited"),
+    );
+}
+
+/// `/resend` overwrites the token slot left by a prior `/send`: only the
+/// newest hash survives, so the two routes target one slot rather than each
+/// holding an independently redeemable token.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn resend_overwrites_send_token_slot(pool: PgPool) {
+    let (env, mailer) = setup_test_server_capturing(pool, true).await;
+    let session = login_and_extract(&env).await;
+    seed_email(&env.state.db, session.user_id).await;
+
+    let send_token = send_and_take_token(&env, &mailer, &session.access_token).await;
+    // Step past the 1/min cap so the resend is not rate-limited.
+    clear_minute_window(&env, session.user_id).await;
+    let resend = post_resend(&env, &session.access_token).await;
+    assert_eq!(resend.status_code(), StatusCode::OK);
+    let resend_token = extract_verify_token(&mailer);
+    assert_ne!(send_token, resend_token, "resend mints fresh entropy");
+
+    let stored = env
+        .state
+        .redis
+        .take_verify_email_token(session.user_id)
+        .await
+        .expect("take token slot")
+        .expect("slot non-empty after resend");
+
+    let send_hash = <[u8; 32]>::from(Sha256::digest(send_token.as_bytes()));
+    let resend_hash = <[u8; 32]>::from(Sha256::digest(resend_token.as_bytes()));
+    assert_eq!(stored, resend_hash, "slot holds the resend token's hash");
+    assert_ne!(stored, send_hash, "the prior send hash is gone");
 }
