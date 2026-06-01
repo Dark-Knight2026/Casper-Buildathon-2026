@@ -54,6 +54,7 @@ fn setup(env: HostEnv) -> TestData {
 
     escrow.set_lease(env.get_account(15));
     escrow.set_treasury(env.get_account(14));
+    escrow.set_security_deposit_token(mock_cep18.address());
 
     TestData {
         env,
@@ -127,6 +128,27 @@ fn create_lease_invoice(test_data: &mut TestData, params: &InvoiceParams) -> U25
     invoice_id
 }
 
+fn create_security_deposit_invoice(test_data: &mut TestData, params: &mut InvoiceParams) -> U256 {
+    test_data
+        .env
+        .set_caller(test_data.escrow.get_lease_contract_address());
+
+    let amount_due = CurrencyAmount::new(
+        Some(test_data.mock_cep18.address()),
+        *params.amount_due.amount(),
+    );
+
+    let invoice_id = test_data.escrow.create_security_deposit_invoice(
+        params.tenant,
+        amount_due,
+        params.deadline,
+    );
+
+    test_data.env.set_caller(test_data.env.get_account(0));
+
+    invoice_id
+}
+
 // =============================================================================
 // init()
 // =============================================================================
@@ -159,6 +181,11 @@ fn test_init_should_initialize_contract_properly() {
         test_data.escrow.get_invoices_count(),
         U256::zero(),
         "Invalid initial invoices count"
+    );
+    assert_eq!(
+        test_data.escrow.get_security_deposit_token_address(),
+        test_data.mock_cep18.address(),
+        "Invalid security deposit token address"
     );
 }
 
@@ -266,6 +293,40 @@ fn test_set_treasury_should_set_treasury_properly() {
         treasury,
         "Invalid Treasury contract address"
     );
+}
+
+// =============================================================================
+// set_security_deposit_token()
+// =============================================================================
+
+#[test]
+fn test_set_security_deposit_token_should_set_properly() {
+    let mut test_data = setup(odra_test::env());
+    let token = test_data.env.get_account(10);
+
+    test_data.escrow.set_security_deposit_token(token);
+
+    assert_eq!(
+        test_data.escrow.get_security_deposit_token_address(),
+        token,
+        "Invalid security deposit token address",
+    )
+}
+
+#[test]
+fn test_set_security_deposit_token_should_revert_if_not_owner_is_calling() {
+    let mut test_data = setup(odra_test::env());
+
+    test_data.env.set_caller(test_data.env.get_account(1));
+
+    assert_eq!(
+        test_data
+            .escrow
+            .try_set_security_deposit_token(test_data.env.get_account(1))
+            .unwrap_err(),
+        AccessError::CallerNotTheOwner.into(),
+        "Should revert when called by non-owner",
+    )
 }
 
 // =============================================================================
