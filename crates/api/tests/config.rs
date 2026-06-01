@@ -13,12 +13,13 @@ use api::ServerConfig;
 /// Env var keys used by `Config::from_env()`. Drives the clear-all phase
 /// of [`set_env_vars`] so individual tests do not need to enumerate which
 /// keys to scrub.
-const CONFIG_ENV_VARS: [&str; 11] = [
+const CONFIG_ENV_VARS: [&str; 12] = [
     "DATABASE_URL",
     "REDIS_URL",
     "SUPABASE_JWT_SECRET",
     "PORT",
     "CORS_ORIGIN",
+    "REQUEST_BODY_LIMIT_MB",
     "S3_BUCKET",
     "S3_REGION",
     "S3_ENDPOINT",
@@ -211,6 +212,51 @@ fn from_env_rejects_body_limit_below_floor() {
 
     set_env_vars(&[REQUIRED_ENV, &[("REQUEST_BODY_LIMIT_MB", "8")]]);
     ServerConfig::from_env().expect("8 MiB is the minimum valid body limit");
+}
+
+#[test]
+#[serial]
+fn from_env_defaults_body_limit_to_8_when_unset() {
+    set_env_vars(&[REQUIRED_ENV]);
+
+    let config = ServerConfig::from_env().expect("Should succeed with default body limit");
+    assert_eq!(
+        config.request_body_limit_mb, 8,
+        "REQUEST_BODY_LIMIT_MB must default to 8 when unset",
+    );
+}
+
+#[test]
+#[serial]
+fn from_env_rejects_body_limit_zero() {
+    set_env_vars(&[REQUIRED_ENV, &[("REQUEST_BODY_LIMIT_MB", "0")]]);
+
+    let err = ServerConfig::from_env().unwrap_err();
+    assert!(
+        err.to_string().contains("REQUEST_BODY_LIMIT_MB"),
+        "Unexpected error: {err}",
+    );
+}
+
+#[test]
+#[serial]
+fn from_env_rejects_non_integer_body_limit() {
+    set_env_vars(&[REQUIRED_ENV, &[("REQUEST_BODY_LIMIT_MB", "abc")]]);
+
+    let err = ServerConfig::from_env().unwrap_err();
+    assert!(
+        err.to_string().contains("request_body_limit_mb"),
+        "Unexpected error: {err}",
+    );
+}
+
+#[test]
+#[serial]
+fn from_env_accepts_valid_body_limit_override() {
+    set_env_vars(&[REQUIRED_ENV, &[("REQUEST_BODY_LIMIT_MB", "16")]]);
+
+    let config = ServerConfig::from_env().expect("16 MiB is a valid body limit");
+    assert_eq!(config.request_body_limit_mb, 16);
 }
 
 #[test]
