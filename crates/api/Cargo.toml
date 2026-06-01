@@ -88,5 +88,6 @@ uuid = { workspace = true, optional = true }
 
 [dev-dependencies]
 axum-test = { workspace = true }
+http = { workspace = true }
 serial_test = { workspace = true }
 testcontainers = { workspace = true }

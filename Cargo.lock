@@ -65,6 +65,7 @@ dependencies = [
  "email_address",
  "futures-util",
  "hex",
+ "http",
  "jsonwebtoken",
  "postmark",
  "rand 0.10.1",

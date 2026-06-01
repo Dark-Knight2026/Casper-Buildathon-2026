@@ -81,6 +81,7 @@ dotenv = "0.15"
 email_address = "0.2"
 futures-util = "0.3"
 hex = "0.4"
+http = "1"
 jsonwebtoken = { version = "10.3", features = ["rust_crypto"] }
 # FIXME(email-postmark): exact pin - postmark 2.0.0 links reqwest 0.12
 # alongside our direct reqwest 0.13. Same pattern as rust-s3 (see below).
