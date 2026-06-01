@@ -483,7 +483,7 @@ fn test_pay_invoice_should_fail_if_invoice_is_already_paid() {
     let invoice_id = create_lease_invoice(&mut test_data, &params);
 
     let rent = *params.amount_due.amount();
-    let amount = rent + rent / U256::from(49u32);
+    let amount = rent;
 
     test_data
         .escrow
@@ -576,26 +576,25 @@ fn test_pay_invoice_should_pay_invoice_in_native_token_properly() {
     let prev_recipient_token_balance = test_data.env.balance_of(&params.landlord);
 
     let rent = *params.amount_due.amount();
-    let amount = rent + rent / U256::from(49u32);
 
     test_data
         .escrow
-        .with_tokens(amount.to_u512())
-        .pay_invoice(invoice_id, amount);
+        .with_tokens(rent.to_u512())
+        .pay_invoice(invoice_id, rent);
 
     let curr_recipient_token_balance = test_data.env.balance_of(&params.landlord);
 
-    let protocol_fee = amount * U256::from(200u32) / U256::from(10000u32);
-    let rent_allocation = amount - protocol_fee;
+    let protocol_fee = rent * U256::from(200u32) / U256::from(10000u32);
+    let distributable_rent = rent - protocol_fee;
 
     assert!(test_data.env.emitted_event(
         &test_data.escrow,
         InvoicePaymentApplied {
             invoice_id,
             payer: params.tenant,
-            amount,
+            amount: rent,
             protocol_fee,
-            rent_paid: rent_allocation,
+            rent_paid: rent,
         }
     ));
 
@@ -609,7 +608,7 @@ fn test_pay_invoice_should_pay_invoice_in_native_token_properly() {
 
     assert_eq!(
         curr_recipient_token_balance,
-        prev_recipient_token_balance + rent_allocation.to_u512(),
+        prev_recipient_token_balance + distributable_rent.to_u512(),
         "Invalid current recipient balance"
     );
 
@@ -630,26 +629,25 @@ fn test_pay_invoice_should_pay_invoice_in_cep18_token_properly() {
     let prev_recipient_token_balance = test_data.mock_cep18.balance_of(&params.landlord);
 
     let rent = *params.amount_due.amount();
-    let amount = rent + rent / U256::from(49u32);
 
     test_data
         .mock_cep18
-        .approve(&test_data.escrow.address(), &amount);
-    test_data.escrow.pay_invoice(invoice_id, amount);
+        .approve(&test_data.escrow.address(), &rent);
+    test_data.escrow.pay_invoice(invoice_id, rent);
 
     let curr_recipient_token_balance = test_data.mock_cep18.balance_of(&params.landlord);
 
-    let protocol_fee = amount * U256::from(200u32) / U256::from(10000u32);
-    let rent_allocation = amount - protocol_fee;
+    let protocol_fee = rent * U256::from(200u32) / U256::from(10000u32);
+    let distributable_rent = rent - protocol_fee;
 
     assert!(test_data.env.emitted_event(
         &test_data.escrow,
         InvoicePaymentApplied {
             invoice_id,
             payer: params.tenant,
-            amount,
+            amount: rent,
             protocol_fee,
-            rent_paid: rent_allocation,
+            rent_paid: rent,
         }
     ));
     assert!(test_data.env.emitted_event(
@@ -661,7 +659,7 @@ fn test_pay_invoice_should_pay_invoice_in_cep18_token_properly() {
     ));
     assert_eq!(
         curr_recipient_token_balance,
-        prev_recipient_token_balance + rent_allocation,
+        prev_recipient_token_balance + distributable_rent,
         "Invalid current recipient balance"
     );
     assert!(
@@ -737,7 +735,7 @@ fn test_pay_invoice_should_route_protocol_fee_to_treasury() {
     let invoice_id = create_lease_invoice(&mut test_data, &params);
 
     let rent = *params.amount_due.amount();
-    let amount = rent * U256::from(50u32) / U256::from(49u32);
+    let amount = rent;
 
     let protocol_fee = amount * U256::from(200u32) / U256::from(10_000u32);
 
