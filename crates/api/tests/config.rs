@@ -188,6 +188,31 @@ fn from_env_rejects_invalid_port() {
     assert!(err.to_string().contains("port"), "Unexpected error: {err}");
 }
 
+/// Regression guard for the `REQUEST_BODY_LIMIT_MB` validation floor.
+///
+/// The outer body cap must leave ~3 MiB of multipart headroom above the
+/// largest per-handler cap (`MAX_AVATAR_BYTES` = 5 MiB), so the minimum safe
+/// value is 8 MiB. A value of 1-7 passes the old `== 0` guard but causes
+/// `RequestBodyLimitLayer` to cut the multipart stream mid-parse, surfacing as
+/// `IncompleteFieldData -> 400` instead of the documented `413`.
+///
+/// Expected to FAIL on the pre-fix code: the `== 0` guard accepts 4 and 7.
+#[test]
+#[serial]
+fn from_env_rejects_body_limit_below_floor() {
+    for too_small in ["1", "4", "7"] {
+        set_env_vars(&[REQUIRED_ENV, &[("REQUEST_BODY_LIMIT_MB", too_small)]]);
+        let err = ServerConfig::from_env().unwrap_err();
+        assert!(
+            err.to_string().contains("REQUEST_BODY_LIMIT_MB"),
+            "{too_small} MiB must be rejected (below the 8 MiB floor), got: {err}",
+        );
+    }
+
+    set_env_vars(&[REQUIRED_ENV, &[("REQUEST_BODY_LIMIT_MB", "8")]]);
+    ServerConfig::from_env().expect("8 MiB is the minimum valid body limit");
+}
+
 #[test]
 #[serial]
 fn from_env_leaves_s3_unset_when_bucket_missing() {
