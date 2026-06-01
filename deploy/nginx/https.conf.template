@@ -114,7 +114,10 @@ server {
 
     # Avatars are immutable per upload (filename includes user_id + extension),
     # so a day of browser/CDN caching is safe; re-uploads change the extension
-    # and thus the URL.
-    add_header Cache-Control "public, max-age=86400" always;
+    # and thus the URL. No `always`: nginx then omits the header on non-2xx
+    # upstream responses, so a transient 404/503 from MinIO during the
+    # upload-then-display flow is not cached for 24h (which would make the
+    # avatar appear permanently broken until the cache entry expires).
+    add_header Cache-Control "public, max-age=86400";
   }
 }
