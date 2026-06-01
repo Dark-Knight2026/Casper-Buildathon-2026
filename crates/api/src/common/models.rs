@@ -209,6 +209,12 @@ pub struct UserInfo {
     /// `true` once email, `first_name`, `last_name` and phone are all populated
     /// (maintained by `trg_users_profile_complete`).
     pub is_profile_complete: bool,
+    /// Aggregate verification state, maintained by
+    /// `trg_users_sync_verification_level`. Lets the client tell whether
+    /// email/identity have been verified using the same value the
+    /// `VerifiedUser<V>` extractor gates on: e.g. email is verified once this
+    /// is any level other than `None`.
+    pub verification_level: VerificationLevel,
     /// Number of currently `active` leases where the user is involved as
     /// primary tenant, listed tenant, landlord, or agent.
     pub active_leases_count: i64,

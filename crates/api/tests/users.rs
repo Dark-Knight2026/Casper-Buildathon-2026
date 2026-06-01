@@ -335,6 +335,12 @@ async fn get_me_returns_authenticated_user_profile(pool: PgPool) {
     assert_eq!(me_body["first_name"].as_str().unwrap(), "Wallet");
     assert_eq!(me_body["last_name"].as_str().unwrap(), "User");
     assert_eq!(me_body["status"].as_str().unwrap(), "active");
+    assert_eq!(
+        me_body["verification_level"].as_str().unwrap(),
+        "none",
+        "a fresh wallet user must surface verification_level='none' so the \
+         client can tell email is not yet verified",
+    );
     assert!(me_body["id"].is_string());
     assert!(me_body["created_at"].is_string());
     assert!(me_body["updated_at"].is_string());
@@ -529,10 +535,11 @@ async fn patch_me_rejects_empty_required_fields(pool: PgPool) {
 /// from request to confirm to prove reachability, so a future refactor that
 /// forgets the verified flag would silently downgrade trust). - The
 /// `trg_users_sync_verification_level` BEFORE-trigger upgrades
-/// `verification_level` from `'none'` to `'email'` on that flip - the
-/// confirmation response shape (`UserInfo`) intentionally drops this column
-/// (see `From<UserProfileRecord> for UserInfo`), so the test verifies it
-/// against the DB row directly.
+/// `verification_level` from `'none'` to `'email'` on that flip, verified both
+/// against the DB row and through a follow-up `GET /me`: the latter pins that
+/// the upgraded level survives `fetch_user_profile` ->
+/// `From<UserProfileRecord> for UserInfo` -> JSON so the client can read its
+/// own verification state.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn confirm_email_change_happy_path_upgrades_verification(pool: PgPool) {
     let mailer = CapturingMailer::default();
@@ -674,6 +681,28 @@ async fn confirm_email_change_happy_path_upgrades_verification(pool: PgPool) {
     assert_eq!(
         final_row.verification_level, "email",
         "verification_level must upgrade from 'none' to 'email' via trg_users_sync_verification_level",
+    );
+
+    // Same upgraded level must now be readable through the public profile, not
+    // just the DB row: this is the path the client actually polls to learn that
+    // email verification succeeded.
+    let me_response = env
+        .server
+        .get("/api/v1/users/me")
+        .add_header(COOKIE, format!("access_token={access_token}"))
+        .await;
+    assert_eq!(me_response.status_code(), StatusCode::OK);
+    let me_body = me_response.json::<Value>();
+    assert_eq!(
+        me_body["verification_level"].as_str().unwrap(),
+        "email",
+        "GET /me must surface the upgraded verification_level so the client can \
+         confirm email verification without a second request",
+    );
+    assert_eq!(
+        me_body["email"].as_str().unwrap(),
+        new_email,
+        "GET /me must reflect the rewritten email alongside the upgraded level",
     );
 }
 
