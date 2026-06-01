@@ -114,10 +114,17 @@ fi
 # accept (must stay in sync across the two layers, see https.conf.template
 # and crates/api/src/common/config.rs). Optional in .env; defaults to 8 to
 # preserve historical behaviour. Positive integer only - nginx unit suffix
-# is appended in the template (`${REQUEST_BODY_LIMIT_MB}M`).
+# is appended in the template (`${REQUEST_BODY_LIMIT_MB}M`). The floor of 8
+# mirrors the axum guard (5 MiB MAX_AVATAR_BYTES + 3 MiB multipart headroom);
+# enforcing it here fails the deploy early instead of letting nginx render at
+# a too-small value and then crashing the backend container at boot.
 : "${REQUEST_BODY_LIMIT_MB:=8}"
 if [[ ! "${REQUEST_BODY_LIMIT_MB}" =~ ^[1-9][0-9]*$ ]]; then
   __msg_error "REQUEST_BODY_LIMIT_MB '${REQUEST_BODY_LIMIT_MB}' must be a positive integer (MiB)"
+  exit 1
+fi
+if (( REQUEST_BODY_LIMIT_MB < 8 )); then
+  __msg_error "REQUEST_BODY_LIMIT_MB '${REQUEST_BODY_LIMIT_MB}' must be at least 8 (MiB); see crates/api/src/common/config.rs"
   exit 1
 fi
 export REQUEST_BODY_LIMIT_MB
