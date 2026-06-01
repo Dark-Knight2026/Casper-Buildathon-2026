@@ -272,9 +272,12 @@ impl ServerConfig {
         if self.port == 0 {
             return Err(ServerError::EnvVar("PORT cannot be 0".to_owned()));
         }
-        if self.request_body_limit_mb == 0 {
+        if self.request_body_limit_mb < 8 {
             return Err(ServerError::EnvVar(
-                "REQUEST_BODY_LIMIT_MB must be at least 1".to_owned(),
+                "REQUEST_BODY_LIMIT_MB must be at least 8 MiB: 5 MiB MAX_AVATAR_BYTES \
+                 + 3 MiB multipart headroom (see server.rs), otherwise oversize \
+                 multipart bodies are cut mid-parse and surface as 400 instead of 413"
+                    .to_owned(),
             ));
         }
         if !self.cors_origin.starts_with("http://") && !self.cors_origin.starts_with("https://") {
