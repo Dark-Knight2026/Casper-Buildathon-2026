@@ -17,6 +17,10 @@ use leasefi_contracts::escrow::{
 
 const MIN_DEADLINE: u64 = 5 * 60; // 5 minutes
 
+// =============================================================================
+// Test Context
+// =============================================================================
+
 struct TestData {
     env: HostEnv,
     escrow: EscrowHostRef,
@@ -29,6 +33,103 @@ struct InvoiceParams {
     amount_due: CurrencyAmount,
     deadline: u64,
 }
+
+fn setup(env: HostEnv) -> TestData {
+    let mut escrow = Escrow::deploy(
+        &env,
+        EscrowInitArgs {
+            owner: env.get_account(0),
+            min_deadline: MIN_DEADLINE,
+        },
+    );
+    let mock_cep18 = BigCoin::deploy(
+        &env,
+        BigCoinInitArgs {
+            symbol: String::from("MOCK"),
+            name: String::from("MOCK"),
+            decimals: 18,
+            initial_supply: U256::from_dec_str("5000000000000000000000000000000").unwrap(),
+        },
+    );
+
+    escrow.set_lease(env.get_account(15));
+    escrow.set_treasury(env.get_account(14));
+
+    TestData {
+        env,
+        escrow,
+        mock_cep18,
+    }
+}
+
+// =============================================================================
+// Helpers
+// =============================================================================
+
+fn generate_invoice_params(test_data: &TestData) -> InvoiceParams {
+    InvoiceParams {
+        tenant: test_data.env.get_account(0),
+        landlord: test_data.env.get_account(1),
+        amount_due: CurrencyAmount::new(None, U256::from_dec_str("1000000000000000000").unwrap()),
+        deadline: test_data.env.block_time() + test_data.escrow.get_min_deadline(),
+    }
+}
+
+fn create_lease_invoice(test_data: &mut TestData, params: &InvoiceParams) -> U256 {
+    test_data
+        .env
+        .set_caller(test_data.escrow.get_lease_contract_address());
+
+    let invoice_id = test_data
+        .escrow
+        .create_lease_invoice(CreateLeaseInvoiceParams {
+            tenant: params.tenant,
+            landlord: params.landlord,
+            rent: params.amount_due,
+            property_manager: None,
+            property_manager_bps: 0,
+            deadline: params.deadline,
+        });
+
+    test_data.env.set_caller(test_data.env.get_account(0));
+
+    assert!(test_data.env.emitted_event(
+        &test_data.escrow,
+        InvoiceCreated {
+            invoice_id,
+            created_at: test_data.env.block_time(),
+        }
+    ));
+
+    let mut amount_due = params.amount_due;
+    assert_eq!(
+        test_data.escrow.get_invoice_by_id(invoice_id),
+        Invoice {
+            kind: InvoiceKind::Lease,
+            buyer: params.tenant,
+            seller: params.landlord,
+            amount_due: params.amount_due,
+            rent_amount: *amount_due.amount(),
+            rent_paid: U256::zero(),
+            property_manager: None,
+            property_manager_bps: 0,
+            deadline: params.deadline,
+            is_paid: false
+        },
+        "Invalid invoice"
+    );
+    assert_eq!(
+        test_data.escrow.get_invoices_count(),
+        invoice_id + 1,
+        "Invalid invoices count number"
+    );
+
+    invoice_id
+}
+
+// =============================================================================
+// init()
+// =============================================================================
 
 #[test]
 fn test_init_should_initialize_contract_properly() {
@@ -60,6 +161,10 @@ fn test_init_should_initialize_contract_properly() {
         "Invalid initial invoices count"
     );
 }
+
+// =============================================================================
+// set_min()
+// =============================================================================
 
 #[test]
 fn test_set_min_deadline_should_revert_if_not_owner_is_calling() {
@@ -95,6 +200,10 @@ fn test_set_min_deadline_should_update_min_deadline_properly() {
     ));
 }
 
+// =============================================================================
+// set_lease()
+// =============================================================================
+
 #[test]
 fn test_set_lease_should_revert_if_not_owner_is_calling() {
     let mut test_data = setup(odra_test::env());
@@ -125,6 +234,10 @@ fn test_set_lease_should_set_lease_properly() {
     );
 }
 
+// =============================================================================
+// set_treasury()
+// =============================================================================
+
 #[test]
 fn test_set_treasury_should_revert_if_not_owner_is_calling() {
     let mut test_data = setup(odra_test::env());
@@ -154,6 +267,10 @@ fn test_set_treasury_should_set_treasury_properly() {
         "Invalid Treasury contract address"
     );
 }
+
+// =============================================================================
+// create_lease_invoice()
+// =============================================================================
 
 #[test]
 fn test_create_lease_invoice_should_fail_if_not_lease_contract_is_calling() {
@@ -259,6 +376,10 @@ fn test_create_lease_invoice_should_create_lease_invoice_properly() {
 
     assert_eq!(invoice_id, U256::zero(), "Invalid invoice ID");
 }
+
+// =============================================================================
+// pay_invoice()
+// =============================================================================
 
 #[test]
 fn test_pay_invoice_should_fail_if_invoice_does_not_exist() {
@@ -484,93 +605,4 @@ fn test_pay_invoice_should_pay_invoice_in_cep18_token_properly() {
         test_data.escrow.get_invoice_by_id(invoice_id).is_paid,
         "Invoice should be marked as paid after successful payment"
     );
-}
-
-fn setup(env: HostEnv) -> TestData {
-    let mut escrow = Escrow::deploy(
-        &env,
-        EscrowInitArgs {
-            owner: env.get_account(0),
-            min_deadline: MIN_DEADLINE,
-        },
-    );
-    let mock_cep18 = BigCoin::deploy(
-        &env,
-        BigCoinInitArgs {
-            symbol: String::from("MOCK"),
-            name: String::from("MOCK"),
-            decimals: 18,
-            initial_supply: U256::from_dec_str("5000000000000000000000000000000").unwrap(),
-        },
-    );
-
-    escrow.set_lease(env.get_account(15));
-    escrow.set_treasury(env.get_account(14));
-
-    TestData {
-        env,
-        escrow,
-        mock_cep18,
-    }
-}
-
-fn generate_invoice_params(test_data: &TestData) -> InvoiceParams {
-    InvoiceParams {
-        tenant: test_data.env.get_account(0),
-        landlord: test_data.env.get_account(1),
-        amount_due: CurrencyAmount::new(None, U256::from_dec_str("1000000000000000000").unwrap()),
-        deadline: test_data.env.block_time() + test_data.escrow.get_min_deadline(),
-    }
-}
-
-fn create_lease_invoice(test_data: &mut TestData, params: &InvoiceParams) -> U256 {
-    test_data
-        .env
-        .set_caller(test_data.escrow.get_lease_contract_address());
-
-    let invoice_id = test_data
-        .escrow
-        .create_lease_invoice(CreateLeaseInvoiceParams {
-            tenant: params.tenant,
-            landlord: params.landlord,
-            rent: params.amount_due,
-            property_manager: None,
-            property_manager_bps: 0,
-            deadline: params.deadline,
-        });
-
-    test_data.env.set_caller(test_data.env.get_account(0));
-
-    assert!(test_data.env.emitted_event(
-        &test_data.escrow,
-        InvoiceCreated {
-            invoice_id,
-            created_at: test_data.env.block_time(),
-        }
-    ));
-
-    let mut amount_due = params.amount_due;
-    assert_eq!(
-        test_data.escrow.get_invoice_by_id(invoice_id),
-        Invoice {
-            kind: InvoiceKind::Lease,
-            buyer: params.tenant,
-            seller: params.landlord,
-            amount_due: params.amount_due,
-            rent_amount: *amount_due.amount(),
-            rent_paid: U256::zero(),
-            property_manager: None,
-            property_manager_bps: 0,
-            deadline: params.deadline,
-            is_paid: false
-        },
-        "Invalid invoice"
-    );
-    assert_eq!(
-        test_data.escrow.get_invoices_count(),
-        invoice_id + 1,
-        "Invalid invoices count number"
-    );
-
-    invoice_id
 }
