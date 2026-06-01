@@ -34,7 +34,8 @@ pub enum EmailError {
 }
 
 impl From<PostmarkClientError> for EmailError {
-    /// Network errors -> Transient. Bad token / bad URL -> Permanent.
+    /// Transport (network) errors -> Transient. Config and request-construction
+    /// errors -> Permanent.
     #[inline]
     fn from(err: PostmarkClientError) -> Self {
         let summary = err.to_string();
@@ -44,7 +45,13 @@ impl From<PostmarkClientError> for EmailError {
             | PostmarkClientError::InvalidUri { .. } => {
                 Self::Permanent(format!("postmark config: {summary}"))
             }
-            PostmarkClientError::Communication { .. } | PostmarkClientError::Http { .. } => {
+            // `Http` wraps an `http::Error` raised while building the request,
+            // not a server response. It is deterministic: the identical call
+            // fails the same way on every retry, so retrying is pointless.
+            PostmarkClientError::Http { .. } => {
+                Self::Permanent(format!("postmark request build: {summary}"))
+            }
+            PostmarkClientError::Communication { .. } => {
                 Self::Transient(format!("postmark transport: {summary}"))
             }
         }
@@ -194,7 +201,10 @@ impl EmailSender for PostmarkSender {
             Err(QueryError::Json { source }) => Err(EmailError::Transient(format!(
                 "postmark response parse: {source}"
             ))),
-            Err(QueryError::Body { source }) => Err(EmailError::Transient(format!(
+            // `Body` wraps an `http::Error` from serializing the request body -
+            // a deterministic client-side construction failure, so the same
+            // payload will fail identically on every retry.
+            Err(QueryError::Body { source }) => Err(EmailError::Permanent(format!(
                 "postmark request build: {source}"
             ))),
         }
