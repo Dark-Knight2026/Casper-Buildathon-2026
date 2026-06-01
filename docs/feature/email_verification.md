@@ -98,7 +98,6 @@ Postmark deliverability checklist for DevOps (one-time, per sending domain):
 
 These are deliberate cuts to be revisited before production launch, not gaps in the current behaviour:
 
-- **Dev escape hatch:** when no Postmark token is configured, `send` returns the plaintext token in the response as `dev_verification_token` so the confirm step stays exercisable without a real inbox. It is suppressed automatically once Postmark is configured (production never sees it), and is marked `TODO(email-postmark)` for removal - handing the token back over HTTP bypasses the email-ownership proof that the round-trip exists to provide.
 - **Plain-text only:** verification mail has no HTML alternative yet. Postmark sender-reputation favours multipart messages, so an HTML part is a near-term follow-up.
 - **Transaction unification:** the confirm path issues the refresh-family revoke and the `email_verified` update as separate statements. An executor-accepting variant of `issue_login_refresh_token` would let the revoke join the `UPDATE` + audit in one transaction.
 - **Email-change consistency:** the older `confirm_email_change` flow predates the constant-time compare used here; aligning it would make the two confirm paths uniform.

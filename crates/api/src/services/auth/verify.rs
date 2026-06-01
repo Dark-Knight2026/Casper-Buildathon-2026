@@ -42,13 +42,10 @@ use crate::{
 };
 
 impl VerifySendResponse {
-    /// Builds the `200` body. `status` is hard-wired to `"sent"`; the optional
-    /// `dev_verification_token` is the dev/MVP escape hatch documented on
-    /// [`VerifySendResponse`].
-    fn sent(dev_verification_token: Option<String>) -> Json<Self> {
+    /// Builds the `200` body. `status` is hard-wired to `"sent"`.
+    fn sent() -> Json<Self> {
         Json(Self {
             status: "sent".to_owned(),
-            dev_verification_token,
         })
     }
 }
@@ -170,22 +167,10 @@ async fn send_or_resend_verify_email(
         .record_verify_email_send_attempt(user_id)
         .await?;
 
-    // WARN: (DEV/MVP ESCAPE HATCH): with no Postmark token the mailer is the
-    // logging stub, so the token never reaches a real inbox. Hand the plaintext
-    // back in the response so the confirm step stays reachable during
-    // development. TODO(email-postmark): delete this once Postmark delivery is
-    // configured - returning the token over HTTP bypasses the email-ownership
-    // proof.
-    let dev_token = state
-        .config
-        .postmark
-        .is_none()
-        .then(|| token.plaintext.clone());
-
     // Build and attempt delivery.
     let message = verification_email(&email, &state.config.frontend_url, &token.plaintext);
     match state.mailer.send(message.clone()).await {
-        Ok(()) => Ok(VerifySendResponse::sent(dev_token)),
+        Ok(()) => Ok(VerifySendResponse::sent()),
         // Transient: the user is told it is on the way; the retry queue
         // delivers in the background. Counter stays bumped - the mail WILL
         // be sent, so the rate limit should account for it.
@@ -196,7 +181,7 @@ async fn send_or_resend_verify_email(
                 "verify-email transient send failure - queuing for retry",
             );
             email_retry::db::insert_retry(&state.db, &message).await?;
-            Ok(VerifySendResponse::sent(dev_token))
+            Ok(VerifySendResponse::sent())
         }
         // Permanent: nothing the queue can fix. Roll back so the user is not
         // blocked - the token is now useless and the slot is freed.

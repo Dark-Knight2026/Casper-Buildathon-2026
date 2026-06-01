@@ -152,19 +152,6 @@ pub struct RevokeAllSessionsResponse {
 pub struct VerifySendResponse {
     /// Always `"sent"`.
     pub status: String,
-    /// WARN: DEV/MVP ESCAPE HATCH - present only while email delivery is
-    /// unconfigured (no Postmark token, so the mailer is the logging stub).
-    ///
-    /// TODO: (email-postmark) remove this field together with its population in
-    /// `send_or_resend_verify_email` once Postmark delivery is wired up. It
-    /// must never be returned in production - handing the token back over HTTP
-    /// defeats the email round-trip that proves address ownership.
-    ///
-    /// The verification token normally travels only inside the email; with no
-    /// real mailer there is no inbox to read it from, so the plaintext is
-    /// surfaced here to keep the confirm step exercisable during development.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub dev_verification_token: Option<String>,
 }
 
 /// Request body for the verify-email confirm step.

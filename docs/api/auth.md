@@ -35,7 +35,7 @@ Session-management endpoints live in [`auth_sessions.md`](auth_sessions.md).
 ## POST `/api/v1/auth/verify/email/send`
 
 - **Input:** none (email is read from the user record, never the body)
-- **Response (200):** `{ "status": "sent" }`. In dev (no Postmark token) the body also carries `dev_verification_token` - see the escape-hatch note in [`../feature/email_verification.md`](../feature/email_verification.md).
+- **Response (200):** `{ "status": "sent" }`.
 - **Errors:** 400 (`email_not_set`), 401 (unauthorized), 429 (`rate_limited` - 1/min, 5/hour shared with resend), 500 (`email_send_failed`)
 - **Auth:** Access cookie required
 
