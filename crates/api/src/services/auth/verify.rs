@@ -152,17 +152,22 @@ async fn send_or_resend_verify_email(
         .await?
         .ok_or_else(|| ApiError::BadRequest("email_not_set".to_owned()))?;
 
-    // Increment both counters now that the request is genuinely actionable.
-    state
-        .redis
-        .record_verify_email_send_attempt(user_id)
-        .await?;
-
-    // Generate the opaque token and persist only its hash (24h TTL).
+    // Generate the opaque token and persist only its hash (24h TTL) BEFORE a
+    // slot is consumed. If the process dies between the two Redis writes, the
+    // worst case is a stored token with no slot spent (harmless, favours the
+    // user) rather than a spent slot with no redeemable token (which would
+    // strand the user behind the limiter with nothing to confirm).
     let token = tokens::generate();
     state
         .redis
         .save_verify_email_token(user_id, &token.hash)
+        .await?;
+
+    // Consume the rate-limit slot only once a redeemable token is safely
+    // stored.
+    state
+        .redis
+        .record_verify_email_send_attempt(user_id)
         .await?;
 
     // WARN: (DEV/MVP ESCAPE HATCH): with no Postmark token the mailer is the
