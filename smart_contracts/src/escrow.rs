@@ -338,6 +338,7 @@ impl Escrow {
 
     /// Allows the Lease contract to create a USDC security deposit invoice.
     /// @dev The deposit is paid into this Escrow contract and held until Lease releases it.
+    #[allow(unused_mut)]
     #[odra(non_reentrant)]
     pub fn create_security_deposit_invoice(
         &mut self,
