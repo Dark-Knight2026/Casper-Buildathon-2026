@@ -178,6 +178,7 @@ export function useICOWallet(): UseICOWalletReturn {
       logger.debug('[useICOWallet] unsolicited account change', { evt });
       try {
         await clickRef.signInWithAccount(evt.account as never);
+        if (cancelled) return;
       } catch (e) {
         logger.error('[useICOWallet] signInWithAccount after unsolicited change failed', { error: e });
       }
