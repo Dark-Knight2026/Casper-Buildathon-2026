@@ -963,3 +963,34 @@ fn test_release_security_deposit_should_split_charge_and_refund() {
         },
     ));
 }
+
+#[test]
+fn test_release_security_deposit_should_revert_if_already_released() {
+    let mut test_data = setup(odra_test::env());
+    let mut params = generate_invoice_params(&test_data);
+    let amount = *params.amount_due.amount();
+    let invoice_id = create_security_deposit_invoice(&mut test_data, &mut params);
+
+    test_data
+        .mock_cep18
+        .approve(&test_data.escrow.address(), &amount);
+
+    test_data.escrow.pay_invoice(invoice_id, amount);
+
+    test_data
+        .env
+        .set_caller(test_data.escrow.get_lease_contract_address());
+
+    test_data
+        .escrow
+        .release_security_deposit(invoice_id, params.landlord, U256::zero());
+
+    assert_eq!(
+        test_data
+            .escrow
+            .try_release_security_deposit(invoice_id, params.landlord, U256::zero(),)
+            .unwrap_err(),
+        Error::SecurityDepositAlreadyReleased.into(),
+        "Security deposit should not be released twice",
+    );
+}
