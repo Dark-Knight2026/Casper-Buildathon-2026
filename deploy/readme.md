@@ -156,6 +156,7 @@ deploy/
 | Variable | `S3_REGION` | `us-east-1` | S3 region label (MinIO ignores; backend signs with it) |
 | Variable | `S3_ENDPOINT` | `http://minio:9000` | S3 API endpoint the backend container PUTs/DELETEs to; per-backend value (see [Switching backends](#switching-to-aws-s3-or-cloudflare-r2)) |
 | Variable | `S3_PUBLIC_URL_BASE` | `https://api.leasefi.com/media` | Public URL prefix stored in `users.avatar_url`; per-backend value (see [Switching backends](#switching-to-aws-s3-or-cloudflare-r2)) |
+| Variable | `REQUEST_BODY_LIMIT_MB` | `8` | Outer body limit for nginx (`client_max_body_size`) and axum (MiB); optional, defaults to 8, minimum 8 |
 | Secret | `S3_ACCESS_KEY` | random 32+ chars | MinIO root user AND backend access key |
 | Secret | `S3_SECRET_KEY` | random 32+ chars | MinIO root password AND backend secret key |
 
