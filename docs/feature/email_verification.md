@@ -12,6 +12,10 @@ The level is **derived, never assigned**. It is recomputed from the verification
 
 `identity` and `full` are wired now but produced by the KYC work, not this flow.
 
+### Pilot gating (live)
+
+The `email` level gates a live route: `POST /api/v1/tax/calculate-liability` is mounted behind the `VerifiedUser<EmailVerified>` extractor. A caller below `email` is rejected with `403` and the body `{ "error": "verification_required", "required_level": "email" }`, which the frontend reads to render the verify-your-email CTA. This is the deliberate first route of the rollout - onboarding and self-service paths (`auth/*`, `GET`/`PATCH /users/me`, the email-change flow, account delete) stay on `AuthUser` so an unverified user is never locked out of the steps that let them verify in the first place.
+
 ## Endpoints
 
 Three endpoints, all mounted under the public auth router but guarded per-handler by the `AuthUser` extractor (same JWT validation as `require_auth`) - a user must be logged in to verify their own email, and the address is always read from the access cookie, never from the request body.
