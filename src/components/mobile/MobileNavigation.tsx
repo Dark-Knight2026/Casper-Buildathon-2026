@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
+import { useICOWallet } from '@/hooks/ico/useICOWallet';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
@@ -28,12 +29,20 @@ interface MobileNavigationProps {
   favoriteCount?: number;
 }
 
-export default function MobileNavigation({ 
+// DEAD CODE (as of 2026-06-01): this component is currently unreachable.
+// Import chain: MobileNavigation ← MobileOptimizedListings ← (nobody — only a
+// comment mention in data/mockProperties.ts). Not wired into App.tsx (the sole
+// router). Note this is legacy "KeyChain" UI (buyer/seller/agent roles, /listings,
+// /favorites routes) that predates the current LeaseFi flow. The auth wiring was
+// fixed to match LandlordLayout/TenantLayout so it's correct if/when reconnected,
+// but right now it never renders. Delete the orphan chain or route it before relying on this.
+export default function MobileNavigation({
   unreadMessages = 0, 
   unreadNotifications = 0,
   favoriteCount = 0 
 }: MobileNavigationProps) {
-  const { user, logout } = useAuth();
+  const { profile, walletSignOut } = useAuth();
+  const { disconnect } = useICOWallet();
   const navigate = useNavigate();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('home');
@@ -44,9 +53,18 @@ export default function MobileNavigation({
     setIsMenuOpen(false);
   };
 
+  // Full sign-out: release the CSPR.click wallet session (await so the SDK's
+  // hard disconnect completes), clear our backend session, then hard-reload to
+  // wipe in-memory SDK state. Matches LandlordLayout/TenantLayout.
+  const handleLogout = async () => {
+    await disconnect();
+    walletSignOut();
+    window.location.assign('/');
+  };
+
   const getDashboardRoute = () => {
-    if (!user) return '/';
-    switch (user.role) {
+    if (!profile) return '/';
+    switch (profile.role) {
       case 'buyer': return '/buyer-dashboard';
       case 'seller': return '/seller-dashboard';
       case 'agent': return '/agent-dashboard';
@@ -67,7 +85,7 @@ export default function MobileNavigation({
 
           <div className="flex items-center space-x-2">
             {/* Notifications */}
-            {user && (
+            {profile && (
               <Button
                 variant="ghost"
                 size="icon"
@@ -96,7 +114,7 @@ export default function MobileNavigation({
                 </SheetHeader>
 
                 <div className="mt-6 space-y-1">
-                  {user ? (
+                  {profile ? (
                     <>
                       {/* User Info */}
                       <div className="px-4 py-3 bg-gray-50 rounded-lg mb-4">
@@ -105,8 +123,8 @@ export default function MobileNavigation({
                             <User className="h-5 w-5 text-white" />
                           </div>
                           <div>
-                            <p className="font-semibold text-gray-900">{user.firstName} {user.lastName}</p>
-                            <p className="text-sm text-gray-600 capitalize">{user.role}</p>
+                            <p className="font-semibold text-gray-900">{profile.firstName} {profile.lastName}</p>
+                            <p className="text-sm text-gray-600 capitalize">{profile.role}</p>
                           </div>
                         </div>
                       </div>
@@ -199,11 +217,7 @@ export default function MobileNavigation({
                       <Button
                         variant="ghost"
                         className="w-full justify-start text-red-600 hover:text-red-700 hover:bg-red-50"
-                        onClick={() => {
-                          logout();
-                          setIsMenuOpen(false);
-                          navigate('/');
-                        }}
+                        onClick={handleLogout}
                       >
                         <LogOut className="h-5 w-5 mr-3" />
                         Sign Out
@@ -270,7 +284,7 @@ export default function MobileNavigation({
       </div>
 
       {/* Bottom Navigation Bar */}
-      {user && (
+      {profile && (
         <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t shadow-lg">
           <div className="grid grid-cols-5 h-16">
             <button
@@ -338,7 +352,7 @@ export default function MobileNavigation({
 
       {/* Spacer for fixed navigation */}
       <div className="lg:hidden h-14" /> {/* Top spacer */}
-      {user && <div className="lg:hidden h-16" />} {/* Bottom spacer */}
+      {profile && <div className="lg:hidden h-16" />} {/* Bottom spacer */}
     </>
   );
 }
