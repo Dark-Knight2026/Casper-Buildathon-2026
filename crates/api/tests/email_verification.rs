@@ -26,11 +26,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use api::common::RedisStore;
-use common::{
-    CapturingMailer, PermanentMailer, TestEnv, TestOverrides, TransientMailer,
-    extract_verify_token, login_and_extract, setup_test_server, setup_test_server_capturing,
-    setup_test_server_with,
-};
+use common::{CapturingMailer, PermanentMailer, TestEnv, TestOverrides, TransientMailer};
 
 /// HTTP path of the verify-email send endpoint.
 const SEND_URI: &str = "/api/v1/auth/verify/email/send";
@@ -39,26 +35,6 @@ const SEND_URI: &str = "/api/v1/auth/verify/email/send";
 const RESEND_URI: &str = "/api/v1/auth/verify/email/resend";
 /// HTTP path of the verify-email confirm endpoint.
 const CONFIRM_URI: &str = "/api/v1/auth/verify/email/confirm";
-
-/// Sets a unique email on the user so verify-send clears the `email IS NULL`
-/// guard. A wallet-only login leaves `email` NULL, which would otherwise make
-/// send return `400 email_not_set`.
-async fn seed_email(pool: &PgPool, user_id: Uuid) -> String {
-    let email = format!("verify-{user_id}@example.com");
-    sqlx::query!(
-        r"
-            UPDATE users
-            SET email = $1, email_verified = FALSE
-            WHERE id = $2
-        ",
-        email,
-        user_id,
-    )
-    .execute(pool)
-    .await
-    .expect("seed email");
-    email
-}
 
 /// Posts to the send endpoint with the given access cookie, returning the raw
 /// response so callers can assert any status (200 / 429 / 500).
@@ -106,16 +82,16 @@ async fn send_and_take_token(
 ) -> String {
     let response = post_send(env, access_token).await;
     assert_eq!(response.status_code(), StatusCode::OK, "send must succeed");
-    extract_verify_token(mailer)
+    common::extract_verify_token(mailer)
 }
 
 /// Happy path: send then confirm flips `email_verified`, lets the trigger
 /// raise `verification_level` to `email`, and rotates both auth cookies.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn send_then_confirm_verifies_email_and_rotates_tokens(pool: PgPool) {
-    let (env, mailer) = setup_test_server_capturing(pool, true).await;
-    let session = login_and_extract(&env).await;
-    seed_email(&env.state.db, session.user_id).await;
+    let (env, mailer) = common::setup_test_server_capturing(pool, true).await;
+    let session = common::login_and_extract(&env).await;
+    common::seed_email(&env.state.db, session.user_id).await;
 
     let token = send_and_take_token(&env, &mailer, &session.access_token).await;
 
@@ -156,9 +132,9 @@ async fn send_then_confirm_verifies_email_and_rotates_tokens(pool: PgPool) {
 /// revoked, while the one returned by confirm rotates cleanly.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn confirm_rotates_refresh_family_old_invalid_new_valid(pool: PgPool) {
-    let (env, mailer) = setup_test_server_capturing(pool, true).await;
-    let session = login_and_extract(&env).await;
-    seed_email(&env.state.db, session.user_id).await;
+    let (env, mailer) = common::setup_test_server_capturing(pool, true).await;
+    let session = common::login_and_extract(&env).await;
+    common::seed_email(&env.state.db, session.user_id).await;
     let token = send_and_take_token(&env, &mailer, &session.access_token).await;
 
     let confirm = env
@@ -199,9 +175,9 @@ async fn confirm_rotates_refresh_family_old_invalid_new_valid(pool: PgPool) {
 /// compare fails, so the genuine token can no longer be redeemed afterwards.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn confirm_with_wrong_token_consumes_slot(pool: PgPool) {
-    let (env, mailer) = setup_test_server_capturing(pool, true).await;
-    let session = login_and_extract(&env).await;
-    seed_email(&env.state.db, session.user_id).await;
+    let (env, mailer) = common::setup_test_server_capturing(pool, true).await;
+    let session = common::login_and_extract(&env).await;
+    common::seed_email(&env.state.db, session.user_id).await;
     let real_token = send_and_take_token(&env, &mailer, &session.access_token).await;
 
     // Valid 43-char base64url shape, guaranteed hash mismatch.
@@ -235,9 +211,9 @@ async fn confirm_with_wrong_token_consumes_slot(pool: PgPool) {
 /// A token is single-use: the second confirm with the same token misses.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn confirm_is_single_use(pool: PgPool) {
-    let (env, mailer) = setup_test_server_capturing(pool, true).await;
-    let session = login_and_extract(&env).await;
-    seed_email(&env.state.db, session.user_id).await;
+    let (env, mailer) = common::setup_test_server_capturing(pool, true).await;
+    let session = common::login_and_extract(&env).await;
+    common::seed_email(&env.state.db, session.user_id).await;
     let token = send_and_take_token(&env, &mailer, &session.access_token).await;
 
     let first = env
@@ -265,9 +241,9 @@ async fn confirm_is_single_use(pool: PgPool) {
 /// expiry) confirms as `404`, not a server error.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn confirm_expired_token_returns_404(pool: PgPool) {
-    let (env, mailer) = setup_test_server_capturing(pool, true).await;
-    let session = login_and_extract(&env).await;
-    seed_email(&env.state.db, session.user_id).await;
+    let (env, mailer) = common::setup_test_server_capturing(pool, true).await;
+    let session = common::login_and_extract(&env).await;
+    common::seed_email(&env.state.db, session.user_id).await;
     let token = send_and_take_token(&env, &mailer, &session.access_token).await;
 
     // Drop the slot the way a 24h TTL expiry eventually would.
@@ -294,8 +270,8 @@ async fn confirm_expired_token_returns_404(pool: PgPool) {
 /// touching Redis.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn confirm_bad_token_format_returns_400(pool: PgPool) {
-    let env = setup_test_server(pool, true).await;
-    let session = login_and_extract(&env).await;
+    let env = common::setup_test_server(pool, true).await;
+    let session = common::login_and_extract(&env).await;
 
     let confirm = env
         .server
@@ -314,7 +290,7 @@ async fn confirm_bad_token_format_returns_400(pool: PgPool) {
 /// the body.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn confirm_without_auth_returns_401(pool: PgPool) {
-    let env = setup_test_server(pool, true).await;
+    let env = common::setup_test_server(pool, true).await;
 
     let confirm = env
         .server
@@ -333,9 +309,9 @@ async fn confirm_without_auth_returns_401(pool: PgPool) {
 /// other devices.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn confirm_already_verified_returns_200_without_cookies(pool: PgPool) {
-    let (env, mailer) = setup_test_server_capturing(pool, true).await;
-    let session = login_and_extract(&env).await;
-    let email = seed_email(&env.state.db, session.user_id).await;
+    let (env, mailer) = common::setup_test_server_capturing(pool, true).await;
+    let session = common::login_and_extract(&env).await;
+    let email = common::seed_email(&env.state.db, session.user_id).await;
     let token = send_and_take_token(&env, &mailer, &session.access_token).await;
 
     // Flip the flag behind the handler's back, leaving the token slot intact.
@@ -398,9 +374,9 @@ async fn confirm_already_verified_returns_200_without_cookies(pool: PgPool) {
 /// First send succeeds; an immediate second hits the per-minute cap (1/min).
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn send_rate_limited_after_first_within_minute(pool: PgPool) {
-    let env = setup_test_server(pool, true).await;
-    let session = login_and_extract(&env).await;
-    seed_email(&env.state.db, session.user_id).await;
+    let env = common::setup_test_server(pool, true).await;
+    let session = common::login_and_extract(&env).await;
+    common::seed_email(&env.state.db, session.user_id).await;
 
     let first = post_send(&env, &session.access_token).await;
     assert_eq!(first.status_code(), StatusCode::OK);
@@ -417,9 +393,9 @@ async fn send_rate_limited_after_first_within_minute(pool: PgPool) {
 /// cap of 5 is not yet reached.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn send_succeeds_again_after_minute_window(pool: PgPool) {
-    let env = setup_test_server(pool, true).await;
-    let session = login_and_extract(&env).await;
-    seed_email(&env.state.db, session.user_id).await;
+    let env = common::setup_test_server(pool, true).await;
+    let session = common::login_and_extract(&env).await;
+    common::seed_email(&env.state.db, session.user_id).await;
 
     assert_eq!(
         post_send(&env, &session.access_token).await.status_code(),
@@ -443,9 +419,9 @@ async fn send_succeeds_again_after_minute_window(pool: PgPool) {
 /// cleared between requests.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn send_hour_cap_blocks_sixth_request(pool: PgPool) {
-    let env = setup_test_server(pool, true).await;
-    let session = login_and_extract(&env).await;
-    seed_email(&env.state.db, session.user_id).await;
+    let env = common::setup_test_server(pool, true).await;
+    let session = common::login_and_extract(&env).await;
+    common::seed_email(&env.state.db, session.user_id).await;
 
     for i in 0..5 {
         let resp = post_send(&env, &session.access_token).await;
@@ -473,7 +449,7 @@ async fn send_hour_cap_blocks_sixth_request(pool: PgPool) {
 /// rejected by the limiter (429).
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn permanent_failure_compensates_send_counter(pool: PgPool) {
-    let env = setup_test_server_with(
+    let env = common::setup_test_server_with(
         pool,
         true,
         TestOverrides {
@@ -482,8 +458,8 @@ async fn permanent_failure_compensates_send_counter(pool: PgPool) {
         },
     )
     .await;
-    let session = login_and_extract(&env).await;
-    seed_email(&env.state.db, session.user_id).await;
+    let session = common::login_and_extract(&env).await;
+    common::seed_email(&env.state.db, session.user_id).await;
 
     let first = post_send(&env, &session.access_token).await;
     // A 500 here is necessarily the send-failure branch - the only 500 send
@@ -504,7 +480,7 @@ async fn permanent_failure_compensates_send_counter(pool: PgPool) {
 /// gets `200`, and the counter stays spent - so an immediate retry is `429`.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn transient_failure_queues_and_keeps_counter(pool: PgPool) {
-    let env = setup_test_server_with(
+    let env = common::setup_test_server_with(
         pool,
         true,
         TestOverrides {
@@ -513,8 +489,8 @@ async fn transient_failure_queues_and_keeps_counter(pool: PgPool) {
         },
     )
     .await;
-    let session = login_and_extract(&env).await;
-    seed_email(&env.state.db, session.user_id).await;
+    let session = common::login_and_extract(&env).await;
+    common::seed_email(&env.state.db, session.user_id).await;
 
     let first = post_send(&env, &session.access_token).await;
     assert_eq!(
@@ -549,8 +525,8 @@ async fn transient_failure_queues_and_keeps_counter(pool: PgPool) {
 /// never burns a slot.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn send_returns_400_when_email_not_set(pool: PgPool) {
-    let env = setup_test_server(pool, true).await;
-    let session = login_and_extract(&env).await;
+    let env = common::setup_test_server(pool, true).await;
+    let session = common::login_and_extract(&env).await;
     // Login synthesizes a placeholder `wallet_*@leasefi.local` email so that
     // `users.email` is non-NULL after wallet sign-in. To exercise the
     // `email_not_set` branch we explicitly clear it back to NULL.
@@ -578,7 +554,7 @@ async fn send_returns_400_when_email_not_set(pool: PgPool) {
 /// per-user counter or the mailer.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn send_without_auth_returns_401(pool: PgPool) {
-    let env = setup_test_server(pool, true).await;
+    let env = common::setup_test_server(pool, true).await;
 
     let response = env.server.post(SEND_URI).await;
     assert_eq!(response.status_code(), StatusCode::UNAUTHORIZED);
@@ -589,9 +565,9 @@ async fn send_without_auth_returns_401(pool: PgPool) {
 /// without leaving two redeemable tokens in flight.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn send_overwrites_previous_token_slot(pool: PgPool) {
-    let (env, mailer) = setup_test_server_capturing(pool, true).await;
-    let session = login_and_extract(&env).await;
-    seed_email(&env.state.db, session.user_id).await;
+    let (env, mailer) = common::setup_test_server_capturing(pool, true).await;
+    let session = common::login_and_extract(&env).await;
+    common::seed_email(&env.state.db, session.user_id).await;
 
     let first_token = send_and_take_token(&env, &mailer, &session.access_token).await;
     // Step past the 1/min cap so the second send is not rate-limited.
@@ -627,13 +603,13 @@ async fn send_overwrites_previous_token_slot(pool: PgPool) {
 /// rather than a stub.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn resend_issues_a_usable_token(pool: PgPool) {
-    let (env, mailer) = setup_test_server_capturing(pool, true).await;
-    let session = login_and_extract(&env).await;
-    seed_email(&env.state.db, session.user_id).await;
+    let (env, mailer) = common::setup_test_server_capturing(pool, true).await;
+    let session = common::login_and_extract(&env).await;
+    common::seed_email(&env.state.db, session.user_id).await;
 
     let resend = post_resend(&env, &session.access_token).await;
     assert_eq!(resend.status_code(), StatusCode::OK, "resend must succeed");
-    let token = extract_verify_token(&mailer);
+    let token = common::extract_verify_token(&mailer);
 
     let confirm = env
         .server
@@ -653,9 +629,9 @@ async fn resend_issues_a_usable_token(pool: PgPool) {
 /// than each having its own quota.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn resend_shares_rate_limit_with_send(pool: PgPool) {
-    let env = setup_test_server(pool, true).await;
-    let session = login_and_extract(&env).await;
-    seed_email(&env.state.db, session.user_id).await;
+    let env = common::setup_test_server(pool, true).await;
+    let session = common::login_and_extract(&env).await;
+    common::seed_email(&env.state.db, session.user_id).await;
 
     let send = post_send(&env, &session.access_token).await;
     assert_eq!(send.status_code(), StatusCode::OK);
@@ -677,16 +653,16 @@ async fn resend_shares_rate_limit_with_send(pool: PgPool) {
 /// holding an independently redeemable token.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn resend_overwrites_send_token_slot(pool: PgPool) {
-    let (env, mailer) = setup_test_server_capturing(pool, true).await;
-    let session = login_and_extract(&env).await;
-    seed_email(&env.state.db, session.user_id).await;
+    let (env, mailer) = common::setup_test_server_capturing(pool, true).await;
+    let session = common::login_and_extract(&env).await;
+    common::seed_email(&env.state.db, session.user_id).await;
 
     let send_token = send_and_take_token(&env, &mailer, &session.access_token).await;
     // Step past the 1/min cap so the resend is not rate-limited.
     clear_minute_window(&env, session.user_id).await;
     let resend = post_resend(&env, &session.access_token).await;
     assert_eq!(resend.status_code(), StatusCode::OK);
-    let resend_token = extract_verify_token(&mailer);
+    let resend_token = common::extract_verify_token(&mailer);
     assert_ne!(send_token, resend_token, "resend mints fresh entropy");
 
     let stored = env

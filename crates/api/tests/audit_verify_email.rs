@@ -15,29 +15,8 @@ use axum::http::{StatusCode, header::USER_AGENT};
 use axum_test::http::header::COOKIE;
 use serde_json::json;
 use sqlx::PgPool;
-use uuid::Uuid;
 
 use api::services::auth::db::{self, VerifyConfirmOutcome};
-
-/// Sets a unique email and clears `email_verified` so the next confirm runs
-/// the genuine UPDATE branch. Wallet-only login synthesises a placeholder
-/// email, but we want a known fixture value the assertion can read back.
-async fn seed_email(pool: &PgPool, user_id: Uuid) -> String {
-    let email = format!("audit-{user_id}@example.com");
-    sqlx::query!(
-        r"
-            UPDATE users
-            SET email = $1, email_verified = FALSE
-            WHERE id = $2
-        ",
-        email,
-        user_id,
-    )
-    .execute(pool)
-    .await
-    .expect("seed email");
-    email
-}
 
 /// A successful confirm writes exactly one `verify_email` audit row carrying
 /// the full request context. The audit trail is the primary record of "who
@@ -47,7 +26,7 @@ async fn seed_email(pool: &PgPool, user_id: Uuid) -> String {
 async fn confirm_writes_verify_email_audit_row(pool: PgPool) {
     let (env, mailer) = common::setup_test_server_capturing(pool.clone(), true).await;
     let session = common::login_and_extract(&env).await;
-    let email = seed_email(&pool, session.user_id).await;
+    let email = common::seed_email(&pool, session.user_id).await;
 
     let send = env
         .server
@@ -129,7 +108,7 @@ async fn confirm_writes_verify_email_audit_row(pool: PgPool) {
 async fn idempotent_confirm_does_not_write_a_second_audit_row(pool: PgPool) {
     let env = common::setup_test_server(pool.clone(), true).await;
     let session = common::login_and_extract(&env).await;
-    seed_email(&pool, session.user_id).await;
+    common::seed_email(&pool, session.user_id).await;
 
     // First confirm runs the genuine UPDATE branch and writes one row.
     let first =
@@ -171,7 +150,7 @@ async fn idempotent_confirm_does_not_write_a_second_audit_row(pool: PgPool) {
 async fn confirm_bumps_updated_at(pool: PgPool) {
     let env = common::setup_test_server(pool.clone(), true).await;
     let session = common::login_and_extract(&env).await;
-    seed_email(&pool, session.user_id).await;
+    common::seed_email(&pool, session.user_id).await;
 
     // Back-date updated_at by an hour so a NOW() bump is unambiguous.
     sqlx::query!(

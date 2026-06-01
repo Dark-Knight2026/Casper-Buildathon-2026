@@ -337,14 +337,38 @@ pub async fn setup_test_server_capturing(
     (env, handle)
 }
 
+/// Sets a unique email on the user and clears `email_verified`, so the next
+/// verify-send clears the `email IS NULL` guard and the next confirm runs the
+/// genuine UPDATE branch. A wallet-only login synthesises a placeholder email;
+/// this overwrites it with a known fixture value the assertions can read back.
+/// Returns the email it set.
+#[inline]
+pub async fn seed_email(pool: &PgPool, user_id: Uuid) -> String {
+    let email = format!("verify-{user_id}@example.com");
+    sqlx::query!(
+        r"
+            UPDATE users
+            SET email = $1, email_verified = FALSE
+            WHERE id = $2
+        ",
+        email,
+        user_id,
+    )
+    .execute(pool)
+    .await
+    .expect("seed email");
+    email
+}
+
 /// Plaintext verification token parsed from the most recent message captured
 /// by a `CapturingMailer`.
 ///
 /// The verify-email body is built by `verification_email` as a single link
 /// `{frontend_url}/verify-email?token={token}` terminated by `\n`, so the
-/// rightmost `?token=` substring isolates the plaintext. Panics if no message
-/// has been captured yet or the body does not carry a token query parameter -
-/// both indicate a miswired test, not a contract change.
+/// `?token=` substring isolates the plaintext. Panics if no message has been
+/// captured yet, the body carries no token query parameter, or it carries more
+/// than one - a second `?token=` would let the parser silently pick one, which
+/// always signals a miswired test rather than a contract change.
 #[inline]
 pub fn extract_verify_token(mailer: &CapturingMailer) -> String {
     let messages = mailer.sent.lock().expect("CapturingMailer mutex poisoned");
@@ -352,9 +376,17 @@ pub fn extract_verify_token(mailer: &CapturingMailer) -> String {
         .last()
         .expect("no captured verification message yet")
         .body;
-    body.rsplit_once("?token=")
-        .map(|(_, tail)| tail.trim_end().to_owned())
-        .expect("verification email body must carry a `?token=...` link")
+    let mut after_marker = body.split("?token=");
+    after_marker.next();
+    let token = after_marker
+        .next()
+        .expect("verification email body must carry a `?token=...` link");
+    assert!(
+        after_marker.next().is_none(),
+        "verification email body carried more than one `?token=` link; \
+         extract_verify_token cannot disambiguate which is current",
+    );
+    token.trim_end().to_owned()
 }
 
 /// 8-byte PNG signature followed by zero padding to 1 KB.
