@@ -27,9 +27,9 @@ export interface ServerUserInfo {
   active_leases_count: number;
   created_at: string;
   updated_at: string;
-  // Email-verification flow. Known values: 'none' | 'email_verified'.
-  // Optional because /users/me and /auth/login responses may omit the field
-  // for legacy sessions; treat absence as unverified.
+  // Email-verification level. Ordered enum (snake_case):
+  // 'none' | 'email' | 'identity' | 'full' — email is verified at 'email'+.
+  // Optional because legacy sessions may omit it; treat absence as unverified.
   verification_level?: string;
 }
 

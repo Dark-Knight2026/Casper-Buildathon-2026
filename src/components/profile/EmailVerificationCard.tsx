@@ -48,7 +48,10 @@ export function EmailVerificationCard() {
 
   if (!profile) return null;
 
-  const verified = profile.verificationLevel === 'email_verified';
+  // Backend `verification_level` is the ordered enum none < email < identity <
+  // full (serialized snake_case). Email counts as verified at `email` and up;
+  // absence (legacy sessions) is treated as unverified.
+  const verified = profile.verificationLevel != null && profile.verificationLevel !== 'none';
   const placeholder = isPlaceholderEmail(profile.email);
 
   const handleSend = async () => {

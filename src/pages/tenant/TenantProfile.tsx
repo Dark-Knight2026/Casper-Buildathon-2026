@@ -14,6 +14,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
+import { useRefetchOnFocus } from '@/hooks/useRefetchOnFocus';
 import { useTenantPreferences } from '@/hooks/useTenantPreferences';
 import { TenantPreferencesDialog } from '@/components/tenant/TenantPreferencesDialog';
 import { RoleSwitchDialog } from '@/components/profile/RoleSwitchDialog';
@@ -51,6 +52,14 @@ export function TenantProfile() {
       // Non-fatal: caller falls back to whatever AuthContext already had.
     });
   }, [refreshProfile]);
+
+  // Re-fetch when the user returns to this tab — covers email verify/change
+  // links that the mail client opened (and confirmed) in a separate tab.
+  useRefetchOnFocus(() => {
+    void refreshProfile().catch(() => {
+      // Non-fatal: keep showing the last good profile.
+    });
+  });
 
   const fullName = useMemo(() => {
     if (!authProfile) return '';

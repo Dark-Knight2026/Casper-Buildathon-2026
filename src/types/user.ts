@@ -76,9 +76,10 @@ export interface User {
   // Server timestamp of the last profile mutation. Used to detect concurrent
   // edits and to invalidate cached UI state after PATCH /users/me.
   updatedAt?: Date;
-  // Email-verification level from the backend. Known values:
-  // 'none' (unverified) | 'email_verified'. Optional because legacy sessions
-  // and older endpoints may omit the field — treat absence as unverified.
+  // Email-verification level from the backend. Ordered enum (snake_case):
+  // 'none' | 'email' | 'identity' | 'full'. Email is verified at 'email' and
+  // above. Optional because legacy sessions/older endpoints may omit it —
+  // treat absence as unverified.
   verificationLevel?: string;
 }
 
