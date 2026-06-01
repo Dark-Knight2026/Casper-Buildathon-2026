@@ -584,12 +584,12 @@ impl Escrow {
     }
 
     fn pay_lease_invoice(&mut self, invoice_id: U256, invoice: &mut Invoice, amount: U256) {
-        let protocol_fee = self.calculate_bps_amount(amount, LEASEFI_TRANSACTION_FEE_BPS);
-        let rent_allocation = amount - protocol_fee;
-
-        if rent_allocation > self.remaining_rent(invoice) {
+        if amount > self.remaining_rent(invoice) {
             self.env().revert(Error::PaymentExceedsAmountDue);
         }
+
+        let protocol_fee = self.calculate_bps_amount(amount, LEASEFI_TRANSACTION_FEE_BPS);
+        let distributable_rent = amount - protocol_fee;
 
         let currency = *invoice.amount_due.currency();
 
@@ -600,9 +600,9 @@ impl Escrow {
             protocol_fee,
         );
 
-        self.distribute_rent(invoice, currency, rent_allocation);
+        self.distribute_rent(invoice, currency, distributable_rent);
 
-        invoice.rent_paid += rent_allocation;
+        invoice.rent_paid += amount;
         invoice.is_paid = self.remaining_rent(invoice).is_zero();
 
         self.env().emit_event(InvoicePaymentApplied {
