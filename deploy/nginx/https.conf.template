@@ -81,6 +81,15 @@ server {
   # `<img>` GETs and may refuse to render the response without an
   # `Access-Control-Allow-Origin: ${PROJECT_DOMAIN}` (or `*` for fully public
   # assets) header here. Add it at that point, not before.
+  #
+  # Intercept the keyless `/media/` request first: the wildcard `(.*)` below
+  # matches zero characters, so `GET /media/` would rewrite to `/${S3_BUCKET}/`
+  # and reach MinIO as a `ListBucket` (XML listing or 403 AccessDenied) instead
+  # of the 404 a missing object key should produce. An exact-match location
+  # outranks the prefix match regardless of file order.
+  location = /media/ {
+    return 404;
+  }
   location /media/ {
     set $minio "minio:9000";
 
