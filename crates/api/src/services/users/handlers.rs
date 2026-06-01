@@ -30,8 +30,10 @@ use crate::{
 ///
 /// Validated in-handler against the byte buffer collected from the
 /// `multipart` field. The outer `RequestBodyLimitLayer` in
-/// [`crate::server`] is sized to match: anything larger is rejected by the
-/// transport layer before it reaches the handler.
+/// [`crate::server`] (driven by `REQUEST_BODY_LIMIT_MB`) holds the
+/// transport-level ceiling; operators are responsible for keeping it
+/// at or above this value plus ~3 MiB of multipart headroom so the 413
+/// contract fires from the handler rather than as a `MultipartError -> 400`.
 const MAX_AVATAR_BYTES: usize = 5 * 1024 * 1024;
 
 /// Minimum accepted avatar payload size.

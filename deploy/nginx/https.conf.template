@@ -46,6 +46,15 @@ server {
   set_real_ip_from 2c0f:f248::/32;
   real_ip_header CF-Connecting-IP;
 
+  # Single env-driven source of truth for the outer request-body ceiling. The
+  # same `REQUEST_BODY_LIMIT_MB` is consumed by axum's `ServerConfig` (see
+  # crates/api/src/common/config.rs) and applied to both `DefaultBodyLimit` and
+  # `RequestBodyLimitLayer`. If nginx were lower than axum, oversize requests
+  # would surface as an HTML 413 from nginx before per-handler 413 contracts
+  # (e.g. avatar uploads capped at MAX_AVATAR_BYTES) could respond with their
+  # documented JSON shape.
+  client_max_body_size ${REQUEST_BODY_LIMIT_MB}M;
+
   location / {
     limit_req zone=api burst=20 nodelay;
 
@@ -59,22 +68,43 @@ server {
     proxy_set_header X-Forwarded-Proto $scheme;
   }
 
-  # Public read-only proxy for media uploads stored in MinIO.
-  # MinIO itself is not exposed on the public network (no ports published in
-  # docker-compose.dev.yml); nginx is the only path that reaches it from
-  # outside the compose network. The trailing slash in proxy_pass rewrites
+  # Public read-only proxy for media uploads stored in MinIO. MinIO itself is
+  # not exposed on the public network (no ports published in
+  # docker-compose.dev.yml); nginx is the only path that reaches it from outside
+  # the compose network. The explicit `rewrite ... break` below maps
   # `/media/<key>` to `/${S3_BUCKET}/<key>` on the MinIO side.
   #
-  # No CORS headers are emitted here because `${PROJECT_DOMAIN}` serves both
-  # the SPA and the `/media/` route, so avatar fetches are same-origin and
-  # the browser does not preflight. If you ever split media onto a separate
-  # host (e.g. `cdn.${PROJECT_DOMAIN}`) the browser will start sending
-  # `Origin:` on `<img>` GETs and may refuse to render the response without
-  # an `Access-Control-Allow-Origin: ${PROJECT_DOMAIN}` (or `*` for fully
-  # public assets) header here. Add it at that point, not before.
+  # No CORS headers are emitted here because `${PROJECT_DOMAIN}` serves both the
+  # SPA and the `/media/` route, so avatar fetches are same-origin and the
+  # browser does not preflight. If you ever split media onto a separate host
+  # (e.g. `cdn.${PROJECT_DOMAIN}`) the browser will start sending `Origin:` on
+  # `<img>` GETs and may refuse to render the response without an
+  # `Access-Control-Allow-Origin: ${PROJECT_DOMAIN}` (or `*` for fully public
+  # assets) header here. Add it at that point, not before.
+  #
+  # Intercept the keyless `/media/` request first: the wildcard `(.*)` below
+  # matches zero characters, so `GET /media/` would rewrite to `/${S3_BUCKET}/`
+  # and reach MinIO as a `ListBucket` (XML listing or 403 AccessDenied) instead
+  # of the 404 a missing object key should produce. An exact-match location
+  # outranks the prefix match regardless of file order.
+  location = /media/ {
+    return 404;
+  }
   location /media/ {
     set $minio "minio:9000";
-    proxy_pass http://$minio/${S3_BUCKET}/;
+
+    # `set $minio` + `proxy_pass http://$minio` is the canonical Docker-DNS
+    # idiom: it forces nginx to re-resolve the upstream via the `resolver`
+    # directive (see nginx.conf) so a restarted MinIO container with a new IP is
+    # picked up without an nginx reload. BUT using a variable in `proxy_pass`
+    # disables nginx's automatic URI rewriting from the location prefix: a URI
+    # part on `proxy_pass http://$minio/<uri>` would *replace* (not augment) the
+    # request URI, so `/media/avatars/foo.png` would arrive at MinIO as `GET
+    # /${S3_BUCKET}/` and return a public bucket-listing XML instead of the
+    # object. Reconstruct the upstream path explicitly with `rewrite ... break`
+    # before `proxy_pass` runs.
+    rewrite ^/media/(.*)$ /${S3_BUCKET}/$1 break;
+    proxy_pass http://$minio;
     proxy_http_version 1.1;
     proxy_set_header Connection "";
 
@@ -82,9 +112,22 @@ server {
     proxy_set_header X-Forwarded-For $remote_addr;
     proxy_set_header X-Forwarded-Proto $scheme;
 
-    # Avatars are immutable per upload (filename includes user_id +
-    # extension), so a day of browser/CDN caching is safe; re-uploads
-    # change the extension and thus the URL.
-    add_header Cache-Control "public, max-age=86400" always;
+    # nginx `add_header` REPLACES, not extends: declaring any add_header in this
+    # block drops every header inherited from the server scope. The three
+    # security headers below are therefore repeated verbatim from the server
+    # block - without them, user-uploaded files would be served with no
+    # X-Content-Type-Options, re-enabling MIME-sniffing on exactly the bytes an
+    # attacker controls. Keep this list in sync with the server-level block above.
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    add_header X-Content-Type-Options    nosniff                               always;
+    add_header X-Frame-Options           DENY                                  always;
+
+    # Avatars are immutable per upload (filename includes user_id + extension),
+    # so a day of browser/CDN caching is safe; re-uploads change the extension
+    # and thus the URL. No `always`: nginx then omits the header on non-2xx
+    # upstream responses, so a transient 404/503 from MinIO during the
+    # upload-then-display flow is not cached for 24h (which would make the
+    # avatar appear permanently broken until the cache entry expires).
+    add_header Cache-Control "public, max-age=86400";
   }
 }
