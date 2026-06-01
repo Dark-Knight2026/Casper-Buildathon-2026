@@ -8,7 +8,7 @@ use rust_decimal::Decimal;
 use crate::{
     common::{ApiResult, AppState},
     services::{
-        auth::AuthUser,
+        auth::{EmailVerified, VerifiedUser, models::VerificationRequiredResponse},
         tax::models::{TaxCalculationRequest, TaxCategory, TaxCategoryType, TaxReport},
     },
 };
@@ -20,10 +20,16 @@ use crate::{
 /// This handler processes a `TaxCalculationRequest`, which includes income and deduction details,
 /// and returns a `TaxReport` with the estimated tax and a breakdown of categories.
 ///
+/// Authorization: `VerifiedUser<EmailVerified>` - the caller must have
+/// confirmed their email (`verification_level >= email`). Tax calculation is a
+/// product feature gated behind the pilot rollout, not part of onboarding, so
+/// an unverified caller is rejected with `403 verification_required` rather
+/// than being allowed through.
+///
 /// # Arguments
 ///
 /// * `state` - The application state (shared DB pool, etc.).
-/// * `_user` - The authenticated user (extracted from JWT).
+/// * `_user` - The email-verified user (extracted and gated from the JWT).
 /// * `payload` - JSON payload containing fiscal year and property IDs.
 ///
 /// # Returns
@@ -41,6 +47,7 @@ use crate::{
     responses(
         (status = 200, description = "Tax liability calculated successfully", body = TaxReport),
         (status = 401, description = "Unauthorized"),
+        (status = 403, description = "verification_required - caller's email is not verified", body = VerificationRequiredResponse),
         (status = 500, description = "Internal server error")
     ),
     security(
@@ -50,7 +57,7 @@ use crate::{
 #[inline]
 pub async fn calculate_tax_liability(
     State(_state): State<Arc<AppState>>,
-    _user: AuthUser,
+    _user: VerifiedUser<EmailVerified>,
     Json(payload): Json<TaxCalculationRequest>,
 ) -> ApiResult<Json<TaxReport>> {
     // MOCK Implementation - using checked arithmetic to avoid panics

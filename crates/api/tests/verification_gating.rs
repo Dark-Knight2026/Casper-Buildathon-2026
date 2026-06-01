@@ -2,10 +2,12 @@
 //!
 //! The extractor reads the user's `verification_level` straight off the JWT
 //! claim, so these tests sign minted access tokens with each level (plus the
-//! legacy "no level" variant) and exercise `from_request_parts` directly.
-//! With no `VerifiedUser`-gated HTTP route mounted yet (the pilot wiring is
-//! deferred until the frontend can render the 403 + verify CTA), the
-//! extractor is the contract under test.
+//! legacy "no level" variant) and exercise `from_request_parts` directly -
+//! covering every branch (block, allow-exact, allow-higher, legacy-missing,
+//! unauthenticated) at the unit level without a mounted route.
+//!
+//! The end-to-end HTTP contract (a real gated route returning `403`/`200`) is
+//! exercised by the pilot route `POST /tax/calculate-liability` in `tax.rs`.
 
 #![cfg(feature = "integration")]
 
@@ -22,7 +24,7 @@ use api::{
     common::VerificationLevel,
     services::auth::{AuthError, AuthGateError, EmailVerified, VerifiedUser},
 };
-use common::{TestEnv, login_and_extract, mint_access_token_with_level, setup_test_server};
+use common::TestEnv;
 
 /// Build request `Parts` with (or without) an `access_token` cookie. The
 /// extractor only inspects headers + state, so a `()`-bodied request is
@@ -53,10 +55,10 @@ async fn run_email_gate(
 /// client can render the right CTA.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn email_gate_blocks_unverified(pool: PgPool) {
-    let env = setup_test_server(pool, true).await;
-    let session = login_and_extract(&env).await;
+    let env = common::setup_test_server(pool, true).await;
+    let session = common::login_and_extract(&env).await;
 
-    let token = mint_access_token_with_level(
+    let token = common::mint_access_token_with_level(
         session.user_id,
         UserRole::Tenant,
         &env.jwt_secret,
@@ -74,10 +76,10 @@ async fn email_gate_blocks_unverified(pool: PgPool) {
 /// `verification_level = 'email'` exactly meets the gate.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn email_gate_allows_email_level(pool: PgPool) {
-    let env = setup_test_server(pool, true).await;
-    let session = login_and_extract(&env).await;
+    let env = common::setup_test_server(pool, true).await;
+    let session = common::login_and_extract(&env).await;
 
-    let token = mint_access_token_with_level(
+    let token = common::mint_access_token_with_level(
         session.user_id,
         UserRole::Tenant,
         &env.jwt_secret,
@@ -93,10 +95,10 @@ async fn email_gate_allows_email_level(pool: PgPool) {
 /// higher level still satisfies a lower requirement.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn email_gate_allows_higher_identity_level(pool: PgPool) {
-    let env = setup_test_server(pool, true).await;
-    let session = login_and_extract(&env).await;
+    let env = common::setup_test_server(pool, true).await;
+    let session = common::login_and_extract(&env).await;
 
-    let token = mint_access_token_with_level(
+    let token = common::mint_access_token_with_level(
         session.user_id,
         UserRole::Tenant,
         &env.jwt_secret,
@@ -114,11 +116,15 @@ async fn email_gate_allows_higher_identity_level(pool: PgPool) {
 /// of us hitting the DB on every gated request.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn email_gate_rejects_token_missing_level_claim(pool: PgPool) {
-    let env = setup_test_server(pool, true).await;
-    let session = login_and_extract(&env).await;
+    let env = common::setup_test_server(pool, true).await;
+    let session = common::login_and_extract(&env).await;
 
-    let token =
-        mint_access_token_with_level(session.user_id, UserRole::Tenant, &env.jwt_secret, None);
+    let token = common::mint_access_token_with_level(
+        session.user_id,
+        UserRole::Tenant,
+        &env.jwt_secret,
+        None,
+    );
     match run_email_gate(&env, Some(&token)).await {
         Err(AuthGateError::VerificationRequired { required }) => {
             assert_eq!(required, VerificationLevel::Email);
@@ -133,7 +139,7 @@ async fn email_gate_rejects_token_missing_level_claim(pool: PgPool) {
 /// authenticated but failed the threshold.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn email_gate_returns_auth_error_without_cookie(pool: PgPool) {
-    let env = setup_test_server(pool, true).await;
+    let env = common::setup_test_server(pool, true).await;
 
     match run_email_gate(&env, None).await {
         Err(AuthGateError::Auth(AuthError::MissingAccessToken)) => {}
