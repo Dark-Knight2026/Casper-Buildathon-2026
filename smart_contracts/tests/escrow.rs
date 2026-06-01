@@ -730,6 +730,33 @@ fn test_pay_invoice_should_revert_if_security_deposit_payment_is_not_exact() {
     );
 }
 
+#[test]
+fn test_pay_invoice_should_route_protocol_fee_to_treasury() {
+    let mut test_data = setup(odra_test::env());
+    let mut params = generate_invoice_params(&test_data);
+    let invoice_id = create_lease_invoice(&mut test_data, &params);
+
+    let rent = *params.amount_due.amount();
+    let amount = rent * U256::from(50u32) / U256::from(49u32);
+
+    let protocol_fee = amount * U256::from(200u32) / U256::from(10_000u32);
+
+    let treasury = test_data.escrow.get_treasury_contract_address();
+
+    let previous_treasury_balance = test_data.env.balance_of(&treasury);
+
+    test_data
+        .escrow
+        .with_tokens(amount.to_u512())
+        .pay_invoice(invoice_id, amount);
+
+    assert_eq!(
+        test_data.env.balance_of(&treasury),
+        previous_treasury_balance + protocol_fee.to_u512(),
+        "Treasury should receive the LeaseFi protocol fee",
+    );
+}
+
 // =============================================================================
 // create_security_deposit_invoice()
 // =============================================================================
