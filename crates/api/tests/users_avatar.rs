@@ -154,19 +154,24 @@ async fn upload_avatar_without_authentication_returns_401(pool: PgPool) {
     assert_eq!(response.status_code(), StatusCode::UNAUTHORIZED);
 }
 
-/// Payload over 5 MB must 413. The outer `RequestBodyLimitLayer` in
-/// `server::create_app` is sized to match `MAX_AVATAR_BYTES`, so this
-/// test asserts the layer-level rejection (which fires before the
-/// handler runs) and the equivalent handler-level guard (which fires for
-/// any future widening of the outer limit). Either path produces the
-/// same status code from the client's perspective, which is the
+/// Payload over `MAX_AVATAR_BYTES` (5 MiB) must 413. Two guards can fire,
+/// depending on size relative to the outer cap:
+/// - handler-level: `MAX_AVATAR_BYTES` < payload <= outer cap. The body
+///   passes `RequestBodyLimitLayer` and the handler rejects it.
+/// - layer-level: payload > outer cap. `RequestBodyLimitLayer` rejects it
+///   before the handler runs.
+///
+/// `common::setup_test_server` sets `request_body_limit_mb: 8`, so this
+/// test's 6 MiB payload exercises the HANDLER-level path: 6 MiB < 8 MiB
+/// passes the layer, then 6 MiB > 5 MiB is rejected by the handler. Both
+/// paths produce the same 413 from the client's perspective, which is the
 /// contract.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn upload_avatar_oversize_payload_returns_413(pool: PgPool) {
     let env = common::setup_test_server(pool, true).await;
     let access_token = login_and_get_access_token(&env, 0x42).await;
 
-    // 6 MB ensures rejection regardless of which guard fires first.
+    // 6 MiB: above the 5 MiB handler cap, below the 8 MiB outer cap.
     let mut oversized = vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
     oversized.extend(core::iter::repeat_n(0u8, 6 * 1024 * 1024));
     let form = MultipartForm::new().add_part(
