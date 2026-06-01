@@ -232,6 +232,12 @@ pub async fn main() -> Result<(), ServerError> {
     // Shutdown broadcast fans out to background workers; real subscribers are
     // added at spawn time via `shutdown_tx.subscribe()`. Created before the
     // worker spawn so the worker can subscribe before HTTP serving begins.
+    //
+    // Capacity 1 is deliberate: the channel only ever carries a single value -
+    // the one-shot shutdown edge sent once from `notify_workers`. A buffer of 1
+    // holds that single message per subscriber, so no slow subscriber can ever
+    // overflow it; a larger capacity would be dead space for a signal that is
+    // sent exactly once.
     let (shutdown_tx, _) = broadcast::channel::<()>(1);
 
     // Spawn background workers only when a real provider is wired in: under

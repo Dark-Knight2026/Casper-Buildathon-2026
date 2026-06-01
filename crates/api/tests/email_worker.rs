@@ -60,6 +60,10 @@ impl SequencedMailer {
 
 #[async_trait]
 impl EmailSender for SequencedMailer {
+    // `tokio::sync::Mutex` only to stay in the async idiom: the guard never
+    // crosses an `.await`. `pop_front` is synchronous and the guard is dropped
+    // at the end of this expression, so the lock is held for a single
+    // non-suspending pop - a `std::sync::Mutex` would be equally correct here.
     async fn send(&self, _message: EmailMessage) -> Result<(), EmailError> {
         self.outcomes
             .lock()
