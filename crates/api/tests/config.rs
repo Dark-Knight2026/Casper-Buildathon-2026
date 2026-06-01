@@ -214,6 +214,30 @@ fn from_env_rejects_body_limit_below_floor() {
     ServerConfig::from_env().expect("8 MiB is the minimum valid body limit");
 }
 
+/// Regression guard for the missing `REQUEST_BODY_LIMIT_MB` validation ceiling.
+///
+/// The field is a `u32`, so without an upper bound a typo like `10000` is
+/// silently accepted and configures a ~9.8 GiB outer cap on both
+/// `DefaultBodyLimit` and `RequestBodyLimitLayer` - a memory-exhaustion / `DoS`
+/// foot-gun, since the only multipart upload is the 5 MiB avatar. 100 MiB is
+/// the documented ceiling: generous headroom over any legitimate upload.
+///
+/// Expected to FAIL on the pre-fix code: with only the `< 8` floor guard,
+/// `10000` passes validation.
+#[test]
+#[serial]
+fn from_env_rejects_body_limit_above_ceiling() {
+    set_env_vars(&[REQUIRED_ENV, &[("REQUEST_BODY_LIMIT_MB", "10000")]]);
+    let err = ServerConfig::from_env().unwrap_err();
+    assert!(
+        err.to_string().contains("REQUEST_BODY_LIMIT_MB"),
+        "10000 MiB must be rejected (above the 100 MiB ceiling), got: {err}",
+    );
+
+    set_env_vars(&[REQUIRED_ENV, &[("REQUEST_BODY_LIMIT_MB", "100")]]);
+    ServerConfig::from_env().expect("100 MiB is the maximum valid body limit");
+}
+
 #[test]
 #[serial]
 fn from_env_defaults_body_limit_to_8_when_unset() {
