@@ -35,10 +35,6 @@ const TenantLeaseDetail = lazy(() => import('@/pages/tenant/TenantLeaseDetail').
 const TenantPayments = lazy(() => import('@/pages/tenant/TenantPayments').then(m => ({ default: m.TenantPayments })));
 const PaymentMethods = lazy(() => import('@/pages/tenant/PaymentMethods'));
 const MakePayment = lazy(() => import('@/pages/tenant/MakePayment'));
-const TenantMaintenance = lazy(() => import('@/pages/tenant/TenantMaintenance').then(m => ({ default: m.TenantMaintenance })));
-const TenantMaintenanceDetail = lazy(() => import('@/pages/tenant/TenantMaintenanceDetail'));
-const TenantRenewals = lazy(() => import('@/pages/tenant/TenantRenewals'));
-const TenantRenewalDetail = lazy(() => import('@/pages/tenant/TenantRenewalDetail'));
 const TenantProfile = lazy(() => import('@/pages/tenant/TenantProfile').then(m => ({ default: m.TenantProfile })));
 const TenantRecommended = lazy(() => import('@/pages/tenant/TenantRecommended'));
 const TenantScore = lazy(() => import('@/pages/tenant/TenantScore'));
@@ -74,9 +70,6 @@ const LandlordProfile = lazy(() => import('@/pages/landlord/LandlordProfile').th
 const LandlordTenants = lazy(() => import('@/pages/landlord/LandlordTenants'));
 const LandlordLeases = lazy(() => import('@/pages/landlord/LandlordLeases'));
 const LandlordPayments = lazy(() => import('@/pages/landlord/LandlordPayments'));
-const LandlordMaintenance = lazy(() => import('@/pages/landlord/LandlordMaintenance'));
-const LandlordRenewals = lazy(() => import('@/pages/landlord/LandlordRenewals'));
-const LandlordRenewalDetail = lazy(() => import('@/pages/landlord/LandlordRenewalDetail'));
 
 // Lazy load landlord application pages
 const ApplicationList = lazy(() => import('@/pages/landlord/applications/ApplicationList'));
@@ -185,7 +178,11 @@ function App() {
               {/* ICO Pages - Public access for token sale, wrapped with Casper wallet provider */}
               <Route path="/big-token" element={<ICOLayout><ICOPage /></ICOLayout>} />
               <Route path="/big-token/whitepaper" element={<ICOLayout><ICOWhitepaperPage /></ICOLayout>} />
-              
+              {/* Preserve old /ico bookmarks & external links after the big-token
+                  rebrand — redirect instead of letting the wildcard bounce them to "/". */}
+              <Route path="/ico" element={<Navigate to="/big-token" replace />} />
+              <Route path="/ico/whitepaper" element={<Navigate to="/big-token/whitepaper" replace />} />
+
               {/* 
                 AUTHENTICATION ROUTES
                 Sign up and login pages
