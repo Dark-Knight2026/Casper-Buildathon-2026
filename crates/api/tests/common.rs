@@ -11,9 +11,7 @@
 //! - Testcontainers for everything - slower (~10s PG, ~3-5s `MinIO` startup per test)
 //! - Shared Redis - breaks parallel test isolation
 
-#![allow(dead_code)]
-#![allow(clippy::missing_panics_doc)]
-#![allow(clippy::must_use_candidate)]
+#![allow(dead_code, clippy::missing_panics_doc, clippy::must_use_candidate)]
 
 use core::fmt::{Debug, Formatter, Result as FmtResult};
 use std::sync::{Arc, Mutex};
@@ -42,7 +40,7 @@ use api::{
     AppState, Claims, IcoFallback, LoggingEmailSender, S3Config, ServerConfig, UserId, UserRole,
     common::{
         CASPER_MESSAGE_PREFIX, JWT_AUDIENCE, JWT_ISSUER, RedisStore, TOTAL_SUPPLY, TokenType,
-        VerificationLevel,
+        VerificationLevel, tokens,
     },
     providers::{EmailError, EmailMessage, EmailSender, SharedMediaStorage, StubMediaStorage},
     server,
@@ -395,7 +393,15 @@ pub fn extract_verify_token(mailer: &CapturingMailer) -> String {
         "verification email body carried more than one `?token=` link; \
          extract_verify_token cannot disambiguate which is current",
     );
-    token.trim_end().to_owned()
+    let token = token.trim_end().to_owned();
+    assert_eq!(
+        token.len(),
+        tokens::TOKEN_STR_LEN,
+        "verify-email token must be exactly TOKEN_STR_LEN={} chars; got {}",
+        tokens::TOKEN_STR_LEN,
+        token.len(),
+    );
+    token
 }
 
 /// 8-byte PNG signature followed by zero padding to 1 KB.
