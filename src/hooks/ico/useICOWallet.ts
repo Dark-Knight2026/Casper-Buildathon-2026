@@ -266,7 +266,14 @@ export function useICOWallet(): UseICOWalletReturn {
       // disconnect() requires the provider key as its first argument.
       const active = await clickRef.getActiveAccountAsync();
       // signOut() is sync (returns void): closes the app-side SDK session.
-      clickRef.signOut();
+      // Wrap it on its own so a signOut failure never short-circuits the hard
+      // disconnect(provider) below — the iframe release is the part that
+      // actually prevents the next signIn() from landing on "Session expired".
+      try {
+        clickRef.signOut();
+      } catch (error) {
+        logger.error('Failed to sign out (continuing to hard-disconnect):', error);
+      }
       // disconnect(provider) is the hard release of the wallet ↔
       // accounts.cspr.click iframe link. Without this the iframe cookies
       // survive and the next signIn() lands the user on SDK's
