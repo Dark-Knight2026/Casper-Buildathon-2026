@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useClickRef } from '@make-software/csprclick-ui';
 import { deriveAccountHash } from '@/lib/blockchain/accountUtils';
 import { clearCsprClickStorage } from '@/lib/csprclick';
@@ -56,6 +56,20 @@ export function useICOWallet(): UseICOWalletReturn {
     isConnecting: false,
     error: null,
   });
+
+  // Tracks whether this hook instance is still mounted. Unlike the `cancelled`
+  // flag inside the event-listener effect below (which only guards the handlers
+  // defined in that closure), this ref is reachable from `syncActiveAccount`,
+  // which is a top-level useCallback called from outside the effect (e.g.
+  // useWalletConnect.handleConnectProvider). It guards the post-await setState
+  // against an unmount-during-await race (e.g. mobile back-gesture mid-connect).
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   // Listen to CSPR.click events
   useEffect(() => {
@@ -274,6 +288,10 @@ export function useICOWallet(): UseICOWalletReturn {
   const syncActiveAccount = useCallback(async () => {
     if (!clickRef) return;
     const active = await clickRef.getActiveAccountAsync();
+    // Bail out if the component unmounted while we awaited the SDK, so we don't
+    // call setState on an unmounted instance (e.g. mobile back-gesture during
+    // a connect that routes through syncActiveAccount).
+    if (!isMountedRef.current) return;
     // Log full payload so we can see what extra fields (email, avatar, JWT, custom)
     // CSPR.click returns for each provider — useful for deciding what to forward
     // to the backend beyond public_key. logger.debug is suppressed in production
