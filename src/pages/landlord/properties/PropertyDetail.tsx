@@ -5,7 +5,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Edit, Trash2, Home, MapPin, DollarSign, Calendar, Eye, FileText } from 'lucide-react';
+import { ArrowLeft, Edit, Trash2, Home, MapPin, DollarSign, Eye, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -14,7 +14,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import { propertyService } from '@/services/propertyService';
-import { getCurrentUserId } from '@/lib/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
 import type { Property, PropertyStatistics } from '@/types/property';
 import { getLeasesByProperty } from '@/data/tenantLeases';
 import { LandlordListingActions } from '@/components/landlord/LandlordListingActions';
@@ -23,6 +23,7 @@ export default function PropertyDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { profile } = useAuth();
 
   const [property, setProperty] = useState<Property | null>(null);
   const [statistics, setStatistics] = useState<PropertyStatistics | null>(null);
@@ -79,7 +80,7 @@ export default function PropertyDetail() {
   const handleDelete = async () => {
     try {
       setDeleting(true);
-      const landlordId = await getCurrentUserId();
+      const landlordId = profile?.id;
       if (!landlordId || !id) return;
 
       await propertyService.deleteProperty(id, landlordId);
