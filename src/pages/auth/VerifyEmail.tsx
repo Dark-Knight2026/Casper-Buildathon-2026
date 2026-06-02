@@ -29,9 +29,17 @@ function getDashboardPath(role: string | undefined): string {
   return '/';
 }
 
-function classifyConfirmError(err: unknown): Exclude<Status, 'verifying' | 'success' | 'needs_login' | 'no_token'> {
+function classifyConfirmError(err: unknown): Exclude<Status, 'verifying' | 'success' | 'no_token'> {
   if (err instanceof Error && 'statusCode' in err) {
     const status = (err as { statusCode?: number }).statusCode;
+    const code = (err as { code?: string }).code;
+    // 401 is overloaded on this endpoint (it requires auth): the middleware
+    // emits invalid_token / missing_access_token when the caller is not logged
+    // in, while the handler emits invalid_or_expired_token for a bad token hash.
+    // Distinguish by the machine code, not the status alone.
+    if (status === 401 && (code === 'invalid_token' || code === 'missing_access_token')) {
+      return 'needs_login';
+    }
     if (status === 401 || status === 404) return 'invalid_token';
     if (status === 400) return 'bad_format';
   }
@@ -69,12 +77,15 @@ export default function VerifyEmail() {
       setStatus('success');
     } catch (err) {
       const next = classifyConfirmError(err);
-      // Stash intent for a future post-login retry on 401-ish failures —
-      // harmless when the user is already logged in.
-      try {
-        localStorage.setItem('auth_redirect_intent', `/verify-email?token=${encodeURIComponent(token)}`);
-      } catch {
-        // Quota / private-mode failure — non-fatal.
+      // Only needs_login benefits from a post-login retry — stash the return
+      // path so the user lands back here after authenticating. Other outcomes
+      // are token problems that logging in won't fix, so don't stash for them.
+      if (next === 'needs_login') {
+        try {
+          localStorage.setItem('auth_redirect_intent', `/verify-email?token=${encodeURIComponent(token)}`);
+        } catch {
+          // Quota / private-mode failure — non-fatal.
+        }
       }
       setStatus(next);
     }

@@ -27,10 +27,21 @@ function getDashboardPath(role: string | undefined): string {
 function classifyError(err: unknown): Exclude<Status, 'confirming' | 'success' | 'no_token'> {
   if (err instanceof Error && 'statusCode' in err) {
     const status = (err as { statusCode?: number }).statusCode;
-    // 401 = no/expired access cookie → needs_login.
-    // 404/410 = token is invalid or already consumed → invalid_token.
-    if (status === 401) return 'needs_login';
-    if (status === 404 || status === 410) return 'invalid_token';
+    const code = (err as { code?: string }).code;
+    // 401 is overloaded (endpoint requires auth): the middleware emits
+    // invalid_token / missing_access_token when the caller is not logged in,
+    // while the handler emits invalid_email_change_token for a missing / expired
+    // / mismatched token. Only the former is a "log in first" situation —
+    // distinguish by the machine code, not the status alone.
+    if (status === 401 && (code === 'invalid_token' || code === 'missing_access_token')) {
+      return 'needs_login';
+    }
+    // Bad / expired / consumed token (401 invalid_email_change_token, 404/410) or
+    // a malformed token (400). None are fixed by logging in or retrying the same
+    // link, so route them all to the dead-end invalid_token screen (no Retry).
+    if (status === 401 || status === 404 || status === 410 || status === 400) {
+      return 'invalid_token';
+    }
   }
   return 'generic_error';
 }

@@ -37,6 +37,15 @@ export interface RequestOptions extends RequestInit {
    * trigger themselves.
    */
   skipRefresh?: boolean;
+  /**
+   * Suppress the global `onAuthError` handler (which hard-redirects to
+   * `/auth/login`) for this single call, letting the caller classify the 401
+   * itself. The transparent refresh-and-replay still runs; only the redirect
+   * on a *final* 401 is skipped. Used by the email verify/change confirm pages,
+   * where a 401 can mean "bad token" (show resend) rather than "session dead"
+   * (redirect) — they must render their own in-page state.
+   */
+  skipAuthError?: boolean;
 }
 
 export class ApiError extends Error {
@@ -245,8 +254,8 @@ export class ApiClient {
         if (refreshed) {
           return await request();
         }
-        if (this.onAuthError) this.onAuthError();
-      } else if (err instanceof ApiError && err.statusCode === 401 && this.onAuthError) {
+        if (this.onAuthError && !options.skipAuthError) this.onAuthError();
+      } else if (err instanceof ApiError && err.statusCode === 401 && this.onAuthError && !options.skipAuthError) {
         this.onAuthError();
       }
       throw err;

@@ -182,9 +182,13 @@ export async function resendVerificationEmail(): Promise<VerifyEmailSendResponse
  * `GET /users/me` (per backend notes: re-fetch is a redundant round-trip and
  * a race risk against the freshly rotated cookies).
  *
- * Errors:
- *   400 `bad_token_format`        — token is not a 43-char base64url string
- *   401/404 `invalid_or_expired_token` — already consumed, expired, or wrong
+ * Errors (the endpoint requires auth, so 401 is overloaded):
+ *   400 `bad_token_format`            — token is not a 43-char base64url string
+ *   401 `invalid_token`/`missing_access_token` — caller not logged in (middleware)
+ *   401 `invalid_or_expired_token`    — token hash mismatch (handler)
+ *   404 `invalid_or_expired_token`    — token slot consumed/expired/never issued
+ * Callers must switch on `ApiError.code`, not status, to tell "needs login" from
+ * "bad token".
  */
 export async function confirmEmailVerification(
   token: string,
@@ -192,6 +196,9 @@ export async function confirmEmailVerification(
   return backendClient.post<VerifyEmailConfirmResponse>(
     '/api/v1/auth/verify/email/confirm',
     { token },
-    { retry: false },
+    // skipAuthError: a 401 here is classified in-page (needs_login vs bad token);
+    // don't let the global handler hard-redirect to /auth/login. Refresh-and-replay
+    // still runs, so an expired-access link transparently re-auths.
+    { retry: false, skipAuthError: true },
   );
 }

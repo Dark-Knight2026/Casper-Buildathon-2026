@@ -81,11 +81,23 @@ export async function requestEmailChange(newEmail: string): Promise<void> {
   } satisfies EmailChangeRequestBody);
 }
 
-/** `POST /users/me/email/confirm`. Returns the updated profile. */
+/**
+ * `POST /users/me/email/confirm`. Returns the updated profile.
+ *
+ * Errors (endpoint requires auth, so 401 is overloaded):
+ *   400                                  — malformed token
+ *   401 `invalid_token`/`missing_access_token` — caller not logged in (middleware)
+ *   401 `invalid_email_change_token`     — token missing/consumed or hash mismatch
+ *   404 / 409                            — user soft-deleted / email taken in a race
+ * Callers must switch on `ApiError.code`, not status, to tell "needs login" from
+ * "bad token". `skipAuthError` keeps the 401 in-page instead of hard-redirecting.
+ */
 export async function confirmEmailChange(token: string): Promise<ServerUserInfo> {
-  return backendClient.post<ServerUserInfo>(`${USERS_ME}/email/confirm`, {
-    token,
-  } satisfies EmailChangeConfirmationBody);
+  return backendClient.post<ServerUserInfo>(
+    `${USERS_ME}/email/confirm`,
+    { token } satisfies EmailChangeConfirmationBody,
+    { skipAuthError: true },
+  );
 }
 
 /**
