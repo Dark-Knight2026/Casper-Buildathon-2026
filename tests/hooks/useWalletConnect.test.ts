@@ -364,4 +364,95 @@ describe('useWalletConnect', () => {
       expect(result.current.connectingProvider).toBe('ledger');
     });
   });
+
+  // The PR removed the signInWithAccount shortcut and routes every connection
+  // through handleConnectProvider — previously zero coverage (L-09). clickRef
+  // here needs a `connect` method (makeClickRef only stubs on/off).
+  describe('handleConnectProvider', () => {
+    function makeConnectClickRef(connect: ReturnType<typeof vi.fn>) {
+      return { on: vi.fn(), off: vi.fn(), connect };
+    }
+
+    it('connects a wallet provider (no social options) and syncs the account', async () => {
+      const connect = vi.fn().mockResolvedValue({ public_key: PUBLIC_KEY });
+      const syncActiveAccount = vi.fn().mockResolvedValue(undefined);
+      setWalletState({ clickRef: makeConnectClickRef(connect), syncActiveAccount });
+
+      const { result } = renderHook(() => useWalletConnect());
+
+      await act(async () => {
+        await result.current.handleConnectProvider('casper-wallet');
+      });
+
+      expect(connect).toHaveBeenCalledWith('casper-wallet', undefined);
+      expect(syncActiveAccount).toHaveBeenCalled();
+      // Success path leaves connectingProvider set (only error/cancel resets it).
+      expect(result.current.connectingProvider).toBe('casper-wallet');
+    });
+
+    it('passes social options (selectAccount) for a social provider', async () => {
+      const connect = vi.fn().mockResolvedValue({ public_key: PUBLIC_KEY });
+      const syncActiveAccount = vi.fn().mockResolvedValue(undefined);
+      setWalletState({ clickRef: makeConnectClickRef(connect), syncActiveAccount });
+
+      const { result } = renderHook(() => useWalletConnect());
+
+      await act(async () => {
+        await result.current.handleConnectProvider('csprclick-w3a-google');
+      });
+
+      expect(connect).toHaveBeenCalledWith(
+        'csprclick-w3a-google',
+        expect.objectContaining({ selectAccount: true }),
+      );
+      expect(syncActiveAccount).toHaveBeenCalled();
+    });
+
+    it('does not sync when connect resolves without an account', async () => {
+      const connect = vi.fn().mockResolvedValue(null);
+      const syncActiveAccount = vi.fn();
+      setWalletState({ clickRef: makeConnectClickRef(connect), syncActiveAccount });
+
+      const { result } = renderHook(() => useWalletConnect());
+
+      await act(async () => {
+        await result.current.handleConnectProvider('casper-wallet');
+      });
+
+      expect(connect).toHaveBeenCalled();
+      expect(syncActiveAccount).not.toHaveBeenCalled();
+    });
+
+    it('resets connectingProvider and does not sync when connect throws', async () => {
+      const connect = vi.fn().mockRejectedValue(new Error('user closed the popup'));
+      const syncActiveAccount = vi.fn();
+      setWalletState({ clickRef: makeConnectClickRef(connect), syncActiveAccount });
+
+      const { result } = renderHook(() => useWalletConnect());
+
+      await act(async () => {
+        await result.current.handleConnectProvider('casper-wallet');
+      });
+
+      expect(syncActiveAccount).not.toHaveBeenCalled();
+      expect(result.current.connectingProvider).toBeNull();
+    });
+
+    it('ignores a second connect while one is already in flight', async () => {
+      const connect = vi.fn().mockResolvedValue({ public_key: PUBLIC_KEY });
+      const syncActiveAccount = vi.fn().mockResolvedValue(undefined);
+      setWalletState({ clickRef: makeConnectClickRef(connect), syncActiveAccount });
+
+      const { result } = renderHook(() => useWalletConnect());
+
+      // Simulate an in-flight selection.
+      act(() => { result.current.setConnectingProvider('casper-wallet'); });
+
+      await act(async () => {
+        await result.current.handleConnectProvider('ledger');
+      });
+
+      expect(connect).not.toHaveBeenCalled();
+    });
+  });
 });
