@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { CheckCircle2, MailWarning } from 'lucide-react';
 
@@ -36,6 +36,11 @@ export function EmailVerificationCard() {
   // when Postmark is not configured. We surface it as a clickable link in dev
   // builds so the flow is testable without a real inbox.
   const [devToken, setDevToken] = useState<string | null>(null);
+
+  // Guards the async `handleSend` from calling setState after unmount (the
+  // request can resolve after the user navigates away).
+  const mountedRef = useRef(true);
+  useEffect(() => () => { mountedRef.current = false; }, []);
 
   // Countdown ticker for the resend cooldown.
   useEffect(() => {
@@ -95,7 +100,7 @@ export function EmailVerificationCard() {
         });
       }
     } finally {
-      setSending(false);
+      if (mountedRef.current) setSending(false);
     }
   };
 

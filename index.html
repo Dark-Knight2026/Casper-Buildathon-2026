@@ -12,8 +12,9 @@
     <!-- Legacy fallback for browsers that prefer .ico — kept last so the
          PNG variants above win for everything modern. -->
     <link rel="shortcut icon" href="/favicon.ico" />
-    <link rel="manifest" href="/manifest.json" />
-    
+    <!-- The manifest <link> is injected by vite-plugin-pwa (manifest.webmanifest);
+         no hand-written public/manifest.json so the two can't drift. -->
+
     <!-- Primary Meta Tags -->
     <title>LeaseFi</title>
     <meta name="title" content="Find Your Dream Property | Real Estate Management Platform" />

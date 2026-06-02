@@ -1,10 +1,18 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Shield, X, ExternalLink } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { useAuth } from '@/hooks/useAuth';
 
-const STORAGE_KEY = 'leasefi_security_recovery_acked_at';
+const STORAGE_KEY_PREFIX = 'leasefi_security_recovery_acked_at';
 const ACCOUNTS_URL = 'https://accounts.cspr.click/';
+
+// Per-user key so dismissing on a shared device doesn't hide the card for the
+// next account. Returns null when there's no user id — then we show the card
+// but skip persistence (we can't safely scope it).
+function storageKeyFor(userId: string | undefined): string | null {
+  return userId ? `${STORAGE_KEY_PREFIX}_${userId}` : null;
+}
 
 /**
  * Dismissible post-sign-up onboarding card. Shown on the dashboard until
@@ -17,30 +25,33 @@ const ACCOUNTS_URL = 'https://accounts.cspr.click/';
  * a social one. See memory: [LeaseFi auth UI must be provider-agnostic].
  */
 export function SecurityRecoveryCard() {
-  // `null` while we're still reading localStorage, so the card doesn't
-  // flash in for one frame on already-acked browsers.
-  const [dismissed, setDismissed] = useState<boolean | null>(null);
-
-  useEffect(() => {
-    let acked = false;
+  const { profile } = useAuth();
+  // This card is mounted behind ProtectedRoute, so `profile` is populated on the
+  // first render — read the ack flag synchronously in a lazy initializer to
+  // avoid a hidden→visible flash for already-acked users.
+  const storageKey = storageKeyFor(profile?.id);
+  const [dismissed, setDismissed] = useState<boolean>(() => {
+    if (!storageKey) return false;
     try {
-      acked = !!localStorage.getItem(STORAGE_KEY);
+      return !!localStorage.getItem(storageKey);
     } catch {
       // localStorage unavailable (private mode, embedded webview) — show the card.
+      return false;
     }
-    setDismissed(acked);
-  }, []);
+  });
 
   const handleDismiss = () => {
-    try {
-      localStorage.setItem(STORAGE_KEY, new Date().toISOString());
-    } catch {
-      // non-fatal — at worst the card returns on next visit
+    if (storageKey) {
+      try {
+        localStorage.setItem(storageKey, new Date().toISOString());
+      } catch {
+        // non-fatal — at worst the card returns on next visit
+      }
     }
     setDismissed(true);
   };
 
-  if (dismissed !== false) return null;
+  if (dismissed) return null;
 
   return (
     <Card className="border-blue-200 bg-blue-50/60">

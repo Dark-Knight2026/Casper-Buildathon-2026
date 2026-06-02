@@ -161,7 +161,7 @@ describe('PrivateSaleCountdown', () => {
 
       fireEvent.click(screen.getByText('Learn More'));
 
-      expect(mockNavigate).toHaveBeenCalledWith('/ico/whitepaper');
+      expect(mockNavigate).toHaveBeenCalledWith('/big-token/whitepaper');
     });
   });
 

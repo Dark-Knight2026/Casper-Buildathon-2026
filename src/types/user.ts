@@ -39,6 +39,11 @@ export type UserStatus =
   | 'suspended'
   | 'pending_verification';
 
+// Email/identity verification level from the backend, ordered:
+// none < email < identity < full (serialized snake_case). Email counts as
+// verified at 'email' and up.
+export type VerificationLevel = 'none' | 'email' | 'identity' | 'full';
+
 export interface User {
   id: string;
   email: string;
@@ -76,11 +81,10 @@ export interface User {
   // Server timestamp of the last profile mutation. Used to detect concurrent
   // edits and to invalidate cached UI state after PATCH /users/me.
   updatedAt?: Date;
-  // Email-verification level from the backend. Ordered enum (snake_case):
-  // 'none' | 'email' | 'identity' | 'full'. Email is verified at 'email' and
+  // Email-verification level from the backend. Email is verified at 'email' and
   // above. Optional because legacy sessions/older endpoints may omit it —
   // treat absence as unverified.
-  verificationLevel?: string;
+  verificationLevel?: VerificationLevel;
 }
 
 export interface UserProfile extends User {
@@ -141,10 +145,11 @@ export function getRoleDisplayName(role: UserRole): string {
 
 // Maps a role to its post-login dashboard path. Only `/tenant/dashboard`
 // and `/landlord/dashboard` exist in App.tsx today, so every non-tenant role
-// lands on the landlord dashboard until role-specific dashboards are added.
+// (and `undefined`, e.g. a profile that has not finished hydrating) lands on
+// the landlord dashboard until role-specific dashboards are added.
 // Paths must match the <Route path=...> declarations in App.tsx exactly,
 // otherwise the * catch-all swallows the redirect.
-export function getDashboardRoute(role: UserRole): string {
+export function getDashboardRoute(role: UserRole | undefined): string {
   if (role === 'tenant') return '/tenant/dashboard';
   return '/landlord/dashboard';
 }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { CheckCircle2, Loader2, Mail, XCircle } from 'lucide-react';
 
@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useAuth } from '@/hooks/useAuth';
+import { getDashboardRoute } from '@/types/user';
 import { confirmEmailChange } from '@/services/userProfileService';
 
 type Status =
@@ -17,12 +18,6 @@ type Status =
   | 'generic_error';
 
 const SUCCESS_REDIRECT_DELAY_MS = 3000;
-
-function getDashboardPath(role: string | undefined): string {
-  if (role === 'landlord') return '/landlord/dashboard';
-  if (role === 'tenant') return '/tenant/dashboard';
-  return '/';
-}
 
 function classifyError(err: unknown): Exclude<Status, 'confirming' | 'success' | 'no_token'> {
   if (err instanceof Error && 'statusCode' in err) {
@@ -53,12 +48,18 @@ export default function ConfirmEmailChange() {
 
   const token = params.get('token');
   const [status, setStatus] = useState<Status>('confirming');
+  // One-shot guard: the change token is single-use, so confirm at most once per
+  // mount even if `token` (a useCallback dep) changes and re-fires the effect,
+  // or StrictMode double-invokes it in dev.
+  const hasConfirmedRef = useRef(false);
 
   const handleConfirm = useCallback(async () => {
     if (!token) {
       setStatus('no_token');
       return;
     }
+    if (hasConfirmedRef.current) return;
+    hasConfirmedRef.current = true;
     // Don't gate on AuthContext.isAuthenticated — that state hydrates from a
     // localStorage marker which can be missing in fresh-tab/new-browser flows,
     // even when the access cookie is still valid. The browser sends the
@@ -93,7 +94,7 @@ export default function ConfirmEmailChange() {
 
   useEffect(() => {
     if (status !== 'success') return;
-    const dashboard = getDashboardPath(profile?.role);
+    const dashboard = getDashboardRoute(profile?.role);
     const timer = window.setTimeout(() => navigate(dashboard, { replace: true }), SUCCESS_REDIRECT_DELAY_MS);
     return () => window.clearTimeout(timer);
   }, [status, profile?.role, navigate]);
@@ -132,7 +133,7 @@ export default function ConfirmEmailChange() {
               )}
               <p className="text-sm text-muted-foreground">Redirecting you to your dashboard…</p>
               <Button asChild variant="outline" size="sm">
-                <Link to={getDashboardPath(profile?.role)}>Go now</Link>
+                <Link to={getDashboardRoute(profile?.role)}>Go now</Link>
               </Button>
             </div>
           )}
@@ -175,7 +176,15 @@ export default function ConfirmEmailChange() {
                   Something went wrong. Please try again or request a fresh change from your profile.
                 </AlertDescription>
               </Alert>
-              <Button onClick={handleConfirm} variant="outline" className="w-full">
+              <Button
+                onClick={() => {
+                  // Deliberate user retry re-arms the one-shot guard.
+                  hasConfirmedRef.current = false;
+                  void handleConfirm();
+                }}
+                variant="outline"
+                className="w-full"
+              >
                 Retry
               </Button>
             </>

@@ -103,22 +103,32 @@ export default defineConfig(({ mode }) => {
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png'],
+      // Single source of truth for PWA metadata. VitePWA generates
+      // `manifest.webmanifest` from this and injects the <link> at build time —
+      // the old hand-written public/manifest.json was removed so the two can no
+      // longer drift (see review ARCH-12).
       manifest: {
         name: 'LeaseFi',
         short_name: 'LeaseFi',
         description: 'LeaseFi — real estate leasing and property management platform',
+        start_url: '/',
+        display: 'standalone',
+        orientation: 'portrait-primary',
         theme_color: '#3b82f6',
         background_color: '#ffffff',
+        categories: ['business', 'productivity', 'utilities'],
         icons: [
           {
             src: '/pwa-192x192.png',
             sizes: '192x192',
-            type: 'image/png'
+            type: 'image/png',
+            purpose: 'any'
           },
           {
             src: '/pwa-512x512.png',
             sizes: '512x512',
-            type: 'image/png'
+            type: 'image/png',
+            purpose: 'any'
           }
         ]
       },
