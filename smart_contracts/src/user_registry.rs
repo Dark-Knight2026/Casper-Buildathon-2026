@@ -2,8 +2,11 @@ use odra::{casper_types::U256, prelude::*};
 use odra_modules::access::{AccessControl, Role, DEFAULT_ADMIN_ROLE};
 
 use crate::common;
-use crate::user_registry::errors::Error;
-use crate::user_registry::types::{UserRecord, WalletStatus};
+use crate::user_registry::{
+    errors::Error,
+    events::UserCreated,
+    types::{UserRecord, WalletStatus},
+};
 
 // =============================================================================
 // Roles
@@ -66,6 +69,13 @@ pub mod types {
 pub mod events {
     use crate::user_registry::types::UserStatus;
     use odra::{casper_types::U256, prelude::*};
+
+    #[odra::event]
+    pub struct UserCreated {
+        pub user_id: U256,
+        pub active_wallet: Address,
+        pub role_flags: u32,
+    }
 }
 
 // =============================================================================
@@ -83,14 +93,16 @@ pub mod errors {
 // Contract
 // =============================================================================
 
-#[odra::module(errors = Error, events = [])]
+#[odra::module(errors = Error, events = [UserCreated])]
 pub struct UserRegistry {
     /// Access control for identity and role managers.
     access_control: SubModule<AccessControl>,
     /// User records keyed by stable user ID.
     users: Mapping<U256, UserRecord>,
     /// Reverse lookup from identity hash to user ID.
-    identity_to_user_id: Mapping<Address, Option<U256>>,
+    identity_to_user_id: Mapping<[u8; 32], Option<U256>>,
+    /// Reverse lookup from currently active wallet to user ID.
+    wallet_to_user_id: Mapping<Address, Option<U256>>,
     /// Historical wallet status keyed by wallet address.
     wallet_statuses: Mapping<Address, WalletStatus>,
     /// Ordered wallet history keyed by user ID.
@@ -104,4 +116,51 @@ impl UserRegistry {
     // =========================================================================
     // Initialization
     // =========================================================================
+
+    pub fn init(&mut self, owner: Address) {
+        self.access_control
+            .unchecked_grant_role(&DEFAULT_ADMIN_ROLE, &owner);
+    }
+
+    // =========================================================================
+    // Identity Management
+    // =========================================================================
+
+    pub fn create_user(
+        &mut self,
+        identity_hash: [u8; 32],
+        initial_wallet: Address,
+        role_flags: u32,
+    ) -> U256 {
+        // TODO: Add asserts
+
+        let user_id = self.get_users_count();
+
+        self.users.set(
+            &user_id,
+            UserRecord {
+                identity_hash,
+                active_wallet: initial_wallet,
+                role_flags,
+                status: types::UserStatus::Active,
+            },
+        );
+
+        self.identity_to_user_id.set(&identity_hash, Some(user_id));
+        self.wallet_to_user_id.set(&initial_wallet, Some(user_id));
+
+        self.wallet_statuses
+            .set(&initial_wallet, WalletStatus::Active);
+        self.wallet_history.set(&user_id, vec![initial_wallet]);
+
+        self.users_count.set(user_id + 1);
+
+        self.env().emit_event(UserCreated {
+            user_id,
+            active_wallet: initial_wallet,
+            role_flags,
+        });
+
+        user_id
+    }
 }
