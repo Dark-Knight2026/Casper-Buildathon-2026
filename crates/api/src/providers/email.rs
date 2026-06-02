@@ -104,6 +104,11 @@ pub trait EmailSender: Send + Sync {
     /// Whether this sender can defer delivery into the retry queue by
     /// returning [`EmailError::Transient`].
     ///
+    /// **MUST return `true`** for any implementor whose `send` can return
+    /// [`EmailError::Transient`]. Otherwise its enqueued rows pile up in
+    /// `email_send_retries` with no worker to drain them, and the failure is
+    /// silent - there is no error log, the worker simply never spawns.
+    ///
     /// The server spawns the retry-queue worker iff its mailer reports `true`,
     /// so the spawn decision follows the *actual* mailer rather than a config
     /// flag read independently. A stub that always succeeds (the default)
@@ -220,6 +225,12 @@ impl EmailSender for PostmarkSender {
                 message.as_deref().unwrap_or("(no message)"),
             )),
             Err(QueryError::Client { source }) => Err(source.into()),
+            // Body failed to deserialize on a response Postmark may already
+            // have accepted. Transient risks a duplicate send if the message
+            // was queued before the body got mangled; Permanent risks silently
+            // dropping a genuinely transient truncation. We pick Transient - a
+            // duplicate verification email is recoverable, a silently lost one
+            // is not, and the re-send is visible in the retry-worker log.
             Err(QueryError::Json { source }) => Err(EmailError::Transient(format!(
                 "postmark response parse: {source}"
             ))),
