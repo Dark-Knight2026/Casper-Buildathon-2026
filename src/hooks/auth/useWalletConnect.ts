@@ -105,6 +105,11 @@ export function useWalletConnect() {
       if (account) await syncActiveAccount();
     } catch (err) {
       logger.error('handleConnectProvider failed:', err);
+    } finally {
+      // Always clear the per-provider connecting state — including the silent
+      // null-resolve path where connect() returns undefined without firing
+      // `csprclick:cancelled`. Without this, the wallet buttons stay disabled
+      // until a page reload.
       setConnectingProvider(null);
     }
   }, [clickRef, isConnecting, connectingProvider, syncActiveAccount]);

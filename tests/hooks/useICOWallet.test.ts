@@ -32,6 +32,20 @@ vi.mock('casper-js-sdk', () => ({
   },
 }));
 
+// Mocked so we can observe the post-await branches: the unmount guards in
+// syncActiveAccount / handleSocialConnected sit BEFORE their `logger.debug`
+// calls, and handleReady's null branch is the only caller of
+// clearCsprClickStorage — both give us a side effect to assert on. Declared via
+// vi.hoisted so they're initialized before the hoisted vi.mock factories run.
+const { mockLogger, mockClearCsprClickStorage } = vi.hoisted(() => ({
+  mockLogger: { log: vi.fn(), debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+  mockClearCsprClickStorage: vi.fn(),
+}));
+vi.mock('@/lib/logger', () => ({ default: mockLogger }));
+vi.mock('@/lib/csprclick', () => ({
+  clearCsprClickStorage: () => mockClearCsprClickStorage(),
+}));
+
 const mockPublicKey = '01abc123def456789abc123def456789abc123def456789abc123def456789abc1';
 const mockProvider = 'casper-wallet';
 
@@ -93,6 +107,9 @@ describe('useICOWallet', () => {
       expect(mockClickRef.on).toHaveBeenCalledWith('csprclick:disconnected', expect.any(Function));
       expect(mockClickRef.on).toHaveBeenCalledWith('csprclick:ready', expect.any(Function));
       expect(mockClickRef.on).toHaveBeenCalledWith('csprclick:cancelled', expect.any(Function));
+      expect(mockClickRef.on).toHaveBeenCalledWith('csprclick-w3a-google:connected', expect.any(Function));
+      expect(mockClickRef.on).toHaveBeenCalledWith('csprclick-w3a-apple:connected', expect.any(Function));
+      expect(mockClickRef.on).toHaveBeenCalledWith('csprclick:unsolicited_account_change', expect.any(Function));
     });
 
     it('should remove all event listeners on unmount', () => {
@@ -106,6 +123,9 @@ describe('useICOWallet', () => {
       expect(mockClickRef.off).toHaveBeenCalledWith('csprclick:disconnected', expect.any(Function));
       expect(mockClickRef.off).toHaveBeenCalledWith('csprclick:ready', expect.any(Function));
       expect(mockClickRef.off).toHaveBeenCalledWith('csprclick:cancelled', expect.any(Function));
+      expect(mockClickRef.off).toHaveBeenCalledWith('csprclick-w3a-google:connected', expect.any(Function));
+      expect(mockClickRef.off).toHaveBeenCalledWith('csprclick-w3a-apple:connected', expect.any(Function));
+      expect(mockClickRef.off).toHaveBeenCalledWith('csprclick:unsolicited_account_change', expect.any(Function));
     });
 
     it('should handle signed_in event', () => {
@@ -185,7 +205,7 @@ describe('useICOWallet', () => {
       expect(result.current.account).toBeNull();
     });
 
-    it('should handle disconnected event', () => {
+    it('should reset to disconnected after a disconnected event', async () => {
       mockClickRef.getActiveAccountAsync.mockResolvedValue({
         public_key: mockPublicKey,
         provider: mockProvider,
@@ -193,7 +213,10 @@ describe('useICOWallet', () => {
 
       const { result } = renderHook(() => useICOWallet());
 
-      // Get the disconnected handler
+      // Establish the connected state first — otherwise asserting "disconnected"
+      // after the event would pass vacuously against the initial state.
+      await waitFor(() => expect(result.current.isConnected).toBe(true));
+
       const disconnectedCall = mockClickRef.on.mock.calls.find(
         (call) => call[0] === 'csprclick:disconnected'
       );
@@ -232,10 +255,10 @@ describe('useICOWallet', () => {
       expect(result.current.isConnecting).toBe(false);
     });
 
-    it('should handle ready event without active account', () => {
+    it('should clear stale storage when ready fires with no active account', async () => {
       const { result } = renderHook(() => useICOWallet());
 
-      // SDK ready but no account connected
+      // SDK ready but no account connected.
       mockClickRef.getActiveAccountAsync.mockResolvedValue(null);
 
       const readyCall = mockClickRef.on.mock.calls.find(
@@ -243,10 +266,18 @@ describe('useICOWallet', () => {
       );
       const handleReady = readyCall?.[1];
 
-      act(() => {
-        handleReady?.();
+      // Ignore the mount IIFE's own null-account cleanup; assert on the handler.
+      mockClearCsprClickStorage.mockClear();
+
+      // Async handler — await it so the post-await branch actually runs (the
+      // previous synchronous act() let the assertions pass before it executed).
+      await act(async () => {
+        await handleReady?.();
       });
 
+      // Non-vacuous: the null branch is the only caller of clearCsprClickStorage,
+      // so this proves the handler reached it.
+      expect(mockClearCsprClickStorage).toHaveBeenCalled();
       expect(result.current.isConnected).toBe(false);
       expect(result.current.account).toBeNull();
     });
@@ -274,6 +305,128 @@ describe('useICOWallet', () => {
       expect(result.current.isConnecting).toBe(false);
       expect(result.current.isConnected).toBe(false);
       expect(result.current.account).toBeNull();
+    });
+
+    it('should handle social provider connected event by re-reading the active account', async () => {
+      const { result } = renderHook(() => useICOWallet());
+
+      // Social providers fire `...:connected` with no usable payload — the
+      // account is read back via getActiveAccountAsync.
+      const googleKey = '03abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789';
+      mockClickRef.getActiveAccountAsync.mockResolvedValue({
+        public_key: googleKey,
+        provider: 'csprclick-w3a-google',
+      });
+
+      const socialCall = mockClickRef.on.mock.calls.find(
+        (call) => call[0] === 'csprclick-w3a-google:connected'
+      );
+      const handleSocialConnected = socialCall?.[1];
+
+      await act(async () => {
+        await handleSocialConnected?.({});
+      });
+
+      expect(result.current.isConnected).toBe(true);
+      expect(result.current.account?.publicKey).toBe(googleKey);
+      expect(result.current.account?.provider).toBe('csprclick-w3a-google');
+    });
+
+    it('should handle the apple social provider connected event', async () => {
+      const { result } = renderHook(() => useICOWallet());
+
+      // Apple is a first-class CSPR.click social provider wired to the same
+      // handler as Google via `csprclick-w3a-apple:connected`.
+      const appleKey = '04abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789';
+      mockClickRef.getActiveAccountAsync.mockResolvedValue({
+        public_key: appleKey,
+        provider: 'csprclick-w3a-apple',
+      });
+
+      const socialCall = mockClickRef.on.mock.calls.find(
+        (call) => call[0] === 'csprclick-w3a-apple:connected'
+      );
+      const handleSocialConnected = socialCall?.[1];
+
+      await act(async () => {
+        await handleSocialConnected?.({});
+      });
+
+      expect(result.current.isConnected).toBe(true);
+      expect(result.current.account?.publicKey).toBe(appleKey);
+      expect(result.current.account?.provider).toBe('csprclick-w3a-apple');
+    });
+
+    it('handleReady skips its work when unmounted mid-await (L-08)', async () => {
+      // Hold getActiveAccountAsync pending so we can unmount before it resolves.
+      let resolveAccount: (v: unknown) => void = () => {};
+      mockClickRef.getActiveAccountAsync.mockReturnValue(
+        new Promise((res) => { resolveAccount = res; })
+      );
+
+      const { unmount } = renderHook(() => useICOWallet());
+      const handleReady = mockClickRef.on.mock.calls.find(
+        (call) => call[0] === 'csprclick:ready'
+      )?.[1];
+
+      let pending: Promise<void> | undefined;
+      act(() => { pending = handleReady?.(); });
+
+      unmount();
+      mockClearCsprClickStorage.mockClear();
+
+      await act(async () => {
+        resolveAccount(null);
+        await pending;
+      });
+
+      // The cancelled guard returned before the null-branch cleanup.
+      expect(mockClearCsprClickStorage).not.toHaveBeenCalled();
+    });
+
+    it('handleSocialConnected skips its work when unmounted mid-await (L-08)', async () => {
+      let resolveAccount: (v: unknown) => void = () => {};
+      mockClickRef.getActiveAccountAsync.mockReturnValue(
+        new Promise((res) => { resolveAccount = res; })
+      );
+
+      const { unmount } = renderHook(() => useICOWallet());
+      const handleSocialConnected = mockClickRef.on.mock.calls.find(
+        (call) => call[0] === 'csprclick-w3a-google:connected'
+      )?.[1];
+
+      let pending: Promise<void> | undefined;
+      act(() => { pending = handleSocialConnected?.({}); });
+
+      unmount();
+      // The pre-await "connected event" debug already fired; clear it so any
+      // remaining debug would be the post-guard "active after social connect".
+      mockLogger.debug.mockClear();
+
+      await act(async () => {
+        resolveAccount({ public_key: mockPublicKey, provider: 'csprclick-w3a-google' });
+        await pending;
+      });
+
+      // Guard returned before the post-await debug + setState.
+      expect(mockLogger.debug).not.toHaveBeenCalled();
+    });
+
+    it('should restore the session on unsolicited account change', async () => {
+      renderHook(() => useICOWallet());
+
+      const evtAccount = { provider: mockProvider, public_key: mockPublicKey };
+
+      const unsolicitedCall = mockClickRef.on.mock.calls.find(
+        (call) => call[0] === 'csprclick:unsolicited_account_change'
+      );
+      const handleUnsolicited = unsolicitedCall?.[1];
+
+      await act(async () => {
+        await handleUnsolicited?.({ account: evtAccount });
+      });
+
+      expect(mockClickRef.signInWithAccount).toHaveBeenCalledWith(evtAccount);
     });
   });
 
@@ -308,7 +461,7 @@ describe('useICOWallet', () => {
   // --- Disconnect ---
 
   describe('disconnect', () => {
-    it('should call signOut on clickRef', async () => {
+    it('should sign out and hard-disconnect the active provider', async () => {
       mockClickRef.getActiveAccountAsync.mockResolvedValue({
         public_key: mockPublicKey,
         provider: mockProvider,
@@ -321,20 +474,94 @@ describe('useICOWallet', () => {
       });
 
       expect(mockClickRef.signOut).toHaveBeenCalled();
+      // Both calls are required: signOut is a soft logout; disconnect(provider)
+      // is the hard iframe release.
+      expect(mockClickRef.disconnect).toHaveBeenCalledWith(mockProvider);
     });
 
-    it('should not throw if signOut fails', () => {
+    it('still hard-disconnects (and does not reject) when signOut throws', async () => {
+      mockClickRef.getActiveAccountAsync.mockResolvedValue({
+        public_key: mockPublicKey,
+        provider: mockProvider,
+      });
       mockClickRef.signOut.mockImplementation(() => {
         throw new Error('SignOut failed');
       });
 
       const { result } = renderHook(() => useICOWallet());
 
-      expect(() => {
-        act(() => {
-          result.current.disconnect();
-        });
-      }).not.toThrow();
+      // The disconnect() body is async — it must run to completion inside an
+      // async act(). The previous synchronous act() returned before signOut was
+      // ever reached, so the try/catch wrapped a no-op (vacuous test).
+      await act(async () => {
+        await result.current.disconnect();
+      });
+
+      expect(mockClickRef.signOut).toHaveBeenCalled();
+      // M-02: a thrown signOut must NOT skip the hard iframe release.
+      expect(mockClickRef.disconnect).toHaveBeenCalledWith(mockProvider);
+    });
+  });
+
+  // --- syncActiveAccount ---
+
+  describe('syncActiveAccount', () => {
+    it('should connect to the active account read from the SDK', async () => {
+      const { result } = renderHook(() => useICOWallet());
+
+      mockClickRef.getActiveAccountAsync.mockResolvedValue({
+        public_key: mockPublicKey,
+        provider: 'csprclick-w3a-google',
+      });
+
+      await act(async () => {
+        await result.current.syncActiveAccount();
+      });
+
+      expect(result.current.isConnected).toBe(true);
+      expect(result.current.account?.publicKey).toBe(mockPublicKey);
+      expect(result.current.account?.provider).toBe('csprclick-w3a-google');
+    });
+
+    it('should no-op when there is no active account', async () => {
+      const { result } = renderHook(() => useICOWallet());
+
+      mockClickRef.getActiveAccountAsync.mockResolvedValue(null);
+
+      await act(async () => {
+        await result.current.syncActiveAccount();
+      });
+
+      expect(result.current.isConnected).toBe(false);
+      expect(result.current.account).toBeNull();
+    });
+
+    it('does not run post-await work after unmount (H-01)', async () => {
+      // Mobile back-gesture during a connect that routes through
+      // syncActiveAccount: the component unmounts while getActiveAccountAsync
+      // is still pending. The isMounted guard must skip everything after the
+      // await (the logger.debug line + setState).
+      let resolveAccount: (v: unknown) => void = () => {};
+      mockClickRef.getActiveAccountAsync.mockReturnValue(
+        new Promise((res) => { resolveAccount = res; })
+      );
+
+      const { result, unmount } = renderHook(() => useICOWallet());
+
+      let pending: Promise<void> | undefined;
+      act(() => { pending = result.current.syncActiveAccount(); });
+
+      unmount();
+      mockLogger.debug.mockClear();
+
+      await act(async () => {
+        resolveAccount({ public_key: mockPublicKey, provider: mockProvider });
+        await pending;
+      });
+
+      // The debug line sits AFTER the guard, so it not firing proves the guard
+      // returned before the setState would have run on the unmounted instance.
+      expect(mockLogger.debug).not.toHaveBeenCalled();
     });
   });
 

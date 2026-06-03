@@ -176,7 +176,9 @@ as legacy scaffolding but are **not in the MVP scope** (see
 - **Properties (landlord)** — list page with filters, add-property
   multi-step form, edit page. Currently against mock data; service-layer
   Supabase imports remain only to satisfy TypeScript and are inert.
-- **Landlord Profile** — basic profile + portfolio overview card.
+- **Landlord Profile** — identity (name/email/phone/bio/avatar) is real via
+  `/api/v1/users/me*`; the portfolio overview card still runs on
+  `MOCK_LANDLORD_DASHBOARD_STATS` until the backend stats endpoint lands.
 
 ### Not yet wired to the real backend
 Properties CRUD/search, leases (create/sign/finalize/terminate), payments

@@ -1,9 +1,9 @@
 ---
 author: Anastasia
-version: 0.4.0
+version: 0.5.0
 created: 2026-05-18T08:08:02Z
-last-modified: 2026-05-27T00:00:00Z
-version-updated: 2026-05-27T00:00:00Z
+last-modified: 2026-06-02T00:00:00Z
+version-updated: 2026-06-02T00:00:00Z
 ---
 
 # LeaseFi — Frontend MVP Task Tracker
@@ -42,9 +42,10 @@ version-updated: 2026-05-27T00:00:00Z
 | 3.5 Payments & Disbursement | 0 | 5 | Stripe gated, ⛔ BE |
 | 3.6 Termination | 0 | 4 | no UI flow, ⛔ BE |
 | 3.7 Dashboards & Accounting | 0 | 4 | mocks + Supabase, no PM |
-| 3.8 Compliance & Privacy (FE part) | 2 | 5 | KYC / audit ⛔ BE |
-| 3.9 Production deploy (FE part) | 0 | 3 | hosting TBD (§6) |
-| **Total** | **9** | **42** | |
+| 3.8 Compliance & Privacy (FE part) | 2 | 6 | KYC / audit ⛔ BE, PII access |
+| 3.9 Production deploy (FE part) | 0 | 3 | CI/CD to chosen host |
+| 3.10 Geographic Pilot | 0 | 8 | state gating ⛔ BE re-validation |
+| **Total** | **6** | **51** | |
 
 ---
 
@@ -66,7 +67,7 @@ version-updated: 2026-05-27T00:00:00Z
   - FE work: request/confirm email screen + token-confirmation landing page.
 - [x] **Profile editable (avatar, personal data)** — 🟢 REAL
   - `src/pages/tenant/TenantProfile.tsx` → `AuthContext.updateProfile` (`PATCH /api/v1/users/me`) + `uploadAvatar` (`POST /api/v1/users/me/avatar`, S3). `RoleSwitchDialog` → `patchMyRole` with reauth gate.
-  - ⚠️ This is the tenant profile page. No dedicated landlord/PM profile-edit pages (see §3.2).
+  - ⚠️ This is the tenant profile page. Landlord profile-edit page now exists (`src/pages/landlord/LandlordProfile.tsx`); PM profile-edit page still missing (see §3.2).
 
 > _Design-reference cross-cut:_ **Task 26** — `<KYCGate/>` wrapper around the Sumsub WebSDK widget gates sensitive actions (sign lease, pay rent, fund deposit). Per Anthony 2026-05-20: Sumsub is the sole KYC service — no separate AML/CDD lookup, OFAC API, or extra biometric layer on top (Sumsub handles identity, document checks, and liveness internally). We store only `sumsub_applicant_id + kyc_status + timestamp`.
 
@@ -75,7 +76,8 @@ version-updated: 2026-05-27T00:00:00Z
 - [ ] **Tenant profile with lease history, payment history, equity balance** — 🟠 MOCK + ⛔ BE-BLOCKED
   - Profile identity is 🟢 REAL (`getMe`), but leases/payments/equity in `src/pages/tenant/TenantDashboard.tsx` = `MOCK_LEASE`/`MOCK_PAYMENTS` (TODO: "remove when /api/v1/leases ready").
 - [ ] **Landlord profile: properties, active leases, received rent** — 🟡 SUPABASE→REWIRE + ⛔ BE-BLOCKED
-  - `src/pages/landlord/LandlordDashboard.tsx` reads `supabase.from('properties'|'leases'|'payments')`. No dedicated landlord profile page.
+  - `src/pages/landlord/LandlordProfile.tsx` now exists (route `/landlord/profile`, `App.tsx:357`). Identity is 🟢 REAL (`getMe` + `uploadAvatar`); dashboard stats = `MOCK_LANDLORD_DASHBOARD_STATS` (TODO(BE): `GET /api/v1/landlord/stats`).
+  - `src/pages/landlord/LandlordDashboard.tsx` now runs on mock fixtures (`MOCK_LANDLORD_DASHBOARD_STATS` / `MOCK_LANDLORD_RECENT_ACTIVITIES` from `src/data/landlordMockData.ts`) — no Supabase calls remain. TODO(BE): wire stats + recent-activity to the Rust API (`GET /api/v1/landlord/stats`, activity feed).
 - [ ] **Property Manager profile (aggregated view)** — 🔴 MISSING
   - No `property_manager` in `UserRole` (`src/types/user.ts`); only a stub template in `DashboardTemplates.tsx`. Needs role enum, route, context.
 - [ ] **`company tag` slot in all 3 profile types** — 🔴 MISSING
@@ -87,8 +89,8 @@ version-updated: 2026-05-27T00:00:00Z
   - Full UI: `src/pages/landlord/properties/{PropertyCreate,PropertyEdit,PropertyDetail,PropertyList}.tsx` via `src/services/propertyService.ts` (imports `supabase`). Rewire to Rust API once the contract exists.
 - [ ] **Numeric `declared_mortgage_value` field on property** — 🔴 MISSING
   - Absent from `src/types/property.ts` and forms. Add input + validation (groundwork for cap §3.4).
-- [ ] **Mortgage documentation upload (prerequisite for lease option)** — ⏸ SPEC-OPEN (§6 #1)
-  - Property-doc storage undecided. Until then do NOT store the file; numeric field above is enough. FE: lease-option toggle stays disabled without a document.
+- [ ] **Mortgage documentation upload (prerequisite for lease option)** — 🔴 MISSING + ⛔ BE-BLOCKED
+  - Storage resolved (2026-05-21): IPFS pin via BE-proxied `/api/v1/ipfs/pin` with mandatory client-side encryption for PII-bearing files (spec §5.2 / §5.5 / §6 Resolved). FE: upload widget that encrypts client-side, posts the blob to the pin endpoint, keeps the lease-option toggle disabled without a document. Blocked until the BE pin endpoint ships.
 - [ ] **Property search + filtering** — 🟠 MOCK + ⛔ BE-BLOCKED
   - `src/pages/tenant/PropertySearch.tsx` filters `FEATURED_PROPERTIES` (`src/data/featuredProperties.ts`) in memory. Rewire to backend search/pagination.
 - [ ] **Property detail page + Google Maps link** — 🟠 MOCK (Maps link 🟢)
@@ -106,8 +108,8 @@ version-updated: 2026-05-27T00:00:00Z
   - No fields, no validation. FE guard layer: disable submit + inline error on breach (BE/contract layers separate).
 - [ ] **Lease recorded on-chain only after finalization (drafts off-chain)** — 🔴 MISSING + ⛔ BE
   - No Casper lease integration. Need FE draft→finalized state + backend finalize call.
-- [ ] **Cryptographic signing by both parties** — 🟡 SUPABASE→REWIRE + ⏸ SPEC-OPEN (§5.6/§6 #4)
-  - Currently canvas e-sign only (`src/services/eSignatureService.ts` → Supabase, `src/types/signature.ts` = base64 image). Real signing mechanism (native Casper / EIP-712 / two txns) not yet decided in spec.
+- [ ] **Cryptographic signing by both parties** — 🟡 SUPABASE→REWIRE + ⛔ BE-BLOCKED
+  - Mechanism resolved (spec §5.6 / §6 Resolved): EIP-712 typed signing via `casper-eip-712`; both parties sign typed data via CSPR.click. FE consumes EIP-712 builders from the shared `@leasefi/types` package (no hand-rolled typed-data on FE). Current code is canvas e-sign only (`src/services/eSignatureService.ts` → Supabase, `src/types/signature.ts` = base64 image) — replace with the EIP-712 flow once the shared types package + BE finalize call ship.
 - [ ] **Lease parameters immutable after signing** — ⛔ BE-BLOCKED
   - Invariant on BE/contract. FE: render parameters read-only post-sign, hide edit actions.
 
@@ -144,8 +146,8 @@ version-updated: 2026-05-27T00:00:00Z
 
 - [ ] **Tenant dashboard (agreed price, paid, equity, balance, interest breakdown)** — 🟠 MOCK + ⛔ BE
   - `src/pages/tenant/TenantDashboard.tsx` on `MOCK_LEASE`/`MOCK_PAYMENTS`; no equity/interest breakdown. Add breakdown components + rewire to `/api/v1/leases`.
-- [ ] **Landlord dashboard (rent received, paid/overdue/partial, termination controls)** — 🟡 SUPABASE→REWIRE + ⛔ BE
-  - `src/pages/landlord/LandlordDashboard.tsx` — direct Supabase queries. No termination controls (see §3.6).
+- [ ] **Landlord dashboard (rent received, paid/overdue/partial, termination controls)** — 🟠 MOCK + ⛔ BE
+  - `src/pages/landlord/LandlordDashboard.tsx` — runs on `MOCK_LANDLORD_*` fixtures (`src/data/landlordMockData.ts`); no Supabase calls remain. No termination controls (see §3.6). TODO(BE): wire to the Rust API.
 - [ ] **PM dashboard (aggregated + drill-down)** — 🔴 MISSING
   - No PM role (§3.2). Needs aggregated dashboard across managed properties + per-property drill-down.
 - [ ] **Full transparency of all amounts (principal/interest/equity, no hidden fees)** — 🔴 MISSING + ⛔ BE
@@ -161,8 +163,10 @@ version-updated: 2026-05-27T00:00:00Z
   - Absent from roles/auth/profile. "Investor" remains in `TestimonialsSection.tsx` (testimonial copy) and `FractionalOwnership.tsx` (out of MVP scope). Remove/unlink these from MVP nav; purge any MVP-reachable copy.
 - [ ] **KYC documents at Sumsub, not with us** — ⛔ BE-BLOCKED (tied to §3.1 KYC)
   - FE stores status only; widget streams docs browser→Sumsub directly. Depends on KYC integration.
-- [ ] **File policy: avatar in S3 (✅), property docs TBD** — partly 🟢 / ⏸ SPEC-OPEN
-  - Avatar → S3 via `uploadAvatar` 🟢. Property docs blocked by §6 #1 (do not store until decided).
+- [ ] **File policy: avatar in S3 (✅), property docs on IPFS** — partly 🟢 / ⛔ BE-BLOCKED
+  - Avatar → S3 via `uploadAvatar` 🟢. Property docs resolved (2026-05-21) to IPFS pin via `/api/v1/ipfs/pin` with mandatory client-side encryption for PII-bearing files (spec §5.2 / §5.5). FE encrypts client-side; blocked until the BE pin endpoint ships.
+- [ ] **Tenant PII not accessible to external parties** — ⛔ BE-BLOCKED
+  - Spec §3.8 / §5.2: public chain queries, other platform users, and third-party scrapers via our API must not link a tenant identity to a property/lease. FE part: never render another party's PII outside an authorized view; on-chain references use hashes/wallet addresses only. Enforcement is mostly BE/contract (no PII payloads on-chain, access-controlled API).
 - [ ] **Audit trail of key actions (create/sign/pay/terminate)** — ⛔ BE-BLOCKED
   - Audit logic on BE/contract. FE part: render the audit feed once an endpoint exists.
 
@@ -170,10 +174,32 @@ version-updated: 2026-05-27T00:00:00Z
 
 ## §3.9 Production deployment (FE part)
 
-- [ ] **Hosting selected** — ⏸ SPEC-OPEN (§6 #2, DevOps rec. by 2026-05-22)
+- [ ] **Hosting selected** — decision 🟢 RESOLVED (2026-05-21), FE deploy pending
+  - AWS us-east-1 (ECS Fargate for BE/indexer); FE on Vercel/Amplify, CDN-fronted (spec §3.9 / §5.5 / §6 Resolved). The hosting question is closed; remaining FE work is the CI/CD pipeline + deploy below, so the box stays open until FE actually ships there.
 - [ ] **FE CI/CD to production** — 🟠 `vercel.json` + `.vercel` (Vercel) exist but tied to the final hosting choice
   - Configure the pipeline for the chosen environment.
 - [ ] **FE deployed to the chosen environment** — ⛔ depends on hosting choice
+
+## §3.10 Geographic Pilot (Phase 1)
+
+> Spec §3.10 — Phase 1 state pilot adopted into MVP scope. Pilot states: **Florida, Texas, Tennessee**. California explicitly blocked (Phase 4); all other US states "Coming soon". State flows into BE on every signup / property / lease write for defense-in-depth.
+
+- [ ] **State selection required at sign-up (tenant, landlord, PM)** — 🔴 MISSING + ⛔ BE-BLOCKED
+  - No `state` field on the sign-up / profile form. Add a required US-state selector; persisted via the profile write.
+- [ ] **Sign-up allowed only from pilot states (FL, TX, TN)** — 🔴 MISSING + ⛔ BE
+  - FE gate on the selected state; BE re-validates. No gating logic today.
+- [ ] **Virginia gated (CO approval, out of MVP unless CO role lands)** — 🔴 MISSING + ⛔ BE
+  - Tied to the Compliance-Officer role (§3.2 / §6 OQ#1); not buildable until that role exists.
+- [ ] **California explicitly blocked with an explanatory screen** — 🔴 MISSING
+  - Dedicated "Not yet available in California — Phase 4" screen on the CA branch.
+- [ ] **All other US states blocked with a generic "Coming soon" screen** — 🔴 MISSING
+  - Fallback screen for any non-pilot, non-CA state.
+- [ ] **Property creation blocked unless property is in a pilot state** — 🔴 MISSING + ⛔ BE
+  - Add a `state` field to the property form + FE pre-check; BE re-validates.
+- [ ] **Lease creation blocked unless landlord, tenant, and property are all in pilot states** — 🔴 MISSING + ⛔ BE
+  - FE pre-check across all three parties + BE re-validation.
+- [ ] **State value stored on user profile and on property** — 🔴 MISSING + ⛔ BE
+  - Persist `state` on both entities; flows into BE on every signup / property / lease write.
 
 ---
 
@@ -201,11 +227,15 @@ version-updated: 2026-05-27T00:00:00Z
 
 Properties CRUD/search, Leases (create/sign/finalize/terminate), Payments/Stripe + disbursement, dashboard data (tenant/landlord/PM), audit trail. Each UI either already exists (on Supabase/mocks, needs rewire) or is missing — see items above.
 
-## Blocked by open spec questions (§6)
+## Resolved spec questions (§6) — no longer blocking
 
-- Property-doc storage (#1) → blocks mortgage-document upload (§3.3).
-- Hosting (#2) → blocks §3.9.
-- Lease signing mechanism on Casper (#4, §5.6) → blocks cryptographic signing (§3.4).
+All three former §6 blockers were resolved 2026-05-21 (spec §6 "Resolved"):
+
+- ✅ Property-doc storage → IPFS pin via `/api/v1/ipfs/pin` with mandatory client-side encryption (§5.2 / §5.5). Mortgage-document upload (§3.3) is now BE-blocked on the pin endpoint, not spec-blocked.
+- ✅ Hosting → AWS us-east-1 + FE on Vercel/Amplify (§3.9 / §5.5).
+- ✅ Lease signing mechanism → EIP-712 typed signing via `casper-eip-712`, shared `@leasefi/types` (§5.6). Cryptographic signing (§3.4) is now BE-blocked on the shared types package + finalize call.
+
+Spec §6 still lists two genuinely open questions, but neither blocks FE MVP work: (1) mortgage-document **authenticity** review process, (2) private sale for accredited investors (Phase 4).
 
 ## Note on scope
 

@@ -92,7 +92,7 @@ The list of items that **must work** in production by release date. This is also
 ### 3.8 Compliance & Privacy
 - [ ] Profile metadata (names, emails, roles, property/lease links) — in our backend (Supabase Postgres). On-chain — hashes only.
 - [ ] KYC documents are held by Sumsub, not by us (see §5.2 for the privacy guarantee).
-- [ ] File storage policy honored: avatars in S3, property docs TBD (see §5.2).
+- [ ] File storage policy honored: avatars in S3, property docs on IPFS (encrypted pin via `/api/v1/ipfs/pin`; see §5.2 / §5.5 / §6 Resolved).
 - [ ] Tenant PII is not accessible to external parties (public chain queries, other platform users, third parties via our UI).
 - [ ] No instance of the word "investor" in UI
 - [ ] Audit trail for key actions (lease create / sign / pay / terminate)
