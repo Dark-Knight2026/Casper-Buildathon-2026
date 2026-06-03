@@ -13,7 +13,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::common::{CapturingMailer, TestOverrides};
-use api::providers::EmailSender;
+use api::{common::tokens, providers::EmailSender};
 
 /// Regression: when `mailer.send` fails inside `request_email_change`, the
 /// handler must roll back the Redis token slot and the rate-limit counter
@@ -638,8 +638,9 @@ async fn confirm_email_change_happy_path_upgrades_verification(pool: PgPool) {
         .expect("body must carry a `?token=...` link");
     assert_eq!(
         token.len(),
-        43,
-        "token must be 43 base64url-no-pad chars; got body: {body:?}",
+        tokens::TOKEN_STR_LEN,
+        "token must be exactly TOKEN_STR_LEN={} base64url-no-pad chars; got body: {body:?}",
+        tokens::TOKEN_STR_LEN,
     );
 
     let confirm_response = env

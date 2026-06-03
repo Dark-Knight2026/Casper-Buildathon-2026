@@ -25,7 +25,7 @@ use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use api::common::RedisStore;
+use api::common::{RedisStore, tokens};
 use common::{CapturingMailer, PermanentMailer, TestEnv, TestOverrides, TransientMailer};
 
 /// HTTP path of the verify-email send endpoint.
@@ -198,8 +198,8 @@ async fn confirm_with_wrong_token_consumes_slot(pool: PgPool) {
     common::seed_email(&env.state.db, session.user_id).await;
     let real_token = send_and_take_token(&env, &mailer, &session.access_token).await;
 
-    // Valid 43-char base64url shape, guaranteed hash mismatch.
-    let wrong_token = "A".repeat(43);
+    // Valid base64url shape (TOKEN_STR_LEN chars), guaranteed hash mismatch.
+    let wrong_token = "A".repeat(tokens::TOKEN_STR_LEN);
     let bad = env
         .server
         .post(CONFIRM_URI)
@@ -313,7 +313,7 @@ async fn confirm_without_auth_returns_401(pool: PgPool) {
     let confirm = env
         .server
         .post(CONFIRM_URI)
-        .json(&json!({ "token": "A".repeat(43) }))
+        .json(&json!({ "token": "A".repeat(tokens::TOKEN_STR_LEN) }))
         .await;
     assert_eq!(confirm.status_code(), StatusCode::UNAUTHORIZED);
 }
