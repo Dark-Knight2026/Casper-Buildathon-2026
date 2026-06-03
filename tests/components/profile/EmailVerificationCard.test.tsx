@@ -55,21 +55,28 @@ describe('EmailVerificationCard', () => {
     );
   });
 
-  it('does not throw when the component unmounts mid-send (TEST-02)', async () => {
+  it('skips post-await state updates when the component unmounts mid-send (TEST-02)', async () => {
     let resolveSend: (v: unknown) => void = () => {};
     sendVerificationEmail.mockReturnValue(new Promise((res) => { resolveSend = res; }));
 
     const { unmount } = renderCard();
     fireEvent.click(screen.getByRole('button', { name: /send verification email/i }));
 
-    // Unmount while the request is still in flight, then let it resolve — the
-    // mountedRef guard must keep the finally's setSending(false) from running on
-    // the unmounted component.
+    // Unmount while the request is still in flight, then let it resolve. The
+    // mountedRef guard must short-circuit the whole post-await success path
+    // (setJustSent / setCooldown / toast) on the unmounted instance.
     unmount();
     await act(async () => {
       resolveSend({});
     });
-    // Reaching here without an unhandled error is the assertion.
+
+    // Observable proof the guard ran: the success toast — which sits AFTER the
+    // guard in handleSend — must NOT fire post-unmount. Under React 18 a stray
+    // setState no longer warns, so this toast assertion (not "didn't throw") is
+    // what actually fails if the guard is removed.
     expect(sendVerificationEmail).toHaveBeenCalledTimes(1);
+    expect(mockToast).not.toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Verification email requested' }),
+    );
   });
 });

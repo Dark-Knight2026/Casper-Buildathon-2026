@@ -65,6 +65,11 @@ export function EmailVerificationCard() {
     try {
       const fn = justSent ? resendVerificationEmail : sendVerificationEmail;
       const response: VerifyEmailSendResponse = await fn();
+      // Bail out if the component unmounted while the request was in flight, so
+      // none of the post-await setState calls (justSent/cooldown/devToken) run
+      // on an unmounted instance. `finally` still skips setSending via its own
+      // guard.
+      if (!mountedRef.current) return;
       setJustSent(true);
       setCooldown(RESEND_COOLDOWN_SECONDS);
       if (response.dev_verification_token && import.meta.env.DEV) {
@@ -77,6 +82,9 @@ export function EmailVerificationCard() {
         description: 'Check your inbox in a minute or so.',
       });
     } catch (err) {
+      // Same post-await unmount guard as the success path: skip the error
+      // setCooldown / toasts if the component is gone.
+      if (!mountedRef.current) return;
       const code = err instanceof Error && 'statusCode' in err
         ? (err as { statusCode?: number }).statusCode
         : undefined;

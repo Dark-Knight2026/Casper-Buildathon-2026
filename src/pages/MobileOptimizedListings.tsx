@@ -1,3 +1,8 @@
+// DEAD CODE (kept intentionally, not yet removed): this page has no route in
+// App.tsx and is not imported by any live code (only mentioned in a comment in
+// data/mockProperties.ts). It is the sole consumer of the Mobile* component
+// family (MobileNavigation, MobileSearchBar, MobileFilterDrawer,
+// MobilePropertyList, MobileComparisonView), which are therefore dead too.
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Property } from '@/types/property';

@@ -13,6 +13,7 @@ type Status =
   | 'confirming'
   | 'success'
   | 'invalid_token'
+  | 'email_taken'
   | 'no_token'
   | 'needs_login'
   | 'generic_error';
@@ -30,6 +31,13 @@ function classifyError(err: unknown): Exclude<Status, 'confirming' | 'success' |
     // distinguish by the machine code, not the status alone.
     if (status === 401 && (code === 'invalid_token' || code === 'missing_access_token')) {
       return 'needs_login';
+    }
+    // 409 means the target email was claimed by another account between the
+    // change request and this confirmation. Retrying the same token will always
+    // 409 again, so route it to its own dead-end screen (no Retry) with an
+    // actionable message instead of the generic "try again" path.
+    if (status === 409) {
+      return 'email_taken';
     }
     // Bad / expired / consumed token (401 invalid_email_change_token, 404/410) or
     // a malformed token (400). None are fixed by logging in or retrying the same
@@ -167,6 +175,20 @@ export default function ConfirmEmailChange() {
                 Request a new change from your profile.
               </p>
             </div>
+          )}
+
+          {status === 'email_taken' && (
+            <>
+              <Alert variant="destructive">
+                <AlertDescription>
+                  This email is already registered to another account. Request a different
+                  email change from your profile.
+                </AlertDescription>
+              </Alert>
+              <Button asChild variant="outline" className="w-full">
+                <Link to={getDashboardRoute(profile?.role)}>Back to dashboard</Link>
+              </Button>
+            </>
           )}
 
           {status === 'generic_error' && (
