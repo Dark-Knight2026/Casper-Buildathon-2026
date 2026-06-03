@@ -85,6 +85,24 @@ async fn send_and_take_token(
     common::extract_verify_token(mailer)
 }
 
+/// Flips `email_verified` to TRUE behind the handler's back, mirroring "the
+/// address was verified by another path". Every other column - including any
+/// live token slot in Redis - is left intact, so callers can drive the
+/// already-verified branches without a second concurrent request.
+async fn mark_email_verified(pool: &PgPool, user_id: Uuid) {
+    sqlx::query!(
+        r"
+            UPDATE users
+            SET email_verified = TRUE
+            WHERE id = $1
+        ",
+        user_id,
+    )
+    .execute(pool)
+    .await
+    .expect("mark email verified out of band");
+}
+
 /// Happy path: send then confirm flips `email_verified`, lets the trigger
 /// raise `verification_level` to `email`, and rotates both auth cookies.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
@@ -317,17 +335,7 @@ async fn confirm_already_verified_returns_200_without_cookies(pool: PgPool) {
     // Flip the flag behind the handler's back, leaving the token slot intact.
     // This reproduces the "verified by another path between send and confirm"
     // race without needing two concurrent requests.
-    sqlx::query!(
-        r"
-            UPDATE users
-            SET email_verified = TRUE
-            WHERE id = $1
-        ",
-        session.user_id,
-    )
-    .execute(&env.state.db)
-    .await
-    .expect("pre-verify out of band");
+    mark_email_verified(&env.state.db, session.user_id).await;
 
     let confirm = env
         .server
@@ -591,6 +599,60 @@ async fn send_overwrites_previous_token_slot(pool: PgPool) {
     assert_ne!(stored, first_hash, "the previous hash is gone");
 }
 
+/// `/send` has no `email_verified` short-circuit: an already-verified user who
+/// taps it still gets `200` and a fresh token. That is safe by design - the
+/// guard lives one layer down, so redeeming the token takes the
+/// `AlreadyVerified` branch (`200 + profile`, NO `Set-Cookie`) and the user is
+/// not signed out of their other devices. This pins the intended idempotency.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn send_to_already_verified_user_yields_noop_confirm(pool: PgPool) {
+    let (env, mailer) = common::setup_test_server_capturing(pool, true).await;
+    let session = common::login_and_extract(&env).await;
+    let email = common::seed_email(&env.state.db, session.user_id).await;
+    mark_email_verified(&env.state.db, session.user_id).await;
+
+    // No short-circuit: the send proceeds and mints a redeemable token.
+    let token = send_and_take_token(&env, &mailer, &session.access_token).await;
+
+    let confirm = env
+        .server
+        .post(CONFIRM_URI)
+        .add_header(COOKIE, format!("access_token={}", session.access_token))
+        .json(&json!({ "token": token }))
+        .await;
+    assert_eq!(confirm.status_code(), StatusCode::OK);
+
+    // AlreadyVerified branch: the body is the current profile, not an error.
+    let body = confirm.json::<Value>();
+    assert_eq!(
+        body["id"].as_str(),
+        Some(session.user_id.to_string().as_str())
+    );
+    assert_eq!(body["email"].as_str(), Some(email.as_str()));
+
+    // The defining contract: a no-op confirm must NOT rotate the token pair.
+    assert!(
+        confirm.maybe_cookie("access_token").is_none(),
+        "send-to-verified confirm must not re-issue the access cookie",
+    );
+    assert!(
+        confirm.maybe_cookie("refresh_token").is_none(),
+        "send-to-verified confirm must not re-issue the refresh cookie",
+    );
+
+    // The pre-existing session therefore survives untouched.
+    let refresh = env
+        .server
+        .post("/api/v1/auth/refresh")
+        .add_header(COOKIE, format!("refresh_token={}", session.refresh_token))
+        .await;
+    assert_eq!(
+        refresh.status_code(),
+        StatusCode::NO_CONTENT,
+        "sending to an already-verified user leaves the session intact",
+    );
+}
+
 // /resend endpoint ------------------------------------------------------------
 //
 // `/resend` is a thin alias onto the send handler. These pin that the alias is
@@ -677,4 +739,54 @@ async fn resend_overwrites_send_token_slot(pool: PgPool) {
     let resend_hash = <[u8; 32]>::from(Sha256::digest(resend_token.as_bytes()));
     assert_eq!(stored, resend_hash, "slot holds the resend token's hash");
     assert_ne!(stored, send_hash, "the prior send hash is gone");
+}
+
+/// `/resend` shares the send handler, so it inherits the same lack of an
+/// `email_verified` short-circuit: an already-verified user who resends gets
+/// `200` and a fresh token whose confirm is the same `AlreadyVerified` no-op -
+/// profile body, no cookie rotation, session preserved.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn resend_to_already_verified_user_yields_noop_confirm(pool: PgPool) {
+    let (env, mailer) = common::setup_test_server_capturing(pool, true).await;
+    let session = common::login_and_extract(&env).await;
+    let email = common::seed_email(&env.state.db, session.user_id).await;
+    mark_email_verified(&env.state.db, session.user_id).await;
+
+    let resend = post_resend(&env, &session.access_token).await;
+    assert_eq!(
+        resend.status_code(),
+        StatusCode::OK,
+        "resend has no verified short-circuit either",
+    );
+    let token = common::extract_verify_token(&mailer);
+
+    let confirm = env
+        .server
+        .post(CONFIRM_URI)
+        .add_header(COOKIE, format!("access_token={}", session.access_token))
+        .json(&json!({ "token": token }))
+        .await;
+    assert_eq!(confirm.status_code(), StatusCode::OK);
+
+    let body = confirm.json::<Value>();
+    assert_eq!(body["email"].as_str(), Some(email.as_str()));
+    assert!(
+        confirm.maybe_cookie("access_token").is_none(),
+        "resend-to-verified confirm must not re-issue the access cookie",
+    );
+    assert!(
+        confirm.maybe_cookie("refresh_token").is_none(),
+        "resend-to-verified confirm must not re-issue the refresh cookie",
+    );
+
+    let refresh = env
+        .server
+        .post("/api/v1/auth/refresh")
+        .add_header(COOKIE, format!("refresh_token={}", session.refresh_token))
+        .await;
+    assert_eq!(
+        refresh.status_code(),
+        StatusCode::NO_CONTENT,
+        "resending to an already-verified user leaves the session intact",
+    );
 }
