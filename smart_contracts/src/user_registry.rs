@@ -5,7 +5,7 @@ use crate::common;
 use crate::user_registry::types::UserStatus;
 use crate::user_registry::{
     errors::Error,
-    events::{ActiveWalletReplaced, UserCreated, UserStatusSet},
+    events::{ActiveWalletReplaced, UserCreated, UserRoleFlagsSet, UserStatusSet},
     types::{UserRecord, WalletStatus},
 };
 
@@ -90,6 +90,12 @@ pub mod events {
         pub user_id: U256,
         pub status: UserStatus,
     }
+
+    #[odra::event]
+    pub struct UserRoleFlagsSet {
+        pub user_id: U256,
+        pub role_flags: u32,
+    }
 }
 
 // =============================================================================
@@ -116,6 +122,8 @@ pub mod errors {
 #[odra::module(errors = Error, events = [
   ActiveWalletReplaced,
   UserCreated,
+  UserStatusSet,
+  UserRoleFlagsSet,
 ])]
 pub struct UserRegistry {
     /// Access control for identity and role managers.
@@ -314,6 +322,21 @@ impl UserRegistry {
         self.users.set(&user_id, record);
 
         self.env().emit_event(UserStatusSet { user_id, status });
+    }
+
+    /// Sets additive capability flags for a user.
+    /// Restricted to `USER_ROLE_MANAGER`.
+    pub fn set_role_flags(&mut self, user_id: U256, role_flags: u32) {
+        self.assert_role(ROLE_USER_ROLE_MANAGER);
+
+        let mut record = self.get_user(user_id);
+        record.role_flags = role_flags;
+        self.users.set(&user_id, record);
+
+        self.env().emit_event(UserRoleFlagsSet {
+            user_id,
+            role_flags,
+        });
     }
 
     // =========================================================================
