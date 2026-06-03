@@ -397,6 +397,38 @@ async fn send_rate_limited_after_first_within_minute(pool: PgPool) {
     );
 }
 
+/// TOCTOU regression: two *concurrent* sends must not both clear the 1/min cap.
+/// With the read-only check and the `INCR` as separate round-trips, both
+/// requests could read count=0, both pass, and both increment past
+/// `VERIFY_EMAIL_SEND_PER_MINUTE_MAX = 1` - two 200s and a counter of 2. The
+/// fused atomic reserve serializes them in Redis, so exactly one wins (200) and
+/// the other is rejected (429).
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn concurrent_sends_serialize_one_winner(pool: PgPool) {
+    let env = common::setup_test_server(pool, true).await;
+    let session = common::login_and_extract(&env).await;
+    common::seed_email(&env.state.db, session.user_id).await;
+
+    let cookie_header = format!("access_token={}", session.access_token);
+    let first = env
+        .server
+        .post(SEND_URI)
+        .add_header(COOKIE, cookie_header.clone());
+    let second = env.server.post(SEND_URI).add_header(COOKIE, cookie_header);
+
+    let (a, b) = tokio::join!(first, second);
+
+    let codes = [a.status_code(), b.status_code()];
+    assert!(
+        codes.contains(&StatusCode::OK),
+        "expected exactly one concurrent send to pass the 1/min cap, got {codes:?}",
+    );
+    assert!(
+        codes.contains(&StatusCode::TOO_MANY_REQUESTS),
+        "expected the losing concurrent send to be rate-limited, got {codes:?}",
+    );
+}
+
 /// Once the per-minute window elapses, a send is allowed again - the hourly
 /// cap of 5 is not yet reached.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
