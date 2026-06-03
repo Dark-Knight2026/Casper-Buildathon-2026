@@ -37,5 +37,5 @@ mod compliance_policy;
 #[path = "../tests/property_fraction_token.rs"]
 mod property_fraction_token;
 
-#[path = "../tests/revenue_distributor.rs"]
-mod revenue_distributor;
+#[path = "../tests/user_registry.rs"]
+mod user_registry;
