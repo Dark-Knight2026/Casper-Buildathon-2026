@@ -2,9 +2,10 @@ use odra::{casper_types::U256, prelude::*};
 use odra_modules::access::{AccessControl, Role, DEFAULT_ADMIN_ROLE};
 
 use crate::common;
+use crate::user_registry::types::UserStatus;
 use crate::user_registry::{
     errors::Error,
-    events::UserCreated,
+    events::{ActiveWalletReplaced, UserCreated, UserStatusSet},
     types::{UserRecord, WalletStatus},
 };
 
@@ -76,6 +77,19 @@ pub mod events {
         pub active_wallet: Address,
         pub role_flags: u32,
     }
+
+    #[odra::event]
+    pub struct ActiveWalletReplaced {
+        pub user_id: U256,
+        pub old_wallet: Address,
+        pub new_wallet: Address,
+    }
+
+    #[odra::event]
+    pub struct UserStatusSet {
+        pub user_id: U256,
+        pub status: UserStatus,
+    }
 }
 
 // =============================================================================
@@ -93,7 +107,10 @@ pub mod errors {
 // Contract
 // =============================================================================
 
-#[odra::module(errors = Error, events = [UserCreated])]
+#[odra::module(errors = Error, events = [
+  ActiveWalletReplaced,
+  UserCreated,
+])]
 pub struct UserRegistry {
     /// Access control for identity and role managers.
     access_control: SubModule<AccessControl>,
@@ -126,6 +143,9 @@ impl UserRegistry {
     // Identity Management
     // =========================================================================
 
+    /// Creates a user record linked to one active wallet.
+    /// Restricted to `IDENTITY_MANAGER`.
+    /// @dev `identity_has` must be an opaque backend-generated identifier.
     pub fn create_user(
         &mut self,
         identity_hash: [u8; 32],
@@ -162,5 +182,44 @@ impl UserRegistry {
         });
 
         user_id
+    }
+
+    /// Replaces the user's active wallet and marks the old wallet as revoked.
+    /// Restricted to `IDENTITY_MANAGER`.
+    pub fn replace_active_wallet(&mut self, user_id: U256, new_wallet: Address) {
+        // TODO: Add asserts
+
+        let mut record = self.get_user(user_id);
+        let old_wallet = record.active_wallet;
+
+        record.active_wallet = new_wallet;
+        self.users.set(&user_id, record);
+
+        self.wallet_to_user_id.set(&old_wallet, None);
+        self.wallet_statuses.set(&old_wallet, WalletStatus::Revoked);
+        self.wallet_to_user_id.set(&new_wallet, Some(user_id));
+        self.wallet_statuses.set(&new_wallet, WalletStatus::Active);
+
+        let mut history = self.wallet_history.get_or_default(&user_id);
+        history.push(new_wallet);
+        self.wallet_history.set(&user_id, history);
+
+        self.env().emit_event(ActiveWalletReplaced {
+            user_id,
+            old_wallet,
+            new_wallet,
+        });
+    }
+
+    /// Sets whether user is active or suspended.
+    /// Restricted to `IDENTITY_MANAGER`.
+    pub fn set_user_status(&mut self, user_id: U256, status: UserStatus) {
+        // TODO: Add asserts
+
+        let mut record = self.get_user(user_id);
+        record.status = status;
+        self.users.set(&user_id, record);
+
+        self.env().emit_event(UserStatusSet { user_id, status });
     }
 }
