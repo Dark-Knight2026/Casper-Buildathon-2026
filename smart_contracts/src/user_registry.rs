@@ -174,6 +174,10 @@ impl UserRegistry {
         self.identity_to_user_id.get(&identity_hash).unwrap_or(None)
     }
 
+    pub fn get_user_id_by_wallet(&self, wallet: Address) -> Option<U256> {
+        self.wallet_to_user_id.get(&wallet).unwrap_or(None)
+    }
+
     /// Returns the user ID for `wallet`, if the wallet is currently active.
     pub fn get_active_wallet(&self, user_id: U256) -> Address {
         self.get_user(user_id).active_wallet
