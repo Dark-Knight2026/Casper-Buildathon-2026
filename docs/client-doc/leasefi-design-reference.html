@@ -1,0 +1,2366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LeaseFi · Design reference · Phase 1 Critical 6</title>
+<meta name="description" content="Authoritative visual reference for LeaseFi Phase 1 frontend implementation. Internal use only.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.5.0/dist/tabler-icons.min.css">
+<style>
+:root {
+  --primary-50: #EFF6FF;
+  --primary-100: #DBEAFE;
+  --primary-200: #BFDBFE;
+  --primary-500: #2563EB;
+  --primary-600: #1D4ED8;
+  --primary-700: #1E40AF;
+  --primary-900: #1E3A8A;
+  --accent-50: #FFF7ED;
+  --accent-100: #FFEDD5;
+  --accent-500: #F97316;
+  --accent-700: #C2410C;
+  --accent-800: #9A3412;
+  --success-50: #F0FDF4;
+  --success-500: #10B981;
+  --success-700: #047857;
+  --warning-50: #FEFCE8;
+  --warning-700: #A16207;
+  --danger-50: #FEF2F2;
+  --danger-700: #B91C1C;
+  --neutral-50: #FAFAF9;
+  --neutral-100: #F5F5F4;
+  --neutral-200: #E7E5E4;
+  --neutral-400: #A8A29E;
+  --neutral-600: #57534E;
+  --neutral-800: #292524;
+  --neutral-900: #1C1917;
+  --doc-bg: #F7F5F1;
+  --font-sans: 'IBM Plex Sans', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  font-family: var(--font-sans);
+  background: var(--doc-bg);
+  color: var(--neutral-900);
+  font-size: 15px;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+.layout {
+  display: grid;
+  grid-template-columns: 256px 1fr;
+  min-height: 100vh;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+.sidebar {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  padding: 36px 28px 36px 36px;
+  border-right: 1px solid var(--neutral-200);
+  background: var(--doc-bg);
+  overflow-y: auto;
+}
+.brand {
+  font-size: 19px;
+  font-weight: 500;
+  color: var(--primary-700);
+  letter-spacing: -0.015em;
+  margin-bottom: 2px;
+}
+.brand-tag {
+  font-size: 10px;
+  color: var(--neutral-600);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: 500;
+  margin-bottom: 36px;
+}
+.nav-section {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--neutral-400);
+  margin: 24px 0 10px;
+  font-weight: 500;
+}
+.nav-section:first-of-type { margin-top: 0; }
+.nav a {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 5px 0 5px 12px;
+  margin-left: -12px;
+  color: var(--neutral-800);
+  text-decoration: none;
+  font-size: 13px;
+  border-left: 2px solid transparent;
+  transition: color 120ms, border-color 120ms;
+  line-height: 1.5;
+}
+.nav a:hover { color: var(--primary-700); }
+.nav a.active { color: var(--primary-700); border-left-color: var(--primary-700); }
+.nav a .num {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--neutral-400);
+  flex-shrink: 0;
+}
+.nav a.active .num { color: var(--primary-700); }
+.content {
+  padding: 64px 64px 96px;
+  max-width: 920px;
+}
+.hero {
+  margin-bottom: 64px;
+  padding-bottom: 36px;
+  border-bottom: 1px solid var(--neutral-200);
+}
+.hero h1 {
+  font-size: 36px;
+  font-weight: 500;
+  letter-spacing: -0.025em;
+  line-height: 1.15;
+  margin-bottom: 14px;
+}
+.hero .lede {
+  font-size: 17px;
+  color: var(--neutral-600);
+  line-height: 1.6;
+  max-width: 680px;
+  margin-bottom: 28px;
+}
+.hero-meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  font-size: 12px;
+}
+.hero-meta-item {
+  padding: 10px 14px;
+  background: white;
+  border: 1px solid var(--neutral-200);
+  border-radius: 8px;
+}
+.hero-meta-item .k {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--neutral-400);
+  font-weight: 500;
+  display: block;
+  margin-bottom: 2px;
+}
+.hero-meta-item .v {
+  color: var(--neutral-900);
+  font-weight: 500;
+}
+.notice {
+  background: var(--accent-50);
+  border: 1px solid var(--accent-100);
+  border-radius: 10px;
+  padding: 16px 20px;
+  margin-top: 24px;
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+.notice i { color: var(--accent-700); font-size: 18px; flex-shrink: 0; margin-top: 2px; }
+.notice-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--accent-800);
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.notice-body { font-size: 13px; color: var(--accent-800); line-height: 1.55; }
+section {
+  margin-bottom: 80px;
+  scroll-margin-top: 24px;
+}
+.section-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.section-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: var(--primary-700);
+  color: white;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: var(--font-mono);
+}
+.section-tag {
+  font-size: 10px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 500;
+}
+.tag-tenant { background: var(--accent-50); color: var(--accent-700); }
+.tag-pm { background: var(--primary-50); color: var(--primary-700); }
+.tag-both { background: var(--neutral-100); color: var(--neutral-600); }
+.tag-mandatory { background: var(--danger-50); color: var(--danger-700); }
+.tag-security { background: var(--neutral-900); color: white; }
+section h2 {
+  font-size: 26px;
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  margin-bottom: 10px;
+  line-height: 1.25;
+}
+.section-intro {
+  font-size: 16px;
+  color: var(--neutral-600);
+  max-width: 680px;
+  margin-bottom: 16px;
+  line-height: 1.65;
+}
+.section-refs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 28px;
+  flex-wrap: wrap;
+  font-size: 11px;
+  color: var(--neutral-600);
+}
+.section-refs code {
+  background: var(--neutral-100);
+  padding: 3px 9px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--neutral-800);
+}
+.mockup-frame {
+  background: var(--neutral-100);
+  border-radius: 14px;
+  padding: 28px;
+  margin-bottom: 24px;
+  border: 1px solid var(--neutral-200);
+}
+.mockup-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--neutral-400);
+  font-weight: 500;
+  margin-bottom: 12px;
+  text-align: center;
+}
+.watch-outs {
+  background: white;
+  border-left: 3px solid var(--accent-500);
+  padding: 18px 22px;
+  border-radius: 0 8px 8px 0;
+  margin-bottom: 20px;
+}
+.watch-outs-title {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--accent-700);
+  font-weight: 500;
+  margin-bottom: 12px;
+}
+.watch-outs ul { list-style: none; }
+.watch-outs li {
+  font-size: 13px;
+  color: var(--neutral-800);
+  padding: 5px 0 5px 22px;
+  position: relative;
+  line-height: 1.55;
+}
+.watch-outs li::before {
+  content: "→";
+  position: absolute;
+  left: 0;
+  top: 5px;
+  color: var(--accent-500);
+  font-weight: 500;
+}
+.watch-outs li strong { color: var(--neutral-900); font-weight: 500; }
+.copy-rules {
+  background: white;
+  border: 1px solid var(--neutral-200);
+  border-radius: 8px;
+  padding: 16px 20px;
+  margin-bottom: 20px;
+  font-size: 13px;
+}
+.copy-rules-title {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--neutral-600);
+  font-weight: 500;
+  margin-bottom: 10px;
+}
+.copy-rules table { width: 100%; border-collapse: collapse; }
+.copy-rules td { padding: 6px 0; vertical-align: top; line-height: 1.55; }
+.copy-rules td:first-child {
+  width: 80px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+}
+.copy-rules td:first-child.good { color: var(--success-700); }
+.copy-rules td:first-child.bad { color: var(--danger-700); }
+.copy-rules td:last-child { color: var(--neutral-800); }
+.closing {
+  margin-top: 96px;
+  padding-top: 36px;
+  border-top: 1px solid var(--neutral-200);
+}
+.closing h2 { font-size: 22px; margin-bottom: 12px; }
+.closing p { color: var(--neutral-600); margin-bottom: 16px; max-width: 680px; }
+.closing ul { color: var(--neutral-800); margin-left: 20px; }
+.closing li { margin-bottom: 8px; font-size: 14px; }
+footer {
+  margin-top: 64px;
+  padding-top: 24px;
+  border-top: 1px solid var(--neutral-200);
+  font-size: 11px;
+  color: var(--neutral-400);
+}
+footer strong { color: var(--neutral-600); font-weight: 500; }
+/* States row for TransactionStatus section */
+.state-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+.state-card {
+  background: white;
+  border: 1px solid var(--neutral-200);
+  border-radius: 12px;
+  padding: 18px;
+}
+.state-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--neutral-400);
+  margin-bottom: 12px;
+  font-weight: 500;
+}
+@media print {
+  .sidebar { display: none; }
+  .layout { grid-template-columns: 1fr; max-width: none; }
+  .content { padding: 24px; max-width: none; }
+  body { background: white; }
+  section { page-break-inside: avoid; break-inside: avoid; }
+  .mockup-frame { break-inside: avoid; }
+}
+@media (max-width: 960px) {
+  .layout { grid-template-columns: 1fr; }
+  .sidebar { position: static; height: auto; }
+  .content { padding: 36px 28px 64px; }
+}
+</style>
+</head>
+<body>
+<div class="layout">
+<aside class="sidebar">
+<div class="brand">LeaseFi</div>
+<div class="brand-tag">Design reference · Phase 1 + Phase 2 preview</div>
+
+<div class="nav-section">Critical 6 surfaces</div>
+<nav class="nav">
+<a href="#tenant-home"><span class="num">01</span>Tenant home</a>
+<a href="#pm-dashboard"><span class="num">02</span>Landlord / PM dashboard</a>
+<a href="#pay-rent"><span class="num">03</span>Pay rent &amp; FeeDisplay</a>
+<a href="#presignature"><span class="num">04</span>PreSignature modal</a>
+<a href="#invitation"><span class="num">05</span>Invitation landing</a>
+<a href="#lease-signing"><span class="num">06</span>Lease signing journey</a>
+<a href="#dispute"><span class="num">07</span>Dispute filing</a>
+</nav>
+
+<div class="nav-section">Mandatory components</div>
+<nav class="nav">
+<a href="#tx-status"><span class="num">08</span>TransactionStatus states</a>
+<a href="#compliance"><span class="num">09</span>Compliance failure surface</a>
+<a href="#kyc-gate"><span class="num">10</span>KYCGate &amp; attestation</a>
+</nav>
+
+<div class="nav-section">Phase 2 preview</div>
+<nav class="nav">
+<a href="#phase2-marketplace"><span class="num">11</span>Marketplace &amp; instant-accept</a>
+</nav>
+
+<div class="nav-section">Closing</div>
+<nav class="nav">
+<a href="#whats-missing"><span class="num">12</span>What's not in this doc</a>
+</nav>
+</aside>
+
+<main class="content">
+
+<header class="hero">
+<h1>LeaseFi design reference</h1>
+<p class="lede">The visual spine for Phase 1 frontend implementation. Six Critical 6 surfaces plus three mandatory shared components. Each section is a watch-out, not a suggestion — these patterns are load-bearing.</p>
+<div class="hero-meta">
+<div class="hero-meta-item"><span class="k">Audience</span><span class="v">Senior frontend engineer</span></div>
+<div class="hero-meta-item"><span class="k">Voice</span><span class="v">Airbnb-warm + Stessa-functional</span></div>
+<div class="hero-meta-item"><span class="k">Stack</span><span class="v">Next.js 15 · React 19 · shadcn</span></div>
+<div class="hero-meta-item"><span class="k">Status</span><span class="v">Authoritative, Phase 1</span></div>
+</div>
+<div class="notice">
+<i class="ti ti-lock"></i>
+<div>
+<div class="notice-title">Confidential</div>
+<div class="notice-body">LeaseFi specifications and source code are proprietary. Do not share externally without written permission. No public marketplaces, no Discord/Slack channels, no conference talks.</div>
+</div>
+</div>
+</header>
+
+<!-- ============================================================ -->
+<!-- SECTION 1: TENANT HOME                                       -->
+<!-- ============================================================ -->
+<section id="tenant-home">
+<div class="section-meta">
+<div class="section-number">1</div>
+<span class="section-tag tag-tenant">Tenant</span>
+<span class="section-tag tag-both">App shell</span>
+</div>
+<h2>Tenant home</h2>
+<p class="section-intro">The Airbnb-warm welcoming surface. Single-action emphasis. Generous whitespace. Status-forward. This is the dashboard for any wallet with 0–1 leases owned as landlord.</p>
+<div class="section-refs">
+<code>07-ui-ux-reference.md §1, §3</code>
+<code>PRD §4.2</code>
+<code>CLAUDE.md §3</code>
+</div>
+
+<div class="mockup-frame">
+<div class="mockup-label">Authenticated tenant view · Wallet connected · KYC Tier 1</div>
+<div style="background:#FFFFFF;border-radius:10px;display:grid;grid-template-columns:172px 1fr;min-height:540px;border:0.5px solid #E7E5E4;overflow:hidden;color:#1C1917;font-family:var(--font-sans);">
+<aside style="background:#FAFAF9;border-right:0.5px solid #E7E5E4;display:flex;flex-direction:column;padding:18px 12px;">
+<div style="font-size:17px;font-weight:500;color:#1E40AF;margin-bottom:26px;padding:0 8px;letter-spacing:-0.01em;">LeaseFi</div>
+<nav style="display:flex;flex-direction:column;gap:2px;">
+<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:6px;background:#DBEAFE;color:#1E3A8A;font-size:13px;font-weight:500;"><i class="ti ti-home" style="font-size:16px;"></i>Home</div>
+<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:6px;color:#57534E;font-size:13px;"><i class="ti ti-file-text" style="font-size:16px;"></i>Leases</div>
+<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:6px;color:#57534E;font-size:13px;"><i class="ti ti-cash" style="font-size:16px;"></i>Pay</div>
+<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:6px;color:#57534E;font-size:13px;"><i class="ti ti-scale" style="font-size:16px;"></i>Disputes</div>
+<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:6px;color:#57534E;font-size:13px;"><i class="ti ti-settings" style="font-size:16px;"></i>Settings</div>
+</nav>
+<div style="margin-top:auto;padding:11px;background:#FFFFFF;border:0.5px solid #E7E5E4;border-radius:6px;">
+<div style="display:flex;align-items:center;gap:7px;margin-bottom:4px;"><div style="width:7px;height:7px;border-radius:50%;background:#10B981;"></div><span style="font-family:var(--font-mono);font-size:11px;color:#292524;">0x…4f3a</span></div>
+<div style="font-size:10px;color:#57534E;">KYC Tier 1 verified</div>
+</div>
+</aside>
+<main style="min-width:0;display:flex;flex-direction:column;">
+<header style="display:flex;align-items:center;justify-content:space-between;padding:14px 22px;border-bottom:0.5px solid #E7E5E4;">
+<h1 style="font-size:15px;font-weight:500;margin:0;">Home</h1>
+<div style="display:flex;align-items:center;gap:6px;padding:4px 10px;background:#FFF7ED;border:0.5px solid #FFEDD5;border-radius:999px;font-size:11px;color:#C2410C;"><i class="ti ti-loader-2" style="font-size:12px;"></i><span>1 confirming · 3 of 8</span></div>
+</header>
+<div style="padding:22px;display:flex;flex-direction:column;gap:14px;">
+<div style="font-size:18px;font-weight:500;">Welcome back, Sarah</div>
+<div style="background:#FFFFFF;border:0.5px solid #E7E5E4;border-radius:12px;padding:20px;">
+<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;">
+<div>
+<div style="font-size:10px;color:#A8A29E;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;">Active lease</div>
+<div style="font-size:14px;font-weight:500;color:#292524;">123 Main St, Anytown FL</div>
+</div>
+<div style="display:flex;align-items:center;gap:4px;padding:3px 8px;background:#F0FDF4;border-radius:999px;font-size:10px;color:#047857;"><i class="ti ti-check" style="font-size:11px;"></i><span>Active</span></div>
+</div>
+<div style="margin-bottom:16px;">
+<div style="font-size:12px;color:#57534E;margin-bottom:4px;">Next rent due in 6 days</div>
+<div style="font-size:28px;font-weight:500;color:#1C1917;font-family:var(--font-mono);letter-spacing:-0.02em;">$1,500.00 <span style="font-size:13px;color:#A8A29E;font-weight:400;">USDC</span></div>
+</div>
+<button style="background:#2563EB;color:#FFFFFF;border:none;border-radius:8px;padding:10px 18px;font-size:14px;font-weight:500;cursor:pointer;display:inline-flex;align-items:center;gap:8px;font-family:var(--font-sans);">Pay rent<i class="ti ti-arrow-right" style="font-size:16px;"></i></button>
+</div>
+<div>
+<div style="font-size:12px;font-weight:500;color:#292524;margin-bottom:8px;">Recent activity</div>
+<div style="background:#FFFFFF;border:0.5px solid #E7E5E4;border-radius:12px;overflow:hidden;">
+<div style="display:grid;grid-template-columns:20px 1fr auto;gap:12px;align-items:center;padding:11px 14px;border-bottom:0.5px solid #E7E5E4;"><i class="ti ti-check" style="font-size:15px;color:#10B981;"></i><div><div style="font-size:13px;color:#292524;">Rent paid</div><div style="font-size:11px;color:#A8A29E;">Dec 1, 2026 · finalized</div></div><div style="font-size:13px;color:#292524;font-family:var(--font-mono);">$1,500.00 USDC</div></div>
+<div style="display:grid;grid-template-columns:20px 1fr auto;gap:12px;align-items:center;padding:11px 14px;border-bottom:0.5px solid #E7E5E4;"><i class="ti ti-check" style="font-size:15px;color:#10B981;"></i><div><div style="font-size:13px;color:#292524;">Lease signed</div><div style="font-size:11px;color:#A8A29E;">Nov 15, 2026</div></div><div style="font-size:13px;color:#A8A29E;font-family:var(--font-mono);">—</div></div>
+<div style="display:grid;grid-template-columns:20px 1fr auto;gap:12px;align-items:center;padding:11px 14px;"><i class="ti ti-check" style="font-size:15px;color:#10B981;"></i><div><div style="font-size:13px;color:#292524;">Deposit funded</div><div style="font-size:11px;color:#A8A29E;">Nov 14, 2026 · refundable</div></div><div style="font-size:13px;color:#292524;font-family:var(--font-mono);">$3,000.00 USDC</div></div>
+</div>
+</div>
+</div>
+</main>
+</div>
+</div>
+
+<div class="watch-outs">
+<div class="watch-outs-title">Watch-outs</div>
+<ul>
+<li><strong>One primary CTA per surface.</strong> "Pay rent" is the only blue button on this page. No competing actions.</li>
+<li><strong>Wallet status indicator is non-negotiable.</strong> Bottom-left of sidebar, always visible. Clicking expands to full address, copy, disconnect, KYC tier.</li>
+<li><strong>Greeting uses first name from KYC if available, else shortened address.</strong> Never display full wallet address in greeting copy — it's noise.</li>
+<li><strong>Status pills carry color AND icon.</strong> WCAG 2.1 AA color-independence. Never signal status with color alone.</li>
+<li><strong>Empty state ("no active lease") replaces the card.</strong> Don't render an empty card with disabled CTA — render the empty-state pattern.</li>
+</ul>
+</div>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION 2: PM DASHBOARD                                      -->
+<!-- ============================================================ -->
+<section id="pm-dashboard">
+<div class="section-meta">
+<div class="section-number">2</div>
+<span class="section-tag tag-pm">Landlord / PM</span>
+<span class="section-tag tag-both">App shell</span>
+</div>
+<h2>Landlord / PM dashboard</h2>
+<p class="section-intro">Same app shell, denser content. Auto-detected when wallet owns 2+ leases. Hero metrics, sortable portfolio table, status-by-color-and-icon. Stessa-functional in both layout and execution. PMs scan; they don't read.</p>
+<div class="section-refs">
+<code>07-ui-ux-reference.md §1, §3</code>
+<code>PRD §4.3</code>
+</div>
+
+<div class="mockup-frame">
+<div class="mockup-label">Authenticated PM view · Wallet owns ≥2 leases · KYC Tier 2</div>
+<div style="background:#FFFFFF;border-radius:10px;display:grid;grid-template-columns:172px 1fr;min-height:640px;border:0.5px solid #E7E5E4;overflow:hidden;color:#1C1917;font-family:var(--font-sans);">
+<aside style="background:#FAFAF9;border-right:0.5px solid #E7E5E4;display:flex;flex-direction:column;padding:18px 12px;">
+<div style="font-size:17px;font-weight:500;color:#1E40AF;margin-bottom:26px;padding:0 8px;letter-spacing:-0.01em;">LeaseFi</div>
+<nav style="display:flex;flex-direction:column;gap:2px;">
+<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:6px;background:#DBEAFE;color:#1E3A8A;font-size:13px;font-weight:500;"><i class="ti ti-home" style="font-size:16px;"></i>Home</div>
+<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:6px;color:#57534E;font-size:13px;"><i class="ti ti-building" style="font-size:16px;"></i>Properties</div>
+<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:6px;color:#57534E;font-size:13px;"><i class="ti ti-file-text" style="font-size:16px;"></i>Leases</div>
+<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:6px;color:#57534E;font-size:13px;"><i class="ti ti-users" style="font-size:16px;"></i>Tenants</div>
+<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:6px;color:#57534E;font-size:13px;"><i class="ti ti-chart-bar" style="font-size:16px;"></i>Reports</div>
+<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:6px;color:#57534E;font-size:13px;"><i class="ti ti-scale" style="font-size:16px;"></i>Disputes</div>
+<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:6px;color:#57534E;font-size:13px;"><i class="ti ti-settings" style="font-size:16px;"></i>Settings</div>
+</nav>
+<div style="margin-top:auto;padding:11px;background:#FFFFFF;border:0.5px solid #E7E5E4;border-radius:6px;">
+<div style="display:flex;align-items:center;gap:7px;margin-bottom:4px;"><div style="width:7px;height:7px;border-radius:50%;background:#10B981;"></div><span style="font-family:var(--font-mono);font-size:11px;color:#292524;">0x…91b2</span></div>
+<div style="font-size:10px;color:#57534E;">Acme Properties · Tier 2</div>
+</div>
+</aside>
+<main style="min-width:0;display:flex;flex-direction:column;">
+<header style="display:flex;align-items:center;justify-content:space-between;padding:14px 22px;border-bottom:0.5px solid #E7E5E4;">
+<h1 style="font-size:15px;font-weight:500;margin:0;">Properties</h1>
+<div style="display:flex;gap:8px;">
+<button style="background:#FFFFFF;color:#57534E;border:0.5px solid #E7E5E4;border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;font-family:var(--font-sans);"><i class="ti ti-download" style="font-size:14px;"></i>Export</button>
+<button style="background:#2563EB;color:#FFFFFF;border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:500;cursor:pointer;display:inline-flex;align-items:center;gap:6px;font-family:var(--font-sans);"><i class="ti ti-plus" style="font-size:14px;"></i>Add property</button>
+</div>
+</header>
+<div style="padding:20px 22px;display:flex;flex-direction:column;gap:14px;">
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;">
+<div style="background:#FAFAF9;border-radius:8px;padding:13px;"><div style="font-size:10px;color:#57534E;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;">Active leases</div><div style="font-size:24px;font-weight:500;">8</div></div>
+<div style="background:#FAFAF9;border-radius:8px;padding:13px;"><div style="font-size:10px;color:#57534E;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;">Monthly rent</div><div style="font-size:24px;font-weight:500;font-family:var(--font-mono);letter-spacing:-0.02em;">$24,500</div></div>
+<div style="background:#F0FDF4;border-radius:8px;padding:13px;"><div style="font-size:10px;color:#047857;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;">Collected (Dec)</div><div style="font-size:24px;font-weight:500;color:#047857;font-family:var(--font-mono);letter-spacing:-0.02em;">$22,700</div></div>
+<div style="background:#FEFCE8;border-radius:8px;padding:13px;"><div style="font-size:10px;color:#A16207;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;">Outstanding</div><div style="font-size:24px;font-weight:500;color:#A16207;font-family:var(--font-mono);letter-spacing:-0.02em;">$1,800</div></div>
+</div>
+
+<div style="background:#FFFFFF;border:0.5px solid #E7E5E4;border-radius:10px;overflow:hidden;">
+<div style="display:grid;grid-template-columns:1.6fr 1.2fr 0.9fr 1.1fr 20px;gap:8px;padding:10px 14px;background:#FAFAF9;border-bottom:0.5px solid #E7E5E4;font-size:10px;color:#57534E;text-transform:uppercase;letter-spacing:0.08em;">
+<div>Property</div><div>Tenant</div><div>Rent</div><div>Status</div><div></div>
+</div>
+<div style="display:grid;grid-template-columns:1.6fr 1.2fr 0.9fr 1.1fr 20px;gap:8px;padding:12px 14px;align-items:center;border-bottom:0.5px solid #E7E5E4;font-size:13px;">
+<div style="color:#292524;">123 Main St</div><div style="color:#57534E;">Sarah K.</div><div style="color:#292524;font-family:var(--font-mono);">$1,500</div>
+<div><span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:#F0FDF4;border-radius:999px;font-size:11px;color:#047857;"><i class="ti ti-check" style="font-size:11px;"></i>Paid Dec 1</span></div>
+<div style="color:#A8A29E;"><i class="ti ti-dots-vertical" style="font-size:15px;"></i></div>
+</div>
+<div style="display:grid;grid-template-columns:1.6fr 1.2fr 0.9fr 1.1fr 20px;gap:8px;padding:12px 14px;align-items:center;border-bottom:0.5px solid #E7E5E4;font-size:13px;">
+<div style="color:#292524;">456 Oak Ave</div><div style="color:#57534E;">Tom R.</div><div style="color:#292524;font-family:var(--font-mono);">$2,200</div>
+<div><span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:#FEFCE8;border-radius:999px;font-size:11px;color:#A16207;"><i class="ti ti-clock" style="font-size:11px;"></i>Due Dec 5</span></div>
+<div style="color:#A8A29E;"><i class="ti ti-dots-vertical" style="font-size:15px;"></i></div>
+</div>
+<div style="display:grid;grid-template-columns:1.6fr 1.2fr 0.9fr 1.1fr 20px;gap:8px;padding:12px 14px;align-items:center;border-bottom:0.5px solid #E7E5E4;font-size:13px;">
+<div style="color:#292524;">789 Elm Rd</div><div style="color:#57534E;">Mei L.</div><div style="color:#292524;font-family:var(--font-mono);">$1,800</div>
+<div><span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:#FEF2F2;border-radius:999px;font-size:11px;color:#B91C1C;"><i class="ti ti-alert-triangle" style="font-size:11px;"></i>3d late</span></div>
+<div style="color:#A8A29E;"><i class="ti ti-dots-vertical" style="font-size:15px;"></i></div>
+</div>
+<div style="display:grid;grid-template-columns:1.6fr 1.2fr 0.9fr 1.1fr 20px;gap:8px;padding:12px 14px;align-items:center;border-bottom:0.5px solid #E7E5E4;font-size:13px;">
+<div style="color:#292524;">234 Pine St</div><div style="color:#57534E;">Jordan A.</div><div style="color:#292524;font-family:var(--font-mono);">$2,800</div>
+<div><span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:#F0FDF4;border-radius:999px;font-size:11px;color:#047857;"><i class="ti ti-check" style="font-size:11px;"></i>Paid Dec 1</span></div>
+<div style="color:#A8A29E;"><i class="ti ti-dots-vertical" style="font-size:15px;"></i></div>
+</div>
+<div style="display:grid;grid-template-columns:1.6fr 1.2fr 0.9fr 1.1fr 20px;gap:8px;padding:12px 14px;align-items:center;border-bottom:0.5px solid #E7E5E4;font-size:13px;">
+<div style="color:#292524;">512 Birch Ln</div><div style="color:#57534E;">Priya N.</div><div style="color:#292524;font-family:var(--font-mono);">$1,650</div>
+<div><span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:#EFF6FF;border-radius:999px;font-size:11px;color:#1E40AF;"><i class="ti ti-scale" style="font-size:11px;"></i>Dispute open</span></div>
+<div style="color:#A8A29E;"><i class="ti ti-dots-vertical" style="font-size:15px;"></i></div>
+</div>
+<div style="display:grid;grid-template-columns:1.6fr 1.2fr 0.9fr 1.1fr 20px;gap:8px;padding:12px 14px;align-items:center;font-size:13px;">
+<div style="color:#292524;">670 Cedar Ct</div><div style="color:#57534E;">Ravi S.</div><div style="color:#292524;font-family:var(--font-mono);">$2,100</div>
+<div><span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:#FFF7ED;border-radius:999px;font-size:11px;color:#C2410C;"><i class="ti ti-loader-2" style="font-size:11px;"></i>Confirming</span></div>
+<div style="color:#A8A29E;"><i class="ti ti-dots-vertical" style="font-size:15px;"></i></div>
+</div>
+</div>
+</div>
+</main>
+</div>
+</div>
+
+<div class="watch-outs">
+<div class="watch-outs-title">Watch-outs</div>
+<ul>
+<li><strong>Audience detection is automatic.</strong> Count entity ownership: 0–1 leases as landlord renders tenant-style layout; 2+ flips to PM-style. Don't expose a user-facing mode toggle.</li>
+<li><strong>Surface the threshold crossing.</strong> When a tenant becomes a small landlord on a second property, render a one-time onboarding moment ("Your view just changed"). Silent re-flow erodes trust.</li>
+<li><strong>Hero metric color encodes state.</strong> Collected = success green; Outstanding = warning amber; "Dispute open" cells = primary blue (informational, not negative). Never red for "outstanding" — that's escalation, not status.</li>
+<li><strong>Status pills are link affordances.</strong> Click "3d late" → late-fee detail; click "Dispute open" → dispute view. The dots-vertical menu is for bulk actions only.</li>
+<li><strong>Table is the surface.</strong> Don't bury data in cards. PMs work in tables and need sort, filter, multi-select.</li>
+</ul>
+</div>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION 3: PAY RENT & FEE DISPLAY                            -->
+<!-- ============================================================ -->
+<section id="pay-rent">
+<div class="section-meta">
+<div class="section-number">3</div>
+<span class="section-tag tag-tenant">Tenant</span>
+<span class="section-tag tag-mandatory">FR-1.4.3.12</span>
+</div>
+<h2>Pay rent &amp; FeeDisplay component</h2>
+<p class="section-intro">The canonical fee-bearing flow. FeeDisplay format is regulatory-mandated and used identically across rent, late fee, buyout, deposit funding, and dispute filing. Button label includes the exact total — never "Submit" or "Pay now."</p>
+<div class="section-refs">
+<code>07-ui-ux-reference.md §4 (Flow 3)</code>
+<code>PRD FR-1.4.3.12</code>
+<code>CLAUDE.md §4</code>
+</div>
+
+<div class="mockup-frame">
+<div class="mockup-label">Path A · Direct USDC payment · Tenant has sufficient on-chain balance</div>
+<div style="background:#FAFAF9;border-radius:10px;padding:32px;border:0.5px solid #E7E5E4;display:flex;align-items:flex-start;justify-content:center;font-family:var(--font-sans);">
+<div style="background:#FFFFFF;border-radius:14px;border:0.5px solid #E7E5E4;padding:28px;max-width:440px;width:100%;">
+<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;"><a style="color:#57534E;font-size:12px;text-decoration:none;display:inline-flex;align-items:center;gap:4px;cursor:pointer;"><i class="ti ti-arrow-left" style="font-size:14px;"></i>Back</a></div>
+<h2 style="font-size:20px;font-weight:500;color:#1C1917;margin:0 0 4px;">Pay rent</h2>
+<div style="font-size:13px;color:#57534E;margin-bottom:20px;">123 Main St · December 2026</div>
+<div style="background:#FAFAF9;border-radius:10px;padding:16px 18px;margin-bottom:18px;">
+<div style="display:flex;justify-content:space-between;align-items:baseline;padding:6px 0;">
+<span style="font-size:13px;color:#57534E;">Rent amount</span>
+<span style="font-size:14px;color:#292524;font-family:var(--font-mono);">$1,500.00 USDC</span>
+</div>
+<div style="display:flex;justify-content:space-between;align-items:baseline;padding:6px 0;">
+<span style="font-size:13px;color:#57534E;">Protocol fee · 2%</span>
+<span style="font-size:14px;color:#292524;font-family:var(--font-mono);">$30.00 USDC</span>
+</div>
+<div style="height:0.5px;background:#E7E5E4;margin:8px 0;"></div>
+<div style="display:flex;justify-content:space-between;align-items:baseline;padding:6px 0;">
+<span style="font-size:13px;color:#292524;font-weight:500;">You'll pay</span>
+<span style="font-size:18px;color:#1C1917;font-family:var(--font-mono);font-weight:500;letter-spacing:-0.02em;">$1,530.00 USDC</span>
+</div>
+</div>
+<div style="background:#FFFFFF;border:0.5px solid #E7E5E4;border-radius:10px;padding:14px;margin-bottom:18px;">
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+<div style="font-size:11px;color:#A8A29E;text-transform:uppercase;letter-spacing:0.08em;">Paying from</div>
+<div style="display:flex;align-items:center;gap:4px;padding:2px 6px;background:#F0FDF4;border-radius:999px;font-size:10px;color:#047857;"><i class="ti ti-check" style="font-size:11px;"></i>Balance OK</div>
+</div>
+<div style="display:flex;align-items:center;gap:10px;">
+<div style="width:32px;height:32px;border-radius:8px;background:#DBEAFE;display:flex;align-items:center;justify-content:center;color:#1E40AF;"><i class="ti ti-wallet" style="font-size:18px;"></i></div>
+<div style="flex:1;">
+<div style="font-size:13px;color:#292524;font-weight:500;">Casper Wallet</div>
+<div style="font-size:11px;color:#57534E;font-family:var(--font-mono);">0x…4f3a · $2,000.00 USDC available</div>
+</div>
+</div>
+</div>
+<button style="background:#2563EB;color:#FFFFFF;border:none;border-radius:10px;padding:14px 20px;font-size:14px;font-weight:500;cursor:pointer;width:100%;display:inline-flex;align-items:center;justify-content:center;gap:8px;font-family:var(--font-sans);margin-bottom:10px;">Pay $1,530.00 USDC<i class="ti ti-arrow-right" style="font-size:16px;"></i></button>
+<div style="text-align:center;font-size:12px;color:#57534E;">Don't have USDC? <a style="color:#1D4ED8;text-decoration:none;font-weight:500;cursor:pointer;">Add funds with a card →</a></div>
+<div style="margin-top:18px;padding-top:14px;border-top:0.5px solid #F5F5F4;font-size:11px;color:#A8A29E;line-height:1.5;"><i class="ti ti-info-circle" style="font-size:12px;vertical-align:-1px;margin-right:4px;"></i>Prices as of Dec 1, 2026 · 09:14 UTC. Your wallet will show the same amount before you sign.</div>
+</div>
+</div>
+</div>
+
+<div class="copy-rules">
+<div class="copy-rules-title">FeeDisplay copy rules</div>
+<table>
+<tr><td class="good">GOOD</td><td>"Pay $1,530.00 USDC" — exact total on the button</td></tr>
+<tr><td class="good">GOOD</td><td>"Protocol fee · 2%" — explicit percentage shown</td></tr>
+<tr><td class="bad">BAD</td><td>"Submit" / "Pay now" / "Confirm" — fee disclosure hidden</td></tr>
+<tr><td class="bad">BAD</td><td>Fee in a tooltip or modal — must be inline and visible</td></tr>
+<tr><td class="bad">BAD</td><td>Marketing language like "Just $30!" — neutral, financial-grade only</td></tr>
+</table>
+</div>
+
+<div class="watch-outs">
+<div class="watch-outs-title">Watch-outs</div>
+<ul>
+<li><strong>FeeDisplay format is regulatory.</strong> Per PRD FR-1.4.3.12. Don't reformat the layout. Don't drop the percentage. Don't change "Total" to "Subtotal".</li>
+<li><strong>Use JetBrains Mono on all amounts.</strong> Decimal alignment matters in financial UI. Sans-serif numerals shift visually.</li>
+<li><strong>Display currency vs on-chain currency.</strong> The form shows USDC. The wallet popup will show the underlying CEP-18 amount. The "your wallet will show the same amount" note is required.</li>
+<li><strong>Pre-flight balance check is rendered.</strong> Don't open a wallet popup just to fail at balance. The "Balance OK" pill is the result of the on-chain read.</li>
+<li><strong>Path B fiat on-ramp link is always present.</strong> Even if balance is sufficient. Tenant may choose to fund from card to preserve USDC for other uses.</li>
+</ul>
+</div>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION 4: PRESIGNATURE MODAL                                -->
+<!-- ============================================================ -->
+<section id="presignature">
+<div class="section-meta">
+<div class="section-number">4</div>
+<span class="section-tag tag-both">Both audiences</span>
+<span class="section-tag tag-security">Security-critical</span>
+</div>
+<h2>PreSignatureConfirmation modal</h2>
+<p class="section-intro">The single most consequential UX surface in the entire product. Fires before any wallet popup. Defeats most signature-substitution phishing vectors by training users to cross-check what their wallet shows against what LeaseFi promised. Reused across all six EIP-712 ceremonies — build once as a parameterized component.</p>
+<div class="section-refs">
+<code>07-ui-ux-reference.md §3</code>
+<code>04-eip712-ceremony.md §6</code>
+<code>06-security-model.md §9</code>
+</div>
+
+<div class="mockup-frame">
+<div class="mockup-label">Fires after PreFlight passes · Before any CSPR.click signing UI</div>
+<div style="background:rgba(28,25,23,0.55);border-radius:10px;display:flex;align-items:center;justify-content:center;padding:28px;font-family:var(--font-sans);min-height:580px;">
+<div style="background:#FFFFFF;border-radius:14px;max-width:440px;width:100%;overflow:hidden;">
+<div style="display:flex;justify-content:space-between;align-items:center;padding:18px 22px;border-bottom:0.5px solid #E7E5E4;">
+<div style="display:flex;align-items:center;gap:10px;">
+<div style="width:30px;height:30px;border-radius:8px;background:#DBEAFE;display:flex;align-items:center;justify-content:center;color:#1E40AF;"><i class="ti ti-shield-check" style="font-size:17px;"></i></div>
+<div>
+<div style="font-size:15px;font-weight:500;color:#1C1917;">Review and sign</div>
+<div style="font-size:11px;color:#57534E;">Lease agreement · EIP-712</div>
+</div>
+</div>
+<button style="background:transparent;border:none;color:#A8A29E;cursor:pointer;padding:4px;" aria-label="Close"><i class="ti ti-x" style="font-size:18px;"></i></button>
+</div>
+<div style="padding:20px 22px 14px;">
+<div style="font-size:12px;color:#57534E;margin-bottom:14px;">You're about to sign a binding lease commitment. Review every line.</div>
+<div style="background:#FAFAF9;border-radius:10px;padding:14px 16px;">
+<div style="display:grid;grid-template-columns:110px 1fr;gap:8px 14px;font-size:13px;">
+<div style="color:#57534E;">Property</div><div style="color:#292524;">123 Main St, Anytown FL</div>
+<div style="color:#57534E;">Tenant</div><div style="color:#292524;">Sarah Kim · <span style="font-family:var(--font-mono);color:#57534E;">0x…4f3a</span></div>
+<div style="color:#57534E;">Landlord</div><div style="color:#292524;">You · <span style="font-family:var(--font-mono);color:#57534E;">0x…91b2</span></div>
+<div style="color:#57534E;">Monthly rent</div><div style="color:#292524;font-family:var(--font-mono);">$1,500.00 USDC</div>
+<div style="color:#57534E;">Security deposit</div><div style="color:#292524;font-family:var(--font-mono);">$3,000.00 USDC <span style="font-family:var(--font-sans);color:#57534E;">· refundable</span></div>
+<div style="color:#57534E;">Term</div><div style="color:#292524;">Jan 1, 2027 — Dec 31, 2027</div>
+<div style="color:#57534E;">Lease fee</div><div style="color:#292524;font-family:var(--font-mono);">$30.00 USDC <span style="font-family:var(--font-sans);color:#57534E;">· 2% of first month</span></div>
+<div style="color:#57534E;">Document</div><div style="color:#1D4ED8;"><a style="text-decoration:none;color:inherit;display:inline-flex;align-items:center;gap:4px;cursor:pointer;">View signed PDF<i class="ti ti-external-link" style="font-size:12px;"></i></a></div>
+</div>
+</div>
+<div style="background:#FFF7ED;border:0.5px solid #FFEDD5;border-radius:10px;padding:12px 14px;margin-top:14px;display:flex;gap:10px;align-items:flex-start;">
+<i class="ti ti-eye" style="font-size:16px;color:#C2410C;margin-top:1px;"></i>
+<div>
+<div style="font-size:12px;color:#9A3412;font-weight:500;margin-bottom:2px;">Cross-check before signing</div>
+<div style="font-size:11px;color:#C2410C;line-height:1.5;">Your Casper wallet will show the same details on the next screen. If anything looks different, cancel and contact support.</div>
+</div>
+</div>
+<div style="font-size:11px;color:#A8A29E;margin-top:12px;padding-left:2px;">Verifying contract · <span style="font-family:var(--font-mono);color:#57534E;">leasefactory.lease.fi</span></div>
+</div>
+<div style="display:flex;gap:8px;padding:14px 22px 20px;">
+<button style="flex:1;background:#FFFFFF;color:#292524;border:0.5px solid #E7E5E4;border-radius:10px;padding:11px 16px;font-size:13px;font-weight:500;cursor:pointer;font-family:var(--font-sans);">Cancel</button>
+<button style="flex:2;background:#2563EB;color:#FFFFFF;border:none;border-radius:10px;padding:11px 16px;font-size:13px;font-weight:500;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;font-family:var(--font-sans);">Continue to wallet<i class="ti ti-arrow-right" style="font-size:15px;"></i></button>
+</div>
+</div>
+</div>
+</div>
+
+<div class="watch-outs">
+<div class="watch-outs-title">Watch-outs</div>
+<ul>
+<li><strong>Build once, parameterize for six ceremonies.</strong> LeaseAgreement, TerminationNotice, BuyoutAgreement, DepositRelease, PMAuthorization, Authentication. Single component, typed-data schema input. Do not build six variants.</li>
+<li><strong>"Cross-check before signing" copy is mandatory.</strong> This trains the security behavior. Don't reword it. Don't move it. Don't hide it behind a tooltip.</li>
+<li><strong>Verifying contract is displayed.</strong> Per EIP-712 anti-phishing model. Use the canonical mainnet address; never a string the user can be tricked into trusting.</li>
+<li><strong>All EIP-712 fields visible.</strong> If the message has 10 fields, show 10 fields. Truncating is how signature-confusion attacks succeed.</li>
+<li><strong>Cancel returns to <code style="font-size:11px;background:#F5F5F4;padding:1px 4px;border-radius:3px;">idle</code>, not <code style="font-size:11px;background:#F5F5F4;padding:1px 4px;border-radius:3px;">failed</code>.</strong> Rejected ≠ failed. No toast, no Sentry, no error UI. Silent return to prior state.</li>
+</ul>
+</div>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION 5: INVITATION LANDING                                -->
+<!-- ============================================================ -->
+<section id="invitation">
+<div class="section-meta">
+<div class="section-number">5</div>
+<span class="section-tag tag-tenant">Tenant first contact</span>
+<span class="section-tag tag-security">Anti-phishing surface</span>
+</div>
+<h2>Lease invitation landing</h2>
+<p class="section-intro">First impression. Renders before any wallet interaction. Full lease terms surfaced up front — that's the anti-phishing model. The next 10 minutes mapped out as numbered steps reduces signature abandonment.</p>
+<div class="section-refs">
+<code>07-ui-ux-reference.md §4 (Flow 2)</code>
+<code>06-security-model.md §9</code>
+<code>CLAUDE.md §12</code>
+</div>
+
+<div class="mockup-frame">
+<div class="mockup-label">Route: <span style="font-family:var(--font-mono);color:#292524;">https://lease.fi/invite/:token</span> · Pre-auth · No wallet connected</div>
+<div style="background:#FAFAF9;border-radius:10px;padding:28px;border:0.5px solid #E7E5E4;min-height:680px;font-family:var(--font-sans);">
+<div style="max-width:480px;margin:0 auto;">
+<div style="display:flex;align-items:center;gap:10px;margin-bottom:24px;">
+<div style="font-size:18px;font-weight:500;color:#1E40AF;letter-spacing:-0.01em;">LeaseFi</div>
+<div style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:#FFFFFF;border:0.5px solid #E7E5E4;border-radius:999px;font-size:10px;color:#57534E;font-family:var(--font-mono);"><i class="ti ti-lock" style="font-size:11px;"></i>lease.fi</div>
+</div>
+<div style="background:#FFFFFF;border-radius:14px;border:0.5px solid #E7E5E4;padding:26px;">
+<div style="font-size:11px;color:#C2410C;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px;font-weight:500;">You've been invited</div>
+<h2 style="font-size:21px;font-weight:500;color:#1C1917;margin:0 0 6px;letter-spacing:-0.015em;">Sign a lease with Acme Properties</h2>
+<div style="font-size:13px;color:#57534E;margin-bottom:22px;">Take a moment to review the terms. You can cancel any time before signing.</div>
+<div style="background:#FAFAF9;border-radius:10px;padding:16px 18px;margin-bottom:20px;">
+<div style="display:grid;grid-template-columns:130px 1fr;gap:10px 16px;font-size:13px;">
+<div style="color:#57534E;">Property</div><div style="color:#292524;">123 Main St, Anytown FL</div>
+<div style="color:#57534E;">Landlord</div><div style="color:#292524;">Acme Properties · <span style="font-family:var(--font-mono);color:#57534E;">0x…91b2</span></div>
+<div style="color:#57534E;">Monthly rent</div><div style="color:#292524;font-family:var(--font-mono);">$1,500.00 USDC</div>
+<div style="color:#57534E;">Security deposit</div><div style="color:#292524;"><span style="font-family:var(--font-mono);">$3,000.00 USDC</span> <span style="display:inline-flex;align-items:center;gap:3px;padding:2px 7px;background:#F0FDF4;border-radius:999px;font-size:10px;color:#047857;vertical-align:1px;margin-left:4px;"><i class="ti ti-arrow-back-up" style="font-size:10px;"></i>refundable</span></div>
+<div style="color:#57534E;">Term</div><div style="color:#292524;">Jan 1, 2027 — Dec 31, 2027 · 12 months</div>
+<div style="color:#57534E;">Lease document</div><div><a style="color:#1D4ED8;text-decoration:none;display:inline-flex;align-items:center;gap:4px;font-size:13px;cursor:pointer;">View signed PDF<i class="ti ti-external-link" style="font-size:12px;"></i></a></div>
+</div>
+</div>
+<div style="margin-bottom:22px;">
+<div style="font-size:13px;font-weight:500;color:#292524;margin-bottom:10px;">Before you sign, you'll need to:</div>
+<div style="display:flex;flex-direction:column;gap:8px;">
+<div style="display:grid;grid-template-columns:24px 1fr auto;gap:10px;align-items:center;font-size:12px;"><div style="width:22px;height:22px;border-radius:50%;background:#DBEAFE;color:#1E40AF;font-weight:500;display:flex;align-items:center;justify-content:center;font-size:11px;">1</div><div style="color:#292524;">Connect your Casper wallet</div><div style="color:#A8A29E;">~30 sec</div></div>
+<div style="display:grid;grid-template-columns:24px 1fr auto;gap:10px;align-items:center;font-size:12px;"><div style="width:22px;height:22px;border-radius:50%;background:#DBEAFE;color:#1E40AF;font-weight:500;display:flex;align-items:center;justify-content:center;font-size:11px;">2</div><div style="color:#292524;">Verify your identity (one time)</div><div style="color:#A8A29E;">~5 min</div></div>
+<div style="display:grid;grid-template-columns:24px 1fr auto;gap:10px;align-items:center;font-size:12px;"><div style="width:22px;height:22px;border-radius:50%;background:#DBEAFE;color:#1E40AF;font-weight:500;display:flex;align-items:center;justify-content:center;font-size:11px;">3</div><div style="color:#292524;">Approve $1,530.00 USDC <span style="color:#57534E;">· rent + 2% fee</span></div><div style="color:#A8A29E;">~1 min</div></div>
+<div style="display:grid;grid-template-columns:24px 1fr auto;gap:10px;align-items:center;font-size:12px;"><div style="width:22px;height:22px;border-radius:50%;background:#DBEAFE;color:#1E40AF;font-weight:500;display:flex;align-items:center;justify-content:center;font-size:11px;">4</div><div style="color:#292524;">Sign the lease</div><div style="color:#A8A29E;">~30 sec</div></div>
+<div style="display:grid;grid-template-columns:24px 1fr auto;gap:10px;align-items:center;font-size:12px;"><div style="width:22px;height:22px;border-radius:50%;background:#DBEAFE;color:#1E40AF;font-weight:500;display:flex;align-items:center;justify-content:center;font-size:11px;">5</div><div style="color:#292524;">Fund the security deposit</div><div style="color:#A8A29E;">~1 min</div></div>
+</div>
+</div>
+<div style="display:flex;gap:8px;">
+<button style="flex:1;background:#FFFFFF;color:#292524;border:0.5px solid #E7E5E4;border-radius:10px;padding:12px 16px;font-size:13px;font-weight:500;cursor:pointer;font-family:var(--font-sans);">Cancel</button>
+<button style="flex:2;background:#2563EB;color:#FFFFFF;border:none;border-radius:10px;padding:12px 16px;font-size:14px;font-weight:500;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;font-family:var(--font-sans);">Get started<i class="ti ti-arrow-right" style="font-size:15px;"></i></button>
+</div>
+</div>
+<div style="margin-top:18px;padding:14px 16px;background:#FFFFFF;border:0.5px solid #E7E5E4;border-radius:10px;display:flex;gap:10px;align-items:flex-start;">
+<i class="ti ti-help-circle" style="font-size:16px;color:#57534E;margin-top:1px;"></i>
+<div>
+<div style="font-size:12px;color:#292524;font-weight:500;margin-bottom:2px;">New to crypto wallets?</div>
+<div style="font-size:11px;color:#57534E;line-height:1.55;">A wallet is how you sign and pay. It's free. We use Casper, which is built for everyday people. <a style="color:#1D4ED8;text-decoration:none;cursor:pointer;">Learn more →</a></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+<div class="copy-rules">
+<div class="copy-rules-title">Invitation copy rules</div>
+<table>
+<tr><td class="good">GOOD</td><td>"Security deposit" with "(refundable)" tag — addresses the #1 tenant confusion</td></tr>
+<tr><td class="good">GOOD</td><td>"Casper wallet" — specific, friendlier than vague "crypto wallet"</td></tr>
+<tr><td class="bad">BAD</td><td>"Connect your Web3 wallet" — alienates non-crypto users</td></tr>
+<tr><td class="bad">BAD</td><td>"Decentralized lease signing" — implementation detail; users don't care</td></tr>
+<tr><td class="bad">BAD</td><td>Countdown timer / "limited time" pressure — LeaseFi is not a marketplace</td></tr>
+</table>
+</div>
+
+<div class="watch-outs">
+<div class="watch-outs-title">Watch-outs</div>
+<ul>
+<li><strong>Render full lease terms before any wallet popup.</strong> No wallet interaction until the tenant has seen the property, rent, deposit, term, and document. Anti-phishing is this surface's job.</li>
+<li><strong>Display the canonical domain explicitly.</strong> The <code style="font-size:11px;background:#F5F5F4;padding:1px 4px;border-radius:3px;">lease.fi</code> pill is a security signal. Users learn to verify it matches their address bar.</li>
+<li><strong>Pre-flight transparency reduces abandonment.</strong> The 5-step preview is not decoration. Hiding the steps and surprising tenants with a wallet popup is the path to ~40%+ signature drop-off.</li>
+<li><strong>Server stores <code style="font-size:11px;background:#F5F5F4;padding:1px 4px;border-radius:3px;">sha256(invite_token)</code> only.</strong> Per draft endpoint pattern. Token leaks via referrer or screenshot don't grant lease access.</li>
+<li><strong>Blank-tenant pattern (open question).</strong> If landlord drafted with <code style="font-size:11px;background:#F5F5F4;padding:1px 4px;border-radius:3px;">tenant: ZERO_ADDRESS</code>, the first wallet that signs claims the role. Verify with SC team before relying on this in production.</li>
+</ul>
+</div>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION 6: LEASE SIGNING JOURNEY                             -->
+<!-- ============================================================ -->
+<section id="lease-signing">
+<div class="section-meta">
+<div class="section-number">6</div>
+<span class="section-tag tag-both">Landlord drafts · Tenant counter-signs</span>
+<span class="section-tag tag-mandatory">Highest complexity</span>
+</div>
+<h2>Lease signing journey</h2>
+<p class="section-intro">The highest-complexity Critical 6 flow. Two parties, two EIP-712 signatures, IPFS document pinning, draft persistence, asynchronous handoff. Plan 1.5–2 weeks of FE work. The screens below show the load-bearing surfaces; the seven landlord wizard steps share chrome but differ in content.</p>
+<div class="section-refs">
+<code>07-ui-ux-reference.md §4 (Flow 2)</code>
+<code>PRD §4.2.2</code>
+<code>04-eip712-ceremony.md §6</code>
+<code>Off-Chain Spec §5.5.1</code>
+<code>SC Spec §5</code>
+</div>
+
+<!-- Sub-screen A: End-to-end overview -->
+<div class="mockup-frame">
+<div class="mockup-label">End-to-end overview · Typical ~3–7 days from draft to lease active</div>
+<div style="background:#FFFFFF;border-radius:12px;padding:24px;border:0.5px solid #E7E5E4;font-family:var(--font-sans);">
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:32px;">
+
+<div>
+<div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:#1E40AF;font-weight:500;margin-bottom:14px;display:flex;align-items:center;gap:6px;"><i class="ti ti-user" style="font-size:13px;"></i>Landlord / PM</div>
+<div style="display:flex;flex-direction:column;gap:8px;">
+<div style="display:grid;grid-template-columns:24px 1fr;gap:10px;align-items:center;font-size:12px;color:#292524;"><div style="width:22px;height:22px;border-radius:50%;background:#EFF6FF;color:#1E40AF;font-weight:500;display:flex;align-items:center;justify-content:center;font-size:11px;">1</div>Property info &amp; photos</div>
+<div style="display:grid;grid-template-columns:24px 1fr;gap:10px;align-items:center;font-size:12px;color:#292524;"><div style="width:22px;height:22px;border-radius:50%;background:#EFF6FF;color:#1E40AF;font-weight:500;display:flex;align-items:center;justify-content:center;font-size:11px;">2</div>Tenant info <span style="color:#A8A29E;">· or blank-tenant</span></div>
+<div style="display:grid;grid-template-columns:24px 1fr;gap:10px;align-items:center;font-size:12px;color:#292524;"><div style="width:22px;height:22px;border-radius:50%;background:#EFF6FF;color:#1E40AF;font-weight:500;display:flex;align-items:center;justify-content:center;font-size:11px;">3</div>Financial terms</div>
+<div style="display:grid;grid-template-columns:24px 1fr;gap:10px;align-items:center;font-size:12px;color:#292524;"><div style="width:22px;height:22px;border-radius:50%;background:#EFF6FF;color:#1E40AF;font-weight:500;display:flex;align-items:center;justify-content:center;font-size:11px;">4</div>Term &amp; dates</div>
+<div style="display:grid;grid-template-columns:24px 1fr;gap:10px;align-items:center;font-size:12px;color:#292524;"><div style="width:22px;height:22px;border-radius:50%;background:#EFF6FF;color:#1E40AF;font-weight:500;display:flex;align-items:center;justify-content:center;font-size:11px;">5</div>Upload PDF → IPFS</div>
+<div style="display:grid;grid-template-columns:24px 1fr;gap:10px;align-items:center;font-size:12px;color:#292524;"><div style="width:22px;height:22px;border-radius:50%;background:#EFF6FF;color:#1E40AF;font-weight:500;display:flex;align-items:center;justify-content:center;font-size:11px;">6</div>Review &amp; sign <span style="color:#A8A29E;">· EIP-712</span></div>
+<div style="display:grid;grid-template-columns:24px 1fr;gap:10px;align-items:center;font-size:12px;color:#292524;"><div style="width:22px;height:22px;border-radius:50%;background:#EFF6FF;color:#1E40AF;font-weight:500;display:flex;align-items:center;justify-content:center;font-size:11px;">7</div>Share invite link</div>
+</div>
+</div>
+
+<div>
+<div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:#C2410C;font-weight:500;margin-bottom:14px;display:flex;align-items:center;gap:6px;"><i class="ti ti-user-check" style="font-size:13px;"></i>Tenant</div>
+<div style="display:flex;flex-direction:column;gap:8px;">
+<div style="display:grid;grid-template-columns:24px 1fr;gap:10px;align-items:center;font-size:12px;color:#292524;"><div style="width:22px;height:22px;border-radius:50%;background:#FFF7ED;color:#C2410C;font-weight:500;display:flex;align-items:center;justify-content:center;font-size:11px;">1</div>Receive invitation</div>
+<div style="display:grid;grid-template-columns:24px 1fr;gap:10px;align-items:center;font-size:12px;color:#292524;"><div style="width:22px;height:22px;border-radius:50%;background:#FFF7ED;color:#C2410C;font-weight:500;display:flex;align-items:center;justify-content:center;font-size:11px;">2</div>Connect Casper wallet</div>
+<div style="display:grid;grid-template-columns:24px 1fr;gap:10px;align-items:center;font-size:12px;color:#292524;"><div style="width:22px;height:22px;border-radius:50%;background:#FFF7ED;color:#C2410C;font-weight:500;display:flex;align-items:center;justify-content:center;font-size:11px;">3</div>Verify identity <span style="color:#A8A29E;">· KYC Tier 1</span></div>
+<div style="display:grid;grid-template-columns:24px 1fr;gap:10px;align-items:center;font-size:12px;color:#292524;"><div style="width:22px;height:22px;border-radius:50%;background:#FFF7ED;color:#C2410C;font-weight:500;display:flex;align-items:center;justify-content:center;font-size:11px;">4</div>Approve PaymentRouter <span style="color:#A8A29E;">· lease + deposit fees</span></div>
+<div style="display:grid;grid-template-columns:24px 1fr;gap:10px;align-items:center;font-size:12px;color:#292524;"><div style="width:22px;height:22px;border-radius:50%;background:#FFF7ED;color:#C2410C;font-weight:500;display:flex;align-items:center;justify-content:center;font-size:11px;">5</div>Sign lease <span style="color:#A8A29E;">· off-chain EIP-712</span></div>
+<div style="display:grid;grid-template-columns:24px 1fr;gap:10px;align-items:center;font-size:12px;color:#292524;"><div style="width:22px;height:22px;border-radius:50%;background:#FFF7ED;color:#C2410C;font-weight:500;display:flex;align-items:center;justify-content:center;font-size:11px;">6</div>Submit create_lease <span style="font-family:var(--font-mono);font-size:10px;color:#1E40AF;background:#EFF6FF;padding:1px 5px;border-radius:3px;margin-left:2px;">Tx A</span></div>
+<div style="display:grid;grid-template-columns:24px 1fr;gap:10px;align-items:center;font-size:12px;color:#292524;"><div style="width:22px;height:22px;border-radius:50%;background:#FFF7ED;color:#C2410C;font-weight:500;display:flex;align-items:center;justify-content:center;font-size:11px;">7</div>Fund deposit <span style="font-family:var(--font-mono);font-size:10px;color:#1E40AF;background:#EFF6FF;padding:1px 5px;border-radius:3px;margin-left:2px;">Tx B</span></div>
+</div>
+</div>
+
+</div>
+
+<div style="margin-top:20px;padding:14px 18px;border-top:0.5px solid #E7E5E4;display:flex;align-items:center;justify-content:center;gap:10px;background:#FAFAF9;border-radius:0 0 8px 8px;margin-left:-24px;margin-right:-24px;margin-bottom:-24px;">
+<div style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;background:#F0FDF4;border-radius:999px;font-size:12px;color:#047857;font-weight:500;"><i class="ti ti-check" style="font-size:14px;"></i>Lease fully active on Casper</div>
+<div style="font-size:11px;color:#57534E;font-family:var(--font-mono);">Tx A: LeaseFactory.create_lease + Tx B: DepositVault.deposit_funds · both finalized</div>
+</div>
+</div>
+</div>
+
+<!-- Sub-screen B: Wizard step detail (Step 3 — Financial) -->
+<div class="mockup-frame">
+<div class="mockup-label">Landlord wizard · Step 3 of 7 · Financial terms · Single-column form</div>
+<div style="background:#FAFAF9;border-radius:10px;padding:32px;border:0.5px solid #E7E5E4;display:flex;align-items:flex-start;justify-content:center;font-family:var(--font-sans);">
+<div style="background:#FFFFFF;border-radius:14px;border:0.5px solid #E7E5E4;padding:28px;max-width:480px;width:100%;">
+
+<div style="display:flex;gap:4px;margin-bottom:22px;">
+<div style="flex:1;height:3px;background:#1E40AF;border-radius:2px;"></div>
+<div style="flex:1;height:3px;background:#1E40AF;border-radius:2px;"></div>
+<div style="flex:1;height:3px;background:#1E40AF;border-radius:2px;"></div>
+<div style="flex:1;height:3px;background:#E7E5E4;border-radius:2px;"></div>
+<div style="flex:1;height:3px;background:#E7E5E4;border-radius:2px;"></div>
+<div style="flex:1;height:3px;background:#E7E5E4;border-radius:2px;"></div>
+<div style="flex:1;height:3px;background:#E7E5E4;border-radius:2px;"></div>
+</div>
+
+<div style="font-size:11px;color:#57534E;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.08em;font-weight:500;">Step 3 of 7</div>
+<h3 style="font-size:20px;font-weight:500;color:#1C1917;margin:0 0 4px;">Financial terms</h3>
+<div style="font-size:13px;color:#57534E;margin-bottom:24px;">Rent amount, deposit, and which currencies you'll accept.</div>
+
+<div style="margin-bottom:20px;">
+<label style="font-size:12px;color:#292524;font-weight:500;display:block;margin-bottom:8px;">Monthly rent</label>
+<div style="display:flex;align-items:center;background:#FFFFFF;border:0.5px solid #E7E5E4;border-radius:8px;overflow:hidden;">
+<div style="padding:11px 14px;background:#FAFAF9;border-right:0.5px solid #E7E5E4;font-size:13px;color:#57534E;font-family:var(--font-mono);display:flex;align-items:center;gap:6px;">USDC <i class="ti ti-chevron-down" style="font-size:13px;"></i></div>
+<div style="flex:1;padding:11px 14px;font-size:15px;color:#1C1917;font-family:var(--font-mono);font-weight:500;">1,500.00</div>
+</div>
+<div style="font-size:11px;color:#57534E;margin-top:6px;">Paid on the 1st of each month. 5-day grace period applies before late fee.</div>
+</div>
+
+<div style="margin-bottom:20px;">
+<label style="font-size:12px;color:#292524;font-weight:500;display:block;margin-bottom:8px;">Security deposit <span style="color:#57534E;font-weight:400;">· refundable to tenant at lease end</span></label>
+<div style="display:flex;align-items:center;background:#FFFFFF;border:0.5px solid #E7E5E4;border-radius:8px;overflow:hidden;">
+<div style="padding:11px 14px;background:#FAFAF9;border-right:0.5px solid #E7E5E4;font-size:13px;color:#57534E;font-family:var(--font-mono);display:flex;align-items:center;gap:6px;">USDC <i class="ti ti-chevron-down" style="font-size:13px;"></i></div>
+<div style="flex:1;padding:11px 14px;font-size:15px;color:#1C1917;font-family:var(--font-mono);font-weight:500;">3,000.00</div>
+</div>
+<div style="font-size:11px;color:#57534E;margin-top:6px;display:flex;align-items:center;gap:4px;"><i class="ti ti-info-circle" style="font-size:12px;color:#1E40AF;"></i>FL state cap: 2× monthly rent. You're within limits.</div>
+</div>
+
+<div style="margin-bottom:20px;">
+<label style="font-size:12px;color:#292524;font-weight:500;display:block;margin-bottom:8px;">Late fee policy</label>
+<div style="display:flex;flex-direction:column;gap:6px;">
+<label style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:#FFFFFF;border:0.5px solid #E7E5E4;border-radius:8px;font-size:13px;color:#57534E;cursor:pointer;"><div style="width:14px;height:14px;border-radius:50%;border:1.5px solid #A8A29E;"></div>None</label>
+<label style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:#EFF6FF;border:0.5px solid #BFDBFE;border-radius:8px;font-size:13px;color:#1E40AF;cursor:pointer;"><div style="width:14px;height:14px;border-radius:50%;border:2px solid #2563EB;background:#2563EB;box-shadow:inset 0 0 0 2px #FFFFFF;"></div>5% of monthly rent <span style="color:#57534E;font-family:var(--font-mono);">· $75.00 USDC</span></label>
+<label style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:#FFFFFF;border:0.5px solid #E7E5E4;border-radius:8px;font-size:13px;color:#57534E;cursor:pointer;"><div style="width:14px;height:14px;border-radius:50%;border:1.5px solid #A8A29E;"></div>Flat fee</label>
+</div>
+</div>
+
+<div style="margin-bottom:24px;">
+<label style="font-size:12px;color:#292524;font-weight:500;display:block;margin-bottom:8px;">Payout currency <span style="color:#57534E;font-weight:400;">· what you'll receive</span></label>
+<div style="display:flex;gap:6px;">
+<label style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:9px;background:#EFF6FF;border:0.5px solid #BFDBFE;border-radius:8px;font-size:12px;color:#1E40AF;font-weight:500;cursor:pointer;">USDC</label>
+<label style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:9px;background:#FFFFFF;border:0.5px solid #E7E5E4;border-radius:8px;font-size:12px;color:#57534E;cursor:pointer;">CSPR</label>
+<label style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:9px;background:#FFFFFF;border:0.5px solid #E7E5E4;border-radius:8px;font-size:12px;color:#57534E;cursor:pointer;">BIG</label>
+</div>
+</div>
+
+<div style="display:flex;justify-content:space-between;align-items:center;padding-top:18px;border-top:0.5px solid #F5F5F4;">
+<button style="background:#FFFFFF;color:#57534E;border:0.5px solid #E7E5E4;border-radius:8px;padding:9px 14px;font-size:13px;font-weight:500;cursor:pointer;display:inline-flex;align-items:center;gap:6px;font-family:var(--font-sans);"><i class="ti ti-arrow-left" style="font-size:14px;"></i>Back</button>
+<div style="display:flex;gap:8px;">
+<button style="background:#FFFFFF;color:#57534E;border:0.5px solid #E7E5E4;border-radius:8px;padding:9px 14px;font-size:13px;cursor:pointer;font-family:var(--font-sans);">Save draft</button>
+<button style="background:#2563EB;color:#FFFFFF;border:none;border-radius:8px;padding:9px 16px;font-size:13px;font-weight:500;cursor:pointer;display:inline-flex;align-items:center;gap:6px;font-family:var(--font-sans);">Continue<i class="ti ti-arrow-right" style="font-size:14px;"></i></button>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+<!-- Sub-screen C: Wizard Step 5 — Document upload + IPFS pinning -->
+<div class="mockup-frame">
+<div class="mockup-label">Landlord wizard · Step 5 of 7 · PDF upload → SHA-256 → IPFS pin · all 4 states</div>
+<div style="background:#FFFFFF;border-radius:12px;padding:24px;border:0.5px solid #E7E5E4;font-family:var(--font-sans);">
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+
+<div style="background:#FAFAF9;border-radius:10px;padding:18px;">
+<div style="font-family:var(--font-mono);font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:#57534E;font-weight:500;margin-bottom:10px;">1 · idle</div>
+<div style="background:#FFFFFF;border:0.5px dashed #BFDBFE;border-radius:8px;padding:24px;text-align:center;">
+<i class="ti ti-cloud-upload" style="font-size:28px;color:#2563EB;display:block;margin-bottom:8px;"></i>
+<div style="font-size:12px;color:#292524;margin-bottom:3px;">Drop your lease PDF here, or <span style="color:#1D4ED8;font-weight:500;">browse</span></div>
+<div style="font-size:10px;color:#A8A29E;">PDF only · max 25 MB</div>
+</div>
+</div>
+
+<div style="background:#FAFAF9;border-radius:10px;padding:18px;">
+<div style="font-family:var(--font-mono);font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:#C2410C;font-weight:500;margin-bottom:10px;">2 · uploading</div>
+<div style="background:#FFFFFF;border:0.5px solid #E7E5E4;border-radius:8px;padding:14px 16px;">
+<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+<i class="ti ti-file-text" style="font-size:16px;color:#57534E;flex-shrink:0;"></i>
+<div style="flex:1;font-size:12px;color:#292524;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">lease_123_main_st.pdf</div>
+<div style="font-size:11px;color:#57534E;font-family:var(--font-mono);">45%</div>
+</div>
+<div style="height:3px;background:#F5F5F4;border-radius:2px;overflow:hidden;margin-bottom:8px;"><div style="width:45%;height:100%;background:#F97316;"></div></div>
+<div style="font-size:10px;color:#57534E;">Uploading · computing SHA-256 hash…</div>
+</div>
+</div>
+
+<div style="background:#FAFAF9;border-radius:10px;padding:18px;">
+<div style="font-family:var(--font-mono);font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:#C2410C;font-weight:500;margin-bottom:10px;">3 · pinning to ipfs</div>
+<div style="background:#FFFFFF;border:0.5px solid #E7E5E4;border-radius:8px;padding:14px 16px;">
+<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+<i class="ti ti-file-text" style="font-size:16px;color:#57534E;flex-shrink:0;"></i>
+<div style="flex:1;font-size:12px;color:#292524;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">lease_123_main_st.pdf</div>
+<div style="font-size:11px;color:#57534E;font-family:var(--font-mono);">82%</div>
+</div>
+<div style="height:3px;background:#F5F5F4;border-radius:2px;overflow:hidden;margin-bottom:8px;"><div style="width:82%;height:100%;background:#F97316;"></div></div>
+<div style="font-size:10px;color:#57534E;font-family:var(--font-mono);">Hash · 0x4a8f02c1…b97e</div>
+<div style="font-size:10px;color:#57534E;">Pinning to IPFS · awaiting CID…</div>
+</div>
+</div>
+
+<div style="background:#F0FDF4;border-radius:10px;padding:18px;">
+<div style="font-family:var(--font-mono);font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:#047857;font-weight:500;margin-bottom:10px;">4 · ready · hashes match</div>
+<div style="background:#FFFFFF;border:0.5px solid #BBF7D0;border-radius:8px;padding:14px 16px;">
+<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+<i class="ti ti-file-check" style="font-size:18px;color:#047857;flex-shrink:0;"></i>
+<div style="flex:1;font-size:12px;color:#292524;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">lease_123_main_st.pdf</div>
+<i class="ti ti-check" style="font-size:14px;color:#10B981;"></i>
+</div>
+<div style="font-size:10px;color:#57534E;font-family:var(--font-mono);margin-bottom:3px;">Hash · 0x4a8f02c1…b97e ✓</div>
+<div style="font-size:10px;color:#57534E;font-family:var(--font-mono);margin-bottom:10px;">IPFS · bafyb4qa7…x9qzm</div>
+<a style="font-size:11px;color:#1D4ED8;text-decoration:none;cursor:pointer;display:inline-flex;align-items:center;gap:3px;">Replace file<i class="ti ti-refresh" style="font-size:11px;"></i></a>
+</div>
+</div>
+
+</div>
+
+<div style="margin-top:18px;padding:14px 16px;background:#FAFAF9;border-radius:8px;display:flex;gap:10px;align-items:flex-start;">
+<i class="ti ti-info-circle" style="font-size:16px;color:#1E40AF;margin-top:1px;flex-shrink:0;"></i>
+<div style="font-size:11px;color:#57534E;line-height:1.55;">
+SHA-256 is the canonical identifier — recorded on-chain in <code style="font-family:var(--font-mono);font-size:10px;background:#FFFFFF;padding:1px 5px;border-radius:3px;">LeaseAgreement.lease_document_hash</code>. The IPFS CID is the retrieval address only. Tenants and disputers always re-hash the retrieved PDF and compare against the on-chain hash before trusting content. Mismatch = block content + log compliance incident per <code style="font-family:var(--font-mono);font-size:10px;background:#FFFFFF;padding:1px 5px;border-radius:3px;">06-security-model.md §10</code>.
+</div>
+</div>
+
+</div>
+</div>
+
+<!-- Sub-screen D: Share / handoff after landlord signs -->
+<div class="mockup-frame">
+<div class="mockup-label">Step 7 of 7 · Landlord has signed · Share invite with tenant</div>
+<div style="background:#FAFAF9;border-radius:10px;padding:32px;border:0.5px solid #E7E5E4;display:flex;align-items:flex-start;justify-content:center;font-family:var(--font-sans);">
+<div style="background:#FFFFFF;border-radius:14px;border:0.5px solid #E7E5E4;padding:32px;max-width:460px;width:100%;text-align:center;">
+
+<div style="width:56px;height:56px;border-radius:50%;background:#F0FDF4;display:flex;align-items:center;justify-content:center;color:#047857;margin:0 auto 18px;"><i class="ti ti-check" style="font-size:28px;"></i></div>
+
+<h3 style="font-size:20px;font-weight:500;color:#1C1917;margin:0 0 6px;letter-spacing:-0.01em;">You've signed. Now send to your tenant.</h3>
+<div style="font-size:13px;color:#57534E;margin-bottom:24px;line-height:1.55;">The lease becomes active when your tenant signs and funds the deposit.</div>
+
+<div style="display:flex;gap:6px;background:#FAFAF9;border:0.5px solid #E7E5E4;border-radius:8px;padding:10px 12px;margin-bottom:14px;text-align:left;align-items:center;">
+<div style="flex:1;font-family:var(--font-mono);font-size:11px;color:#57534E;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">https://lease.fi/invite/k4f7d29a18b…</div>
+<button style="background:#FFFFFF;border:0.5px solid #E7E5E4;border-radius:6px;padding:5px 11px;font-size:11px;font-weight:500;cursor:pointer;font-family:var(--font-sans);display:inline-flex;align-items:center;gap:4px;"><i class="ti ti-copy" style="font-size:13px;"></i>Copy</button>
+</div>
+
+<div style="display:flex;gap:6px;margin-bottom:22px;">
+<button style="flex:1;padding:10px;border:0.5px solid #E7E5E4;border-radius:8px;background:#FFFFFF;font-size:12px;color:#292524;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;font-family:var(--font-sans);"><i class="ti ti-mail" style="font-size:14px;"></i>Email</button>
+<button style="flex:1;padding:10px;border:0.5px solid #E7E5E4;border-radius:8px;background:#FFFFFF;font-size:12px;color:#292524;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;font-family:var(--font-sans);"><i class="ti ti-message" style="font-size:14px;"></i>Text</button>
+<button style="flex:1;padding:10px;border:0.5px solid #E7E5E4;border-radius:8px;background:#FFFFFF;font-size:12px;color:#292524;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;font-family:var(--font-sans);"><i class="ti ti-qrcode" style="font-size:14px;"></i>QR code</button>
+</div>
+
+<div style="margin-bottom:20px;padding:14px 16px;background:#EFF6FF;border-radius:8px;text-align:left;">
+<div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:#1E40AF;font-weight:500;margin-bottom:6px;">What happens next</div>
+<div style="font-size:12px;color:#1E3A8A;line-height:1.6;">Tenant connects wallet → verifies identity → approves $1,530 USDC → signs lease → funds $3,000 deposit. You'll get a notification at each step.</div>
+</div>
+
+<div style="font-size:11px;color:#A8A29E;line-height:1.5;display:flex;align-items:center;justify-content:center;gap:5px;"><i class="ti ti-clock" style="font-size:12px;"></i>Link expires in 7 days · draft persists until then</div>
+</div>
+</div>
+</div>
+
+<!-- Sub-screen D: Waiting for tenant -->
+<div class="mockup-frame">
+<div class="mockup-label">Landlord home · After sharing · Asynchronous handoff in progress</div>
+<div style="background:#FAFAF9;border-radius:10px;padding:32px;border:0.5px solid #E7E5E4;font-family:var(--font-sans);">
+<div style="background:#FFFFFF;border-radius:14px;border:0.5px solid #E7E5E4;padding:26px;max-width:540px;margin:0 auto;">
+
+<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;">
+<div>
+<div style="font-size:10px;color:#A8A29E;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;">Draft lease</div>
+<div style="font-size:16px;font-weight:500;color:#1C1917;">123 Main St, Anytown FL</div>
+<div style="font-size:12px;color:#57534E;">Sarah Kim · <span style="font-family:var(--font-mono);">$1,500</span>/mo · 12 months</div>
+</div>
+<div style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:#FFF7ED;border:0.5px solid #FFEDD5;border-radius:999px;font-size:11px;color:#C2410C;font-weight:500;"><i class="ti ti-loader-2" style="font-size:12px;"></i>Awaiting tenant</div>
+</div>
+
+<div style="background:#FAFAF9;border-radius:10px;padding:18px;">
+<div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:#57534E;font-weight:500;margin-bottom:14px;">Signing progress</div>
+
+<div style="display:flex;flex-direction:column;gap:12px;">
+<div style="display:grid;grid-template-columns:22px 1fr auto;gap:10px;align-items:center;">
+<div style="width:20px;height:20px;border-radius:50%;background:#10B981;display:flex;align-items:center;justify-content:center;"><i class="ti ti-check" style="font-size:12px;color:white;"></i></div>
+<div>
+<div style="font-size:13px;color:#292524;font-weight:500;">You signed</div>
+<div style="font-size:11px;color:#57534E;">Nov 12, 2026 · 14:22 · <span style="font-family:var(--font-mono);">0x…91b2</span></div>
+</div>
+<div style="font-size:11px;color:#047857;font-weight:500;">Complete</div>
+</div>
+
+<div style="display:grid;grid-template-columns:22px 1fr auto;gap:10px;align-items:center;">
+<div style="width:20px;height:20px;border-radius:50%;background:#FEFCE8;border:1.5px solid #EAB308;display:flex;align-items:center;justify-content:center;"><i class="ti ti-clock" style="font-size:11px;color:#A16207;"></i></div>
+<div>
+<div style="font-size:13px;color:#292524;font-weight:500;">Waiting for tenant signature</div>
+<div style="font-size:11px;color:#57534E;">Sarah Kim · sent 2h ago · expires in 6d 22h</div>
+</div>
+<div style="font-size:11px;color:#A16207;font-weight:500;">Pending</div>
+</div>
+
+<div style="display:grid;grid-template-columns:22px 1fr auto;gap:10px;align-items:center;opacity:0.55;">
+<div style="width:20px;height:20px;border-radius:50%;background:#F5F5F4;display:flex;align-items:center;justify-content:center;"><i class="ti ti-coin" style="font-size:11px;color:#A8A29E;"></i></div>
+<div>
+<div style="font-size:13px;color:#292524;">Deposit funded by tenant</div>
+<div style="font-size:11px;color:#57534E;font-family:var(--font-mono);">$3,000.00 USDC → DepositVault</div>
+</div>
+<div style="font-size:11px;color:#A8A29E;">Not started</div>
+</div>
+
+<div style="display:grid;grid-template-columns:22px 1fr auto;gap:10px;align-items:center;opacity:0.55;">
+<div style="width:20px;height:20px;border-radius:50%;background:#F5F5F4;display:flex;align-items:center;justify-content:center;"><i class="ti ti-check" style="font-size:12px;color:#A8A29E;"></i></div>
+<div>
+<div style="font-size:13px;color:#292524;">Lease active on Casper</div>
+<div style="font-size:11px;color:#57534E;font-family:var(--font-mono);">LeaseFactory.create_lease finalized</div>
+</div>
+<div style="font-size:11px;color:#A8A29E;">Not started</div>
+</div>
+</div>
+</div>
+
+<div style="display:flex;gap:8px;margin-top:18px;">
+<button style="flex:1;padding:10px 14px;background:#FFFFFF;border:0.5px solid #E7E5E4;border-radius:8px;font-size:13px;font-weight:500;color:#292524;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;font-family:var(--font-sans);"><i class="ti ti-send" style="font-size:14px;"></i>Resend invite</button>
+<button style="flex:1;padding:10px 14px;background:#FFFFFF;border:0.5px solid #FECACA;color:#B91C1C;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;font-family:var(--font-sans);"><i class="ti ti-x" style="font-size:14px;"></i>Cancel draft</button>
+</div>
+</div>
+</div>
+</div>
+
+<!-- Sub-screen E: Lease active (both signed, on-chain finalized) -->
+<div class="mockup-frame">
+<div class="mockup-label">Both signed · Deposit funded · On-chain finalized · LeaseCreatedEvent emitted</div>
+<div style="background:#FAFAF9;border-radius:10px;padding:32px;border:0.5px solid #E7E5E4;display:flex;align-items:flex-start;justify-content:center;font-family:var(--font-sans);">
+<div style="background:#FFFFFF;border-radius:14px;border:0.5px solid #E7E5E4;padding:32px;max-width:480px;width:100%;text-align:center;">
+
+<div style="width:64px;height:64px;border-radius:50%;background:#F0FDF4;display:flex;align-items:center;justify-content:center;color:#047857;margin:0 auto 20px;"><i class="ti ti-check" style="font-size:34px;"></i></div>
+
+<h3 style="font-size:22px;font-weight:500;color:#1C1917;margin:0 0 6px;letter-spacing:-0.01em;">Lease is active</h3>
+<div style="font-size:13px;color:#57534E;margin-bottom:24px;line-height:1.55;">123 Main St · Sarah Kim · Jan 1, 2027 → Dec 31, 2027</div>
+
+<div style="background:#FAFAF9;border-radius:10px;padding:16px 18px;margin-bottom:22px;text-align:left;">
+<div style="display:grid;grid-template-columns:120px 1fr;gap:8px 14px;font-size:12px;">
+<div style="color:#57534E;">Lease contract</div><div style="font-family:var(--font-mono);color:#1D4ED8;">0x4a91…7e3c</div>
+<div style="color:#57534E;">Deposit vault</div><div style="font-family:var(--font-mono);color:#1D4ED8;">0x8b22…1f9d</div>
+<div style="color:#57534E;">First rent due</div><div style="color:#292524;">Jan 1, 2027</div>
+<div style="color:#57534E;">Confirmed</div><div style="color:#292524;font-family:var(--font-mono);">Block 18,442,103 · 8/8</div>
+</div>
+</div>
+
+<div style="display:flex;gap:8px;">
+<button style="flex:1;padding:11px 16px;background:#FFFFFF;color:#292524;border:0.5px solid #E7E5E4;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;font-family:var(--font-sans);">View lease details</button>
+<button style="flex:1;padding:11px 16px;background:#2563EB;color:white;border:none;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;font-family:var(--font-sans);">Back to home</button>
+</div>
+</div>
+</div>
+</div>
+
+<!-- Sub-screen G: Failure states triad -->
+<div class="mockup-frame">
+<div class="mockup-label">Three lease-creation failure paths · Each has distinct copy and recovery</div>
+<div style="background:#FFFFFF;border-radius:12px;padding:24px;border:0.5px solid #E7E5E4;font-family:var(--font-sans);">
+
+<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
+
+<div style="background:#FAFAF9;border-radius:10px;padding:18px;">
+<div style="font-family:var(--font-mono);font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:#B91C1C;font-weight:500;margin-bottom:12px;">Tenant declined</div>
+<div style="width:36px;height:36px;border-radius:50%;background:#FEF2F2;display:flex;align-items:center;justify-content:center;color:#B91C1C;margin-bottom:12px;"><i class="ti ti-x" style="font-size:18px;"></i></div>
+<div style="font-size:13px;font-weight:500;color:#1C1917;margin-bottom:6px;">Tenant didn't sign</div>
+<div style="font-size:11px;color:#57534E;line-height:1.55;margin-bottom:12px;">Sarah Kim reviewed the lease and chose not to sign. The draft is cancelled. No funds moved.</div>
+<div style="display:flex;flex-direction:column;gap:5px;">
+<button style="background:#2563EB;color:white;border:none;border-radius:6px;padding:7px 10px;font-size:11px;font-weight:500;cursor:pointer;font-family:var(--font-sans);">Draft new lease</button>
+<button style="background:#FFFFFF;color:#292524;border:0.5px solid #E7E5E4;border-radius:6px;padding:7px 10px;font-size:11px;cursor:pointer;font-family:var(--font-sans);">Contact tenant</button>
+</div>
+<div style="margin-top:10px;padding-top:10px;border-top:0.5px solid #F5F5F4;font-size:10px;color:#A8A29E;">No protocol fee charged.</div>
+</div>
+
+<div style="background:#FAFAF9;border-radius:10px;padding:18px;">
+<div style="font-family:var(--font-mono);font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:#A16207;font-weight:500;margin-bottom:12px;">Draft expired</div>
+<div style="width:36px;height:36px;border-radius:50%;background:#FEFCE8;display:flex;align-items:center;justify-content:center;color:#A16207;margin-bottom:12px;"><i class="ti ti-clock" style="font-size:18px;"></i></div>
+<div style="font-size:13px;font-weight:500;color:#1C1917;margin-bottom:6px;">Invitation expired</div>
+<div style="font-size:11px;color:#57534E;line-height:1.55;margin-bottom:12px;">The 7-day window ended without a tenant signature. Your signature is no longer valid; signatures expire with the draft.</div>
+<div style="display:flex;flex-direction:column;gap:5px;">
+<button style="background:#2563EB;color:white;border:none;border-radius:6px;padding:7px 10px;font-size:11px;font-weight:500;cursor:pointer;font-family:var(--font-sans);">Start a new draft</button>
+</div>
+<div style="margin-top:10px;padding-top:10px;border-top:0.5px solid #F5F5F4;font-size:10px;color:#A8A29E;">Archived 30 days for your records.</div>
+</div>
+
+<div style="background:#FAFAF9;border-radius:10px;padding:18px;">
+<div style="font-family:var(--font-mono);font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:#B91C1C;font-weight:500;margin-bottom:12px;">Deposit failed</div>
+<div style="width:36px;height:36px;border-radius:50%;background:#FEF2F2;display:flex;align-items:center;justify-content:center;color:#B91C1C;margin-bottom:12px;"><i class="ti ti-alert-triangle" style="font-size:18px;"></i></div>
+<div style="font-size:13px;font-weight:500;color:#1C1917;margin-bottom:6px;">Deposit funding failed</div>
+<div style="font-size:11px;color:#57534E;line-height:1.55;margin-bottom:12px;">Lease was created on-chain (contracts deployed, NFTs minted, execution fee collected) but the deposit transaction reverted. Vault is empty. Tenant's USDC is safe; they can retry deposit funding without re-signing.</div>
+<div style="display:flex;flex-direction:column;gap:5px;">
+<button style="background:#2563EB;color:white;border:none;border-radius:6px;padding:7px 10px;font-size:11px;font-weight:500;cursor:pointer;font-family:var(--font-sans);">View lease status</button>
+</div>
+<div style="margin-top:10px;padding-top:10px;border-top:0.5px solid #F5F5F4;font-size:10px;color:#A8A29E;">Common cause: allowance race.</div>
+</div>
+
+</div>
+</div>
+</div>
+
+<!-- Sub-screen H: Draft lifecycle state machine -->
+<div class="mockup-frame">
+<div class="mockup-label">Draft state machine · 8 happy-path states · Two on-chain transactions · 5 alternative terminal states</div>
+<div style="background:#FFFFFF;border-radius:12px;padding:28px;border:0.5px solid #E7E5E4;font-family:var(--font-sans);">
+
+<div style="display:grid;grid-template-columns:1.4fr 1fr;gap:32px;">
+
+<div>
+<div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:#047857;font-weight:500;margin-bottom:16px;display:flex;align-items:center;gap:6px;"><i class="ti ti-circle-check" style="font-size:13px;"></i>Happy path</div>
+
+<div style="display:flex;flex-direction:column;gap:14px;">
+
+<div style="display:grid;grid-template-columns:28px 1fr;gap:12px;align-items:flex-start;">
+<div style="width:24px;height:24px;border-radius:50%;background:#DBEAFE;color:#1E40AF;font-weight:500;display:flex;align-items:center;justify-content:center;font-size:11px;font-family:var(--font-mono);">1</div>
+<div>
+<div style="font-size:13px;color:#1C1917;font-weight:500;">Draft created</div>
+<div style="font-size:10px;color:#57534E;font-family:var(--font-mono);">POST /api/v1/leases/drafts</div>
+</div>
+</div>
+
+<div style="display:grid;grid-template-columns:28px 1fr;gap:12px;align-items:flex-start;">
+<div style="width:24px;height:24px;border-radius:50%;background:#DBEAFE;color:#1E40AF;font-weight:500;display:flex;align-items:center;justify-content:center;font-size:11px;font-family:var(--font-mono);">2</div>
+<div>
+<div style="font-size:13px;color:#1C1917;font-weight:500;">Drafting · autosaved</div>
+<div style="font-size:10px;color:#57534E;font-family:var(--font-mono);">PUT /api/v1/leases/drafts/:id</div>
+</div>
+</div>
+
+<div style="display:grid;grid-template-columns:28px 1fr;gap:12px;align-items:flex-start;">
+<div style="width:24px;height:24px;border-radius:50%;background:#DBEAFE;color:#1E40AF;font-weight:500;display:flex;align-items:center;justify-content:center;font-size:11px;font-family:var(--font-mono);">3</div>
+<div>
+<div style="font-size:13px;color:#1C1917;font-weight:500;">Landlord signed · EIP-712</div>
+<div style="font-size:10px;color:#57534E;font-family:var(--font-mono);">signAndVerify · sig stored with draft</div>
+</div>
+</div>
+
+<div style="display:grid;grid-template-columns:28px 1fr;gap:12px;align-items:flex-start;">
+<div style="width:24px;height:24px;border-radius:50%;background:#DBEAFE;color:#1E40AF;font-weight:500;display:flex;align-items:center;justify-content:center;font-size:11px;font-family:var(--font-mono);">4</div>
+<div>
+<div style="font-size:13px;color:#1C1917;font-weight:500;">Shared · invite token issued</div>
+<div style="font-size:10px;color:#57534E;font-family:var(--font-mono);">POST /drafts/:id/share → token</div>
+</div>
+</div>
+
+<div style="display:grid;grid-template-columns:28px 1fr;gap:12px;align-items:flex-start;">
+<div style="width:24px;height:24px;border-radius:50%;background:#DBEAFE;color:#1E40AF;font-weight:500;display:flex;align-items:center;justify-content:center;font-size:11px;font-family:var(--font-mono);">5</div>
+<div>
+<div style="font-size:13px;color:#1C1917;font-weight:500;">Tenant signed · EIP-712</div>
+<div style="font-size:10px;color:#57534E;font-family:var(--font-mono);">signAndVerify · both sigs present</div>
+</div>
+</div>
+
+<div style="display:grid;grid-template-columns:28px 1fr;gap:12px;align-items:flex-start;">
+<div style="width:24px;height:24px;border-radius:50%;background:#DBEAFE;color:#1E40AF;font-weight:500;display:flex;align-items:center;justify-content:center;font-size:11px;font-family:var(--font-mono);">6</div>
+<div>
+<div style="font-size:13px;color:#1C1917;font-weight:500;">Lease created on-chain <span style="font-family:var(--font-mono);font-size:10px;color:#1E40AF;background:#EFF6FF;padding:1px 6px;border-radius:3px;margin-left:2px;">Tx A</span></div>
+<div style="font-size:10px;color:#57534E;font-family:var(--font-mono);">LeaseFactory.create_lease · contracts deployed · NFTs minted · execution fee collected</div>
+</div>
+</div>
+
+<div style="display:grid;grid-template-columns:28px 1fr;gap:12px;align-items:flex-start;">
+<div style="width:24px;height:24px;border-radius:50%;background:#DBEAFE;color:#1E40AF;font-weight:500;display:flex;align-items:center;justify-content:center;font-size:11px;font-family:var(--font-mono);">7</div>
+<div>
+<div style="font-size:13px;color:#1C1917;font-weight:500;">Deposit funded <span style="font-family:var(--font-mono);font-size:10px;color:#1E40AF;background:#EFF6FF;padding:1px 6px;border-radius:3px;margin-left:2px;">Tx B</span></div>
+<div style="font-size:10px;color:#57534E;font-family:var(--font-mono);">DepositVault.deposit_funds · separate transaction · no signatures required</div>
+</div>
+</div>
+
+<div style="display:grid;grid-template-columns:28px 1fr;gap:12px;align-items:flex-start;">
+<div style="width:24px;height:24px;border-radius:50%;background:#10B981;color:white;font-weight:500;display:flex;align-items:center;justify-content:center;"><i class="ti ti-check" style="font-size:13px;"></i></div>
+<div>
+<div style="font-size:13px;color:#1C1917;font-weight:500;">Lease fully active</div>
+<div style="font-size:10px;color:#57534E;font-family:var(--font-mono);">LeaseCreatedEvent + DepositRecordedEvent · indexer notifies both parties</div>
+</div>
+</div>
+
+</div>
+</div>
+
+<div>
+<div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:#A16207;font-weight:500;margin-bottom:16px;display:flex;align-items:center;gap:6px;"><i class="ti ti-git-branch" style="font-size:13px;"></i>Alternative paths</div>
+
+<div style="display:flex;flex-direction:column;gap:10px;">
+
+<div style="background:#FAFAF9;border-left:3px solid #B91C1C;border-radius:0 8px 8px 0;padding:11px 14px;">
+<div style="font-size:12px;font-weight:500;color:#1C1917;margin-bottom:3px;">Cancelled by landlord</div>
+<div style="font-size:10px;color:#57534E;line-height:1.5;">From any state 1–5. Draft archived 30 days.</div>
+<div style="font-size:10px;color:#57534E;font-family:var(--font-mono);margin-top:4px;">DELETE /drafts/:id</div>
+</div>
+
+<div style="background:#FAFAF9;border-left:3px solid #A16207;border-radius:0 8px 8px 0;padding:11px 14px;">
+<div style="font-size:12px;font-weight:500;color:#1C1917;margin-bottom:3px;">Expired · 7-day TTL</div>
+<div style="font-size:10px;color:#57534E;line-height:1.5;">From state 4 if tenant doesn't sign. Configurable up to 30 days at share-time.</div>
+<div style="font-size:10px;color:#57534E;font-family:var(--font-mono);margin-top:4px;">Indexer scheduled job</div>
+</div>
+
+<div style="background:#FAFAF9;border-left:3px solid #A8A29E;border-radius:0 8px 8px 0;padding:11px 14px;">
+<div style="font-size:12px;font-weight:500;color:#1C1917;margin-bottom:3px;">Tenant rejected signature</div>
+<div style="font-size:10px;color:#57534E;line-height:1.5;">From state 4. Wallet rejection is not an error. Draft remains shared until tenant returns or expires.</div>
+<div style="font-size:10px;color:#57534E;font-family:var(--font-mono);margin-top:4px;">Silent · returns to idle</div>
+</div>
+
+<div style="background:#FAFAF9;border-left:3px solid #B91C1C;border-radius:0 8px 8px 0;padding:11px 14px;">
+<div style="font-size:12px;font-weight:500;color:#1C1917;margin-bottom:3px;">create_lease reverted</div>
+<div style="font-size:10px;color:#57534E;line-height:1.5;">State 6 fails. Full atomic rollback. Retry with same signatures — they were arguments, not stored state.</div>
+<div style="font-size:10px;color:#57534E;font-family:var(--font-mono);margin-top:4px;">Tx A revert → classifyError → retry</div>
+</div>
+
+<div style="background:#FEF2F2;border-left:3px solid #B91C1C;border-radius:0 8px 8px 0;padding:11px 14px;">
+<div style="font-size:12px;font-weight:500;color:#1C1917;margin-bottom:3px;">Stranded · lease created, deposit unfunded</div>
+<div style="font-size:10px;color:#57534E;line-height:1.5;">State 7 fails OR tenant abandons after state 6. Lease exists on-chain, vault is Empty. No re-signing needed to retry.</div>
+<div style="font-size:10px;color:#B91C1C;font-family:var(--font-mono);margin-top:4px;">Confirm SC cancellation path</div>
+</div>
+
+</div>
+</div>
+
+</div>
+</div>
+</div>
+
+<!-- PM on behalf callout -->
+<div style="background:#EFF6FF;border:0.5px solid #BFDBFE;border-radius:10px;padding:16px 20px;margin-bottom:20px;display:flex;gap:12px;align-items:flex-start;font-family:var(--font-sans);">
+<i class="ti ti-users" style="font-size:20px;color:#1E40AF;margin-top:2px;flex-shrink:0;"></i>
+<div>
+<div style="font-size:12px;color:#1E3A8A;font-weight:500;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.06em;">Phase 1 limitation · PM acting on behalf</div>
+<div style="font-size:12px;color:#1E40AF;line-height:1.6;">Property managers can draft leases on behalf of landlords via <code style="font-family:var(--font-mono);font-size:11px;background:#FFFFFF;padding:1px 5px;border-radius:3px;">PMAuthorization</code>, but cannot sign for them. The landlord must complete the EIP-712 signature themselves on their own wallet. Phase 2 introduces delegated signing once Casper Smart Account integration lands. Implementation: PM completes Steps 1–5 of the wizard, then the wizard transitions to a handoff state at Step 6 ("Awaiting landlord signature") — the landlord receives a notification with a deep link back into the wizard at Step 6.</div>
+</div>
+</div>
+
+<div class="copy-rules">
+<div class="copy-rules-title">Signing journey copy rules</div>
+<table>
+<tr><td class="good">GOOD</td><td>"You signed" / "Waiting for tenant" — neutral, observational</td></tr>
+<tr><td class="good">GOOD</td><td>"Lease is active" — completion of signing, not the lease term itself</td></tr>
+<tr><td class="good">GOOD</td><td>"Save draft" persistent throughout wizard — drafts persist server-side per draft endpoint pattern</td></tr>
+<tr><td class="bad">NEVER</td><td>"Your tenant hasn't signed yet" — borderline accusatory framing</td></tr>
+<tr><td class="bad">NEVER</td><td>"Sign now or lose it" — manufactured urgency; LeaseFi has no scarcity</td></tr>
+<tr><td class="bad">NEVER</td><td>"Lease complete" — implies the lease term itself completed</td></tr>
+<tr><td class="bad">NEVER</td><td>"Send a reminder" CTA that nags the tenant directly — landlord can resend the link, the system does not nag</td></tr>
+</table>
+</div>
+
+<div class="watch-outs">
+<div class="watch-outs-title">Watch-outs</div>
+<ul>
+<li><strong>Lease activation is two separate on-chain transactions.</strong> <code style="font-size:11px;background:#F5F5F4;padding:1px 4px;border-radius:3px;">LeaseFactory.create_lease</code> (Tx A) deploys the Lease and DepositVault contracts, mints NFTs, collects the 2% lease execution fee, and verifies both EIP-712 signatures. <code style="font-size:11px;background:#F5F5F4;padding:1px 4px;border-radius:3px;">DepositVault.deposit_funds</code> (Tx B) is a separate transaction the tenant submits afterward — no signatures, just funder/amount/currency. Each has independent atomic rollback. The pending-transaction store must track them independently.</li>
+<li><strong>EIP-712 signatures are function arguments, not stored nonces.</strong> Verified inline by <code style="font-size:11px;background:#F5F5F4;padding:1px 4px;border-radius:3px;">create_lease</code>, never written to chain. If Tx A reverts, the same signatures retry cleanly. If Tx A succeeds and Tx B reverts, no signatures are needed for Tx B retry — <code style="font-size:11px;background:#F5F5F4;padding:1px 4px;border-radius:3px;">deposit_funds</code> doesn't require them.</li>
+<li><strong>Stranded-lease risk · escalate to SC team.</strong> Between Tx A success and Tx B success, the tenant has a created lease with an empty vault. If the tenant disappears, the lease is stranded on-chain — contracts exist, execution fee collected, but no deposit on file. Confirm with SC team that a clean cancellation path exists (e.g., <code style="font-size:11px;background:#F5F5F4;padding:1px 4px;border-radius:3px;">Lease.cancel_unfunded</code> after a grace period). Without one, bad-faith tenants can create leases cheaply and block landlords from re-leasing until manual cleanup. Render an explicit "lease created · awaiting deposit" state in the UI; do not hide this transitional period.</li>
+<li><strong>Save draft is mandatory on every step.</strong> Per the draft endpoint pattern. Landlords abandon multi-step forms; the draft is how they come back. Server stores the draft, not the browser.</li>
+<li><strong>The handoff is asynchronous.</strong> Don't lock the landlord's session waiting for the tenant. Landlord may sign and disappear for days; tenant may sign at any point within the 7-day window. The "waiting" state is a steady-state view, not a loading spinner.</li>
+<li><strong>Landlord cannot modify the draft after signing.</strong> EIP-712 signature is over the immutable payload. Edits invalidate the signature. If the landlord needs to change terms, cancel the draft and start over — and message that clearly.</li>
+<li><strong>Lease becomes active when tenant submits <code style="font-size:11px;background:#F5F5F4;padding:1px 4px;border-radius:3px;">LeaseFactory.create_lease</code>.</strong> The tenant is the on-chain submitter, paying gas, supplying both signatures and funding the deposit in a coordinated submission. The contract verifies everything atomically.</li>
+<li><strong>Server stores <code style="font-size:11px;background:#F5F5F4;padding:1px 4px;border-radius:3px;">sha256(invite_token)</code> only.</strong> Even if the link is intercepted via screenshot, referrer leak, or shoulder-surfing, the attacker still needs the tenant's wallet to sign.</li>
+<li><strong>Resend generates a new token, invalidates the old.</strong> If the tenant lost the link or the landlord suspects compromise, resending rotates the token. Old link returns 404.</li>
+<li><strong>Blank-tenant pattern — verify with SC team.</strong> Landlord signs with <code style="font-size:11px;background:#F5F5F4;padding:1px 4px;border-radius:3px;">tenant: ZERO_ADDRESS</code>; first wallet to sign claims the role. This is an open question per <code style="font-size:11px;background:#F5F5F4;padding:1px 4px;border-radius:3px;">CLAUDE.md §12</code>. Don't ship UX dependent on it until confirmed.</li>
+<li><strong>EIP-712 schema is <code style="font-size:11px;background:#F5F5F4;padding:1px 4px;border-radius:3px;">LeaseAgreement</code>, <code style="font-size:11px;background:#F5F5F4;padding:1px 4px;border-radius:3px;">verifyingContract = LeaseFactory address</code>.</strong> Get either wrong and signatures verify cryptographically but reject on-chain. Use <code style="font-size:11px;background:#F5F5F4;padding:1px 4px;border-radius:3px;">@leasefi/types</code> builders only; no inline typed-data construction.</li>
+<li><strong>FL state cap on security deposit is 2× monthly rent.</strong> Validate client-side, contract-side, and at submission. Surface jurisdiction context if other states have different caps in Phase 1+ (TX, TN, VA).</li>
+<li><strong>Tenant's KYC, fee approval, and lease signature happen in a single session.</strong> Don't lose progress between them. If the tenant abandons after approving the fee but before signing, the next session resumes from sign.</li>
+<li><strong>SHA-256 vs IPFS CID — keep them separate.</strong> The on-chain <code style="font-size:11px;background:#F5F5F4;padding:1px 4px;border-radius:3px;">lease_document_hash</code> is SHA-256. The CID is the retrieval address only. Always re-hash retrieved PDFs and compare to the on-chain hash before trusting content. Never trust the CID alone — IPFS gateways can serve different content for the same CID under attack.</li>
+<li><strong>Notification triggers fire on state transitions, not on polling.</strong> State 3→4 notifies tenant. State 4→5 notifies landlord. State 6→7 notifies both. Subscribe to indexer SSE. Per <code style="font-size:11px;background:#F5F5F4;padding:1px 4px;border-radius:3px;">Off-Chain Spec §7.1.1</code>.</li>
+<li><strong>Resumability is a hard requirement.</strong> Landlord opens the wizard, fills 4 steps, closes the tab, returns 3 days later. The wizard must restore state from the server-persisted draft — not from localStorage or sessionStorage. Browser-persisted draft state is forbidden. Test this path in Playwright; it's the #1 regression target.</li>
+<li><strong>IPFS pin tokens are server-issued, 5-minute TTL.</strong> Frontend never holds Pinata or web3.storage API keys. If pin fails after upload, the PDF is on the server but not yet on IPFS — retry without re-uploading.</li>
+<li><strong>Hash verification is the security boundary.</strong> Compute SHA-256 client-side on upload. Send hash + PDF to server. Server re-computes and verifies match. Hash also goes into the EIP-712 <code style="font-size:11px;background:#F5F5F4;padding:1px 4px;border-radius:3px;">LeaseAgreement</code> payload. Three independent computations of the same hash = catches both upload corruption and tampering.</li>
+</ul>
+</div>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION 7: DISPUTE FILING                                    -->
+<!-- ============================================================ -->
+<section id="dispute">
+<div class="section-meta">
+<div class="section-number">7</div>
+<span class="section-tag tag-both">Tenant or landlord</span>
+<span class="section-tag tag-mandatory">Lowest prior art</span>
+</div>
+<h2>Dispute filing</h2>
+<p class="section-intro">Highest emotional stakes in the product. Measured tone, no adversarial framing. The system handles the dispute; the user files a claim, never an accusation. Loser-pays reimbursement disclosure is mandatory — it reduces friction for legitimate filers while disincentivizing frivolous ones.</p>
+<div class="section-refs">
+<code>07-ui-ux-reference.md §4 (Flow 5)</code>
+<code>PRD §4.3.4</code>
+<code>SC Spec §8</code>
+</div>
+
+<div class="mockup-frame">
+<div class="mockup-label">Dispute filing form · Tenant filing against landlord deductions</div>
+<div style="background:#FAFAF9;border-radius:10px;padding:28px;border:0.5px solid #E7E5E4;min-height:720px;font-family:var(--font-sans);">
+<div style="max-width:480px;margin:0 auto;">
+<div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;"><a style="color:#57534E;font-size:12px;text-decoration:none;display:inline-flex;align-items:center;gap:4px;cursor:pointer;"><i class="ti ti-arrow-left" style="font-size:14px;"></i>Back to lease</a></div>
+<div style="background:#FFFFFF;border-radius:14px;border:0.5px solid #E7E5E4;padding:26px;">
+<h2 style="font-size:19px;font-weight:500;color:#1C1917;margin:0 0 4px;letter-spacing:-0.01em;">File a dispute</h2>
+<div style="font-size:12px;color:#57534E;margin-bottom:22px;">About your security deposit at 123 Main St</div>
+<div style="margin-bottom:20px;">
+<label style="font-size:12px;color:#292524;font-weight:500;display:block;margin-bottom:8px;">What's this about?</label>
+<div style="display:flex;flex-direction:column;gap:6px;">
+<label style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:#EFF6FF;border:0.5px solid #BFDBFE;border-radius:8px;font-size:13px;color:#1E40AF;cursor:pointer;"><div style="width:14px;height:14px;border-radius:50%;border:2px solid #2563EB;background:#2563EB;box-shadow:inset 0 0 0 2px #FFFFFF;"></div>I disagree with deductions from my deposit</label>
+<label style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:#FFFFFF;border:0.5px solid #E7E5E4;border-radius:8px;font-size:13px;color:#57534E;cursor:pointer;"><div style="width:14px;height:14px;border-radius:50%;border:1.5px solid #A8A29E;"></div>Lease term violation by counterparty</label>
+<label style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:#FFFFFF;border:0.5px solid #E7E5E4;border-radius:8px;font-size:13px;color:#57534E;cursor:pointer;"><div style="width:14px;height:14px;border-radius:50%;border:1.5px solid #A8A29E;"></div>Property condition issue</label>
+<label style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:#FFFFFF;border:0.5px solid #E7E5E4;border-radius:8px;font-size:13px;color:#57534E;cursor:pointer;"><div style="width:14px;height:14px;border-radius:50%;border:1.5px solid #A8A29E;"></div>Other</label>
+</div>
+</div>
+<div style="margin-bottom:20px;">
+<label style="font-size:12px;color:#292524;font-weight:500;display:block;margin-bottom:8px;">Amount in dispute</label>
+<div style="display:flex;align-items:center;background:#FFFFFF;border:0.5px solid #E7E5E4;border-radius:8px;overflow:hidden;">
+<div style="padding:11px 14px;background:#FAFAF9;border-right:0.5px solid #E7E5E4;font-size:13px;color:#57534E;font-family:var(--font-mono);">USDC</div>
+<div style="flex:1;padding:11px 14px;font-size:15px;color:#1C1917;font-family:var(--font-mono);font-weight:500;">1,200.00</div>
+</div>
+<div style="font-size:11px;color:#57534E;margin-top:6px;font-family:var(--font-mono);">Available in deposit: $3,000.00 USDC</div>
+</div>
+<div style="margin-bottom:20px;">
+<label style="font-size:12px;color:#292524;font-weight:500;display:block;margin-bottom:8px;">Describe the issue</label>
+<div style="background:#FFFFFF;border:0.5px solid #E7E5E4;border-radius:8px;padding:12px 14px;font-size:13px;color:#A8A29E;min-height:88px;">Explain what happened in your own words. Stick to facts. Dates and specifics help.</div>
+</div>
+<div style="margin-bottom:22px;">
+<label style="font-size:12px;color:#292524;font-weight:500;display:block;margin-bottom:8px;">Supporting documents <span style="color:#57534E;font-weight:400;">· recommended</span></label>
+<div style="background:#FFFFFF;border:0.5px dashed #BFDBFE;border-radius:8px;padding:18px;text-align:center;cursor:pointer;">
+<i class="ti ti-cloud-upload" style="font-size:22px;color:#2563EB;display:block;margin-bottom:6px;"></i>
+<div style="font-size:12px;color:#292524;">Drop files, or <span style="color:#1D4ED8;font-weight:500;">browse</span></div>
+<div style="font-size:10px;color:#A8A29E;margin-top:3px;">PDF, photo, or document · pinned to IPFS</div>
+</div>
+</div>
+<div style="background:#FAFAF9;border-radius:10px;padding:14px 16px;margin-bottom:20px;">
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+<span style="font-size:12px;color:#292524;font-weight:500;">Filing fee</span>
+<span style="font-size:14px;color:#1C1917;font-family:var(--font-mono);font-weight:500;">$24.00 USDC</span>
+</div>
+<div style="font-size:11px;color:#57534E;line-height:1.55;"><span style="color:#292524;">2% of $1,200 disputed amount.</span> Reimbursed from the other party's payout if your dispute is resolved in your favor (≥ 80% recovery).</div>
+</div>
+<div style="display:flex;gap:8px;">
+<button style="flex:1;background:#FFFFFF;color:#292524;border:0.5px solid #E7E5E4;border-radius:10px;padding:12px 16px;font-size:13px;font-weight:500;cursor:pointer;font-family:var(--font-sans);">Cancel</button>
+<button style="flex:2;background:#2563EB;color:#FFFFFF;border:none;border-radius:10px;padding:12px 16px;font-size:13px;font-weight:500;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;font-family:var(--font-sans);">Review and file<i class="ti ti-arrow-right" style="font-size:15px;"></i></button>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+<div class="copy-rules">
+<div class="copy-rules-title">Dispute copy rules</div>
+<table>
+<tr><td class="good">GOOD</td><td>"Counterparty" / "the other party" — neutral terms</td></tr>
+<tr><td class="good">GOOD</td><td>"Reimbursed if dispute is resolved in your favor" — incentive disclosure</td></tr>
+<tr><td class="bad">BAD</td><td>"Plaintiff" / "Defendant" / "Accused" — court framing</td></tr>
+<tr><td class="bad">BAD</td><td>"Your landlord owes you" — assumes outcome before arbitration</td></tr>
+<tr><td class="bad">BAD</td><td>"Win your case" — adversarial; the system handles the dispute</td></tr>
+</table>
+</div>
+
+<div class="watch-outs">
+<div class="watch-outs-title">Watch-outs</div>
+<ul>
+<li><strong>The 80% win threshold maps to <code style="font-size:11px;background:#F5F5F4;padding:1px 4px;border-radius:3px;">win_threshold_bps</code> on-chain.</strong> Don't hardcode "80%" — read from <code style="font-size:11px;background:#F5F5F4;padding:1px 4px;border-radius:3px;">DisputeModule.win_threshold_bps</code>. Default 8000; governance-adjustable in Phase 2.</li>
+<li><strong>Evidence pinned via server-issued IPFS token.</strong> 5-minute TTL. Frontend never holds Pinata/web3.storage keys.</li>
+<li><strong>Disputed amount validated client-side against <code style="font-size:11px;background:#F5F5F4;padding:1px 4px;border-radius:3px;">DepositVault.available_funds</code>.</strong> Contract will revert otherwise — fail at preflight, not at signature.</li>
+<li><strong>This is the lowest-prior-art surface in the product.</strong> Stessa doesn't dispute. Airbnb's resolution center is consumer-style. Push for unmoderated user research before code lands — five tests is cheaper than a redesign.</li>
+<li><strong>Counterparty is notified.</strong> Don't let the filer believe this is private. Surface this explicitly somewhere in the flow.</li>
+</ul>
+</div>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION 8: TRANSACTION STATUS                                -->
+<!-- ============================================================ -->
+<section id="tx-status">
+<div class="section-meta">
+<div class="section-number">8</div>
+<span class="section-tag tag-both">Mandatory shared component</span>
+<span class="section-tag tag-mandatory">Most-rendered surface</span>
+</div>
+<h2>TransactionStatus — all states</h2>
+<p class="section-intro">The most-rendered chain-aware component in the entire app. Every fee-bearing flow uses <code style="font-size:13px;background:#F5F5F4;padding:1px 6px;border-radius:4px;">useTransaction</code> and surfaces <code style="font-size:13px;background:#F5F5F4;padding:1px 6px;border-radius:4px;">&lt;TransactionStatus state={…} /&gt;</code>. Three-stage confirmation is the trust spine — never collapse it.</p>
+<div class="section-refs">
+<code>02-transaction-state-machine.md</code>
+<code>CLAUDE.md §5</code>
+<code>05-data-layer-architecture.md §9</code>
+</div>
+
+<div class="mockup-frame">
+<div class="mockup-label">All five primary states · Rendered identically across rent, dispute, deposit, lease ceremonies</div>
+<div class="state-grid">
+
+<div class="state-card">
+<div class="state-label">awaiting-signature</div>
+<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+<div style="width:32px;height:32px;border-radius:50%;background:#DBEAFE;display:flex;align-items:center;justify-content:center;color:#1E40AF;"><i class="ti ti-pen" style="font-size:16px;"></i></div>
+<div>
+<div style="font-size:13px;font-weight:500;color:#1C1917;">Sign in your wallet</div>
+<div style="font-size:11px;color:#57534E;">Casper Wallet should be open</div>
+</div>
+</div>
+<div style="height:4px;background:#F5F5F4;border-radius:2px;overflow:hidden;margin-bottom:10px;"><div style="width:25%;height:100%;background:#2563EB;"></div></div>
+<div style="font-size:11px;color:#A8A29E;">Step 1 of 4 · Pre-flight passed</div>
+</div>
+
+<div class="state-card">
+<div class="state-label">pending</div>
+<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+<div style="width:32px;height:32px;border-radius:50%;background:#FFF7ED;display:flex;align-items:center;justify-content:center;color:#C2410C;"><i class="ti ti-loader-2" style="font-size:16px;"></i></div>
+<div>
+<div style="font-size:13px;font-weight:500;color:#1C1917;">Submitted to network</div>
+<div style="font-size:11px;color:#57534E;font-family:var(--font-mono);">0xa3f…8b21</div>
+</div>
+</div>
+<div style="height:4px;background:#F5F5F4;border-radius:2px;overflow:hidden;margin-bottom:10px;"><div style="width:50%;height:100%;background:#F97316;"></div></div>
+<div style="font-size:11px;color:#A8A29E;">Step 2 of 4 · Awaiting inclusion</div>
+</div>
+
+<div class="state-card">
+<div class="state-label">in-block</div>
+<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+<div style="width:32px;height:32px;border-radius:50%;background:#FFF7ED;display:flex;align-items:center;justify-content:center;color:#C2410C;"><i class="ti ti-progress" style="font-size:16px;"></i></div>
+<div>
+<div style="font-size:13px;font-weight:500;color:#1C1917;">Confirming</div>
+<div style="font-size:11px;color:#57534E;">3 of 8 confirmations</div>
+</div>
+</div>
+<div style="height:4px;background:#F5F5F4;border-radius:2px;overflow:hidden;margin-bottom:10px;"><div style="width:75%;height:100%;background:#F97316;"></div></div>
+<div style="font-size:11px;color:#A8A29E;">Step 3 of 4 · ~90 seconds remaining</div>
+</div>
+
+<div class="state-card">
+<div class="state-label" style="color:#047857;">finalized</div>
+<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+<div style="width:32px;height:32px;border-radius:50%;background:#F0FDF4;display:flex;align-items:center;justify-content:center;color:#047857;"><i class="ti ti-check" style="font-size:18px;"></i></div>
+<div>
+<div style="font-size:13px;font-weight:500;color:#1C1917;">Rent paid</div>
+<div style="font-size:11px;color:#57534E;font-family:var(--font-mono);">$1,530.00 USDC</div>
+</div>
+</div>
+<div style="height:4px;background:#10B981;border-radius:2px;margin-bottom:10px;"></div>
+<div style="font-size:11px;color:#047857;">Permanent · 8 confirmations</div>
+</div>
+
+<div class="state-card" style="border-color:#FECACA;">
+<div class="state-label" style="color:#B91C1C;">failed · recoverable</div>
+<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+<div style="width:32px;height:32px;border-radius:50%;background:#FEF2F2;display:flex;align-items:center;justify-content:center;color:#B91C1C;"><i class="ti ti-alert-circle" style="font-size:18px;"></i></div>
+<div>
+<div style="font-size:13px;font-weight:500;color:#1C1917;">Transaction didn't go through</div>
+<div style="font-size:11px;color:#57534E;">Your USDC is safe in your wallet</div>
+</div>
+</div>
+<button style="width:100%;background:#FFFFFF;color:#292524;border:0.5px solid #E7E5E4;border-radius:6px;padding:7px 12px;font-size:12px;font-weight:500;cursor:pointer;font-family:var(--font-sans);">Retry payment</button>
+</div>
+
+</div>
+</div>
+
+<div class="copy-rules">
+<div class="copy-rules-title">State machine non-negotiables</div>
+<table>
+<tr><td class="bad">NEVER</td><td>Show "✓ Paid" off a tx hash alone. Hash means "node accepted" — nothing about success.</td></tr>
+<tr><td class="bad">NEVER</td><td>Treat <code style="font-size:11px;background:#F5F5F4;padding:1px 4px;border-radius:3px;">user-rejected</code> as <code style="font-size:11px;background:#F5F5F4;padding:1px 4px;border-radius:3px;">failed</code>. Silent return to idle. No toast, no Sentry.</td></tr>
+<tr><td class="bad">NEVER</td><td>Optimistic UI for chain-dependent state. Three-stage confirmation or nothing.</td></tr>
+<tr><td class="good">ALWAYS</td><td>"Your USDC is safe in your wallet" on failures. Without it, users panic.</td></tr>
+<tr><td class="good">ALWAYS</td><td>Subscribe to indexer SSE for finalization. Not the wallet. Not RPC polling.</td></tr>
+</table>
+</div>
+
+<div class="watch-outs">
+<div class="watch-outs-title">Watch-outs</div>
+<ul>
+<li><strong>Three-stage confirmation: submitted → in-block (1 block, ~16s) → finalized (8 blocks, ~2 min).</strong> The UI distinguishes all three. Do not collapse.</li>
+<li><strong>Pre-flight order is deliberate.</strong> build-args → KYC → OFAC → velocity → balance → allowance → sign. Reordering leaks compliance state via timing.</li>
+<li><strong>Reorg handling.</strong> Between in-block and finalized, roll back to pending on reorg. Orphan timeout 32 blocks → <code style="font-size:11px;background:#F5F5F4;padding:1px 4px;border-radius:3px;">failed: reorg-orphaned</code>.</li>
+<li><strong>Persistence via sessionStorage, never localStorage.</strong> Tx state should not survive a browser session.</li>
+<li><strong>GlobalTxIndicator survives navigation.</strong> User pays rent, navigates to disputes — the badge persists in the header. Click to return.</li>
+</ul>
+</div>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION 9: COMPLIANCE FAILURE                                -->
+<!-- ============================================================ -->
+<section id="compliance">
+<div class="section-meta">
+<div class="section-number">9</div>
+<span class="section-tag tag-mandatory">Regulatory</span>
+<span class="section-tag tag-security">BSA §314</span>
+</div>
+<h2>Compliance failure surface</h2>
+<p class="section-intro">The surface where the most expensive engineering mistakes happen. The Bank Secrecy Act §314 prohibits informing a user that their account is flagged. OFAC, enhanced-KYC, sanctions screening, and jurisdiction restrictions all collapse to the same generic message. The Compliance Officer handles user communication out-of-band.</p>
+<div class="section-refs">
+<code>06-security-model.md §13</code>
+<code>05-data-layer-architecture.md §9</code>
+<code>CO/GC Pack §6.2</code>
+</div>
+
+<div class="mockup-frame">
+<div class="mockup-label">Generic message · No specifics · No retry button</div>
+<div style="background:#FAFAF9;border-radius:10px;padding:48px 28px;border:0.5px solid #E7E5E4;display:flex;align-items:center;justify-content:center;font-family:var(--font-sans);">
+<div style="background:#FFFFFF;border-radius:14px;border:0.5px solid #E7E5E4;padding:32px;max-width:420px;width:100%;text-align:center;">
+<div style="width:56px;height:56px;border-radius:50%;background:#FEFCE8;display:flex;align-items:center;justify-content:center;color:#A16207;margin:0 auto 16px;"><i class="ti ti-info-circle" style="font-size:28px;"></i></div>
+<h3 style="font-size:18px;font-weight:500;color:#1C1917;margin:0 0 8px;">Transaction not processed</h3>
+<div style="font-size:13px;color:#57534E;line-height:1.6;margin-bottom:24px;">This transaction cannot be processed at this time. Please contact support for assistance.</div>
+<a style="display:inline-flex;align-items:center;gap:6px;padding:10px 20px;background:#FFFFFF;color:#292524;border:0.5px solid #E7E5E4;border-radius:8px;font-size:13px;font-weight:500;text-decoration:none;cursor:pointer;font-family:var(--font-sans);">Contact support<i class="ti ti-external-link" style="font-size:14px;"></i></a>
+</div>
+</div>
+</div>
+
+<div class="copy-rules">
+<div class="copy-rules-title">Compliance failure copy — exact strings</div>
+<table>
+<tr><td class="good">EXACT</td><td>"This transaction cannot be processed at this time. Please contact support for assistance."</td></tr>
+<tr><td class="bad">NEVER</td><td>"You appear on the OFAC Specially Designated Nationals list."</td></tr>
+<tr><td class="bad">NEVER</td><td>"Enhanced due diligence is required for this transaction."</td></tr>
+<tr><td class="bad">NEVER</td><td>"Sanctions screening has flagged this transaction."</td></tr>
+<tr><td class="bad">NEVER</td><td>"Your KYC tier is insufficient for this jurisdiction."</td></tr>
+</table>
+</div>
+
+<div class="watch-outs">
+<div class="watch-outs-title">Watch-outs</div>
+<ul>
+<li><strong>No retry button.</strong> Inviting retry signals "this is the same type of block" — that's a tipping-off signal. Single CTA: "Contact support."</li>
+<li><strong>All compliance contract reverts collapse to one error class.</strong> <code style="font-size:11px;background:#F5F5F4;padding:1px 4px;border-radius:3px;">OfacScreeningFailed</code>, <code style="font-size:11px;background:#F5F5F4;padding:1px 4px;border-radius:3px;">SanctionsListMatch</code>, <code style="font-size:11px;background:#F5F5F4;padding:1px 4px;border-radius:3px;">EnhancedDueDiligenceRequired</code>, <code style="font-size:11px;background:#F5F5F4;padding:1px 4px;border-radius:3px;">JurisdictionRestricted</code> → <code style="font-size:11px;background:#F5F5F4;padding:1px 4px;border-radius:3px;">ofac-restricted</code>. Don't add a variant.</li>
+<li><strong>Velocity limits are exempted.</strong> Velocity is operational rate-limiting, not compliance. You may show the reset time.</li>
+<li><strong>CO is notified server-side.</strong> The Compliance Officer receives the detailed signal via internal channels and handles communication if appropriate. Frontend's job is silence.</li>
+<li><strong>No Sentry capture with specifics.</strong> PII-redacted only. The signal goes to CO via internal channel, not error tracking.</li>
+<li><strong>This requires CO sign-off.</strong> Any change to this surface — copy, layout, CTA — requires Compliance Officer review per CO/GC Pack §6.2.</li>
+</ul>
+</div>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION 10: KYC GATE                                         -->
+<!-- ============================================================ -->
+<section id="kyc-gate">
+<div class="section-meta">
+<div class="section-number">10</div>
+<span class="section-tag tag-both">Mandatory shared component</span>
+<span class="section-tag tag-mandatory">Easy to skip</span>
+</div>
+<h2>KYCGate &amp; attestation-pending state</h2>
+<p class="section-intro">Wraps every fee-bearing action. The <code style="font-size:13px;background:#F5F5F4;padding:1px 6px;border-radius:4px;">pending-attestation</code> state — a ~30 second window while the on-chain attestation finalizes — is explicitly called out in the spec as easy to skip and producing confused users. Render it distinctly.</p>
+<div class="section-refs">
+<code>05-data-layer-architecture.md §11</code>
+<code>CLAUDE.md §11</code>
+<code>PRD §4.4.1</code>
+</div>
+
+<div class="mockup-frame">
+<div class="mockup-label">Two states · KYC required (block) and pending-attestation (transient)</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;font-family:var(--font-sans);">
+
+<div style="background:#FFFFFF;border:0.5px solid #E7E5E4;border-radius:12px;padding:24px;">
+<div style="font-size:10px;color:#57534E;text-transform:uppercase;letter-spacing:0.08em;font-weight:500;margin-bottom:14px;font-family:var(--font-mono);">kyc-required · Tier 2</div>
+<div style="width:44px;height:44px;border-radius:50%;background:#DBEAFE;display:flex;align-items:center;justify-content:center;color:#1E40AF;margin-bottom:14px;"><i class="ti ti-id" style="font-size:22px;"></i></div>
+<h3 style="font-size:16px;font-weight:500;color:#1C1917;margin:0 0 6px;">Verify your identity</h3>
+<div style="font-size:13px;color:#57534E;line-height:1.55;margin-bottom:18px;">This transaction requires identity verification. It's a one-time, 5-minute process.</div>
+<div style="background:#FAFAF9;border-radius:8px;padding:10px 14px;font-size:12px;color:#292524;line-height:1.5;margin-bottom:18px;">
+<div style="display:flex;justify-content:space-between;padding:3px 0;"><span style="color:#57534E;">Current tier</span><span>Not verified</span></div>
+<div style="display:flex;justify-content:space-between;padding:3px 0;"><span style="color:#57534E;">Required tier</span><span style="font-weight:500;">Tier 1</span></div>
+<div style="display:flex;justify-content:space-between;padding:3px 0;"><span style="color:#57534E;">Time needed</span><span>~5 minutes</span></div>
+</div>
+<button style="width:100%;background:#2563EB;color:#FFFFFF;border:none;border-radius:8px;padding:11px 18px;font-size:13px;font-weight:500;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;font-family:var(--font-sans);">Start verification<i class="ti ti-arrow-right" style="font-size:14px;"></i></button>
+</div>
+
+<div style="background:#FFFFFF;border:0.5px solid #E7E5E4;border-radius:12px;padding:24px;">
+<div style="font-size:10px;color:#57534E;text-transform:uppercase;letter-spacing:0.08em;font-weight:500;margin-bottom:14px;font-family:var(--font-mono);">pending-attestation · ~30s</div>
+<div style="width:44px;height:44px;border-radius:50%;background:#FFF7ED;display:flex;align-items:center;justify-content:center;color:#C2410C;margin-bottom:14px;"><i class="ti ti-loader-2" style="font-size:22px;"></i></div>
+<h3 style="font-size:16px;font-weight:500;color:#1C1917;margin:0 0 6px;">Recording your verification</h3>
+<div style="font-size:13px;color:#57534E;line-height:1.55;margin-bottom:18px;">Persona confirmed your identity. We're writing the verification to the Casper network so future transactions skip this step.</div>
+<div style="height:4px;background:#F5F5F4;border-radius:2px;overflow:hidden;margin-bottom:10px;"><div style="width:60%;height:100%;background:#F97316;"></div></div>
+<div style="display:flex;justify-content:space-between;font-size:11px;color:#A8A29E;margin-bottom:18px;">
+<span>Submitting attestation</span><span>~18s remaining</span>
+</div>
+<div style="font-size:11px;color:#57534E;background:#FFF7ED;border:0.5px solid #FFEDD5;border-radius:6px;padding:10px 12px;line-height:1.5;"><i class="ti ti-info-circle" style="font-size:13px;vertical-align:-1px;margin-right:4px;color:#C2410C;"></i>Keep this tab open. You can use the app normally; this finishes in the background.</div>
+</div>
+
+</div>
+</div>
+
+<div class="watch-outs">
+<div class="watch-outs-title">Watch-outs</div>
+<ul>
+<li><strong>The pending-attestation state is mandatory.</strong> Skipping it produces "I verified but the app says I'm not verified" tickets. Render it distinctly with progress.</li>
+<li><strong>Renewal cadence is hard-coded.</strong> 30 days before expiry → banner. 7 days → modal interrupt on next fee-bearing action. Day of expiry → blocks all fee-bearing actions.</li>
+<li><strong>Wallet rotation is a Phase 1 limitation.</strong> Each wallet KYCs independently. Surface this in copy — don't pretend it's not friction.</li>
+<li><strong>KYC source is abstracted.</strong> Default <code style="font-size:11px;background:#F5F5F4;padding:1px 4px;border-radius:3px;">APIKYCSource</code> until <code style="font-size:11px;background:#F5F5F4;padding:1px 4px;border-radius:3px;">AttestationKYCSource</code> decision lands. Consume <code style="font-size:11px;background:#F5F5F4;padding:1px 4px;border-radius:3px;">useKYCStatus(address)</code> only — never the source directly.</li>
+<li><strong>Tier insufficiency is NOT a compliance failure.</strong> KYC-required surfaces the actual reason ("Tier 1 required"). OFAC/sanctions/jurisdiction collapses to the generic compliance surface. Don't conflate.</li>
+</ul>
+</div>
+</section>
+
+<!-- ============================================================ -->
+<!-- SECTION 11 · PHASE 2 PREVIEW · MARKETPLACE + INSTANT-ACCEPT  -->
+<!-- ============================================================ -->
+<section id="phase2-marketplace">
+
+<div style="background:linear-gradient(135deg,#FFFBEB 0%,#FEF3C7 100%);border:0.5px solid #FCD34D;border-radius:10px;padding:14px 18px;margin-bottom:24px;display:flex;gap:12px;align-items:flex-start;">
+<i class="ti ti-clock-hour-4" style="font-size:18px;color:#A16207;margin-top:1px;flex-shrink:0;"></i>
+<div>
+<div style="font-size:13px;font-weight:500;color:#78350F;margin-bottom:3px;">Phase 2 preview · Not for Phase 1 build</div>
+<div style="font-size:12px;color:#92400E;line-height:1.55;">The surfaces below are forward-looking scope. They will not ship in Phase 1. Documented here so Phase 1 architecture decisions don't accidentally close off Phase 2 paths — and so the senior FE engineer can plan component reuse and naming with the marketplace flow in mind.</div>
+</div>
+</div>
+
+<div class="section-meta">
+<div class="section-number">11</div>
+<span class="section-tag tag-both">Marketplace expansion</span>
+<span class="section-tag" style="background:#FEF3C7;color:#92400E;">Phase 2 scope</span>
+</div>
+<h2>Phase 2 preview: Marketplace listings &amp; instant-accept</h2>
+<p class="section-intro">Public listings, tenant pre-approval, instant-accept by qualified tenants, landlord counter-signature. A marketplace surface that runs alongside the bilateral lease-signing flow from Section 6 — same on-chain settlement (LeaseFactory.create_lease + DepositVault.deposit_funds), different entry point. Five mockup frames cover the novel surfaces; two well-understood patterns (listing creation wizard, browse / search) are deferred to FE engineer prose.</p>
+<div class="section-refs">
+<code>ADR-003 · Pre-approval vendor stack</code>
+<code>PRD §4.5 · future</code>
+<code>Off-Chain Spec §5.7 · future</code>
+<code>SC Spec §5 · same as Phase 1</code>
+</div>
+
+<!-- ==================================================== -->
+<!-- End-to-end overview                                  -->
+<!-- ==================================================== -->
+<div class="mockup-frame">
+<div class="mockup-label">End-to-end overview · Marketplace path · Typical ~5 minutes from listing-view to counter-sign</div>
+<div style="background:#FFFFFF;border-radius:12px;padding:24px;border:0.5px solid #E7E5E4;font-family:var(--font-sans);">
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:32px;">
+
+<div>
+<div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:#C2410C;font-weight:500;margin-bottom:14px;display:flex;align-items:center;gap:6px;"><i class="ti ti-user-check" style="font-size:13px;"></i>Tenant</div>
+<div style="display:flex;flex-direction:column;gap:8px;">
+<div style="display:grid;grid-template-columns:24px 1fr;gap:10px;align-items:center;font-size:12px;color:#292524;"><div style="width:22px;height:22px;border-radius:50%;background:#FFF7ED;color:#C2410C;font-weight:500;display:flex;align-items:center;justify-content:center;font-size:11px;">1</div>Complete pre-approval <span style="color:#A8A29E;">· one-time, 60d valid</span></div>
+<div style="display:grid;grid-template-columns:24px 1fr;gap:10px;align-items:center;font-size:12px;color:#292524;"><div style="width:22px;height:22px;border-radius:50%;background:#FFF7ED;color:#C2410C;font-weight:500;display:flex;align-items:center;justify-content:center;font-size:11px;">2</div>Browse listings</div>
+<div style="display:grid;grid-template-columns:24px 1fr;gap:10px;align-items:center;font-size:12px;color:#292524;"><div style="width:22px;height:22px;border-radius:50%;background:#FFF7ED;color:#C2410C;font-weight:500;display:flex;align-items:center;justify-content:center;font-size:11px;">3</div>Open listing detail</div>
+<div style="display:grid;grid-template-columns:24px 1fr;gap:10px;align-items:center;font-size:12px;color:#292524;"><div style="width:22px;height:22px;border-radius:50%;background:#FFF7ED;color:#C2410C;font-weight:500;display:flex;align-items:center;justify-content:center;font-size:11px;">4</div>Sign lease acceptance <span style="color:#A8A29E;">· EIP-712, off-chain</span></div>
+<div style="display:grid;grid-template-columns:24px 1fr;gap:10px;align-items:center;font-size:12px;color:#292524;"><div style="width:22px;height:22px;border-radius:50%;background:#FFF7ED;color:#C2410C;font-weight:500;display:flex;align-items:center;justify-content:center;font-size:11px;">5</div>Wait for counter-sign <span style="color:#A8A29E;">· 48-hour window</span></div>
+<div style="display:grid;grid-template-columns:24px 1fr;gap:10px;align-items:center;font-size:12px;color:#292524;"><div style="width:22px;height:22px;border-radius:50%;background:#FFF7ED;color:#C2410C;font-weight:500;display:flex;align-items:center;justify-content:center;font-size:11px;">6</div>Fund deposit <span style="font-family:var(--font-mono);font-size:10px;color:#1E40AF;background:#EFF6FF;padding:1px 5px;border-radius:3px;margin-left:2px;">Tx B</span></div>
+</div>
+</div>
+
+<div>
+<div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:#1E40AF;font-weight:500;margin-bottom:14px;display:flex;align-items:center;gap:6px;"><i class="ti ti-user" style="font-size:13px;"></i>Landlord / PM</div>
+<div style="display:flex;flex-direction:column;gap:8px;">
+<div style="display:grid;grid-template-columns:24px 1fr;gap:10px;align-items:center;font-size:12px;color:#292524;"><div style="width:22px;height:22px;border-radius:50%;background:#EFF6FF;color:#1E40AF;font-weight:500;display:flex;align-items:center;justify-content:center;font-size:11px;">1</div>Create listing <span style="color:#A8A29E;">· photos, terms, criteria</span></div>
+<div style="display:grid;grid-template-columns:24px 1fr;gap:10px;align-items:center;font-size:12px;color:#292524;"><div style="width:22px;height:22px;border-radius:50%;background:#EFF6FF;color:#1E40AF;font-weight:500;display:flex;align-items:center;justify-content:center;font-size:11px;">2</div>Publish listing <span style="color:#A8A29E;">· off-chain, no gas</span></div>
+<div style="display:grid;grid-template-columns:24px 1fr;gap:10px;align-items:center;font-size:12px;color:#292524;"><div style="width:22px;height:22px;border-radius:50%;background:#EFF6FF;color:#1E40AF;font-weight:500;display:flex;align-items:center;justify-content:center;font-size:11px;">3</div>Receive applications</div>
+<div style="display:grid;grid-template-columns:24px 1fr;gap:10px;align-items:center;font-size:12px;color:#292524;"><div style="width:22px;height:22px;border-radius:50%;background:#EFF6FF;color:#1E40AF;font-weight:500;display:flex;align-items:center;justify-content:center;font-size:11px;">4</div>Review applicants <span style="color:#A8A29E;">· pseudonymous</span></div>
+<div style="display:grid;grid-template-columns:24px 1fr;gap:10px;align-items:center;font-size:12px;color:#292524;"><div style="width:22px;height:22px;border-radius:50%;background:#EFF6FF;color:#1E40AF;font-weight:500;display:flex;align-items:center;justify-content:center;font-size:11px;">5</div>Document declines <span style="color:#A8A29E;">· FHA trail</span></div>
+<div style="display:grid;grid-template-columns:24px 1fr;gap:10px;align-items:center;font-size:12px;color:#292524;"><div style="width:22px;height:22px;border-radius:50%;background:#EFF6FF;color:#1E40AF;font-weight:500;display:flex;align-items:center;justify-content:center;font-size:11px;">6</div>Counter-sign <span style="font-family:var(--font-mono);font-size:10px;color:#1E40AF;background:#EFF6FF;padding:1px 5px;border-radius:3px;margin-left:2px;">Tx A</span></div>
+</div>
+</div>
+
+</div>
+
+<div style="margin-top:20px;padding:14px 18px;border-top:0.5px solid #E7E5E4;display:flex;align-items:center;justify-content:center;gap:10px;background:#FAFAF9;border-radius:0 0 8px 8px;margin-left:-24px;margin-right:-24px;margin-bottom:-24px;">
+<div style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;background:#F0FDF4;border-radius:999px;font-size:12px;color:#047857;font-weight:500;"><i class="ti ti-check" style="font-size:14px;"></i>Lease fully active on Casper</div>
+<div style="font-size:11px;color:#57534E;font-family:var(--font-mono);">Same Tx A + Tx B as Section 6 · marketplace is the entry point, not the settlement</div>
+</div>
+</div>
+</div>
+
+<!-- ==================================================== -->
+<!-- Sub-screen A: Tenant listing detail                  -->
+<!-- ==================================================== -->
+<div class="mockup-frame">
+<div class="mockup-label">Sub-screen A · Tenant listing detail · Pre-approved tenant sees instant-accept</div>
+<div style="background:#FFFFFF;border-radius:14px;border:0.5px solid #E7E5E4;overflow:hidden;font-family:var(--font-sans);color:#1C1917;max-width:520px;margin:0 auto;">
+
+<div style="background:linear-gradient(135deg,#DBEAFE 0%,#BFDBFE 50%,#93C5FD 100%);height:180px;position:relative;display:flex;align-items:flex-end;padding:14px;">
+<div style="display:flex;gap:4px;">
+<div style="width:24px;height:3px;background:#FFFFFF;border-radius:2px;opacity:0.9;"></div>
+<div style="width:24px;height:3px;background:#FFFFFF;border-radius:2px;opacity:0.4;"></div>
+<div style="width:24px;height:3px;background:#FFFFFF;border-radius:2px;opacity:0.4;"></div>
+<div style="width:24px;height:3px;background:#FFFFFF;border-radius:2px;opacity:0.4;"></div>
+</div>
+<div style="position:absolute;top:14px;right:14px;display:flex;gap:6px;">
+<button style="width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,0.9);border:none;display:flex;align-items:center;justify-content:center;color:#292524;cursor:pointer;"><i class="ti ti-heart" style="font-size:16px;"></i></button>
+<button style="width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,0.9);border:none;display:flex;align-items:center;justify-content:center;color:#292524;cursor:pointer;"><i class="ti ti-share" style="font-size:16px;"></i></button>
+</div>
+<div style="position:absolute;top:14px;left:14px;display:inline-flex;align-items:center;gap:4px;padding:4px 9px;background:rgba(255,255,255,0.95);border-radius:999px;font-size:10px;color:#292524;font-weight:500;"><i class="ti ti-photo" style="font-size:11px;"></i>1 / 12</div>
+</div>
+
+<div style="padding:20px 22px;">
+<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">
+<div>
+<h3 style="font-size:19px;font-weight:500;margin:0 0 3px;letter-spacing:-0.01em;">123 Main St</h3>
+<div style="font-size:13px;color:#57534E;">Anytown, FL · Riverside neighborhood</div>
+</div>
+<div style="text-align:right;">
+<div style="font-size:18px;font-weight:500;font-family:var(--font-mono);letter-spacing:-0.02em;">$1,500</div>
+<div style="font-size:10px;color:#57534E;text-transform:uppercase;letter-spacing:0.06em;">per month</div>
+</div>
+</div>
+
+<div style="display:flex;gap:14px;font-size:12px;color:#57534E;margin-bottom:18px;padding-bottom:16px;border-bottom:0.5px solid #F5F5F4;">
+<div style="display:flex;align-items:center;gap:4px;"><i class="ti ti-bed" style="font-size:14px;"></i>3 bed</div>
+<div style="display:flex;align-items:center;gap:4px;"><i class="ti ti-bath" style="font-size:14px;"></i>2 bath</div>
+<div style="display:flex;align-items:center;gap:4px;"><i class="ti ti-ruler" style="font-size:14px;"></i>1,400 sqft</div>
+<div style="display:flex;align-items:center;gap:4px;"><i class="ti ti-calendar" style="font-size:14px;"></i>Move in Feb 1</div>
+</div>
+
+<div style="background:linear-gradient(to right,#F0FDF4,#ECFDF5);border:0.5px solid #BBF7D0;border-radius:10px;padding:14px 16px;margin-bottom:16px;display:flex;gap:12px;align-items:center;">
+<div style="width:38px;height:38px;border-radius:50%;background:#10B981;display:flex;align-items:center;justify-content:center;color:#FFFFFF;flex-shrink:0;"><i class="ti ti-bolt" style="font-size:20px;"></i></div>
+<div style="flex:1;">
+<div style="font-size:13px;color:#047857;font-weight:500;margin-bottom:2px;">You're pre-approved · instant accept</div>
+<div style="font-size:11px;color:#047857;line-height:1.5;">Verified income, credit, identity. You meet this landlord's criteria.</div>
+</div>
+</div>
+
+<div style="font-size:11px;color:#57534E;text-transform:uppercase;letter-spacing:0.08em;font-weight:500;margin-bottom:10px;">Lease terms</div>
+<div style="background:#FAFAF9;border-radius:10px;padding:14px 16px;margin-bottom:16px;">
+<div style="display:grid;grid-template-columns:130px 1fr;gap:7px 14px;font-size:13px;">
+<div style="color:#57534E;">Monthly rent</div><div style="color:#292524;font-family:var(--font-mono);">$1,500.00 USDC</div>
+<div style="color:#57534E;">Security deposit</div><div style="color:#292524;"><span style="font-family:var(--font-mono);">$3,000.00 USDC</span> <span style="font-size:10px;color:#047857;background:#F0FDF4;padding:1px 6px;border-radius:999px;margin-left:3px;">refundable</span></div>
+<div style="color:#57534E;">Term</div><div style="color:#292524;">12 months · ends Jan 31, 2028</div>
+<div style="color:#57534E;">Late fee</div><div style="color:#292524;">5% of monthly rent · 5-day grace</div>
+<div style="color:#57534E;">Lease document</div><div><a style="color:#1D4ED8;text-decoration:none;display:inline-flex;align-items:center;gap:4px;cursor:pointer;">View PDF<i class="ti ti-external-link" style="font-size:11px;"></i></a></div>
+</div>
+</div>
+
+<div style="font-size:11px;color:#57534E;text-transform:uppercase;letter-spacing:0.08em;font-weight:500;margin-bottom:10px;">Why you qualify</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:11px;margin-bottom:18px;">
+<div style="display:flex;align-items:center;gap:5px;color:#292524;"><i class="ti ti-check" style="font-size:13px;color:#10B981;"></i>Verified income · 3.2× rent</div>
+<div style="display:flex;align-items:center;gap:5px;color:#292524;"><i class="ti ti-check" style="font-size:13px;color:#10B981;"></i>Credit standing met</div>
+<div style="display:flex;align-items:center;gap:5px;color:#292524;"><i class="ti ti-check" style="font-size:13px;color:#10B981;"></i>Rental history clean</div>
+<div style="display:flex;align-items:center;gap:5px;color:#292524;"><i class="ti ti-check" style="font-size:13px;color:#10B981;"></i>ID verified · KYC Tier 2</div>
+</div>
+
+<button style="background:#2563EB;color:#FFFFFF;border:none;border-radius:10px;padding:13px 20px;font-size:14px;font-weight:500;cursor:pointer;width:100%;display:inline-flex;align-items:center;justify-content:center;gap:8px;font-family:var(--font-sans);margin-bottom:10px;">Accept lease and apply<i class="ti ti-arrow-right" style="font-size:16px;"></i></button>
+
+<div style="text-align:center;font-size:11px;color:#57534E;line-height:1.5;">Your acceptance is a binding signature. The landlord has 48 hours to counter-sign or decline.</div>
+
+<div style="margin-top:16px;padding:12px 14px;background:#FAFAF9;border-radius:8px;display:flex;justify-content:space-between;align-items:center;font-size:11px;">
+<div style="display:flex;align-items:center;gap:6px;color:#57534E;"><i class="ti ti-users" style="font-size:13px;"></i>Listed 3d ago · 4 other applications</div>
+<div style="display:flex;align-items:center;gap:6px;color:#292524;"><i class="ti ti-shield-check" style="font-size:13px;color:#1E40AF;"></i>Acme Properties · 12 leases · 4.8★</div>
+</div>
+</div>
+</div>
+</div>
+
+<!-- ==================================================== -->
+<!-- Sub-screen B: Landlord applications inbox            -->
+<!-- ==================================================== -->
+<div class="mockup-frame">
+<div class="mockup-label">Sub-screen B · Landlord applications inbox · Pseudonymous until counter-sign</div>
+<div style="background:#FFFFFF;border-radius:10px;border:0.5px solid #E7E5E4;overflow:hidden;font-family:var(--font-sans);color:#1C1917;">
+
+<div style="padding:18px 22px;border-bottom:0.5px solid #E7E5E4;display:flex;justify-content:space-between;align-items:flex-start;">
+<div>
+<div style="font-size:10px;color:#A8A29E;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:3px;">Active listing · 4 applications</div>
+<h3 style="font-size:16px;font-weight:500;margin:0 0 2px;">123 Main St, Anytown FL</h3>
+<div style="font-size:12px;color:#57534E;font-family:var(--font-mono);">$1,500/mo · 12 months · move-in Feb 1</div>
+</div>
+<div style="display:flex;gap:8px;">
+<button style="background:#FFFFFF;color:#57534E;border:0.5px solid #E7E5E4;border-radius:8px;padding:6px 12px;font-size:11px;cursor:pointer;display:inline-flex;align-items:center;gap:5px;font-family:var(--font-sans);"><i class="ti ti-eye-off" style="font-size:13px;"></i>Unlist</button>
+<button style="background:#FFFFFF;color:#57534E;border:0.5px solid #E7E5E4;border-radius:8px;padding:6px 12px;font-size:11px;cursor:pointer;display:inline-flex;align-items:center;gap:5px;font-family:var(--font-sans);"><i class="ti ti-edit" style="font-size:13px;"></i>Edit</button>
+</div>
+</div>
+
+<div style="display:flex;align-items:center;gap:6px;padding:10px 22px;border-bottom:0.5px solid #E7E5E4;background:#FAFAF9;font-size:11px;">
+<span style="color:#57534E;text-transform:uppercase;letter-spacing:0.06em;font-weight:500;margin-right:4px;">Filter</span>
+<div style="display:inline-flex;align-items:center;gap:4px;padding:3px 9px;background:#DBEAFE;border-radius:999px;color:#1E40AF;font-weight:500;cursor:pointer;">All criteria met (2)</div>
+<div style="display:inline-flex;align-items:center;gap:4px;padding:3px 9px;background:#FFFFFF;border:0.5px solid #E7E5E4;border-radius:999px;color:#57534E;cursor:pointer;">Pre-approved (3)</div>
+<div style="display:inline-flex;align-items:center;gap:4px;padding:3px 9px;background:#FFFFFF;border:0.5px solid #E7E5E4;border-radius:999px;color:#57534E;cursor:pointer;">Income met (3)</div>
+<div style="display:inline-flex;align-items:center;gap:4px;padding:3px 9px;background:#FFFFFF;border:0.5px solid #E7E5E4;border-radius:999px;color:#57534E;cursor:pointer;">By date</div>
+</div>
+
+<div style="display:grid;grid-template-columns:1.1fr 1fr;">
+
+<div style="border-right:0.5px solid #E7E5E4;">
+
+<div style="padding:14px 18px;border-bottom:0.5px solid #E7E5E4;background:#EFF6FF;border-left:3px solid #2563EB;">
+<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:5px;">
+<div style="display:flex;align-items:center;gap:8px;">
+<div style="width:30px;height:30px;border-radius:50%;background:#1E40AF;color:#FFFFFF;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:500;">SK</div>
+<div>
+<div style="font-size:12px;color:#292524;font-weight:500;">Applicant · <span style="font-family:var(--font-mono);">0x…4f3a</span></div>
+<div style="font-size:10px;color:#57534E;">Applied 2h ago</div>
+</div>
+</div>
+<div style="display:inline-flex;align-items:center;gap:3px;padding:2px 7px;background:#10B981;color:#FFFFFF;border-radius:999px;font-size:9px;font-weight:500;text-transform:uppercase;letter-spacing:0.04em;"><i class="ti ti-check" style="font-size:10px;"></i>Pre-approved</div>
+</div>
+<div style="display:flex;gap:5px;flex-wrap:wrap;font-size:9px;">
+<span style="background:#F0FDF4;color:#047857;padding:1px 6px;border-radius:999px;">Income 3.2×</span>
+<span style="background:#F0FDF4;color:#047857;padding:1px 6px;border-radius:999px;">Credit OK</span>
+<span style="background:#F0FDF4;color:#047857;padding:1px 6px;border-radius:999px;">History clean</span>
+<span style="background:#F0FDF4;color:#047857;padding:1px 6px;border-radius:999px;">KYC Tier 2</span>
+</div>
+</div>
+
+<div style="padding:14px 18px;border-bottom:0.5px solid #E7E5E4;">
+<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:5px;">
+<div style="display:flex;align-items:center;gap:8px;">
+<div style="width:30px;height:30px;border-radius:50%;background:#A8A29E;color:#FFFFFF;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:500;">TR</div>
+<div>
+<div style="font-size:12px;color:#292524;font-weight:500;">Applicant · <span style="font-family:var(--font-mono);">0x…7c81</span></div>
+<div style="font-size:10px;color:#57534E;">Applied 1d ago</div>
+</div>
+</div>
+<div style="display:inline-flex;align-items:center;gap:3px;padding:2px 7px;background:#10B981;color:#FFFFFF;border-radius:999px;font-size:9px;font-weight:500;text-transform:uppercase;letter-spacing:0.04em;"><i class="ti ti-check" style="font-size:10px;"></i>Pre-approved</div>
+</div>
+<div style="display:flex;gap:5px;flex-wrap:wrap;font-size:9px;">
+<span style="background:#F0FDF4;color:#047857;padding:1px 6px;border-radius:999px;">Income 4.1×</span>
+<span style="background:#F0FDF4;color:#047857;padding:1px 6px;border-radius:999px;">Credit OK</span>
+<span style="background:#F0FDF4;color:#047857;padding:1px 6px;border-radius:999px;">History clean</span>
+<span style="background:#F0FDF4;color:#047857;padding:1px 6px;border-radius:999px;">KYC Tier 2</span>
+</div>
+</div>
+
+<div style="padding:14px 18px;border-bottom:0.5px solid #E7E5E4;">
+<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:5px;">
+<div style="display:flex;align-items:center;gap:8px;">
+<div style="width:30px;height:30px;border-radius:50%;background:#A8A29E;color:#FFFFFF;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:500;">JA</div>
+<div>
+<div style="font-size:12px;color:#292524;font-weight:500;">Applicant · <span style="font-family:var(--font-mono);">0x…d2f6</span></div>
+<div style="font-size:10px;color:#57534E;">Applied 1d ago</div>
+</div>
+</div>
+<div style="display:inline-flex;align-items:center;gap:3px;padding:2px 7px;background:#FEFCE8;color:#A16207;border-radius:999px;font-size:9px;font-weight:500;text-transform:uppercase;letter-spacing:0.04em;"><i class="ti ti-shield-check" style="font-size:10px;"></i>Verified</div>
+</div>
+<div style="display:flex;gap:5px;flex-wrap:wrap;font-size:9px;">
+<span style="background:#F0FDF4;color:#047857;padding:1px 6px;border-radius:999px;">Income 2.9×</span>
+<span style="background:#FEFCE8;color:#A16207;padding:1px 6px;border-radius:999px;">Credit below</span>
+<span style="background:#F0FDF4;color:#047857;padding:1px 6px;border-radius:999px;">History clean</span>
+<span style="background:#F0FDF4;color:#047857;padding:1px 6px;border-radius:999px;">KYC Tier 1</span>
+</div>
+</div>
+
+<div style="padding:14px 18px;">
+<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:5px;">
+<div style="display:flex;align-items:center;gap:8px;">
+<div style="width:30px;height:30px;border-radius:50%;background:#A8A29E;color:#FFFFFF;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:500;">PN</div>
+<div>
+<div style="font-size:12px;color:#292524;font-weight:500;">Applicant · <span style="font-family:var(--font-mono);">0x…b15a</span></div>
+<div style="font-size:10px;color:#57534E;">Applied 2d ago</div>
+</div>
+</div>
+<div style="display:inline-flex;align-items:center;gap:3px;padding:2px 7px;background:#10B981;color:#FFFFFF;border-radius:999px;font-size:9px;font-weight:500;text-transform:uppercase;letter-spacing:0.04em;"><i class="ti ti-check" style="font-size:10px;"></i>Pre-approved</div>
+</div>
+<div style="display:flex;gap:5px;flex-wrap:wrap;font-size:9px;">
+<span style="background:#F0FDF4;color:#047857;padding:1px 6px;border-radius:999px;">Income 3.6×</span>
+<span style="background:#F0FDF4;color:#047857;padding:1px 6px;border-radius:999px;">Credit OK</span>
+<span style="background:#F0FDF4;color:#047857;padding:1px 6px;border-radius:999px;">History clean</span>
+<span style="background:#F0FDF4;color:#047857;padding:1px 6px;border-radius:999px;">KYC Tier 2</span>
+</div>
+</div>
+
+</div>
+
+<div style="padding:20px;background:#FAFAF9;">
+<div style="font-size:10px;color:#A8A29E;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Applicant detail · pseudonymous</div>
+
+<div style="background:#FFFFFF;border-radius:10px;border:0.5px solid #E7E5E4;padding:16px;margin-bottom:14px;">
+<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+<div style="width:40px;height:40px;border-radius:50%;background:#1E40AF;color:#FFFFFF;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:500;">SK</div>
+<div>
+<div style="font-size:13px;color:#292524;font-weight:500;">Applicant · 0x…4f3a</div>
+<div style="font-size:11px;color:#57534E;">Signed EIP-712 acceptance · 2h ago</div>
+</div>
+</div>
+
+<div style="font-size:10px;color:#57534E;text-transform:uppercase;letter-spacing:0.08em;font-weight:500;margin-bottom:6px;">Verification status</div>
+<div style="display:flex;flex-direction:column;gap:5px;font-size:11px;margin-bottom:14px;">
+<div style="display:flex;align-items:center;gap:6px;color:#292524;"><i class="ti ti-check" style="font-size:13px;color:#10B981;"></i>Identity · KYC Tier 2</div>
+<div style="display:flex;align-items:center;gap:6px;color:#292524;"><i class="ti ti-check" style="font-size:13px;color:#10B981;"></i>Income · 3.2× rent (Plaid-verified)</div>
+<div style="display:flex;align-items:center;gap:6px;color:#292524;"><i class="ti ti-check" style="font-size:13px;color:#10B981;"></i>Credit · meets your threshold (TransUnion)</div>
+<div style="display:flex;align-items:center;gap:6px;color:#292524;"><i class="ti ti-check" style="font-size:13px;color:#10B981;"></i>Rental history · 2 prior LeaseFi leases · 0 disputes</div>
+</div>
+
+<div style="font-size:10px;color:#57534E;text-transform:uppercase;letter-spacing:0.08em;font-weight:500;margin-bottom:6px;">Note from applicant</div>
+<div style="font-size:11px;color:#292524;line-height:1.55;font-style:italic;padding:8px 10px;background:#FAFAF9;border-radius:6px;">"I'd love to move in Feb 1. Quiet, work-from-home, no pets. References available."</div>
+</div>
+
+<div style="background:#FFF7ED;border:0.5px solid #FFEDD5;border-radius:8px;padding:10px 12px;margin-bottom:12px;display:flex;gap:8px;align-items:flex-start;">
+<i class="ti ti-info-circle" style="font-size:14px;color:#C2410C;margin-top:1px;flex-shrink:0;"></i>
+<div style="font-size:10px;color:#9A3412;line-height:1.5;">Full identity is revealed when you counter-sign. Until then, you see verification status, not personal details.</div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:6px;">
+<button style="background:#2563EB;color:#FFFFFF;border:none;border-radius:8px;padding:10px 14px;font-size:12px;font-weight:500;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;font-family:var(--font-sans);">Counter-sign and accept<i class="ti ti-arrow-right" style="font-size:14px;"></i></button>
+<div style="display:flex;gap:6px;">
+<button style="flex:1;background:#FFFFFF;color:#57534E;border:0.5px solid #E7E5E4;border-radius:8px;padding:8px 12px;font-size:11px;cursor:pointer;font-family:var(--font-sans);">Request more info</button>
+<button style="flex:1;background:#FFFFFF;color:#B91C1C;border:0.5px solid #FECACA;border-radius:8px;padding:8px 12px;font-size:11px;cursor:pointer;font-family:var(--font-sans);">Decline</button>
+</div>
+</div>
+</div>
+
+</div>
+</div>
+</div>
+
+<!-- ==================================================== -->
+<!-- Sub-screen C: Counter-sign moment                    -->
+<!-- ==================================================== -->
+<div class="mockup-frame">
+<div class="mockup-label">Sub-screen C · Counter-sign moment · Identity revealed · Other applicants auto-declined</div>
+<div style="min-height:540px;background:rgba(28,25,23,0.55);border-radius:10px;display:flex;align-items:center;justify-content:center;padding:28px;font-family:var(--font-sans);">
+
+<div style="background:#FFFFFF;border-radius:14px;max-width:460px;width:100%;overflow:hidden;">
+
+<div style="display:flex;justify-content:space-between;align-items:center;padding:18px 22px;border-bottom:0.5px solid #E7E5E4;">
+<div style="display:flex;align-items:center;gap:10px;">
+<div style="width:30px;height:30px;border-radius:8px;background:#DBEAFE;display:flex;align-items:center;justify-content:center;color:#1E40AF;"><i class="ti ti-signature" style="font-size:17px;"></i></div>
+<div>
+<div style="font-size:15px;font-weight:500;color:#1C1917;">Counter-sign and execute</div>
+<div style="font-size:11px;color:#57534E;">LeaseAgreement · EIP-712</div>
+</div>
+</div>
+<button style="background:transparent;border:none;color:#A8A29E;cursor:pointer;padding:4px;" aria-label="Close"><i class="ti ti-x" style="font-size:18px;"></i></button>
+</div>
+
+<div style="padding:20px 22px;">
+
+<div style="background:#F0FDF4;border:0.5px solid #BBF7D0;border-radius:10px;padding:14px;margin-bottom:14px;">
+<div style="font-size:10px;color:#047857;text-transform:uppercase;letter-spacing:0.08em;font-weight:500;margin-bottom:8px;">Identity revealed at counter-sign</div>
+<div style="display:flex;align-items:center;gap:10px;">
+<div style="width:36px;height:36px;border-radius:50%;background:#10B981;color:#FFFFFF;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:500;">SK</div>
+<div>
+<div style="font-size:14px;color:#1C1917;font-weight:500;">Sarah Kim</div>
+<div style="font-size:11px;color:#57534E;font-family:var(--font-mono);">0x…4f3a · sarah.kim@example.com</div>
+</div>
+</div>
+</div>
+
+<div style="background:#FAFAF9;border-radius:10px;padding:14px 16px;margin-bottom:14px;">
+<div style="display:grid;grid-template-columns:110px 1fr;gap:7px 14px;font-size:13px;">
+<div style="color:#57534E;">Property</div><div style="color:#292524;">123 Main St, Anytown FL</div>
+<div style="color:#57534E;">Monthly rent</div><div style="color:#292524;font-family:var(--font-mono);">$1,500.00 USDC</div>
+<div style="color:#57534E;">Deposit</div><div style="color:#292524;font-family:var(--font-mono);">$3,000.00 USDC <span style="font-family:var(--font-sans);color:#57534E;">· refundable</span></div>
+<div style="color:#57534E;">Term</div><div style="color:#292524;">Feb 1, 2027 — Jan 31, 2028</div>
+<div style="color:#57534E;">Document</div><div style="color:#1D4ED8;font-family:var(--font-mono);font-size:11px;">0x4a8f02c1…b97e</div>
+</div>
+</div>
+
+<div style="background:#FEF2F2;border:0.5px solid #FECACA;border-radius:10px;padding:12px 14px;margin-bottom:14px;display:flex;gap:10px;align-items:flex-start;">
+<i class="ti ti-alert-triangle" style="font-size:16px;color:#B91C1C;margin-top:1px;flex-shrink:0;"></i>
+<div>
+<div style="font-size:12px;color:#7F1D1D;font-weight:500;margin-bottom:3px;">3 other applicants will be auto-declined</div>
+<div style="font-size:11px;color:#991B1B;line-height:1.5;">Required: select a reason for each decline. This creates a documented trail under fair-housing law. We'll send neutral, compliant decline messages on your behalf.</div>
+<a style="font-size:11px;color:#7F1D1D;text-decoration:underline;cursor:pointer;display:inline-block;margin-top:4px;font-weight:500;">Review decline reasons →</a>
+</div>
+</div>
+
+<div style="background:#EFF6FF;border-radius:10px;padding:12px 14px;margin-bottom:14px;">
+<div style="font-size:10px;color:#1E40AF;text-transform:uppercase;letter-spacing:0.08em;font-weight:500;margin-bottom:8px;">What happens next</div>
+<div style="display:flex;flex-direction:column;gap:6px;font-size:11px;color:#1E3A8A;">
+<div style="display:flex;gap:8px;align-items:flex-start;"><span style="font-family:var(--font-mono);font-size:10px;background:#FFFFFF;padding:1px 5px;border-radius:3px;color:#1E40AF;font-weight:500;flex-shrink:0;">Tx A</span><span>LeaseFactory.create_lease submitted · contracts deploy, NFTs mint, 2% execution fee collected</span></div>
+<div style="display:flex;gap:8px;align-items:flex-start;"><span style="font-family:var(--font-mono);font-size:10px;background:#FFFFFF;padding:1px 5px;border-radius:3px;color:#1E40AF;font-weight:500;flex-shrink:0;">Tx B</span><span>Sarah is notified to fund the $3,000 deposit (separate transaction)</span></div>
+<div style="display:flex;gap:8px;align-items:flex-start;"><i class="ti ti-mail-forward" style="font-size:12px;margin-top:1px;flex-shrink:0;"></i><span>3 declines sent, listing taken down</span></div>
+</div>
+</div>
+
+<div style="background:#FFF7ED;border:0.5px solid #FFEDD5;border-radius:10px;padding:11px 14px;display:flex;gap:9px;align-items:flex-start;">
+<i class="ti ti-eye" style="font-size:14px;color:#C2410C;margin-top:1px;flex-shrink:0;"></i>
+<div style="font-size:11px;color:#9A3412;line-height:1.5;"><span style="font-weight:500;">Cross-check before signing.</span> Your Casper wallet will show the same lease details. If anything looks different, cancel.</div>
+</div>
+
+</div>
+
+<div style="display:flex;gap:8px;padding:14px 22px 20px;">
+<button style="flex:1;background:#FFFFFF;color:#292524;border:0.5px solid #E7E5E4;border-radius:10px;padding:11px 16px;font-size:13px;font-weight:500;cursor:pointer;font-family:var(--font-sans);">Cancel</button>
+<button style="flex:2;background:#2563EB;color:#FFFFFF;border:none;border-radius:10px;padding:11px 16px;font-size:13px;font-weight:500;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;font-family:var(--font-sans);">Counter-sign &amp; execute<i class="ti ti-arrow-right" style="font-size:15px;"></i></button>
+</div>
+</div>
+</div>
+</div>
+
+<!-- ==================================================== -->
+<!-- Sub-screen D: Decline-reasoning UI                   -->
+<!-- ==================================================== -->
+<div class="mockup-frame">
+<div class="mockup-label">Sub-screen D · Decline reasoning · FHA documentation trail · Required before counter-sign</div>
+<div style="background:#FFFFFF;border-radius:12px;border:0.5px solid #E7E5E4;overflow:hidden;font-family:var(--font-sans);color:#1C1917;max-width:580px;margin:0 auto;">
+
+<div style="padding:20px 22px;border-bottom:0.5px solid #E7E5E4;background:linear-gradient(to bottom,#FEFCE8 0%,#FFFFFF 100%);">
+<div style="display:flex;align-items:flex-start;gap:11px;">
+<div style="width:32px;height:32px;border-radius:8px;background:#FEFCE8;border:0.5px solid #FDE68A;display:flex;align-items:center;justify-content:center;color:#A16207;flex-shrink:0;"><i class="ti ti-file-stack" style="font-size:18px;"></i></div>
+<div>
+<div style="font-size:15px;font-weight:500;margin-bottom:3px;">Document declines before counter-signing</div>
+<div style="font-size:11px;color:#57534E;line-height:1.5;">Required by fair-housing law. Each non-selected applicant needs a structured reason. We'll send neutral, FCRA-compliant decline messages on your behalf.</div>
+</div>
+</div>
+</div>
+
+<div style="padding:18px 22px;">
+<div style="font-size:10px;color:#A8A29E;text-transform:uppercase;letter-spacing:0.06em;font-weight:500;margin-bottom:11px;">3 applicants to decline</div>
+
+<div style="border:0.5px solid #E7E5E4;border-radius:10px;padding:14px 16px;margin-bottom:10px;">
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+<div style="display:flex;align-items:center;gap:8px;">
+<div style="width:26px;height:26px;border-radius:50%;background:#A8A29E;color:#FFFFFF;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:500;">TR</div>
+<div>
+<div style="font-size:12px;font-weight:500;">Applicant · <span style="font-family:var(--font-mono);">0x…7c81</span></div>
+<div style="font-size:10px;color:#57534E;">Applied 1d ago · Pre-approved</div>
+</div>
+</div>
+</div>
+<div style="font-size:10px;color:#57534E;text-transform:uppercase;letter-spacing:0.06em;font-weight:500;margin-bottom:5px;">Decline reason</div>
+<select style="width:100%;padding:8px 10px;font-size:12px;border:0.5px solid #E7E5E4;border-radius:7px;background:#FFFFFF;color:#1C1917;font-family:var(--font-sans);margin-bottom:8px;">
+<option>Selected another qualified applicant</option>
+<option>Income criteria not met</option>
+<option>Credit threshold not met</option>
+<option>Application incomplete</option>
+</select>
+<div style="font-size:10px;color:#1E40AF;background:#EFF6FF;padding:6px 9px;border-radius:6px;line-height:1.5;"><strong>Tenant will receive:</strong> "Thank you for applying to 123 Main St. The landlord has selected another qualified applicant. Your pre-approval remains valid for 58 more days and can be used on other listings."</div>
+</div>
+
+<div style="border:0.5px solid #E7E5E4;border-radius:10px;padding:14px 16px;margin-bottom:10px;">
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+<div style="display:flex;align-items:center;gap:8px;">
+<div style="width:26px;height:26px;border-radius:50%;background:#A8A29E;color:#FFFFFF;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:500;">JA</div>
+<div>
+<div style="font-size:12px;font-weight:500;">Applicant · <span style="font-family:var(--font-mono);">0x…d2f6</span></div>
+<div style="font-size:10px;color:#57534E;">Applied 1d ago · Verified · 3 of 4 criteria</div>
+</div>
+</div>
+</div>
+<div style="font-size:10px;color:#57534E;text-transform:uppercase;letter-spacing:0.06em;font-weight:500;margin-bottom:5px;">Decline reason</div>
+<select style="width:100%;padding:8px 10px;font-size:12px;border:0.5px solid #E7E5E4;border-radius:7px;background:#FFFFFF;color:#1C1917;font-family:var(--font-sans);margin-bottom:8px;">
+<option>Credit threshold not met</option>
+<option>Income criteria not met</option>
+<option>Selected another qualified applicant</option>
+<option>Application incomplete</option>
+</select>
+<div style="background:#FEF2F2;border:0.5px solid #FECACA;border-radius:7px;padding:8px 10px;margin-bottom:8px;display:flex;gap:7px;align-items:flex-start;">
+<i class="ti ti-info-circle" style="font-size:14px;color:#B91C1C;margin-top:1px;flex-shrink:0;"></i>
+<div style="font-size:10px;color:#7F1D1D;line-height:1.45;"><strong>Adverse-action notice required.</strong> Credit-based declines trigger FCRA notice automatically — bureau contact info and dispute-rights language included.</div>
+</div>
+<div style="font-size:10px;color:#1E40AF;background:#EFF6FF;padding:6px 9px;border-radius:6px;line-height:1.5;"><strong>Tenant will receive:</strong> Adverse-action notice with TransUnion contact info and rights to obtain free credit report + dispute inaccuracies (FCRA-compliant template).</div>
+</div>
+
+<div style="border:0.5px solid #E7E5E4;border-radius:10px;padding:14px 16px;margin-bottom:14px;">
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+<div style="display:flex;align-items:center;gap:8px;">
+<div style="width:26px;height:26px;border-radius:50%;background:#A8A29E;color:#FFFFFF;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:500;">PN</div>
+<div>
+<div style="font-size:12px;font-weight:500;">Applicant · <span style="font-family:var(--font-mono);">0x…b15a</span></div>
+<div style="font-size:10px;color:#57534E;">Applied 2d ago · Pre-approved</div>
+</div>
+</div>
+</div>
+<div style="font-size:10px;color:#57534E;text-transform:uppercase;letter-spacing:0.06em;font-weight:500;margin-bottom:5px;">Decline reason</div>
+<select style="width:100%;padding:8px 10px;font-size:12px;border:0.5px solid #E7E5E4;border-radius:7px;background:#FFFFFF;color:#1C1917;font-family:var(--font-sans);margin-bottom:8px;">
+<option>Selected another qualified applicant</option>
+<option>Income criteria not met</option>
+<option>Credit threshold not met</option>
+<option>Application incomplete</option>
+</select>
+<div style="font-size:10px;color:#1E40AF;background:#EFF6FF;padding:6px 9px;border-radius:6px;line-height:1.5;"><strong>Tenant will receive:</strong> "Thank you for applying to 123 Main St. The landlord has selected another qualified applicant. Your pre-approval remains valid for 57 more days and can be used on other listings."</div>
+</div>
+
+<div style="background:#FAFAF9;border-radius:8px;padding:10px 13px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;">
+<div style="font-size:11px;color:#57534E;display:flex;align-items:center;gap:6px;"><i class="ti ti-shield-check" style="font-size:14px;color:#10B981;"></i>Full decision log saved for fair-housing audit</div>
+<a style="font-size:11px;color:#1D4ED8;cursor:pointer;font-weight:500;">Notes (optional) +</a>
+</div>
+
+<div style="display:flex;gap:8px;">
+<button style="flex:1;background:#FFFFFF;color:#292524;border:0.5px solid #E7E5E4;border-radius:9px;padding:11px 14px;font-size:12px;font-weight:500;cursor:pointer;font-family:var(--font-sans);">Back</button>
+<button style="flex:2;background:#2563EB;color:#FFFFFF;border:none;border-radius:9px;padding:11px 14px;font-size:12px;font-weight:500;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;font-family:var(--font-sans);">Send declines &amp; counter-sign Sarah<i class="ti ti-arrow-right" style="font-size:14px;"></i></button>
+</div>
+</div>
+</div>
+</div>
+
+<!-- ==================================================== -->
+<!-- Sub-screen E: Tenant pre-approval onboarding hub     -->
+<!-- ==================================================== -->
+<div class="mockup-frame">
+<div class="mockup-label">Sub-screen E · Tenant pre-approval hub · Four signals · Reusable across listings · 60-day validity</div>
+<div style="background:#FFFFFF;border-radius:14px;border:0.5px solid #E7E5E4;overflow:hidden;font-family:var(--font-sans);color:#1C1917;max-width:500px;margin:0 auto;">
+
+<div style="background:linear-gradient(135deg,#EFF6FF 0%,#DBEAFE 100%);padding:22px 22px 18px;">
+<div style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;background:#FFFFFF;border-radius:999px;font-size:10px;color:#1E40AF;font-weight:500;margin-bottom:11px;"><i class="ti ti-bolt" style="font-size:12px;"></i>One-time setup</div>
+<h3 style="font-size:18px;font-weight:500;margin:0 0 5px;letter-spacing:-0.01em;">Get pre-approved</h3>
+<div style="font-size:12px;color:#57534E;line-height:1.5;">Verify once · apply instantly to any listing for the next 60 days. Most tenants finish in 6 minutes.</div>
+
+<div style="margin-top:14px;display:flex;gap:5px;">
+<div style="flex:1;height:5px;background:#10B981;border-radius:3px;"></div>
+<div style="flex:1;height:5px;background:#10B981;border-radius:3px;"></div>
+<div style="flex:1;height:5px;background:#FBBF24;border-radius:3px;"></div>
+<div style="flex:1;height:5px;background:#E7E5E4;border-radius:3px;"></div>
+</div>
+<div style="margin-top:6px;font-size:10px;color:#57534E;font-family:var(--font-mono);">2 of 4 complete</div>
+</div>
+
+<div style="padding:18px 22px;">
+
+<div style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:#F0FDF4;border:0.5px solid #BBF7D0;border-radius:10px;margin-bottom:10px;">
+<div style="width:32px;height:32px;border-radius:50%;background:#10B981;display:flex;align-items:center;justify-content:center;color:#FFFFFF;flex-shrink:0;"><i class="ti ti-check" style="font-size:17px;"></i></div>
+<div style="flex:1;">
+<div style="font-size:13px;font-weight:500;color:#1C1917;">Identity verified</div>
+<div style="font-size:10px;color:#057857;">KYC Tier 2 · Persona · completed Mar 14</div>
+</div>
+<div style="font-size:10px;color:#057857;text-transform:uppercase;letter-spacing:0.06em;font-weight:500;">Done</div>
+</div>
+
+<div style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:#F0FDF4;border:0.5px solid #BBF7D0;border-radius:10px;margin-bottom:10px;">
+<div style="width:32px;height:32px;border-radius:50%;background:#10B981;display:flex;align-items:center;justify-content:center;color:#FFFFFF;flex-shrink:0;"><i class="ti ti-check" style="font-size:17px;"></i></div>
+<div style="flex:1;">
+<div style="font-size:13px;font-weight:500;color:#1C1917;">Income verified</div>
+<div style="font-size:10px;color:#057857;">Plaid · Chase Checking · $5,200/mo · 4 months stable</div>
+</div>
+<div style="font-size:10px;color:#057857;text-transform:uppercase;letter-spacing:0.06em;font-weight:500;">Done</div>
+</div>
+
+<div style="display:flex;align-items:flex-start;gap:12px;padding:14px;background:#FFFBEB;border:0.5px solid #FCD34D;border-radius:10px;margin-bottom:10px;">
+<div style="width:32px;height:32px;border-radius:50%;background:#FFFFFF;border:1.5px dashed #F59E0B;display:flex;align-items:center;justify-content:center;color:#A16207;flex-shrink:0;"><i class="ti ti-shield-check" style="font-size:16px;"></i></div>
+<div style="flex:1;">
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+<div style="font-size:13px;font-weight:500;color:#1C1917;">Credit &amp; rental history</div>
+<div style="font-size:11px;color:#A16207;font-family:var(--font-mono);">$30</div>
+</div>
+<div style="font-size:11px;color:#78716C;line-height:1.5;margin-bottom:8px;">TransUnion runs your credit, eviction, and criminal background. Result in ~10 minutes. You pay TransUnion directly.</div>
+<button style="background:#A16207;color:#FFFFFF;border:none;border-radius:7px;padding:7px 14px;font-size:11px;font-weight:500;cursor:pointer;font-family:var(--font-sans);display:inline-flex;align-items:center;gap:5px;">Start screening<i class="ti ti-arrow-right" style="font-size:12px;"></i></button>
+</div>
+</div>
+
+<div style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:#FAFAF9;border:0.5px solid #E7E5E4;border-radius:10px;margin-bottom:14px;opacity:0.65;">
+<div style="width:32px;height:32px;border-radius:50%;background:#FFFFFF;border:0.5px solid #E7E5E4;display:flex;align-items:center;justify-content:center;color:#A8A29E;flex-shrink:0;"><i class="ti ti-bolt" style="font-size:16px;"></i></div>
+<div style="flex:1;">
+<div style="font-size:13px;color:#57534E;">Instant-apply unlocked</div>
+<div style="font-size:10px;color:#A8A29E;">Once your screening is complete</div>
+</div>
+</div>
+
+<div style="padding:12px 14px;background:#FAFAF9;border-radius:8px;">
+<div style="font-size:10px;color:#57534E;text-transform:uppercase;letter-spacing:0.08em;font-weight:500;margin-bottom:8px;">What you get</div>
+<div style="display:flex;flex-direction:column;gap:5px;font-size:11px;color:#292524;">
+<div style="display:flex;align-items:center;gap:6px;"><i class="ti ti-check" style="font-size:13px;color:#10B981;"></i>Apply to any LeaseFi listing in one tap for 60 days</div>
+<div style="display:flex;align-items:center;gap:6px;"><i class="ti ti-check" style="font-size:13px;color:#10B981;"></i>Landlords see verification badges, not your raw data</div>
+<div style="display:flex;align-items:center;gap:6px;"><i class="ti ti-check" style="font-size:13px;color:#10B981;"></i>You always know why an application was declined</div>
+</div>
+</div>
+
+</div>
+</div>
+</div>
+
+<!-- ==================================================== -->
+<!-- Architectural decisions baked in                     -->
+<!-- ==================================================== -->
+<div class="copy-rules">
+<div class="copy-rules-title">Architectural decisions baked in · do not invent alternatives</div>
+<table>
+<tr><td><strong>Listings</strong></td><td>Off-chain in Phase 2 (PostgreSQL + IPFS for photos). No on-chain footprint until counter-sign. Phase 3 re-evaluates on-chain listing commitments if marketplace scales and bait-and-switch becomes a complaint vector.</td></tr>
+<tr><td><strong>Sequence</strong></td><td>Tenant signs first (EIP-712 acceptance becomes the application). Landlord counter-signs to commit. Landlord retains right of refusal. Do not invert.</td></tr>
+<tr><td><strong>Pre-approval</strong></td><td>Two-layered: LeaseFi-wide profile (identity + income + credit + history, 60-day validity) AND per-listing criteria match (landlord-set thresholds, computed at view-time). Tenant sees both states. ADR-003 governs vendor stack.</td></tr>
+<tr><td><strong>Vendor stack</strong></td><td>Persona (identity, existing) + Plaid Income (new) + TransUnion SmartMove (new). Backups: Truework + Experian RentBureau. Per ADR-003.</td></tr>
+<tr><td><strong>Privacy gate</strong></td><td>Pre-counter-sign: pseudonymous identity + verification badges + criteria-match boolean. Post-counter-sign: full identity revealed. Never expose tenant PII before commit.</td></tr>
+<tr><td><strong>Concurrent apps</strong></td><td>Landlord picks one applicant. When counter-sign succeeds, other applications auto-decline with structured reason codes. Documented trail per FHA.</td></tr>
+<tr><td><strong>Settlement</strong></td><td>Same Tx A (LeaseFactory.create_lease) + Tx B (DepositVault.deposit_funds) as Section 6. Marketplace is entry-point only; the on-chain lease is identical.</td></tr>
+</table>
+</div>
+
+<!-- ==================================================== -->
+<!-- Deferred surfaces                                    -->
+<!-- ==================================================== -->
+<div class="copy-rules">
+<div class="copy-rules-title">Surfaces deferred to FE engineer · well-understood patterns</div>
+<table>
+<tr><td><strong>Listing creation wizard</strong></td><td>Section 6 lease-signing wizard chrome plus three steps inserted before signing: (1) photos — drag-drop, min 3 max 12, IPFS-pinned via pinning service; (2) public listing copy — headline + description in markdown; (3) per-listing eligibility criteria — income-multiple slider, min credit-score select, no-evictions toggle, accept-Section-8 toggle force-disabled in source-of-income discrimination jurisdictions. ~95% Section 6 chrome reuse.</td></tr>
+<tr><td><strong>Browse / search</strong></td><td>Standard listing-grid pattern (photo + address + price + beds/baths + pre-approval-match badge per card). Filters: city, max rent, bed count, available date, pet-friendly. One LeaseFi-specific toggle worth calling out: "Show only listings I'm pre-approved for" — the marketplace's accelerant. Map view is Phase 2.1, not MVP.</td></tr>
+<tr><td><strong>State-jurisdiction gating</strong></td><td>LandlordCriteriaSource abstraction in code. Outside-Counsel-drafted matrix maps each jurisdiction to allowed criteria thresholds. FL/TX/TN/VA in Phase 2; additional states require new matrix entries before activation.</td></tr>
+<tr><td><strong>Tenant application status states</strong></td><td>"Submitted · awaiting counter-sign", "Declined · with reason", "Counter-signed · fund your deposit (Tx B)", "Expired · 48h passed without counter-sign". Reuses TransactionStatus chrome from Section 8 plus copy-only variants.</td></tr>
+</table>
+</div>
+
+<!-- ==================================================== -->
+<!-- Watch-outs                                           -->
+<!-- ==================================================== -->
+<div class="watch-outs">
+<div class="watch-outs-title">Watch-outs · Phase 2 readiness</div>
+<ul>
+<li><strong>Pre-approval is FCRA-regulated.</strong> Credit-based declines trigger FCRA adverse-action notice. Templates are Outside-Counsel-drafted, not engineering-invented. Engineering supplies the delivery channel (email + in-app); CO owns canonical copy. Wrong template = HUD complaint.</li>
+<li><strong>FHA disparate-impact on criteria thresholds.</strong> Outside Counsel reviews allowed landlord-criteria threshold ranges. Some thresholds (e.g., "no evictions ever") have HUD-documented disparate impact on protected classes and are blocked at the listing-criteria UI. Do not let landlords type free-text criteria — structured fields only.</li>
+<li><strong>Source-of-income discrimination is state-specific.</strong> FL/TX/TN Phase 2 launch states do not currently have source-of-income protections. VA Phase 2+ does. Phase 4 states (DC, NY, CA, MA, et al.) do. The accept-Section-8 toggle and "income source" filter are gated by jurisdiction via LandlordCriteriaSource.</li>
+<li><strong>Privacy gate is load-bearing.</strong> Pre-counter-sign tenant detail must never leak full name, exact address, employer, or bank balance. Verification badges and criteria-match booleans only. Test this with an adversarial peer-review pass before launch.</li>
+<li><strong>Decline-reasoning is mandatory, not optional.</strong> Counter-sign is gated on documenting reasons for all non-selected applicants. Skip path does not exist. Audit log persists for fair-housing review.</li>
+<li><strong>Pre-approval expiry hits at day 60.</strong> Renewal flow surfaces at day 53 (banner) and day 58 (modal interrupt on next listing application). Do not let tenants apply with stale pre-approval — landlord sees stale data, landlord makes decisions on stale data, lawsuit risk.</li>
+<li><strong>Listing edits invalidate prior applications.</strong> If a landlord changes rent or term mid-listing, all open applications are invalidated and applicants are notified. Do not silently update behind their back; the EIP-712 acceptance was for the original terms.</li>
+<li><strong>Backup vendor failover is a real drill, not a hypothetical.</strong> ADR-003 §5.4 requires a 48-hour full-failover test before Phase 2 launch. Engineering owns the runbook; CO owns the sign-off.</li>
+</ul>
+</div>
+
+</section>
+
+
+<!-- ============================================================ -->
+<!-- CLOSING                                                      -->
+<!-- ============================================================ -->
+<section id="whats-missing" class="closing">
+<div class="section-meta">
+<div class="section-number">12</div>
+<span class="section-tag tag-both">Scope boundary</span>
+</div>
+<h2>What's not in this document</h2>
+<p>This is the visual spine, not the complete design system. The following surfaces are deliberately deferred — handle them in the order below as Phase 1 progresses.</p>
+
+<ul>
+<li><strong>Auth / wallet-connect first impression.</strong> Single CTA screen. Easiest Critical 6 flow; build day-one as a warmup.</li>
+<li><strong>Per-step wizard content for steps 1, 2, 4, 5.</strong> Section 6 shows Step 3 in detail and the wizard chrome. Property, tenant, term, and document-upload steps share the same chrome; the form fields differ.</li>
+<li><strong>Path B fiat on-ramp.</strong> Embedded provider widget. Visualize once the on-ramp partner is signed; partner-specific UX constraints.</li>
+<li><strong>Failed-state UX matrix.</strong> Per-error-class copy (insufficient-balance, allowance-insufficient, wallet-locked, network-failure, contract-revert with unknown code). Use the error discrimination table in <code style="font-size:12px;background:#F5F5F4;padding:1px 4px;border-radius:3px;">05-data-layer-architecture.md §9</code>.</li>
+<li><strong>Account-switch mid-transaction warning.</strong> Three sub-states: aborted-in-signature (clean), aborted-in-pending (chain proceeds), aborted-in-confirmation (track via indexer). Surface the consequence; do not bury.</li>
+<li><strong>GlobalTxIndicator expanded panel.</strong> Multi-transaction list view when ≥2 pending. Click-to-return navigation.</li>
+<li><strong>Empty states.</strong> "No active lease" for tenant home. "No properties yet" for PM dashboard. "No disputes" lists. Template once, reuse everywhere.</li>
+<li><strong>Loading / skeleton states.</strong> Per route. Template once via shadcn Skeleton; do not invent per-component.</li>
+<li><strong>Settings.</strong> KYC tier, wallet management, notification preferences, currency preference. Lower-stakes, higher-volume; default to shadcn settings patterns.</li>
+<li><strong>Lease detail page.</strong> Most-used PM screen. Sections: parties, financial, term, document, activity log, actions (terminate, dispute, request manual deposit release).</li>
+<li><strong>Notification center.</strong> Per-category preferences. Critical security notifications (KYC required, dispute filed) cannot be disabled — only channel selection.</li>
+<li><strong>Termination &amp; buyout flows.</strong> EIP-712 ceremonies. Reuse PreSignatureConfirmation; design the term-specific copy.</li>
+<li><strong>Mobile responsive variants.</strong> The web app must work at mobile widths before the native app ships. Bottom tab bar instead of left sidebar; full-screen forms instead of modals.</li>
+</ul>
+
+<p style="margin-top:24px;">All of the above are sized work for the senior frontend engineer. The reference in this document is the irreducible spine — get these nine surfaces right and the rest extends naturally.</p>
+</section>
+
+<footer>
+<div><strong>LeaseFi</strong> · Design reference · Phase 1 Critical 6</div>
+<div style="margin-top:6px;">Authoritative for visual implementation. Specifications under <code style="font-family:var(--font-mono);font-size:10px;background:#F5F5F4;padding:1px 5px;border-radius:3px;color:#57534E;">/docs/</code> are the source of truth — when this document conflicts with the specs, the specs win.</div>
+<div style="margin-top:14px;">Confidential. Do not share externally without written permission.</div>
+</footer>
+
+</main>
+</div>
+
+<script>
+// Active nav highlighting via IntersectionObserver
+const sections = document.querySelectorAll('section[id]');
+const navLinks = document.querySelectorAll('.nav a');
+
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      const id = entry.target.id;
+      navLinks.forEach(link => {
+        link.classList.toggle('active', link.getAttribute('href') === '#' + id);
+      });
+    }
+  });
+}, { rootMargin: '-20% 0px -70% 0px' });
+
+sections.forEach(section => observer.observe(section));
+</script>
+</body>
+</html>

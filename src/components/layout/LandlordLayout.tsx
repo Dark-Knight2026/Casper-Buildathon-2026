@@ -74,6 +74,15 @@ const NAV_LINKS = [
   { to: '/landlord/messages',     label: 'Messages',     icon: MessageSquare },
 ];
 
+// NOTE: this layout collapses to the burger at min-[1200px], NOT lg: (1024px)
+// like TenantLayout. That divergence is intentional, not an oversight: the
+// landlord nav has one more item than tenant's (9 vs 8) and packs them tighter
+// (gap-6 vs gap-8), so at 1024–1199px the full row would overflow/wrap. Tenant
+// fits at lg:, landlord needs the wider threshold. Keep the two in sync only by
+// content width, not by forcing the same token. The 1200 value is repeated at
+// the resize handler, the two desktop blocks, the burger wrapper, and the
+// overlay guard below — change all five together if the nav width changes.
+
 export default function LandlordLayout() {
   const { profile, walletSignOut } = useAuth();
   const { disconnect } = useICOWallet();

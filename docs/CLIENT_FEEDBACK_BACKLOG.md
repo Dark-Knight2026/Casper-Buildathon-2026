@@ -4,6 +4,8 @@ This document tracks tasks derived from client product feedback. Tasks 1–7
 came from the original Tenant-flow review email; tasks 8–13 were captured
 during the LeaseFi recurring meeting on **2026-05-07** with Anthony Batten
 and Chris. Tasks 14–16 are explicitly post-MVP (phase 2 / blocked on legal).
+Tasks 17–26 were captured on **2026-05-26** after Anthony shared
+`docs/client-doc/leasefi-design-reference.html` and clarified scope via Slack.
 
 | #  | Task                                                       | Status            |
 |----|------------------------------------------------------------|-------------------|
@@ -23,6 +25,16 @@ and Chris. Tasks 14–16 are explicitly post-MVP (phase 2 / blocked on legal).
 | 14 | Bidirectional tenant ↔ landlord reviews (Uber-style)       | 🕓 phase 2        |
 | 15 | Admin moderation panel for reviews                         | 🕓 phase 2        |
 | 16 | Equities marketplace UI (public buy-in, secondary market)  | 🚫 blocked³       |
+| 17 | Design-reference scope decision (header / wallet-invisible)| ✅ confirmed⁴     |
+| 18 | Tenant home alignment with design reference §1             | 🔲 pending        |
+| 19 | Landlord / PM dashboard alignment with §2                  | 🔲 pending        |
+| 20 | Pay rent + `<FeeDisplay/>` canonical breakdown (§3)        | 🔲 pending        |
+| 21 | `<PreSignatureConfirmation/>` shared modal (§4)            | 🔲 pending        |
+| 22 | Lease invitation landing — pre-auth, anti-phishing (§5)    | 🔲 pending        |
+| 23 | Lease signing journey — wizard + counter-sign (§6)         | 🔲 pending        |
+| 24 | Dispute filing UI (§7)                                     | 🔲 pending⁵       |
+| 25 | `<TransactionStatus/>` shared state-machine (§8)           | 🔲 pending        |
+| 26 | `<KYCGate/>` around Sumsub WebSDK (no extra compliance layers) (§10) | 🔲 pending        |
 
 ¹ Demo = UI is final, but the backend integration is mocked. Open product
 questions and required endpoints are documented at the top of
@@ -35,6 +47,15 @@ in principle but exact ownership not yet locked).
 ³ Blocked on SEC licensing and DAO-structure decisions. Anthony explicitly
 deferred this to post-MVP because offering equity outside a tenant–landlord
 lease option agreement turns the platform into a securities offering.
+
+⁴ Anthony confirmed on 2026-05-26 via Slack that we take **flow / information
+displayed / copy rules** from the design reference, and **keep current
+header layout, palette (emerald/navy), fonts (Inter), icons (lucide), and
+invisible-wallet UX**. See Task 17 for the verbatim exchange.
+
+⁵ Phase-1 inclusion is unconfirmed — Kenneth's DisputeModule (ADR-005) lands
+on-chain in Phase 0, but the FE filing UI is not in the Critical 6 spine.
+Defer to Phase 1.1 unless Anthony explicitly pulls it forward.
 
 ---
 
@@ -796,6 +817,704 @@ Coupled to Task 14; has no use case without it.
 Legal exposure is open-ended without licensing; building the UI before
 the legal scaffolding risks throwaway work or, worse, a launch that
 violates securities law.
+
+---
+
+## Task 17 — Design-Reference Scope Decision
+
+### Source
+
+`docs/client-doc/leasefi-design-reference.html` (12 sections, "Critical 6"
+spine). Confirmed by Anthony via Slack 2026-05-26 in response to three
+scope questions (palette swap, sidebar vs header, wallet visibility).
+
+### Decision
+
+- **Take from the reference:** which surfaces exist; what information
+  each shows (fields, status pills, hero metrics); flow between surfaces;
+  copy rules (the `GOOD / BAD` callouts); the named shared components
+  (`FeeDisplay`, `PreSignatureConfirmation`, `TransactionStatus`,
+  `KYCGate`, `GlobalTxIndicator`).
+- **Do NOT take from the reference:** blue #2563EB + orange palette,
+  IBM Plex font, Tabler icons, left-sidebar layout, visible Casper-wallet
+  address pill, user-facing "Casper Wallet" / "Connect your wallet"
+  labels.
+- **Keep our existing:** emerald + navy palette per `STYLE_GUIDE.md`,
+  Inter font, lucide icons, top-header layout, invisible-wallet UX
+  (CSPR.click auto-provisions; copy stays provider-agnostic).
+- **Conflict rule:** when the reference contradicts `STYLE_GUIDE.md` or
+  `LEASEFI_MVP_SPEC_2026-07-15.md`, the spec wins. The reference's own
+  footer states this.
+- Tasks 18–26 each inherit this scope.
+
+### Open product questions
+
+1. **Compliance failure surface (§9 of the reference).** Reference treats
+   it as `Mandatory · Regulatory · BSA §314`. Anthony said on the
+   2026-05-20 call: no AML / CDD list / sanctions screening / biometric
+   handling. Treating §9 as **out of scope for MVP**. Confirm before any
+   work on §9 is scheduled.
+2. **Dispute filing UI (§7).** Critical 6 spine includes it; Anthony has
+   not explicitly pulled it into Phase 1. Kenneth is building the SC
+   side. Confirm whether FE files in Phase 1 or Phase 1.1.
+3. **KYC scope (§10).** Anthony's 2026-05-20 call: Sumsub is the sole
+   KYC service for MVP per ADR-002 (confirmed in Dev_Team_Brief item 4
+   and ADR-004 §Phase 0). What he excluded are **additional compliance
+   layers on top of Sumsub** — no separate AML / CDD list lookup, no
+   standalone OFAC sanctions API, no extra biometric handling beyond
+   what Sumsub does internally, no third-party screening. We hold only
+   `sumsub_applicant_id + kyc_status + timestamp` in our DB; documents
+   stream browser → Sumsub directly. Casper-name purchase as a separate
+   KYC step is Phase 2.
+
+### Backend endpoints required
+
+None — scope decision, not implementation.
+
+### Demo files (when implemented)
+
+None — meta-task. Tracked here so subsequent tasks can reference it.
+
+### Estimated effort
+
+0 h — decision already captured. The hours land in Tasks 18–26.
+
+---
+
+## Task 18 — Tenant Home Alignment (Design Reference §1)
+
+### Source
+
+`docs/client-doc/leasefi-design-reference.html` §1 "Tenant home". Scope
+inheritance: **Task 17** (information + flow + copy only; keep current
+header layout, palette, invisible-wallet UX).
+
+### Goal
+
+Restructure `src/pages/tenant/TenantDashboard.tsx` so it matches the
+Critical 6 information architecture: single primary CTA (Pay rent),
+status-forward `Active lease` hero card, recent activity list, automatic
+audience detection.
+
+### Acceptance criteria
+
+- Tenant view renders for wallets with **0–1 leases owned as landlord**.
+  When the count crosses to 2+, auto-flip to the PM view (Task 19). One-time
+  "Your view just changed" onboarding moment on the crossover.
+- **One primary CTA per surface.** `Pay rent` is the only accent-color
+  button on this page. All secondary actions are tertiary-styled.
+- Hero `Active lease` card shows: property address, `Active` status pill
+  (icon + color, not color alone — WCAG 2.1 AA), "Next rent due in N days",
+  rent amount in monospace `$X.XX USDC`, single CTA.
+- Recent activity list renders icon + label + ISO date + amount in mono.
+  Items: `Rent paid`, `Lease signed`, `Deposit funded`. Reuse existing
+  `tenantPayments.ts` and `tenantLeases.ts` demo data sources.
+- Empty state ("no active lease") renders the empty-state pattern, **not**
+  a disabled card with greyed-out CTA.
+- Greeting line: `Welcome back, {firstName}` from profile. Fallback to
+  shortened wallet address (`0x…4f3a`). Never the full wallet address.
+- Drop the old `EnhancedTenantDashboard*` duplicate files
+  (`src/pages/EnhancedTenantDashboard.tsx`,
+  `EnhancedTenantDashboardWithPayments.tsx`,
+  `EnhancedTenantDashboardWithOnboarding.tsx`) — confirmed orphans.
+
+### Open product questions
+
+1. Audience detection — does "lease owned as landlord" mean `landlordId === me`
+   on any `Property`, or rows in a separate `leases` table? Tied to BE schema.
+2. Crossover moment copy — what does "Your view just changed" toast/modal
+   say exactly? Draft and confirm with Anthony.
+
+### Backend endpoints required
+
+- `GET /api/v1/leases?role=tenant&status=active` — already documented in
+  spec §3.4 as BE-blocked.
+- `GET /api/v1/payments/recent?limit=N` — activity feed source.
+
+### Demo files (when implemented)
+
+- `src/pages/tenant/TenantDashboard.tsx` — restructure (existing)
+- `src/components/tenant/ActiveLeaseHero.tsx` — new hero card
+- `src/components/tenant/RecentActivityList.tsx` — new activity feed
+- Delete: `src/pages/EnhancedTenantDashboard*.tsx` (3 orphans)
+
+### Estimated effort
+
+~14 h. Existing page; mostly restructure + copy. New components are small.
+
+---
+
+## Task 19 — Landlord / PM Dashboard Alignment (Design Reference §2)
+
+### Source
+
+`docs/client-doc/leasefi-design-reference.html` §2 "Landlord / PM dashboard".
+Scope inheritance: **Task 17**.
+
+### Goal
+
+Bring `src/pages/landlord/LandlordDashboard.tsx` to the Critical 6 layout:
+four hero metrics, sortable portfolio table, clickable status pills as
+deep-links. Stessa-functional density.
+
+### Acceptance criteria
+
+- Four hero metrics in a 4-column grid, color-coded by intent:
+  - `Active leases` (neutral)
+  - `Monthly rent` (neutral, mono number)
+  - `Collected (Dec)` (success-green)
+  - `Outstanding` (warning-amber — **not red**; red is escalation, not
+    status)
+- Sortable portfolio table: `Property / Tenant / Rent / Status / ⋮`.
+- Status pills double as deep-links:
+  - `Paid Dec 1` → payment detail
+  - `Due Dec N` → upcoming-payment view
+  - `3d late` → late-fee detail
+  - `Dispute open` (info-blue, not red) → dispute view
+  - `Confirming` → in-flight TransactionStatus (Task 25)
+- `⋮` (dots-vertical) is reserved for **bulk actions only**. Single-row
+  actions live on the status pill or `Property` cell.
+- Header actions on the **right of our existing top header**: `Export`
+  (secondary) and `Add property` (primary). Do not introduce a sidebar.
+- Auto-detection on `wallet owns ≥2 leases as landlord`. No user-facing
+  "switch view" toggle.
+
+### Open product questions
+
+1. Hero metric "Collected (Dec)" — does Dec mean current month or
+   trailing 30 days? Trailing is more useful mid-month; calendar is the
+   reference's choice.
+2. Export format — CSV only, or PDF/XLSX too? CSV ships in Phase 1;
+   others Phase 2.
+3. Bulk-action set — which actions are bulk-capable? Suggest: mark
+   communication sent, export selected rows, send reminder. Confirm.
+
+### Backend endpoints required
+
+- `GET /api/v1/landlord/dashboard/stats` — replaces
+  `MOCK_LANDLORD_DASHBOARD_STATS` from `src/data/landlordMockData.ts`.
+- `GET /api/v1/landlord/portfolio?sort=&filter=&page=` — table data.
+
+### Demo files (when implemented)
+
+- `src/pages/landlord/LandlordDashboard.tsx` — restructure (existing)
+- `src/components/landlord/PortfolioTable.tsx` — new sortable table
+- `src/components/landlord/StatusPill.tsx` — shared pill with deep-link
+
+### Estimated effort
+
+~22 h. Mock data already in `landlordMockData.ts`; bulk of the work is the
+table component (sorting / filtering / multi-select) and pill deep-links.
+
+---
+
+## Task 20 — Pay Rent + `<FeeDisplay/>` Canonical Breakdown (Design Reference §3)
+
+### Source
+
+`docs/client-doc/leasefi-design-reference.html` §3 "Pay rent & FeeDisplay
+component". Spec ref: `PRD FR-1.4.3.12`. Scope inheritance: **Task 17**.
+
+### Goal
+
+Promote the fee breakdown to a parameterized shared component reused
+identically across rent, late fee, buyout, deposit funding, and dispute
+filing. Make the button label include the exact total (regulatory
+requirement).
+
+### Acceptance criteria
+
+- New shared component `src/components/payments/FeeDisplay.tsx` with API:
+  `<FeeDisplay base={…} feePercent={2} label="Rent amount" currency="USDC" />`.
+  Renders three rows: base / fee (with explicit `%`) / total (mono, bold).
+- `MakePayment.tsx` consumes `<FeeDisplay/>` — drop the inline breakdown.
+- Submit button label = `Pay $1,530.00 USDC` (the exact total, not "Submit"
+  or "Pay now"). Constant-source the format helper so all fee-bearing
+  flows stay identical.
+- Before signing: wrap the submit in `<PreSignatureConfirmation/>`
+  (Task 21).
+- USDC only in MVP. **Not USDT** (Anthony, 2026-05-20 call).
+- Path A (direct USDC) ships in MVP. Path B (fiat on-ramp) is Phase 2.
+
+### Open product questions
+
+1. Late fee percent — `2%` is the protocol fee on rent. The late-fee % is
+   a per-lease setting. Confirm where it lives (lease record? global
+   default? landlord-overridable?).
+2. Currency display — always `USDC` suffix, or hide when single-currency?
+   Reference shows it. Keep visible for now.
+3. Rounding — bankers' rounding vs half-up? Stripe uses half-up. Confirm.
+
+### Backend endpoints required
+
+- `POST /api/v1/payments/rent` — submit (BE-blocked, payment integration TBD).
+- `GET /api/v1/leases/:id/upcoming-payment` — fee preview source.
+
+### Demo files (when implemented)
+
+- `src/components/payments/FeeDisplay.tsx` — new shared component
+- `src/pages/tenant/MakePayment.tsx` — refactor to use `<FeeDisplay/>`
+- `src/lib/formatCurrency.ts` — shared formatter (likely exists; extend)
+
+### Estimated effort
+
+~20 h. Component itself is small (~4 h). Integrating into MakePayment +
+extending to other fee-bearing flows takes the bulk.
+
+---
+
+## Task 21 — `<PreSignatureConfirmation/>` Shared Modal (Design Reference §4)
+
+### Source
+
+`docs/client-doc/leasefi-design-reference.html` §4 "PreSignatureConfirmation
+modal". Spec refs: `04-eip712-ceremony.md §6`, `06-security-model.md §9`.
+Scope inheritance: **Task 17**.
+
+### Goal
+
+Build the single most consequential security UX surface — the
+anti-phishing modal that fires before every wallet popup. Parameterized
+once for six EIP-712 ceremonies, not six variants.
+
+### Acceptance criteria
+
+- New shared component
+  `src/components/shared/PreSignatureConfirmation.tsx`.
+- Single component, typed-data schema input. Supports six ceremonies:
+  `LeaseAgreement`, `TerminationNotice`, `BuyoutAgreement`,
+  `DepositRelease`, `PMAuthorization`, `Authentication`.
+- Header: shield-check icon + `Review and sign` + sub-title
+  (ceremony type · EIP-712) + close-X.
+- Body: grid showing every typed-data field. If schema has 10 fields,
+  render 10 fields. **Truncating is a signature-substitution attack
+  vector — forbidden.**
+- Mandatory orange-callout copy (verbatim, do not reword, do not collapse
+  into a tooltip):
+  > "Your Casper wallet will show the same details on the next screen.
+  >  If anything looks different, cancel and contact support."
+- Footer: `Verifying contract · {canonical-mainnet-address}` — canonical
+  string, never user-supplied.
+- Buttons: `Cancel` (returns to `idle` — **no toast, no Sentry, no error
+  UI**) + `Continue to wallet →` (advances to CSPR.click).
+- Fires **after PreFlight passes** (balance / allowance / network checks),
+  **before** any wallet UI.
+
+### Open product questions
+
+1. PreFlight ownership — does each ceremony module run its own preflight,
+   or do we share a `usePreFlight()` hook? Recommend the hook.
+2. Reject vs failure — confirmed in spec that wallet-reject is `idle`,
+   not `failed`. Re-confirm so no telemetry mistakenly logs rejects as
+   errors.
+3. Canonical contract address source — `.env` (per-network) or constants
+   in `src/lib/contracts.ts`? `.env` cleaner.
+
+### Backend endpoints required
+
+None — purely on-chain interaction prep.
+
+### Demo files (when implemented)
+
+- `src/components/shared/PreSignatureConfirmation.tsx` — new
+- `src/hooks/usePreFlight.ts` — new
+- Integration in: lease sign (Task 23), pay rent (Task 20), deposit fund
+  (Task 23), dispute filing (Task 24), termination, buyout
+
+### Estimated effort
+
+~36 h. Critical path. Component itself is moderate; the integration
+across all six ceremonies takes the bulk.
+
+---
+
+## Task 22 — Lease Invitation Landing (Design Reference §5)
+
+### Source
+
+`docs/client-doc/leasefi-design-reference.html` §5 "Lease invitation
+landing". Anti-phishing surface. Spec refs:
+`07-ui-ux-reference.md §4 (Flow 2)`, `06-security-model.md §9`.
+Scope inheritance: **Task 17**.
+
+### Goal
+
+First impression for tenant invitees. Render full lease terms **before**
+any wallet interaction. Pre-flight a 5-step preview so signature
+abandonment drops.
+
+### Acceptance criteria
+
+- New route `/invite/:token`. **Pre-auth** — not wrapped in
+  `ProtectedRoute`.
+- Anti-phishing canonical-domain pill (`lease.fi` with lock icon) next to
+  the LeaseFi logo, **always visible**.
+- "You've been invited" eyebrow + h2 `Sign a lease with {LandlordName}`.
+- Full lease summary card before any wallet CTA: property, landlord
+  (name + truncated address), monthly rent (USDC mono), security deposit
+  with `refundable` pill, lease term, signed-PDF link.
+- 5-step preview card "Before you sign, you'll need to:" with numbered
+  bullets and time estimates:
+  1. Connect your Casper wallet (~30 sec)
+  2. Verify your identity (~5 min)
+  3. Approve $X USDC · rent + 2% fee (~1 min)
+  4. Sign the lease (~30 sec)
+  5. Fund the security deposit (~1 min)
+- CTAs: `Cancel` (tertiary) + `Get started →` (primary, single accent).
+- Helper card "New to crypto wallets?" with friendly explainer. Copy
+  rules:
+  - ✅ "Security deposit (refundable)"
+  - ✅ "Casper wallet"
+  - ❌ "Web3 wallet"
+  - ❌ "Decentralized lease signing"
+  - ❌ Countdown timers / FOMO pressure
+- Token validation: BE stores `sha256(invite_token)` only (per draft
+  endpoint pattern). FE sends the raw token once on landing.
+- Decisions on the blank-tenant pattern (landlord drafted with
+  `tenant: ZERO_ADDRESS`) — verify with SC team before relying on
+  "first wallet that signs claims the role" semantics.
+
+### Open product questions
+
+1. **Blank-tenant production guarantee.** Open in the design reference
+   itself. Kenneth to confirm whether the SC enforces single-claim or
+   relies on FE not to broadcast multiple claims.
+2. **Token reuse / expiry.** What's the expiration window? Single-use
+   or re-openable until signed?
+3. **What happens if the token is invalid / expired.** Reference doesn't
+   spec the error screen. Suggest a neutral "This invitation is no longer
+   valid — contact your landlord" panel with no system error styling.
+
+### Backend endpoints required
+
+- `GET /api/v1/lease-invites/:token` → returns the lease summary that
+  matches `sha256(token)`. BE-blocked.
+- `POST /api/v1/lease-invites/:token/claim` → starts the wallet-connect
+  flow on the server side. BE-blocked.
+
+### Demo files (when implemented)
+
+- `src/pages/invite/InviteLanding.tsx` — new pre-auth page
+- `src/components/invite/LeaseSummaryCard.tsx` — new
+- `src/components/invite/PreflightStepsCard.tsx` — new
+- `src/App.tsx` — register `/invite/:token` outside `ProtectedRoute`
+
+### Estimated effort
+
+~28 h. New surface from scratch with security-critical copy review +
+new route registration. No existing component reuse on the landing itself.
+
+---
+
+## Task 23 — Lease Signing Journey (Design Reference §6)
+
+### Source
+
+`docs/client-doc/leasefi-design-reference.html` §6 "Lease signing
+journey". Highest-complexity Critical 6 flow. Spec refs:
+`PRD §4.2.2`, `04-eip712-ceremony.md §6`, `Off-Chain Spec §5.5.1`,
+`SC Spec §5`. Scope inheritance: **Task 17**.
+
+### Goal
+
+Build the two-party, two-EIP-712-signature, IPFS-pinned, draft-persisted,
+asynchronous-handoff lease lifecycle. The single most expensive surface
+in the FE scope.
+
+### Acceptance criteria — sub-screens
+
+**A · End-to-end overview**
+
+- 2-column timeline on the wizard summary screen.
+  - Landlord (7 steps): Property → Tenant info → Financial → Term →
+    PDF→IPFS → Review & sign → Share invite
+  - Tenant (7 steps): Receive invite → Connect wallet → Verify identity →
+    Approve PaymentRouter → Sign lease → Submit `create_lease` (Tx A) →
+    Fund deposit (Tx B)
+- Tx-A and Tx-B labeled in mono badges.
+- Final-state band "Lease fully active on Casper" with success pill.
+
+**B · Landlord wizard (7 steps; shared chrome)**
+
+- Step 1: Property info + photos (reuse property-create form)
+- Step 2: Tenant info or blank-tenant (`ZERO_ADDRESS`) — Open Q #1 below
+- Step 3: Financial terms (rent, deposit, late fee, prorate logic) —
+  detailed mockup in design reference
+- Step 4: Term & dates
+- Step 5: Upload PDF → IPFS with progress + hash echo
+- Step 6: Review & sign — invokes `<PreSignatureConfirmation/>` (Task 21)
+- Step 7: Share invite link (handoff to `/invite/:token`, see Task 22)
+
+**C · Share / handoff after landlord signs**
+- Surfaces the invite URL with copy-link, email-share, expiry info.
+
+**D · Waiting for tenant**
+- Status panel showing days since send + last-visited timestamp.
+
+**E · Lease active (both signed, on-chain finalized)**
+- Success state with links to lease detail + tx-explorer.
+
+**F · Failure-states triad**
+- Tenant declined / Tx reverted / Document hash mismatch — three distinct
+  copies + recovery CTAs each.
+
+**G · Draft lifecycle state machine**
+- States: `draft → landlord_signed → tenant_signed → on_chain_finalized
+  → active`. Failure branches: `declined`, `expired`, `failed`.
+- Encoded as a TS discriminated union in `src/types/lease.ts`.
+
+**H · PM-on-behalf callout**
+- When the signer is a PM-role wallet acting for a landlord, both the
+  PreSignature modal and the lease-detail page display
+  "Signed on behalf of {LandlordName}".
+
+### Open product questions
+
+1. Blank-tenant in production (cross-link from Task 22 Open Q #1).
+2. Step 5 IPFS pinning — does FE call a pinning service directly
+   (Pinata / web3.storage) or proxy through BE? Latter is safer
+   (key management). Confirm.
+3. Step 7 share — single invite link (sent however the landlord wants),
+   or do we offer an email-send right from the UI? Email is friendlier
+   but adds dep on Ivan's Postmark integration.
+4. Document hash mismatch (failure-state F) — does FE recompute the
+   hash from the IPFS-fetched bytes, or trust the SC's verification?
+   FE-side recomputation is defense-in-depth.
+
+### Backend endpoints required
+
+- `POST /api/v1/leases/draft` → create/update draft
+- `POST /api/v1/leases/:id/upload-document` → IPFS pinning proxy
+- `POST /api/v1/leases/:id/sign` → record signature, return invite token
+- `GET /api/v1/leases/:id` → lease state for waiting-screen polling
+- `POST /api/v1/leases/:id/finalize` → after both signatures, surface tx
+  hash from SC submission
+
+### Demo files (when implemented)
+
+- `src/pages/lease/LeaseWizardPage.tsx` — restructure (existing)
+- `src/components/lease/wizard/Step{1..7}.tsx` — restructure existing
+- `src/components/lease/LeaseLifecycleBanner.tsx` — state-aware banner
+- `src/components/lease/PMOnBehalfCallout.tsx` — new
+- `src/types/lease.ts` — extend with discriminated-union states
+
+### Estimated effort
+
+~72 h (≈ 1.5–2 calendar weeks of FE work, as the design reference
+explicitly calls out). Decomposes into ~12 h per major sub-screen with
+shared wizard chrome.
+
+---
+
+## Task 24 — Dispute Filing UI (Design Reference §7)
+
+### Source
+
+`docs/client-doc/leasefi-design-reference.html` §7 "Dispute filing".
+SC side: `ADR-005-minimal-disputemodule-phase-0.md`.
+Scope inheritance: **Task 17**.
+
+### Goal
+
+A minimal dispute-filing surface for tenants and landlords. Bond-bearing
+(via `<FeeDisplay/>` from Task 20) + signature-bearing (via
+`<PreSignatureConfirmation/>` from Task 21) flow with a stub
+dispute-detail follow-up.
+
+### Acceptance criteria
+
+- New route `/disputes/file` (for tenant + landlord).
+- Form fields: category (`deposit-withholding` / `unauthorized-charge` /
+  `lease-violation` / `other`), description (free text, min 50 chars),
+  evidence (file upload — IPFS pinning, same proxy as Task 23 Step 5).
+- Bond breakdown via `<FeeDisplay/>` — show exact USDC amount.
+- Submit invokes `<PreSignatureConfirmation/>` for the
+  `DisputeBondAgreement` ceremony.
+- Post-submit dispute-detail stub at `/disputes/:id` showing tx hash +
+  state (`open` / `resolved-tenant` / `resolved-landlord` / `expired`).
+
+### Open product questions
+
+1. **Phase 1 vs Phase 1.1.** Reference labels §7 as Critical 6, but
+   Anthony has not explicitly pulled it into Phase 1. Confirm before
+   scheduling.
+2. Bond amount — fixed per category, % of disputed amount, or
+   landlord-set per lease? Kenneth's ADR-005 likely settles this; sync.
+3. Evidence — file types accepted? Size limit? Multiple files per
+   dispute?
+
+### Backend endpoints required
+
+- `POST /api/v1/disputes` → create + return EIP-712 typed data
+- `POST /api/v1/disputes/:id/evidence` → IPFS upload proxy
+- `GET /api/v1/disputes/:id` → detail polling
+
+### Demo files (when implemented)
+
+- `src/pages/disputes/DisputeFile.tsx` — new
+- `src/pages/disputes/DisputeDetail.tsx` — new (stub)
+- `src/components/disputes/CategorySelect.tsx` — new
+- `src/components/disputes/EvidenceUpload.tsx` — reuse Task 23 IPFS
+  pinning component
+
+### Estimated effort
+
+~24 h once Task 21 (PreSignature) + Task 20 (FeeDisplay) ship. Blocked
+on Kenneth's DisputeModule for the EIP-712 schema. Defer unless
+Anthony pulls it forward.
+
+---
+
+## Task 25 — `<TransactionStatus/>` Shared State Machine (Design Reference §8)
+
+### Source
+
+`docs/client-doc/leasefi-design-reference.html` §8 "TransactionStatus —
+all states". Spec ref: `05-data-layer-architecture.md §9`.
+Scope inheritance: **Task 17**.
+
+### Goal
+
+Replace the ICO-specific `TransactionStatusToast` with a canonical shared
+state-machine component used on every on-chain transaction. Most-rendered
+surface in the product.
+
+### Acceptance criteria
+
+- New shared component `src/components/shared/TransactionStatus.tsx` as
+  a state-machine over discriminated states:
+  - `idle` (no render)
+  - `pre-flight` (balance / allowance / network checks)
+  - `awaiting-signature` (wallet popup open)
+  - `signed-pending-broadcast`
+  - `broadcasting`
+  - `confirming · N of M` (progress)
+  - `confirmed`
+  - `failed-revert` (with discriminated `errorCode` for the per-class copy
+    matrix from `05-data-layer-architecture.md §9`)
+  - `failed-timeout`
+  - `failed-rejected` (silent return to `idle` — no UI)
+- Header pill on every authenticated screen (right of page title):
+  `{count} confirming · {n} of {m}`.
+- Click-to-expand panel when ≥2 pending transactions. Each row is
+  click-to-return navigable.
+- Icon + color for each state, color-independent per WCAG 2.1 AA.
+- Retire `src/pages/ico/components/shared/TransactionStatusToast.tsx`
+  (or wrap it as a thin adapter).
+
+### Open product questions
+
+1. **Indexer vs polling.** Reference assumes an indexer can report
+   per-tx confirmation count. Casper's CSPR.cloud has this; confirm
+   capacity/cost.
+2. **Pending persistence.** When the user reloads mid-tx, do we restore
+   pending state from `localStorage`, from a BE side-channel, or from
+   on-chain polling? Spec §9 likely settles this.
+3. **Account-switch mid-tx.** Reference's "what's not in this document"
+   list flags three sub-states: aborted-in-signature, aborted-in-pending,
+   aborted-in-confirmation. Out of scope for Task 25; track separately.
+
+### Backend endpoints required
+
+- `GET /api/v1/tx/:hash/status` → poll fallback if indexer unavailable.
+
+### Demo files (when implemented)
+
+- `src/components/shared/TransactionStatus.tsx` — new
+- `src/hooks/useTransactionStatus.ts` — new
+- `src/components/shared/GlobalTxIndicator.tsx` — header pill + expand panel
+- Mount in `TenantLayout` and `LandlordLayout` headers
+
+### Estimated effort
+
+~28 h. State machine + integration across layouts + retiring the ICO
+toast. Cross-cuts every on-chain flow.
+
+---
+
+## Task 26 — `<KYCGate/>` around Sumsub WebSDK (Design Reference §10)
+
+### Source
+
+`docs/client-doc/leasefi-design-reference.html` §10 "KYCGate &
+attestation-pending state". Scope inheritance: **Task 17** +
+Dev_Team_Brief item 4 (Sumsub accepted as MVP KYC provider, integration
+shape provider-agnostic, per ADR-002) + ADR-004 §Phase 0 (`Onboarding
+with Sumsub KYC at user onboarding`) + Anthony's 2026-05-20 call ("no
+AML/CDD/biometric handling **on top of Sumsub**").
+
+### Goal
+
+A wrapper that gates fee-bearing actions (sign lease, pay rent, fund
+deposit) on Sumsub-verified KYC status. Sumsub is the **sole** KYC
+service — no separate AML lookup, OFAC API, or biometric layer on top.
+Sumsub handles identity, document checks, and liveness internally; we
+only consume the `applicant_id + status + timestamp` triple via webhook.
+
+### Acceptance criteria
+
+- New shared component `src/components/shared/KYCGate.tsx` with two
+  states matching design reference §10:
+  - `kyc-required` (blocking) — renders "Verify your identity" panel
+    with `Start verification` CTA that opens the Sumsub WebSDK widget;
+    documents stream browser → Sumsub directly.
+  - `pending-attestation` (~30 s transient) — renders "Recording your
+    verification" with a progress indicator while the BE persists the
+    Sumsub webhook callback and (in later phases) writes the on-chain
+    attestation.
+- New hook `src/hooks/useKYCStatus.ts` returning
+  `{ status, tier, pending, openWidget }`. Provider-abstracted shape
+  (default `APIKYCSource`; future `AttestationKYCSource` swap-in
+  without product-code rewrite) — consume `useKYCStatus(address)` only,
+  never the source directly.
+- Integration points (each calls `useKYCStatus()` and shows the gate UI
+  before the destructive action):
+  - `MakePayment` (Task 20)
+  - `LeaseWizard Step 6` (Task 23)
+  - `Deposit funding` (Task 23 sub-screen Tx B)
+  - `DisputeFile` (Task 24, if Phase 1)
+- **Out of scope on top of Sumsub** (per Anthony 2026-05-20): separate
+  AML / CDD list lookup, standalone OFAC sanctions screening, third-party
+  document-tampering services (Snappt etc.), additional biometric
+  liveness layers. Sumsub's built-in checks are the entire KYC surface
+  for MVP.
+- Casper-name purchase as a separate KYC step is **Phase 2** (Anthony,
+  2026-05-20).
+- Tier insufficiency (e.g. Tier 1 user attempting a Tier 2 action) is
+  NOT a compliance failure — show the actual reason ("Tier 2 required").
+  OFAC / sanctions / jurisdiction blocks collapse to the generic
+  `<ComplianceFailure/>` surface from §9 per BSA §314 (separate task,
+  out of MVP).
+
+### Open product questions
+
+1. Re-verification cadence — design reference says 30 d before expiry
+   → banner, 7 d → modal interrupt, day-of → hard block. Confirm we
+   adopt those thresholds 1:1, or relax for pilot.
+2. Multiple-action gating — if the user verifies once during the lease
+   signing flow, does it pre-clear them for a same-session payment?
+   Suggest yes — single gate per session.
+3. Wallet rotation — design reference §10 calls out that each wallet
+   KYCs independently as a Phase 1 limitation. Confirm we surface this
+   in copy rather than hide it.
+
+### Backend endpoints required
+
+- BE creates Sumsub applicant on first sensitive-action attempt and
+  returns the widget access token.
+- BE handles the Sumsub verification webhook (status transitions:
+  `init` → `pending` → `completed`/`rejected`).
+- `GET /api/v1/users/me/kyc-state` — returns
+  `{ status, tier, lastVerifiedAt, applicantId }`. Persisted fields on
+  user: `sumsub_applicant_id`, `kyc_status`, `kyc_verified_at` — nothing
+  else from Sumsub leaves their infrastructure.
+
+### Demo files (when implemented)
+
+- `src/components/shared/KYCGate.tsx` — new
+- `src/hooks/useKYCStatus.ts` — new
+- `src/lib/kyc/APIKYCSource.ts` — provider-agnostic source wrapper
+- Integration adapters in Tasks 20, 23, 24.
 
 ---
 

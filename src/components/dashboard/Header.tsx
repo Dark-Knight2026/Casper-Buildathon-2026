@@ -11,6 +11,7 @@ import {
   DropdownMenuTrigger 
 } from '@/components/ui/dropdown-menu';
 import { useAuth } from '@/hooks/useAuth';
+import { useICOWallet } from '@/hooks/ico/useICOWallet';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useMobileDetection } from '@/hooks/useMobileDetection';
 
@@ -18,9 +19,25 @@ interface HeaderProps {
   onMenuClick: () => void;
 }
 
+// DEAD CODE (as of 2026-06-01): this component is currently unreachable.
+// Import chain: Header ← DashboardLayout ← LeaseLayout ← (nobody). None of
+// these are wired into App.tsx (the sole router). The auth wiring below was
+// fixed to match LandlordLayout/TenantLayout so it's correct if/when this is
+// reconnected, but right now it never renders. Delete the orphan chain or
+// route it before relying on this.
 export const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
-  const { user, logout } = useAuth();
+  const { profile, walletSignOut } = useAuth();
+  const { disconnect } = useICOWallet();
   const { isMobile } = useMobileDetection();
+
+  // Full sign-out: release the CSPR.click wallet session (await so the SDK's
+  // hard disconnect completes), clear our backend session, then hard-reload to
+  // wipe in-memory SDK state. Matches LandlordLayout/TenantLayout.
+  const handleLogout = async () => {
+    await disconnect();
+    walletSignOut();
+    window.location.assign('/');
+  };
 
   return (
     <header className="sticky top-0 z-30 flex h-14 sm:h-16 items-center gap-2 sm:gap-4 border-b bg-background px-3 sm:px-6">
@@ -72,8 +89,8 @@ export const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
               aria-label="User menu"
             >
               <Avatar className="h-8 w-8">
-                <AvatarImage src={user?.avatar} alt={user?.name} />
-                <AvatarFallback>{user?.name?.charAt(0) || 'U'}</AvatarFallback>
+                <AvatarImage src={profile?.avatar} alt={profile?.name} />
+                <AvatarFallback>{profile?.name?.charAt(0) || 'U'}</AvatarFallback>
               </Avatar>
               <span className="sr-only">Toggle user menu</span>
             </Button>
@@ -85,7 +102,7 @@ export const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
             <DropdownMenuItem>Settings</DropdownMenuItem>
             <DropdownMenuItem>Support</DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={logout}>Logout</DropdownMenuItem>
+            <DropdownMenuItem onClick={handleLogout}>Logout</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

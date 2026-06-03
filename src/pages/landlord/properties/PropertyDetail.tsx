@@ -5,7 +5,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Edit, Trash2, Home, MapPin, DollarSign, Calendar, Eye, FileText } from 'lucide-react';
+import { ArrowLeft, Edit, Trash2, Home, MapPin, DollarSign, Eye, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -14,15 +14,19 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import { propertyService } from '@/services/propertyService';
-import { getCurrentUserId } from '@/lib/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
 import type { Property, PropertyStatistics } from '@/types/property';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { getLeasesByProperty } from '@/data/tenantLeases';
 import { LandlordListingActions } from '@/components/landlord/LandlordListingActions';
+import { PROPERTY_DELETE_ENABLED } from '@/lib/featureFlags';
+import logger from '@/lib/logger';
 
 export default function PropertyDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { profile } = useAuth();
 
   const [property, setProperty] = useState<Property | null>(null);
   const [statistics, setStatistics] = useState<PropertyStatistics | null>(null);
@@ -46,11 +50,15 @@ export default function PropertyDetail() {
       }
 
       setProperty(data);
-      
-      // Increment view count
-      await propertyService.incrementPropertyViews(id);
+
+      // Increment view count as a fire-and-forget side effect. Its own catch
+      // keeps a view-count failure from surfacing as a page-level
+      // "Failed to load property" error in the catch block below.
+      void propertyService.incrementPropertyViews(id).catch((error) => {
+        logger.error('Error incrementing property views:', error);
+      });
     } catch (error) {
-      console.error('Error loading property:', error);
+      logger.error('Error loading property:', error);
       toast({
         title: 'Error',
         description: 'Failed to load property',
@@ -67,7 +75,7 @@ export default function PropertyDetail() {
       const stats = await propertyService.getPropertyStatistics(id);
       setStatistics(stats);
     } catch (error) {
-      console.error('Error loading statistics:', error);
+      logger.error('Error loading statistics:', error);
     }
   }, [id]);
 
@@ -79,8 +87,16 @@ export default function PropertyDetail() {
   const handleDelete = async () => {
     try {
       setDeleting(true);
-      const landlordId = await getCurrentUserId();
-      if (!landlordId || !id) return;
+      const landlordId = profile?.id;
+      if (!landlordId) {
+        toast({
+          title: 'Session expired',
+          description: 'Please sign in again to delete this property',
+          variant: 'destructive'
+        });
+        return;
+      }
+      if (!id) return;
 
       await propertyService.deleteProperty(id, landlordId);
       
@@ -111,12 +127,14 @@ export default function PropertyDetail() {
     }).format(amount);
   };
 
-  const formatDate = (date: Date) => {
+  // availableDate arrives as an ISO string from the API/DTO (see Property type),
+  // so accept string | Date and normalize before formatting.
+  const formatDate = (date: string | Date) => {
     return new Intl.DateTimeFormat('en-US', {
       year: 'numeric',
       month: 'long',
       day: 'numeric'
-    }).format(date);
+    }).format(new Date(date));
   };
 
   if (loading) {
@@ -167,6 +185,27 @@ export default function PropertyDetail() {
               Edit
             </Button>
             
+            {!PROPERTY_DELETE_ENABLED ? (
+              // TODO(BE): Re-enable once Rust DELETE /api/v1/properties/:id ships.
+              // Supabase is deactivated, so deleteProperty would fail silently —
+              // disable the trigger entirely rather than show a no-op confirm dialog.
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    {/* span wrapper: disabled buttons don't emit the pointer events the tooltip needs */}
+                    <span className="inline-flex">
+                      <Button variant="destructive" disabled>
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Delete
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    Deleting properties isn’t available yet — coming with the next backend release.
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            ) : (
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button variant="destructive">
@@ -190,6 +229,7 @@ export default function PropertyDetail() {
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
+            )}
           </div>
         </div>
       </div>
