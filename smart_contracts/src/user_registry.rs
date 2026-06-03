@@ -241,7 +241,10 @@ impl UserRegistry {
         initial_wallet: Address,
         role_flags: u32,
     ) -> U256 {
-        // TODO: Add asserts
+        self.assert_role(ROLE_IDENTITY_MANAGER);
+        self.assert_valid_identity_hash(identity_hash);
+        self.assert_identity_available(identity_hash);
+        self.assert_wallet_available(initial_wallet);
 
         let user_id = self.get_users_count();
 
@@ -276,7 +279,8 @@ impl UserRegistry {
     /// Replaces the user's active wallet and marks the old wallet as revoked.
     /// Restricted to `IDENTITY_MANAGER`.
     pub fn replace_active_wallet(&mut self, user_id: U256, new_wallet: Address) {
-        // TODO: Add asserts
+        self.assert_role(ROLE_IDENTITY_MANAGER);
+        self.assert_wallet_available(new_wallet);
 
         let mut record = self.get_user(user_id);
         let old_wallet = record.active_wallet;
@@ -303,7 +307,7 @@ impl UserRegistry {
     /// Sets whether user is active or suspended.
     /// Restricted to `IDENTITY_MANAGER`.
     pub fn set_user_status(&mut self, user_id: U256, status: UserStatus) {
-        // TODO: Add asserts
+        self.assert_role(ROLE_IDENTITY_MANAGER);
 
         let mut record = self.get_user(user_id);
         record.status = status;
@@ -345,4 +349,39 @@ impl UserRegistry {
 // Internal Helpers
 // =============================================================================
 
-impl UserRegistry {}
+impl UserRegistry {
+    #[inline]
+    fn assert_role(&self, role_name: &str) {
+        let role = common::hash_role(role_name);
+
+        if !self.access_control.has_role(&role, &self.env().caller()) {
+            self.env().revert(Error::NotAuthorized);
+        }
+    }
+
+    #[inline]
+    fn assert_valid_identity_hash(&self, identity_hash: [u8; 32]) {
+        if identity_hash == [0u8; 32] {
+            self.env().revert(Error::MissingIdentityHash);
+        }
+    }
+
+    #[inline]
+    fn assert_identity_available(&self, identity_hash: [u8; 32]) {
+        if self
+            .identity_to_user_id
+            .get(&identity_hash)
+            .unwrap_or(None)
+            .is_some()
+        {
+            self.env().revert(Error::IdentityAlreadyRegistered);
+        }
+    }
+
+    #[inline]
+    fn assert_wallet_available(&self, wallet: Address) {
+        if self.wallet_statuses.get(&wallet).is_some() {
+            self.env().revert(Error::WalletAlreadyLinked);
+        }
+    }
+}
