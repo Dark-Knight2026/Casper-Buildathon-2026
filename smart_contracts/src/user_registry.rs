@@ -100,7 +100,13 @@ pub mod errors {
     use odra::prelude::*;
 
     #[odra::odra_error]
-    pub enum Error {}
+    pub enum Error {
+        NotAuthorized = 1200,
+        MissingIdentityHash = 1201,
+        IdentityAlreadyRegistered = 1202,
+        InvalidUserId = 1203,
+        WalletAlreadyLinked = 1204,
+    }
 }
 
 // =============================================================================
@@ -137,6 +143,17 @@ impl UserRegistry {
     pub fn init(&mut self, owner: Address) {
         self.access_control
             .unchecked_grant_role(&DEFAULT_ADMIN_ROLE, &owner);
+    }
+
+    // =========================================================================
+    // View Functions
+    // =========================================================================
+
+    /// Returns the usr record for `user_id`
+    pub fn get_user(&self, user_id: U256) -> UserRecord {
+        self.users
+            .get(&user_id)
+            .unwrap_or_revert_with(&self.env(), Error::InvalidUserId)
     }
 
     // =========================================================================
