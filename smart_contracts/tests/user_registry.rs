@@ -104,3 +104,61 @@ fn test_create_user_should_store_user_and_wallet_indexes() {
         }
     ))
 }
+
+#[test]
+fn test_create_user_should_revert_if_caller_is_not_identity_manager() {
+    let mut ctx = setup(odra_test::env());
+
+    ctx.env.set_caller(ctx.env.get_account(9));
+
+    assert_eq!(
+        ctx.registry
+            .try_create_user([1u8; 32], ctx.wallet_1, ROLE_FLAG_TENANT)
+            .unwrap_err(),
+        Error::NotAuthorized.into(),
+    );
+}
+
+#[test]
+fn test_create_user_should_require_identity_hash() {
+    let mut ctx = setup(odra_test::env());
+
+    ctx.env.set_caller(ctx.identity_manager);
+
+    assert_eq!(
+        ctx.registry
+            .try_create_user([0u8; 32], ctx.wallet_1, ROLE_FLAG_TENANT)
+            .unwrap_err(),
+        Error::MissingIdentityHash.into(),
+    );
+}
+
+#[test]
+fn test_create_user_should_revert_for_duplicate_identity() {
+    let mut ctx = setup(odra_test::env());
+    create_user(&mut ctx);
+
+    ctx.env.set_caller(ctx.identity_manager);
+
+    assert_eq!(
+        ctx.registry
+            .try_create_user([1u8; 32], ctx.wallet_2, ROLE_FLAG_LANDLORD)
+            .unwrap_err(),
+        Error::IdentityAlreadyRegistered.into(),
+    );
+}
+
+#[test]
+fn test_create_user_should_revert_for_duplicate_wallet() {
+    let mut ctx = setup(odra_test::env());
+    create_user(&mut ctx);
+
+    ctx.env.set_caller(ctx.identity_manager);
+
+    assert_eq!(
+        ctx.registry
+            .try_create_user([2u8; 32], ctx.wallet_1, ROLE_FLAG_TENANT)
+            .unwrap_err(),
+        Error::WalletAlreadyLinked.into(),
+    );
+}
