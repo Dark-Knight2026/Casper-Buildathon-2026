@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useClickRef } from '@make-software/csprclick-ui';
+import type { UnsolicitedAccountChangeClickEvent } from '@make-software/csprclick-core-types';
 import { deriveAccountHash } from '@/lib/blockchain/accountUtils';
 import { clearCsprClickStorage } from '@/lib/csprclick';
 import logger from '@/lib/logger';
@@ -188,10 +189,10 @@ export function useICOWallet(): UseICOWalletReturn {
     // Without this, the SDK and our React state can drift out of sync,
     // leading to /api/authenticate/me 401s on subsequent signMessage calls.
     // Source: https://github.com/make-software/csprclick-examples/blob/master/csprclick-react/src/App.tsx
-    const handleUnsolicitedAccountChange = async (evt: { account: { provider: string; public_key: string } }) => {
+    const handleUnsolicitedAccountChange = async (evt: UnsolicitedAccountChangeClickEvent) => {
       logger.debug('[useICOWallet] unsolicited account change', { evt });
       try {
-        await clickRef.signInWithAccount(evt.account as never);
+        await clickRef.signInWithAccount(evt.account);
         if (cancelled) return;
       } catch (e) {
         logger.error('[useICOWallet] signInWithAccount after unsolicited change failed', { error: e });

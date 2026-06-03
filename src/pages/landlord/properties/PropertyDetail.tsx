@@ -18,6 +18,7 @@ import { useAuth } from '@/hooks/useAuth';
 import type { Property, PropertyStatistics } from '@/types/property';
 import { getLeasesByProperty } from '@/data/tenantLeases';
 import { LandlordListingActions } from '@/components/landlord/LandlordListingActions';
+import logger from '@/lib/logger';
 
 export default function PropertyDetail() {
   const { id } = useParams<{ id: string }>();
@@ -47,11 +48,15 @@ export default function PropertyDetail() {
       }
 
       setProperty(data);
-      
-      // Increment view count
-      await propertyService.incrementPropertyViews(id);
+
+      // Increment view count as a fire-and-forget side effect. Its own catch
+      // keeps a view-count failure from surfacing as a page-level
+      // "Failed to load property" error in the catch block below.
+      void propertyService.incrementPropertyViews(id).catch((error) => {
+        logger.error('Error incrementing property views:', error);
+      });
     } catch (error) {
-      console.error('Error loading property:', error);
+      logger.error('Error loading property:', error);
       toast({
         title: 'Error',
         description: 'Failed to load property',
@@ -68,7 +73,7 @@ export default function PropertyDetail() {
       const stats = await propertyService.getPropertyStatistics(id);
       setStatistics(stats);
     } catch (error) {
-      console.error('Error loading statistics:', error);
+      logger.error('Error loading statistics:', error);
     }
   }, [id]);
 
@@ -81,7 +86,15 @@ export default function PropertyDetail() {
     try {
       setDeleting(true);
       const landlordId = profile?.id;
-      if (!landlordId || !id) return;
+      if (!landlordId) {
+        toast({
+          title: 'Session expired',
+          description: 'Please sign in again to delete this property',
+          variant: 'destructive'
+        });
+        return;
+      }
+      if (!id) return;
 
       await propertyService.deleteProperty(id, landlordId);
       
@@ -112,12 +125,14 @@ export default function PropertyDetail() {
     }).format(amount);
   };
 
-  const formatDate = (date: Date) => {
+  // availableDate arrives as an ISO string from the API/DTO (see Property type),
+  // so accept string | Date and normalize before formatting.
+  const formatDate = (date: string | Date) => {
     return new Intl.DateTimeFormat('en-US', {
       year: 'numeric',
       month: 'long',
       day: 'numeric'
-    }).format(date);
+    }).format(new Date(date));
   };
 
   if (loading) {
