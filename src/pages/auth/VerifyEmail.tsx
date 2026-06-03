@@ -200,11 +200,16 @@ export default function VerifyEmail() {
           )}
 
           {status === 'bad_format' && (
-            <Alert variant="destructive">
-              <AlertDescription>
-                The verification token in this link is malformed. Request a new email from your profile.
-              </AlertDescription>
-            </Alert>
+            <>
+              <Alert variant="destructive">
+                <AlertDescription>
+                  The verification token in this link is malformed. Request a new email below.
+                </AlertDescription>
+              </Alert>
+              <Button onClick={handleResend} disabled={resending} className="w-full">
+                {resending ? 'Sending…' : 'Send a new verification email'}
+              </Button>
+            </>
           )}
 
           {status === 'generic_error' && (

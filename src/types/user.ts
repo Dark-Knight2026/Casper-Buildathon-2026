@@ -143,15 +143,24 @@ export function getRoleDisplayName(role: UserRole): string {
   return roleNames[role] || role;
 }
 
-// Maps a role to its post-login dashboard path. Only `/tenant/dashboard`
-// and `/landlord/dashboard` exist in App.tsx today, so every non-tenant role
-// (and `undefined`, e.g. a profile that has not finished hydrating) lands on
-// the landlord dashboard until role-specific dashboards are added.
+// Maps a role to its post-login dashboard path. For the MVP only two roles
+// have a real dashboard: `tenant` → `/tenant/dashboard` and `landlord` →
+// `/landlord/dashboard` (a `manager` dashboard is planned next; all the other
+// UserRole values are post-MVP and have no dashboard yet).
+//
+// Any other role — and `undefined` (e.g. a profile that has not finished
+// hydrating) — falls back to the public root `/`. This is deliberate: the
+// fallback MUST NOT be a ProtectedRoute path. `/landlord/dashboard` only
+// allows `landlord`, so returning it for, say, an `agent` would make
+// ProtectedRoute redirect to getDashboardRoute() again → infinite loop. `/`
+// is a public route, so it always terminates the redirect chain.
+//
 // Paths must match the <Route path=...> declarations in App.tsx exactly,
 // otherwise the * catch-all swallows the redirect.
 export function getDashboardRoute(role: UserRole | undefined): string {
   if (role === 'tenant') return '/tenant/dashboard';
-  return '/landlord/dashboard';
+  if (role === 'landlord') return '/landlord/dashboard';
+  return '/';
 }
 
 // Maps a role (or undefined for guest) to the appropriate "search / property
