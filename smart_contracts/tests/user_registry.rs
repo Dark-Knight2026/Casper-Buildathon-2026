@@ -231,3 +231,80 @@ fn test_replace_active_wallet_should_revert_if_caller_is_not_identity_manager() 
         Error::NotAuthorized.into()
     );
 }
+
+// =============================================================================
+// set_user_role_flags()
+// =============================================================================
+
+#[test]
+fn test_set_user_role_flags_should_update_additive_roles() {
+    let mut ctx = setup(odra_test::env());
+    let user_id = create_user(&mut ctx);
+
+    let role_flags = ROLE_FLAG_LANDLORD | ROLE_FLAG_TENANT | ROLE_FLAG_PROPERTY_MANAGER;
+
+    ctx.env.set_caller(ctx.role_manager);
+    ctx.registry.set_user_role_flags(user_id, role_flags);
+
+    assert!(ctx.registry.has_landlord_role(user_id));
+    assert!(ctx.registry.has_tenant_role(user_id));
+    assert!(ctx.registry.has_property_manager_role(user_id));
+
+    assert!(ctx.env.emitted_event(
+        &ctx.registry,
+        UserRoleFlagsSet {
+            user_id,
+            role_flags,
+        }
+    ));
+}
+
+#[test]
+fn test_set_user_role_flags_should_revert_if_caller_is_not_role_manager() {
+    let mut ctx = setup(odra_test::env());
+    let user_id = create_user(&mut ctx);
+
+    ctx.env.set_caller(ctx.identity_manager);
+
+    assert_eq!(
+        ctx.registry
+            .try_set_user_role_flags(user_id, ROLE_FLAG_LANDLORD)
+            .unwrap_err(),
+        Error::NotAuthorized.into(),
+    );
+}
+
+// =============================================================================
+// set_user_status()
+// =============================================================================
+
+#[test]
+fn test_set_user_status_should_suspend_user() {
+    let mut ctx = setup(odra_test::env());
+    let user_id = create_user(&mut ctx);
+
+    ctx.registry.set_user_status(user_id, UserStatus::Suspended);
+
+    assert!(!ctx.registry.is_active_user(user_id));
+    assert!(ctx.env.emitted_event(
+        &ctx.registry,
+        UserStatusSet {
+            user_id,
+            status: UserStatus::Suspended,
+        }
+    ));
+}
+
+#[test]
+fn test_user_updates_should_revert_for_invalid_user() {
+    let mut ctx = setup(odra_test::env());
+
+    ctx.env.set_caller(ctx.identity_manager);
+
+    assert_eq!(
+        ctx.registry
+            .try_set_user_status(U256::from(42), UserStatus::Suspended)
+            .unwrap_err(),
+        Error::InvalidUserId.into(),
+    );
+}
