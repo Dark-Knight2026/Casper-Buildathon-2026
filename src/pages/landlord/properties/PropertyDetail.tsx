@@ -16,8 +16,10 @@ import { useToast } from '@/hooks/use-toast';
 import { propertyService } from '@/services/propertyService';
 import { useAuth } from '@/hooks/useAuth';
 import type { Property, PropertyStatistics } from '@/types/property';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { getLeasesByProperty } from '@/data/tenantLeases';
 import { LandlordListingActions } from '@/components/landlord/LandlordListingActions';
+import { PROPERTY_DELETE_ENABLED } from '@/lib/featureFlags';
 import logger from '@/lib/logger';
 
 export default function PropertyDetail() {
@@ -183,6 +185,27 @@ export default function PropertyDetail() {
               Edit
             </Button>
             
+            {!PROPERTY_DELETE_ENABLED ? (
+              // TODO(BE): Re-enable once Rust DELETE /api/v1/properties/:id ships.
+              // Supabase is deactivated, so deleteProperty would fail silently —
+              // disable the trigger entirely rather than show a no-op confirm dialog.
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    {/* span wrapper: disabled buttons don't emit the pointer events the tooltip needs */}
+                    <span className="inline-flex">
+                      <Button variant="destructive" disabled>
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Delete
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    Deleting properties isn’t available yet — coming with the next backend release.
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            ) : (
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button variant="destructive">
@@ -206,6 +229,7 @@ export default function PropertyDetail() {
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
+            )}
           </div>
         </div>
       </div>
