@@ -27,7 +27,7 @@ pub use models::{
     UserStatus, VerificationLevel,
 };
 pub use pagination::{Pageable, PaginatedResponse, Pagination};
-pub use redis::RedisStore;
+pub use redis::{RedisStore, VerifyEmailReservation};
 
 /// Validates and normalizes a Casper account hash (64 hex characters, no prefix).
 ///

@@ -3,6 +3,20 @@
 use redis::{AsyncCommands, Client, RedisError, aio::ConnectionManager};
 use uuid::Uuid;
 
+/// Outcome of [`reserve_verify_email_send`]: the send slot was atomically
+/// reserved, or the caller is over a rate-limit window and nothing was written.
+///
+/// [`reserve_verify_email_send`]: RedisStore::reserve_verify_email_send
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VerifyEmailReservation {
+    /// Both windows were under their caps: the token hash was stored and both
+    /// counters incremented in the same atomic step.
+    Reserved,
+    /// The per-minute or per-hour cap was already reached; no Redis state
+    /// changed, so any previously stored token is left intact.
+    RateLimited,
+}
+
 /// Time-to-live for login nonce in Redis (5 minutes).
 const LOGIN_NONCE_TTL: u64 = 300;
 
@@ -384,34 +398,6 @@ impl RedisStore {
         Ok(())
     }
 
-    /// Persists a pending email-verification token keyed by `user_id`.
-    ///
-    /// Mirrors [`save_email_change_token`] but stores only `hex(token_hash)`
-    /// with no trailing payload: verification does not carry a new email,
-    /// it just flips `email_verified`. Hashing means a Redis dump never
-    /// exposes a usable confirmation token.
-    ///
-    /// Keying on `user_id` (not the hash) means a fresh send atomically
-    /// overwrites the previous slot, instantly invalidating the old link -
-    /// consistent with email-change.
-    ///
-    /// [`save_email_change_token`]: Self::save_email_change_token
-    ///
-    /// # Errors
-    ///
-    /// Returns `RedisError` if the connection fails.
-    #[inline]
-    pub async fn save_verify_email_token(
-        &self,
-        user_id: Uuid,
-        token_hash: &[u8; 32],
-    ) -> RedisResult<()> {
-        let mut conn = self.conn.clone();
-        let key = Self::verify_email_key(user_id);
-        conn.set_ex(&key, hex::encode(token_hash), VERIFY_EMAIL_TTL)
-            .await
-    }
-
     /// Atomically retrieves and deletes the pending verification token for
     /// `user_id`, returning the stored 32-byte hash.
     ///
@@ -457,69 +443,83 @@ impl RedisStore {
         conn.del::<_, ()>(&key).await
     }
 
-    /// Returns `true` when the user has exceeded *either* the per-minute or
-    /// the per-hour verify-email send limit.
+    /// Atomically reserves one verify-email send: stores the token hash (24h
+    /// TTL) and bumps both rolling-window counters, but only when the user is
+    /// under *both* the per-minute and per-hour caps.
     ///
-    /// Read-only (no `INCR`): the send handler calls this as a pre-flight
-    /// check before the `email IS NULL` guard, so a wallet-only user who
-    /// taps the button never burns a counter slot. The `OR` across
-    /// both windows is the point - the per-minute guard catches bursts the
-    /// hourly cap alone would let through.
+    /// A single Lua script fuses the rate-limit check, the token write, and the
+    /// two `INCR`s into one indivisible step - that is what makes the limit
+    /// race-free. With a separate read-only check followed by a later `INCR`,
+    /// two concurrent sends could both read a count of zero, both pass, and
+    /// both increment past the per-minute cap; the script runs to completion
+    /// for one caller before the other starts, so only one can reserve. Fusing
+    /// the token write in as well removes the old save-then-increment ordering
+    /// window: the slot and the counters now move together or not at all, so
+    /// there is never a spent slot with no redeemable token (which would strand
+    /// the user behind the limiter) nor a stored token whose send went
+    /// un-counted.
     ///
-    /// # Errors
-    ///
-    /// Returns `RedisError` if the connection fails.
-    #[inline]
-    pub async fn is_verify_email_send_rate_limited(&self, user_id: Uuid) -> RedisResult<bool> {
-        let mut conn = self.conn.clone();
-        let minute_key = Self::verify_email_send_minute_key(user_id);
-        let hour_key = Self::verify_email_send_hour_key(user_id);
-        let minute_count = conn.get::<_, Option<u64>>(&minute_key).await?;
-        let hour_count = conn.get::<_, Option<u64>>(&hour_key).await?;
-        Ok(
-            minute_count.is_some_and(|c| c >= VERIFY_EMAIL_SEND_PER_MINUTE_MAX)
-                || hour_count.is_some_and(|c| c >= VERIFY_EMAIL_SEND_PER_HOUR_MAX),
-        )
-    }
-
-    /// Records one verify-email send attempt against *both* rolling windows.
-    ///
-    /// `INCR` + conditional `EXPIRE` per key mirrors
-    /// [`record_email_change_attempt`], applied to the minute and hour
-    /// counters in turn: the TTL is set only on the first increment so each
-    /// window starts when the user begins, not on every retry.
-    ///
-    /// [`record_email_change_attempt`]: Self::record_email_change_attempt
+    /// On [`VerifyEmailReservation::RateLimited`] the script writes nothing, so
+    /// a throttled retry leaves any previously stored token intact rather than
+    /// clobbering a link the user may still be about to click. The `email IS
+    /// NULL` guard therefore still runs first in the handler: a wallet-only
+    /// user is rejected before this method is ever called, so they never
+    /// reserve a slot.
     ///
     /// # Errors
     ///
     /// Returns `RedisError` if the connection fails.
     #[inline]
-    pub async fn record_verify_email_send_attempt(&self, user_id: Uuid) -> RedisResult<()> {
+    pub async fn reserve_verify_email_send(
+        &self,
+        user_id: Uuid,
+        token_hash: &[u8; 32],
+    ) -> RedisResult<VerifyEmailReservation> {
+        // KEYS: token slot, minute counter, hour counter.
+        // ARGV: token hash, token TTL, minute cap, minute window, hour cap,
+        //       hour window.
+        let script = redis::Script::new(
+            r"
+                local minute = tonumber(redis.call('GET', KEYS[2]) or '0')
+                local hour = tonumber(redis.call('GET', KEYS[3]) or '0')
+                if minute >= tonumber(ARGV[3]) or hour >= tonumber(ARGV[5]) then
+                    return 0
+                end
+                redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[2])
+                if redis.call('INCR', KEYS[2]) == 1 then
+                    redis.call('EXPIRE', KEYS[2], ARGV[4])
+                end
+                if redis.call('INCR', KEYS[3]) == 1 then
+                    redis.call('EXPIRE', KEYS[3], ARGV[6])
+                end
+                return 1
+            ",
+        );
         let mut conn = self.conn.clone();
-        let minute_key = Self::verify_email_send_minute_key(user_id);
-        let hour_key = Self::verify_email_send_hour_key(user_id);
-        let minute_count = conn.incr::<_, _, u64>(&minute_key, 1u64).await?;
-        if minute_count == 1 {
-            conn.expire::<_, ()>(
-                &minute_key,
-                VERIFY_EMAIL_SEND_PER_MINUTE_WINDOW_SECS.cast_signed(),
-            )
+        let reserved = script
+            .key(Self::verify_email_key(user_id))
+            .key(Self::verify_email_send_minute_key(user_id))
+            .key(Self::verify_email_send_hour_key(user_id))
+            .arg(hex::encode(token_hash))
+            .arg(VERIFY_EMAIL_TTL)
+            .arg(VERIFY_EMAIL_SEND_PER_MINUTE_MAX)
+            .arg(VERIFY_EMAIL_SEND_PER_MINUTE_WINDOW_SECS)
+            .arg(VERIFY_EMAIL_SEND_PER_HOUR_MAX)
+            .arg(VERIFY_EMAIL_SEND_PER_HOUR_WINDOW_SECS)
+            .invoke_async::<i64>(&mut conn)
             .await?;
-        }
-        let hour_count = conn.incr::<_, _, u64>(&hour_key, 1u64).await?;
-        if hour_count == 1 {
-            conn.expire::<_, ()>(
-                &hour_key,
-                VERIFY_EMAIL_SEND_PER_HOUR_WINDOW_SECS.cast_signed(),
-            )
-            .await?;
-        }
-        Ok(())
+        Ok(if reserved == 1 {
+            VerifyEmailReservation::Reserved
+        } else {
+            VerifyEmailReservation::RateLimited
+        })
     }
 
-    /// Reverses a previous `record_verify_email_send_attempt` after the
-    /// downstream send fails permanently.
+    /// Reverses the counter increments of a previous
+    /// [`reserve_verify_email_send`] after the downstream send fails
+    /// permanently.
+    ///
+    /// [`reserve_verify_email_send`]: Self::reserve_verify_email_send
     ///
     /// `DECR` on both counters; a counter that drops to zero (or below,
     /// defensively) is deleted so the next attempt starts a fresh window

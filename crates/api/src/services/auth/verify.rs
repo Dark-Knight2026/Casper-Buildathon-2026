@@ -28,7 +28,10 @@ use time::Duration as CookieDuration;
 use uuid::Uuid;
 
 use crate::{
-    common::{ApiError, ApiResult, AppState, ErrorResponse, UserInfo, UserRole, tokens},
+    common::{
+        ApiError, ApiResult, AppState, ErrorResponse, UserInfo, UserRole, VerifyEmailReservation,
+        tokens,
+    },
     providers::{EmailError, EmailMessage},
     services::{
         auth::{
@@ -127,45 +130,41 @@ pub async fn resend_verify_email(
 
 /// Shared send/resend implementation.
 ///
-/// The order is deliberate: the read-only rate-limit check and the
-/// `email IS NULL` guard both run *before* the counter is incremented, so a
-/// wallet-only user who taps the button never burns their hourly slot.
+/// The order is deliberate: the `email IS NULL` guard runs *before* any Redis
+/// write, so a wallet-only user who taps the button never reserves a slot. The
+/// reservation itself is a single atomic step (see
+/// [`reserve_verify_email_send`]), fusing the rate-limit check, the token
+/// write, and the counter increments so a concurrent request cannot interleave
+/// between them.
+///
+/// [`reserve_verify_email_send`]: crate::common::RedisStore::reserve_verify_email_send
 async fn send_or_resend_verify_email(
     state: &Arc<AppState>,
     user_id: Uuid,
 ) -> ApiResult<Json<VerifySendResponse>> {
-    // Read-only rate-limit check - does NOT increment.
-    if state
-        .redis
-        .is_verify_email_send_rate_limited(user_id)
-        .await?
-    {
-        return Err(ApiError::TooManyRequests("rate_limited".to_owned()));
-    }
-
-    // Email fetch + NOT NULL guard. Counter still untouched here, so a
-    // wallet-only account that hits this path does not lose a slot.
+    // Email fetch + NOT NULL guard runs first, before any Redis write, so a
+    // wallet-only account that hits this path never reserves a slot.
     let email = db::fetch_user_email_for_verify(&state.db, user_id)
         .await?
         .ok_or_else(|| ApiError::BadRequest("email_not_set".to_owned()))?;
 
-    // Generate the opaque token and persist only its hash (24h TTL) BEFORE a
-    // slot is consumed. If the process dies between the two Redis writes, the
-    // worst case is a stored token with no slot spent (harmless, favours the
-    // user) rather than a spent slot with no redeemable token (which would
-    // strand the user behind the limiter with nothing to confirm).
+    // Atomically reserve the send: one Lua script checks both rate-limit
+    // windows and, only if both are under their caps, stores the token hash
+    // (24h TTL) and bumps both counters together. Fusing the check with the
+    // writes closes the TOCTOU race two concurrent sends could otherwise use to
+    // both clear the per-minute cap, and means there is never a spent slot
+    // without a redeemable token (or the reverse).
     let token = tokens::generate();
-    state
+    match state
         .redis
-        .save_verify_email_token(user_id, &token.hash)
-        .await?;
-
-    // Consume the rate-limit slot only once a redeemable token is safely
-    // stored.
-    state
-        .redis
-        .record_verify_email_send_attempt(user_id)
-        .await?;
+        .reserve_verify_email_send(user_id, &token.hash)
+        .await?
+    {
+        VerifyEmailReservation::RateLimited => {
+            return Err(ApiError::TooManyRequests("rate_limited".to_owned()));
+        }
+        VerifyEmailReservation::Reserved => {}
+    }
 
     // Build and attempt delivery.
     let message = verification_email(&email, &state.config.frontend_url, &token.plaintext);
