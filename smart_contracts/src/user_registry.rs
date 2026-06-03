@@ -156,6 +156,48 @@ impl UserRegistry {
             .unwrap_or_revert_with(&self.env(), Error::InvalidUserId)
     }
 
+    /// Returns the number of users created through this registry.
+    pub fn get_users_count(&self) -> U256 {
+        self.users_count.get_or_default()
+    }
+
+    /// Returns the user ID for `identity_hash`, if registered.
+    pub fn get_user_id_by_identity_hash(&self, identity_hash: [u8; 32]) -> Option<U256> {
+        self.identity_to_user_id.get(&identity_hash).unwrap_or(None)
+    }
+
+    /// Returns the user ID for `wallet`, if the wallet is currently active.
+    pub fn get_active_wallet(&self, user_id: U256) -> Address {
+        self.get_user(user_id).active_wallet
+    }
+
+    /// Returns the recorded wallet status, if this wallet has ever been linked.
+    pub fn get_wallet_status(&self, wallet: Address) -> Option<WalletStatus> {
+        self.wallet_statuses.get(&wallet)
+    }
+
+    /// Returns the wallet history for `user_id`.
+    pub fn get_wallet_history(&self, user_id: U256) -> Vec<Address> {
+        self.get_user(user_id);
+        self.wallet_history.get_or_default(&user_id)
+    }
+
+    /// Returns true when `wallet` is the user's current active wallet.
+    pub fn is_active_wallet(&self, user_id: U256, wallet: Address) -> bool {
+        self.get_active_wallet(user_id) == wallet
+    }
+
+    /// Returns true when the user exists and is active.
+    pub fn is_active_user(self, user_id: U256) -> bool {
+        matches!(self.get_user(user_id).status, UserStatus::Active)
+    }
+
+    /// Returns true when `user_id` has every bit in `role_flag`.
+    pub fn has_role_flag(&self, user_id: U256, role_flag: u32) -> bool {
+        let record = self.get_user(user_id);
+        role_flag != 0 && record.role_flags & role_flag == role_flag
+    }
+
     // =========================================================================
     // Identity Management
     // =========================================================================
