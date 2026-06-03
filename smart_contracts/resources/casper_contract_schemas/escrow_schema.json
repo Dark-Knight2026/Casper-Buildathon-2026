@@ -9,6 +9,46 @@
   "types": [
     {
       "struct": {
+        "name": "CreateLeaseInvoiceParams",
+        "description": null,
+        "members": [
+          {
+            "name": "tenant",
+            "description": null,
+            "ty": "Key"
+          },
+          {
+            "name": "landlord",
+            "description": null,
+            "ty": "Key"
+          },
+          {
+            "name": "rent",
+            "description": null,
+            "ty": "CurrencyAmount"
+          },
+          {
+            "name": "property_manager",
+            "description": null,
+            "ty": {
+              "Option": "Key"
+            }
+          },
+          {
+            "name": "property_manager_bps",
+            "description": null,
+            "ty": "U32"
+          },
+          {
+            "name": "deadline",
+            "description": null,
+            "ty": "U64"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
         "name": "CurrencyAmount",
         "description": null,
         "members": [
@@ -51,6 +91,28 @@
             "name": "amount_due",
             "description": null,
             "ty": "CurrencyAmount"
+          },
+          {
+            "name": "rent_amount",
+            "description": null,
+            "ty": "U256"
+          },
+          {
+            "name": "rent_paid",
+            "description": null,
+            "ty": "U256"
+          },
+          {
+            "name": "property_manager",
+            "description": null,
+            "ty": {
+              "Option": "Key"
+            }
+          },
+          {
+            "name": "property_manager_bps",
+            "description": null,
+            "ty": "U32"
           },
           {
             "name": "deadline",
@@ -103,6 +165,39 @@
     },
     {
       "struct": {
+        "name": "InvoicePaymentApplied",
+        "description": null,
+        "members": [
+          {
+            "name": "invoice_id",
+            "description": null,
+            "ty": "U256"
+          },
+          {
+            "name": "payer",
+            "description": null,
+            "ty": "Key"
+          },
+          {
+            "name": "amount",
+            "description": null,
+            "ty": "U256"
+          },
+          {
+            "name": "protocol_fee",
+            "description": null,
+            "ty": "U256"
+          },
+          {
+            "name": "rent_paid",
+            "description": null,
+            "ty": "U256"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
         "name": "MinDeadlineSet",
         "description": null,
         "members": [
@@ -137,6 +232,108 @@
             "ty": {
               "Option": "Key"
             }
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
+        "name": "SecurityDepositHeld",
+        "description": null,
+        "members": [
+          {
+            "name": "invoice_id",
+            "description": null,
+            "ty": "U256"
+          },
+          {
+            "name": "tenant",
+            "description": null,
+            "ty": "Key"
+          },
+          {
+            "name": "amount",
+            "description": null,
+            "ty": "U256"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
+        "name": "SecurityDepositRecord",
+        "description": null,
+        "members": [
+          {
+            "name": "amount",
+            "description": null,
+            "ty": "U256"
+          },
+          {
+            "name": "paid",
+            "description": null,
+            "ty": "Bool"
+          },
+          {
+            "name": "released",
+            "description": null,
+            "ty": "Bool"
+          },
+          {
+            "name": "landlord_charge",
+            "description": null,
+            "ty": "U256"
+          },
+          {
+            "name": "tenant_refund",
+            "description": null,
+            "ty": "U256"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
+        "name": "SecurityDepositReleased",
+        "description": null,
+        "members": [
+          {
+            "name": "invoice_id",
+            "description": null,
+            "ty": "U256"
+          },
+          {
+            "name": "landlord",
+            "description": null,
+            "ty": "Key"
+          },
+          {
+            "name": "tenant",
+            "description": null,
+            "ty": "Key"
+          },
+          {
+            "name": "landlord_charge",
+            "description": null,
+            "ty": "U256"
+          },
+          {
+            "name": "tenant_refund",
+            "description": null,
+            "ty": "U256"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
+        "name": "SecurityDepositTokenSet",
+        "description": null,
+        "members": [
+          {
+            "name": "token",
+            "description": null,
+            "ty": "Key"
           }
         ]
       }
@@ -204,6 +401,21 @@
       "discriminant": 305
     },
     {
+      "name": "InvalidInvoiceKind",
+      "description": "",
+      "discriminant": 313
+    },
+    {
+      "name": "InvalidPaymentAmount",
+      "description": "",
+      "discriminant": 311
+    },
+    {
+      "name": "InvalidSecurityDepositCurrency",
+      "description": "",
+      "discriminant": 314
+    },
+    {
       "name": "InvoiceIsAlreadyPaid",
       "description": "",
       "discriminant": 307
@@ -229,9 +441,29 @@
       "discriminant": 20000
     },
     {
+      "name": "PaymentExceedsAmountDue",
+      "description": "",
+      "discriminant": 312
+    },
+    {
       "name": "RoleRenounceForAnotherAddress",
       "description": "The role cannot be renounced for another address.",
       "discriminant": 20004
+    },
+    {
+      "name": "SecurityDepositAlreadyReleased",
+      "description": "",
+      "discriminant": 316
+    },
+    {
+      "name": "SecurityDepositChargeTooHigh",
+      "description": "",
+      "discriminant": 317
+    },
+    {
+      "name": "SecurityDepositNotPaid",
+      "description": "",
+      "discriminant": 315
     },
     {
       "name": "TreasuryContractIsNotSet",
@@ -294,82 +526,14 @@
       "access": "public"
     },
     {
-      "name": "create_lease_invoice",
-      "description": "Allows to create a lease invoice by the Lease contract",
+      "name": "set_security_deposit_token",
+      "description": "",
       "is_mutable": true,
       "arguments": [
         {
-          "name": "tenant",
+          "name": "token",
           "description": null,
           "ty": "Key",
-          "optional": false
-        },
-        {
-          "name": "landlord",
-          "description": null,
-          "ty": "Key",
-          "optional": false
-        },
-        {
-          "name": "amount_due",
-          "description": null,
-          "ty": "CurrencyAmount",
-          "optional": false
-        },
-        {
-          "name": "deadline",
-          "description": null,
-          "ty": "U64",
-          "optional": false
-        }
-      ],
-      "return_ty": "U256",
-      "is_contract_context": true,
-      "access": "public"
-    },
-    {
-      "name": "create_security_deposit_invoice",
-      "description": "Allows to create a security deposit invoice by the Lease contract",
-      "is_mutable": true,
-      "arguments": [
-        {
-          "name": "tenant",
-          "description": null,
-          "ty": "Key",
-          "optional": false
-        },
-        {
-          "name": "amount_due",
-          "description": null,
-          "ty": "CurrencyAmount",
-          "optional": false
-        },
-        {
-          "name": "deadline",
-          "description": null,
-          "ty": "U64",
-          "optional": false
-        }
-      ],
-      "return_ty": "U256",
-      "is_contract_context": true,
-      "access": "public"
-    },
-    {
-      "name": "pay_invoice",
-      "description": "Allows to pay any invoice created earlier",
-      "is_mutable": true,
-      "arguments": [
-        {
-          "name": "invoice_id",
-          "description": null,
-          "ty": "U256",
-          "optional": false
-        },
-        {
-          "name": "__cargo_purse",
-          "description": null,
-          "ty": "URef",
           "optional": false
         }
       ],
@@ -392,6 +556,31 @@
       "is_mutable": false,
       "arguments": [],
       "return_ty": "Key",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "get_security_deposit_token_address",
+      "description": "Returns the USDC token used for security deposits",
+      "is_mutable": false,
+      "arguments": [],
+      "return_ty": "Key",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "get_security_deposit",
+      "description": "",
+      "is_mutable": false,
+      "arguments": [
+        {
+          "name": "invoice_id",
+          "description": null,
+          "ty": "U256",
+          "optional": false
+        }
+      ],
+      "return_ty": "SecurityDepositRecord",
       "is_contract_context": true,
       "access": "public"
     },
@@ -426,6 +615,106 @@
       "is_mutable": false,
       "arguments": [],
       "return_ty": "U64",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "create_lease_invoice",
+      "description": "Allows the Lease contract to create a rent invoice.",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "params",
+          "description": null,
+          "ty": "CreateLeaseInvoiceParams",
+          "optional": false
+        }
+      ],
+      "return_ty": "U256",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "create_security_deposit_invoice",
+      "description": "Allows the Lease contract to create a USDC security deposit invoice.",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "tenant",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        },
+        {
+          "name": "mut amount_due",
+          "description": null,
+          "ty": "CurrencyAmount",
+          "optional": false
+        },
+        {
+          "name": "deadline",
+          "description": null,
+          "ty": "U64",
+          "optional": false
+        }
+      ],
+      "return_ty": "U256",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "pay_invoice",
+      "description": "Pays an invoice created earlier.",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "invoice_id",
+          "description": null,
+          "ty": "U256",
+          "optional": false
+        },
+        {
+          "name": "amount",
+          "description": null,
+          "ty": "U256",
+          "optional": false
+        },
+        {
+          "name": "__cargo_purse",
+          "description": null,
+          "ty": "URef",
+          "optional": false
+        }
+      ],
+      "return_ty": "Unit",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "release_security_deposit",
+      "description": "Releases a held security deposit when a lease is finalized.",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "invoice_id",
+          "description": null,
+          "ty": "U256",
+          "optional": false
+        },
+        {
+          "name": "landlord",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        },
+        {
+          "name": "security_deposit_charge",
+          "description": null,
+          "ty": "U256",
+          "optional": false
+        }
+      ],
+      "return_ty": "Unit",
       "is_contract_context": true,
       "access": "public"
     },
@@ -474,12 +763,28 @@
       "ty": "InvoicePaid"
     },
     {
+      "name": "InvoicePaymentApplied",
+      "ty": "InvoicePaymentApplied"
+    },
+    {
       "name": "MinDeadlineSet",
       "ty": "MinDeadlineSet"
     },
     {
       "name": "OwnershipTransferred",
       "ty": "OwnershipTransferred"
+    },
+    {
+      "name": "SecurityDepositHeld",
+      "ty": "SecurityDepositHeld"
+    },
+    {
+      "name": "SecurityDepositReleased",
+      "ty": "SecurityDepositReleased"
+    },
+    {
+      "name": "SecurityDepositTokenSet",
+      "ty": "SecurityDepositTokenSet"
     }
   ],
   "call": {

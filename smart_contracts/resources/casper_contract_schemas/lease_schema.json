@@ -18,6 +18,11 @@
             "ty": "Key"
           },
           {
+            "name": "rent_distribution_terms",
+            "description": null,
+            "ty": "RentDistributionTerms"
+          },
+          {
             "name": "equity_option",
             "description": null,
             "ty": {
@@ -122,6 +127,11 @@
             "name": "landlord",
             "description": null,
             "ty": "Key"
+          },
+          {
+            "name": "rent_distribution_terms",
+            "description": null,
+            "ty": "RentDistributionTerms"
           },
           {
             "name": "equity_option",
@@ -258,6 +268,26 @@
           }
         ]
       }
+    },
+    {
+      "struct": {
+        "name": "RentDistributionTerms",
+        "description": null,
+        "members": [
+          {
+            "name": "property_manager",
+            "description": null,
+            "ty": {
+              "Option": "Key"
+            }
+          },
+          {
+            "name": "property_manager_bps",
+            "description": null,
+            "ty": "U32"
+          }
+        ]
+      }
     }
   ],
   "errors": [
@@ -297,6 +327,16 @@
       "discriminant": 410
     },
     {
+      "name": "InvalidPropertyManager",
+      "description": "",
+      "discriminant": 412
+    },
+    {
+      "name": "InvalidPropertyManagerBps",
+      "description": "",
+      "discriminant": 411
+    },
+    {
       "name": "InvalidPropertyStatus",
       "description": "",
       "discriminant": 409
@@ -314,7 +354,7 @@
     {
       "name": "LeaseAlreadyFinalized",
       "description": "",
-      "discriminant": 411
+      "discriminant": 413
     },
     {
       "name": "MissingRole",
@@ -344,7 +384,7 @@
     {
       "name": "TenantAlreadyEquityEligible",
       "description": "",
-      "discriminant": 412
+      "discriminant": 414
     },
     {
       "name": "ZeroAmount",
