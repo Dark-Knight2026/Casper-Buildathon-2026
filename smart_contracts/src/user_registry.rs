@@ -198,6 +198,36 @@ impl UserRegistry {
         role_flag != 0 && record.role_flags & role_flag == role_flag
     }
 
+    /// Returns true if the user has tenant capability.
+    pub fn has_tenant_role(&self, user_id: U256) -> bool {
+        self.has_role_flag(user_id, ROLE_FLAG_TENANT)
+    }
+
+    /// Returns true if the user has the landlord capability.
+    pub fn has_landlord_role(&self, user_id: U256) -> bool {
+        self.has_role_flag(user_id, ROLE_FLAG_LANDLORD)
+    }
+
+    /// Returns true if the user has the property manager capability.
+    pub fn has_property_manager_role(&self, user_id: U256) -> bool {
+        self.has_role_flag(user_id, ROLE_FLAG_PROPERTY_MANAGER)
+    }
+
+    /// Returns the tenant capability flag value.
+    pub fn tenant_role_flag(&self) -> u32 {
+        ROLE_FLAG_TENANT
+    }
+
+    /// Returns the landlord capability flag value.
+    pub fn landlord_role_flag(&self) -> u32 {
+        ROLE_FLAG_LANDLORD
+    }
+
+    /// Returns the tenant capability flag value.
+    pub fn property_manager_role_flag(&self) -> u32 {
+        ROLE_FLAG_PROPERTY_MANAGER
+    }
+
     // =========================================================================
     // Identity Management
     // =========================================================================
