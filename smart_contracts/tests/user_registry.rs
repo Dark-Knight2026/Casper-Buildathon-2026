@@ -162,3 +162,72 @@ fn test_create_user_should_revert_for_duplicate_wallet() {
         Error::WalletAlreadyLinked.into(),
     );
 }
+
+// =============================================================================
+// replace_active_wallet()
+// =============================================================================
+
+#[test]
+fn test_replace_active_wallet_should_revoke_old_wallet_and_activate_new_wallet() {
+    let mut ctx = setup(odra_test::env());
+    let user_id = create_user(&mut ctx);
+
+    ctx.registry.replace_active_wallet(user_id, ctx.wallet_2);
+
+    assert_eq!(ctx.registry.get_active_wallet(user_id), ctx.wallet_2);
+    assert_eq!(ctx.registry.get_user_id_by_wallet(ctx.wallet_1), None);
+    assert_eq!(
+        ctx.registry.get_user_id_by_wallet(ctx.wallet_2),
+        Some(user_id),
+    );
+    assert!(matches!(
+        ctx.registry.get_wallet_status(ctx.wallet_1),
+        Some(WalletStatus::Revoked),
+    ));
+    assert!(matches!(
+        ctx.registry.get_wallet_status(ctx.wallet_2),
+        Some(WalletStatus::Active),
+    ));
+    assert_eq!(
+        ctx.registry.get_wallet_history(user_id),
+        vec![ctx.wallet_1, ctx.wallet_2],
+    );
+    assert!(ctx.env.emitted_event(
+        &ctx.registry,
+        ActiveWalletReplaced {
+            user_id,
+            old_wallet: ctx.wallet_1,
+            new_wallet: ctx.wallet_2,
+        }
+    ));
+}
+
+#[test]
+fn test_replace_active_wallet_should_reject_any_previously_linked_wallet() {
+    let mut ctx = setup(odra_test::env());
+    let user_id = create_user(&mut ctx);
+
+    ctx.registry.replace_active_wallet(user_id, ctx.wallet_2);
+
+    assert_eq!(
+        ctx.registry
+            .try_replace_active_wallet(user_id, ctx.wallet_1)
+            .unwrap_err(),
+        Error::WalletAlreadyLinked.into()
+    );
+}
+
+#[test]
+fn test_replace_active_wallet_should_revert_if_caller_is_not_identity_manager() {
+    let mut ctx = setup(odra_test::env());
+    let user_id = create_user(&mut ctx);
+
+    ctx.env.set_caller(ctx.env.get_account(9));
+
+    assert_eq!(
+        ctx.registry
+            .try_replace_active_wallet(user_id, ctx.wallet_2)
+            .unwrap_err(),
+        Error::NotAuthorized.into()
+    );
+}
