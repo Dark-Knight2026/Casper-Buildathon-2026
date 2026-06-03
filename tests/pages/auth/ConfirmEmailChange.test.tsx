@@ -11,6 +11,17 @@ vi.mock('@/services/userProfileService', () => ({
   confirmEmailChange: (...a: unknown[]) => confirmEmailChange(...a),
 }));
 
+// Keep MemoryRouter / Link / useSearchParams real; only intercept useNavigate so
+// we can assert the success auto-redirect fired.
+const mockNavigate = vi.fn();
+vi.mock('react-router-dom', async (importActual) => {
+  const actual = await importActual<typeof import('react-router-dom')>();
+  return { ...actual, useNavigate: () => mockNavigate };
+});
+
+// Mirror of SUCCESS_REDIRECT_DELAY_MS in ConfirmEmailChange.tsx (not exported).
+const SUCCESS_REDIRECT_DELAY_MS = 3000;
+
 import ConfirmEmailChange from '@/pages/auth/ConfirmEmailChange';
 
 function apiError(statusCode: number, code?: string) {
@@ -81,5 +92,41 @@ describe('ConfirmEmailChange', () => {
     confirmEmailChange.mockRejectedValue(apiError(500, 'internal'));
     renderPage('tok');
     await waitFor(() => expect(screen.getByRole('button', { name: /retry/i })).toBeInTheDocument());
+  });
+
+  it('routes a 409 to a dead-end email_taken screen (no Retry) — TBLK-01', async () => {
+    confirmEmailChange.mockRejectedValue(apiError(409, 'email_taken'));
+    renderPage('tok');
+    await waitFor(() =>
+      expect(screen.getByText(/already registered to another account/i)).toBeInTheDocument(),
+    );
+    // email_taken offers a way out (Back to dashboard) but never a Retry — the
+    // second attempt would just 409 again.
+    expect(screen.getByRole('link', { name: /back to dashboard/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /retry/i })).not.toBeInTheDocument();
+  });
+
+  it('shows no_token and never calls the API when the link has no token — TBLK-04', async () => {
+    renderPage('');
+    await waitFor(() =>
+      expect(screen.getByText(/needs a confirmation token/i)).toBeInTheDocument(),
+    );
+    expect(confirmEmailChange).not.toHaveBeenCalled();
+  });
+
+  it('auto-redirects to the role dashboard after the success delay — TBLK-02', async () => {
+    vi.useFakeTimers();
+    try {
+      confirmEmailChange.mockResolvedValue({ id: '1', role: 'tenant' });
+      renderPage();
+      // Flush the confirm promise so status becomes 'success' and the redirect
+      // timer is scheduled, then advance past the delay to fire it.
+      await vi.advanceTimersByTimeAsync(0);
+      expect(mockNavigate).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(SUCCESS_REDIRECT_DELAY_MS);
+      expect(mockNavigate).toHaveBeenCalledWith('/tenant/dashboard', { replace: true });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

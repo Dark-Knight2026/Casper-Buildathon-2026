@@ -16,6 +16,17 @@ vi.mock('@/services/ico/backendAuthService', () => ({
   sendVerificationEmail: (...a: unknown[]) => sendVerificationEmail(...a),
 }));
 
+// Keep MemoryRouter / Link / useSearchParams real; only intercept useNavigate so
+// we can assert the success auto-redirect fired.
+const mockNavigate = vi.fn();
+vi.mock('react-router-dom', async (importActual) => {
+  const actual = await importActual<typeof import('react-router-dom')>();
+  return { ...actual, useNavigate: () => mockNavigate };
+});
+
+// Mirror of SUCCESS_REDIRECT_DELAY_MS in VerifyEmail.tsx (not exported).
+const SUCCESS_REDIRECT_DELAY_MS = 3000;
+
 import VerifyEmail from '@/pages/auth/VerifyEmail';
 
 // Mirror the ApiError shape the api-client throws (statusCode + machine code).
@@ -85,5 +96,39 @@ describe('VerifyEmail', () => {
     renderPage('');
     await waitFor(() => expect(screen.getByText(/needs a verification token/i)).toBeInTheDocument());
     expect(confirmEmailVerification).not.toHaveBeenCalled();
+  });
+
+  it('routes a 500 to generic_error with both Retry and Resend — TBLK-03', async () => {
+    confirmEmailVerification.mockRejectedValue(apiError(500, 'internal'));
+    renderPage('tok');
+    await waitFor(() => expect(screen.getByText(/something went wrong/i)).toBeInTheDocument());
+    expect(screen.getByRole('button', { name: /retry/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /new email/i })).toBeInTheDocument();
+  });
+
+  it('retries the verification when Retry is clicked from generic_error — TBLK-03', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    confirmEmailVerification.mockRejectedValue(apiError(500, 'internal'));
+    renderPage('tok');
+    await waitFor(() => expect(screen.getByRole('button', { name: /retry/i })).toBeInTheDocument());
+    expect(confirmEmailVerification).toHaveBeenCalledTimes(1);
+    await userEvent.click(screen.getByRole('button', { name: /retry/i }));
+    await waitFor(() => expect(confirmEmailVerification).toHaveBeenCalledTimes(2));
+  });
+
+  it('auto-redirects to the role dashboard after the success delay — TBLK-02', async () => {
+    vi.useFakeTimers();
+    try {
+      confirmEmailVerification.mockResolvedValue({ user: { id: '1', role: 'tenant' } });
+      renderPage();
+      // Flush the confirm promise so status becomes 'success' and the redirect
+      // timer is scheduled, then advance past the delay to fire it.
+      await vi.advanceTimersByTimeAsync(0);
+      expect(mockNavigate).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(SUCCESS_REDIRECT_DELAY_MS);
+      expect(mockNavigate).toHaveBeenCalledWith('/tenant/dashboard', { replace: true });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

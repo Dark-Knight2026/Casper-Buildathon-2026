@@ -10,15 +10,19 @@ describe('getDashboardRoute', () => {
     expect(getDashboardRoute('landlord')).toBe('/landlord/dashboard');
   });
 
-  it('routes every other known role to the landlord dashboard (no role-specific dashboard yet)', () => {
-    expect(getDashboardRoute('agent')).toBe('/landlord/dashboard');
-    expect(getDashboardRoute('admin')).toBe('/landlord/dashboard');
+  it('routes every other (post-MVP) role to the public root, not a ProtectedRoute (R4-02)', () => {
+    // Only tenant and landlord have a dashboard in the MVP. Returning
+    // '/landlord/dashboard' for these roles caused an infinite redirect loop:
+    // ProtectedRoute (allowedRoles=['landlord']) denies them → calls
+    // getDashboardRoute again → same path. '/' is public, so it terminates.
+    expect(getDashboardRoute('agent')).toBe('/');
+    expect(getDashboardRoute('admin')).toBe('/');
   });
 
-  it('routes undefined (e.g. profile not yet hydrated) to the landlord dashboard, never to "/"', () => {
+  it('routes undefined (e.g. profile not yet hydrated) to the public root', () => {
     // The auth confirm pages call this with profile?.role, which can be
-    // undefined for a frame — it must resolve to a real route, not the old
-    // local helper's "/" that would land users on the marketing home.
-    expect(getDashboardRoute(undefined)).toBe('/landlord/dashboard');
+    // undefined for a frame — '/' is a safe, loop-free landing until the role
+    // resolves and a real dashboard exists for it.
+    expect(getDashboardRoute(undefined)).toBe('/');
   });
 });
