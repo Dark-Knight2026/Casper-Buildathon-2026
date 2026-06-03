@@ -311,4 +311,38 @@ impl UserRegistry {
 
         self.env().emit_event(UserStatusSet { user_id, status });
     }
+
+    // =========================================================================
+    // Role Getters
+    // =========================================================================
+
+    /// Returns the role hash for accounts allowed to create users and replace wallets.
+    pub fn identity_manager_role(&self) -> Role {
+        common::hash_role(ROLE_IDENTITY_MANAGER)
+    }
+
+    /// Returns the role hash for accounts allowed to update user role flags.
+    pub fn user_role_manager_role(&self) -> Role {
+        common::hash_role(ROLE_USER_ROLE_MANAGER)
+    }
+
+    // =========================================================================
+    // Delegation
+    // =========================================================================
+
+    delegate! {
+        to self.access_control {
+            fn has_role(&self, role: &Role, address: &Address) -> bool;
+            fn get_role_admin(&self, role: &Role) -> Role;
+            fn grant_role(&mut self, role: &Role, address: &Address);
+            fn revoke_role(&mut self, role: &Role, address: &Address);
+            fn renounce_role(&mut self, role: &Role, address: &Address);
+        }
+    }
 }
+
+// =============================================================================
+// Internal Helpers
+// =============================================================================
+
+impl UserRegistry {}
