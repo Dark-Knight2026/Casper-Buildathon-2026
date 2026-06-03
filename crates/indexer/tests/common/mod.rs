@@ -84,10 +84,16 @@ pub async fn disable_rls(pool: &PgPool) {
         "staking_reward_deposits",
         "staking_reward_state",
     ] {
-        sqlx::query(&format!(r"ALTER TABLE {table} DISABLE ROW LEVEL SECURITY"))
-            .execute(pool)
-            .await
-            .unwrap_or_else(|e| panic!("failed to disable RLS on {table}: {e}"));
+        // `sqlx 0.9` guards `query()` behind `SqlSafeStr`; identifiers cannot
+        // be bound, but the table names above are a hardcoded literal array (no
+        // caller input reaches this string), so `AssertSqlSafe` is the
+        // documented opt-out.
+        sqlx::query(sqlx::AssertSqlSafe(format!(
+            r"ALTER TABLE {table} DISABLE ROW LEVEL SECURITY"
+        )))
+        .execute(pool)
+        .await
+        .unwrap_or_else(|e| panic!("failed to disable RLS on {table}: {e}"));
     }
 }
 

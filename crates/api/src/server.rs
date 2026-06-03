@@ -20,6 +20,7 @@ use tokio::{
         self,
         unix::{self, SignalKind},
     },
+    sync::broadcast::{self, Sender},
 };
 use tower_http::{cors::CorsLayer, limit::RequestBodyLimitLayer, trace::TraceLayer};
 use utoipa::OpenApi;
@@ -28,8 +29,8 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 use utoipa_swagger_ui::SwaggerUi;
 
 use crate::{
-    ApiDoc, AppState, EmailSender, LoggingEmailSender, RedisStore, S3MediaStorage, ServerConfig,
-    ServerError, SharedMediaStorage, StubMediaStorage, onchain, services,
+    ApiDoc, AppState, EmailSender, LoggingEmailSender, PostmarkSender, RedisStore, S3MediaStorage,
+    ServerConfig, ServerError, SharedMediaStorage, StubMediaStorage, onchain, services, workers,
 };
 
 /// Creates the full application router combining public and protected routes.
@@ -148,16 +149,31 @@ pub async fn main() -> Result<(), ServerError> {
         tracing::error!(error = %e, "Failed to parse REDIS_URL");
         ServerError::EnvVar("Invalid Redis URL".to_owned())
     })?;
-    let redis_store = RedisStore::new(redis_client).await.map_err(|e| {
-        tracing::error!(error = %e, "Failed to connect to Redis");
-        ServerError::EnvVar("Redis connection failed".to_owned())
-    })?;
+    let redis_store = RedisStore::new(redis_client, config.email_change_max_attempts)
+        .await
+        .map_err(|e| {
+            tracing::error!(error = %e, "Failed to connect to Redis");
+            ServerError::EnvVar("Redis connection failed".to_owned())
+        })?;
 
-    // Bootstrap a no-delivery mailer. Real-provider impls (SMTP, SES) are
-    // a follow-up: they will be selected here based on env config without
-    // changes to handlers, since AppState holds the mailer behind the
-    // `EmailSender` trait object.
-    let mailer: Arc<dyn EmailSender> = Arc::new(LoggingEmailSender);
+    // Select the mailer based on env config: `POSTMARK_SERVER_TOKEN` set ->
+    // Postmark backend, unset -> `LoggingEmailSender` with a warning log.
+    // AppState holds the mailer behind the `EmailSender` trait object, so
+    // handlers do not branch on the concrete backend. The retry-queue worker
+    // below is gated on the same condition (a logger never fails, so its
+    // queue would never drain).
+    let mailer: Arc<dyn EmailSender> = if let Some(postmark) = &config.postmark {
+        Arc::new(PostmarkSender::new(
+            &postmark.server_token,
+            &postmark.from_email,
+        ))
+    } else {
+        tracing::warn!(
+            event = "mailer_logging_stub",
+            "POSTMARK_SERVER_TOKEN unset - using LoggingEmailSender (no real delivery). Production MUST configure POSTMARK_SERVER_TOKEN + POSTMARK_FROM_EMAIL."
+        );
+        Arc::new(LoggingEmailSender)
+    };
 
     // Select media storage based on env config: `S3_BUCKET` set -> S3
     // backend, unset -> `StubMediaStorage` with a warning log. AppState
@@ -189,19 +205,66 @@ pub async fn main() -> Result<(), ServerError> {
         config: config.clone(),
     });
 
+    // Shutdown broadcast fans out to background workers; real subscribers are
+    // added at spawn time via `shutdown_tx.subscribe()`. Created before the
+    // worker spawn so the worker can subscribe before HTTP serving begins.
+    //
+    // Capacity 1 is deliberate: the channel only ever carries a single value -
+    // the one-shot shutdown edge sent once from `notify_workers`. A buffer of 1
+    // holds that single message per subscriber, so no slow subscriber can ever
+    // overflow it; a larger capacity would be dead space for a signal that is
+    // sent exactly once.
+    let (shutdown_tx, _) = broadcast::channel::<()>(1);
+
+    // Spawn background workers iff the selected mailer can enqueue retries.
+    // Deriving this from the mailer itself (rather than re-reading
+    // `config.postmark`) keeps the spawn decision in lockstep with the mailer
+    // selection above: whoever can fill the retry queue is the one that
+    // declares it needs the worker to drain it. Under a stub mailer no send
+    // ever fails, so the queue would never receive a row. Clones are cheap -
+    // `db` is an Arc-backed pool and `mailer` is already a trait object behind
+    // `Arc`.
+    let worker_handles = if state.mailer.uses_retry_queue() {
+        workers::spawn_all(state.db.clone(), state.mailer.clone(), &shutdown_tx)
+    } else {
+        Vec::new()
+    };
+
     // 4. Build app with production middleware
     let app = create_app(state)?;
     let addr = SocketAddr::from(([0, 0, 0, 0], config.port));
     tracing::info!(address = %addr, "Server listening");
     let listener = TcpListener::bind(addr).await?;
+
     axum::serve(
         listener,
         app.into_make_service_with_connect_info::<SocketAddr>(),
     )
-    .with_graceful_shutdown(shutdown_signal())
+    .with_graceful_shutdown(wait_and_notify_shutdown(shutdown_tx))
     .await?;
 
+    // `serve` has returned, which means `wait_and_notify_shutdown` already
+    // fired the broadcast - every worker's `select!` has observed the signal.
+    // Await each so its in-flight tick drains before the process exits.
+    for handle in worker_handles {
+        if let Err(err) = handle.await {
+            tracing::warn!(?err, "background worker panicked during shutdown");
+        }
+    }
+
     Ok(())
+}
+
+/// Composes signal-wait + worker-broadcast into the single future that
+/// `axum::serve.with_graceful_shutdown` consumes.
+///
+/// Order matters: HTTP server starts draining the moment this future resolves,
+/// so the broadcast is sent *before* the await completes - otherwise workers
+/// would only learn about shutdown after `axum::serve` has already returned,
+/// defeating the point of graceful coordination.
+async fn wait_and_notify_shutdown(tx: Sender<()>) {
+    shutdown_signal().await;
+    notify_workers(&tx);
 }
 
 /// Awaits a shutdown signal (e.g., Ctrl+C) to gracefully shut down the server.
@@ -241,4 +304,20 @@ async fn shutdown_signal() {
     }
 
     tracing::info!("Shutting down gracefully...");
+}
+
+/// Fan-out of the shutdown edge to every active background subscriber.
+///
+/// `Err(SendError)` means no subscribers - not a failure, just a deployment
+/// without background workers.
+#[inline]
+pub fn notify_workers(tx: &Sender<()>) {
+    match tx.send(()) {
+        Ok(subscribers) => {
+            tracing::debug!(subscribers, "shutdown broadcast delivered");
+        }
+        Err(_) => {
+            tracing::debug!("shutdown broadcast had no subscribers");
+        }
+    }
 }

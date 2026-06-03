@@ -76,18 +76,16 @@ pub enum ApiError {
     Database(sqlx::Error),
     /// Queue/Redis related error.
     Queue(String),
-    /// Returned when the request body is over the per-endpoint cap.
+    /// 413 (not 400) so clients can route oversize bodies to a distinct UX path.
     ///
-    /// Distinct from `BadRequest` so a client that uploaded a 6 MB avatar
-    /// gets the standard `413` semantic (clear the file picker, ask the
-    /// user to compress) instead of the generic 400 funnel that other
-    /// validation failures share.
+    /// Used when the request body exceeds the per-endpoint cap. A 6 MB
+    /// avatar triggers "clear picker / compress" UX, not the generic
+    /// 400 funnel that other validation failures share.
     PayloadTooLarge(String),
-    /// Returned when the request body's MIME type is not on the
-    /// per-endpoint whitelist, or when the bytes do not match the declared
-    /// type. Used by the avatar handler for both the disallowed-MIME and
-    /// MIME-spoofing cases so clients can map the failure to a single
-    /// "your file format is not supported" message.
+    /// Folds disallowed-MIME and MIME-spoofing into one 415 so clients show one message.
+    ///
+    /// Used when the request MIME is not on the per-endpoint whitelist,
+    /// or when the bytes do not match the declared type.
     UnsupportedMediaType(String),
     /// Generic internal server error.
     Internal(String),
@@ -173,32 +171,27 @@ impl From<sqlx::Error> for ApiError {
 }
 
 impl From<EmailError> for ApiError {
-    /// Maps email-transport failures to a generic 500.
+    /// Default fallback: both variants collapse to 500.
     ///
-    /// The provider-side message goes into [`ApiError::Internal`], which
-    /// `IntoResponse` logs but does NOT echo into the response body - the
-    /// client gets a flat "internal server error" so SMTP hostnames,
-    /// rate-limit hints, or quota details cannot leak. A future variant
-    /// `ApiError::Email(EmailError)` is justified only when handlers need
-    /// differentiated responses (e.g. 503 + `Retry-After` for provider
-    /// rate-limits); until then this stringly-typed wrap is enough.
+    /// Handlers that need retry-queue routing or 422 surfacing must
+    /// `match` before `?`. Exhaustive on purpose: a new variant must
+    /// opt into its HTTP shape.
     #[inline]
     fn from(err: EmailError) -> Self {
-        Self::Internal(err.to_string())
+        match err {
+            EmailError::Transient(_) | EmailError::Permanent(_) => Self::Internal(err.to_string()),
+        }
     }
 }
 
 impl From<redis::RedisError> for ApiError {
-    /// Maps Redis transport failures to the existing `Queue` variant.
+    /// Fail-stop default for `?`-cascade callers that cannot recover inline.
     ///
-    /// Most existing call sites handle Redis errors inline because they
-    /// have specific recovery semantics (auth-middleware fail-open,
-    /// wallet-failure log-and-ignore). The newer email-change handlers
-    /// instead need fail-stop propagation through `?`: without Redis
-    /// neither rate-limit nor token storage works, so 500 is the only
-    /// safe answer. `IntoResponse` for `Queue` already logs the error
-    /// server-side and emits a flat "Internal system error" body, so no
-    /// transport details leak to the client.
+    /// Sites with recovery semantics (auth fail-open, wallet
+    /// log-ignore) handle Redis errors directly. Email-change handlers
+    /// need 500 - no Redis means no rate-limit and no token storage.
+    /// `Queue` already logs server-side and emits a flat body, so no
+    /// transport details leak.
     #[inline]
     fn from(err: redis::RedisError) -> Self {
         Self::Queue(err.to_string())

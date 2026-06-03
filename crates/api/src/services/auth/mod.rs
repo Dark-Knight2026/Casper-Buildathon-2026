@@ -7,6 +7,8 @@
 pub mod cookies;
 /// Database operations for authentication.
 pub mod db;
+/// Verification- and role-gating extractors (`VerifiedUser`, `RoleUser`).
+pub mod extractors;
 /// JWT encoding/decoding primitives.
 pub mod jwt;
 /// Logout handler: clears auth cookies and revokes refresh-family + jti blocklist.
@@ -21,6 +23,8 @@ pub mod refresh;
 pub mod routes;
 /// Session-management handlers: list and revoke active refresh tokens.
 pub mod sessions;
+/// Email-verification handlers: send/confirm/resend verification links.
+pub mod verify;
 /// Wallet-based authentication: nonce + signature login.
 pub mod wallet;
 
@@ -33,14 +37,19 @@ pub use db::{
     ActiveSession, UpsertOutcome, insert_refresh_token, list_active_sessions,
     revoke_all_sessions_for_user, revoke_session_by_id, upsert_user_by_wallet,
 };
+pub use extractors::{
+    AdminRole, AgentRole, AuthGateError, EmailVerified, IdentityVerified, LandlordRole, RoleMarker,
+    RoleUser, TenantRole, VerificationMarker, VerifiedUser,
+};
 pub use jwt::{ACCESS_TOKEN_TTL, EncodedAccessToken, decode_token, encode_access_token};
-pub use logout::logout;
 pub use middleware::{AuthError, AuthUser};
 pub use models::{
     LoginRequest, LoginResponse, NonceRequest, NonceResponse, RevokeAllSessionsRequest,
-    RevokeAllSessionsResponse, SessionResponse,
+    RevokeAllSessionsResponse, RoleRequiredResponse, SessionResponse, VerificationRequiredResponse,
+    VerifyConfirmRequest, VerifySendResponse,
 };
 pub use refresh::{IssuedRefreshToken, REFRESH_TOKEN_TTL, issue_login_refresh_token, rotate};
 pub use routes::router;
 pub use sessions::{get_sessions, revoke_all_sessions, revoke_session};
+pub use verify::{confirm_verify_email, resend_verify_email, send_verify_email};
 pub use wallet::{get_nonce, login};

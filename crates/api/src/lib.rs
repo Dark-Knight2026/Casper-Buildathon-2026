@@ -32,6 +32,9 @@ pub mod server;
 /// Business logic services.
 #[cfg(feature = "enabled")]
 pub mod services;
+/// Background workers (retry queues, scheduled cleanup, etc.).
+#[cfg(feature = "enabled")]
+pub mod workers;
 
 // Re-exports
 #[cfg(feature = "enabled")]
@@ -43,8 +46,8 @@ pub use common::{
 pub use openapi::ApiDoc;
 #[cfg(feature = "enabled")]
 pub use providers::{
-    EmailError, EmailMessage, EmailSender, LoggingEmailSender, MediaStorage, S3MediaStorage,
-    SharedMediaStorage, StubMediaStorage,
+    EmailError, EmailMessage, EmailSender, LoggingEmailSender, MediaStorage, PostmarkSender,
+    S3MediaStorage, SharedMediaStorage, StubMediaStorage,
 };
 #[cfg(feature = "enabled")]
 pub use services::auth::AuthUser;

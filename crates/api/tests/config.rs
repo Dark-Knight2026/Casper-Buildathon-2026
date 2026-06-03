@@ -18,7 +18,7 @@ use api::ServerConfig;
 /// the ones a test sets explicitly: any default-backed var left in the ambient
 /// CI environment (or set by a prior serial test) would otherwise leak into a
 /// test that assumes it is unset, making the suite order-dependent.
-const CONFIG_ENV_VARS: [&str; 17] = [
+const CONFIG_ENV_VARS: [&str; 18] = [
     "DATABASE_URL",
     "REDIS_URL",
     "SUPABASE_JWT_SECRET",
@@ -36,6 +36,7 @@ const CONFIG_ENV_VARS: [&str; 17] = [
     "S3_ACCESS_KEY",
     "S3_SECRET_KEY",
     "S3_PUBLIC_URL_BASE",
+    "EMAIL_CHANGE_MAX_ATTEMPTS",
 ];
 
 /// Canonical "everything required by `from_env`" set. Reused as the base

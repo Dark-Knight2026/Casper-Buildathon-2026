@@ -26,6 +26,12 @@ struct RawEnvConfig {
     port: u16,
     #[serde(default = "default_cors_origin")]
     cors_origin: String,
+    /// Base URL of the frontend app, used to build links embedded in
+    /// transactional emails (e.g. the email-verification deep link).
+    /// Independent of the mailer backend - even `LoggingEmailSender` logs
+    /// a link, so this is required regardless of Postmark config.
+    #[serde(default = "default_frontend_url")]
+    frontend_url: String,
     /// Outer request-body ceiling in MiB. Mirrored into nginx at deploy time
     /// (see `deploy/nginx/https.conf.template`); both layers MUST stay in sync
     /// so the per-handler 413 contract responds before either edge clips the
@@ -72,6 +78,19 @@ struct RawEnvConfig {
     /// (`{bucket}.s3.{region}.amazonaws.com`) MUST set this explicitly.
     #[serde(default)]
     s3_public_url_base: Option<String>,
+    /// Postmark Server Token. When set, enables the Postmark-backed mailer
+    /// and the retry-queue worker; requires `POSTMARK_FROM_EMAIL`. When
+    /// unset, bootstrap falls back to `LoggingEmailSender` (no delivery).
+    #[serde(default)]
+    postmark_server_token: Option<SecretString>,
+    /// Verified Postmark sender signature used as the `From` address.
+    #[serde(default)]
+    postmark_from_email: Option<String>,
+    /// Per-user cap on email-change requests within the 24h rolling window.
+    /// Exposed as env so staging or integration runs can raise it without
+    /// recompiling. Pairs with the fixed 24h window enforced in `RedisStore`.
+    #[serde(default = "default_email_change_max_attempts")]
+    email_change_max_attempts: u64,
 }
 
 const fn default_port() -> u16 {
@@ -80,8 +99,14 @@ const fn default_port() -> u16 {
 fn default_cors_origin() -> String {
     "http://localhost:8080".to_owned()
 }
+fn default_frontend_url() -> String {
+    "http://localhost:3000".to_owned()
+}
 const fn default_request_body_limit_mb() -> u32 {
     8
+}
+const fn default_email_change_max_attempts() -> u64 {
+    3
 }
 
 /// Fallback ICO configuration from `ICO_PRICE_USD` and `ICO_TOTAL_ALLOCATION` env vars.
@@ -127,6 +152,22 @@ pub struct S3Config {
     pub public_url_base: String,
 }
 
+/// Postmark transactional-email configuration loaded from `POSTMARK_*` env vars.
+///
+/// Present when `POSTMARK_SERVER_TOKEN` is configured; bootstrap uses this
+/// block to instantiate [`PostmarkSender`](crate::providers::PostmarkSender)
+/// and to gate the retry-queue worker. When absent, bootstrap falls back to
+/// [`LoggingEmailSender`](crate::providers::LoggingEmailSender) and the worker
+/// is not spawned (a logger never fails, so the queue would never drain).
+#[derive(Debug, Clone)]
+pub struct PostmarkConfig {
+    /// Postmark Server Token, kept out of `Debug`/logs via `SecretString`.
+    pub server_token: SecretString,
+    /// Verified Postmark sender signature used as the `From` address. An
+    /// unverified address turns every send into a `Permanent` failure.
+    pub from_email: String,
+}
+
 /// Server application configuration loaded from environment variables.
 #[derive(Debug, Clone)]
 pub struct ServerConfig {
@@ -140,6 +181,9 @@ pub struct ServerConfig {
     pub port: u16,
     /// Allowed CORS origin.
     pub cors_origin: String,
+    /// Base URL of the frontend app, used to build links embedded in
+    /// transactional emails. Defaults to `http://localhost:3000` for dev.
+    pub frontend_url: String,
     /// Outer request-body ceiling in MiB, applied uniformly across the router
     /// via `DefaultBodyLimit` and `RequestBodyLimitLayer` in [`crate::server::create_app`].
     ///
@@ -166,6 +210,15 @@ pub struct ServerConfig {
     /// backend; `None` falls back to `StubMediaStorage`. Populated by
     /// `from_env` only when the full `S3_*` block is provided.
     pub s3: Option<S3Config>,
+    /// Postmark mailer config. `Some` enables the Postmark-backed
+    /// `EmailSender` and the retry-queue worker; `None` falls back to
+    /// `LoggingEmailSender`. Populated by `from_env` only when
+    /// `POSTMARK_SERVER_TOKEN` (and `POSTMARK_FROM_EMAIL`) are provided.
+    pub postmark: Option<PostmarkConfig>,
+    /// Per-user cap on email-change requests within the 24h rolling window.
+    /// Defaults to 3; raise via `EMAIL_CHANGE_MAX_ATTEMPTS` for staging or
+    /// integration runs. Rejected at startup if 0 (would lock every user out).
+    pub email_change_max_attempts: u64,
 }
 
 impl ServerConfig {
@@ -243,18 +296,36 @@ impl ServerConfig {
             None => None,
         };
 
+        let postmark = match raw.postmark_server_token {
+            Some(server_token) => {
+                let from_email = raw.postmark_from_email.ok_or_else(|| {
+                    ServerError::EnvVar(
+                        "POSTMARK_SERVER_TOKEN set but POSTMARK_FROM_EMAIL missing".to_owned(),
+                    )
+                })?;
+                Some(PostmarkConfig {
+                    server_token,
+                    from_email,
+                })
+            }
+            None => None,
+        };
+
         let config = Self {
             database_url: raw.database_url,
             redis_url: raw.redis_url,
             jwt_secret: raw.supabase_jwt_secret,
             port: raw.port,
             cors_origin: raw.cors_origin,
+            frontend_url: raw.frontend_url,
             request_body_limit_mb: raw.request_body_limit_mb,
             cookie_secure: raw.cookie_secure,
             contract_big: raw.contract_big.map(|s| s.to_ascii_lowercase()),
             ico_fallback,
             total_supply: raw.total_supply.unwrap_or(TOTAL_SUPPLY),
             s3,
+            postmark,
+            email_change_max_attempts: raw.email_change_max_attempts,
         };
 
         config.validate()?;
@@ -300,6 +371,11 @@ impl ServerConfig {
             return Err(ServerError::EnvVar(format!(
                 "SUPABASE_JWT_SECRET must be at least 64 bytes for HS256 security, got {secret_len}"
             )));
+        }
+        if self.email_change_max_attempts == 0 {
+            return Err(ServerError::EnvVar(
+                "EMAIL_CHANGE_MAX_ATTEMPTS cannot be 0 (would lock every user out)".to_owned(),
+            ));
         }
         if let Some(s3) = &self.s3 {
             // Reject any value that lacks an explicit scheme - bare hosts

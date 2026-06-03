@@ -11,13 +11,12 @@
 //! - Testcontainers for everything - slower (~10s PG, ~3-5s `MinIO` startup per test)
 //! - Shared Redis - breaks parallel test isolation
 
-#![allow(dead_code)]
-#![allow(clippy::missing_panics_doc)]
-#![allow(clippy::must_use_candidate)]
+#![allow(dead_code, clippy::missing_panics_doc, clippy::must_use_candidate)]
 
 use core::fmt::{Debug, Formatter, Result as FmtResult};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
+use async_trait::async_trait;
 use axum::http::{Method, StatusCode};
 use axum_test::{TestServer, TestServerConfig, Transport, http::header::COOKIE};
 use casper_types::{AsymmetricType, PublicKey, SecretKey, crypto};
@@ -41,9 +40,9 @@ use api::{
     AppState, Claims, IcoFallback, LoggingEmailSender, S3Config, ServerConfig, UserId, UserRole,
     common::{
         CASPER_MESSAGE_PREFIX, JWT_AUDIENCE, JWT_ISSUER, RedisStore, TOTAL_SUPPLY, TokenType,
-        VerificationLevel,
+        VerificationLevel, tokens,
     },
-    providers::{EmailSender, SharedMediaStorage, StubMediaStorage},
+    providers::{EmailError, EmailMessage, EmailSender, SharedMediaStorage, StubMediaStorage},
     server,
 };
 
@@ -128,7 +127,7 @@ pub struct TestOverrides {
     ///
     /// Tests that exercise `mailer.send` failure paths (e.g. the
     /// email-change rollback) supply a fake here that returns
-    /// `EmailError::Transport` so the rest of the handler can be observed
+    /// `EmailError::Transient` so the rest of the handler can be observed
     /// without wiring up a real SMTP relay.
     pub mailer: Option<Arc<dyn EmailSender>>,
     /// Custom media storage for the test (defaults to `StubMediaStorage`).
@@ -137,6 +136,11 @@ pub struct TestOverrides {
     /// `StorageError::Transport` so the handler's 500-mapping path can
     /// be observed without wiring up a real S3 backend.
     pub media_storage: Option<SharedMediaStorage>,
+    /// Override for the per-user email-change attempt cap. `None` keeps the
+    /// production default (3). The rate-limit test sets this so it can drive
+    /// the limiter to its boundary in fewer requests than the wall-clock
+    /// window would otherwise force.
+    pub email_change_max_attempts: Option<u64>,
     /// Outer request-body cap in MiB (defaults to 8, matching production).
     ///
     /// Lowered by the layer-level 413 test so a payload above this cap but
@@ -157,6 +161,7 @@ impl Debug for TestOverrides {
                 "media_storage",
                 &self.media_storage.as_ref().map(|_| "MediaStorage"),
             )
+            .field("email_change_max_attempts", &self.email_change_max_attempts)
             .field("request_body_limit_mb", &self.request_body_limit_mb)
             .finish()
     }
@@ -199,12 +204,15 @@ pub async fn setup_test_server_with(
         jwt_secret: SecretString::from(jwt_secret.clone()),
         port: 0,
         cors_origin: TEST_CORS_ORIGIN.to_owned(),
+        frontend_url: "http://localhost:3000".to_owned(),
         request_body_limit_mb: overrides.request_body_limit_mb.unwrap_or(8),
         cookie_secure: false,
         contract_big: overrides.contract_big,
         ico_fallback: overrides.ico_fallback,
         total_supply: TOTAL_SUPPLY,
         s3: None,
+        postmark: None,
+        email_change_max_attempts: overrides.email_change_max_attempts.unwrap_or(3),
     };
     let mailer = overrides
         .mailer
@@ -214,7 +222,7 @@ pub async fn setup_test_server_with(
         .unwrap_or_else(|| Arc::new(StubMediaStorage::new()) as SharedMediaStorage);
     let state = Arc::new(AppState {
         db: pool,
-        redis: RedisStore::new(redis_client)
+        redis: RedisStore::new(redis_client, config.email_change_max_attempts)
             .await
             .expect("Failed to connect to Redis"),
         mailer,
@@ -238,6 +246,162 @@ pub async fn setup_test_server_with(
         redis: redis_env,
         state,
     }
+}
+
+/// Fake mailer whose `send` always fails transiently.
+///
+/// Drives the queue-for-retry branch: the handler still answers `200`, the
+/// message lands in `email_send_retries`, and the rate-limit counter is NOT
+/// compensated (the mail will still be delivered by the worker).
+#[derive(Debug, Default)]
+pub struct TransientMailer;
+
+#[async_trait]
+impl EmailSender for TransientMailer {
+    #[inline]
+    async fn send(&self, _message: EmailMessage) -> Result<(), EmailError> {
+        Err(EmailError::Transient(
+            "transient mailer (test fixture)".to_owned(),
+        ))
+    }
+}
+
+/// Fake mailer whose `send` always fails permanently.
+///
+/// Drives the rollback branch: the token slot is cleared, the rate-limit
+/// counter is decremented, and the handler answers `500` so a dead send never
+/// blocks the user from retrying.
+#[derive(Debug, Default)]
+pub struct PermanentMailer;
+
+#[async_trait]
+impl EmailSender for PermanentMailer {
+    #[inline]
+    async fn send(&self, _message: EmailMessage) -> Result<(), EmailError> {
+        Err(EmailError::Permanent(
+            "permanent mailer (test fixture)".to_owned(),
+        ))
+    }
+}
+
+/// Mailer that records every successfully-sent message in memory.
+///
+/// Used wherever a test needs the plaintext payload that travels only inside
+/// the outbound message: confirmation tokens never land in Redis (Redis stores
+/// only their SHA-256 hash) and are not echoed in the HTTP response under a
+/// real Postmark config, so the only path to that plaintext from a test
+/// harness is intercepting the message body before it would reach an SMTP
+/// relay. Clone the `sent` handle before moving the mailer into
+/// `Arc<dyn EmailSender>` to retain read-back access.
+///
+/// `std::sync::Mutex` (not `tokio::sync::Mutex`) is correct here because
+/// the `send` impl pushes-and-returns without crossing an `.await`; the
+/// lock is released before the future yields.
+#[derive(Debug, Default, Clone)]
+pub struct CapturingMailer {
+    /// Append-only log of every message accepted by `send`. Wrapped in `Arc`
+    /// so a test can clone a read-back handle before moving the mailer into
+    /// the `Arc<dyn EmailSender>` slot on `AppState`.
+    pub sent: Arc<Mutex<Vec<EmailMessage>>>,
+}
+
+#[async_trait]
+impl EmailSender for CapturingMailer {
+    #[inline]
+    async fn send(&self, message: EmailMessage) -> Result<(), EmailError> {
+        self.sent
+            .lock()
+            .expect("CapturingMailer mutex poisoned")
+            .push(message);
+        Ok(())
+    }
+}
+
+/// Wires a `CapturingMailer` into the test server and returns a shared handle
+/// to its message log alongside the environment.
+///
+/// `CapturingMailer` is `Clone` over its inner `Arc`, so the returned mailer
+/// reads the same `Vec<EmailMessage>` that the one moved into
+/// `Arc<dyn EmailSender>` writes to. Use the returned handle with
+/// [`extract_verify_token`] to recover plaintext that travels only inside the
+/// outbound email body.
+#[inline]
+pub async fn setup_test_server_capturing(
+    pool: PgPool,
+    with_redis: bool,
+) -> (TestEnv, CapturingMailer) {
+    let mailer = CapturingMailer::default();
+    let handle = mailer.clone();
+    let env = setup_test_server_with(
+        pool,
+        with_redis,
+        TestOverrides {
+            mailer: Some(Arc::new(mailer) as Arc<dyn EmailSender>),
+            ..TestOverrides::default()
+        },
+    )
+    .await;
+    (env, handle)
+}
+
+/// Sets a unique email on the user and clears `email_verified`, so the next
+/// verify-send clears the `email IS NULL` guard and the next confirm runs the
+/// genuine UPDATE branch. A wallet-only login synthesises a placeholder email;
+/// this overwrites it with a known fixture value the assertions can read back.
+/// Returns the email it set.
+#[inline]
+pub async fn seed_email(pool: &PgPool, user_id: Uuid) -> String {
+    let email = format!("verify-{user_id}@example.com");
+    sqlx::query!(
+        r"
+            UPDATE users
+            SET email = $1, email_verified = FALSE
+            WHERE id = $2
+        ",
+        email,
+        user_id,
+    )
+    .execute(pool)
+    .await
+    .expect("seed email");
+    email
+}
+
+/// Plaintext verification token parsed from the most recent message captured
+/// by a `CapturingMailer`.
+///
+/// The verify-email body is built by `verification_email` as a single link
+/// `{frontend_url}/verify-email?token={token}` terminated by `\n`, so the
+/// `?token=` substring isolates the plaintext. Panics if no message has been
+/// captured yet, the body carries no token query parameter, or it carries more
+/// than one - a second `?token=` would let the parser silently pick one, which
+/// always signals a miswired test rather than a contract change.
+#[inline]
+pub fn extract_verify_token(mailer: &CapturingMailer) -> String {
+    let messages = mailer.sent.lock().expect("CapturingMailer mutex poisoned");
+    let body = &messages
+        .last()
+        .expect("no captured verification message yet")
+        .body;
+    let mut after_marker = body.split("?token=");
+    after_marker.next();
+    let token = after_marker
+        .next()
+        .expect("verification email body must carry a `?token=...` link");
+    assert!(
+        after_marker.next().is_none(),
+        "verification email body carried more than one `?token=` link; \
+         extract_verify_token cannot disambiguate which is current",
+    );
+    let token = token.trim_end().to_owned();
+    assert_eq!(
+        token.len(),
+        tokens::TOKEN_STR_LEN,
+        "verify-email token must be exactly TOKEN_STR_LEN={} chars; got {}",
+        tokens::TOKEN_STR_LEN,
+        token.len(),
+    );
+    token
 }
 
 /// 8-byte PNG signature followed by zero padding to 1 KB.
@@ -347,6 +511,70 @@ pub fn mint_access_token_with_backdated_iat(
         &EncodingKey::from_secret(secret.as_bytes()),
     )
     .expect("Failed to mint backdated JWT")
+}
+
+/// Mints an access JWT with a caller-supplied `verification_level` claim,
+/// including the `None` (legacy pre-claim token) variant.
+///
+/// The `VerifiedUser<V>` extractor reads the level from the JWT, not from
+/// the user row, so this helper drives gating tests without having to
+/// mutate `users.verification_level` (which is in any case read-only - it
+/// is recomputed by `trg_users_sync_verification_level` from the flag
+/// columns).
+#[inline]
+pub fn mint_access_token_with_level(
+    user_id: UserId,
+    role: UserRole,
+    secret: &str,
+    verification_level: Option<VerificationLevel>,
+) -> String {
+    let now = Utc::now();
+    let exp = now
+        .checked_add_signed(Duration::hours(24))
+        .expect("Valid expiration")
+        .timestamp();
+    let exp_usize = usize::try_from(exp.max(0)).expect("Valid expiration timestamp");
+    let iat_usize = usize::try_from(now.timestamp().max(0)).expect("Valid iat");
+
+    let claims = Claims {
+        sub: user_id,
+        role,
+        exp: exp_usize,
+        iss: JWT_ISSUER.to_owned(),
+        aud: JWT_AUDIENCE.to_owned(),
+        token_type: Some(TokenType::Access),
+        verification_level,
+        jti: Uuid::new_v4(),
+        iat: iat_usize,
+    };
+    encode(
+        &Header::default(),
+        &claims,
+        &EncodingKey::from_secret(secret.as_bytes()),
+    )
+    .expect("Failed to mint JWT with custom level")
+}
+
+/// Inserts a `pending` row into `email_send_retries` with the DDL default
+/// `next_retry_at = NOW()` (immediately due) and returns its id.
+///
+/// Used by both the worker tests and the db-layer tests as the canonical
+/// seed for "there is a fresh transient delivery waiting for a tick". The
+/// payload columns are placeholders - the worker re-sends them verbatim, so
+/// the strings only have to be non-NULL.
+#[inline]
+pub async fn seed_pending_retry(pool: &PgPool, to: &str) -> Uuid {
+    sqlx::query_scalar!(
+        r"
+            INSERT INTO email_send_retries (to_address, subject, body)
+            VALUES ($1, 'subj', 'body')
+            RETURNING id
+        ",
+        to,
+    )
+    .fetch_one(pool)
+    .await
+    .expect("seed insert")
 }
 
 /// Seeds an `active` lease where `landlord_id = user_id`.

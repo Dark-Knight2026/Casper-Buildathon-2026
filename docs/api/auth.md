@@ -32,6 +32,26 @@ Session-management endpoints live in [`auth_sessions.md`](auth_sessions.md).
 - **Behavior:** idempotent; blocklists the access JWT's `jti` until natural expiry, revokes the refresh-token family. Missing or undecodable cookies still produce 204.
 - **Auth:** Best-effort (no cookies still works)
 
+## POST `/api/v1/auth/verify/email/send`
+
+- **Input:** none (email is read from the user record, never the body)
+- **Response (200):** `{ "status": "sent" }`.
+- **Errors:** 400 (`email_not_set`), 401 (unauthorized), 429 (`rate_limited` - 1/min, 5/hour shared with resend), 500 (`email_send_failed`)
+- **Auth:** Access cookie required
+
+## POST `/api/v1/auth/verify/email/resend`
+
+- Identical to `send` - same logic, same rate-limit slot. Separate route only so the UI can present "resend" distinctly.
+
+## POST `/api/v1/auth/verify/email/confirm`
+
+- **Input:** `{ "token": "<43-char base64url token from the email link>" }`
+- **Response (200):** `{ UserInfo }`. On a genuine transition, `Set-Cookie` rotates both `access_token` (carrying the bumped `verification_level`) and `refresh_token`. The client must adopt the returned `UserInfo` (or re-fetch `/users/me`).
+- **Errors:** 400 (`bad_token_format`), 401/404 (`invalid_or_expired_token`), 500
+- **Auth:** Access cookie required
+
+The full flow (levels, token model, retry queue, rate limiting) is specified in [`../feature/email_verification.md`](../feature/email_verification.md).
+
 ## Deployment note: `Authorization` header removed from CORS
 
 `server.rs` declares `.allow_headers([CONTENT_TYPE])` - `Authorization` is intentionally absent from the CORS-preflight whitelist. Browsers will strip any cross-origin request that still carries `Authorization: Bearer ...` during preflight, which surfaces as an opaque 401/blocked-by-CORS on the client side and is hard to attribute to the CORS layer from logs alone.

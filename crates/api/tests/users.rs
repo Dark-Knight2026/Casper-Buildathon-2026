@@ -2,9 +2,8 @@
 
 mod common;
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
-use async_trait::async_trait;
 use axum::http::StatusCode;
 use axum_test::http::header::COOKIE;
 use casper_types::{AsymmetricType, PublicKey, SecretKey};
@@ -13,51 +12,8 @@ use serde_json::Value;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::common::TestOverrides;
-use api::providers::{EmailError, EmailMessage, EmailSender};
-
-/// Mailer that always fails delivery.
-///
-/// Used to assert that `request_email_change` rolls back the Redis token
-/// slot and the rate-limit counter when the transport step blows up.
-#[derive(Debug, Default)]
-struct FailingMailer;
-
-#[async_trait]
-impl EmailSender for FailingMailer {
-    async fn send(&self, _message: EmailMessage) -> Result<(), EmailError> {
-        Err(EmailError::Transport(
-            "failing mailer (test fixture)".to_owned(),
-        ))
-    }
-}
-
-/// Mailer that records every successfully-sent message in memory.
-///
-/// Used by the email-change happy-path test to recover the plaintext
-/// confirmation token: the token never lands in Redis (Redis stores only
-/// its SHA-256 hash) and is never echoed in the HTTP response, so the
-/// only path to it from a test harness is intercepting the outbound
-/// message body before it reaches a real SMTP relay.
-///
-/// `std::sync::Mutex` (not `tokio::sync::Mutex`) is correct here because
-/// the `send` impl pushes-and-returns without crossing an `.await`; the
-/// lock is released before the future yields.
-#[derive(Debug, Default, Clone)]
-struct CapturingMailer {
-    sent: Arc<Mutex<Vec<EmailMessage>>>,
-}
-
-#[async_trait]
-impl EmailSender for CapturingMailer {
-    async fn send(&self, message: EmailMessage) -> Result<(), EmailError> {
-        self.sent
-            .lock()
-            .expect("CapturingMailer mutex poisoned")
-            .push(message);
-        Ok(())
-    }
-}
+use crate::common::{CapturingMailer, TestOverrides};
+use api::{common::tokens, providers::EmailSender};
 
 /// Regression: when `mailer.send` fails inside `request_email_change`, the
 /// handler must roll back the Redis token slot and the rate-limit counter
@@ -73,7 +29,7 @@ async fn request_email_change_rolls_back_state_on_mailer_failure(pool: PgPool) {
         pool.clone(),
         true,
         TestOverrides {
-            mailer: Some(Arc::new(FailingMailer)),
+            mailer: Some(Arc::new(common::TransientMailer)),
             ..TestOverrides::default()
         },
     )
@@ -379,6 +335,12 @@ async fn get_me_returns_authenticated_user_profile(pool: PgPool) {
     assert_eq!(me_body["first_name"].as_str().unwrap(), "Wallet");
     assert_eq!(me_body["last_name"].as_str().unwrap(), "User");
     assert_eq!(me_body["status"].as_str().unwrap(), "active");
+    assert_eq!(
+        me_body["verification_level"].as_str().unwrap(),
+        "none",
+        "a fresh wallet user must surface verification_level='none' so the \
+         client can tell email is not yet verified",
+    );
     assert!(me_body["id"].is_string());
     assert!(me_body["created_at"].is_string());
     assert!(me_body["updated_at"].is_string());
@@ -573,10 +535,11 @@ async fn patch_me_rejects_empty_required_fields(pool: PgPool) {
 /// from request to confirm to prove reachability, so a future refactor that
 /// forgets the verified flag would silently downgrade trust). - The
 /// `trg_users_sync_verification_level` BEFORE-trigger upgrades
-/// `verification_level` from `'none'` to `'email'` on that flip - the
-/// confirmation response shape (`UserInfo`) intentionally drops this column
-/// (see `From<UserProfileRecord> for UserInfo`), so the test verifies it
-/// against the DB row directly.
+/// `verification_level` from `'none'` to `'email'` on that flip, verified both
+/// against the DB row and through a follow-up `GET /me`: the latter pins that
+/// the upgraded level survives `fetch_user_profile` ->
+/// `From<UserProfileRecord> for UserInfo` -> JSON so the client can read its
+/// own verification state.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn confirm_email_change_happy_path_upgrades_verification(pool: PgPool) {
     let mailer = CapturingMailer::default();
@@ -651,10 +614,9 @@ async fn confirm_email_change_happy_path_upgrades_verification(pool: PgPool) {
     assert_eq!(request_response.status_code(), StatusCode::ACCEPTED);
 
     // Pull the plaintext token out of the captured email body. The
-    // handler formats the body as
-    // `"Use this token within 24 hours to confirm the email change: <TOKEN>"`,
-    // so `rsplit(": ").next()` gives the token and trims away any
-    // trailing whitespace defensively.
+    // handler formats the body as a single link
+    // `{frontend_url}/confirm-email-change?token=<TOKEN>` terminated by
+    // `\n`, so the rightmost `?token=` substring isolates the plaintext.
     let body = {
         let lock = captured.lock().expect("CapturingMailer mutex poisoned");
         assert_eq!(
@@ -671,14 +633,14 @@ async fn confirm_email_change_happy_path_upgrades_verification(pool: PgPool) {
         msg.body.clone()
     };
     let token = body
-        .rsplit(": ")
-        .next()
-        .expect("body must contain ': '")
-        .trim();
+        .rsplit_once("?token=")
+        .map(|(_, tail)| tail.trim_end())
+        .expect("body must carry a `?token=...` link");
     assert_eq!(
         token.len(),
-        43,
-        "token must be 43 base64url-no-pad chars; got body: {body:?}",
+        tokens::TOKEN_STR_LEN,
+        "token must be exactly TOKEN_STR_LEN={} base64url-no-pad chars; got body: {body:?}",
+        tokens::TOKEN_STR_LEN,
     );
 
     let confirm_response = env
@@ -720,5 +682,77 @@ async fn confirm_email_change_happy_path_upgrades_verification(pool: PgPool) {
     assert_eq!(
         final_row.verification_level, "email",
         "verification_level must upgrade from 'none' to 'email' via trg_users_sync_verification_level",
+    );
+
+    // Same upgraded level must now be readable through the public profile, not
+    // just the DB row: this is the path the client actually polls to learn that
+    // email verification succeeded.
+    let me_response = env
+        .server
+        .get("/api/v1/users/me")
+        .add_header(COOKIE, format!("access_token={access_token}"))
+        .await;
+    assert_eq!(me_response.status_code(), StatusCode::OK);
+    let me_body = me_response.json::<Value>();
+    assert_eq!(
+        me_body["verification_level"].as_str().unwrap(),
+        "email",
+        "GET /me must surface the upgraded verification_level so the client can \
+         confirm email verification without a second request",
+    );
+    assert_eq!(
+        me_body["email"].as_str().unwrap(),
+        new_email,
+        "GET /me must reflect the rewritten email alongside the upgraded level",
+    );
+}
+
+/// Pins that `request_email_change` reads its attempt cap from
+/// `ServerConfig::email_change_max_attempts`, not a hardcoded `3`.
+///
+/// The test raises the cap to `5` via `TestOverrides`. With the
+/// configurable plumbing in place, the first five requests must each return
+/// `202` and the sixth must return `429`. A regression that re-introduces a
+/// hardcoded `3` would surface as a `429` on the fourth request, well
+/// before the configured limit.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn request_email_change_respects_configured_attempt_cap(pool: PgPool) {
+    let env = common::setup_test_server_with(
+        pool,
+        true,
+        TestOverrides {
+            email_change_max_attempts: Some(5),
+            ..TestOverrides::default()
+        },
+    )
+    .await;
+
+    let session = common::login_and_extract(&env).await;
+
+    for i in 0..5 {
+        let response = env
+            .server
+            .post("/api/v1/users/me/email")
+            .add_header(COOKIE, format!("access_token={}", session.access_token))
+            .json(&serde_json::json!({ "new_email": format!("rate-{i}@example.com") }))
+            .await;
+        assert_eq!(
+            response.status_code(),
+            StatusCode::ACCEPTED,
+            "request {} of 5 must succeed when cap is 5; a 429 here means the limit is still hardcoded below 5",
+            i + 1,
+        );
+    }
+
+    let blocked = env
+        .server
+        .post("/api/v1/users/me/email")
+        .add_header(COOKIE, format!("access_token={}", session.access_token))
+        .json(&serde_json::json!({ "new_email": "rate-overflow@example.com" }))
+        .await;
+    assert_eq!(
+        blocked.status_code(),
+        StatusCode::TOO_MANY_REQUESTS,
+        "sixth request must 429 once the configured cap of 5 is exhausted",
     );
 }

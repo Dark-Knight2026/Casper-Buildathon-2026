@@ -93,8 +93,24 @@ pub enum UserStatus {
 ///
 /// Encoded into access-token claims so authorization extractors can gate
 /// endpoints by verification without re-querying the database on every request.
+///
+/// The variants are declared in ascending order of strength, and the derived
+/// `Ord` relies on that order: the `VerifiedUser<V>` extractor compares
+/// `level < V::MIN_LEVEL` to enforce a monotonic gate (a `full` user satisfies
+/// an `email` requirement). Do not reorder the variants.
 #[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, EnumString, Display, ToSchema,
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Serialize,
+    Deserialize,
+    EnumString,
+    Display,
+    ToSchema,
 )]
 #[serde(rename_all = "snake_case")]
 #[strum(serialize_all = "snake_case")]
@@ -193,6 +209,12 @@ pub struct UserInfo {
     /// `true` once email, `first_name`, `last_name` and phone are all populated
     /// (maintained by `trg_users_profile_complete`).
     pub is_profile_complete: bool,
+    /// Aggregate verification state, maintained by
+    /// `trg_users_sync_verification_level`. Lets the client tell whether
+    /// email/identity have been verified using the same value the
+    /// `VerifiedUser<V>` extractor gates on: e.g. email is verified once this
+    /// is any level other than `None`.
+    pub verification_level: VerificationLevel,
     /// Number of currently `active` leases where the user is involved as
     /// primary tenant, listed tenant, landlord, or agent.
     pub active_leases_count: i64,

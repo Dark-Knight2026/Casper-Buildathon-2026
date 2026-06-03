@@ -11,7 +11,7 @@ use axum_extra::extract::CookieJar;
 use chrono::Utc;
 
 use crate::{
-    common::{ApiError, ApiResult, AppState, UserInfo},
+    common::{ApiError, ApiResult, AppState, UserInfo, tokens},
     providers::EmailMessage,
     services::{
         auth::{AuthUser, cookies},
@@ -21,7 +21,6 @@ use crate::{
                 AvatarUploadResponse, DeleteAccountRequest, EmailChangeConfirmRequest,
                 EmailChangeRequest, UpdateProfileRequest, UpdateRoleRequest,
             },
-            tokens,
         },
     },
 };
@@ -410,9 +409,10 @@ pub async fn delete_me(
 /// touched until the confirmation step succeeds, so a typo in the new
 /// address never leaves the user with a broken email column.
 ///
-/// Per-user rate limit: at most 3 requests per rolling 24h window. A
-/// fresh request from the same user atomically overwrites the previous
-/// pending slot, instantly invalidating the previously-emailed link.
+/// Per-user rate limit: configurable via `EMAIL_CHANGE_MAX_ATTEMPTS`
+/// (default 3) per rolling 24h window. A fresh request from the same
+/// user atomically overwrites the previous pending slot, instantly
+/// invalidating the previously-emailed link.
 ///
 /// Authorization: `AuthUser` (any logged-in user; verification not
 /// required - users must be able to fix typos in their email before
@@ -474,12 +474,16 @@ pub async fn request_email_change(
     // OLD email so the user can react to a misissued request even when
     // the new mailbox is not under their control. Deferred to a follow-up
     // commit to keep this one focused on the confirmation round-trip.
+    let link = format!(
+        "{}/confirm-email-change?token={}",
+        state.config.frontend_url.trim_end_matches('/'),
+        token.plaintext,
+    );
     let message = EmailMessage {
         to: new_email,
         subject: "Confirm your new email address".to_owned(),
         body: format!(
-            "Use this token within 24 hours to confirm the email change: {}",
-            token.plaintext,
+            "Click the link below to confirm your new email address. It expires in 24 hours.\n\n{link}\n",
         ),
     };
     if let Err(send_err) = state.mailer.send(message).await {
@@ -515,8 +519,8 @@ pub async fn request_email_change(
 /// Looks up the pending request via atomic `GETDEL` keyed on `user_id`,
 /// compares the SHA-256 of the presented token against the stored hash,
 /// and on match rewrites `email = new_email, email_verified = TRUE` in a
-/// single UPDATE. The `trg_users_profile_complete` trigger recomputes the
-/// aggregate `verification_level` automatically.
+/// single UPDATE. The `trg_users_sync_verification_level` trigger recomputes
+/// the aggregate `verification_level` automatically.
 ///
 /// Failure modes:
 ///

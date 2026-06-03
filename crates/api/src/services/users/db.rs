@@ -54,11 +54,10 @@ pub struct UserProfileRecord {
 /// Maps a DB-side `UserProfileRecord` into the public-facing [`UserInfo`]
 /// shape returned by `/me` endpoints and the wallet login response.
 ///
-/// `verification_level` is intentionally dropped: it lives on the record so
-/// authorization-checking code can read it without a second SQL trip, but
-/// `UserInfo` does not expose it - surfacing aggregate verification
-/// publicly is a deliberate omission to avoid leaking onboarding state to
-/// the wrong UI surfaces.
+/// `verification_level` is carried straight through: `/me` returns the
+/// authenticated user's own onboarding state, so the client can mirror the
+/// server-side `VerifiedUser<V>` gate (e.g. email is verified once the level
+/// is anything other than `none`) without a second request.
 ///
 /// `role` is parsed here with an `Unknown` fallback (mirroring the
 /// wallet-login path) so a stray DB value can never 500 a profile read or
@@ -78,6 +77,7 @@ impl From<UserProfileRecord> for UserInfo {
             avatar_url: record.avatar_url,
             bio: record.bio,
             is_profile_complete: record.is_profile_complete,
+            verification_level: record.verification_level,
             active_leases_count: record.active_leases_count,
             created_at: record.created_at,
             updated_at: record.updated_at,
@@ -531,8 +531,8 @@ pub async fn is_email_taken(
 /// would force a redundant second round-trip.
 ///
 /// `verification_level` is NOT written explicitly: the
-/// `trg_users_profile_complete` BEFORE-trigger recomputes it from the
-/// atomic-bool columns (`email_verified`, `phone_verified`, ...) on every
+/// `trg_users_sync_verification_level` BEFORE-trigger recomputes it from the
+/// atomic-bool columns (`email_verified`, `identity_verified`) on every
 /// UPDATE, so the aggregate is always consistent without handler code
 /// touching it.
 ///

@@ -6,12 +6,24 @@
       {
         "ordinal": 0,
         "name": "pending_rewards",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "staking_positions",
+            "name": "pending_rewards"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "reward_per_token_paid",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "staking_positions",
+            "name": "reward_per_token_paid"
+          }
+        }
       }
     ],
     "parameters": {

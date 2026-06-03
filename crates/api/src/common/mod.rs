@@ -12,6 +12,8 @@ pub mod models;
 pub mod pagination;
 /// Redis client wrapper.
 pub mod redis;
+/// Opaque single-use token generation shared across flows.
+pub mod tokens;
 
 // Re-exports
 pub use config::{AppState, IcoFallback, S3Config, ServerConfig, TOTAL_SUPPLY};
@@ -25,7 +27,7 @@ pub use models::{
     UserStatus, VerificationLevel,
 };
 pub use pagination::{Pageable, PaginatedResponse, Pagination};
-pub use redis::RedisStore;
+pub use redis::{RedisStore, VerifyEmailReservation};
 
 /// Validates and normalizes a Casper account hash (64 hex characters, no prefix).
 ///
@@ -36,7 +38,7 @@ pub use redis::RedisStore;
 pub fn validate_account(account: &str) -> ApiResult<String> {
     let account = account.to_ascii_lowercase();
     if account.len() != 64 || !account.chars().all(|c| c.is_ascii_hexdigit()) {
-        return Err(errors::ApiError::BadRequest(
+        return Err(ApiError::BadRequest(
             "Address must be 64 hex characters (account hash without prefix)".to_owned(),
         ));
     }

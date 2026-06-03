@@ -21,7 +21,7 @@ pub mod email;
 /// Media-storage abstraction.
 pub mod storage;
 
-pub use email::{EmailError, EmailMessage, EmailSender, LoggingEmailSender};
+pub use email::{EmailError, EmailMessage, EmailSender, LoggingEmailSender, PostmarkSender};
 pub use storage::{
     MediaStorage, S3MediaStorage, SharedMediaStorage, StorageError, StubMediaStorage,
 };
