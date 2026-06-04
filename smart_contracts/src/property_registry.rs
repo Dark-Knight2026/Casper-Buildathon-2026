@@ -6,7 +6,7 @@ use crate::{
         errors::Error,
         events::{
             PropertyCreated, PropertyMetadataSet, PropertyStatusSet, PropertyTokenSet,
-            RevenueDistributorSet, UserRegistrySet,
+            UserRegistrySet,
         },
         types::{CreatePropertyParams, PropertyRecord, PropertyStatus},
     },
@@ -53,8 +53,6 @@ pub mod types {
         pub issuer: U256,
         /// Property ownership token address, set while Draft.
         pub token: Option<Address>,
-        /// Revenue distributor address, set while Draft.
-        pub revenue_distributor: Option<Address>,
         /// Total ownership token supply intended for the property.
         pub total_supply: U256,
         /// Metadata URI or content hash for the property.
@@ -74,52 +72,30 @@ pub mod events {
 
     #[odra::event]
     pub struct PropertyCreated {
-        /// Created property ID.
         pub property_id: U256,
-        /// User ID of the property issuer/landlord.
         pub issuer: U256,
-        /// Total ownership token supply intended for the property.
         pub total_supply: U256,
     }
 
-    /// Emitted when the property token address is set.
     #[odra::event]
     pub struct PropertyTokenSet {
-        /// Property ID being configured.
         pub property_id: U256,
-        /// Property ownership token address.
         pub token: Address,
     }
 
-    /// Emitted when the revenue distributor address is set.
-    #[odra::event]
-    pub struct RevenueDistributorSet {
-        /// Property ID being configured.
-        pub property_id: U256,
-        /// Revenue distributor address.
-        pub revenue_distributor: Address,
-    }
-
-    /// Emitted when property lifecycle status changes.
     #[odra::event]
     pub struct PropertyStatusSet {
-        /// Property ID being updated.
         pub property_id: U256,
-        /// New lifecycle status.
         pub status: PropertyStatus,
     }
 
-    /// Emitted when property metadata changes.
     #[odra::event]
     pub struct PropertyMetadataSet {
-        /// Property ID being updated.
         pub property_id: U256,
     }
 
-    /// Emitted when the UserRegistry dependency is updated.
     #[odra::event]
     pub struct UserRegistrySet {
-        /// UserRegistry contract address.
         pub user_registry: Address,
     }
 }
@@ -139,7 +115,6 @@ pub mod errors {
         EmptyMetadataUri = 903,
         PropertyNotDraft = 904,
         MissingPropertyToken = 905,
-        MissingRevenueDistributor = 906,
         InvalidStatusTransition = 907,
         PropertyTokenAlreadyRegistered = 908,
         NotAuthorized = 909,
@@ -156,7 +131,6 @@ pub mod errors {
     PropertyMetadataSet,
     PropertyStatusSet,
     PropertyTokenSet,
-    RevenueDistributorSet,
     UserRegistrySet
 ])]
 pub struct PropertyRegistry {
@@ -230,24 +204,6 @@ impl PropertyRegistry {
             .emit_event(PropertyTokenSet { property_id, token });
     }
 
-    /// Sets the property revenue distributor address.
-    /// Restricted to `PROPERTY_MANAGER`.
-    /// @dev The property must still be in `Draft` status.
-    pub fn set_revenue_distributor(&mut self, property_id: U256, revenue_distributor: Address) {
-        self.assert_property_manager();
-
-        let mut property = self.get_property(property_id);
-        self.assert_draft(&property);
-
-        property.revenue_distributor = Some(revenue_distributor);
-        self.properties.set(&property_id, property);
-
-        self.env().emit_event(RevenueDistributorSet {
-            property_id,
-            revenue_distributor,
-        });
-    }
-
     /// Updates the metadata URI or content hash for a draft property.
     /// Restricted to `PROPERTY_MANAGER`.
     /// @dev Metadata must not contain private investor data.
@@ -301,9 +257,6 @@ impl PropertyRegistry {
             if property.token.is_none() {
                 self.env().revert(Error::MissingPropertyToken);
             }
-            if property.revenue_distributor.is_none() {
-                self.env().revert(Error::MissingRevenueDistributor);
-            }
         }
 
         property.status = status;
@@ -338,13 +291,6 @@ impl PropertyRegistry {
         self.token_to_property_id.get(&token).unwrap_or(None)
     }
 
-    /// Returns the property revenue distributor address
-    pub fn get_revenue_distributor(&self, property_id: U256) -> Address {
-        self.get_property(property_id)
-            .revenue_distributor
-            .unwrap_or_revert_with(&self.env(), Error::MissingRevenueDistributor)
-    }
-
     /// Returns the UserRegistry contract address.
     pub fn get_user_registry_contract_address(&self) -> Address {
         *self.user_registry.address()
@@ -363,7 +309,7 @@ impl PropertyRegistry {
 
     /// Creates a property record in `Draft` status.
     /// Restricted to `PROPERTY_MANAGER`.
-    /// @dev Token and revenue distributor addresses are intentionally set later so deployment can be done in small, verifiable steps.
+    /// @dev Token address is intentionally set later so deployment can be done in small, verifiable steps.
     pub fn create_property(&mut self, params: CreatePropertyParams) -> U256 {
         self.assert_property_manager();
 
@@ -388,7 +334,6 @@ impl PropertyRegistry {
             PropertyRecord {
                 issuer,
                 token: None,
-                revenue_distributor: None,
                 total_supply,
                 metadata_uri: params.metadata_uri,
                 status: PropertyStatus::Draft,
