@@ -1,7 +1,7 @@
 use leasefi_contracts::user_registry::{
     errors::Error,
     events::{ActiveWalletReplaced, UserCreated, UserRoleFlagsSet, UserStatusSet},
-    types::{UserStatus, WalletStatus},
+    types::UserStatus,
     UserRegistry, UserRegistryHostRef, UserRegistryInitArgs, ROLE_FLAG_LANDLORD,
     ROLE_FLAG_PROPERTY_MANAGER, ROLE_FLAG_TENANT,
 };
@@ -22,7 +22,6 @@ struct Context {
     role_manager: Address,
     wallet_1: Address,
     wallet_2: Address,
-    wallet_3: Address,
 }
 
 fn setup(env: HostEnv) -> Context {
@@ -30,7 +29,6 @@ fn setup(env: HostEnv) -> Context {
     let role_manager = env.get_account(2);
     let wallet_1 = env.get_account(3);
     let wallet_2 = env.get_account(4);
-    let wallet_3 = env.get_account(5);
 
     let mut registry = UserRegistry::deploy(
         &env,
@@ -49,7 +47,6 @@ fn setup(env: HostEnv) -> Context {
         role_manager,
         wallet_1,
         wallet_2,
-        wallet_3,
     }
 }
 
@@ -90,11 +87,7 @@ fn test_create_user_should_store_user_and_wallet_indexes() {
     assert!(ctx.registry.is_active_wallet(user_id, ctx.wallet_1));
     assert!(ctx.registry.has_tenant_role(user_id));
     assert!(!ctx.registry.has_landlord_role(user_id));
-    assert_eq!(ctx.registry.get_wallet_history(user_id), vec![ctx.wallet_1]);
-    assert!(matches!(
-        ctx.registry.get_wallet_status(ctx.wallet_1),
-        Some(WalletStatus::Active),
-    ));
+    assert_eq!(ctx.registry.get_user_wallets(user_id), vec![ctx.wallet_1]);
     assert!(ctx.env.emitted_event(
         &ctx.registry,
         UserCreated {
@@ -168,28 +161,24 @@ fn test_create_user_should_revert_for_duplicate_wallet() {
 // =============================================================================
 
 #[test]
-fn test_replace_active_wallet_should_revoke_old_wallet_and_activate_new_wallet() {
+fn test_replace_active_wallet_should_activate_new_wallet_and_keep_old_linked() {
     let mut ctx = setup(odra_test::env());
     let user_id = create_user(&mut ctx);
 
+    ctx.env.set_caller(ctx.identity_manager);
     ctx.registry.replace_active_wallet(user_id, ctx.wallet_2);
 
     assert_eq!(ctx.registry.get_active_wallet(user_id), ctx.wallet_2);
-    assert_eq!(ctx.registry.get_user_id_by_wallet(ctx.wallet_1), None);
+    assert_eq!(
+        ctx.registry.get_user_id_by_wallet(ctx.wallet_1),
+        Some(user_id)
+    );
     assert_eq!(
         ctx.registry.get_user_id_by_wallet(ctx.wallet_2),
         Some(user_id),
     );
-    assert!(matches!(
-        ctx.registry.get_wallet_status(ctx.wallet_1),
-        Some(WalletStatus::Revoked),
-    ));
-    assert!(matches!(
-        ctx.registry.get_wallet_status(ctx.wallet_2),
-        Some(WalletStatus::Active),
-    ));
     assert_eq!(
-        ctx.registry.get_wallet_history(user_id),
+        ctx.registry.get_user_wallets(user_id),
         vec![ctx.wallet_1, ctx.wallet_2],
     );
     assert!(ctx.env.emitted_event(
@@ -203,15 +192,46 @@ fn test_replace_active_wallet_should_revoke_old_wallet_and_activate_new_wallet()
 }
 
 #[test]
-fn test_replace_active_wallet_should_reject_any_previously_linked_wallet() {
+fn test_replace_active_wallet_should_allow_reactivating_previously_linked_wallet() {
     let mut ctx = setup(odra_test::env());
     let user_id = create_user(&mut ctx);
 
+    ctx.env.set_caller(ctx.identity_manager);
     ctx.registry.replace_active_wallet(user_id, ctx.wallet_2);
+    ctx.registry.replace_active_wallet(user_id, ctx.wallet_1);
+
+    assert_eq!(ctx.registry.get_active_wallet(user_id), ctx.wallet_1);
+}
+
+#[test]
+fn test_replace_active_wallet_should_revert_if_wallet_already_active() {
+    let mut ctx = setup(odra_test::env());
+    let user_id = create_user(&mut ctx);
+
+    ctx.env.set_caller(ctx.identity_manager);
 
     assert_eq!(
         ctx.registry
             .try_replace_active_wallet(user_id, ctx.wallet_1)
+            .unwrap_err(),
+        Error::WalletAlreadyActive.into()
+    );
+}
+
+#[test]
+fn test_replace_active_wallet_should_revert_if_wallet_linked_to_other_user() {
+    let mut ctx = setup(odra_test::env());
+    let user_id_1 = create_user(&mut ctx);
+
+    // Create a second user with wallet_2
+    ctx.env.set_caller(ctx.identity_manager);
+    let _user_id_2 = ctx
+        .registry
+        .create_user([2u8; 32], ctx.wallet_2, ROLE_FLAG_TENANT);
+
+    assert_eq!(
+        ctx.registry
+            .try_replace_active_wallet(user_id_1, ctx.wallet_2)
             .unwrap_err(),
         Error::WalletAlreadyLinked.into()
     );
