@@ -1,8 +1,14 @@
-use leasefi_contracts::property_registry::{
-    errors::Error,
-    events::{PropertyCreated, PropertyMetadataSet, PropertyTokenSet, RevenueDistributorSet},
-    types::{CreatePropertyParams, PropertyStatus},
-    PropertyRegistry, PropertyRegistryHostRef, PropertyRegistryInitArgs,
+use leasefi_contracts::{
+    property_registry::{
+        errors::Error,
+        events::{PropertyCreated, PropertyMetadataSet, PropertyTokenSet},
+        types::{CreatePropertyParams, PropertyStatus},
+        PropertyRegistry, PropertyRegistryHostRef, PropertyRegistryInitArgs,
+    },
+    user_registry::{
+        UserRegistry, UserRegistryHostRef, UserRegistryInitArgs, ROLE_FLAG_LANDLORD,
+        ROLE_FLAG_PROPERTY_MANAGER,
+    },
 };
 use odra::{
     casper_types::U256,
@@ -19,34 +25,45 @@ use crate::property_registry::events::PropertyStatusSet;
 struct Context {
     env: HostEnv,
     registry: PropertyRegistryHostRef,
+    user_registry: UserRegistryHostRef,
     property_manager: Address,
+    property_manager_id: U256,
     issuer: Address,
+    issuer_id: U256,
     token: Address,
-    revenue_distributor: Address,
 }
 
 fn setup(env: HostEnv) -> Context {
+    let owner = env.get_account(0);
     let property_manager = env.get_account(1);
     let issuer = env.get_account(2);
     let token = env.get_account(3);
-    let revenue_distributor = env.get_account(4);
 
-    let mut registry = PropertyRegistry::deploy(
+    let mut user_registry = UserRegistry::deploy(&env, UserRegistryInitArgs { owner });
+
+    let registry = PropertyRegistry::deploy(
         &env,
         PropertyRegistryInitArgs {
-            owner: env.get_account(0),
+            owner,
+            user_registry: user_registry.address(),
         },
     );
 
-    registry.grant_role(&registry.property_manager_role(), &property_manager);
+    user_registry.grant_role(&user_registry.identity_manager_role(), &owner);
+
+    let property_manager_id =
+        user_registry.create_user([1u8; 32], property_manager, ROLE_FLAG_PROPERTY_MANAGER);
+    let issuer_id = user_registry.create_user([2u8; 32], issuer, ROLE_FLAG_LANDLORD);
 
     Context {
         env,
         registry,
+        user_registry,
         property_manager,
+        property_manager_id,
         issuer,
+        issuer_id,
         token,
-        revenue_distributor,
     }
 }
 
@@ -56,7 +73,7 @@ fn setup(env: HostEnv) -> Context {
 
 fn property_params(ctx: &Context) -> CreatePropertyParams {
     CreatePropertyParams {
-        issuer: ctx.issuer,
+        issuer: ctx.issuer_id,
         total_supply: U256::from(1_000_000),
         metadata_uri: String::from("ipfs://property-1"),
     }
@@ -83,7 +100,7 @@ fn test_create_property_should_create_draft_properly() {
     let property = ctx.registry.get_property(property_id);
 
     assert_eq!(property_id, expected_property_id, "Invalid Property ID");
-    assert_eq!(property.issuer, ctx.issuer, "Invalid issuer");
+    assert_eq!(property.issuer, ctx.issuer_id, "Invalid issuer");
     assert_eq!(property.total_supply, U256::from(1_000_000));
     assert_eq!(
         property.metadata_uri,
@@ -98,7 +115,7 @@ fn test_create_property_should_create_draft_properly() {
         &ctx.registry,
         PropertyCreated {
             property_id,
-            issuer: ctx.issuer,
+            issuer: ctx.issuer_id,
             total_supply: U256::from(1_000_000),
         }
     ));
@@ -112,7 +129,7 @@ fn test_create_property_should_revert_if_caller_is_not_property_manager() {
     ctx.env.set_caller(ctx.env.get_account(10));
     assert_eq!(
         ctx.registry.try_create_property(params).unwrap_err(),
-        Error::NotAuthorized.into(),
+        Error::CallerNotPropertyManager.into(),
         "Should revert if caller is not property manager",
     );
 }
@@ -122,7 +139,7 @@ fn test_create_property_should_revert_if_total_supply_is_zero() {
     let mut ctx = setup(odra_test::env());
 
     let params = CreatePropertyParams {
-        issuer: ctx.issuer,
+        issuer: ctx.issuer_id,
         total_supply: U256::zero(),
         metadata_uri: String::from("ipfs://property-1"),
     };
@@ -140,7 +157,7 @@ fn test_create_property_should_revert_if_metadata_uri_is_empty() {
     let mut ctx = setup(odra_test::env());
 
     let params = CreatePropertyParams {
-        issuer: ctx.issuer,
+        issuer: ctx.issuer_id,
         total_supply: U256::from(1_000_000),
         metadata_uri: String::new(),
     };
@@ -193,28 +210,6 @@ fn test_set_property_token_should_set_token_for_draft_property() {
 }
 
 #[test]
-fn test_set_revenue_distributor_should_set_distributor_for_draft_property() {
-    let mut ctx = setup(odra_test::env());
-    let property_id = create_property(&mut ctx);
-
-    ctx.registry
-        .set_revenue_distributor(property_id, ctx.revenue_distributor);
-
-    assert_eq!(
-        ctx.registry.get_revenue_distributor(property_id),
-        ctx.revenue_distributor,
-        "Invalid revenue distributor",
-    );
-    assert!(ctx.env.emitted_event(
-        &ctx.registry,
-        RevenueDistributorSet {
-            property_id,
-            revenue_distributor: ctx.revenue_distributor,
-        }
-    ));
-}
-
-#[test]
 fn test_set_metadata_uri_should_update_metadata_uri_for_draft_property() {
     let mut ctx = setup(odra_test::env());
     let property_id = create_property(&mut ctx);
@@ -243,7 +238,7 @@ fn test_set_property_token_should_revert_if_caller_is_not_manager() {
         ctx.registry
             .try_set_property_token(property_id, ctx.token)
             .unwrap_err(),
-        Error::NotAuthorized.into(),
+        Error::CallerNotPropertyManager.into(),
         "Should revert if caller is not property manager",
     );
 }
@@ -318,21 +313,6 @@ fn test_set_property_token_should_revert_if_token_is_registered_to_another_prope
 }
 
 #[test]
-fn test_set_revenue_distributor_should_revert_if_caller_is_not_manager() {
-    let mut ctx = setup(odra_test::env());
-    let property_id = create_property(&mut ctx);
-
-    ctx.env.set_caller(ctx.env.get_account(9));
-    assert_eq!(
-        ctx.registry
-            .try_set_revenue_distributor(property_id, ctx.revenue_distributor)
-            .unwrap_err(),
-        Error::NotAuthorized.into(),
-        "Should revert if caller is not property manager",
-    );
-}
-
-#[test]
 fn test_set_metadata_uri_should_revert_if_caller_is_not_manager() {
     let mut ctx = setup(odra_test::env());
     let property_id = create_property(&mut ctx);
@@ -342,7 +322,7 @@ fn test_set_metadata_uri_should_revert_if_caller_is_not_manager() {
         ctx.registry
             .try_set_metadata_uri(property_id, String::from("ipfs://new"))
             .unwrap_err(),
-        Error::NotAuthorized.into(),
+        Error::CallerNotPropertyManager.into(),
         "Should revert if caller is not property manager",
     );
 }
@@ -361,7 +341,7 @@ fn test_set_property_status_should_revert_if_caller_is_not_manager() {
         ctx.registry
             .try_set_property_status(property_id, PropertyStatus::Active)
             .unwrap_err(),
-        Error::NotAuthorized.into(),
+        Error::CallerNotPropertyManager.into(),
         "Should revert if caller is not property manager",
     );
 }
@@ -381,30 +361,11 @@ fn test_set_property_status_should_require_token_before_active_status() {
 }
 
 #[test]
-fn test_set_property_status_should_require_distributor_before_active_status() {
-    let mut ctx = setup(odra_test::env());
-    let property_id = create_property(&mut ctx);
-
-    // Set the token as its the first error thrown
-    ctx.registry.set_property_token(property_id, ctx.token);
-
-    assert_eq!(
-        ctx.registry
-            .try_set_property_status(property_id, PropertyStatus::Active)
-            .unwrap_err(),
-        Error::MissingRevenueDistributor.into(),
-        "Should require revenue distributor before activation",
-    );
-}
-
-#[test]
 fn test_set_property_status_should_activate_property_after_required_addresses_are_set() {
     let mut ctx = setup(odra_test::env());
     let property_id = create_property(&mut ctx);
 
     ctx.registry.set_property_token(property_id, ctx.token);
-    ctx.registry
-        .set_revenue_distributor(property_id, ctx.revenue_distributor);
     ctx.registry
         .set_property_status(property_id, PropertyStatus::Active);
 
@@ -429,8 +390,6 @@ fn test_draft_only_fields_should_revert_after_property_is_active() {
 
     ctx.registry.set_property_token(property_id, ctx.token);
     ctx.registry
-        .set_revenue_distributor(property_id, ctx.revenue_distributor);
-    ctx.registry
         .set_property_status(property_id, PropertyStatus::Active);
 
     assert_eq!(
@@ -439,14 +398,6 @@ fn test_draft_only_fields_should_revert_after_property_is_active() {
             .unwrap_err(),
         Error::PropertyNotDraft.into(),
         "Should not allow token changes after activation",
-    );
-
-    assert_eq!(
-        ctx.registry
-            .try_set_revenue_distributor(property_id, ctx.env.get_account(6))
-            .unwrap_err(),
-        Error::PropertyNotDraft.into(),
-        "Should not allow revenue distributor changes after activation",
     );
 
     assert_eq!(
@@ -465,8 +416,6 @@ fn test_set_property_status_should_revert_if_transitioning_from_active_to_draft(
 
     ctx.registry.set_property_token(property_id, ctx.token);
     ctx.registry
-        .set_revenue_distributor(property_id, ctx.revenue_distributor);
-    ctx.registry
         .set_property_status(property_id, PropertyStatus::Active);
 
     assert_eq!(
@@ -484,8 +433,6 @@ fn test_set_property_status_should_revert_if_transitioning_from_terminal_states(
     let property_id = create_property(&mut ctx);
 
     ctx.registry.set_property_token(property_id, ctx.token);
-    ctx.registry
-        .set_revenue_distributor(property_id, ctx.revenue_distributor);
 
     // Test Sold is terminal
     ctx.registry
@@ -503,8 +450,6 @@ fn test_set_property_status_should_revert_if_transitioning_from_terminal_states(
     let token_2 = ctx.env.get_account(10);
     ctx.registry.set_property_token(property_id_2, token_2);
     ctx.registry
-        .set_revenue_distributor(property_id_2, ctx.revenue_distributor);
-    ctx.registry
         .set_property_status(property_id_2, PropertyStatus::Closed);
     assert_eq!(
         ctx.registry
@@ -521,8 +466,6 @@ fn test_set_property_status_liquidating_transitions() {
     let property_id = create_property(&mut ctx);
 
     ctx.registry.set_property_token(property_id, ctx.token);
-    ctx.registry
-        .set_revenue_distributor(property_id, ctx.revenue_distributor);
 
     ctx.registry
         .set_property_status(property_id, PropertyStatus::Liquidating);
