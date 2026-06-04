@@ -6,14 +6,14 @@ use crate::user_registry::types::UserStatus;
 use crate::user_registry::{
     errors::Error,
     events::{ActiveWalletReplaced, UserCreated, UserRoleFlagsSet, UserStatusSet},
-    types::{UserRecord, WalletStatus},
+    types::UserRecord,
 };
 
 // =============================================================================
 // Roles
 // =============================================================================
 
-/// Role allowed to create users and replac active wallets after off-chain identity checks.
+/// Role allowed to create users and replace active wallets after off-chain identity checks.
 pub const ROLE_IDENTITY_MANAGER: &str = "IDENTITY_MANAGER";
 /// Role allowed to update additive user capability flags, i.e. tenant and/or landlord.
 pub const ROLE_USER_ROLE_MANAGER: &str = "USER_ROLE_MANAGER";
@@ -39,15 +39,6 @@ pub mod types {
         Active,
         /// User remains registered but should not be treated as active.
         Suspended,
-    }
-
-    #[odra::odra_type]
-    #[derive(Copy)]
-    pub enum WalletStatus {
-        /// Wallet is the user's current wallet.
-        Active,
-        /// Wallet was previously linked but is no longer authorized.
-        Revoked,
     }
 
     #[odra::odra_type]
@@ -112,6 +103,7 @@ pub mod errors {
         IdentityAlreadyRegistered = 1202,
         InvalidUserId = 1203,
         WalletAlreadyLinked = 1204,
+        WalletAlreadyActive = 1205,
     }
 }
 
@@ -130,14 +122,12 @@ pub struct UserRegistry {
     access_control: SubModule<AccessControl>,
     /// User records keyed by stable user ID.
     users: Mapping<U256, UserRecord>,
+    /// All wallets linked to each user keyed by user ID.
+    user_wallets: Mapping<U256, Vec<Address>>,
+    /// Permanent lookup from any linked wallet to its user ID.
+    wallet_to_user_id: Mapping<Address, Option<U256>>,
     /// Reverse lookup from identity hash to user ID.
     identity_to_user_id: Mapping<[u8; 32], Option<U256>>,
-    /// Reverse lookup from currently active wallet to user ID.
-    wallet_to_user_id: Mapping<Address, Option<U256>>,
-    /// Historical wallet status keyed by wallet address.
-    wallet_statuses: Mapping<Address, WalletStatus>,
-    /// Ordered wallet history keyed by user ID.
-    wallet_history: Mapping<U256, Vec<Address>>,
     /// Number of users created.
     users_count: Var<U256>,
 }
@@ -157,7 +147,7 @@ impl UserRegistry {
     // View Functions
     // =========================================================================
 
-    /// Returns the usr record for `user_id`
+    /// Returns the user record for `user_id`
     pub fn get_user(&self, user_id: U256) -> UserRecord {
         self.users
             .get(&user_id)
@@ -174,33 +164,36 @@ impl UserRegistry {
         self.identity_to_user_id.get(&identity_hash).unwrap_or(None)
     }
 
+    /// Returns the user ID for `wallet`, if the wallet has ever been linked.
     pub fn get_user_id_by_wallet(&self, wallet: Address) -> Option<U256> {
         self.wallet_to_user_id.get(&wallet).unwrap_or(None)
     }
 
-    /// Returns the user ID for `wallet`, if the wallet is currently active.
+    /// Returns every wallet linked to `user_id`.
+    pub fn get_user_wallets(&self, user_id: U256) -> Vec<Address> {
+        // Validate the user exists
+        self.get_user(user_id);
+
+        self.user_wallets.get_or_default(&user_id)
+    }
+
+    /// Returns the user's current active wallet.
     pub fn get_active_wallet(&self, user_id: U256) -> Address {
         self.get_user(user_id).active_wallet
     }
 
-    /// Returns the recorded wallet status, if this wallet has ever been linked.
-    pub fn get_wallet_status(&self, wallet: Address) -> Option<WalletStatus> {
-        self.wallet_statuses.get(&wallet)
-    }
-
-    /// Returns the wallet history for `user_id`.
-    pub fn get_wallet_history(&self, user_id: U256) -> Vec<Address> {
-        self.get_user(user_id);
-        self.wallet_history.get_or_default(&user_id)
+    /// Returns true if the wallet is linked to user.
+    pub fn is_linked_wallet(&self, user_id: U256, wallet: Address) -> bool {
+        self.get_user_id_by_wallet(wallet) == Some(user_id)
     }
 
     /// Returns true when `wallet` is the user's current active wallet.
     pub fn is_active_wallet(&self, user_id: U256, wallet: Address) -> bool {
-        self.get_active_wallet(user_id) == wallet
+        self.get_active_wallet(user_id) == wallet && self.is_linked_wallet(user_id, wallet)
     }
 
     /// Returns true when the user exists and is active.
-    pub fn is_active_user(self, user_id: U256) -> bool {
+    pub fn is_active_user(&self, user_id: U256) -> bool {
         matches!(self.get_user(user_id).status, UserStatus::Active)
     }
 
@@ -246,7 +239,7 @@ impl UserRegistry {
 
     /// Creates a user record linked to one active wallet.
     /// Restricted to `IDENTITY_MANAGER`.
-    /// @dev `identity_has` must be an opaque backend-generated identifier.
+    /// @dev `identity_hash` must be an opaque backend-generated identifier.
     pub fn create_user(
         &mut self,
         identity_hash: [u8; 32],
@@ -256,7 +249,7 @@ impl UserRegistry {
         self.assert_role(ROLE_IDENTITY_MANAGER);
         self.assert_valid_identity_hash(identity_hash);
         self.assert_identity_available(identity_hash);
-        self.assert_wallet_available(initial_wallet);
+        self.assert_wallet_never_linked(initial_wallet);
 
         let user_id = self.get_users_count();
 
@@ -266,16 +259,12 @@ impl UserRegistry {
                 identity_hash,
                 active_wallet: initial_wallet,
                 role_flags,
-                status: types::UserStatus::Active,
+                status: UserStatus::Active,
             },
         );
 
         self.identity_to_user_id.set(&identity_hash, Some(user_id));
-        self.wallet_to_user_id.set(&initial_wallet, Some(user_id));
-
-        self.wallet_statuses
-            .set(&initial_wallet, WalletStatus::Active);
-        self.wallet_history.set(&user_id, vec![initial_wallet]);
+        self.link_wallet_to_user(user_id, initial_wallet);
 
         self.users_count.set(user_id + 1);
 
@@ -288,26 +277,24 @@ impl UserRegistry {
         user_id
     }
 
-    /// Replaces the user's active wallet and marks the old wallet as revoked.
+    /// Replaces the user's active wallet.
+    /// @dev `new_wallet` may be new or already linked to the same user.
     /// Restricted to `IDENTITY_MANAGER`.
     pub fn replace_active_wallet(&mut self, user_id: U256, new_wallet: Address) {
         self.assert_role(ROLE_IDENTITY_MANAGER);
-        self.assert_wallet_available(new_wallet);
 
         let mut record = self.get_user(user_id);
         let old_wallet = record.active_wallet;
 
+        self.assert_wallet_not_alread_active(old_wallet, new_wallet);
+        self.assert_wallet_not_linked_to_other_user(user_id, new_wallet);
+
+        if self.get_user_id_by_wallet(new_wallet).is_none() {
+            self.link_wallet_to_user(user_id, new_wallet);
+        }
+
         record.active_wallet = new_wallet;
         self.users.set(&user_id, record);
-
-        self.wallet_to_user_id.set(&old_wallet, None);
-        self.wallet_statuses.set(&old_wallet, WalletStatus::Revoked);
-        self.wallet_to_user_id.set(&new_wallet, Some(user_id));
-        self.wallet_statuses.set(&new_wallet, WalletStatus::Active);
-
-        let mut history = self.wallet_history.get_or_default(&user_id);
-        history.push(new_wallet);
-        self.wallet_history.set(&user_id, history);
 
         self.env().emit_event(ActiveWalletReplaced {
             user_id,
@@ -330,7 +317,7 @@ impl UserRegistry {
 
     /// Sets additive capability flags for a user.
     /// Restricted to `USER_ROLE_MANAGER`.
-    pub fn set_role_flags(&mut self, user_id: U256, role_flags: u32) {
+    pub fn set_user_role_flags(&mut self, user_id: U256, role_flags: u32) {
         self.assert_role(ROLE_USER_ROLE_MANAGER);
 
         let mut record = self.get_user(user_id);
@@ -406,9 +393,36 @@ impl UserRegistry {
     }
 
     #[inline]
-    fn assert_wallet_available(&self, wallet: Address) {
-        if self.wallet_statuses.get(&wallet).is_some() {
+    fn assert_wallet_never_linked(&self, wallet: Address) {
+        if self.get_user_id_by_wallet(wallet).is_some() {
             self.env().revert(Error::WalletAlreadyLinked);
+        }
+    }
+
+    #[inline]
+    fn assert_wallet_not_alread_active(&self, active_wallet: Address, wallet: Address) {
+        if active_wallet == wallet {
+            self.env().revert(Error::WalletAlreadyActive);
+        }
+    }
+
+    #[inline]
+    fn assert_wallet_not_linked_to_other_user(&self, user_id: U256, wallet: Address) {
+        if let Some(linked_user_id) = self.get_user_id_by_wallet(wallet) {
+            if linked_user_id != user_id {
+                self.env().revert(Error::WalletAlreadyLinked);
+            }
+        }
+    }
+
+    #[inline]
+    fn link_wallet_to_user(&mut self, user_id: U256, wallet: Address) {
+        self.wallet_to_user_id.set(&wallet, Some(user_id));
+
+        let mut wallets = self.user_wallets.get_or_default(&user_id);
+        if !wallets.contains(&wallet) {
+            wallets.push(wallet);
+            self.user_wallets.set(&user_id, wallets);
         }
     }
 }
