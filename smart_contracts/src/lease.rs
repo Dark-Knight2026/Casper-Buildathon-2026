@@ -14,7 +14,7 @@ use crate::{
     },
     nft::NFTContractRef,
     property_registry::PropertyRegistryContractRef,
-    roles::RolesContractRef,
+    user_registry::UserRegistryContractRef,
 };
 
 // =============================================================================
@@ -28,10 +28,10 @@ pub mod types {
 
     #[odra::odra_type]
     pub struct LeaseAgreement {
-        /// Tenant wallet responsible for paying rent and lease invoices.
-        pub tenant: Address,
-        /// Landlord wallet that created and owns the lease relationship.
-        pub landlord: Address,
+        /// Tenant user ID responsible for paying rent and lease invoices.
+        pub tenant: U256,
+        /// Landlord user ID that created and owns the lease relationship.
+        pub landlord: U256,
         /// Rent split rules used when lease invoice payments are distributed.
         pub rent_distribution_terms: RentDistributionTerms,
         /// Optional lease-to-own terms that make the tenant eligible for property equity.
@@ -54,7 +54,7 @@ pub mod types {
 
     #[odra::odra_type]
     pub struct CreateLeaseAgreementParams {
-        pub tenant: Address,
+        pub tenant: U256,
         pub rent_distribution_terms: RentDistributionTerms,
         pub equity_option: Option<LeaseEquityOption>,
         pub monthly_rent: CurrencyAmount,
@@ -67,9 +67,9 @@ pub mod types {
 
     #[odra::odra_type]
     pub struct RentDistributionTerms {
-        /// Optional property manager that receives a percentage of the base rent
+        /// Optional property manager user ID that receives a percentage of the base rent
         /// @dev This applies to the rent, not security deposits or equity top-ups
-        pub property_manager: Option<Address>,
+        pub property_manager: Option<U256>,
         /// Property manager rent share in basis points
         /// @dev 10_000 = 100%. Must be zero when `property_manager` is `None`.
         pub property_manager_bps: u32,
@@ -111,13 +111,13 @@ pub mod events {
     #[odra::event]
     pub struct EquityEligibilityGranted {
         pub property_id: U256,
-        pub account: Address,
+        pub account: U256,
     }
 
     #[odra::event]
     pub struct EquityEligibilityRevoked {
         pub property_id: U256,
-        pub account: Address,
+        pub account: U256,
     }
 }
 
@@ -145,6 +145,7 @@ pub mod errors {
         InvalidPropertyManager = 412,
         LeaseAlreadyFinalized = 413,
         TenantAlreadyEquityEligible = 414,
+        InvalidTenant = 415,
     }
 }
 
@@ -162,18 +163,18 @@ pub mod errors {
 pub struct Lease {
     /// Ownership control for contract configuration.
     ownable: SubModule<Ownable>,
-    /// Roles contract used to verify landlord permissions.
-    roles: External<RolesContractRef>,
     /// Escrow contract used to create and inspect lease invoices.
     escrow: External<EscrowContractRef>,
     /// NFT contract used to mint frozen lease NFTs to tenants.
     nft: External<NFTContractRef>,
     /// Property registry used to validate lease equity options.
     property_registry: External<PropertyRegistryContractRef>,
+    /// User registry used to authorize user IDs and resolve active wallets.
+    user_registry: External<UserRegistryContractRef>,
     /// Lease agreements keyed by lease agreement ID.
     leases: Mapping<U256, LeaseAgreement>,
-    /// Equity Eligibility keyed by property ID and tenant wallet.
-    equity_eligible: Mapping<(U256, Address), bool>,
+    /// Equity Eligibility keyed by property ID and tenant user ID.
+    equity_eligible: Mapping<(U256, U256), bool>,
     /// Number of lease agreements created.
     leases_count: Var<U256>,
 }
@@ -187,29 +188,21 @@ impl Lease {
     pub fn init(
         &mut self,
         owner: Address,
-        roles: Address,
         escrow: Address,
         nft: Address,
         property_registry: Address,
+        user_registry: Address,
     ) {
         self.ownable.init(owner);
-        self.roles.set(roles);
         self.escrow.set(escrow);
         self.nft.set(nft);
         self.property_registry.set(property_registry);
+        self.user_registry.set(user_registry);
     }
 
     // =========================================================================
     // Owner-only configuration
     // =========================================================================
-
-    /// Sets the Roles contract address by the owner
-    /// @dev No zero-address guard is applied per the project's `odra.rulebook.md`
-    ///      (Security: Address Handling), as Odra addresses have no default/zero value.
-    pub fn set_roles(&mut self, roles: Address) {
-        self.assert_owner();
-        self.roles.set(roles);
-    }
 
     /// Sets the Escrow contract address by the owner
     /// @dev No zero-address guard is applied per the project's `odra.rulebook.md`
@@ -235,14 +228,17 @@ impl Lease {
         self.property_registry.set(property_registry);
     }
 
+    /// Sets the UserRegistry contract address by the owner
+    /// @dev No zero-address guard is applied per the project's `odra.rulebook.md`
+    ///      (Security: Address Handling), as Odra addresses have no default/zero value.
+    pub fn set_user_registry(&mut self, user_registry: Address) {
+        self.assert_owner();
+        self.user_registry.set(user_registry);
+    }
+
     // =========================================================================
     // View Functions
     // =========================================================================
-
-    /// Returns the Roles contract address
-    pub fn get_roles_contract_address(&self) -> Address {
-        *self.roles.address()
-    }
 
     /// Returns the Escrow contract address
     pub fn get_escrow_contract_address(&self) -> Address {
@@ -257,6 +253,11 @@ impl Lease {
     /// Returns the PropertyRegistry contract address
     pub fn get_property_registry_contract_address(&self) -> Address {
         *self.property_registry.address()
+    }
+
+    /// Returns the UserRegistry contract address
+    pub fn get_user_registry_contract_address(&self) -> Address {
+        *self.user_registry.address()
     }
 
     /// Returns lease agreement by its ID
@@ -298,7 +299,7 @@ impl Lease {
     /// @dev Eligibility is not automatically time-bounded. It persists until the
     /// landlord calls `finalize_lease_agreement` for the associated lease.
     /// Finalization is a protocol-level obligation after lease expiry.
-    pub fn is_equity_eligible(&self, property_id: U256, account: Address) -> bool {
+    pub fn is_equity_eligible(&self, property_id: U256, account: U256) -> bool {
         self.equity_eligible.get_or_default(&(property_id, account))
     }
 
@@ -309,13 +310,13 @@ impl Lease {
     /// Allows to create a new lease agreement and all invoices for this agreement by a landlord
     #[odra(non_reentrant)]
     pub fn create_lease_agreement(&mut self, params: CreateLeaseAgreementParams) -> U256 {
-        self.assert_landlord();
-
-        let landlord = self.env().caller();
+        let landlord = self.get_caller_landlord();
 
         if params.tenant == landlord {
             self.env().revert(Error::EqualTenantAndLandlord);
         }
+
+        self.assert_valid_tenant(params.tenant);
 
         self.validate_rent_distribution_terms(
             &params.rent_distribution_terms,
@@ -342,6 +343,7 @@ impl Lease {
         let block_timestamp = self.env().get_block_time();
         let mut invoices_ids = vec![self.escrow.create_security_deposit_invoice(
             params.tenant,
+            landlord,
             params.security_deposit,
             block_timestamp + params.invoice_validity_duration,
         )];
@@ -369,7 +371,8 @@ impl Lease {
             String::from("lease_agreement_id"),
             lease_agreement_id.to_string(),
         )];
-        let token_id = self.nft.mint(params.tenant, metadata);
+        let tenant_wallet = self.user_registry.get_active_wallet(params.tenant);
+        let token_id = self.nft.mint(tenant_wallet, metadata);
         self.nft.set_frozen_tokens(&token_id, true);
 
         // Mark the tenant as eligible for property equity
@@ -448,9 +451,7 @@ impl Lease {
             self.env().revert(Error::LeaseAlreadyFinalized);
         }
 
-        if lease_agreement.landlord != self.env().caller() {
-            self.env().revert(Error::InvalidLandlord);
-        }
+        self.assert_caller_is_active_user(lease_agreement.landlord, Error::InvalidLandlord);
 
         if self.env().get_block_time() < lease_agreement.end {
             self.env().revert(Error::LeaseAgreementHasNotFinishedYet);
@@ -501,9 +502,7 @@ impl Lease {
             self.env().revert(Error::LeaseAlreadyFinalized);
         }
 
-        if lease_agreement.landlord != self.env().caller() {
-            self.env().revert(Error::InvalidLandlord);
-        }
+        self.assert_caller_is_active_user(lease_agreement.landlord, Error::InvalidLandlord);
 
         if self.env().get_block_time() < lease_agreement.end {
             self.env().revert(Error::LeaseAgreementHasNotFinishedYet);
@@ -572,11 +571,39 @@ impl Lease {
     }
 
     #[inline]
-    fn assert_landlord(&self) {
-        let landlord_role = self.roles.get_landlord_role();
+    fn get_caller_landlord(&self) -> U256 {
+        let caller = self.env().caller();
+        let user_id = self
+            .user_registry
+            .get_user_id_by_wallet(caller)
+            .unwrap_or_revert_with(&self.env(), Error::CallerNotLandlord);
 
-        if !self.roles.has_role(&landlord_role, &self.env().caller()) {
+        if !self.user_registry.is_active_user(user_id)
+            || !self.user_registry.is_active_wallet(user_id, caller)
+            || !self.user_registry.has_landlord_role(user_id)
+        {
             self.env().revert(Error::CallerNotLandlord);
+        }
+
+        user_id
+    }
+
+    #[inline]
+    fn assert_caller_is_active_user(&self, user_id: U256, error: Error) {
+        let caller = self.env().caller();
+
+        if !self.user_registry.is_active_user(user_id)
+            || !self.user_registry.is_active_wallet(user_id, caller)
+        {
+            self.env().revert(error);
+        }
+    }
+
+    #[inline]
+    fn assert_valid_tenant(&self, tenant: U256) {
+        if !self.user_registry.is_active_user(tenant) || !self.user_registry.has_tenant_role(tenant)
+        {
+            self.env().revert(Error::InvalidTenant);
         }
     }
 
@@ -590,8 +617,8 @@ impl Lease {
     fn validate_rent_distribution_terms(
         &self,
         terms: &RentDistributionTerms,
-        tenant: Address,
-        landlord: Address,
+        tenant: U256,
+        landlord: U256,
     ) {
         // TODO: Can't use u16 for property_maanger_bps. Find out why and determine if we really need to type cast the constant to u32
         if terms.property_manager_bps > ONE_HUNDRED_PERCENT_BPS as u32 {
@@ -600,7 +627,13 @@ impl Lease {
 
         match terms.property_manager {
             Some(property_manager) => {
-                if property_manager == tenant || property_manager == landlord {
+                if property_manager == tenant
+                    || property_manager == landlord
+                    || !self.user_registry.is_active_user(property_manager)
+                    || !self
+                        .user_registry
+                        .has_property_manager_role(property_manager)
+                {
                     self.env().revert(Error::InvalidPropertyManager)
                 }
             }
