@@ -1,7 +1,7 @@
 use odra::{
     casper_types::{U256, U512},
     host::{Deployer, HostEnv, HostRef},
-    prelude::{Address, Addressable},
+    prelude::Addressable,
     uints::ToU512,
 };
 use odra_modules::access::errors::Error as AccessError;
@@ -13,6 +13,9 @@ use leasefi_contracts::escrow::{
     events::{InvoiceCreated, InvoicePaid, InvoicePaymentApplied, MinDeadlineSet},
     types::{CreateLeaseInvoiceParams, Invoice, InvoiceKind},
     Escrow, EscrowHostRef, EscrowInitArgs,
+};
+use leasefi_contracts::user_registry::{
+    UserRegistry, UserRegistryHostRef, UserRegistryInitArgs, ROLE_FLAG_LANDLORD, ROLE_FLAG_TENANT,
 };
 
 use crate::escrow::events::{SecurityDepositHeld, SecurityDepositReleased};
@@ -26,22 +29,32 @@ const MIN_DEADLINE: u64 = 5 * 60; // 5 minutes
 struct TestData {
     env: HostEnv,
     escrow: EscrowHostRef,
+    user_registry: UserRegistryHostRef,
     mock_cep18: BigCoinHostRef,
+    tenant_id: U256,
+    landlord_id: U256,
 }
 
 struct InvoiceParams {
-    tenant: Address,
-    landlord: Address,
+    tenant: U256,
+    landlord: U256,
     amount_due: CurrencyAmount,
     deadline: u64,
 }
 
 fn setup(env: HostEnv) -> TestData {
+    let owner = env.get_account(0);
+    let tenant = env.get_account(1);
+    let landlord = env.get_account(2);
+
+    let mut user_registry = UserRegistry::deploy(&env, UserRegistryInitArgs { owner });
+
     let mut escrow = Escrow::deploy(
         &env,
         EscrowInitArgs {
-            owner: env.get_account(0),
+            owner,
             min_deadline: MIN_DEADLINE,
+            user_registry: user_registry.address(),
         },
     );
     let mock_cep18 = BigCoin::deploy(
@@ -54,6 +67,10 @@ fn setup(env: HostEnv) -> TestData {
         },
     );
 
+    user_registry.grant_role(&user_registry.identity_manager_role(), &owner);
+    let tenant_id = user_registry.create_user([1u8; 32], tenant, ROLE_FLAG_TENANT);
+    let landlord_id = user_registry.create_user([2u8; 32], landlord, ROLE_FLAG_LANDLORD);
+
     escrow.set_lease(env.get_account(15));
     escrow.set_treasury(env.get_account(14));
     escrow.set_security_deposit_token(mock_cep18.address());
@@ -61,7 +78,10 @@ fn setup(env: HostEnv) -> TestData {
     TestData {
         env,
         escrow,
+        user_registry,
         mock_cep18,
+        tenant_id,
+        landlord_id,
     }
 }
 
@@ -71,8 +91,8 @@ fn setup(env: HostEnv) -> TestData {
 
 fn generate_invoice_params(test_data: &TestData) -> InvoiceParams {
     InvoiceParams {
-        tenant: test_data.env.get_account(0),
-        landlord: test_data.env.get_account(1),
+        tenant: test_data.tenant_id,
+        landlord: test_data.landlord_id,
         amount_due: CurrencyAmount::new(None, U256::from_dec_str("1000000000000000000").unwrap()),
         deadline: test_data.env.block_time() + test_data.escrow.get_min_deadline(),
     }
@@ -142,6 +162,7 @@ fn create_security_deposit_invoice(test_data: &mut TestData, params: &mut Invoic
 
     let invoice_id = test_data.escrow.create_security_deposit_invoice(
         params.tenant,
+        params.landlord,
         amount_due,
         params.deadline,
     );
@@ -814,6 +835,7 @@ fn test_create_security_deposit_invoice_should_create_invoice_properly() {
 
     let invoice_id = test_data.escrow.create_security_deposit_invoice(
         params.tenant,
+        params.landlord,
         amount_due,
         params.deadline,
     );
