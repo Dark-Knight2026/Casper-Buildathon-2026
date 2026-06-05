@@ -364,8 +364,8 @@ fn test_create_lease_invoice_should_fail_if_not_lease_contract_is_calling() {
         test_data
             .escrow
             .try_create_lease_invoice(CreateLeaseInvoiceParams {
-                tenant: test_data.env.get_account(0),
-                landlord: test_data.env.get_account(0),
+                tenant: test_data.tenant_id,
+                landlord: test_data.landlord_id,
                 rent: CurrencyAmount::new(None, U256::zero()),
                 property_manager: None,
                 property_manager_bps: 0,
@@ -389,8 +389,8 @@ fn test_create_lease_invoice_should_fail_if_buyer_is_equal_to_seller() {
         test_data
             .escrow
             .try_create_lease_invoice(CreateLeaseInvoiceParams {
-                tenant: test_data.env.get_account(0),
-                landlord: test_data.env.get_account(0),
+              tenant: test_data.tenant_id,
+              landlord: test_data.landlord_id,
                 rent: CurrencyAmount::new(None, U256::one()),
                 property_manager: None,
                 property_manager_bps: 0,
@@ -414,8 +414,8 @@ fn test_create_lease_invoice_should_fail_if_amount_is_zero() {
         test_data
             .escrow
             .try_create_lease_invoice(CreateLeaseInvoiceParams {
-                tenant: test_data.env.get_account(0),
-                landlord: test_data.env.get_account(1),
+                tenant: U256::one(),
+                landlord: U256::from(2),
                 rent: CurrencyAmount::new(None, U256::zero()),
                 property_manager: None,
                 property_manager_bps: 0,
@@ -439,8 +439,8 @@ fn test_create_lease_invoice_should_fail_if_deadline_is_sooner_than_min_deadline
         test_data
             .escrow
             .try_create_lease_invoice(CreateLeaseInvoiceParams {
-                tenant: test_data.env.get_account(0),
-                landlord: test_data.env.get_account(1),
+                tenant: U256::one(),
+                landlord: U256::from(2),
                 rent: CurrencyAmount::new(None, U256::one()),
                 property_manager: None,
                 property_manager_bps: 0,
@@ -485,7 +485,9 @@ fn test_pay_invoice_should_fail_if_not_buyer_is_trying_to_pay_invoice() {
     let params = generate_invoice_params(&test_data);
     let invoice_id = create_lease_invoice(&mut test_data, &params);
 
-    test_data.env.set_caller(params.landlord);
+    let landlord = test_data.user_registry.get_user(params.landlord);
+
+    test_data.env.set_caller(landlord.active_wallet);
 
     assert_eq!(
         test_data
@@ -594,7 +596,10 @@ fn test_pay_invoice_should_pay_invoice_in_native_token_properly() {
     let mut test_data = setup(odra_test::env());
     let mut params = generate_invoice_params(&test_data);
     let invoice_id = create_lease_invoice(&mut test_data, &params);
-    let prev_recipient_token_balance = test_data.env.balance_of(&params.landlord);
+
+    let landlord = test_data.user_registry.get_user(params.landlord);
+
+    let prev_recipient_token_balance = test_data.env.balance_of(&landlord.active_wallet);
 
     let rent = *params.amount_due.amount();
 
@@ -603,7 +608,7 @@ fn test_pay_invoice_should_pay_invoice_in_native_token_properly() {
         .with_tokens(rent.to_u512())
         .pay_invoice(invoice_id, rent);
 
-    let curr_recipient_token_balance = test_data.env.balance_of(&params.landlord);
+    let curr_recipient_token_balance = test_data.env.balance_of(&landlord.active_wallet);
 
     let protocol_fee = rent * U256::from(200u32) / U256::from(10000u32);
     let distributable_rent = rent - protocol_fee;
@@ -647,7 +652,10 @@ fn test_pay_invoice_should_pay_invoice_in_cep18_token_properly() {
     *params.amount_due.currency() = Some(test_data.mock_cep18.address());
 
     let invoice_id = create_lease_invoice(&mut test_data, &params);
-    let prev_recipient_token_balance = test_data.mock_cep18.balance_of(&params.landlord);
+
+    let landlord = test_data.user_registry.get_user(params.landlord);
+
+    let prev_recipient_token_balance = test_data.mock_cep18.balance_of(&landlord.active_wallet);
 
     let rent = *params.amount_due.amount();
 
@@ -656,7 +664,7 @@ fn test_pay_invoice_should_pay_invoice_in_cep18_token_properly() {
         .approve(&test_data.escrow.address(), &rent);
     test_data.escrow.pay_invoice(invoice_id, rent);
 
-    let curr_recipient_token_balance = test_data.mock_cep18.balance_of(&params.landlord);
+    let curr_recipient_token_balance = test_data.mock_cep18.balance_of(&landlord.active_wallet);
 
     let protocol_fee = rent * U256::from(200u32) / U256::from(10000u32);
     let distributable_rent = rent - protocol_fee;
@@ -793,7 +801,12 @@ fn test_create_security_deposit_invoice_should_revert_if_not_lease_contract_is_c
     assert_eq!(
         test_data
             .escrow
-            .try_create_security_deposit_invoice(params.tenant, amount_due, params.deadline,)
+            .try_create_security_deposit_invoice(
+                params.tenant,
+                params.landlord,
+                amount_due,
+                params.deadline,
+            )
             .unwrap_err(),
         Error::CallerNotLeaseContract.into(),
         "Should revert when caller is not the Lease contract",
@@ -812,7 +825,12 @@ fn test_create_security_deposit_invoice_should_revert_if_currency_is_not_securit
     assert_eq!(
         test_data
             .escrow
-            .try_create_security_deposit_invoice(params.tenant, params.amount_due, params.deadline,)
+            .try_create_security_deposit_invoice(
+                params.tenant,
+                params.landlord,
+                params.amount_due,
+                params.deadline,
+            )
             .unwrap_err(),
         Error::InvalidSecurityDepositCurrency.into(),
         "Should require configured security deposit token"
@@ -845,7 +863,7 @@ fn test_create_security_deposit_invoice_should_create_invoice_properly() {
         Invoice {
             kind: InvoiceKind::SecurityDeposit,
             buyer: params.tenant,
-            seller: test_data.escrow.get_lease_contract_address(),
+            seller: params.landlord,
             amount_due,
             rent_amount: U256::zero(),
             rent_paid: U256::zero(),
@@ -964,8 +982,11 @@ fn test_release_security_deposit_should_split_charge_and_refund() {
 
     let invoice_id = create_security_deposit_invoice(&mut test_data, &mut params);
 
-    let previous_landlord_balance = test_data.mock_cep18.balance_of(&params.landlord);
-    let previous_tenant_balance = test_data.mock_cep18.balance_of(&params.tenant);
+    let tenant = test_data.user_registry.get_user(params.tenant);
+    let landlord = test_data.user_registry.get_user(params.landlord);
+
+    let previous_landlord_balance = test_data.mock_cep18.balance_of(&landlord.active_wallet);
+    let previous_tenant_balance = test_data.mock_cep18.balance_of(&tenant.active_wallet);
 
     test_data
         .mock_cep18
@@ -988,13 +1009,13 @@ fn test_release_security_deposit_should_split_charge_and_refund() {
     assert_eq!(deposit.tenant_refund, tenant_refund);
 
     assert_eq!(
-        test_data.mock_cep18.balance_of(&params.landlord),
+        test_data.mock_cep18.balance_of(&landlord.active_wallet),
         previous_landlord_balance + landlord_charge,
         "Invalid landlord balance",
     );
 
     assert_eq!(
-        test_data.mock_cep18.balance_of(&params.tenant),
+        test_data.mock_cep18.balance_of(&tenant.active_wallet),
         previous_tenant_balance - landlord_charge,
         "Invalid tenant balance after deposit and refund",
     );
