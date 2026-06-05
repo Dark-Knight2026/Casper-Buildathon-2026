@@ -25,12 +25,9 @@ export default function ProtectedRoute({ children, allowedRoles }: ProtectedRout
   // Check if user's role is allowed
   const userRole = profile.role;
   
-  // 'both' means the route is accessible to both landlords and tenants
-  if (allowedRoles.includes('both')) {
-    return <>{children}</>;
-  }
-
-  // Check if user's role matches any of the allowed roles
+  // There is no shared 'both' role: tenant and landlord are distinct. A feature
+  // both can use is mounted under each layout (reusing the component), not gated
+  // by widening this check — so a single role-membership test is enough.
   if (!allowedRoles.includes(userRole as RouteRole)) {
     return <Navigate to={getDashboardRoute(userRole)} replace />;
   }

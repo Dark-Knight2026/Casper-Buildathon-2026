@@ -253,71 +253,17 @@ function App() {
                 <Route path="renewals/:id/negotiate" element={<TenantRenewalNegotiation />} />
                 <Route path="messages"             element={<CommunicationCenter />} />
                 <Route path="profile"              element={<TenantProfile />} />
+                {/* Shared features reused under the tenant tree (were single
+                    ['both'] routes; tenant and landlord are now distinct). */}
+                <Route path="notifications"             element={<NotificationHistory />} />
+                <Route path="notifications/preferences" element={<NotificationPreferences />} />
+                <Route path="payments/history"          element={<PaymentHistory />} />
+                <Route path="properties/compare"        element={<PropertyComparisonPage />} />
+                <Route path="accessibility/test"        element={<AccessibilityTestPage />} />
+                <Route path="signature/:signatureId"    element={<DocumentSigning />} />
+                <Route path="leasing/pipeline"          element={<LeasePipeline />} />
               </Route>
               
-              {/*
-                SHARED ROUTES - Both tenant and landlord can access
-                Requires authentication but allows multiple roles
-              */}
-              {/* TODO: add /landlord/messages route inside landlord layout */}
-              
-              {/* Notification routes - Accessible by both roles */}
-              <Route 
-                path="/notifications" 
-                element={
-                  <ProtectedRoute allowedRoles={['both']}>
-                    <NotificationHistory />
-                  </ProtectedRoute>
-                } 
-              />
-              <Route 
-                path="/notifications/preferences" 
-                element={
-                  <ProtectedRoute allowedRoles={['both']}>
-                    <NotificationPreferences />
-                  </ProtectedRoute>
-                } 
-              />
-              
-              {/* Payment History - Accessible by both roles */}
-              <Route 
-                path="/payments/history" 
-                element={
-                  <ProtectedRoute allowedRoles={['both']}>
-                    <PaymentHistory />
-                  </ProtectedRoute>
-                } 
-              />
-              
-              {/* Property Comparison - Accessible by both roles */}
-              <Route 
-                path="/properties/compare" 
-                element={
-                  <ProtectedRoute allowedRoles={['both']}>
-                    <PropertyComparisonPage />
-                  </ProtectedRoute>
-                } 
-              />
-              
-              {/* Accessibility Testing - Accessible by both roles */}
-              <Route 
-                path="/accessibility/test" 
-                element={
-                  <ProtectedRoute allowedRoles={['both']}>
-                    <AccessibilityTestPage />
-                  </ProtectedRoute>
-                } 
-              />
-              
-              {/* E-Signature - Accessible by both roles */}
-              <Route 
-                path="/signature/:signatureId" 
-                element={
-                  <ProtectedRoute allowedRoles={['both']}>
-                    <DocumentSigning />
-                  </ProtectedRoute>
-                } 
-              />
               
               {/* 
                 LANDLORD ROUTES - Protected
@@ -364,17 +310,17 @@ function App() {
                 {/* Shared CommunicationCenter stub (plan decision #2). */}
                 <Route path="messages"               element={<CommunicationCenter />} />
                 <Route path="profile"                element={<LandlordProfile />} />
+                {/* Shared features reused under the landlord tree (were single
+                    ['both'] routes; tenant and landlord are now distinct). */}
+                <Route path="notifications"             element={<NotificationHistory />} />
+                <Route path="notifications/preferences" element={<NotificationPreferences />} />
+                <Route path="payments/history"          element={<PaymentHistory />} />
+                <Route path="properties/compare"        element={<PropertyComparisonPage />} />
+                <Route path="accessibility/test"        element={<AccessibilityTestPage />} />
+                <Route path="signature/:signatureId"    element={<DocumentSigning />} />
+                <Route path="leasing/pipeline"          element={<LeasePipeline />} />
               </Route>
               
-              {/* Dashboard routes - Protected (accessible by both roles) */}
-              <Route 
-                path="/dashboard/leasing/pipeline" 
-                element={
-                  <ProtectedRoute allowedRoles={['both']}>
-                    <LeasePipeline />
-                  </ProtectedRoute>
-                } 
-              />
               
               {/* Report routes - Protected (accessible by landlords and admins) */}
               <Route 

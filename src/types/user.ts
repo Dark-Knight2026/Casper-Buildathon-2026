@@ -175,8 +175,10 @@ export function getSearchRoute(role: UserRole | undefined): string {
   return '/properties';
 }
 
-// Route-level role type (includes 'both' as a sentinel for landlord+tenant access)
-export type RouteRole = 'landlord' | 'tenant' | 'admin' | 'both';
+// Route-level role type. tenant and landlord are distinct roles; a feature both
+// can use is mounted under each layout (reusing the component), so there is no
+// shared 'both' sentinel.
+export type RouteRole = 'landlord' | 'tenant' | 'admin';
 
 // Role categories for grouping
 export const CORE_ROLES: UserRole[] = ['buyer', 'seller', 'agent', 'broker', 'landlord', 'tenant'];
