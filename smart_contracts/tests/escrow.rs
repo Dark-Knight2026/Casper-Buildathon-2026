@@ -57,7 +57,7 @@ fn setup(env: HostEnv) -> TestData {
             user_registry: user_registry.address(),
         },
     );
-    let mock_cep18 = BigCoin::deploy(
+    let mut mock_cep18 = BigCoin::deploy(
         &env,
         BigCoinInitArgs {
             symbol: String::from("MOCK"),
@@ -66,6 +66,14 @@ fn setup(env: HostEnv) -> TestData {
             initial_supply: U256::from_dec_str("5000000000000000000000000000000").unwrap(),
         },
     );
+
+    // Fund the tenant (and landlord) with mock CEP18 tokens. The initial supply is held by the deployer (owner).
+    // This is required for tests that pay security deposits or CEP18 rent invoices as the buyer/tenant.
+    env.set_caller(owner);
+    let fund = U256::from_dec_str("1000000000000000000000000").unwrap();
+    mock_cep18.transfer(&tenant, &fund);
+    mock_cep18.transfer(&landlord, &fund);
+    env.set_caller(owner);
 
     user_registry.grant_role(&user_registry.identity_manager_role(), &owner);
     let tenant_id = user_registry.create_user([1u8; 32], tenant, ROLE_FLAG_TENANT);
@@ -170,6 +178,11 @@ fn create_security_deposit_invoice(test_data: &mut TestData, params: &mut Invoic
     test_data.env.set_caller(test_data.env.get_account(0));
 
     invoice_id
+}
+
+fn set_caller_as_buyer(test_data: &mut TestData, user_id: U256) {
+    let wallet = test_data.user_registry.get_active_wallet(user_id);
+    test_data.env.set_caller(wallet);
 }
 
 // =============================================================================
@@ -389,12 +402,12 @@ fn test_create_lease_invoice_should_fail_if_buyer_is_equal_to_seller() {
         test_data
             .escrow
             .try_create_lease_invoice(CreateLeaseInvoiceParams {
-              tenant: test_data.tenant_id,
-              landlord: test_data.landlord_id,
+                tenant: test_data.tenant_id,
+                landlord: test_data.tenant_id, // force equal to trigger the check (before deadline etc)
                 rent: CurrencyAmount::new(None, U256::one()),
                 property_manager: None,
                 property_manager_bps: 0,
-                deadline: 0,
+                deadline: test_data.env.block_time() + test_data.escrow.get_min_deadline() + 100,
             })
             .unwrap_err(),
         Error::EqualBuyerAndSeller.into(),
@@ -508,6 +521,7 @@ fn test_pay_invoice_should_fail_if_invoice_is_already_paid() {
     let rent = *params.amount_due.amount();
     let amount = rent;
 
+    set_caller_as_buyer(&mut test_data, params.tenant);
     test_data
         .escrow
         .with_tokens(amount.to_u512())
@@ -533,6 +547,7 @@ fn test_pay_invoice_should_fail_if_invoice_is_expired() {
         .env
         .advance_block_time(test_data.escrow.get_invoice_by_id(invoice_id).deadline + 1);
 
+    set_caller_as_buyer(&mut test_data, params.tenant);
     assert_eq!(
         test_data
             .escrow
@@ -551,6 +566,7 @@ fn test_pay_invoice_should_fail_if_attached_cspr_value_is_invalid_for_invoice_in
 
     let amount = *params.amount_due.amount();
 
+    set_caller_as_buyer(&mut test_data, params.tenant);
     assert_eq!(
         test_data
             .escrow
@@ -580,6 +596,7 @@ fn test_pay_invoice_should_fail_if_attached_cspr_value_is_invalid_for_invoice_in
 
     let invoice_id = create_lease_invoice(&mut test_data, &params);
 
+    set_caller_as_buyer(&mut test_data, params.tenant);
     assert_eq!(
         test_data
             .escrow
@@ -603,6 +620,7 @@ fn test_pay_invoice_should_pay_invoice_in_native_token_properly() {
 
     let rent = *params.amount_due.amount();
 
+    set_caller_as_buyer(&mut test_data, params.tenant);
     test_data
         .escrow
         .with_tokens(rent.to_u512())
@@ -659,6 +677,7 @@ fn test_pay_invoice_should_pay_invoice_in_cep18_token_properly() {
 
     let rent = *params.amount_due.amount();
 
+    set_caller_as_buyer(&mut test_data, params.tenant);
     test_data
         .mock_cep18
         .approve(&test_data.escrow.address(), &rent);
@@ -706,6 +725,7 @@ fn test_pay_invoice_should_hold_security_deposit_in_escrow() {
     let invoice_id = create_security_deposit_invoice(&mut test_data, &mut params);
     let previous_escrow_balance = test_data.mock_cep18.balance_of(&test_data.escrow.address());
 
+    set_caller_as_buyer(&mut test_data, params.tenant);
     test_data
         .mock_cep18
         .approve(&test_data.escrow.address(), &amount);
@@ -743,6 +763,7 @@ fn test_pay_invoice_should_revert_if_security_deposit_payment_is_not_exact() {
     let amount = *params.amount_due.amount();
     let invoice_id = create_security_deposit_invoice(&mut test_data, &mut params);
 
+    set_caller_as_buyer(&mut test_data, params.tenant);
     test_data
         .mock_cep18
         .approve(&test_data.escrow.address(), &amount);
@@ -772,6 +793,7 @@ fn test_pay_invoice_should_route_protocol_fee_to_treasury() {
 
     let previous_treasury_balance = test_data.env.balance_of(&treasury);
 
+    set_caller_as_buyer(&mut test_data, params.tenant);
     test_data
         .escrow
         .with_tokens(amount.to_u512())
@@ -888,6 +910,7 @@ fn test_release_security_deposit_should_revert_if_not_lease_contract_is_calling(
     let amount = *params.amount_due.amount();
     let invoice_id = create_security_deposit_invoice(&mut test_data, &mut params);
 
+    set_caller_as_buyer(&mut test_data, params.tenant);
     test_data
         .mock_cep18
         .approve(&test_data.escrow.address(), &amount);
@@ -951,6 +974,7 @@ fn test_release_security_deposit_should_revert_if_charge_is_too_high() {
     let amount = *params.amount_due.amount();
     let invoice_id = create_security_deposit_invoice(&mut test_data, &mut params);
 
+    set_caller_as_buyer(&mut test_data, params.tenant);
     test_data
         .mock_cep18
         .approve(&test_data.escrow.address(), &amount);
@@ -988,6 +1012,7 @@ fn test_release_security_deposit_should_split_charge_and_refund() {
     let previous_landlord_balance = test_data.mock_cep18.balance_of(&landlord.active_wallet);
     let previous_tenant_balance = test_data.mock_cep18.balance_of(&tenant.active_wallet);
 
+    set_caller_as_buyer(&mut test_data, params.tenant);
     test_data
         .mock_cep18
         .approve(&test_data.escrow.address(), &amount);
@@ -1039,6 +1064,7 @@ fn test_release_security_deposit_should_revert_if_already_released() {
     let amount = *params.amount_due.amount();
     let invoice_id = create_security_deposit_invoice(&mut test_data, &mut params);
 
+    set_caller_as_buyer(&mut test_data, params.tenant);
     test_data
         .mock_cep18
         .approve(&test_data.escrow.address(), &amount);
