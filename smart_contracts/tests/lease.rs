@@ -51,7 +51,6 @@ struct TestData {
     security_deposit_token: BigCoinHostRef,
     landlord: Address,
     landlord_id: U256,
-    tenant: Address,
     tenant_id: U256,
     unwhitelisted_tenant_id: U256,
 }
@@ -73,7 +72,7 @@ fn setup(env: HostEnv) -> TestData {
         },
     );
 
-    let security_deposit_token = BigCoin::deploy(
+    let mut security_deposit_token = BigCoin::deploy(
         &env,
         BigCoinInitArgs {
             symbol: String::from("USDC"),
@@ -131,6 +130,14 @@ fn setup(env: HostEnv) -> TestData {
     let unwhitelisted_tenant_id =
         user_registry.create_user([15u8; 32], unwhitelisted_tenant_wallet, ROLE_FLAG_TENANT);
 
+    // Fund tenant (and landlord) with security_deposit_token (USDC BigCoin) so that pay_all_lease_agreement_invoices
+    // (used by finalize/prolong tests) can approve and pay the security deposit invoice.
+    // The initial supply after deploy belongs to owner (account 0).
+    env.set_caller(env.get_account(0));
+    let fund = U256::from_dec_str("10000000000000000000000").unwrap();
+    security_deposit_token.transfer(&tenant_wallet, &fund);
+    security_deposit_token.transfer(&landlord, &fund);
+
     escrow.set_lease(lease.address());
     escrow.set_treasury(env.get_account(19));
     escrow.set_security_deposit_token(security_deposit_token.address());
@@ -142,6 +149,10 @@ fn setup(env: HostEnv) -> TestData {
     nft.add_to_whitelist(&tenant_wallet);
     // Note: unwhitelisted_tenant_wallet is intentionally not whitelisted for nft mint test
 
+    // Default to landlord wallet so create_lease_agreement tests (and similar) have correct caller
+    // for get_caller_landlord() without every test having to set it. Negative tests override as needed.
+    env.set_caller(landlord);
+
     TestData {
         env,
         user_registry,
@@ -152,7 +163,6 @@ fn setup(env: HostEnv) -> TestData {
         security_deposit_token,
         landlord,
         landlord_id,
-        tenant: tenant_wallet,
         tenant_id,
         unwhitelisted_tenant_id,
     }
@@ -839,7 +849,7 @@ fn test_create_lease_agreement_should_fail_if_landlord_is_not_issuer() {
     let mut test_data = setup(odra_test::env());
     let mut params = generate_lease_agreement_creation_params(&test_data);
 
-    let other_issuer_wallet = test_data.env.get_account(15);
+    let other_issuer_wallet = test_data.env.get_account(16);
     // Property issuer is different from landlord
     test_data.env.set_caller(test_data.env.get_account(0));
     let other_issuer_id =
