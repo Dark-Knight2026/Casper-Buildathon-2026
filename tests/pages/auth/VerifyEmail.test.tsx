@@ -92,6 +92,33 @@ describe('VerifyEmail', () => {
     expect(localStorage.getItem('auth_redirect_intent')).toBeNull();
   });
 
+  it('offers a working resend button in bad_format that calls sendVerificationEmail (VE-01)', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    confirmEmailVerification.mockRejectedValue(apiError(400, 'bad_token_format'));
+    sendVerificationEmail.mockResolvedValue({ status: 'sent' });
+    renderPage('tok');
+    const resendBtn = await screen.findByRole('button', { name: /send a new verification email/i });
+    await userEvent.click(resendBtn);
+    await waitFor(() => expect(sendVerificationEmail).toHaveBeenCalledTimes(1));
+  });
+
+  it('disables the resend button and shows "Sending…" while the request is in flight (VE-01)', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    confirmEmailVerification.mockRejectedValue(apiError(400, 'bad_token_format'));
+    let resolveSend!: () => void;
+    sendVerificationEmail.mockReturnValue(new Promise<void>((res) => { resolveSend = res; }));
+    renderPage('tok');
+    const resendBtn = await screen.findByRole('button', { name: /send a new verification email/i });
+    await userEvent.click(resendBtn);
+    // While the send promise is pending the button reflects the sending state…
+    await waitFor(() => expect(screen.getByRole('button', { name: /sending…/i })).toBeDisabled());
+    // …and reverts once it resolves.
+    resolveSend();
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /send a new verification email/i })).toBeEnabled(),
+    );
+  });
+
   it('shows no_token when the link has no token', async () => {
     renderPage('');
     await waitFor(() => expect(screen.getByText(/needs a verification token/i)).toBeInTheDocument());

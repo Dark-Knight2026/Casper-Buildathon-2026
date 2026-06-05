@@ -20,6 +20,9 @@ import {
   loginWithSignature,
   refreshSession,
   logoutSession,
+  sendVerificationEmail,
+  resendVerificationEmail,
+  confirmEmailVerification,
   type ServerUserInfo,
 } from '@/services/ico/backendAuthService';
 
@@ -243,6 +246,83 @@ describe('backendAuthService', () => {
         logoutSession(),
         'logoutSession is best-effort — failures must not throw out of it'
       ).resolves.toBeUndefined();
+    });
+  });
+
+  // ── email verification (BACKENDAUTH-01) ───────────────────────────────
+
+  describe('sendVerificationEmail', () => {
+    it('POSTs the send endpoint with no body and retry disabled', async () => {
+      mockPost.mockResolvedValue({ status: 'sent' });
+      await sendVerificationEmail();
+      expect(
+        mockPost,
+        'send must hit /verify/email/send with no body and retry off (a queued send still resolves "sent")'
+      ).toHaveBeenCalledWith('/api/v1/auth/verify/email/send', undefined, { retry: false });
+    });
+
+    it('returns the send response verbatim', async () => {
+      const res = { status: 'sent' as const };
+      mockPost.mockResolvedValue(res);
+      await expect(
+        sendVerificationEmail(),
+        'send should pass the { status } body through unchanged'
+      ).resolves.toEqual(res);
+    });
+
+    it('propagates errors from backendClient', async () => {
+      mockPost.mockRejectedValue(new ApiError('rate limited', 429));
+      await expect(
+        sendVerificationEmail(),
+        'a 429 rate-limit must surface to the caller, not be swallowed'
+      ).rejects.toThrow('rate limited');
+    });
+  });
+
+  describe('resendVerificationEmail', () => {
+    it('POSTs the distinct resend endpoint with no body and retry disabled', async () => {
+      mockPost.mockResolvedValue({ status: 'sent' });
+      await resendVerificationEmail();
+      expect(
+        mockPost,
+        'resend must hit the separate /verify/email/resend endpoint (distinct metrics), not /send'
+      ).toHaveBeenCalledWith('/api/v1/auth/verify/email/resend', undefined, { retry: false });
+    });
+
+    it('propagates errors from backendClient', async () => {
+      mockPost.mockRejectedValue(new Error('boom'));
+      await expect(resendVerificationEmail()).rejects.toThrow('boom');
+    });
+  });
+
+  describe('confirmEmailVerification', () => {
+    it('POSTs { token } and sets skipAuthError so the in-page 401 handler runs', async () => {
+      mockPost.mockResolvedValue({ user: SAMPLE_USER });
+      await confirmEmailVerification('tok-123');
+      expect(
+        mockPost,
+        'confirm must send { token } with skipAuthError:true so a 401 is classified in-page (needs_login vs bad token) instead of hard-redirecting to /auth/login'
+      ).toHaveBeenCalledWith(
+        '/api/v1/auth/verify/email/confirm',
+        { token: 'tok-123' },
+        { retry: false, skipAuthError: true },
+      );
+    });
+
+    it('returns the upgraded user from the confirm response', async () => {
+      mockPost.mockResolvedValue({ user: SAMPLE_USER });
+      await expect(
+        confirmEmailVerification('tok'),
+        'confirm should pass the { user } body through so the caller can feed AuthContext directly'
+      ).resolves.toEqual({ user: SAMPLE_USER });
+    });
+
+    it('propagates errors from backendClient', async () => {
+      mockPost.mockRejectedValue(new ApiError('invalid_or_expired_token', 401));
+      await expect(
+        confirmEmailVerification('tok'),
+        'a bad/expired-token 401 must surface so the page can classify it'
+      ).rejects.toThrow('invalid_or_expired_token');
     });
   });
 });
