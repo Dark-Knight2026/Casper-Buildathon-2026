@@ -83,7 +83,7 @@ fn setup(env: HostEnv) -> TestData {
         },
     );
 
-    let mut property_registry = PropertyRegistry::deploy(
+    let property_registry = PropertyRegistry::deploy(
         &env,
         PropertyRegistryInitArgs {
             owner: env.get_account(0),

@@ -19,7 +19,9 @@ use leasefi_contracts::{
         types::{CreatePropertyParams, PropertyStatus},
         PropertyRegistry, PropertyRegistryInitArgs,
     },
-    roles::{Roles, RolesInitArgs},
+    user_registry::{
+        UserRegistry, UserRegistryInitArgs, ROLE_FLAG_LANDLORD, ROLE_FLAG_PROPERTY_MANAGER,
+    },
 };
 use odra::{
     casper_types::U256,
@@ -59,19 +61,25 @@ fn setup(env: HostEnv) -> Context {
     let initial_holder = env.get_account(5);
     let recipient = env.get_account(6);
     let spender = env.get_account(7);
-    let revenue_distributor = env.get_account(8);
-    let issuer = env.get_account(9);
+    let issuer_wallet = env.get_account(9);
     let initial_supply = U256::from(1_000_000);
 
-    let roles = Roles::deploy(&env, RolesInitArgs { admin: owner });
+    let mut user_registry = UserRegistry::deploy(&env, UserRegistryInitArgs { owner });
 
     let mut investor_registry = InvestorRegistry::deploy(&env, InvestorRegistryInitArgs { owner });
-    let mut property_registry = PropertyRegistry::deploy(&env, PropertyRegistryInitArgs { owner });
+    let mut property_registry = PropertyRegistry::deploy(
+        &env,
+        PropertyRegistryInitArgs {
+            owner,
+            user_registry: user_registry.address(),
+        },
+    );
     let mut escrow = Escrow::deploy(
         &env,
         EscrowInitArgs {
             owner,
             min_deadline: 5 * 60,
+            user_registry: user_registry.address(),
         },
     );
 
@@ -95,10 +103,10 @@ fn setup(env: HostEnv) -> Context {
         &env,
         LeaseInitArgs {
             owner,
-            roles: roles.address(),
             escrow: escrow.address(),
             nft: nft.address(),
             property_registry: property_registry.address(),
+            user_registry: user_registry.address(),
         },
     );
 
@@ -117,24 +125,26 @@ fn setup(env: HostEnv) -> Context {
             investor_registry: investor_registry.address(),
             property_registry: property_registry.address(),
             lease: lease.address(),
+            user_registry: user_registry.address(),
         },
     );
+
+    // Setup users in UserRegistry (replaces Roles + property_manager_role grant)
+    user_registry.grant_role(&user_registry.identity_manager_role(), &owner);
+    let _property_manager_id =
+        user_registry.create_user([1u8; 32], property_manager, ROLE_FLAG_PROPERTY_MANAGER);
+    let issuer_id = user_registry.create_user([2u8; 32], issuer_wallet, ROLE_FLAG_LANDLORD);
 
     investor_registry.grant_role(
         &investor_registry.verification_manager_role(),
         &verification_manager,
     );
 
-    property_registry.grant_role(
-        &property_registry.property_manager_role(),
-        &property_manager,
-    );
-
     compliance.grant_role(&compliance.compliance_manager_role(), &compliance_manager);
 
     env.set_caller(property_manager);
     let property_id = property_registry.create_property(CreatePropertyParams {
-        issuer,
+        issuer: issuer_id,
         total_supply: initial_supply,
         metadata_uri: String::from("ipfs://property-1"),
     });
@@ -160,7 +170,6 @@ fn setup(env: HostEnv) -> Context {
 
     env.set_caller(property_manager);
     property_registry.set_property_token(property_id, token.address());
-    property_registry.set_revenue_distributor(property_id, revenue_distributor);
     property_registry.set_property_status(property_id, PropertyStatus::Active);
 
     Context {
