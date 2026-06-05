@@ -1,15 +1,15 @@
 ---
 author: Anastasia
-version: 0.5.0
+version: 0.6.0
 created: 2026-05-18T08:08:02Z
-last-modified: 2026-06-02T00:00:00Z
-version-updated: 2026-06-02T00:00:00Z
+last-modified: 2026-06-05T00:00:00Z
+version-updated: 2026-06-05T00:00:00Z
 ---
 
 # LeaseFi — Frontend MVP Task Tracker
 
-> Scope source: [`docs/LEASEFI_MVP_SPEC_2026-07-15.md`](./LEASEFI_MVP_SPEC_2026-07-15.md) §3 "Definition of Done".
-> Delivery target: **2026-07-15**. This tracker covers **§3 DoD only** (frontend).
+> Scope source: [`docs/LEASEFI_MVP_SPEC_2026-07-15.md`](./LEASEFI_MVP_SPEC_2026-07-15.md) — **§0 Phase 0 (Hackathon)** is the current priority; **§3 "Definition of Done"** is the MVP stage that follows.
+> Delivery targets: **Phase 0 hackathon — 2026-06-30**; MVP — **2026-07-15**. This tracker covers the **frontend** slice of both: Phase 0 (§0 below) + §3 DoD.
 
 ## "Done" criterion
 
@@ -31,7 +31,33 @@ version-updated: 2026-06-02T00:00:00Z
 
 ---
 
+## §0. Phase 0 — Hackathon (current priority)
+
+> Scope: spec **§0** (hackathon starter, deadline **2026-06-30**). Crypto-only (testnet **CSPR / cUSD**), **email + password** auth, **tenant + landlord** only — full delta in spec §0.3.
+> **"Done" here ≠ the MVP bar.** Phase-0 done = the **on-chain flow works in the demo** against testnet contracts, not "wired to the Rust backend". Only the **frontend** H-tasks are tracked here; the full cross-team H-list (contracts/backend/AI/demo) lives in spec §0.4.
+> 🚫 **No Supabase — anywhere.** All off-chain data goes through the **Rust backend** (`backendClient` / `backendAuthService` / `userProfileService`); on-chain via **Casper** (wallet-submitted tx, read back through the backend/indexer). The legacy Supabase services are **dead** — reuse the UI shells but **do not call or extend Supabase**.
+
+| H | Frontend task | Must/Nice | Status |
+|---|---|---|---|
+| H-11 | Email + password auth UI (sign-up / sign-in / reset) | MUST | 🔴 MISSING + ⛔ BE — current auth is CSPR.click social; needs backend H-7 (email+pass) |
+| H-12 | Wallet connect — simple Casper wallet, testnet CSPR / cUSD | MUST | 🟡 PARTIAL — CSPR.click invisible-wallet provisioning exists (§3.1); add explicit connect + testnet-token transacting |
+| H-13 | Landlord: list property → on-chain **NFT mint** | MUST | 🔴 reuse `PropertyCreate.tsx` **UI shell** → wire to **Rust backend + Casper mint** (drop Supabase) · ⛔ contract |
+| H-14 | Lease create + **sign** → on-chain record | MUST | 🔴 reuse `LeaseCreationWizard.tsx` **UI shell** → wire to **Rust backend + Casper sign/record** (drop Supabase) · ⛔ contract |
+| H-15 | Deposit + rent-payment flows (escrow / treasury) | NICE | 🔴 MISSING + ⛔ contract |
+| H-16 | Hide out-of-scope features behind feature flags | — | 🟢 **can start now (pure FE)** — flag off PM role, lease option, termination, dashboards/accounting without deleting code (`src/lib/featureFlags.ts`) |
+
+**Notes**
+- **H-16 is the only no-dependency FE task** — start here; it de-clutters the demo to the must-have spine (list property → sign lease).
+- **H-13 / H-14** reuse only the **UI shell** of property-create + lease-wizard — data integration is **Rust backend + Casper, never Supabase**.
+- **H-12** keeps the invisible-wallet UX from §3.1; Phase 0 adds explicit testnet **CSPR / cUSD** transacting (no on-ramp / conversion).
+- "investor" check (spec **H-20**) overlaps the MVP item in §3.8.
+- Cross-team, not FE-dev: contracts **H-1…H-6**, backend **H-7…H-10**, AI-plan **H-17**, GitHub **H-18**, demo video **H-19** — see spec §0.4.
+
+---
+
 ## Summary
+
+> Below this line: the **MVP** tracker (§3 DoD) — the *next* stage after Phase 0.
 
 | Section | Done | Total | Main blocker |
 |---|---|---|---|
@@ -236,6 +262,63 @@ All three former §6 blockers were resolved 2026-05-21 (spec §6 "Resolved"):
 - ✅ Lease signing mechanism → EIP-712 typed signing via `casper-eip-712`, shared `@leasefi/types` (§5.6). Cryptographic signing (§3.4) is now BE-blocked on the shared types package + finalize call.
 
 Spec §6 still lists two genuinely open questions, but neither blocks FE MVP work: (1) mortgage-document **authenticity** review process, (2) private sale for accredited investors (Phase 4).
+
+## Design-reference implementation notes (don't forget)
+
+> Distilled from [`docs/client-doc/leasefi-design-reference.html`](./client-doc/leasefi-design-reference.html) (Phase 1 "Critical 6" visual spine). **Authority:** the HTML is authoritative for **visual** implementation, but **the specs under `/docs/` win on any conflict.** Confidential — do not share externally. Tags: ⭐ = Phase-0-relevant, otherwise MVP/later.
+
+**Cross-cutting (every surface)**
+- **One primary CTA per surface.** ⭐
+- **Never signal status with color alone** (WCAG 2.1 AA). Status = color **+** icon/label. **Never red for "outstanding"** — red = escalation; outstanding = amber, collected = green, dispute = blue (informational).
+- **Money amounts in JetBrains Mono** (decimal alignment; sans-serif numerals shift). ⭐
+- **Empty states:** render the empty-state pattern, not an empty card with a disabled CTA. Template once, reuse. (tenant "No active lease", PM "No properties yet", "No disputes".)
+- **Skeletons:** template once via shadcn `Skeleton`; don't invent per-component.
+- **Wallet address:** never show the full address in greeting copy. Full address lives only in the sidebar wallet widget (expand → copy / disconnect / KYC tier). ⭐
+- **Draft state lives on the server, never the browser.** Wizards resume from the server-persisted draft — `localStorage`/`sessionStorage` draft is **forbidden**. (#1 Playwright regression target.) ⭐
+- **Tx state in `sessionStorage` only** (must not survive a browser session) — distinct from drafts (server). ⭐
+
+**FeeDisplay (regulatory — PRD FR-1.4.3.12)**
+- Format is **regulatory-mandated**: don't reformat the layout, don't drop the percentage, don't rename "Total" → "Subtotal". Fee must be **inline and visible**, never in a tooltip/modal.
+- **Button label includes the exact total** — never "Submit" / "Pay now". ⭐
+- Pre-flight **"Balance OK" pill** is the result of an on-chain read — don't open a wallet popup just to fail on balance.
+- **Path B fiat on-ramp link always present**, even when balance suffices.
+- Show **display currency (USDC) vs on-chain (CEP-18)** + the "your wallet will show the same amount" note.
+- One component reused across rent / late fee / buyout / deposit funding / dispute.
+
+**PreSignatureConfirmation (the highest-stakes surface)**
+- **Build once, parameterize for all six EIP-712 ceremonies** (LeaseAgreement, TerminationNotice, BuyoutAgreement, DepositRelease, PMAuthorization, Authentication). **Do not build six variants.** ⭐ (Authentication ceremony is Phase-0-relevant.)
+- Fires **before any wallet popup**; **three-stage confirmation is the trust spine — never collapse it.**
+- **"Cross-check before signing" copy is mandatory** — don't reword, move, or hide it.
+- **Show ALL EIP-712 fields** (truncation is how signature-confusion attacks succeed) + the verifying contract (canonical address).
+- **Cancel/reject = silent return to idle.** Rejected ≠ failed: no toast, no Sentry, no error UI. ⭐
+
+**TransactionStatus / state machine**
+- **Three stages, never collapsed:** submitted → in-block (~16s) → finalized (8 blocks, ~2 min). ⭐
+- **GlobalTxIndicator persists across navigation** (header badge, click-to-return).
+- **Pre-flight order is deliberate:** build-args → KYC → OFAC → velocity → balance → allowance → sign (reordering leaks compliance state via timing).
+- Reorg: roll back in-block → pending; orphan timeout 32 blocks → failed.
+
+**Lease invitation & signing**
+- **Render full lease terms before any wallet popup** (anti-phishing) + show the canonical `lease.fi` domain pill. ⭐
+- **Lease activation = two on-chain tx:** Tx A `LeaseFactory.create_lease` (verifies both EIP-712 sigs inline, mints NFTs, takes 2% fee) + Tx B `DepositVault.deposit_funds` (separate, no sigs). **Track independently**; render an explicit **"lease created · awaiting deposit"** transitional state. ⭐ (stranded-lease risk — confirm a `cancel_unfunded` path with the SC team.)
+- **EIP-712:** use `@leasefi/types` builders only (no inline typed-data); `verifyingContract` = `LeaseFactory`. ⭐
+- **Async handoff:** the "waiting" state is steady-state, not a spinner; don't lock the landlord's session. Resend rotates the token (old link → 404).
+- **SHA-256 (on-chain `lease_document_hash`) ≠ IPFS CID** (retrieval address only). Always re-hash the retrieved PDF and compare before trusting; never trust the CID alone. IPFS pin tokens are **server-issued, 5-min TTL** — FE never holds Pinata/web3.storage keys.
+- **FL security-deposit cap = 2× monthly rent** (validate client + contract + submission).
+
+**KYC / compliance**
+- Consume **`useKYCStatus(address)` only** — never the KYC source directly (default `APIKYCSource`). ⭐
+- **Pending-attestation state is mandatory** (skipping it → "I verified but the app says I'm not" tickets).
+- Compliance-failure surface: **no retry button** (single CTA "Contact support"); all compliance reverts collapse to one `ofac-restricted` class; **CO sign-off required** to change copy/layout; **no Sentry with specifics**. **Tier insufficiency ≠ compliance failure** (surface the real "Tier 1 required").
+
+**Dashboards (landlord/PM)**
+- **Auto-detect by ownership:** 0–1 leases → tenant-style layout; 2+ → PM-style table. **No user-facing mode toggle.**
+- **PMs work in tables** (sort / filter / multi-select), not cards.
+
+**Architecture baked in (do not invent alternatives)**
+- Listings off-chain (PostgreSQL + IPFS photos) — **no on-chain footprint until counter-sign** (Phase 2 marketplace).
+- **Tenant signs first** (acceptance = application); **landlord counter-signs to commit** — don't invert.
+- **Privacy gate:** pre-counter-sign = pseudonymous (badges + criteria-match boolean only); full identity **only** post-counter-sign. Never expose tenant PII before commit.
 
 ## Note on scope
 
