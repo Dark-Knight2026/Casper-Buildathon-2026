@@ -21,7 +21,10 @@ use leasefi_contracts::{
         types::{CreatePropertyParams, PropertyStatus},
         PropertyRegistry, PropertyRegistryHostRef, PropertyRegistryInitArgs,
     },
-    roles::{Roles, RolesInitArgs},
+    user_registry::{
+        UserRegistry, UserRegistryHostRef, UserRegistryInitArgs, ROLE_FLAG_LANDLORD,
+        ROLE_FLAG_PROPERTY_MANAGER, ROLE_FLAG_TENANT,
+    },
 };
 use odra::{
     casper_types::U256,
@@ -43,14 +46,18 @@ struct Context {
     property_registry: PropertyRegistryHostRef,
     lease: LeaseHostRef,
     escrow: EscrowHostRef,
+    user_registry: UserRegistryHostRef,
     compliance_manager: Address,
     verification_manager: Address,
     property_manager: Address,
+    property_manager_id: U256,
     sender: Address,
     recipient: Address,
+    recipient_id: U256,
     property_token: Address,
     revenue_distributor: Address,
     landlord: Address,
+    landlord_id: U256,
     security_deposit_token: BigCoinHostRef,
 }
 
@@ -64,10 +71,10 @@ fn setup(env: HostEnv) -> Context {
     let revenue_distributor = env.get_account(7);
     let landlord = env.get_account(8);
 
-    let mut roles = Roles::deploy(
+    let mut user_registry = UserRegistry::deploy(
         &env,
-        RolesInitArgs {
-            admin: env.get_account(0),
+        UserRegistryInitArgs {
+            owner: env.get_account(0),
         },
     );
 
@@ -82,6 +89,7 @@ fn setup(env: HostEnv) -> Context {
         &env,
         PropertyRegistryInitArgs {
             owner: env.get_account(0),
+            user_registry: user_registry.address(),
         },
     );
 
@@ -90,6 +98,7 @@ fn setup(env: HostEnv) -> Context {
         EscrowInitArgs {
             owner: env.get_account(0),
             min_deadline: 5 * 60,
+            user_registry: user_registry.address(),
         },
     );
 
@@ -113,10 +122,10 @@ fn setup(env: HostEnv) -> Context {
         &env,
         LeaseInitArgs {
             owner: env.get_account(0),
-            roles: roles.address(),
             escrow: escrow.address(),
             nft: nft.address(),
             property_registry: property_registry.address(),
+            user_registry: user_registry.address(),
         },
     );
 
@@ -127,6 +136,7 @@ fn setup(env: HostEnv) -> Context {
             investor_registry: investor_registry.address(),
             property_registry: property_registry.address(),
             lease: lease.address(),
+            user_registry: user_registry.address(),
         },
     );
 
@@ -152,21 +162,16 @@ fn setup(env: HostEnv) -> Context {
     nft.add_to_whitelist(&env.get_account(0));
     nft.add_to_whitelist(&recipient);
 
+    user_registry.grant_role(&user_registry.identity_manager_role(), &env.get_account(0));
+    let property_manager_id =
+        user_registry.create_user([1u8; 32], property_manager, ROLE_FLAG_PROPERTY_MANAGER);
+    let landlord_id = user_registry.create_user([2u8; 32], landlord, ROLE_FLAG_LANDLORD);
+    let recipient_id = user_registry.create_user([3u8; 32], recipient, ROLE_FLAG_TENANT);
+
     investor_registry.grant_role(
         &investor_registry.verification_manager_role(),
         &verification_manager,
     );
-
-    property_registry.grant_role(
-        &property_registry.property_manager_role(),
-        &property_manager,
-    );
-
-    roles.grant_role(
-        &roles.get_role_admin(&roles.get_landlord_role()),
-        &env.get_account(0),
-    );
-    roles.grant_role(&roles.get_landlord_role(), &landlord);
 
     compliance.grant_role(&compliance.compliance_manager_role(), &compliance_manager);
 
@@ -181,14 +186,18 @@ fn setup(env: HostEnv) -> Context {
         property_registry,
         lease,
         escrow,
+        user_registry,
         compliance_manager,
         verification_manager,
         property_manager,
+        property_manager_id,
         sender,
         recipient,
+        recipient_id,
         property_token,
         revenue_distributor,
         landlord,
+        landlord_id,
         security_deposit_token,
     }
 }
@@ -217,7 +226,7 @@ fn create_draft_property(ctx: &mut Context) -> U256 {
     ctx.env.set_caller(ctx.property_manager);
 
     ctx.property_registry.create_property(CreatePropertyParams {
-        issuer: ctx.env.get_account(8),
+        issuer: ctx.landlord_id,
         total_supply: U256::from(1_000_000),
         metadata_uri: String::from("ipfs://property-1"),
     })
@@ -230,9 +239,6 @@ fn create_active_property(ctx: &mut Context) -> U256 {
         .set_property_token(property_id, ctx.property_token);
 
     ctx.property_registry
-        .set_revenue_distributor(property_id, ctx.revenue_distributor);
-
-    ctx.property_registry
         .set_property_status(property_id, PropertyStatus::Active);
 
     property_id
@@ -243,9 +249,6 @@ fn create_inactive_property_with_token(ctx: &mut Context) -> U256 {
 
     ctx.property_registry
         .set_property_token(property_id, ctx.property_token);
-
-    ctx.property_registry
-        .set_revenue_distributor(property_id, ctx.revenue_distributor);
 
     property_id
 }
@@ -737,7 +740,7 @@ fn test_assert_can_transfer_should_succeed_if_equity_distribution_requires_lease
     ctx.env.set_caller(ctx.landlord);
     ctx.lease
         .create_lease_agreement(CreateLeaseAgreementParams {
-            tenant: ctx.recipient,
+            tenant: ctx.recipient_id,
             rent_distribution_terms: RentDistributionTerms {
                 property_manager: None,
                 property_manager_bps: 0,
@@ -906,7 +909,7 @@ fn test_equity_lease_finalization_blocks_compliance_transfer() {
     let lease_agreement_id = ctx
         .lease
         .create_lease_agreement(CreateLeaseAgreementParams {
-            tenant: ctx.recipient,
+            tenant: ctx.recipient_id,
             rent_distribution_terms: RentDistributionTerms {
                 property_manager: None,
                 property_manager_bps: 0,
@@ -961,7 +964,7 @@ fn test_equity_lease_finalization_blocks_compliance_transfer() {
 
     // Eligibility should be revoked
     assert!(
-        !ctx.lease.is_equity_eligible(property_id, ctx.recipient),
+        !ctx.lease.is_equity_eligible(property_id, ctx.recipient_id),
         "Tenant should no longer be equity eligible after lease finalization",
     );
 
