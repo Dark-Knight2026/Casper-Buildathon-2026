@@ -6,7 +6,7 @@ use leasefi_contracts::{
         PropertyRegistry, PropertyRegistryHostRef, PropertyRegistryInitArgs,
     },
     user_registry::{
-        UserRegistry, UserRegistryHostRef, UserRegistryInitArgs, ROLE_FLAG_LANDLORD,
+        UserRegistry, UserRegistryInitArgs, ROLE_FLAG_LANDLORD,
         ROLE_FLAG_PROPERTY_MANAGER,
     },
 };
@@ -25,10 +25,7 @@ use crate::property_registry::events::PropertyStatusSet;
 struct Context {
     env: HostEnv,
     registry: PropertyRegistryHostRef,
-    user_registry: UserRegistryHostRef,
     property_manager: Address,
-    property_manager_id: U256,
-    issuer: Address,
     issuer_id: U256,
     token: Address,
 }
@@ -51,17 +48,14 @@ fn setup(env: HostEnv) -> Context {
 
     user_registry.grant_role(&user_registry.identity_manager_role(), &owner);
 
-    let property_manager_id =
+    let _property_manager_id =
         user_registry.create_user([1u8; 32], property_manager, ROLE_FLAG_PROPERTY_MANAGER);
     let issuer_id = user_registry.create_user([2u8; 32], issuer, ROLE_FLAG_LANDLORD);
 
     Context {
         env,
         registry,
-        user_registry,
         property_manager,
-        property_manager_id,
-        issuer,
         issuer_id,
         token,
     }

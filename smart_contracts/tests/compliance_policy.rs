@@ -22,7 +22,7 @@ use leasefi_contracts::{
         PropertyRegistry, PropertyRegistryHostRef, PropertyRegistryInitArgs,
     },
     user_registry::{
-        UserRegistry, UserRegistryHostRef, UserRegistryInitArgs, ROLE_FLAG_LANDLORD,
+        UserRegistry, UserRegistryInitArgs, ROLE_FLAG_LANDLORD,
         ROLE_FLAG_PROPERTY_MANAGER, ROLE_FLAG_TENANT,
     },
 };
@@ -46,16 +46,13 @@ struct Context {
     property_registry: PropertyRegistryHostRef,
     lease: LeaseHostRef,
     escrow: EscrowHostRef,
-    user_registry: UserRegistryHostRef,
     compliance_manager: Address,
     verification_manager: Address,
     property_manager: Address,
-    property_manager_id: U256,
     sender: Address,
     recipient: Address,
     recipient_id: U256,
     property_token: Address,
-    revenue_distributor: Address,
     landlord: Address,
     landlord_id: U256,
     security_deposit_token: BigCoinHostRef,
@@ -68,7 +65,6 @@ fn setup(env: HostEnv) -> Context {
     let sender = env.get_account(4);
     let recipient = env.get_account(5);
     let property_token = env.get_account(6);
-    let revenue_distributor = env.get_account(7);
     let landlord = env.get_account(8);
 
     let mut user_registry = UserRegistry::deploy(
@@ -85,7 +81,7 @@ fn setup(env: HostEnv) -> Context {
         },
     );
 
-    let mut property_registry = PropertyRegistry::deploy(
+    let property_registry = PropertyRegistry::deploy(
         &env,
         PropertyRegistryInitArgs {
             owner: env.get_account(0),
@@ -163,7 +159,7 @@ fn setup(env: HostEnv) -> Context {
     nft.add_to_whitelist(&recipient);
 
     user_registry.grant_role(&user_registry.identity_manager_role(), &env.get_account(0));
-    let property_manager_id =
+    let _property_manager_id =
         user_registry.create_user([1u8; 32], property_manager, ROLE_FLAG_PROPERTY_MANAGER);
     let landlord_id = user_registry.create_user([2u8; 32], landlord, ROLE_FLAG_LANDLORD);
     let recipient_id = user_registry.create_user([3u8; 32], recipient, ROLE_FLAG_TENANT);
@@ -186,16 +182,13 @@ fn setup(env: HostEnv) -> Context {
         property_registry,
         lease,
         escrow,
-        user_registry,
         compliance_manager,
         verification_manager,
         property_manager,
-        property_manager_id,
         sender,
         recipient,
         recipient_id,
         property_token,
-        revenue_distributor,
         landlord,
         landlord_id,
         security_deposit_token,
