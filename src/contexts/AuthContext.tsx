@@ -237,6 +237,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const walletSignOut = useCallback(() => {
     clearSessionMarker();
+    // Drop any stashed post-login redirect intent — it can carry a single-use
+    // verification token in its URL, which must not survive logout onto a
+    // shared device (SEC-002/003).
+    try {
+      localStorage.removeItem('auth_redirect_intent');
+    } catch {
+      // private-mode / quota — non-fatal.
+    }
     setProfile(null);
     // Best-effort server-side revocation; never throws.
     void logoutSession();

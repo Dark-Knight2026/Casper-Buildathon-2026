@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { CheckCircle2, Loader2, Mail, XCircle } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -44,10 +44,16 @@ function classifyConfirmError(err: unknown): Exclude<Status, 'verifying' | 'succ
 export default function VerifyEmail() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { toast } = useToast();
   const { profile, setWalletSession } = useAuth();
 
-  const token = params.get('token');
+  // Capture the single-use token from the URL exactly once. We strip it from
+  // the address bar on terminal states (effect below) so it can't leak via the
+  // Referer header — which means we must NOT re-read it reactively, or it would
+  // vanish mid-flow and break Retry / flip the screen to no_token.
+  const tokenRef = useRef(params.get('token'));
+  const token = tokenRef.current;
   const [status, setStatus] = useState<Status>('verifying');
   const [resending, setResending] = useState(false);
   // One-shot guard: the verification token is single-use, so we confirm at most
@@ -104,6 +110,20 @@ export default function VerifyEmail() {
     const timer = window.setTimeout(() => navigate(dashboard, { replace: true }), SUCCESS_REDIRECT_DELAY_MS);
     return () => window.clearTimeout(timer);
   }, [status, profile?.role, navigate]);
+
+  // Once we reach a terminal error state, scrub the token from the URL so it is
+  // not sent in the Referer header on any later navigation. (success navigates
+  // away on its own; no_token never carried a token.)
+  useEffect(() => {
+    const leaksToken =
+      status === 'invalid_token' ||
+      status === 'bad_format' ||
+      status === 'needs_login' ||
+      status === 'generic_error';
+    if (token && leaksToken) {
+      navigate(location.pathname, { replace: true });
+    }
+  }, [status, token, navigate, location.pathname]);
 
   const handleResend = async () => {
     if (resending) return;

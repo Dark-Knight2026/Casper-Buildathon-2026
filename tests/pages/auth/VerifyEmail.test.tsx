@@ -119,6 +119,65 @@ describe('VerifyEmail', () => {
     );
   });
 
+  it('shows a success toast after a resend resolves (VE-01a)', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    confirmEmailVerification.mockRejectedValue(apiError(400, 'bad_token_format'));
+    sendVerificationEmail.mockResolvedValue({ status: 'sent' });
+    renderPage('tok');
+    const btn = await screen.findByRole('button', { name: /send a new verification email/i });
+    await userEvent.click(btn);
+    await waitFor(() =>
+      expect(mockToast).toHaveBeenCalledWith(
+        expect.objectContaining({ title: expect.stringMatching(/verification email sent/i) }),
+      ),
+    );
+  });
+
+  it('shows a rate-limit toast when resend is throttled with 429 (VE-01b)', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    confirmEmailVerification.mockRejectedValue(apiError(400, 'bad_token_format'));
+    sendVerificationEmail.mockRejectedValue(apiError(429));
+    renderPage('tok');
+    const btn = await screen.findByRole('button', { name: /send a new verification email/i });
+    await userEvent.click(btn);
+    await waitFor(() =>
+      expect(mockToast).toHaveBeenCalledWith(
+        expect.objectContaining({ title: expect.stringMatching(/please wait/i), variant: 'destructive' }),
+      ),
+    );
+  });
+
+  it('tells the user to add an email when resend returns 400 (VE-01b)', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    confirmEmailVerification.mockRejectedValue(apiError(400, 'bad_token_format'));
+    sendVerificationEmail.mockRejectedValue(apiError(400, 'email_not_set'));
+    renderPage('tok');
+    const btn = await screen.findByRole('button', { name: /send a new verification email/i });
+    await userEvent.click(btn);
+    await waitFor(() =>
+      expect(mockToast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          description: expect.stringMatching(/add an email/i),
+          variant: 'destructive',
+        }),
+      ),
+    );
+  });
+
+  it('shows a generic error toast when resend fails unexpectedly (VE-01b)', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    confirmEmailVerification.mockRejectedValue(apiError(400, 'bad_token_format'));
+    sendVerificationEmail.mockRejectedValue(apiError(500, 'internal'));
+    renderPage('tok');
+    const btn = await screen.findByRole('button', { name: /send a new verification email/i });
+    await userEvent.click(btn);
+    await waitFor(() =>
+      expect(mockToast).toHaveBeenCalledWith(
+        expect.objectContaining({ title: expect.stringMatching(/could not send email/i), variant: 'destructive' }),
+      ),
+    );
+  });
+
   it('shows no_token when the link has no token', async () => {
     renderPage('');
     await waitFor(() => expect(screen.getByText(/needs a verification token/i)).toBeInTheDocument());

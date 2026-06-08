@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { CheckCircle2, Loader2, Mail, XCircle } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -52,9 +52,15 @@ function classifyError(err: unknown): Exclude<Status, 'confirming' | 'success' |
 export default function ConfirmEmailChange() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { profile, setWalletSession } = useAuth();
 
-  const token = params.get('token');
+  // Capture the single-use token from the URL exactly once. We strip it from
+  // the address bar on terminal states (effect below) so it can't leak via the
+  // Referer header — which means we must NOT re-read it reactively, or it would
+  // vanish mid-flow and break Retry / flip the screen to no_token.
+  const tokenRef = useRef(params.get('token'));
+  const token = tokenRef.current;
   const [status, setStatus] = useState<Status>('confirming');
   // One-shot guard: the change token is single-use, so confirm at most once per
   // mount even if `token` (a useCallback dep) changes and re-fires the effect,
@@ -106,6 +112,20 @@ export default function ConfirmEmailChange() {
     const timer = window.setTimeout(() => navigate(dashboard, { replace: true }), SUCCESS_REDIRECT_DELAY_MS);
     return () => window.clearTimeout(timer);
   }, [status, profile?.role, navigate]);
+
+  // Once we reach a terminal error state, scrub the token from the URL so it is
+  // not sent in the Referer header on any later navigation. (success navigates
+  // away on its own; no_token never carried a token.)
+  useEffect(() => {
+    const leaksToken =
+      status === 'invalid_token' ||
+      status === 'email_taken' ||
+      status === 'needs_login' ||
+      status === 'generic_error';
+    if (token && leaksToken) {
+      navigate(location.pathname, { replace: true });
+    }
+  }, [status, token, navigate, location.pathname]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4 py-12">
