@@ -10,6 +10,7 @@ workspace = true
 [features]
 default = ["enabled"]
 enabled = [
+    "dep:argon2",
     "dep:async-trait",
     "dep:axum",
     "dep:axum-extra",
@@ -50,6 +51,7 @@ full = ["enabled"]
 integration = []
 
 [dependencies]
+argon2 = { workspace = true, optional = true }
 async-trait = { workspace = true, optional = true }
 axum = { workspace = true, optional = true }
 axum-extra = { workspace = true, optional = true }

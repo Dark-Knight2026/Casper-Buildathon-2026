@@ -10,6 +10,8 @@ pub mod errors;
 pub mod models;
 /// Reusable pagination primitives.
 pub mod pagination;
+/// Password hashing primitives and the account-password policy.
+pub mod password;
 /// Redis client wrapper.
 pub mod redis;
 /// Opaque single-use token generation shared across flows.
@@ -27,6 +29,9 @@ pub use models::{
     UserStatus, VerificationLevel,
 };
 pub use pagination::{Pageable, PaginatedResponse, Pagination};
+pub use password::{
+    MAX_PASSWORD_LEN, MIN_PASSWORD_LEN, hash_password, validate_password_policy, verify_password,
+};
 pub use redis::{RedisStore, VerifyEmailReservation};
 
 /// Validates and normalizes a Casper account hash (64 hex characters, no prefix).

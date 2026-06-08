@@ -69,6 +69,7 @@ mod_module_files = "allow"
 missing_docs_in_private_items = "allow"
 
 [workspace.dependencies]
+argon2 = "0.5"
 async-trait = "0.1"
 axum = { version = "0.8", features = ["macros", "multipart"] }
 axum-extra = { version = "0.12", features = ["cookie"] }
