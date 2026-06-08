@@ -670,7 +670,7 @@ pub async fn authed_request<T: DeserializeOwned>(
 /// matching the byte sequence the browser extension produces. Every
 /// integration test that needs a wallet-login round-trip flows the
 /// nonce-message through this helper before posting it to
-/// `/api/v1/auth/login`; consolidating the prefix-handling here keeps
+/// `/api/v1/auth/login/wallet`; consolidating the prefix-handling here keeps
 /// the contract anchored in one place if Casper ever reshapes the
 /// signing envelope.
 #[inline]
@@ -762,7 +762,7 @@ pub async fn login_and_extract(env: &TestEnv) -> LoggedSession {
 
     let login_response = env
         .server
-        .post("/api/v1/auth/login")
+        .post("/api/v1/auth/login/wallet")
         .json(&serde_json::json!({
             "wallet_address": wallet_address,
             "signature": signature_hex,

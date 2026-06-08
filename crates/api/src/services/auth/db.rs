@@ -311,6 +311,110 @@ pub async fn create_password_user(
     }))
 }
 
+/// Row returned by [`find_password_login_by_email`] for the login path.
+///
+/// `password_hash` is `Option` because `users.password_hash` is NULL for
+/// wallet-only accounts; the login handler treats `None` exactly like a wrong
+/// password (generic 401) after a dummy verify. `role` and `verification_level`
+/// are parsed into their typed enums at this layer so the handler encodes them
+/// straight into the access JWT without reparsing - and, unlike the wallet /
+/// refresh paths, `role` is parsed strictly (a decode error becomes 500) so a
+/// corrupt value never reaches the claims as `Unknown`.
+#[derive(Debug)]
+pub struct PasswordLoginRecord {
+    /// User id; the JWT subject and refresh-token owner.
+    pub id: Uuid,
+    /// Stored Argon2id PHC hash, or `None` for a wallet-only account.
+    pub password_hash: Option<String>,
+    /// Account role, copied into the access-token claims.
+    pub role: UserRole,
+    /// Aggregate verification level, copied into the access-token claims.
+    pub verification_level: VerificationLevel,
+    /// Account status (`active` / `pending_verification` / `suspended` /
+    /// `inactive`); the handler gates login on it.
+    pub status: Option<String>,
+}
+
+/// Looks up the password-login fields for an email, or `None` when no live
+/// (non-deleted) user has that address.
+///
+/// Returns everything the login handler needs in one round trip. The caller
+/// folds a `None` result and a `None` `password_hash` into the same generic
+/// 401 (after a dummy verify), so this function reports "no usable login"
+/// without distinguishing "no such email" from "wallet-only account" - the
+/// status gate and password check happen in the handler.
+///
+/// # Errors
+///
+/// Returns `sqlx::Error` on DB failure or if `role` / `verification_level`
+/// cannot be decoded into their typed enums.
+#[inline]
+pub async fn find_password_login_by_email(
+    pool: &PgPool,
+    email: &str,
+) -> Result<Option<PasswordLoginRecord>, Error> {
+    let row = sqlx::query!(
+        r"
+            SELECT id, password_hash, role, verification_level, status
+            FROM users
+            WHERE email = $1 AND deleted_at IS NULL
+        ",
+        email,
+    )
+    .fetch_optional(pool)
+    .await?;
+
+    let Some(row) = row else {
+        return Ok(None);
+    };
+
+    let role = UserRole::from_str(&row.role).map_err(|err| Error::ColumnDecode {
+        index: "role".to_owned(),
+        source: Box::new(err),
+    })?;
+
+    let verification_level =
+        VerificationLevel::from_str(&row.verification_level).map_err(|err| {
+            Error::ColumnDecode {
+                index: "verification_level".to_owned(),
+                source: Box::new(err),
+            }
+        })?;
+
+    Ok(Some(PasswordLoginRecord {
+        id: row.id,
+        password_hash: row.password_hash,
+        role,
+        verification_level,
+        status: row.status,
+    }))
+}
+
+/// Stamps `users.last_login_at = NOW()` after a successful password login.
+///
+/// A standalone UPDATE rather than part of a transaction: unlike the wallet
+/// upsert (which bumps the timestamp inside its own tx), the password-login
+/// path has no surrounding transaction, and a failure here is a real DB fault
+/// that should propagate as 500 rather than be swallowed.
+///
+/// # Errors
+///
+/// Returns `sqlx::Error` on DB failure.
+#[inline]
+pub async fn update_last_login_at(pool: &PgPool, user_id: Uuid) -> Result<(), Error> {
+    sqlx::query!(
+        r"
+            UPDATE users
+            SET last_login_at = NOW()
+            WHERE id = $1
+        ",
+        user_id,
+    )
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
 /// Revokes every still-active `refresh_tokens` row for the given user.
 ///
 /// Called at login time so a fresh login invalidates any prior session (web

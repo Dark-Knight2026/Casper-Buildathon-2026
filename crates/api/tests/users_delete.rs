@@ -51,7 +51,7 @@ async fn relogin_with_keypair(env: &TestEnv, session: &LoggedSession) -> String 
 
     let login_response = env
         .server
-        .post("/api/v1/auth/login")
+        .post("/api/v1/auth/login/wallet")
         .json(&serde_json::json!({
             "wallet_address": wallet_address,
             "signature": signature_hex,
@@ -138,10 +138,10 @@ async fn delete_me_happy_path_revokes_session_and_clears_state(pool: PgPool) {
     );
 
     // wallet_connections: every row for the user is gone.
-    let wallet_count: i64 = sqlx::query_scalar!(
+    let wallet_count = sqlx::query_scalar::<_, i64>(
         r#"SELECT COUNT(*) AS "n!" FROM wallet_connections WHERE user_id = $1"#,
-        session.user_id,
     )
+    .bind(session.user_id)
     .fetch_one(&pool)
     .await
     .unwrap();
@@ -151,13 +151,13 @@ async fn delete_me_happy_path_revokes_session_and_clears_state(pool: PgPool) {
     );
 
     // refresh_tokens: every row that existed for the user is now revoked.
-    let active_refresh: i64 = sqlx::query_scalar!(
+    let active_refresh = sqlx::query_scalar::<_, i64>(
         r#"
             SELECT COUNT(*) AS "n!" FROM refresh_tokens
             WHERE user_id = $1 AND revoked_at IS NULL
         "#,
-        session.user_id,
     )
+    .bind(session.user_id)
     .fetch_one(&pool)
     .await
     .unwrap();
@@ -271,13 +271,13 @@ async fn delete_me_without_confirmation_returns_400(pool: PgPool) {
         "rejected requests must not rewrite email to placeholder",
     );
 
-    let audit_count: i64 = sqlx::query_scalar!(
+    let audit_count = sqlx::query_scalar::<_, i64>(
         r#"
             SELECT COUNT(*) AS "n!" FROM audit_logs
             WHERE user_id = $1 AND action = 'self_delete_user'
         "#,
-        session.user_id,
     )
+    .bind(session.user_id)
     .fetch_one(&pool)
     .await
     .unwrap();
@@ -320,10 +320,10 @@ async fn delete_me_with_stale_iat_returns_403(pool: PgPool) {
     );
 
     // Sanity: row still alive.
-    let still_alive: bool = sqlx::query_scalar!(
+    let still_alive = sqlx::query_scalar::<_, bool>(
         r#"SELECT (deleted_at IS NULL) AS "alive!" FROM users WHERE id = $1"#,
-        session.user_id,
     )
+    .bind(session.user_id)
     .fetch_one(&pool)
     .await
     .unwrap();
@@ -364,10 +364,10 @@ async fn delete_me_with_active_lease_returns_409(pool: PgPool) {
     );
 
     // Sanity: row still alive after blocked deletion.
-    let still_alive: bool = sqlx::query_scalar!(
+    let still_alive = sqlx::query_scalar::<_, bool>(
         r#"SELECT (deleted_at IS NULL) AS "alive!" FROM users WHERE id = $1"#,
-        session.user_id,
     )
+    .bind(session.user_id)
     .fetch_one(&pool)
     .await
     .unwrap();
@@ -431,15 +431,15 @@ async fn delete_me_concurrent_lease_does_not_orphan_user(pool: PgPool) {
         "user must not be soft-deleted while an active lease still references them as landlord_id",
     );
 
-    let active_leases: i64 = sqlx::query_scalar!(
+    let active_leases = sqlx::query_scalar::<_, i64>(
         r#"
             SELECT COUNT(*) AS "n!" FROM leases
             WHERE status = 'active'
               AND deleted_at IS NULL
               AND (landlord_id = $1 OR primary_tenant_id = $1)
         "#,
-        user_id,
     )
+    .bind(user_id)
     .fetch_one(&pool)
     .await
     .unwrap();

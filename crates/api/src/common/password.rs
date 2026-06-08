@@ -12,6 +12,8 @@
 //! parameters travel inside that string, so [`verify_password`] needs only the
 //! stored value and the presented plaintext - no out-of-band parameter book-keeping.
 
+use std::sync::LazyLock;
+
 use argon2::{
     Argon2,
     password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString, rand_core::OsRng},
@@ -74,6 +76,33 @@ pub fn verify_password(plaintext: &str, stored_hash: &str) -> bool {
     Argon2::default()
         .verify_password(plaintext.as_bytes(), &parsed)
         .is_ok()
+}
+
+/// Argon2id hash of a throwaway secret, used as the comparison target on the
+/// login path when an email maps to no live password account (unknown address
+/// or a wallet-only row whose `password_hash` is NULL).
+///
+/// Verifying the presented password against this hash makes the "no account"
+/// branch perform the same Argon2 work as a real verification, so an attacker
+/// cannot tell a registered email from an unregistered one by timing the
+/// response. The hashed plaintext is meaningless - it exists only to give
+/// [`verify_password`] a well-formed PHC string; no real password equals it.
+/// Computed once on first login failure and reused (`LazyLock`).
+static DUMMY_PASSWORD_HASH: LazyLock<String> = LazyLock::new(|| {
+    hash_password("not a real password - constant-time login decoy")
+        .expect("hashing a constant dummy password never fails")
+});
+
+/// Burns one Argon2 verification against a fixed decoy hash to equalize login
+/// timing when no password account matches the presented email.
+///
+/// Call on the "user not found" / "wallet-only account" branch of login so the
+/// failed response costs the same wall-clock time as a real password check and
+/// the response time does not reveal whether the account exists. The boolean
+/// result is intentionally discarded - the decoy never matches.
+#[inline]
+pub fn dummy_verify(presented_plaintext: &str) {
+    let _ = verify_password(presented_plaintext, &DUMMY_PASSWORD_HASH);
 }
 
 /// Validates a candidate password against the account-password policy.

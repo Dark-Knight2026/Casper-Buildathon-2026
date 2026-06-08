@@ -133,7 +133,7 @@ async fn cors_preflight_allows_credentials(pool: PgPool) {
 
     let response = env
         .server
-        .method(Method::OPTIONS, "/api/v1/auth/login")
+        .method(Method::OPTIONS, "/api/v1/auth/login/wallet")
         .add_header(header::ORIGIN, common::TEST_CORS_ORIGIN)
         .add_header(header::ACCESS_CONTROL_REQUEST_METHOD, "POST")
         .await;
@@ -164,7 +164,7 @@ async fn cors_preflight_does_not_allow_authorization_header(pool: PgPool) {
 
     let response = env
         .server
-        .method(Method::OPTIONS, "/api/v1/auth/login")
+        .method(Method::OPTIONS, "/api/v1/auth/login/wallet")
         .add_header(header::ORIGIN, common::TEST_CORS_ORIGIN)
         .add_header(header::ACCESS_CONTROL_REQUEST_METHOD, "POST")
         .add_header(header::ACCESS_CONTROL_REQUEST_HEADERS, "authorization")

@@ -50,7 +50,7 @@ async fn request_email_change_rolls_back_state_on_mailer_failure(pool: PgPool) {
 
     let login_response = env
         .server
-        .post("/api/v1/auth/login")
+        .post("/api/v1/auth/login/wallet")
         .json(&serde_json::json!({
             "wallet_address": wallet_address,
             "signature": signature_hex,
@@ -143,7 +143,7 @@ async fn confirm_email_change_with_wrong_token_returns_401(pool: PgPool) {
 
     let login_response = env
         .server
-        .post("/api/v1/auth/login")
+        .post("/api/v1/auth/login/wallet")
         .json(&serde_json::json!({
             "wallet_address": wallet_address,
             "signature": signature_hex,
@@ -209,7 +209,7 @@ async fn confirm_email_change_with_expired_token_returns_401(pool: PgPool) {
 
     let login_response = env
         .server
-        .post("/api/v1/auth/login")
+        .post("/api/v1/auth/login/wallet")
         .json(&serde_json::json!({
             "wallet_address": wallet_address,
             "signature": signature_hex,
@@ -271,7 +271,7 @@ async fn confirm_email_change_with_expired_token_returns_401(pool: PgPool) {
 
 /// `GET /api/v1/users/me` happy path: a freshly logged-in user can read
 /// back the same profile shape the login response returned. Pins that the
-/// access cookie issued by `/auth/login` is accepted by `require_auth`,
+/// access cookie issued by `/auth/login/wallet` is accepted by `require_auth`,
 /// that `fetch_user_profile` includes the wallet-default placeholders
 /// (`first_name = 'Wallet'`, `last_name = 'User'`, status = 'active')
 /// inserted by `upsert_user_by_wallet`, and that the response carries a
@@ -295,7 +295,7 @@ async fn get_me_returns_authenticated_user_profile(pool: PgPool) {
 
     let login_response = env
         .server
-        .post("/api/v1/auth/login")
+        .post("/api/v1/auth/login/wallet")
         .json(&serde_json::json!({
             "wallet_address": wallet_address,
             "signature": signature_hex,
@@ -395,7 +395,7 @@ async fn patch_me_updates_editable_fields(pool: PgPool) {
 
     let login_response = env
         .server
-        .post("/api/v1/auth/login")
+        .post("/api/v1/auth/login/wallet")
         .json(&serde_json::json!({
             "wallet_address": wallet_address,
             "signature": signature_hex,
@@ -481,7 +481,7 @@ async fn patch_me_rejects_empty_required_fields(pool: PgPool) {
 
     let login_response = env
         .server
-        .post("/api/v1/auth/login")
+        .post("/api/v1/auth/login/wallet")
         .json(&serde_json::json!({
             "wallet_address": wallet_address,
             "signature": signature_hex,
@@ -569,7 +569,7 @@ async fn confirm_email_change_happy_path_upgrades_verification(pool: PgPool) {
 
     let login_response = env
         .server
-        .post("/api/v1/auth/login")
+        .post("/api/v1/auth/login/wallet")
         .json(&serde_json::json!({
             "wallet_address": wallet_address,
             "signature": signature_hex,

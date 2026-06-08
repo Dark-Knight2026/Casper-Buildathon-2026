@@ -144,12 +144,12 @@ async fn ensure_not_rate_limited(state: &AppState, wallet: &str) -> ApiResult<()
 
 /// Atomically consumes the nonce via GETDEL (one-time use, no TOCTOU
 /// window). On miss, records a login failure so an attacker probing
-/// `/auth/login` without ever paying for `/auth/nonce` still trips the
+/// `/auth/login/wallet` without ever paying for `/auth/nonce` still trips the
 /// per-wallet rate-limit gate.
 ///
 /// Threat-model tradeoff: consuming the nonce before signature
 /// verification means an attacker who knows a wallet address can call
-/// `/auth/login` with a garbage signature to invalidate the legitimate
+/// `/auth/login/wallet` with a garbage signature to invalidate the legitimate
 /// user's nonce. We accept this: TOCTOU elimination is more critical
 /// than the nonce-invalidation vector, because TOCTOU allows actual
 /// replay attacks while nonce-DoS only causes a retry.
@@ -274,7 +274,7 @@ fn build_login_cookies(
     CookieJar::new().add(access_cookie).add(refresh_cookie)
 }
 
-// `POST /api/v1/auth/login`
+// `POST /api/v1/auth/login/wallet`
 //
 /// Authenticates a user by verifying their signature against a stored nonce.
 ///
@@ -304,7 +304,7 @@ fn build_login_cookies(
 /// - `ApiError::Internal` for DB/Redis failures or timestamp overflow
 #[utoipa::path(
     post,
-    path = "/login",
+    path = "/login/wallet",
     tag = "Auth",
     request_body = LoginRequest,
     responses(
@@ -315,7 +315,7 @@ fn build_login_cookies(
     )
 )]
 #[inline]
-pub async fn login(
+pub async fn login_wallet(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<LoginRequest>,
 ) -> ApiResult<(CookieJar, Json<LoginResponse>)> {

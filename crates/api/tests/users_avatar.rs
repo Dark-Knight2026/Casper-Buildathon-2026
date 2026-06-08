@@ -47,7 +47,7 @@ async fn login_and_get_access_token(env: &TestEnv, secret_seed: u8) -> String {
 
     let login_response = env
         .server
-        .post("/api/v1/auth/login")
+        .post("/api/v1/auth/login/wallet")
         .json(&serde_json::json!({
             "wallet_address": wallet_address,
             "signature": signature_hex,

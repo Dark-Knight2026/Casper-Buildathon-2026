@@ -20,7 +20,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 /// Baseline: a freshly issued access token works against `GET /me` when
-/// `users.jwt_invalidate_before IS NULL` (the default after `/auth/login`).
+/// `users.jwt_invalidate_before IS NULL` (the default after `/auth/login/wallet`).
 /// Pins that the new middleware DB lookup does not regress the happy path.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn null_jwt_invalidate_before_allows_request(pool: PgPool) {
@@ -149,7 +149,7 @@ async fn fresh_login_after_cutoff_succeeds(pool: PgPool) {
     );
     let first_login = env
         .server
-        .post("/api/v1/auth/login")
+        .post("/api/v1/auth/login/wallet")
         .json(&serde_json::json!({
             "wallet_address": wallet_address,
             "signature": signature_hex,
@@ -188,7 +188,7 @@ async fn fresh_login_after_cutoff_succeeds(pool: PgPool) {
     tokio::time::sleep(Duration::from_secs(1)).await;
     let second_login = env
         .server
-        .post("/api/v1/auth/login")
+        .post("/api/v1/auth/login/wallet")
         .json(&serde_json::json!({
             "wallet_address": wallet_address,
             "signature": signature_hex,
@@ -253,14 +253,14 @@ async fn deleted_user_cutoff_blocks_non_profile_endpoint(pool: PgPool) {
 
     // Sanity: the cutoff really did land on the row. If this assertion
     // fails, the rest of the test would be testing a different bug.
-    let cutoff_set: bool = sqlx::query_scalar!(
+    let cutoff_set = sqlx::query_scalar::<_, bool>(
         r#"
             SELECT (jwt_invalidate_before IS NOT NULL) AS "stamped!"
             FROM users
             WHERE id = $1
         "#,
-        session.user_id,
     )
+    .bind(session.user_id)
     .fetch_one(&pool)
     .await
     .unwrap();

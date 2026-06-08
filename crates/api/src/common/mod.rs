@@ -30,7 +30,8 @@ pub use models::{
 };
 pub use pagination::{Pageable, PaginatedResponse, Pagination};
 pub use password::{
-    MAX_PASSWORD_LEN, MIN_PASSWORD_LEN, hash_password, validate_password_policy, verify_password,
+    MAX_PASSWORD_LEN, MIN_PASSWORD_LEN, dummy_verify, hash_password, validate_password_policy,
+    verify_password,
 };
 pub use redis::{RedisStore, VerifyEmailReservation};
 

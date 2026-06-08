@@ -11,7 +11,7 @@ Session-management endpoints live in [`auth_sessions.md`](auth_sessions.md).
 - **Response:** `{ "nonce": "...", "message": "Sign this..." }`
 - **Auth:** Public
 
-## POST `/api/v1/auth/login`
+## POST `/api/v1/auth/login/wallet`
 
 - **Input:** `{ "wallet_address": "...", "signature": "...", "role"?: "tenant"|"landlord"|"agent" }`
 - **Response (200):** `{ "user": UserInfo }` plus `Set-Cookie: access_token=...; refresh_token=...`. See [`users.md`](users.md) for the `UserInfo` shape.

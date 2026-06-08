@@ -56,7 +56,7 @@ async fn relogin_with_keypair(env: &TestEnv, session: &LoggedSession) -> String 
 
     let login_response = env
         .server
-        .post("/api/v1/auth/login")
+        .post("/api/v1/auth/login/wallet")
         .json(&serde_json::json!({
             "wallet_address": wallet_address,
             "signature": signature_hex,
@@ -194,7 +194,7 @@ async fn role_change_bidirectional_after_redis_reset(pool: PgPool) {
 
     // Drop the rate-limit slot to simulate the 24h window having elapsed.
     let redis_env = env.redis.as_ref().expect("redis env");
-    let mut conn: redis::aio::MultiplexedConnection = redis_env
+    let mut conn = redis_env
         .client
         .get_multiplexed_async_connection()
         .await
@@ -374,7 +374,7 @@ async fn role_change_noop_does_not_burn_rate_limit(pool: PgPool) {
     );
 
     // Sanity: row actually flipped now.
-    let role: String = sqlx::query_scalar!("SELECT role FROM users WHERE id = $1", session.user_id)
+    let role = sqlx::query_scalar!("SELECT role FROM users WHERE id = $1", session.user_id)
         .fetch_one(&pool)
         .await
         .unwrap();
@@ -416,14 +416,14 @@ async fn role_change_with_active_lease_returns_409(pool: PgPool) {
     assert!(row.jwt_invalidate_before.is_none());
 
     let redis_env = env.redis.as_ref().expect("redis env");
-    let mut conn: redis::aio::MultiplexedConnection = redis_env
+    let mut conn = redis_env
         .client
         .get_multiplexed_async_connection()
         .await
         .unwrap();
-    let exists: i64 = redis::cmd("EXISTS")
+    let exists = redis::cmd("EXISTS")
         .arg(RedisStore::role_change_attempts_key(session.user_id))
-        .query_async(&mut conn)
+        .query_async::<i64>(&mut conn)
         .await
         .unwrap();
     assert_eq!(

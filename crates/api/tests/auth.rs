@@ -15,6 +15,7 @@ use uuid::Uuid;
 use api::{
     Claims, RedisStore, UserRole,
     common::{JWT_AUDIENCE, JWT_ISSUER, TokenType},
+    services::auth,
     services::{AUTH_RATE_LIMIT_BURST, auth::UpsertOutcome},
 };
 
@@ -35,7 +36,7 @@ async fn login_with_seed(env: &common::TestEnv, secret_seed: [u8; 32]) -> TestRe
     let signature_hex = common::sign_with_prefix(message, &secret_key, &public_key);
 
     env.server
-        .post("/api/v1/auth/login")
+        .post("/api/v1/auth/login/wallet")
         .json(&serde_json::json!({
             "wallet_address": wallet_address,
             "signature": signature_hex,
@@ -81,7 +82,7 @@ async fn login_rejects_invalid_wallet_address(pool: PgPool) {
 
     let response = env
         .server
-        .post("/api/v1/auth/login")
+        .post("/api/v1/auth/login/wallet")
         .json(&serde_json::json!({
             "wallet_address": "invalid",
             "signature": "fake_signature"
@@ -111,7 +112,7 @@ async fn login_rejects_non_hex_address(pool: PgPool) {
 
     let response = env
         .server
-        .post("/api/v1/auth/login")
+        .post("/api/v1/auth/login/wallet")
         .json(&serde_json::json!({
             "wallet_address": non_hex_address,
             "signature": "01a234567890abcdef01234567890abcdef01234567890abcdef01234567890abc01234567890abcdef01234567890abcdef01234567890abcdef01234567890abcdef"
@@ -133,7 +134,7 @@ async fn login_without_nonce_returns_401(pool: PgPool) {
     // Returns 401 (UNAUTHORIZED) because nonce lookup fails before signature check.
     let response = env
         .server
-        .post("/api/v1/auth/login")
+        .post("/api/v1/auth/login/wallet")
         .json(&serde_json::json!({
             "wallet_address": "01a234567890abcdef01234567890abcdef01234567890abcdef01234567890abc",
             "signature": "01a234567890abcdef01234567890abcdef01234567890abcdef01234567890abc01234567890abcdef01234567890abcdef01234567890abcdef01234567890abcdef"
@@ -207,7 +208,7 @@ async fn full_auth_flow_nonce_sign_login(pool: PgPool) {
     // 4. Login
     let login_response = env
         .server
-        .post("/api/v1/auth/login")
+        .post("/api/v1/auth/login/wallet")
         .json(&serde_json::json!({
             "wallet_address": wallet_address,
             "signature": signature_hex
@@ -259,7 +260,7 @@ async fn replay_attack_prevention(pool: PgPool) {
     // First login succeeds
     let first = env
         .server
-        .post("/api/v1/auth/login")
+        .post("/api/v1/auth/login/wallet")
         .json(&serde_json::json!({
             "wallet_address": wallet_address,
             "signature": signature_hex
@@ -270,7 +271,7 @@ async fn replay_attack_prevention(pool: PgPool) {
     // Second login with same signature fails (nonce was deleted)
     let second = env
         .server
-        .post("/api/v1/auth/login")
+        .post("/api/v1/auth/login/wallet")
         .json(&serde_json::json!({
             "wallet_address": wallet_address,
             "signature": signature_hex
@@ -313,7 +314,7 @@ async fn concurrent_nonce_overwrites_previous(pool: PgPool) {
     // Login with latest nonce succeeds (first nonce was overwritten)
     let fresh = env
         .server
-        .post("/api/v1/auth/login")
+        .post("/api/v1/auth/login/wallet")
         .json(&serde_json::json!({
             "wallet_address": wallet_address,
             "signature": second_sig
@@ -346,7 +347,7 @@ async fn failed_login_consumes_nonce(pool: PgPool) {
     // First attempt with a wrong signature consumes the nonce
     let bad = env
         .server
-        .post("/api/v1/auth/login")
+        .post("/api/v1/auth/login/wallet")
         .json(&serde_json::json!({
             "wallet_address": wallet_address,
             "signature": "01".repeat(64)
@@ -361,7 +362,7 @@ async fn failed_login_consumes_nonce(pool: PgPool) {
     // Second attempt with the correct signature fails (nonce already consumed)
     let retry = env
         .server
-        .post("/api/v1/auth/login")
+        .post("/api/v1/auth/login/wallet")
         .json(&serde_json::json!({
             "wallet_address": wallet_address,
             "signature": correct_sig
@@ -389,7 +390,7 @@ async fn login_without_nonce_is_rejected(pool: PgPool) {
 
     let response = env
         .server
-        .post("/api/v1/auth/login")
+        .post("/api/v1/auth/login/wallet")
         .json(&serde_json::json!({
             "wallet_address": wallet_address,
             "signature": signature_hex
@@ -570,7 +571,7 @@ async fn full_auth_flow_secp256k1(pool: PgPool) {
     // Login
     let login_response = env
         .server
-        .post("/api/v1/auth/login")
+        .post("/api/v1/auth/login/wallet")
         .json(&serde_json::json!({
             "wallet_address": wallet_address,
             "signature": signature_hex
@@ -1099,8 +1100,8 @@ async fn concurrent_first_login_resolves_same_user(pool: PgPool) {
     let email_b = placeholder_email.clone();
 
     let (result_a, result_b) = tokio::join!(
-        api::services::auth::upsert_user_by_wallet(&pool_a, &email_a, &wallet_a, UserRole::Tenant),
-        api::services::auth::upsert_user_by_wallet(&pool_b, &email_b, &wallet_b, UserRole::Tenant),
+        auth::upsert_user_by_wallet(&pool_a, &email_a, &wallet_a, UserRole::Tenant),
+        auth::upsert_user_by_wallet(&pool_b, &email_b, &wallet_b, UserRole::Tenant),
     );
 
     let UpsertOutcome::Resolved(record_a) =
@@ -1120,14 +1121,14 @@ async fn concurrent_first_login_resolves_same_user(pool: PgPool) {
     );
 }
 
-/// Regression: a `POST /auth/login` against a wallet that has no nonce
+/// Regression: a `POST /auth/login/wallet` against a wallet that has no nonce
 /// stored in Redis must increment the per-wallet failure counter so
 /// repeated attempts hit the 429 ceiling instead of returning 401
 /// indefinitely.
 ///
 /// The buggy path returns `Unauthorized` directly from `take_nonce`'s
 /// `ok_or_else`, never calling `record_login_failure`. An attacker who
-/// only knows a wallet address can then probe the `/auth/login`
+/// only knows a wallet address can then probe the `/auth/login/wallet`
 /// endpoint without first paying for a `/auth/nonce` round-trip and
 /// without ever tripping the rate-limit gate.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
@@ -1146,7 +1147,7 @@ async fn nonce_miss_counts_toward_rate_limit(pool: PgPool) {
     for attempt in 0..5 {
         let response = env
             .server
-            .post("/api/v1/auth/login")
+            .post("/api/v1/auth/login/wallet")
             .json(&serde_json::json!({
                 "wallet_address": wallet_address,
                 "signature": signature,
@@ -1163,7 +1164,7 @@ async fn nonce_miss_counts_toward_rate_limit(pool: PgPool) {
     // even consults Redis for a nonce, returning 429.
     let response = env
         .server
-        .post("/api/v1/auth/login")
+        .post("/api/v1/auth/login/wallet")
         .json(&serde_json::json!({
             "wallet_address": wallet_address,
             "signature": signature,
@@ -1242,14 +1243,11 @@ async fn replaced_by_fk_blocks_chain_breaking_deletes(pool: PgPool) {
     let wallet_address = public_key.to_hex().to_ascii_lowercase();
     let placeholder_email = format!("wallet_{}@leasefi.local", &wallet_address[..40]);
 
-    let UpsertOutcome::Resolved(user) = api::services::auth::upsert_user_by_wallet(
-        &pool,
-        &placeholder_email,
-        &wallet_address,
-        UserRole::Tenant,
-    )
-    .await
-    .expect("seed user creation must succeed") else {
+    let UpsertOutcome::Resolved(user) =
+        auth::upsert_user_by_wallet(&pool, &placeholder_email, &wallet_address, UserRole::Tenant)
+            .await
+            .expect("seed user creation must succeed")
+    else {
         panic!("seed user must Resolve - fresh wallet upserts default to status='active'");
     };
 
@@ -1486,14 +1484,11 @@ async fn login_refresh_revoke_and_insert_are_atomic(pool: PgPool) {
     let wallet_address = public_key.to_hex().to_ascii_lowercase();
     let placeholder_email = format!("wallet_{}@leasefi.local", &wallet_address[..40]);
 
-    let UpsertOutcome::Resolved(user) = api::services::auth::upsert_user_by_wallet(
-        &pool,
-        &placeholder_email,
-        &wallet_address,
-        UserRole::Tenant,
-    )
-    .await
-    .expect("seed user creation must succeed") else {
+    let UpsertOutcome::Resolved(user) =
+        auth::upsert_user_by_wallet(&pool, &placeholder_email, &wallet_address, UserRole::Tenant)
+            .await
+            .expect("seed user creation must succeed")
+    else {
         panic!("seed user must Resolve - fresh wallet upserts default to status='active'");
     };
 
@@ -1529,7 +1524,7 @@ async fn login_refresh_revoke_and_insert_are_atomic(pool: PgPool) {
     .await
     .expect("installing the BEFORE INSERT trigger must succeed");
 
-    let result = api::services::auth::issue_login_refresh_token(&pool, user.id).await;
+    let result = auth::issue_login_refresh_token(&pool, user.id).await;
     assert!(
         result.is_err(),
         "issue_login_refresh_token must surface the INSERT failure as an error",
@@ -1592,7 +1587,7 @@ async fn login_with_admin_role_rejected_with_400(pool: PgPool) {
 
     let login_response = env
         .server
-        .post("/api/v1/auth/login")
+        .post("/api/v1/auth/login/wallet")
         .json(&serde_json::json!({
             "wallet_address": wallet_address,
             "signature": signature_hex,
@@ -1716,13 +1711,9 @@ async fn upsert_retry_exhaustion_is_not_row_not_found(pool: PgPool) {
     .await
     .expect("seed user insert");
 
-    let result = api::services::auth::upsert_user_by_wallet(
-        &pool,
-        placeholder_email,
-        wallet_address,
-        UserRole::Tenant,
-    )
-    .await;
+    let result =
+        auth::upsert_user_by_wallet(&pool, placeholder_email, wallet_address, UserRole::Tenant)
+            .await;
 
     let err = result.expect_err("retry budget must be exhausted in this scenario");
     assert!(

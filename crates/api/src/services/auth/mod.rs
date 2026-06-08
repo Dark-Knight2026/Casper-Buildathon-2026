@@ -36,8 +36,9 @@ pub use cookies::{
     build_refresh_cookie,
 };
 pub use db::{
-    ActiveSession, RegisterOutcome, UpsertOutcome, create_password_user, insert_refresh_token,
-    list_active_sessions, revoke_all_sessions_for_user, revoke_session_by_id,
+    ActiveSession, PasswordLoginRecord, RegisterOutcome, UpsertOutcome, create_password_user,
+    find_password_login_by_email, insert_refresh_token, list_active_sessions,
+    revoke_all_sessions_for_user, revoke_session_by_id, update_last_login_at,
     upsert_user_by_wallet,
 };
 pub use extractors::{
@@ -56,4 +57,4 @@ pub use refresh::{IssuedRefreshToken, REFRESH_TOKEN_TTL, issue_login_refresh_tok
 pub use routes::router;
 pub use sessions::{get_sessions, revoke_all_sessions, revoke_session};
 pub use verify::{confirm_verify_email, resend_verify_email, send_verify_email};
-pub use wallet::{get_nonce, login};
+pub use wallet::{get_nonce, login_wallet};

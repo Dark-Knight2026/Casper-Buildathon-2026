@@ -186,6 +186,24 @@ fn validate_name(field: &str, value: &str) -> ApiResult<String> {
     Ok(trimmed.to_owned())
 }
 
+/// Request payload for email + password login.
+///
+/// Deliberately has no `into_validated` counterpart: the login path must NOT
+/// surface field-level validation errors. An "email is not valid" message
+/// would itself leak that the address is unknown, so the handler normalizes
+/// the email and folds every failure - bad format, unknown email, wrong
+/// password, wallet-only account - into one generic `401`.
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct PasswordLoginRequest {
+    /// Email address. Normalized (trim + lowercase) in the handler before the
+    /// lookup so it matches the stored, normalized value.
+    pub email: String,
+    /// Plaintext password (transported only over HTTPS). Verified against the
+    /// stored Argon2id hash in constant time; never logged or echoed back.
+    #[schema(value_type = String)]
+    pub password: SecretString,
+}
+
 // Sessions --------------------------------------------------------------------
 
 /// One row of the response from `GET /api/v1/auth/sessions`.

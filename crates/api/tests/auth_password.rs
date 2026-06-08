@@ -7,7 +7,7 @@ use secrecy::SecretString;
 use serde_json::{Value, json};
 use sqlx::PgPool;
 
-use api::{UserRole, common::VerificationLevel};
+use api::{UserRole, common::VerificationLevel, services::auth};
 
 /// A password that satisfies the policy: >= 8 chars, has a digit, and mixes
 /// case. Reused across the happy-path tests so a single fixture documents what
@@ -64,11 +64,8 @@ async fn register_creates_user_and_logs_in(pool: PgPool) {
     assert_eq!(body["user"]["verification_level"], "none");
 
     // The access JWT decodes and carries verification_level = none.
-    let claims = api::services::auth::decode_token(
-        &access_token,
-        &SecretString::from(env.jwt_secret.clone()),
-    )
-    .expect("access token decodes");
+    let claims = auth::decode_token(&access_token, &SecretString::from(env.jwt_secret.clone()))
+        .expect("access token decodes");
     assert_eq!(claims.role, UserRole::Tenant);
     assert_eq!(claims.verification_level, Some(VerificationLevel::None));
 
@@ -222,4 +219,166 @@ async fn register_rejects_non_self_registerable_role(pool: PgPool) {
         .await;
 
     assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
+}
+
+/// Registers a password account, then logs in with the same credentials and
+/// the same email under a different case - login must normalize it, set both
+/// auth cookies, and mint an access JWT carrying the user's role and level.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn password_login_succeeds_with_valid_credentials(pool: PgPool) {
+    let env = common::setup_test_server(pool, false).await;
+
+    let register = env
+        .server
+        .post("/api/v1/auth/register")
+        .json(&json!({
+            "email": "login@example.com",
+            "password": VALID_PASSWORD,
+            "first_name": "Log",
+            "last_name": "In",
+        }))
+        .await;
+    assert_eq!(register.status_code(), StatusCode::OK);
+
+    // Mixed case on login proves the handler normalizes before lookup.
+    let response = env
+        .server
+        .post("/api/v1/auth/login/password")
+        .json(&json!({
+            "email": "Login@Example.com",
+            "password": VALID_PASSWORD,
+        }))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+
+    let access_token = response.cookie("access_token").value().to_owned();
+    let refresh_token = response.cookie("refresh_token").value().to_owned();
+    assert!(!access_token.is_empty(), "access_token cookie must be set");
+    assert!(
+        !refresh_token.is_empty(),
+        "refresh_token cookie must be set"
+    );
+
+    let body = response.json::<Value>();
+    assert_eq!(body["user"]["email"], "login@example.com");
+
+    let claims = auth::decode_token(&access_token, &SecretString::from(env.jwt_secret.clone()))
+        .expect("access token decodes");
+    assert_eq!(claims.role, UserRole::Tenant);
+    assert_eq!(claims.verification_level, Some(VerificationLevel::None));
+}
+
+/// A wrong password for a real account yields the generic 401 - no hint that
+/// the email exists.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn password_login_rejects_wrong_password(pool: PgPool) {
+    let env = common::setup_test_server(pool, false).await;
+
+    let register = env
+        .server
+        .post("/api/v1/auth/register")
+        .json(&json!({
+            "email": "wrongpass@example.com",
+            "password": VALID_PASSWORD,
+            "first_name": "Wrong",
+            "last_name": "Pass",
+        }))
+        .await;
+    assert_eq!(register.status_code(), StatusCode::OK);
+
+    let response = env
+        .server
+        .post("/api/v1/auth/login/password")
+        .json(&json!({
+            "email": "wrongpass@example.com",
+            "password": "Different1Pass",
+        }))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::UNAUTHORIZED);
+}
+
+/// An unknown email returns the same generic 401 as a wrong password - the
+/// anti-enumeration guarantee.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn password_login_rejects_unknown_email(pool: PgPool) {
+    let env = common::setup_test_server(pool, false).await;
+
+    let response = env
+        .server
+        .post("/api/v1/auth/login/password")
+        .json(&json!({
+            "email": "ghost@example.com",
+            "password": VALID_PASSWORD,
+        }))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::UNAUTHORIZED);
+}
+
+/// A wallet-only account (`password_hash IS NULL`) cannot be logged into with
+/// a password: the handler treats the NULL hash exactly like a wrong password
+/// and returns the generic 401.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn password_login_rejects_wallet_only_account(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+
+    sqlx::query(
+        r"
+            INSERT INTO users (email, primary_auth_method, role, first_name, last_name, status)
+            VALUES ($1, 'wallet', 'tenant', 'Wallet', 'Only', 'active')
+        ",
+    )
+    .bind("walletonly@example.com")
+    .execute(&pool)
+    .await
+    .expect("insert wallet-only user");
+
+    let response = env
+        .server
+        .post("/api/v1/auth/login/password")
+        .json(&json!({
+            "email": "walletonly@example.com",
+            "password": VALID_PASSWORD,
+        }))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::UNAUTHORIZED);
+}
+
+/// A suspended account has valid credentials but must not receive tokens: the
+/// status gate rejects it with 403, distinct from the credential-failure 401.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn password_login_rejects_suspended_account(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+
+    let register = env
+        .server
+        .post("/api/v1/auth/register")
+        .json(&json!({
+            "email": "suspended@example.com",
+            "password": VALID_PASSWORD,
+            "first_name": "Sus",
+            "last_name": "Pended",
+        }))
+        .await;
+    assert_eq!(register.status_code(), StatusCode::OK);
+
+    sqlx::query("UPDATE users SET status = 'suspended' WHERE email = $1")
+        .bind("suspended@example.com")
+        .execute(&pool)
+        .await
+        .expect("suspend the account");
+
+    let response = env
+        .server
+        .post("/api/v1/auth/login/password")
+        .json(&json!({
+            "email": "suspended@example.com",
+            "password": VALID_PASSWORD,
+        }))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::FORBIDDEN);
 }
