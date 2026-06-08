@@ -61,7 +61,7 @@ version-updated: 2026-06-05T00:00:00Z
 
 | Section | Done | Total | Main blocker |
 |---|---|---|---|
-| 3.1 Auth & Onboarding | 3 | 5 | KYC + email-verify UI |
+| 3.1 Auth & Onboarding | 4 | 5 | KYC |
 | 3.2 Profiles (3 roles) | 0 | 4 | role data ⛔, no PM role |
 | 3.3 Properties | 1 | 6 | propertyService on Supabase |
 | 3.4 Lease Agreement | 0 | 6 | lease option / cap / signing absent |
@@ -71,7 +71,7 @@ version-updated: 2026-06-05T00:00:00Z
 | 3.8 Compliance & Privacy (FE part) | 2 | 6 | KYC / audit ⛔ BE, PII access |
 | 3.9 Production deploy (FE part) | 0 | 3 | CI/CD to chosen host |
 | 3.10 Geographic Pilot | 0 | 8 | state gating ⛔ BE re-validation |
-| **Total** | **6** | **51** | |
+| **Total** | **7** | **51** | |
 
 ---
 
@@ -88,9 +88,10 @@ version-updated: 2026-06-05T00:00:00Z
   - `kyc_status` exists only in `src/types/blockchain.ts`, never read/shown. No Sumsub widget.
   - FE work: embed Sumsub WebSDK widget, KYC status screen, gate "no KYC → no lease/payment".
   - Block: backend does not create the applicant nor serve the webhook status.
-- [ ] **Email verification (Postmark)** — 🔴 MISSING (contract exists)
-  - `userProfileService.requestEmailChange` / `confirmEmailChange` (`/api/v1/users/me/email[/confirm]`) defined, but UI disabled: `src/pages/tenant/TenantProfile.tsx:515` — button disabled with TODO.
-  - FE work: request/confirm email screen + token-confirmation landing page.
+- [x] **Email verification & email change** — 🟢 REAL
+  - Initial verify: `sendVerificationEmail` / `resendVerificationEmail` / `confirmEmailVerification` (backendAuthService) → landing page `src/pages/auth/VerifyEmail.tsx` (routed `/verify-email`).
+  - Email change: `requestEmailChange` / `confirmEmailChange` (`/api/v1/users/me/email[/confirm]`, userProfileService) → `ChangeEmailDialog` + landing page `src/pages/auth/ConfirmEmailChange.tsx` (routed `/confirm-email-change`).
+  - Status + resend surfaced via `EmailVerificationCard`, mounted on tenant & landlord profiles.
 - [x] **Profile editable (avatar, personal data)** — 🟢 REAL
   - `src/pages/tenant/TenantProfile.tsx` → `AuthContext.updateProfile` (`PATCH /api/v1/users/me`) + `uploadAvatar` (`POST /api/v1/users/me/avatar`, S3). `RoleSwitchDialog` → `patchMyRole` with reauth gate.
   - ⚠️ This is the tenant profile page. Landlord profile-edit page now exists (`src/pages/landlord/LandlordProfile.tsx`); PM profile-edit page still missing (see §3.2).
@@ -231,7 +232,7 @@ version-updated: 2026-06-05T00:00:00Z
 
 ## "Now" backlog (can start without the backend)
 
-1. Email-verify UI — contract `/api/v1/users/me/email[/confirm]` already known.
+1. ~~Email-verify UI~~ — ✅ DONE (VerifyEmail/ConfirmEmailChange + EmailVerificationCard, backend-integrated; see §3.1).
 2. KYC Sumsub widget + status screen + action gate (widget streams browser→Sumsub; status display lands later).
 3. `declared_mortgage_value` field on the property form.
 4. "PM split %" field in the lease wizard.
