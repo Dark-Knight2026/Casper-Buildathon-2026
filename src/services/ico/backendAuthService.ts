@@ -27,6 +27,10 @@ export interface ServerUserInfo {
   active_leases_count: number;
   created_at: string;
   updated_at: string;
+  // Email-verification level. Ordered enum (snake_case):
+  // 'none' | 'email' | 'identity' | 'full' — email is verified at 'email'+.
+  // Optional because legacy sessions may omit it; treat absence as unverified.
+  verification_level?: string;
 }
 
 export interface LoginResponse {
@@ -124,4 +128,77 @@ export async function logoutSession(): Promise<void> {
     // Logout is best-effort — even if the backend rejects (already-expired
     // refresh, network down), the client will still clear its local state.
   }
+}
+
+// ─── Email verification ─────────────────────────────────────────────────────
+
+export interface VerifyEmailSendResponse {
+  status: 'sent';
+  // Dev/MVP escape hatch — populated ONLY while POSTMARK_SERVER_TOKEN is not
+  // configured on the backend, so the frontend can confirm without a real
+  // inbox. Disappears automatically once Postmark is wired. Frontend MUST NOT
+  // rely on this in production.
+  dev_verification_token?: string;
+}
+
+export interface VerifyEmailConfirmResponse {
+  user: ServerUserInfo;
+}
+
+/**
+ * Request a verification email be sent to the authenticated user's address.
+ * Resolves with `{ status: 'sent' }` even when delivery is deferred to the
+ * retry queue — the UI should signal "request accepted", not "delivered".
+ *
+ * Errors:
+ *   400 `email_not_set`   — user has no real email yet (e.g. wallet-only)
+ *   429 `rate_limited`    — 1/min, 5/hour per user
+ */
+export async function sendVerificationEmail(): Promise<VerifyEmailSendResponse> {
+  return backendClient.post<VerifyEmailSendResponse>(
+    '/api/v1/auth/verify/email/send',
+    undefined,
+    { retry: false },
+  );
+}
+
+/**
+ * Same contract as `sendVerificationEmail` — backend exposes a separate
+ * endpoint so we can attribute resend metrics distinctly from first-send.
+ */
+export async function resendVerificationEmail(): Promise<VerifyEmailSendResponse> {
+  return backendClient.post<VerifyEmailSendResponse>(
+    '/api/v1/auth/verify/email/resend',
+    undefined,
+    { retry: false },
+  );
+}
+
+/**
+ * Exchange the email-verification token for an upgraded session. On success
+ * the backend rotates both access and refresh cookies via Set-Cookie and
+ * returns the fresh `UserInfo` with the upgraded `verification_level` — the
+ * caller should feed that into AuthContext directly and NOT follow up with
+ * `GET /users/me` (per backend notes: re-fetch is a redundant round-trip and
+ * a race risk against the freshly rotated cookies).
+ *
+ * Errors (the endpoint requires auth, so 401 is overloaded):
+ *   400 `bad_token_format`            — token is not a 43-char base64url string
+ *   401 `invalid_token`/`missing_access_token` — caller not logged in (middleware)
+ *   401 `invalid_or_expired_token`    — token hash mismatch (handler)
+ *   404 `invalid_or_expired_token`    — token slot consumed/expired/never issued
+ * Callers must switch on `ApiError.code`, not status, to tell "needs login" from
+ * "bad token".
+ */
+export async function confirmEmailVerification(
+  token: string,
+): Promise<VerifyEmailConfirmResponse> {
+  return backendClient.post<VerifyEmailConfirmResponse>(
+    '/api/v1/auth/verify/email/confirm',
+    { token },
+    // skipAuthError: a 401 here is classified in-page (needs_login vs bad token);
+    // don't let the global handler hard-redirect to /auth/login. Refresh-and-replay
+    // still runs, so an expired-access link transparently re-auths.
+    { retry: false, skipAuthError: true },
+  );
 }

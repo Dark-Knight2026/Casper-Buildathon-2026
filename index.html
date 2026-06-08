@@ -4,15 +4,17 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     
-    <!-- Favicon and App Icons -->
-    <link rel="shortcut icon" href="/favicon.ico" />
-    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+    <!-- Favicon and App Icons (all derived from public/leaseFilogo2.png) -->
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
     <link rel="icon" type="image/png" sizes="192x192" href="/pwa-192x192.png" />
     <link rel="icon" type="image/png" sizes="512x512" href="/pwa-512x512.png" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="apple-touch-icon" sizes="180x180" href="/pwa-192x192.png" />
-    <link rel="manifest" href="/manifest.json" />
-    
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <!-- Legacy fallback for browsers that prefer .ico — kept last so the
+         PNG variants above win for everything modern. -->
+    <link rel="shortcut icon" href="/favicon.ico" />
+    <!-- The manifest <link> is injected by vite-plugin-pwa (manifest.webmanifest);
+         no hand-written public/manifest.json so the two can't drift. -->
+
     <!-- Primary Meta Tags -->
     <title>LeaseFi</title>
     <meta name="title" content="Find Your Dream Property | Real Estate Management Platform" />

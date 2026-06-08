@@ -29,7 +29,10 @@ import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
+import { useRefetchOnFocus } from '@/hooks/useRefetchOnFocus';
 import { RoleSwitchDialog } from '@/components/profile/RoleSwitchDialog';
+import { EmailVerificationCard } from '@/components/profile/EmailVerificationCard';
+import { ChangeEmailDialog } from '@/components/profile/ChangeEmailDialog';
 import { uploadAvatar } from '@/services/userProfileService';
 import { ApiError } from '@/lib/api-client';
 import { AvatarStatus } from '@/lib/api-errors';
@@ -61,6 +64,14 @@ export function LandlordProfile() {
     });
   }, [refreshProfile]);
 
+  // Re-fetch when the user returns to this tab — covers email verify/change
+  // links that the mail client opened (and confirmed) in a separate tab.
+  useRefetchOnFocus(() => {
+    void refreshProfile().catch(() => {
+      /* non-fatal: keep showing the last good profile. */
+    });
+  });
+
   const fullName = useMemo(() => {
     if (!authProfile) return '';
     const first = authProfile.firstName ?? '';
@@ -74,6 +85,7 @@ export function LandlordProfile() {
   const [avatarLoadFailed, setAvatarLoadFailed] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [roleSwitchOpen, setRoleSwitchOpen] = useState(false);
+  const [changeEmailOpen, setChangeEmailOpen] = useState(false);
   const [formData, setFormData] = useState({
     firstName: authProfile?.firstName ?? '',
     lastName: authProfile?.lastName ?? '',
@@ -210,6 +222,10 @@ export function LandlordProfile() {
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-foreground mb-2">My Profile</h1>
         <p className="text-muted-foreground">Manage your account information</p>
+      </div>
+
+      <div className="mb-6">
+        <EmailVerificationCard />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -500,16 +516,17 @@ export function LandlordProfile() {
                   row (email left, button right, single line). Mirrors
                   TenantProfile so layouts stay parallel. */}
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-                <div className="flex items-start gap-3 min-w-0 justify-end sm:items-center sm:justify-start">
+                <div className="flex items-start gap-3 min-w-0 sm:items-center">
                   <Mail className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5 sm:mt-0" />
-                  <p className="text-sm text-foreground min-w-0 wrap-break-word text-right sm:text-left">
+                  <p className="text-sm text-foreground min-w-0 wrap-break-word text-left">
                     {authProfile?.email ?? ''}
                   </p>
                 </div>
-                {/* Disabled until the change-email dialog ships — service
-                    layer exists (requestEmailChange / confirmEmailChange in
-                    userProfileService.ts); only the dialog is missing. */}
-                <Button variant="outline" size="sm" disabled title="Coming soon">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setChangeEmailOpen(true)}
+                >
                   Change email
                 </Button>
               </div>
@@ -520,6 +537,12 @@ export function LandlordProfile() {
           </Card>
         </div>
       </div>
+
+      <ChangeEmailDialog
+        open={changeEmailOpen}
+        onOpenChange={setChangeEmailOpen}
+        currentEmail={authProfile?.email}
+      />
     </div>
   );
 }

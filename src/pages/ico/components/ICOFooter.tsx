@@ -54,7 +54,7 @@ export function ICOFooter() {
           </div>
           <div className="flex items-center gap-4">
             <a
-              href="/ico/whitepaper"
+              href="/big-token/whitepaper"
               target="_blank"
               rel="noopener noreferrer"
               className="hover:text-[hsl(var(--ico-brand-primary))] transition-colors"

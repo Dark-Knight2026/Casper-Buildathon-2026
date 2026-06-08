@@ -218,7 +218,7 @@ Add to `App.tsx`:
 
 ```tsx
 // Single public ICO route with state-driven UI
-<Route path="/ico" element={<ICOPage />} />
+<Route path="/big-token" element={<ICOPage />} />
 ```
 
 **Implementation Note:** No page reloads between modes; UI swaps dynamically based on state.

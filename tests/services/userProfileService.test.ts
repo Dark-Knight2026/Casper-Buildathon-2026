@@ -78,7 +78,13 @@ describe('confirmEmailChange', () => {
   it('POSTs /me/email/confirm with the token in the body', async () => {
     postMock.mockResolvedValueOnce({ id: '1' });
     await confirmEmailChange('tok123');
-    expect(postMock).toHaveBeenCalledWith(`${ME}/email/confirm`, { token: 'tok123' });
+    // skipAuthError keeps a 401 in-page (needs_login vs bad token) instead of
+    // letting the global handler hard-redirect to /auth/login.
+    expect(postMock).toHaveBeenCalledWith(
+      `${ME}/email/confirm`,
+      { token: 'tok123' },
+      { skipAuthError: true },
+    );
   });
 });
 

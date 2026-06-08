@@ -1,3 +1,9 @@
+// DEAD CODE (kept intentionally, not yet removed): this component's only
+// importer is `pages/MobileOptimizedListings.tsx`, which is itself never routed
+// or imported by live code — so nothing here renders in the app. Re R3-02:
+// the local getDashboardRoute() below returns stale routes (/buyer-dashboard,
+// /landlord-dashboard, …) that don't exist in App.tsx. Before reviving this,
+// replace it with getDashboardRoute from '@/types/user'.
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';

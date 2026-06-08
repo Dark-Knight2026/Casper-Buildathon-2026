@@ -2,6 +2,100 @@
 
 > This document is the source of truth for the **MVP**. Hour/day estimates are not included — each engineer prepares their own estimate against this scope.
 > Delivery target — **2026-07-15**.
+>
+> ⚠️ **Priority change (Thursday call, 2026-06-04):** the first development stage is now **Phase 0 — Hackathon Starter Project** (see **§0**), deadline **2026-06-30**. The full MVP below (§1–§8) remains the source of truth for the **next** stage; Phase 0 is a subset assembled so as **not to change the architecture**.
+
+---
+
+## §0. Phase 0 — Hackathon Starter Project (current priority)
+
+> **Context.** Agreed on the Thursday call 2026-06-04: a new hackathon (cash-for-build) appeared, deadline **2026-06-30**, ~3 weeks of work, the client adds up to **40 eng hours/week**. **The first development stage is now NOT the full MVP (§1–§8), but a starter project for the hackathon.** Phase 0 is deliberately minimal and **does not change the architecture**: everything we build for the hackathon lives in the MVP roadmap and won't need rewriting afterward. What we "omit" here (full auth, KYC) is added **on top** later, without breakage.
+
+### §0.1 Hackathon goal & criteria
+Show a working prototype on Casper testnet that **executes real on-chain transactions**. Three mandatory judging requirements:
+1. Working prototype deployed on **Casper testnet**, with a component that **produces on-chain transactions**.
+2. **Open-source GitHub** repository.
+3. **Demo video**.
+
+Bonus judging criterion — meaningful **AI agent / autonomous system** integration. We satisfy it with a **plan / forethought** (our ~32-agent roadmap), without a full implementation — that is sufficient for judges (immature ecosystem; a plan is expected, not a finished agent).
+
+A live deployment is not required — a **demo video** plus transactions visible on-chain (explorer / repo) is enough.
+
+### §0.2 Phase 0 scope — 4 ways to show an on-chain transaction
+**Must-have** (minimum hackathon threshold — two are enough for a "win"):
+- **Property listing** — landlord lists a property → **NFT mint on-chain** (transaction #1).
+- **Lease agreement** — lease signed and recorded **on-chain** (transaction #2).
+
+**Nice-to-have** (bonus, if time allows):
+- **Deposit** — deposit into the **Escrow** contract (transaction #3).
+- **Rent payment** — payment via pay-router into the **Treasury** with a **2% fee** (transaction #4).
+
+### §0.3 Delta vs MVP — what we SIMPLIFY in Phase 0
+| Aspect | MVP (§1–§8) | Phase 0 — Hackathon |
+|---|---|---|
+| Money rail | Fiat-first via **Stripe** (§5.7) | **Crypto-only**: testnet **CSPR / cUSD** (Casper stablecoin). No Stripe, fiat, on/off-ramp, fiat↔crypto conversion. |
+| Stablecoin | — | cUSD (Casper CS USD) — non-fluctuating, good for escrow. The big token comes later. |
+| Auth | CSPR.click social (Google/Apple) | **Email + password** only; other providers deferred. |
+| KYC / AML / E-Sign | Mandatory gating (Sumsub) | **Stub** (ad-hoc mock approve), no Sumsub — so it doesn't block the flow. |
+| Roles | Tenant / Landlord / Property Manager | **Tenant + Landlord** only. PM **not needed** in Phase 0. |
+| Lease option / equity, 120% cap | In scope | **Out** of Phase 0. |
+| Termination / dashboards / accounting | In scope | **Out** of Phase 0 — we only demo the transaction flow. |
+| Recurring schedule, disbursement split UI | In scope | Simplified / out of scope. |
+
+> ⚠️ **Guardrail:** Phase 0 **simplifies but does not break the architecture.** No decision that would have to be redone after the hackathon (direct Thursday-call decision: "we are not altering our architecture after the fact").
+
+### §0.4 Tasks (H-1 … H-20)
+
+#### Smart Contracts (Casper / Odra)
+**H-1. Deploy all contracts to Casper testnet + wire-up.** [MUST] Deploy all contracts (five contracts), create the initial property record, wire contracts together.
+
+**H-2. Property listing → NFT mint.** [MUST] Entry point that mints a Property NFT on-chain when a landlord lists. Transaction #1.
+
+**H-3. Lease agreement on-chain + both-party signing.** [MUST] Record the final lease on-chain, signed by tenant + landlord. Mechanism simplified; fallback — two sequential Casper transactions. Transaction #2.
+
+**H-4. Escrow deposit.** [NICE] Tenant deposit into the Escrow contract. Transaction #3.
+
+**H-5. Rent → pay-router → Treasury with 2% fee.** [NICE] Route rent: 2% to Treasury, remainder to landlord (contract logic already exists — bring to demo state). Transaction #4.
+
+**H-6. UserRegistry / `user_id` identity + active wallet.** Identify users by `user_id` (increment), not wallet address; each user has an active wallet. Being built this week. **Wallet recovery / active-wallet switch is NOT demoed at the hackathon** (§0.5).
+
+#### Backend (Rust)
+**H-7. Email + password auth.** [MUST] Registration / login / reset password. No social providers (deferred). The base auth layer everything else runs on.
+
+**H-8. KYC and E-Signature — stubs.** Ad-hoc mock approve instead of Sumsub / real signing, so the lifecycle isn't blocked. Real implementation comes in the MVP stage.
+
+**H-9. Deploy backend with env config.** [MUST] Configure env (frontend URL var, email send) so email verification and FE integration work in the deployed environment.
+
+**H-10. Indexer / API for demo transactions.** Serve the FE statuses/links for the on-chain transactions shown in the demo.
+
+#### Frontend (React)
+**H-11. Email + password auth UI.** [MUST] Sign-up / sign-in / reset. Paired with H-7.
+
+**H-12. Wallet connect — simple Casper wallet.** [MUST] CSPR.click embedded wallet, testnet CSPR / cUSD, no on-ramp / conversion. Tenant/landlord connects or creates a wallet; profile and data persist when the wallet changes (decoupling).
+
+**H-13. Landlord: list property.** [MUST] Listing flow → drives the on-chain NFT mint (H-2).
+
+**H-14. Lease create + sign.** [MUST] Lease creation + both-party signing → on-chain record (H-3).
+
+**H-15. Deposit + rent payment flows.** [NICE] UI for escrow deposit and rent payment into treasury (H-4, H-5).
+
+**H-16. Hide out-of-scope features behind feature flags.** PM role, lease option, termination, dashboards/accounting — hide/disable **without deleting code** (they return in the MVP stage).
+
+#### AI agent (bonus criterion)
+**H-17. Document the AI-agent integration plan (forethought).** Put a ~32-agent roadmap in the repo; optionally wire up 1 agent as a statement of intent. Full implementation is out of Phase 0.
+
+#### Demo & Submission
+**H-18. Prepare GitHub for submission.** Implement the §0.5 decision (open-source the main repo vs a separate fresh repo). Preserve original / closed-source code.
+
+**H-19. Record the demo video.** Run each of the 4 transactions **~10 times** (≈40 transactions) so judges clearly see it works. An AI video editor for narration is an option.
+
+**H-20. "investor" terminology check.** Ensure no "investor" wording on the Phase 0 surface (Clarity Act, §5.1).
+
+### §0.5 Phase 0 — Open Questions / Notes
+- **GitHub open-source.** Open-source the main repo, or make a separate **fresh repo** just for the hackathon (judges' rule "all builds must be original")? Risk: the open code diverging from what we show. Decision — offline (Anthony / Chris). Blocks H-18.
+- **Wallet recovery / active-wallet switch.** Being built this week (UserRegistry, H-6), but **not demoed at the hackathon** — it scores zero with this audience; save it for Token 2049.
+- **Dispute layer.** Differentiator for **Token 2049**, not the hackathon. Out of Phase 0.
+- **Token 2049 (next big event).** After the hackathon: dispute layer + wallet-recovery demo; the hackathon provides seed funding toward the audit.
 
 ---
 

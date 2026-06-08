@@ -23,6 +23,7 @@ import type { LeaseAgreement, UtilityResponsibility } from '@/types/lease';
 import type { Payment } from '@/services/paymentService';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorBoundary } from '@/components/ui/error-boundary';
+import { SecurityRecoveryCard } from '@/components/auth/SecurityRecoveryCard';
 import { LeaseExtensionBanner } from '@/components/tenant/LeaseExtensionBanner';
 import { LeaseDecisionBanner } from '@/components/tenant/LeaseDecisionBanner';
 import { RecommendedProperties } from '@/components/tenant/RecommendedProperties';
@@ -124,9 +125,13 @@ export function TenantDashboard() {
   return (
     <ErrorBoundary>
       <div className="container mx-auto px-4 py-8">
-        <div className="mb-8">
+        <div className="mb-6">
           <h1 className="text-3xl font-bold mb-2">Welcome Back!</h1>
           <p className="text-gray-600">Here's an overview of your rental information</p>
+        </div>
+
+        <div className="mb-6">
+          <SecurityRecoveryCard />
         </div>
 
         {showExpirationWarning && (

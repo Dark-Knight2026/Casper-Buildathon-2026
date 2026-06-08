@@ -10,8 +10,8 @@ const CACHE_NAME = `keychain-${CACHE_VERSION}`;
 const STATIC_ASSETS = [
   '/',
   '/index.html',
-  '/manifest.json',
-  '/images/photo1764585038.jpg',
+  // PWA manifest is emitted by vite-plugin-pwa as /manifest.webmanifest and
+  // served fresh; there is no hand-written /manifest.json to precache.
   '/images/photo1764585038.jpg'
 ];
 

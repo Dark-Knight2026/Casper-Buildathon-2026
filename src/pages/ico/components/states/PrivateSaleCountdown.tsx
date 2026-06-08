@@ -75,7 +75,7 @@ export function PrivateSaleCountdown({ targetTimestamp, endTimestamp, progress, 
           </InfoCard>
         )}
       </div>
-      <MainButton text="Learn More" onClick={() => navigate('/ico/whitepaper')}/>
+      <MainButton text="Learn More" onClick={() => navigate('/big-token/whitepaper')}/>
     </div>
   );
 }

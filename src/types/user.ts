@@ -39,6 +39,11 @@ export type UserStatus =
   | 'suspended'
   | 'pending_verification';
 
+// Email/identity verification level from the backend, ordered:
+// none < email < identity < full (serialized snake_case). Email counts as
+// verified at 'email' and up.
+export type VerificationLevel = 'none' | 'email' | 'identity' | 'full';
+
 export interface User {
   id: string;
   email: string;
@@ -76,6 +81,10 @@ export interface User {
   // Server timestamp of the last profile mutation. Used to detect concurrent
   // edits and to invalidate cached UI state after PATCH /users/me.
   updatedAt?: Date;
+  // Email-verification level from the backend. Email is verified at 'email' and
+  // above. Optional because legacy sessions/older endpoints may omit it —
+  // treat absence as unverified.
+  verificationLevel?: VerificationLevel;
 }
 
 export interface UserProfile extends User {
@@ -134,14 +143,24 @@ export function getRoleDisplayName(role: UserRole): string {
   return roleNames[role] || role;
 }
 
-// Maps a role to its post-login dashboard path. Only `/tenant/dashboard`
-// and `/landlord/dashboard` exist in App.tsx today, so every non-tenant role
-// lands on the landlord dashboard until role-specific dashboards are added.
+// Maps a role to its post-login dashboard path. For the MVP only two roles
+// have a real dashboard: `tenant` → `/tenant/dashboard` and `landlord` →
+// `/landlord/dashboard` (a `manager` dashboard is planned next; all the other
+// UserRole values are post-MVP and have no dashboard yet).
+//
+// Any other role — and `undefined` (e.g. a profile that has not finished
+// hydrating) — falls back to the public root `/`. This is deliberate: the
+// fallback MUST NOT be a ProtectedRoute path. `/landlord/dashboard` only
+// allows `landlord`, so returning it for, say, an `agent` would make
+// ProtectedRoute redirect to getDashboardRoute() again → infinite loop. `/`
+// is a public route, so it always terminates the redirect chain.
+//
 // Paths must match the <Route path=...> declarations in App.tsx exactly,
 // otherwise the * catch-all swallows the redirect.
-export function getDashboardRoute(role: UserRole): string {
+export function getDashboardRoute(role: UserRole | undefined): string {
   if (role === 'tenant') return '/tenant/dashboard';
-  return '/landlord/dashboard';
+  if (role === 'landlord') return '/landlord/dashboard';
+  return '/';
 }
 
 // Maps a role (or undefined for guest) to the appropriate "search / property
@@ -156,8 +175,10 @@ export function getSearchRoute(role: UserRole | undefined): string {
   return '/properties';
 }
 
-// Route-level role type (includes 'both' as a sentinel for landlord+tenant access)
-export type RouteRole = 'landlord' | 'tenant' | 'admin' | 'both';
+// Route-level role type. tenant and landlord are distinct roles; a feature both
+// can use is mounted under each layout (reusing the component), so there is no
+// shared 'both' sentinel.
+export type RouteRole = 'landlord' | 'tenant' | 'admin';
 
 // Role categories for grouping
 export const CORE_ROLES: UserRole[] = ['buyer', 'seller', 'agent', 'broker', 'landlord', 'tenant'];

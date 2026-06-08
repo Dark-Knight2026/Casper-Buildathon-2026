@@ -6,7 +6,7 @@ import {
   type ServerUserInfo,
 } from '@/services/ico/backendAuthService';
 import { getMe, patchMe, type PatchProfileBody } from '@/services/userProfileService';
-import type { UserProfile, UserRole, UserStatus } from '@/types/user';
+import type { UserProfile, UserRole, UserStatus, VerificationLevel } from '@/types/user';
 import { logger } from '@/utils/logger';
 
 // Non-secret session marker. The actual auth tokens live in HttpOnly cookies
@@ -43,6 +43,18 @@ const KNOWN_USER_STATUSES: ReadonlySet<UserStatus> = new Set<UserStatus>([
 function mapUserStatus(raw: string | null): UserStatus | undefined {
   if (raw === null) return undefined;
   return KNOWN_USER_STATUSES.has(raw as UserStatus) ? (raw as UserStatus) : undefined;
+}
+
+const KNOWN_VERIFICATION_LEVELS: ReadonlySet<VerificationLevel> = new Set<VerificationLevel>([
+  'none', 'email', 'identity', 'full',
+]);
+
+// Narrow the raw backend `verification_level` string to the typed union; an
+// unknown value (new backend level, tampered payload) becomes undefined so the
+// UI treats it as unverified rather than trusting an arbitrary string.
+function mapVerificationLevel(raw: string | null | undefined): VerificationLevel | undefined {
+  if (raw == null) return undefined;
+  return KNOWN_VERIFICATION_LEVELS.has(raw as VerificationLevel) ? (raw as VerificationLevel) : undefined;
 }
 
 // Whitelist of `users.role` values the UI knows how to route. An unknown
@@ -104,6 +116,7 @@ function mapServerUserInfo(info: ServerUserInfo): UserProfile {
     isProfileComplete: info.is_profile_complete,
     status: mapUserStatus(info.status),
     activeLeasesCount: info.active_leases_count,
+    verificationLevel: mapVerificationLevel(info.verification_level),
   };
 }
 
@@ -224,6 +237,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const walletSignOut = useCallback(() => {
     clearSessionMarker();
+    // Drop any stashed post-login redirect intent — it can carry a single-use
+    // verification token in its URL, which must not survive logout onto a
+    // shared device (SEC-002/003).
+    try {
+      localStorage.removeItem('auth_redirect_intent');
+    } catch {
+      // private-mode / quota — non-fatal.
+    }
     setProfile(null);
     // Best-effort server-side revocation; never throws.
     void logoutSession();
