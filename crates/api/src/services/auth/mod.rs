@@ -17,6 +17,8 @@ pub mod logout;
 pub mod middleware;
 /// Request/response models for authentication endpoints.
 pub mod models;
+/// Email + password authentication handlers.
+pub mod password;
 /// Refresh-token issuance helpers.
 pub mod refresh;
 /// Router configuration for authentication endpoints.
@@ -34,8 +36,9 @@ pub use cookies::{
     build_refresh_cookie,
 };
 pub use db::{
-    ActiveSession, UpsertOutcome, insert_refresh_token, list_active_sessions,
-    revoke_all_sessions_for_user, revoke_session_by_id, upsert_user_by_wallet,
+    ActiveSession, RegisterOutcome, UpsertOutcome, create_password_user, insert_refresh_token,
+    list_active_sessions, revoke_all_sessions_for_user, revoke_session_by_id,
+    upsert_user_by_wallet,
 };
 pub use extractors::{
     AdminRole, AgentRole, AuthGateError, EmailVerified, IdentityVerified, LandlordRole, RoleMarker,
@@ -44,10 +47,11 @@ pub use extractors::{
 pub use jwt::{ACCESS_TOKEN_TTL, EncodedAccessToken, decode_token, encode_access_token};
 pub use middleware::{AuthError, AuthUser};
 pub use models::{
-    LoginRequest, LoginResponse, NonceRequest, NonceResponse, RevokeAllSessionsRequest,
-    RevokeAllSessionsResponse, RoleRequiredResponse, SessionResponse, VerificationRequiredResponse,
-    VerifyConfirmRequest, VerifySendResponse,
+    LoginRequest, LoginResponse, NonceRequest, NonceResponse, RegisterRequest,
+    RevokeAllSessionsRequest, RevokeAllSessionsResponse, RoleRequiredResponse, SessionResponse,
+    VerificationRequiredResponse, VerifyConfirmRequest, VerifySendResponse,
 };
+pub use password::register;
 pub use refresh::{IssuedRefreshToken, REFRESH_TOKEN_TTL, issue_login_refresh_token, rotate};
 pub use routes::router;
 pub use sessions::{get_sessions, revoke_all_sessions, revoke_session};

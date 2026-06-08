@@ -7,12 +7,23 @@
 //! `users` produce it.
 
 use chrono::{DateTime, Utc};
-use secrecy::SecretString;
+use email_address::EmailAddress;
+use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::common::{UserInfo, UserRole, VerificationLevel};
+use crate::common::{self, ApiError, ApiResult, UserInfo, UserRole, VerificationLevel};
+
+/// RFC 5321 hard limit on the full email address length.
+///
+/// Enforced explicitly because `EmailAddress::is_valid` accepts addresses
+/// past this size when individual labels are shorter than their RFC limits.
+const MAX_EMAIL_LEN: usize = 254;
+
+/// Maximum length of a name field (`first_name` / `last_name`), matching the
+/// `VARCHAR(100)` columns in the `users` schema.
+const MAX_NAME_LEN: usize = 100;
 
 // Wallet ----------------------------------------------------------------------
 
@@ -59,6 +70,120 @@ pub struct LoginRequest {
 pub struct LoginResponse {
     /// Profile of the authenticated user.
     pub user: UserInfo,
+}
+
+// Password --------------------------------------------------------------------
+
+/// Role applied when a registration request omits `role`.
+///
+/// Named so the default lives on the field via `#[serde(default = ...)]`
+/// rather than as a magic literal inside `into_validated`.
+fn default_registration_role() -> UserRole {
+    UserRole::Tenant
+}
+
+/// Request payload for email + password registration.
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct RegisterRequest {
+    /// Email address. Normalized (trim + lowercase) and RFC-validated before
+    /// any DB lookup, so `John@X.com` and `john@x.com` resolve to one account.
+    pub email: String,
+    /// Plaintext password (transported only over HTTPS). Checked against the
+    /// account-password policy, then Argon2id-hashed before storage - the
+    /// plaintext never leaves this request.
+    #[schema(value_type = String)]
+    pub password: SecretString,
+    /// Role chosen at signup. Restricted to self-registerable roles
+    /// (`tenant`, `landlord`, `agent`); defaults to `tenant` when omitted.
+    #[serde(default = "default_registration_role")]
+    pub role: UserRole,
+    /// First name (NOT NULL in `users`); must be non-empty after trim.
+    pub first_name: String,
+    /// Last name (NOT NULL in `users`); must be non-empty after trim.
+    pub last_name: String,
+}
+
+/// A [`RegisterRequest`] whose fields have passed every request-layer check.
+///
+/// Produced by [`RegisterRequest::into_validated`] so the handler receives
+/// normalized, policy-checked values and never re-validates. `password` is
+/// still plaintext here - hashing is a CPU-heavy side effect the handler owns,
+/// kept out of the request layer.
+#[derive(Debug)]
+pub struct ValidatedRegistration {
+    /// Normalized (trim + lowercase) email address.
+    pub email: String,
+    /// Plaintext password, policy-checked but not yet hashed.
+    pub password: SecretString,
+    /// Resolved role (defaulted to `tenant`, guaranteed self-registerable).
+    pub role: UserRole,
+    /// Trimmed first name.
+    pub first_name: String,
+    /// Trimmed last name.
+    pub last_name: String,
+}
+
+impl RegisterRequest {
+    /// Normalizes and validates the registration payload.
+    ///
+    /// Runs at the HTTP boundary so malformed input is rejected before any
+    /// hashing or SQL happens: email is trimmed/lowercased and RFC-checked,
+    /// the password is run through [`common::validate_password_policy`], the
+    /// role defaults to `tenant` and must be self-registerable, and the names
+    /// are trimmed and required to be non-empty.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ApiError::BadRequest`] when the email exceeds [`MAX_EMAIL_LEN`]
+    /// or is syntactically invalid, the password fails the policy, the role is
+    /// not self-registerable, or a name is empty / over [`MAX_NAME_LEN`].
+    #[inline]
+    pub fn into_validated(self) -> ApiResult<ValidatedRegistration> {
+        let email = self.email.trim().to_ascii_lowercase();
+        if email.len() > MAX_EMAIL_LEN {
+            return Err(ApiError::BadRequest(format!(
+                "email must be at most {MAX_EMAIL_LEN} characters"
+            )));
+        }
+        if !EmailAddress::is_valid(&email) {
+            return Err(ApiError::BadRequest(
+                "email is not a valid email address".to_owned(),
+            ));
+        }
+
+        common::validate_password_policy(self.password.expose_secret())?;
+
+        if !self.role.is_self_registerable() {
+            return Err(ApiError::BadRequest(
+                "Role not allowed for self-registration".to_owned(),
+            ));
+        }
+
+        Ok(ValidatedRegistration {
+            email,
+            password: self.password,
+            role: self.role,
+            first_name: validate_name("first_name", &self.first_name)?,
+            last_name: validate_name("last_name", &self.last_name)?,
+        })
+    }
+}
+
+/// Trims a required name field and enforces non-empty / max-length.
+///
+/// `first_name` and `last_name` are `NOT NULL` in the schema, so an
+/// all-whitespace value is rejected rather than stored as a blank name.
+fn validate_name(field: &str, value: &str) -> ApiResult<String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err(ApiError::BadRequest(format!("{field} cannot be empty")));
+    }
+    if trimmed.chars().count() > MAX_NAME_LEN {
+        return Err(ApiError::BadRequest(format!(
+            "{field} must be at most {MAX_NAME_LEN} characters"
+        )));
+    }
+    Ok(trimmed.to_owned())
 }
 
 // Sessions --------------------------------------------------------------------

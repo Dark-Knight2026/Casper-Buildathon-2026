@@ -222,6 +222,95 @@ pub async fn upsert_user_by_wallet(
     ))
 }
 
+/// Outcome of [`create_password_user`].
+///
+/// An enum (not `Option`) to mirror [`UpsertOutcome`]: the email-taken arm
+/// drives a distinct handler response (409) and reads more clearly at the
+/// call site than a bare `None`.
+#[derive(Debug)]
+pub enum RegisterOutcome {
+    /// A fresh `users` row was inserted for this email.
+    Created(UserRecord),
+    /// The email already belongs to a live (non-deleted) account; no row was
+    /// written. The handler maps this to 409.
+    EmailTaken,
+}
+
+/// Inserts a new email + password user, or reports the email as already taken.
+///
+/// Writes a single `users` row with `primary_auth_method = 'password'`,
+/// `status = 'pending_verification'`, `email_verified = false`, and no wallet.
+/// `verification_level` is left to its column default (`'none'`); the
+/// `trg_users_sync_verification_level` trigger keeps it consistent with the
+/// (still false) `email_verified` flag.
+///
+/// Uniqueness is enforced via `ON CONFLICT DO NOTHING` against the
+/// `users_email_unique` partial index. The `ON CONFLICT` target must repeat
+/// that index's predicate (`WHERE email IS NOT NULL AND deleted_at IS NULL`)
+/// verbatim, or Postgres rejects the statement - the same constraint the
+/// wallet upsert path contends with. A conflict yields zero returned rows,
+/// surfaced as [`RegisterOutcome::EmailTaken`] rather than an error.
+///
+/// # Arguments
+///
+/// * `pool` - Database connection pool
+/// * `email` - Normalized (trim + lowercase) email; caller pre-validates format
+/// * `password_hash` - Argon2id PHC string; caller pre-hashes the plaintext
+/// * `role` - Role to assign; caller MUST pre-validate via
+///   [`UserRole::is_self_registerable`]
+/// * `first_name` / `last_name` - Trimmed, non-empty name fields
+///
+/// # Errors
+///
+/// Returns `sqlx::Error` on DB failure or if `verification_level` cannot be
+/// decoded into the typed enum. The email-taken case is NOT an error - it is
+/// the [`RegisterOutcome::EmailTaken`] variant.
+#[inline]
+pub async fn create_password_user(
+    pool: &PgPool,
+    email: &str,
+    password_hash: &str,
+    role: &UserRole,
+    first_name: &str,
+    last_name: &str,
+) -> Result<RegisterOutcome, Error> {
+    let role_str = role.to_string();
+
+    let inserted = sqlx::query!(
+        r"
+            INSERT INTO users ( email, password_hash, primary_auth_method, role, first_name, last_name, status, email_verified)
+            VALUES ($1, $2, 'password', $3, $4, $5, 'pending_verification', false)
+            ON CONFLICT (email) WHERE email IS NOT NULL AND deleted_at IS NULL DO NOTHING
+            RETURNING id, role, verification_level
+        ",
+        email,
+        password_hash,
+        role_str,
+        first_name,
+        last_name,
+    )
+    .fetch_optional(pool)
+    .await?;
+
+    let Some(row) = inserted else {
+        return Ok(RegisterOutcome::EmailTaken);
+    };
+
+    let verification_level =
+        VerificationLevel::from_str(&row.verification_level).map_err(|err| {
+            Error::ColumnDecode {
+                index: "verification_level".to_owned(),
+                source: Box::new(err),
+            }
+        })?;
+
+    Ok(RegisterOutcome::Created(UserRecord {
+        id: row.id,
+        role: row.role,
+        verification_level,
+    }))
+}
+
 /// Revokes every still-active `refresh_tokens` row for the given user.
 ///
 /// Called at login time so a fresh login invalidates any prior session (web
