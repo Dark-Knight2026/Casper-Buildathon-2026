@@ -6,11 +6,12 @@
 //! [`crate::common::models`] because both `auth` and `users` produce it.
 
 use email_address::EmailAddress;
+use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 use crate::{
-    common::{ApiError, ApiResult, UserRole},
+    common::{self, ApiError, ApiResult, UserRole},
     services::users::db::ProfilePatch,
 };
 
@@ -330,5 +331,66 @@ impl DeleteAccountRequest {
             )));
         }
         Ok(())
+    }
+}
+
+/// Request body for `POST /api/v1/users/me/password`.
+///
+/// One endpoint serves two cases, distinguished by whether the account already
+/// has a `password_hash`:
+///
+/// - **change** (a password account): `current_password` is required and
+///   verified before the rewrite.
+/// - **set** (a wallet-only / OAuth-only account setting its first password):
+///   `current_password` is absent; the handler requires a freshly
+///   authenticated session instead.
+///
+/// Both passwords are `SecretString` so they never land in `Debug` output or
+/// logs. The `value_type` overrides keep the `OpenAPI` schema as plain strings
+/// - `SecretString` has no `ToSchema` of its own.
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct ChangePasswordRequest {
+    /// Current password. Required to change an existing password; omitted (or
+    /// `null`) when setting the first password on a wallet-only account.
+    #[schema(value_type = Option<String>)]
+    pub current_password: Option<SecretString>,
+    /// New password. Must satisfy the same policy as registration (length plus
+    /// a digit and mixed case).
+    #[schema(value_type = String)]
+    pub new_password: SecretString,
+}
+
+/// A [`ChangePasswordRequest`] whose `new_password` has passed the policy.
+///
+/// `current_password` is carried through unchanged - whether it is required at
+/// all depends on the change-vs-set branch the handler resolves from the
+/// stored hash, which the request layer cannot see. `new_password` stays
+/// plaintext here; hashing is the handler's CPU-heavy side effect.
+#[derive(Debug)]
+pub struct ValidatedPasswordChange {
+    /// Presented current password, if any. `None` is only valid on the set path.
+    pub current_password: Option<SecretString>,
+    /// Policy-checked but not-yet-hashed new password.
+    pub new_password: SecretString,
+}
+
+impl ChangePasswordRequest {
+    /// Validates `new_password` against the account-password policy.
+    ///
+    /// Runs at the HTTP boundary so a weak password is rejected before any
+    /// hash verification or SQL happens. `current_password` is intentionally
+    /// NOT checked here - its necessity is a function of the account's stored
+    /// hash, which only the handler knows.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ApiError::BadRequest`] when `new_password` fails the policy.
+    #[inline]
+    pub fn into_validated(self) -> ApiResult<ValidatedPasswordChange> {
+        common::validate_password_policy(self.new_password.expose_secret())?;
+        Ok(ValidatedPasswordChange {
+            current_password: self.current_password,
+            new_password: self.new_password,
+        })
     }
 }

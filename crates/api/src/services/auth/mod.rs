@@ -33,7 +33,7 @@ pub mod wallet;
 // Re-exports
 pub use cookies::{
     ACCESS_TOKEN_COOKIE, REFRESH_COOKIE_PATH, REFRESH_TOKEN_COOKIE, build_access_cookie,
-    build_refresh_cookie,
+    build_refresh_cookie, build_session_cookies,
 };
 pub use db::{
     ActiveSession, PasswordLoginRecord, RegisterOutcome, UpsertOutcome, create_password_user,

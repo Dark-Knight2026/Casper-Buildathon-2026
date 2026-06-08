@@ -24,7 +24,6 @@ use axum::{
 };
 use axum_extra::extract::CookieJar;
 use subtle::ConstantTimeEq;
-use time::Duration as CookieDuration;
 use uuid::Uuid;
 
 use crate::{
@@ -383,14 +382,9 @@ pub async fn confirm_verify_email(
                 &state.config.jwt_secret,
             )?;
 
-            let access_cookie = cookies::build_access_cookie(
+            let jar = cookies::build_session_cookies(
                 encoded.token,
-                CookieDuration::seconds(jwt::ACCESS_TOKEN_TTL.num_seconds()),
-                state.config.cookie_secure,
-            );
-            let refresh_cookie = cookies::build_refresh_cookie(
                 issued.plaintext,
-                CookieDuration::seconds(refresh::REFRESH_TOKEN_TTL.num_seconds()),
                 state.config.cookie_secure,
             );
 
@@ -400,10 +394,7 @@ pub async fn confirm_verify_email(
                 "email verified; tokens re-issued",
             );
 
-            Ok((
-                CookieJar::new().add(access_cookie).add(refresh_cookie),
-                Json(user_info),
-            ))
+            Ok((jar, Json(user_info)))
         }
     }
 }

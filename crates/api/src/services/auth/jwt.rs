@@ -4,7 +4,7 @@
 //! `jsonwebtoken` directly. Extractors and middleware call [`decode_token`]
 //! to validate incoming tokens.
 
-use chrono::{Duration, Utc};
+use chrono::{DateTime, Duration, Utc};
 use jsonwebtoken::{self, Algorithm, DecodingKey, EncodingKey, Header, Validation, errors::Error};
 use secrecy::{ExposeSecret, SecretString};
 use uuid::Uuid;
@@ -36,7 +36,17 @@ pub struct EncodedAccessToken {
     pub jti: Uuid,
 }
 
-/// Encodes a signed access token for the given user.
+/// Encodes a signed access token whose `iat` is the caller-supplied
+/// `issued_at` (and `exp = issued_at + ACCESS_TOKEN_TTL`).
+///
+/// Exists for the one flow that must control `iat` precisely: re-issuing the
+/// caller's session right after stamping `users.jwt_invalidate_before`
+/// (password change). The middleware rejects a token when `iat <= cutoff` at
+/// second granularity, so a token minted in the same wall-clock second as the
+/// cutoff would be dead on arrival. The password-change handler passes
+/// `issued_at = cutoff + 1s` so the fresh token provably clears the very
+/// cutoff that kills every other session. Every other caller wants
+/// "now" and should use [`encode_access_token`].
 ///
 /// Populates every optional claim (`token_type`, `verification_level`)
 /// explicitly so newly issued tokens carry the full schema; the `Option`
@@ -49,19 +59,21 @@ pub struct EncodedAccessToken {
 /// Returns [`ApiError::Internal`] if the expiration timestamp overflows
 /// `usize` or if `jsonwebtoken` fails to encode the token.
 #[inline]
-pub fn encode_access_token(
+pub fn encode_access_token_at(
     user_id: UserId,
     role: UserRole,
     verification_level: VerificationLevel,
     secret: &SecretString,
+    issued_at: DateTime<Utc>,
 ) -> ApiResult<EncodedAccessToken> {
-    let now = Utc::now();
-    let exp_at = now.checked_add_signed(ACCESS_TOKEN_TTL).ok_or_else(|| {
-        ApiError::Internal("Timestamp overflow calculating JWT expiration".to_owned())
-    })?;
+    let exp_at = issued_at
+        .checked_add_signed(ACCESS_TOKEN_TTL)
+        .ok_or_else(|| {
+            ApiError::Internal("Timestamp overflow calculating JWT expiration".to_owned())
+        })?;
     let exp = usize::try_from(exp_at.timestamp().max(0))
         .map_err(|_| ApiError::Internal("JWT expiration timestamp overflow".to_owned()))?;
-    let iat = usize::try_from(now.timestamp().max(0))
+    let iat = usize::try_from(issued_at.timestamp().max(0))
         .map_err(|_| ApiError::Internal("JWT issued-at timestamp overflow".to_owned()))?;
     let jti = Uuid::new_v4();
     let claims = Claims {
@@ -82,6 +94,27 @@ pub fn encode_access_token(
     )
     .map_err(|e| ApiError::Internal(format!("Token encoding error: {e}")))?;
     Ok(EncodedAccessToken { token, jti })
+}
+
+/// Encodes a signed access token issued as of now.
+///
+/// Thin wrapper over [`encode_access_token_at`] with `issued_at = Utc::now()`,
+/// which is what login, registration, wallet auth, and refresh rotation all
+/// want. Only the password-change re-issue path needs the explicit-`iat`
+/// variant.
+///
+/// # Errors
+///
+/// Returns [`ApiError::Internal`] if the expiration timestamp overflows
+/// `usize` or if `jsonwebtoken` fails to encode the token.
+#[inline]
+pub fn encode_access_token(
+    user_id: UserId,
+    role: UserRole,
+    verification_level: VerificationLevel,
+    secret: &SecretString,
+) -> ApiResult<EncodedAccessToken> {
+    encode_access_token_at(user_id, role, verification_level, secret, Utc::now())
 }
 
 /// Decodes and validates a JWT (signature, issuer, audience, expiration).

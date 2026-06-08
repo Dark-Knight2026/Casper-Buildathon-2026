@@ -15,7 +15,6 @@ use chrono::{DateTime, Duration, Utc};
 use rand::Rng;
 use sha2::{Digest, Sha256};
 use sqlx::PgPool;
-use time::Duration as CookieDuration;
 use uuid::Uuid;
 
 use crate::{
@@ -271,14 +270,9 @@ pub async fn rotate(
         &state.config.jwt_secret,
     )?;
 
-    let access_cookie = cookies::build_access_cookie(
+    let jar = cookies::build_session_cookies(
         encoded.token,
-        CookieDuration::seconds(jwt::ACCESS_TOKEN_TTL.num_seconds()),
-        state.config.cookie_secure,
-    );
-    let refresh_cookie = cookies::build_refresh_cookie(
         new_token.plaintext,
-        CookieDuration::seconds(REFRESH_TOKEN_TTL.num_seconds()),
         state.config.cookie_secure,
     );
 
@@ -289,8 +283,5 @@ pub async fn rotate(
         "Refresh token rotated"
     );
 
-    Ok((
-        CookieJar::new().add(access_cookie).add(refresh_cookie),
-        StatusCode::NO_CONTENT,
-    ))
+    Ok((jar, StatusCode::NO_CONTENT))
 }

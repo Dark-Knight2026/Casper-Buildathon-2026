@@ -54,6 +54,7 @@ use crate::{
             auth::models::VerifySendResponse,
             // Users models
             users::models::AvatarUploadResponse,
+            users::models::ChangePasswordRequest,
             users::models::DeleteAccountRequest,
             users::models::EmailChangeConfirmRequest,
             users::models::EmailChangeRequest,

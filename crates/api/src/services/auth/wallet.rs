@@ -11,7 +11,6 @@ use axum_extra::extract::CookieJar;
 use rand::{RngExt, distr::Alphanumeric};
 use secrecy::{ExposeSecret, SecretString};
 use sha2::{Digest, Sha256};
-use time::Duration as CookieDuration;
 
 use crate::{
     common::{
@@ -252,28 +251,6 @@ async fn resolve_active_user(
     }
 }
 
-/// Assembles the access + refresh cookies into a single `CookieJar`.
-/// `cookie_secure` controls whether the browser refuses plain-HTTP
-/// transport - `false` in dev so login works on `http://localhost`,
-/// `true` in any HTTPS deployment.
-fn build_login_cookies(
-    access_token: String,
-    refresh_plaintext: String,
-    cookie_secure: bool,
-) -> CookieJar {
-    let access_cookie = cookies::build_access_cookie(
-        access_token,
-        CookieDuration::seconds(jwt::ACCESS_TOKEN_TTL.num_seconds()),
-        cookie_secure,
-    );
-    let refresh_cookie = cookies::build_refresh_cookie(
-        refresh_plaintext,
-        CookieDuration::seconds(refresh::REFRESH_TOKEN_TTL.num_seconds()),
-        cookie_secure,
-    );
-    CookieJar::new().add(access_cookie).add(refresh_cookie)
-}
-
 // `POST /api/v1/auth/login/wallet`
 //
 /// Authenticates a user by verifying their signature against a stored nonce.
@@ -351,7 +328,7 @@ pub async fn login_wallet(
     // the full profile here.
     let profile = users::fetch_user_profile(&state.db, user_record.id).await?;
 
-    let jar = build_login_cookies(
+    let jar = cookies::build_session_cookies(
         encoded.token,
         issued_refresh.plaintext,
         state.config.cookie_secure,

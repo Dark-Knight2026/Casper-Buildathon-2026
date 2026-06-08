@@ -5,8 +5,13 @@
 //! handler keeps the route handler focused on policy (when to issue, when to
 //! clear) and let's refresh/logout reuse the exact same builders.
 
-use axum_extra::extract::cookie::{Cookie, SameSite};
+use axum_extra::extract::{
+    CookieJar,
+    cookie::{Cookie, SameSite},
+};
 use time::Duration as CookieDuration;
+
+use super::{jwt, refresh};
 
 /// Name of the cookie that carries the access token (short-lived JWT).
 pub const ACCESS_TOKEN_COOKIE: &str = "access_token";
@@ -63,6 +68,34 @@ pub fn build_refresh_cookie(
         .path(REFRESH_COOKIE_PATH)
         .max_age(max_age)
         .build()
+}
+
+/// Assembles the access + refresh cookies into one `CookieJar` with the
+/// canonical session TTLs.
+///
+/// The single place that knows the full "logged-in session" cookie pair:
+/// login, registration, wallet auth, refresh rotation, and password change all
+/// hand a fresh `(access_token, refresh_plaintext)` here and receive identical
+/// cookie attributes. Centralizing it means the access cookie's 15-minute
+/// window ([`jwt::ACCESS_TOKEN_TTL`]) and the refresh cookie's 14-day window
+/// ([`refresh::REFRESH_TOKEN_TTL`]) can never drift between the issuance paths.
+#[inline]
+pub fn build_session_cookies(
+    access_token: String,
+    refresh_plaintext: String,
+    secure: bool,
+) -> CookieJar {
+    let access_cookie = build_access_cookie(
+        access_token,
+        CookieDuration::seconds(jwt::ACCESS_TOKEN_TTL.num_seconds()),
+        secure,
+    );
+    let refresh_cookie = build_refresh_cookie(
+        refresh_plaintext,
+        CookieDuration::seconds(refresh::REFRESH_TOKEN_TTL.num_seconds()),
+        secure,
+    );
+    CookieJar::new().add(access_cookie).add(refresh_cookie)
 }
 
 /// Builds an "expired" access-token cookie used by logout to instruct the

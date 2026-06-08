@@ -714,3 +714,145 @@ pub async fn soft_delete_user(pool: &PgPool, user_id: Uuid) -> Result<SoftDelete
 
     Ok(SoftDeleteOutcome::Deleted)
 }
+
+/// Identity needed to re-mint the caller's session after a password change.
+///
+/// Returned by [`update_password_invalidate_other_sessions`] so the handler
+/// can encode a fresh access token without a second `SELECT`: the same UPDATE
+/// that rewrites the hash hands back the current `role` and
+/// `verification_level`. A password change touches neither, so these are the
+/// values the re-issued token must carry.
+#[derive(Debug)]
+pub struct ReissueIdentity {
+    /// Current role, parsed from the TEXT column.
+    pub role: UserRole,
+    /// Current aggregate verification level, parsed from the TEXT column.
+    pub verification_level: VerificationLevel,
+}
+
+/// Reads the stored `password_hash` for `user_id`.
+///
+/// The two-level meaning of the return is load-bearing for the
+/// change-vs-set branch in the handler:
+///
+/// - `Ok(Some(hash))` - a password account; the handler verifies
+///   `current_password` against `hash` (the **change** path).
+/// - `Ok(None)` - a wallet-only / OAuth-only account whose `password_hash` is
+///   NULL; the handler takes the first-time **set** path (no current password
+///   to check, recent-auth required instead).
+/// - `Err(RowNotFound)` - the user row is gone (soft-deleted between JWT issue
+///   and this call); `From<sqlx::Error>` maps it to 404 at the handler edge,
+///   matching every other `/me` endpoint's deleted-while-logged-in behavior.
+///
+/// # Errors
+///
+/// - [`Error::RowNotFound`] when the user no longer exists.
+/// - [`sqlx::Error`] for DB transport failures.
+#[inline]
+pub async fn fetch_password_hash(pool: &PgPool, user_id: Uuid) -> Result<Option<String>, Error> {
+    let row = sqlx::query!(
+        r"
+            SELECT password_hash
+            FROM users
+            WHERE id = $1 AND deleted_at IS NULL
+        ",
+        user_id,
+    )
+    .fetch_optional(pool)
+    .await?;
+
+    let row = row.ok_or(Error::RowNotFound)?;
+    Ok(row.password_hash)
+}
+
+/// Rewrites the user's password and force-revokes every OTHER session, in one
+/// transaction.
+///
+/// Two statements run atomically so a surviving refresh token can never be
+/// rotated into a fresh access token after the cutoff is stamped:
+///
+/// 1. **`UPDATE users`** - writes the new `password_hash`, stamps
+///    `jwt_invalidate_before = $cutoff` so the auth middleware kills every
+///    outstanding access token (`iat <= cutoff`), and bumps `updated_at`
+///    explicitly so the column moves even where the `updated_at` trigger is
+///    absent. `RETURNING role, verification_level` hands the caller the
+///    identity for the re-issued token without a second round-trip.
+/// 2. **`UPDATE refresh_tokens`** - revokes every active refresh row for the
+///    user (including the caller's own); the handler immediately issues a
+///    brand-new family for the current device via the login path.
+///
+/// `primary_auth_method` is deliberately left untouched: a wallet-only user
+/// setting a first password still authenticates by wallet too, so the
+/// *primary* method does not change just because a password now exists.
+///
+/// The cutoff is passed in from the application clock rather than computed via
+/// SQL `NOW()`. The handler re-issues the caller's token with
+/// `iat = cutoff + 1s`, and that `iat` is an application-clock value; keeping
+/// the cutoff on the same clock guarantees `iat > cutoff` regardless of any
+/// app/db clock skew, which a SQL `NOW()` cutoff could not promise.
+///
+/// Returns the [`ReissueIdentity`], or [`Error::RowNotFound`] if the row was
+/// soft-deleted in the window between [`fetch_password_hash`] and this call.
+///
+/// # Errors
+///
+/// - [`Error::RowNotFound`] when the user disappeared mid-flow.
+/// - [`Error::ColumnDecode`] when `role` / `verification_level` do not parse.
+/// - [`sqlx::Error`] for DB transport failures.
+#[inline]
+pub async fn update_password_invalidate_other_sessions(
+    pool: &PgPool,
+    user_id: Uuid,
+    new_password_hash: &str,
+    cutoff: DateTime<Utc>,
+) -> Result<ReissueIdentity, Error> {
+    let mut tx = pool.begin().await?;
+
+    let row = sqlx::query!(
+        r"
+            UPDATE users
+            SET password_hash = $2,
+                jwt_invalidate_before = $3,
+                updated_at = NOW()
+            WHERE id = $1 AND deleted_at IS NULL
+            RETURNING role, verification_level
+        ",
+        user_id,
+        new_password_hash,
+        cutoff,
+    )
+    .fetch_optional(tx.as_mut())
+    .await?;
+
+    let row = row.ok_or(Error::RowNotFound)?;
+
+    sqlx::query!(
+        r"
+            UPDATE refresh_tokens
+            SET revoked_at = NOW()
+            WHERE user_id = $1 AND revoked_at IS NULL
+        ",
+        user_id,
+    )
+    .execute(tx.as_mut())
+    .await?;
+
+    tx.commit().await?;
+
+    let role = UserRole::from_str(&row.role).map_err(|err| Error::ColumnDecode {
+        index: "role".to_owned(),
+        source: Box::new(err),
+    })?;
+    let verification_level =
+        VerificationLevel::from_str(&row.verification_level).map_err(|err| {
+            Error::ColumnDecode {
+                index: "verification_level".to_owned(),
+                source: Box::new(err),
+            }
+        })?;
+
+    Ok(ReissueIdentity {
+        role,
+        verification_level,
+    })
+}

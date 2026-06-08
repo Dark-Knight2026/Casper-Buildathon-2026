@@ -8,18 +8,20 @@ use axum::{
     http::StatusCode,
 };
 use axum_extra::extract::CookieJar;
-use chrono::Utc;
+use chrono::{Duration, Utc};
+use secrecy::ExposeSecret;
 
 use crate::{
-    common::{ApiError, ApiResult, AppState, UserInfo, tokens},
+    common::{self, ApiError, ApiResult, AppState, UserInfo, tokens},
     providers::EmailMessage,
     services::{
-        auth::{AuthUser, cookies},
+        auth::{AuthUser, cookies, jwt, refresh},
         users::{
             db::{self, SoftDeleteOutcome},
             models::{
-                AvatarUploadResponse, DeleteAccountRequest, EmailChangeConfirmRequest,
-                EmailChangeRequest, UpdateProfileRequest, UpdateRoleRequest,
+                AvatarUploadResponse, ChangePasswordRequest, DeleteAccountRequest,
+                EmailChangeConfirmRequest, EmailChangeRequest, UpdateProfileRequest,
+                UpdateRoleRequest,
             },
         },
     },
@@ -72,6 +74,19 @@ const ROLE_CHANGE_RECENT_AUTH_WINDOW_SECS: i64 = 5 * 60;
 /// future tightening of one window (e.g. 60 seconds for deletion) does
 /// not auto-tighten the other and surprise role-change clients.
 const DELETE_ACCOUNT_RECENT_AUTH_WINDOW_SECS: i64 = 5 * 60;
+
+/// Maximum age (in seconds) of the access token's `iat` claim that the
+/// first-time password-set path accepts.
+///
+/// Only the **set** branch of `POST /me/password` (a wallet-only account
+/// adding its first password) consults this: there is no `current_password`
+/// to prove possession, so a freshly-authenticated session is required
+/// instead, mirroring [`ROLE_CHANGE_RECENT_AUTH_WINDOW_SECS`]. The **change**
+/// branch does NOT use it - `current_password` is itself the proof, so a
+/// long-lived session can still rotate a password it already knows. A stolen,
+/// long-lived access cookie therefore cannot graft a brand-new password onto
+/// a wallet account once the window has elapsed.
+const PASSWORD_SET_RECENT_AUTH_WINDOW_SECS: i64 = 5 * 60;
 
 /// Detected image format for an uploaded avatar.
 ///
@@ -986,4 +1001,147 @@ pub async fn patch_me_role(
     let jar = CookieJar::new().add(clear_access).add(clear_refresh);
 
     Ok((jar, Json(UserInfo::from(profile))))
+}
+
+// `POST /api/v1/users/me/password`
+//
+/// Changes (or sets, for a wallet-only account) the authenticated user's
+/// password, revokes every other session, and re-issues the current one.
+///
+/// One endpoint, two branches resolved from the stored `password_hash`:
+///
+/// - **change** (`password_hash` present): `current_password` is required and
+///   verified constant-time. A wrong or missing one is rejected before any
+///   write - 401 for wrong, 400 for missing.
+/// - **set** (`password_hash` NULL - a wallet-only / OAuth-only account adding
+///   its first password): no `current_password` exists to check, so a
+///   freshly-authenticated session is required instead
+///   ([`PASSWORD_SET_RECENT_AUTH_WINDOW_SECS`]); a stale access cookie is 403'd.
+///
+/// On success (decision #8 - "change/set kills all OTHER sessions, keeps the
+/// current one alive"):
+///
+/// - The new Argon2id hash is written and `jwt_invalidate_before` is stamped,
+///   killing every outstanding access token; every active refresh row is
+///   revoked in the same transaction so no surviving refresh can be rotated
+///   into a fresh access token.
+/// - The current device is immediately re-issued a new access + refresh pair.
+///   The access token's `iat` is set one second past the cutoff so it provably
+///   survives the very cutoff that just killed every other token (the
+///   middleware compares `iat <= cutoff` at second granularity - see
+///   [`jwt::encode_access_token_at`]). The refresh pair is a brand-new family,
+///   minted the same way login does.
+///
+/// Net effect: other devices are logged out at once; the caller stays signed
+/// in on this device with fresh cookies and never sees a 401.
+///
+/// Authorization: `AuthUser` (any logged-in user). Verification is not
+/// required - a partially-onboarded user must be able to manage their password.
+///
+/// # Errors
+///
+/// - 400 (`BadRequest`) when `new_password` fails the policy, or when
+///   `current_password` is missing on the change path.
+/// - 401 (`Unauthorized`) when the access cookie is missing/invalid (upstream),
+///   or `current_password` does not match on the change path.
+/// - 403 (`Forbidden`, code `reauthentication_required`) when the set path is
+///   taken with a stale session.
+/// - 404 (`NotFound`) if the user row was soft-deleted mid-flow.
+/// - 500 for hashing, token-issuance, or DB failures.
+#[utoipa::path(
+    post,
+    path = "/me/password",
+    tag = "Users",
+    request_body = ChangePasswordRequest,
+    responses(
+        (status = 204, description = "Password changed; other sessions revoked, current session re-issued via Set-Cookie"),
+        (status = 400, description = "Weak new password, or missing current password on the change path"),
+        (status = 401, description = "Current password incorrect, or unauthorized"),
+        (status = 403, description = "Re-authentication required to set a first password"),
+        (status = 404, description = "User no longer exists"),
+        (status = 500, description = "Internal server error"),
+    ),
+    security(
+        ("cookie_auth" = [])
+    )
+)]
+#[inline]
+pub async fn change_password(
+    State(state): State<Arc<AppState>>,
+    auth_user: AuthUser,
+    Json(payload): Json<ChangePasswordRequest>,
+) -> ApiResult<(CookieJar, StatusCode)> {
+    let user_id = auth_user.0.sub;
+    let validated = payload.into_validated()?;
+
+    if let Some(stored_hash) = db::fetch_password_hash(&state.db, user_id).await? {
+        // Change path: prove possession of the existing password.
+        let Some(current_password) = validated.current_password.as_ref() else {
+            return Err(ApiError::BadRequest(
+                "current_password is required to change an existing password".to_owned(),
+            ));
+        };
+        if !common::verify_password(current_password.expose_secret(), &stored_hash) {
+            tracing::info!(
+                event = "password_change_failed",
+                reason = "bad_current_password",
+                user_id = %user_id,
+                "Password change rejected: current password did not match"
+            );
+            return Err(ApiError::Unauthorized(
+                "current_password is incorrect".to_owned(),
+            ));
+        }
+    } else {
+        // Set path (wallet-only / OAuth-only first password): no current
+        // password to verify, so demand a freshly-authenticated session.
+        let now_secs = Utc::now().timestamp();
+        let iat_secs = i64::try_from(auth_user.0.iat).unwrap_or(i64::MAX);
+        if now_secs.saturating_sub(iat_secs) > PASSWORD_SET_RECENT_AUTH_WINDOW_SECS {
+            return Err(ApiError::Forbidden("reauthentication_required".to_owned()));
+        }
+    }
+
+    let new_password_hash = common::hash_password(validated.new_password.expose_secret())?;
+
+    // One app-clock reading drives both the force-revoke cutoff and the
+    // re-issued token's `iat`. Stamping the cutoff at `now` and minting the new
+    // token at `now + 1s` guarantees `iat > cutoff` at the middleware's
+    // second-granularity `iat <= cutoff` check, so the caller's brand-new token
+    // survives the cutoff that kills every other session. Reading the cutoff
+    // from the app clock (not SQL `NOW()`) keeps it on the same clock as the
+    // `iat`, so app/db clock skew cannot flip the comparison.
+    let now = Utc::now();
+    let reissue_at = now + Duration::seconds(1);
+
+    let identity =
+        db::update_password_invalidate_other_sessions(&state.db, user_id, &new_password_hash, now)
+            .await?;
+
+    // Re-issue the current session: the UPDATE revoked every refresh family
+    // (including this device's), so mint a fresh family the same way login does
+    // and an access token whose `iat` clears the cutoff.
+    let encoded = jwt::encode_access_token_at(
+        user_id,
+        identity.role,
+        identity.verification_level,
+        &state.config.jwt_secret,
+        reissue_at,
+    )?;
+    let issued_refresh = refresh::issue_login_refresh_token(&state.db, user_id).await?;
+
+    let jar = cookies::build_session_cookies(
+        encoded.token,
+        issued_refresh.plaintext,
+        state.config.cookie_secure,
+    );
+
+    tracing::info!(
+        event = "password_changed",
+        user_id = %user_id,
+        refresh_family = %issued_refresh.family_id,
+        "Password changed; other sessions revoked and current session re-issued"
+    );
+
+    Ok((jar, StatusCode::NO_CONTENT))
 }

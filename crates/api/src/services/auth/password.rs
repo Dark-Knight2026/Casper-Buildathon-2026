@@ -11,7 +11,6 @@ use std::sync::Arc;
 use axum::{Json, extract::State};
 use axum_extra::extract::CookieJar;
 use secrecy::ExposeSecret;
-use time::Duration as CookieDuration;
 
 use crate::{
     common::{self, ApiError, ApiResult, AppState, ErrorResponse, UserInfo},
@@ -26,29 +25,6 @@ use crate::{
         users,
     },
 };
-
-/// Assembles the access + refresh cookies into one `CookieJar`.
-///
-/// Shared by [`register`] and [`login_password`] so both emit byte-identical
-/// cookie attributes (TTL, `Secure`, paths) from the builders in [`cookies`] -
-/// the same pair `refresh::rotate` and the wallet login produce.
-fn build_session_cookies(
-    access_token: String,
-    refresh_plaintext: String,
-    cookie_secure: bool,
-) -> CookieJar {
-    let access_cookie = cookies::build_access_cookie(
-        access_token,
-        CookieDuration::seconds(jwt::ACCESS_TOKEN_TTL.num_seconds()),
-        cookie_secure,
-    );
-    let refresh_cookie = cookies::build_refresh_cookie(
-        refresh_plaintext,
-        CookieDuration::seconds(refresh::REFRESH_TOKEN_TTL.num_seconds()),
-        cookie_secure,
-    );
-    CookieJar::new().add(access_cookie).add(refresh_cookie)
-}
 
 /// The single generic error every password-login authentication failure
 /// collapses to.
@@ -147,7 +123,7 @@ pub async fn register(
     let issued_refresh = refresh::issue_login_refresh_token(&state.db, user_record.id).await?;
     let profile = users::fetch_user_profile(&state.db, user_record.id).await?;
 
-    let jar = build_session_cookies(
+    let jar = cookies::build_session_cookies(
         encoded.token,
         issued_refresh.plaintext,
         state.config.cookie_secure,
@@ -268,7 +244,7 @@ pub async fn login_password(
     auth::update_last_login_at(&state.db, record.id).await?;
     let profile = users::fetch_user_profile(&state.db, record.id).await?;
 
-    let jar = build_session_cookies(
+    let jar = cookies::build_session_cookies(
         encoded.token,
         issued_refresh.plaintext,
         state.config.cookie_secure,

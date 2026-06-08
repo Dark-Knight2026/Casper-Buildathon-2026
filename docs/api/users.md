@@ -95,3 +95,15 @@ Returned by `/users/me` and embedded in `LoginResponse.user`:
 - **Note on stale-cookie semantics:** subsequent calls under the soft-deleted user's stale access cookie return 401 `invalid_token`. `soft_delete_user` stamps `users.jwt_invalidate_before = NOW()`, the middleware's `fetch_jwt_invalidate_before` reads the cutoff regardless of `deleted_at`, and `claims.iat <= cutoff` rejects the JWT. The rejection is uniform across every `AuthUser`-protected endpoint (including `tax`, `analytics`, and other handlers that do not load the user profile). See [`feature/force_revoke.md`](../feature/force_revoke.md).
 - **Errors:** 400 (missing/wrong confirm), 401, 403 (recent-auth), 404 (already soft-deleted), 409 (active leases), 500
 - **Auth:** Access cookie required
+
+## POST `/api/v1/users/me/password`
+
+- **Input:** `{ "current_password"?: "...", "new_password": "..." }`
+- **Response (204):** empty body; a fresh `access_token` + `refresh_token` pair is delivered via `Set-Cookie`. The caller stays logged in on this device.
+- **Behavior:** one endpoint, two branches resolved from the account's stored `password_hash`:
+  - **change** (`password_hash` present): `current_password` is required and verified constant-time. A missing one is 400, a wrong one is 401. No recent-auth gate - the current password is itself the proof of possession.
+  - **set** (`password_hash` NULL - a wallet-only / OAuth-only account adding its first password): no `current_password` exists to check, so a freshly-authenticated session is required instead (the token's `iat` must be within the last 5 minutes, mirroring `PATCH /me/role`); a stale cookie is 403 `reauthentication_required`. `primary_auth_method` is left unchanged - a wallet account that adds a password still authenticates by wallet too.
+  - `new_password` must satisfy the same policy as registration (>= 8 chars, a digit, mixed case); a weak one is 400.
+- **Side effect (decision #8 - kill OTHER sessions, keep current):** in one DB transaction the new Argon2id hash is written, `users.jwt_invalidate_before` is stamped (kills every outstanding access token via the global cutoff - see [`feature/force_revoke.md`](../feature/force_revoke.md)), and every active refresh-token row is revoked. The caller's device is then immediately re-issued a new access + refresh pair, so other devices are logged out at once while the current one never sees a 401. The re-issued access token's `iat` is set one second past the cutoff so it provably clears the middleware's `iat <= cutoff` check.
+- **Errors:** 400 (weak `new_password`, or missing `current_password` on the change path), 401 (wrong `current_password`, or unauthorized), 403 (recent-auth on the set path), 404 (user gone), 500
+- **Auth:** Access cookie required
