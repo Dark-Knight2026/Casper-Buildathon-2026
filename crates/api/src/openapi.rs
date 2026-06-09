@@ -62,6 +62,7 @@ use crate::{
             users::models::EmailChangeConfirmRequest,
             users::models::EmailChangeRequest,
             users::models::LinkWalletRequest,
+            users::models::OnchainRegistrationResponse,
             users::models::UpdateProfileRequest,
             users::models::UpdateRoleRequest,
             // Health models

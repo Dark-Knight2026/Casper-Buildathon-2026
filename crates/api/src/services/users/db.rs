@@ -45,6 +45,9 @@ pub struct UserProfileRecord {
     pub verification_level: VerificationLevel,
     /// Number of currently `active` leases where the user participates.
     pub active_leases_count: i64,
+    /// Contract-assigned on-chain user id, read as TEXT (the column is
+    /// `NUMERIC`/`U256`-wide). `None` until the indexer records it.
+    pub onchain_user_id: Option<String>,
     /// Account creation timestamp.
     pub created_at: DateTime<Utc>,
     /// Last profile update timestamp.
@@ -79,6 +82,7 @@ impl From<UserProfileRecord> for UserInfo {
             is_profile_complete: record.is_profile_complete,
             verification_level: record.verification_level,
             active_leases_count: record.active_leases_count,
+            onchain_user_id: record.onchain_user_id,
             created_at: record.created_at,
             updated_at: record.updated_at,
         }
@@ -116,6 +120,7 @@ pub async fn fetch_user_profile(pool: &PgPool, user_id: Uuid) -> Result<UserProf
                 u.bio,
                 u.is_profile_complete,
                 u.verification_level,
+                u.onchain_user_id::text AS onchain_user_id,
                 u.created_at AS "created_at!",
                 u.updated_at AS "updated_at!",
                 (
@@ -168,6 +173,7 @@ pub async fn fetch_user_profile(pool: &PgPool, user_id: Uuid) -> Result<UserProf
         is_profile_complete: record.is_profile_complete,
         verification_level,
         active_leases_count: record.active_leases_count,
+        onchain_user_id: record.onchain_user_id,
         created_at: record.created_at,
         updated_at: record.updated_at,
     })

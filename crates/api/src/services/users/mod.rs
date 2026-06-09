@@ -20,12 +20,12 @@ pub use db::{
     update_password_invalidate_other_sessions, update_user_profile,
 };
 pub use handlers::{
-    change_password, confirm_email_change, delete_me, get_me, link_wallet, patch_me, patch_me_role,
-    request_email_change, upload_avatar,
+    change_password, confirm_email_change, delete_me, get_me, get_onchain_registration,
+    link_wallet, patch_me, patch_me_role, request_email_change, upload_avatar,
 };
 pub use models::{
     ACCOUNT_DELETE_CONFIRMATION, AvatarUploadResponse, ChangePasswordRequest, DeleteAccountRequest,
-    EmailChangeConfirmRequest, EmailChangeRequest, LinkWalletRequest, UpdateProfileRequest,
-    UpdateRoleRequest,
+    EmailChangeConfirmRequest, EmailChangeRequest, LinkWalletRequest, OnchainRegistrationResponse,
+    UpdateProfileRequest, UpdateRoleRequest,
 };
 pub use routes::router;

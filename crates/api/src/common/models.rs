@@ -245,6 +245,11 @@ pub struct UserInfo {
     /// Number of currently `active` leases where the user is involved as
     /// primary tenant, listed tenant, landlord, or agent.
     pub active_leases_count: i64,
+    /// Contract-assigned on-chain user id (`UserRegistry`), serialized as a
+    /// decimal string because it is a `U256` that does not fit a JSON number.
+    /// `None` until the indexer observes the `UserCreated` event for this
+    /// user's wallet.
+    pub onchain_user_id: Option<String>,
     /// Account creation timestamp.
     pub created_at: DateTime<Utc>,
     /// Last profile update timestamp.

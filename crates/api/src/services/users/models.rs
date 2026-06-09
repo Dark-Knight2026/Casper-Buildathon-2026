@@ -450,3 +450,21 @@ impl LinkWalletRequest {
         })
     }
 }
+
+/// Response of `GET /api/v1/users/me/onchain-registration`.
+///
+/// HACK: (hackathon)
+///
+/// Carries exactly the two arguments the frontend cannot compute itself yet
+/// must pass to `UserRegistry::create_user`: the deterministic `identity_hash`
+/// and the `role_flags` bitmask derived from the user's role. The third
+/// argument (the wallet address) the frontend already holds.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct OnchainRegistrationResponse {
+    /// Lowercase hex of the 32-byte identity hash; decode to `[u8; 32]` for
+    /// the contract call.
+    pub identity_hash: String,
+    /// Role-flags bitmask for `create_user` (`TENANT=1`, `LANDLORD=2`,
+    /// `PROPERTY_MANAGER=4`; `0` for roles with no on-chain flag).
+    pub role_flags: u32,
+}

@@ -1,5 +1,6 @@
 //! HTTP request handlers for user-profile endpoints.
 
+use core::str::FromStr;
 use std::sync::Arc;
 
 use axum::{
@@ -10,9 +11,11 @@ use axum::{
 use axum_extra::extract::CookieJar;
 use chrono::{Duration, Utc};
 use secrecy::ExposeSecret;
+use sha2::{Digest, Sha256};
+use uuid::Uuid;
 
 use crate::{
-    common::{self, ApiError, ApiResult, AppState, UserInfo, tokens},
+    common::{self, ApiError, ApiResult, AppState, UserInfo, UserRole, tokens},
     providers::EmailMessage,
     services::{
         auth::{self, AuthUser, cookies, jwt, refresh},
@@ -21,7 +24,7 @@ use crate::{
             models::{
                 AvatarUploadResponse, ChangePasswordRequest, DeleteAccountRequest,
                 EmailChangeConfirmRequest, EmailChangeRequest, LinkWalletRequest,
-                UpdateProfileRequest, UpdateRoleRequest,
+                OnchainRegistrationResponse, UpdateProfileRequest, UpdateRoleRequest,
             },
         },
     },
@@ -1254,4 +1257,86 @@ pub async fn link_wallet(
     );
 
     Ok(Json(UserInfo::from(profile)))
+}
+
+/// Domain-separation tag mixed into [`derive_identity_hash`]. Versioned so the
+/// derivation scheme can change later without colliding with hashes already
+/// registered on-chain under the old scheme.
+const IDENTITY_HASH_DOMAIN_TAG: &[u8] = b"leasefi:identity:v1";
+
+/// Derives the deterministic, PII-free `identity_hash` a user presents to
+/// `UserRegistry::create_user`.
+///
+/// `sha256(domain_tag || user_id)`: stable for a given user (a retried
+/// registration reuses the same hash, and the contract's uniqueness check
+/// then rejects a duplicate `create_user`) and reveals nothing about the
+/// account. Returned as lowercase hex; the frontend decodes it to `[u8; 32]`.
+fn derive_identity_hash(user_id: Uuid) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(IDENTITY_HASH_DOMAIN_TAG);
+    hasher.update(user_id.as_bytes());
+    hex::encode(hasher.finalize())
+}
+
+// `GET /api/v1/users/me/onchain-registration`
+//
+/// Returns the data the frontend needs to call `UserRegistry::create_user`
+/// from the user's own wallet.
+///
+/// HACK: (hackathon): during the hackathon the contract write is done by the
+/// frontend (from the user's wallet) instead of a backend deploy-signer, so
+/// the backend just hands over the two arguments the frontend cannot derive
+/// itself: the deterministic `identity_hash` and the `role_flags` bitmask.
+/// The wallet address (the third `create_user` argument) the frontend already
+/// holds. This endpoint is removed when the proper backend write-path lands.
+///
+/// Precondition: the wallet must already be linked (`POST /me/wallet`). A
+/// caller with no wallet gets 409 - they have nothing to sign the on-chain
+/// deploy with, so producing the hash now would be premature. The hash and
+/// flags themselves do not depend on the wallet; the gate just enforces the
+/// onboarding order.
+///
+/// Authorization: `AuthUser` (any logged-in user).
+///
+/// # Errors
+///
+/// - 401 (`Unauthorized`) when the access cookie is missing/invalid (upstream).
+/// - 409 (`Conflict`) when no wallet is linked to the account yet.
+/// - 500 for DB failures.
+#[utoipa::path(
+    get,
+    path = "/me/onchain-registration",
+    tag = "Users",
+    responses(
+        (status = 200, description = "On-chain registration arguments", body = OnchainRegistrationResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 409, description = "Wallet not linked yet"),
+        (status = 500, description = "Internal server error"),
+    ),
+    security(
+        ("cookie_auth" = [])
+    )
+)]
+#[inline]
+pub async fn get_onchain_registration(
+    State(state): State<Arc<AppState>>,
+    auth_user: AuthUser,
+) -> ApiResult<Json<OnchainRegistrationResponse>> {
+    let user_id = auth_user.0.sub;
+    let profile = db::fetch_user_profile(&state.db, user_id).await?;
+
+    if profile.wallet_address.is_none() {
+        return Err(ApiError::Conflict(
+            "Wallet must be linked before on-chain registration".to_owned(),
+        ));
+    }
+
+    // Role is read from the freshly-loaded profile (not the JWT) so the flags
+    // reflect the current DB role rather than a possibly-stale token claim.
+    let role = UserRole::from_str(&profile.role).unwrap_or(UserRole::Unknown);
+
+    Ok(Json(OnchainRegistrationResponse {
+        identity_hash: derive_identity_hash(user_id),
+        role_flags: role.to_onchain_role_flags(),
+    }))
 }
