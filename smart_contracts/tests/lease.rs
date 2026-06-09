@@ -16,8 +16,8 @@ use leasefi_contracts::escrow::{
 use leasefi_contracts::lease::{
     errors::Error,
     events::{
-        EquityEligibilityGranted, EquityEligibilityRevoked, LeaseAgreementCreated,
-        LeaseAgreementFinished, LeaseAgreementProlonged,
+        EquityEligibilityGranted, EquityEligibilityRevoked, LeaseAgreementCancelled,
+        LeaseAgreementCreated, LeaseAgreementFinished, LeaseAgreementProlonged,
     },
     types::{CreateLeaseAgreementParams, LeaseAgreement, RentDistributionTerms},
     Lease, LeaseHostRef, LeaseInitArgs,
@@ -1054,6 +1054,68 @@ fn test_finalize_already_finalized_lease_should_revert() {
     );
 }
 
+// =============================================================================
+// cancel_lease_agreement()
+// =============================================================================
+
+#[test]
+fn test_cancel_lease_agreement_should_cancel_properly() {
+    let mut test_data = setup(odra_test::env());
+    let mut params = generate_lease_agreement_creation_params(&test_data);
+    let lease_agreement_id = test_data.lease.create_lease_agreement(params.clone());
+
+    // Pay only the security deposit
+    test_data.env.set_caller(params.tenant);
+    test_data.security_deposit_token.approve(
+        &test_data.escrow.address(),
+        params.security_deposit.amount(),
+    );
+    test_data.escrow.pay_invoice(
+        test_data
+            .lease
+            .get_lease_agreement_by_id(&lease_agreement_id)
+            .invoices_ids[0],
+        *params.security_deposit.amount(),
+    );
+
+    test_data.env.set_caller(test_data.landlord);
+    test_data
+        .lease
+        .cancel_lease_agreement(&lease_agreement_id, &U256::zero());
+
+    let lease_agreement_after = test_data
+        .lease
+        .get_lease_agreement_by_id(&lease_agreement_id);
+
+    assert!(
+        lease_agreement_after.is_finished,
+        "Lease should be finished after cancel"
+    );
+    assert!(test_data.env.emitted_event(
+        &test_data.lease,
+        LeaseAgreementCancelled {
+            lease_agreement_id,
+            cancelled_at: test_data.env.block_time(),
+            security_deposit_charge: U256::zero(),
+        }
+    ));
+
+    // Verify deposit was released with charge 0 (full refund to tenant)
+    let deposit = test_data.escrow.get_security_deposit(
+        test_data
+            .lease
+            .get_lease_agreement_by_id(&lease_agreement_id)
+            .invoices_ids[0],
+    );
+    assert!(deposit.released, "Security deposit should be released");
+    assert_eq!(deposit.landlord_charge, U256::zero());
+    assert_eq!(deposit.tenant_refund, *params.security_deposit.amount());
+}
+
+// =============================================================================
+// prolong_lease_agreement()
+// =============================================================================
+
 #[test]
 fn test_prolong_lease_with_equity_option_preserves_eligibility() {
     let mut test_data = setup(odra_test::env());
@@ -1093,10 +1155,6 @@ fn test_prolong_lease_with_equity_option_preserves_eligibility() {
         "Tenant equity eligibility should be preserved after lease prolongation"
     );
 }
-
-// =============================================================================
-// prolong_lease_agreement()
-// =============================================================================
 
 #[test]
 fn test_prolong_lease_agreement_should_fail_if_lease_agreement_does_not_exist() {

@@ -7,8 +7,8 @@ use crate::{
     lease::{
         errors::Error,
         events::{
-            EquityEligibilityGranted, EquityEligibilityRevoked, LeaseAgreementCreated,
-            LeaseAgreementFinished, LeaseAgreementProlonged,
+            EquityEligibilityGranted, EquityEligibilityRevoked, LeaseAgreementCancelled,
+            LeaseAgreementCreated, LeaseAgreementFinished, LeaseAgreementProlonged,
         },
         types::{CreateLeaseAgreementParams, LeaseAgreement, RentDistributionTerms},
     },
@@ -109,6 +109,13 @@ pub mod events {
     }
 
     #[odra::event]
+    pub struct LeaseAgreementCancelled {
+        pub lease_agreement_id: U256,
+        pub cancelled_at: u64,
+        pub security_deposit_charge: U256,
+    }
+
+    #[odra::event]
     pub struct EquityEligibilityGranted {
         pub property_id: U256,
         pub account: Address,
@@ -156,6 +163,7 @@ pub mod errors {
   LeaseAgreementCreated,
   LeaseAgreementFinished,
   LeaseAgreementProlonged,
+  LeaseAgreementCancelled,
   EquityEligibilityGranted,
   EquityEligibilityRevoked,
 ])]
@@ -483,6 +491,72 @@ impl Lease {
         self.env().emit_event(LeaseAgreementFinished {
             lease_agreement_id: *lease_agreement_id,
             finished_at: self.env().get_block_time(),
+        });
+    }
+
+    /// Allows early cancellation/termination of a lease agreement by the landlord.
+    /// This provides an exit path for both parties before the scheduled end date.
+    /// The security deposit (if paid) is released via Escrow using the provided charge
+    /// (charge=0 for full refund to tenant). Equity eligibility is cleared if present.
+    /// Future rent invoices are left as-is (parties may settle off-chain).
+    ///
+    /// @dev Callable only by the landlord. Does not require the end date to have passed
+    /// and does not require all invoices to be paid (unlike finalize).
+    #[odra(non_reentrant)]
+    pub fn cancel_lease_agreement(
+        &mut self,
+        lease_agreement_id: &U256,
+        security_deposit_charge: &U256,
+    ) {
+        let mut lease_agreement = self.get_lease_agreement_by_id(lease_agreement_id);
+
+        if lease_agreement.is_finished {
+            self.env().revert(Error::LeaseAlreadyFinalized);
+        }
+
+        let caller = self.env().caller();
+        if lease_agreement.landlord != caller && lease_agreement.tenant != caller {
+            self.env().revert(Error::InvalidLandlord);
+        }
+
+        // Release security deposit if it was paid (and not yet released).
+        // We do not call assert_all_invoices_paid here to allow early exit even if
+        // some rent remains unpaid.
+        let security_invoice_id = lease_agreement.invoices_ids[0];
+        let sec_invoice = self.escrow.get_invoice_by_id(security_invoice_id);
+        if matches!(
+            sec_invoice.kind,
+            crate::escrow::types::InvoiceKind::SecurityDeposit
+        ) && sec_invoice.is_paid
+        {
+            self.escrow.release_security_deposit(
+                security_invoice_id,
+                lease_agreement.landlord,
+                *security_deposit_charge,
+            );
+        }
+
+        // Clear the `equity_eligible` entry (same as finalize)
+        if let Some(ref equity_option) = lease_agreement.equity_option {
+            let property_id = equity_option.property_id;
+            let tenant = lease_agreement.tenant;
+            self.equity_eligible.set(&(property_id, tenant), false);
+
+            self.env().emit_event(EquityEligibilityRevoked {
+                property_id,
+                account: tenant,
+            });
+        }
+
+        // The lease NFT remains frozen.
+        lease_agreement.is_finished = true;
+
+        self.leases.set(lease_agreement_id, lease_agreement);
+
+        self.env().emit_event(events::LeaseAgreementCancelled {
+            lease_agreement_id: *lease_agreement_id,
+            cancelled_at: self.env().get_block_time(),
+            security_deposit_charge: *security_deposit_charge,
         });
     }
 
