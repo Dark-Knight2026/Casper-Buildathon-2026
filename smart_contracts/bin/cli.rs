@@ -293,6 +293,11 @@ impl DeployScript for LeasefiDeployScript {
         staking.transfer_ownership(&new_owner);
         ico.transfer_ownership(&new_owner);
         property_registry.grant_role(&DEFAULT_ADMIN_ROLE, &new_owner);
+        
+        // Grant PROPERTY_MANAGER role (in addition to DEFAULT_ADMIN_ROLE) so the mutating
+        // functions (create_property, set_property_token, set_revenue_distributor,
+        // set_metadata_uri, set_property_status) do not revert with AccessDenied.
+        // Addresses C-5 / PROP-R54-01.
         property_registry.grant_role(&property_registry.property_manager_role(), &new_owner);
         property_registry.revoke_role(&DEFAULT_ADMIN_ROLE, &env.caller());
         investor_registry.grant_role(&DEFAULT_ADMIN_ROLE, &new_owner);
