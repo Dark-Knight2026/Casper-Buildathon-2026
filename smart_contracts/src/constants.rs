@@ -1,8 +1,8 @@
 pub const ONE_HUNDRED_PERCENT_BPS: u16 = 10_000; // 100.00%
 
-pub const STAKING_REWARDS_BPS: u16 = 4_000; // 40.00%
+pub const STAKING_REWARDS_BPS: u16 = 6_000; // 60.00%
 
-pub const INCENTIVES_REWARDS_BPS: u16 = 6_000; // 60.00%
+pub const INCENTIVES_REWARDS_BPS: u16 = 4_000; // 40.00%
 
 pub const ONE_MONTH_IN_SECONDS: u64 = 30 * 24 * 60 * 60;
 

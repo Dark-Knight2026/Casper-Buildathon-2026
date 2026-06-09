@@ -1,7 +1,7 @@
 use odra::{casper_types::U256, prelude::*, uints::ToU512, ContractRef};
 use odra_modules::{access::Ownable, cep18_token::Cep18ContractRef};
 
-use crate::constants::{ONE_HUNDRED_PERCENT_BPS, STAKING_REWARDS_BPS};
+use crate::constants::{INCENTIVES_REWARDS_BPS, ONE_HUNDRED_PERCENT_BPS, STAKING_REWARDS_BPS};
 use crate::staking::StakingContractRef;
 use crate::treasury::{
     errors::Error,
@@ -46,8 +46,9 @@ impl Treasury {
     /// 2. The Treasury owner withdraws them (via withdraw_token / self-balance).
     /// 3. Off-chain, the fee revenue is converted to BIG.
     /// 4. The owner (or any provider of the BIG) calls this function with the BIG amount
-    ///    (after approve), routing 40% (STAKING_REWARDS_BPS) to stakers via Staking.deposit_rewards
-    ///    (when stake > 0) and keeping 60% as BIG reserves.
+    ///    (after approve), routing 60% (STAKING_REWARDS_BPS) to stakers via Staking.deposit_rewards
+    ///    (when stake > 0) and keeping 40% (INCENTIVES_REWARDS_BPS) as BIG reserves for future
+    ///    incentives.
     ///
     /// If there is no active stake yet, the full deposit remains in Treasury reserves instead of reverting.
     #[odra(non_reentrant)]
@@ -56,10 +57,14 @@ impl Treasury {
             let mut big_coin =
                 Cep18ContractRef::new(self.env(), self.get_big_coin_contract_address());
             let staking_rewards = amount * STAKING_REWARDS_BPS / ONE_HUNDRED_PERCENT_BPS;
+            let _incentive_reserves = amount * INCENTIVES_REWARDS_BPS / ONE_HUNDRED_PERCENT_BPS;
             let staking_address = self.get_staking_contract_address();
             let mut staking = StakingContractRef::new(self.env(), staking_address);
 
             big_coin.transfer_from(&self.env().caller(), &self.env().self_address(), &amount);
+
+            // _incentive_reserves (40%) stay in Treasury as reserves (the amount not forwarded to staking);
+            // explicit reference to INCENTIVES_REWARDS_BPS eliminates the previous dead code.
 
             if !staking_rewards.is_zero() && !staking.get_total_staked().is_zero() {
                 big_coin.approve(&staking_address, &staking_rewards);
