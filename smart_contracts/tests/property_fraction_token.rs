@@ -3,6 +3,7 @@ use leasefi_contracts::{
         errors::Error as ComplianceError, types::ComplianceConfig, CompliancePolicy,
         CompliancePolicyHostRef, CompliancePolicyInitArgs,
     },
+    constants::COMPLIANCE_POLICY_UPDATE_TIMELOCK,
     escrow::{Escrow, EscrowInitArgs},
     investor_registry::{
         types::InvestorRecord, InvestorRegistry, InvestorRegistryHostRef, InvestorRegistryInitArgs,
@@ -310,10 +311,27 @@ fn test_set_compliance_policy_should_update_policy_for_token_manager() {
     ctx.env.set_caller(ctx.token_manager);
     ctx.token.set_compliance_policy(new_policy);
 
+    // Change is pending due to timelock; current policy is unchanged
+    assert_eq!(
+        ctx.token.get_compliance_policy_contract(),
+        ctx.compliance.address(),
+        "Compliance policy should not change until timelock elapses",
+    );
+    assert_eq!(
+        ctx.token.get_pending_compliance_policy(),
+        Some(new_policy),
+        "New policy should be pending",
+    );
+
+    // Advance past timelock and apply
+    ctx.env
+        .advance_block_time(COMPLIANCE_POLICY_UPDATE_TIMELOCK + 1);
+    ctx.token.apply_compliance_policy();
+
     assert_eq!(
         ctx.token.get_compliance_policy_contract(),
         new_policy,
-        "Invalid updated compliance policy addres",
+        "Invalid updated compliance policy address",
     );
 
     assert!(ctx.env.emitted_event(
