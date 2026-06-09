@@ -664,8 +664,15 @@ fn test_purchase_should_purchase_with_cspr_token_properly() {
 
     let currency = Currency::CSPR;
     let price = ctx.ico.get_ico_token_price(currency);
-    let amount_to_spend = U256::from(100) * price;
-    let expected_purchase_amount = amount_to_spend * U256::from(10).pow(U256::from(18)) / price;
+
+    // amount_to_spend in motes; the /1000 normalization inside purchase means we set
+    // it to 100 * price * 1000 so that effective spend units = 100 * price, yielding
+    // 100 * 10^18 BIG (same as the USDC test). This is no longer tautological because
+    // the mote normalization (the bug being fixed) is now part of the calc.
+    let amount_to_spend = U256::from(100) * price * U256::from(1_000);
+    let expected_purchase_amount =
+        (amount_to_spend / 1_000) * U256::from(10).pow(U256::from(18)) / price;
+
     let prev_current_ico_schedule = ctx.ico.get_current_ico_schedule().unwrap();
     let prev_buyer_balance = ctx.big_coin.balance_of(&ctx.users.alice);
     let prev_ico_balance = ctx.big_coin.balance_of(&ctx.ico.address());

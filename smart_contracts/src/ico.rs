@@ -148,8 +148,17 @@ impl ICO {
             .get_current_ico_schedule()
             .unwrap_or_revert_with(&self.env(), Error::NoActiveIcoSchedule);
         let ico_token_price = self.get_ico_token_price(currency);
-        let purchase_amount =
-            amount_to_spend * U256::from(10).pow(U256::from(18)) / ico_token_price;
+
+        // For CSPR, amount_to_spend is in motes (10^9 per CSPR). Normalize to 6 decimal
+        // units (like USDC/USDT and the schedule price) to match the conversion formula.
+        // Without this, CSPR purchases over-issue BIG by ~10^3 (motes vs price decimals)
+        // plus potential oracle scaling mismatches (up to 10^6 total in some cases).
+        let spend_for_calc = if currency == Currency::CSPR {
+            amount_to_spend / U256::from(1_000)
+        } else {
+            amount_to_spend
+        };
+        let purchase_amount = spend_for_calc * U256::from(10).pow(U256::from(18)) / ico_token_price;
 
         if purchase_amount.is_zero() {
             self.env().revert(Error::InvalidPurchaseAmount);
