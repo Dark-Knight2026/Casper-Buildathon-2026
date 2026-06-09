@@ -38,7 +38,9 @@ async fn register_and_access(env: &TestEnv, email: &str) -> String {
 /// the session. The old password stops authenticating and the new one starts.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn change_password_swaps_credentials(pool: PgPool) {
-    let env = common::setup_test_server(pool, false).await;
+    // Redis-isolated: the register call writes a per-IP rate-limit counter
+    // shared across tests, so a dedicated container avoids cross-test bleed.
+    let env = common::setup_test_server(pool, true).await;
     let access = register_and_access(&env, "change@example.com").await;
 
     let response = env
@@ -85,7 +87,7 @@ async fn change_password_swaps_credentials(pool: PgPool) {
 /// second-granularity `iat <= cutoff` check.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn change_password_revokes_other_sessions_but_keeps_current(pool: PgPool) {
-    let env = common::setup_test_server(pool, false).await;
+    let env = common::setup_test_server(pool, true).await;
 
     let register = env
         .server
@@ -152,7 +154,7 @@ async fn change_password_revokes_other_sessions_but_keeps_current(pool: PgPool) 
 /// took effect.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn change_password_rejects_wrong_current(pool: PgPool) {
-    let env = common::setup_test_server(pool, false).await;
+    let env = common::setup_test_server(pool, true).await;
     let access = register_and_access(&env, "wrongcur@example.com").await;
 
     let response = env
@@ -187,7 +189,7 @@ async fn change_password_rejects_wrong_current(pool: PgPool) {
 /// `current_password` is a 400 - the proof of possession is mandatory.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn change_password_requires_current_on_change_path(pool: PgPool) {
-    let env = common::setup_test_server(pool, false).await;
+    let env = common::setup_test_server(pool, true).await;
     let access = register_and_access(&env, "nocur@example.com").await;
 
     let response = env

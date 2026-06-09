@@ -29,6 +29,7 @@ use crate::{
                 RegisterRequest, ResetPasswordRequest,
             },
             refresh,
+            verify::RequestAudit,
         },
         users,
     },
@@ -43,6 +44,50 @@ use crate::{
 /// failed - the anti-enumeration guarantee for the login path.
 fn invalid_credentials() -> ApiError {
     ApiError::Unauthorized("Invalid email or password".to_owned())
+}
+
+/// Per-IP registration rate-limit gate.
+///
+/// Fails open like the wallet-login limiter: a Redis outage degrades to "no
+/// extra limit" - the global `GovernorLayer` still applies - rather than taking
+/// registration down. A missing peer IP (no `ConnectInfo`, only off the real
+/// HTTP transport) skips the per-IP counter since there is nothing to key on.
+/// On a pass the attempt is recorded before any work, so a flood of bodies the
+/// validator would reject still counts toward the cap.
+async fn enforce_register_rate_limit(state: &AppState, ip: Option<&str>) -> ApiResult<()> {
+    let Some(ip) = ip else {
+        return Ok(());
+    };
+    if state
+        .redis
+        .is_register_rate_limited(ip)
+        .await
+        .unwrap_or(false)
+    {
+        tracing::warn!(
+            event = "register_rate_limited",
+            %ip,
+            "Too many registration attempts from this client"
+        );
+        return Err(ApiError::TooManyRequests("rate_limited".to_owned()));
+    }
+    if let Err(err) = state.redis.record_register_attempt(ip).await {
+        tracing::warn!(error = %err, %ip, "failed to record registration attempt");
+    }
+    Ok(())
+}
+
+/// Records one failed password-login against the per-email limiter, best-effort.
+///
+/// A Redis error is logged, never propagated: the user-facing result is the 401
+/// credential failure, which must not become a 500 just because the counter
+/// could not be bumped - that would both mask the real outcome and leak Redis
+/// state as an enumeration side-channel. The email is deliberately kept out of
+/// the log line. Mirrors the warn-on-failure shape of [`enforce_register_rate_limit`].
+async fn note_login_failure(state: &AppState, email: &str) {
+    if let Err(err) = state.redis.record_password_login_failure(email).await {
+        tracing::warn!(error = %err, "failed to record password-login failure");
+    }
 }
 
 // `POST /api/v1/auth/register`
@@ -88,14 +133,18 @@ fn invalid_credentials() -> ApiError {
         (status = 200, description = "Registration successful; user auto-logged in", body = LoginResponse),
         (status = 400, description = "Invalid email, weak password, disallowed role, or empty name", body = ErrorResponse),
         (status = 409, description = "Email already registered", body = ErrorResponse),
+        (status = 429, description = "Too many registration attempts from this client", body = ErrorResponse),
         (status = 500, description = "Internal server error", body = ErrorResponse)
     )
 )]
 #[inline]
 pub async fn register(
     State(state): State<Arc<AppState>>,
+    audit: RequestAudit,
     Json(payload): Json<RegisterRequest>,
 ) -> ApiResult<(CookieJar, Json<LoginResponse>)> {
+    enforce_register_rate_limit(&state, audit.ip.as_deref()).await?;
+
     let validated = payload.into_validated()?;
     let password_hash = common::hash_password(validated.password.expose_secret())?;
 
@@ -192,6 +241,7 @@ pub async fn register(
         (status = 200, description = "Login successful; user logged in", body = LoginResponse),
         (status = 401, description = "Invalid email or password", body = ErrorResponse),
         (status = 403, description = "Account is suspended or inactive", body = ErrorResponse),
+        (status = 429, description = "Too many failed login attempts for this email", body = ErrorResponse),
         (status = 500, description = "Internal server error", body = ErrorResponse)
     )
 )]
@@ -202,16 +252,34 @@ pub async fn login_password(
 ) -> ApiResult<(CookieJar, Json<LoginResponse>)> {
     let email = payload.email.trim().to_ascii_lowercase();
 
+    // Per-email brute-force gate (fails open on a Redis error, mirroring the
+    // wallet limiter). The 429 leaks nothing: it is returned for any email,
+    // registered or not, so the anti-enumeration guarantee still holds.
+    if state
+        .redis
+        .is_password_login_rate_limited(&email)
+        .await
+        .unwrap_or(false)
+    {
+        tracing::warn!(
+            event = "login_rate_limited",
+            "Password login rejected: too many recent failures for this email"
+        );
+        return Err(ApiError::TooManyRequests("rate_limited".to_owned()));
+    }
+
     // Anti-enumeration: an unknown email and a wallet-only account (NULL hash)
     // must be indistinguishable from a wrong password. Both branches burn a
-    // dummy Argon2 verify so the response time matches the real path, then
-    // return the same generic 401.
+    // dummy Argon2 verify so the response time matches the real path, record the
+    // failure against the per-email limiter, then return the same generic 401.
     let Some(record) = auth::find_password_login_by_email(&state.db, &email).await? else {
         common::dummy_verify(payload.password.expose_secret());
+        note_login_failure(&state, &email).await;
         return Err(invalid_credentials());
     };
     let Some(password_hash) = record.password_hash.as_deref() else {
         common::dummy_verify(payload.password.expose_secret());
+        note_login_failure(&state, &email).await;
         return Err(invalid_credentials());
     };
 
@@ -221,6 +289,7 @@ pub async fn login_password(
             reason = "bad_password",
             "Password login rejected: credentials did not match"
         );
+        note_login_failure(&state, &email).await;
         return Err(invalid_credentials());
     }
 

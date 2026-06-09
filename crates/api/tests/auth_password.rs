@@ -8,7 +8,11 @@ use secrecy::SecretString;
 use serde_json::{Value, json};
 use sqlx::PgPool;
 
-use api::{UserRole, common::VerificationLevel, services::auth};
+use api::{
+    UserRole,
+    common::{RedisStore, VerificationLevel},
+    services::auth,
+};
 use common::{CapturingMailer, TestEnv};
 
 /// A password that satisfies the policy: >= 8 chars, has a digit, and mixes
@@ -39,7 +43,10 @@ struct UserAuthRow {
 
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn register_creates_user_and_logs_in(pool: PgPool) {
-    let env = common::setup_test_server(pool.clone(), false).await;
+    // Redis-isolated: registration now writes a per-IP rate-limit counter, and
+    // the IP key (127.0.0.1) is shared across tests, so a dedicated container
+    // keeps the counter from bleeding between parallel runs.
+    let env = common::setup_test_server(pool.clone(), true).await;
 
     let response = env
         .server
@@ -97,7 +104,7 @@ async fn register_creates_user_and_logs_in(pool: PgPool) {
 
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn register_duplicate_email_returns_409(pool: PgPool) {
-    let env = common::setup_test_server(pool, false).await;
+    let env = common::setup_test_server(pool, true).await;
     let payload = json!({
         "email": "dup@example.com",
         "password": VALID_PASSWORD,
@@ -124,7 +131,7 @@ async fn register_duplicate_email_returns_409(pool: PgPool) {
 /// registration hits the same normalized email and is rejected with 409.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn register_normalizes_email_case(pool: PgPool) {
-    let env = common::setup_test_server(pool, false).await;
+    let env = common::setup_test_server(pool, true).await;
 
     let first = env
         .server
@@ -153,7 +160,7 @@ async fn register_normalizes_email_case(pool: PgPool) {
 
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn register_rejects_invalid_email(pool: PgPool) {
-    let env = common::setup_test_server(pool, false).await;
+    let env = common::setup_test_server(pool, true).await;
 
     let response = env
         .server
@@ -171,7 +178,7 @@ async fn register_rejects_invalid_email(pool: PgPool) {
 
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn register_rejects_short_password(pool: PgPool) {
-    let env = common::setup_test_server(pool, false).await;
+    let env = common::setup_test_server(pool, true).await;
 
     let response = env
         .server
@@ -190,7 +197,7 @@ async fn register_rejects_short_password(pool: PgPool) {
 /// Password is long enough but has no digit - the policy must still reject it.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn register_rejects_password_without_digit(pool: PgPool) {
-    let env = common::setup_test_server(pool, false).await;
+    let env = common::setup_test_server(pool, true).await;
 
     let response = env
         .server
@@ -210,7 +217,7 @@ async fn register_rejects_password_without_digit(pool: PgPool) {
 /// rather than silently downgrading or provisioning a privileged account.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn register_rejects_non_self_registerable_role(pool: PgPool) {
-    let env = common::setup_test_server(pool, false).await;
+    let env = common::setup_test_server(pool, true).await;
 
     let response = env
         .server
@@ -232,7 +239,7 @@ async fn register_rejects_non_self_registerable_role(pool: PgPool) {
 /// auth cookies, and mint an access JWT carrying the user's role and level.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn password_login_succeeds_with_valid_credentials(pool: PgPool) {
-    let env = common::setup_test_server(pool, false).await;
+    let env = common::setup_test_server(pool, true).await;
 
     let register = env
         .server
@@ -279,7 +286,7 @@ async fn password_login_succeeds_with_valid_credentials(pool: PgPool) {
 /// the email exists.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn password_login_rejects_wrong_password(pool: PgPool) {
-    let env = common::setup_test_server(pool, false).await;
+    let env = common::setup_test_server(pool, true).await;
 
     let register = env
         .server
@@ -309,7 +316,7 @@ async fn password_login_rejects_wrong_password(pool: PgPool) {
 /// anti-enumeration guarantee.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn password_login_rejects_unknown_email(pool: PgPool) {
-    let env = common::setup_test_server(pool, false).await;
+    let env = common::setup_test_server(pool, true).await;
 
     let response = env
         .server
@@ -328,7 +335,7 @@ async fn password_login_rejects_unknown_email(pool: PgPool) {
 /// and returns the generic 401.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn password_login_rejects_wallet_only_account(pool: PgPool) {
-    let env = common::setup_test_server(pool.clone(), false).await;
+    let env = common::setup_test_server(pool.clone(), true).await;
 
     sqlx::query(
         r"
@@ -357,7 +364,7 @@ async fn password_login_rejects_wallet_only_account(pool: PgPool) {
 /// status gate rejects it with 403, distinct from the credential-failure 401.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn password_login_rejects_suspended_account(pool: PgPool) {
-    let env = common::setup_test_server(pool.clone(), false).await;
+    let env = common::setup_test_server(pool.clone(), true).await;
 
     let register = env
         .server
@@ -643,4 +650,152 @@ async fn reset_password_token_is_single_use(pool: PgPool) {
         .json(&json!({ "token": token, "new_password": "An0therPass" }))
         .await;
     assert_eq!(second.status_code(), StatusCode::BAD_REQUEST);
+}
+
+// Rate limiting ---------------------------------------------------------------
+
+/// Posts a registration with a distinct email, returning the raw response so a
+/// caller can assert any status (200 / 429). Every call hits the same client IP
+/// (the test transport's 127.0.0.1), which is what the per-IP limiter keys on.
+async fn post_register(env: &TestEnv, email: &str) -> TestResponse {
+    env.server
+        .post("/api/v1/auth/register")
+        .json(&json!({
+            "email": email,
+            "password": VALID_PASSWORD,
+            "first_name": "Rate",
+            "last_name": "Limit",
+        }))
+        .await
+}
+
+/// Posts a password login, returning the raw response so a caller can assert
+/// any status (200 / 401 / 429).
+async fn post_login(env: &TestEnv, email: &str, password: &str) -> TestResponse {
+    env.server
+        .post("/api/v1/auth/login/password")
+        .json(&json!({ "email": email, "password": password }))
+        .await
+}
+
+/// Deletes the per-email failed-login counter to simulate the 60-second window
+/// having elapsed, without sleeping in CI - the same trick the verify-email
+/// rate-limit tests use on their send counter.
+async fn clear_login_fail_window(env: &TestEnv, email: &str) {
+    let redis_env = env.redis.as_ref().expect("redis env");
+    let mut conn = redis_env
+        .client
+        .get_multiplexed_async_connection()
+        .await
+        .expect("redis connection");
+    redis::cmd("DEL")
+        .arg(RedisStore::password_login_fail_key(email))
+        .query_async::<()>(&mut conn)
+        .await
+        .expect("DEL login-fail key");
+}
+
+/// Five registrations from one client IP fit under the per-IP cap; the sixth is
+/// rejected with 429 before any work runs. The emails are all distinct, proving
+/// the limiter keys on the IP rather than the address.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn register_rate_limited_after_five_attempts_per_ip(pool: PgPool) {
+    let env = common::setup_test_server(pool, true).await;
+
+    for index in 0..5 {
+        let response = post_register(&env, &format!("burst{index}@example.com")).await;
+        assert_eq!(
+            response.status_code(),
+            StatusCode::OK,
+            "registration {index} is within the per-IP cap"
+        );
+    }
+
+    let blocked = post_register(&env, "burst5@example.com").await;
+    assert_eq!(blocked.status_code(), StatusCode::TOO_MANY_REQUESTS);
+    assert_eq!(
+        blocked.json::<Value>()["error"].as_str(),
+        Some("rate_limited")
+    );
+}
+
+/// Five failed logins for one email exhaust the per-email failure cap; the
+/// sixth is rejected by the limiter (429) rather than the credential check
+/// (401). The email never existed, so the 429 also doubles as proof the limiter
+/// runs ahead of - and is indistinguishable from - the anti-enumeration path.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn password_login_rate_limited_after_five_failures(pool: PgPool) {
+    let env = common::setup_test_server(pool, true).await;
+
+    for _ in 0..5 {
+        let response = post_login(&env, "victim@example.com", "WrongGuess1").await;
+        assert_eq!(response.status_code(), StatusCode::UNAUTHORIZED);
+    }
+
+    let blocked = post_login(&env, "victim@example.com", "WrongGuess1").await;
+    assert_eq!(blocked.status_code(), StatusCode::TOO_MANY_REQUESTS);
+    assert_eq!(
+        blocked.json::<Value>()["error"].as_str(),
+        Some("rate_limited")
+    );
+}
+
+/// While the limiter is tripped even the correct password is blocked (429); once
+/// the window elapses the same correct password logs in. Proves the lockout is
+/// time-bounded, not permanent, and that the gate runs before credential
+/// verification.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn password_login_rate_limit_lifts_after_window(pool: PgPool) {
+    let env = common::setup_test_server(pool, true).await;
+    register_account(&env, "windowed@example.com").await;
+
+    for _ in 0..5 {
+        let response = post_login(&env, "windowed@example.com", "WrongGuess1").await;
+        assert_eq!(response.status_code(), StatusCode::UNAUTHORIZED);
+    }
+
+    // The correct password is still blocked - the limiter sits ahead of the
+    // credential check.
+    let blocked = post_login(&env, "windowed@example.com", VALID_PASSWORD).await;
+    assert_eq!(blocked.status_code(), StatusCode::TOO_MANY_REQUESTS);
+
+    // Simulate the 60-second window resetting, then the correct password works.
+    clear_login_fail_window(&env, "windowed@example.com").await;
+    let allowed = post_login(&env, "windowed@example.com", VALID_PASSWORD).await;
+    assert_eq!(
+        allowed.status_code(),
+        StatusCode::OK,
+        "the limiter lifts once the window resets"
+    );
+}
+
+/// A second forgot-password request within the per-minute window still answers
+/// the anti-enumeration `200 { sent }`, but the send limiter suppresses the
+/// second email so only one reset link goes out.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn forgot_password_send_is_rate_limited_to_one_per_minute(pool: PgPool) {
+    let (env, mailer) = common::setup_test_server_capturing(pool, true).await;
+    register_account(&env, "throttle@example.com").await;
+
+    let first = env
+        .server
+        .post("/api/v1/auth/password/forgot")
+        .json(&json!({ "email": "throttle@example.com" }))
+        .await;
+    assert_eq!(first.status_code(), StatusCode::OK);
+
+    let second = env
+        .server
+        .post("/api/v1/auth/password/forgot")
+        .json(&json!({ "email": "throttle@example.com" }))
+        .await;
+    assert_eq!(second.status_code(), StatusCode::OK);
+    assert_eq!(second.json::<Value>()["status"], "sent");
+
+    let messages = mailer.sent.lock().expect("mailer mutex");
+    assert_eq!(
+        messages.len(),
+        1,
+        "the per-minute send cap suppresses the second reset email"
+    );
 }

@@ -65,6 +65,33 @@ const LOGIN_FAIL: RateLimit = RateLimit {
     window_secs: 60,
 };
 
+/// Failed password-login rate limit per email: 5 attempts per 60 seconds.
+///
+/// Mirrors [`LOGIN_FAIL`] - the wallet-login analog - in shape and threshold,
+/// but lives as a separate const keyed on the normalized email so password and
+/// wallet brute-force are bounded independently. Keying on email (not IP)
+/// targets credential-stuffing against one known account; the accepted
+/// trade-off is the same as the wallet path - an attacker who knows a victim's
+/// email can lock them out for the rolling window by burning failures.
+const PASSWORD_LOGIN_FAIL: RateLimit = RateLimit {
+    max_attempts: 5,
+    window_secs: 60,
+};
+
+/// Registration rate limit per client IP: 5 attempts per 60 seconds.
+///
+/// Keyed on the peer IP, not the email: the abuse vector for registration is
+/// one source minting many accounts under many different emails, which a
+/// per-email counter (forever stuck at 1) would never catch. A per-minute burst
+/// guard of 5 sits well above any human signup cadence - even a shared NAT
+/// egress rarely registers five accounts in a minute - while capping automated
+/// account creation. It layers on top of the global per-IP `GovernorLayer` as a
+/// registration-specific tightening.
+const REGISTER_PER_IP: RateLimit = RateLimit {
+    max_attempts: 5,
+    window_secs: 60,
+};
+
 /// Time-to-live for a pending email-change token (24 hours).
 ///
 /// Generous on purpose: the link is delivered by email and may sit in a
@@ -259,6 +286,85 @@ impl RedisStore {
         // Set TTL only on the first failure to start the window.
         if count == 1 {
             conn.expire::<_, ()>(&key, LOGIN_FAIL.window_secs.cast_signed())
+                .await?;
+        }
+        Ok(())
+    }
+
+    /// Returns `true` if the email has exceeded the failed password-login limit.
+    ///
+    /// The password analog of [`is_login_rate_limited`]; the handler reads this
+    /// before doing any work and fails open on a Redis error (the global
+    /// `GovernorLayer` still applies) so an outage cannot take login down.
+    ///
+    /// [`is_login_rate_limited`]: Self::is_login_rate_limited
+    ///
+    /// # Errors
+    ///
+    /// Returns `RedisError` if the connection fails.
+    #[inline]
+    pub async fn is_password_login_rate_limited(&self, email: &str) -> RedisResult<bool> {
+        let mut conn = self.conn.clone();
+        let key = Self::password_login_fail_key(email);
+        let count = conn.get::<_, Option<u64>>(&key).await?;
+        Ok(count.is_some_and(|c| c >= PASSWORD_LOGIN_FAIL.max_attempts))
+    }
+
+    /// Records one failed password-login attempt for the email.
+    ///
+    /// `INCR` + conditional `EXPIRE` mirrors [`record_login_failure`]: the TTL
+    /// is set only on the first failure so the rolling window starts when the
+    /// run of failures begins, not on every retry.
+    ///
+    /// [`record_login_failure`]: Self::record_login_failure
+    ///
+    /// # Errors
+    ///
+    /// Returns `RedisError` if the connection fails.
+    #[inline]
+    pub async fn record_password_login_failure(&self, email: &str) -> RedisResult<()> {
+        let mut conn = self.conn.clone();
+        let key = Self::password_login_fail_key(email);
+        let count = conn.incr::<_, _, u64>(&key, 1u64).await?;
+        if count == 1 {
+            conn.expire::<_, ()>(&key, PASSWORD_LOGIN_FAIL.window_secs.cast_signed())
+                .await?;
+        }
+        Ok(())
+    }
+
+    /// Returns `true` if the client IP has exceeded the registration limit.
+    ///
+    /// Fails open on a Redis error at the call site, same as the login gates.
+    ///
+    /// # Errors
+    ///
+    /// Returns `RedisError` if the connection fails.
+    #[inline]
+    pub async fn is_register_rate_limited(&self, ip: &str) -> RedisResult<bool> {
+        let mut conn = self.conn.clone();
+        let key = Self::register_attempts_key(ip);
+        let count = conn.get::<_, Option<u64>>(&key).await?;
+        Ok(count.is_some_and(|c| c >= REGISTER_PER_IP.max_attempts))
+    }
+
+    /// Records one registration attempt for the client IP.
+    ///
+    /// Counts every inbound attempt the gate lets through - including ones the
+    /// handler later rejects on validation - so a flood of malformed bodies
+    /// still trips the cap. `INCR` + conditional `EXPIRE` matches the other
+    /// counters: the TTL starts the window on the first attempt only.
+    ///
+    /// # Errors
+    ///
+    /// Returns `RedisError` if the connection fails.
+    #[inline]
+    pub async fn record_register_attempt(&self, ip: &str) -> RedisResult<()> {
+        let mut conn = self.conn.clone();
+        let key = Self::register_attempts_key(ip);
+        let count = conn.incr::<_, _, u64>(&key, 1u64).await?;
+        if count == 1 {
+            conn.expire::<_, ()>(&key, REGISTER_PER_IP.window_secs.cast_signed())
                 .await?;
         }
         Ok(())
@@ -812,6 +918,26 @@ impl RedisStore {
     #[inline]
     fn login_fail_key(wallet_address: &str) -> String {
         format!("login_fail:{wallet_address}")
+    }
+
+    /// Generates the Redis key for the per-email failed password-login counter.
+    ///
+    /// Exposed `pub` so rate-limit tests can DEL it to simulate the 60-second
+    /// window having elapsed without sleeping in CI.
+    #[inline]
+    #[must_use]
+    pub fn password_login_fail_key(email: &str) -> String {
+        format!("password_login_fail:{email}")
+    }
+
+    /// Generates the Redis key for the per-IP registration counter.
+    ///
+    /// Exposed `pub` so rate-limit tests can DEL it to simulate the 60-second
+    /// window having elapsed without sleeping in CI.
+    #[inline]
+    #[must_use]
+    pub fn register_attempts_key(ip: &str) -> String {
+        format!("register_attempts:{ip}")
     }
 
     /// Generates the Redis key for a blocklisted access-token `jti`.
