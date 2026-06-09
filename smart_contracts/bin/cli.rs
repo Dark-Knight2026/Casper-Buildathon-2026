@@ -207,6 +207,11 @@ impl DeployScript for LeasefiDeployScript {
             400_000_000_000,
         )?;
 
+        let usdc_address = Address::new(
+            "hash-7f06f66426f18ca8d3b8df69f977a54554d39fda43ebe942fd22ece0d20235bd", // testnet, 48bd364532febf044cca8d2d716336b93d27458ce0aa48ad292ca28304fa8649 - mainnet
+        )
+        .unwrap();
+
         // Setup Treasury
         treasury.set_big_coin(big_coin.address());
         treasury.set_staking(staking.address());
@@ -230,6 +235,7 @@ impl DeployScript for LeasefiDeployScript {
         // Setup Escrow
         escrow.set_lease(lease.address());
         escrow.set_treasury(treasury.address());
+        escrow.set_security_deposit_token(usdc_address);
 
         // Setup ICO
         let creation_params = LeasefiDeployScript::get_ico_schedule_creation_params(env);
@@ -240,15 +246,7 @@ impl DeployScript for LeasefiDeployScript {
         ico.set_staking(staking.address());
         ico.add_currency(Currency::CSPR, None);
         env.set_gas(15_000_000_000);
-        ico.add_currency(
-            Currency::USDC,
-            Some(
-                Address::new(
-                    "hash-7f06f66426f18ca8d3b8df69f977a54554d39fda43ebe942fd22ece0d20235bd", // testnet, 48bd364532febf044cca8d2d716336b93d27458ce0aa48ad292ca28304fa8649 - mainnet
-                )
-                .unwrap(),
-            ),
-        );
+        ico.add_currency(Currency::USDC, Some(usdc_address));
         ico.add_currency(
             Currency::USDT,
             Some(
