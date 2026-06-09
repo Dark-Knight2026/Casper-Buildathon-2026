@@ -96,7 +96,7 @@ impl DeployScript for LeasefiDeployScript {
             450_000_000_000,
         )?;
 
-        let roles = Roles::load_or_deploy_with_cfg(
+        let mut roles = Roles::load_or_deploy_with_cfg(
             env,
             None,
             RolesInitArgs { admin: new_owner },
@@ -262,6 +262,23 @@ impl DeployScript for LeasefiDeployScript {
         big_coin.approve(&ico.address(), &(creation_params.sale_amount));
         ico.add_ico_schedule(creation_params);
 
+        // Grant all domain roles to new_owner during post-deployment setup.
+        // Without these, functions like Lease::create_lease_agreement (requires LANDLORD) and
+        // PropertyRegistry management functions (requires PROPERTY_MANAGER) revert with AccessDenied.
+        // Roles contract was init'd with new_owner as its DEFAULT_ADMIN_ROLE holder.
+        let deployer = env.caller();
+        env.set_caller(new_owner);
+        roles.grant_role(
+            &roles.get_role_admin(&roles.get_landlord_role()),
+            &new_owner,
+        );
+        roles.grant_role(&roles.get_landlord_role(), &new_owner);
+        roles.grant_role(&roles.get_role_admin(&roles.get_agent_role()), &new_owner);
+        roles.grant_role(&roles.get_agent_role(), &new_owner);
+        roles.grant_role(&roles.get_role_admin(&roles.get_manager_role()), &new_owner);
+        roles.grant_role(&roles.get_manager_role(), &new_owner);
+        env.set_caller(deployer);
+
         // Transfer ownership
         nft.grant_role(&DEFAULT_ADMIN_ROLE, &new_owner);
         nft.revoke_role(&DEFAULT_ADMIN_ROLE, &env.caller());
@@ -272,6 +289,7 @@ impl DeployScript for LeasefiDeployScript {
         staking.transfer_ownership(&new_owner);
         ico.transfer_ownership(&new_owner);
         property_registry.grant_role(&DEFAULT_ADMIN_ROLE, &new_owner);
+        property_registry.grant_role(&property_registry.property_manager_role(), &new_owner);
         property_registry.revoke_role(&DEFAULT_ADMIN_ROLE, &env.caller());
         investor_registry.grant_role(&DEFAULT_ADMIN_ROLE, &new_owner);
         investor_registry.revoke_role(&DEFAULT_ADMIN_ROLE, &env.caller());
