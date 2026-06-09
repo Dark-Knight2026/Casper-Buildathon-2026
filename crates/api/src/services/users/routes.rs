@@ -36,4 +36,5 @@ pub fn router() -> OpenApiRouter<Arc<AppState>> {
         .routes(routes!(handlers::upload_avatar))
         .routes(routes!(handlers::patch_me_role))
         .routes(routes!(handlers::change_password))
+        .routes(routes!(handlers::link_wallet))
 }

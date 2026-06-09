@@ -36,10 +36,10 @@ pub use cookies::{
     build_refresh_cookie, build_session_cookies,
 };
 pub use db::{
-    ActiveSession, PasswordLoginRecord, RegisterOutcome, UpsertOutcome, create_password_user,
-    find_password_login_by_email, insert_refresh_token, list_active_sessions,
-    revoke_all_sessions_for_user, revoke_session_by_id, update_last_login_at,
-    upsert_user_by_wallet,
+    ActiveSession, LinkWalletOutcome, PasswordLoginRecord, RegisterOutcome, UpsertOutcome,
+    add_wallet_connection, create_password_user, find_password_login_by_email,
+    insert_refresh_token, link_wallet_to_user, list_active_sessions, revoke_all_sessions_for_user,
+    revoke_session_by_id, update_last_login_at, upsert_user_by_wallet,
 };
 pub use extractors::{
     AdminRole, AgentRole, AuthGateError, EmailVerified, IdentityVerified, LandlordRole, RoleMarker,

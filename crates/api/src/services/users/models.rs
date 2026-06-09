@@ -394,3 +394,59 @@ impl ChangePasswordRequest {
         })
     }
 }
+
+/// Request body for `POST /api/v1/users/me/wallet`.
+///
+/// Carries the Casper wallet address to link and a signature over the nonce
+/// previously fetched from `GET /api/v1/auth/nonce` for that same address. The
+/// signature proves the caller controls the wallet's private key, so an
+/// attacker cannot bind someone else's address to their account.
+///
+/// `signature` is a `SecretString` so it never lands in `Debug` output or
+/// logs; the `value_type` override keeps the `OpenAPI` schema a plain string.
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct LinkWalletRequest {
+    /// Casper public key (66 hex for Ed25519, 68 for Secp256k1). Normalized to
+    /// lowercase in [`LinkWalletRequest::into_validated`].
+    pub wallet_address: String,
+    /// Hex-encoded signature over the nonce message, produced by the wallet.
+    #[schema(value_type = String)]
+    pub signature: SecretString,
+}
+
+/// A [`LinkWalletRequest`] whose `wallet_address` passed format validation and
+/// was lowercased.
+///
+/// Lowercasing happens here (not in the handler) because the Redis nonce key
+/// is case-sensitive and was stored under the lowercased address by
+/// `GET /auth/nonce`; the signature is carried through untouched for the
+/// handler's constant-time verification.
+#[derive(Debug)]
+pub struct ValidatedWalletLink {
+    /// Normalized (trimmed + lowercased) wallet address.
+    pub wallet_address: String,
+    /// Hex-encoded signature over the nonce message.
+    pub signature: SecretString,
+}
+
+impl LinkWalletRequest {
+    /// Trims and lowercases the address, then validates its Casper shape.
+    ///
+    /// Runs at the HTTP boundary so a malformed address 400s before any Redis
+    /// nonce lookup happens. Reuses [`common::validate_wallet_address`] so the
+    /// link and wallet-login paths reject identical input the same way.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ApiError::BadRequest`] when the address is not a valid Casper
+    /// public-key shape.
+    #[inline]
+    pub fn into_validated(self) -> ApiResult<ValidatedWalletLink> {
+        let wallet_address = self.wallet_address.trim().to_ascii_lowercase();
+        common::validate_wallet_address(&wallet_address)?;
+        Ok(ValidatedWalletLink {
+            wallet_address,
+            signature: self.signature,
+        })
+    }
+}

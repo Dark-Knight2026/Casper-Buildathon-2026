@@ -15,13 +15,13 @@ use crate::{
     common::{self, ApiError, ApiResult, AppState, UserInfo, tokens},
     providers::EmailMessage,
     services::{
-        auth::{AuthUser, cookies, jwt, refresh},
+        auth::{self, AuthUser, cookies, jwt, refresh},
         users::{
             db::{self, SoftDeleteOutcome},
             models::{
                 AvatarUploadResponse, ChangePasswordRequest, DeleteAccountRequest,
-                EmailChangeConfirmRequest, EmailChangeRequest, UpdateProfileRequest,
-                UpdateRoleRequest,
+                EmailChangeConfirmRequest, EmailChangeRequest, LinkWalletRequest,
+                UpdateProfileRequest, UpdateRoleRequest,
             },
         },
     },
@@ -1126,4 +1126,132 @@ pub async fn change_password(
     );
 
     Ok((jar, StatusCode::NO_CONTENT))
+}
+
+// `POST /api/v1/users/me/wallet`
+//
+/// Links a Casper wallet to the authenticated user's account (backend-only).
+///
+/// Two-step proof-of-ownership, reusing the wallet-login machinery: the client
+/// first fetches a nonce from `GET /api/v1/auth/nonce` for the address, signs
+/// it with the wallet, and posts the address + signature here. We consume the
+/// nonce (GETDEL, one-time use) and verify the signature, so a caller cannot
+/// bind an address they do not control.
+///
+/// On success the wallet becomes the user's primary connection: any previous
+/// primary is demoted and `users.wallet_address` is re-synced by the
+/// `wallet_connections` trigger. A wallet already owned by a different account
+/// is rejected with 409. This writes only the backend DB - no on-chain
+/// `create_user` deploy happens here.
+///
+/// Authorization: `AuthUser` (any logged-in user). Email verification is NOT
+/// required - connecting a wallet is part of onboarding, before the user has
+/// necessarily verified their email.
+///
+/// # Errors
+///
+/// - 400 (`BadRequest`) when the address shape or the signature format is invalid.
+/// - 401 (`Unauthorized`) when the access cookie is missing/invalid (upstream),
+///   or the nonce is missing/expired, or the signature does not match.
+/// - 409 (`Conflict`) when the wallet is already linked to another account.
+/// - 500 for Redis/DB failures.
+#[utoipa::path(
+    post,
+    path = "/me/wallet",
+    tag = "Users",
+    request_body = LinkWalletRequest,
+    responses(
+        (status = 200, description = "Wallet linked; returns the updated profile", body = UserInfo),
+        (status = 400, description = "Invalid wallet address or signature format"),
+        (status = 401, description = "Unauthorized, or nonce/signature invalid"),
+        (status = 409, description = "Wallet already linked to another account"),
+        (status = 500, description = "Internal server error"),
+    ),
+    security(
+        ("cookie_auth" = [])
+    )
+)]
+#[inline]
+pub async fn link_wallet(
+    State(state): State<Arc<AppState>>,
+    auth_user: AuthUser,
+    Json(payload): Json<LinkWalletRequest>,
+) -> ApiResult<Json<UserInfo>> {
+    let user_id = auth_user.0.sub;
+    let validated = payload.into_validated()?;
+    let wallet_address = validated.wallet_address;
+
+    // One-time nonce consume: GETDEL closes the TOCTOU window the same way the
+    // wallet-login path does. A miss means the client never fetched a nonce for
+    // this address, or it already expired.
+    let Some(message) = state.redis.take_nonce(&wallet_address).await? else {
+        tracing::warn!(
+            event = "wallet_link_failed",
+            reason = "nonce_expired",
+            user_id = %user_id,
+            "Nonce not found or expired"
+        );
+        return Err(ApiError::Unauthorized(
+            "Nonce not found or expired".to_owned(),
+        ));
+    };
+
+    // Two failure shapes, two statuses: a `CryptoError` (malformed signature)
+    // becomes 400 via `map_err?`, then the `bool` is bridged to a `Result` so a
+    // `false` (signature mismatch) becomes 401.
+    common::verify_casper_signature(
+        &wallet_address,
+        validated.signature.expose_secret(),
+        &message,
+    )
+    .map_err(|e| {
+        tracing::warn!(
+            event = "wallet_link_failed",
+            reason = "invalid_signature_format",
+            user_id = %user_id,
+            error = ?e,
+            "Signature verification error"
+        );
+        ApiError::BadRequest("Invalid signature format".to_owned())
+    })?
+    .then_some(())
+    .ok_or_else(|| {
+        tracing::warn!(
+            event = "wallet_link_failed",
+            reason = "signature_mismatch",
+            user_id = %user_id,
+            "Signature verification failed"
+        );
+        ApiError::Unauthorized("Invalid signature".to_owned())
+    })?;
+
+    match auth::link_wallet_to_user(&state.db, user_id, &wallet_address).await? {
+        auth::LinkWalletOutcome::Linked => {}
+        auth::LinkWalletOutcome::WalletTaken => {
+            tracing::warn!(
+                event = "wallet_link_failed",
+                reason = "already_linked",
+                user_id = %user_id,
+                wallet_address = %wallet_address,
+                "Wallet already linked to another account"
+            );
+            return Err(ApiError::Conflict(
+                "Wallet already linked to another account".to_owned(),
+            ));
+        }
+    }
+
+    // Reload the profile so the response carries the trigger-synced
+    // `wallet_address` and the joined `active_leases_count`, matching the shape
+    // `GET /me` and the wallet-login response return.
+    let profile = db::fetch_user_profile(&state.db, user_id).await?;
+
+    tracing::info!(
+        event = "wallet_linked",
+        user_id = %user_id,
+        wallet_address = %wallet_address,
+        "Wallet linked to account"
+    );
+
+    Ok(Json(UserInfo::from(profile)))
 }

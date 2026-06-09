@@ -13,10 +13,7 @@ use secrecy::{ExposeSecret, SecretString};
 use sha2::{Digest, Sha256};
 
 use crate::{
-    common::{
-        self, ApiError, ApiResult, AppState, CASPER_ED25519_PUBKEY_HEX_LEN,
-        CASPER_SECP256K1_PUBKEY_HEX_LEN, UserInfo, UserRole,
-    },
+    common::{self, ApiError, ApiResult, AppState, UserInfo, UserRole},
     services::{
         auth::{
             self, cookies,
@@ -66,7 +63,7 @@ pub async fn get_nonce(
     Query(payload): Query<NonceRequest>,
 ) -> ApiResult<Json<NonceResponse>> {
     let wallet = payload.wallet_address.to_ascii_lowercase();
-    validate_wallet_address(&wallet)?;
+    common::validate_wallet_address(&wallet)?;
 
     // Generate a random string (16 characters)
     let random_string: String = rand::rng()
@@ -98,26 +95,6 @@ pub async fn get_nonce(
         nonce: random_string,
         message,
     }))
-}
-
-/// Validates wallet-address shape: must be Ed25519 (66 hex) or Secp256k1
-/// (68 hex) length, and entirely hexadecimal. Runs before any Redis or
-/// DB I/O so malformed input fails with a 400 without consuming nonces
-/// or rate-limit slots.
-fn validate_wallet_address(wallet: &str) -> ApiResult<()> {
-    let len = wallet.len();
-    if (len != CASPER_ED25519_PUBKEY_HEX_LEN && len != CASPER_SECP256K1_PUBKEY_HEX_LEN)
-        || !wallet.chars().all(|c| c.is_ascii_hexdigit())
-    {
-        tracing::warn!(
-            length = len,
-            expected_ed25519 = CASPER_ED25519_PUBKEY_HEX_LEN,
-            expected_secp256k1 = CASPER_SECP256K1_PUBKEY_HEX_LEN,
-            "Invalid wallet address"
-        );
-        return Err(ApiError::BadRequest("Invalid wallet address".to_owned()));
-    }
-    Ok(())
 }
 
 /// Per-wallet rate-limit gate: rejects with 429 if too many recent failed
@@ -298,7 +275,7 @@ pub async fn login_wallet(
 ) -> ApiResult<(CookieJar, Json<LoginResponse>)> {
     let wallet_address = payload.wallet_address.to_ascii_lowercase();
 
-    validate_wallet_address(&wallet_address)?;
+    common::validate_wallet_address(&wallet_address)?;
     ensure_not_rate_limited(&state, &wallet_address).await?;
     let stored_nonce = consume_nonce_or_fail(&state, &wallet_address).await?;
     verify_signature_or_fail(&state, &wallet_address, &payload.signature, &stored_nonce).await?;

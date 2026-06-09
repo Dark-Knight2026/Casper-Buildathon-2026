@@ -177,22 +177,11 @@ pub async fn upsert_user_by_wallet(
             continue;
         };
 
-        // `wallet_connections` has no unique on `wallet_address` alone -
-        // only the composite `UNIQUE (user_id, wallet_address)`. The pair
-        // is the only collision possible in this branch (same user just
-        // inserted, same wallet) and a `DO NOTHING` keeps the operation
-        // idempotent if a parallel retry observes the same state.
-        sqlx::query!(
-            r"
-                INSERT INTO wallet_connections (user_id, wallet_address, provider, is_primary, is_custodial)
-                VALUES ($1, $2, 'casper_wallet', true, false)
-                ON CONFLICT (user_id, wallet_address) DO NOTHING
-            ",
-            inserted.id,
-            wallet_address,
-        )
-        .execute(tx.as_mut())
-        .await?;
+        // First wallet for a brand-new user, so it is the primary. The
+        // shared insert keeps the `(user_id, wallet_address)` upsert in one
+        // place; the only collision possible here is a parallel retry of the
+        // same user+wallet, which the `ON CONFLICT` clause makes idempotent.
+        add_wallet_connection(tx.as_mut(), inserted.id, wallet_address, true).await?;
 
         let verification_level = VerificationLevel::from_str(&inserted.verification_level)
             .map_err(|err| Error::ColumnDecode {
@@ -220,6 +209,137 @@ pub async fn upsert_user_by_wallet(
     Err(Error::Protocol(
         "upsert_user_by_wallet: retry budget exhausted".to_owned(),
     ))
+}
+
+/// Inserts (or re-flags) a `wallet_connections` row for a user.
+///
+/// The canonical place the `(user_id, wallet_address)` pair is written, shared
+/// by the wallet-login upsert and the explicit wallet-link flow. Always sets
+/// `provider = 'casper_wallet'`, `is_custodial = false`; `is_primary` is the
+/// caller's choice.
+///
+/// On the `UNIQUE (user_id, wallet_address)` conflict it upgrades the existing
+/// row (`is_primary`, `last_used_at`) rather than doing nothing, so a user who
+/// re-links a wallet they already hold gets it promoted to primary instead of
+/// silently keeping the old flag. This is the only collision the schema allows
+/// here - the same wallet under a *different* user is rejected upstream (the
+/// ownership gate in [`link_wallet_to_user`] and the partial
+/// `users_wallet_address_unique` index), never reaching this statement.
+///
+/// Takes `&mut PgConnection` so both callers can run it inside their own
+/// transaction.
+///
+/// # Errors
+///
+/// Returns `sqlx::Error` on DB failure.
+#[inline]
+pub async fn add_wallet_connection(
+    conn: &mut PgConnection,
+    user_id: Uuid,
+    wallet_address: &str,
+    is_primary: bool,
+) -> Result<(), Error> {
+    sqlx::query!(
+        r"
+            INSERT INTO wallet_connections (user_id, wallet_address, provider, is_primary, is_custodial)
+            VALUES ($1, $2, 'casper_wallet', $3, false)
+            ON CONFLICT (user_id, wallet_address)
+            DO UPDATE SET is_primary = EXCLUDED.is_primary, last_used_at = NOW()
+        ",
+        user_id,
+        wallet_address,
+        is_primary,
+    )
+    .execute(conn)
+    .await?;
+    Ok(())
+}
+
+/// Outcome of [`link_wallet_to_user`].
+///
+/// An enum (not `Result`/`bool`) because the rejection arm is a normal
+/// business outcome (409) rather than an error: the handler maps each variant
+/// to a distinct response, mirroring [`UpsertOutcome`].
+#[derive(Debug, Eq, PartialEq)]
+pub enum LinkWalletOutcome {
+    /// The wallet is now the user's primary `wallet_connections` row (freshly
+    /// inserted, or an existing row of this user promoted to primary).
+    Linked,
+    /// The wallet address already belongs to a different account. Nothing was
+    /// written; the handler maps this to 409.
+    WalletTaken,
+}
+
+/// Links a Casper wallet to an existing user, making it their primary wallet.
+///
+/// Backend-only: this writes `wallet_connections` and lets the sync-trigger
+/// refresh the `users.wallet_address` cache. No on-chain deploy happens here.
+///
+/// All side effects run in one transaction:
+///
+/// 1. **Ownership gate.** If the address already lives in `wallet_connections`
+///    under a *different* user, return [`LinkWalletOutcome::WalletTaken`]
+///    without mutating anything. A row owned by *this* user is fine - it falls
+///    through and gets re-promoted to primary.
+/// 2. **Demote then promote.** The current primary (if any) is flipped to
+///    `is_primary = false` before the new row is inserted/promoted, so the
+///    partial unique index `idx_wallet_connections_primary`
+///    (`user_id WHERE is_primary`) never observes two primaries within the
+///    transaction.
+///
+/// Concurrency: the ownership SELECT and the INSERT have a TOCTOU window for
+/// the rare case of two accounts racing to link the *same* never-seen-before
+/// wallet. The partial `users_wallet_address_unique` index is the backstop -
+/// when the sync-trigger writes `users.wallet_address` for the loser, it trips
+/// a unique violation that surfaces as `ApiError::Conflict` (409) upstream, the
+/// same status the explicit gate produces.
+///
+/// # Errors
+///
+/// Returns `sqlx::Error` on DB failure. The cross-account race backstop arrives
+/// as a unique-violation `sqlx::Error`, which the handler's `?` converts to 409
+/// via `From<sqlx::Error> for ApiError`.
+#[inline]
+pub async fn link_wallet_to_user(
+    pool: &PgPool,
+    user_id: Uuid,
+    wallet_address: &str,
+) -> Result<LinkWalletOutcome, Error> {
+    let mut tx = pool.begin().await?;
+
+    let owner = sqlx::query!(
+        r"
+            SELECT user_id
+            FROM wallet_connections
+            WHERE wallet_address = $1
+            LIMIT 1
+        ",
+        wallet_address,
+    )
+    .fetch_optional(tx.as_mut())
+    .await?;
+
+    if owner.is_some_and(|row| row.user_id != user_id) {
+        // Owned by another account; no writes happened, so the transaction
+        // rolls back on drop.
+        return Ok(LinkWalletOutcome::WalletTaken);
+    }
+
+    sqlx::query!(
+        r"
+            UPDATE wallet_connections
+            SET is_primary = false
+            WHERE user_id = $1 AND is_primary = true
+        ",
+        user_id,
+    )
+    .execute(tx.as_mut())
+    .await?;
+
+    add_wallet_connection(tx.as_mut(), user_id, wallet_address, true).await?;
+
+    tx.commit().await?;
+    Ok(LinkWalletOutcome::Linked)
 }
 
 /// Outcome of [`create_password_user`].

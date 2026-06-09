@@ -61,6 +61,7 @@ use crate::{
             users::models::DeleteAccountRequest,
             users::models::EmailChangeConfirmRequest,
             users::models::EmailChangeRequest,
+            users::models::LinkWalletRequest,
             users::models::UpdateProfileRequest,
             users::models::UpdateRoleRequest,
             // Health models

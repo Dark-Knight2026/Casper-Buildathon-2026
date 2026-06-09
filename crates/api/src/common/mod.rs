@@ -16,6 +16,8 @@ pub mod password;
 pub mod redis;
 /// Opaque single-use token generation shared across flows.
 pub mod tokens;
+/// Shared input-validation helpers for Casper addresses.
+pub mod validation;
 
 // Re-exports
 pub use config::{AppState, IcoFallback, S3Config, ServerConfig, TOTAL_SUPPLY};
@@ -34,19 +36,4 @@ pub use password::{
     verify_password,
 };
 pub use redis::{RedisStore, SendReservation};
-
-/// Validates and normalizes a Casper account hash (64 hex characters, no prefix).
-///
-/// # Errors
-///
-/// Returns `ApiError::BadRequest` if the address is not exactly 64 hex characters.
-#[inline]
-pub fn validate_account(account: &str) -> ApiResult<String> {
-    let account = account.to_ascii_lowercase();
-    if account.len() != 64 || !account.chars().all(|c| c.is_ascii_hexdigit()) {
-        return Err(ApiError::BadRequest(
-            "Address must be 64 hex characters (account hash without prefix)".to_owned(),
-        ));
-    }
-    Ok(account)
-}
+pub use validation::{validate_account, validate_wallet_address};

@@ -107,3 +107,12 @@ Returned by `/users/me` and embedded in `LoginResponse.user`:
 - **Side effect (decision #8 - kill OTHER sessions, keep current):** in one DB transaction the new Argon2id hash is written, `users.jwt_invalidate_before` is stamped (kills every outstanding access token via the global cutoff - see [`feature/force_revoke.md`](../feature/force_revoke.md)), and every active refresh-token row is revoked. The caller's device is then immediately re-issued a new access + refresh pair, so other devices are logged out at once while the current one never sees a 401. The re-issued access token's `iat` is set one second past the cutoff so it provably clears the middleware's `iat <= cutoff` check.
 - **Errors:** 400 (weak `new_password`, or missing `current_password` on the change path), 401 (wrong `current_password`, or unauthorized), 403 (recent-auth on the set path), 404 (user gone), 500
 - **Auth:** Access cookie required
+
+## POST `/api/v1/users/me/wallet`
+
+- **Input:** `{ "wallet_address": "01abc...", "signature": "01def..." }`
+- **Prerequisite:** the client first calls `GET /api/v1/auth/nonce?wallet_address=...` for the same address, signs the returned message with the wallet, and posts the signature here. This is the same nonce + signature challenge the wallet-login path uses; the nonce endpoint is reused rather than duplicated under `/users`.
+- **Response (200):** updated `UserInfo`. The linked wallet becomes the account's primary, so `wallet_address` reflects the new address (synced from `wallet_connections` by the `trg_wallet_connections_sync_cache` trigger).
+- **Behavior:** proves wallet ownership by consuming the nonce (GETDEL, one-time use) and verifying the signature constant-time, so a caller cannot bind an address they do not control. On success, in one DB transaction, any previous primary is demoted and the new `wallet_connections` row is inserted with `is_primary = true, provider = 'casper_wallet', is_custodial = false`. **Backend-only** - no on-chain `create_user` deploy happens here. Email verification is NOT required: connecting a wallet is part of onboarding, before the user has necessarily verified their email.
+- **Errors:** 400 (malformed address or signature format), 401 (unauthorized, or nonce missing/expired, or signature mismatch), 409 (wallet already linked to another account), 500
+- **Auth:** Access cookie required
