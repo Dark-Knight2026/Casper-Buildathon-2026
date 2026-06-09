@@ -43,6 +43,33 @@ impl UserRole {
     pub const fn is_self_registerable(&self) -> bool {
         matches!(self, Self::Tenant | Self::Landlord | Self::Agent)
     }
+
+    /// Maps a business role to the `role_flags` bitmask the frontend passes to
+    /// `UserRegistry::create_user`.
+    ///
+    /// HACK: (hackathon): the frontend calls `create_user` directly from the
+    /// user's own wallet, so the backend only prepares this argument instead of
+    /// signing the deploy itself.
+    /// The contract exposes `TENANT`/`LANDLORD`/`PROPERTY_MANAGER` only, hence
+    /// `Agent` maps to `PROPERTY_MANAGER`; `Admin`/`Unknown` are not
+    /// self-registerable and never reach a wallet link in the normal flow, so
+    /// they carry no on-chain flag. The `match` is deliberately exhaustive: a
+    /// future `UserRole` variant must force a decision here rather than
+    /// silently defaulting to `0`.
+    ///
+    /// Values mirror `UserRegistry::ROLE_FLAG_*` (`TENANT=1`, `LANDLORD=2`,
+    /// `PROPERTY_MANAGER=4`) in the Casper contract.
+    #[inline]
+    #[must_use]
+    pub const fn to_onchain_role_flags(&self) -> u32 {
+        match self {
+            Self::Tenant => 1,
+            Self::Landlord => 2,
+            // The contract has no `agent` flag; map to `PROPERTY_MANAGER`.
+            Self::Agent => 4,
+            Self::Admin | Self::Unknown => 0,
+        }
+    }
 }
 
 /// JWT issuer claim value. Only tokens issued by our API are accepted.
