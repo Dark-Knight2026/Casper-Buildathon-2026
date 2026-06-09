@@ -600,6 +600,12 @@ impl Escrow {
             protocol_fee,
         );
 
+        // Protocol fee revenue (2% of rent) is sent to Treasury (as CSPR via transfer_tokens
+        // or CEP-18 via transfer_from). See Treasury::deposit_rewards documentation for the
+        // intended off-chain conversion pathway (withdraw fees -> convert to BIG -> call
+        // deposit_rewards) that routes 40% of the value to stakers. deposit_rewards() is the
+        // on-chain step that actually delivers BIG to the staking reward pool.
+
         self.distribute_rent(invoice, currency, distributable_rent);
 
         invoice.rent_paid += amount;

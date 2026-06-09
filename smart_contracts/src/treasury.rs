@@ -40,6 +40,15 @@ impl Treasury {
     /// Allows to deposit any rewards amount in the BIG token by anyone, then distributes these rewards
     /// between the Staking contract and internal reserves.
     ///
+    /// This is the mechanism by which protocol fee revenue (e.g. the 2% rent fee collected
+    /// by Escrow and held in the Treasury as CSPR/USDC/USDT) reaches stakers:
+    /// 1. Fees accumulate in the Treasury (as non-BIG tokens).
+    /// 2. The Treasury owner withdraws them (via withdraw_token / self-balance).
+    /// 3. Off-chain, the fee revenue is converted to BIG.
+    /// 4. The owner (or any provider of the BIG) calls this function with the BIG amount
+    ///    (after approve), routing 40% (STAKING_REWARDS_BPS) to stakers via Staking.deposit_rewards
+    ///    (when stake > 0) and keeping 60% as BIG reserves.
+    ///
     /// If there is no active stake yet, the full deposit remains in Treasury reserves instead of reverting.
     #[odra(non_reentrant)]
     pub fn deposit_rewards(&mut self, amount: U256) {
