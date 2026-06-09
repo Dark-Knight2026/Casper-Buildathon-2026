@@ -232,6 +232,12 @@ impl DeployScript for LeasefiDeployScript {
         nft.add_freezer(&lease.address());
         nft.add_whitelist_manager(&lease.address());
 
+        // Whitelist new_owner on the NFT so that create_lease_agreement (which does nft.mint to tenant)
+        // can succeed for the platform admin without CannotTransact. The whitelist is an allowlist
+        // (KYC/AML) gate; actual tenant onboarding would use add_to_whitelist via a WHITELIST_MANAGER
+        // (Lease was granted the role above; new_owner receives DEFAULT_ADMIN_ROLE and can manage further).
+        nft.add_to_whitelist(&new_owner);
+
         // Setup Escrow
         escrow.set_lease(lease.address());
         escrow.set_treasury(treasury.address());
