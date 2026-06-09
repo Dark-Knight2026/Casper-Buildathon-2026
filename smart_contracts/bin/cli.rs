@@ -19,7 +19,11 @@ use leasefi_contracts::{
     investor_registry::{InvestorRegistry, InvestorRegistryInitArgs},
     lease::{Lease, LeaseInitArgs},
     nft::{types::NFTInitParams, NFTInitArgs, NFT},
-    property_registry::{PropertyRegistry, PropertyRegistryInitArgs},
+    property_fraction_token::{
+        types::PropertyFractionTokenInitParams, PropertyFractionToken,
+        PropertyFractionTokenInitArgs,
+    },
+    property_registry::{types::CreatePropertyParams, PropertyRegistry, PropertyRegistryInitArgs},
     roles::{Roles, RolesInitArgs},
     staking::{Staking, StakingInitArgs},
     treasury::{Treasury, TreasuryInitArgs},
@@ -212,6 +216,39 @@ impl DeployScript for LeasefiDeployScript {
         )
         .unwrap();
 
+        property_registry.grant_role(&property_registry.property_manager_role(), &env.caller());
+        let sample_property_id = property_registry.create_property(CreatePropertyParams {
+            issuer: new_owner,
+            total_supply: U256::from(1_000_000u64) * U256::from(10).pow(U256::from(18)),
+            metadata_uri: String::from("ipfs://leasefi-bootstrap-property"),
+        });
+        let mut property_fraction_token = PropertyFractionToken::load_or_deploy_with_cfg(
+            env,
+            None,
+            PropertyFractionTokenInitArgs {
+                params: PropertyFractionTokenInitParams {
+                    owner: env.caller(),
+                    property_id: sample_property_id,
+                    compliance_policy: compliance.address(),
+                    symbol: String::from("LFPROP"),
+                    name: String::from("LeaseFi Property Fraction"),
+                    decimals: 18,
+                    initial_supply: U256::from(1_000_000u64) * U256::from(10).pow(U256::from(18)),
+                    initial_holder: new_owner,
+                },
+            },
+            InstallConfig::upgradable::<PropertyFractionToken>(),
+            container,
+            400_000_000_000,
+        )?;
+
+        // Grant TOKEN_MANAGER to new_owner so PFT management (set_compliance_policy) works
+        // after handoff. The PFT owner (deployer) performs the grant.
+        property_fraction_token
+            .grant_role(&property_fraction_token.token_manager_role(), &new_owner);
+        // Link the token to the registry property (deployer currently holds PROPERTY_MANAGER).
+        property_registry.set_property_token(sample_property_id, property_fraction_token.address());
+
         // Setup Treasury
         treasury.set_big_coin(big_coin.address());
         treasury.set_staking(staking.address());
@@ -293,7 +330,7 @@ impl DeployScript for LeasefiDeployScript {
         staking.transfer_ownership(&new_owner);
         ico.transfer_ownership(&new_owner);
         property_registry.grant_role(&DEFAULT_ADMIN_ROLE, &new_owner);
-        
+
         // Grant PROPERTY_MANAGER role (in addition to DEFAULT_ADMIN_ROLE) so the mutating
         // functions (create_property, set_property_token, set_revenue_distributor,
         // set_metadata_uri, set_property_status) do not revert with AccessDenied.
@@ -304,6 +341,11 @@ impl DeployScript for LeasefiDeployScript {
         investor_registry.revoke_role(&DEFAULT_ADMIN_ROLE, &env.caller());
         compliance.grant_role(&DEFAULT_ADMIN_ROLE, &new_owner);
         compliance.revoke_role(&DEFAULT_ADMIN_ROLE, &env.caller());
+
+        // Hand off PFT admin role (DEFAULT_ADMIN_ROLE) to new_owner, consistent with other
+        // contracts. TOKEN_MANAGER was already granted to new_owner during bootstrap above.
+        property_fraction_token.grant_role(&DEFAULT_ADMIN_ROLE, &new_owner);
+        property_fraction_token.revoke_role(&DEFAULT_ADMIN_ROLE, &env.caller());
 
         Ok(())
     }
@@ -325,6 +367,7 @@ pub fn main() {
         .contract::<PropertyRegistry>()
         .contract::<InvestorRegistry>()
         .contract::<CompliancePolicy>()
+        .contract::<PropertyFractionToken>()
         .build()
         .run();
 }
