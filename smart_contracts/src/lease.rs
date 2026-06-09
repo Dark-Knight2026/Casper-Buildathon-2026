@@ -2,7 +2,7 @@ use odra::{casper_types::U256, prelude::*, ContractRef};
 use odra_modules::access::Ownable;
 
 use crate::{
-    constants::{ONE_HUNDRED_PERCENT_BPS, ONE_MONTH_IN_SECONDS},
+    constants::{ONE_HUNDRED_PERCENT_BPS, ONE_MONTH_IN_MILLISECONDS},
     escrow::{types::CreateLeaseInvoiceParams, EscrowContractRef},
     lease::{
         errors::Error,
@@ -329,7 +329,7 @@ impl Lease {
 
         let lease_duration = params.end - params.start;
 
-        if lease_duration % ONE_MONTH_IN_SECONDS != 0 {
+        if lease_duration % ONE_MONTH_IN_MILLISECONDS != 0 {
             self.env().revert(Error::InvalidTimeframes);
         }
 
@@ -346,7 +346,7 @@ impl Lease {
             block_timestamp + params.invoice_validity_duration,
         )];
 
-        for i in 0..(lease_duration / ONE_MONTH_IN_SECONDS) {
+        for i in 0..(lease_duration / ONE_MONTH_IN_MILLISECONDS) {
             invoices_ids.push(self.escrow.create_lease_invoice(CreateLeaseInvoiceParams {
                 tenant: params.tenant,
                 landlord,
@@ -354,7 +354,7 @@ impl Lease {
                 property_manager: params.rent_distribution_terms.property_manager,
                 property_manager_bps: params.rent_distribution_terms.property_manager_bps,
                 deadline: block_timestamp
-                    + (ONE_MONTH_IN_SECONDS * i)
+                    + (ONE_MONTH_IN_MILLISECONDS * i)
                     + params.invoice_validity_duration,
             }));
         }
@@ -517,13 +517,13 @@ impl Lease {
 
         let lease_duration = new_end - lease_agreement.end;
 
-        if lease_duration % ONE_MONTH_IN_SECONDS != 0 {
+        if lease_duration % ONE_MONTH_IN_MILLISECONDS != 0 {
             self.env().revert(Error::InvalidTimeframes);
         }
 
         let block_timestamp = self.env().get_block_time();
 
-        for i in 0..(lease_duration / ONE_MONTH_IN_SECONDS) {
+        for i in 0..(lease_duration / ONE_MONTH_IN_MILLISECONDS) {
             lease_agreement
                 .invoices_ids
                 .push(self.escrow.create_lease_invoice(CreateLeaseInvoiceParams {
@@ -534,7 +534,7 @@ impl Lease {
                     property_manager_bps:
                         lease_agreement.rent_distribution_terms.property_manager_bps,
                     deadline: block_timestamp
-                        + (ONE_MONTH_IN_SECONDS * i)
+                        + (ONE_MONTH_IN_MILLISECONDS * i)
                         + invoice_validity_duration,
                 }));
         }

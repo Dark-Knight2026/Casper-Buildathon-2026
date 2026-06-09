@@ -8,7 +8,7 @@ use odra_modules::access::errors::Error as AccessError;
 
 use leasefi_contracts::big_coin::{BigCoin, BigCoinHostRef, BigCoinInitArgs};
 use leasefi_contracts::common::CurrencyAmount;
-use leasefi_contracts::constants::ONE_MONTH_IN_SECONDS;
+use leasefi_contracts::constants::ONE_MONTH_IN_MILLISECONDS;
 use leasefi_contracts::escrow::{
     types::{Invoice, InvoiceKind},
     Escrow, EscrowHostRef, EscrowInitArgs,
@@ -164,7 +164,7 @@ fn generate_lease_agreement_creation_params(test_data: &TestData) -> CreateLease
             U256::from_dec_str("5000000000000000000").unwrap(),
         ),
         start: test_data.env.block_time(),
-        end: test_data.env.block_time() + (ONE_MONTH_IN_SECONDS * 12),
+        end: test_data.env.block_time() + (ONE_MONTH_IN_MILLISECONDS * 12),
         invoice_validity_duration: test_data.escrow.get_min_deadline(),
     }
 }
@@ -581,7 +581,7 @@ fn test_create_lease_agreement_should_create_lease_agreement_properly() {
                 property_manager: None,
                 property_manager_bps: 0,
                 deadline: test_data.env.block_time()
-                    + (ONE_MONTH_IN_SECONDS * (i - 1) as u64)
+                    + (ONE_MONTH_IN_MILLISECONDS * (i - 1) as u64)
                     + params.invoice_validity_duration,
                 is_paid: false
             },
@@ -940,7 +940,7 @@ fn test_finalize_lease_agreement_should_fail_if_not_all_invoices_are_paid() {
 
     test_data
         .env
-        .advance_block_time(test_data.env.block_time() + (ONE_MONTH_IN_SECONDS * 12));
+        .advance_block_time(test_data.env.block_time() + (ONE_MONTH_IN_MILLISECONDS * 12));
 
     assert_eq!(
         test_data
@@ -962,7 +962,7 @@ fn test_finalize_lease_agreement_should_finalize_properly_when_all_invoices_paid
 
     test_data
         .env
-        .advance_block_time(test_data.env.block_time() + (ONE_MONTH_IN_SECONDS * 12));
+        .advance_block_time(test_data.env.block_time() + (ONE_MONTH_IN_MILLISECONDS * 12));
     test_data
         .lease
         .finalize_lease_agreement(&lease_agreement_id, &U256::zero());
@@ -1006,7 +1006,7 @@ fn test_equity_eligibility_is_revoked_after_lease_finalization() {
 
     test_data
         .env
-        .advance_block_time(test_data.env.block_time() + (ONE_MONTH_IN_SECONDS * 12));
+        .advance_block_time(test_data.env.block_time() + (ONE_MONTH_IN_MILLISECONDS * 12));
     test_data
         .lease
         .finalize_lease_agreement(&lease_agreement_id, &U256::zero());
@@ -1038,7 +1038,7 @@ fn test_finalize_already_finalized_lease_should_revert() {
 
     test_data
         .env
-        .advance_block_time(test_data.env.block_time() + (ONE_MONTH_IN_SECONDS * 12));
+        .advance_block_time(test_data.env.block_time() + (ONE_MONTH_IN_MILLISECONDS * 12));
     test_data
         .lease
         .finalize_lease_agreement(&lease_agreement_id, &U256::zero());
@@ -1076,9 +1076,9 @@ fn test_prolong_lease_with_equity_option_preserves_eligibility() {
 
     test_data
         .env
-        .advance_block_time(test_data.env.block_time() + (ONE_MONTH_IN_SECONDS * 12));
+        .advance_block_time(test_data.env.block_time() + (ONE_MONTH_IN_MILLISECONDS * 12));
 
-    let new_end = params.end + (ONE_MONTH_IN_SECONDS * 6);
+    let new_end = params.end + (ONE_MONTH_IN_MILLISECONDS * 6);
     test_data.lease.prolong_lease_agreement(
         &lease_agreement_id,
         new_end,
@@ -1154,7 +1154,7 @@ fn test_prolong_lease_agreement_should_fail_if_not_all_invoices_are_paid() {
 
     test_data
         .env
-        .advance_block_time(test_data.env.block_time() + (ONE_MONTH_IN_SECONDS * 12));
+        .advance_block_time(test_data.env.block_time() + (ONE_MONTH_IN_MILLISECONDS * 12));
 
     assert_eq!(
         test_data
@@ -1179,7 +1179,7 @@ fn test_prolong_lease_agreement_should_fail_if_new_end_timestamp_is_lte_previous
 
     test_data
         .env
-        .advance_block_time(test_data.env.block_time() + (ONE_MONTH_IN_SECONDS * 12));
+        .advance_block_time(test_data.env.block_time() + (ONE_MONTH_IN_MILLISECONDS * 12));
 
     assert_eq!(
         test_data
@@ -1212,7 +1212,7 @@ fn test_prolong_lease_agreement_should_fail_if_new_lease_duration_is_not_even_to
 
     test_data
         .env
-        .advance_block_time(test_data.env.block_time() + (ONE_MONTH_IN_SECONDS * 12));
+        .advance_block_time(test_data.env.block_time() + (ONE_MONTH_IN_MILLISECONDS * 12));
 
     assert_eq!(
         test_data
@@ -1237,7 +1237,7 @@ fn test_prolong_lease_agreement_should_prolong_lease_agreement_and_create_new_in
 
     test_data.env.advance_block_time(params.end);
 
-    let new_end = params.end + (ONE_MONTH_IN_SECONDS * 24);
+    let new_end = params.end + (ONE_MONTH_IN_MILLISECONDS * 24);
     let old_invoices_len = lease_agreement_before.invoices_ids.len();
 
     test_data.lease.prolong_lease_agreement(
@@ -1285,7 +1285,7 @@ fn test_prolong_lease_agreement_should_prolong_lease_agreement_and_create_new_in
                 property_manager: None,
                 property_manager_bps: 0,
                 deadline: test_data.env.block_time()
-                    + (ONE_MONTH_IN_SECONDS * n as u64)
+                    + (ONE_MONTH_IN_MILLISECONDS * n as u64)
                     + params.invoice_validity_duration,
                 is_paid: false
             },
@@ -1308,7 +1308,7 @@ fn test_prolong_finalized_lease_should_revert() {
 
     test_data
         .env
-        .advance_block_time(test_data.env.block_time() + (ONE_MONTH_IN_SECONDS * 12));
+        .advance_block_time(test_data.env.block_time() + (ONE_MONTH_IN_MILLISECONDS * 12));
     test_data
         .lease
         .finalize_lease_agreement(&lease_agreement_id, &U256::zero());
@@ -1319,7 +1319,7 @@ fn test_prolong_finalized_lease_should_revert() {
             .lease
             .try_prolong_lease_agreement(
                 &lease_agreement_id,
-                lease_agreement.end + ONE_MONTH_IN_SECONDS,
+                lease_agreement.end + ONE_MONTH_IN_MILLISECONDS,
                 test_data.escrow.get_min_deadline(),
             )
             .unwrap_err(),
