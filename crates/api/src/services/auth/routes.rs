@@ -25,9 +25,11 @@ use crate::{
 pub fn router() -> OpenApiRouter<Arc<AppState>> {
     OpenApiRouter::new()
         .routes(routes!(wallet::get_nonce))
+        .routes(routes!(wallet::login_wallet))
         .routes(routes!(password::register))
         .routes(routes!(password::login_password))
-        .routes(routes!(wallet::login_wallet))
+        .routes(routes!(password::forgot_password))
+        .routes(routes!(password::reset_password))
         .routes(routes!(refresh::rotate))
         .routes(routes!(logout::logout))
         .routes(routes!(sessions::get_sessions))

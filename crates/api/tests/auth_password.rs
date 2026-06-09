@@ -3,20 +3,26 @@
 mod common;
 
 use axum::http::StatusCode;
+use axum_test::{TestResponse, http::header::COOKIE};
 use secrecy::SecretString;
 use serde_json::{Value, json};
 use sqlx::PgPool;
 
 use api::{UserRole, common::VerificationLevel, services::auth};
+use common::{CapturingMailer, TestEnv};
 
 /// A password that satisfies the policy: >= 8 chars, has a digit, and mixes
 /// case. Reused across the happy-path tests so a single fixture documents what
 /// "valid" means.
 const VALID_PASSWORD: &str = "Sup3rSecret";
 
+/// The replacement password the reset tests install. Distinct from
+/// [`VALID_PASSWORD`] so a test can prove the swap took effect by logging in
+/// with one and being rejected with the other.
+const NEW_PASSWORD: &str = "N3wPassword";
+
 /// Auth-relevant columns of a `users` row, read back via a runtime
-/// `query_as` (no compile-time `query!` macro, so the tests stay independent
-/// of the `.sqlx` cache). Nullable columns map to `Option`.
+/// `query_as`. Nullable columns map to `Option`.
 #[derive(sqlx::FromRow)]
 struct UserAuthRow {
     /// `users.primary_auth_method` (NOT NULL): `'wallet' | 'password' | 'oauth'`.
@@ -381,4 +387,260 @@ async fn password_login_rejects_suspended_account(pool: PgPool) {
         .await;
 
     assert_eq!(response.status_code(), StatusCode::FORBIDDEN);
+}
+
+// Forgot / reset password -----------------------------------------------------
+
+/// Registers a password account and returns the full registration response, so
+/// a caller can read back the auto-login `access_token` / `refresh_token`
+/// cookies when it needs to prove they get revoked.
+async fn register_account(env: &TestEnv, email: &str) -> TestResponse {
+    let response = env
+        .server
+        .post("/api/v1/auth/register")
+        .json(&json!({
+            "email": email,
+            "password": VALID_PASSWORD,
+            "first_name": "For",
+            "last_name": "Got",
+        }))
+        .await;
+    assert_eq!(response.status_code(), StatusCode::OK);
+    response
+}
+
+/// Posts `forgot`, asserts the anti-enumeration `200 { status: "sent" }`, and
+/// returns the plaintext reset token parsed from the captured email.
+///
+/// The reset link shares the `?token=...` shape with the verify-email link, so
+/// the same `extract_verify_token` helper recovers the plaintext (it also
+/// asserts the token is exactly `TOKEN_STR_LEN` chars).
+async fn forgot_and_take_token(env: &TestEnv, mailer: &CapturingMailer, email: &str) -> String {
+    let response = env
+        .server
+        .post("/api/v1/auth/password/forgot")
+        .json(&json!({ "email": email }))
+        .await;
+    assert_eq!(response.status_code(), StatusCode::OK);
+    assert_eq!(response.json::<Value>()["status"], "sent");
+    common::extract_verify_token(mailer)
+}
+
+/// A live account with a password gets a reset link: the response is `sent` and
+/// exactly one reset email - addressed and worded as a reset, not a verify - is
+/// captured.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn forgot_password_mails_reset_link_for_password_account(pool: PgPool) {
+    let (env, mailer) = common::setup_test_server_capturing(pool, true).await;
+    register_account(&env, "forgot@example.com").await;
+
+    // Mixed case proves the handler normalizes before the lookup.
+    let response = env
+        .server
+        .post("/api/v1/auth/password/forgot")
+        .json(&json!({ "email": "Forgot@Example.com" }))
+        .await;
+    assert_eq!(response.status_code(), StatusCode::OK);
+    assert_eq!(response.json::<Value>()["status"], "sent");
+
+    let messages = mailer.sent.lock().expect("mailer mutex");
+    assert_eq!(messages.len(), 1, "exactly one reset email");
+    assert_eq!(messages[0].subject, "Reset your password");
+    assert!(
+        messages[0].body.contains("/reset-password?token="),
+        "body carries the reset link"
+    );
+}
+
+/// Anti-enumeration: an unknown email gets the same `sent` answer and NO email,
+/// so the endpoint cannot be used to discover which addresses are registered.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn forgot_password_is_silent_for_unknown_email(pool: PgPool) {
+    let (env, mailer) = common::setup_test_server_capturing(pool, true).await;
+
+    let response = env
+        .server
+        .post("/api/v1/auth/password/forgot")
+        .json(&json!({ "email": "ghost@example.com" }))
+        .await;
+    assert_eq!(response.status_code(), StatusCode::OK);
+    assert_eq!(response.json::<Value>()["status"], "sent");
+    assert!(
+        mailer.sent.lock().expect("mailer mutex").is_empty(),
+        "no email is sent for an unknown address"
+    );
+}
+
+/// Anti-enumeration: a wallet-only account (`password_hash IS NULL`) has no
+/// password to reset, so it gets the same `sent` answer and no email - it is
+/// indistinguishable from a password account.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn forgot_password_is_silent_for_wallet_only_account(pool: PgPool) {
+    let (env, mailer) = common::setup_test_server_capturing(pool.clone(), true).await;
+
+    sqlx::query(
+        r"
+            INSERT INTO users (email, primary_auth_method, role, first_name, last_name, status)
+            VALUES ($1, 'wallet', 'tenant', 'Wallet', 'Only', 'active')
+        ",
+    )
+    .bind("walletforgot@example.com")
+    .execute(&pool)
+    .await
+    .expect("insert wallet-only user");
+
+    let response = env
+        .server
+        .post("/api/v1/auth/password/forgot")
+        .json(&json!({ "email": "walletforgot@example.com" }))
+        .await;
+    assert_eq!(response.status_code(), StatusCode::OK);
+    assert_eq!(response.json::<Value>()["status"], "sent");
+    assert!(
+        mailer.sent.lock().expect("mailer mutex").is_empty(),
+        "no email is sent for a wallet-only account"
+    );
+}
+
+/// Happy path: a valid token swaps the stored hash and auto-logs the user in.
+/// The old password stops authenticating and the new one starts.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn reset_password_with_valid_token_swaps_credentials(pool: PgPool) {
+    let (env, mailer) = common::setup_test_server_capturing(pool, true).await;
+    register_account(&env, "reset@example.com").await;
+    let token = forgot_and_take_token(&env, &mailer, "reset@example.com").await;
+
+    let response = env
+        .server
+        .post("/api/v1/auth/password/reset")
+        .json(&json!({ "token": token, "new_password": NEW_PASSWORD }))
+        .await;
+    assert_eq!(response.status_code(), StatusCode::OK);
+    assert!(
+        !response.cookie("access_token").value().is_empty(),
+        "auto-login re-issues an access_token cookie"
+    );
+    assert!(
+        !response.cookie("refresh_token").value().is_empty(),
+        "auto-login re-issues a refresh_token cookie"
+    );
+
+    // The old password no longer authenticates.
+    let old = env
+        .server
+        .post("/api/v1/auth/login/password")
+        .json(&json!({ "email": "reset@example.com", "password": VALID_PASSWORD }))
+        .await;
+    assert_eq!(old.status_code(), StatusCode::UNAUTHORIZED);
+
+    // The new password does.
+    let new = env
+        .server
+        .post("/api/v1/auth/login/password")
+        .json(&json!({ "email": "reset@example.com", "password": NEW_PASSWORD }))
+        .await;
+    assert_eq!(new.status_code(), StatusCode::OK);
+}
+
+/// A well-formed but unknown token is rejected with the generic 400 and leaves
+/// the stored hash untouched: the original password still logs in.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn reset_password_rejects_invalid_token(pool: PgPool) {
+    let env = common::setup_test_server(pool, true).await;
+    register_account(&env, "badtoken@example.com").await;
+
+    // 43 chars clears the length check, so the failure is a genuine Redis miss
+    // rather than a shape rejection.
+    let response = env
+        .server
+        .post("/api/v1/auth/password/reset")
+        .json(&json!({ "token": "A".repeat(43), "new_password": NEW_PASSWORD }))
+        .await;
+    assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
+
+    // Hash untouched: the original password still authenticates.
+    let login = env
+        .server
+        .post("/api/v1/auth/login/password")
+        .json(&json!({ "email": "badtoken@example.com", "password": VALID_PASSWORD }))
+        .await;
+    assert_eq!(login.status_code(), StatusCode::OK);
+}
+
+/// A reset kills every prior session: the pre-reset access + refresh tokens are
+/// both force-revoked, while the auto-login pair survives the very cutoff that
+/// killed them (the `iat = cutoff + 1s` invariant). Stronger than change
+/// password, which keeps the current device.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn reset_password_invalidates_all_sessions(pool: PgPool) {
+    let (env, mailer) = common::setup_test_server_capturing(pool, true).await;
+    let register = register_account(&env, "sessions@example.com").await;
+    let old_access = register.cookie("access_token").value().to_owned();
+    let old_refresh = register.cookie("refresh_token").value().to_owned();
+
+    let token = forgot_and_take_token(&env, &mailer, "sessions@example.com").await;
+    let reset = env
+        .server
+        .post("/api/v1/auth/password/reset")
+        .json(&json!({ "token": token, "new_password": NEW_PASSWORD }))
+        .await;
+    assert_eq!(reset.status_code(), StatusCode::OK);
+    let new_access = reset.cookie("access_token").value().to_owned();
+    let new_refresh = reset.cookie("refresh_token").value().to_owned();
+
+    // The pre-reset access token is force-revoked (iat <= cutoff).
+    let old_me = env
+        .server
+        .get("/api/v1/users/me")
+        .add_header(COOKIE, format!("access_token={old_access}"))
+        .await;
+    assert_eq!(old_me.status_code(), StatusCode::UNAUTHORIZED);
+
+    // The auto-login access token survives the cutoff it just set.
+    let new_me = env
+        .server
+        .get("/api/v1/users/me")
+        .add_header(COOKIE, format!("access_token={new_access}"))
+        .await;
+    assert_eq!(new_me.status_code(), StatusCode::OK);
+
+    // The pre-reset refresh family is revoked - it cannot be rotated.
+    let old_rotate = env
+        .server
+        .post("/api/v1/auth/refresh")
+        .add_header(COOKIE, format!("refresh_token={old_refresh}"))
+        .await;
+    assert_eq!(old_rotate.status_code(), StatusCode::UNAUTHORIZED);
+
+    // The auto-login refresh token rotates cleanly.
+    let new_rotate = env
+        .server
+        .post("/api/v1/auth/refresh")
+        .add_header(COOKIE, format!("refresh_token={new_refresh}"))
+        .await;
+    assert_eq!(new_rotate.status_code(), StatusCode::NO_CONTENT);
+}
+
+/// The reset token is single-use: the `GETDEL` consumes the slot on the first
+/// redeem, so the same token misses on a second attempt.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn reset_password_token_is_single_use(pool: PgPool) {
+    let (env, mailer) = common::setup_test_server_capturing(pool, true).await;
+    register_account(&env, "singleuse@example.com").await;
+    let token = forgot_and_take_token(&env, &mailer, "singleuse@example.com").await;
+
+    let first = env
+        .server
+        .post("/api/v1/auth/password/reset")
+        .json(&json!({ "token": token.clone(), "new_password": NEW_PASSWORD }))
+        .await;
+    assert_eq!(first.status_code(), StatusCode::OK);
+
+    // The slot was consumed; the same token now misses.
+    let second = env
+        .server
+        .post("/api/v1/auth/password/reset")
+        .json(&json!({ "token": token, "new_password": "An0therPass" }))
+        .await;
+    assert_eq!(second.status_code(), StatusCode::BAD_REQUEST);
 }

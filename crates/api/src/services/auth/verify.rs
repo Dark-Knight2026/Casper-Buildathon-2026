@@ -28,8 +28,7 @@ use uuid::Uuid;
 
 use crate::{
     common::{
-        ApiError, ApiResult, AppState, ErrorResponse, UserInfo, UserRole, VerifyEmailReservation,
-        tokens,
+        ApiError, ApiResult, AppState, ErrorResponse, SendReservation, UserInfo, UserRole, tokens,
     },
     providers::{EmailError, EmailMessage},
     services::{
@@ -159,10 +158,10 @@ async fn send_or_resend_verify_email(
         .reserve_verify_email_send(user_id, &token.hash)
         .await?
     {
-        VerifyEmailReservation::RateLimited => {
+        SendReservation::RateLimited => {
             return Err(ApiError::TooManyRequests("rate_limited".to_owned()));
         }
-        VerifyEmailReservation::Reserved => {}
+        SendReservation::Reserved => {}
     }
 
     // Build and attempt delivery.

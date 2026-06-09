@@ -33,7 +33,7 @@ pub use password::{
     MAX_PASSWORD_LEN, MIN_PASSWORD_LEN, dummy_verify, hash_password, validate_password_policy,
     verify_password,
 };
-pub use redis::{RedisStore, VerifyEmailReservation};
+pub use redis::{RedisStore, SendReservation};
 
 /// Validates and normalizes a Casper account hash (64 hex characters, no prefix).
 ///

@@ -305,29 +305,24 @@ pub async fn patch_me(
 //
 /// Soft-deletes the authenticated user's account.
 ///
-/// Three gates run in strict order before any DB write; a regression
-/// that re-orders them surfaces as a different status code:
-///
-/// 1. **Confirmation string** (400). The body must include
-///    `confirm = "delete-my-account"` verbatim. The magic constant
-///    blocks accidental zero-body retries from wiping the account; an
-///    extra header would be invisible in the audit logs the operator
-///    sees later.
-/// 2. **Recent-auth check** (403, code `reauthentication_required`).
-///    The token's `iat` must be no older than
-///    [`DELETE_ACCOUNT_RECENT_AUTH_WINDOW_SECS`]. A stolen, long-lived
-///    access cookie cannot be repurposed for an account wipe once the
-///    window has elapsed - the attacker must produce a fresh login,
-///    which requires the wallet's signing key.
-/// 3. **Active-leases gate** (409, code `active_leases_blocking`).
-///    A user bound to an active lease as `landlord_id` or
-///    `primary_tenant_id` cannot self-delete: the contractual
-///    counterparty would be left pointing at a soft-deleted user with
-///    no clean way to renegotiate. Runs inside the
-///    [`db::soft_delete_user`] transaction (after `SELECT ... FOR
-///    UPDATE` on the user row), matching the [`patch_me_role`]
-///    pattern - a lease created concurrently after the lock cannot
-///    slip through.
+/// Three gates run in strict order before any DB write; a regression that
+/// re-orders them surfaces as a different status code. First the body must
+/// include `confirm = "delete-my-account"` verbatim, else 400: the magic
+/// constant blocks accidental zero-body retries from wiping the account, where
+/// an extra header would be invisible in the audit logs the operator sees
+/// later. Then a recent-auth check (403, code `reauthentication_required`)
+/// requires the token's `iat` to be no older than
+/// [`DELETE_ACCOUNT_RECENT_AUTH_WINDOW_SECS`], so a stolen long-lived access
+/// cookie cannot be repurposed for an account wipe once the window has elapsed -
+/// the attacker would have to produce a fresh login, which requires the
+/// wallet's signing key. Finally an active-leases gate (409, code
+/// `active_leases_blocking`) blocks a user bound to an active lease as
+/// `landlord_id` or `primary_tenant_id` from self-deleting, since the
+/// contractual counterparty would be left pointing at a soft-deleted user with
+/// no clean way to renegotiate; it runs inside the [`db::soft_delete_user`]
+/// transaction (after `SELECT ... FOR UPDATE` on the user row), matching the
+/// [`patch_me_role`] pattern so a lease created concurrently after the lock
+/// cannot slip through.
 ///
 /// On success [`db::soft_delete_user`] runs four statements in one
 /// transaction:
@@ -608,24 +603,17 @@ pub async fn confirm_email_change(
 ///
 /// Multipart form-data with a single field `file` carrying the image.
 /// Validation runs in-handler before any storage I/O so a malformed payload
-/// never reaches the backend:
-///
-/// 1. **Field present**: the multipart body must include a field named
-///    `file`. A missing field is 400.
-/// 2. **Size cap**: the buffered field bytes must not exceed
-///    [`MAX_AVATAR_BYTES`]. Oversize payloads return 413.
-/// 3. **Minimum-size guard**: the buffered field bytes must be at least
-///    [`MIN_AVATAR_BYTES`]. Truncated payloads (e.g. a 3-byte JPEG SOI)
-///    return 415 - they would otherwise satisfy the whitelist and the
-///    magic-byte prefix check while being unrenderable.
-/// 4. **MIME whitelist**: the field's `Content-Type` header must be one of
-///    `image/png`, `image/jpeg`, `image/webp`. Anything else returns 415.
-/// 5. **Magic-byte sniff**: the first 12 bytes must match the format the
-///    `Content-Type` claims. Mismatches (e.g. `Content-Type: image/png`
-///    with JPEG bytes, or `Content-Type: image/webp` with RIFF-header
-///    bytes that lack the `WEBP` tag) return 415. This blocks
-///    MIME-spoofing attacks where a client uploads an executable under an
-///    image MIME header.
+/// never reaches the backend. A missing `file` field is rejected with 400. The
+/// buffered field bytes must not exceed [`MAX_AVATAR_BYTES`] (oversize is 413)
+/// and must be at least [`MIN_AVATAR_BYTES`] (a truncated payload such
+/// as a 3-byte JPEG SOI is 415 - it would otherwise satisfy the whitelist and
+/// the magic-byte prefix check while being unrenderable). The field's
+/// `Content-Type` must be one of `image/png`, `image/jpeg`, `image/webp`, and
+/// anything else is 415. Finally the first 12 bytes must match the format the
+/// `Content-Type` claims; a mismatch (e.g. `Content-Type: image/png` with JPEG
+/// bytes, or `image/webp` with RIFF-header bytes that lack the `WEBP` tag) is
+/// 415, which blocks MIME-spoofing attacks where a client uploads an executable
+/// under an image MIME header.
 ///
 /// Per-user rate limit: at most 10 uploads per rolling 1h window. Mirrors
 /// the email-change pattern so a stolen-cookie attacker cannot use the
@@ -847,35 +835,30 @@ pub async fn upload_avatar(
 /// every outstanding session.
 ///
 /// Five gates run in strict order; a regression that re-orders any of them
-/// would surface as a different status code for the same request:
-///
-/// 1. **Whitelist validation** (400). Only `tenant`, `landlord`, `agent` are
-///    self-selectable. `admin` / `property_manager` and any unknown string
-///    are rejected before any DB or Redis I/O. Reuses the same gate as
-///    `LoginRequest.role` so the two surfaces cannot drift.
-/// 2. **Recent-auth check** (403, code `reauthentication_required`). The
-///    token's `iat` must be no older than [`ROLE_CHANGE_RECENT_AUTH_WINDOW_SECS`].
-///    Privilege change is sensitive enough to require a freshly
-///    authenticated session - a stolen access cookie cannot be
-///    repurposed for it once the window has elapsed.
-/// 3. **Idempotent shortcut**. The transaction's `SELECT ... FOR UPDATE`
-///    locks the row; if `old_role == new_role` the function commits and
-///    returns 200 WITHOUT touching Redis. This makes idempotent retries
-///    (and the bidirectional flow `tenant -> landlord -> tenant` after
-///    the rate-limit window) completely free in budget terms.
-/// 4. **Rate-limit** (429, code `rate_limited`). Only consulted when the
-///    role actually differs - so a noop never burns a slot. Threshold 1
-///    per 24h; any prior committed change blocks the next within the
-///    window. The error path explicitly `drop(tx)`s before returning so
-///    the `FOR UPDATE` row lock is released eagerly rather than at
-///    end-of-scope async-drop.
-/// 5. **Active-leases pre-check** (409, code `active_leases_blocking`). A
-///    user bound to an active lease as `landlord` or `primary_tenant`
-///    cannot change role - the contractual counterparty would silently
-///    flip type. Runs inside the transaction so a lease created
-///    concurrently after our `FOR UPDATE` cannot slip through. The
-///    blocking-leases error path uses the same explicit `drop(tx)`
-///    pattern as the rate-limit branch.
+/// would surface as a different status code for the same request. First a
+/// whitelist gate (400) allows only `tenant`, `landlord`, `agent` to be
+/// self-selected - `admin` / `property_manager` and any unknown string are
+/// rejected before any DB or Redis I/O, reusing the same gate as
+/// `LoginRequest.role` so the two surfaces cannot drift. Then a recent-auth
+/// check (403, code `reauthentication_required`) requires the token's `iat` to
+/// be no older than [`ROLE_CHANGE_RECENT_AUTH_WINDOW_SECS`], because a privilege
+/// change is sensitive enough to demand a freshly authenticated session - a
+/// stolen access cookie cannot be repurposed for it once the window has elapsed.
+/// An idempotent shortcut follows: the transaction's `SELECT ... FOR UPDATE`
+/// locks the row, and if `old_role == new_role` the function commits and returns
+/// 200 WITHOUT touching Redis, making idempotent retries (and the bidirectional
+/// flow `tenant -> landlord -> tenant` after the rate-limit window) free in
+/// budget terms. A rate-limit (429, code `rate_limited`) is consulted only when
+/// the role actually differs, so a noop never burns a slot; the threshold is 1
+/// per 24h, so any prior committed change blocks the next within the window, and
+/// the error path explicitly `drop(tx)`s before returning so the `FOR UPDATE`
+/// row lock is released eagerly rather than at end-of-scope async-drop. Finally
+/// an active-leases pre-check (409, code `active_leases_blocking`) blocks a user
+/// bound to an active lease as `landlord` or `primary_tenant` from changing
+/// role, since the contractual counterparty would silently flip type; it runs
+/// inside the transaction so a lease created concurrently after the `FOR UPDATE`
+/// cannot slip through, and uses the same explicit `drop(tx)` pattern as the
+/// rate-limit branch.
 ///
 /// On success:
 ///
@@ -1018,8 +1001,7 @@ pub async fn patch_me_role(
 ///   freshly-authenticated session is required instead
 ///   ([`PASSWORD_SET_RECENT_AUTH_WINDOW_SECS`]); a stale access cookie is 403'd.
 ///
-/// On success (decision #8 - "change/set kills all OTHER sessions, keeps the
-/// current one alive"):
+/// On success every OTHER session is killed while the current one stays alive:
 ///
 /// - The new Argon2id hash is written and `jwt_invalidate_before` is stamped,
 ///   killing every outstanding access token; every active refresh row is

@@ -400,7 +400,7 @@ async fn send_rate_limited_after_first_within_minute(pool: PgPool) {
 /// TOCTOU regression: two *concurrent* sends must not both clear the 1/min cap.
 /// With the read-only check and the `INCR` as separate round-trips, both
 /// requests could read count=0, both pass, and both increment past
-/// `VERIFY_EMAIL_SEND_PER_MINUTE_MAX = 1` - two 200s and a counter of 2. The
+/// `VERIFY_EMAIL_SEND_LIMIT.per_minute_max = 1` - two 200s and a counter of 2. The
 /// fused atomic reserve serializes them in Redis, so exactly one wins (200) and
 /// the other is rejected (429).
 #[sqlx::test(migrator = "common::MIGRATIONS")]

@@ -204,6 +204,80 @@ pub struct PasswordLoginRequest {
     pub password: SecretString,
 }
 
+/// Request payload for `POST /auth/password/forgot`.
+///
+/// Carries only the email. Like [`PasswordLoginRequest`] it has no
+/// `into_validated`: the forgot path must NOT surface field-level validation
+/// errors, because an "email is not valid" message would itself leak which
+/// addresses are known. The handler normalizes the email and always answers
+/// `200 { status: "sent" }`.
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct ForgotPasswordRequest {
+    /// Email address to send a reset link to. Normalized (trim + lowercase) in
+    /// the handler before the lookup.
+    pub email: String,
+}
+
+/// Response body for `POST /auth/password/forgot`.
+///
+/// `status` is always `"sent"`, regardless of whether the email mapped to a
+/// reset-eligible account - this is the anti-enumeration guarantee.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct ForgotPasswordResponse {
+    /// Always `"sent"`.
+    pub status: String,
+}
+
+/// Request payload for `POST /auth/password/reset`.
+///
+/// Unauthenticated: the user proves possession of the account via the opaque
+/// `token` from the reset email, not a session cookie. The `token` is the
+/// Redis lookup key (its SHA-256 maps to the `user_id`), so a forged body
+/// cannot reset another account without holding that account's emailed token.
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct ResetPasswordRequest {
+    /// The 43-char base64url token delivered in the reset email.
+    pub token: String,
+    /// Plaintext new password (transported only over HTTPS). Checked against
+    /// the account-password policy, then Argon2id-hashed before storage.
+    #[schema(value_type = String)]
+    pub new_password: SecretString,
+}
+
+/// A [`ResetPasswordRequest`] whose `new_password` has passed the policy check.
+///
+/// Mirrors `ValidatedPasswordChange`: policy validation happens at the request
+/// boundary so the handler receives a policy-clean password and never
+/// re-validates. The `token` is still raw here - its length/shape check and
+/// the Redis lookup are the handler's job, kept next to the consume step.
+#[derive(Debug)]
+pub struct ValidatedPasswordReset {
+    /// Trimmed opaque reset token; shape-checked and redeemed in the handler.
+    pub token: String,
+    /// Policy-checked plaintext password, not yet hashed.
+    pub new_password: SecretString,
+}
+
+impl ResetPasswordRequest {
+    /// Validates `new_password` against the account-password policy and trims
+    /// the token.
+    ///
+    /// Runs before the handler consumes the Redis slot, so a weak password is
+    /// rejected without burning the user's one-shot reset token.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ApiError::BadRequest`] when the new password fails the policy.
+    #[inline]
+    pub fn into_validated(self) -> ApiResult<ValidatedPasswordReset> {
+        common::validate_password_policy(self.new_password.expose_secret())?;
+        Ok(ValidatedPasswordReset {
+            token: self.token.trim().to_owned(),
+            new_password: self.new_password,
+        })
+    }
+}
+
 // Sessions --------------------------------------------------------------------
 
 /// One row of the response from `GET /api/v1/auth/sessions`.

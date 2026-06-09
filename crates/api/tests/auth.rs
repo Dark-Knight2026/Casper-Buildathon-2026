@@ -1142,7 +1142,7 @@ async fn nonce_miss_counts_toward_rate_limit(pool: PgPool) {
     let signature = "01".to_string() + &"ab".repeat(64);
 
     // First 5 attempts must surface as 401 (nonce missing) - this is the
-    // failure we're counting. LOGIN_FAIL_MAX_ATTEMPTS is 5, so after the
+    // failure we're counting. LOGIN_FAIL.max_attempts is 5, so after the
     // 5th miss the counter equals the threshold.
     for attempt in 0..5 {
         let response = env

@@ -3,13 +3,20 @@
 use redis::{AsyncCommands, Client, RedisError, aio::ConnectionManager};
 use uuid::Uuid;
 
-/// Outcome of [`reserve_verify_email_send`]: the send slot was atomically
-/// reserved, or the caller is over a rate-limit window and nothing was written.
+/// Outcome of an atomic "reserve a token-bearing send under a rate limit" step.
+///
+/// Shared by [`reserve_verify_email_send`] and [`reserve_password_reset_send`]:
+/// both run the same Lua script that either stores the token slot and bumps the
+/// per-user counters in one indivisible step, or - if a rolling window is
+/// already at its cap - writes nothing. The two flows differ only in which keys
+/// the slot and counters use, not in the shape of the result, so they share
+/// this type.
 ///
 /// [`reserve_verify_email_send`]: RedisStore::reserve_verify_email_send
+/// [`reserve_password_reset_send`]: RedisStore::reserve_password_reset_send
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum VerifyEmailReservation {
-    /// Both windows were under their caps: the token hash was stored and both
+pub enum SendReservation {
+    /// Both windows were under their caps: the token slot was stored and both
     /// counters incremented in the same atomic step.
     Reserved,
     /// The per-minute or per-hour cap was already reached; no Redis state
@@ -17,14 +24,46 @@ pub enum VerifyEmailReservation {
     RateLimited,
 }
 
+/// Two-tier (per-minute + per-hour) rate limit for a token-bearing email send.
+///
+/// The verify-email and password-reset send flows share this shape: a tight
+/// per-minute burst guard layered with a looser per-hour cap, with the four
+/// values fed straight into the `reserve_*_send` Lua script. Kept as a struct
+/// with one const instance per flow (rather than one shared const) so the two
+/// policies can be tuned independently later without disturbing the other.
+struct SendRateLimitPer {
+    /// Max sends allowed within `per_minute_window_secs`.
+    minute_max: u64,
+    /// Short rolling window, in seconds.
+    minute_window_secs: u64,
+    /// Max sends allowed within `per_hour_window_secs`.
+    hour_max: u64,
+    /// Long rolling window, in seconds.
+    hour_window_secs: u64,
+}
+
+/// Single-window rate limit: at most `max_attempts` within `window_secs`.
+///
+/// Backs the counter-based guards (`INCR` + conditional `EXPIRE`) for login
+/// failures, avatar uploads, and role changes. The email-change guard does NOT
+/// use this, because its cap is per-deploy configurable
+/// (`ServerConfig::email_change_max_attempts`) rather than a compile-time
+/// constant, so only its window lives as a bare const below.
+struct RateLimit {
+    /// Attempts allowed before the guard trips.
+    max_attempts: u64,
+    /// Rolling window, in seconds, the count is measured over.
+    window_secs: u64,
+}
+
 /// Time-to-live for login nonce in Redis (5 minutes).
 const LOGIN_NONCE_TTL: u64 = 300;
 
-/// Maximum failed login attempts per wallet address before rate limiting.
-const LOGIN_FAIL_MAX_ATTEMPTS: u64 = 5;
-
-/// Time window for failed login rate limiting (60 seconds).
-const LOGIN_FAIL_WINDOW_SECS: u64 = 60;
+/// Failed-login rate limit per wallet address: 5 attempts per 60 seconds.
+const LOGIN_FAIL: RateLimit = RateLimit {
+    max_attempts: 5,
+    window_secs: 60,
+};
 
 /// Time-to-live for a pending email-change token (24 hours).
 ///
@@ -37,6 +76,8 @@ const EMAIL_CHANGE_TTL: u64 = 24 * 60 * 60;
 
 /// Rolling window for the email-change rate limit (24 hours).
 ///
+/// A bare window rather than a [`RateLimit`] because the cap is per-deploy
+/// configurable (`ServerConfig::email_change_max_attempts`), not constant.
 /// Matches `EMAIL_CHANGE_TTL` so the user cannot churn the
 /// `email_change:{user_id}` slot to silently invalidate previous links and
 /// flood the new mailbox with confirmation emails.
@@ -49,29 +90,42 @@ const EMAIL_CHANGE_RATE_WINDOW_SECS: u64 = 24 * 60 * 60;
 /// window would 404 good-faith confirmations.
 const VERIFY_EMAIL_TTL: u64 = 24 * 60 * 60;
 
-/// Maximum verify-email send requests per user within
-/// [`VERIFY_EMAIL_SEND_PER_MINUTE_WINDOW_SECS`].
+/// Verify-email send rate limit: one per minute, five per hour.
 ///
-/// Tight burst guard: one send per minute stops a user (or a stolen cookie)
-/// from hammering the resend button and flooding the mailbox.
-const VERIFY_EMAIL_SEND_PER_MINUTE_MAX: u64 = 1;
+/// The per-minute tier is a tight burst guard - one send per minute stops a
+/// user (or a stolen cookie) from hammering the resend button and flooding the
+/// mailbox. The per-hour tier absorbs a handful of legitimate retries (typo'd
+/// address, lost mail) while still bounding the total volume one account can
+/// trigger in an hour.
+const VERIFY_EMAIL_SEND_LIMIT: SendRateLimitPer = SendRateLimitPer {
+    minute_max: 1,
+    minute_window_secs: 60,
+    hour_max: 5,
+    hour_window_secs: 60 * 60,
+};
 
-/// Short rolling window for the verify-email send rate limit (60 seconds).
-const VERIFY_EMAIL_SEND_PER_MINUTE_WINDOW_SECS: u64 = 60;
-
-/// Maximum verify-email send requests per user within
-/// [`VERIFY_EMAIL_SEND_PER_HOUR_WINDOW_SECS`].
+/// Time-to-live for a pending password-reset token (30 minutes).
 ///
-/// Hourly cap layered over the per-minute guard: absorbs a handful of
-/// legitimate retries (typo'd address, lost mail) while still bounding the
-/// total volume one account can trigger in an hour.
-const VERIFY_EMAIL_SEND_PER_HOUR_MAX: u64 = 5;
+/// Deliberately far shorter than [`VERIFY_EMAIL_TTL`] (24h): a reset link is a
+/// full account-takeover capability, so the window an intercepted link stays
+/// live is kept tight. 30 minutes still covers a user who opens the mail,
+/// gets distracted, and comes back - the common good-faith case - without
+/// leaving a stolen link redeemable for a day.
+const PASSWORD_RESET_TTL: u64 = 30 * 60;
 
-/// Long rolling window for the verify-email send rate limit (1 hour).
-const VERIFY_EMAIL_SEND_PER_HOUR_WINDOW_SECS: u64 = 60 * 60;
+/// Password-reset send rate limit: identical shape to
+/// [`VERIFY_EMAIL_SEND_LIMIT`] - one per minute, five per hour - kept as a
+/// separate instance so the reset policy can be tightened independently of
+/// verify-email. The per-minute tier blocks an attacker (or a button-masher)
+/// from flooding a victim's mailbox with reset links.
+const PASSWORD_RESET_SEND_LIMIT: SendRateLimitPer = SendRateLimitPer {
+    minute_max: 1,
+    minute_window_secs: 60,
+    hour_max: 5,
+    hour_window_secs: 60 * 60,
+};
 
-/// Maximum avatar uploads per user within
-/// [`AVATAR_UPLOAD_RATE_WINDOW_SECS`].
+/// Avatar-upload rate limit: 10 uploads per rolling hour.
 ///
 /// Sized to absorb a power-user iterating through several crops/variants
 /// (avatars get re-uploaded surprisingly often during onboarding) while
@@ -79,30 +133,27 @@ const VERIFY_EMAIL_SEND_PER_HOUR_WINDOW_SECS: u64 = 60 * 60;
 /// stub-or-S3 backend. The 10/h threshold also blocks a stolen-cookie
 /// attacker from using the endpoint as a write-amplification primitive
 /// against the storage backend.
-const AVATAR_UPLOAD_MAX_ATTEMPTS: u64 = 10;
+const AVATAR_UPLOAD: RateLimit = RateLimit {
+    max_attempts: 10,
+    window_secs: 60 * 60,
+};
 
-/// Rolling window for the avatar-upload rate limit (1 hour).
-const AVATAR_UPLOAD_RATE_WINDOW_SECS: u64 = 60 * 60;
-
-/// Rolling window for the role-change rate limit (24 hours).
+/// Role-change rate limit: one successful change per rolling 24 hours.
 ///
 /// Role changes are rare, auditable events - most users never trigger one,
 /// and the few who do should not be churning between roles. Capping at
 /// "one successful change per day" matches the audit/security expectation
 /// without locking a user out of recovery: a 24h wait is acceptable
 /// friction for a security-sensitive operation that also clears refresh
-/// tokens and forces a re-login.
-const ROLE_CHANGE_RATE_WINDOW_SECS: u64 = 24 * 60 * 60;
-
-/// Maximum role-change requests per user within
-/// [`ROLE_CHANGE_RATE_WINDOW_SECS`].
-///
-/// Threshold of 1 means: any prior successful change in the rolling 24h
-/// window blocks the next attempt. Two-way changes
-/// (tenant -> landlord -> tenant) require waiting out the window or an
-/// operator clearing the slot manually; the test surface uses
-/// [`RedisStore::role_change_attempts_key`] to reset between assertions.
-const ROLE_CHANGE_MAX_ATTEMPTS: u64 = 1;
+/// tokens and forces a re-login. The threshold of 1 means any prior committed
+/// change in the rolling window blocks the next; two-way changes
+/// (tenant -> landlord -> tenant) require waiting out the window or an operator
+/// clearing the slot manually (the test surface uses
+/// [`RedisStore::role_change_attempts_key`] to reset between assertions).
+const ROLE_CHANGE: RateLimit = RateLimit {
+    max_attempts: 1,
+    window_secs: 24 * 60 * 60,
+};
 
 /// A convenience type alias for `Result` returned from Redis client.
 pub type RedisResult<T> = Result<T, RedisError>;
@@ -189,7 +240,7 @@ impl RedisStore {
         let mut conn = self.conn.clone();
         let key = Self::login_fail_key(wallet_address);
         let count = conn.get::<_, Option<u64>>(&key).await?;
-        Ok(count.is_some_and(|c| c >= LOGIN_FAIL_MAX_ATTEMPTS))
+        Ok(count.is_some_and(|c| c >= LOGIN_FAIL.max_attempts))
     }
 
     /// Records a failed login attempt for the given wallet address.
@@ -207,7 +258,7 @@ impl RedisStore {
         let count = conn.incr::<_, _, u64>(&key, 1u64).await?;
         // Set TTL only on the first failure to start the window.
         if count == 1 {
-            conn.expire::<_, ()>(&key, LOGIN_FAIL_WINDOW_SECS.cast_signed())
+            conn.expire::<_, ()>(&key, LOGIN_FAIL.window_secs.cast_signed())
                 .await?;
         }
         Ok(())
@@ -459,7 +510,7 @@ impl RedisStore {
     /// the user behind the limiter) nor a stored token whose send went
     /// un-counted.
     ///
-    /// On [`VerifyEmailReservation::RateLimited`] the script writes nothing, so
+    /// On [`SendReservation::RateLimited`] the script writes nothing, so
     /// a throttled retry leaves any previously stored token intact rather than
     /// clobbering a link the user may still be about to click. The `email IS
     /// NULL` guard therefore still runs first in the handler: a wallet-only
@@ -474,7 +525,7 @@ impl RedisStore {
         &self,
         user_id: Uuid,
         token_hash: &[u8; 32],
-    ) -> RedisResult<VerifyEmailReservation> {
+    ) -> RedisResult<SendReservation> {
         // KEYS: token slot, minute counter, hour counter.
         // ARGV: token hash, token TTL, minute cap, minute window, hour cap,
         //       hour window.
@@ -502,16 +553,16 @@ impl RedisStore {
             .key(Self::verify_email_send_hour_key(user_id))
             .arg(hex::encode(token_hash))
             .arg(VERIFY_EMAIL_TTL)
-            .arg(VERIFY_EMAIL_SEND_PER_MINUTE_MAX)
-            .arg(VERIFY_EMAIL_SEND_PER_MINUTE_WINDOW_SECS)
-            .arg(VERIFY_EMAIL_SEND_PER_HOUR_MAX)
-            .arg(VERIFY_EMAIL_SEND_PER_HOUR_WINDOW_SECS)
+            .arg(VERIFY_EMAIL_SEND_LIMIT.minute_max)
+            .arg(VERIFY_EMAIL_SEND_LIMIT.minute_window_secs)
+            .arg(VERIFY_EMAIL_SEND_LIMIT.hour_max)
+            .arg(VERIFY_EMAIL_SEND_LIMIT.hour_window_secs)
             .invoke_async::<i64>(&mut conn)
             .await?;
         Ok(if reserved == 1 {
-            VerifyEmailReservation::Reserved
+            SendReservation::Reserved
         } else {
-            VerifyEmailReservation::RateLimited
+            SendReservation::RateLimited
         })
     }
 
@@ -552,8 +603,158 @@ impl RedisStore {
         Ok(())
     }
 
-    /// Returns `true` when the user has already exceeded
-    /// [`AVATAR_UPLOAD_MAX_ATTEMPTS`] within the rolling window.
+    /// Atomically reserves one password-reset send: stores the
+    /// `{token_hash -> user_id}` slot (30m TTL) and bumps both rolling-window
+    /// counters, but only when the user is under *both* the per-minute and
+    /// per-hour caps.
+    ///
+    /// Same single-Lua-script race-freedom argument as
+    /// [`reserve_verify_email_send`]: fusing the check, the slot write, and the
+    /// two `INCR`s means two concurrent forgot requests cannot both clear the
+    /// per-minute cap, and there is never a spent counter without a redeemable
+    /// slot.
+    ///
+    /// The slot is keyed by the token hash (not the user id): a reset arrives
+    /// unauthenticated carrying only the token, so the token hash is the only
+    /// thing the redeem path can look the user up by. The stored *value* is the
+    /// `user_id`, which [`take_password_reset_token`] returns. The rate-limit
+    /// counters stay keyed by `user_id` because the forgot path resolves the
+    /// email to a user before calling this.
+    ///
+    /// [`reserve_verify_email_send`]: Self::reserve_verify_email_send
+    /// [`take_password_reset_token`]: Self::take_password_reset_token
+    ///
+    /// # Errors
+    ///
+    /// Returns `RedisError` if the connection fails.
+    #[inline]
+    pub async fn reserve_password_reset_send(
+        &self,
+        user_id: Uuid,
+        token_hash: &[u8; 32],
+    ) -> RedisResult<SendReservation> {
+        // KEYS: token slot (keyed by hash), minute counter, hour counter.
+        // ARGV: user id (the slot value), token TTL, minute cap, minute window,
+        //       hour cap, hour window.
+        let script = redis::Script::new(
+            r"
+                local minute = tonumber(redis.call('GET', KEYS[2]) or '0')
+                local hour = tonumber(redis.call('GET', KEYS[3]) or '0')
+                if minute >= tonumber(ARGV[3]) or hour >= tonumber(ARGV[5]) then
+                    return 0
+                end
+                redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[2])
+                if redis.call('INCR', KEYS[2]) == 1 then
+                    redis.call('EXPIRE', KEYS[2], ARGV[4])
+                end
+                if redis.call('INCR', KEYS[3]) == 1 then
+                    redis.call('EXPIRE', KEYS[3], ARGV[6])
+                end
+                return 1
+            ",
+        );
+        let mut conn = self.conn.clone();
+        let reserved = script
+            .key(Self::password_reset_key(token_hash))
+            .key(Self::password_reset_send_minute_key(user_id))
+            .key(Self::password_reset_send_hour_key(user_id))
+            .arg(user_id.to_string())
+            .arg(PASSWORD_RESET_TTL)
+            .arg(PASSWORD_RESET_SEND_LIMIT.minute_max)
+            .arg(PASSWORD_RESET_SEND_LIMIT.minute_window_secs)
+            .arg(PASSWORD_RESET_SEND_LIMIT.hour_max)
+            .arg(PASSWORD_RESET_SEND_LIMIT.hour_window_secs)
+            .invoke_async::<i64>(&mut conn)
+            .await?;
+        Ok(if reserved == 1 {
+            SendReservation::Reserved
+        } else {
+            SendReservation::RateLimited
+        })
+    }
+
+    /// Atomically retrieves and deletes the pending password-reset slot for the
+    /// presented token hash, returning the `user_id` it pointed at.
+    ///
+    /// Uses `GETDEL` to close the TOCTOU window: the slot is consumed even if
+    /// the subsequent password update fails, so a reset link is strictly
+    /// single-use - a replay finds nothing. Returns `Ok(None)` when the slot is
+    /// empty (never issued, already consumed, or expired) or when the stored
+    /// value fails to parse as a `Uuid`, which the handler treats identically
+    /// to a missing slot (generic invalid-token error).
+    ///
+    /// # Errors
+    ///
+    /// Returns `RedisError` if the connection fails.
+    #[inline]
+    pub async fn take_password_reset_token(
+        &self,
+        token_hash: &[u8; 32],
+    ) -> RedisResult<Option<Uuid>> {
+        let mut conn = self.conn.clone();
+        let key = Self::password_reset_key(token_hash);
+        let raw = redis::cmd("GETDEL")
+            .arg(&key)
+            .query_async::<Option<String>>(&mut conn)
+            .await?;
+        Ok(raw.and_then(|value| Uuid::parse_str(&value).ok()))
+    }
+
+    /// Drops a pending password-reset slot without consuming it through the
+    /// redeem path.
+    ///
+    /// Used by the forgot handler to roll the slot back when `mailer.send`
+    /// fails permanently: the user never received the link, so leaving it live
+    /// for 30 minutes just keeps a useless capability redeemable. Best-effort -
+    /// callers log-warn rather than mask the upstream failure.
+    ///
+    /// # Errors
+    ///
+    /// Returns `RedisError` if the connection fails.
+    #[inline]
+    pub async fn clear_password_reset_token(&self, token_hash: &[u8; 32]) -> RedisResult<()> {
+        let mut conn = self.conn.clone();
+        let key = Self::password_reset_key(token_hash);
+        conn.del::<_, ()>(&key).await
+    }
+
+    /// Reverses the counter increments of a previous
+    /// [`reserve_password_reset_send`] after the downstream send fails
+    /// permanently.
+    ///
+    /// [`reserve_password_reset_send`]: Self::reserve_password_reset_send
+    ///
+    /// `DECR` on both counters, deleting a counter that drops to zero so the
+    /// next attempt starts a fresh window - mirrors
+    /// [`decrement_verify_email_send_attempt`]. Only called on
+    /// [`EmailError::Permanent`](crate::providers::EmailError::Permanent): a
+    /// transient failure keeps the counters bumped because the queued retry
+    /// still delivers.
+    ///
+    /// [`decrement_verify_email_send_attempt`]: Self::decrement_verify_email_send_attempt
+    ///
+    /// # Errors
+    ///
+    /// Returns `RedisError` if the connection fails. Best-effort: the
+    /// overcounting it cleans up is a UX issue, not a security one.
+    #[inline]
+    pub async fn decrement_password_reset_send_attempt(&self, user_id: Uuid) -> RedisResult<()> {
+        let mut conn = self.conn.clone();
+        let minute_key = Self::password_reset_send_minute_key(user_id);
+        let hour_key = Self::password_reset_send_hour_key(user_id);
+        let minute_count = conn.decr::<_, _, i64>(&minute_key, 1i64).await?;
+        if minute_count <= 0 {
+            conn.del::<_, ()>(&minute_key).await?;
+        }
+        let hour_count = conn.decr::<_, _, i64>(&hour_key, 1i64).await?;
+        if hour_count <= 0 {
+            conn.del::<_, ()>(&hour_key).await?;
+        }
+        Ok(())
+    }
+
+    /// Returns `true` when the user has already exceeded the
+    /// [`AVATAR_UPLOAD`] cap within the rolling window.
     ///
     /// Mirrors the email-change rate-limit pattern: handlers `?`-propagate
     /// the Redis error so a transport outage surfaces as 500 rather than
@@ -567,7 +768,7 @@ impl RedisStore {
         let mut conn = self.conn.clone();
         let key = Self::avatar_upload_attempts_key(user_id);
         let count = conn.get::<_, Option<u64>>(&key).await?;
-        Ok(count.is_some_and(|c| c >= AVATAR_UPLOAD_MAX_ATTEMPTS))
+        Ok(count.is_some_and(|c| c >= AVATAR_UPLOAD.max_attempts))
     }
 
     /// Records one avatar-upload attempt against the rolling window.
@@ -588,7 +789,7 @@ impl RedisStore {
         let key = Self::avatar_upload_attempts_key(user_id);
         let count = conn.incr::<_, _, u64>(&key, 1u64).await?;
         if count == 1 {
-            conn.expire::<_, ()>(&key, AVATAR_UPLOAD_RATE_WINDOW_SECS.cast_signed())
+            conn.expire::<_, ()>(&key, AVATAR_UPLOAD.window_secs.cast_signed())
                 .await?;
         }
         Ok(())
@@ -663,6 +864,39 @@ impl RedisStore {
         format!("verify:email:send:1h:{user_id}")
     }
 
+    /// Generates the Redis key for a pending password-reset slot.
+    ///
+    /// Keyed by the hex-encoded token hash (not the user id): the redeem path
+    /// is unauthenticated and carries only the token, so the hash is the lookup
+    /// key and the `user_id` is the stored value. Exposed `pub` so reset tests
+    /// can derive the key from the plaintext token captured in the email and
+    /// assert TTL / consumption directly.
+    #[inline]
+    #[must_use]
+    pub fn password_reset_key(token_hash: &[u8; 32]) -> String {
+        format!("password_reset:{}", hex::encode(token_hash))
+    }
+
+    /// Generates the Redis key for the per-minute password-reset send counter.
+    ///
+    /// Exposed `pub` so the rate-limit tests can delete it to simulate the
+    /// 60-second window having elapsed without sleeping in the test.
+    #[inline]
+    #[must_use]
+    pub fn password_reset_send_minute_key(user_id: Uuid) -> String {
+        format!("password_reset:send:1m:{user_id}")
+    }
+
+    /// Generates the Redis key for the per-hour password-reset send counter.
+    ///
+    /// Exposed `pub` so the rate-limit tests can delete it to simulate the
+    /// 1-hour window having elapsed without sleeping in the test.
+    #[inline]
+    #[must_use]
+    pub fn password_reset_send_hour_key(user_id: Uuid) -> String {
+        format!("password_reset:send:1h:{user_id}")
+    }
+
     /// Generates the Redis key for the avatar-upload rate-limit counter.
     ///
     /// Exposed `pub` (rather than module-private) so integration tests
@@ -678,8 +912,8 @@ impl RedisStore {
         format!("avatar_upload_attempts:{user_id}")
     }
 
-    /// Returns `true` when the user has already exceeded
-    /// [`ROLE_CHANGE_MAX_ATTEMPTS`] within the rolling window.
+    /// Returns `true` when the user has already exceeded the
+    /// [`ROLE_CHANGE`] cap within the rolling window.
     ///
     /// Mirrors the email-change and avatar-upload rate-limit pattern -
     /// handlers `?`-propagate the Redis error so a transport outage
@@ -693,7 +927,7 @@ impl RedisStore {
         let mut conn = self.conn.clone();
         let key = Self::role_change_attempts_key(user_id);
         let count = conn.get::<_, Option<u64>>(&key).await?;
-        Ok(count.is_some_and(|c| c >= ROLE_CHANGE_MAX_ATTEMPTS))
+        Ok(count.is_some_and(|c| c >= ROLE_CHANGE.max_attempts))
     }
 
     /// Records one successful role change against the rolling window.
@@ -713,7 +947,7 @@ impl RedisStore {
         let key = Self::role_change_attempts_key(user_id);
         let count = conn.incr::<_, _, u64>(&key, 1u64).await?;
         if count == 1 {
-            conn.expire::<_, ()>(&key, ROLE_CHANGE_RATE_WINDOW_SECS.cast_signed())
+            conn.expire::<_, ()>(&key, ROLE_CHANGE.window_secs.cast_signed())
                 .await?;
         }
         Ok(())

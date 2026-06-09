@@ -116,7 +116,7 @@ rust-s3 = { version = "=0.37.2", default-features = false, features = ["tokio-ru
 # NOTE: Pinned to 0.12 (not 0.13) so the whole graph resolves a SINGLE reqwest:
 # both transitive consumers - `postmark 2.0.0` and `rust-s3 0.37.2` - require
 # reqwest ^0.12. Taking our direct dep up to 0.13 would fork a second reqwest
-# major alongside theirs. 
+# major alongside theirs.
 # TODO: Bump once both upstreams migrate.
 # crates: ignore-upgrade
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
