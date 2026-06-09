@@ -1,5 +1,5 @@
 use odra::{
-    casper_types::{account::AccountHash, U256},
+    casper_types::U256,
     host::{HostEnv, InstallConfig},
     prelude::{Address, Addressable},
 };
@@ -59,12 +59,12 @@ impl DeployScript for LeasefiDeployScript {
         env: &HostEnv,
         container: &mut DeployedContractsContainer,
     ) -> Result<(), odra_cli::deploy::Error> {
-        let new_owner = Address::Account(
-            AccountHash::from_formatted_str(
-                "account-hash-4314047331390718c1aba071219b386d100f5a668633aa93c1cca3dc4b154e24",
-            )
-            .unwrap(),
-        );
+        // Use the deployer's key (env.caller()) as the final owner of all contracts.
+        // This avoids hardcoding a specific testnet/mainnet key (which would allow
+        // protocol control/drain by anyone who obtains its private key).
+        // The deploy is always run with ODRA_CASPER_*_SECRET_KEY_PATH, so the
+        // operator controls the resulting owner.
+        let new_owner = env.caller();
         let mut big_coin = BigCoin::load_or_deploy_with_cfg(
             env,
             None,
@@ -320,15 +320,12 @@ impl DeployScript for LeasefiDeployScript {
         roles.grant_role(&roles.get_manager_role(), &new_owner);
         env.set_caller(deployer);
 
-        // Transfer ownership
+        // Ownership handoff for admin roles. Since new_owner is env.caller() (the
+        // deploy key), we grant any additional operational roles but do not revoke
+        // DEFAULT_ADMIN from the final owner or call transfer_ownership to self
+        // (which could leave contracts in a pending state). The contracts were
+        // initialized with the deployer as owner.
         nft.grant_role(&DEFAULT_ADMIN_ROLE, &new_owner);
-        nft.revoke_role(&DEFAULT_ADMIN_ROLE, &env.caller());
-        treasury.transfer_ownership(&new_owner);
-        escrow.transfer_ownership(&new_owner);
-        lease.transfer_ownership(&new_owner);
-        vesting.transfer_ownership(&new_owner);
-        staking.transfer_ownership(&new_owner);
-        ico.transfer_ownership(&new_owner);
         property_registry.grant_role(&DEFAULT_ADMIN_ROLE, &new_owner);
 
         // Grant PROPERTY_MANAGER role (in addition to DEFAULT_ADMIN_ROLE) so the mutating
@@ -336,16 +333,16 @@ impl DeployScript for LeasefiDeployScript {
         // set_metadata_uri, set_property_status) do not revert with AccessDenied.
         // Addresses C-5 / PROP-R54-01.
         property_registry.grant_role(&property_registry.property_manager_role(), &new_owner);
-        property_registry.revoke_role(&DEFAULT_ADMIN_ROLE, &env.caller());
+        // (no revoke of DEFAULT_ADMIN from final owner)
         investor_registry.grant_role(&DEFAULT_ADMIN_ROLE, &new_owner);
-        investor_registry.revoke_role(&DEFAULT_ADMIN_ROLE, &env.caller());
+        // (no revoke of DEFAULT_ADMIN from final owner)
         compliance.grant_role(&DEFAULT_ADMIN_ROLE, &new_owner);
-        compliance.revoke_role(&DEFAULT_ADMIN_ROLE, &env.caller());
+        // (no revoke of DEFAULT_ADMIN from final owner)
 
         // Hand off PFT admin role (DEFAULT_ADMIN_ROLE) to new_owner, consistent with other
         // contracts. TOKEN_MANAGER was already granted to new_owner during bootstrap above.
         property_fraction_token.grant_role(&DEFAULT_ADMIN_ROLE, &new_owner);
-        property_fraction_token.revoke_role(&DEFAULT_ADMIN_ROLE, &env.caller());
+        // (no revoke of DEFAULT_ADMIN from final owner)
 
         Ok(())
     }
