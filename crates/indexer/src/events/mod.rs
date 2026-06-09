@@ -8,6 +8,7 @@ pub mod cep18;
 pub mod db;
 pub mod ico;
 pub mod staking;
+pub mod user_registry;
 pub mod vesting;
 
 use serde_json::Value;
@@ -18,7 +19,7 @@ use crate::{
     event_trait::{EventContext, IndexableEvent},
     events::{
         cep18::Cep18EventType, ico::IcoEventType, staking::StakingEventType,
-        vesting::VestingEventType,
+        user_registry::UserRegistryEventType, vesting::VestingEventType,
     },
 };
 
@@ -34,6 +35,8 @@ pub enum EventType {
     Vesting(VestingEventType),
     /// An event emitted by the Staking contract.
     Staking(StakingEventType),
+    /// An event emitted by the `UserRegistry` contract.
+    UserRegistry(UserRegistryEventType),
 }
 
 impl EventType {
@@ -69,6 +72,11 @@ impl EventType {
             ContractType::Staking => event_name
                 .parse::<StakingEventType>()
                 .map(Self::Staking)
+                .map_err(|_| unknown()),
+
+            ContractType::UserRegistry => event_name
+                .parse::<UserRegistryEventType>()
+                .map(Self::UserRegistry)
                 .map_err(|_| unknown()),
 
             _ => Err(unknown()),
@@ -158,6 +166,7 @@ impl EventRegistry {
             EventType::Staking(StakingEventType::RewardsDeposited) => staking::RewardsDeposited,
             EventType::Staking(StakingEventType::RewardsClaimed) => staking::RewardsClaimed,
             EventType::Staking(StakingEventType::StakerSnapshot) => staking::StakerSnapshot,
+            EventType::UserRegistry(UserRegistryEventType::UserCreated) => user_registry::UserCreated,
         )
     }
 }

@@ -3,7 +3,9 @@
 
 use indexer::{
     config::ContractType,
-    events::{EventType, cep18::Cep18EventType, ico::IcoEventType},
+    events::{
+        EventType, cep18::Cep18EventType, ico::IcoEventType, user_registry::UserRegistryEventType,
+    },
 };
 
 // ICO events ------------------------------------------------------------------
@@ -89,6 +91,23 @@ fn cep18_all_variants_parse_correctly() {
 #[test]
 fn cep18_unknown_event_name_returns_error() {
     assert!(EventType::parse(ContractType::Big, "UnknownEvent").is_err());
+}
+
+// UserRegistry events ---------------------------------------------------------
+
+/// `UserCreated` on the `UserRegistry` contract must resolve to the correct variant.
+#[test]
+fn user_registry_user_created_parses_to_correct_variant() {
+    assert_eq!(
+        EventType::parse(ContractType::UserRegistry, "UserCreated").unwrap(),
+        EventType::UserRegistry(UserRegistryEventType::UserCreated),
+    );
+}
+
+/// An unrecognized event name on the `UserRegistry` contract must return `Err`.
+#[test]
+fn user_registry_unknown_event_name_returns_error() {
+    assert!(EventType::parse(ContractType::UserRegistry, "UnknownEvent").is_err());
 }
 
 // Unknown contract type -------------------------------------------------------

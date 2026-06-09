@@ -33,6 +33,7 @@ pub fn schemas_for(contract_type: ContractType) -> &'static [EventSchema] {
         ContractType::Ico => events::ico::CES_SCHEMAS,
         ContractType::Vesting => events::vesting::CES_SCHEMAS,
         ContractType::Staking => events::staking::CES_SCHEMAS,
+        ContractType::UserRegistry => events::user_registry::CES_SCHEMAS,
         _ => &[],
     }
 }

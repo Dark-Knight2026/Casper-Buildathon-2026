@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT wallet_address\n            FROM users\n            WHERE onchain_user_id IS NULL\n              AND wallet_address IS NOT NULL\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "wallet_address",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "wallet_address"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "a22c9dc0389dd30964ddccbf35d3bf7bd062e4cb83c7c7fb78e064b67a13d7b5"
+}

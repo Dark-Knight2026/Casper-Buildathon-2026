@@ -1085,3 +1085,72 @@ pub async fn update_staker_reward_snapshot(
 
     Ok(rows)
 }
+
+// Users (on-chain reconciliation) ---------------------------------------------
+
+/// Loads the linked wallets of users that have no on-chain id yet.
+///
+/// Returned values are `users.wallet_address` verbatim (Casper public keys,
+/// 66/68 hex). The `UserCreated` event instead carries an account hash, so the
+/// caller derives each wallet's account hash in Rust and compares, then writes
+/// back via [`set_user_onchain_id`] keyed on the same verbatim string. The set
+/// is naturally small (only users awaiting on-chain registration).
+///
+/// # Errors
+///
+/// Returns [`IndexerError::Database`](IndexerError::Database) on SQL failures.
+#[inline]
+pub async fn fetch_unregistered_wallets(tx: &mut PgTransaction<'_>) -> IndexerResult<Vec<String>> {
+    let rows = sqlx::query!(
+        r"
+            SELECT wallet_address
+            FROM users
+            WHERE onchain_user_id IS NULL
+              AND wallet_address IS NOT NULL
+        ",
+    )
+    .fetch_all(tx.as_mut())
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .filter_map(|row| row.wallet_address)
+        .collect())
+}
+
+/// Records the contract-assigned on-chain id on the user with this exact
+/// `wallet_address` (the verbatim public key returned by
+/// [`fetch_unregistered_wallets`]).
+///
+/// Only fills an as-yet-unset id, so re-processing the same event (or a race
+/// with a concurrent writer) is a no-op. The `$1::TEXT::NUMERIC` cast binds the
+/// U256 decimal string straight into the `NUMERIC` column without pulling in a
+/// decimal type.
+///
+/// Returns `true` when the row was updated, `false` when the id was already set.
+///
+/// # Errors
+///
+/// Returns [`IndexerError::Database`](IndexerError::Database) on SQL failures.
+#[inline]
+pub async fn set_user_onchain_id(
+    tx: &mut PgTransaction<'_>,
+    wallet_address: &str,
+    onchain_user_id: &str,
+) -> IndexerResult<bool> {
+    let result = sqlx::query!(
+        r"
+            UPDATE users
+            SET onchain_user_id = $1::TEXT::NUMERIC,
+                onchain_status = 'active'
+            WHERE wallet_address = $2
+              AND onchain_user_id IS NULL
+        ",
+        onchain_user_id,
+        wallet_address,
+    )
+    .execute(tx.as_mut())
+    .await?;
+
+    Ok(result.rows_affected() > 0)
+}
