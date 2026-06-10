@@ -116,6 +116,22 @@ impl ICO {
     pub fn add_ico_schedule(&mut self, ico_schedule: ICOScheduleCreateParams) -> ICOScheduleId {
         self.assert_owner();
 
+        // Capture the caller (== current owner) *immediately* for the funding pull (H-8).
+        // We deliberately use the live caller() here rather than self.get_owner() (or storing
+        // the owner address at schedule time). This prevents orphaned approvals from a prior
+        // owner after any ownership transfer, and forces the *active* owner account to be the
+        // one holding sufficient BIG + having approved this ICO for the sale_amount.
+        //
+        // The CLI deploy inits the ICO with owner=env.caller() (the account that received the
+        // full BIG initial_supply) and does the approve + add_ico_schedule from that same key.
+        // No ownership transfer is performed for the ICO itself (role grants are used for
+        // handoff on other contracts). Thus the funded key remains owner and can add schedules.
+        // (A "dedicated treasury" source for the sale BIG was considered but not used, to keep
+        // changes minimal; the explicit owner-funds-at-creation-time makes the allocation clear.)
+        let caller = self.env().caller();
+        let self_address = self.env().self_address();
+        let sale_amount = ico_schedule.sale_amount;
+
         let ico_id = self.get_ico_schedules_count();
 
         if ico_id > U128::zero() {
@@ -124,23 +140,9 @@ impl ICO {
             self.validate_ico_schedule(&ico_schedule, None);
         }
 
-        let caller = self.env().caller();
-        let self_address = self.env().self_address();
-        let sale_amount = ico_schedule.sale_amount;
-
         self.ico_schedules.set(&ico_id, ico_schedule.clone().into());
         self.ico_schedules_count.set(ico_id + 1);
 
-        // Funding requirement: The caller (who must be the current owner of this ICO contract,
-        // thanks to the assert_owner() above) must personally hold (or have approved) the full
-        // sale_amount of BIG tokens. This contract pulls via transfer_from(caller, self, sale_amount).
-        //
-        // If ownership of the *ICO contract* is later transferred to a different address that
-        // does not hold/approve sufficient BIG, future add_ico_schedule calls from the new owner
-        // will fail with insufficient balance.
-        //
-        // The deploy script (which uses new_owner = env.caller()) ensures the final owner retains
-        // the remaining BIG supply after the initial schedule(s) are created.
         self.big_coin
             .transfer_from(&caller, &self_address, &sale_amount);
 

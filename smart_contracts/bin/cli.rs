@@ -300,6 +300,10 @@ impl DeployScript for LeasefiDeployScript {
             ),
         );
         env.set_gas(20_000_000_000);
+        // The deployer (== ICO owner, since ICOInitArgs uses owner: env.caller() and new_owner
+        // remains the deploy key with no transfer_ownership for ICO) must hold BIG and approve
+        // before add_ico_schedule. This implements the "pull from caller()" fix for H-8 (avoids
+        // relying on a stale get_owner() address + orphaned approvals after any ownership change).
         big_coin.approve(&ico.address(), &(creation_params.sale_amount));
         ico.add_ico_schedule(creation_params);
 
