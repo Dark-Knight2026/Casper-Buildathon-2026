@@ -446,7 +446,7 @@ fn verify_valid_signature() {
     let sig_hex = common::sign_with_prefix(message, &secret_key, &public_key);
     let pk_hex = public_key.to_hex();
 
-    let result = api::common::verify_casper_signature(&pk_hex, &sig_hex, message);
+    let result = api::common::crypto::verify_casper_signature(&pk_hex, &sig_hex, message);
 
     assert!(
         result.is_ok(),
@@ -464,7 +464,7 @@ fn verify_invalid_message() {
     let sig_hex = common::sign_with_prefix(message, &secret_key, &public_key);
     let pk_hex = public_key.to_hex();
 
-    let result = api::common::verify_casper_signature(&pk_hex, &sig_hex, "Fake Message");
+    let result = api::common::crypto::verify_casper_signature(&pk_hex, &sig_hex, "Fake Message");
 
     assert!(result.is_ok());
     assert!(
@@ -487,7 +487,7 @@ fn verify_signature_without_prefix_is_rejected() {
     let sig_hex = signature.to_hex();
     let pk_hex = public_key.to_hex();
 
-    let result = api::common::verify_casper_signature(&pk_hex, &sig_hex, message);
+    let result = api::common::crypto::verify_casper_signature(&pk_hex, &sig_hex, message);
 
     assert!(
         result.is_ok(),
@@ -1100,8 +1100,8 @@ async fn concurrent_first_login_resolves_same_user(pool: PgPool) {
     let email_b = placeholder_email.clone();
 
     let (result_a, result_b) = tokio::join!(
-        auth::upsert_user_by_wallet(&pool_a, &email_a, &wallet_a, UserRole::Tenant),
-        auth::upsert_user_by_wallet(&pool_b, &email_b, &wallet_b, UserRole::Tenant),
+        auth::db::upsert_user_by_wallet(&pool_a, &email_a, &wallet_a, UserRole::Tenant),
+        auth::db::upsert_user_by_wallet(&pool_b, &email_b, &wallet_b, UserRole::Tenant),
     );
 
     let UpsertOutcome::Resolved(record_a) =
@@ -1243,11 +1243,14 @@ async fn replaced_by_fk_blocks_chain_breaking_deletes(pool: PgPool) {
     let wallet_address = public_key.to_hex().to_ascii_lowercase();
     let placeholder_email = format!("wallet_{}@leasefi.local", &wallet_address[..40]);
 
-    let UpsertOutcome::Resolved(user) =
-        auth::upsert_user_by_wallet(&pool, &placeholder_email, &wallet_address, UserRole::Tenant)
-            .await
-            .expect("seed user creation must succeed")
-    else {
+    let UpsertOutcome::Resolved(user) = auth::db::upsert_user_by_wallet(
+        &pool,
+        &placeholder_email,
+        &wallet_address,
+        UserRole::Tenant,
+    )
+    .await
+    .expect("seed user creation must succeed") else {
         panic!("seed user must Resolve - fresh wallet upserts default to status='active'");
     };
 
@@ -1484,11 +1487,14 @@ async fn login_refresh_revoke_and_insert_are_atomic(pool: PgPool) {
     let wallet_address = public_key.to_hex().to_ascii_lowercase();
     let placeholder_email = format!("wallet_{}@leasefi.local", &wallet_address[..40]);
 
-    let UpsertOutcome::Resolved(user) =
-        auth::upsert_user_by_wallet(&pool, &placeholder_email, &wallet_address, UserRole::Tenant)
-            .await
-            .expect("seed user creation must succeed")
-    else {
+    let UpsertOutcome::Resolved(user) = auth::db::upsert_user_by_wallet(
+        &pool,
+        &placeholder_email,
+        &wallet_address,
+        UserRole::Tenant,
+    )
+    .await
+    .expect("seed user creation must succeed") else {
         panic!("seed user must Resolve - fresh wallet upserts default to status='active'");
     };
 
@@ -1524,7 +1530,7 @@ async fn login_refresh_revoke_and_insert_are_atomic(pool: PgPool) {
     .await
     .expect("installing the BEFORE INSERT trigger must succeed");
 
-    let result = auth::issue_login_refresh_token(&pool, user.id).await;
+    let result = auth::refresh::issue_login_refresh_token(&pool, user.id).await;
     assert!(
         result.is_err(),
         "issue_login_refresh_token must surface the INSERT failure as an error",
@@ -1712,7 +1718,7 @@ async fn upsert_retry_exhaustion_is_not_row_not_found(pool: PgPool) {
     .expect("seed user insert");
 
     let result =
-        auth::upsert_user_by_wallet(&pool, placeholder_email, wallet_address, UserRole::Tenant)
+        auth::db::upsert_user_by_wallet(&pool, placeholder_email, wallet_address, UserRole::Tenant)
             .await;
 
     let err = result.expect_err("retry budget must be exhausted in this scenario");

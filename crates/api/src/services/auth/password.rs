@@ -16,13 +16,13 @@ use uuid::Uuid;
 
 use crate::{
     common::{
-        self, ApiError, ApiResult, AppState, ErrorResponse, SendReservation, UserInfo, tokens,
+        ApiError, ApiResult, AppState, ErrorResponse, SendReservation, UserInfo, password, tokens,
     },
     providers::{EmailError, EmailMessage},
     services::{
         auth::{
-            self, cookies,
-            db::RegisterOutcome,
+            cookies,
+            db::{self, RegisterOutcome},
             jwt,
             models::{
                 ForgotPasswordRequest, ForgotPasswordResponse, LoginResponse, PasswordLoginRequest,
@@ -146,9 +146,9 @@ pub async fn register(
     enforce_register_rate_limit(&state, audit.ip.as_deref()).await?;
 
     let validated = payload.into_validated()?;
-    let password_hash = common::hash_password(validated.password.expose_secret())?;
+    let password_hash = password::hash_password(validated.password.expose_secret())?;
 
-    let user_record = match auth::create_password_user(
+    let user_record = match db::create_password_user(
         &state.db,
         &validated.email,
         &password_hash,
@@ -178,7 +178,7 @@ pub async fn register(
         &state.config.jwt_secret,
     )?;
     let issued_refresh = refresh::issue_login_refresh_token(&state.db, user_record.id).await?;
-    let profile = users::fetch_user_profile(&state.db, user_record.id).await?;
+    let profile = users::db::fetch_user_profile(&state.db, user_record.id).await?;
 
     let jar = cookies::build_session_cookies(
         encoded.token,
@@ -272,18 +272,18 @@ pub async fn login_password(
     // must be indistinguishable from a wrong password. Both branches burn a
     // dummy Argon2 verify so the response time matches the real path, record the
     // failure against the per-email limiter, then return the same generic 401.
-    let Some(record) = auth::find_password_login_by_email(&state.db, &email).await? else {
-        common::dummy_verify(payload.password.expose_secret());
+    let Some(record) = db::find_password_login_by_email(&state.db, &email).await? else {
+        password::dummy_verify(payload.password.expose_secret());
         note_login_failure(&state, &email).await;
         return Err(invalid_credentials());
     };
     let Some(password_hash) = record.password_hash.as_deref() else {
-        common::dummy_verify(payload.password.expose_secret());
+        password::dummy_verify(payload.password.expose_secret());
         note_login_failure(&state, &email).await;
         return Err(invalid_credentials());
     };
 
-    if !common::verify_password(payload.password.expose_secret(), password_hash) {
+    if !password::verify_password(payload.password.expose_secret(), password_hash) {
         tracing::info!(
             event = "login_failed",
             reason = "bad_password",
@@ -318,8 +318,8 @@ pub async fn login_password(
         &state.config.jwt_secret,
     )?;
     let issued_refresh = refresh::issue_login_refresh_token(&state.db, record.id).await?;
-    auth::update_last_login_at(&state.db, record.id).await?;
-    let profile = users::fetch_user_profile(&state.db, record.id).await?;
+    db::update_last_login_at(&state.db, record.id).await?;
+    let profile = users::db::fetch_user_profile(&state.db, record.id).await?;
 
     let jar = cookies::build_session_cookies(
         encoded.token,
@@ -382,7 +382,7 @@ pub async fn forgot_password(
 
     // Every branch returns the same `sent` body; only this first one does any
     // real work, and only for an account that has a password to reset.
-    if let Some(record) = auth::find_password_login_by_email(&state.db, &email).await? {
+    if let Some(record) = db::find_password_login_by_email(&state.db, &email).await? {
         if record.password_hash.is_some() {
             issue_reset_token(&state, record.id, &email).await?;
         } else {
@@ -575,7 +575,7 @@ pub async fn reset_password(
         return Err(invalid_reset_token());
     };
 
-    let new_password_hash = common::hash_password(validated.new_password.expose_secret())?;
+    let new_password_hash = password::hash_password(validated.new_password.expose_secret())?;
 
     // One app-clock reading drives both the cutoff and the re-issue: the cutoff
     // kills every outstanding access token by `iat`, and the new token is
@@ -585,7 +585,7 @@ pub async fn reset_password(
     // is not authenticated during a reset, so this invalidates all of them).
     let now = Utc::now();
     let reissue_at = now + Duration::seconds(1);
-    let identity = users::update_password_invalidate_other_sessions(
+    let identity = users::db::update_password_invalidate_other_sessions(
         &state.db,
         user_id,
         &new_password_hash,
@@ -600,7 +600,7 @@ pub async fn reset_password(
         reissue_at,
     )?;
     let issued_refresh = refresh::issue_login_refresh_token(&state.db, user_id).await?;
-    let profile = users::fetch_user_profile(&state.db, user_id).await?;
+    let profile = users::db::fetch_user_profile(&state.db, user_id).await?;
 
     let jar = cookies::build_session_cookies(
         encoded.token,

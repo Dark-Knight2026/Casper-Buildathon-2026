@@ -9,7 +9,7 @@ use rust_decimal::{Decimal, prelude::ToPrimitive};
 use tracing::warn;
 
 use crate::{
-    common::{ApiResult, AppState, ErrorResponse, PaginatedResponse, Pagination},
+    common::{ApiResult, AppState, ErrorResponse, PaginatedResponse, Pagination, validation},
     onchain::{
         common::{self, TOKEN_DECIMALS},
         vesting::{
@@ -98,7 +98,7 @@ pub async fn get_vesting_schedules(
     State(state): State<Arc<AppState>>,
     Query(query): Query<SchedulesQuery>,
 ) -> ApiResult<Json<PaginatedResponse<VestingScheduleItem>>> {
-    let account = common::validate_account(&query.account)?;
+    let account = validation::validate_account(&query.account)?;
     let pagination = query.pagination();
     let (rows, item_count) = db::fetch_schedules_by_account(
         &state.db,

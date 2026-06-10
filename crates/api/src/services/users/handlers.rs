@@ -15,7 +15,9 @@ use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 use crate::{
-    common::{self, ApiError, ApiResult, AppState, ErrorResponse, UserInfo, UserRole, tokens},
+    common::{
+        ApiError, ApiResult, AppState, ErrorResponse, UserInfo, UserRole, crypto, password, tokens,
+    },
     providers::EmailMessage,
     services::{
         auth::{self, AuthUser, cookies, jwt, refresh},
@@ -1066,7 +1068,7 @@ pub async fn change_password(
                 "current_password is required to change an existing password".to_owned(),
             ));
         };
-        if !common::verify_password(current_password.expose_secret(), &stored_hash) {
+        if !password::verify_password(current_password.expose_secret(), &stored_hash) {
             tracing::info!(
                 event = "password_change_failed",
                 reason = "bad_current_password",
@@ -1087,7 +1089,7 @@ pub async fn change_password(
         }
     }
 
-    let new_password_hash = common::hash_password(validated.new_password.expose_secret())?;
+    let new_password_hash = password::hash_password(validated.new_password.expose_secret())?;
 
     // One app-clock reading drives both the force-revoke cutoff and the
     // re-issued token's `iat`. Stamping the cutoff at `now` and minting the new
@@ -1202,7 +1204,7 @@ pub async fn link_wallet(
     // Two failure shapes, two statuses: a `CryptoError` (malformed signature)
     // becomes 400 via `map_err?`, then the `bool` is bridged to a `Result` so a
     // `false` (signature mismatch) becomes 401.
-    common::verify_casper_signature(
+    crypto::verify_casper_signature(
         &wallet_address,
         validated.signature.expose_secret(),
         &message,
@@ -1228,7 +1230,7 @@ pub async fn link_wallet(
         ApiError::Unauthorized("Invalid signature".to_owned())
     })?;
 
-    match auth::link_wallet_to_user(&state.db, user_id, &wallet_address).await? {
+    match auth::db::link_wallet_to_user(&state.db, user_id, &wallet_address).await? {
         auth::LinkWalletOutcome::Linked => {}
         auth::LinkWalletOutcome::WalletTaken => {
             tracing::warn!(

@@ -11,7 +11,9 @@ use serde::Deserialize;
 use utoipa::IntoParams;
 
 use crate::{
-    common::{self, ApiError, ApiResult, AppState, ErrorResponse, PaginatedResponse, Pagination},
+    common::{
+        ApiError, ApiResult, AppState, ErrorResponse, PaginatedResponse, Pagination, validation,
+    },
     onchain::transactions::{
         db,
         models::{HashType, TransactionResponse, TxType},
@@ -79,7 +81,7 @@ pub async fn get_account_transactions(
     Path(address): Path<String>,
     Query(query): Query<AccountTxQuery>,
 ) -> ApiResult<Json<PaginatedResponse<TransactionResponse>>> {
-    let address = common::validate_account(&address)?;
+    let address = validation::validate_account(&address)?;
 
     if let Some(HashType::Unknown(v)) = query.from_type {
         return Err(ApiError::BadRequest(format!(

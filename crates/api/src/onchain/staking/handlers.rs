@@ -10,7 +10,7 @@ use chrono::{Months, Utc};
 use rust_decimal::{Decimal, prelude::ToPrimitive};
 
 use crate::{
-    common::{ApiError, ApiResult, AppState, ErrorResponse},
+    common::{ApiError, ApiResult, AppState, ErrorResponse, validation},
     onchain::{
         common,
         staking::{
@@ -66,7 +66,7 @@ pub async fn get_staking_info(
     State(state): State<Arc<AppState>>,
     Path(path): Path<AccountHashPath>,
 ) -> ApiResult<Json<StakingInfoResponse>> {
-    let account = common::validate_account(&path.account_hash)?;
+    let account = validation::validate_account(&path.account_hash)?;
 
     let snap = db::fetch_staking_info_snapshot(&state.db, &account).await?;
 
@@ -150,7 +150,7 @@ pub async fn get_portfolio(
     State(state): State<Arc<AppState>>,
     Path(path): Path<AccountHashPath>,
 ) -> ApiResult<Json<PortfolioResponse>> {
-    let account = common::validate_account(&path.account_hash)?;
+    let account = validation::validate_account(&path.account_hash)?;
 
     let snap = db::fetch_portfolio_snapshot(&state.db, &account).await?;
 
@@ -216,7 +216,7 @@ pub async fn get_earnings(
     Path(path): Path<AccountHashPath>,
     Query(query): Query<EarningsQuery>,
 ) -> ApiResult<Json<EarningsResponse>> {
-    let account = common::validate_account(&path.account_hash)?;
+    let account = validation::validate_account(&path.account_hash)?;
 
     let since = match parse_period_months(&query.period)? {
         Some(months) => Utc::now()
@@ -264,7 +264,7 @@ pub async fn get_rewards_history(
     Path(path): Path<AccountHashPath>,
     Query(query): Query<RewardsHistoryQuery>,
 ) -> ApiResult<Json<RewardsHistoryResponse>> {
-    let account = common::validate_account(&path.account_hash)?;
+    let account = validation::validate_account(&path.account_hash)?;
     let days = query.period.clamp(1, 365);
 
     let rows = db::fetch_daily_cumulative_rewards(&state.db, &account, days).await?;
@@ -313,7 +313,7 @@ pub async fn get_unbonding(
     State(state): State<Arc<AppState>>,
     Path(path): Path<AccountHashPath>,
 ) -> ApiResult<Json<UnbondingResponse>> {
-    let account = common::validate_account(&path.account_hash)?;
+    let account = validation::validate_account(&path.account_hash)?;
 
     let snap = db::fetch_unbonding_snapshot(&state.db, &account).await?;
     let position = snap.position;

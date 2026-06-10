@@ -7,9 +7,6 @@ use crate::common::{ApiError, ApiResult};
 /// Number of decimal places in the BIG token U256 value.
 pub const TOKEN_DECIMALS: u32 = 18;
 
-// Re-export from crate::common to avoid duplicate definitions.
-pub use crate::common::validate_account;
-
 /// Converts a raw U256 text value (minimal units, decimals=18) to a human-readable f64.
 ///
 /// # Errors

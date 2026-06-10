@@ -10,6 +10,4 @@ pub mod models;
 pub mod routes;
 
 // Re-exports
-pub use handlers::get_property_performance;
 pub use models::{PropertyPerformanceReport, PropertyPerformanceRequest};
-pub use routes::router;

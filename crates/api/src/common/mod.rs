@@ -23,7 +23,7 @@ pub mod validation;
 pub use config::{AppState, IcoFallback, S3Config, ServerConfig, TOTAL_SUPPLY};
 pub use crypto::{
     CASPER_ED25519_PUBKEY_HEX_LEN, CASPER_MESSAGE_PREFIX, CASPER_SECP256K1_PUBKEY_HEX_LEN,
-    CryptoError, verify_casper_signature,
+    CryptoError,
 };
 pub use errors::{ApiError, ApiResult, ErrorResponse, ServerError};
 pub use models::{
@@ -31,9 +31,5 @@ pub use models::{
     UserStatus, VerificationLevel,
 };
 pub use pagination::{Pageable, PaginatedResponse, Pagination};
-pub use password::{
-    MAX_PASSWORD_LEN, MIN_PASSWORD_LEN, dummy_verify, hash_password, validate_password_policy,
-    verify_password,
-};
+pub use password::{MAX_PASSWORD_LEN, MIN_PASSWORD_LEN};
 pub use redis::{RedisStore, SendReservation};
-pub use validation::{validate_account, validate_wallet_address};

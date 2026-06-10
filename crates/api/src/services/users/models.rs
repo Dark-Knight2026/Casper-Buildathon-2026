@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 use crate::{
-    common::{self, ApiError, ApiResult, UserRole},
+    common::{ApiError, ApiResult, UserRole, password, validation},
     services::users::db::ProfilePatch,
 };
 
@@ -387,7 +387,7 @@ impl ChangePasswordRequest {
     /// Returns [`ApiError::BadRequest`] when `new_password` fails the policy.
     #[inline]
     pub fn into_validated(self) -> ApiResult<ValidatedPasswordChange> {
-        common::validate_password_policy(self.new_password.expose_secret())?;
+        password::validate_password_policy(self.new_password.expose_secret())?;
         Ok(ValidatedPasswordChange {
             current_password: self.current_password,
             new_password: self.new_password,
@@ -433,7 +433,7 @@ impl LinkWalletRequest {
     /// Trims and lowercases the address, then validates its Casper shape.
     ///
     /// Runs at the HTTP boundary so a malformed address 400s before any Redis
-    /// nonce lookup happens. Reuses [`common::validate_wallet_address`] so the
+    /// nonce lookup happens. Reuses [`crate::common::validation::validate_wallet_address`] so the
     /// link and wallet-login paths reject identical input the same way.
     ///
     /// # Errors
@@ -443,7 +443,7 @@ impl LinkWalletRequest {
     #[inline]
     pub fn into_validated(self) -> ApiResult<ValidatedWalletLink> {
         let wallet_address = self.wallet_address.trim().to_ascii_lowercase();
-        common::validate_wallet_address(&wallet_address)?;
+        validation::validate_wallet_address(&wallet_address)?;
         Ok(ValidatedWalletLink {
             wallet_address,
             signature: self.signature,

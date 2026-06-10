@@ -77,8 +77,9 @@ async fn register_creates_user_and_logs_in(pool: PgPool) {
     assert_eq!(body["user"]["verification_level"], "none");
 
     // The access JWT decodes and carries verification_level = none.
-    let claims = auth::decode_token(&access_token, &SecretString::from(env.jwt_secret.clone()))
-        .expect("access token decodes");
+    let claims =
+        auth::jwt::decode_token(&access_token, &SecretString::from(env.jwt_secret.clone()))
+            .expect("access token decodes");
     assert_eq!(claims.role, UserRole::Tenant);
     assert_eq!(claims.verification_level, Some(VerificationLevel::None));
 
@@ -276,8 +277,9 @@ async fn password_login_succeeds_with_valid_credentials(pool: PgPool) {
     let body = response.json::<Value>();
     assert_eq!(body["user"]["email"], "login@example.com");
 
-    let claims = auth::decode_token(&access_token, &SecretString::from(env.jwt_secret.clone()))
-        .expect("access token decodes");
+    let claims =
+        auth::jwt::decode_token(&access_token, &SecretString::from(env.jwt_secret.clone()))
+            .expect("access token decodes");
     assert_eq!(claims.role, UserRole::Tenant);
     assert_eq!(claims.verification_level, Some(VerificationLevel::None));
 }

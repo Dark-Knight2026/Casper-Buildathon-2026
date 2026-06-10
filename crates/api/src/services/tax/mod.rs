@@ -10,6 +10,4 @@ pub mod models;
 pub mod routes;
 
 // Re-exports
-pub use handlers::calculate_tax_liability;
 pub use models::{TaxCalculationRequest, TaxCategory, TaxCategoryType, TaxReport};
-pub use routes::router;

@@ -8,5 +8,3 @@ pub mod handlers;
 pub mod models;
 /// Router configuration for ICO endpoints.
 pub mod routes;
-
-pub use routes::router;

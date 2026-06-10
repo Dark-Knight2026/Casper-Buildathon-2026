@@ -64,9 +64,9 @@ pub fn router() -> OpenApiRouter<Arc<AppState>> {
     );
 
     OpenApiRouter::new()
-        .nest("/transactions", transactions::router())
-        .nest("/ico", ico::router())
-        .nest("/vesting", vesting::router())
-        .nest("/staking", staking::router())
+        .nest("/transactions", transactions::routes::router())
+        .nest("/ico", ico::routes::router())
+        .nest("/vesting", vesting::routes::router())
+        .nest("/staking", staking::routes::router())
         .route_layer(GovernorLayer::new(rate_limit))
 }

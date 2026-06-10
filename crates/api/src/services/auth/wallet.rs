@@ -13,11 +13,13 @@ use secrecy::{ExposeSecret, SecretString};
 use sha2::{Digest, Sha256};
 
 use crate::{
-    common::{self, ApiError, ApiResult, AppState, ErrorResponse, UserInfo, UserRole},
+    common::{
+        ApiError, ApiResult, AppState, ErrorResponse, UserInfo, UserRole, crypto, validation,
+    },
     services::{
         auth::{
             self, cookies,
-            db::UserRecord,
+            db::{self, UserRecord},
             jwt,
             models::{LoginRequest, LoginResponse, NonceRequest, NonceResponse},
             refresh,
@@ -63,7 +65,7 @@ pub async fn get_nonce(
     Query(payload): Query<NonceRequest>,
 ) -> ApiResult<Json<NonceResponse>> {
     let wallet = payload.wallet_address.to_ascii_lowercase();
-    common::validate_wallet_address(&wallet)?;
+    validation::validate_wallet_address(&wallet)?;
 
     // Generate a random string (16 characters)
     let random_string: String = rand::rng()
@@ -158,7 +160,7 @@ async fn verify_signature_or_fail(
     signature: &SecretString,
     nonce: &str,
 ) -> ApiResult<()> {
-    let is_valid = common::verify_casper_signature(wallet, signature.expose_secret(), nonce)
+    let is_valid = crypto::verify_casper_signature(wallet, signature.expose_secret(), nonce)
         .map_err(|e| {
             tracing::warn!(
                 event = "login_failed",
@@ -214,7 +216,7 @@ async fn resolve_active_user(
     wallet: &str,
     role: UserRole,
 ) -> ApiResult<UserRecord> {
-    match auth::upsert_user_by_wallet(&state.db, email, wallet, role).await? {
+    match db::upsert_user_by_wallet(&state.db, email, wallet, role).await? {
         auth::UpsertOutcome::Resolved(record) => Ok(record),
         auth::UpsertOutcome::NotActive => {
             tracing::warn!(
@@ -275,7 +277,7 @@ pub async fn login_wallet(
 ) -> ApiResult<(CookieJar, Json<LoginResponse>)> {
     let wallet_address = payload.wallet_address.to_ascii_lowercase();
 
-    common::validate_wallet_address(&wallet_address)?;
+    validation::validate_wallet_address(&wallet_address)?;
     ensure_not_rate_limited(&state, &wallet_address).await?;
     let stored_nonce = consume_nonce_or_fail(&state, &wallet_address).await?;
     verify_signature_or_fail(&state, &wallet_address, &payload.signature, &stored_nonce).await?;
@@ -303,7 +305,7 @@ pub async fn login_wallet(
     // response body needs joined `active_leases_count` and the cached
     // wallet_address that the post-upsert trigger fills in, so reload
     // the full profile here.
-    let profile = users::fetch_user_profile(&state.db, user_record.id).await?;
+    let profile = users::db::fetch_user_profile(&state.db, user_record.id).await?;
 
     let jar = cookies::build_session_cookies(
         encoded.token,

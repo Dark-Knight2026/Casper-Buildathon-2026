@@ -269,7 +269,7 @@ async fn unstaked_initiated_sets_unbonding(pool: PgPool) {
 
     assert_eq!(pos.0, "6000", "10000 - 4000 = 6000");
     assert_eq!(pos.1, "4000");
-    let expected_ts = chrono::DateTime::from_timestamp_millis(1_700_172_800_000);
+    let expected_ts = DateTime::from_timestamp_millis(1_700_172_800_000);
     assert_eq!(pos.2, expected_ts);
 }
 
@@ -322,7 +322,7 @@ async fn unstaked_initiated_without_prior_staked(pool: PgPool) {
 
     assert_eq!(pos.0, "0", "no prior stake - staked_amount must be zero");
     assert_eq!(pos.1, "5000", "unbonding delta must be preserved");
-    let expected_ts = chrono::DateTime::from_timestamp_millis(1_700_172_800_000);
+    let expected_ts = DateTime::from_timestamp_millis(1_700_172_800_000);
     assert_eq!(pos.2, expected_ts);
 }
 
@@ -922,7 +922,7 @@ async fn unstaked_initiated_idempotent(pool: PgPool) {
         pos.1, "4000",
         "duplicate UnstakedInitiated must not double-increment unbonding_amount"
     );
-    let expected_ts = chrono::DateTime::from_timestamp_millis(1_700_172_800_000);
+    let expected_ts = DateTime::from_timestamp_millis(1_700_172_800_000);
     assert_eq!(pos.2, expected_ts);
 
     let event_count = sqlx::query_scalar::<_, i64>(

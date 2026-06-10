@@ -6,7 +6,7 @@
 //! the same input.
 //!
 //! The destructive happy-path test also locks down every side effect of
-//! [`api::services::users::soft_delete_user`] (`wallet_connections` wiped,
+//! [`api::services::users::db::soft_delete_user`] (`wallet_connections` wiped,
 //! cached `users.wallet_address` zeroed by trigger, email rewritten to
 //! the placeholder, refresh tokens revoked, audit row written) so a
 //! regression in any one statement is caught with a single failed
@@ -400,7 +400,7 @@ async fn delete_me_with_active_lease_returns_409(pool: PgPool) {
 }
 
 /// Active-lease guard: when a lease exists at the moment
-/// [`api::services::users::soft_delete_user`] is invoked, the function
+/// [`api::services::users::db::soft_delete_user`] is invoked, the function
 /// must refuse the deletion via [`api::services::users::SoftDeleteOutcome::LeaseBlocking`]
 /// and leave `users.deleted_at` untouched.
 ///
@@ -428,7 +428,7 @@ async fn delete_me_concurrent_lease_does_not_orphan_user(pool: PgPool) {
 
     common::seed_active_lease_as_landlord(&pool, user_id).await;
 
-    let outcome = api::services::users::soft_delete_user(&pool, user_id)
+    let outcome = api::services::users::db::soft_delete_user(&pool, user_id)
         .await
         .expect("soft_delete_user must not error when the lease gate trips");
     assert_eq!(

@@ -12,6 +12,4 @@ pub mod models;
 pub mod routes;
 
 // Re-exports
-pub use handlers::health_check;
 pub use models::ConnectionStatus;
-pub use routes::router;

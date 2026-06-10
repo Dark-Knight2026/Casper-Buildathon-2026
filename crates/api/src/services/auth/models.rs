@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::common::{self, ApiError, ApiResult, UserInfo, UserRole, VerificationLevel};
+use crate::common::{ApiError, ApiResult, UserInfo, UserRole, VerificationLevel, password};
 
 /// RFC 5321 hard limit on the full email address length.
 ///
@@ -128,7 +128,7 @@ impl RegisterRequest {
     ///
     /// Runs at the HTTP boundary so malformed input is rejected before any
     /// hashing or SQL happens: email is trimmed/lowercased and RFC-checked,
-    /// the password is run through [`common::validate_password_policy`], the
+    /// the password is run through [`crate::common::password::validate_password_policy`], the
     /// role defaults to `tenant` and must be self-registerable, and the names
     /// are trimmed and required to be non-empty.
     ///
@@ -151,7 +151,7 @@ impl RegisterRequest {
             ));
         }
 
-        common::validate_password_policy(self.password.expose_secret())?;
+        password::validate_password_policy(self.password.expose_secret())?;
 
         if !self.role.is_self_registerable() {
             return Err(ApiError::BadRequest(
@@ -270,7 +270,7 @@ impl ResetPasswordRequest {
     /// Returns [`ApiError::BadRequest`] when the new password fails the policy.
     #[inline]
     pub fn into_validated(self) -> ApiResult<ValidatedPasswordReset> {
-        common::validate_password_policy(self.new_password.expose_secret())?;
+        password::validate_password_policy(self.new_password.expose_secret())?;
         Ok(ValidatedPasswordReset {
             token: self.token.trim().to_owned(),
             new_password: self.new_password,

@@ -9,9 +9,9 @@ use axum::{
 use rust_decimal::{Decimal, prelude::ToPrimitive};
 
 use crate::{
-    common::{ApiError, ApiResult, AppState, ErrorResponse},
+    common::{ApiError, ApiResult, AppState, ErrorResponse, validation},
     onchain::{
-        common::{self, TOKEN_DECIMALS},
+        common::TOKEN_DECIMALS,
         ico::{
             db,
             models::{IcoBalanceResponse, IcoProgressResponse},
@@ -78,7 +78,7 @@ pub async fn get_ico_balance(
     State(state): State<Arc<AppState>>,
     Path(address): Path<String>,
 ) -> ApiResult<Json<IcoBalanceResponse>> {
-    let address = common::validate_account(&address)?;
+    let address = validation::validate_account(&address)?;
 
     let snapshot = db::fetch_balance_snapshot(&state.db, &address).await?;
 

@@ -31,30 +31,19 @@ pub mod verify;
 pub mod wallet;
 
 // Re-exports
-pub use cookies::{
-    ACCESS_TOKEN_COOKIE, REFRESH_COOKIE_PATH, REFRESH_TOKEN_COOKIE, build_access_cookie,
-    build_refresh_cookie, build_session_cookies,
-};
+pub use cookies::{ACCESS_TOKEN_COOKIE, REFRESH_COOKIE_PATH, REFRESH_TOKEN_COOKIE};
 pub use db::{
     ActiveSession, LinkWalletOutcome, PasswordLoginRecord, RegisterOutcome, UpsertOutcome,
-    add_wallet_connection, create_password_user, find_password_login_by_email,
-    insert_refresh_token, link_wallet_to_user, list_active_sessions, revoke_all_sessions_for_user,
-    revoke_session_by_id, update_last_login_at, upsert_user_by_wallet,
 };
 pub use extractors::{
     AdminRole, AgentRole, AuthGateError, EmailVerified, IdentityVerified, LandlordRole, RoleMarker,
     RoleUser, TenantRole, VerificationMarker, VerifiedUser,
 };
-pub use jwt::{ACCESS_TOKEN_TTL, EncodedAccessToken, decode_token, encode_access_token};
+pub use jwt::{ACCESS_TOKEN_TTL, EncodedAccessToken};
 pub use middleware::{AuthError, AuthUser};
 pub use models::{
     LoginRequest, LoginResponse, NonceRequest, NonceResponse, RegisterRequest,
     RevokeAllSessionsRequest, RevokeAllSessionsResponse, RoleRequiredResponse, SessionResponse,
     VerificationRequiredResponse, VerifyConfirmRequest, VerifySendResponse,
 };
-pub use password::register;
-pub use refresh::{IssuedRefreshToken, REFRESH_TOKEN_TTL, issue_login_refresh_token, rotate};
-pub use routes::router;
-pub use sessions::{get_sessions, revoke_all_sessions, revoke_session};
-pub use verify::{confirm_verify_email, resend_verify_email, send_verify_email};
-pub use wallet::{get_nonce, login_wallet};
+pub use refresh::{IssuedRefreshToken, REFRESH_TOKEN_TTL};
