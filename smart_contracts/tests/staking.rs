@@ -928,3 +928,69 @@ fn test_claim_releases_vesting_lock_for_remaining_free_stake() {
     assert_eq!(staking_info.staked_amount, U256::zero());
     assert_eq!(staking_info.unbonding_amount, free_amount);
 }
+
+// =============================================================================
+// sweep_dust() 
+// =============================================================================
+
+#[test]
+fn test_sweep_dust_should_sweep_trapped_dust() {
+    // Basic/minimal test for H-9: use amounts that cause truncation in deposit math
+    // (even 1 staker with stake=3, reward=1 leads to pending=0, dust=1 trapped).
+    let mut ctx = setup(odra_test::env());
+    let owner = ctx.users.owner;
+    let recipient = ctx.users.bob;
+    let alice = ctx.users.alice;
+    let tiny_stake = U256::from(3u64);
+    let tiny_reward = U256::from(1u64);
+    let staking_contract = ctx.staking.address();
+
+    // Fund/stake tiny amount for alice (1 staker)
+    fund_and_approve(&mut ctx, alice, tiny_stake);
+    ctx.env.set_caller(alice);
+    ctx.staking.stake_for(alice, tiny_stake);
+
+    // Owner approves and deposits tiny reward (will truncate to 0 pending)
+    ctx.env.set_caller(owner);
+    ctx.big_coin.approve(&staking_contract, &tiny_reward);
+    ctx.staking.deposit_rewards(tiny_reward);
+
+    // With these amounts, get_pending should be 0 (truncation), but contract bal increased
+    assert_eq!(ctx.staking.get_pending_rewards(ctx.users.alice), U256::zero());
+    let bal_after_deposit = ctx.big_coin.balance_of(&staking_contract);
+    // At minimum, the reward unit is now in contract but not claimable
+    assert!(bal_after_deposit > tiny_stake);
+
+    // Non-owner cannot sweep
+    ctx.env.set_caller(ctx.users.alice);
+    assert_eq!(
+        ctx.staking.try_sweep_dust(recipient).unwrap_err(),
+        AccessError::CallerNotTheOwner.into(),
+        "Should revert when called by non-owner"
+    );
+
+    // Owner sweeps the dust to recipient
+    ctx.env.set_caller(owner);
+    let prev_recipient_bal = ctx.big_coin.balance_of(&recipient);
+    ctx.staking.sweep_dust(recipient);
+
+    let new_recipient_bal = ctx.big_coin.balance_of(&recipient);
+    let bal_after_sweep = ctx.big_coin.balance_of(&staking_contract);
+
+    assert_eq!(new_recipient_bal, prev_recipient_bal + tiny_reward);
+    // After sweep, only the staked principal should remain (dust recovered)
+    assert_eq!(bal_after_sweep, tiny_stake);
+
+    // Event emitted
+    assert!(ctx.env.emitted_event(
+        &ctx.staking,
+        DustSwept {
+            recipient,
+            amount: tiny_reward,
+        }
+    ));
+
+    // Second sweep does nothing (no more dust)
+    ctx.staking.sweep_dust(recipient);
+    assert_eq!(ctx.big_coin.balance_of(&recipient), new_recipient_bal);
+}

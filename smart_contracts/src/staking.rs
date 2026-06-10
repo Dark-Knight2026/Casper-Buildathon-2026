@@ -6,7 +6,7 @@ use crate::{
     staking::{
         errors::Error,
         events::{
-            BigCoinSet, RewardsClaimed, RewardsDeposited, Staked, StakerSnapshot,
+            BigCoinSet, DustSwept, RewardsClaimed, RewardsDeposited, Staked, StakerSnapshot,
             UnbondedWithdrawn, UnstakedInitiated, VestingSet,
         },
     },
@@ -72,6 +72,12 @@ pub mod events {
     }
 
     #[odra::event]
+    pub struct DustSwept {
+        pub recipient: Address,
+        pub amount: U256,
+    }
+
+    #[odra::event]
     pub struct StakerSnapshot {
         pub staker: Address,
         pub staked_amount: U256,
@@ -133,6 +139,7 @@ pub mod errors {
     StakerSnapshot,
     BigCoinSet,
     VestingSet,
+    DustSwept,
   ]
 )]
 pub struct Staking {
@@ -159,6 +166,7 @@ pub struct Staking {
     /// Global reward accumulator — cumulative rewards per staked token.
     /// This value is updated whenever newly available rewards are deposited.
     reward_per_token_stored: Var<U256>,
+    unclaimed_rewards: Var<U256>,
     initialized: Var<bool>,
 }
 
@@ -378,11 +386,44 @@ impl Staking {
 
         self.reward_per_token_stored.set(current + increase);
 
+        // Track the portion of this deposit that the accumulator math allocates to
+        // stakers (increase * total / precision). This is <= amount due to truncation
+        // in deposit_rewards. The difference (plus any secondary trunc in update_reward_for)
+        // is dust that can be swept via sweep_dust. (H-9)
+        let newly_unclaimed = increase * total_staked / Self::precision();
+        let cur_unclaimed = self.unclaimed_rewards.get_or_default();
+        self.unclaimed_rewards.set(cur_unclaimed + newly_unclaimed);
+
         self.env().emit_event(RewardsDeposited {
             caller,
             amount,
             reward_per_token_stored: self.reward_per_token_stored.get_or_default(),
         });
+    }
+
+    /// Allows the owner to recover BIG dust that has accumulated in the contract
+    /// due to truncation in the reward accumulator math (deposit_rewards and
+    /// update_reward_for / get_pending_rewards). Only the excess over
+    /// (total_staked + unclaimed_rewards) is transferred.
+    pub fn sweep_dust(&mut self, recipient: Address) {
+        self.assert_owner();
+
+        let self_addr = self.env().self_address();
+        let balance =
+            Cep18ContractRef::new(self.env(), *self.big_coin.address()).balance_of(&self_addr);
+        let staked = self.total_staked.get_or_default();
+        let unclaimed = self.unclaimed_rewards.get_or_default();
+        let reserved = staked + unclaimed;
+
+        if balance > reserved {
+            let dust = balance - reserved;
+            self.big_coin.transfer(&recipient, &dust);
+
+            self.env().emit_event(DustSwept {
+                recipient,
+                amount: dust,
+            });
+        }
     }
 
     /// Claims all pending BIG token rewards accrued by the caller.
@@ -405,6 +446,12 @@ impl Staking {
 
         staker_info.pending_rewards = U256::zero();
         self.stakers.set(&staker, staker_info);
+
+        // Reduce unclaimed accounting by the paid amount. Combined with the add in
+        // deposit_rewards (using the first truncation's allocated amount), this lets
+        // sweep_dust compute excess = balance - total_staked - unclaimed as the trapped dust.
+        let cur_unclaimed = self.unclaimed_rewards.get_or_default();
+        self.unclaimed_rewards.set(cur_unclaimed - rewards);
 
         self.big_coin.transfer(&staker, &rewards);
 
