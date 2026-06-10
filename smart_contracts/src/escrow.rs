@@ -55,10 +55,10 @@ pub mod types {
         /// Base rent amount already paid.
         /// @dev Used for partial lease payments.
         pub rent_paid: U256,
-        /// Optional property manager that receives a percentage of base rent.
+        /// Optional property manager that receives a percentage of gross base rent.
         pub property_manager: Option<Address>,
         /// Property manager rent share in basis points.
-        /// @dev 10_000 = 100%.
+        /// @dev 10_000 = 100%. Applied to gross rent paid (PM not diluted by protocol fee).
         pub property_manager_bps: u32,
         /// Timestamp after which the invoice can no longer be paid.
         pub deadline: u64,
@@ -70,14 +70,15 @@ pub mod types {
     pub struct CreateLeaseInvoiceParams {
         /// Tenant wallet responsible for paying rent.
         pub tenant: Address,
-        /// Landlord wallet receiving rent after protocol fee and manager split.
+        /// Landlord wallet receiving rent after protocol fee (of gross) and manager split.
         pub landlord: Address,
         /// Rent amount and currency for this invoice.
         pub rent: CurrencyAmount,
-        /// Optional property manager receiving a perentage of rent.
+        /// Optional property manager receiving a percentage of gross rent.
+        /// @dev BPS applied to gross tenant payment (before protocol fee); see M-1.
         pub property_manager: Option<Address>,
         /// Property manager rent share in basis points.
-        /// @dev 10_000 = 100%
+        /// @dev 10_000 = 100%. Applied to gross (PM not diluted by the 2% tx fee).
         pub property_manager_bps: u32,
         /// Timestamp after which the invoice can longer be paid.
         pub deadline: u64,
@@ -727,8 +728,6 @@ impl Escrow {
         }
 
         let protocol_fee = self.calculate_bps_amount(amount, LEASEFI_TRANSACTION_FEE_BPS);
-        let distributable_rent = amount - protocol_fee;
-
         let currency = *invoice.amount_due.currency();
 
         self.transfer_payment(
@@ -745,7 +744,9 @@ impl Escrow {
         // (40% INCENTIVES_REWARDS_BPS stays as reserves). deposit_rewards() is the on-chain
         // step that actually delivers BIG to the staking reward pool.
 
-        self.distribute_rent(invoice, currency, distributable_rent);
+        // Pass gross amount so PM BPS is applied to gross rent (not net after fee).
+        // Landlord receives gross - fee - PM_share (absorbs the fee; PM no longer diluted).
+        self.distribute_rent(invoice, currency, amount, protocol_fee);
 
         invoice.rent_paid += amount;
         invoice.is_paid = self.remaining_rent(invoice).is_zero();
@@ -770,14 +771,21 @@ impl Escrow {
     // Transfers
     // =============================================================================
 
-    fn distribute_rent(&mut self, invoice: &Invoice, currency: Option<Address>, rent_amount: U256) {
-        if rent_amount.is_zero() {
+    fn distribute_rent(
+        &mut self,
+        invoice: &Invoice,
+        currency: Option<Address>,
+        gross_rent: U256,
+        protocol_fee: U256,
+    ) {
+        if gross_rent.is_zero() {
             return;
         }
 
         let property_manager_amount =
-            self.calculate_bps_amount(rent_amount, invoice.property_manager_bps);
-        let landlord_amount = rent_amount - property_manager_amount;
+            self.calculate_bps_amount(gross_rent, invoice.property_manager_bps);
+        // PM share of *gross* (per M-1); landlord gets remainder after gross PM share + gross fee.
+        let landlord_amount = gross_rent - property_manager_amount - protocol_fee;
 
         if let Some(property_manager) = invoice.property_manager {
             self.transfer_payment(

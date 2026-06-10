@@ -11,7 +11,9 @@ use leasefi_contracts::common::CurrencyAmount;
 use leasefi_contracts::constants::COMPLIANCE_POLICY_UPDATE_TIMELOCK;
 use leasefi_contracts::escrow::{
     errors::Error,
-    events::{InvoiceCreated, InvoicePaid, InvoicePaymentApplied, LeaseSet, MinDeadlineSet, TreasurySet},
+    events::{
+        InvoiceCreated, InvoicePaid, InvoicePaymentApplied, LeaseSet, MinDeadlineSet, TreasurySet,
+    },
     types::{CreateLeaseInvoiceParams, Invoice, InvoiceKind},
     Escrow, EscrowHostRef, EscrowInitArgs,
 };
@@ -267,7 +269,9 @@ fn test_set_lease_should_set_lease_properly() {
         "Lease should not change until timelock elapses"
     );
 
-    test_data.env.advance_block_time(COMPLIANCE_POLICY_UPDATE_TIMELOCK + 1);
+    test_data
+        .env
+        .advance_block_time(COMPLIANCE_POLICY_UPDATE_TIMELOCK + 1);
     test_data.escrow.apply_pending_lease();
 
     assert_eq!(
@@ -276,10 +280,9 @@ fn test_set_lease_should_set_lease_properly() {
         "Invalid Lease contract address"
     );
 
-    assert!(test_data.env.emitted_event(
-        &test_data.escrow,
-        LeaseSet { lease }
-    ));
+    assert!(test_data
+        .env
+        .emitted_event(&test_data.escrow, LeaseSet { lease }));
 }
 
 // =============================================================================
@@ -316,7 +319,9 @@ fn test_set_treasury_should_set_treasury_properly() {
         "Treasury should not change until timelock elapses"
     );
 
-    test_data.env.advance_block_time(COMPLIANCE_POLICY_UPDATE_TIMELOCK + 1);
+    test_data
+        .env
+        .advance_block_time(COMPLIANCE_POLICY_UPDATE_TIMELOCK + 1);
     test_data.escrow.apply_pending_treasury();
 
     assert_eq!(
@@ -325,10 +330,9 @@ fn test_set_treasury_should_set_treasury_properly() {
         "Invalid Treasury contract address"
     );
 
-    assert!(test_data.env.emitted_event(
-        &test_data.escrow,
-        TreasurySet { treasury }
-    ));
+    assert!(test_data
+        .env
+        .emitted_event(&test_data.escrow, TreasurySet { treasury }));
 }
 
 // =============================================================================
@@ -649,6 +653,61 @@ fn test_pay_invoice_should_pay_invoice_in_native_token_properly() {
     assert!(
         test_data.escrow.get_invoice_by_id(invoice_id).is_paid,
         "Invoice should be marked as paid after successful payment"
+    );
+}
+
+// =============================================================================
+// PM BPS of gross (not net after fee)
+// =============================================================================
+
+#[test]
+fn test_pay_invoice_should_give_pm_bps_of_gross_rent() {
+    // PM BPS applied to gross payment amount.
+    // (Previously applied to post-fee net, causing silent dilution e.g. 30% PM got 29.4%.)
+    // Landlord absorbs the fee in net. Total always sums to gross.
+    let mut test_data = setup(odra_test::env());
+    let tenant = test_data.env.get_account(1);
+    let landlord = test_data.env.get_account(2);
+    let pm = test_data.env.get_account(3);
+    let gross = U256::from(10_000u64);
+    let pm_bps = 3_000u32; // 30%
+
+    test_data
+        .env
+        .set_caller(test_data.escrow.get_lease_contract_address());
+    let invoice_id = test_data
+        .escrow
+        .create_lease_invoice(CreateLeaseInvoiceParams {
+            tenant,
+            landlord,
+            rent: CurrencyAmount::new(None, gross),
+            property_manager: Some(pm),
+            property_manager_bps: pm_bps,
+            deadline: test_data.env.block_time() + 10_000,
+        });
+
+    let prev_pm = test_data.env.balance_of(&pm);
+    let prev_land = test_data.env.balance_of(&landlord);
+
+    test_data.env.set_caller(tenant);
+    test_data
+        .escrow
+        .with_tokens(gross.to_u512())
+        .pay_invoice(invoice_id, gross);
+
+    let fee = gross * U256::from(200u32) / U256::from(10_000u32);
+    let expected_pm = gross * U256::from(pm_bps) / U256::from(10_000u32);
+    let expected_land = gross - fee - expected_pm;
+
+    assert_eq!(
+        test_data.env.balance_of(&pm),
+        prev_pm + expected_pm.to_u512(),
+        "PM must receive exact BPS of gross (no 2% dilution)"
+    );
+    assert_eq!(
+        test_data.env.balance_of(&landlord),
+        prev_land + expected_land.to_u512(),
+        "Landlord receives gross minus fee minus PM share"
     );
 }
 

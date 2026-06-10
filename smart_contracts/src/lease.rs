@@ -68,8 +68,8 @@ pub mod types {
 
     #[odra::odra_type]
     pub struct RentDistributionTerms {
-        /// Optional property manager that receives a percentage of the base rent
-        /// @dev This applies to the rent, not security deposits or equity top-ups
+        /// Optional property manager that receives a percentage of the base rent (of gross)
+        /// @dev This applies to the rent, not security deposits or equity top-ups. BPS of gross; (PM not diluted by 2% tx fee).
         pub property_manager: Option<Address>,
         /// Property manager rent share in basis points
         /// @dev 10_000 = 100%. Must be zero when `property_manager` is `None`.
@@ -282,7 +282,8 @@ impl Lease {
         self.assert_owner();
         self.property_registry.set(property_registry);
 
-        self.env().emit_event(PropertyRegistrySet { property_registry });
+        self.env()
+            .emit_event(PropertyRegistrySet { property_registry });
     }
 
     // =========================================================================
