@@ -109,15 +109,25 @@ impl ICO {
             self.validate_ico_schedule(&ico_schedule, None);
         }
 
-        let owner = self.get_owner();
+        let caller = self.env().caller();
         let self_address = self.env().self_address();
         let sale_amount = ico_schedule.sale_amount;
 
         self.ico_schedules.set(&ico_id, ico_schedule.clone().into());
         self.ico_schedules_count.set(ico_id + 1);
 
+        // Funding requirement: The caller (who must be the current owner of this ICO contract,
+        // thanks to the assert_owner() above) must personally hold (or have approved) the full
+        // sale_amount of BIG tokens. This contract pulls via transfer_from(caller, self, sale_amount).
+        //
+        // If ownership of the *ICO contract* is later transferred to a different address that
+        // does not hold/approve sufficient BIG, future add_ico_schedule calls from the new owner
+        // will fail with insufficient balance.
+        //
+        // The deploy script (which uses new_owner = env.caller()) ensures the final owner retains
+        // the remaining BIG supply after the initial schedule(s) are created.
         self.big_coin
-            .transfer_from(&owner, &self_address, &sale_amount);
+            .transfer_from(&caller, &self_address, &sale_amount);
 
         self.env().emit_event(ICOScheduleAdded {
             id: ico_id,
