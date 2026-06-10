@@ -364,10 +364,16 @@ impl ICO {
         *self.vesting.address()
     }
 
+    /// renounce_ownership is disabled to prevent a single transaction from
+    /// permanently removing all admin controls (which would brick ICO
+    /// schedule management, currency support, etc.).
+    pub fn renounce_ownership(&mut self) {
+        self.env().revert(Error::RenounceOwnershipNotAllowed);
+    }
+
     delegate! {
         to self.ownable {
             fn transfer_ownership(&mut self, new_owner: &Address);
-            fn renounce_ownership(&mut self);
             fn get_owner(&self) -> Address;
         }
     }
@@ -514,6 +520,7 @@ pub mod errors {
         InvalidPurchaseAmount = 512,
         InvalidICOScheduleVestingDuration = 513,
         ICOScheduleCliffExceedsVestingDuration = 514,
+        RenounceOwnershipNotAllowed = 515,
     }
 }
 

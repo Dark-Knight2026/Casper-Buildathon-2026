@@ -354,10 +354,16 @@ impl Vesting {
     // Ownable delegation
     // =========================================================================
 
+    /// renounce_ownership is disabled to prevent a single transaction from
+    /// permanently removing all admin controls (which would brick vesting
+    /// schedule management, etc.).
+    pub fn renounce_ownership(&mut self) {
+        self.env().revert(Error::RenounceOwnershipNotAllowed);
+    }
+
     delegate! {
       to self.ownable {
         fn transfer_ownership(&mut self, new_owner: &Address);
-        fn renounce_ownership(&mut self);
         fn get_owner(&self) -> Address;
       }
     }
