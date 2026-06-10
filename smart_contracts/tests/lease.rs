@@ -17,8 +17,7 @@ use leasefi_contracts::lease::{
     errors::Error,
     events::{
         EquityEligibilityGranted, EquityEligibilityRevoked, EscrowSet, LeaseAgreementCancelled,
-        LeaseAgreementCreated, LeaseAgreementFinished, LeaseAgreementProlonged, NftSet,
-        PropertyRegistrySet, RolesSet,
+        LeaseAgreementCreated, LeaseAgreementFinished, LeaseAgreementProlonged, NftSet, RolesSet,
     },
     types::{CreateLeaseAgreementParams, LeaseAgreement, RentDistributionTerms},
     Lease, LeaseHostRef, LeaseInitArgs,
@@ -296,10 +295,9 @@ fn test_set_roles_should_set_roles_properly() {
         "Invalid Roles contract address"
     );
 
-    assert!(test_data.env.emitted_event(
-        &test_data.lease,
-        RolesSet { roles }
-    ));
+    assert!(test_data
+        .env
+        .emitted_event(&test_data.lease, RolesSet { roles }));
 }
 
 // =============================================================================
@@ -334,10 +332,9 @@ fn test_set_escrow_should_set_escrow_properly() {
         "Invalid Escrow contract address"
     );
 
-    assert!(test_data.env.emitted_event(
-        &test_data.lease,
-        EscrowSet { escrow }
-    ));
+    assert!(test_data
+        .env
+        .emitted_event(&test_data.lease, EscrowSet { escrow }));
 }
 
 // =============================================================================
@@ -372,10 +369,9 @@ fn test_set_nft_should_set_nft_properly() {
         "Invalid NFT contract address"
     );
 
-    assert!(test_data.env.emitted_event(
-        &test_data.lease,
-        NftSet { nft }
-    ));
+    assert!(test_data
+        .env
+        .emitted_event(&test_data.lease, NftSet { nft }));
 }
 
 // =============================================================================
