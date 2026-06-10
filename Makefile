@@ -43,22 +43,33 @@ lint: ## Run clippy in strict mode
 	@echo "[*] Running clippy..."
 	@cargo clippy --workspace --all-targets --all-features -- -D warnings
 
-openapi: ## Check all ToSchema types are registered in openapi.rs
+openapi: ## Check all project ToSchema types are registered in openapi.rs
 	@echo "[*] Checking OpenAPI schema completeness..."
-	@missing=0; \
-	for f in $$(find crates/api/src -name 'models.rs' -type f | sort); do \
+	@missing=0; warned=0; errors=""; warnings=""; \
+	for f in $$(find crates/api/src -name '*.rs' -type f | sort); do \
+		case "$$f" in */models.rs) in_models=1 ;; *) in_models=0 ;; esac; \
 		for name in $$(grep -A5 'derive.*ToSchema' "$$f" \
 			| grep -oE 'pub (struct|enum) [A-Za-z0-9_]+' \
 			| awk '{print $$3}'); do \
-			if ! grep -q "$$name" crates/api/src/openapi.rs; then \
-				echo "  $${f#crates/api/src/}: $$name"; \
+			grep -q "$$name" crates/api/src/openapi.rs && continue; \
+			if [ "$$in_models" -eq 1 ]; then \
+				errors="$$errors    $${f#crates/api/src/}: $$name"$$'\n'; \
 				missing=$$((missing + 1)); \
+			else \
+				warnings="$$warnings    $${f#crates/api/src/}: $$name"$$'\n'; \
+				warned=$$((warned + 1)); \
 			fi; \
 		done; \
 	done; \
+	if [ "$$warned" -gt 0 ]; then \
+		echo ""; \
+		echo "[~] $$warned ToSchema type(s) outside models.rs, not registered (warning):"; \
+		printf '%s' "$$warnings"; \
+	fi; \
 	if [ "$$missing" -gt 0 ]; then \
 		echo ""; \
-		echo "[!] $$missing type(s) with ToSchema not found in openapi.rs"; \
+		echo "[!] $$missing type(s) in models.rs with ToSchema not found in openapi.rs:"; \
+		printf '%s' "$$errors"; \
 		exit 1; \
 	fi
 
