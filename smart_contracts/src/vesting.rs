@@ -88,6 +88,7 @@ pub mod errors {
         CallerNotBeneficiary = 706,
         NothingToClaim = 707,
         ClaimBlockedByActiveUnbonding = 708,
+        RenounceOwnershipNotAllowed = 709,
     }
 }
 

@@ -194,6 +194,7 @@ pub mod errors {
         SecurityDepositChargeTooHigh = 317,
         CompliancePolicyUpdateTimelockNotElapsed = 318,
         NoPendingCompliancePolicy = 319,
+        RenounceOwnershipNotAllowed = 320,
     }
 }
 
@@ -558,10 +559,16 @@ impl Escrow {
     // Ownable delegation
     // =========================================================================
 
+    /// renounce_ownership is disabled to prevent a single transaction from
+    /// permanently removing all admin controls (which would brick fee routing,
+    /// security deposit custody, etc. with active funds at stake).
+    pub fn renounce_ownership(&mut self) {
+        self.env().revert(Error::RenounceOwnershipNotAllowed);
+    }
+
     delegate! {
         to self.ownable {
             fn transfer_ownership(&mut self, new_owner: &Address);
-            fn renounce_ownership(&mut self);
             fn get_owner(&self) -> Address;
         }
     }

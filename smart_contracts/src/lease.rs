@@ -173,6 +173,7 @@ pub mod errors {
         InvalidPropertyManager = 412,
         LeaseAlreadyFinalized = 413,
         TenantAlreadyEquityEligible = 414,
+        RenounceOwnershipNotAllowed = 415,
     }
 }
 
@@ -659,10 +660,16 @@ impl Lease {
     // Ownable delegation
     // =========================================================================
 
+    /// renounce_ownership is disabled to prevent a single transaction from
+    /// permanently removing all admin controls (which would brick lease
+    /// management, equity eligibility, etc.).
+    pub fn renounce_ownership(&mut self) {
+        self.env().revert(Error::RenounceOwnershipNotAllowed);
+    }
+
     delegate! {
         to self.ownable {
             fn transfer_ownership(&mut self, new_owner: &Address);
-            fn renounce_ownership(&mut self);
             fn get_owner(&self) -> Address;
         }
     }
