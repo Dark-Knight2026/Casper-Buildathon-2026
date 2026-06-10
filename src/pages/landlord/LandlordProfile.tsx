@@ -32,6 +32,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useRefetchOnFocus } from '@/hooks/useRefetchOnFocus';
 import { RoleSwitchDialog } from '@/components/profile/RoleSwitchDialog';
 import { EmailVerificationCard } from '@/components/profile/EmailVerificationCard';
+import { WalletSection } from '@/components/profile/WalletSection';
 import { ChangeEmailDialog } from '@/components/profile/ChangeEmailDialog';
 import { uploadAvatar } from '@/services/userProfileService';
 import { ApiError } from '@/lib/api-client';
@@ -224,14 +225,16 @@ export function LandlordProfile() {
         <p className="text-muted-foreground">Manage your account information</p>
       </div>
 
-      <div className="mb-6">
+      <div className="mb-6 space-y-6">
         <EmailVerificationCard />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left column — overview */}
-        <div className="lg:col-span-1 space-y-6">
-          <Card>
+        {/* Left column — overview. flex-col so the avatar card can grow
+            (flex-1) to fill the column, which the grid stretches to the right
+            column's height — keeping the two columns bottom-aligned. */}
+        <div className="lg:col-span-1 flex flex-col gap-6">
+          <Card className="flex-1">
             <CardContent className="pt-6 space-y-4">
               <div className="flex flex-col items-center">
                 {(() => {
@@ -506,38 +509,41 @@ export function LandlordProfile() {
             currentRole={authProfile?.role}
           />
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Email Address</CardTitle>
-              <CardDescription>Changing email requires verification</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Mobile: stacked column, right-aligned, email wraps. ≥sm:
-                  row (email left, button right, single line). Mirrors
-                  TenantProfile so layouts stay parallel. */}
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-                <div className="flex items-start gap-3 min-w-0 sm:items-center">
-                  <Mail className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5 sm:mt-0" />
-                  <p className="text-sm text-foreground min-w-0 wrap-break-word text-left">
-                    {authProfile?.email ?? ''}
-                  </p>
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setChangeEmailOpen(true)}
-                >
-                  Change email
-                </Button>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                A confirmation link will be sent to your new email address.
-              </p>
-            </CardContent>
-          </Card>
         </div>
       </div>
-
+      <div className="mt-6 space-y-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Email Address</CardTitle>
+            <CardDescription>Changing email requires verification</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Mobile: stacked column, right-aligned, email wraps. ≥sm:
+                row (email left, button right, single line). Mirrors
+                TenantProfile so layouts stay parallel. */}
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+              <div className="flex items-start gap-3 min-w-0 sm:items-center">
+                <Mail className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5 sm:mt-0" />
+                <p className="text-sm text-foreground min-w-0 wrap-break-word text-left">
+                  {authProfile?.email ?? ''}
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setChangeEmailOpen(true)}
+              >
+                Change email
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              A confirmation link will be sent to your new email address.
+            </p>
+          </CardContent>
+        </Card>
+        <WalletSection />
+      </div>
+      
       <ChangeEmailDialog
         open={changeEmailOpen}
         onOpenChange={setChangeEmailOpen}

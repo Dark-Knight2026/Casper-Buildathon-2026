@@ -19,6 +19,7 @@ import { useTenantPreferences } from '@/hooks/useTenantPreferences';
 import { TenantPreferencesDialog } from '@/components/tenant/TenantPreferencesDialog';
 import { RoleSwitchDialog } from '@/components/profile/RoleSwitchDialog';
 import { EmailVerificationCard } from '@/components/profile/EmailVerificationCard';
+import { WalletSection } from '@/components/profile/WalletSection';
 import { ChangeEmailDialog } from '@/components/profile/ChangeEmailDialog';
 import { countActivePreferences, ALL_MATCH_CATEGORIES } from '@/types/tenantPreferences';
 import { uploadAvatar } from '@/services/userProfileService';
@@ -378,14 +379,6 @@ export function TenantProfile() {
                   </Button>
                 </div>
               </div>
-              {authProfile?.walletAddress && (
-                <div className="space-y-1">
-                  <p className="text-sm text-muted-foreground">Wallet</p>
-                  <p className="text-xs font-mono text-foreground break-all leading-relaxed select-all">
-                    {authProfile.walletAddress}
-                  </p>
-                </div>
-              )}
             </CardContent>
           </Card>
         </div>
@@ -515,7 +508,12 @@ export function TenantProfile() {
             currentRole={authProfile?.role}
           />
 
-          {/* Email — separate verification flow */}
+        </div>
+      </div>
+
+      {/* Wallet linking — full-width card under the grid (last card). */}
+      <div className="mt-6 space-y-6">
+                  {/* Email — separate verification flow */}
           <Card>
             <CardHeader>
               <CardTitle>Email Address</CardTitle>
@@ -544,8 +542,7 @@ export function TenantProfile() {
               </p>
             </CardContent>
           </Card>
-
-        </div>
+        <WalletSection />
       </div>
 
       <ChangeEmailDialog

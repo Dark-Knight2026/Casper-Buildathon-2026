@@ -1,22 +1,35 @@
 import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { SOCIAL_PROVIDERS } from './constants';
+import { WALLET_PROVIDERS, type ProviderDef } from './constants';
 
 interface ProviderListProps {
   connectingProvider: string | null;
   onConnect: (providerKey: string) => void;
   onCancel: () => void;
   disabled?: boolean;
+  /** Subset of providers to render. Defaults to all `WALLET_PROVIDERS`. */
+  providers?: ProviderDef[];
+  /** Small header above the buttons. Pass `null` to omit it. */
+  title?: string | null;
 }
 
-export function ProviderList({ connectingProvider, onConnect, onCancel, disabled }: ProviderListProps) {
+export function ProviderList({
+  connectingProvider,
+  onConnect,
+  onCancel,
+  disabled,
+  providers = WALLET_PROVIDERS,
+  title = 'Continue with',
+}: ProviderListProps) {
   return (
     <div className="space-y-2">
-      <p className="text-xs font-medium text-muted-foreground text-center">
-        Continue with
-      </p>
+      {title !== null && (
+        <p className="text-xs font-medium text-muted-foreground text-center">
+          {title}
+        </p>
+      )}
 
-      {SOCIAL_PROVIDERS.map(provider => {
+      {providers.map(provider => {
         const isConnecting = connectingProvider === provider.key;
         return (
           <div key={provider.key} className="flex items-center gap-2">

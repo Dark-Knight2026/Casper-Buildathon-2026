@@ -1,4 +1,5 @@
 import React from 'react';
+import { Wallet } from 'lucide-react';
 import { WALLET_KEYS } from '@make-software/csprclick-core-types';
 
 // Checks if device is truly mobile — based on device capability, NOT screen width
@@ -23,7 +24,17 @@ export const TERMINAL_PROVIDER_STATUSES = new Set([
   'no-device-found',               // Ledger: no hardware wallet detected
 ]);
 
-export const SOCIAL_PROVIDERS: ProviderDef[] = [
+// Providers offered for wallet linking. Self-custody Casper Wallet first
+// (crypto-native users), then the custodial social providers (CSPR.click
+// provisions a signable Casper key behind each). Add LEDGER / METAMASK_SNAP /
+// WALLETCONNECT here if/when needed — the connect flow already handles
+// non-social keys (no `selectAccount`).
+export const WALLET_PROVIDERS: ProviderDef[] = [
+  {
+    key: WALLET_KEYS.CASPER_WALLET,
+    label: 'Casper Wallet',
+    icon: <Wallet className="h-5 w-5" aria-hidden="true" />,
+  },
   {
     key: WALLET_KEYS.W3A_GOOGLE,
     label: 'Google',
