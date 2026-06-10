@@ -10,7 +10,7 @@ use leasefi_contracts::big_coin::{BigCoin, BigCoinHostRef, BigCoinInitArgs};
 use leasefi_contracts::common::CurrencyAmount;
 use leasefi_contracts::escrow::{
     errors::Error,
-    events::{InvoiceCreated, InvoicePaid, InvoicePaymentApplied, MinDeadlineSet},
+    events::{InvoiceCreated, InvoicePaid, InvoicePaymentApplied, LeaseSet, MinDeadlineSet, TreasurySet},
     types::{CreateLeaseInvoiceParams, Invoice, InvoiceKind},
     Escrow, EscrowHostRef, EscrowInitArgs,
 };
@@ -261,6 +261,11 @@ fn test_set_lease_should_set_lease_properly() {
         lease,
         "Invalid Lease contract address"
     );
+
+    assert!(test_data.env.emitted_event(
+        &test_data.escrow,
+        LeaseSet { lease }
+    ));
 }
 
 // =============================================================================
@@ -295,6 +300,11 @@ fn test_set_treasury_should_set_treasury_properly() {
         treasury,
         "Invalid Treasury contract address"
     );
+
+    assert!(test_data.env.emitted_event(
+        &test_data.escrow,
+        TreasurySet { treasury }
+    ));
 }
 
 // =============================================================================

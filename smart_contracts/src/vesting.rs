@@ -64,6 +64,11 @@ pub mod events {
         pub beneficiary: Address,
         pub amount: U256,
     }
+
+    #[odra::event]
+    pub struct StakingSet {
+        pub staking: Address,
+    }
 }
 
 // =============================================================================
@@ -92,8 +97,13 @@ pub mod errors {
 
 #[odra::module(
     errors = Error,
-    events = [ScheduleCreated, TokensClaimed, WhitelistedCreatorAdded, WhitelistedCreatorRemoved],
-)]
+    events = [
+      ScheduleCreated,
+      TokensClaimed,
+      WhitelistedCreatorAdded,
+      WhitelistedCreatorRemoved,
+      StakingSet
+])]
 pub struct Vesting {
     /// Ownership control — only the owner can configure the contract.
     ownable: SubModule<Ownable>,
@@ -136,6 +146,8 @@ impl Vesting {
     pub fn set_staking(&mut self, staking: Address) {
         self.assert_owner();
         self.staking.set(staking);
+
+        self.env().emit_event(StakingSet { staking });
     }
 
     /// Grants an address permission to create vesting schedules.

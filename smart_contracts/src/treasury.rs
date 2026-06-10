@@ -5,10 +5,16 @@ use crate::constants::{INCENTIVES_REWARDS_BPS, ONE_HUNDRED_PERCENT_BPS, STAKING_
 use crate::staking::StakingContractRef;
 use crate::treasury::{
     errors::Error,
-    events::{ReservesWithdrawn, RewardsDeposited, TokenWithdrawn},
+    events::{BigCoinSet, ReservesWithdrawn, RewardsDeposited, StakingSet, TokenWithdrawn},
 };
 
-#[odra::module(errors = Error, events = [RewardsDeposited, ReservesWithdrawn, TokenWithdrawn])]
+#[odra::module(errors = Error, events = [
+  RewardsDeposited,
+  ReservesWithdrawn,
+  TokenWithdrawn,
+  StakingSet,
+  BigCoinSet,
+])]
 pub struct Treasury {
     ownable: SubModule<Ownable>,
     staking: Var<Address>,
@@ -29,12 +35,16 @@ impl Treasury {
     pub fn set_staking(&mut self, staking: Address) {
         self.assert_owner();
         self.staking.set(staking);
+
+        self.env().emit_event(StakingSet { staking });
     }
 
     /// Sets the BIG token contract address by the owner
     pub fn set_big_coin(&mut self, big_coin: Address) {
         self.assert_owner();
         self.big_coin.set(big_coin);
+
+        self.env().emit_event(BigCoinSet { big_coin });
     }
 
     /// Allows to deposit any rewards amount in the BIG token by anyone, then distributes these rewards
@@ -189,6 +199,16 @@ pub mod events {
         pub token: Option<Address>,
         pub amount: U256,
         pub recipient: Address,
+    }
+
+    #[odra::event]
+    pub struct StakingSet {
+        pub staking: Address,
+    }
+
+    #[odra::event]
+    pub struct BigCoinSet {
+        pub big_coin: Address,
     }
 }
 

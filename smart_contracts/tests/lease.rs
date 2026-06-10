@@ -16,8 +16,9 @@ use leasefi_contracts::escrow::{
 use leasefi_contracts::lease::{
     errors::Error,
     events::{
-        EquityEligibilityGranted, EquityEligibilityRevoked, LeaseAgreementCancelled,
-        LeaseAgreementCreated, LeaseAgreementFinished, LeaseAgreementProlonged,
+        EquityEligibilityGranted, EquityEligibilityRevoked, EscrowSet, LeaseAgreementCancelled,
+        LeaseAgreementCreated, LeaseAgreementFinished, LeaseAgreementProlonged, NftSet,
+        PropertyRegistrySet, RolesSet,
     },
     types::{CreateLeaseAgreementParams, LeaseAgreement, RentDistributionTerms},
     Lease, LeaseHostRef, LeaseInitArgs,
@@ -294,6 +295,11 @@ fn test_set_roles_should_set_roles_properly() {
         roles,
         "Invalid Roles contract address"
     );
+
+    assert!(test_data.env.emitted_event(
+        &test_data.lease,
+        RolesSet { roles }
+    ));
 }
 
 // =============================================================================
@@ -327,6 +333,11 @@ fn test_set_escrow_should_set_escrow_properly() {
         escrow,
         "Invalid Escrow contract address"
     );
+
+    assert!(test_data.env.emitted_event(
+        &test_data.lease,
+        EscrowSet { escrow }
+    ));
 }
 
 // =============================================================================
@@ -360,6 +371,11 @@ fn test_set_nft_should_set_nft_properly() {
         nft,
         "Invalid NFT contract address"
     );
+
+    assert!(test_data.env.emitted_event(
+        &test_data.lease,
+        NftSet { nft }
+    ));
 }
 
 // =============================================================================

@@ -11,8 +11,8 @@ use crate::{
     ico::{
         errors::Error,
         events::{
-            CurrencyAdded, CurrencyRemoved, ICOScheduleAdded, TokensPurchased,
-            UnsoldTokensWithdrawn,
+            BigCoinSet, CurrencyAdded, CurrencyRemoved, ICOScheduleAdded, StakingSet,
+            TokensPurchased, TreasurySet, UnsoldTokensWithdrawn, VestingSet,
         },
         types::{Currency, ICOSchedule, ICOScheduleCreateParams},
     },
@@ -26,7 +26,7 @@ pub type ICOScheduleId = U128;
 
 #[odra::module(
     errors = Error,
-    events = [ICOScheduleAdded, CurrencyAdded, CurrencyRemoved, TokensPurchased, UnsoldTokensWithdrawn]
+    events = [ICOScheduleAdded, CurrencyAdded, CurrencyRemoved, TokensPurchased, UnsoldTokensWithdrawn, BigCoinSet, TreasurySet, VestingSet, StakingSet]
 )]
 pub struct ICO {
     ownable: SubModule<Ownable>,
@@ -52,24 +52,32 @@ impl ICO {
     pub fn set_big_coin(&mut self, big_coin: Address) {
         self.assert_owner();
         self.big_coin.set(big_coin);
+
+        self.env().emit_event(BigCoinSet { big_coin });
     }
 
     /// Sets the Treasury contract address by the owner
     pub fn set_treasury(&mut self, treasury: Address) {
         self.assert_owner();
         self.treasury.set(treasury);
+
+        self.env().emit_event(TreasurySet { treasury });
     }
 
     /// Sets the Vesting contract address by the owner
     pub fn set_vesting(&mut self, vesting: Address) {
         self.assert_owner();
         self.vesting.set(vesting);
+
+        self.env().emit_event(VestingSet { vesting });
     }
 
     /// Sets the Staking contract address by the owner
     pub fn set_staking(&mut self, staking: Address) {
         self.assert_owner();
         self.staking.set(staking);
+
+        self.env().emit_event(StakingSet { staking });
     }
 
     /// Adds a new currency by the owner. Added currency will be supported for making purchases during ICOs
@@ -463,6 +471,26 @@ pub mod events {
     pub struct UnsoldTokensWithdrawn {
         pub recipient: Address,
         pub amount: U256,
+    }
+
+    #[odra::event]
+    pub struct BigCoinSet {
+        pub big_coin: Address,
+    }
+
+    #[odra::event]
+    pub struct TreasurySet {
+        pub treasury: Address,
+    }
+
+    #[odra::event]
+    pub struct VestingSet {
+        pub vesting: Address,
+    }
+
+    #[odra::event]
+    pub struct StakingSet {
+        pub staking: Address,
     }
 }
 

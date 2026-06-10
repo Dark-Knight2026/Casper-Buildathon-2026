@@ -6,8 +6,8 @@ use crate::{
     staking::{
         errors::Error,
         events::{
-            RewardsClaimed, RewardsDeposited, Staked, StakerSnapshot, UnbondedWithdrawn,
-            UnstakedInitiated,
+            BigCoinSet, RewardsClaimed, RewardsDeposited, Staked, StakerSnapshot,
+            UnbondedWithdrawn, UnstakedInitiated, VestingSet,
         },
     },
     vesting::VestingContractRef,
@@ -78,6 +78,16 @@ pub mod events {
         pub pending_rewards: U256,
         pub reward_per_token_paid: U256,
     }
+
+    #[odra::event]
+    pub struct BigCoinSet {
+        pub big_coin: Address,
+    }
+
+    #[odra::event]
+    pub struct VestingSet {
+        pub vesting: Address,
+    }
 }
 
 // =============================================================================
@@ -118,7 +128,9 @@ pub mod errors {
     UnbondedWithdrawn,
     RewardsDeposited,
     RewardsClaimed,
-    StakerSnapshot
+    StakerSnapshot,
+    BigCoinSet,
+    VestingSet,
   ]
 )]
 pub struct Staking {
@@ -165,12 +177,16 @@ impl Staking {
     pub fn set_big_coin(&mut self, big_coin: Address) {
         self.assert_owner();
         self.big_coin.set(big_coin);
+
+        self.env().emit_event(BigCoinSet { big_coin });
     }
 
     /// Sets the Vesting contract address by the owner
     pub fn set_vesting(&mut self, vesting: Address) {
         self.assert_owner();
         self.vesting.set(vesting);
+
+        self.env().emit_event(VestingSet { vesting });
     }
 
     // =========================================================================

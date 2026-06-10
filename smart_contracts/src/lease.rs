@@ -7,8 +7,9 @@ use crate::{
     lease::{
         errors::Error,
         events::{
-            EquityEligibilityGranted, EquityEligibilityRevoked, LeaseAgreementCancelled,
-            LeaseAgreementCreated, LeaseAgreementFinished, LeaseAgreementProlonged,
+            EquityEligibilityGranted, EquityEligibilityRevoked, EscrowSet, LeaseAgreementCancelled,
+            LeaseAgreementCreated, LeaseAgreementFinished, LeaseAgreementProlonged, NftSet,
+            PropertyRegistrySet, RolesSet,
         },
         types::{CreateLeaseAgreementParams, LeaseAgreement, RentDistributionTerms},
     },
@@ -126,6 +127,26 @@ pub mod events {
         pub property_id: U256,
         pub account: Address,
     }
+
+    #[odra::event]
+    pub struct RolesSet {
+        pub roles: Address,
+    }
+
+    #[odra::event]
+    pub struct EscrowSet {
+        pub escrow: Address,
+    }
+
+    #[odra::event]
+    pub struct NftSet {
+        pub nft: Address,
+    }
+
+    #[odra::event]
+    pub struct PropertyRegistrySet {
+        pub property_registry: Address,
+    }
 }
 
 // =============================================================================
@@ -166,6 +187,10 @@ pub mod errors {
   LeaseAgreementCancelled,
   EquityEligibilityGranted,
   EquityEligibilityRevoked,
+  RolesSet,
+  EscrowSet,
+  NftSet,
+  PropertyRegistrySet,
 ])]
 pub struct Lease {
     /// Ownership control for contract configuration.
@@ -217,6 +242,8 @@ impl Lease {
     pub fn set_roles(&mut self, roles: Address) {
         self.assert_owner();
         self.roles.set(roles);
+
+        self.env().emit_event(RolesSet { roles });
     }
 
     /// Sets the Escrow contract address by the owner
@@ -225,6 +252,8 @@ impl Lease {
     pub fn set_escrow(&mut self, escrow: Address) {
         self.assert_owner();
         self.escrow.set(escrow);
+
+        self.env().emit_event(EscrowSet { escrow });
     }
 
     /// Sets the NFT contract address by the owner
@@ -233,6 +262,8 @@ impl Lease {
     pub fn set_nft(&mut self, nft: Address) {
         self.assert_owner();
         self.nft.set(nft);
+
+        self.env().emit_event(NftSet { nft });
     }
 
     /// Sets the PropertyRegistry contract address by the owner
@@ -241,6 +272,8 @@ impl Lease {
     pub fn set_property_registry(&mut self, property_registry: Address) {
         self.assert_owner();
         self.property_registry.set(property_registry);
+
+        self.env().emit_event(PropertyRegistrySet { property_registry });
     }
 
     // =========================================================================

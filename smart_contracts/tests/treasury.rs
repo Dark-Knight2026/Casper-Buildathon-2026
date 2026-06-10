@@ -11,7 +11,7 @@ use leasefi_contracts::constants::{ONE_HUNDRED_PERCENT_BPS, STAKING_REWARDS_BPS}
 use leasefi_contracts::staking::{Staking, StakingHostRef, StakingInitArgs};
 use leasefi_contracts::treasury::{
     errors::Error,
-    events::{ReservesWithdrawn, RewardsDeposited, TokenWithdrawn},
+    events::{BigCoinSet, ReservesWithdrawn, RewardsDeposited, StakingSet, TokenWithdrawn},
     Treasury, TreasuryHostRef, TreasuryInitArgs,
 };
 
@@ -131,6 +131,11 @@ fn test_set_staking_should_set_staking_properly() {
         staking,
         "Invalid Staking contract address"
     );
+
+    assert!(env.emitted_event(
+        &treasury,
+        StakingSet { staking }
+    ));
 }
 
 #[test]
@@ -160,6 +165,11 @@ fn test_set_big_coin_should_set_big_coin_properly() {
         big_coin,
         "Invalid BIG coin contract address"
     );
+
+    assert!(env.emitted_event(
+        &treasury,
+        BigCoinSet { big_coin }
+    ));
 }
 
 #[test]

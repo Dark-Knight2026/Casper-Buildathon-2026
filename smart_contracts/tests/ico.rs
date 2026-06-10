@@ -11,7 +11,8 @@ use leasefi_contracts::constants::{PRIVATE_SALE_CLIFF_DURATION, PRIVATE_SALE_VES
 use leasefi_contracts::ico::{
     errors::Error,
     events::{
-        CurrencyAdded, CurrencyRemoved, ICOScheduleAdded, TokensPurchased, UnsoldTokensWithdrawn,
+        BigCoinSet, CurrencyAdded, CurrencyRemoved, ICOScheduleAdded, StakingSet, TokensPurchased,
+        TreasurySet, UnsoldTokensWithdrawn, VestingSet,
     },
     types::{Currency, ICOScheduleCreateParams},
     ICOHostRef, ICOInitArgs, ICOScheduleId, ICO,
@@ -105,6 +106,11 @@ fn test_set_big_coin_should_set_coin_coin_properly() {
         big_coin,
         "Invalid BIG coin contract address"
     );
+
+    assert!(ctx.env.emitted_event(
+        &ctx.ico,
+        BigCoinSet { big_coin }
+    ));
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -136,6 +142,11 @@ fn test_set_treasury_should_set_treasury_properly() {
         treasury,
         "Invalid Treasury contract address"
     );
+
+    assert!(ctx.env.emitted_event(
+        &ctx.ico,
+        TreasurySet { treasury }
+    ));
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -167,6 +178,11 @@ fn test_set_staking_should_set_staking_properly() {
         staking,
         "Invalid Staking contract address"
     );
+
+    assert!(ctx.env.emitted_event(
+        &ctx.ico,
+        StakingSet { staking }
+    ));
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -198,6 +214,11 @@ fn test_set_vesting_should_set_vesting_properly() {
         vesting,
         "Invalid Vesting contract address"
     );
+
+    assert!(ctx.env.emitted_event(
+        &ctx.ico,
+        VestingSet { vesting }
+    ));
 }
 
 /////////////////////////////////////////////////////////////////////////////

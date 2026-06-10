@@ -14,7 +14,7 @@ use leasefi_contracts::staking::{
 };
 use leasefi_contracts::vesting::{
     errors::Error,
-    events::{ScheduleCreated, TokensClaimed},
+    events::{ScheduleCreated, StakingSet, TokensClaimed},
     Vesting, VestingHostRef, VestingId, VestingInitArgs,
 };
 
@@ -158,6 +158,11 @@ fn test_set_staking_should_set_staking_properly() {
         new_address,
         "Invalid Staking contract address",
     );
+
+    assert!(ctx.env.emitted_event(
+        &ctx.vesting,
+        StakingSet { staking: new_address }
+    ));
 }
 
 // =============================================================================

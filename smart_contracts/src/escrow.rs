@@ -12,8 +12,8 @@ use crate::{
     escrow::{
         errors::Error,
         events::{
-            InvoiceCreated, InvoicePaid, InvoicePaymentApplied, MinDeadlineSet,
-            SecurityDepositHeld, SecurityDepositReleased, SecurityDepositTokenSet,
+            InvoiceCreated, InvoicePaid, InvoicePaymentApplied, LeaseSet, MinDeadlineSet,
+            SecurityDepositHeld, SecurityDepositReleased, SecurityDepositTokenSet, TreasurySet,
         },
         types::{CreateLeaseInvoiceParams, Invoice, InvoiceKind, SecurityDepositRecord},
     },
@@ -151,6 +151,16 @@ pub mod events {
         pub landlord_charge: U256,
         pub tenant_refund: U256,
     }
+
+    #[odra::event]
+    pub struct LeaseSet {
+        pub lease: Address,
+    }
+
+    #[odra::event]
+    pub struct TreasurySet {
+        pub treasury: Address,
+    }
 }
 
 // =============================================================================
@@ -195,6 +205,8 @@ pub mod errors {
     InvoicePaid,
     SecurityDepositHeld,
     SecurityDepositReleased,
+    LeaseSet,
+    TreasurySet,
 ])]
 pub struct Escrow {
     /// Ownership control for contract configuration.
@@ -248,12 +260,16 @@ impl Escrow {
     pub fn set_lease(&mut self, lease: Address) {
         self.assert_owner();
         self.lease.set(lease);
+
+        self.env().emit_event(LeaseSet { lease });
     }
 
     /// Sets the Treasury contract address by the owner
     pub fn set_treasury(&mut self, treasury: Address) {
         self.assert_owner();
         self.treasury.set(treasury);
+
+        self.env().emit_event(TreasurySet { treasury });
     }
 
     pub fn set_security_deposit_token(&mut self, token: Address) {

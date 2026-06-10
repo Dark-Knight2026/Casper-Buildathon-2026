@@ -175,6 +175,11 @@ fn test_set_big_coin_should_set_big_coin_properly() {
         big_coin,
         "Invalid BIG Coin contract address"
     );
+
+    assert!(ctx.env.emitted_event(
+        &ctx.staking,
+        BigCoinSet { big_coin }
+    ));
 }
 
 // =============================================================================
@@ -205,6 +210,11 @@ fn test_set_vesting_should_set_vesting_properly() {
         new_address,
         "Invalid Staking contract address",
     );
+
+    assert!(ctx.env.emitted_event(
+        &ctx.staking,
+        VestingSet { vesting: new_address }
+    ));
 }
 
 // =============================================================================
