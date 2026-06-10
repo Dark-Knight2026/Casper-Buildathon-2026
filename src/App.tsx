@@ -6,7 +6,6 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { AuthProvider } from '@/contexts/AuthContext';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import SkipNavigation from '@/components/layout/SkipNavigation';
-import { AuthWalletLayout } from '@/components/auth/AuthWalletLayout';
 import { ComingSoon } from '@/components/common/ComingSoon';
 import { MFA_ENABLED } from '@/lib/featureFlags';
 
@@ -22,6 +21,8 @@ const MFASetup = lazy(() => import('@/pages/auth/MFASetup'));
 const MFAVerify = lazy(() => import('@/pages/auth/MFAVerify'));
 const VerifyEmail = lazy(() => import('@/pages/auth/VerifyEmail'));
 const ConfirmEmailChange = lazy(() => import('@/pages/auth/ConfirmEmailChange'));
+const ForgotPassword = lazy(() => import('@/pages/auth/ForgotPassword'));
+const ResetPassword = lazy(() => import('@/pages/auth/ResetPassword'));
 const HelpHub = lazy(() => import('@/pages/HelpHub'));
 
 import TenantLayout from '@/components/layout/TenantLayout';
@@ -187,8 +188,14 @@ function App() {
                 AUTHENTICATION ROUTES
                 Sign up and login pages
               */}
-              <Route path="/auth/login" element={<AuthWalletLayout><Login /></AuthWalletLayout>} />
-              <Route path="/auth/register" element={<AuthWalletLayout><Register /></AuthWalletLayout>} />
+              <Route path="/auth/login" element={<Login />} />
+              <Route path="/auth/register" element={<Register />} />
+              {/* Password recovery. /reset-password must match the backend
+                  reset-email link (${FRONTEND_URL}/reset-password?token=…);
+                  both are outside ProtectedRoute since they may land on a
+                  fresh browser. */}
+              <Route path="/forgot-password" element={<ForgotPassword />} />
+              <Route path="/reset-password" element={<ResetPassword />} />
               <Route
                 path="/auth/mfa-setup"
                 element={

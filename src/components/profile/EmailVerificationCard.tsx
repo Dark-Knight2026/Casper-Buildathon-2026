@@ -118,10 +118,16 @@ export function EmailVerificationCard() {
     return (
       <Card>
         <CardHeader>
-          <div className="flex items-center gap-2">
-            <CheckCircle2 className="h-5 w-5 text-emerald-500" aria-hidden="true" />
-            <CardTitle className="text-base">Email verified</CardTitle>
-            <Badge variant="secondary">{profile.email}</Badge>
+          {/* Mobile: email drops under the "Email verified" label so a long
+              address never crowds or overflows the row. sm+: inline again. */}
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-500" aria-hidden="true" />
+              <CardTitle className="text-base">Email verified</CardTitle>
+            </div>
+            <Badge variant="secondary" className="w-fit max-w-full break-all">
+              {profile.email}
+            </Badge>
           </div>
         </CardHeader>
       </Card>

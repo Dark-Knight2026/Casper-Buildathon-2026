@@ -80,7 +80,11 @@ export interface RegisterBody {
  */
 export async function register(body: RegisterBody): Promise<LoginResponse> {
   return backendClient.post<LoginResponse>('/api/v1/auth/register', body, {
+    // No session yet: errors (400/409) are handled in-page and must not fire
+    // the global auth-redirect or the refresh-and-replay path.
     retry: false,
+    skipRefresh: true,
+    skipAuthError: true,
   });
 }
 
@@ -104,7 +108,11 @@ export async function loginWithPassword(
   return backendClient.post<LoginResponse>(
     '/api/v1/auth/login/password',
     { email, password },
-    { retry: false },
+    // skipRefresh: there is no session yet, so a 401 must not trigger the
+    // refresh-and-replay path. skipAuthError: a 401 here means "wrong
+    // credentials" and is handled in-page — it must NOT fire the global
+    // onAuthError handler, which hard-redirects to /auth/login (a full reload).
+    { retry: false, skipRefresh: true, skipAuthError: true },
   );
 }
 
@@ -124,7 +132,9 @@ export async function forgotPassword(email: string): Promise<ForgotPasswordRespo
   return backendClient.post<ForgotPasswordResponse>(
     '/api/v1/auth/password/forgot',
     { email },
-    { retry: false },
+    // Unauthenticated flow: never let an error here trigger the global
+    // auth-redirect; the page renders its own neutral state.
+    { retry: false, skipRefresh: true, skipAuthError: true },
   );
 }
 
@@ -146,7 +156,9 @@ export async function resetPassword(
   return backendClient.post<LoginResponse>(
     '/api/v1/auth/password/reset',
     { token, new_password: newPassword },
-    { retry: false },
+    // Unauthenticated flow: a 400 (bad/expired token) is handled in-page and
+    // must not hard-redirect via the global onAuthError handler.
+    { retry: false, skipRefresh: true, skipAuthError: true },
   );
 }
 

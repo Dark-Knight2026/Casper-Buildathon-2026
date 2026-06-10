@@ -12,6 +12,7 @@ import {
   confirmEmailVerification,
   sendVerificationEmail,
 } from '@/services/backendAuthService';
+import { getMe } from '@/services/userProfileService';
 
 type Status =
   | 'verifying'
@@ -84,6 +85,25 @@ export default function VerifyEmail() {
       setStatus('success');
     } catch (err) {
       const next = classifyConfirmError(err);
+      // The single-use token may have already been consumed by an earlier
+      // successful confirm (re-opened link, double-click, or a tab on an
+      // origin without the session cookie). In that case the email is in fact
+      // already verified, so a "log in" / "invalid link" screen is misleading.
+      // Re-check the real state: if there is a live session whose email is
+      // already verified, treat this as success instead of nagging the user.
+      if (next === 'needs_login' || next === 'invalid_token') {
+        try {
+          const me = await getMe();
+          if (me.verification_level && me.verification_level !== 'none') {
+            setSession(me);
+            setStatus('success');
+            return;
+          }
+        } catch {
+          // No live session (or still failing) — fall through to the original
+          // classification below.
+        }
+      }
       // Only needs_login benefits from a post-login retry — stash the return
       // path so the user lands back here after authenticating. Other outcomes
       // are token problems that logging in won't fix, so don't stash for them.
