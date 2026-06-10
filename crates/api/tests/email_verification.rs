@@ -90,14 +90,14 @@ async fn send_and_take_token(
 /// live token slot in Redis - is left intact, so callers can drive the
 /// already-verified branches without a second concurrent request.
 async fn mark_email_verified(pool: &PgPool, user_id: Uuid) {
-    sqlx::query!(
+    sqlx::query(
         r"
             UPDATE users
             SET email_verified = TRUE
             WHERE id = $1
         ",
-        user_id,
     )
+    .bind(user_id)
     .execute(pool)
     .await
     .expect("mark email verified out of band");
@@ -128,22 +128,19 @@ async fn send_then_confirm_verifies_email_and_rotates_tokens(pool: PgPool) {
     assert_ne!(new_refresh, session.refresh_token, "refresh token rotated");
 
     // DB state: flag flipped, trigger raised the level in the same statement.
-    let row = sqlx::query!(
+    let row = sqlx::query_as::<_, (Option<bool>, String)>(
         r"
             SELECT email_verified, verification_level
             FROM users
             WHERE id = $1
         ",
-        session.user_id,
     )
+    .bind(session.user_id)
     .fetch_one(&env.state.db)
     .await
     .expect("fetch user");
-    assert!(
-        row.email_verified.unwrap_or(false),
-        "email_verified set to true"
-    );
-    assert_eq!(row.verification_level, "email", "level raised to email");
+    assert!(row.0.unwrap_or(false), "email_verified set to true");
+    assert_eq!(row.1, "email", "level raised to email");
 }
 
 /// Confirm mints a fresh refresh family: the pre-confirm refresh cookie is
@@ -540,7 +537,7 @@ async fn transient_failure_queues_and_keeps_counter(pool: PgPool) {
     );
 
     // The message was queued for background retry rather than rolled back.
-    let queued = sqlx::query_scalar!(
+    let queued = sqlx::query_scalar::<_, i64>(
         r"
             SELECT COUNT(*) FROM email_send_retries WHERE status = 'pending'
         ",
@@ -548,7 +545,7 @@ async fn transient_failure_queues_and_keeps_counter(pool: PgPool) {
     .fetch_one(&env.state.db)
     .await
     .expect("count queued rows");
-    assert_eq!(queued, Some(1), "transient failure enqueues one retry row");
+    assert_eq!(queued, 1, "transient failure enqueues one retry row");
 
     let second = post_send(&env, &session.access_token).await;
     assert_eq!(
@@ -570,14 +567,14 @@ async fn send_returns_400_when_email_not_set(pool: PgPool) {
     // Login synthesizes a placeholder `wallet_*@leasefi.local` email so that
     // `users.email` is non-NULL after wallet sign-in. To exercise the
     // `email_not_set` branch we explicitly clear it back to NULL.
-    sqlx::query!(
+    sqlx::query(
         r"
             UPDATE users
             SET email = NULL
             WHERE id = $1
         ",
-        session.user_id,
     )
+    .bind(session.user_id)
     .execute(&env.state.db)
     .await
     .expect("clear email");

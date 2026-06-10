@@ -352,15 +352,15 @@ pub async fn setup_test_server_capturing(
 #[inline]
 pub async fn seed_email(pool: &PgPool, user_id: Uuid) -> String {
     let email = format!("verify-{user_id}@example.com");
-    sqlx::query!(
+    sqlx::query(
         r"
             UPDATE users
             SET email = $1, email_verified = FALSE
             WHERE id = $2
         ",
-        email,
-        user_id,
     )
+    .bind(&email)
+    .bind(user_id)
     .execute(pool)
     .await
     .expect("seed email");
@@ -564,14 +564,14 @@ pub fn mint_access_token_with_level(
 /// the strings only have to be non-NULL.
 #[inline]
 pub async fn seed_pending_retry(pool: &PgPool, to: &str) -> Uuid {
-    sqlx::query_scalar!(
+    sqlx::query_scalar::<_, Uuid>(
         r"
             INSERT INTO email_send_retries (to_address, subject, body)
             VALUES ($1, 'subj', 'body')
             RETURNING id
         ",
-        to,
     )
+    .bind(to)
     .fetch_one(pool)
     .await
     .expect("seed insert")
@@ -593,7 +593,7 @@ pub async fn seed_pending_retry(pool: &PgPool, to: &str) -> Uuid {
 /// not the `primary_tenant_id` branch.
 #[inline]
 pub async fn seed_active_lease_as_landlord(pool: &PgPool, user_id: Uuid) {
-    let property_id = sqlx::query!(
+    let property_id = sqlx::query_scalar::<_, Uuid>(
         r"
             INSERT INTO properties (
                 landlord_id, property_type, address_line1, city, state, zip_code
@@ -601,14 +601,13 @@ pub async fn seed_active_lease_as_landlord(pool: &PgPool, user_id: Uuid) {
             VALUES ($1, 'single_family', '1 Test St', 'Testville', 'CA', '00000')
             RETURNING id
         ",
-        user_id,
     )
+    .bind(user_id)
     .fetch_one(pool)
     .await
-    .expect("seed property")
-    .id;
+    .expect("seed property");
 
-    sqlx::query!(
+    sqlx::query(
         r"
             INSERT INTO leases (
                 landlord_id, property_id, agent_id, tenant_ids, primary_tenant_id,
@@ -621,9 +620,9 @@ pub async fn seed_active_lease_as_landlord(pool: &PgPool, user_id: Uuid) {
                 1000.00, 1000.00, $1
             )
         ",
-        user_id,
-        property_id,
     )
+    .bind(user_id)
+    .bind(property_id)
     .execute(pool)
     .await
     .expect("seed lease");

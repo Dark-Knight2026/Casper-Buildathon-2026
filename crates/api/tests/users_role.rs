@@ -18,11 +18,25 @@ use core::time::Duration as CoreDuration;
 use axum::http::StatusCode;
 use axum_test::http::header::COOKIE;
 use casper_types::AsymmetricType;
+use chrono::{DateTime, Utc};
 use serde_json::Value;
 use sqlx::PgPool;
+use uuid::Uuid;
 
 use api::{UserRole, common::RedisStore};
 use common::{LoggedSession, TestEnv};
+
+/// `audit_logs` columns read back via a runtime `query_as` (no compile-time
+/// macro in tests).
+#[derive(sqlx::FromRow)]
+struct RoleAuditLogRow {
+    action: String,
+    resource_type: String,
+    resource_id: Option<Uuid>,
+    old_values: Option<Value>,
+    new_values: Option<Value>,
+    status: Option<String>,
+}
 
 /// Re-logs in for the same wallet, returning a fresh access token.
 ///
@@ -90,28 +104,27 @@ async fn role_change_happy_path_returns_200_and_revokes_session(pool: PgPool) {
     let cleared = response.cookie("access_token");
     assert_eq!(cleared.value(), "", "access_token must be cleared");
 
-    let row = sqlx::query!(
+    let row = sqlx::query_as::<_, (String, Option<DateTime<Utc>>)>(
         r"SELECT role, jwt_invalidate_before FROM users WHERE id = $1",
-        session.user_id,
     )
+    .bind(session.user_id)
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(row.role, "landlord");
+    assert_eq!(row.0, "landlord");
     assert!(
-        row.jwt_invalidate_before.is_some(),
+        row.1.is_some(),
         "jwt_invalidate_before must be stamped on success",
     );
 
     // The refresh row created at login time must now be revoked.
-    let revoked_count = sqlx::query!(
+    let revoked_count = sqlx::query_scalar::<_, i64>(
         r#"SELECT COUNT(*) AS "n!" FROM refresh_tokens WHERE user_id = $1 AND revoked_at IS NOT NULL"#,
-        session.user_id,
     )
+    .bind(session.user_id)
     .fetch_one(&pool)
     .await
-    .unwrap()
-    .n;
+    .unwrap();
     assert!(
         revoked_count >= 1,
         "at least one refresh row must be revoked after role change",
@@ -145,7 +158,7 @@ async fn role_change_writes_audit_log(pool: PgPool) {
         .await;
     assert_eq!(response.status_code(), StatusCode::OK);
 
-    let row = sqlx::query!(
+    let row = sqlx::query_as::<_, RoleAuditLogRow>(
         r"
             SELECT action, resource_type, resource_id, old_values, new_values, status
             FROM audit_logs
@@ -153,8 +166,8 @@ async fn role_change_writes_audit_log(pool: PgPool) {
             ORDER BY created_at DESC
             LIMIT 1
         ",
-        session.user_id,
     )
+    .bind(session.user_id)
     .fetch_one(&pool)
     .await
     .expect("audit_logs row must exist after role change");
@@ -251,16 +264,16 @@ async fn role_change_rejects_non_whitelist_values(pool: PgPool) {
     }
 
     // Sanity: row stayed at `tenant`, jwt_invalidate_before still NULL.
-    let row = sqlx::query!(
+    let row = sqlx::query_as::<_, (String, Option<DateTime<Utc>>)>(
         r"SELECT role, jwt_invalidate_before FROM users WHERE id = $1",
-        session.user_id,
     )
+    .bind(session.user_id)
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(row.role, "tenant");
+    assert_eq!(row.0, "tenant");
     assert!(
-        row.jwt_invalidate_before.is_none(),
+        row.1.is_none(),
         "rejected requests must not stamp jwt_invalidate_before",
     );
 }
@@ -374,7 +387,8 @@ async fn role_change_noop_does_not_burn_rate_limit(pool: PgPool) {
     );
 
     // Sanity: row actually flipped now.
-    let role = sqlx::query_scalar!("SELECT role FROM users WHERE id = $1", session.user_id)
+    let role = sqlx::query_scalar::<_, String>("SELECT role FROM users WHERE id = $1")
+        .bind(session.user_id)
         .fetch_one(&pool)
         .await
         .unwrap();
@@ -405,15 +419,15 @@ async fn role_change_with_active_lease_returns_409(pool: PgPool) {
 
     // Side-effect-free rejection: role stayed, jwt_invalidate_before NULL,
     // Redis slot empty (so a follow-up after lease termination still works).
-    let row = sqlx::query!(
+    let row = sqlx::query_as::<_, (String, Option<DateTime<Utc>>)>(
         r"SELECT role, jwt_invalidate_before FROM users WHERE id = $1",
-        session.user_id,
     )
+    .bind(session.user_id)
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(row.role, "tenant");
-    assert!(row.jwt_invalidate_before.is_none());
+    assert_eq!(row.0, "tenant");
+    assert!(row.1.is_none());
 
     let redis_env = env.redis.as_ref().expect("redis env");
     let mut conn = redis_env

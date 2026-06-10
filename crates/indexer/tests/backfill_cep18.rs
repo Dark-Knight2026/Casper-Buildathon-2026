@@ -354,11 +354,11 @@ async fn empty_data_exits_cleanly_without_cursor(pool: PgPool) {
         .await
         .unwrap();
 
-    let cursor: Option<i64> = sqlx::query_scalar!(
+    let cursor = sqlx::query_scalar::<_, i64>(
         r"
             SELECT cursor_value FROM event_cursors
             WHERE stream_type = 'backfill' AND contract_hash = 'big_hash'
-        "
+        ",
     )
     .fetch_optional(&pool)
     .await
@@ -368,11 +368,10 @@ async fn empty_data_exits_cleanly_without_cursor(pool: PgPool) {
         "cursor must not be saved when no actions were processed"
     );
 
-    let tx_count: i64 = sqlx::query_scalar!(r"SELECT COUNT(*) FROM blockchain_transactions")
+    let tx_count = sqlx::query_scalar::<_, i64>(r"SELECT COUNT(*) FROM blockchain_transactions")
         .fetch_one(&pool)
         .await
-        .unwrap()
-        .unwrap_or(0);
+        .unwrap();
     assert_eq!(
         tx_count, 0,
         "no transactions must be written for empty data"
@@ -388,11 +387,11 @@ async fn cursor_resume_skips_actions_at_or_below_saved_block(pool: PgPool) {
     let server = MockServer::start().await;
 
     // Seed cursor at block 500.
-    sqlx::query!(
+    sqlx::query(
         r"
             INSERT INTO event_cursors (stream_type, contract_hash, cursor_value, last_updated_at)
             VALUES ('backfill', 'big_hash', 500, NOW())
-        "
+        ",
     )
     .execute(&pool)
     .await
@@ -428,11 +427,11 @@ async fn cursor_resume_skips_actions_at_or_below_saved_block(pool: PgPool) {
         .await
         .unwrap();
 
-    let cursor: Option<i64> = sqlx::query_scalar!(
+    let cursor = sqlx::query_scalar::<_, i64>(
         r"
             SELECT cursor_value FROM event_cursors
             WHERE stream_type = 'backfill' AND contract_hash = 'big_hash'
-        "
+        ",
     )
     .fetch_optional(&pool)
     .await
@@ -443,11 +442,10 @@ async fn cursor_resume_skips_actions_at_or_below_saved_block(pool: PgPool) {
         "cursor must not regress when all actions are below it"
     );
 
-    let tx_count: i64 = sqlx::query_scalar!(r"SELECT COUNT(*) FROM blockchain_transactions")
+    let tx_count = sqlx::query_scalar::<_, i64>(r"SELECT COUNT(*) FROM blockchain_transactions")
         .fetch_one(&pool)
         .await
-        .unwrap()
-        .unwrap_or(0);
+        .unwrap();
     assert_eq!(
         tx_count, 0,
         "no transactions must be written for skipped actions"
@@ -492,30 +490,29 @@ async fn transfer_action_written_to_tables_and_cursor_advances(pool: PgPool) {
         .unwrap();
 
     // blockchain_transactions must have one token_transfer row.
-    let tx_count: i64 = sqlx::query_scalar!(
+    let tx_count = sqlx::query_scalar::<_, i64>(
         r"
             SELECT COUNT(*) FROM blockchain_transactions
             WHERE transaction_hash = $1 AND transaction_type = 'token_transfer'
         ",
-        TRANSFER_DEPLOY_HASH
     )
+    .bind(TRANSFER_DEPLOY_HASH)
     .fetch_one(&pool)
     .await
-    .unwrap()
-    .unwrap_or(0);
+    .unwrap();
     assert_eq!(
         tx_count, 1,
         "blockchain_transactions must have one token_transfer row"
     );
 
     // Bob's BIG balance must equal the transferred amount.
-    let bob_balance: Option<String> = sqlx::query_scalar!(
+    let bob_balance = sqlx::query_scalar::<_, String>(
         r"
             SELECT balance FROM token_holdings
             WHERE user_address = $1 AND token_type = 'BIG'
         ",
-        FakeAddress::Bob.as_str(),
     )
+    .bind(FakeAddress::Bob.as_str())
     .fetch_optional(&pool)
     .await
     .unwrap();
@@ -526,13 +523,13 @@ async fn transfer_action_written_to_tables_and_cursor_advances(pool: PgPool) {
     );
 
     // Alice gets balance '0' (Decrease with no prior balance avoids negatives on first-seen event).
-    let alice_balance: Option<String> = sqlx::query_scalar!(
+    let alice_balance = sqlx::query_scalar::<_, String>(
         r"
             SELECT balance FROM token_holdings
             WHERE user_address = $1 AND token_type = 'BIG'
         ",
-        FakeAddress::Alice.as_str(),
     )
+    .bind(FakeAddress::Alice.as_str())
     .fetch_optional(&pool)
     .await
     .unwrap();
@@ -543,11 +540,11 @@ async fn transfer_action_written_to_tables_and_cursor_advances(pool: PgPool) {
     );
 
     // Cursor must advance to block 200.
-    let cursor: Option<i64> = sqlx::query_scalar!(
+    let cursor = sqlx::query_scalar::<_, i64>(
         r"
             SELECT cursor_value FROM event_cursors
             WHERE stream_type = 'backfill' AND contract_hash = 'big_hash'
-        "
+        ",
     )
     .fetch_optional(&pool)
     .await
@@ -599,11 +596,11 @@ async fn burn_action_skipped_and_cursor_not_updated(pool: PgPool) {
         .await
         .unwrap();
 
-    let cursor: Option<i64> = sqlx::query_scalar!(
+    let cursor = sqlx::query_scalar::<_, i64>(
         r"
             SELECT cursor_value FROM event_cursors
             WHERE stream_type = 'backfill' AND contract_hash = 'big_hash'
-        "
+        ",
     )
     .fetch_optional(&pool)
     .await
@@ -613,11 +610,10 @@ async fn burn_action_skipped_and_cursor_not_updated(pool: PgPool) {
         "cursor must not be saved when the only action is Burn (skipped by ft_action_to_event)"
     );
 
-    let tx_count: i64 = sqlx::query_scalar!(r"SELECT COUNT(*) FROM blockchain_transactions")
+    let tx_count = sqlx::query_scalar::<_, i64>(r"SELECT COUNT(*) FROM blockchain_transactions")
         .fetch_one(&pool)
         .await
-        .unwrap()
-        .unwrap_or(0);
+        .unwrap();
     assert_eq!(
         tx_count, 0,
         "no transactions must be written for a Burn action"
@@ -670,24 +666,25 @@ async fn mint_action_stored_raw_without_token_holdings_update(pool: PgPool) {
         .unwrap();
 
     // One blockchain_events row must exist for Mint and be marked processed.
-    let event = sqlx::query!(r"SELECT processed FROM blockchain_events WHERE event_type = 'Mint'")
-        .fetch_optional(&pool)
-        .await
-        .unwrap();
+    let processed = sqlx::query_scalar::<_, Option<bool>>(
+        r"SELECT processed FROM blockchain_events WHERE event_type = 'Mint'",
+    )
+    .fetch_optional(&pool)
+    .await
+    .unwrap();
 
-    let event = event.expect("blockchain_events row must exist for Mint");
+    let processed = processed.expect("blockchain_events row must exist for Mint");
     assert_eq!(
-        event.processed,
+        processed,
         Some(true),
         "Mint event must be marked processed = true in blockchain_events"
     );
 
     // Mint handler updates token_holdings for the recipient.
-    let holdings: i64 = sqlx::query_scalar!(r"SELECT COUNT(*) FROM token_holdings")
+    let holdings = sqlx::query_scalar::<_, i64>(r"SELECT COUNT(*) FROM token_holdings")
         .fetch_one(&pool)
         .await
-        .unwrap()
-        .unwrap_or(0);
+        .unwrap();
     assert_eq!(
         holdings, 1,
         "Mint must create a token_holdings entry for recipient"
@@ -705,11 +702,11 @@ async fn start_block_takes_precedence_over_cursor_when_greater(pool: PgPool) {
     let server = MockServer::start().await;
 
     // Seed cursor at block 100.
-    sqlx::query!(
+    sqlx::query(
         r"
             INSERT INTO event_cursors (stream_type, contract_hash, cursor_value, last_updated_at)
             VALUES ('backfill', 'big_hash', 100, NOW())
-        "
+        ",
     )
     .execute(&pool)
     .await
@@ -752,11 +749,11 @@ async fn start_block_takes_precedence_over_cursor_when_greater(pool: PgPool) {
     .unwrap();
 
     // Cursor must not advance — the action was skipped.
-    let cursor: Option<i64> = sqlx::query_scalar!(
+    let cursor = sqlx::query_scalar::<_, i64>(
         r"
             SELECT cursor_value FROM event_cursors
             WHERE stream_type = 'backfill' AND contract_hash = 'big_hash'
-        "
+        ",
     )
     .fetch_optional(&pool)
     .await
@@ -767,11 +764,10 @@ async fn start_block_takes_precedence_over_cursor_when_greater(pool: PgPool) {
         "cursor must not advance when all actions are below start_block"
     );
 
-    let tx_count: i64 = sqlx::query_scalar!(r"SELECT COUNT(*) FROM blockchain_transactions")
+    let tx_count = sqlx::query_scalar::<_, i64>(r"SELECT COUNT(*) FROM blockchain_transactions")
         .fetch_one(&pool)
         .await
-        .unwrap()
-        .unwrap_or(0);
+        .unwrap();
     assert_eq!(
         tx_count, 0,
         "no transactions must be written for actions below start_block"
@@ -819,14 +815,13 @@ async fn page_count_zero_with_data_processes_single_page_and_stops(pool: PgPool)
         .unwrap();
 
     // The Transfer on page 1 must have been processed despite page_count = 0.
-    let tx_count: i64 = sqlx::query_scalar!(
+    let tx_count = sqlx::query_scalar::<_, i64>(
         r"SELECT COUNT(*) FROM blockchain_transactions WHERE transaction_hash = $1",
-        TRANSFER_DEPLOY_HASH,
     )
+    .bind(TRANSFER_DEPLOY_HASH)
     .fetch_one(&pool)
     .await
-    .unwrap()
-    .unwrap_or(0);
+    .unwrap();
     assert_eq!(
         tx_count, 1,
         "action must be processed even when page_count = 0"

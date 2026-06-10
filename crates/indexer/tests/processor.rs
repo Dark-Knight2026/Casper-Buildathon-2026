@@ -67,14 +67,13 @@ async fn duplicate_event_is_no_op(pool: PgPool) {
         .await
         .expect("second process_event must succeed (idempotent)");
 
-    let count: i64 = sqlx::query_scalar!(
+    let count = sqlx::query_scalar::<_, i64>(
         r"SELECT COUNT(*) FROM blockchain_events WHERE transaction_hash = $1",
-        TRANSFER_DEPLOY_HASH,
     )
+    .bind(TRANSFER_DEPLOY_HASH)
     .fetch_one(&pool)
     .await
-    .unwrap()
-    .unwrap_or(0);
+    .unwrap();
 
     assert_eq!(
         count, 1,
@@ -116,11 +115,10 @@ async fn handler_error_rolls_back_blockchain_events_row(pool: PgPool) {
         "malformed event_data must cause process_event to return Err"
     );
 
-    let count: i64 = sqlx::query_scalar!(r"SELECT COUNT(*) FROM blockchain_events")
+    let count = sqlx::query_scalar::<_, i64>(r"SELECT COUNT(*) FROM blockchain_events")
         .fetch_one(&pool)
         .await
-        .unwrap()
-        .unwrap_or(0);
+        .unwrap();
 
     assert_eq!(
         count, 0,
@@ -161,31 +159,30 @@ async fn unknown_event_is_stored_raw_without_handler(pool: PgPool) {
         .expect("unknown event must not fail — it should be stored as raw data");
 
     // One blockchain_events row must exist and be marked processed.
-    let row = sqlx::query!(
+    let processed = sqlx::query_scalar::<_, Option<bool>>(
         r"
             SELECT processed FROM blockchain_events
             WHERE transaction_hash = $1
               AND event_type       = 'NonExistentEvent'
         ",
-        TRANSFER_DEPLOY_HASH,
     )
+    .bind(TRANSFER_DEPLOY_HASH)
     .fetch_optional(&pool)
     .await
     .unwrap();
 
-    let row = row.expect("blockchain_events row must exist for an unknown event");
+    let processed = processed.expect("blockchain_events row must exist for an unknown event");
     assert_eq!(
-        row.processed,
+        processed,
         Some(true),
         "unknown event must be marked processed = true in blockchain_events"
     );
 
     // No domain writes — token_holdings and ico_purchases stay empty.
-    let holdings: i64 = sqlx::query_scalar!(r"SELECT COUNT(*) FROM token_holdings")
+    let holdings = sqlx::query_scalar::<_, i64>(r"SELECT COUNT(*) FROM token_holdings")
         .fetch_one(&pool)
         .await
-        .unwrap()
-        .unwrap_or(0);
+        .unwrap();
 
     assert_eq!(
         holdings, 0,
@@ -244,41 +241,35 @@ async fn reprocessing_after_full_rollback_does_not_double_balance(pool: PgPool) 
     // Simulate a complete transaction rollback: undo every row that
     // process_event wrote. With a single shared transaction (the fix), a real
     // rollback would remove all three atomically.
-    sqlx::query!(
-        r"DELETE FROM blockchain_events WHERE transaction_hash = $1",
-        TRANSFER_DEPLOY_HASH,
-    )
-    .execute(&pool)
-    .await
-    .unwrap();
-    sqlx::query!(
-        r"DELETE FROM blockchain_transactions WHERE transaction_hash = $1",
-        TRANSFER_DEPLOY_HASH,
-    )
-    .execute(&pool)
-    .await
-    .unwrap();
-    sqlx::query!(
-        r"DELETE FROM token_holdings WHERE user_address IN ($1, $2)",
-        FakeAddress::Alice.as_str(),
-        FakeAddress::Bob.as_str(),
-    )
-    .execute(&pool)
-    .await
-    .unwrap();
+    sqlx::query(r"DELETE FROM blockchain_events WHERE transaction_hash = $1")
+        .bind(TRANSFER_DEPLOY_HASH)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query(r"DELETE FROM blockchain_transactions WHERE transaction_hash = $1")
+        .bind(TRANSFER_DEPLOY_HASH)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query(r"DELETE FROM token_holdings WHERE user_address IN ($1, $2)")
+        .bind(FakeAddress::Alice.as_str())
+        .bind(FakeAddress::Bob.as_str())
+        .execute(&pool)
+        .await
+        .unwrap();
 
     // Second call — starts from a clean slate, must produce the same result.
     processor::process_event(&pool, &registry, &HashSet::new(), &event)
         .await
         .expect("second call must succeed");
 
-    let balance: Option<String> = sqlx::query_scalar!(
+    let balance = sqlx::query_scalar::<_, String>(
         r"
             SELECT balance FROM token_holdings
             WHERE user_address = $1 AND token_type = 'BIG'
         ",
-        FakeAddress::Bob.as_str(),
     )
+    .bind(FakeAddress::Bob.as_str())
     .fetch_optional(&pool)
     .await
     .unwrap();

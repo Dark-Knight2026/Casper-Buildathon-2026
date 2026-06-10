@@ -16,7 +16,7 @@ use core::time::Duration;
 use std::{collections::VecDeque, sync::Arc};
 
 use async_trait::async_trait;
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 use tokio::{
     sync::{Mutex, broadcast},
@@ -77,14 +77,14 @@ impl EmailSender for SequencedMailer {
 /// worker's backoff math is asserted separately - here we use this purely to
 /// drive multi-tick paths without waiting on real time.
 async fn force_due_now(pool: &PgPool, id: Uuid) {
-    sqlx::query!(
+    sqlx::query(
         r"
             UPDATE email_send_retries
             SET next_retry_at = NOW()
             WHERE id = $1
         ",
-        id,
     )
+    .bind(id)
     .execute(pool)
     .await
     .expect("force row due now");
@@ -118,21 +118,21 @@ async fn tick_marks_row_completed_on_success(pool: PgPool) {
         .await
         .expect("tick");
 
-    let row = sqlx::query!(
+    let row = sqlx::query_as::<_, (String, i32, Option<DateTime<Utc>>)>(
         r"
             SELECT status, attempts, completed_at
             FROM email_send_retries
             WHERE id = $1
         ",
-        id,
     )
+    .bind(id)
     .fetch_one(&pool)
     .await
     .expect("fetch row");
 
-    assert_eq!(row.status, "completed");
-    assert_eq!(row.attempts, 1);
-    assert!(row.completed_at.is_some(), "completed_at populated");
+    assert_eq!(row.0, "completed");
+    assert_eq!(row.1, 1);
+    assert!(row.2.is_some(), "completed_at populated");
 }
 
 /// Permanent failure on a queued row terminates it with `status = 'failed'` and
@@ -146,30 +146,27 @@ async fn tick_marks_row_failed_on_permanent(pool: PgPool) {
         .await
         .expect("tick");
 
-    let row = sqlx::query!(
+    let row = sqlx::query_as::<_, (String, Option<DateTime<Utc>>, Option<String>)>(
         r"
             SELECT status, completed_at, last_error
             FROM email_send_retries
             WHERE id = $1
         ",
-        id,
     )
+    .bind(id)
     .fetch_one(&pool)
     .await
     .expect("fetch row");
 
-    assert_eq!(row.status, "failed");
+    assert_eq!(row.0, "failed");
+    assert!(row.1.is_some(), "terminal row carries completed_at");
     assert!(
-        row.completed_at.is_some(),
-        "terminal row carries completed_at"
-    );
-    assert!(
-        row.last_error
+        row.2
             .as_deref()
             .unwrap_or_default()
             .starts_with("permanent: "),
         "last_error prefixed with `permanent:`, got {:?}",
-        row.last_error,
+        row.2,
     );
 }
 
@@ -186,35 +183,32 @@ async fn tick_reschedules_transient_with_backoff(pool: PgPool) {
         .await
         .expect("tick");
 
-    let row = sqlx::query!(
+    let row = sqlx::query_as::<_, (String, i32, DateTime<Utc>, Option<String>)>(
         r"
             SELECT status, attempts, next_retry_at, last_error
             FROM email_send_retries
             WHERE id = $1
         ",
-        id,
     )
+    .bind(id)
     .fetch_one(&pool)
     .await
     .expect("fetch row");
 
-    assert_eq!(
-        row.status, "pending",
-        "transient leaves the row claimable again"
-    );
-    assert_eq!(row.attempts, 1);
-    let pushed_secs = (row.next_retry_at - before).num_seconds();
+    assert_eq!(row.0, "pending", "transient leaves the row claimable again");
+    assert_eq!(row.1, 1);
+    let pushed_secs = (row.2 - before).num_seconds();
     assert!(
         pushed_secs >= 50,
         "next_retry_at pushed by ~60s backoff (got {pushed_secs}s)",
     );
     assert!(
-        row.last_error
+        row.3
             .as_deref()
             .unwrap_or_default()
             .starts_with("transient: "),
         "last_error prefixed with `transient:`, got {:?}",
-        row.last_error,
+        row.3,
     );
 }
 
@@ -243,23 +237,23 @@ async fn tick_succeeds_after_two_transient_failures(pool: PgPool) {
         .await
         .expect("tick 3");
 
-    let row = sqlx::query!(
+    let row = sqlx::query_as::<_, (String, i32, Option<DateTime<Utc>>, Option<String>)>(
         r"
             SELECT status, attempts, completed_at, last_error
             FROM email_send_retries
             WHERE id = $1
         ",
-        id,
     )
+    .bind(id)
     .fetch_one(&pool)
     .await
     .expect("fetch row");
 
-    assert_eq!(row.status, "completed");
-    assert_eq!(row.attempts, 3, "claim-time increment fires on every tick");
-    assert!(row.completed_at.is_some());
+    assert_eq!(row.0, "completed");
+    assert_eq!(row.1, 3, "claim-time increment fires on every tick");
+    assert!(row.2.is_some());
     assert_eq!(
-        row.last_error.as_deref(),
+        row.3.as_deref(),
         Some("transient: second attempt"),
         "success preserves the last transient reason for audit",
     );
@@ -270,15 +264,15 @@ async fn tick_succeeds_after_two_transient_failures(pool: PgPool) {
 /// otherwise mutate state.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn tick_does_not_reclaim_terminal_row(pool: PgPool) {
-    let id = sqlx::query_scalar!(
+    let id = sqlx::query_scalar::<_, Uuid>(
         r"
             INSERT INTO email_send_retries
                 (to_address, subject, body, attempts, status, completed_at, last_error)
             VALUES ($1, 'subj', 'body', 5, 'failed', NOW(), 'pre-existing')
             RETURNING id
         ",
-        "terminal@example.com",
     )
+    .bind("terminal@example.com")
     .fetch_one(&pool)
     .await
     .expect("seed terminal row");
@@ -288,20 +282,20 @@ async fn tick_does_not_reclaim_terminal_row(pool: PgPool) {
         .await
         .expect("tick");
 
-    let row = sqlx::query!(
+    let row = sqlx::query_as::<_, (String, i32, Option<String>)>(
         r"
             SELECT status, attempts, last_error
             FROM email_send_retries
             WHERE id = $1
         ",
-        id,
     )
+    .bind(id)
     .fetch_one(&pool)
     .await
     .expect("fetch row");
-    assert_eq!(row.status, "failed");
-    assert_eq!(row.attempts, 5, "terminal row attempts must not be bumped");
-    assert_eq!(row.last_error.as_deref(), Some("pre-existing"));
+    assert_eq!(row.0, "failed");
+    assert_eq!(row.1, 5, "terminal row attempts must not be bumped");
+    assert_eq!(row.2.as_deref(), Some("pre-existing"));
 }
 
 /// A transient reaching `MAX_ATTEMPTS` (12) is promoted to terminal `failed`
@@ -311,15 +305,15 @@ async fn tick_does_not_reclaim_terminal_row(pool: PgPool) {
 async fn tick_promotes_transient_to_failed_after_max_attempts(pool: PgPool) {
     // Seed at attempts = 11; the claim-time increment lifts it to 12, which
     // matches MAX_ATTEMPTS exactly and triggers the promote branch.
-    let id = sqlx::query_scalar!(
+    let id = sqlx::query_scalar::<_, Uuid>(
         r"
             INSERT INTO email_send_retries
                 (to_address, subject, body, attempts, status)
             VALUES ($1, 'subj', 'body', 11, 'pending')
             RETURNING id
         ",
-        "max@example.com",
     )
+    .bind("max@example.com")
     .fetch_one(&pool)
     .await
     .expect("seed near-max row");
@@ -329,27 +323,27 @@ async fn tick_promotes_transient_to_failed_after_max_attempts(pool: PgPool) {
         .await
         .expect("tick");
 
-    let row = sqlx::query!(
+    let row = sqlx::query_as::<_, (String, i32, Option<DateTime<Utc>>, Option<String>)>(
         r"
             SELECT status, attempts, completed_at, last_error
             FROM email_send_retries
             WHERE id = $1
         ",
-        id,
     )
+    .bind(id)
     .fetch_one(&pool)
     .await
     .expect("fetch row");
-    assert_eq!(row.status, "failed");
-    assert_eq!(row.attempts, 12);
-    assert!(row.completed_at.is_some(), "max-attempts marks terminal");
+    assert_eq!(row.0, "failed");
+    assert_eq!(row.1, 12);
+    assert!(row.2.is_some(), "max-attempts marks terminal");
     assert!(
-        row.last_error
+        row.3
             .as_deref()
             .unwrap_or_default()
             .starts_with("transient (max attempts): "),
         "last_error tags the max-attempts promotion, got {:?}",
-        row.last_error,
+        row.3,
     );
 }
 

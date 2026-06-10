@@ -22,6 +22,17 @@ use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 use uuid::Uuid;
 
+/// Audit-log columns read back via a runtime `query_as` (no compile-time
+/// macro in tests).
+#[derive(sqlx::FromRow)]
+struct AuditLogRow {
+    action: String,
+    resource_type: String,
+    resource_id: Option<Uuid>,
+    metadata: Option<Value>,
+    status: Option<String>,
+}
+
 /// Inserts an extra `refresh_tokens` row for `user_id` directly via SQL
 /// to simulate a second active device for the same user.
 ///
@@ -42,17 +53,17 @@ async fn insert_extra_session(pool: &PgPool, user_id: Uuid) -> (Uuid, Vec<u8>) {
     let token_hash = Sha256::digest(format!("synthetic-extra-{token_id}").as_bytes()).to_vec();
     let expires_at = Utc::now() + Duration::days(7);
 
-    sqlx::query!(
+    sqlx::query(
         r"
             INSERT INTO refresh_tokens (id, user_id, token_hash, family_id, expires_at)
             VALUES ($1, $2, $3, $4, $5)
         ",
-        token_id,
-        user_id,
-        &token_hash,
-        family_id,
-        expires_at,
     )
+    .bind(token_id)
+    .bind(user_id)
+    .bind(&token_hash)
+    .bind(family_id)
+    .bind(expires_at)
     .execute(pool)
     .await
     .expect("synthetic refresh_tokens insert");
@@ -90,34 +101,32 @@ async fn revoke_all_keep_current_preserves_caller_kills_others(pool: PgPool) {
     );
 
     let current_hash = Sha256::digest(session.refresh_token.as_bytes()).to_vec();
-    let current_active: bool = sqlx::query_scalar!(
+    let current_active = sqlx::query_scalar::<_, bool>(
         r"
             SELECT (revoked_at IS NULL) AS active
             FROM refresh_tokens
             WHERE token_hash = $1
         ",
-        current_hash,
     )
+    .bind(current_hash)
     .fetch_one(&pool)
     .await
-    .unwrap()
     .unwrap();
     assert!(
         current_active,
         "caller's own refresh row must remain active when keep_current = true",
     );
 
-    let other_revoked: bool = sqlx::query_scalar!(
+    let other_revoked = sqlx::query_scalar::<_, bool>(
         r"
             SELECT (revoked_at IS NOT NULL) AS revoked
             FROM refresh_tokens
             WHERE id = $1
         ",
-        other_id,
     )
+    .bind(other_id)
     .fetch_one(&pool)
     .await
-    .unwrap()
     .unwrap();
     assert!(other_revoked, "the other-device row must be revoked");
 
@@ -247,17 +256,16 @@ async fn revoke_all_does_not_touch_other_users(pool: PgPool) {
     assert_eq!(response.status_code(), StatusCode::OK);
 
     let bob_hash = Sha256::digest(bob.refresh_token.as_bytes()).to_vec();
-    let bob_active: bool = sqlx::query_scalar!(
+    let bob_active = sqlx::query_scalar::<_, bool>(
         r"
             SELECT (revoked_at IS NULL) AS active
             FROM refresh_tokens
             WHERE token_hash = $1
         ",
-        bob_hash,
     )
+    .bind(bob_hash)
     .fetch_one(&pool)
     .await
-    .unwrap()
     .unwrap();
     assert!(bob_active, "bob's session must survive alice's revoke-all",);
 
@@ -294,7 +302,7 @@ async fn revoke_all_writes_audit_log_with_keep_current_flag(pool: PgPool) {
         .await;
     assert_eq!(response.status_code(), StatusCode::OK);
 
-    let row = sqlx::query!(
+    let row = sqlx::query_as::<_, AuditLogRow>(
         r"
             SELECT action, resource_type, resource_id, metadata, status
             FROM audit_logs
@@ -302,8 +310,8 @@ async fn revoke_all_writes_audit_log_with_keep_current_flag(pool: PgPool) {
             ORDER BY created_at DESC
             LIMIT 1
         ",
-        session.user_id,
     )
+    .bind(session.user_id)
     .fetch_one(&pool)
     .await
     .expect("audit_logs row must exist after revoke-all");

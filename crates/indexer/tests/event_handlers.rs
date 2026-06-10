@@ -31,6 +31,61 @@ use indexer::{
     processor::{self, RawEvent},
 };
 
+/// `transaction_type` / `from_address` / `amount` of a `blockchain_transactions`
+/// row, read back via a runtime `query_as` (no compile-time macro in tests).
+#[derive(sqlx::FromRow)]
+struct TxTypeFromAmountRow {
+    transaction_type: String,
+    from_address: String,
+    amount: Option<String>,
+}
+
+/// `transaction_type` / `from_address` of a `blockchain_transactions` audit row.
+#[derive(sqlx::FromRow)]
+struct TxTypeFromRow {
+    transaction_type: String,
+    from_address: String,
+}
+
+/// `transaction_type` / `from_address` / `amount` / `currency` of a
+/// `blockchain_transactions` row.
+#[derive(sqlx::FromRow)]
+struct TxTypeFromAmountCurrencyRow {
+    transaction_type: String,
+    from_address: String,
+    amount: Option<String>,
+    currency: Option<String>,
+}
+
+/// `buyer_address` / `amount` / `currency` of an `ico_purchases` row.
+#[derive(sqlx::FromRow)]
+struct IcoPurchaseRow {
+    buyer_address: String,
+    amount: String,
+    currency: String,
+}
+
+/// Full `ico_schedules` row read back to assert schedule, price, and audit fields.
+#[derive(sqlx::FromRow)]
+struct IcoScheduleRow {
+    schedule_id: String,
+    start_timestamp: i64,
+    end_timestamp: i64,
+    sale_amount: String,
+    price: String,
+    transaction_hash: String,
+    block_height: i64,
+}
+
+/// `price` / `sale_amount` / `block_height` of an `ico_schedules` row, used to
+/// assert UPSERT and stale-event guard behaviour.
+#[derive(sqlx::FromRow)]
+struct IcoSchedulePriceRow {
+    price: String,
+    sale_amount: String,
+    block_height: i64,
+}
+
 // Transfer handler — blockchain_transactions
 
 /// Transfer must write exactly one row in `blockchain_transactions` with
@@ -60,14 +115,14 @@ async fn transfer_writes_blockchain_transaction_row(pool: PgPool) {
     .await
     .unwrap();
 
-    let row = sqlx::query!(
+    let row = sqlx::query_as::<_, TxTypeFromAmountRow>(
         r"
             SELECT transaction_type, from_address, amount
             FROM   blockchain_transactions
             WHERE  transaction_hash = $1
         ",
-        TRANSFER_DEPLOY_HASH,
     )
+    .bind(TRANSFER_DEPLOY_HASH)
     .fetch_one(&pool)
     .await
     .unwrap();
@@ -105,13 +160,13 @@ async fn transfer_increases_recipient_and_clamps_unknown_sender(pool: PgPool) {
     .await
     .unwrap();
 
-    let bob: Option<String> = sqlx::query_scalar!(
+    let bob = sqlx::query_scalar::<_, String>(
         r"
             SELECT balance FROM token_holdings
             WHERE user_address = $1 AND token_type = 'BIG'
         ",
-        FakeAddress::Bob.as_str(),
     )
+    .bind(FakeAddress::Bob.as_str())
     .fetch_optional(&pool)
     .await
     .unwrap();
@@ -121,13 +176,13 @@ async fn transfer_increases_recipient_and_clamps_unknown_sender(pool: PgPool) {
         "recipient balance must equal transferred amount"
     );
 
-    let alice: Option<String> = sqlx::query_scalar!(
+    let alice = sqlx::query_scalar::<_, String>(
         r"
             SELECT balance FROM token_holdings
             WHERE user_address = $1 AND token_type = 'BIG'
         ",
-        FakeAddress::Alice.as_str(),
     )
+    .bind(FakeAddress::Alice.as_str())
     .fetch_optional(&pool)
     .await
     .unwrap();
@@ -144,13 +199,13 @@ async fn transfer_decreases_existing_sender_balance(pool: PgPool) {
     common::disable_rls(&pool).await;
 
     // Seed alice with 1 000 BIG tokens before the transfer.
-    sqlx::query!(
+    sqlx::query(
         r"
             INSERT INTO token_holdings (user_address, token_type, balance, last_updated_at)
             VALUES ($1, 'BIG', '1000', NOW())
         ",
-        FakeAddress::Alice.as_str(),
     )
+    .bind(FakeAddress::Alice.as_str())
     .execute(&pool)
     .await
     .unwrap();
@@ -175,13 +230,13 @@ async fn transfer_decreases_existing_sender_balance(pool: PgPool) {
     .await
     .unwrap();
 
-    let alice: Option<String> = sqlx::query_scalar!(
+    let alice = sqlx::query_scalar::<_, String>(
         r"
             SELECT balance FROM token_holdings
             WHERE user_address = $1 AND token_type = 'BIG'
         ",
-        FakeAddress::Alice.as_str(),
     )
+    .bind(FakeAddress::Alice.as_str())
     .fetch_optional(&pool)
     .await
     .unwrap();
@@ -225,14 +280,14 @@ async fn set_allowance_writes_blockchain_transaction_row(pool: PgPool) {
     .await
     .unwrap();
 
-    let row = sqlx::query!(
+    let row = sqlx::query_as::<_, TxTypeFromAmountRow>(
         r"
             SELECT transaction_type, from_address, amount
             FROM   blockchain_transactions
             WHERE  transaction_hash = $1
         ",
-        TRANSFER_DEPLOY_HASH,
     )
+    .bind(TRANSFER_DEPLOY_HASH)
     .fetch_one(&pool)
     .await
     .unwrap();
@@ -277,14 +332,14 @@ async fn tokens_purchased_writes_ico_purchase_and_blockchain_transaction(pool: P
     .await
     .unwrap();
 
-    let purchase = sqlx::query!(
+    let purchase = sqlx::query_as::<_, IcoPurchaseRow>(
         r"
             SELECT buyer_address, amount, currency
             FROM   ico_purchases
             WHERE  transaction_hash = $1
         ",
-        PURCHASE_DEPLOY_HASH,
     )
+    .bind(PURCHASE_DEPLOY_HASH)
     .fetch_one(&pool)
     .await
     .unwrap();
@@ -293,14 +348,14 @@ async fn tokens_purchased_writes_ico_purchase_and_blockchain_transaction(pool: P
     assert_eq!(purchase.amount, "1000000000");
     assert_eq!(purchase.currency, "CSPR");
 
-    let tx_row = sqlx::query!(
+    let tx_row = sqlx::query_as::<_, TxTypeFromAmountCurrencyRow>(
         r"
             SELECT transaction_type, from_address, amount, currency
             FROM   blockchain_transactions
             WHERE  transaction_hash = $1
         ",
-        PURCHASE_DEPLOY_HASH,
     )
+    .bind(PURCHASE_DEPLOY_HASH)
     .fetch_one(&pool)
     .await
     .unwrap();
@@ -342,13 +397,13 @@ async fn tokens_purchased_increases_buyer_big_balance(pool: PgPool) {
     .await
     .unwrap();
 
-    let balance: Option<String> = sqlx::query_scalar!(
+    let balance = sqlx::query_scalar::<_, String>(
         r"
             SELECT balance FROM token_holdings
             WHERE user_address = $1 AND token_type = 'BIG'
         ",
-        FakeAddress::Buyer.as_str(),
     )
+    .bind(FakeAddress::Buyer.as_str())
     .fetch_optional(&pool)
     .await
     .unwrap();
@@ -388,13 +443,13 @@ async fn transfer_usdc_updates_usdc_token_holdings(pool: PgPool) {
     .await
     .unwrap();
 
-    let bob: Option<String> = sqlx::query_scalar!(
+    let bob = sqlx::query_scalar::<_, String>(
         r"
             SELECT balance FROM token_holdings
             WHERE user_address = $1 AND token_type = 'USDC'
         ",
-        FakeAddress::Bob.as_str(),
     )
+    .bind(FakeAddress::Bob.as_str())
     .fetch_optional(&pool)
     .await
     .unwrap();
@@ -406,12 +461,12 @@ async fn transfer_usdc_updates_usdc_token_holdings(pool: PgPool) {
     );
 
     // BIG table must be untouched.
-    let big_count: i64 =
-        sqlx::query_scalar!(r"SELECT COUNT(*) FROM token_holdings WHERE token_type = 'BIG'")
-            .fetch_one(&pool)
-            .await
-            .unwrap()
-            .unwrap_or(0);
+    let big_count = sqlx::query_scalar::<_, i64>(
+        r"SELECT COUNT(*) FROM token_holdings WHERE token_type = 'BIG'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     assert_eq!(
         big_count, 0,
         "Transfer on USDC contract must not touch BIG token_holdings"
@@ -444,13 +499,13 @@ async fn transfer_usdt_updates_usdt_token_holdings(pool: PgPool) {
     .await
     .unwrap();
 
-    let bob: Option<String> = sqlx::query_scalar!(
+    let bob = sqlx::query_scalar::<_, String>(
         r"
             SELECT balance FROM token_holdings
             WHERE user_address = $1 AND token_type = 'USDT'
         ",
-        FakeAddress::Bob.as_str(),
     )
+    .bind(FakeAddress::Bob.as_str())
     .fetch_optional(&pool)
     .await
     .unwrap();
@@ -462,12 +517,12 @@ async fn transfer_usdt_updates_usdt_token_holdings(pool: PgPool) {
     );
 
     // BIG table must be untouched.
-    let big_count: i64 =
-        sqlx::query_scalar!(r"SELECT COUNT(*) FROM token_holdings WHERE token_type = 'BIG'")
-            .fetch_one(&pool)
-            .await
-            .unwrap()
-            .unwrap_or(0);
+    let big_count = sqlx::query_scalar::<_, i64>(
+        r"SELECT COUNT(*) FROM token_holdings WHERE token_type = 'BIG'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     assert_eq!(
         big_count, 0,
         "Transfer on USDT contract must not touch BIG token_holdings"
@@ -508,10 +563,10 @@ async fn tokens_purchased_unknown_currency_stored_as_unknown_label(pool: PgPool)
     .await
     .unwrap();
 
-    let purchase_currency: Option<String> = sqlx::query_scalar!(
+    let purchase_currency = sqlx::query_scalar::<_, String>(
         r"SELECT currency FROM ico_purchases WHERE transaction_hash = $1",
-        PURCHASE_DEPLOY_HASH,
     )
+    .bind(PURCHASE_DEPLOY_HASH)
     .fetch_optional(&pool)
     .await
     .unwrap();
@@ -522,10 +577,10 @@ async fn tokens_purchased_unknown_currency_stored_as_unknown_label(pool: PgPool)
         "unknown currency discriminant must be stored as 'UNKNOWN' in ico_purchases"
     );
 
-    let tx_currency: Option<Option<String>> = sqlx::query_scalar!(
+    let tx_currency = sqlx::query_scalar::<_, Option<String>>(
         r"SELECT currency FROM blockchain_transactions WHERE transaction_hash = $1",
-        PURCHASE_DEPLOY_HASH,
     )
+    .bind(PURCHASE_DEPLOY_HASH)
     .fetch_optional(&pool)
     .await
     .unwrap();
@@ -569,11 +624,10 @@ async fn set_allowance_does_not_modify_token_holdings(pool: PgPool) {
     .await
     .unwrap();
 
-    let holdings: i64 = sqlx::query_scalar!(r"SELECT COUNT(*) FROM token_holdings")
+    let holdings = sqlx::query_scalar::<_, i64>(r"SELECT COUNT(*) FROM token_holdings")
         .fetch_one(&pool)
         .await
-        .unwrap()
-        .unwrap_or(0);
+        .unwrap();
 
     assert_eq!(
         holdings, 0,
@@ -615,16 +669,16 @@ async fn ico_schedule_added_writes_schedule_row(pool: PgPool) {
     .await
     .unwrap();
 
-    let row = sqlx::query!(
+    let row = sqlx::query_as::<_, IcoScheduleRow>(
         r"
             SELECT schedule_id, start_timestamp, end_timestamp, sale_amount, price, transaction_hash, block_height
             FROM   ico_schedules
             WHERE  schedule_id = 'schedule-1'
         ",
     )
-      .fetch_one(&pool)
-      .await
-      .unwrap();
+    .fetch_one(&pool)
+    .await
+    .unwrap();
 
     assert_eq!(row.schedule_id, "schedule-1");
     assert_eq!(row.start_timestamp, 1_700_000_000);
@@ -635,14 +689,14 @@ async fn ico_schedule_added_writes_schedule_row(pool: PgPool) {
     assert_eq!(row.block_height, 500);
 
     // Must also write a blockchain_transactions audit row.
-    let tx_row = sqlx::query!(
+    let tx_row = sqlx::query_as::<_, TxTypeFromRow>(
         r"
             SELECT transaction_type, from_address
             FROM   blockchain_transactions
             WHERE  transaction_hash = $1
         ",
-        deploy_hash,
     )
+    .bind(deploy_hash)
     .fetch_one(&pool)
     .await
     .unwrap();
@@ -714,24 +768,23 @@ async fn ico_schedule_added_upsert_updates_existing_row(pool: PgPool) {
     .await
     .unwrap();
 
-    let count: i64 = sqlx::query_scalar!(
+    let count = sqlx::query_scalar::<_, i64>(
         r"
             SELECT COUNT(*) FROM ico_schedules
             WHERE schedule_id = 'schedule-upsert'
-        "
+        ",
     )
     .fetch_one(&pool)
     .await
-    .unwrap()
-    .unwrap_or(0);
+    .unwrap();
 
     assert_eq!(count, 1, "UPSERT must not create duplicate rows");
 
-    let row = sqlx::query!(
+    let row = sqlx::query_as::<_, IcoSchedulePriceRow>(
         r"
             SELECT price, sale_amount, block_height FROM ico_schedules
             WHERE schedule_id = 'schedule-upsert'
-        "
+        ",
     )
     .fetch_one(&pool)
     .await
@@ -811,11 +864,11 @@ async fn ico_schedule_added_stale_event_does_not_overwrite(pool: PgPool) {
     .await
     .unwrap();
 
-    let row = sqlx::query!(
+    let row = sqlx::query_as::<_, IcoSchedulePriceRow>(
         r"
             SELECT price, sale_amount, block_height FROM ico_schedules
             WHERE schedule_id = 'schedule-guard'
-        "
+        ",
     )
     .fetch_one(&pool)
     .await

@@ -197,17 +197,16 @@ async fn revoke_other_users_session_returns_404(pool: PgPool) {
 
     // Bob's session remains active: the row is still `revoked_at IS NULL`.
     let bob_session_uuid = Uuid::parse_str(&bob_session_id).unwrap();
-    let still_active = sqlx::query_scalar!(
+    let still_active = sqlx::query_scalar::<_, bool>(
         r"
             SELECT revoked_at IS NULL AS active
             FROM refresh_tokens
             WHERE id = $1
         ",
-        bob_session_uuid,
     )
+    .bind(bob_session_uuid)
     .fetch_one(&pool)
     .await
-    .unwrap()
     .unwrap();
     assert!(
         still_active,

@@ -13,10 +13,30 @@ mod common;
 
 use axum::http::{StatusCode, header::USER_AGENT};
 use axum_test::http::header::COOKIE;
-use serde_json::json;
+use serde_json::{Value, json};
 use sqlx::PgPool;
+use uuid::Uuid;
 
 use api::services::auth::db::{self, VerifyConfirmOutcome};
+
+/// One `audit_logs` row read back via a runtime `query_as` (no compile-time
+/// macro in tests). Column order mirrors the SELECT so the
+/// `#[derive(sqlx::FromRow)]` mapping stays positional-agnostic.
+#[derive(sqlx::FromRow)]
+struct AuditRow {
+    user_id: Option<Uuid>,
+    user_email: Option<String>,
+    user_role: Option<String>,
+    action: String,
+    resource_type: String,
+    resource_id: Option<Uuid>,
+    new_values: Option<Value>,
+    status: Option<String>,
+    request_method: Option<String>,
+    request_path: Option<String>,
+    ip_text: Option<String>,
+    user_agent: Option<String>,
+}
 
 /// A successful confirm writes exactly one `verify_email` audit row carrying
 /// the full request context. The audit trail is the primary record of "who
@@ -49,7 +69,7 @@ async fn confirm_writes_verify_email_audit_row(pool: PgPool) {
     // cast to text for the read-back. `audit-write` time is the canonical
     // moment, so we order by created_at DESC + LIMIT 1 even though only one
     // row is expected.
-    let row = sqlx::query!(
+    let row = sqlx::query_as::<_, AuditRow>(
         r"
             SELECT user_id, user_email, user_role, action, resource_type, resource_id, new_values, status, request_method, request_path, ip_address::text AS ip_text, user_agent
             FROM audit_logs
@@ -57,8 +77,8 @@ async fn confirm_writes_verify_email_audit_row(pool: PgPool) {
             ORDER BY created_at DESC
             LIMIT 1
         ",
-        session.user_id,
     )
+    .bind(session.user_id)
     .fetch_one(&pool)
     .await
     .expect("verify_email audit row must exist after successful confirm");
@@ -124,19 +144,18 @@ async fn idempotent_confirm_does_not_write_a_second_audit_row(pool: PgPool) {
             .expect("second confirm");
     assert_eq!(second, VerifyConfirmOutcome::AlreadyVerified);
 
-    let count = sqlx::query_scalar!(
+    let count = sqlx::query_scalar::<_, i64>(
         r"
             SELECT COUNT(*) FROM audit_logs
             WHERE user_id = $1 AND action = 'verify_email'
         ",
-        session.user_id,
     )
+    .bind(session.user_id)
     .fetch_one(&pool)
     .await
     .expect("count audit rows");
     assert_eq!(
-        count,
-        Some(1),
+        count, 1,
         "idempotent confirm must not append a second verify_email audit row",
     );
 }
@@ -153,14 +172,14 @@ async fn confirm_bumps_updated_at(pool: PgPool) {
     common::seed_email(&pool, session.user_id).await;
 
     // Back-date updated_at by an hour so a NOW() bump is unambiguous.
-    sqlx::query!(
+    sqlx::query(
         r"
             UPDATE users
             SET updated_at = NOW() - INTERVAL '1 hour'
             WHERE id = $1
         ",
-        session.user_id,
     )
+    .bind(session.user_id)
     .execute(&pool)
     .await
     .expect("back-date updated_at");
@@ -171,14 +190,14 @@ async fn confirm_bumps_updated_at(pool: PgPool) {
             .expect("confirm");
     assert_eq!(outcome, VerifyConfirmOutcome::Verified);
 
-    let recently_bumped = sqlx::query_scalar!(
+    let recently_bumped = sqlx::query_scalar::<_, bool>(
         r#"
             SELECT updated_at > NOW() - INTERVAL '1 minute' AS "recently_bumped!"
             FROM users
             WHERE id = $1
         "#,
-        session.user_id,
     )
+    .bind(session.user_id)
     .fetch_one(&pool)
     .await
     .expect("read updated_at freshness");

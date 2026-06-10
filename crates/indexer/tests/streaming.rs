@@ -139,11 +139,10 @@ async fn non_json_frame_is_silently_skipped(pool: PgPool) {
     .await
     .expect("non-JSON frame must return Ok(())");
 
-    let count: i64 = sqlx::query_scalar!(r"SELECT COUNT(*) FROM blockchain_events")
+    let count = sqlx::query_scalar::<_, i64>(r"SELECT COUNT(*) FROM blockchain_events")
         .fetch_one(&pool)
         .await
-        .unwrap()
-        .unwrap_or(0);
+        .unwrap();
 
     assert_eq!(
         count, 0,
@@ -180,11 +179,10 @@ async fn message_for_unknown_contract_is_skipped(pool: PgPool) {
     .await
     .expect("message for unknown contract must return Ok(())");
 
-    let count: i64 = sqlx::query_scalar!(r"SELECT COUNT(*) FROM blockchain_events")
+    let count = sqlx::query_scalar::<_, i64>(r"SELECT COUNT(*) FROM blockchain_events")
         .fetch_one(&pool)
         .await
-        .unwrap()
-        .unwrap_or(0);
+        .unwrap();
 
     assert_eq!(
         count, 0,
@@ -232,11 +230,10 @@ async fn transform_id_overflow_returns_error(pool: PgPool) {
     );
 
     // The event must not land in the DB when the pipeline rejects the frame.
-    let count = sqlx::query_scalar!(r"SELECT COUNT(*) FROM blockchain_events")
+    let count = sqlx::query_scalar::<_, i64>(r"SELECT COUNT(*) FROM blockchain_events")
         .fetch_one(&pool)
         .await
-        .unwrap()
-        .unwrap_or(0);
+        .unwrap();
 
     assert_eq!(
         count, 0,
@@ -245,11 +242,11 @@ async fn transform_id_overflow_returns_error(pool: PgPool) {
 
     // The streaming cursor must NOT advance for a rejected frame - otherwise
     // a single poisoned message could permanently skip over a range of events.
-    let cursor = sqlx::query_scalar!(
+    let cursor = sqlx::query_scalar::<_, i64>(
         r"
             SELECT cursor_value FROM event_cursors
             WHERE stream_type = 'streaming' AND contract_hash = ''
-        "
+        ",
     )
     .fetch_optional(&pool)
     .await
@@ -291,22 +288,21 @@ async fn valid_message_processes_event_and_updates_cursor(pool: PgPool) {
     .await
     .expect("valid Transfer message must succeed");
 
-    let count: i64 = sqlx::query_scalar!(r"SELECT COUNT(*) FROM blockchain_events")
+    let count = sqlx::query_scalar::<_, i64>(r"SELECT COUNT(*) FROM blockchain_events")
         .fetch_one(&pool)
         .await
-        .unwrap()
-        .unwrap_or(0);
+        .unwrap();
 
     assert_eq!(
         count, 1,
         "valid message must write one row to blockchain_events"
     );
 
-    let cursor: Option<i64> = sqlx::query_scalar!(
+    let cursor = sqlx::query_scalar::<_, i64>(
         r"
             SELECT cursor_value FROM event_cursors
             WHERE stream_type = 'streaming' AND contract_hash = ''
-        "
+        ",
     )
     .fetch_optional(&pool)
     .await
@@ -353,22 +349,21 @@ async fn malformed_event_data_skipped_without_error(pool: PgPool) {
     .expect("malformed event must return Ok(()), not kill WSS connection");
 
     // Event must not be persisted (transaction rolled back).
-    let count: i64 = sqlx::query_scalar!(r"SELECT COUNT(*) FROM blockchain_events")
+    let count = sqlx::query_scalar::<_, i64>(r"SELECT COUNT(*) FROM blockchain_events")
         .fetch_one(&pool)
         .await
-        .unwrap()
-        .unwrap_or(0);
+        .unwrap();
     assert_eq!(
         count, 0,
         "malformed event must not be stored in blockchain_events"
     );
 
     // Cursor must still advance past the broken event.
-    let cursor: Option<i64> = sqlx::query_scalar!(
+    let cursor = sqlx::query_scalar::<_, i64>(
         r"
             SELECT cursor_value FROM event_cursors
             WHERE stream_type = 'streaming' AND contract_hash = ''
-        "
+        ",
     )
     .fetch_optional(&pool)
     .await

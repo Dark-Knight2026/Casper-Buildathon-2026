@@ -1255,54 +1255,54 @@ async fn replaced_by_fk_blocks_chain_breaking_deletes(pool: PgPool) {
     let successor_id = Uuid::new_v4();
     let family_id = Uuid::new_v4();
 
-    sqlx::query!(
+    sqlx::query(
         r"
             INSERT INTO refresh_tokens (id, user_id, token_hash, family_id, expires_at)
             VALUES ($1, $2, $3, $4, NOW() + INTERVAL '1 day')
         ",
-        predecessor_id,
-        user.id,
-        &b"predecessor_chain_hash"[..],
-        family_id,
     )
+    .bind(predecessor_id)
+    .bind(user.id)
+    .bind(&b"predecessor_chain_hash"[..])
+    .bind(family_id)
     .execute(&pool)
     .await
     .expect("predecessor insert");
 
-    sqlx::query!(
+    sqlx::query(
         r"
             INSERT INTO refresh_tokens (id, user_id, token_hash, family_id, expires_at)
             VALUES ($1, $2, $3, $4, NOW() + INTERVAL '1 day')
         ",
-        successor_id,
-        user.id,
-        &b"successor_chain_hash"[..],
-        family_id,
     )
+    .bind(successor_id)
+    .bind(user.id)
+    .bind(&b"successor_chain_hash"[..])
+    .bind(family_id)
     .execute(&pool)
     .await
     .expect("successor insert");
 
-    sqlx::query!(
+    sqlx::query(
         r"
             UPDATE refresh_tokens
             SET replaced_by = $1
             WHERE id = $2
         ",
-        successor_id,
-        predecessor_id,
     )
+    .bind(successor_id)
+    .bind(predecessor_id)
     .execute(&pool)
     .await
     .expect("wiring predecessor->successor chain");
 
-    let delete_result = sqlx::query!(
+    let delete_result = sqlx::query(
         r"
             DELETE FROM refresh_tokens
             WHERE id = $1
         ",
-        successor_id,
     )
+    .bind(successor_id)
     .execute(&pool)
     .await;
 
@@ -1311,14 +1311,14 @@ async fn replaced_by_fk_blocks_chain_breaking_deletes(pool: PgPool) {
         "DELETE of a successor must be blocked by FK RESTRICT while a predecessor still points to it; otherwise an out-of-order cleanup silently shreds audit history",
     );
 
-    let chain: Option<Uuid> = sqlx::query_scalar!(
+    let chain = sqlx::query_scalar::<_, Option<Uuid>>(
         r"
             SELECT replaced_by
             FROM refresh_tokens
             WHERE id = $1
         ",
-        predecessor_id,
     )
+    .bind(predecessor_id)
     .fetch_one(&pool)
     .await
     .expect("predecessor row must still exist");
@@ -1369,14 +1369,14 @@ async fn repeated_login_same_wallet_returns_same_user(pool: PgPool) {
     );
 
     // Belt-and-suspenders: confirm the DB really has only one wallet row.
-    let row_count: i64 = sqlx::query_scalar!(
+    let row_count = sqlx::query_scalar::<_, i64>(
         r#"
             SELECT COUNT(*) AS "count!"
             FROM wallet_connections
             WHERE user_id = $1
         "#,
-        first_user_id,
     )
+    .bind(first_user_id)
     .fetch_one(&pool)
     .await
     .expect("count query failed");
@@ -1419,14 +1419,14 @@ async fn login_blocked_for_suspended_user(pool: PgPool) {
         .and_then(|s| Uuid::parse_str(s).ok())
         .expect("first login response must include user.id");
 
-    let updated = sqlx::query!(
+    let updated = sqlx::query(
         r"
             UPDATE users
             SET status = 'suspended'
             WHERE id = $1
         ",
-        user_id,
     )
+    .bind(user_id)
     .execute(&pool)
     .await
     .expect("manual status downgrade must succeed");
@@ -1494,15 +1494,15 @@ async fn login_refresh_revoke_and_insert_are_atomic(pool: PgPool) {
 
     let predecessor_hash = b"atomicity_predecessor_hash_32____bytes";
     let predecessor_family = Uuid::new_v4();
-    sqlx::query!(
+    sqlx::query(
         r"
             INSERT INTO refresh_tokens (user_id, token_hash, family_id, expires_at)
             VALUES ($1, $2, $3, NOW() + INTERVAL '14 days')
         ",
-        user.id,
-        &predecessor_hash[..],
-        predecessor_family,
     )
+    .bind(user.id)
+    .bind(&predecessor_hash[..])
+    .bind(predecessor_family)
     .execute(&pool)
     .await
     .expect("predecessor refresh-token seeding must succeed");
@@ -1535,14 +1535,14 @@ async fn login_refresh_revoke_and_insert_are_atomic(pool: PgPool) {
         .await
         .expect("removing the temporary BEFORE INSERT trigger must succeed");
 
-    let predecessor_revoked: Option<DateTime<Utc>> = sqlx::query_scalar!(
+    let predecessor_revoked = sqlx::query_scalar::<_, Option<DateTime<Utc>>>(
         r"
             SELECT revoked_at
             FROM refresh_tokens
             WHERE token_hash = $1
         ",
-        &predecessor_hash[..],
     )
+    .bind(&predecessor_hash[..])
     .fetch_one(&pool)
     .await
     .expect("predecessor row must still exist - the failed login is not allowed to delete it");
@@ -1610,14 +1610,14 @@ async fn login_with_admin_role_rejected_with_400(pool: PgPool) {
         "no refresh_token cookie must be issued on a rejected role",
     );
 
-    let user_count: i64 = sqlx::query_scalar!(
+    let user_count = sqlx::query_scalar::<_, i64>(
         r#"
             SELECT COUNT(*) AS "count!"
             FROM wallet_connections
             WHERE wallet_address = $1
         "#,
-        wallet_address.to_ascii_lowercase(),
     )
+    .bind(wallet_address.to_ascii_lowercase())
     .fetch_one(&pool)
     .await
     .expect("count query failed");
@@ -1699,14 +1699,14 @@ async fn upsert_retry_exhaustion_is_not_row_not_found(pool: PgPool) {
     let placeholder_email = "retry-exhaust@leasefi.local";
     let wallet_address = "01a234567890abcdef01234567890abcdef01234567890abcdef01234567890abc";
 
-    sqlx::query!(
+    sqlx::query(
         r"
             INSERT INTO users (email, role, first_name, last_name, status)
             VALUES ($1, $2, 'Wallet', 'User', 'active')
         ",
-        placeholder_email,
-        UserRole::Tenant.to_string(),
     )
+    .bind(placeholder_email)
+    .bind(UserRole::Tenant.to_string())
     .execute(&pool)
     .await
     .expect("seed user insert");

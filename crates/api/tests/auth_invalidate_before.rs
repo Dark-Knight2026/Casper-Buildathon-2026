@@ -51,14 +51,14 @@ async fn cutoff_in_past_does_not_invalidate_newer_token(pool: PgPool) {
 
     // Set the cutoff 1 hour BEFORE login. Any token issued at login time
     // has `iat ~= NOW()`, so `iat > cutoff` and the token must be accepted.
-    sqlx::query!(
+    sqlx::query(
         r"
             UPDATE users
             SET jwt_invalidate_before = NOW() - INTERVAL '1 hour'
             WHERE id = $1
         ",
-        session.user_id,
     )
+    .bind(session.user_id)
     .execute(&pool)
     .await
     .expect("seed cutoff in past");
@@ -87,14 +87,14 @@ async fn cutoff_after_iat_invalidates_token(pool: PgPool) {
     let env = common::setup_test_server(pool.clone(), true).await;
     let session = common::login_and_extract(&env).await;
 
-    sqlx::query!(
+    sqlx::query(
         r"
             UPDATE users
             SET jwt_invalidate_before = NOW() + INTERVAL '5 seconds'
             WHERE id = $1
         ",
-        session.user_id,
     )
+    .bind(session.user_id)
     .execute(&pool)
     .await
     .expect("seed cutoff in future");
@@ -159,14 +159,14 @@ async fn fresh_login_after_cutoff_succeeds(pool: PgPool) {
         Uuid::parse_str(first_login.json::<Value>()["user"]["id"].as_str().unwrap()).unwrap();
 
     // Force-revoke.
-    sqlx::query!(
+    sqlx::query(
         r"
             UPDATE users
             SET jwt_invalidate_before = NOW()
             WHERE id = $1
         ",
-        user_id,
     )
+    .bind(user_id)
     .execute(&pool)
     .await
     .expect("seed cutoff at NOW()");

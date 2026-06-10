@@ -15,6 +15,26 @@ use uuid::Uuid;
 use crate::common::{CapturingMailer, TestOverrides};
 use api::{common::tokens, providers::EmailSender};
 
+/// Profile columns read back via a runtime `query_as` (no compile-time macro
+/// in tests).
+#[derive(sqlx::FromRow)]
+struct ProfileRow {
+    first_name: String,
+    last_name: String,
+    phone: Option<String>,
+    bio: Option<String>,
+    phone_verified: Option<bool>,
+}
+
+/// `users` columns asserted after an email-change confirm, read back via a
+/// runtime `query_as` (no compile-time macro in tests).
+#[derive(sqlx::FromRow)]
+struct EmailConfirmRow {
+    email: Option<String>,
+    verification_level: String,
+    email_verified: Option<bool>,
+}
+
 /// Regression: when `mailer.send` fails inside `request_email_change`, the
 /// handler must roll back the Redis token slot and the rate-limit counter
 /// so the user can retry without burning one of their three daily attempts
@@ -60,14 +80,14 @@ async fn request_email_change_rolls_back_state_on_mailer_failure(pool: PgPool) {
     let access_cookie = login_response.cookie("access_token");
     let access_token = access_cookie.value().to_owned();
 
-    let user_id = sqlx::query_scalar!(
+    let user_id = sqlx::query_scalar::<_, Uuid>(
         r"
             SELECT user_id
             FROM wallet_connections
             WHERE wallet_address = $1
         ",
-        wallet_address.to_ascii_lowercase(),
     )
+    .bind(wallet_address.to_ascii_lowercase())
     .fetch_one(&pool)
     .await
     .expect("wallet must exist after first login");
@@ -218,14 +238,14 @@ async fn confirm_email_change_with_expired_token_returns_401(pool: PgPool) {
     assert_eq!(login_response.status_code(), StatusCode::OK);
     let access_token = login_response.cookie("access_token").value().to_owned();
 
-    let user_id = sqlx::query_scalar!(
+    let user_id = sqlx::query_scalar::<_, Uuid>(
         r"
             SELECT user_id
             FROM wallet_connections
             WHERE wallet_address = $1
         ",
-        wallet_address.to_ascii_lowercase(),
     )
+    .bind(wallet_address.to_ascii_lowercase())
     .fetch_one(&pool)
     .await
     .expect("wallet must exist after first login");
@@ -432,14 +452,14 @@ async fn patch_me_updates_editable_fields(pool: PgPool) {
     assert_eq!(patched["phone"].as_str().unwrap(), "+12025550123");
     assert_eq!(patched["bio"].as_str().unwrap(), "Casper hodler");
 
-    let row = sqlx::query!(
+    let row = sqlx::query_as::<_, ProfileRow>(
         r"
             SELECT first_name, last_name, phone, bio, phone_verified
             FROM users
             WHERE id = $1
         ",
-        user_id,
     )
+    .bind(user_id)
     .fetch_one(&pool)
     .await
     .expect("user row must exist after PATCH");
@@ -583,23 +603,23 @@ async fn confirm_email_change_happy_path_upgrades_verification(pool: PgPool) {
         .parse::<Uuid>()
         .unwrap();
 
-    let initial = sqlx::query!(
+    let initial = sqlx::query_as::<_, (String, Option<bool>)>(
         r"
             SELECT verification_level, email_verified
             FROM users
             WHERE id = $1
         ",
-        user_id,
     )
+    .bind(user_id)
     .fetch_one(&pool)
     .await
     .expect("user row must exist after login");
     assert_eq!(
-        initial.verification_level, "none",
+        initial.0, "none",
         "fresh wallet user must start at verification_level='none'",
     );
     assert_eq!(
-        initial.email_verified,
+        initial.1,
         Some(false),
         "fresh wallet user must start with email_verified=false",
     );
@@ -657,14 +677,14 @@ async fn confirm_email_change_happy_path_upgrades_verification(pool: PgPool) {
         "confirm response must echo the new email",
     );
 
-    let final_row = sqlx::query!(
+    let final_row = sqlx::query_as::<_, EmailConfirmRow>(
         r"
             SELECT email, verification_level, email_verified
             FROM users
             WHERE id = $1
         ",
-        user_id,
     )
+    .bind(user_id)
     .fetch_one(&pool)
     .await
     .expect("user row must still exist after confirm");

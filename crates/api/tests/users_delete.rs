@@ -19,11 +19,33 @@ use core::time::Duration as CoreDuration;
 use axum::http::StatusCode;
 use axum_test::http::header::COOKIE;
 use casper_types::AsymmetricType;
+use chrono::{DateTime, Utc};
 use serde_json::Value;
 use sqlx::PgPool;
+use uuid::Uuid;
 
 use api::UserRole;
 use common::{LoggedSession, TestEnv};
+
+/// `users` columns asserted after a self-delete, read back via a runtime
+/// `query_as` (no compile-time macro in tests).
+#[derive(sqlx::FromRow)]
+struct DeleteUserRow {
+    deleted_at: Option<DateTime<Utc>>,
+    jwt_invalidate_before: Option<DateTime<Utc>>,
+    wallet_address: Option<String>,
+    email: Option<String>,
+}
+
+/// `audit_logs` columns read back via a runtime `query_as` (no compile-time
+/// macro in tests).
+#[derive(sqlx::FromRow)]
+struct DeleteAuditLogRow {
+    action: String,
+    resource_type: String,
+    resource_id: Option<Uuid>,
+    status: Option<String>,
+}
 
 /// Re-logs in for the same wallet, returning a fresh access token.
 ///
@@ -104,14 +126,14 @@ async fn delete_me_happy_path_revokes_session_and_clears_state(pool: PgPool) {
     // users row: deleted_at stamped, jwt_invalidate_before stamped,
     // wallet_address NULL (via wallet_connections trigger), email
     // rewritten to the per-user placeholder.
-    let row = sqlx::query!(
+    let row = sqlx::query_as::<_, DeleteUserRow>(
         r"
             SELECT deleted_at, jwt_invalidate_before, wallet_address, email
             FROM users
             WHERE id = $1
         ",
-        session.user_id,
     )
+    .bind(session.user_id)
     .fetch_one(&pool)
     .await
     .unwrap();
@@ -205,7 +227,7 @@ async fn delete_me_writes_audit_log(pool: PgPool) {
         .await;
     assert_eq!(response.status_code(), StatusCode::NO_CONTENT);
 
-    let row = sqlx::query!(
+    let row = sqlx::query_as::<_, DeleteAuditLogRow>(
         r"
             SELECT action, resource_type, resource_id, status
             FROM audit_logs
@@ -213,8 +235,8 @@ async fn delete_me_writes_audit_log(pool: PgPool) {
             ORDER BY created_at DESC
             LIMIT 1
         ",
-        session.user_id,
     )
+    .bind(session.user_id)
     .fetch_one(&pool)
     .await
     .expect("audit_logs row must exist after self-delete");
@@ -253,19 +275,19 @@ async fn delete_me_without_confirmation_returns_400(pool: PgPool) {
     assert_eq!(wrong.status_code(), StatusCode::BAD_REQUEST);
 
     // Sanity: row still alive, no placeholder email, no audit row.
-    let row = sqlx::query!(
+    let row = sqlx::query_as::<_, (Option<DateTime<Utc>>, Option<String>)>(
         r"SELECT deleted_at, email FROM users WHERE id = $1",
-        session.user_id,
     )
+    .bind(session.user_id)
     .fetch_one(&pool)
     .await
     .unwrap();
     assert!(
-        row.deleted_at.is_none(),
+        row.0.is_none(),
         "rejected requests must not stamp deleted_at",
     );
     assert!(
-        !row.email
+        !row.1
             .as_deref()
             .is_some_and(|email| email.contains("@deleted.local")),
         "rejected requests must not rewrite email to placeholder",
@@ -415,19 +437,19 @@ async fn delete_me_concurrent_lease_does_not_orphan_user(pool: PgPool) {
         "active lease must surface as LeaseBlocking, not Deleted",
     );
 
-    let row = sqlx::query!(
+    let deleted_at = sqlx::query_scalar::<_, Option<DateTime<Utc>>>(
         r"
             SELECT deleted_at
             FROM users
             WHERE id = $1
         ",
-        user_id,
     )
+    .bind(user_id)
     .fetch_one(&pool)
     .await
     .expect("user row must exist");
     assert!(
-        row.deleted_at.is_none(),
+        deleted_at.is_none(),
         "user must not be soft-deleted while an active lease still references them as landlord_id",
     );
 

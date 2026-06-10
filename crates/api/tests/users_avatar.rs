@@ -408,14 +408,14 @@ async fn upload_avatar_db_failure_does_not_consume_rate_limit_slot(pool: PgPool)
     // Direct UPDATE soft-deletes the user without going through the
     // `DELETE /me` gates. Mirrors the production failure mode where
     // the JWT outlives the row by up to 15 minutes.
-    sqlx::query!(
+    sqlx::query(
         r"
             UPDATE users
             SET deleted_at = NOW()
             WHERE id = $1
         ",
-        session.user_id,
     )
+    .bind(session.user_id)
     .execute(&pool)
     .await
     .expect("soft-delete user");

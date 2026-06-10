@@ -13,7 +13,7 @@ mod common;
 
 use core::time::Duration;
 
-use chrono::{Duration as ChronoDuration, Utc};
+use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use sqlx::PgPool;
 
 use api::workers::email_retry;
@@ -40,7 +40,7 @@ async fn claim_marks_attempt_and_returns_payload(pool: PgPool) {
 /// Claim ignores rows whose `next_retry_at` is in the future.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn claim_skips_rows_scheduled_in_future(pool: PgPool) {
-    sqlx::query!(
+    sqlx::query(
         r"
             INSERT INTO email_send_retries (to_address, subject, body, next_retry_at)
             VALUES ('later@example.com', 's', 'b', NOW() + INTERVAL '1 hour')
@@ -63,7 +63,7 @@ async fn claim_skips_rows_scheduled_in_future(pool: PgPool) {
 /// Claim ignores rows whose `status` is no longer `pending`.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn claim_skips_terminal_rows(pool: PgPool) {
-    sqlx::query!(
+    sqlx::query(
         r"
             INSERT INTO email_send_retries (to_address, subject, body, status, completed_at)
             VALUES
@@ -105,23 +105,20 @@ async fn mark_completed_sets_status_and_completed_at(pool: PgPool) {
         .await
         .expect("mark_completed");
 
-    let row = sqlx::query!(
+    let row = sqlx::query_as::<_, (String, Option<DateTime<Utc>>, Option<String>)>(
         r"
             SELECT status, completed_at, last_error
             FROM email_send_retries
             WHERE id = $1
         ",
-        id,
     )
+    .bind(id)
     .fetch_one(&pool)
     .await
     .expect("fetch");
-    assert_eq!(row.status, "completed");
-    assert!(row.completed_at.is_some());
-    assert!(
-        row.last_error.is_none(),
-        "happy path leaves last_error NULL"
-    );
+    assert_eq!(row.0, "completed");
+    assert!(row.1.is_some());
+    assert!(row.2.is_none(), "happy path leaves last_error NULL");
 }
 
 /// `mark_failed` records the reason and transitions to terminal `failed`.
@@ -133,20 +130,20 @@ async fn mark_failed_records_reason(pool: PgPool) {
         .await
         .expect("mark_failed");
 
-    let row = sqlx::query!(
+    let row = sqlx::query_as::<_, (String, Option<DateTime<Utc>>, Option<String>)>(
         r"
             SELECT status, completed_at, last_error
             FROM email_send_retries
             WHERE id = $1
         ",
-        id,
     )
+    .bind(id)
     .fetch_one(&pool)
     .await
     .expect("fetch");
-    assert_eq!(row.status, "failed");
-    assert!(row.completed_at.is_some());
-    assert_eq!(row.last_error.as_deref(), Some("permanent: bad recipient"));
+    assert_eq!(row.0, "failed");
+    assert!(row.1.is_some());
+    assert_eq!(row.2.as_deref(), Some("permanent: bad recipient"));
 }
 
 /// `mark_transient_failure` reschedules without leaving `pending`.
@@ -159,20 +156,20 @@ async fn mark_transient_failure_keeps_pending_and_pushes_next_retry(pool: PgPool
         .await
         .expect("mark_transient_failure");
 
-    let row = sqlx::query!(
+    let row = sqlx::query_as::<_, (String, DateTime<Utc>, Option<String>)>(
         r"
             SELECT status, next_retry_at, last_error
             FROM email_send_retries
             WHERE id = $1
         ",
-        id,
     )
+    .bind(id)
     .fetch_one(&pool)
     .await
     .expect("fetch");
-    assert_eq!(row.status, "pending", "transient failure stays in queue");
-    assert_eq!(row.last_error.as_deref(), Some("transient: timeout"));
-    let drift = (row.next_retry_at - new_when).num_milliseconds().abs();
+    assert_eq!(row.0, "pending", "transient failure stays in queue");
+    assert_eq!(row.2.as_deref(), Some("transient: timeout"));
+    let drift = (row.1 - new_when).num_milliseconds().abs();
     assert!(
         drift < 1000,
         "next_retry_at should match the scheduled instant (drift={drift}ms)",
@@ -182,7 +179,7 @@ async fn mark_transient_failure_keeps_pending_and_pushes_next_retry(pool: PgPool
 /// Cleanup deletes terminal rows older than the retention window.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn cleanup_deletes_terminal_rows_past_retention(pool: PgPool) {
-    sqlx::query!(
+    sqlx::query(
         r"
             INSERT INTO email_send_retries (to_address, subject, body, status, completed_at)
             VALUES
@@ -204,7 +201,7 @@ async fn cleanup_deletes_terminal_rows_past_retention(pool: PgPool) {
         deleted, 1,
         "only the 40-day-old terminal row is past retention"
     );
-    let kept_addresses = sqlx::query_scalar!(
+    let kept_addresses = sqlx::query_scalar::<_, String>(
         r"
             SELECT to_address FROM email_send_retries ORDER BY to_address
         ",

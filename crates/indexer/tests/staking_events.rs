@@ -15,7 +15,7 @@ mod common;
 
 use std::collections::HashSet;
 
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use serde_json::json;
 use sqlx::PgPool;
 
@@ -79,45 +79,43 @@ async fn staked_creates_position_and_event(pool: PgPool) {
     .await
     .unwrap();
 
-    let pos = sqlx::query!(
+    let pos = sqlx::query_as::<_, (String, String)>(
         r"
             SELECT staked_amount, total_rewards_claimed
             FROM staking_positions
             WHERE staker_address = $1
         ",
-        FakeAddress::Buyer.as_str(),
     )
+    .bind(FakeAddress::Buyer.as_str())
     .fetch_one(&pool)
     .await
     .unwrap();
 
-    assert_eq!(pos.staked_amount, "5000000000000000000000");
-    assert_eq!(pos.total_rewards_claimed, "0");
+    assert_eq!(pos.0, "5000000000000000000000");
+    assert_eq!(pos.1, "0");
 
-    let event_count: i64 = sqlx::query_scalar!(
+    let event_count = sqlx::query_scalar::<_, i64>(
         r"
             SELECT COUNT(*)
             FROM staking_events
             WHERE staker_address = $1 AND event_type = 'stake'
         ",
-        FakeAddress::Buyer.as_str(),
     )
+    .bind(FakeAddress::Buyer.as_str())
     .fetch_one(&pool)
     .await
-    .unwrap()
-    .unwrap_or(0);
+    .unwrap();
 
     assert_eq!(event_count, 1);
 
     // Verify blockchain_transactions row was written.
-    let tx_count: i64 = sqlx::query_scalar!(
+    let tx_count = sqlx::query_scalar::<_, i64>(
         r"SELECT COUNT(*) FROM blockchain_transactions WHERE transaction_hash = $1",
-        STAKING_DEPLOY_1,
     )
+    .bind(STAKING_DEPLOY_1)
     .fetch_one(&pool)
     .await
-    .unwrap()
-    .unwrap_or(0);
+    .unwrap();
 
     assert_eq!(
         tx_count, 1,
@@ -147,10 +145,10 @@ async fn staked_idempotent(pool: PgPool) {
             .unwrap();
     }
 
-    let staked: String = sqlx::query_scalar!(
+    let staked = sqlx::query_scalar::<_, String>(
         r"SELECT staked_amount FROM staking_positions WHERE staker_address = $1",
-        FakeAddress::Buyer.as_str(),
     )
+    .bind(FakeAddress::Buyer.as_str())
     .fetch_one(&pool)
     .await
     .unwrap();
@@ -160,14 +158,13 @@ async fn staked_idempotent(pool: PgPool) {
         "duplicate Staked must not double staked_amount"
     );
 
-    let event_count: i64 = sqlx::query_scalar!(
+    let event_count = sqlx::query_scalar::<_, i64>(
         r"SELECT COUNT(*) FROM staking_events WHERE transaction_hash = $1",
-        STAKING_DEPLOY_1,
     )
+    .bind(STAKING_DEPLOY_1)
     .fetch_one(&pool)
     .await
-    .unwrap()
-    .unwrap_or(0);
+    .unwrap();
 
     assert_eq!(
         event_count, 1,
@@ -198,14 +195,14 @@ async fn staked_accumulates(pool: PgPool) {
         .unwrap();
     }
 
-    let staked: String = sqlx::query_scalar!(
+    let staked = sqlx::query_scalar::<_, String>(
         r"
             SELECT staked_amount
             FROM staking_positions
             WHERE staker_address = $1
         ",
-        FakeAddress::Buyer.as_str(),
     )
+    .bind(FakeAddress::Buyer.as_str())
     .fetch_one(&pool)
     .await
     .unwrap();
@@ -258,22 +255,22 @@ async fn unstaked_initiated_sets_unbonding(pool: PgPool) {
     .await
     .unwrap();
 
-    let pos = sqlx::query!(
+    let pos = sqlx::query_as::<_, (String, String, Option<DateTime<Utc>>)>(
         r"
             SELECT staked_amount, unbonding_amount, unbonding_ends_at
             FROM staking_positions
             WHERE staker_address = $1
         ",
-        FakeAddress::Buyer.as_str(),
     )
+    .bind(FakeAddress::Buyer.as_str())
     .fetch_one(&pool)
     .await
     .unwrap();
 
-    assert_eq!(pos.staked_amount, "6000", "10000 - 4000 = 6000");
-    assert_eq!(pos.unbonding_amount, "4000");
+    assert_eq!(pos.0, "6000", "10000 - 4000 = 6000");
+    assert_eq!(pos.1, "4000");
     let expected_ts = chrono::DateTime::from_timestamp_millis(1_700_172_800_000);
-    assert_eq!(pos.unbonding_ends_at, expected_ts);
+    assert_eq!(pos.2, expected_ts);
 }
 
 /// `UnstakedInitiated` without a prior `Staked` event must not panic and
@@ -301,39 +298,32 @@ async fn unstaked_initiated_without_prior_staked(pool: PgPool) {
     .unwrap();
 
     // staking_events row should still be inserted (event log is append-only)
-    let event_count: i64 = sqlx::query_scalar!(
+    let event_count = sqlx::query_scalar::<_, i64>(
         r"SELECT COUNT(*) FROM staking_events WHERE staker_address = $1 AND event_type = 'unstake'",
-        FakeAddress::Buyer.as_str(),
     )
+    .bind(FakeAddress::Buyer.as_str())
     .fetch_one(&pool)
     .await
-    .unwrap()
-    .unwrap_or(0);
+    .unwrap();
     assert_eq!(event_count, 1, "event log should record the unstake");
 
     // Position must be created with the unbonding delta preserved.
-    let pos = sqlx::query!(
+    let pos = sqlx::query_as::<_, (String, String, Option<DateTime<Utc>>)>(
         r"
             SELECT staked_amount, unbonding_amount, unbonding_ends_at
             FROM staking_positions
             WHERE staker_address = $1
         ",
-        FakeAddress::Buyer.as_str(),
     )
+    .bind(FakeAddress::Buyer.as_str())
     .fetch_one(&pool)
     .await
     .expect("upsert must create a position even without a prior Staked event");
 
-    assert_eq!(
-        pos.staked_amount, "0",
-        "no prior stake - staked_amount must be zero"
-    );
-    assert_eq!(
-        pos.unbonding_amount, "5000",
-        "unbonding delta must be preserved"
-    );
+    assert_eq!(pos.0, "0", "no prior stake - staked_amount must be zero");
+    assert_eq!(pos.1, "5000", "unbonding delta must be preserved");
     let expected_ts = chrono::DateTime::from_timestamp_millis(1_700_172_800_000);
-    assert_eq!(pos.unbonding_ends_at, expected_ts);
+    assert_eq!(pos.2, expected_ts);
 }
 
 // UnbondedWithdrawn handler ---------------------------------------------------
@@ -387,20 +377,20 @@ async fn unbonded_withdrawn_clears_unbonding(pool: PgPool) {
     .await
     .unwrap();
 
-    let pos = sqlx::query!(
+    let pos = sqlx::query_as::<_, (String, Option<DateTime<Utc>>)>(
         r"
             SELECT unbonding_amount, unbonding_ends_at
             FROM staking_positions
             WHERE staker_address = $1
         ",
-        FakeAddress::Buyer.as_str(),
     )
+    .bind(FakeAddress::Buyer.as_str())
     .fetch_one(&pool)
     .await
     .unwrap();
 
-    assert_eq!(pos.unbonding_amount, "0");
-    assert_eq!(pos.unbonding_ends_at, None);
+    assert_eq!(pos.0, "0");
+    assert_eq!(pos.1, None);
 }
 
 // RewardsDeposited handler ----------------------------------------------------
@@ -427,26 +417,26 @@ async fn rewards_deposited_inserts_deposit(pool: PgPool) {
     .await
     .unwrap();
 
-    let deposit = sqlx::query!(
+    let deposit = sqlx::query_as::<_, (String, String, String, String)>(
         r"
             SELECT caller_address, amount, reward_per_token_stored, transaction_hash
             FROM staking_reward_deposits
             WHERE transaction_hash = $1
         ",
-        STAKING_DEPLOY_4,
     )
+    .bind(STAKING_DEPLOY_4)
     .fetch_one(&pool)
     .await
     .unwrap();
 
-    assert_eq!(deposit.caller_address, FakeAddress::ContractX.as_str());
-    assert_eq!(deposit.amount, "100000");
-    assert_eq!(deposit.reward_per_token_stored, "2000000000000000000");
-    assert_eq!(deposit.transaction_hash, STAKING_DEPLOY_4);
+    assert_eq!(deposit.0, FakeAddress::ContractX.as_str());
+    assert_eq!(deposit.1, "100000");
+    assert_eq!(deposit.2, "2000000000000000000");
+    assert_eq!(deposit.3, STAKING_DEPLOY_4);
 
     // Verify global reward state was updated.
-    let global_reward_per_token: String = sqlx::query_scalar!(
-        r"SELECT reward_per_token_stored FROM staking_reward_state WHERE id = 1"
+    let global_reward_per_token = sqlx::query_scalar::<_, String>(
+        r"SELECT reward_per_token_stored FROM staking_reward_state WHERE id = 1",
     )
     .fetch_one(&pool)
     .await
@@ -479,18 +469,17 @@ async fn rewards_deposited_idempotent(pool: PgPool) {
         .unwrap();
     }
 
-    let count: i64 = sqlx::query_scalar!(
+    let count = sqlx::query_scalar::<_, i64>(
         r"
             SELECT COUNT(*)
             FROM staking_reward_deposits
             WHERE transaction_hash = $1
         ",
-        STAKING_DEPLOY_4,
     )
+    .bind(STAKING_DEPLOY_4)
     .fetch_one(&pool)
     .await
-    .unwrap()
-    .unwrap_or(0);
+    .unwrap();
 
     assert_eq!(
         count, 1,
@@ -557,18 +546,17 @@ async fn rewards_deposited_batch_deploy_both_recorded(pool: PgPool) {
     .await
     .unwrap();
 
-    let count: i64 = sqlx::query_scalar!(
+    let count = sqlx::query_scalar::<_, i64>(
         r"
             SELECT COUNT(*)
             FROM staking_reward_deposits
             WHERE transaction_hash = $1
         ",
-        STAKING_DEPLOY_10,
     )
+    .bind(STAKING_DEPLOY_10)
     .fetch_one(&pool)
     .await
-    .unwrap()
-    .unwrap_or(0);
+    .unwrap();
 
     assert_eq!(
         count, 2,
@@ -576,8 +564,8 @@ async fn rewards_deposited_batch_deploy_both_recorded(pool: PgPool) {
     );
 
     // Global reward state must reflect the latest (highest) value.
-    let global_reward_per_token: String = sqlx::query_scalar!(
-        r"SELECT reward_per_token_stored FROM staking_reward_state WHERE id = 1"
+    let global_reward_per_token = sqlx::query_scalar::<_, String>(
+        r"SELECT reward_per_token_stored FROM staking_reward_state WHERE id = 1",
     )
     .fetch_one(&pool)
     .await
@@ -627,44 +615,42 @@ async fn rewards_claimed_updates_position(pool: PgPool) {
     .await
     .unwrap();
 
-    let pos = sqlx::query!(
+    let total_rewards_claimed = sqlx::query_scalar::<_, String>(
         r"
             SELECT total_rewards_claimed
             FROM staking_positions
             WHERE staker_address = $1
         ",
-        FakeAddress::Buyer.as_str(),
     )
+    .bind(FakeAddress::Buyer.as_str())
     .fetch_one(&pool)
     .await
     .unwrap();
 
-    assert_eq!(pos.total_rewards_claimed, "500");
+    assert_eq!(total_rewards_claimed, "500");
 
-    let event_count: i64 = sqlx::query_scalar!(
+    let event_count = sqlx::query_scalar::<_, i64>(
         r"
             SELECT COUNT(*)
             FROM staking_events
             WHERE staker_address = $1 AND event_type = 'reward_claim'
         ",
-        FakeAddress::Buyer.as_str(),
     )
+    .bind(FakeAddress::Buyer.as_str())
     .fetch_one(&pool)
     .await
-    .unwrap()
-    .unwrap_or(0);
+    .unwrap();
 
     assert_eq!(event_count, 1);
 
     // Verify blockchain_transactions row was written.
-    let tx_count: i64 = sqlx::query_scalar!(
+    let tx_count = sqlx::query_scalar::<_, i64>(
         r"SELECT COUNT(*) FROM blockchain_transactions WHERE transaction_hash = $1",
-        STAKING_DEPLOY_5,
     )
+    .bind(STAKING_DEPLOY_5)
     .fetch_one(&pool)
     .await
-    .unwrap()
-    .unwrap_or(0);
+    .unwrap();
 
     assert_eq!(
         tx_count, 1,
@@ -710,14 +696,14 @@ async fn rewards_claimed_accumulates(pool: PgPool) {
         .unwrap();
     }
 
-    let total: String = sqlx::query_scalar!(
+    let total = sqlx::query_scalar::<_, String>(
         r"
             SELECT total_rewards_claimed
             FROM staking_positions
             WHERE staker_address = $1
         ",
-        FakeAddress::Buyer.as_str(),
     )
+    .bind(FakeAddress::Buyer.as_str())
     .fetch_one(&pool)
     .await
     .unwrap();
@@ -771,22 +757,22 @@ async fn staker_snapshot_updates_position(pool: PgPool) {
     .await
     .unwrap();
 
-    let pos = sqlx::query!(
+    let pos = sqlx::query_as::<_, (String, String, Option<i64>)>(
         r"
             SELECT pending_rewards, reward_per_token_paid, snapshot_block_height
             FROM staking_positions
             WHERE staker_address = $1
         ",
-        FakeAddress::Buyer.as_str(),
     )
+    .bind(FakeAddress::Buyer.as_str())
     .fetch_one(&pool)
     .await
     .unwrap();
 
-    assert_eq!(pos.pending_rewards, "500000000000000000000");
-    assert_eq!(pos.reward_per_token_paid, "3000000000000000000");
+    assert_eq!(pos.0, "500000000000000000000");
+    assert_eq!(pos.1, "3000000000000000000");
     assert_eq!(
-        pos.snapshot_block_height,
+        pos.2,
         Some(500),
         "snapshot_block_height must equal the event block_height"
     );
@@ -850,23 +836,20 @@ async fn staker_snapshot_overwrites_on_update(pool: PgPool) {
     .await
     .unwrap();
 
-    let pos = sqlx::query!(
+    let pos = sqlx::query_as::<_, (String, String)>(
         r"
             SELECT pending_rewards, reward_per_token_paid
             FROM staking_positions
             WHERE staker_address = $1
         ",
-        FakeAddress::Buyer.as_str(),
     )
+    .bind(FakeAddress::Buyer.as_str())
     .fetch_one(&pool)
     .await
     .unwrap();
 
-    assert_eq!(
-        pos.pending_rewards, "999",
-        "snapshot must overwrite, not accumulate"
-    );
-    assert_eq!(pos.reward_per_token_paid, "5000000000000000000");
+    assert_eq!(pos.0, "999", "snapshot must overwrite, not accumulate");
+    assert_eq!(pos.1, "5000000000000000000");
 }
 
 const STAKING_DEPLOY_7: &str = "0000000000000000000000000000000000000000000000000000000000009007";
@@ -919,37 +902,36 @@ async fn unstaked_initiated_idempotent(pool: PgPool) {
         .unwrap();
     }
 
-    let pos = sqlx::query!(
+    let pos = sqlx::query_as::<_, (String, String, Option<DateTime<Utc>>)>(
         r"
             SELECT staked_amount, unbonding_amount, unbonding_ends_at
             FROM staking_positions
             WHERE staker_address = $1
         ",
-        FakeAddress::Buyer.as_str(),
     )
+    .bind(FakeAddress::Buyer.as_str())
     .fetch_one(&pool)
     .await
     .unwrap();
 
     assert_eq!(
-        pos.staked_amount, "6000",
+        pos.0, "6000",
         "duplicate UnstakedInitiated must not double-decrement staked_amount"
     );
     assert_eq!(
-        pos.unbonding_amount, "4000",
+        pos.1, "4000",
         "duplicate UnstakedInitiated must not double-increment unbonding_amount"
     );
     let expected_ts = chrono::DateTime::from_timestamp_millis(1_700_172_800_000);
-    assert_eq!(pos.unbonding_ends_at, expected_ts);
+    assert_eq!(pos.2, expected_ts);
 
-    let event_count: i64 = sqlx::query_scalar!(
+    let event_count = sqlx::query_scalar::<_, i64>(
         r"SELECT COUNT(*) FROM staking_events WHERE transaction_hash = $1",
-        STAKING_DEPLOY_7,
     )
+    .bind(STAKING_DEPLOY_7)
     .fetch_one(&pool)
     .await
-    .unwrap()
-    .unwrap_or(0);
+    .unwrap();
 
     assert_eq!(
         event_count, 1,
@@ -1006,24 +988,24 @@ async fn staker_snapshot_idempotent(pool: PgPool) {
         .unwrap();
     }
 
-    let pos = sqlx::query!(
+    let pos = sqlx::query_as::<_, (String, String)>(
         r"
             SELECT pending_rewards, reward_per_token_paid
             FROM staking_positions
             WHERE staker_address = $1
         ",
-        FakeAddress::Buyer.as_str(),
     )
+    .bind(FakeAddress::Buyer.as_str())
     .fetch_one(&pool)
     .await
     .unwrap();
 
     assert_eq!(
-        pos.pending_rewards, "200",
+        pos.0, "200",
         "duplicate StakerSnapshot must not change pending_rewards"
     );
     assert_eq!(
-        pos.reward_per_token_paid, "3000000000000000000",
+        pos.1, "3000000000000000000",
         "duplicate StakerSnapshot must not change reward_per_token_paid"
     );
 }
@@ -1094,28 +1076,28 @@ async fn staker_snapshot_same_block_different_deploy(pool: PgPool) {
     .await
     .unwrap();
 
-    let pos = sqlx::query!(
+    let pos = sqlx::query_as::<_, (String, String, Option<i64>)>(
         r"
             SELECT pending_rewards, reward_per_token_paid, snapshot_block_height
             FROM staking_positions
             WHERE staker_address = $1
         ",
-        FakeAddress::Buyer.as_str(),
     )
+    .bind(FakeAddress::Buyer.as_str())
     .fetch_one(&pool)
     .await
     .unwrap();
 
     assert_eq!(
-        pos.pending_rewards, "999",
+        pos.0, "999",
         "second same-block snapshot must overwrite the first"
     );
     assert_eq!(
-        pos.reward_per_token_paid, "5000000000000000000",
+        pos.1, "5000000000000000000",
         "second same-block snapshot must overwrite reward_per_token_paid"
     );
     assert_eq!(
-        pos.snapshot_block_height,
+        pos.2,
         Some(500),
         "snapshot_block_height must remain 500 after same-block overwrite"
     );
@@ -1185,14 +1167,13 @@ async fn rewards_deposited_null_and_zero_transform_idx_do_not_collide(pool: PgPo
     .await
     .unwrap();
 
-    let count: i64 = sqlx::query_scalar!(
+    let count = sqlx::query_scalar::<_, i64>(
         r"SELECT COUNT(*) FROM staking_reward_deposits WHERE transaction_hash = $1",
-        STAKING_DEPLOY_11,
     )
+    .bind(STAKING_DEPLOY_11)
     .fetch_one(&pool)
     .await
-    .unwrap()
-    .unwrap_or(0);
+    .unwrap();
 
     assert_eq!(
         count, 2,
@@ -1257,14 +1238,13 @@ async fn staking_event_null_and_zero_transform_idx_do_not_collide(pool: PgPool) 
     .await
     .unwrap();
 
-    let event_count: i64 = sqlx::query_scalar!(
+    let event_count = sqlx::query_scalar::<_, i64>(
         r"SELECT COUNT(*) FROM staking_events WHERE transaction_hash = $1 AND event_type = 'stake'",
-        STAKING_DEPLOY_12,
     )
+    .bind(STAKING_DEPLOY_12)
     .fetch_one(&pool)
     .await
-    .unwrap()
-    .unwrap_or(0);
+    .unwrap();
 
     assert_eq!(
         event_count, 2,
@@ -1319,24 +1299,21 @@ async fn unstaked_initiated_over_balance_clamps_unbonding(pool: PgPool) {
     .await
     .unwrap();
 
-    let pos = sqlx::query!(
+    let pos = sqlx::query_as::<_, (String, String)>(
         r"
             SELECT staked_amount, unbonding_amount
             FROM staking_positions
             WHERE staker_address = $1
         ",
-        FakeAddress::Buyer.as_str(),
     )
+    .bind(FakeAddress::Buyer.as_str())
     .fetch_one(&pool)
     .await
     .unwrap();
 
+    assert_eq!(pos.0, "0", "over-unstake must clamp staked_amount to zero");
     assert_eq!(
-        pos.staked_amount, "0",
-        "over-unstake must clamp staked_amount to zero"
-    );
-    assert_eq!(
-        pos.unbonding_amount, "1000",
+        pos.1, "1000",
         "unbonding_amount must be clamped to the previously-staked balance \
          (1000), not the requested unstake amount (5000) - tokens that were \
          never staked cannot enter the unbonding queue"
@@ -1374,24 +1351,21 @@ async fn unstake_before_stake_preserves_unbonding(pool: PgPool) {
     .await
     .unwrap();
 
-    let pos = sqlx::query!(
+    let pos = sqlx::query_as::<_, (String, String)>(
         r"
             SELECT staked_amount, unbonding_amount
             FROM staking_positions
             WHERE staker_address = $1
         ",
-        FakeAddress::Buyer.as_str(),
     )
+    .bind(FakeAddress::Buyer.as_str())
     .fetch_one(&pool)
     .await
     .expect("position must be created even without a prior Staked event");
 
+    assert_eq!(pos.0, "0", "no prior stake - staked_amount must be zero");
     assert_eq!(
-        pos.staked_amount, "0",
-        "no prior stake - staked_amount must be zero"
-    );
-    assert_eq!(
-        pos.unbonding_amount, "3000",
+        pos.1, "3000",
         "unbonding delta must be preserved, not silently dropped"
     );
 }
@@ -1415,21 +1389,21 @@ async fn withdraw_before_stake_creates_position(pool: PgPool) {
     .await
     .unwrap();
 
-    let pos = sqlx::query!(
+    let pos = sqlx::query_as::<_, (String, String)>(
         r"
             SELECT staked_amount, unbonding_amount
             FROM staking_positions
             WHERE staker_address = $1
         ",
-        FakeAddress::Buyer.as_str(),
     )
+    .bind(FakeAddress::Buyer.as_str())
     .fetch_one(&pool)
     .await
     .expect("position must be created even without a prior Staked event");
 
-    assert_eq!(pos.staked_amount, "0");
+    assert_eq!(pos.0, "0");
     assert_eq!(
-        pos.unbonding_amount, "0",
+        pos.1, "0",
         "withdraw clears unbonding - on a fresh position this is already zero"
     );
 }
@@ -1457,21 +1431,21 @@ async fn rewards_claimed_before_stake_preserves_rewards(pool: PgPool) {
     .await
     .unwrap();
 
-    let pos = sqlx::query!(
+    let pos = sqlx::query_as::<_, (String, String)>(
         r"
             SELECT staked_amount, total_rewards_claimed
             FROM staking_positions
             WHERE staker_address = $1
         ",
-        FakeAddress::Buyer.as_str(),
     )
+    .bind(FakeAddress::Buyer.as_str())
     .fetch_one(&pool)
     .await
     .expect("position must be created even without a prior Staked event");
 
-    assert_eq!(pos.staked_amount, "0");
+    assert_eq!(pos.0, "0");
     assert_eq!(
-        pos.total_rewards_claimed, "7500",
+        pos.1, "7500",
         "reward claim must be preserved, not silently dropped"
     );
 }

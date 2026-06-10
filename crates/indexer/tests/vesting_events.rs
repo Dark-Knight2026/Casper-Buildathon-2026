@@ -22,6 +22,23 @@ use indexer::{
     processor::{self, RawEvent},
 };
 
+/// Full `vesting_schedules` row read back via a runtime `query_as` (no
+/// compile-time macro in tests). `BIGINT` columns map to `i64`, `TEXT` to
+/// `String`.
+#[derive(sqlx::FromRow)]
+struct VestingScheduleRow {
+    vesting_id: String,
+    beneficiary: String,
+    whitelisted_creator: String,
+    total_amount: String,
+    claimed_amount: String,
+    start_timestamp: i64,
+    cliff_duration: i64,
+    vesting_duration: i64,
+    transaction_hash: String,
+    block_height: i64,
+}
+
 /// Fake 64-char deploy hash for vesting tests.
 const VESTING_DEPLOY_HASH: &str =
     "0000000000000000000000000000000000000000000000000000000000007777";
@@ -71,7 +88,7 @@ async fn schedule_created_writes_vesting_schedule_row(pool: PgPool) {
     .await
     .unwrap();
 
-    let row = sqlx::query!(
+    let row = sqlx::query_as::<_, VestingScheduleRow>(
         r"
             SELECT vesting_id, beneficiary, whitelisted_creator, total_amount, claimed_amount, start_timestamp, cliff_duration, vesting_duration, transaction_hash, block_height
             FROM   vesting_schedules
@@ -160,30 +177,24 @@ async fn schedule_created_upsert_updates_existing_row(pool: PgPool) {
     .await
     .unwrap();
 
-    let count: i64 =
-        sqlx::query_scalar!(r"SELECT COUNT(*) FROM vesting_schedules WHERE vesting_id = '0'")
-            .fetch_one(&pool)
-            .await
-            .unwrap()
-            .unwrap_or(0);
-
-    assert_eq!(count, 1, "UPSERT must not create duplicate rows");
-
-    let row = sqlx::query!(
-        r"SELECT total_amount, block_height FROM vesting_schedules WHERE vesting_id = '0'"
+    let count = sqlx::query_scalar::<_, i64>(
+        r"SELECT COUNT(*) FROM vesting_schedules WHERE vesting_id = '0'",
     )
     .fetch_one(&pool)
     .await
     .unwrap();
 
-    assert_eq!(
-        row.total_amount, "2000",
-        "total_amount must be updated by UPSERT"
-    );
-    assert_eq!(
-        row.block_height, 200,
-        "block_height must be updated by UPSERT"
-    );
+    assert_eq!(count, 1, "UPSERT must not create duplicate rows");
+
+    let row = sqlx::query_as::<_, (String, i64)>(
+        r"SELECT total_amount, block_height FROM vesting_schedules WHERE vesting_id = '0'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(row.0, "2000", "total_amount must be updated by UPSERT");
+    assert_eq!(row.1, 200, "block_height must be updated by UPSERT");
 }
 
 /// Re-indexing `ScheduleCreated` must NOT reset `claimed_amount` that was
@@ -275,19 +286,19 @@ async fn schedule_created_upsert_preserves_claimed_amount(pool: PgPool) {
     .await
     .unwrap();
 
-    let row = sqlx::query!(
-        r"SELECT claimed_amount, total_amount FROM vesting_schedules WHERE vesting_id = '0'"
+    let row = sqlx::query_as::<_, (String, String)>(
+        r"SELECT claimed_amount, total_amount FROM vesting_schedules WHERE vesting_id = '0'",
     )
     .fetch_one(&pool)
     .await
     .unwrap();
 
     assert_eq!(
-        row.claimed_amount, "3000",
+        row.0, "3000",
         "UPSERT must preserve claimed_amount accumulated by TokensClaimed"
     );
     assert_eq!(
-        row.total_amount, "10000",
+        row.1, "10000",
         "total_amount must still be correct after UPSERT"
     );
 }
@@ -355,11 +366,12 @@ async fn tokens_claimed_increases_claimed_amount(pool: PgPool) {
     .await
     .unwrap();
 
-    let claimed: Option<String> =
-        sqlx::query_scalar!(r"SELECT claimed_amount FROM vesting_schedules WHERE vesting_id = '5'")
-            .fetch_optional(&pool)
-            .await
-            .unwrap();
+    let claimed = sqlx::query_scalar::<_, String>(
+        r"SELECT claimed_amount FROM vesting_schedules WHERE vesting_id = '5'",
+    )
+    .fetch_optional(&pool)
+    .await
+    .unwrap();
 
     assert_eq!(
         claimed.as_deref(),
@@ -374,15 +386,15 @@ async fn tokens_claimed_accumulates(pool: PgPool) {
     common::disable_rls(&pool).await;
 
     // Seed schedule directly
-    sqlx::query!(
+    sqlx::query(
         r"
             INSERT INTO vesting_schedules (vesting_id, beneficiary, whitelisted_creator, total_amount, start_timestamp, cliff_duration, vesting_duration, transaction_hash, block_height)
             VALUES ('10', $1, $2, '50000', 100, 50, 100, $3, 100)
         ",
-        FakeAddress::Buyer.as_str(),
-        FakeAddress::ContractX.as_str(),
-        VESTING_DEPLOY_HASH,
     )
+    .bind(FakeAddress::Buyer.as_str())
+    .bind(FakeAddress::ContractX.as_str())
+    .bind(VESTING_DEPLOY_HASH)
     .execute(&pool)
     .await
     .unwrap();
@@ -442,8 +454,8 @@ async fn tokens_claimed_accumulates(pool: PgPool) {
     .await
     .unwrap();
 
-    let claimed: Option<String> = sqlx::query_scalar!(
-        r"SELECT claimed_amount FROM vesting_schedules WHERE vesting_id = '10'"
+    let claimed = sqlx::query_scalar::<_, String>(
+        r"SELECT claimed_amount FROM vesting_schedules WHERE vesting_id = '10'",
     )
     .fetch_optional(&pool)
     .await
@@ -462,15 +474,15 @@ async fn tokens_claimed_idempotent(pool: PgPool) {
     common::disable_rls(&pool).await;
 
     // Seed schedule directly.
-    sqlx::query!(
+    sqlx::query(
         r"
             INSERT INTO vesting_schedules (vesting_id, beneficiary, whitelisted_creator, total_amount, start_timestamp, cliff_duration, vesting_duration, transaction_hash, block_height)
             VALUES ('20', $1, $2, '50000', 100, 50, 100, $3, 100)
         ",
-        FakeAddress::Buyer.as_str(),
-        FakeAddress::ContractX.as_str(),
-        VESTING_DEPLOY_HASH,
     )
+    .bind(FakeAddress::Buyer.as_str())
+    .bind(FakeAddress::ContractX.as_str())
+    .bind(VESTING_DEPLOY_HASH)
     .execute(&pool)
     .await
     .unwrap();
@@ -501,8 +513,8 @@ async fn tokens_claimed_idempotent(pool: PgPool) {
             .unwrap();
     }
 
-    let claimed: String = sqlx::query_scalar!(
-        r"SELECT claimed_amount FROM vesting_schedules WHERE vesting_id = '20'"
+    let claimed = sqlx::query_scalar::<_, String>(
+        r"SELECT claimed_amount FROM vesting_schedules WHERE vesting_id = '20'",
     )
     .fetch_one(&pool)
     .await
@@ -523,16 +535,16 @@ async fn tokens_claimed_batch_deploy_different_schedules(pool: PgPool) {
     common::disable_rls(&pool).await;
 
     // Seed two vesting schedules.
-    sqlx::query!(
+    sqlx::query(
         r"
             INSERT INTO vesting_schedules (vesting_id, beneficiary, whitelisted_creator, total_amount, start_timestamp, cliff_duration, vesting_duration, transaction_hash, block_height)
             VALUES ('30', $1, $2, '50000', 100, 50, 100, $3, 100),
                    ('31', $1, $2, '80000', 100, 50, 100, $3, 100)
         ",
-        FakeAddress::Buyer.as_str(),
-        FakeAddress::ContractX.as_str(),
-        VESTING_DEPLOY_HASH,
     )
+    .bind(FakeAddress::Buyer.as_str())
+    .bind(FakeAddress::ContractX.as_str())
+    .bind(VESTING_DEPLOY_HASH)
     .execute(&pool)
     .await
     .unwrap();
@@ -589,15 +601,15 @@ async fn tokens_claimed_batch_deploy_different_schedules(pool: PgPool) {
     .await
     .unwrap();
 
-    let claimed_30: String = sqlx::query_scalar!(
-        r"SELECT claimed_amount FROM vesting_schedules WHERE vesting_id = '30'"
+    let claimed_30 = sqlx::query_scalar::<_, String>(
+        r"SELECT claimed_amount FROM vesting_schedules WHERE vesting_id = '30'",
     )
     .fetch_one(&pool)
     .await
     .unwrap();
 
-    let claimed_31: String = sqlx::query_scalar!(
-        r"SELECT claimed_amount FROM vesting_schedules WHERE vesting_id = '31'"
+    let claimed_31 = sqlx::query_scalar::<_, String>(
+        r"SELECT claimed_amount FROM vesting_schedules WHERE vesting_id = '31'",
     )
     .fetch_one(&pool)
     .await

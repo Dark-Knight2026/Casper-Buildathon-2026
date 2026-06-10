@@ -65,14 +65,14 @@ async fn from_request_parts_uses_cached_authuser_from_extensions(pool: PgPool) {
     // Stamp a cutoff well past the token's `iat`. Any extractor call
     // that goes back to the DB after this point would see
     // `claims.iat <= cutoff_ts` and return `TokenInvalidated`.
-    sqlx::query!(
+    sqlx::query(
         r"
             UPDATE users
             SET jwt_invalidate_before = NOW() + INTERVAL '1 hour'
             WHERE id = $1
         ",
-        session.user_id,
     )
+    .bind(session.user_id)
     .execute(&pool)
     .await
     .expect("stamp jwt_invalidate_before");
