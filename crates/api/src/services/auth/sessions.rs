@@ -21,7 +21,7 @@ use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 use crate::{
-    common::{ApiError, ApiResult, AppState},
+    common::{ApiError, ApiResult, AppState, ErrorResponse},
     services::auth::{
         AuthUser,
         cookies::{self, REFRESH_TOKEN_COOKIE},
@@ -64,8 +64,8 @@ use crate::{
     tag = "Auth",
     responses(
         (status = 200, description = "Active sessions for the authenticated user", body = Vec<SessionResponse>),
-        (status = 401, description = "Unauthorized"),
-        (status = 500, description = "Internal server error"),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse),
     ),
     security(
         ("cookie_auth" = [])
@@ -146,9 +146,9 @@ pub async fn get_sessions(
     ),
     responses(
         (status = 204, description = "Session revoked"),
-        (status = 401, description = "Unauthorized"),
-        (status = 404, description = "Session not found or not owned by user"),
-        (status = 500, description = "Internal server error"),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 404, description = "Session not found or not owned by user", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse),
     ),
     security(
         ("cookie_auth" = [])
@@ -214,9 +214,9 @@ pub async fn revoke_session(
     request_body = RevokeAllSessionsRequest,
     responses(
         (status = 200, description = "Sessions revoked", body = RevokeAllSessionsResponse),
-        (status = 400, description = "Malformed request body"),
-        (status = 401, description = "Unauthorized"),
-        (status = 500, description = "Internal server error"),
+        (status = 400, description = "Malformed request body", body = ErrorResponse),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse),
     ),
     security(
         ("cookie_auth" = [])

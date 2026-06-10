@@ -18,7 +18,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::{
-    common::{ApiError, ApiResult, AppState, UserId},
+    common::{ApiError, ApiResult, AppState, ErrorResponse, UserId},
     services::auth::{
         cookies::{self, REFRESH_TOKEN_COOKIE},
         db::{self, RefreshOutcome},
@@ -198,8 +198,8 @@ pub async fn issue_login_refresh_token(
     tag = "Auth",
     responses(
         (status = 204, description = "Refresh successful; tokens rotated via Set-Cookie"),
-        (status = 401, description = "Refresh token missing, expired, or revoked"),
-        (status = 500, description = "Internal server error"),
+        (status = 401, description = "Refresh token missing, expired, or revoked", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse),
     )
 )]
 #[inline]

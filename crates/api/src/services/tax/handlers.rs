@@ -6,7 +6,7 @@ use axum::{Json, extract::State};
 use rust_decimal::Decimal;
 
 use crate::{
-    common::{ApiResult, AppState},
+    common::{ApiResult, AppState, ErrorResponse},
     services::{
         auth::{EmailVerified, VerifiedUser, models::VerificationRequiredResponse},
         tax::models::{TaxCalculationRequest, TaxCategory, TaxCategoryType, TaxReport},
@@ -46,9 +46,9 @@ use crate::{
     request_body = TaxCalculationRequest,
     responses(
         (status = 200, description = "Tax liability calculated successfully", body = TaxReport),
-        (status = 401, description = "Unauthorized"),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
         (status = 403, description = "verification_required - caller's email is not verified", body = VerificationRequiredResponse),
-        (status = 500, description = "Internal server error")
+        (status = 500, description = "Internal server error", body = ErrorResponse)
     ),
     security(
         ("cookie_auth" = [])

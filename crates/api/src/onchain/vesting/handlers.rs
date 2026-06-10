@@ -9,7 +9,7 @@ use rust_decimal::{Decimal, prelude::ToPrimitive};
 use tracing::warn;
 
 use crate::{
-    common::{ApiResult, AppState, PaginatedResponse, Pagination},
+    common::{ApiResult, AppState, ErrorResponse, PaginatedResponse, Pagination},
     onchain::{
         common::{self, TOKEN_DECIMALS},
         vesting::{
@@ -88,10 +88,9 @@ fn calculate_vested(total: &str, start: i64, cliff: i64, duration: i64, now: i64
         Pagination,
     ),
     responses(
-        (status = 200, description = "Paginated vesting schedules",
-         body = inline(PaginatedResponse<VestingScheduleItem>)),
-        (status = 400, description = "Invalid account hash format"),
-        (status = 500, description = "Internal error"),
+        (status = 200, description = "Paginated vesting schedules", body = inline(PaginatedResponse<VestingScheduleItem>)),
+        (status = 400, description = "Invalid account hash format", body = ErrorResponse),
+        (status = 500, description = "Internal error", body = ErrorResponse),
     )
 )]
 #[inline]
@@ -175,7 +174,7 @@ pub async fn get_vesting_schedules(
     tag = "Vesting",
     responses(
         (status = 200, description = "BIG token supply information", body = TokenSupplyResponse),
-        (status = 500, description = "Internal error"),
+        (status = 500, description = "Internal error", body = ErrorResponse),
     )
 )]
 #[inline]
@@ -204,7 +203,7 @@ pub async fn get_token_supply(
     tag = "Vesting",
     responses(
         (status = 200, description = "Global vesting release schedule", body = ReleaseScheduleResponse),
-        (status = 500, description = "Internal error"),
+        (status = 500, description = "Internal error", body = ErrorResponse),
     )
 )]
 #[inline]

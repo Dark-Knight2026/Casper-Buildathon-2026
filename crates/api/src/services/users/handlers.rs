@@ -15,7 +15,7 @@ use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 use crate::{
-    common::{self, ApiError, ApiResult, AppState, UserInfo, UserRole, tokens},
+    common::{self, ApiError, ApiResult, AppState, ErrorResponse, UserInfo, UserRole, tokens},
     providers::EmailMessage,
     services::{
         auth::{self, AuthUser, cookies, jwt, refresh},
@@ -219,9 +219,9 @@ fn sniff_image_kind(payload: &[u8]) -> Option<ImageKind> {
     tag = "Users",
     responses(
         (status = 200, description = "Authenticated user's profile", body = UserInfo),
-        (status = 401, description = "Unauthorized"),
-        (status = 404, description = "User no longer exists"),
-        (status = 500, description = "Internal server error"),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 404, description = "User no longer exists", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse),
     ),
     security(
         ("cookie_auth" = [])
@@ -284,10 +284,10 @@ pub async fn get_me(
     request_body = UpdateProfileRequest,
     responses(
         (status = 200, description = "Updated profile", body = UserInfo),
-        (status = 400, description = "Invalid input"),
-        (status = 401, description = "Unauthorized"),
-        (status = 404, description = "User no longer exists"),
-        (status = 500, description = "Internal server error"),
+        (status = 400, description = "Invalid input", body = ErrorResponse),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 404, description = "User no longer exists", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse),
     ),
     security(
         ("cookie_auth" = [])
@@ -368,12 +368,12 @@ pub async fn patch_me(
     request_body = DeleteAccountRequest,
     responses(
         (status = 204, description = "Account soft-deleted; cookies cleared"),
-        (status = 400, description = "Missing or wrong confirmation string"),
-        (status = 401, description = "Unauthorized"),
-        (status = 403, description = "Re-authentication required"),
-        (status = 404, description = "User no longer exists"),
-        (status = 409, description = "Active leases block account deletion"),
-        (status = 500, description = "Internal server error"),
+        (status = 400, description = "Missing or wrong confirmation string", body = ErrorResponse),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 403, description = "Re-authentication required", body = ErrorResponse),
+        (status = 404, description = "User no longer exists", body = ErrorResponse),
+        (status = 409, description = "Active leases block account deletion", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse),
     ),
     security(
         ("cookie_auth" = [])
@@ -446,11 +446,11 @@ pub async fn delete_me(
     request_body = EmailChangeRequest,
     responses(
         (status = 202, description = "Confirmation email queued"),
-        (status = 400, description = "Invalid email format"),
-        (status = 401, description = "Unauthorized"),
-        (status = 409, description = "Email already in use"),
-        (status = 429, description = "Too many email-change requests"),
-        (status = 500, description = "Internal server error"),
+        (status = 400, description = "Invalid email format", body = ErrorResponse),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 409, description = "Email already in use", body = ErrorResponse),
+        (status = 429, description = "Too many email-change requests", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse),
     ),
     security(
         ("cookie_auth" = [])
@@ -564,11 +564,11 @@ pub async fn request_email_change(
     request_body = EmailChangeConfirmRequest,
     responses(
         (status = 200, description = "Email change confirmed", body = UserInfo),
-        (status = 400, description = "Invalid token format"),
-        (status = 401, description = "Token invalid, expired, or already consumed"),
-        (status = 404, description = "User no longer exists"),
-        (status = 409, description = "Email taken in race"),
-        (status = 500, description = "Internal server error"),
+        (status = 400, description = "Invalid token format", body = ErrorResponse),
+        (status = 401, description = "Token invalid, expired, or already consumed", body = ErrorResponse),
+        (status = 404, description = "User no longer exists", body = ErrorResponse),
+        (status = 409, description = "Email taken in race", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse),
     ),
     security(
         ("cookie_auth" = [])
@@ -663,12 +663,12 @@ pub async fn confirm_email_change(
     ),
     responses(
         (status = 200, description = "Avatar stored", body = AvatarUploadResponse),
-        (status = 400, description = "Missing or malformed `file` field"),
-        (status = 401, description = "Unauthorized"),
-        (status = 413, description = "Payload too large (over 5 MB)"),
-        (status = 415, description = "Unsupported media type"),
-        (status = 429, description = "Too many avatar uploads"),
-        (status = 500, description = "Internal server error"),
+        (status = 400, description = "Missing or malformed `file` field", body = ErrorResponse),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 413, description = "Payload too large (over 5 MB)", body = ErrorResponse),
+        (status = 415, description = "Unsupported media type", body = ErrorResponse),
+        (status = 429, description = "Too many avatar uploads", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse),
     ),
     security(
         ("cookie_auth" = [])
@@ -909,13 +909,13 @@ pub async fn upload_avatar(
     request_body = UpdateRoleRequest,
     responses(
         (status = 200, description = "Role changed; cookies cleared", body = UserInfo),
-        (status = 400, description = "Invalid role"),
-        (status = 401, description = "Unauthorized"),
-        (status = 403, description = "Re-authentication required"),
-        (status = 404, description = "User no longer exists"),
-        (status = 409, description = "Active leases block role change"),
-        (status = 429, description = "Too many role-change requests"),
-        (status = 500, description = "Internal server error"),
+        (status = 400, description = "Invalid role", body = ErrorResponse),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 403, description = "Re-authentication required", body = ErrorResponse),
+        (status = 404, description = "User no longer exists", body = ErrorResponse),
+        (status = 409, description = "Active leases block role change", body = ErrorResponse),
+        (status = 429, description = "Too many role-change requests", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse),
     ),
     security(
         ("cookie_auth" = [])
@@ -1040,11 +1040,11 @@ pub async fn patch_me_role(
     request_body = ChangePasswordRequest,
     responses(
         (status = 204, description = "Password changed; other sessions revoked, current session re-issued via Set-Cookie"),
-        (status = 400, description = "Weak new password, or missing current password on the change path"),
-        (status = 401, description = "Current password incorrect, or unauthorized"),
-        (status = 403, description = "Re-authentication required to set a first password"),
-        (status = 404, description = "User no longer exists"),
-        (status = 500, description = "Internal server error"),
+        (status = 400, description = "Weak new password, or missing current password on the change path", body = ErrorResponse),
+        (status = 401, description = "Current password incorrect, or unauthorized", body = ErrorResponse),
+        (status = 403, description = "Re-authentication required to set a first password", body = ErrorResponse),
+        (status = 404, description = "User no longer exists", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse),
     ),
     security(
         ("cookie_auth" = [])
@@ -1165,10 +1165,10 @@ pub async fn change_password(
     request_body = LinkWalletRequest,
     responses(
         (status = 200, description = "Wallet linked; returns the updated profile", body = UserInfo),
-        (status = 400, description = "Invalid wallet address or signature format"),
-        (status = 401, description = "Unauthorized, or nonce/signature invalid"),
-        (status = 409, description = "Wallet already linked to another account"),
-        (status = 500, description = "Internal server error"),
+        (status = 400, description = "Invalid wallet address or signature format", body = ErrorResponse),
+        (status = 401, description = "Unauthorized, or nonce/signature invalid", body = ErrorResponse),
+        (status = 409, description = "Wallet already linked to another account", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse),
     ),
     security(
         ("cookie_auth" = [])
@@ -1309,9 +1309,9 @@ fn derive_identity_hash(user_id: Uuid) -> String {
     tag = "Users",
     responses(
         (status = 200, description = "On-chain registration arguments", body = OnchainRegistrationResponse),
-        (status = 401, description = "Unauthorized"),
-        (status = 409, description = "Wallet not linked yet"),
-        (status = 500, description = "Internal server error"),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 409, description = "Wallet not linked yet", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse),
     ),
     security(
         ("cookie_auth" = [])

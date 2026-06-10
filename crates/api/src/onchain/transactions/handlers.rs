@@ -11,7 +11,7 @@ use serde::Deserialize;
 use utoipa::IntoParams;
 
 use crate::{
-    common::{self, ApiError, ApiResult, AppState, PaginatedResponse, Pagination},
+    common::{self, ApiError, ApiResult, AppState, ErrorResponse, PaginatedResponse, Pagination},
     onchain::transactions::{
         db,
         models::{HashType, TransactionResponse, TxType},
@@ -69,8 +69,8 @@ impl AccountTxQuery {
     ),
     responses(
         (status = 200, description = "Paginated transaction list", body = inline(PaginatedResponse<TransactionResponse>)),
-        (status = 400, description = "Invalid address format"),
-        (status = 500, description = "Internal server error")
+        (status = 400, description = "Invalid address format", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
     )
 )]
 #[inline]
@@ -117,7 +117,7 @@ pub async fn get_account_transactions(
     params(Pagination),
     responses(
         (status = 200, description = "Paginated BIG token transaction list", body = inline(PaginatedResponse<TransactionResponse>)),
-        (status = 500, description = "Internal server error or BIG contract not configured")
+        (status = 500, description = "Internal server error or BIG contract not configured", body = ErrorResponse)
     )
 )]
 #[inline]

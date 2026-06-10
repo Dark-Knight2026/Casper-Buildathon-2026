@@ -6,7 +6,7 @@ use axum::{Json, extract::State};
 use rust_decimal::Decimal;
 
 use crate::{
-    common::{ApiResult, AppState},
+    common::{ApiResult, AppState, ErrorResponse},
     services::{
         analytics::models::{PropertyPerformanceReport, PropertyPerformanceRequest},
         auth::AuthUser,
@@ -39,8 +39,8 @@ use crate::{
     request_body = PropertyPerformanceRequest,
     responses(
         (status = 200, description = "Property performance report", body = PropertyPerformanceReport),
-        (status = 401, description = "Unauthorized"),
-        (status = 500, description = "Internal server error")
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
     ),
     security(
         ("cookie_auth" = [])

@@ -13,7 +13,7 @@ use secrecy::{ExposeSecret, SecretString};
 use sha2::{Digest, Sha256};
 
 use crate::{
-    common::{self, ApiError, ApiResult, AppState, UserInfo, UserRole},
+    common::{self, ApiError, ApiResult, AppState, ErrorResponse, UserInfo, UserRole},
     services::{
         auth::{
             self, cookies,
@@ -53,8 +53,8 @@ use crate::{
         ("wallet_address" = String, Query, description = "The wallet address (public key)")),
   responses(
         (status = 200, description = "Nonce generated successfully", body = NonceResponse),
-        (status = 400, description = "Invalid wallet address length"),
-        (status = 500, description = "Internal server error")
+        (status = 400, description = "Invalid wallet address length", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
     )
 )]
 #[inline]
@@ -263,9 +263,9 @@ async fn resolve_active_user(
     request_body = LoginRequest,
     responses(
         (status = 200, description = "Login successful", body = LoginResponse),
-        (status = 400, description = "Invalid wallet address or signature format"),
-        (status = 401, description = "Invalid signature or expired nonce"),
-        (status = 500, description = "Internal server error")
+        (status = 400, description = "Invalid wallet address or signature format", body = ErrorResponse),
+        (status = 401, description = "Invalid signature or expired nonce", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
     )
 )]
 #[inline]

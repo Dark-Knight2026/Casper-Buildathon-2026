@@ -10,7 +10,7 @@ use chrono::{Months, Utc};
 use rust_decimal::{Decimal, prelude::ToPrimitive};
 
 use crate::{
-    common::{ApiError, ApiResult, AppState},
+    common::{ApiError, ApiResult, AppState, ErrorResponse},
     onchain::{
         common,
         staking::{
@@ -57,8 +57,8 @@ fn parse_period_months(period: &str) -> ApiResult<Option<u32>> {
     params(AccountHashPath),
     responses(
         (status = 200, description = "Staking information", body = StakingInfoResponse),
-        (status = 400, description = "Invalid account hash format"),
-        (status = 500, description = "Internal error"),
+        (status = 400, description = "Invalid account hash format", body = ErrorResponse),
+        (status = 500, description = "Internal error", body = ErrorResponse),
     )
 )]
 #[inline]
@@ -141,8 +141,8 @@ pub async fn get_staking_info(
     params(AccountHashPath),
     responses(
         (status = 200, description = "Portfolio overview", body = PortfolioResponse),
-        (status = 400, description = "Invalid account hash format"),
-        (status = 500, description = "Internal error"),
+        (status = 400, description = "Invalid account hash format", body = ErrorResponse),
+        (status = 500, description = "Internal error", body = ErrorResponse),
     )
 )]
 #[inline]
@@ -206,8 +206,8 @@ pub async fn get_portfolio(
     params(AccountHashPath, EarningsQuery),
     responses(
         (status = 200, description = "Monthly earnings data", body = EarningsResponse),
-        (status = 400, description = "Invalid account hash format"),
-        (status = 500, description = "Internal error"),
+        (status = 400, description = "Invalid account hash format", body = ErrorResponse),
+        (status = 500, description = "Internal error", body = ErrorResponse),
     )
 )]
 #[inline]
@@ -254,8 +254,8 @@ pub async fn get_earnings(
     params(AccountHashPath, RewardsHistoryQuery),
     responses(
         (status = 200, description = "Daily rewards history", body = RewardsHistoryResponse),
-        (status = 400, description = "Invalid account hash format"),
-        (status = 500, description = "Internal error"),
+        (status = 400, description = "Invalid account hash format", body = ErrorResponse),
+        (status = 500, description = "Internal error", body = ErrorResponse),
     )
 )]
 #[inline]
@@ -304,8 +304,8 @@ pub async fn get_rewards_history(
     params(AccountHashPath),
     responses(
         (status = 200, description = "Unbonding status and history", body = UnbondingResponse),
-        (status = 400, description = "Invalid account hash format"),
-        (status = 500, description = "Internal error"),
+        (status = 400, description = "Invalid account hash format", body = ErrorResponse),
+        (status = 500, description = "Internal error", body = ErrorResponse),
     )
 )]
 #[inline]

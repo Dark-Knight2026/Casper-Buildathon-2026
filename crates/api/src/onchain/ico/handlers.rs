@@ -9,7 +9,7 @@ use axum::{
 use rust_decimal::{Decimal, prelude::ToPrimitive};
 
 use crate::{
-    common::{ApiError, ApiResult, AppState},
+    common::{ApiError, ApiResult, AppState, ErrorResponse},
     onchain::{
         common::{self, TOKEN_DECIMALS},
         ico::{
@@ -69,8 +69,8 @@ fn price_to_decimal(raw: &str) -> ApiResult<Decimal> {
     ),
     responses(
         (status = 200, description = "ICO balance for the account", body = IcoBalanceResponse),
-        (status = 400, description = "Invalid address format"),
-        (status = 500, description = "ICO not configured or internal error")
+        (status = 400, description = "Invalid address format", body = ErrorResponse),
+        (status = 500, description = "ICO not configured or internal error", body = ErrorResponse)
     )
 )]
 #[inline]
@@ -139,7 +139,7 @@ pub async fn get_ico_balance(
     tag = "ICO",
     responses(
         (status = 200, description = "Current ICO sale progress", body = IcoProgressResponse),
-        (status = 500, description = "ICO not configured or internal error")
+        (status = 500, description = "ICO not configured or internal error", body = ErrorResponse)
     )
 )]
 #[inline]
