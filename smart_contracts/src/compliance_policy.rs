@@ -114,17 +114,32 @@ pub mod errors {
   LeaseSet,
 ])]
 pub struct CompliancePolicy {
+    /// Access control module for DEFAULT_ADMIN_ROLE and COMPLIANCE_MANAGER roles.
     access_control: SubModule<AccessControl>,
+    /// External reference to the InvestorRegistry for KYC / investor verification.
     investor_registry: External<InvestorRegistryContractRef>,
+    /// External reference to the PropertyRegistry for property status and issuer checks.
     property_registry: External<PropertyRegistryContractRef>,
+    /// External reference to the Lease contract for equity-eligibility gating.
     lease: External<LeaseContractRef>,
+    /// Per-property compliance configuration (transfers enabled, equity distribution rules).
     configs: Mapping<U256, ComplianceConfig>,
+    /// Accounts that are exempt from investor verification checks (e.g. issuance escrows).
     transfer_exempt_accounts: Mapping<Address, bool>,
+    /// Proposed new investor registry address (set by owner via set_investor_registry).
+    /// Remains None until a timelocked change is applied via apply_pending_investor_registry.
     pending_investor_registry: Var<Option<Address>>,
+    /// Block time (in ms) at which the pending investor registry change may be applied.
     pending_investor_registry_activation_time: Var<u64>,
+    /// Proposed new property registry address (set by owner via set_property_registry).
+    /// Remains None until a timelocked change is applied via apply_pending_property_registry.
     pending_property_registry: Var<Option<Address>>,
+    /// Block time (in ms) at which the pending property registry change may be applied.
     pending_property_registry_activation_time: Var<u64>,
+    /// Proposed new lease address (set by owner via set_lease).
+    /// Remains None until a timelocked change is applied via apply_pending_lease.
     pending_lease: Var<Option<Address>>,
+    /// Block time (in ms) at which the pending lease change may be applied.
     pending_lease_activation_time: Var<u64>,
 }
 

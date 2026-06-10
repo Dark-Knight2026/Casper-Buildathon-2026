@@ -230,9 +230,15 @@ pub struct Escrow {
     invoices_count: Var<U256>,
     /// Minimum delay required between invoice creation and deadline.
     min_deadline: Var<u64>,
+    /// Proposed new Lease contract address (set by owner via set_lease).
+    /// Remains None until a timelocked change is applied via apply_pending_lease.
     pending_lease: Var<Option<Address>>,
+    /// Block time (in ms) at which the pending Lease change may be applied.
     pending_lease_activation_time: Var<u64>,
+    /// Proposed new Treasury contract address (set by owner via set_treasury).
+    /// Remains None until a timelocked change is applied via apply_pending_treasury.
     pending_treasury: Var<Option<Address>>,
+    /// Block time (in ms) at which the pending Treasury change may be applied.
     pending_treasury_activation_time: Var<u64>,
 }
 
