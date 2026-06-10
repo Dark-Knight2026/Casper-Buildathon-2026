@@ -30,9 +30,29 @@ const USER_REGISTRY_DEPLOY_HASH: &str =
 /// `UserCreated` event instead carries its derived account hash.
 const WALLET_PUBKEY: &str = "0106ca7c39cd272dbf21a86eeb3b36b7c26e2e9b94af64292419f7862936bca2ca";
 
-/// Inserts a minimal `users` row with the given linked wallet. Only the
-/// NOT-NULL-without-default columns are set; the rest take their defaults.
+/// Inserts a minimal `users` row with the given linked wallet, caching its
+/// derived `account_hash` the way the wallet-link insert path does. Only the
+/// NOT-NULL-without-default columns (plus the cache) are set; the rest take
+/// their defaults. Exercises the indexed fast-path match.
 async fn seed_user_with_wallet(pool: &PgPool, wallet: &str) {
+    let account_hash = normalize_casper_address(wallet).expect("valid public key");
+    sqlx::query(
+        r"
+            INSERT INTO users (first_name, last_name, role, wallet_address, account_hash)
+            VALUES ('Test', 'User', 'tenant', $1, $2)
+        ",
+    )
+    .bind(wallet)
+    .bind(account_hash)
+    .execute(pool)
+    .await
+    .expect("seed user row");
+}
+
+/// Inserts a `users` row linked to a wallet but WITHOUT a cached `account_hash`,
+/// reproducing a row linked before the cache column existed. Exercises the
+/// indexer's derive-on-the-fly legacy fallback.
+async fn seed_legacy_user_with_wallet(pool: &PgPool, wallet: &str) {
     sqlx::query(
         r"
             INSERT INTO users (first_name, last_name, role, wallet_address)
@@ -42,7 +62,7 @@ async fn seed_user_with_wallet(pool: &PgPool, wallet: &str) {
     .bind(wallet)
     .execute(pool)
     .await
-    .expect("seed user row");
+    .expect("seed legacy user row");
 }
 
 /// Disables RLS on the tables this test touches: the indexer-owned tables the
@@ -154,5 +174,53 @@ async fn user_created_for_unknown_wallet_is_skipped(pool: PgPool) {
     assert_eq!(
         linked_count, 0,
         "no account should be linked for an unrelated account hash"
+    );
+}
+
+/// A wallet linked before the `account_hash` cache existed (NULL cache) must
+/// still reconcile: the indexed fast-path misses, so the indexer derives the
+/// hash for the legacy wallet and matches by it.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn user_created_links_legacy_wallet_without_account_hash(pool: PgPool) {
+    disable_all_rls(&pool).await;
+    seed_legacy_user_with_wallet(&pool, WALLET_PUBKEY).await;
+
+    let account_hash = normalize_casper_address(WALLET_PUBKEY).expect("valid public key");
+
+    processor::process_event(
+        &pool,
+        &EventRegistry::new(),
+        &HashSet::new(),
+        &RawEvent {
+            contract_hash: "user_registry_hash".to_owned(),
+            deploy_hash: USER_REGISTRY_DEPLOY_HASH.to_owned(),
+            block_height: 100,
+            contract_type: ContractType::UserRegistry,
+            event_name: "UserCreated".to_owned(),
+            event_data: json!({
+                "user_id": "777",
+                "active_wallet": account_hash,
+                "role_flags": 1_u32
+            }),
+            block_timestamp: None,
+            transform_idx: None,
+            api_from_type: None,
+            api_to_type: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let onchain_user_id = sqlx::query_scalar::<_, Option<String>>(
+        "SELECT onchain_user_id::text FROM users WHERE wallet_address = $1",
+    )
+    .bind(WALLET_PUBKEY)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        onchain_user_id.as_deref(),
+        Some("777"),
+        "legacy wallet without a cached account_hash should reconcile via the fallback"
     );
 }

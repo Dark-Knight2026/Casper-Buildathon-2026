@@ -6,7 +6,7 @@ use chrono::{DateTime, Utc};
 use sqlx::{Error, PgConnection, PgPool};
 use uuid::Uuid;
 
-use crate::common::{UserRole, VerificationLevel};
+use crate::common::{UserRole, VerificationLevel, crypto};
 
 /// User record returned after login/registration.
 #[derive(Debug)]
@@ -239,15 +239,24 @@ pub async fn add_wallet_connection(
     wallet_address: &str,
     is_primary: bool,
 ) -> Result<(), Error> {
+    // Derive and cache the account hash now (we hold the public key here): the
+    // sync-trigger copies it onto `users.account_hash`, letting the indexer
+    // reconcile `UserCreated` events with an indexed lookup. The address has
+    // already passed signature verification upstream, so this never fails in
+    // practice; a derivation error surfaces as a 500 rather than a silent skip.
+    let account_hash = crypto::derive_account_hash(wallet_address)
+        .map_err(|err| Error::Protocol(format!("derive account hash: {err}")))?;
+
     sqlx::query!(
         r"
-            INSERT INTO wallet_connections (user_id, wallet_address, provider, is_primary, is_custodial)
-            VALUES ($1, $2, 'casper_wallet', $3, false)
+            INSERT INTO wallet_connections (user_id, wallet_address, account_hash, provider, is_primary, is_custodial)
+            VALUES ($1, $2, $3, 'casper_wallet', $4, false)
             ON CONFLICT (user_id, wallet_address)
-            DO UPDATE SET is_primary = EXCLUDED.is_primary, last_used_at = NOW()
+            DO UPDATE SET account_hash = EXCLUDED.account_hash, is_primary = EXCLUDED.is_primary, last_used_at = NOW()
         ",
         user_id,
         wallet_address,
+        account_hash,
         is_primary,
     )
     .execute(conn)

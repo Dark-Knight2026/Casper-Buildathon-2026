@@ -28,9 +28,10 @@ use crate::{
 ///
 /// Matching canonicalises both sides to an account hash: the event's
 /// `active_wallet` is a Casper account hash, while `users.wallet_address`
-/// stores a public key (66/68 hex). [`address::normalize_casper_address`]
-/// reduces a public key to its account hash, so deriving it for each
-/// unregistered user and comparing is representation-agnostic.
+/// stores a public key (66/68 hex). The wallet-link path caches the derived
+/// account hash on `users.account_hash` (indexed), so the common case is a
+/// direct lookup; rows linked before that cache existed fall back to deriving
+/// each remaining un-hashed wallet, which stays representation-agnostic.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserCreated {
     /// Contract-assigned user id (U256 rendered as a decimal string).
@@ -56,46 +57,43 @@ impl IndexableEvent for UserCreated {
     async fn process(&self, ctx: &mut EventContext<'_>) -> IndexerResult<()> {
         let target_account_hash = address::normalize_casper_address(&self.active_wallet)?;
 
-        // `users.wallet_address` stores public keys, while the event carries an
-        // account hash. Derive each unregistered user's account hash and compare;
-        // the matched wallet string is written back verbatim.
-        let candidates = db::fetch_unregistered_wallets(ctx.tx).await?;
-        let mut matched_wallet = None;
-        for wallet in candidates {
-            if address::normalize_casper_address(&wallet)? == target_account_hash {
-                matched_wallet = Some(wallet);
-                break;
-            }
-        }
-
-        let Some(wallet) = matched_wallet else {
-            // No account has linked this wallet yet (or it was already
-            // reconciled). Not an error: the backend state simply has not
-            // caught up, so we skip rather than fail the whole event.
-            tracing::warn!(
-                onchain_user_id = %self.user_id,
-                account_hash = %target_account_hash,
-                "UserCreated has no matching unlinked account; skipping"
-            );
-            return Ok(());
-        };
-
-        if db::set_user_onchain_id(ctx.tx, &wallet, &self.user_id).await? {
+        // Fast path: the wallet-link insert caches each wallet's account hash on
+        // the indexed `users.account_hash`, so the match is a direct lookup.
+        if db::set_user_onchain_id_by_account_hash(ctx.tx, &target_account_hash, &self.user_id)
+            .await?
+        {
             tracing::info!(
                 onchain_user_id = %self.user_id,
                 account_hash = %target_account_hash,
                 "Linked on-chain user id to backend account"
             );
-        } else {
-            // Raced with another writer that filled the id between the fetch
-            // and this update.
-            tracing::warn!(
-                onchain_user_id = %self.user_id,
-                account_hash = %target_account_hash,
-                "on-chain id already set for matched account; skipping"
-            );
+            return Ok(());
         }
 
+        // Fallback: rows linked before the `account_hash` cache existed keep it
+        // NULL and miss the indexed UPDATE. Derive the hash for that shrinking
+        // legacy set and match by wallet; new links never reach here.
+        let legacy = db::fetch_legacy_unregistered_wallets(ctx.tx).await?;
+        for wallet in legacy {
+            if address::normalize_casper_address(&wallet)? == target_account_hash {
+                db::set_user_onchain_id(ctx.tx, &wallet, &self.user_id).await?;
+                tracing::info!(
+                    onchain_user_id = %self.user_id,
+                    account_hash = %target_account_hash,
+                    "Linked on-chain user id to backend account (legacy wallet)"
+                );
+                return Ok(());
+            }
+        }
+
+        // No account caches or derives to this hash yet (or it was already
+        // reconciled). Not an error: the backend state simply has not caught up,
+        // so we skip rather than fail the whole event.
+        tracing::warn!(
+            onchain_user_id = %self.user_id,
+            account_hash = %target_account_hash,
+            "UserCreated has no matching unlinked account; skipping"
+        );
         Ok(())
     }
 }

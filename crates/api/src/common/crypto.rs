@@ -76,3 +76,29 @@ pub fn verify_casper_signature(
         Err(_) => Ok(false),
     }
 }
+
+/// Derives the Casper account hash (64-char lowercase hex) from a public key hex.
+///
+/// The account hash is the on-chain identity a public key maps to, and the
+/// `UserCreated` event carries it instead of the public key. Caching it at
+/// wallet-link time lets the indexer reconcile by an indexed lookup rather than
+/// re-deriving every unlinked wallet. Mirrors the 66/68-hex branch of the
+/// indexer's `normalize_casper_address`, so both sides canonicalise identically.
+///
+/// # Errors
+///
+/// Returns `CryptoError::CasperError` if `public_key_hex` is not a valid Casper
+/// public key.
+#[inline]
+pub fn derive_account_hash(public_key_hex: &str) -> Result<String, CryptoError> {
+    let public_key = PublicKey::from_hex(public_key_hex)
+        .map_err(|e| CryptoError::CasperError(format!("Invalid public key: {e:?}")))?;
+
+    // `AccountHash::to_formatted_string` returns "account-hash-XXXX"; strip the
+    // tag to keep the bare 64-hex form the indexer compares against.
+    let formatted = public_key.to_account_hash().to_formatted_string();
+    let hex = formatted
+        .strip_prefix("account-hash-")
+        .unwrap_or(&formatted);
+    Ok(hex.to_lowercase())
+}

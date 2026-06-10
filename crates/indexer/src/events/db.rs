@@ -1088,25 +1088,70 @@ pub async fn update_staker_reward_snapshot(
 
 // Users (on-chain reconciliation) ---------------------------------------------
 
-/// Loads the linked wallets of users that have no on-chain id yet.
+/// Stamps the on-chain id on the user whose cached `account_hash` matches,
+/// the fast path for `UserCreated` reconciliation.
 ///
-/// Returned values are `users.wallet_address` verbatim (Casper public keys,
-/// 66/68 hex). The `UserCreated` event instead carries an account hash, so the
-/// caller derives each wallet's account hash in Rust and compares, then writes
-/// back via [`set_user_onchain_id`] keyed on the same verbatim string. The set
-/// is naturally small (only users awaiting on-chain registration).
+/// `account_hash` is indexed (`users_account_hash_unique`), so this is a direct
+/// lookup rather than the previous scan-and-derive over every unregistered
+/// wallet. Only fills an as-yet-unset id (`onchain_user_id IS NULL`), so
+/// re-processing the same event or a concurrent writer is a no-op.
+///
+/// Returns `true` when a row was updated, `false` when no account caches this
+/// hash yet (un-backfilled legacy row, or the wallet simply is not linked) -
+/// the caller then tries [`fetch_legacy_unregistered_wallets`].
 ///
 /// # Errors
 ///
 /// Returns [`IndexerError::Database`](IndexerError::Database) on SQL failures.
 #[inline]
-pub async fn fetch_unregistered_wallets(tx: &mut PgTransaction<'_>) -> IndexerResult<Vec<String>> {
+pub async fn set_user_onchain_id_by_account_hash(
+    tx: &mut PgTransaction<'_>,
+    account_hash: &str,
+    onchain_user_id: &str,
+) -> IndexerResult<bool> {
+    let result = sqlx::query!(
+        r"
+            UPDATE users
+            SET onchain_user_id = $1::TEXT::NUMERIC,
+                onchain_status = 'active'
+            WHERE account_hash = $2
+              AND onchain_user_id IS NULL
+        ",
+        onchain_user_id,
+        account_hash,
+    )
+    .execute(tx.as_mut())
+    .await?;
+
+    Ok(result.rows_affected() > 0)
+}
+
+/// Loads the linked wallets of un-registered users whose `account_hash` cache
+/// is not yet populated - the fallback set for `UserCreated` reconciliation.
+///
+/// This is the narrow remainder the indexed
+/// [`set_user_onchain_id_by_account_hash`] cannot reach: rows linked before the
+/// `account_hash` column existed keep it `NULL`. Returned values are
+/// `users.wallet_address` verbatim (Casper public keys, 66/68 hex); the caller
+/// derives each wallet's account hash in Rust, compares, and writes back via
+/// [`set_user_onchain_id`] keyed on the same verbatim string. The set shrinks to
+/// empty as those users re-link (the insert path now caches the hash), and new
+/// links never land here.
+///
+/// # Errors
+///
+/// Returns [`IndexerError::Database`](IndexerError::Database) on SQL failures.
+#[inline]
+pub async fn fetch_legacy_unregistered_wallets(
+    tx: &mut PgTransaction<'_>,
+) -> IndexerResult<Vec<String>> {
     let rows = sqlx::query!(
         r"
             SELECT wallet_address
             FROM users
             WHERE onchain_user_id IS NULL
               AND wallet_address IS NOT NULL
+              AND account_hash IS NULL
         ",
     )
     .fetch_all(tx.as_mut())
@@ -1120,7 +1165,7 @@ pub async fn fetch_unregistered_wallets(tx: &mut PgTransaction<'_>) -> IndexerRe
 
 /// Records the contract-assigned on-chain id on the user with this exact
 /// `wallet_address` (the verbatim public key returned by
-/// [`fetch_unregistered_wallets`]).
+/// [`fetch_legacy_unregistered_wallets`]) - the legacy fallback path.
 ///
 /// Only fills an as-yet-unset id, so re-processing the same event (or a race
 /// with a concurrent writer) is a no-op. The `$1::TEXT::NUMERIC` cast binds the

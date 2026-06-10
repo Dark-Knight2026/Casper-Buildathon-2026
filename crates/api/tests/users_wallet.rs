@@ -63,6 +63,18 @@ async fn fetch_and_sign_nonce(
 struct WalletConnectionRow {
     is_primary: bool,
     provider: String,
+    account_hash: Option<String>,
+}
+
+/// Derives the canonical account hash (bare 64-char lowercase hex) the link
+/// path is expected to cache for a public key, mirroring
+/// `common::crypto::derive_account_hash`.
+fn expected_account_hash(public_key: &PublicKey) -> String {
+    let formatted = public_key.to_account_hash().to_formatted_string();
+    formatted
+        .strip_prefix("account-hash-")
+        .unwrap_or(&formatted)
+        .to_ascii_lowercase()
 }
 
 #[sqlx::test(migrator = "common::MIGRATIONS")]
@@ -96,7 +108,7 @@ async fn link_wallet_persists_connection_and_syncs_cache(pool: PgPool) {
     // The first wallet a user links becomes primary.
     let connection = sqlx::query_as::<_, WalletConnectionRow>(
         r"
-            SELECT is_primary, provider
+            SELECT is_primary, provider, account_hash
             FROM wallet_connections
             WHERE wallet_address = $1
         ",
@@ -109,10 +121,19 @@ async fn link_wallet_persists_connection_and_syncs_cache(pool: PgPool) {
     assert!(connection.is_primary, "first linked wallet must be primary");
     assert_eq!(connection.provider, "casper_wallet");
 
-    // The AFTER-trigger synced the cached `users.wallet_address`.
-    let cached = sqlx::query_scalar::<_, Option<String>>(
+    // The link path caches the derived account hash so the indexer can match
+    // `UserCreated` events without re-deriving every wallet.
+    let account_hash = expected_account_hash(&public_key);
+    assert_eq!(
+        connection.account_hash.as_deref(),
+        Some(account_hash.as_str()),
+        "the linked wallet must cache its derived account hash"
+    );
+
+    // The AFTER-trigger synced both cached columns on `users`.
+    let cached = sqlx::query_as::<_, (Option<String>, Option<String>)>(
         r"
-            SELECT wallet_address
+            SELECT wallet_address, account_hash
             FROM users
             WHERE email = $1
         ",
@@ -122,7 +143,12 @@ async fn link_wallet_persists_connection_and_syncs_cache(pool: PgPool) {
     .await
     .expect("user row exists");
 
-    assert_eq!(cached.as_deref(), Some(wallet_address.as_str()));
+    assert_eq!(cached.0.as_deref(), Some(wallet_address.as_str()));
+    assert_eq!(
+        cached.1.as_deref(),
+        Some(account_hash.as_str()),
+        "trigger must sync users.account_hash from the primary connection"
+    );
 }
 
 #[sqlx::test(migrator = "common::MIGRATIONS")]
