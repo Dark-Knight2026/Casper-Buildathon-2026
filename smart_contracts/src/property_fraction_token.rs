@@ -78,6 +78,7 @@ pub mod errors {
         ZeroInitialSupply = 1104,
         CompliancePolicyUpdateTimelockNotElapsed = 1105,
         NoPendingCompliancePolicy = 1106,
+        AlreadyInitialized = 1107,
     }
 }
 
@@ -93,6 +94,7 @@ pub struct PropertyFractionToken {
     property_id: Var<U256>,
     pending_compliance_policy: Var<Option<Address>>,
     pending_compliance_policy_activation_time: Var<u64>,
+    initialized: Var<bool>,
 }
 
 #[odra::module]
@@ -108,6 +110,10 @@ impl PropertyFractionToken {
     ///      the property registry may not be active until this token address is deployed and
     ///      registered.
     pub fn init(&mut self, params: PropertyFractionTokenInitParams) {
+        if self.initialized.get_or_default() {
+            self.env().revert(Error::AlreadyInitialized);
+        }
+
         self.validate_init_params(&params);
 
         self.access_control
@@ -133,6 +139,8 @@ impl PropertyFractionToken {
             initial_supply: params.initial_supply,
             compliance_policy: params.compliance_policy,
         });
+
+        self.initialized.set(true);
     }
 
     // =============================================================================

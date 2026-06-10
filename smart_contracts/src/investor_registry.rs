@@ -64,6 +64,7 @@ pub mod errors {
         NotAuthorized = 800,
         MissingIdentityHash = 801,
         AccountNotRegistered = 802,
+        AlreadyInitialized = 803,
     }
 }
 
@@ -75,6 +76,7 @@ pub mod errors {
 pub struct InvestorRegistry {
     access_control: SubModule<AccessControl>,
     records: Mapping<Address, InvestorRecord>,
+    initialized: Var<bool>,
 }
 
 #[odra::module]
@@ -84,8 +86,14 @@ impl InvestorRegistry {
     // =============================================================================
 
     pub fn init(&mut self, owner: Address) {
+        if self.initialized.get_or_default() {
+            self.env().revert(Error::AlreadyInitialized);
+        }
+
         self.access_control
             .unchecked_grant_role(&DEFAULT_ADMIN_ROLE, &owner);
+
+        self.initialized.set(true);
     }
 
     // =============================================================================

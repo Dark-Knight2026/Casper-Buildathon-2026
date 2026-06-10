@@ -111,6 +111,7 @@ pub mod errors {
         MissingRevenueDistributor = 906,
         InvalidStatusTransition = 907,
         PropertyTokenAlreadyRegistered = 908,
+        AlreadyInitialized = 909,
     }
 }
 
@@ -130,6 +131,7 @@ pub struct PropertyRegistry {
     properties: Mapping<U256, PropertyRecord>,
     properties_count: Sequence<U256>,
     token_to_property_id: Mapping<Address, Option<U256>>,
+    initialized: Var<bool>,
 }
 
 #[odra::module]
@@ -139,8 +141,14 @@ impl PropertyRegistry {
     // =============================================================================
 
     pub fn init(&mut self, owner: Address) {
+        if self.initialized.get_or_default() {
+            self.env().revert(Error::AlreadyInitialized);
+        }
+
         self.access_control
             .unchecked_grant_role(&DEFAULT_ADMIN_ROLE, &owner);
+
+        self.initialized.set(true);
     }
 
     // =============================================================================

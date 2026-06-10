@@ -174,6 +174,7 @@ pub mod errors {
         LeaseAlreadyFinalized = 413,
         TenantAlreadyEquityEligible = 414,
         RenounceOwnershipNotAllowed = 415,
+        AlreadyInitialized = 416,
     }
 }
 
@@ -210,6 +211,7 @@ pub struct Lease {
     equity_eligible: Mapping<(U256, Address), bool>,
     /// Number of lease agreements created.
     leases_count: Var<U256>,
+    initialized: Var<bool>,
 }
 
 #[odra::module]
@@ -226,11 +228,17 @@ impl Lease {
         nft: Address,
         property_registry: Address,
     ) {
+        if self.initialized.get_or_default() {
+            self.env().revert(Error::AlreadyInitialized);
+        }
+
         self.ownable.init(owner);
         self.roles.set(roles);
         self.escrow.set(escrow);
         self.nft.set(nft);
         self.property_registry.set(property_registry);
+
+        self.initialized.set(true);
     }
 
     // =========================================================================

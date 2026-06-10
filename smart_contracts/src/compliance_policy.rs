@@ -99,6 +99,7 @@ pub mod errors {
         RecipientNotEquityEligible = 1007,
         CompliancePolicyUpdateTimelockNotElapsed = 1008,
         NoPendingCompliancePolicy = 1009,
+        AlreadyInitialized = 1010,
     }
 }
 
@@ -141,6 +142,7 @@ pub struct CompliancePolicy {
     pending_lease: Var<Option<Address>>,
     /// Block time (in ms) at which the pending lease change may be applied.
     pending_lease_activation_time: Var<u64>,
+    initialized: Var<bool>,
 }
 
 #[odra::module]
@@ -156,6 +158,10 @@ impl CompliancePolicy {
         property_registry: Address,
         lease: Address,
     ) {
+        if self.initialized.get_or_default() {
+            self.env().revert(Error::AlreadyInitialized);
+        }
+
         self.access_control
             .unchecked_grant_role(&DEFAULT_ADMIN_ROLE, &owner);
         self.investor_registry.set(investor_registry);
@@ -168,6 +174,8 @@ impl CompliancePolicy {
         self.pending_property_registry_activation_time.set(0);
         self.pending_lease.set(None);
         self.pending_lease_activation_time.set(0);
+
+        self.initialized.set(true);
     }
 
     // =============================================================================

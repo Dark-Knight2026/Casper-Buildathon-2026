@@ -1,4 +1,5 @@
 use crate::common;
+use crate::roles::errors::Error;
 use odra::prelude::*;
 use odra_modules::access::{AccessControl, Role, DEFAULT_ADMIN_ROLE};
 
@@ -11,20 +12,44 @@ pub const ROLE_AGENT_ADMIN: &str = "AGENT_ADMIN";
 pub const ROLE_MANAGER: &str = "MANAGER";
 pub const ROLE_MANAGER_ADMIN: &str = "MANAGER_ADMIN";
 
-#[odra::module]
+// =============================================================================
+// Errors
+// =============================================================================
+
+pub mod errors {
+    use odra::prelude::*;
+
+    #[odra::odra_error]
+    pub enum Error {
+        AlreadyInitialized = 1200,
+    }
+}
+
+// =============================================================================
+// Contract
+// =============================================================================
+
+#[odra::module(errors = Error)]
 pub struct Roles {
     access_control: SubModule<AccessControl>,
+    initialized: Var<bool>,
 }
 
 #[odra::module]
 impl Roles {
     pub fn init(&mut self, admin: Address) {
+        if self.initialized.get_or_default() {
+            self.env().revert(Error::AlreadyInitialized);
+        }
+
         self.access_control
             .unchecked_grant_role(&DEFAULT_ADMIN_ROLE, &admin);
 
         self.set_landlord_admin_role();
         self.set_agent_admin_role();
         self.set_manager_admin_role();
+
+        self.initialized.set(true);
     }
 
     /// Returns LANDLORD_ROLE role hash
@@ -52,6 +77,10 @@ impl Roles {
         }
     }
 }
+
+// =============================================================================
+// Internal helpers
+// =============================================================================
 
 impl Roles {
     fn set_landlord_admin_role(&mut self) {

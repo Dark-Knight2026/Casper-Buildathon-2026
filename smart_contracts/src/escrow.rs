@@ -195,6 +195,7 @@ pub mod errors {
         CompliancePolicyUpdateTimelockNotElapsed = 318,
         NoPendingCompliancePolicy = 319,
         RenounceOwnershipNotAllowed = 320,
+        AlreadyInitialized = 321,
     }
 }
 
@@ -240,6 +241,7 @@ pub struct Escrow {
     pending_treasury: Var<Option<Address>>,
     /// Block time (in ms) at which the pending Treasury change may be applied.
     pending_treasury_activation_time: Var<u64>,
+    initialized: Var<bool>,
 }
 
 #[odra::module]
@@ -249,6 +251,10 @@ impl Escrow {
     // =========================================================================
 
     pub fn init(&mut self, owner: Address, min_deadline: u64) {
+        if self.initialized.get_or_default() {
+            self.env().revert(Error::AlreadyInitialized);
+        }
+
         self.ownable.init(owner);
         self.set_min_deadline(min_deadline);
 
@@ -256,6 +262,8 @@ impl Escrow {
         self.pending_lease_activation_time.set(0);
         self.pending_treasury.set(None);
         self.pending_treasury_activation_time.set(0);
+
+        self.initialized.set(true);
     }
 
     // =========================================================================

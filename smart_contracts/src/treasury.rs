@@ -8,6 +8,66 @@ use crate::treasury::{
     events::{BigCoinSet, ReservesWithdrawn, RewardsDeposited, StakingSet, TokenWithdrawn},
 };
 
+// =============================================================================
+// Events
+// =============================================================================
+
+pub mod events {
+    use odra::{casper_types::U256, prelude::*};
+
+    #[odra::event]
+    pub struct RewardsDeposited {
+        pub amount: U256,
+    }
+
+    #[odra::event]
+    pub struct ReservesWithdrawn {
+        pub recipient: Address,
+        pub amount: U256,
+    }
+
+    #[odra::event]
+    pub struct TokenWithdrawn {
+        pub token: Option<Address>,
+        pub amount: U256,
+        pub recipient: Address,
+    }
+
+    #[odra::event]
+    pub struct StakingSet {
+        pub staking: Address,
+    }
+
+    #[odra::event]
+    pub struct BigCoinSet {
+        pub big_coin: Address,
+    }
+}
+
+// =============================================================================
+// Errors
+// =============================================================================
+
+pub mod errors {
+    use odra::prelude::*;
+
+    #[odra::odra_error]
+    pub enum Error {
+        BigCoinContractIsNotSet = 200,
+        StakingContractIsNotSet = 201,
+        NotEnoughReserves = 202,
+        InvalidWithdrawalAmount = 203,
+        DirectReservesTokenWithdrawalIsNotAllowed = 204,
+        InsufficientWithdrawalTokenAmount = 205,
+        RenounceOwnershipNotAllowed = 206,
+        AlreadyInitialized = 207,
+    }
+}
+
+// =============================================================================
+// Contract
+// =============================================================================
+
 #[odra::module(errors = Error, events = [
   RewardsDeposited,
   ReservesWithdrawn,
@@ -19,17 +79,28 @@ pub struct Treasury {
     ownable: SubModule<Ownable>,
     staking: Var<Address>,
     big_coin: Var<Address>,
+    initialized: Var<bool>,
 }
 
 #[odra::module]
 impl Treasury {
+    // =============================================================================
+    // Init
+    // =============================================================================
+
     pub fn init(&mut self, owner: Address) {
+        if self.initialized.get_or_default() {
+            self.env().revert(Error::AlreadyInitialized);
+        }
+
         self.ownable.init(owner);
+
+        self.initialized.set(true);
     }
 
-    /// Allows to receive CSPR tokens by this contract
-    #[odra(payable)]
-    pub fn receive(&self) {}
+    // =========================================================================
+    // Owner-only configuration
+    // =========================================================================
 
     /// Sets the Staking contract address by the owner
     pub fn set_staking(&mut self, staking: Address) {
@@ -46,6 +117,32 @@ impl Treasury {
 
         self.env().emit_event(BigCoinSet { big_coin });
     }
+
+    // =========================================================================
+    // View Functions
+    // =========================================================================
+
+    /// Returns the BIG token reserves stored on this contract and available to withdraw by the owner
+    pub fn get_reserves(&self) -> U256 {
+        Cep18ContractRef::new(self.env(), self.get_big_coin_contract_address())
+            .balance_of(&self.env().self_address())
+    }
+
+    /// Returns the Staking contract address
+    pub fn get_staking_contract_address(&self) -> Address {
+        self.staking
+            .get_or_revert_with(Error::StakingContractIsNotSet)
+    }
+
+    /// Returns the BIG token contract address
+    pub fn get_big_coin_contract_address(&self) -> Address {
+        self.big_coin
+            .get_or_revert_with(Error::BigCoinContractIsNotSet)
+    }
+
+    // =========================================================================
+    // Deposit
+    // =========================================================================
 
     /// Allows to deposit any rewards amount in the BIG token by anyone, then distributes these rewards
     /// between the Staking contract and internal reserves.
@@ -84,6 +181,14 @@ impl Treasury {
             self.env().emit_event(RewardsDeposited { amount });
         }
     }
+
+    /// Allows to receive CSPR tokens by this contract
+    #[odra(payable)]
+    pub fn receive(&self) {}
+
+    // =========================================================================
+    // Withdrawal
+    // =========================================================================
 
     /// Allows to withdraw any available reserves amount by the owner
     #[odra(non_reentrant)]
@@ -146,23 +251,9 @@ impl Treasury {
         });
     }
 
-    /// Returns the BIG token reserves stored on this contract and available to withdraw by the owner
-    pub fn get_reserves(&self) -> U256 {
-        Cep18ContractRef::new(self.env(), self.get_big_coin_contract_address())
-            .balance_of(&self.env().self_address())
-    }
-
-    /// Returns the Staking contract address
-    pub fn get_staking_contract_address(&self) -> Address {
-        self.staking
-            .get_or_revert_with(Error::StakingContractIsNotSet)
-    }
-
-    /// Returns the BIG token contract address
-    pub fn get_big_coin_contract_address(&self) -> Address {
-        self.big_coin
-            .get_or_revert_with(Error::BigCoinContractIsNotSet)
-    }
+    // =========================================================================
+    // Ownable Delegation
+    // =========================================================================
 
     /// renounce_ownership is disabled to prevent accidental or malicious permanent
     /// removal of admin controls on this contract (which would brick fee handling,
@@ -179,56 +270,13 @@ impl Treasury {
     }
 }
 
+// =============================================================================
+// Internal helpers
+// =============================================================================
+
 impl Treasury {
     #[inline]
     fn assert_owner(&self) {
         self.ownable.assert_owner(&self.env().caller());
-    }
-}
-
-pub mod events {
-    use odra::{casper_types::U256, prelude::*};
-
-    #[odra::event]
-    pub struct RewardsDeposited {
-        pub amount: U256,
-    }
-
-    #[odra::event]
-    pub struct ReservesWithdrawn {
-        pub recipient: Address,
-        pub amount: U256,
-    }
-
-    #[odra::event]
-    pub struct TokenWithdrawn {
-        pub token: Option<Address>,
-        pub amount: U256,
-        pub recipient: Address,
-    }
-
-    #[odra::event]
-    pub struct StakingSet {
-        pub staking: Address,
-    }
-
-    #[odra::event]
-    pub struct BigCoinSet {
-        pub big_coin: Address,
-    }
-}
-
-pub mod errors {
-    use odra::prelude::*;
-
-    #[odra::odra_error]
-    pub enum Error {
-        BigCoinContractIsNotSet = 200,
-        StakingContractIsNotSet = 201,
-        NotEnoughReserves = 202,
-        InvalidWithdrawalAmount = 203,
-        DirectReservesTokenWithdrawalIsNotAllowed = 204,
-        InsufficientWithdrawalTokenAmount = 205,
-        RenounceOwnershipNotAllowed = 206,
     }
 }

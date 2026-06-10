@@ -38,14 +38,21 @@ pub struct ICO {
     treasury: External<TreasuryContractRef>,
     staking: External<StakingContractRef>,
     vesting: External<VestingContractRef>,
+    initialized: Var<bool>,
 }
 
 #[odra::module]
 impl ICO {
     pub fn init(&mut self, owner: Address, styks_price_feed: Address) {
+        if self.initialized.get_or_default() {
+            self.env().revert(Error::AlreadyInitialized);
+        }
+
         self.ownable.init(owner);
 
         self.styks_price_feed.set(styks_price_feed);
+
+        self.initialized.set(true);
     }
 
     /// Sets the BIG token contract address by the owner
@@ -521,6 +528,7 @@ pub mod errors {
         InvalidICOScheduleVestingDuration = 513,
         ICOScheduleCliffExceedsVestingDuration = 514,
         RenounceOwnershipNotAllowed = 515,
+        AlreadyInitialized = 516,
     }
 }
 
