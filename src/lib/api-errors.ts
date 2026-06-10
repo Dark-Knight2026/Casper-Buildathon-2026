@@ -60,6 +60,16 @@ export const ProfileApiErrorCode = {
    * CTA rather than a flat error toast. Status: 409.
    */
   ActiveLeasesBlocking: 'active_leases_blocking',
+
+  /**
+   * An opaque single-use token was malformed, expired, or already consumed.
+   * Emitted by the password-reset (`POST /auth/password/reset`, status 400)
+   * and email verify/change-confirm flows. UI should offer to restart the
+   * flow (request a fresh link) rather than retry the same token. The wording
+   * is deliberately uniform across malformed/expired/consumed so it leaks
+   * nothing about which check failed.
+   */
+  InvalidOrExpiredToken: 'invalid_or_expired_token',
 } as const;
 
 export type ProfileApiErrorCode =

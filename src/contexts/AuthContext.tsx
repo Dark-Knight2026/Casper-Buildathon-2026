@@ -1,11 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AuthContext } from './AuthContextDefinition';
-import {
-  logoutSession,
-  refreshSession,
-  type ServerUserInfo,
-} from '@/services/ico/backendAuthService';
+import { logoutSession, refreshSession } from '@/services/backendAuthService';
 import { getMe, patchMe, type PatchProfileBody } from '@/services/userProfileService';
+import type { ServerUserInfo } from '@/types/serverUser';
 import type { UserProfile, UserRole, UserStatus, VerificationLevel } from '@/types/user';
 import { logger } from '@/utils/logger';
 

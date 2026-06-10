@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import { useICOWallet } from '@/hooks/ico/useICOWallet';
-import { getNonce, loginWithSignature } from '@/services/ico/backendAuthService';
+import { getNonce, loginWithSignature } from '@/services/backendAuthService';
 import { ApiError } from '@/lib/api-client';
 import { ProfileApiErrorCode } from '@/lib/api-errors';
 import { logger } from '@/utils/logger';

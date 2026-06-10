@@ -4,9 +4,8 @@ import {
   getNonce,
   loginWithSignature,
   logoutSession,
-  type ServerUserInfo,
-  type SelfRegisterableRole,
-} from '@/services/ico';
+} from '@/services/backendAuthService';
+import type { ServerUserInfo, SelfRegisterableRole } from '@/types/serverUser';
 import { logger } from '@/utils/logger';
 
 /**

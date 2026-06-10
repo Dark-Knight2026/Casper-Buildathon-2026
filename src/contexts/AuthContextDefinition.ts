@@ -1,6 +1,6 @@
 import { createContext } from 'react';
 import type { UserProfile } from '@/types/user';
-import type { ServerUserInfo } from '@/services/ico/backendAuthService';
+import type { ServerUserInfo } from '@/types/serverUser';
 
 export interface AuthContextType {
   profile: UserProfile | null;

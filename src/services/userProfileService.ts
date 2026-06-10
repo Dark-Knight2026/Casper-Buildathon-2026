@@ -1,8 +1,5 @@
 import { backendClient } from '@/lib/api-client';
-import {
-  type ServerUserInfo,
-  type SelfRegisterableRole,
-} from '@/services/ico/backendAuthService';
+import type { ServerUserInfo, SelfRegisterableRole } from '@/types/serverUser';
 
 /**
  * Profile-management API surface.
@@ -16,12 +13,6 @@ import {
  * Errors propagate as `ApiError`. When the backend emitted a machine-readable
  * envelope (`{ "error": "reauthentication_required" }` etc.), the token is on
  * `error.code` — see `src/lib/api-errors.ts` for the constant set.
- *
- * `ServerUserInfo` and `SelfRegisterableRole` are re-used from
- * `src/services/ico/backendAuthService.ts` for now. Those types describe the
- * REST envelope, not anything Casper-specific — promoting them to a neutral
- * location (`src/types/serverUser.ts`) is a clean follow-up that lets the
- * `ico/` import drop entirely.
  */
 
 const USERS_ME = '/api/v1/users/me';
@@ -129,4 +120,85 @@ export async function uploadAvatar(file: File): Promise<AvatarUploadResponse> {
   const form = new FormData();
   form.append('file', file);
   return backendClient.post<AvatarUploadResponse>(`${USERS_ME}/avatar`, form);
+}
+
+/**
+ * Body for `POST /users/me/password`. One endpoint serves two cases, resolved
+ * server-side by whether the account already has a password hash:
+ *   - change: `current_password` required, verified before the rewrite.
+ *   - first-set (wallet-only / OAuth-only account): omit `current_password`;
+ *     the backend instead requires a freshly authenticated session.
+ */
+export interface ChangePasswordBody {
+  /** Omit (or set undefined) on the first-set path. */
+  current_password?: string;
+  new_password: string;
+}
+
+/**
+ * `POST /users/me/password`. Returns `204` (no body): the backend revokes all
+ * OTHER sessions and rotates the current one, so the active device stays
+ * logged in via freshly set cookies.
+ *
+ * Errors:
+ *   400 — weak new password, or missing current password on the change path
+ *   401 — current password incorrect
+ *   403 `reauthentication_required` — first-set path without a recent auth
+ *   404 — user no longer exists
+ */
+export async function changePassword(body: ChangePasswordBody): Promise<void> {
+  await backendClient.post<void>(`${USERS_ME}/password`, body);
+}
+
+/**
+ * `POST /users/me/wallet`. Links a Casper wallet to the logged-in account via
+ * a nonce + signature ownership proof — the caller must first fetch a nonce
+ * from `GET /auth/nonce?wallet_address=<pubkey>`, sign its `message`, and pass
+ * the resulting signature here. The newly linked wallet becomes primary; the
+ * updated profile (with `wallet_address` populated) is returned.
+ *
+ * `signature` must carry the 1-byte algorithm prefix (01 = Ed25519,
+ * 02 = Secp256k1) — see `loginWithSignature` for the prefixing rule.
+ *
+ * Errors:
+ *   401 — signature did not prove ownership of the wallet
+ *   409 — that wallet is already linked (to this or another account)
+ */
+export async function linkWallet(
+  walletAddress: string,
+  signature: string,
+): Promise<ServerUserInfo> {
+  return backendClient.post<ServerUserInfo>(`${USERS_ME}/wallet`, {
+    wallet_address: walletAddress,
+    signature,
+  });
+}
+
+/**
+ * Response of `GET /users/me/onchain-registration` — the two `create_user`
+ * arguments the frontend cannot derive itself (the third, the wallet address,
+ * it already holds).
+ *
+ * HACK (hackathon bridge): this endpoint exists only while the frontend calls
+ * `UserRegistry::create_user` from the user's own wallet. It is retired once
+ * the backend signs the deploy itself.
+ */
+export interface OnchainRegistrationResponse {
+  /** Lowercase hex of the 32-byte identity hash; decode to `[u8; 32]`. */
+  identity_hash: string;
+  /** Role-flags bitmask: TENANT=1, LANDLORD=2, PROPERTY_MANAGER=4, else 0. */
+  role_flags: number;
+}
+
+/**
+ * `GET /users/me/onchain-registration`. Requires a linked wallet.
+ *
+ * Errors:
+ *   409 — no wallet linked yet (link one via `linkWallet` first)
+ */
+export async function getOnchainRegistration(): Promise<OnchainRegistrationResponse> {
+  return backendClient.get<OnchainRegistrationResponse>(
+    `${USERS_ME}/onchain-registration`,
+    { retry: false },
+  );
 }

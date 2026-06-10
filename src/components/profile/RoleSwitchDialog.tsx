@@ -25,7 +25,7 @@ import { useSensitiveAction } from '@/hooks/auth/useSensitiveAction';
 import { ApiError } from '@/lib/api-client';
 import { ProfileApiErrorCode } from '@/lib/api-errors';
 import { patchMyRole } from '@/services/userProfileService';
-import type { SelfRegisterableRole } from '@/services/ico/backendAuthService';
+import type { SelfRegisterableRole } from '@/types/serverUser';
 
 const ROLE_OPTIONS: ReadonlyArray<{ value: SelfRegisterableRole; label: string }> = [
   { value: 'tenant', label: 'Tenant' },

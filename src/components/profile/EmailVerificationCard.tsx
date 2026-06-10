@@ -12,7 +12,7 @@ import {
   resendVerificationEmail,
   sendVerificationEmail,
   type VerifyEmailSendResponse,
-} from '@/services/ico/backendAuthService';
+} from '@/services/backendAuthService';
 
 const RESEND_COOLDOWN_SECONDS = 60;
 

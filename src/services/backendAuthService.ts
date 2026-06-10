@@ -1,36 +1,14 @@
 import { backendClient } from '@/lib/api-client';
+import type { ServerUserInfo, SelfRegisterableRole } from '@/types/serverUser';
+
+// Re-exported for back-compat: `ServerUserInfo` and `SelfRegisterableRole` now
+// live in the neutral `@/types/serverUser`, but some call sites still import
+// them from here. New code should import from `@/types/serverUser` directly.
+export type { ServerUserInfo, SelfRegisterableRole } from '@/types/serverUser';
 
 export interface NonceResponse {
   nonce: string;
   message: string;
-}
-
-/**
- * Server-shape of the authenticated user, mirroring backend
- * `crates/api/src/services/auth/models.rs::UserInfo`.
- *
- * Snake-case fields match the JSON wire format. Map to the frontend
- * `User` type at the call site (see `mapServerUserInfo` below).
- */
-export interface ServerUserInfo {
-  id: string;
-  role: string;
-  wallet_address: string | null;
-  status: string | null;
-  email: string | null;
-  first_name: string;
-  last_name: string;
-  phone: string | null;
-  avatar_url: string | null;
-  bio: string | null;
-  is_profile_complete: boolean;
-  active_leases_count: number;
-  created_at: string;
-  updated_at: string;
-  // Email-verification level. Ordered enum (snake_case):
-  // 'none' | 'email' | 'identity' | 'full' — email is verified at 'email'+.
-  // Optional because legacy sessions may omit it; treat absence as unverified.
-  verification_level?: string;
 }
 
 export interface LoginResponse {
@@ -45,14 +23,6 @@ export async function getNonce(publicKey: string): Promise<NonceResponse> {
     { retry: false },
   );
 }
-
-/**
- * Roles the backend accepts during self-registration. Mirrors
- * `UserRole::is_self_registerable` in `crates/api/src/common/models.rs` —
- * any other value would be rejected with 400. The field is honored only on
- * first INSERT; on subsequent logins the backend ignores it.
- */
-export type SelfRegisterableRole = 'tenant' | 'landlord' | 'agent';
 
 export async function loginWithSignature(
   publicKey: string,
@@ -79,6 +49,103 @@ export async function loginWithSignature(
       // `tenant` and the field is honored only on the very first login.
       ...(role !== undefined ? { role } : {}),
     },
+    { retry: false },
+  );
+}
+
+// ─── Email + password auth ──────────────────────────────────────────────────
+
+export interface RegisterBody {
+  email: string;
+  password: string;
+  first_name: string;
+  last_name: string;
+  // Honored only on this INSERT; backend defaults to `tenant` when omitted.
+  role?: SelfRegisterableRole;
+}
+
+/**
+ * Register a new email + password user. The backend creates the account with
+ * `primary_auth_method = 'password'`, `verification_level = 'none'`, no wallet,
+ * and auto-logs the user in: the access + refresh tokens arrive as HttpOnly
+ * cookies and the body carries only the profile — the same shape as login.
+ *
+ * The verification email is NOT sent here; trigger it separately via
+ * `sendVerificationEmail()` once the user is signed in.
+ *
+ * Errors (switch on `ApiError.statusCode`):
+ *   400 — invalid email, weak password, disallowed role, or empty name
+ *   409 — email already registered
+ *   429 — too many registration attempts from this client
+ */
+export async function register(body: RegisterBody): Promise<LoginResponse> {
+  return backendClient.post<LoginResponse>('/api/v1/auth/register', body, {
+    retry: false,
+  });
+}
+
+/**
+ * Authenticate an email + password user. On success the backend sets the
+ * access + refresh cookies and returns the profile.
+ *
+ * Anti-enumeration: every authentication failure (unknown email, wrong
+ * password, wallet-only account) collapses to one generic `401` — the UI must
+ * NOT distinguish them or reveal whether the email exists.
+ *
+ * Errors:
+ *   401 — invalid credentials (generic; do not leak which check failed)
+ *   403 — account suspended or inactive
+ *   429 — too many failed attempts for this email
+ */
+export async function loginWithPassword(
+  email: string,
+  password: string,
+): Promise<LoginResponse> {
+  return backendClient.post<LoginResponse>(
+    '/api/v1/auth/login/password',
+    { email, password },
+    { retry: false },
+  );
+}
+
+export interface ForgotPasswordResponse {
+  status: 'sent';
+}
+
+/**
+ * Start the forgotten-password flow. The backend always answers
+ * `{ status: 'sent' }` regardless of whether the email maps to a reset-eligible
+ * account (anti-enumeration), so the UI must show a neutral "if that address
+ * exists, a link was sent" message and never branch on the result.
+ *
+ * Unauthenticated.
+ */
+export async function forgotPassword(email: string): Promise<ForgotPasswordResponse> {
+  return backendClient.post<ForgotPasswordResponse>(
+    '/api/v1/auth/password/forgot',
+    { email },
+    { retry: false },
+  );
+}
+
+/**
+ * Complete the forgotten-password flow with the opaque token from the reset
+ * email (43-char base64url, delivered as `?token=` on the reset link). On
+ * success the backend invalidates ALL sessions, sets the new password, and
+ * auto-logs the user in via fresh cookies.
+ *
+ * Errors:
+ *   400 `invalid_or_expired_token` — malformed/expired/consumed token, or weak
+ *                                    new password
+ *   404 — account no longer exists
+ */
+export async function resetPassword(
+  token: string,
+  newPassword: string,
+): Promise<LoginResponse> {
+  return backendClient.post<LoginResponse>(
+    '/api/v1/auth/password/reset',
+    { token, new_password: newPassword },
     { retry: false },
   );
 }

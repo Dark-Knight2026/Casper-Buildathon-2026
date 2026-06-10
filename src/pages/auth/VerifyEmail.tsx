@@ -11,7 +11,7 @@ import { useToast } from '@/hooks/use-toast';
 import {
   confirmEmailVerification,
   sendVerificationEmail,
-} from '@/services/ico/backendAuthService';
+} from '@/services/backendAuthService';
 
 type Status =
   | 'verifying'
