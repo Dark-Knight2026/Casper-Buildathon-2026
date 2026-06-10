@@ -32,13 +32,13 @@ export interface UseSensitiveActionReturn {
  */
 export function useSensitiveAction(): UseSensitiveActionReturn {
   const { runWithReauth, state, reset } = useReauthGate();
-  const { walletSignOut } = useAuth();
+  const { signOut } = useAuth();
   const navigate = useNavigate();
 
   const runAndReauth = useCallback(
     async <T>(call: () => Promise<T>): Promise<T> => {
       const result = await runWithReauth(call);
-      walletSignOut();
+      signOut();
       try {
         Object.keys(localStorage).forEach((key) => {
           if (key.startsWith('csprclick:')) localStorage.removeItem(key);
@@ -49,7 +49,7 @@ export function useSensitiveAction(): UseSensitiveActionReturn {
       navigate('/auth/login', { replace: true });
       return result;
     },
-    [runWithReauth, walletSignOut, navigate],
+    [runWithReauth, signOut, navigate],
   );
 
   return { runAndReauth, state, reset };

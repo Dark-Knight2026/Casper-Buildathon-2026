@@ -26,7 +26,7 @@ interface HeaderProps {
 // reconnected, but right now it never renders. Delete the orphan chain or
 // route it before relying on this.
 export const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
-  const { profile, walletSignOut } = useAuth();
+  const { profile, signOut } = useAuth();
   const { disconnect } = useICOWallet();
   const { isMobile } = useMobileDetection();
 
@@ -35,7 +35,7 @@ export const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
   // wipe in-memory SDK state. Matches LandlordLayout/TenantLayout.
   const handleLogout = async () => {
     await disconnect();
-    walletSignOut();
+    signOut();
     window.location.assign('/');
   };
 

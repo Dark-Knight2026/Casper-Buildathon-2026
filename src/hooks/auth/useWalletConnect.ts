@@ -19,7 +19,7 @@ import logger from '@/lib/logger';
  */
 export function useWalletConnect() {
   const navigate = useNavigate();
-  const { profile, setWalletSession } = useAuth();
+  const { profile, setSession } = useAuth();
   const [connectingProvider, setConnectingProvider] = useState<string | null>(null);
   const didRedirect = useRef(false);
 
@@ -40,8 +40,8 @@ export function useWalletConnect() {
   // Tokens live in HttpOnly cookies; only the profile object travels through JS.
   useEffect(() => {
     if (!user || didRedirect.current) return;
-    setWalletSession(user);
-  // setWalletSession is stable (useCallback); only re-run when login produces a new user.
+    setSession(user);
+  // setSession is stable (useCallback); only re-run when login produces a new user.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 

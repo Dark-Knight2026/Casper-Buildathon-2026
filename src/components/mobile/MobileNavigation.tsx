@@ -47,7 +47,7 @@ export default function MobileNavigation({
   unreadNotifications = 0,
   favoriteCount = 0 
 }: MobileNavigationProps) {
-  const { profile, walletSignOut } = useAuth();
+  const { profile, signOut } = useAuth();
   const { disconnect } = useICOWallet();
   const navigate = useNavigate();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -64,7 +64,7 @@ export default function MobileNavigation({
   // wipe in-memory SDK state. Matches LandlordLayout/TenantLayout.
   const handleLogout = async () => {
     await disconnect();
-    walletSignOut();
+    signOut();
     window.location.assign('/');
   };
 

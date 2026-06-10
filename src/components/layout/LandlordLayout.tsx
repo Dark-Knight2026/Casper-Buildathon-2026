@@ -84,7 +84,7 @@ const NAV_LINKS = [
 // overlay guard below — change all five together if the nav width changes.
 
 export default function LandlordLayout() {
-  const { profile, walletSignOut } = useAuth();
+  const { profile, signOut } = useAuth();
   const { disconnect } = useICOWallet();
   const { pathname } = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -98,7 +98,7 @@ export default function LandlordLayout() {
   // the landing page starts from a clean slate.
   const handleSignOut = async () => {
     await disconnect();
-    walletSignOut();
+    signOut();
     window.location.assign('/');
   };
 

@@ -53,7 +53,7 @@ export default function ConfirmEmailChange() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const location = useLocation();
-  const { profile, setWalletSession } = useAuth();
+  const { profile, setSession } = useAuth();
 
   // Capture the single-use token from the URL exactly once. We strip it from
   // the address bar on terminal states (effect below) so it can't leak via the
@@ -84,7 +84,7 @@ export default function ConfirmEmailChange() {
       const updatedUser = await confirmEmailChange(token);
       // Backend returns the fresh ServerUserInfo with the new email applied;
       // feed it directly into AuthContext (no re-fetch needed).
-      setWalletSession(updatedUser);
+      setSession(updatedUser);
       setStatus('success');
     } catch (err) {
       const next = classifyError(err);
@@ -100,7 +100,7 @@ export default function ConfirmEmailChange() {
       }
       setStatus(next);
     }
-  }, [token, setWalletSession]);
+  }, [token, setSession]);
 
   useEffect(() => {
     void handleConfirm();

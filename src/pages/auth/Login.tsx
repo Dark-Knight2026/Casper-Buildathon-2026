@@ -69,7 +69,7 @@ export default function Login() {
     // AuthContext state is intentionally NOT reset here — `location.reload()`
     // unmounts the whole React tree, so the provider is rebuilt clean on the
     // next mount. If this is ever swapped for `navigate(...)` (soft routing),
-    // `walletSignOut()` must be called first; otherwise the stale `profile`
+    // `signOut()` must be called first; otherwise the stale `profile`
     // marker survives and consumers think the user is still signed in.
     window.location.reload();
   };

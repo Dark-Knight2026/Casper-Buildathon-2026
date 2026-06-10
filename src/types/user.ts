@@ -85,6 +85,11 @@ export interface User {
   // above. Optional because legacy sessions/older endpoints may omit it —
   // treat absence as unverified.
   verificationLevel?: VerificationLevel;
+  // Contract-assigned on-chain user id (`UserRegistry`), as a decimal string
+  // (it is a U256 that does not fit a JS number). `null`/absent until the
+  // indexer observes the `UserCreated` event for this user's linked wallet —
+  // used to gate wallet/on-chain dependent actions (see requireWallet, Phase D).
+  onchainUserId?: string | null;
 }
 
 export interface UserProfile extends User {

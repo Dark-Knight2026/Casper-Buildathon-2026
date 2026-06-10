@@ -74,7 +74,7 @@ const NAV_LINKS = [
 ];
 
 export default function TenantLayout() {
-  const { profile, walletSignOut } = useAuth();
+  const { profile, signOut } = useAuth();
   const { disconnect } = useICOWallet();
   const { pathname } = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -88,7 +88,7 @@ export default function TenantLayout() {
   // the landing page starts from a clean slate.
   const handleSignOut = async () => {
     await disconnect();
-    walletSignOut();
+    signOut();
     window.location.assign('/');
   };
 

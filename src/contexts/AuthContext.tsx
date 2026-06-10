@@ -114,6 +114,9 @@ function mapServerUserInfo(info: ServerUserInfo): UserProfile {
     status: mapUserStatus(info.status),
     activeLeasesCount: info.active_leases_count,
     verificationLevel: mapVerificationLevel(info.verification_level),
+    // `onchain_user_id` may be absent on legacy payloads; normalize to null so
+    // consumers treat "not yet registered on-chain" uniformly.
+    onchainUserId: info.onchain_user_id ?? null,
   };
 }
 
@@ -212,7 +215,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const setWalletSession = useCallback((info: ServerUserInfo) => {
+  const setSession = useCallback((info: ServerUserInfo) => {
     const next = mapServerUserInfo(info);
     saveSessionMarker(next);
     setProfile(next);
@@ -232,7 +235,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setProfile(mapped);
   }, []);
 
-  const walletSignOut = useCallback(() => {
+  const signOut = useCallback(() => {
     clearSessionMarker();
     // Drop any stashed post-login redirect intent — it can carry a single-use
     // verification token in its URL, which must not survive logout onto a
@@ -248,7 +251,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   return (
-    <AuthContext.Provider value={{ profile, loading, setWalletSession, updateProfile, refreshProfile, walletSignOut }}>
+    <AuthContext.Provider
+      value={{
+        profile,
+        loading,
+        setSession,
+        updateProfile,
+        refreshProfile,
+        signOut,
+        // Deprecated aliases — kept so existing call sites keep working while
+        // they migrate to setSession/signOut. Remove once no consumers remain.
+        setWalletSession: setSession,
+        walletSignOut: signOut,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

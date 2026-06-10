@@ -46,7 +46,7 @@ export default function VerifyEmail() {
   const navigate = useNavigate();
   const location = useLocation();
   const { toast } = useToast();
-  const { profile, setWalletSession } = useAuth();
+  const { profile, setSession } = useAuth();
 
   // Capture the single-use token from the URL exactly once. We strip it from
   // the address bar on terminal states (effect below) so it can't leak via the
@@ -80,7 +80,7 @@ export default function VerifyEmail() {
       // returned UserInfo directly into AuthContext instead of re-fetching
       // /users/me (avoids a redundant round-trip and a race against the
       // freshly rotated session).
-      setWalletSession(response.user);
+      setSession(response.user);
       setStatus('success');
     } catch (err) {
       const next = classifyConfirmError(err);
@@ -96,7 +96,7 @@ export default function VerifyEmail() {
       }
       setStatus(next);
     }
-  }, [token, setWalletSession]);
+  }, [token, setSession]);
 
   // Auto-confirm on mount when both token and session are ready.
   useEffect(() => {
