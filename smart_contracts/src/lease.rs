@@ -717,7 +717,7 @@ impl Lease {
         landlord: Address,
     ) {
         // TODO: Can't use u16 for property_maanger_bps. Find out why and determine if we really need to type cast the constant to u32
-        if terms.property_manager_bps > ONE_HUNDRED_PERCENT_BPS as u32 {
+        if terms.property_manager_bps >= ONE_HUNDRED_PERCENT_BPS as u32 {
             self.env().revert(Error::InvalidPropertyManagerBps);
         }
 
