@@ -87,7 +87,10 @@ impl DeployScript for LeasefiDeployScript {
             minters: vec![],
             burners: vec![],
             whitelist_managers: vec![env.caller()],
-            freezers: vec![],
+            // Grant FREEZER at init (via the deploy script) so external freeze/unfreeze ops
+            // (e.g. set_frozen_tokens) do not permanently revert for the deployer/owner.
+            // Lease also receives it via add_freezer later. Addresses M-7.
+            freezers: vec![env.caller()],
             force_transferers: vec![],
         };
 
@@ -339,8 +342,14 @@ impl DeployScript for LeasefiDeployScript {
         property_registry.grant_role(&property_registry.property_manager_role(), &new_owner);
         // (no revoke of DEFAULT_ADMIN from final owner)
         investor_registry.grant_role(&DEFAULT_ADMIN_ROLE, &new_owner);
+        // Grant VERIFICATION_MANAGER so that set_investor_record (KYC updates) works after handoff.
+        // Addresses M-5.
+        investor_registry.grant_role(&investor_registry.verification_manager_role(), &new_owner);
         // (no revoke of DEFAULT_ADMIN from final owner)
         compliance.grant_role(&DEFAULT_ADMIN_ROLE, &new_owner);
+        // Grant COMPLIANCE_MANAGER so that set_compliance_config / set_transfer_exempt work after handoff.
+        // Addresses M-6.
+        compliance.grant_role(&compliance.compliance_manager_role(), &new_owner);
         // (no revoke of DEFAULT_ADMIN from final owner)
 
         // Hand off PFT admin role (DEFAULT_ADMIN_ROLE) to new_owner, consistent with other
