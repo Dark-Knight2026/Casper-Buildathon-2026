@@ -144,6 +144,9 @@ fn setup(env: HostEnv) -> Context {
 
     escrow.set_lease(lease.address());
     escrow.set_treasury(env.get_account(19));
+    env.advance_block_time(COMPLIANCE_POLICY_UPDATE_TIMELOCK + 1);
+    escrow.apply_pending_lease();
+    escrow.apply_pending_treasury();
     escrow.set_security_deposit_token(security_deposit_token.address());
 
     nft.add_minter(&lease.address());

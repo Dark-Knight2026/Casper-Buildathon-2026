@@ -8,7 +8,7 @@ use odra_modules::access::errors::Error as AccessError;
 
 use leasefi_contracts::big_coin::{BigCoin, BigCoinHostRef, BigCoinInitArgs};
 use leasefi_contracts::common::CurrencyAmount;
-use leasefi_contracts::constants::ONE_MONTH_IN_MILLISECONDS;
+use leasefi_contracts::constants::{COMPLIANCE_POLICY_UPDATE_TIMELOCK, ONE_MONTH_IN_MILLISECONDS};
 use leasefi_contracts::escrow::{
     types::{Invoice, InvoiceKind},
     Escrow, EscrowHostRef, EscrowInitArgs,
@@ -113,6 +113,9 @@ fn setup(env: HostEnv) -> TestData {
 
     escrow.set_lease(lease.address());
     escrow.set_treasury(env.get_account(19));
+    env.advance_block_time(COMPLIANCE_POLICY_UPDATE_TIMELOCK + 1);
+    escrow.apply_pending_lease();
+    escrow.apply_pending_treasury();
     escrow.set_security_deposit_token(security_deposit_token.address());
 
     nft.add_minter(&lease.address());
