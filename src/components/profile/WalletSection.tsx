@@ -31,10 +31,12 @@ import logger from '@/lib/logger';
  * demotes the previous one — `POST /users/me/wallet` is add-and-make-primary).
  */
 // Split the providers so each group can carry its own explanation: the
-// self-custody Casper Wallet for users who already have it, and the social
-// providers that transparently provision a wallet for those who don't.
-const CASPER_PROVIDERS = WALLET_PROVIDERS.filter((p) => p.key === WALLET_KEYS.CASPER_WALLET);
-const SOCIAL_PROVIDERS = WALLET_PROVIDERS.filter((p) => p.key !== WALLET_KEYS.CASPER_WALLET);
+// self-custody wallets (Casper Wallet extension, Ledger hardware) for users
+// who already control a key, and the social providers that transparently
+// provision a wallet for those who don't.
+const SELF_CUSTODY_KEYS = new Set<string>([WALLET_KEYS.CASPER_WALLET, WALLET_KEYS.LEDGER]);
+const SELF_CUSTODY_PROVIDERS = WALLET_PROVIDERS.filter((p) => SELF_CUSTODY_KEYS.has(p.key));
+const SOCIAL_PROVIDERS = WALLET_PROVIDERS.filter((p) => !SELF_CUSTODY_KEYS.has(p.key));
 
 export function WalletSection() {
   const { profile } = useAuth();
@@ -138,10 +140,12 @@ function WalletLinkCard({ isReplacing = false, onCancel, onLinked }: WalletLinkC
         providerKey.startsWith('csprclick-') ||
         providerKey === 'torus' ||
         providerKey === 'customjwt';
+      const isLedger = providerKey === WALLET_KEYS.LEDGER;
 
-      // Extension wallets must be installed + enabled; social providers have no
-      // extension so the check does not apply to them.
-      if (!isSocial && !clickRef.isProviderPresent(providerKey)) {
+      // Extension wallets must be installed + enabled; Ledger connects over USB
+      // (no injected provider) and social providers have no extension — skip the
+      // presence gate for both.
+      if (!isSocial && !isLedger && !clickRef.isProviderPresent(providerKey)) {
         setConnectError(
           'Casper Wallet extension not found. Install it from the Chrome Web Store, or continue with Google or Apple below.',
         );
@@ -166,7 +170,9 @@ function WalletLinkCard({ isReplacing = false, onCancel, onLinked }: WalletLinkC
         setConnectError(
           isSocial
             ? 'Could not connect. Please try again.'
-            : 'Could not open Casper Wallet. Make sure the extension is installed and unlocked, then try again.',
+            : isLedger
+              ? 'Could not connect your Ledger. Make sure it is plugged in, unlocked, and the Casper app is open, then try again.'
+              : 'Could not open Casper Wallet. Make sure the extension is installed and unlocked, then try again.',
         );
       } finally {
         setConnectingProvider(null);
@@ -320,16 +326,17 @@ function WalletLinkCard({ isReplacing = false, onCancel, onLinked }: WalletLinkC
               can authorize actions with it.
             </p>
 
-            {/* Self-custody: user already has the Casper Wallet extension. */}
+            {/* Self-custody: user already controls a key (Casper Wallet
+                extension or a Ledger device). */}
             <div className="space-y-2">
               <div>
-                <p className="text-sm font-medium text-foreground">Already have a Casper wallet?</p>
+                <p className="text-sm font-medium text-foreground">Already have a wallet?</p>
                 <p className="text-xs text-muted-foreground">
-                  Connect the Casper Wallet browser extension directly.
+                  Connect the Casper Wallet browser extension or your Ledger device directly.
                 </p>
               </div>
               <ProviderList
-                providers={CASPER_PROVIDERS}
+                providers={SELF_CUSTODY_PROVIDERS}
                 title={null}
                 connectingProvider={connectingProvider}
                 onConnect={handleConnect}
