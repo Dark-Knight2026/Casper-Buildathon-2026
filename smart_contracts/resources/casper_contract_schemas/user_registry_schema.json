@@ -217,26 +217,6 @@
           }
         ]
       }
-    },
-    {
-      "enum": {
-        "name": "WalletStatus",
-        "description": null,
-        "variants": [
-          {
-            "name": "Active",
-            "description": null,
-            "discriminant": 0,
-            "ty": "Unit"
-          },
-          {
-            "name": "Revoked",
-            "description": null,
-            "discriminant": 1,
-            "ty": "Unit"
-          }
-        ]
-      }
     }
   ],
   "errors": [
@@ -286,6 +266,11 @@
       "discriminant": 20004
     },
     {
+      "name": "WalletAlreadyActive",
+      "description": "",
+      "discriminant": 1205
+    },
+    {
       "name": "WalletAlreadyLinked",
       "description": "",
       "discriminant": 1204
@@ -294,7 +279,7 @@
   "entry_points": [
     {
       "name": "get_user",
-      "description": "Returns the usr record for `user_id`",
+      "description": "Returns the user record for `user_id`",
       "is_mutable": false,
       "arguments": [
         {
@@ -338,8 +323,44 @@
       "access": "public"
     },
     {
+      "name": "get_user_id_by_wallet",
+      "description": "Returns the user ID for `wallet`, if the wallet has ever been linked.",
+      "is_mutable": false,
+      "arguments": [
+        {
+          "name": "wallet",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        }
+      ],
+      "return_ty": {
+        "Option": "U256"
+      },
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "get_user_wallets",
+      "description": "Returns every wallet linked to `user_id`.",
+      "is_mutable": false,
+      "arguments": [
+        {
+          "name": "user_id",
+          "description": null,
+          "ty": "U256",
+          "optional": false
+        }
+      ],
+      "return_ty": {
+        "List": "Key"
+      },
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
       "name": "get_active_wallet",
-      "description": "Returns the user ID for `wallet`, if the wallet is currently active.",
+      "description": "Returns the user's current active wallet.",
       "is_mutable": false,
       "arguments": [
         {
@@ -354,26 +375,8 @@
       "access": "public"
     },
     {
-      "name": "get_wallet_status",
-      "description": "Returns the recorded wallet status, if this wallet has ever been linked.",
-      "is_mutable": false,
-      "arguments": [
-        {
-          "name": "wallet",
-          "description": null,
-          "ty": "Key",
-          "optional": false
-        }
-      ],
-      "return_ty": {
-        "Option": "WalletStatus"
-      },
-      "is_contract_context": true,
-      "access": "public"
-    },
-    {
-      "name": "get_wallet_history",
-      "description": "Returns the wallet history for `user_id`.",
+      "name": "is_linked_wallet",
+      "description": "Returns true if the wallet is linked to user.",
       "is_mutable": false,
       "arguments": [
         {
@@ -381,11 +384,15 @@
           "description": null,
           "ty": "U256",
           "optional": false
+        },
+        {
+          "name": "wallet",
+          "description": null,
+          "ty": "Key",
+          "optional": false
         }
       ],
-      "return_ty": {
-        "List": "Key"
-      },
+      "return_ty": "Bool",
       "is_contract_context": true,
       "access": "public"
     },
@@ -556,7 +563,7 @@
     },
     {
       "name": "replace_active_wallet",
-      "description": "Replaces the user's active wallet and marks the old wallet as revoked.",
+      "description": "Replaces the user's active wallet.",
       "is_mutable": true,
       "arguments": [
         {
@@ -599,7 +606,7 @@
       "access": "public"
     },
     {
-      "name": "set_role_flags",
+      "name": "set_user_role_flags",
       "description": "Sets additive capability flags for a user.",
       "is_mutable": true,
       "arguments": [

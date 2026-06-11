@@ -15,7 +15,7 @@
           {
             "name": "tenant",
             "description": null,
-            "ty": "Key"
+            "ty": "U256"
           },
           {
             "name": "rent_distribution_terms",
@@ -90,7 +90,7 @@
           {
             "name": "account",
             "description": null,
-            "ty": "Key"
+            "ty": "U256"
           }
         ]
       }
@@ -108,7 +108,7 @@
           {
             "name": "account",
             "description": null,
-            "ty": "Key"
+            "ty": "U256"
           }
         ]
       }
@@ -121,12 +121,12 @@
           {
             "name": "tenant",
             "description": null,
-            "ty": "Key"
+            "ty": "U256"
           },
           {
             "name": "landlord",
             "description": null,
-            "ty": "Key"
+            "ty": "U256"
           },
           {
             "name": "rent_distribution_terms",
@@ -278,7 +278,7 @@
             "name": "property_manager",
             "description": null,
             "ty": {
-              "Option": "Key"
+              "Option": "U256"
             }
           },
           {
@@ -342,6 +342,11 @@
       "discriminant": 409
     },
     {
+      "name": "InvalidTenant",
+      "description": "",
+      "discriminant": 415
+    },
+    {
       "name": "InvalidTimeframes",
       "description": "",
       "discriminant": 403
@@ -394,22 +399,6 @@
   ],
   "entry_points": [
     {
-      "name": "set_roles",
-      "description": "Sets the Roles contract address by the owner",
-      "is_mutable": true,
-      "arguments": [
-        {
-          "name": "roles",
-          "description": null,
-          "ty": "Key",
-          "optional": false
-        }
-      ],
-      "return_ty": "Unit",
-      "is_contract_context": true,
-      "access": "public"
-    },
-    {
       "name": "set_escrow",
       "description": "Sets the Escrow contract address by the owner",
       "is_mutable": true,
@@ -458,11 +447,18 @@
       "access": "public"
     },
     {
-      "name": "get_roles_contract_address",
-      "description": "Returns the Roles contract address",
-      "is_mutable": false,
-      "arguments": [],
-      "return_ty": "Key",
+      "name": "set_user_registry",
+      "description": "Sets the UserRegistry contract address by the owner",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "user_registry",
+          "description": null,
+          "ty": "Key",
+          "optional": false
+        }
+      ],
+      "return_ty": "Unit",
       "is_contract_context": true,
       "access": "public"
     },
@@ -487,6 +483,15 @@
     {
       "name": "get_property_registry_contract_address",
       "description": "Returns the PropertyRegistry contract address",
+      "is_mutable": false,
+      "arguments": [],
+      "return_ty": "Key",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
+      "name": "get_user_registry_contract_address",
+      "description": "Returns the UserRegistry contract address",
       "is_mutable": false,
       "arguments": [],
       "return_ty": "Key",
@@ -564,7 +569,7 @@
         {
           "name": "account",
           "description": null,
-          "ty": "Key",
+          "ty": "U256",
           "optional": false
         }
       ],
@@ -734,12 +739,6 @@
         "optional": false
       },
       {
-        "name": "roles",
-        "description": null,
-        "ty": "Key",
-        "optional": false
-      },
-      {
         "name": "escrow",
         "description": null,
         "ty": "Key",
@@ -753,6 +752,12 @@
       },
       {
         "name": "property_registry",
+        "description": null,
+        "ty": "Key",
+        "optional": false
+      },
+      {
+        "name": "user_registry",
         "description": null,
         "ty": "Key",
         "optional": false
