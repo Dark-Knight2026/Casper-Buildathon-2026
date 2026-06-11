@@ -286,6 +286,12 @@ function WalletLinkCard({ isReplacing = false, onCancel, onLinked }: WalletLinkC
                 <div className="h-2 w-2 rounded-full bg-green-500" />
                 <span className="font-mono truncate">{account.publicKey.slice(0, 24)}…</span>
               </div>
+              {isOnchainRegistrationEnabled && (
+                <p className="text-xs text-muted-foreground">
+                  Linking registers you on the Casper network, so your wallet will be
+                  asked to approve a small network fee (a few CSPR).
+                </p>
+              )}
               <Button className="w-full" onClick={handleLink} disabled={linking}>
                 {linking ? (
                   <>

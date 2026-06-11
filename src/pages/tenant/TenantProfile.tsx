@@ -247,11 +247,10 @@ export function TenantProfile() {
         <EmailVerificationCard />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
 
-        {/* Left column — overview */}
-        <div className="lg:col-span-1 space-y-6">
-          <Card>
+        {/* Row 1: profile overview ‖ personal information */}
+        <Card className="lg:col-span-1">
             <CardContent className="pt-6 space-y-4">
               {/* Avatar */}
               <div className="flex flex-col items-center">
@@ -358,38 +357,8 @@ export function TenantProfile() {
             </CardContent>
           </Card>
 
-          {/* Account status */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Account Status</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex justify-between">
-                <p className="text-sm text-muted-foreground">Status</p>
-                <p className="text-sm font-medium text-foreground capitalize">{authProfile?.status ?? '—'}</p>
-              </div>
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-sm text-muted-foreground">Account Type</p>
-                <div className="flex items-center gap-2">
-                  <p className="text-sm font-medium text-foreground capitalize">{authProfile?.role ?? ''}</p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setRoleSwitchOpen(true)}
-                  >
-                    Switch
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Right column — edit forms */}
-        <div className="lg:col-span-2 space-y-6">
-
-          {/* Personal information */}
-          <Card>
+        {/* Personal information */}
+        <Card className="lg:col-span-2">
             <CardHeader>
               <CardTitle>Personal Information</CardTitle>
               <CardDescription>Update your personal details</CardDescription>
@@ -455,10 +424,36 @@ export function TenantProfile() {
                 </Button>
               </div>
             </CardContent>
-          </Card>
+        </Card>
 
-          {/* Rental Preferences — drives Task 6 recommendations */}
-          <Card>
+        {/* Row 2: account status ‖ rental preferences */}
+        <Card className="lg:col-span-1">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Account Status</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex justify-between">
+              <p className="text-sm text-muted-foreground">Status</p>
+              <p className="text-sm font-medium text-foreground capitalize">{authProfile?.status ?? '—'}</p>
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm text-muted-foreground">Account Type</p>
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-medium text-foreground capitalize">{authProfile?.role ?? ''}</p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setRoleSwitchOpen(true)}
+                >
+                  Switch
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Rental Preferences — drives Task 6 recommendations */}
+        <Card className="lg:col-span-2">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Sliders className="h-4 w-4" />
@@ -496,22 +491,20 @@ export function TenantProfile() {
               </div>
             </CardContent>
           </Card>
-
-          <TenantPreferencesDialog
-            open={preferencesOpen}
-            onOpenChange={setPreferencesOpen}
-            initialPreferences={preferences}
-            onSave={updatePreferences}
-          />
-
-          <RoleSwitchDialog
-            open={roleSwitchOpen}
-            onOpenChange={setRoleSwitchOpen}
-            currentRole={authProfile?.role}
-          />
-
-        </div>
       </div>
+
+      <TenantPreferencesDialog
+        open={preferencesOpen}
+        onOpenChange={setPreferencesOpen}
+        initialPreferences={preferences}
+        onSave={updatePreferences}
+      />
+
+      <RoleSwitchDialog
+        open={roleSwitchOpen}
+        onOpenChange={setRoleSwitchOpen}
+        currentRole={authProfile?.role}
+      />
 
       {/* Wallet linking — full-width card under the grid (last card). */}
       <div className="mt-6 space-y-6">
