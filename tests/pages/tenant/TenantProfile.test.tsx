@@ -22,8 +22,14 @@ vi.mock('@/hooks/useAuth', () => ({
     profile: profileFixture,
     refreshProfile: refreshProfileMock,
     updateProfile: updateProfileMock,
-    walletSignOut: vi.fn(),
+    signOut: vi.fn(),
   }),
+}));
+
+// WalletSection mounts the CSPR.click SDK (csprclick-ui), which doesn't resolve
+// under the test runner and isn't relevant to this page's own logic — stub it.
+vi.mock('@/components/profile/WalletSection', () => ({
+  WalletSection: () => null,
 }));
 
 const mockUploadAvatar = vi.fn();

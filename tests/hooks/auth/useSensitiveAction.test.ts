@@ -8,7 +8,7 @@ import { renderHook, act } from '@testing-library/react';
 //   - useReauthGate : drives the reauth round-trip. Replaced with a spy that
 //                     forwards the underlying call so we can choose to make
 //                     it resolve or reject.
-//   - useAuth       : provides walletSignOut(); spied to confirm the local
+//   - useAuth       : provides signOut(); spied to confirm the local
 //                     session is wiped on success.
 //   - useNavigate   : redirect to /auth/login after the cleanup runs.
 
@@ -26,7 +26,7 @@ vi.mock('@/hooks/auth/useReauthGate', () => ({
 
 const mockWalletSignOut = vi.fn();
 vi.mock('@/hooks/useAuth', () => ({
-  useAuth: () => ({ walletSignOut: mockWalletSignOut }),
+  useAuth: () => ({ signOut: mockWalletSignOut }),
 }));
 
 const mockNavigate = vi.fn();

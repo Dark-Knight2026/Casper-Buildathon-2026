@@ -23,6 +23,9 @@ import {
   patchMyRole,
   requestEmailChange,
   uploadAvatar,
+  changePassword,
+  linkWallet,
+  getOnchainRegistration,
 } from '@/services/userProfileService';
 
 const ME = '/api/v1/users/me';
@@ -128,6 +131,45 @@ describe('uploadAvatar', () => {
     expect(result, 'canonical URL must come from the server, NOT the optimistic blob URL').toEqual({
       avatar_url: 'https://cdn/abc.png',
     });
+  });
+});
+
+describe('changePassword', () => {
+  it('POSTs /me/password with the body (204 → void)', async () => {
+    postMock.mockResolvedValueOnce(undefined);
+    await changePassword({ current_password: 'Old123', new_password: 'New123' });
+    expect(postMock).toHaveBeenCalledWith(`${ME}/password`, {
+      current_password: 'Old123',
+      new_password: 'New123',
+    });
+  });
+
+  it('supports the first-set shape (no current_password)', async () => {
+    postMock.mockResolvedValueOnce(undefined);
+    await changePassword({ new_password: 'New123' });
+    expect(postMock).toHaveBeenCalledWith(`${ME}/password`, { new_password: 'New123' });
+  });
+});
+
+describe('linkWallet', () => {
+  it('POSTs /me/wallet with wallet_address + signature and returns the profile', async () => {
+    const profile = { id: '1', wallet_address: '02abc' };
+    postMock.mockResolvedValueOnce(profile);
+    const res = await linkWallet('02abc', '02sig');
+    expect(postMock).toHaveBeenCalledWith(`${ME}/wallet`, {
+      wallet_address: '02abc',
+      signature: '02sig',
+    });
+    expect(res).toBe(profile);
+  });
+});
+
+describe('getOnchainRegistration', () => {
+  it('GETs /me/onchain-registration with retry disabled', async () => {
+    getMock.mockResolvedValueOnce({ identity_hash: 'ab', role_flags: 1 });
+    const res = await getOnchainRegistration();
+    expect(getMock).toHaveBeenCalledWith(`${ME}/onchain-registration`, { retry: false });
+    expect(res).toEqual({ identity_hash: 'ab', role_flags: 1 });
   });
 });
 

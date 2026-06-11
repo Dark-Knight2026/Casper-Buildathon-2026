@@ -1,340 +1,100 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+import { ApiError } from '@/lib/api-client';
 
-const mockUseWalletConnect = vi.fn();
-vi.mock('@/hooks/auth/useWalletConnect', () => ({
-  useWalletConnect: () => mockUseWalletConnect(),
+const mockUseAuth = vi.fn();
+vi.mock('@/hooks/useAuth', () => ({ useAuth: () => mockUseAuth() }));
+
+const register = vi.fn();
+vi.mock('@/services/backendAuthService', () => ({
+  register: (...a: unknown[]) => register(...a),
 }));
 
-// Same ProviderList stub as Login.test.tsx — page-level tests treat it as
-// an external boundary; real rendering is exercised by the source-of-truth
-// component scope.
-vi.mock('@/pages/auth/register/ProviderList', () => ({
-  ProviderList: ({
-    onConnect,
-    disabled,
-  }: {
-    onConnect: (key: string) => void;
-    disabled?: boolean;
-  }) => (
-    <div>
-      <button onClick={() => onConnect('csprclick-w3a-google')} disabled={disabled}>
-        Google
-      </button>
-      <button onClick={() => onConnect('csprclick-w3a-apple')} disabled={disabled}>
-        Apple
-      </button>
-    </div>
-  ),
-}));
+const mockNavigate = vi.fn();
+vi.mock('react-router-dom', async (importActual) => {
+  const actual = await importActual<typeof import('react-router-dom')>();
+  return { ...actual, useNavigate: () => mockNavigate };
+});
 
 import Register from '@/pages/auth/Register';
 
-interface WalletState {
-  isConnected: boolean;
-  account: { publicKey: string; accountHash: string; provider: string } | null;
-  isAuthenticated: boolean;
-  isSigningIn: boolean;
-  connectingProvider: string | null;
-  error: string | null;
-  isLoading: boolean;
-  setConnectingProvider: ReturnType<typeof vi.fn>;
-  handleConnectProvider: ReturnType<typeof vi.fn>;
-  login: ReturnType<typeof vi.fn>;
-  disconnect: ReturnType<typeof vi.fn>;
+function apiError(statusCode: number) {
+  return new ApiError(`status ${statusCode}`, statusCode);
 }
 
-function setWalletConnect(overrides: Partial<WalletState> = {}) {
-  mockUseWalletConnect.mockReturnValue({
-    isConnected: false,
-    account: null,
-    isAuthenticated: false,
-    isSigningIn: false,
-    connectingProvider: null,
-    error: null,
-    isLoading: false,
-    setConnectingProvider: vi.fn(),
-    handleConnectProvider: vi.fn(),
-    login: vi.fn(),
-    disconnect: vi.fn(),
-    ...overrides,
-  });
-}
+const setSession = vi.fn();
 
-function renderRegister() {
+function renderPage(search = '') {
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[`/auth/register${search}`]}>
       <Register />
-    </MemoryRouter>
+    </MemoryRouter>,
   );
 }
 
-function renderRegisterAt(path: string) {
-  return render(
-    <MemoryRouter initialEntries={[path]}>
-      <Register />
-    </MemoryRouter>
-  );
+function fillValid() {
+  fireEvent.change(screen.getByLabelText(/first name/i), { target: { value: 'Jane' } });
+  fireEvent.change(screen.getByLabelText(/last name/i), { target: { value: 'Doe' } });
+  fireEvent.change(screen.getByLabelText(/email/i), { target: { value: 'Jane@Example.com' } });
+  fireEvent.change(screen.getByLabelText(/^password/i, { selector: 'input' }), { target: { value: 'Valid123' } });
 }
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  localStorage.clear();
+  mockUseAuth.mockReturnValue({ profile: null, setSession });
+});
 
 describe('Register', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    setWalletConnect();
+  it('submits the normalized body (default role tenant) and seats the session', async () => {
+    register.mockResolvedValue({ user: { id: '1', role: 'tenant' } });
+    renderPage();
+    fillValid();
+    fireEvent.click(screen.getByRole('button', { name: /create account/i }));
+
+    await waitFor(() =>
+      expect(register).toHaveBeenCalledWith({
+        email: 'jane@example.com',
+        password: 'Valid123',
+        first_name: 'Jane',
+        last_name: 'Doe',
+        role: 'tenant',
+      }),
+    );
+    expect(setSession).toHaveBeenCalledWith({ id: '1', role: 'tenant' });
   });
 
-  describe('disconnected state', () => {
-    it('renders the role selector with Tenant pre-selected', () => {
-      renderRegister();
-      expect(
-        screen.getByRole('radio', { name: /tenant/i }),
-        'Tenant radio must be present so first-time users can pick a role'
-      ).toBeChecked();
-      expect(
-        screen.getByRole('radio', { name: /landlord/i }),
-        'Landlord radio must be present as the alternative'
-      ).not.toBeChecked();
-    });
+  it('honors a ?role=landlord deep-link', async () => {
+    register.mockResolvedValue({ user: { id: '1', role: 'landlord' } });
+    renderPage('?role=landlord');
+    fillValid();
+    fireEvent.click(screen.getByRole('button', { name: /create account/i }));
 
-    it('renders ProviderList with social options', () => {
-      renderRegister();
-      expect(
-        screen.getByRole('button', { name: /google/i }),
-        'Google provider button must be the entry point on the unconnected Register page'
-      ).toBeInTheDocument();
-    });
-
-    it('clicking a provider drives handleConnectProvider', () => {
-      const handleConnectProvider = vi.fn();
-      setWalletConnect({ handleConnectProvider });
-      renderRegister();
-      fireEvent.click(screen.getByRole('button', { name: /google/i }));
-      expect(
-        handleConnectProvider,
-        'provider click must invoke useWalletConnect.handleConnectProvider with the SDK key'
-      ).toHaveBeenCalledWith('csprclick-w3a-google');
-    });
+    await waitFor(() =>
+      expect(register).toHaveBeenCalledWith(expect.objectContaining({ role: 'landlord' })),
+    );
   });
 
-  describe('connected state', () => {
-    const account = {
-      publicKey: '0203665f958313f836f59d16abf75162dc2d1e12d79eed322a951b31fe5ac3e98672',
-      accountHash: 'hash',
-      provider: 'csprclick-w3a-google',
-    };
+  it('blocks submit and shows a field error for an empty name', async () => {
+    renderPage();
+    // leave first name empty
+    fireEvent.change(screen.getByLabelText(/last name/i), { target: { value: 'Doe' } });
+    fireEvent.change(screen.getByLabelText(/email/i), { target: { value: 'jane@example.com' } });
+    fireEvent.change(screen.getByLabelText(/^password/i, { selector: 'input' }), { target: { value: 'Valid123' } });
+    fireEvent.click(screen.getByRole('button', { name: /create account/i }));
 
-    it('renders the truncated public key + Sign in button', () => {
-      setWalletConnect({ isConnected: true, account });
-      renderRegister();
-      expect(
-        screen.getByText(account.publicKey.slice(0, 20), { exact: false }),
-        'connected Register must display the wallet address before the user signs the nonce'
-      ).toBeInTheDocument();
-      expect(
-        screen.getByRole('button', { name: /^sign in$/i }),
-        'connected Register must offer the Sign in button to trigger nonce/signature'
-      ).toBeInTheDocument();
-    });
-
-    it('passes the default tenant role to login() when Sign in is clicked', () => {
-      const login = vi.fn();
-      setWalletConnect({ isConnected: true, account, login });
-      renderRegister();
-      fireEvent.click(screen.getByRole('button', { name: /^sign in$/i }));
-      expect(
-        login,
-        'Sign in must propagate the currently-selected role to the backend (default tenant)'
-      ).toHaveBeenCalledWith('tenant');
-    });
-
-    it('forwards landlord role when the user picked Landlord before connecting', () => {
-      // RoleSelector is disabled once the wallet connects (locks in the
-      // first-registration role). To test the Landlord path we have to flip
-      // the role BEFORE connect — render disconnected, click Landlord, then
-      // simulate the post-connect render via a fresh setWalletConnect call.
-      const login = vi.fn();
-      setWalletConnect({ login });
-      const { rerender } = renderRegister();
-      fireEvent.click(screen.getByRole('radio', { name: /landlord/i }));
-
-      setWalletConnect({ isConnected: true, account, login });
-      rerender(
-        <MemoryRouter>
-          <Register />
-        </MemoryRouter>
-      );
-
-      fireEvent.click(screen.getByRole('button', { name: /^sign in$/i }));
-      expect(
-        login,
-        'when the user pre-selected Landlord, that role must reach the backend on first registration'
-      ).toHaveBeenCalledWith('landlord');
-    });
-
-    it('disables Sign in while signing or already authenticated', () => {
-      setWalletConnect({ isConnected: true, account, isSigningIn: true });
-      renderRegister();
-      // Anchor the regex: the page also renders a "Trouble signing in? Reset
-      // connection" footer button whose accessible name otherwise matches
-      // /signing in/i and makes the selector ambiguous.
-      expect(
-        screen.getByRole('button', { name: /^Signing in/i }),
-        'Sign in button must reflect in-flight state and be disabled to prevent double-submit'
-      ).toBeDisabled();
-    });
-
-    it('shows the lock-hint on RoleSelector once a wallet is connected', () => {
-      setWalletConnect({ isConnected: true, account });
-      renderRegister();
-      expect(
-        screen.getByText(/set during first connection/i),
-        'connected state must explain that the role choice is now locked at the wallet level'
-      ).toBeInTheDocument();
-    });
-
-    it('"Use a different account" link calls disconnect and reloads', async () => {
-      const disconnect = vi.fn();
-      const reloadSpy = vi.fn();
-      Object.defineProperty(window, 'location', {
-        configurable: true,
-        value: { ...window.location, reload: reloadSpy },
-      });
-
-      setWalletConnect({ isConnected: true, account, disconnect });
-      renderRegister();
-      fireEvent.click(screen.getByRole('button', { name: /use a different account/i }));
-      expect(disconnect, 'switch flow must invoke useWalletConnect.disconnect').toHaveBeenCalled();
-      // handleResetConnection awaits disconnect() before calling reload — wait
-      // for the post-await side effects to flush.
-      await waitFor(() =>
-        expect(
-          reloadSpy,
-          'switch flow must hard-reload to wipe in-memory CSPR.click SDK cache'
-        ).toHaveBeenCalled()
-      );
-    });
+    expect(await screen.findByText(/first name is required/i)).toBeInTheDocument();
+    expect(register).not.toHaveBeenCalled();
   });
 
-  describe('error surface', () => {
-    it('displays the alert when useWalletConnect exposes an error', () => {
-      setWalletConnect({ error: 'Sign-in was cancelled.' });
-      renderRegister();
-      expect(
-        screen.getByText('Sign-in was cancelled.'),
-        'auth/wallet errors must surface in the destructive Alert region'
-      ).toBeInTheDocument();
-    });
-  });
+  it('shows an "already exists" message on a 409', async () => {
+    register.mockRejectedValue(apiError(409));
+    renderPage();
+    fillValid();
+    fireEvent.click(screen.getByRole('button', { name: /create account/i }));
 
-  describe('navigation', () => {
-    it('exposes a Sign in link to /auth/login for returning users', () => {
-      renderRegister();
-      const link = screen.getByRole('link', { name: /sign in/i });
-      expect(
-        link,
-        'Register must offer a Sign in entrypoint for returning users'
-      ).toHaveAttribute('href', '/auth/login');
-    });
-  });
-
-  describe('?role= deep-link', () => {
-    it('pre-selects landlord when ?role=landlord is present', () => {
-      renderRegisterAt('/auth/register?role=landlord');
-      expect(
-        screen.getByRole('radio', { name: /landlord/i }),
-        'help-hub deep-link must pre-select Landlord so the user lands on the right role'
-      ).toBeChecked();
-    });
-
-    it('pre-selects tenant when ?role=tenant is present', () => {
-      renderRegisterAt('/auth/register?role=tenant');
-      expect(
-        screen.getByRole('radio', { name: /tenant/i }),
-        'tenant deep-link must pre-select Tenant'
-      ).toBeChecked();
-    });
-
-    it('falls back to tenant for an unsupported ?role= value', () => {
-      // Backend role contract only knows tenant/landlord today; anything else
-      // (e.g. property_manager) must silently default rather than 500 the page.
-      renderRegisterAt('/auth/register?role=property_manager');
-      expect(
-        screen.getByRole('radio', { name: /tenant/i }),
-        'unsupported roles must fall back to Tenant — the safer default'
-      ).toBeChecked();
-    });
-
-    it('rejects admin role in deep-link and falls back to tenant', () => {
-      // SelfRegisterableRole intentionally excludes 'admin' — accepting it
-      // from a URL would be a role-injection escalation path. The fallback
-      // is the same as for unknown roles, but the security boundary is
-      // worth its own assertion.
-      renderRegisterAt('/auth/register?role=admin');
-      expect(
-        screen.getByRole('radio', { name: /tenant/i }),
-        'admin must fall back to tenant — role injection via URL must be blocked'
-      ).toBeChecked();
-    });
-
-    it('defaults to tenant when ?role= is absent', () => {
-      renderRegisterAt('/auth/register');
-      expect(
-        screen.getByRole('radio', { name: /tenant/i }),
-        'no query param means the standard Tenant default'
-      ).toBeChecked();
-    });
-  });
-
-  describe('reset connection footer', () => {
-    // Same recovery hatch as on Login — when CSPR.click's session-expired
-    // modal flips `isConnected` off, this is the user's only way out.
-
-    it('renders the footer button in the disconnected state', () => {
-      renderRegister();
-      expect(
-        screen.getByRole('button', { name: /trouble signing in\?\s*reset connection/i }),
-        'reset-connection footer must NOT be gated on isConnected — it covers exactly the case where isConnected went stale'
-      ).toBeInTheDocument();
-    });
-
-    it('click invokes disconnect, strips csprclick:* + leasefi_session, then reloads', async () => {
-      const disconnect = vi.fn();
-      const reloadSpy = vi.fn();
-      Object.defineProperty(window, 'location', {
-        configurable: true,
-        value: { ...window.location, reload: reloadSpy },
-      });
-
-      localStorage.clear();
-      localStorage.setItem('leasefi_session', '{"id":"1"}');
-      localStorage.setItem('csprclick:account', '0x123');
-      localStorage.setItem('csprclick:nonce', 'abc');
-      localStorage.setItem('foreign:other', 'keep-me');
-
-      setWalletConnect({ disconnect });
-      renderRegister();
-      fireEvent.click(screen.getByRole('button', { name: /trouble signing in/i }));
-
-      expect(disconnect, 'reset flow must release the wallet session via the SDK').toHaveBeenCalledTimes(1);
-      // handleResetConnection is async (await disconnect() then localStorage
-      // cleanup + reload) — wait for the post-await side effects to flush.
-      await waitFor(() =>
-        expect(
-          reloadSpy,
-          'hard reload is what actually rebuilds AuthContext and the SDK from a clean slate'
-        ).toHaveBeenCalledTimes(1)
-      );
-      expect(
-        localStorage.getItem('leasefi_session'),
-        'session marker must go — otherwise ProtectedRoute keeps showing a stale signed-in UI'
-      ).toBeNull();
-      expect(localStorage.getItem('csprclick:account'), 'csprclick:* prefix is the loop-causing one').toBeNull();
-      expect(localStorage.getItem('csprclick:nonce'), 'every csprclick:* key, not just account').toBeNull();
-      expect(
-        localStorage.getItem('foreign:other'),
-        'only `csprclick:` prefix is stripped — unrelated keys must survive'
-      ).toBe('keep-me');
-    });
+    expect(await screen.findByText(/already exists/i)).toBeInTheDocument();
+    expect(setSession).not.toHaveBeenCalled();
   });
 });

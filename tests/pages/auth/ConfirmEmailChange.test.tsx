@@ -46,7 +46,7 @@ describe('ConfirmEmailChange', () => {
     localStorage.clear();
     mockUseAuth.mockReturnValue({
       profile: { role: 'tenant', email: 'new@example.com' },
-      setWalletSession: vi.fn(),
+      setSession: vi.fn(),
     });
   });
 

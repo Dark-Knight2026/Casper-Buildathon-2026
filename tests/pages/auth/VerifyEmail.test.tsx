@@ -11,9 +11,17 @@ vi.mock('@/hooks/use-toast', () => ({ useToast: () => ({ toast: mockToast }) }))
 
 const confirmEmailVerification = vi.fn();
 const sendVerificationEmail = vi.fn();
-vi.mock('@/services/ico/backendAuthService', () => ({
+vi.mock('@/services/backendAuthService', () => ({
   confirmEmailVerification: (...a: unknown[]) => confirmEmailVerification(...a),
   sendVerificationEmail: (...a: unknown[]) => sendVerificationEmail(...a),
+}));
+
+// `getMe` is consulted in the catch path to detect an already-verified
+// (reused-link) account; default it to "no session" so error-path tests fall
+// through to the original token-error classification.
+const getMe = vi.fn();
+vi.mock('@/services/userProfileService', () => ({
+  getMe: (...a: unknown[]) => getMe(...a),
 }));
 
 // Keep MemoryRouter / Link / useSearchParams real; only intercept useNavigate so
@@ -50,7 +58,8 @@ describe('VerifyEmail', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
-    mockUseAuth.mockReturnValue({ profile: { role: 'tenant' }, setWalletSession: vi.fn() });
+    getMe.mockRejectedValue(new Error('no session'));
+    mockUseAuth.mockReturnValue({ profile: { role: 'tenant' }, setSession: vi.fn() });
   });
 
   it('confirms the token once and shows success', async () => {

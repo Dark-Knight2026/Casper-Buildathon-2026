@@ -23,8 +23,12 @@ import {
   sendVerificationEmail,
   resendVerificationEmail,
   confirmEmailVerification,
+  register,
+  loginWithPassword,
+  forgotPassword,
+  resetPassword,
   type ServerUserInfo,
-} from '@/services/ico/backendAuthService';
+} from '@/services/backendAuthService';
 
 const mockGet = vi.mocked(backendClient.get);
 const mockPost = vi.mocked(backendClient.post);
@@ -44,7 +48,13 @@ const SAMPLE_USER: ServerUserInfo = {
   active_leases_count: 0,
   created_at: '2026-01-01T00:00:00Z',
   updated_at: '2026-04-01T00:00:00Z',
+  onchain_user_id: null,
 };
+
+// Unauthenticated auth calls opt out of the global 401→refresh→redirect:
+// skipRefresh (no session yet) + skipAuthError (errors handled in-page, never a
+// full-page reload). Asserting these guards the "failed login reloads" fix.
+const UNAUTH_OPTS = { retry: false, skipRefresh: true, skipAuthError: true };
 
 describe('backendAuthService', () => {
   beforeEach(() => vi.clearAllMocks());
@@ -323,6 +333,75 @@ describe('backendAuthService', () => {
         confirmEmailVerification('tok'),
         'a bad/expired-token 401 must surface so the page can classify it'
       ).rejects.toThrow('invalid_or_expired_token');
+    });
+  });
+
+  // ── email + password auth ─────────────────────────────────────────────
+
+  describe('register', () => {
+    it('POSTs /auth/register with the body and unauthenticated options', async () => {
+      mockPost.mockResolvedValue({ user: SAMPLE_USER });
+      const body = {
+        email: 'jane@example.com',
+        password: 'Valid123',
+        first_name: 'Jane',
+        last_name: 'Doe',
+        role: 'tenant' as const,
+      };
+      await register(body);
+      expect(
+        mockPost,
+        'register must not trigger the global refresh/redirect (no session yet)'
+      ).toHaveBeenCalledWith('/api/v1/auth/register', body, UNAUTH_OPTS);
+    });
+
+    it('propagates a 409 (email taken) to the caller', async () => {
+      mockPost.mockRejectedValue(new ApiError('Email already registered', 409));
+      await expect(
+        register({ email: 'a@b.com', password: 'Valid123', first_name: 'A', last_name: 'B' }),
+      ).rejects.toThrow('Email already registered');
+    });
+  });
+
+  describe('loginWithPassword', () => {
+    it('POSTs /auth/login/password and does not hard-redirect on failure', async () => {
+      mockPost.mockResolvedValue({ user: SAMPLE_USER });
+      await loginWithPassword('jane@example.com', 'Valid123');
+      expect(
+        mockPost,
+        'a 401 here is a wrong-credentials case handled in-form, so skipAuthError must be set'
+      ).toHaveBeenCalledWith(
+        '/api/v1/auth/login/password',
+        { email: 'jane@example.com', password: 'Valid123' },
+        UNAUTH_OPTS,
+      );
+    });
+  });
+
+  describe('forgotPassword', () => {
+    it('POSTs /auth/password/forgot with just the email', async () => {
+      mockPost.mockResolvedValue({ status: 'sent' });
+      const res = await forgotPassword('jane@example.com');
+      expect(mockPost).toHaveBeenCalledWith(
+        '/api/v1/auth/password/forgot',
+        { email: 'jane@example.com' },
+        UNAUTH_OPTS,
+      );
+      expect(res, 'anti-enumeration: response is always { status: "sent" }').toEqual({
+        status: 'sent',
+      });
+    });
+  });
+
+  describe('resetPassword', () => {
+    it('POSTs /auth/password/reset mapping newPassword → new_password', async () => {
+      mockPost.mockResolvedValue({ user: SAMPLE_USER });
+      await resetPassword('tok123', 'Valid123');
+      expect(mockPost).toHaveBeenCalledWith(
+        '/api/v1/auth/password/reset',
+        { token: 'tok123', new_password: 'Valid123' },
+        UNAUTH_OPTS,
+      );
     });
   });
 });

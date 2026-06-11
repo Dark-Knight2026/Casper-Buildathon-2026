@@ -10,7 +10,7 @@ vi.mock('@/hooks/use-toast', () => ({ useToast: () => ({ toast: mockToast }) }))
 
 const sendVerificationEmail = vi.fn();
 const resendVerificationEmail = vi.fn();
-vi.mock('@/services/ico/backendAuthService', () => ({
+vi.mock('@/services/backendAuthService', () => ({
   sendVerificationEmail: (...a: unknown[]) => sendVerificationEmail(...a),
   resendVerificationEmail: (...a: unknown[]) => resendVerificationEmail(...a),
 }));

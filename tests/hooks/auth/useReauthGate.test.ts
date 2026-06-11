@@ -10,7 +10,7 @@ vi.mock('@/hooks/ico/useICOWallet', () => ({
 
 const mockGetNonce = vi.fn();
 const mockLoginWithSignature = vi.fn();
-vi.mock('@/services/ico/backendAuthService', () => ({
+vi.mock('@/services/backendAuthService', () => ({
   getNonce: (...args: unknown[]) => mockGetNonce(...args),
   loginWithSignature: (...args: unknown[]) => mockLoginWithSignature(...args),
 }));
