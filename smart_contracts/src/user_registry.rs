@@ -238,7 +238,7 @@ impl UserRegistry {
     // =========================================================================
 
     /// Creates a user record linked to one active wallet.
-    /// Restricted to `IDENTITY_MANAGER`.
+    /// (TEMPORARY: role restriction removed for testnet; was Restricted to `IDENTITY_MANAGER`.)
     /// @dev `identity_hash` must be an opaque backend-generated identifier.
     pub fn create_user(
         &mut self,
@@ -246,7 +246,8 @@ impl UserRegistry {
         initial_wallet: Address,
         role_flags: u32,
     ) -> U256 {
-        self.assert_role(ROLE_IDENTITY_MANAGER);
+        // TEMPORARY (testnet/hackathon): role gate removed; frontend calls from user wallets.
+        // Restore: self.assert_role(ROLE_IDENTITY_MANAGER);
         self.assert_valid_identity_hash(identity_hash);
         self.assert_identity_available(identity_hash);
         self.assert_wallet_never_linked(initial_wallet);

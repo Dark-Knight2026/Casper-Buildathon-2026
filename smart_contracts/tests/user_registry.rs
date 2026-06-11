@@ -98,6 +98,8 @@ fn test_create_user_should_store_user_and_wallet_indexes() {
     ))
 }
 
+// TEMPORARY: create_user role gate removed for testnet integration; this test is ignored until restored.
+#[ignore]
 #[test]
 fn test_create_user_should_revert_if_caller_is_not_identity_manager() {
     let mut ctx = setup(odra_test::env());
