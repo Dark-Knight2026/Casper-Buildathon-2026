@@ -18,6 +18,7 @@ odra-build = { version = "2.5.0", features = [], default-features = false }
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 odra-build = { version = "2.5.0", features = [], default-features = false }
 odra-cli = { version = "2.5.0", features = [], default-features = false }
+odra-casper-livenet-env = { version = "2.6.0", features = [], default-features = false }
 
 [[bin]]
 name = "leasefi_contracts_build_contract"
@@ -32,6 +33,11 @@ test = false
 [[bin]]
 name = "leasefi_contracts_cli"
 path = "bin/cli.rs"
+test = false
+
+[[bin]]
+name = "manual_setter"
+path = "bin/manual_setter.rs"
 test = false
 
 [profile.release]
