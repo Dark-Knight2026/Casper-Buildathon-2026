@@ -29,12 +29,12 @@ const USER_REGISTRY_PACKAGE_HASH = import.meta.env.VITE_USER_REGISTRY_PACKAGE_HA
 export const isOnchainRegistrationEnabled = Boolean(USER_REGISTRY_PACKAGE_HASH);
 
 /**
- * Gas for `create_user` (motes). Default 5 CSPR — a few storage writes plus an
- * event, comparable to the vesting `claim` (3 CSPR) with headroom. Override via
- * `VITE_USER_REGISTRY_CREATE_USER_GAS` once measured on testnet.
+ * Gas for `create_user` (motes). Default 3 CSPR — measured on testnet at
+ * ~1.03 CSPR consumed (a few storage writes plus an event), so 3 CSPR leaves
+ * comfortable headroom. Override via `VITE_USER_REGISTRY_CREATE_USER_GAS`.
  */
 const GAS_CREATE_USER = BigInt(
-  import.meta.env.VITE_USER_REGISTRY_CREATE_USER_GAS ?? '5000000000',
+  import.meta.env.VITE_USER_REGISTRY_CREATE_USER_GAS ?? '3000000000',
 );
 
 /** Decodes a hex string (optional `0x`) into bytes. */
