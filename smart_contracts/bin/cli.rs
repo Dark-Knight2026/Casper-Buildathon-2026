@@ -303,6 +303,7 @@ pub fn main() {
         .contract::<BigCoin>()
         .contract::<NFT>()
         .contract::<Roles>()
+        .contract::<UserRegistry>()
         .contract::<Treasury>()
         .contract::<Escrow>()
         .contract::<Lease>()
