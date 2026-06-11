@@ -20,6 +20,7 @@ import {
   DollarSign,
   FileText,
   Users,
+  Lock,
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -34,6 +35,7 @@ import { RoleSwitchDialog } from '@/components/profile/RoleSwitchDialog';
 import { EmailVerificationCard } from '@/components/profile/EmailVerificationCard';
 import { WalletSection } from '@/components/profile/WalletSection';
 import { ChangeEmailDialog } from '@/components/profile/ChangeEmailDialog';
+import { ChangePasswordDialog } from '@/components/profile/ChangePasswordDialog';
 import { uploadAvatar } from '@/services/userProfileService';
 import { ApiError } from '@/lib/api-client';
 import { AvatarStatus } from '@/lib/api-errors';
@@ -87,6 +89,7 @@ export function LandlordProfile() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [roleSwitchOpen, setRoleSwitchOpen] = useState(false);
   const [changeEmailOpen, setChangeEmailOpen] = useState(false);
+  const [changePasswordOpen, setChangePasswordOpen] = useState(false);
   const [formData, setFormData] = useState({
     firstName: authProfile?.firstName ?? '',
     lastName: authProfile?.lastName ?? '',
@@ -541,6 +544,25 @@ export function LandlordProfile() {
             </p>
           </CardContent>
         </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Password</CardTitle>
+            <CardDescription>Change the password you use to sign in</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+              <div className="flex items-center gap-3 min-w-0">
+                <Lock className="h-4 w-4 text-muted-foreground shrink-0" />
+                <p className="text-sm tracking-widest text-muted-foreground">••••••••</p>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => setChangePasswordOpen(true)}>
+                Change password
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
         <WalletSection />
       </div>
       
@@ -549,6 +571,7 @@ export function LandlordProfile() {
         onOpenChange={setChangeEmailOpen}
         currentEmail={authProfile?.email}
       />
+      <ChangePasswordDialog open={changePasswordOpen} onOpenChange={setChangePasswordOpen} />
     </div>
   );
 }

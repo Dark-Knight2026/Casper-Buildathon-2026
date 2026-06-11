@@ -4,7 +4,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
-import { User, Mail, Phone, Home, Calendar, Save, Loader2, Sliders } from 'lucide-react';
+import { User, Mail, Phone, Home, Calendar, Save, Loader2, Sliders, Lock } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,6 +21,7 @@ import { RoleSwitchDialog } from '@/components/profile/RoleSwitchDialog';
 import { EmailVerificationCard } from '@/components/profile/EmailVerificationCard';
 import { WalletSection } from '@/components/profile/WalletSection';
 import { ChangeEmailDialog } from '@/components/profile/ChangeEmailDialog';
+import { ChangePasswordDialog } from '@/components/profile/ChangePasswordDialog';
 import { countActivePreferences, ALL_MATCH_CATEGORIES } from '@/types/tenantPreferences';
 import { uploadAvatar } from '@/services/userProfileService';
 import { ApiError } from '@/lib/api-client';
@@ -120,6 +121,7 @@ export function TenantProfile() {
   const [preferencesOpen, setPreferencesOpen] = useState(false);
   const [roleSwitchOpen, setRoleSwitchOpen] = useState(false);
   const [changeEmailOpen, setChangeEmailOpen] = useState(false);
+  const [changePasswordOpen, setChangePasswordOpen] = useState(false);
   const activeCount = countActivePreferences(preferences);
 
   // Server-side validators on `PATCH /users/me` reject empty/whitespace values
@@ -542,6 +544,25 @@ export function TenantProfile() {
               </p>
             </CardContent>
           </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Password</CardTitle>
+            <CardDescription>Change the password you use to sign in</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+              <div className="flex items-center gap-3 min-w-0">
+                <Lock className="h-4 w-4 text-muted-foreground shrink-0" />
+                <p className="text-sm tracking-widest text-muted-foreground">••••••••</p>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => setChangePasswordOpen(true)}>
+                Change password
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
         <WalletSection />
       </div>
 
@@ -550,6 +571,7 @@ export function TenantProfile() {
         onOpenChange={setChangeEmailOpen}
         currentEmail={authProfile?.email}
       />
+      <ChangePasswordDialog open={changePasswordOpen} onOpenChange={setChangePasswordOpen} />
     </div>
   );
 }

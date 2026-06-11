@@ -12,6 +12,7 @@ import { WALLET_PROVIDERS } from '@/pages/auth/register/constants';
 import { useAuth } from '@/hooks/useAuth';
 import { useICOWallet } from '@/hooks/ico/useICOWallet';
 import { useLinkWallet } from '@/hooks/auth/useLinkWallet';
+import { clearCsprClickStorage } from '@/lib/csprclick';
 import logger from '@/lib/logger';
 
 /**
@@ -22,9 +23,10 @@ import logger from '@/lib/logger';
  * agnostic — we never surface "create a wallet"; CSPR.click provisions one
  * transparently behind the social providers.
  *
- * The CSPR.click provider/SDK is only mounted when there is no wallet yet
- * (see the early return), so an account that already linked one pays no SDK
- * cost and just renders its address.
+ * When a wallet is already linked we show its address (no SDK mounted, so it
+ * stays cheap). "Connect a different wallet" switches into the connect+link
+ * flow: linking a new wallet makes it the account's primary (the backend
+ * demotes the previous one — `POST /users/me/wallet` is add-and-make-primary).
  */
 // Split the providers so each group can carry its own explanation: the
 // self-custody Casper Wallet for users who already have it, and the social
@@ -34,38 +36,59 @@ const SOCIAL_PROVIDERS = WALLET_PROVIDERS.filter((p) => p.key !== WALLET_KEYS.CA
 
 export function WalletSection() {
   const { profile } = useAuth();
+  // Toggled by "Connect a different wallet": mounts the SDK + connect flow over
+  // the already-linked address so the user can swap to another wallet.
+  const [changing, setChanging] = useState(false);
+  const linkedAddress = profile?.walletAddress;
 
-  // Already linked → show the address; the on-chain identifier is public, so a
-  // profile page shows it in full (per the wallet-display convention).
-  if (profile?.walletAddress) {
-    return (
-      <Card>
-        <CardHeader>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-500" aria-hidden="true" />
-              <CardTitle className="text-base">Wallet connected</CardTitle>
-            </div>
-          </div>
-          <CardDescription className="pt-1 font-mono text-xs break-all">
-            {profile.walletAddress}
-          </CardDescription>
-        </CardHeader>
-      </Card>
-    );
+  if (linkedAddress && !changing) {
+    return <LinkedWalletCard address={linkedAddress} onChange={() => setChanging(true)} />;
   }
 
-  // Not linked yet → mount the CSPR.click provider so the connect + sign flow
-  // has an SDK to talk to.
+  // No wallet yet, or replacing one → mount the CSPR.click provider so the
+  // connect + sign flow has an SDK to talk to.
   return (
     <AuthWalletLayout>
-      <WalletLinkCard />
+      <WalletLinkCard
+        isReplacing={Boolean(linkedAddress)}
+        onCancel={linkedAddress ? () => setChanging(false) : undefined}
+        onLinked={() => setChanging(false)}
+      />
     </AuthWalletLayout>
   );
 }
 
-function WalletLinkCard() {
-  const { isConnected, account, clickRef, syncActiveAccount } = useICOWallet();
+/** Linked state: shows the primary wallet address + a swap affordance. */
+function LinkedWalletCard({ address, onChange }: { address: string; onChange: () => void }) {
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center gap-2">
+          <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-500" aria-hidden="true" />
+          <CardTitle className="text-base">Wallet connected</CardTitle>
+        </div>
+        <CardDescription className="pt-1 font-mono text-xs break-all">{address}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <Button variant="outline" size="sm" onClick={onChange}>
+          Connect a different wallet
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+interface WalletLinkCardProps {
+  /** True when an address is already linked and we're swapping it out. */
+  isReplacing?: boolean;
+  /** Abort back to the linked view (only provided when replacing). */
+  onCancel?: () => void;
+  /** Called after a successful link so the parent can leave "changing" mode. */
+  onLinked?: () => void;
+}
+
+function WalletLinkCard({ isReplacing = false, onCancel, onLinked }: WalletLinkCardProps) {
+  const { isConnected, account, clickRef, syncActiveAccount, disconnect } = useICOWallet();
   const { link, linking, error: linkError, clearError } = useLinkWallet();
   const [connectingProvider, setConnectingProvider] = useState<string | null>(null);
   const [connectError, setConnectError] = useState<string | null>(null);
@@ -123,20 +146,37 @@ function WalletLinkCard() {
     [clickRef, connectingProvider, syncActiveAccount, clearError],
   );
 
-  const handleLink = useCallback(() => {
-    void link(clickRef, account?.publicKey);
-  }, [link, clickRef, account?.publicKey]);
+  const handleLink = useCallback(async () => {
+    const ok = await link(clickRef, account?.publicKey);
+    if (ok) onLinked?.();
+  }, [link, clickRef, account?.publicKey, onLinked]);
+
+  // Drop the CSPR.click session the SDK restored so the card falls back to the
+  // provider picker — lets the user pick a different wallet. Clearing
+  // `csprclick:*` storage prevents the SDK from silently re-restoring the same
+  // account on the next connect.
+  const handleUseDifferent = useCallback(async () => {
+    clearError();
+    setConnectError(null);
+    await disconnect();
+    clearCsprClickStorage();
+  }, [disconnect, clearError]);
+
+  const busy = linking || connectingProvider !== null;
 
   return (
     <Card>
       <CardHeader>
         <div className="flex items-center gap-2">
           <Wallet className="h-5 w-5 shrink-0 text-primary" aria-hidden="true" />
-          <CardTitle className="text-base">Connect a wallet</CardTitle>
+          <CardTitle className="text-base">
+            {isReplacing ? 'Connect a different wallet' : 'Connect a wallet'}
+          </CardTitle>
         </div>
         <CardDescription>
-          Link a wallet to sign lease agreements and approve on-chain payments.
-          It's optional for now — you can add one anytime.
+          {isReplacing
+            ? 'Linking a new wallet makes it your primary signing wallet, replacing the current one.'
+            : "Link a wallet to sign lease agreements and approve on-chain payments. It's optional for now — you can add one anytime."}
         </CardDescription>
       </CardHeader>
 
@@ -164,6 +204,14 @@ function WalletLinkCard() {
                 'Link this wallet'
               )}
             </Button>
+            <button
+              type="button"
+              onClick={handleUseDifferent}
+              disabled={linking}
+              className="block w-full text-center text-sm text-muted-foreground hover:text-foreground hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Use a different wallet
+            </button>
           </div>
         ) : (
           <div className="space-y-5">
@@ -216,6 +264,18 @@ function WalletLinkCard() {
               />
             </div>
           </div>
+        )}
+
+        {/* Abort the swap and return to the currently linked wallet. */}
+        {onCancel && (
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={busy}
+            className="block w-full text-center text-sm text-muted-foreground hover:text-foreground hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Cancel
+          </button>
         )}
       </CardContent>
     </Card>
