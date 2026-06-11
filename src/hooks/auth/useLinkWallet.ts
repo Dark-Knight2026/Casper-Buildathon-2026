@@ -29,7 +29,14 @@ export function useLinkWallet() {
   const [error, setError] = useState<string | null>(null);
 
   const link = useCallback(
-    async (clickRef: ICSPRClickSDK | null, publicKey: string | null | undefined): Promise<boolean> => {
+    async (
+      clickRef: ICSPRClickSDK | null,
+      publicKey: string | null | undefined,
+      // `refresh: false` defers the profile refresh to the caller — used when an
+      // on-chain registration step follows immediately, so the profile (and the
+      // UI that keys off `walletAddress`) only updates once the whole flow ends.
+      opts?: { refresh?: boolean },
+    ): Promise<boolean> => {
       if (!clickRef || !publicKey) return false;
 
       setLinking(true);
@@ -53,9 +60,12 @@ export function useLinkWallet() {
           ? result.signatureHex
           : `${prefix}${result.signatureHex}`;
 
-        // 4. Bind the wallet, then refresh so `walletAddress` propagates.
+        // 4. Bind the wallet, then refresh so `walletAddress` propagates
+        //    (unless the caller defers it to run an on-chain step first).
         await linkWallet(publicKey, signature);
-        await refreshProfile();
+        if (opts?.refresh !== false) {
+          await refreshProfile();
+        }
         logger.debug('[useLinkWallet] wallet linked');
         return true;
       } catch (err) {

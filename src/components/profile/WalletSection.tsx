@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Wallet, CheckCircle2, Loader2, AlertCircle } from 'lucide-react';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,6 +12,8 @@ import { WALLET_PROVIDERS } from '@/pages/auth/register/constants';
 import { useAuth } from '@/hooks/useAuth';
 import { useICOWallet } from '@/hooks/ico/useICOWallet';
 import { useLinkWallet } from '@/hooks/auth/useLinkWallet';
+import { useOnchainRegistration } from '@/hooks/auth/useOnchainRegistration';
+import { isOnchainRegistrationEnabled } from '@/services/onchainRegistrationService';
 import { clearCsprClickStorage } from '@/lib/csprclick';
 import logger from '@/lib/logger';
 
@@ -42,7 +44,13 @@ export function WalletSection() {
   const linkedAddress = profile?.walletAddress;
 
   if (linkedAddress && !changing) {
-    return <LinkedWalletCard address={linkedAddress} onChange={() => setChanging(true)} />;
+    return (
+      <LinkedWalletCard
+        address={linkedAddress}
+        onchainUserId={profile?.onchainUserId ?? null}
+        onChange={() => setChanging(true)}
+      />
+    );
   }
 
   // No wallet yet, or replacing one → mount the CSPR.click provider so the
@@ -58,8 +66,16 @@ export function WalletSection() {
   );
 }
 
-/** Linked state: shows the primary wallet address + a swap affordance. */
-function LinkedWalletCard({ address, onChange }: { address: string; onChange: () => void }) {
+/** Linked state: shows the primary wallet address + on-chain id + a swap affordance. */
+function LinkedWalletCard({
+  address,
+  onchainUserId,
+  onChange,
+}: {
+  address: string;
+  onchainUserId: string | null;
+  onChange: () => void;
+}) {
   return (
     <Card>
       <CardHeader>
@@ -69,7 +85,14 @@ function LinkedWalletCard({ address, onChange }: { address: string; onChange: ()
         </div>
         <CardDescription className="pt-1 font-mono text-xs break-all">{address}</CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-3">
+        {onchainUserId ? (
+          <p className="text-sm text-muted-foreground">
+            On-chain ID: <span className="font-medium text-foreground">{onchainUserId}</span>
+          </p>
+        ) : isOnchainRegistrationEnabled ? (
+          <p className="text-sm text-muted-foreground">On-chain registration pending…</p>
+        ) : null}
         <Button variant="outline" size="sm" onClick={onChange}>
           Connect a different wallet
         </Button>
@@ -88,10 +111,16 @@ interface WalletLinkCardProps {
 }
 
 function WalletLinkCard({ isReplacing = false, onCancel, onLinked }: WalletLinkCardProps) {
+  const { refreshProfile } = useAuth();
   const { isConnected, account, clickRef, syncActiveAccount, disconnect } = useICOWallet();
   const { link, linking, error: linkError, clearError } = useLinkWallet();
+  const onchain = useOnchainRegistration(account?.publicKey, clickRef);
   const [connectingProvider, setConnectingProvider] = useState<string | null>(null);
   const [connectError, setConnectError] = useState<string | null>(null);
+
+  const onchainBusy = onchain.phase === 'preparing' || onchain.phase === 'submitting';
+  const onchainDone = onchain.phase === 'done';
+  const onchainError = onchain.phase === 'error';
 
   // Per-provider connect via the documented `clickRef.connect(providerKey)`
   // (no SDK modal). Social providers go through an OAuth round-trip; extension
@@ -147,9 +176,39 @@ function WalletLinkCard({ isReplacing = false, onCancel, onLinked }: WalletLinkC
   );
 
   const handleLink = useCallback(async () => {
-    const ok = await link(clickRef, account?.publicKey);
-    if (ok) onLinked?.();
-  }, [link, clickRef, account?.publicKey, onLinked]);
+    // When on-chain registration follows, defer the profile refresh: refreshing
+    // now would set `walletAddress` and flip WalletSection to the linked view,
+    // unmounting this card (and the SDK) mid-deploy. We refresh after on-chain
+    // completes (see the effect below).
+    const ok = await link(clickRef, account?.publicKey, {
+      refresh: !isOnchainRegistrationEnabled,
+    });
+    if (!ok) return;
+    if (!isOnchainRegistrationEnabled) {
+      onLinked?.();
+      return;
+    }
+    void onchain.register();
+  }, [link, clickRef, account?.publicKey, onLinked, onchain]);
+
+  // On-chain deploy confirmed → reflect the linked wallet (and, once the indexer
+  // catches up, `onchain_user_id`) and leave to the linked view.
+  useEffect(() => {
+    if (!onchainDone) return;
+    let cancelled = false;
+    void refreshProfile().finally(() => {
+      if (!cancelled) onLinked?.();
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [onchainDone, refreshProfile, onLinked]);
+
+  // The wallet IS linked even if the on-chain step fails — let the user proceed.
+  const handleSkipOnchain = useCallback(async () => {
+    await refreshProfile();
+    onLinked?.();
+  }, [refreshProfile, onLinked]);
 
   // Drop the CSPR.click session the SDK restored so the card falls back to the
   // provider picker — lets the user pick a different wallet. Clearing
@@ -162,7 +221,7 @@ function WalletLinkCard({ isReplacing = false, onCancel, onLinked }: WalletLinkC
     clearCsprClickStorage();
   }, [disconnect, clearError]);
 
-  const busy = linking || connectingProvider !== null;
+  const busy = linking || connectingProvider !== null || onchainBusy || onchainDone;
 
   return (
     <Card>
@@ -189,30 +248,64 @@ function WalletLinkCard({ isReplacing = false, onCancel, onLinked }: WalletLinkC
         )}
 
         {isConnected && account ? (
-          <div className="space-y-3">
-            <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800">
-              <div className="h-2 w-2 rounded-full bg-green-500" />
-              <span className="font-mono truncate">{account.publicKey.slice(0, 24)}…</span>
+          onchainBusy || onchainDone ? (
+            <div className="space-y-2 py-2 text-center">
+              <Loader2 className="mx-auto h-6 w-6 animate-spin text-muted-foreground" aria-hidden="true" />
+              <p className="text-sm text-muted-foreground">
+                {onchainDone
+                  ? 'Registered on-chain ✓'
+                  : onchain.txStep === 'signing'
+                    ? 'Approve the transaction in your wallet…'
+                    : onchain.txStep === 'pending'
+                      ? 'Confirming on-chain…'
+                      : 'Registering you on-chain…'}
+              </p>
             </div>
-            <Button className="w-full" onClick={handleLink} disabled={linking}>
-              {linking ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Linking…
-                </>
-              ) : (
-                'Link this wallet'
-              )}
-            </Button>
-            <button
-              type="button"
-              onClick={handleUseDifferent}
-              disabled={linking}
-              className="block w-full text-center text-sm text-muted-foreground hover:text-foreground hover:underline disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Use a different wallet
-            </button>
-          </div>
+          ) : onchainError ? (
+            <div className="space-y-3">
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  {onchain.message ?? 'On-chain registration failed.'}
+                </AlertDescription>
+              </Alert>
+              <Button className="w-full" onClick={() => void onchain.register()}>
+                Try again
+              </Button>
+              <button
+                type="button"
+                onClick={handleSkipOnchain}
+                className="block w-full text-center text-sm text-muted-foreground hover:text-foreground hover:underline"
+              >
+                Skip for now
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800">
+                <div className="h-2 w-2 rounded-full bg-green-500" />
+                <span className="font-mono truncate">{account.publicKey.slice(0, 24)}…</span>
+              </div>
+              <Button className="w-full" onClick={handleLink} disabled={linking}>
+                {linking ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Linking…
+                  </>
+                ) : (
+                  'Link this wallet'
+                )}
+              </Button>
+              <button
+                type="button"
+                onClick={handleUseDifferent}
+                disabled={linking}
+                className="block w-full text-center text-sm text-muted-foreground hover:text-foreground hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Use a different wallet
+              </button>
+            </div>
+          )
         ) : (
           <div className="space-y-5">
             <p className="text-sm text-muted-foreground">
