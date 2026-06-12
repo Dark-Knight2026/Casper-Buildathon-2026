@@ -322,7 +322,7 @@ pub async fn update_listing(
     Ok(Json(assemble_listing(&state, row).await?))
 }
 
-// `GET /api/v1/landlord/listings`
+// `GET /api/v1/listings/landlord`
 //
 /// The caller's own listings (any state), paginated.
 ///
@@ -331,7 +331,7 @@ pub async fn update_listing(
 /// Returns a database error on failure.
 #[utoipa::path(
     get,
-    path = "/landlord/listings",
+    path = "/listings/landlord",
     tag = "Listings",
     params(Pagination),
     responses(
