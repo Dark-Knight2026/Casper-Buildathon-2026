@@ -785,13 +785,7 @@ pub async fn upload_authority_document(
 
     // Authorize before storing so a non-owner cannot leave an orphan blob. The
     // db write re-checks ownership under a row lock to close the TOCTOU window.
-    match db::listing_owner(&state.db, listing_id).await? {
-        None => return Err(ApiError::NotFound("listing not found".to_owned())),
-        Some(owner) if owner != user.0.sub => {
-            return Err(ApiError::Forbidden("not_listing_owner".to_owned()));
-        }
-        Some(_) => {}
-    }
+    db::assert_listing_owner(&state.db, listing_id, user.0.sub).await?;
 
     let key = format!(
         "listings/{listing_id}/authority/{}.{}",
@@ -963,13 +957,7 @@ pub async fn upload_listing_media(
     }
 
     // Authorize before storing so a non-owner cannot leave an orphan blob.
-    match db::listing_owner(&state.db, listing_id).await? {
-        None => return Err(ApiError::NotFound("listing not found".to_owned())),
-        Some(owner) if owner != user.0.sub => {
-            return Err(ApiError::Forbidden("not_listing_owner".to_owned()));
-        }
-        Some(_) => {}
-    }
+    db::assert_listing_owner(&state.db, listing_id, user.0.sub).await?;
 
     // Strip EXIF/GPS before anything leaves the process - storage and pin both
     // see only the sanitized bytes, so the CID is of the clean content too.
@@ -1075,13 +1063,7 @@ pub async fn update_media(
     Path(listing_id): Path<Uuid>,
     Json(payload): Json<MediaReorderRequest>,
 ) -> ApiResult<Json<Vec<MediaRef>>> {
-    match db::listing_owner(&state.db, listing_id).await? {
-        None => return Err(ApiError::NotFound("listing not found".to_owned())),
-        Some(owner) if owner != user.0.sub => {
-            return Err(ApiError::Forbidden("not_listing_owner".to_owned()));
-        }
-        Some(_) => {}
-    }
+    db::assert_listing_owner(&state.db, listing_id, user.0.sub).await?;
 
     // Remove first (drops rows + blobs), then reorder what remains. Blob delete
     // is best-effort: the db row is already gone, so a storage hiccup only

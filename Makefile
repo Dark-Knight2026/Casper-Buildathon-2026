@@ -62,12 +62,10 @@ openapi: ## Check all project ToSchema types are registered in openapi.rs
 		done; \
 	done; \
 	if [ "$$warned" -gt 0 ]; then \
-		echo ""; \
 		echo "[~] $$warned ToSchema type(s) outside models.rs, not registered (warning):"; \
 		printf '%s' "$$warnings"; \
 	fi; \
 	if [ "$$missing" -gt 0 ]; then \
-		echo ""; \
 		echo "[!] $$missing type(s) in models.rs with ToSchema not found in openapi.rs:"; \
 		printf '%s' "$$errors"; \
 		exit 1; \

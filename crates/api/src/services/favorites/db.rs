@@ -107,6 +107,13 @@ pub async fn list_favorites(
     limit: i64,
     offset: i64,
 ) -> Result<(Vec<FavoriteResponse>, i64), Error> {
+    // One REPEATABLE READ snapshot for count + page, so the total and the
+    // returned page cannot disagree under concurrent saves/withdrawals.
+    let mut tx = pool.begin().await?;
+    sqlx::raw_sql("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
+        .execute(tx.as_mut())
+        .await?;
+
     let total = sqlx::query_scalar!(
         r#"
             SELECT COUNT(*) AS "count!"
@@ -116,7 +123,7 @@ pub async fn list_favorites(
         "#,
         user_id,
     )
-    .fetch_one(pool)
+    .fetch_one(tx.as_mut())
     .await?;
 
     let entries = sqlx::query!(
@@ -132,9 +139,12 @@ pub async fn list_favorites(
         limit,
         offset,
     )
-    .fetch_all(pool)
+    .fetch_all(tx.as_mut())
     .await?;
+    tx.commit().await?;
 
+    // Hydrate the nested listings after the snapshot closes (a separate batch
+    // read; the listings themselves are joined-live above).
     let ids = entries
         .iter()
         .map(|entry| entry.listing_id)
