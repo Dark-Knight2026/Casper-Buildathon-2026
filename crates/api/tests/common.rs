@@ -43,8 +43,8 @@ use api::{
         VerificationLevel, tokens,
     },
     providers::{
-        EmailError, EmailMessage, EmailSender, FakeKycProvider, FakePinner, SharedMediaStorage,
-        StubFairHousingScreen, StubMediaStorage,
+        EmailError, EmailMessage, EmailSender, FakeKycProvider, FakePinner, NoopMetadataStripper,
+        SharedMediaStorage, StubFairHousingScreen, StubMediaStorage,
     },
     server,
 };
@@ -233,6 +233,7 @@ pub async fn setup_test_server_with(
         kyc: Arc::new(FakeKycProvider::new()),
         fair_housing: Arc::new(StubFairHousingScreen::new()),
         content_pinner: Arc::new(FakePinner::new()),
+        metadata_stripper: Arc::new(NoopMetadataStripper::new()),
         config,
     });
 

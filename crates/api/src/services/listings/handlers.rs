@@ -11,7 +11,7 @@ use axum::{
 use uuid::Uuid;
 
 use crate::{
-    common::{ApiError, ApiResult, AppState, ErrorResponse, PaginatedResponse, Pagination},
+    common::{ApiError, ApiResult, AppState, ErrorResponse, PaginatedResponse, Pagination, image},
     providers::ScreenOutcome,
     services::{
         auth::{LandlordRole, RoleUser, TenantRole},
@@ -105,6 +105,24 @@ fn document_multipart_err(err: &MultipartError) -> ApiError {
     if err.status() == StatusCode::PAYLOAD_TOO_LARGE {
         ApiError::PayloadTooLarge(format!(
             "Document payload exceeds {MAX_DOCUMENT_BYTES}-byte limit"
+        ))
+    } else {
+        ApiError::BadRequest(format!("Failed to read upload: {err}"))
+    }
+}
+
+/// Maximum accepted listing-media payload size (10 MB).
+const MAX_MEDIA_BYTES: usize = 10 * 1024 * 1024;
+
+/// Multipart field carrying the media bytes.
+const MEDIA_FILE_FIELD: &str = "file";
+
+/// Maps a media multipart error preserving the size-vs-shape distinction (413
+/// for an oversize field, 400 for a parse failure).
+fn media_multipart_err(err: &MultipartError) -> ApiError {
+    if err.status() == StatusCode::PAYLOAD_TOO_LARGE {
+        ApiError::PayloadTooLarge(format!(
+            "Media payload exceeds {MAX_MEDIA_BYTES}-byte limit"
         ))
     } else {
         ApiError::BadRequest(format!("Failed to read upload: {err}"))
@@ -852,4 +870,127 @@ pub async fn screen_listing(
         cleared: outcome.cleared,
         flags: outcome.flags,
     }))
+}
+
+// `POST /api/v1/listings/{id}/media`
+//
+/// Uploads an image (PNG/JPEG/WebP, max 10 MB) to a listing the caller owns.
+/// The bytes are sniffed by magic number, stripped of metadata (EXIF/GPS),
+/// stored via `MediaStorage`, and pinned via `ContentPinner`. The new item
+/// starts in `pending` moderation, so it is hidden from public reads until
+/// approved.
+///
+/// # Errors
+///
+/// Returns `400` on a missing/malformed field, `403` when the caller is not the
+/// lister, `404` when the listing does not exist, `413` when the payload is too
+/// large, `415` on an unsupported media type, or a storage/pin/database error.
+#[utoipa::path(
+    post,
+    path = "/listings/{id}/media",
+    tag = "Listings",
+    params(
+        ("id" = Uuid, Path, description = "Listing id")
+    ),
+    request_body(
+        content = Vec<u8>,
+        content_type = "multipart/form-data",
+        description = "Multipart form with a single `file` field (PNG/JPEG/WebP, max 10 MB)",
+    ),
+    responses(
+        (status = 201, description = "Media stored", body = MediaRef),
+        (status = 400, description = "Missing or malformed `file` field", body = ErrorResponse),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 403, description = "Not the lister", body = ErrorResponse),
+        (status = 404, description = "Listing not found", body = ErrorResponse),
+        (status = 413, description = "Payload too large", body = ErrorResponse),
+        (status = 415, description = "Unsupported media type", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse),
+    ),
+    security(
+        ("cookie_auth" = [])
+    )
+)]
+#[inline]
+pub async fn upload_listing_media(
+    State(state): State<Arc<AppState>>,
+    user: RoleUser<LandlordRole>,
+    Path(listing_id): Path<Uuid>,
+    mut multipart: Multipart,
+) -> ApiResult<(StatusCode, Json<MediaRef>)> {
+    let mut file = None;
+    while let Some(field) = multipart
+        .next_field()
+        .await
+        .map_err(|err| media_multipart_err(&err))?
+    {
+        if field.name() == Some(MEDIA_FILE_FIELD) {
+            let declared_mime = field.content_type().map(str::to_ascii_lowercase);
+            let bytes = field
+                .bytes()
+                .await
+                .map_err(|err| media_multipart_err(&err))?
+                .to_vec();
+            file = Some((declared_mime, bytes));
+            break;
+        }
+    }
+
+    let (declared_mime, bytes) =
+        file.ok_or_else(|| ApiError::BadRequest("Missing `file` field".to_owned()))?;
+
+    if bytes.len() > MAX_MEDIA_BYTES {
+        return Err(ApiError::PayloadTooLarge(format!(
+            "Media payload exceeds {MAX_MEDIA_BYTES}-byte limit"
+        )));
+    }
+
+    let detected = image::sniff_image_kind(&bytes).ok_or_else(|| {
+        ApiError::UnsupportedMediaType(
+            "File bytes do not match a supported image format (PNG/JPEG/WebP)".to_owned(),
+        )
+    })?;
+
+    // When the client sent a Content-Type, it must agree with the sniffed bytes.
+    if let Some(declared) = &declared_mime {
+        let base = declared.split(';').next().unwrap_or("").trim();
+        if base != detected.mime {
+            return Err(ApiError::UnsupportedMediaType(format!(
+                "declared content-type {declared} does not match the file bytes"
+            )));
+        }
+    }
+
+    // Authorize before storing so a non-owner cannot leave an orphan blob.
+    match db::listing_owner(&state.db, listing_id).await? {
+        None => return Err(ApiError::NotFound("listing not found".to_owned())),
+        Some(owner) if owner != user.0.sub => {
+            return Err(ApiError::Forbidden("not_listing_owner".to_owned()));
+        }
+        Some(_) => {}
+    }
+
+    // Strip EXIF/GPS before anything leaves the process - storage and pin both
+    // see only the sanitized bytes, so the CID is of the clean content too.
+    let clean = state.metadata_stripper.strip(&bytes, detected.mime).await;
+    let key = format!(
+        "listings/{listing_id}/media/{}.{}",
+        Uuid::new_v4(),
+        detected.ext
+    );
+    let url = state
+        .media_storage
+        .put(&key, &clean, detected.mime)
+        .await
+        .map_err(|err| {
+            tracing::error!(?err, "listing media storage failed");
+            ApiError::Internal("failed to store media".to_owned())
+        })?;
+    let cid = state.content_pinner.pin(&clean).await.map_err(|err| {
+        tracing::error!(?err, "listing media pin failed");
+        ApiError::Internal("failed to pin media".to_owned())
+    })?;
+
+    let row = db::insert_listing_media(&state.db, listing_id, &url, &cid).await?;
+    Ok((StatusCode::CREATED, Json(MediaRef::from(row))))
 }

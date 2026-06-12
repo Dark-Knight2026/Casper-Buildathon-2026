@@ -28,5 +28,6 @@ pub fn router() -> OpenApiRouter<Arc<AppState>> {
         .routes(routes!(handlers::get_provenance))
         .routes(routes!(handlers::upload_authority_document))
         .routes(routes!(handlers::screen_listing))
+        .routes(routes!(handlers::upload_listing_media))
         .routes(routes!(handlers::get_landlord_listings))
 }

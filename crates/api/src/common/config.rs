@@ -10,7 +10,9 @@ use serde::Deserialize;
 use crate::{
     ServerError,
     common::RedisStore,
-    providers::{ContentPinner, EmailSender, FairHousingScreen, KycProvider, MediaStorage},
+    providers::{
+        ContentPinner, EmailSender, FairHousingScreen, KycProvider, MediaStorage, MetadataStripper,
+    },
 };
 
 /// Total BIG token supply (human-readable).
@@ -438,6 +440,10 @@ pub struct AppState {
     /// can swap `FakePinner` (hackathon) for a real IPFS node/provider without
     /// touching call sites.
     pub content_pinner: Arc<dyn ContentPinner>,
+    /// Image metadata stripper for listing media. Boxed-trait so the bootstrap
+    /// can swap `NoopMetadataStripper` (hackathon) for a real EXIF/GPS stripper
+    /// without touching call sites.
+    pub metadata_stripper: Arc<dyn MetadataStripper>,
     /// Application configuration.
     pub config: ServerConfig,
 }
@@ -453,6 +459,7 @@ impl core::fmt::Debug for AppState {
             .field("kyc", &"KycProvider")
             .field("fair_housing", &"FairHousingScreen")
             .field("content_pinner", &"ContentPinner")
+            .field("metadata_stripper", &"MetadataStripper")
             .field("config", &self.config)
             .finish()
     }

@@ -30,9 +30,9 @@ use utoipa_swagger_ui::SwaggerUi;
 
 use crate::{
     ApiDoc, AppState, ContentPinner, EmailSender, FairHousingScreen, FakeKycProvider, FakePinner,
-    KycProvider, LoggingEmailSender, PostmarkSender, RedisStore, S3MediaStorage, ServerConfig,
-    ServerError, SharedMediaStorage, StubFairHousingScreen, StubMediaStorage, onchain, services,
-    workers,
+    KycProvider, LoggingEmailSender, MetadataStripper, NoopMetadataStripper, PostmarkSender,
+    RedisStore, S3MediaStorage, ServerConfig, ServerError, SharedMediaStorage,
+    StubFairHousingScreen, StubMediaStorage, onchain, services, workers,
 };
 
 /// Creates the full application router combining public and protected routes.
@@ -234,6 +234,16 @@ pub async fn main() -> Result<(), ServerError> {
         Arc::new(FakePinner::new())
     };
 
+    // No real EXIF/GPS stripper is wired yet, so uploaded media keeps its
+    // metadata. A real byte-level stripper will be selected here by config.
+    let metadata_stripper: Arc<dyn MetadataStripper> = {
+        tracing::warn!(
+            event = "metadata_stripper_noop",
+            "No real metadata stripper configured - using NoopMetadataStripper (EXIF/GPS is NOT stripped from uploads). Production MUST wire a real stripper before media upload can be trusted."
+        );
+        Arc::new(NoopMetadataStripper::new())
+    };
+
     // 3. Build application state
     let state = Arc::new(AppState {
         db: pool,
@@ -243,6 +253,7 @@ pub async fn main() -> Result<(), ServerError> {
         kyc,
         fair_housing,
         content_pinner,
+        metadata_stripper,
         config: config.clone(),
     });
 

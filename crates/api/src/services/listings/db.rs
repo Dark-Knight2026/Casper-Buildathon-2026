@@ -1316,3 +1316,37 @@ pub async fn add_authority_document(
         ),
     })
 }
+
+/// Inserts a media row for a listing, appended after existing media, and
+/// returns it. Position is the next slot under a single subquery (no separate
+/// max read); moderation defaults to `pending`, so the item is excluded from
+/// public reads until approved.
+///
+/// # Errors
+///
+/// Returns [`Error`] on any database failure.
+#[inline]
+pub async fn insert_listing_media(
+    pool: &PgPool,
+    listing_id: Uuid,
+    url: &str,
+    cid: &str,
+) -> Result<MediaRow, Error> {
+    sqlx::query_as!(
+        MediaRow,
+        r"
+            INSERT INTO listing_media (listing_id, url, cid, position)
+            VALUES (
+                $1, $2, $3,
+                (SELECT COALESCE(MAX(position) + 1, 0)
+                 FROM listing_media WHERE listing_id = $1)
+            )
+            RETURNING id, listing_id, url, cid, position, moderation_status
+        ",
+        listing_id,
+        url,
+        cid,
+    )
+    .fetch_one(pool)
+    .await
+}

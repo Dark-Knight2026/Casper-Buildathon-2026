@@ -15,6 +15,8 @@
 //!   `StubFairHousingScreen`).
 //! - [`content_pinner`] - content pinning / IPFS (`ContentPinner`,
 //!   `FakePinner`).
+//! - [`metadata_stripper`] - image metadata stripping (`MetadataStripper`,
+//!   `NoopMetadataStripper`).
 //!
 //! New external-service adapters (SMS, payment processors) belong
 //! here, not in [`common`](crate::common): `common` is reserved for
@@ -29,6 +31,8 @@ pub mod email;
 pub mod fair_housing;
 /// Identity-verification (KYC) abstraction.
 pub mod kyc;
+/// Image metadata-stripping abstraction.
+pub mod metadata_stripper;
 /// Media-storage abstraction.
 pub mod storage;
 
@@ -39,6 +43,7 @@ pub use fair_housing::{
     StubFairHousingScreen,
 };
 pub use kyc::{FakeKycProvider, KycError, KycOutcome, KycProvider, KycResult, SharedKycProvider};
+pub use metadata_stripper::{MetadataStripper, NoopMetadataStripper, SharedMetadataStripper};
 pub use storage::{
     MediaStorage, S3MediaStorage, SharedMediaStorage, StorageError, StubMediaStorage,
 };

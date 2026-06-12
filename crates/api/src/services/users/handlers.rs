@@ -16,7 +16,9 @@ use uuid::Uuid;
 
 use crate::{
     common::{
-        ApiError, ApiResult, AppState, ErrorResponse, UserInfo, UserRole, crypto, password, tokens,
+        ApiError, ApiResult, AppState, ErrorResponse, UserInfo, UserRole, crypto,
+        image::{self, ImageKind},
+        password, tokens,
     },
     providers::EmailMessage,
     services::{
@@ -93,37 +95,6 @@ const DELETE_ACCOUNT_RECENT_AUTH_WINDOW_SECS: i64 = 5 * 60;
 /// a wallet account once the window has elapsed.
 const PASSWORD_SET_RECENT_AUTH_WINDOW_SECS: i64 = 5 * 60;
 
-/// Detected image format for an uploaded avatar.
-///
-/// Carries both the canonical MIME and the on-disk extension so the handler
-/// does not duplicate the lookup table at the call site. [`AVATAR_EXTENSIONS`]
-/// is derived from the `ext` field of each variant below, so adding a new
-/// variant automatically lands in the sibling-sweep set.
-#[derive(Debug, Clone, Copy)]
-struct ImageKind {
-    /// Canonical IANA MIME type, used both as the storage `Content-Type`
-    /// metadata and the cross-check against the client-supplied
-    /// `Content-Type` header.
-    mime: &'static str,
-    /// Storage-key extension (no leading dot).
-    ext: &'static str,
-}
-
-impl ImageKind {
-    const PNG: Self = Self {
-        mime: "image/png",
-        ext: "png",
-    };
-    const JPEG: Self = Self {
-        mime: "image/jpeg",
-        ext: "jpg",
-    };
-    const WEBP: Self = Self {
-        mime: "image/webp",
-        ext: "webp",
-    };
-}
-
 /// Extensions the avatar handler may have produced for a given user
 /// historically. Used to delete stale objects under sibling extensions when
 /// a user re-uploads with a different image format - without this sweep,
@@ -155,40 +126,6 @@ fn multipart_err_to_api(err: &MultipartError) -> ApiError {
     } else {
         ApiError::BadRequest(format!("Failed to read file: {err}"))
     }
-}
-
-/// Sniffs the leading bytes of `payload` and returns the detected image
-/// kind, or `None` if the payload does not match any whitelisted format.
-///
-/// The sniff is intentionally minimal:
-///
-/// - PNG: 8-byte signature `89 50 4E 47 0D 0A 1A 0A`.
-/// - JPEG: 3-byte SOI `FF D8 FF` (covers JFIF, EXIF, and bare-JFIF
-///   variants - the fourth byte distinguishes them but does not affect
-///   acceptance).
-/// - WEBP: 12-byte composite (`RIFF` + 4-byte size + `WEBP`). The 4-byte
-///   `RIFF` prefix alone collides with AVI/WAV, so the second tag is what
-///   actually pins the format.
-///
-/// Returning `None` is the only failure mode: the handler maps it to 415,
-/// which means a payload with a valid MIME header but bytes that do not
-/// match any whitelisted signature is rejected the same way as a payload
-/// with a disallowed MIME header. This is deliberate - it blocks
-/// MIME-spoofing where a client claims `image/png` but sends an executable.
-fn sniff_image_kind(payload: &[u8]) -> Option<ImageKind> {
-    const PNG_MAGIC: [u8; 8] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
-    const JPEG_MAGIC: [u8; 3] = [0xFF, 0xD8, 0xFF];
-
-    if payload.len() >= PNG_MAGIC.len() && payload[..PNG_MAGIC.len()] == PNG_MAGIC {
-        return Some(ImageKind::PNG);
-    }
-    if payload.len() >= JPEG_MAGIC.len() && payload[..JPEG_MAGIC.len()] == JPEG_MAGIC {
-        return Some(ImageKind::JPEG);
-    }
-    if payload.len() >= 12 && &payload[0..4] == b"RIFF" && &payload[8..12] == b"WEBP" {
-        return Some(ImageKind::WEBP);
-    }
-    None
 }
 
 // `GET /api/v1/users/me`
@@ -759,7 +696,7 @@ pub async fn upload_avatar(
         )));
     }
 
-    let detected = sniff_image_kind(&bytes).ok_or_else(|| {
+    let detected = image::sniff_image_kind(&bytes).ok_or_else(|| {
         ApiError::UnsupportedMediaType(
             "File bytes do not match a supported image format".to_owned(),
         )

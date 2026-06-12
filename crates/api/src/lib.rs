@@ -48,9 +48,9 @@ pub use openapi::ApiDoc;
 pub use providers::{
     ContentPinner, EmailError, EmailMessage, EmailSender, FairHousingError, FairHousingScreen,
     FakeKycProvider, FakePinner, KycError, KycOutcome, KycProvider, LoggingEmailSender,
-    MediaStorage, PinError, PostmarkSender, S3MediaStorage, ScreenOutcome, SharedContentPinner,
-    SharedFairHousingScreen, SharedKycProvider, SharedMediaStorage, StubFairHousingScreen,
-    StubMediaStorage,
+    MediaStorage, MetadataStripper, NoopMetadataStripper, PinError, PostmarkSender, S3MediaStorage,
+    ScreenOutcome, SharedContentPinner, SharedFairHousingScreen, SharedKycProvider,
+    SharedMediaStorage, SharedMetadataStripper, StubFairHousingScreen, StubMediaStorage,
 };
 #[cfg(feature = "enabled")]
 pub use services::auth::AuthUser;

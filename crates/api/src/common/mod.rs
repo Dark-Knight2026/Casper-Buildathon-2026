@@ -6,6 +6,8 @@ pub mod config;
 pub mod crypto;
 /// Error types for the application.
 pub mod errors;
+/// Raster-image format sniffing shared across upload handlers.
+pub mod image;
 /// Shared data models and type definitions.
 pub mod models;
 /// Reusable pagination primitives.
