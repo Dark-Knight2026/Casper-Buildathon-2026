@@ -20,6 +20,8 @@ pub mod analytics;
 pub mod auth;
 /// Health check feature module.
 pub mod health;
+/// Listing (time-bound offer) feature module; mixed public/role-gated auth.
+pub mod listings;
 /// Property (physical-asset) feature module; mixed public/role-gated auth.
 pub mod properties;
 /// Tax calculation feature module.
@@ -145,5 +147,6 @@ pub fn marketplace_router() -> OpenApiRouter<Arc<AppState>> {
 
     OpenApiRouter::new()
         .merge(properties::routes::router())
+        .merge(listings::routes::router())
         .route_layer(GovernorLayer::new(rate_limit))
 }

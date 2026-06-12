@@ -40,7 +40,7 @@ const MAX_PARKING_FEATURE_LEN: usize = 100;
 const MAX_PARKING_FEATURES: usize = 32;
 
 /// Physical-asset record (RESO-aligned). Returned by detail and create.
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Property {
     /// Property id.
