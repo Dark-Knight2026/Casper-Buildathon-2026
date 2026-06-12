@@ -14,6 +14,7 @@ use crate::{
     onchain::{ico, staking, transactions, vesting},
     services::{
         analytics, applications, auth, favorites, health, listings, properties, tax, users,
+        viewings,
     },
 };
 
@@ -99,6 +100,11 @@ use crate::{
             applications::models::RentalApplication,
             applications::models::SubmitApplicationRequest,
             applications::models::ReviewApplicationRequest,
+            // Viewings models
+            viewings::models::Viewing,
+            viewings::models::ViewingStatus,
+            viewings::models::BookViewingRequest,
+            viewings::models::UpdateViewingStatusRequest,
             // Health models
             health::models::ConnectionStatus,
             health::models::HealthResponse,
@@ -144,6 +150,7 @@ use crate::{
         (name = "Listings", description = "Listing (time-bound offer) endpoints"),
         (name = "Favorites", description = "Tenant saved-listing endpoints"),
         (name = "Applications", description = "Rental-application endpoints"),
+        (name = "Viewings", description = "In-person viewing-booking endpoints"),
         (name = "Tax", description = "Tax calculation endpoints"),
         (name = "Analytics", description = "Property analytics endpoints"),
         (name = "Transactions", description = "Transaction history endpoints"),

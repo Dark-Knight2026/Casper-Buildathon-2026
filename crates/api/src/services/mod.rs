@@ -32,6 +32,8 @@ pub mod properties;
 pub mod tax;
 /// Authenticated user-profile feature module.
 pub mod users;
+/// Viewings (in-person booking) feature module (ADR-007 downstream); role-gated.
+pub mod viewings;
 
 /// Rate limit: requests allowed per second for auth endpoints.
 pub const AUTH_RATE_LIMIT_PER_SECOND: u64 = 1;
@@ -154,5 +156,6 @@ pub fn marketplace_router() -> OpenApiRouter<Arc<AppState>> {
         .merge(listings::routes::router())
         .merge(favorites::routes::router())
         .merge(applications::routes::router())
+        .merge(viewings::routes::router())
         .route_layer(GovernorLayer::new(rate_limit))
 }
