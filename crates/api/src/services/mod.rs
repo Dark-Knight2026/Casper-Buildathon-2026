@@ -20,6 +20,8 @@ pub mod analytics;
 pub mod auth;
 /// Health check feature module.
 pub mod health;
+/// Property (physical-asset) feature module; mixed public/role-gated auth.
+pub mod properties;
 /// Tax calculation feature module.
 pub mod tax;
 /// Authenticated user-profile feature module.
@@ -106,4 +108,42 @@ pub fn protected_router(state: Arc<AppState>) -> OpenApiRouter<Arc<AppState>> {
             state,
             auth::middleware::require_auth,
         ))
+}
+
+/// Rate limit: requests allowed per second for the property/listing marketplace.
+pub const MARKETPLACE_RATE_LIMIT_PER_SECOND: u64 = 10;
+
+/// Rate limit: maximum burst size for the property/listing marketplace.
+pub const MARKETPLACE_RATE_LIMIT_BURST: u32 = 50;
+
+/// Creates the property/listing marketplace router.
+///
+/// Unlike [`protected_router`], this router applies NO blanket `require_auth`:
+/// the surface is mixed-access. Public reads (e.g. `GET /properties/{id}`)
+/// carry no auth extractor, while writes self-gate via `RoleUser<R>` inside
+/// each handler (which validates the `access_token` cookie on its own). Only
+/// the shared rate limiter is applied here. Handlers declare full paths, so
+/// their routers are `.merge()`d rather than nested under a prefix.
+///
+/// # Panics
+///
+/// Panics at startup if the rate-limit configuration is invalid.
+#[inline]
+#[must_use]
+pub fn marketplace_router() -> OpenApiRouter<Arc<AppState>> {
+    let rate_limit = Arc::new(
+        GovernorConfigBuilder::default()
+            .key_extractor(SmartIpKeyExtractor)
+            .per_second(MARKETPLACE_RATE_LIMIT_PER_SECOND)
+            .burst_size(MARKETPLACE_RATE_LIMIT_BURST)
+            .use_headers()
+            .finish()
+            .expect(
+                "marketplace rate-limit config is always valid: per_second > 0 and burst_size > 0",
+            ),
+    );
+
+    OpenApiRouter::new()
+        .merge(properties::routes::router())
+        .route_layer(GovernorLayer::new(rate_limit))
 }
