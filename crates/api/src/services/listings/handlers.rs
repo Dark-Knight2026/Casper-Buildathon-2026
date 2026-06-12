@@ -12,12 +12,12 @@ use uuid::Uuid;
 use crate::{
     common::{ApiError, ApiResult, AppState, ErrorResponse, PaginatedResponse, Pagination},
     services::{
-        auth::{LandlordRole, RoleUser},
+        auth::{LandlordRole, RoleUser, TenantRole},
         listings::{
             db::{self, ListingUpdate, StateTransition, WithdrawOutcome},
             models::{
                 CreateListingRequest, Listing, ListingSearchParams, ListingState, MediaRef,
-                UpdateListingRequest, UpdateStateRequest,
+                UpdateListingRequest, UpdateStateRequest, ViewResponse,
             },
         },
         properties::{db as properties_db, models::Property},
@@ -360,5 +360,47 @@ pub async fn delete_listing(
         WithdrawOutcome::Withdrawn => Ok(StatusCode::NO_CONTENT),
         WithdrawOutcome::NotFound => Err(ApiError::NotFound("listing not found".to_owned())),
         WithdrawOutcome::Forbidden => Err(ApiError::Forbidden("not_listing_owner".to_owned())),
+    }
+}
+
+// `POST /api/v1/listings/{id}/view`
+//
+/// Records a unique-tenant view of an active listing. Idempotent per tenant -
+/// the `views` counter increments only on a tenant's first view; repeat calls
+/// return the current count with `counted = false`.
+///
+/// # Errors
+///
+/// Returns `404` when no active listing has that id, or a database error.
+#[utoipa::path(
+    post,
+    path = "/listings/{id}/view",
+    tag = "Listings",
+    params(
+        ("id" = Uuid, Path, description = "Listing id")
+    ),
+    responses(
+        (status = 200, description = "View recorded", body = ViewResponse),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 403, description = "Tenant role required", body = ErrorResponse),
+        (status = 404, description = "Listing not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse),
+    ),
+    security(
+        ("cookie_auth" = [])
+    )
+)]
+#[inline]
+pub async fn record_listing_view(
+    State(state): State<Arc<AppState>>,
+    user: RoleUser<TenantRole>,
+    Path(listing_id): Path<Uuid>,
+) -> ApiResult<Json<ViewResponse>> {
+    match db::record_view(&state.db, listing_id, user.0.sub).await? {
+        Some(tally) => Ok(Json(ViewResponse {
+            views: tally.views,
+            counted: tally.counted,
+        })),
+        None => Err(ApiError::NotFound("listing not found".to_owned())),
     }
 }

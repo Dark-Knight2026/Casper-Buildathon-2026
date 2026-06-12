@@ -883,3 +883,69 @@ pub async fn withdraw_listing(
     tx.commit().await?;
     Ok(WithdrawOutcome::Withdrawn)
 }
+
+/// The unique-tenant view counter after a [`record_view`] call.
+#[derive(Debug)]
+pub struct ViewTally {
+    /// View count after the operation.
+    pub views: i32,
+    /// Whether this call incremented the counter (`false` = a repeat view).
+    pub counted: bool,
+}
+
+/// Records a unique-tenant view of an active listing and returns the resulting
+/// tally, or `None` when no active listing has that id.
+///
+/// A single CTE does everything atomically: it gates on the listing being
+/// `active`, inserts the event with `ON CONFLICT DO NOTHING`, and bumps
+/// `listings.views` only when that insert actually happened (`RETURNING` is
+/// empty on conflict). One registered tenant therefore counts at most once, and
+/// the event-insert and counter-bump can never disagree.
+///
+/// # Errors
+///
+/// Returns [`Error`] on any database failure.
+#[inline]
+pub async fn record_view(
+    pool: &PgPool,
+    listing_id: Uuid,
+    viewer_id: Uuid,
+) -> Result<Option<ViewTally>, Error> {
+    let row = sqlx::query!(
+        r#"
+            WITH target AS (
+                SELECT id, views
+                FROM listings
+                WHERE id = $1 AND state = 'active' AND deleted_at IS NULL
+            ),
+            inserted AS (
+                INSERT INTO listing_view_events (listing_id, user_id)
+                SELECT id, $2 FROM target
+                ON CONFLICT (listing_id, user_id) DO NOTHING
+                RETURNING id
+            ),
+            bumped AS (
+                UPDATE listings
+                SET views = views + 1
+                WHERE id = $1 AND EXISTS (SELECT 1 FROM inserted)
+                RETURNING views
+            )
+            SELECT
+                (SELECT id FROM target) AS "found_id?",
+                EXISTS (SELECT 1 FROM inserted) AS "counted!",
+                COALESCE((SELECT views FROM bumped), (SELECT views FROM target)) AS "views?"
+        "#,
+        listing_id,
+        viewer_id,
+    )
+    .fetch_one(pool)
+    .await?;
+
+    if row.found_id.is_none() {
+        return Ok(None);
+    }
+    Ok(Some(ViewTally {
+        views: row.views.unwrap_or(0),
+        counted: row.counted,
+    }))
+}

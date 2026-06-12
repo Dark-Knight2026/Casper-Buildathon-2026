@@ -80,6 +80,7 @@ use crate::{
             listings::models::CreateListingRequest,
             listings::models::UpdateListingRequest,
             listings::models::UpdateStateRequest,
+            listings::models::ViewResponse,
             listings::models::RentLtrTerms,
             // Health models
             health::models::ConnectionStatus,

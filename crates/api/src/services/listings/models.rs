@@ -602,6 +602,16 @@ pub struct UpdateStateRequest {
     pub state: ListingState,
 }
 
+/// Result of recording a tenant view (`POST /listings/{id}/view`).
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ViewResponse {
+    /// Unique-tenant view count after this request.
+    pub views: i32,
+    /// Whether this request counted as a new view (`false` if already viewed).
+    pub counted: bool,
+}
+
 /// Trims a title, rejecting empty / over-long values.
 fn validate_title(raw: &str) -> ApiResult<String> {
     let trimmed = raw.trim();
