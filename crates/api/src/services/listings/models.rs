@@ -16,7 +16,9 @@ use uuid::Uuid;
 use crate::{
     common::{ApiError, ApiResult, Pagination},
     services::{
-        listings::db::{ListingFilter, ListingRow, ListingSort, MediaRow},
+        listings::db::{
+            ListingFilter, ListingPatch, ListingRow, ListingSort, MediaRow, NewListing,
+        },
         properties::models::Property,
     },
 };
@@ -429,4 +431,185 @@ fn parse_bbox(raw: &str) -> ApiResult<(f64, f64, f64, f64)> {
         ));
     }
     Ok((min_lng, min_lat, max_lng, max_lat))
+}
+
+/// Long-term rental terms - the only terms shape created/served at MVP.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RentLtrTerms {
+    /// Monthly rent.
+    pub rent_monthly: f64,
+    /// Security deposit.
+    pub security_deposit: f64,
+    /// Offered lease terms (e.g. "1 Year", "Month-to-Month").
+    pub lease_terms_offered: Vec<String>,
+    /// Furnished.
+    pub furnished: bool,
+}
+
+impl RentLtrTerms {
+    /// Validates the terms and serializes them to a JSONB value.
+    fn into_value(self) -> ApiResult<Value> {
+        if !self.rent_monthly.is_finite() || self.rent_monthly <= 0.0 {
+            return Err(ApiError::BadRequest(
+                "terms.rentMonthly must be a positive number".to_owned(),
+            ));
+        }
+        if !self.security_deposit.is_finite() || self.security_deposit < 0.0 {
+            return Err(ApiError::BadRequest(
+                "terms.securityDeposit must be a non-negative number".to_owned(),
+            ));
+        }
+        if self.lease_terms_offered.is_empty() {
+            return Err(ApiError::BadRequest(
+                "terms.leaseTermsOffered must not be empty".to_owned(),
+            ));
+        }
+        serde_json::to_value(self)
+            .map_err(|_| ApiError::Internal("failed to serialize terms".to_owned()))
+    }
+}
+
+/// Create-a-listing payload (always a `rent_ltr` draft at MVP).
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateListingRequest {
+    /// Physical property this offer is against.
+    #[schema(value_type = Uuid)]
+    pub property_id: Uuid,
+    /// Listing title.
+    pub title: String,
+    /// Listing description.
+    pub description: Option<String>,
+    /// Amenities.
+    pub amenities: Option<Vec<String>>,
+    /// Utilities included.
+    pub utilities_included: Option<Vec<String>>,
+    /// Pet policy label.
+    pub pet_policy: Option<String>,
+    /// Available date (`YYYY-MM-DD`).
+    pub available_date: Option<NaiveDate>,
+    /// Surrounding POIs (JSON array).
+    #[schema(value_type = Option<Object>)]
+    pub surrounding_area: Option<Value>,
+    /// Long-term rental terms.
+    pub terms: RentLtrTerms,
+}
+
+impl CreateListingRequest {
+    /// Validates and maps the payload into a [`NewListing`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ApiError::BadRequest`] on empty title, over-long text, or
+    /// invalid terms.
+    #[inline]
+    pub fn into_validated(self) -> ApiResult<NewListing> {
+        let title = validate_title(&self.title)?;
+        let description = validate_description(&self.description.unwrap_or_default())?;
+        let terms = self.terms.into_value()?;
+        Ok(NewListing {
+            property_id: self.property_id,
+            title,
+            description,
+            amenities: clean_list(self.amenities.unwrap_or_default()),
+            utilities_included: clean_list(self.utilities_included.unwrap_or_default()),
+            pet_policy: clean_optional(self.pet_policy),
+            available_date: self.available_date,
+            surrounding_area: self.surrounding_area.unwrap_or_else(|| Value::Array(Vec::new())),
+            terms,
+        })
+    }
+}
+
+/// Partial listing update; absent fields are left unchanged.
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateListingRequest {
+    /// Listing title.
+    pub title: Option<String>,
+    /// Listing description.
+    pub description: Option<String>,
+    /// Amenities.
+    pub amenities: Option<Vec<String>>,
+    /// Utilities included.
+    pub utilities_included: Option<Vec<String>>,
+    /// Pet policy label.
+    pub pet_policy: Option<String>,
+    /// Available date (`YYYY-MM-DD`).
+    pub available_date: Option<NaiveDate>,
+    /// Surrounding POIs (JSON array).
+    #[schema(value_type = Option<Object>)]
+    pub surrounding_area: Option<Value>,
+    /// Long-term rental terms.
+    pub terms: Option<RentLtrTerms>,
+}
+
+impl UpdateListingRequest {
+    /// Validates and maps the payload into a [`ListingPatch`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ApiError::BadRequest`] on empty title, over-long text, or
+    /// invalid terms.
+    #[inline]
+    pub fn into_patch(self) -> ApiResult<ListingPatch> {
+        Ok(ListingPatch {
+            title: self.title.as_deref().map(validate_title).transpose()?,
+            description: self.description.as_deref().map(validate_description).transpose()?,
+            amenities: self.amenities.map(clean_list),
+            utilities_included: self.utilities_included.map(clean_list),
+            pet_policy: self.pet_policy.map(|policy| policy.trim().to_owned()),
+            available_date: self.available_date,
+            surrounding_area: self.surrounding_area,
+            terms: self.terms.map(RentLtrTerms::into_value).transpose()?,
+        })
+    }
+}
+
+/// Trims a title, rejecting empty / over-long values.
+fn validate_title(raw: &str) -> ApiResult<String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Err(ApiError::BadRequest("title cannot be empty".to_owned()));
+    }
+    if trimmed.chars().count() > 200 {
+        return Err(ApiError::BadRequest(
+            "title must be at most 200 characters".to_owned(),
+        ));
+    }
+    Ok(trimmed.to_owned())
+}
+
+/// Trims a description, rejecting over-long values.
+fn validate_description(raw: &str) -> ApiResult<String> {
+    let trimmed = raw.trim();
+    if trimmed.chars().count() > 4000 {
+        return Err(ApiError::BadRequest(
+            "description must be at most 4000 characters".to_owned(),
+        ));
+    }
+    Ok(trimmed.to_owned())
+}
+
+/// Trims list items, dropping blanks.
+fn clean_list(items: Vec<String>) -> Vec<String> {
+    items
+        .into_iter()
+        .filter_map(|item| {
+            let trimmed = item.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed.to_owned())
+            }
+        })
+        .collect()
+}
+
+/// Trims an optional string; blank collapses to `None`.
+fn clean_optional(value: Option<String>) -> Option<String> {
+    value
+        .map(|raw| raw.trim().to_owned())
+        .filter(|trimmed| !trimmed.is_empty())
 }

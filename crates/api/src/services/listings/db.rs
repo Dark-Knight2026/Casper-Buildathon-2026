@@ -259,6 +259,13 @@ pub async fn list_active_listings(
     pool: &PgPool,
     filter: &ListingFilter,
 ) -> Result<(Vec<Listing>, i64), Error> {
+    // One REPEATABLE READ snapshot for count + page + batch loads, so the total
+    // and the returned page can never disagree under concurrent writes.
+    let mut tx = pool.begin().await?;
+    sqlx::raw_sql("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
+        .execute(tx.as_mut())
+        .await?;
+
     let mut count_builder = QueryBuilder::<Postgres>::new(
         "SELECT COUNT(*) FROM listings l \
          JOIN properties p ON p.id = l.property_id \
@@ -267,7 +274,7 @@ pub async fn list_active_listings(
     push_filters(&mut count_builder, filter);
     let total = count_builder
         .build_query_scalar::<i64>()
-        .fetch_one(pool)
+        .fetch_one(tx.as_mut())
         .await?;
 
     let mut builder = QueryBuilder::<Postgres>::new("SELECT ");
@@ -285,17 +292,19 @@ pub async fn list_active_listings(
     builder.push_bind(filter.offset);
     let rows = builder
         .build_query_as::<ListingRow>()
-        .fetch_all(pool)
+        .fetch_all(tx.as_mut())
         .await?;
 
     if rows.is_empty() {
+        tx.commit().await?;
         return Ok((Vec::new(), total));
     }
 
     let property_ids = rows.iter().map(|row| row.property_id).collect::<Vec<_>>();
     let listing_ids = rows.iter().map(|row| row.id).collect::<Vec<_>>();
-    let properties = fetch_properties_by_ids(pool, &property_ids).await?;
-    let mut media = fetch_media_by_listing_ids(pool, &listing_ids).await?;
+    let properties = fetch_properties_by_ids(tx.as_mut(), &property_ids).await?;
+    let mut media = fetch_media_by_listing_ids(tx.as_mut(), &listing_ids).await?;
+    tx.commit().await?;
 
     let listings = rows
         .into_iter()
@@ -393,10 +402,13 @@ fn push_order(builder: &mut QueryBuilder<Postgres>, filter: &ListingFilter) {
 }
 
 /// Batch-loads properties by id into a lookup keyed by property id.
-async fn fetch_properties_by_ids(
-    pool: &PgPool,
+async fn fetch_properties_by_ids<'e, E>(
+    executor: E,
     ids: &[Uuid],
-) -> Result<HashMap<Uuid, Property>, Error> {
+) -> Result<HashMap<Uuid, Property>, Error>
+where
+    E: sqlx::PgExecutor<'e>,
+{
     let rows = sqlx::query_as!(
         PropertyRow,
         r#"
@@ -414,7 +426,7 @@ async fn fetch_properties_by_ids(
         "#,
         ids,
     )
-    .fetch_all(pool)
+    .fetch_all(executor)
     .await?;
     Ok(rows
         .into_iter()
@@ -423,10 +435,13 @@ async fn fetch_properties_by_ids(
 }
 
 /// Batch-loads approved media by listing id into a lookup keyed by listing id.
-async fn fetch_media_by_listing_ids(
-    pool: &PgPool,
+async fn fetch_media_by_listing_ids<'e, E>(
+    executor: E,
     ids: &[Uuid],
-) -> Result<HashMap<Uuid, Vec<MediaRef>>, Error> {
+) -> Result<HashMap<Uuid, Vec<MediaRef>>, Error>
+where
+    E: sqlx::PgExecutor<'e>,
+{
     let rows = sqlx::query_as!(
         MediaRow,
         r#"
@@ -437,7 +452,7 @@ async fn fetch_media_by_listing_ids(
         "#,
         ids,
     )
-    .fetch_all(pool)
+    .fetch_all(executor)
     .await?;
     let mut grouped: HashMap<Uuid, Vec<MediaRef>> = HashMap::new();
     for row in rows {
@@ -447,4 +462,264 @@ async fn fetch_media_by_listing_ids(
             .push(MediaRef::from(row));
     }
     Ok(grouped)
+}
+
+/// Validated input for [`create_listing`]; `listed_by` is supplied by the
+/// handler from the authenticated landlord.
+#[derive(Debug)]
+pub struct NewListing {
+    /// Physical property this offer is against.
+    pub property_id: Uuid,
+    /// Title.
+    pub title: String,
+    /// Description.
+    pub description: String,
+    /// Amenities.
+    pub amenities: Vec<String>,
+    /// Utilities included.
+    pub utilities_included: Vec<String>,
+    /// Pet policy label.
+    pub pet_policy: Option<String>,
+    /// Available date.
+    pub available_date: Option<NaiveDate>,
+    /// Surrounding POIs (JSONB).
+    pub surrounding_area: Value,
+    /// Polymorphic terms (JSONB).
+    pub terms: Value,
+}
+
+/// Partial update for [`update_listing`]; `None` fields are left unchanged.
+#[derive(Debug)]
+pub struct ListingPatch {
+    /// Title.
+    pub title: Option<String>,
+    /// Description.
+    pub description: Option<String>,
+    /// Amenities.
+    pub amenities: Option<Vec<String>>,
+    /// Utilities included.
+    pub utilities_included: Option<Vec<String>>,
+    /// Pet policy label.
+    pub pet_policy: Option<String>,
+    /// Available date.
+    pub available_date: Option<NaiveDate>,
+    /// Surrounding POIs (JSONB).
+    pub surrounding_area: Option<Value>,
+    /// Polymorphic terms (JSONB).
+    pub terms: Option<Value>,
+}
+
+/// Creates a `draft` `rent_ltr` listing owned by `listed_by`.
+///
+/// # Errors
+///
+/// Returns [`Error`] on any database failure (e.g. a missing `property_id`
+/// surfaces as a foreign-key violation).
+#[inline]
+pub async fn create_listing(
+    pool: &PgPool,
+    listed_by: Uuid,
+    new: NewListing,
+) -> Result<ListingRow, Error> {
+    sqlx::query_as!(
+        ListingRow,
+        r#"
+            INSERT INTO listings (
+                property_id, listed_by, intent, state, title, description,
+                amenities, utilities_included, pet_policy, available_date,
+                surrounding_area, terms
+            )
+            VALUES ($1, $2, 'rent_ltr', 'draft', $3, $4, $5, $6, $7, $8, $9, $10)
+            RETURNING
+                id, property_id, listed_by, intent, state, days_on_market,
+                expires_at, title, description, amenities, utilities_included,
+                pet_policy, available_date,
+                surrounding_area AS "surrounding_area: Json<serde_json::Value>",
+                terms AS "terms: Json<serde_json::Value>",
+                views, identity_verified, authority_tier, fair_housing_cleared,
+                managed_by_pm,
+                created_at AS "created_at!",
+                updated_at AS "updated_at!"
+        "#,
+        new.property_id,
+        listed_by,
+        new.title,
+        new.description,
+        new.amenities.as_slice(),
+        new.utilities_included.as_slice(),
+        new.pet_policy,
+        new.available_date,
+        new.surrounding_area,
+        new.terms,
+    )
+    .fetch_one(pool)
+    .await
+}
+
+/// Outcome of an owner-scoped update: the fresh row, or why it was refused.
+#[derive(Debug)]
+pub enum ListingUpdate {
+    /// Updated; carries the fresh row (boxed - it dwarfs the unit variants).
+    Updated(Box<ListingRow>),
+    /// No live listing has that id.
+    NotFound,
+    /// The caller is not the lister.
+    Forbidden,
+}
+
+/// Applies a partial update to a listing owned by `owner_id`, atomically.
+///
+/// The owner check and the write run in one transaction: a `SELECT ... FOR
+/// UPDATE` locks the row, so it cannot be deleted or re-owned between the check
+/// and the `UPDATE ... RETURNING`. This closes the check-then-act (TOCTOU)
+/// window the previous owner-check-then-update split had.
+///
+/// # Errors
+///
+/// Returns [`Error`] on any database failure.
+#[inline]
+pub async fn update_listing(
+    pool: &PgPool,
+    listing_id: Uuid,
+    owner_id: Uuid,
+    patch: ListingPatch,
+) -> Result<ListingUpdate, Error> {
+    let mut tx = pool.begin().await?;
+
+    let current_owner = sqlx::query_scalar!(
+        r"
+            SELECT listed_by
+            FROM listings
+            WHERE id = $1 AND deleted_at IS NULL
+            FOR UPDATE
+        ",
+        listing_id,
+    )
+    .fetch_optional(tx.as_mut())
+    .await?;
+
+    let Some(current_owner) = current_owner else {
+        return Ok(ListingUpdate::NotFound);
+    };
+    if current_owner != owner_id {
+        return Ok(ListingUpdate::Forbidden);
+    }
+
+    let row = sqlx::query_as!(
+        ListingRow,
+        r#"
+            UPDATE listings
+            SET
+                title = COALESCE($2, title),
+                description = COALESCE($3, description),
+                amenities = COALESCE($4, amenities),
+                utilities_included = COALESCE($5, utilities_included),
+                pet_policy = COALESCE($6, pet_policy),
+                available_date = COALESCE($7, available_date),
+                surrounding_area = COALESCE($8, surrounding_area),
+                terms = COALESCE($9, terms)
+            WHERE id = $1
+            RETURNING
+                id, property_id, listed_by, intent, state, days_on_market,
+                expires_at, title, description, amenities, utilities_included,
+                pet_policy, available_date,
+                surrounding_area AS "surrounding_area: Json<serde_json::Value>",
+                terms AS "terms: Json<serde_json::Value>",
+                views, identity_verified, authority_tier, fair_housing_cleared,
+                managed_by_pm,
+                created_at AS "created_at!",
+                updated_at AS "updated_at!"
+        "#,
+        listing_id,
+        patch.title,
+        patch.description,
+        patch.amenities.as_deref(),
+        patch.utilities_included.as_deref(),
+        patch.pet_policy,
+        patch.available_date,
+        patch.surrounding_area,
+        patch.terms,
+    )
+    .fetch_one(tx.as_mut())
+    .await?;
+
+    tx.commit().await?;
+    Ok(ListingUpdate::Updated(Box::new(row)))
+}
+
+/// Lists a landlord's own listings (any state), newest first, with batch-loaded
+/// nested property and media plus the total count.
+///
+/// # Errors
+///
+/// Returns [`Error`] on any database failure.
+#[inline]
+pub async fn list_landlord_listings(
+    pool: &PgPool,
+    landlord_id: Uuid,
+    limit: i64,
+    offset: i64,
+) -> Result<(Vec<Listing>, i64), Error> {
+    // One REPEATABLE READ snapshot for count + page + batch loads.
+    let mut tx = pool.begin().await?;
+    sqlx::raw_sql("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
+        .execute(tx.as_mut())
+        .await?;
+
+    let total = sqlx::query_scalar!(
+        r#"
+            SELECT COUNT(*) AS "count!"
+            FROM listings
+            WHERE listed_by = $1 AND deleted_at IS NULL
+        "#,
+        landlord_id,
+    )
+    .fetch_one(tx.as_mut())
+    .await?;
+
+    let rows = sqlx::query_as!(
+        ListingRow,
+        r#"
+            SELECT
+                id, property_id, listed_by, intent, state, days_on_market,
+                expires_at, title, description, amenities, utilities_included,
+                pet_policy, available_date,
+                surrounding_area AS "surrounding_area: Json<serde_json::Value>",
+                terms AS "terms: Json<serde_json::Value>",
+                views, identity_verified, authority_tier, fair_housing_cleared,
+                managed_by_pm,
+                created_at AS "created_at!",
+                updated_at AS "updated_at!"
+            FROM listings
+            WHERE listed_by = $1 AND deleted_at IS NULL
+            ORDER BY created_at DESC
+            LIMIT $2 OFFSET $3
+        "#,
+        landlord_id,
+        limit,
+        offset,
+    )
+    .fetch_all(tx.as_mut())
+    .await?;
+
+    if rows.is_empty() {
+        tx.commit().await?;
+        return Ok((Vec::new(), total));
+    }
+
+    let property_ids = rows.iter().map(|row| row.property_id).collect::<Vec<_>>();
+    let listing_ids = rows.iter().map(|row| row.id).collect::<Vec<_>>();
+    let properties = fetch_properties_by_ids(tx.as_mut(), &property_ids).await?;
+    let mut media = fetch_media_by_listing_ids(tx.as_mut(), &listing_ids).await?;
+    tx.commit().await?;
+
+    let listings = rows
+        .into_iter()
+        .map(|row| {
+            let property = properties.get(&row.property_id).cloned();
+            let row_media = media.remove(&row.id).unwrap_or_default();
+            Listing::assemble(row, property, row_media)
+        })
+        .collect();
+    Ok((listings, total))
 }
