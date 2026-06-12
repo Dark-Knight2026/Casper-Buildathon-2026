@@ -81,6 +81,8 @@ use crate::{
             listings::models::UpdateListingRequest,
             listings::models::UpdateStateRequest,
             listings::models::ViewResponse,
+            listings::models::ListingStatistics,
+            listings::models::ListingHistoricalData,
             listings::models::RentLtrTerms,
             // Health models
             health::models::ConnectionStatus,

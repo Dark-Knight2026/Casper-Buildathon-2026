@@ -16,7 +16,9 @@ use uuid::Uuid;
 use crate::{
     common::{ApiError, ApiResult},
     services::{
-        listings::models::{Listing, ListingState, MediaRef},
+        listings::models::{
+            Listing, ListingHistoricalData, ListingState, ListingStatistics, MediaRef,
+        },
         properties::{db::PropertyRow, models::Property},
     },
 };
@@ -947,5 +949,99 @@ pub async fn record_view(
     Ok(Some(ViewTally {
         views: row.views.unwrap_or(0),
         counted: row.counted,
+    }))
+}
+
+/// Fetches a performance snapshot for a listing the caller owns, or `None` when
+/// no live listing with that id is owned by `owner_id`.
+///
+/// Lease metrics are scoped to the listing's `property_id` (leases keep their FK
+/// on the physical asset, ADR-007); `occupancy_rate` reuses the shared
+/// `calculate_occupancy_rate` over the lister's portfolio. The owner check is in
+/// the `WHERE`, so a foreign listing reads as absent rather than leaking its
+/// existence.
+///
+/// # Errors
+///
+/// Returns [`Error`] on any database failure.
+#[inline]
+pub async fn fetch_statistics(
+    pool: &PgPool,
+    listing_id: Uuid,
+    owner_id: Uuid,
+) -> Result<Option<ListingStatistics>, Error> {
+    let row = sqlx::query!(
+        r#"
+            SELECT
+                (
+                    SELECT COUNT(*) FROM listing_view_events v
+                    WHERE v.listing_id = l.id
+                ) AS "total_views!",
+                (
+                    SELECT COUNT(*) FROM leases le
+                    WHERE le.property_id = l.property_id
+                      AND le.status = 'active' AND le.deleted_at IS NULL
+                ) AS "active_leases!",
+                (
+                    SELECT COALESCE(SUM(le.monthly_rent), 0) FROM leases le
+                    WHERE le.property_id = l.property_id
+                      AND le.status = 'active' AND le.deleted_at IS NULL
+                )::float8 AS "monthly_revenue!",
+                calculate_occupancy_rate(l.listed_by)::float8 AS "occupancy_rate!"
+            FROM listings l
+            WHERE l.id = $1 AND l.listed_by = $2 AND l.deleted_at IS NULL
+        "#,
+        listing_id,
+        owner_id,
+    )
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(row.map(|r| ListingStatistics {
+        total_views: r.total_views,
+        // The applications domain is not wired into this surface yet.
+        total_applications: 0,
+        active_leases: r.active_leases,
+        monthly_revenue: r.monthly_revenue,
+        occupancy_rate: r.occupancy_rate,
+    }))
+}
+
+/// Fetches a historical-activity summary for a listing the caller owns, or
+/// `None` when no live listing with that id is owned by `owner_id`.
+///
+/// # Errors
+///
+/// Returns [`Error`] on any database failure.
+#[inline]
+pub async fn fetch_historical_data(
+    pool: &PgPool,
+    listing_id: Uuid,
+    owner_id: Uuid,
+) -> Result<Option<ListingHistoricalData>, Error> {
+    let row = sqlx::query!(
+        r#"
+            SELECT
+                (
+                    SELECT COUNT(*) FROM leases le
+                    WHERE le.property_id = l.property_id AND le.deleted_at IS NULL
+                ) AS "total_leases!",
+                (
+                    SELECT COUNT(*) FROM listing_view_events v
+                    WHERE v.listing_id = l.id
+                ) AS "total_views!"
+            FROM listings l
+            WHERE l.id = $1 AND l.listed_by = $2 AND l.deleted_at IS NULL
+        "#,
+        listing_id,
+        owner_id,
+    )
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(row.map(|r| ListingHistoricalData {
+        total_leases: r.total_leases,
+        total_views: r.total_views,
+        has_historical_data: r.total_leases > 0 || r.total_views > 0,
     }))
 }

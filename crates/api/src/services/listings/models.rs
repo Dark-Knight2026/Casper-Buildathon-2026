@@ -612,6 +612,38 @@ pub struct ViewResponse {
     pub counted: bool,
 }
 
+/// Listing performance snapshot (`GET /listings/{id}/statistics`).
+///
+/// Lease-derived metrics are scoped to the listing's physical `property`;
+/// `occupancyRate` is the lister's portfolio occupancy via the shared formula.
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ListingStatistics {
+    /// Unique-tenant views of this listing.
+    pub total_views: i64,
+    /// Rental applications received. The applications domain is not part of
+    /// this surface yet, so this is reported as `0`.
+    pub total_applications: i64,
+    /// Active leases on the listing's property.
+    pub active_leases: i64,
+    /// Monthly revenue from those active leases.
+    pub monthly_revenue: f64,
+    /// Lister portfolio occupancy rate (active-leased / total properties * 100).
+    pub occupancy_rate: f64,
+}
+
+/// Historical-activity summary (`GET /listings/{id}/historical-data`).
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ListingHistoricalData {
+    /// All leases ever recorded on the listing's property.
+    pub total_leases: i64,
+    /// All unique-tenant views of this listing.
+    pub total_views: i64,
+    /// Whether any historical activity exists at all.
+    pub has_historical_data: bool,
+}
+
 /// Trims a title, rejecting empty / over-long values.
 fn validate_title(raw: &str) -> ApiResult<String> {
     let trimmed = raw.trim();

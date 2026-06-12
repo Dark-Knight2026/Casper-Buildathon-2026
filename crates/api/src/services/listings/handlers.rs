@@ -16,8 +16,9 @@ use crate::{
         listings::{
             db::{self, ListingUpdate, StateTransition, WithdrawOutcome},
             models::{
-                CreateListingRequest, Listing, ListingSearchParams, ListingState, MediaRef,
-                UpdateListingRequest, UpdateStateRequest, ViewResponse,
+                CreateListingRequest, Listing, ListingHistoricalData, ListingSearchParams,
+                ListingState, ListingStatistics, MediaRef, UpdateListingRequest,
+                UpdateStateRequest, ViewResponse,
             },
         },
         properties::{db as properties_db, models::Property},
@@ -403,4 +404,82 @@ pub async fn record_listing_view(
         })),
         None => Err(ApiError::NotFound("listing not found".to_owned())),
     }
+}
+
+// `GET /api/v1/listings/{id}/statistics`
+//
+/// Performance snapshot for a listing the caller owns: views, applications,
+/// active leases, monthly revenue and portfolio occupancy.
+///
+/// # Errors
+///
+/// Returns `404` when the caller owns no live listing with that id, or a
+/// database error.
+#[utoipa::path(
+    get,
+    path = "/listings/{id}/statistics",
+    tag = "Listings",
+    params(
+        ("id" = Uuid, Path, description = "Listing id")
+    ),
+    responses(
+        (status = 200, description = "Listing statistics", body = ListingStatistics),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 403, description = "Landlord role required", body = ErrorResponse),
+        (status = 404, description = "Listing not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse),
+    ),
+    security(
+        ("cookie_auth" = [])
+    )
+)]
+#[inline]
+pub async fn get_listing_statistics(
+    State(state): State<Arc<AppState>>,
+    user: RoleUser<LandlordRole>,
+    Path(listing_id): Path<Uuid>,
+) -> ApiResult<Json<ListingStatistics>> {
+    db::fetch_statistics(&state.db, listing_id, user.0.sub)
+        .await?
+        .map(Json)
+        .ok_or_else(|| ApiError::NotFound("listing not found".to_owned()))
+}
+
+// `GET /api/v1/listings/{id}/historical-data`
+//
+/// Historical-activity summary for a listing the caller owns: lease and view
+/// counts plus whether any history exists.
+///
+/// # Errors
+///
+/// Returns `404` when the caller owns no live listing with that id, or a
+/// database error.
+#[utoipa::path(
+    get,
+    path = "/listings/{id}/historical-data",
+    tag = "Listings",
+    params(
+        ("id" = Uuid, Path, description = "Listing id")
+    ),
+    responses(
+        (status = 200, description = "Listing historical data", body = ListingHistoricalData),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 403, description = "Landlord role required", body = ErrorResponse),
+        (status = 404, description = "Listing not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse),
+    ),
+    security(
+        ("cookie_auth" = [])
+    )
+)]
+#[inline]
+pub async fn get_listing_historical_data(
+    State(state): State<Arc<AppState>>,
+    user: RoleUser<LandlordRole>,
+    Path(listing_id): Path<Uuid>,
+) -> ApiResult<Json<ListingHistoricalData>> {
+    db::fetch_historical_data(&state.db, listing_id, user.0.sub)
+        .await?
+        .map(Json)
+        .ok_or_else(|| ApiError::NotFound("listing not found".to_owned()))
 }
