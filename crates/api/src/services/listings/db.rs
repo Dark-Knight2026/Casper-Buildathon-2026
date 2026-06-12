@@ -468,6 +468,59 @@ where
     Ok(grouped)
 }
 
+/// Batch-loads live listings by id into a lookup keyed by listing id, each
+/// assembled with its nested property and approved media. Shared by the
+/// downstream domains (favorites, applications, viewings) that surface a nested
+/// listing; the caller imposes its own ordering from the returned map.
+///
+/// # Errors
+///
+/// Returns [`Error`] on any database failure.
+#[inline]
+pub async fn fetch_listings_by_ids(
+    pool: &PgPool,
+    ids: &[Uuid],
+) -> Result<HashMap<Uuid, Listing>, Error> {
+    if ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+
+    let rows = sqlx::query_as!(
+        ListingRow,
+        r#"
+            SELECT
+                id, property_id, listed_by, intent, state, days_on_market,
+                expires_at, title, description, amenities, utilities_included,
+                pet_policy, available_date,
+                surrounding_area AS "surrounding_area: Json<serde_json::Value>",
+                terms AS "terms: Json<serde_json::Value>",
+                views, identity_verified, authority_tier, fair_housing_cleared,
+                managed_by_pm,
+                created_at AS "created_at!",
+                updated_at AS "updated_at!"
+            FROM listings
+            WHERE id = ANY($1) AND deleted_at IS NULL
+        "#,
+        ids,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let property_ids = rows.iter().map(|row| row.property_id).collect::<Vec<_>>();
+    let listing_ids = rows.iter().map(|row| row.id).collect::<Vec<_>>();
+    let properties = fetch_properties_by_ids(pool, &property_ids).await?;
+    let mut media = fetch_media_by_listing_ids(pool, &listing_ids).await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| {
+            let property = properties.get(&row.property_id).cloned();
+            let row_media = media.remove(&row.id).unwrap_or_default();
+            (row.id, Listing::assemble(row, property, row_media))
+        })
+        .collect())
+}
+
 /// Validated input for [`create_listing`]; `listed_by` is supplied by the
 /// handler from the authenticated landlord.
 #[derive(Debug)]

@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT f.listing_id\n            FROM favorites f\n            JOIN listings l ON l.id = f.listing_id AND l.deleted_at IS NULL\n            WHERE f.user_id = $1\n            ORDER BY f.created_at DESC\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "listing_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "favorites",
+            "name": "listing_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "269b36145c7a83dbcb9d3d41e4d702fe798b9f8341045bed0fded5c575b01de6"
+}

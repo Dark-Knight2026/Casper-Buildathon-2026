@@ -18,6 +18,8 @@ use utoipa_axum::router::OpenApiRouter;
 pub mod analytics;
 /// Authentication feature module.
 pub mod auth;
+/// Favorites (tenant saved listings) feature module; tenant-gated.
+pub mod favorites;
 /// Health check feature module.
 pub mod health;
 /// Listing (time-bound offer) feature module; mixed public/role-gated auth.
@@ -148,5 +150,6 @@ pub fn marketplace_router() -> OpenApiRouter<Arc<AppState>> {
     OpenApiRouter::new()
         .merge(properties::routes::router())
         .merge(listings::routes::router())
+        .merge(favorites::routes::router())
         .route_layer(GovernorLayer::new(rate_limit))
 }
