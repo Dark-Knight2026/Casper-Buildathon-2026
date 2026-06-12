@@ -513,7 +513,8 @@ pub struct ListingPatch {
     pub terms: Option<Value>,
 }
 
-/// Creates a `draft` `rent_ltr` listing owned by `listed_by`.
+/// Creates a `draft` `rent_ltr` listing owned by `listed_by`, stamping the
+/// Fair Housing screen result the handler computed from the listing text.
 ///
 /// # Errors
 ///
@@ -524,6 +525,7 @@ pub async fn create_listing(
     pool: &PgPool,
     listed_by: Uuid,
     new: NewListing,
+    fair_housing_cleared: bool,
 ) -> Result<ListingRow, Error> {
     sqlx::query_as!(
         ListingRow,
@@ -531,9 +533,9 @@ pub async fn create_listing(
             INSERT INTO listings (
                 property_id, listed_by, intent, state, title, description,
                 amenities, utilities_included, pet_policy, available_date,
-                surrounding_area, terms
+                surrounding_area, terms, fair_housing_cleared
             )
-            VALUES ($1, $2, 'rent_ltr', 'draft', $3, $4, $5, $6, $7, $8, $9, $10)
+            VALUES ($1, $2, 'rent_ltr', 'draft', $3, $4, $5, $6, $7, $8, $9, $10, $11)
             RETURNING
                 id, property_id, listed_by, intent, state, days_on_market,
                 expires_at, title, description, amenities, utilities_included,
@@ -555,6 +557,7 @@ pub async fn create_listing(
         new.available_date,
         new.surrounding_area,
         new.terms,
+        fair_housing_cleared,
     )
     .fetch_one(pool)
     .await
@@ -1079,6 +1082,60 @@ pub async fn fetch_provenance(
             r.managed_by_pm,
         )
     }))
+}
+
+/// Fetches the screenable free-text (title, description) of a listing the
+/// caller owns, or `None` when no live listing with that id is owned by
+/// `owner_id`.
+///
+/// # Errors
+///
+/// Returns [`Error`] on any database failure.
+#[inline]
+pub async fn fetch_owned_listing_text(
+    pool: &PgPool,
+    listing_id: Uuid,
+    owner_id: Uuid,
+) -> Result<Option<(String, String)>, Error> {
+    let row = sqlx::query!(
+        r"
+            SELECT title, description
+            FROM listings
+            WHERE id = $1 AND listed_by = $2 AND deleted_at IS NULL
+        ",
+        listing_id,
+        owner_id,
+    )
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(row.map(|r| (r.title, r.description)))
+}
+
+/// Stamps the Fair Housing screen result on a listing. Caller-owned scoping is
+/// the caller's responsibility (the listing id is already authorized upstream).
+///
+/// # Errors
+///
+/// Returns [`Error`] on any database failure.
+#[inline]
+pub async fn set_fair_housing_cleared(
+    pool: &PgPool,
+    listing_id: Uuid,
+    cleared: bool,
+) -> Result<(), Error> {
+    sqlx::query!(
+        r"
+            UPDATE listings
+            SET fair_housing_cleared = $2
+            WHERE id = $1
+        ",
+        listing_id,
+        cleared,
+    )
+    .execute(pool)
+    .await?;
+    Ok(())
 }
 
 /// Returns the lister of a live listing, or `None` when no live listing has

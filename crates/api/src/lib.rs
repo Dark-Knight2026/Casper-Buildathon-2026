@@ -46,9 +46,10 @@ pub use common::{
 pub use openapi::ApiDoc;
 #[cfg(feature = "enabled")]
 pub use providers::{
-    EmailError, EmailMessage, EmailSender, FakeKycProvider, KycError, KycOutcome, KycProvider,
-    LoggingEmailSender, MediaStorage, PostmarkSender, S3MediaStorage, SharedKycProvider,
-    SharedMediaStorage, StubMediaStorage,
+    EmailError, EmailMessage, EmailSender, FairHousingError, FairHousingScreen, FakeKycProvider,
+    KycError, KycOutcome, KycProvider, LoggingEmailSender, MediaStorage, PostmarkSender,
+    S3MediaStorage, ScreenOutcome, SharedFairHousingScreen, SharedKycProvider, SharedMediaStorage,
+    StubFairHousingScreen, StubMediaStorage,
 };
 #[cfg(feature = "enabled")]
 pub use services::auth::AuthUser;

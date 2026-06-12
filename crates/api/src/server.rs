@@ -29,9 +29,9 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 use utoipa_swagger_ui::SwaggerUi;
 
 use crate::{
-    ApiDoc, AppState, EmailSender, FakeKycProvider, KycProvider, LoggingEmailSender,
-    PostmarkSender, RedisStore, S3MediaStorage, ServerConfig, ServerError, SharedMediaStorage,
-    StubMediaStorage, onchain, services, workers,
+    ApiDoc, AppState, EmailSender, FairHousingScreen, FakeKycProvider, KycProvider,
+    LoggingEmailSender, PostmarkSender, RedisStore, S3MediaStorage, ServerConfig, ServerError,
+    SharedMediaStorage, StubFairHousingScreen, StubMediaStorage, onchain, services, workers,
 };
 
 /// Creates the full application router combining public and protected routes.
@@ -117,6 +117,7 @@ pub fn create_app(state: Arc<AppState>) -> Result<Router, ServerError> {
 /// - Signal handlers cannot be installed
 /// - Server binding fails
 #[inline]
+#[allow(clippy::too_many_lines)]
 pub async fn main() -> Result<(), ServerError> {
     // Initialize logging
     tracing_subscriber::fmt::init();
@@ -210,6 +211,17 @@ pub async fn main() -> Result<(), ServerError> {
         Arc::new(FakeKycProvider::new())
     };
 
+    // The Fair Housing screen has no real backend yet, so listing free-text is
+    // screened by a stub technical blocklist. The official CO/GC ruleset will
+    // be selected here by config when delivered.
+    let fair_housing: Arc<dyn FairHousingScreen> = {
+        tracing::warn!(
+            event = "fair_housing_screen_stub",
+            "No real Fair Housing ruleset configured - using StubFairHousingScreen (coarse substring blocklist, not a compliance control). Production MUST wire the official CO/GC ruleset before the gate can be trusted."
+        );
+        Arc::new(StubFairHousingScreen::new())
+    };
+
     // 3. Build application state
     let state = Arc::new(AppState {
         db: pool,
@@ -217,6 +229,7 @@ pub async fn main() -> Result<(), ServerError> {
         mailer,
         media_storage,
         kyc,
+        fair_housing,
         config: config.clone(),
     });
 

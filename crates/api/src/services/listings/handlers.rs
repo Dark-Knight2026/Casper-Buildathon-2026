@@ -12,20 +12,38 @@ use uuid::Uuid;
 
 use crate::{
     common::{ApiError, ApiResult, AppState, ErrorResponse, PaginatedResponse, Pagination},
+    providers::ScreenOutcome,
     services::{
         auth::{LandlordRole, RoleUser, TenantRole},
         listings::{
             db::{self, AuthorityUpload, ListingUpdate, StateTransition, WithdrawOutcome},
             models::{
-                AuthorityDocumentResponse, AuthorityDocumentType, CreateListingRequest, Listing,
-                ListingHistoricalData, ListingProvenance, ListingSearchParams, ListingState,
-                ListingStatistics, MediaRef, UpdateListingRequest, UpdateStateRequest,
-                ViewResponse,
+                AuthorityDocumentResponse, AuthorityDocumentType, CreateListingRequest,
+                FairHousingScreenResponse, Listing, ListingHistoricalData, ListingProvenance,
+                ListingSearchParams, ListingState, ListingStatistics, MediaRef,
+                UpdateListingRequest, UpdateStateRequest, ViewResponse,
             },
         },
         properties::{db as properties_db, models::Property},
     },
 };
+
+/// Screens a listing's title + description through the bound Fair Housing
+/// screen, mapping a backend failure to a 500.
+async fn screen_listing_text(
+    state: &AppState,
+    title: &str,
+    description: &str,
+) -> ApiResult<ScreenOutcome> {
+    state
+        .fair_housing
+        .screen(&format!("{title}\n{description}"))
+        .await
+        .map_err(|err| {
+            tracing::error!(?err, "fair housing screen failed");
+            ApiError::Internal("fair housing screen failed".to_owned())
+        })
+}
 
 /// Maximum accepted authority-document payload size (10 MB). Legal documents
 /// (deed/title/management agreement) run larger than avatars, so this ceiling
@@ -217,7 +235,8 @@ pub async fn create_listing(
     let new_listing = payload.into_validated()?;
     // Referenced property must exist; RowNotFound maps to 404 via `?`.
     let property = properties_db::fetch_property(&state.db, new_listing.property_id).await?;
-    let row = db::create_listing(&state.db, user.0.sub, new_listing).await?;
+    let screen = screen_listing_text(&state, &new_listing.title, &new_listing.description).await?;
+    let row = db::create_listing(&state.db, user.0.sub, new_listing, screen.cleared).await?;
     let listing = Listing::assemble(row, Some(Property::from(property)), Vec::new());
     Ok((StatusCode::CREATED, Json(listing)))
 }
@@ -225,7 +244,8 @@ pub async fn create_listing(
 // `PUT /api/v1/listings/{id}`
 //
 /// Partial update of a listing the caller owns. Re-runs the Fair Housing text
-/// screen on changed text (gate wiring lands in a later commit).
+/// screen when the title or description changes, restamping
+/// `fairHousingCleared`.
 ///
 /// # Errors
 ///
@@ -259,7 +279,9 @@ pub async fn update_listing(
     Json(payload): Json<UpdateListingRequest>,
 ) -> ApiResult<Json<Listing>> {
     let patch = payload.into_patch()?;
-    let row = match db::update_listing(&state.db, listing_id, user.0.sub, patch).await? {
+    // Whether this update touched screenable free-text; drives the re-screen.
+    let text_changed = patch.title.is_some() || patch.description.is_some();
+    let mut row = match db::update_listing(&state.db, listing_id, user.0.sub, patch).await? {
         ListingUpdate::Updated(row) => *row,
         ListingUpdate::NotFound => {
             return Err(ApiError::NotFound("listing not found".to_owned()));
@@ -268,6 +290,12 @@ pub async fn update_listing(
             return Err(ApiError::Forbidden("not_listing_owner".to_owned()));
         }
     };
+    if text_changed {
+        let screen = screen_listing_text(&state, &row.title, &row.description).await?;
+        db::set_fair_housing_cleared(&state.db, row.id, screen.cleared).await?;
+        // Reflect the fresh verdict in the row we are about to return.
+        row.fair_housing_cleared = screen.cleared;
+    }
     Ok(Json(assemble_listing(&state, row).await?))
 }
 
@@ -744,4 +772,49 @@ pub async fn upload_authority_document(
         AuthorityUpload::NotFound => Err(ApiError::NotFound("listing not found".to_owned())),
         AuthorityUpload::Forbidden => Err(ApiError::Forbidden("not_listing_owner".to_owned())),
     }
+}
+
+// `POST /api/v1/listings/{id}/fair-housing/screen`
+//
+/// Runs the Fair Housing advertising screen on a listing the caller owns and
+/// restamps `fairHousingCleared`. Returns the verdict plus any flags for
+/// remediation.
+///
+/// # Errors
+///
+/// Returns `404` when the caller owns no live listing with that id, a screen
+/// backend failure, or a database error.
+#[utoipa::path(
+    post,
+    path = "/listings/{id}/fair-housing/screen",
+    tag = "Listings",
+    params(
+        ("id" = Uuid, Path, description = "Listing id")
+    ),
+    responses(
+        (status = 200, description = "Screen result", body = FairHousingScreenResponse),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 403, description = "Landlord role required", body = ErrorResponse),
+        (status = 404, description = "Listing not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse),
+    ),
+    security(
+        ("cookie_auth" = [])
+    )
+)]
+#[inline]
+pub async fn screen_listing(
+    State(state): State<Arc<AppState>>,
+    user: RoleUser<LandlordRole>,
+    Path(listing_id): Path<Uuid>,
+) -> ApiResult<Json<FairHousingScreenResponse>> {
+    let (title, description) = db::fetch_owned_listing_text(&state.db, listing_id, user.0.sub)
+        .await?
+        .ok_or_else(|| ApiError::NotFound("listing not found".to_owned()))?;
+    let outcome = screen_listing_text(&state, &title, &description).await?;
+    db::set_fair_housing_cleared(&state.db, listing_id, outcome.cleared).await?;
+    Ok(Json(FairHousingScreenResponse {
+        cleared: outcome.cleared,
+        flags: outcome.flags,
+    }))
 }

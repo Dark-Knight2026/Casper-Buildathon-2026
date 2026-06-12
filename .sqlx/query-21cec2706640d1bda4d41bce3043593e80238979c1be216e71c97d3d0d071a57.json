@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            INSERT INTO listings (\n                property_id, listed_by, intent, state, title, description,\n                amenities, utilities_included, pet_policy, available_date,\n                surrounding_area, terms\n            )\n            VALUES ($1, $2, 'rent_ltr', 'draft', $3, $4, $5, $6, $7, $8, $9, $10)\n            RETURNING\n                id, property_id, listed_by, intent, state, days_on_market,\n                expires_at, title, description, amenities, utilities_included,\n                pet_policy, available_date,\n                surrounding_area AS \"surrounding_area: Json<serde_json::Value>\",\n                terms AS \"terms: Json<serde_json::Value>\",\n                views, identity_verified, authority_tier, fair_housing_cleared,\n                managed_by_pm,\n                created_at AS \"created_at!\",\n                updated_at AS \"updated_at!\"\n        ",
+  "query": "\n            INSERT INTO listings (\n                property_id, listed_by, intent, state, title, description,\n                amenities, utilities_included, pet_policy, available_date,\n                surrounding_area, terms, fair_housing_cleared\n            )\n            VALUES ($1, $2, 'rent_ltr', 'draft', $3, $4, $5, $6, $7, $8, $9, $10, $11)\n            RETURNING\n                id, property_id, listed_by, intent, state, days_on_market,\n                expires_at, title, description, amenities, utilities_included,\n                pet_policy, available_date,\n                surrounding_area AS \"surrounding_area: Json<serde_json::Value>\",\n                terms AS \"terms: Json<serde_json::Value>\",\n                views, identity_verified, authority_tier, fair_housing_cleared,\n                managed_by_pm,\n                created_at AS \"created_at!\",\n                updated_at AS \"updated_at!\"\n        ",
   "describe": {
     "columns": [
       {
@@ -257,7 +257,8 @@
         "Text",
         "Date",
         "Jsonb",
-        "Jsonb"
+        "Jsonb",
+        "Bool"
       ]
     },
     "nullable": [
@@ -285,5 +286,5 @@
       true
     ]
   },
-  "hash": "bdec07fae3719d9d2f5046b6e2be0f8553ec39856103f8d744b6ab6add4b907d"
+  "hash": "21cec2706640d1bda4d41bce3043593e80238979c1be216e71c97d3d0d071a57"
 }

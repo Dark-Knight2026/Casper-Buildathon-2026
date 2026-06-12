@@ -691,6 +691,18 @@ pub struct AuthorityDocumentResponse {
     pub provenance: ListingProvenance,
 }
 
+/// Result of a Fair Housing advertising screen
+/// (`POST /listings/{id}/fair-housing/screen`).
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct FairHousingScreenResponse {
+    /// Whether the listing's current text cleared the screen.
+    pub cleared: bool,
+    /// Reasons the text was flagged, for landlord remediation. Empty when
+    /// `cleared`.
+    pub flags: Vec<String>,
+}
+
 /// Trims a title, rejecting empty / over-long values.
 fn validate_title(raw: &str) -> ApiResult<String> {
     let trimmed = raw.trim();

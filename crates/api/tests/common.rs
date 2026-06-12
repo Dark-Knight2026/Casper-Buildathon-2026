@@ -44,7 +44,7 @@ use api::{
     },
     providers::{
         EmailError, EmailMessage, EmailSender, FakeKycProvider, SharedMediaStorage,
-        StubMediaStorage,
+        StubFairHousingScreen, StubMediaStorage,
     },
     server,
 };
@@ -231,6 +231,7 @@ pub async fn setup_test_server_with(
         mailer,
         media_storage,
         kyc: Arc::new(FakeKycProvider::new()),
+        fair_housing: Arc::new(StubFairHousingScreen::new()),
         config,
     });
 
