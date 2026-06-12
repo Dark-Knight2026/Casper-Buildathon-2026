@@ -5,6 +5,7 @@
  */
 
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/hooks/useAuth';
 import {
   Home,
   FileText,
@@ -13,7 +14,14 @@ import {
   Calendar,
   Download,
   CreditCard,
-  Bell
+  Bell,
+  MapPin,
+  Check,
+  Clock,
+  AlertTriangle,
+  Loader2,
+  RotateCcw,
+  ArrowRight
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -78,13 +86,36 @@ const MOCK_PAYMENTS: Payment[] = [
   { id: 'p3', amount: 1500, paymentDate: new Date('2025-10-01'), paymentMethod: 'credit_card',   paymentStatus: 'completed', leaseId: 'mock-lease-1' } as Payment,
 ];
 
+// Lease-lifecycle activity. Unlike payments, this captures on-chain milestones
+// (lease signed, deposit funded) per the design reference §1 "Recent activity".
+// TODO: replace with GET /leases/:id/activity (or indexer feed) when ready.
+type ActivityItem = {
+  id: string;
+  label: string;
+  date: Date;
+  amount?: number;
+  note?: string;
+};
+
+const MOCK_ACTIVITY: ActivityItem[] = [
+  { id: 'a1', label: 'Rent paid', date: new Date('2025-12-01'), amount: 1500, note: 'finalized' },
+  { id: 'a2', label: 'Lease signed', date: new Date('2025-10-01') },
+  { id: 'a3', label: 'Deposit funded', date: new Date('2025-09-30'), amount: 3000, note: 'refundable' },
+];
+
 export function TenantDashboard() {
   // TODO: replace with API calls when backend is ready
   const currentLease = MOCK_LEASE;
   const recentPayments = MOCK_PAYMENTS;
+  const recentActivity = MOCK_ACTIVITY;
 
   const navigate = useNavigate();
+  const { profile } = useAuth();
   const { score: tenantScore } = useTenantScore();
+
+  // Name is mandatory at registration, so firstName is normally present;
+  // fall back to a neutral greeting only if the profile hasn't loaded yet.
+  const greetingName = profile?.firstName?.trim();
 
   const formatCurrency = (amount: number): string => {
     return new Intl.NumberFormat('en-US', {
@@ -101,18 +132,23 @@ export function TenantDashboard() {
     }).format(new Date(date));
   };
 
+  // WCAG 2.1 AA color-independence: every status carries an icon, not color
+  // alone. Mirrors the design reference (§1) status-pill rule.
   const getPaymentStatusBadge = (status: string) => {
-    const statusColors: Record<string, string> = {
-      completed: 'bg-green-100 text-green-800',
-      pending: 'bg-yellow-100 text-yellow-800',
-      processing: 'bg-blue-100 text-blue-800',
-      failed: 'bg-red-100 text-red-800',
-      refunded: 'bg-gray-100 text-gray-800',
-      cancelled: 'bg-gray-100 text-gray-800'
+    const statusStyles: Record<string, { className: string; icon: typeof Check }> = {
+      completed: { className: 'bg-green-100 text-green-800', icon: Check },
+      pending: { className: 'bg-yellow-100 text-yellow-800', icon: Clock },
+      processing: { className: 'bg-blue-100 text-blue-800', icon: Loader2 },
+      failed: { className: 'bg-red-100 text-red-800', icon: AlertTriangle },
+      refunded: { className: 'bg-gray-100 text-gray-800', icon: RotateCcw },
+      cancelled: { className: 'bg-gray-100 text-gray-800', icon: AlertTriangle }
     };
 
+    const { className, icon: Icon } = statusStyles[status] || statusStyles.pending;
+
     return (
-      <Badge className={statusColors[status] || statusColors.pending}>
+      <Badge className={`gap-1 ${className}`}>
+        <Icon className="h-3 w-3" aria-hidden="true" />
         {status.toUpperCase()}
       </Badge>
     );
@@ -122,11 +158,27 @@ export function TenantDashboard() {
   const showExpirationWarning = daysUntilExpiration <= 60;
   const [firstCurrentProperty] = getMyCurrentProperties(CURRENT_TENANT_ID);
 
+  // Next rent due date = next occurrence of the lease's payment-due day.
+  // Computed FE-side; no backend call needed (design plan §1, task 5).
+  const getNextRentDueDate = (dueDay: number): Date => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    let due = new Date(today.getFullYear(), today.getMonth(), dueDay);
+    if (due < today) {
+      due = new Date(today.getFullYear(), today.getMonth() + 1, dueDay);
+    }
+    return due;
+  };
+  const rentDueInDays = daysUntil(getNextRentDueDate(currentLease.paymentDueDay));
+  const isLeaseActive = currentLease.status === 'active';
+
   return (
     <ErrorBoundary>
       <div className="container mx-auto px-4 py-8">
         <div className="mb-6">
-          <h1 className="text-3xl font-bold mb-2">Welcome Back!</h1>
+          <h1 className="text-3xl font-bold mb-2">
+            {greetingName ? `Welcome back, ${greetingName}` : 'Welcome back'}
+          </h1>
           <p className="text-gray-600">Here's an overview of your rental information</p>
         </div>
 
@@ -181,6 +233,62 @@ export function TenantDashboard() {
           </div>
         )}
 
+        {/* Active-lease hero — single primary action (design plan §1; tasks 2/3/5/7).
+            Empty state replaces the card entirely when there is no active lease,
+            rather than rendering a card with a disabled CTA. */}
+        {isLeaseActive ? (
+          <Card className="mb-8">
+            <CardContent className="p-6">
+              <div className="flex items-start justify-between gap-4">
+                <div className="space-y-1">
+                  <p className="text-xs uppercase tracking-wide text-gray-400">Active lease</p>
+                  <p className="flex items-center gap-2 text-base font-semibold">
+                    <MapPin className="h-4 w-4 text-gray-400" aria-hidden="true" />
+                    {currentLease.propertyAddress}
+                  </p>
+                </div>
+                <Badge className="gap-1 bg-green-100 text-green-800">
+                  <Check className="h-3 w-3" aria-hidden="true" />
+                  Active
+                </Badge>
+              </div>
+
+              <div className="mt-6">
+                <p className="text-sm text-gray-600">
+                  {rentDueInDays > 0
+                    ? `Next rent due in ${rentDueInDays} days`
+                    : rentDueInDays === 0
+                      ? 'Rent due today'
+                      : `Rent overdue by ${Math.abs(rentDueInDays)} days`}
+                </p>
+                <p className="mt-1 text-4xl font-bold tracking-tight">
+                  {formatCurrency(currentLease.monthlyRent)}
+                </p>
+              </div>
+
+              <Button
+                className="mt-6"
+                onClick={() => navigate('/tenant/payments')}
+                aria-label="Pay rent"
+              >
+                Pay rent
+                <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" />
+              </Button>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card className="mb-8">
+            <CardContent className="p-6">
+              <EmptyState
+                icon={Home}
+                title="No active lease"
+                description="You don't have an active lease yet. Browse available properties to find your next home."
+                action={{ label: 'Browse properties', onClick: () => navigate('/tenant/property-search') }}
+              />
+            </CardContent>
+          </Card>
+        )}
+
         {/* Quick Stats */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <Card>
@@ -217,7 +325,7 @@ export function TenantDashboard() {
             <CardContent>
               <div className="text-2xl font-bold">{formatCurrency(currentLease.securityDeposit)}</div>
               <p className="text-xs text-gray-500 mt-1">
-                Held by landlord
+                Refundable at lease end
               </p>
             </CardContent>
           </Card>
@@ -294,15 +402,6 @@ export function TenantDashboard() {
               <Button
                 variant="outline"
                 className="w-full justify-start"
-                onClick={() => navigate('/tenant/payments')}
-                aria-label="Make a payment"
-              >
-                <DollarSign className="mr-2 h-4 w-4" aria-hidden="true" />
-                Make Payment
-              </Button>
-              <Button
-                variant="outline"
-                className="w-full justify-start"
                 onClick={() => navigate('/tenant/maintenance')}
                 aria-label="Request maintenance"
               >
@@ -330,6 +429,35 @@ export function TenantDashboard() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Recent Activity — lease-lifecycle milestones (design ref §1).
+            Captures on-chain events (lease signed, deposit funded) that the
+            payments list alone doesn't surface. */}
+        <Card className="mb-8">
+          <CardHeader>
+            <CardTitle>Recent Activity</CardTitle>
+            <CardDescription>Lease milestones and on-chain events</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="divide-y">
+              {recentActivity.map((item) => (
+                <div key={item.id} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
+                  <Check className="h-4 w-4 shrink-0 text-green-600" aria-hidden="true" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium">{item.label}</p>
+                    <p className="text-xs text-gray-500">
+                      {formatDate(item.date)}
+                      {item.note ? ` • ${item.note}` : ''}
+                    </p>
+                  </div>
+                  {item.amount !== undefined && (
+                    <p className="text-sm text-gray-700">{formatCurrency(item.amount)}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Recent Payments */}
         <Card>
@@ -365,7 +493,7 @@ export function TenantDashboard() {
                 {recentPayments.map((payment) => (
                   <div
                     key={payment.id}
-                    className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 transition-colors focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2"
+                    className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-0 p-4 border rounded-lg hover:bg-gray-50 transition-colors focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2"
                     tabIndex={0}
                     role="article"
                     aria-label={`Payment of ${formatCurrency(payment.amount)} on ${formatDate(payment.paymentDate)}`}
@@ -381,7 +509,7 @@ export function TenantDashboard() {
                         </p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 pl-14 sm:pl-0">
                       {getPaymentStatusBadge(payment.paymentStatus)}
                       {payment.paymentStatus === 'completed' && (
                         <Button
