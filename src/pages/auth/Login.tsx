@@ -11,6 +11,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useAuth } from '@/hooks/useAuth';
 import { loginWithPassword } from '@/services/backendAuthService';
 import { getDashboardRoute } from '@/types/user';
+import { storePasswordCredential } from '@/lib/passwordCredential';
 
 import { authErrorMessage, popPostAuthRedirect, validateEmailFormat } from './authValidation';
 
@@ -48,6 +49,14 @@ export default function Login() {
 
     try {
       const { user } = await loginWithPassword(email.trim().toLowerCase(), password);
+      // Persist the pair to the browser credential store before redirecting —
+      // our fetch+redirect flow otherwise misses the native "Save password?"
+      // prompt. Fire-and-forget; no-ops on non-Chromium browsers.
+      void storePasswordCredential({
+        id: user.email ?? email.trim().toLowerCase(),
+        password,
+        name: `${user.first_name} ${user.last_name}`.trim(),
+      });
       // setSession populates `profile`; the effect above performs the redirect.
       setSession(user);
     } catch (err) {
@@ -87,6 +96,7 @@ export default function Login() {
             <Input
               label="Email"
               type="email"
+              name="email"
               autoComplete="email"
               required
               value={email}
@@ -97,6 +107,7 @@ export default function Login() {
             <div className="space-y-1">
               <PasswordInput
                 label="Password"
+                name="password"
                 autoComplete="current-password"
                 required
                 value={password}

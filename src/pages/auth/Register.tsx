@@ -11,6 +11,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useAuth } from '@/hooks/useAuth';
 import { register } from '@/services/backendAuthService';
 import { getDashboardRoute } from '@/types/user';
+import { storePasswordCredential } from '@/lib/passwordCredential';
 
 import { RoleSelector } from './register/RoleSelector';
 import {
@@ -90,6 +91,13 @@ export default function Register() {
         last_name: lastName.trim(),
         role,
       });
+      // Save the new credentials to the browser store before the auto-login
+      // redirect unmounts the form. Fire-and-forget; no-ops off Chromium.
+      void storePasswordCredential({
+        id: user.email ?? email.trim().toLowerCase(),
+        password,
+        name: `${firstName.trim()} ${lastName.trim()}`.trim(),
+      });
       // register auto-logs in; setSession populates `profile` → effect redirects.
       setSession(user);
     } catch (err) {
@@ -130,6 +138,7 @@ export default function Register() {
             <div className="grid grid-cols-2 gap-3">
               <Input
                 label="First name"
+                name="firstName"
                 autoComplete="given-name"
                 required
                 value={firstName}
@@ -139,6 +148,7 @@ export default function Register() {
               />
               <Input
                 label="Last name"
+                name="lastName"
                 autoComplete="family-name"
                 required
                 value={lastName}
@@ -151,6 +161,7 @@ export default function Register() {
             <Input
               label="Email"
               type="email"
+              name="email"
               autoComplete="email"
               required
               value={email}
@@ -161,6 +172,7 @@ export default function Register() {
 
             <PasswordInput
               label="Password"
+              name="password"
               autoComplete="new-password"
               required
               value={password}
