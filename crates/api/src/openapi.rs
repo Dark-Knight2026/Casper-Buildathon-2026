@@ -83,6 +83,8 @@ use crate::{
             listings::models::ViewResponse,
             listings::models::ListingStatistics,
             listings::models::ListingHistoricalData,
+            listings::models::AuthorityDocumentType,
+            listings::models::AuthorityDocumentResponse,
             listings::models::RentLtrTerms,
             // Health models
             health::models::ConnectionStatus,

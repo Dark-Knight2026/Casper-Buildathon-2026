@@ -1,10 +1,11 @@
 //! HTTP request handlers for listing endpoints (public read surface).
 
+use core::str::FromStr;
 use std::sync::Arc;
 
 use axum::{
     Json,
-    extract::{Path, Query, State},
+    extract::{Multipart, Path, Query, State, multipart::MultipartError},
     http::StatusCode,
 };
 use uuid::Uuid;
@@ -14,16 +15,83 @@ use crate::{
     services::{
         auth::{LandlordRole, RoleUser, TenantRole},
         listings::{
-            db::{self, ListingUpdate, StateTransition, WithdrawOutcome},
+            db::{self, AuthorityUpload, ListingUpdate, StateTransition, WithdrawOutcome},
             models::{
-                CreateListingRequest, Listing, ListingHistoricalData, ListingSearchParams,
-                ListingState, ListingStatistics, MediaRef, UpdateListingRequest,
-                UpdateStateRequest, ViewResponse,
+                AuthorityDocumentResponse, AuthorityDocumentType, CreateListingRequest, Listing,
+                ListingHistoricalData, ListingProvenance, ListingSearchParams, ListingState,
+                ListingStatistics, MediaRef, UpdateListingRequest, UpdateStateRequest,
+                ViewResponse,
             },
         },
         properties::{db as properties_db, models::Property},
     },
 };
+
+/// Maximum accepted authority-document payload size (10 MB). Legal documents
+/// (deed/title/management agreement) run larger than avatars, so this ceiling
+/// is double the avatar limit.
+const MAX_DOCUMENT_BYTES: usize = 10 * 1024 * 1024;
+
+/// Multipart field carrying the document bytes.
+const DOCUMENT_FILE_FIELD: &str = "file";
+/// Multipart field carrying the document type.
+const DOCUMENT_TYPE_FIELD: &str = "documentType";
+
+/// Detected authority-document format: canonical MIME plus storage extension.
+#[derive(Debug, Clone, Copy)]
+struct DocumentKind {
+    /// Canonical IANA MIME type.
+    mime: &'static str,
+    /// Storage-key extension (no leading dot).
+    ext: &'static str,
+}
+
+impl DocumentKind {
+    const PDF: Self = Self {
+        mime: "application/pdf",
+        ext: "pdf",
+    };
+    const PNG: Self = Self {
+        mime: "image/png",
+        ext: "png",
+    };
+    const JPEG: Self = Self {
+        mime: "image/jpeg",
+        ext: "jpg",
+    };
+}
+
+/// Sniffs the leading bytes and returns the detected document kind, or `None`
+/// for anything off the whitelist (PDF / PNG / JPEG). Blocks MIME-spoofing the
+/// same way the avatar sniff does: a header alone is never trusted.
+fn sniff_document_kind(payload: &[u8]) -> Option<DocumentKind> {
+    const PDF_MAGIC: [u8; 4] = [0x25, 0x50, 0x44, 0x46]; // %PDF
+    const PNG_MAGIC: [u8; 8] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+    const JPEG_MAGIC: [u8; 3] = [0xFF, 0xD8, 0xFF];
+
+    if payload.len() >= PDF_MAGIC.len() && payload[..PDF_MAGIC.len()] == PDF_MAGIC {
+        return Some(DocumentKind::PDF);
+    }
+    if payload.len() >= PNG_MAGIC.len() && payload[..PNG_MAGIC.len()] == PNG_MAGIC {
+        return Some(DocumentKind::PNG);
+    }
+    if payload.len() >= JPEG_MAGIC.len() && payload[..JPEG_MAGIC.len()] == JPEG_MAGIC {
+        return Some(DocumentKind::JPEG);
+    }
+    None
+}
+
+/// Maps a multipart error into an API error preserving the size-vs-shape
+/// distinction (413 for an oversize field, 400 for a parse failure).
+fn document_multipart_err(err: &MultipartError) -> ApiError {
+    if err.status() == StatusCode::PAYLOAD_TOO_LARGE {
+        ApiError::PayloadTooLarge(format!(
+            "Document payload exceeds {MAX_DOCUMENT_BYTES}-byte limit"
+        ))
+    } else {
+        ApiError::BadRequest(format!("Failed to read upload: {err}"))
+    }
+}
 
 /// Re-reads a listing's nested property and approved media and assembles the
 /// public wire shape. Shared by every handler that returns a single listing.
@@ -482,4 +550,198 @@ pub async fn get_listing_historical_data(
         .await?
         .map(Json)
         .ok_or_else(|| ApiError::NotFound("listing not found".to_owned()))
+}
+
+// `GET /api/v1/listings/{id}/provenance`
+//
+/// Current authority-gate status for a listing the caller owns: identity,
+/// authority tier + label, PM attribution, Fair Housing, and the derived
+/// "verified lister" badge.
+///
+/// # Errors
+///
+/// Returns `404` when the caller owns no live listing with that id, or a
+/// database error.
+#[utoipa::path(
+    get,
+    path = "/listings/{id}/provenance",
+    tag = "Listings",
+    params(
+        ("id" = Uuid, Path, description = "Listing id")
+    ),
+    responses(
+        (status = 200, description = "Listing provenance", body = ListingProvenance),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 403, description = "Landlord role required", body = ErrorResponse),
+        (status = 404, description = "Listing not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse),
+    ),
+    security(
+        ("cookie_auth" = [])
+    )
+)]
+#[inline]
+pub async fn get_provenance(
+    State(state): State<Arc<AppState>>,
+    user: RoleUser<LandlordRole>,
+    Path(listing_id): Path<Uuid>,
+) -> ApiResult<Json<ListingProvenance>> {
+    db::fetch_provenance(&state.db, listing_id, user.0.sub)
+        .await?
+        .map(Json)
+        .ok_or_else(|| ApiError::NotFound("listing not found".to_owned()))
+}
+
+// `POST /api/v1/listings/{id}/authority/documents`
+//
+/// Uploads a proof-of-authority document (deed/title/management agreement) for
+/// a listing the caller owns, lifting its authority tier from `T0` to `T1`. A
+/// management agreement also marks the listing as PM-managed.
+///
+/// The multipart body carries a `file` field (PDF/PNG/JPEG, max 10 MB) and a
+/// `documentType` field. The caller is authorized before the file is stored, so
+/// a non-owner cannot leave an orphan blob.
+///
+/// # Errors
+///
+/// Returns `400` on a missing/invalid field, `403` when the caller is not the
+/// lister, `404` when the listing does not exist, `413` when the payload is too
+/// large, `415` on an unsupported media type, or a storage/database error.
+#[utoipa::path(
+    post,
+    path = "/listings/{id}/authority/documents",
+    tag = "Listings",
+    params(
+        ("id" = Uuid, Path, description = "Listing id")
+    ),
+    request_body(
+        content = Vec<u8>,
+        content_type = "multipart/form-data",
+        description = "Multipart form: a `file` field (PDF/PNG/JPEG, max 10 MB) and a `documentType` field (deed/title/management_agreement)",
+    ),
+    responses(
+        (status = 201, description = "Document stored, tier updated", body = AuthorityDocumentResponse),
+        (status = 400, description = "Missing or malformed field", body = ErrorResponse),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 403, description = "Not the lister", body = ErrorResponse),
+        (status = 404, description = "Listing not found", body = ErrorResponse),
+        (status = 413, description = "Payload too large", body = ErrorResponse),
+        (status = 415, description = "Unsupported media type", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse),
+    ),
+    security(
+        ("cookie_auth" = [])
+    )
+)]
+#[inline]
+pub async fn upload_authority_document(
+    State(state): State<Arc<AppState>>,
+    user: RoleUser<LandlordRole>,
+    Path(listing_id): Path<Uuid>,
+    mut multipart: Multipart,
+) -> ApiResult<(StatusCode, Json<AuthorityDocumentResponse>)> {
+    let mut file = None;
+    let mut document_type = None;
+    while let Some(field) = multipart
+        .next_field()
+        .await
+        .map_err(|err| document_multipart_err(&err))?
+    {
+        match field.name() {
+            Some(DOCUMENT_FILE_FIELD) => {
+                let declared_mime = field.content_type().map(str::to_ascii_lowercase);
+                let bytes = field
+                    .bytes()
+                    .await
+                    .map_err(|err| document_multipart_err(&err))?
+                    .to_vec();
+                file = Some((declared_mime, bytes));
+            }
+            Some(DOCUMENT_TYPE_FIELD) => {
+                let raw = field
+                    .text()
+                    .await
+                    .map_err(|err| document_multipart_err(&err))?;
+                let parsed = AuthorityDocumentType::from_str(raw.trim()).map_err(|_| {
+                    ApiError::BadRequest(
+                        "documentType must be one of: deed, title, management_agreement".to_owned(),
+                    )
+                })?;
+                document_type = Some(parsed);
+            }
+            _ => {}
+        }
+    }
+
+    let (declared_mime, bytes) =
+        file.ok_or_else(|| ApiError::BadRequest("Missing `file` field".to_owned()))?;
+    let document_type = document_type
+        .ok_or_else(|| ApiError::BadRequest("Missing `documentType` field".to_owned()))?;
+
+    if bytes.len() > MAX_DOCUMENT_BYTES {
+        return Err(ApiError::PayloadTooLarge(format!(
+            "Document payload exceeds {MAX_DOCUMENT_BYTES}-byte limit"
+        )));
+    }
+
+    let detected = sniff_document_kind(&bytes).ok_or_else(|| {
+        ApiError::UnsupportedMediaType(
+            "File bytes do not match a supported document format (PDF/PNG/JPEG)".to_owned(),
+        )
+    })?;
+
+    // When the client sent a Content-Type, it must agree with the sniffed
+    // bytes - blocks claiming `application/pdf` while sending something else.
+    if let Some(declared) = &declared_mime {
+        let base = declared.split(';').next().unwrap_or("").trim();
+        if base != detected.mime {
+            return Err(ApiError::UnsupportedMediaType(format!(
+                "declared content-type {declared} does not match the file bytes"
+            )));
+        }
+    }
+
+    // Authorize before storing so a non-owner cannot leave an orphan blob. The
+    // db write re-checks ownership under a row lock to close the TOCTOU window.
+    match db::listing_owner(&state.db, listing_id).await? {
+        None => return Err(ApiError::NotFound("listing not found".to_owned())),
+        Some(owner) if owner != user.0.sub => {
+            return Err(ApiError::Forbidden("not_listing_owner".to_owned()));
+        }
+        Some(_) => {}
+    }
+
+    let key = format!(
+        "listings/{listing_id}/authority/{}.{}",
+        Uuid::new_v4(),
+        detected.ext
+    );
+    let url = state
+        .media_storage
+        .put(&key, &bytes, detected.mime)
+        .await
+        .map_err(|err| {
+            tracing::error!(?err, "authority document storage failed");
+            ApiError::Internal("failed to store document".to_owned())
+        })?;
+
+    match db::add_authority_document(&state.db, listing_id, user.0.sub, document_type, &url).await?
+    {
+        AuthorityUpload::Added {
+            id,
+            created_at,
+            provenance,
+        } => Ok((
+            StatusCode::CREATED,
+            Json(AuthorityDocumentResponse {
+                id,
+                document_type,
+                url,
+                uploaded_at: created_at,
+                provenance,
+            }),
+        )),
+        AuthorityUpload::NotFound => Err(ApiError::NotFound("listing not found".to_owned())),
+        AuthorityUpload::Forbidden => Err(ApiError::Forbidden("not_listing_owner".to_owned())),
+    }
 }

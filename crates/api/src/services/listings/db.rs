@@ -17,7 +17,8 @@ use crate::{
     common::{ApiError, ApiResult},
     services::{
         listings::models::{
-            Listing, ListingHistoricalData, ListingState, ListingStatistics, MediaRef,
+            AuthorityDocumentType, Listing, ListingHistoricalData, ListingProvenance, ListingState,
+            ListingStatistics, MediaRef,
         },
         properties::{db::PropertyRow, models::Property},
     },
@@ -1044,4 +1045,166 @@ pub async fn fetch_historical_data(
         total_views: r.total_views,
         has_historical_data: r.total_leases > 0 || r.total_views > 0,
     }))
+}
+
+/// Fetches the derived provenance for a listing the caller owns, or `None` when
+/// no live listing with that id is owned by `owner_id`.
+///
+/// # Errors
+///
+/// Returns [`Error`] on any database failure.
+#[inline]
+pub async fn fetch_provenance(
+    pool: &PgPool,
+    listing_id: Uuid,
+    owner_id: Uuid,
+) -> Result<Option<ListingProvenance>, Error> {
+    let row = sqlx::query!(
+        r"
+            SELECT identity_verified, authority_tier, fair_housing_cleared, managed_by_pm
+            FROM listings
+            WHERE id = $1 AND listed_by = $2 AND deleted_at IS NULL
+        ",
+        listing_id,
+        owner_id,
+    )
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(row.map(|r| {
+        ListingProvenance::from_parts(
+            r.identity_verified,
+            &r.authority_tier,
+            r.fair_housing_cleared,
+            r.managed_by_pm,
+        )
+    }))
+}
+
+/// Returns the lister of a live listing, or `None` when no live listing has
+/// that id. Used to authorize a multipart upload before touching storage, so a
+/// non-owner cannot leave an orphan blob behind a `403`.
+///
+/// # Errors
+///
+/// Returns [`Error`] on any database failure.
+#[inline]
+pub async fn listing_owner(pool: &PgPool, listing_id: Uuid) -> Result<Option<Uuid>, Error> {
+    sqlx::query_scalar!(
+        r"
+            SELECT listed_by
+            FROM listings
+            WHERE id = $1 AND deleted_at IS NULL
+        ",
+        listing_id,
+    )
+    .fetch_optional(pool)
+    .await
+}
+
+/// Outcome of an owner-scoped authority-document upload.
+#[derive(Debug)]
+pub enum AuthorityUpload {
+    /// Stored; carries the new document id, its timestamp and the post-upload
+    /// provenance (authority tier may have risen to `T1`).
+    Added {
+        /// New document id.
+        id: Uuid,
+        /// Upload timestamp.
+        created_at: DateTime<Utc>,
+        /// Gate status after the upload.
+        provenance: ListingProvenance,
+    },
+    /// No live listing has that id.
+    NotFound,
+    /// The caller is not the lister.
+    Forbidden,
+}
+
+/// Records a proof-of-authority document for a listing the caller owns and
+/// lifts its authority tier, atomically.
+///
+/// A `SELECT ... FOR UPDATE` locks the listing so the owner check, the document
+/// insert and the tier bump share one snapshot. The bump is monotonic: `T0`
+/// rises to `T1`, while an already-higher tier is left untouched. A management
+/// agreement also sets `managed_by_pm` (never clears it).
+///
+/// # Errors
+///
+/// Returns [`Error`] on any database failure.
+#[inline]
+pub async fn add_authority_document(
+    pool: &PgPool,
+    listing_id: Uuid,
+    owner_id: Uuid,
+    document_type: AuthorityDocumentType,
+    url: &str,
+) -> Result<AuthorityUpload, Error> {
+    let delegates_pm = document_type.delegates_pm_authority();
+    let mut tx = pool.begin().await?;
+
+    let current_owner = sqlx::query_scalar!(
+        r"
+            SELECT listed_by
+            FROM listings
+            WHERE id = $1 AND deleted_at IS NULL
+            FOR UPDATE
+        ",
+        listing_id,
+    )
+    .fetch_optional(tx.as_mut())
+    .await?;
+
+    let Some(current_owner) = current_owner else {
+        return Ok(AuthorityUpload::NotFound);
+    };
+    if current_owner != owner_id {
+        return Ok(AuthorityUpload::Forbidden);
+    }
+
+    let document = sqlx::query!(
+        r#"
+            INSERT INTO listing_authority_documents (
+                listing_id, document_type, url, uploaded_by
+            )
+            VALUES ($1, $2, $3, $4)
+            RETURNING id, created_at AS "created_at!"
+        "#,
+        listing_id,
+        document_type.to_string(),
+        url,
+        owner_id,
+    )
+    .fetch_one(tx.as_mut())
+    .await?;
+
+    let gate = sqlx::query!(
+        r"
+            UPDATE listings
+            SET
+                authority_tier = CASE WHEN authority_tier = 'T0' THEN 'T1'
+                                      ELSE authority_tier END,
+                managed_by_pm = managed_by_pm OR $2
+            WHERE id = $1
+            RETURNING identity_verified, authority_tier, fair_housing_cleared,
+                      managed_by_pm
+        ",
+        listing_id,
+        delegates_pm,
+    )
+    .fetch_one(tx.as_mut())
+    .await?;
+
+    tx.commit().await?;
+
+    Ok(AuthorityUpload::Added {
+        id: document.id,
+        created_at: document.created_at,
+        provenance: ListingProvenance::from_parts(
+            gate.identity_verified,
+            &gate.authority_tier,
+            gate.fair_housing_cleared,
+            gate.managed_by_pm,
+        ),
+    })
 }

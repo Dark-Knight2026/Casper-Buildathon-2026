@@ -175,7 +175,9 @@ pub struct ListingProvenance {
 
 impl ListingProvenance {
     /// Derives the provenance view (label + badge) from the gate columns.
-    fn from_parts(
+    #[inline]
+    #[must_use]
+    pub fn from_parts(
         identity_verified: bool,
         authority_tier: &str,
         fair_housing_cleared: bool,
@@ -642,6 +644,51 @@ pub struct ListingHistoricalData {
     pub total_views: i64,
     /// Whether any historical activity exists at all.
     pub has_historical_data: bool,
+}
+
+/// Type of proof-of-authority document. Stored as TEXT (CHECK) in the DB;
+/// parsed into this enum at the model boundary.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema, EnumString, Display,
+)]
+#[serde(rename_all = "snake_case")]
+#[strum(serialize_all = "snake_case")]
+pub enum AuthorityDocumentType {
+    /// Property deed - proof of ownership.
+    Deed,
+    /// Title document - proof of ownership.
+    Title,
+    /// Management agreement - delegated property-manager authority.
+    ManagementAgreement,
+}
+
+impl AuthorityDocumentType {
+    /// Whether this document delegates property-manager authority (sets
+    /// `managed_by_pm`). Deed/title prove ownership; only a management
+    /// agreement attributes conduct to a PM (ADR-006).
+    #[inline]
+    #[must_use]
+    pub fn delegates_pm_authority(self) -> bool {
+        matches!(self, Self::ManagementAgreement)
+    }
+}
+
+/// Result of uploading a proof-of-authority document
+/// (`POST /listings/{id}/authority/documents`).
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AuthorityDocumentResponse {
+    /// Stored document id.
+    #[schema(value_type = Uuid)]
+    pub id: Uuid,
+    /// Document type.
+    pub document_type: AuthorityDocumentType,
+    /// CDN-fronted URL of the stored document.
+    pub url: String,
+    /// Upload timestamp.
+    pub uploaded_at: DateTime<Utc>,
+    /// Gate status after this upload (authority tier may have risen to `T1`).
+    pub provenance: ListingProvenance,
 }
 
 /// Trims a title, rejecting empty / over-long values.
