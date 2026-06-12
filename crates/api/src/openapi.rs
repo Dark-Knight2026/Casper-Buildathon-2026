@@ -79,6 +79,7 @@ use crate::{
             listings::models::AuthorityTier,
             listings::models::CreateListingRequest,
             listings::models::UpdateListingRequest,
+            listings::models::UpdateStateRequest,
             listings::models::RentLtrTerms,
             // Health models
             health::models::ConnectionStatus,

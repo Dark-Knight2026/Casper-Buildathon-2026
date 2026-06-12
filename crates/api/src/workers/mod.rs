@@ -20,8 +20,14 @@ use tokio::{sync::broadcast::Sender, task::JoinHandle};
 use crate::EmailSender;
 
 pub mod email_retry;
+pub mod listing_expiry;
 
 /// Spawns every background worker on its own tokio task.
+///
+/// The listing auto-expiry worker always runs (it has no external dependency).
+/// The email retry worker is spawned only when the bound mailer can enqueue
+/// retries (`uses_retry_queue`) - under a stub mailer no send ever fails, so its
+/// queue would never receive a row to drain.
 ///
 /// Each worker receives a fresh `broadcast::Receiver<()>` via
 /// `shutdown_tx.subscribe()`, so a single
@@ -34,9 +40,16 @@ pub fn spawn_all(
     mailer: Arc<dyn EmailSender>,
     shutdown_tx: &Sender<()>,
 ) -> Vec<JoinHandle<()>> {
-    vec![tokio::spawn(email_retry::run(
-        pool,
-        mailer,
+    let mut handles = vec![tokio::spawn(listing_expiry::run(
+        pool.clone(),
         shutdown_tx.subscribe(),
-    ))]
+    ))];
+    if mailer.uses_retry_queue() {
+        handles.push(tokio::spawn(email_retry::run(
+            pool,
+            mailer,
+            shutdown_tx.subscribe(),
+        )));
+    }
+    handles
 }

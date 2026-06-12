@@ -5,9 +5,10 @@
 //! runtime `QueryBuilder` because its filter set is dynamic. Nested property
 //! and media are batch-loaded by id to avoid N+1.
 
+use core::str::FromStr;
 use std::collections::HashMap;
 
-use chrono::{DateTime, NaiveDate, Utc};
+use chrono::{DateTime, Duration, NaiveDate, Utc};
 use serde_json::Value;
 use sqlx::{Error, FromRow, PgPool, Postgres, QueryBuilder, types::Json};
 use uuid::Uuid;
@@ -15,7 +16,7 @@ use uuid::Uuid;
 use crate::{
     common::{ApiError, ApiResult},
     services::{
-        listings::models::{Listing, MediaRef},
+        listings::models::{Listing, ListingState, MediaRef},
         properties::{db::PropertyRow, models::Property},
     },
 };
@@ -722,4 +723,163 @@ pub async fn list_landlord_listings(
         })
         .collect();
     Ok((listings, total))
+}
+
+/// Outcome of an owner-scoped lifecycle transition.
+#[derive(Debug)]
+pub enum StateTransition {
+    /// Transitioned; carries the fresh row (boxed - it dwarfs the unit
+    /// variants).
+    Updated(Box<ListingRow>),
+    /// No live listing has that id.
+    NotFound,
+    /// The caller is not the lister.
+    Forbidden,
+    /// The requested transition is not legal from the current state.
+    Illegal {
+        /// Current state.
+        from: ListingState,
+        /// Requested target state.
+        to: ListingState,
+    },
+}
+
+/// Drives a listing through a lifecycle transition, owner-scoped and atomic.
+///
+/// A `SELECT ... FOR UPDATE` locks the row so the current-state read, owner
+/// check and write share one snapshot - the row cannot be re-owned, deleted or
+/// transitioned by anyone else in between. On `-> active` a fresh expiry window
+/// is stamped; the authority gate that guards activation is wired in a later
+/// commit.
+///
+/// # Errors
+///
+/// Returns [`Error`] on any database failure.
+#[inline]
+pub async fn transition_state(
+    pool: &PgPool,
+    listing_id: Uuid,
+    owner_id: Uuid,
+    target: ListingState,
+) -> Result<StateTransition, Error> {
+    let mut tx = pool.begin().await?;
+
+    let current = sqlx::query!(
+        r"
+            SELECT listed_by, state
+            FROM listings
+            WHERE id = $1 AND deleted_at IS NULL
+            FOR UPDATE
+        ",
+        listing_id,
+    )
+    .fetch_optional(tx.as_mut())
+    .await?;
+
+    let Some(current) = current else {
+        return Ok(StateTransition::NotFound);
+    };
+    if current.listed_by != owner_id {
+        return Ok(StateTransition::Forbidden);
+    }
+    let from = ListingState::from_str(&current.state).unwrap_or(ListingState::Draft);
+    if !from.can_transition_to(target) {
+        return Ok(StateTransition::Illegal { from, to: target });
+    }
+
+    // Stamp a fresh expiry window only when publishing; every other transition
+    // passes NULL, and COALESCE keeps the stored `expires_at` untouched.
+    let new_expires_at = (target == ListingState::Active).then(|| Utc::now() + Duration::days(90)); // 90-day LTR window
+
+    let row = sqlx::query_as!(
+        ListingRow,
+        r#"
+            UPDATE listings
+            SET
+                state = $2,
+                expires_at = COALESCE($3, expires_at)
+            WHERE id = $1
+            RETURNING
+                id, property_id, listed_by, intent, state, days_on_market,
+                expires_at, title, description, amenities, utilities_included,
+                pet_policy, available_date,
+                surrounding_area AS "surrounding_area: Json<serde_json::Value>",
+                terms AS "terms: Json<serde_json::Value>",
+                views, identity_verified, authority_tier, fair_housing_cleared,
+                managed_by_pm,
+                created_at AS "created_at!",
+                updated_at AS "updated_at!"
+        "#,
+        listing_id,
+        target.to_string(),
+        new_expires_at,
+    )
+    .fetch_one(tx.as_mut())
+    .await?;
+
+    tx.commit().await?;
+    Ok(StateTransition::Updated(Box::new(row)))
+}
+
+/// Outcome of a soft withdraw.
+#[derive(Debug)]
+pub enum WithdrawOutcome {
+    /// Soft-withdrawn (`state = 'withdrawn'`, `deleted_at` stamped).
+    Withdrawn,
+    /// No live listing has that id.
+    NotFound,
+    /// The caller is not the lister.
+    Forbidden,
+}
+
+/// Soft-withdraws a listing the caller owns: sets `state = 'withdrawn'` and
+/// stamps `deleted_at`, under the same `FOR UPDATE` lock as a state transition.
+///
+/// Always a soft delete. A hard delete is withheld until historical-data
+/// tracking can confirm no downstream rows (leases, applications, views)
+/// reference the listing.
+///
+/// # Errors
+///
+/// Returns [`Error`] on any database failure.
+#[inline]
+pub async fn withdraw_listing(
+    pool: &PgPool,
+    listing_id: Uuid,
+    owner_id: Uuid,
+) -> Result<WithdrawOutcome, Error> {
+    let mut tx = pool.begin().await?;
+
+    let current_owner = sqlx::query_scalar!(
+        r"
+            SELECT listed_by
+            FROM listings
+            WHERE id = $1 AND deleted_at IS NULL
+            FOR UPDATE
+        ",
+        listing_id,
+    )
+    .fetch_optional(tx.as_mut())
+    .await?;
+
+    let Some(current_owner) = current_owner else {
+        return Ok(WithdrawOutcome::NotFound);
+    };
+    if current_owner != owner_id {
+        return Ok(WithdrawOutcome::Forbidden);
+    }
+
+    sqlx::query!(
+        r"
+            UPDATE listings
+            SET state = 'withdrawn', deleted_at = now()
+            WHERE id = $1
+        ",
+        listing_id,
+    )
+    .execute(tx.as_mut())
+    .await?;
+
+    tx.commit().await?;
+    Ok(WithdrawOutcome::Withdrawn)
 }

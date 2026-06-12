@@ -14,15 +14,42 @@ use crate::{
     services::{
         auth::{LandlordRole, RoleUser},
         listings::{
-            db::{self, ListingUpdate},
+            db::{self, ListingUpdate, StateTransition, WithdrawOutcome},
             models::{
-                CreateListingRequest, Listing, ListingSearchParams, MediaRef,
-                UpdateListingRequest,
+                CreateListingRequest, Listing, ListingSearchParams, ListingState, MediaRef,
+                UpdateListingRequest, UpdateStateRequest,
             },
         },
         properties::{db as properties_db, models::Property},
     },
 };
+
+/// Re-reads a listing's nested property and approved media and assembles the
+/// public wire shape. Shared by every handler that returns a single listing.
+async fn assemble_listing(state: &AppState, row: db::ListingRow) -> ApiResult<Listing> {
+    let property = properties_db::fetch_property(&state.db, row.property_id)
+        .await
+        .ok()
+        .map(Property::from);
+    let media = db::fetch_listing_media(&state.db, row.id)
+        .await?
+        .into_iter()
+        .map(MediaRef::from)
+        .collect();
+    Ok(Listing::assemble(row, property, media))
+}
+
+/// Maps a [`StateTransition`] outcome to its row or the matching API error.
+fn transition_or_error(outcome: StateTransition) -> ApiResult<db::ListingRow> {
+    match outcome {
+        StateTransition::Updated(row) => Ok(*row),
+        StateTransition::NotFound => Err(ApiError::NotFound("listing not found".to_owned())),
+        StateTransition::Forbidden => Err(ApiError::Forbidden("not_listing_owner".to_owned())),
+        StateTransition::Illegal { from, to } => Err(ApiError::Conflict(format!(
+            "cannot transition listing from {from} to {to}"
+        ))),
+    }
+}
 
 // `GET /api/v1/listings`
 //
@@ -84,16 +111,7 @@ pub async fn get_listing(
     Path(listing_id): Path<Uuid>,
 ) -> ApiResult<Json<Listing>> {
     let row = db::fetch_listing(&state.db, listing_id).await?;
-    let property = properties_db::fetch_property(&state.db, row.property_id)
-        .await
-        .ok()
-        .map(Property::from);
-    let media = db::fetch_listing_media(&state.db, listing_id)
-        .await?
-        .into_iter()
-        .map(MediaRef::from)
-        .collect();
-    Ok(Json(Listing::assemble(row, property, media)))
+    Ok(Json(assemble_listing(&state, row).await?))
 }
 
 // `POST /api/v1/listings`
@@ -181,16 +199,7 @@ pub async fn update_listing(
             return Err(ApiError::Forbidden("not_listing_owner".to_owned()));
         }
     };
-    let property = properties_db::fetch_property(&state.db, row.property_id)
-        .await
-        .ok()
-        .map(Property::from);
-    let media = db::fetch_listing_media(&state.db, listing_id)
-        .await?
-        .into_iter()
-        .map(MediaRef::from)
-        .collect();
-    Ok(Json(Listing::assemble(row, property, media)))
+    Ok(Json(assemble_listing(&state, row).await?))
 }
 
 // `GET /api/v1/landlord/listings`
@@ -221,8 +230,135 @@ pub async fn get_landlord_listings(
     user: RoleUser<LandlordRole>,
     Query(pagination): Query<Pagination>,
 ) -> ApiResult<Json<PaginatedResponse<Listing>>> {
-    let (listings, total) =
-        db::list_landlord_listings(&state.db, user.0.sub, pagination.page_size(), pagination.offset())
-            .await?;
+    let (listings, total) = db::list_landlord_listings(
+        &state.db,
+        user.0.sub,
+        pagination.page_size(),
+        pagination.offset(),
+    )
+    .await?;
     Ok(Json(PaginatedResponse::new(listings, total, &pagination)))
+}
+
+// `POST /api/v1/listings/{id}/submit`
+//
+/// Submits a `draft` for review (`draft -> pending`). `pending` is the
+/// pre-publish holding state; activation (`-> active`) runs the authority gate
+/// in a later commit.
+///
+/// # Errors
+///
+/// Returns `403` when the caller is not the lister, `404` when the listing does
+/// not exist, `409` when it is not in `draft`, or a database error.
+#[utoipa::path(
+    post,
+    path = "/listings/{id}/submit",
+    tag = "Listings",
+    params(
+        ("id" = Uuid, Path, description = "Listing id")
+    ),
+    responses(
+        (status = 200, description = "Submitted listing", body = Listing),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 403, description = "Not the lister", body = ErrorResponse),
+        (status = 404, description = "Listing not found", body = ErrorResponse),
+        (status = 409, description = "Listing is not in a submittable state", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse),
+    ),
+    security(
+        ("cookie_auth" = [])
+    )
+)]
+#[inline]
+pub async fn submit_listing(
+    State(state): State<Arc<AppState>>,
+    user: RoleUser<LandlordRole>,
+    Path(listing_id): Path<Uuid>,
+) -> ApiResult<Json<Listing>> {
+    let outcome =
+        db::transition_state(&state.db, listing_id, user.0.sub, ListingState::Pending).await?;
+    let row = transition_or_error(outcome)?;
+    Ok(Json(assemble_listing(&state, row).await?))
+}
+
+// `PUT /api/v1/listings/{id}/state`
+//
+/// Drives a listing the caller owns through a forward lifecycle transition.
+/// Legal transitions only; `-> active` will be authority-gate-guarded in a
+/// later commit. `withdrawn`/`expired` are not settable here.
+///
+/// # Errors
+///
+/// Returns `403` when the caller is not the lister, `404` when the listing does
+/// not exist, `409` on an illegal transition, or a database error.
+#[utoipa::path(
+    put,
+    path = "/listings/{id}/state",
+    tag = "Listings",
+    request_body = UpdateStateRequest,
+    params(
+        ("id" = Uuid, Path, description = "Listing id")
+    ),
+    responses(
+        (status = 200, description = "Transitioned listing", body = Listing),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 403, description = "Not the lister", body = ErrorResponse),
+        (status = 404, description = "Listing not found", body = ErrorResponse),
+        (status = 409, description = "Illegal lifecycle transition", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse),
+    ),
+    security(
+        ("cookie_auth" = [])
+    )
+)]
+#[inline]
+pub async fn set_listing_state(
+    State(state): State<Arc<AppState>>,
+    user: RoleUser<LandlordRole>,
+    Path(listing_id): Path<Uuid>,
+    Json(payload): Json<UpdateStateRequest>,
+) -> ApiResult<Json<Listing>> {
+    let outcome = db::transition_state(&state.db, listing_id, user.0.sub, payload.state).await?;
+    let row = transition_or_error(outcome)?;
+    Ok(Json(assemble_listing(&state, row).await?))
+}
+
+// `DELETE /api/v1/listings/{id}`
+//
+/// Soft-withdraws a listing the caller owns (`state = 'withdrawn'`,
+/// `deleted_at` stamped). Always a soft delete to preserve historical data.
+///
+/// # Errors
+///
+/// Returns `403` when the caller is not the lister, `404` when the listing does
+/// not exist, or a database error.
+#[utoipa::path(
+    delete,
+    path = "/listings/{id}",
+    tag = "Listings",
+    params(
+        ("id" = Uuid, Path, description = "Listing id")
+    ),
+    responses(
+        (status = 204, description = "Listing withdrawn"),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 403, description = "Not the lister", body = ErrorResponse),
+        (status = 404, description = "Listing not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse),
+    ),
+    security(
+        ("cookie_auth" = [])
+    )
+)]
+#[inline]
+pub async fn delete_listing(
+    State(state): State<Arc<AppState>>,
+    user: RoleUser<LandlordRole>,
+    Path(listing_id): Path<Uuid>,
+) -> ApiResult<StatusCode> {
+    match db::withdraw_listing(&state.db, listing_id, user.0.sub).await? {
+        WithdrawOutcome::Withdrawn => Ok(StatusCode::NO_CONTENT),
+        WithdrawOutcome::NotFound => Err(ApiError::NotFound("listing not found".to_owned())),
+        WithdrawOutcome::Forbidden => Err(ApiError::Forbidden("not_listing_owner".to_owned())),
+    }
 }

@@ -110,6 +110,26 @@ pub enum ListingState {
     Expired,
 }
 
+impl ListingState {
+    /// Whether an owner may drive this listing from `self` to `target`.
+    ///
+    /// Forward lifecycle only. `withdrawn` is reached via `DELETE` (soft
+    /// withdraw) and `expired` via the auto-expiry worker, so neither is
+    /// settable through the state endpoint. `pending` is the post-submit,
+    /// pre-publish holding state where the authority gate runs before
+    /// `-> active`.
+    #[inline]
+    #[must_use]
+    pub fn can_transition_to(self, target: Self) -> bool {
+        matches!(
+            (self, target),
+            (Self::Draft, Self::Pending)
+                | (Self::Pending, Self::Active | Self::Draft)
+                | (Self::Active, Self::Leased | Self::Sold | Self::Draft)
+        )
+    }
+}
+
 /// Authority-to-list tier. Stored as TEXT (`T0`/`T1`/`T2`) in the DB; serde
 /// keeps the uppercase wire form rather than `snake_case`.
 #[derive(
@@ -516,7 +536,9 @@ impl CreateListingRequest {
             utilities_included: clean_list(self.utilities_included.unwrap_or_default()),
             pet_policy: clean_optional(self.pet_policy),
             available_date: self.available_date,
-            surrounding_area: self.surrounding_area.unwrap_or_else(|| Value::Array(Vec::new())),
+            surrounding_area: self
+                .surrounding_area
+                .unwrap_or_else(|| Value::Array(Vec::new())),
             terms,
         })
     }
@@ -556,7 +578,11 @@ impl UpdateListingRequest {
     pub fn into_patch(self) -> ApiResult<ListingPatch> {
         Ok(ListingPatch {
             title: self.title.as_deref().map(validate_title).transpose()?,
-            description: self.description.as_deref().map(validate_description).transpose()?,
+            description: self
+                .description
+                .as_deref()
+                .map(validate_description)
+                .transpose()?,
             amenities: self.amenities.map(clean_list),
             utilities_included: self.utilities_included.map(clean_list),
             pet_policy: self.pet_policy.map(|policy| policy.trim().to_owned()),
@@ -565,6 +591,15 @@ impl UpdateListingRequest {
             terms: self.terms.map(RentLtrTerms::into_value).transpose()?,
         })
     }
+}
+
+/// Target-state payload for `PUT /listings/{id}/state`.
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateStateRequest {
+    /// Desired lifecycle state. Only forward transitions are accepted;
+    /// `withdrawn`/`expired` are driven by `DELETE` and the expiry worker.
+    pub state: ListingState,
 }
 
 /// Trims a title, rejecting empty / over-long values.

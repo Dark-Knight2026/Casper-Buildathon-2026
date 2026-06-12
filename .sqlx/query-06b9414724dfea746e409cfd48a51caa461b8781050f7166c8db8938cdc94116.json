@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE listings\n            SET days_on_market = GREATEST(days_on_market, (now()::date - created_at::date))\n            WHERE state IN ('active', 'pending')\n              AND deleted_at IS NULL\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "06b9414724dfea746e409cfd48a51caa461b8781050f7166c8db8938cdc94116"
+}

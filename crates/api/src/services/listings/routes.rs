@@ -19,5 +19,8 @@ pub fn router() -> OpenApiRouter<Arc<AppState>> {
         .routes(routes!(handlers::create_listing))
         .routes(routes!(handlers::get_listing))
         .routes(routes!(handlers::update_listing))
+        .routes(routes!(handlers::delete_listing))
+        .routes(routes!(handlers::submit_listing))
+        .routes(routes!(handlers::set_listing_state))
         .routes(routes!(handlers::get_landlord_listings))
 }
