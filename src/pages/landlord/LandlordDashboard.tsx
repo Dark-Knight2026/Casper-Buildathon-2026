@@ -3,8 +3,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Building2, Users, FileText, DollarSign, Wrench, TrendingUp, AlertCircle } from 'lucide-react';
+import { Building2, Users, FileText, DollarSign, Wrench, TrendingUp, AlertCircle, Check, Clock, AlertTriangle, Scale, Loader2, MoreVertical, Download } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { exportService } from '@/services/exportService';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { DashboardSkeleton } from '@/components/ui/loading-skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorBoundary } from '@/components/ui/error-boundary';
@@ -12,10 +14,76 @@ import { SecurityRecoveryCard } from '@/components/auth/SecurityRecoveryCard';
 import {
   MOCK_LANDLORD_DASHBOARD_STATS,
   MOCK_LANDLORD_RECENT_ACTIVITIES,
+  MOCK_LANDLORD_PORTFOLIO,
   MOCK_LANDLORD_LOAD_MS,
   type LandlordDashboardStats,
   type LandlordRecentActivity,
+  type LandlordPortfolioRow,
 } from '@/data/landlordMockData';
+
+// Status pill styling — color AND icon (WCAG color-independence). The pill is a
+// link affordance per design §2.4. "late" stays red (genuine escalation); the
+// amber-not-red rule applies to the Outstanding metric, not to late rows.
+const PORTFOLIO_STATUS_STYLES: Record<
+  LandlordPortfolioRow['status'],
+  { className: string; icon: typeof Check }
+> = {
+  paid: { className: 'bg-green-100 text-green-800', icon: Check },
+  due: { className: 'bg-yellow-100 text-yellow-800', icon: Clock },
+  late: { className: 'bg-red-100 text-red-800', icon: AlertTriangle },
+  dispute: { className: 'bg-blue-100 text-blue-800', icon: Scale },
+  confirming: { className: 'bg-orange-100 text-orange-800', icon: Loader2 },
+};
+
+function PortfolioStatusPill({ row }: { row: LandlordPortfolioRow }) {
+  const { className, icon: Icon } = PORTFOLIO_STATUS_STYLES[row.status];
+  return (
+    <Link to={row.statusHref} className="inline-flex" aria-label={`${row.property}: ${row.statusLabel}`}>
+      <Badge className={`gap-1 ${className}`}>
+        <Icon className="h-3 w-3" aria-hidden="true" />
+        {row.statusLabel}
+      </Badge>
+    </Link>
+  );
+}
+
+// Recent-activity status pills: icon + color, and a link to the relevant view
+// (design §2.4). "overdue" stays red as a specific escalated item, mirroring the
+// portfolio "late" row.
+const ACTIVITY_STATUS_STYLES: Record<string, { className: string; icon: typeof Check }> = {
+  paid: { className: 'bg-green-100 text-green-800', icon: Check },
+  completed: { className: 'bg-green-100 text-green-800', icon: Check },
+  pending: { className: 'bg-yellow-100 text-yellow-800', icon: Clock },
+  partial: { className: 'bg-amber-100 text-amber-800', icon: Clock },
+  overdue: { className: 'bg-red-100 text-red-800', icon: AlertTriangle },
+};
+
+const ACTIVITY_TYPE_HREF: Record<LandlordRecentActivity['type'], string> = {
+  payment: '/landlord/payments',
+  maintenance: '/landlord/maintenance',
+  lease: '/landlord/leases',
+};
+
+function ActivityStatusPill({ activity }: { activity: LandlordRecentActivity }) {
+  const style = ACTIVITY_STATUS_STYLES[activity.status];
+  const Icon = style?.icon;
+  return (
+    <Link
+      to={ACTIVITY_TYPE_HREF[activity.type]}
+      className="inline-flex shrink-0"
+      aria-label={`${activity.title} — ${activity.status}`}
+    >
+      {style ? (
+        <Badge className={`gap-1 capitalize ${style.className}`}>
+          {Icon && <Icon className="h-3 w-3" aria-hidden="true" />}
+          {activity.status}
+        </Badge>
+      ) : (
+        <Badge variant="outline" className="capitalize">{activity.status}</Badge>
+      )}
+    </Link>
+  );
+}
 
 export default function LandlordDashboard() {
   const [stats, setStats] = useState<LandlordDashboardStats>({
@@ -29,6 +97,7 @@ export default function LandlordDashboard() {
     expiringLeases: 0,
   });
   const [recentActivities, setRecentActivities] = useState<LandlordRecentActivity[]>([]);
+  const [portfolio, setPortfolio] = useState<LandlordPortfolioRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -43,6 +112,7 @@ export default function LandlordDashboard() {
     const timer = setTimeout(() => {
       setStats(MOCK_LANDLORD_DASHBOARD_STATS);
       setRecentActivities(MOCK_LANDLORD_RECENT_ACTIVITIES);
+      setPortfolio(MOCK_LANDLORD_PORTFOLIO);
       setLoading(false);
     }, MOCK_LANDLORD_LOAD_MS);
     return () => clearTimeout(timer);
@@ -52,6 +122,20 @@ export default function LandlordDashboard() {
     const cleanup = loadDashboardData();
     return cleanup;
   }, [loadDashboardData]);
+
+  // Export the portfolio table to CSV (design §2 header affordance). Mapped to
+  // plain records so the CSV has readable headers, and because an `interface`
+  // (unlike a `type`) has no implicit index signature and isn't assignable to
+  // the exporter's `Record<string, unknown>` parameter.
+  const handleExportPortfolio = () => {
+    const rows = portfolio.map((r) => ({
+      Property: r.property,
+      Tenant: r.tenant,
+      Rent: r.rent,
+      Status: r.statusLabel,
+    }));
+    exportService.exportToCSV(rows, 'portfolio.csv');
+  };
 
   if (loading) {
     return <DashboardSkeleton />;
@@ -86,11 +170,20 @@ export default function LandlordDashboard() {
             <p className="text-muted-foreground">Overview of your properties and tenants</p>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row">
-            <Button asChild className="w-full sm:w-auto">
-              <Link to="/landlord/properties/create">Add Property</Link>
+            <Button
+              variant="outline"
+              className="w-full sm:w-auto"
+              onClick={handleExportPortfolio}
+              disabled={portfolio.length === 0}
+            >
+              <Download className="mr-2 h-4 w-4" aria-hidden="true" />
+              Export
             </Button>
             <Button asChild variant="outline" className="w-full sm:w-auto">
               <Link to="/landlord/leases/create">Create Lease</Link>
+            </Button>
+            <Button asChild className="w-full sm:w-auto">
+              <Link to="/landlord/properties/create">Add Property</Link>
             </Button>
           </div>
         </div>
@@ -100,15 +193,18 @@ export default function LandlordDashboard() {
         {/* Alert Cards */}
         {(stats.overduePayments > 0 || stats.expiringLeases > 0 || stats.pendingMaintenance > 0) && (
           <div className="grid gap-4 md:grid-cols-3">
+            {/* Outstanding/overdue is a warning-state metric → amber, not red.
+                Red is reserved for true escalation (e.g. a "late" row in the
+                portfolio table). Design §2.3. */}
             {stats.overduePayments > 0 && (
-              <Card className="border-red-200 bg-red-50">
+              <Card className="border-amber-200 bg-amber-50">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium text-red-900">Overdue Payments</CardTitle>
-                  <AlertCircle className="h-4 w-4 text-red-600" aria-hidden="true" />
+                  <CardTitle className="text-sm font-medium text-amber-900">Overdue Payments</CardTitle>
+                  <AlertCircle className="h-4 w-4 text-amber-600" aria-hidden="true" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold text-red-900">{stats.overduePayments}</div>
-                  <Button asChild variant="link" className="text-red-600 p-0 h-auto">
+                  <div className="text-2xl font-bold text-amber-900">{stats.overduePayments}</div>
+                  <Button asChild variant="link" className="text-amber-700 p-0 h-auto">
                     <Link to="/landlord/payments?filter=overdue">View Details →</Link>
                   </Button>
                 </CardContent>
@@ -212,6 +308,63 @@ export default function LandlordDashboard() {
           </Card>
         </div>
 
+        {/* Portfolio table — the central PM surface (design §2: "Table is the
+            surface. Don't bury data in cards"). Status pills carry icon + color
+            and link to the relevant detail view. */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Portfolio</CardTitle>
+            <CardDescription>Properties, tenants, and rent status at a glance</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {portfolio.length === 0 ? (
+              <EmptyState
+                icon={Building2}
+                title="No properties yet"
+                description="Add your first property to start tracking rent and tenants here."
+                action={{
+                  label: 'Add Property',
+                  onClick: () => window.location.href = '/landlord/properties/create',
+                }}
+              />
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Property</TableHead>
+                    <TableHead>Tenant</TableHead>
+                    <TableHead>Rent</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="w-10 text-right sr-only">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {portfolio.map((row) => (
+                    <TableRow key={row.id}>
+                      <TableCell className="font-medium">{row.property}</TableCell>
+                      <TableCell className="text-muted-foreground">{row.tenant}</TableCell>
+                      <TableCell>${row.rent.toLocaleString()}</TableCell>
+                      <TableCell><PortfolioStatusPill row={row} /></TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          asChild
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-muted-foreground"
+                        >
+                          <Link to={row.statusHref} aria-label={`Open ${row.property}`}>
+                            <MoreVertical className="h-4 w-4" />
+                          </Link>
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+
         {/* Recent Activity */}
         <Card>
           <CardHeader>
@@ -234,7 +387,7 @@ export default function LandlordDashboard() {
                 {recentActivities.map((activity) => (
                   <div
                     key={activity.id}
-                    className="flex items-start justify-between border-b pb-4 last:border-0"
+                    className="flex flex-col gap-2 border-b pb-4 last:border-0 sm:flex-row sm:items-start sm:justify-between sm:gap-0"
                     role="article"
                     aria-label={`${activity.title}: ${activity.description}`}
                   >
@@ -252,13 +405,9 @@ export default function LandlordDashboard() {
                         </p>
                       </div>
                     </div>
-                    <Badge variant={
-                      activity.status === 'completed' || activity.status === 'paid' ? 'default' :
-                      activity.status === 'pending' ? 'secondary' :
-                      activity.status === 'overdue' ? 'destructive' : 'outline'
-                    }>
-                      {activity.status}
-                    </Badge>
+                    <div className="pl-7 sm:pl-0">
+                      <ActivityStatusPill activity={activity} />
+                    </div>
                   </div>
                 ))}
               </div>
