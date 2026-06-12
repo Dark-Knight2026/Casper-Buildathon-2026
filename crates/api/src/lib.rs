@@ -46,8 +46,9 @@ pub use common::{
 pub use openapi::ApiDoc;
 #[cfg(feature = "enabled")]
 pub use providers::{
-    EmailError, EmailMessage, EmailSender, LoggingEmailSender, MediaStorage, PostmarkSender,
-    S3MediaStorage, SharedMediaStorage, StubMediaStorage,
+    EmailError, EmailMessage, EmailSender, FakeKycProvider, KycError, KycOutcome, KycProvider,
+    LoggingEmailSender, MediaStorage, PostmarkSender, S3MediaStorage, SharedKycProvider,
+    SharedMediaStorage, StubMediaStorage,
 };
 #[cfg(feature = "enabled")]
 pub use services::auth::AuthUser;

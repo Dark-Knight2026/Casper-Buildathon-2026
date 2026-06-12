@@ -42,7 +42,10 @@ use api::{
         CASPER_MESSAGE_PREFIX, JWT_AUDIENCE, JWT_ISSUER, RedisStore, TOTAL_SUPPLY, TokenType,
         VerificationLevel, tokens,
     },
-    providers::{EmailError, EmailMessage, EmailSender, SharedMediaStorage, StubMediaStorage},
+    providers::{
+        EmailError, EmailMessage, EmailSender, FakeKycProvider, SharedMediaStorage,
+        StubMediaStorage,
+    },
     server,
 };
 
@@ -227,6 +230,7 @@ pub async fn setup_test_server_with(
             .expect("Failed to connect to Redis"),
         mailer,
         media_storage,
+        kyc: Arc::new(FakeKycProvider::new()),
         config,
     });
 

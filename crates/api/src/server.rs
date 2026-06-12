@@ -29,8 +29,9 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 use utoipa_swagger_ui::SwaggerUi;
 
 use crate::{
-    ApiDoc, AppState, EmailSender, LoggingEmailSender, PostmarkSender, RedisStore, S3MediaStorage,
-    ServerConfig, ServerError, SharedMediaStorage, StubMediaStorage, onchain, services, workers,
+    ApiDoc, AppState, EmailSender, FakeKycProvider, KycProvider, LoggingEmailSender,
+    PostmarkSender, RedisStore, S3MediaStorage, ServerConfig, ServerError, SharedMediaStorage,
+    StubMediaStorage, onchain, services, workers,
 };
 
 /// Creates the full application router combining public and protected routes.
@@ -197,12 +198,25 @@ pub async fn main() -> Result<(), ServerError> {
         Arc::new(StubMediaStorage::new())
     };
 
+    // No real KYC provider exists yet, so the listing authority gate runs
+    // against a fake that auto-verifies every identity. A real provider
+    // (Persona/TransUnion) will be selected here by config, mirroring the
+    // mailer/media-storage bootstrap above.
+    let kyc: Arc<dyn KycProvider> = {
+        tracing::warn!(
+            event = "kyc_provider_stub",
+            "No real KYC provider configured - using FakeKycProvider (auto-verifies every identity). Production MUST wire a real provider before the authority gate can be trusted."
+        );
+        Arc::new(FakeKycProvider::new())
+    };
+
     // 3. Build application state
     let state = Arc::new(AppState {
         db: pool,
         redis: redis_store,
         mailer,
         media_storage,
+        kyc,
         config: config.clone(),
     });
 

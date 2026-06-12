@@ -10,7 +10,7 @@ use serde::Deserialize;
 use crate::{
     ServerError,
     common::RedisStore,
-    providers::{EmailSender, MediaStorage},
+    providers::{EmailSender, KycProvider, MediaStorage},
 };
 
 /// Total BIG token supply (human-readable).
@@ -426,6 +426,10 @@ pub struct AppState {
     /// so the bootstrap can swap `StubMediaStorage` (dev/test) for an
     /// S3-compatible implementation in production without touching call sites.
     pub media_storage: Arc<dyn MediaStorage>,
+    /// Identity-verification provider for the listing authority gate.
+    /// Boxed-trait so the bootstrap can swap `FakeKycProvider` (hackathon) for
+    /// a real provider (Persona/TransUnion) without touching call sites.
+    pub kyc: Arc<dyn KycProvider>,
     /// Application configuration.
     pub config: ServerConfig,
 }
@@ -438,6 +442,7 @@ impl core::fmt::Debug for AppState {
             .field("redis", &"RedisStore")
             .field("mailer", &"EmailSender")
             .field("media_storage", &"MediaStorage")
+            .field("kyc", &"KycProvider")
             .field("config", &self.config)
             .finish()
     }
