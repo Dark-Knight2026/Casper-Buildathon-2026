@@ -4,18 +4,20 @@ use std::sync::Arc;
 
 use axum::{
     Json,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
 };
 use uuid::Uuid;
 
 use crate::{
-    common::{ApiError, ApiResult, AppState, ErrorResponse},
+    common::{ApiError, ApiResult, AppState, ErrorResponse, PaginatedResponse, Pagination},
     services::{
         auth::{LandlordRole, RoleUser},
         properties::{
             db,
-            models::{CreatePropertyRequest, Property, PropertyListingSummary},
+            models::{
+                CreatePropertyRequest, Property, PropertyListingSummary, PropertySearchParams,
+            },
         },
     },
 };
@@ -137,4 +139,38 @@ pub async fn get_property_listings(
     let rows = db::list_property_listings(&state.db, property_id).await?;
     let listings = rows.into_iter().map(PropertyListingSummary::from).collect();
     Ok(Json(listings))
+}
+
+// `GET /api/v1/properties/search`
+//
+/// Geo + paginated property search (public).
+///
+/// Radius mode (`nearLat`+`nearLng`+`radiusMiles`) and/or bounding box
+/// (`bbox=minLng,minLat,maxLng,maxLat`). Without geo params it lists all
+/// properties, newest first; radius results are distance-ordered.
+///
+/// # Errors
+///
+/// Returns [`ApiError::BadRequest`] on malformed geo params, or a database error.
+#[utoipa::path(
+    get,
+    path = "/properties/search",
+    tag = "Properties",
+    params(PropertySearchParams, Pagination),
+    responses(
+        (status = 200, description = "Matching properties (paginated)", body = PaginatedResponse<Property>),
+        (status = 400, description = "Invalid search parameters", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse),
+    )
+)]
+#[inline]
+pub async fn search_properties(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<PropertySearchParams>,
+    Query(pagination): Query<Pagination>,
+) -> ApiResult<Json<PaginatedResponse<Property>>> {
+    let search = params.into_validated(&pagination)?;
+    let (rows, total) = db::search_properties_geo(&state.db, &search).await?;
+    let properties = rows.into_iter().map(Property::from).collect();
+    Ok(Json(PaginatedResponse::new(properties, total, &pagination)))
 }

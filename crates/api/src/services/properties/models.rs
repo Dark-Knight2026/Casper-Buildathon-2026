@@ -9,12 +9,12 @@
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
+use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 use crate::{
-    common::{ApiError, ApiResult, PropertyId},
-    services::properties::db::{ListingSummaryRow, NewProperty, PropertyRow},
+    common::{ApiError, ApiResult, Pagination, PropertyId},
+    services::properties::db::{GeoSearch, ListingSummaryRow, NewProperty, PropertyRow},
 };
 
 /// Property types accepted on create. Mirrors the `properties.property_type`
@@ -317,4 +317,106 @@ fn validate_parking(value: Option<Vec<String>>) -> ApiResult<Option<Vec<String>>
     } else {
         Some(features)
     })
+}
+
+/// Geo + pagination query for `GET /properties/search`. Radius mode requires
+/// `nearLat`+`nearLng`+`radiusMiles` together; `bbox` is
+/// `minLng,minLat,maxLng,maxLat`. Both modes may combine (AND); neither lists all.
+#[derive(Debug, Deserialize, IntoParams)]
+#[serde(rename_all = "camelCase")]
+pub struct PropertySearchParams {
+    /// Radius-center latitude (with `nearLng` + `radiusMiles`).
+    pub near_lat: Option<f64>,
+    /// Radius-center longitude (with `nearLat` + `radiusMiles`).
+    pub near_lng: Option<f64>,
+    /// Search radius in miles, `(0, 500]`.
+    pub radius_miles: Option<f64>,
+    /// Bounding box `minLng,minLat,maxLng,maxLat`.
+    pub bbox: Option<String>,
+}
+
+impl PropertySearchParams {
+    /// Validates geo params and resolves bbox + pagination into a [`GeoSearch`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ApiError::BadRequest`] when the radius trio is partial, a
+    /// coordinate/radius is out of range, or `bbox` is malformed.
+    #[inline]
+    pub fn into_validated(self, pagination: &Pagination) -> ApiResult<GeoSearch> {
+        let radius_count = [
+            self.near_lat.is_some(),
+            self.near_lng.is_some(),
+            self.radius_miles.is_some(),
+        ]
+        .iter()
+        .filter(|present| **present)
+        .count();
+        if radius_count != 0 && radius_count != 3 {
+            return Err(ApiError::BadRequest(
+                "nearLat, nearLng and radiusMiles must be provided together".to_owned(),
+            ));
+        }
+        validate_coordinate("nearLat", self.near_lat, 90.0)?;
+        validate_coordinate("nearLng", self.near_lng, 180.0)?;
+        if let Some(radius) = self.radius_miles
+            && (!radius.is_finite() || radius <= 0.0 || radius > 500.0)
+        {
+            // 500-mile ceiling keeps the radius scan bounded.
+            return Err(ApiError::BadRequest(
+                "radiusMiles must be in (0, 500]".to_owned(),
+            ));
+        }
+
+        let (bbox_min_lng, bbox_min_lat, bbox_max_lng, bbox_max_lat) = match &self.bbox {
+            Some(raw) => {
+                let (min_lng, min_lat, max_lng, max_lat) = parse_bbox(raw)?;
+                (Some(min_lng), Some(min_lat), Some(max_lng), Some(max_lat))
+            }
+            None => (None, None, None, None),
+        };
+
+        Ok(GeoSearch {
+            near_lat: self.near_lat,
+            near_lng: self.near_lng,
+            radius_miles: self.radius_miles,
+            bbox_min_lng,
+            bbox_min_lat,
+            bbox_max_lng,
+            bbox_max_lat,
+            limit: pagination.page_size(),
+            offset: pagination.offset(),
+        })
+    }
+}
+
+/// Parses a `minLng,minLat,maxLng,maxLat` bbox string into validated bounds.
+fn parse_bbox(raw: &str) -> ApiResult<(f64, f64, f64, f64)> {
+    let parts = raw.split(',').collect::<Vec<_>>();
+    if parts.len() != 4 {
+        return Err(ApiError::BadRequest(
+            "bbox must be 'minLng,minLat,maxLng,maxLat'".to_owned(),
+        ));
+    }
+    let bounds = parts
+        .iter()
+        .map(|part| part.trim().parse::<f64>())
+        .collect::<Result<Vec<f64>, _>>()
+        .map_err(|_| ApiError::BadRequest("bbox values must be numbers".to_owned()))?;
+    let (min_lng, min_lat, max_lng, max_lat) = (bounds[0], bounds[1], bounds[2], bounds[3]);
+    if !(-180.0..=180.0).contains(&min_lng)
+        || !(-180.0..=180.0).contains(&max_lng)
+        || !(-90.0..=90.0).contains(&min_lat)
+        || !(-90.0..=90.0).contains(&max_lat)
+    {
+        return Err(ApiError::BadRequest(
+            "bbox coordinates out of range".to_owned(),
+        ));
+    }
+    if min_lng > max_lng || min_lat > max_lat {
+        return Err(ApiError::BadRequest(
+            "bbox min must not exceed max".to_owned(),
+        ));
+    }
+    Ok((min_lng, min_lat, max_lng, max_lat))
 }

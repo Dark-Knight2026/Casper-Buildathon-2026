@@ -111,6 +111,31 @@ pub struct NewProperty {
     pub parcel_id: Option<String>,
 }
 
+/// Validated geo + pagination filter for [`search_properties_geo`]. Radius and
+/// bbox bounds are pre-parsed; absent bounds are `None` (no filter on that
+/// axis). Limit/offset are already clamped by the pagination layer.
+#[derive(Debug)]
+pub struct GeoSearch {
+    /// Radius-center latitude.
+    pub near_lat: Option<f64>,
+    /// Radius-center longitude.
+    pub near_lng: Option<f64>,
+    /// Search radius in miles.
+    pub radius_miles: Option<f64>,
+    /// Bounding-box minimum longitude.
+    pub bbox_min_lng: Option<f64>,
+    /// Bounding-box minimum latitude.
+    pub bbox_min_lat: Option<f64>,
+    /// Bounding-box maximum longitude.
+    pub bbox_max_lng: Option<f64>,
+    /// Bounding-box maximum latitude.
+    pub bbox_max_lat: Option<f64>,
+    /// Page size (LIMIT).
+    pub limit: i64,
+    /// Page offset (OFFSET).
+    pub offset: i64,
+}
+
 /// Flat [`upsert_property`] result: every property column plus the `xmax = 0`
 /// insert/conflict discriminator, kept private since the handler only sees the
 /// split `(PropertyRow, bool)`.
@@ -321,4 +346,105 @@ pub async fn list_property_listings(
     )
     .fetch_all(pool)
     .await
+}
+
+/// Geo + paginated property search. Returns the matching page and the total
+/// match count (for pagination metadata).
+///
+/// Radius (`near_lat`/`near_lng`/`radius_miles`) and bbox bounds are optional
+/// nullable params: a `NULL` bound short-circuits its branch to `true`, so the
+/// same cached query serves radius-only, bbox-only, both, or neither. A NULL
+/// `geog` (property without coordinates) drops out of any geo filter. Radius
+/// results are ordered by true spherical distance; otherwise newest first.
+///
+/// # Errors
+///
+/// Returns [`Error`] on any database failure.
+#[inline]
+pub async fn search_properties_geo(
+    pool: &PgPool,
+    search: &GeoSearch,
+) -> Result<(Vec<PropertyRow>, i64), Error> {
+    let total = sqlx::query_scalar!(
+        r#"
+            SELECT COUNT(*) AS "count!"
+            FROM properties
+            WHERE deleted_at IS NULL
+              AND ($3::float8 IS NULL OR ST_DWithin(
+                    geog,
+                    ST_SetSRID(ST_MakePoint($2::float8, $1::float8), 4326)::geography,
+                    $3::float8 * 1609.34
+                  ))
+              AND ($4::float8 IS NULL OR ST_Intersects(
+                    geog,
+                    ST_MakeEnvelope($4::float8, $5::float8, $6::float8, $7::float8, 4326)::geography
+                  ))
+        "#,
+        search.near_lat,
+        search.near_lng,
+        search.radius_miles,
+        search.bbox_min_lng,
+        search.bbox_min_lat,
+        search.bbox_max_lng,
+        search.bbox_max_lat,
+    )
+    .fetch_one(pool)
+    .await?;
+
+    let rows = sqlx::query_as!(
+        PropertyRow,
+        r#"
+            SELECT
+                id,
+                normalized_address,
+                parcel_id,
+                address_line1,
+                address_line2,
+                city,
+                state,
+                zip_code,
+                latitude::float8 AS "latitude?",
+                longitude::float8 AS "longitude?",
+                property_type,
+                bedrooms,
+                bathrooms::float8 AS "bathrooms?",
+                square_feet,
+                year_built,
+                parking_features,
+                created_at AS "created_at!",
+                updated_at AS "updated_at!"
+            FROM properties
+            WHERE deleted_at IS NULL
+              AND ($3::float8 IS NULL OR ST_DWithin(
+                    geog,
+                    ST_SetSRID(ST_MakePoint($2::float8, $1::float8), 4326)::geography,
+                    $3::float8 * 1609.34
+                  ))
+              AND ($4::float8 IS NULL OR ST_Intersects(
+                    geog,
+                    ST_MakeEnvelope($4::float8, $5::float8, $6::float8, $7::float8, 4326)::geography
+                  ))
+            ORDER BY
+                CASE
+                    WHEN $1::float8 IS NOT NULL AND $2::float8 IS NOT NULL
+                    THEN ST_Distance(geog, ST_SetSRID(ST_MakePoint($2::float8, $1::float8), 4326)::geography)
+                    ELSE NULL
+                END ASC NULLS LAST,
+                created_at DESC
+            LIMIT $8 OFFSET $9
+        "#,
+        search.near_lat,
+        search.near_lng,
+        search.radius_miles,
+        search.bbox_min_lng,
+        search.bbox_min_lat,
+        search.bbox_max_lng,
+        search.bbox_max_lat,
+        search.limit,
+        search.offset,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok((rows, total))
 }
