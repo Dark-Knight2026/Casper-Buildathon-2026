@@ -29,9 +29,10 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 use utoipa_swagger_ui::SwaggerUi;
 
 use crate::{
-    ApiDoc, AppState, EmailSender, FairHousingScreen, FakeKycProvider, KycProvider,
-    LoggingEmailSender, PostmarkSender, RedisStore, S3MediaStorage, ServerConfig, ServerError,
-    SharedMediaStorage, StubFairHousingScreen, StubMediaStorage, onchain, services, workers,
+    ApiDoc, AppState, ContentPinner, EmailSender, FairHousingScreen, FakeKycProvider, FakePinner,
+    KycProvider, LoggingEmailSender, PostmarkSender, RedisStore, S3MediaStorage, ServerConfig,
+    ServerError, SharedMediaStorage, StubFairHousingScreen, StubMediaStorage, onchain, services,
+    workers,
 };
 
 /// Creates the full application router combining public and protected routes.
@@ -222,6 +223,17 @@ pub async fn main() -> Result<(), ServerError> {
         Arc::new(StubFairHousingScreen::new())
     };
 
+    // No real IPFS provider exists yet, so listing media is pinned by a fake
+    // that returns a deterministic synthetic CID without storing the bytes. A
+    // real node/provider will be selected here by config when delivered.
+    let content_pinner: Arc<dyn ContentPinner> = {
+        tracing::warn!(
+            event = "content_pinner_stub",
+            "No real IPFS provider configured - using FakePinner (synthetic CID, content is NOT retrievable). Production MUST wire a real IPFS node/provider."
+        );
+        Arc::new(FakePinner::new())
+    };
+
     // 3. Build application state
     let state = Arc::new(AppState {
         db: pool,
@@ -230,6 +242,7 @@ pub async fn main() -> Result<(), ServerError> {
         media_storage,
         kyc,
         fair_housing,
+        content_pinner,
         config: config.clone(),
     });
 

@@ -13,12 +13,16 @@
 //! - [`kyc`] - identity verification (`KycProvider`, `FakeKycProvider`).
 //! - [`fair_housing`] - advertising-text screen (`FairHousingScreen`,
 //!   `StubFairHousingScreen`).
+//! - [`content_pinner`] - content pinning / IPFS (`ContentPinner`,
+//!   `FakePinner`).
 //!
 //! New external-service adapters (SMS, payment processors) belong
 //! here, not in [`common`](crate::common): `common` is reserved for
 //! passive shared types (config, errors, models) that have no
 //! trait-and-implementation shape.
 
+/// Content-pinning (IPFS) abstraction.
+pub mod content_pinner;
 /// Email-sending abstraction.
 pub mod email;
 /// Fair Housing advertising-screen abstraction.
@@ -28,6 +32,7 @@ pub mod kyc;
 /// Media-storage abstraction.
 pub mod storage;
 
+pub use content_pinner::{ContentPinner, FakePinner, PinError, PinResult, SharedContentPinner};
 pub use email::{EmailError, EmailMessage, EmailSender, LoggingEmailSender, PostmarkSender};
 pub use fair_housing::{
     FairHousingError, FairHousingResult, FairHousingScreen, ScreenOutcome, SharedFairHousingScreen,

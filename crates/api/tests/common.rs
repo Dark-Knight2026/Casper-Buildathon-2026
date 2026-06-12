@@ -43,7 +43,7 @@ use api::{
         VerificationLevel, tokens,
     },
     providers::{
-        EmailError, EmailMessage, EmailSender, FakeKycProvider, SharedMediaStorage,
+        EmailError, EmailMessage, EmailSender, FakeKycProvider, FakePinner, SharedMediaStorage,
         StubFairHousingScreen, StubMediaStorage,
     },
     server,
@@ -232,6 +232,7 @@ pub async fn setup_test_server_with(
         media_storage,
         kyc: Arc::new(FakeKycProvider::new()),
         fair_housing: Arc::new(StubFairHousingScreen::new()),
+        content_pinner: Arc::new(FakePinner::new()),
         config,
     });
 

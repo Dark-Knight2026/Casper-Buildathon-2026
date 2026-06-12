@@ -10,7 +10,7 @@ use serde::Deserialize;
 use crate::{
     ServerError,
     common::RedisStore,
-    providers::{EmailSender, FairHousingScreen, KycProvider, MediaStorage},
+    providers::{ContentPinner, EmailSender, FairHousingScreen, KycProvider, MediaStorage},
 };
 
 /// Total BIG token supply (human-readable).
@@ -434,6 +434,10 @@ pub struct AppState {
     /// the bootstrap can swap `StubFairHousingScreen` (hackathon) for the
     /// official CO/GC ruleset without touching call sites.
     pub fair_housing: Arc<dyn FairHousingScreen>,
+    /// Content pinner (IPFS) for listing media. Boxed-trait so the bootstrap
+    /// can swap `FakePinner` (hackathon) for a real IPFS node/provider without
+    /// touching call sites.
+    pub content_pinner: Arc<dyn ContentPinner>,
     /// Application configuration.
     pub config: ServerConfig,
 }
@@ -448,6 +452,7 @@ impl core::fmt::Debug for AppState {
             .field("media_storage", &"MediaStorage")
             .field("kyc", &"KycProvider")
             .field("fair_housing", &"FairHousingScreen")
+            .field("content_pinner", &"ContentPinner")
             .field("config", &self.config)
             .finish()
     }
