@@ -40,7 +40,7 @@ pub enum ModerationStatus {
 }
 
 /// A media item attached to a listing.
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct MediaRef {
     /// Media id.
@@ -156,7 +156,7 @@ pub enum AuthorityTier {
 /// attribution, Fair Housing, derived badge), not a state machine - they ship
 /// as-is on the wire, so they stay flat rather than folding into enums.
 #[allow(clippy::struct_excessive_bools)]
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ListingProvenance {
     /// Gate 1 - identity (KYC) verified.
@@ -205,7 +205,7 @@ impl ListingProvenance {
 }
 
 /// A listing: a time-bound offer against a property.
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Listing {
     /// Listing id.

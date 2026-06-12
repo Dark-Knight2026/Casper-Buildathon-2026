@@ -12,7 +12,9 @@ use utoipa::{
 
 use crate::{
     onchain::{ico, staking, transactions, vesting},
-    services::{analytics, auth, favorites, health, listings, properties, tax, users},
+    services::{
+        analytics, applications, auth, favorites, health, listings, properties, tax, users,
+    },
 };
 
 /// `OpenAPI` documentation configuration.
@@ -92,6 +94,11 @@ use crate::{
             // Favorites models
             favorites::models::AddFavoriteRequest,
             favorites::models::FavoriteResponse,
+            // Applications models
+            applications::models::ApplicationStatus,
+            applications::models::RentalApplication,
+            applications::models::SubmitApplicationRequest,
+            applications::models::ReviewApplicationRequest,
             // Health models
             health::models::ConnectionStatus,
             health::models::HealthResponse,
@@ -136,6 +143,7 @@ use crate::{
         (name = "Properties", description = "Property (physical-asset) endpoints"),
         (name = "Listings", description = "Listing (time-bound offer) endpoints"),
         (name = "Favorites", description = "Tenant saved-listing endpoints"),
+        (name = "Applications", description = "Rental-application endpoints"),
         (name = "Tax", description = "Tax calculation endpoints"),
         (name = "Analytics", description = "Property analytics endpoints"),
         (name = "Transactions", description = "Transaction history endpoints"),

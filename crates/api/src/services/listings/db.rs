@@ -1263,6 +1263,30 @@ pub async fn listing_owner(pool: &PgPool, listing_id: Uuid) -> Result<Option<Uui
     .await
 }
 
+/// Asserts that `owner_id` is the lister of a live listing. The shared
+/// listing-ownership gate for the downstream domains (applications, viewings)
+/// that authorize a landlord action against a listing they must own.
+///
+/// # Errors
+///
+/// Returns [`ApiError::NotFound`] when no live listing has that id (no leak of
+/// a foreign listing's existence) and [`ApiError::Forbidden`] when the caller is
+/// not the lister; otherwise any database error.
+#[inline]
+pub async fn assert_listing_owner(
+    pool: &PgPool,
+    listing_id: Uuid,
+    owner_id: Uuid,
+) -> ApiResult<()> {
+    match listing_owner(pool, listing_id).await? {
+        None => Err(ApiError::NotFound("listing not found".to_owned())),
+        Some(owner) if owner != owner_id => {
+            Err(ApiError::Forbidden("not_listing_owner".to_owned()))
+        }
+        Some(_) => Ok(()),
+    }
+}
+
 /// Outcome of an owner-scoped authority-document upload.
 #[derive(Debug)]
 pub enum AuthorityUpload {
