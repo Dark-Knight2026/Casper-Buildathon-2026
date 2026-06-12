@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            INSERT INTO listing_media (listing_id, url, cid, position)\n            VALUES (\n                $1, $2, $3,\n                (SELECT COALESCE(MAX(position) + 1, 0)\n                 FROM listing_media WHERE listing_id = $1)\n            )\n            RETURNING id, listing_id, url, cid, position, moderation_status\n        ",
+  "query": "\n            SELECT id, listing_id, url, cid, position, moderation_status\n            FROM listing_media\n            WHERE listing_id = $1\n            ORDER BY position ASC\n        ",
   "describe": {
     "columns": [
       {
@@ -72,9 +72,7 @@
     ],
     "parameters": {
       "Left": [
-        "Uuid",
-        "Text",
-        "Text"
+        "Uuid"
       ]
     },
     "nullable": [
@@ -86,5 +84,5 @@
       false
     ]
   },
-  "hash": "d5a10c7320ef5e90f59daef6f9dabae02d07ffc8e9ceafc255febe37d77ce469"
+  "hash": "8a4bf80227be49b27041fed4b7a3d71de0b1312d93f2001ee8b78dd4646489a2"
 }

@@ -703,6 +703,28 @@ pub struct FairHousingScreenResponse {
     pub flags: Vec<String>,
 }
 
+/// Moderator decision payload
+/// (`PUT /listings/{id}/media/{mediaId}/moderation`).
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct MediaModerationRequest {
+    /// New moderation status (`approved`/`rejected`; `pending` resets).
+    pub moderation_status: ModerationStatus,
+}
+
+/// Owner reorder/remove payload (`PUT /listings/{id}/media`). Both fields are
+/// optional and independent: `order` sets positions, `remove` deletes items.
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct MediaReorderRequest {
+    /// Desired media order; each id's position becomes its index here.
+    #[schema(value_type = Option<Vec<Uuid>>)]
+    pub order: Option<Vec<Uuid>>,
+    /// Media ids to remove (blob is deleted from storage too).
+    #[schema(value_type = Option<Vec<Uuid>>)]
+    pub remove: Option<Vec<Uuid>>,
+}
+
 /// Trims a title, rejecting empty / over-long values.
 fn validate_title(raw: &str) -> ApiResult<String> {
     let trimmed = raw.trim();

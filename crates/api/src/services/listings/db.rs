@@ -18,7 +18,7 @@ use crate::{
     services::{
         listings::models::{
             AuthorityDocumentType, AuthorityTier, Listing, ListingHistoricalData,
-            ListingProvenance, ListingState, ListingStatistics, MediaRef,
+            ListingProvenance, ListingState, ListingStatistics, MediaRef, ModerationStatus,
         },
         properties::{db::PropertyRow, models::Property},
     },
@@ -1320,7 +1320,8 @@ pub async fn add_authority_document(
 /// Inserts a media row for a listing, appended after existing media, and
 /// returns it. Position is the next slot under a single subquery (no separate
 /// max read); moderation defaults to `pending`, so the item is excluded from
-/// public reads until approved.
+/// public reads until approved. `storage_key` is kept for a later
+/// `MediaStorage::delete`.
 ///
 /// # Errors
 ///
@@ -1331,22 +1332,137 @@ pub async fn insert_listing_media(
     listing_id: Uuid,
     url: &str,
     cid: &str,
+    storage_key: &str,
 ) -> Result<MediaRow, Error> {
     sqlx::query_as!(
         MediaRow,
         r"
-            INSERT INTO listing_media (listing_id, url, cid, position)
+            INSERT INTO listing_media (listing_id, url, cid, position, storage_key)
             VALUES (
                 $1, $2, $3,
                 (SELECT COALESCE(MAX(position) + 1, 0)
-                 FROM listing_media WHERE listing_id = $1)
+                 FROM listing_media WHERE listing_id = $1),
+                $4
             )
             RETURNING id, listing_id, url, cid, position, moderation_status
         ",
         listing_id,
         url,
         cid,
+        storage_key,
     )
     .fetch_one(pool)
+    .await
+}
+
+/// Sets the moderation status of a media item (the moderator action, not the
+/// owner's). Scoped to `listing_id` so the path stays consistent. Returns the
+/// updated row, or `None` when no such media exists under that listing.
+///
+/// # Errors
+///
+/// Returns [`Error`] on any database failure.
+#[inline]
+pub async fn set_media_moderation(
+    pool: &PgPool,
+    listing_id: Uuid,
+    media_id: Uuid,
+    status: ModerationStatus,
+) -> Result<Option<MediaRow>, Error> {
+    sqlx::query_as!(
+        MediaRow,
+        r"
+            UPDATE listing_media
+            SET moderation_status = $3
+            WHERE id = $2 AND listing_id = $1
+            RETURNING id, listing_id, url, cid, position, moderation_status
+        ",
+        listing_id,
+        media_id,
+        status.to_string(),
+    )
+    .fetch_optional(pool)
+    .await
+}
+
+/// Reorders a listing's media: each id's new position is its index in `order`.
+/// Ids that are not media of this listing are ignored (the `listing_id` guard
+/// in the join). A single `UPDATE ... FROM unnest WITH ORDINALITY` applies the
+/// whole reordering atomically.
+///
+/// # Errors
+///
+/// Returns [`Error`] on any database failure.
+#[inline]
+pub async fn reorder_listing_media(
+    pool: &PgPool,
+    listing_id: Uuid,
+    order: &[Uuid],
+) -> Result<(), Error> {
+    sqlx::query!(
+        r"
+            UPDATE listing_media AS m
+            SET position = (o.ord - 1)::int
+            FROM unnest($2::uuid[]) WITH ORDINALITY AS o(media_id, ord)
+            WHERE m.id = o.media_id AND m.listing_id = $1
+        ",
+        listing_id,
+        order,
+    )
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// Removes media items from a listing and returns the storage keys of the rows
+/// actually deleted, so the caller can delete the blobs. Ids not belonging to
+/// this listing are ignored.
+///
+/// # Errors
+///
+/// Returns [`Error`] on any database failure.
+#[inline]
+pub async fn remove_listing_media(
+    pool: &PgPool,
+    listing_id: Uuid,
+    ids: &[Uuid],
+) -> Result<Vec<String>, Error> {
+    let rows = sqlx::query!(
+        r"
+            DELETE FROM listing_media
+            WHERE listing_id = $1 AND id = ANY($2)
+            RETURNING storage_key
+        ",
+        listing_id,
+        ids,
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().filter_map(|row| row.storage_key).collect())
+}
+
+/// Fetches all of a listing's media (any moderation status), ordered for
+/// display. The owner-facing counterpart to [`fetch_listing_media`], which
+/// returns approved-only for public reads.
+///
+/// # Errors
+///
+/// Returns [`Error`] on any database failure.
+#[inline]
+pub async fn fetch_all_listing_media(
+    pool: &PgPool,
+    listing_id: Uuid,
+) -> Result<Vec<MediaRow>, Error> {
+    sqlx::query_as!(
+        MediaRow,
+        r"
+            SELECT id, listing_id, url, cid, position, moderation_status
+            FROM listing_media
+            WHERE listing_id = $1
+            ORDER BY position ASC
+        ",
+        listing_id,
+    )
+    .fetch_all(pool)
     .await
 }

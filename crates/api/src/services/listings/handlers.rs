@@ -14,14 +14,15 @@ use crate::{
     common::{ApiError, ApiResult, AppState, ErrorResponse, PaginatedResponse, Pagination, image},
     providers::ScreenOutcome,
     services::{
-        auth::{LandlordRole, RoleUser, TenantRole},
+        auth::{AgentRole, LandlordRole, RoleUser, TenantRole},
         listings::{
             db::{self, AuthorityUpload, ListingUpdate, StateTransition, WithdrawOutcome},
             models::{
                 AuthorityDocumentResponse, AuthorityDocumentType, CreateListingRequest,
                 FairHousingScreenResponse, Listing, ListingHistoricalData, ListingProvenance,
-                ListingSearchParams, ListingState, ListingStatistics, MediaRef,
-                UpdateListingRequest, UpdateStateRequest, ViewResponse,
+                ListingSearchParams, ListingState, ListingStatistics, MediaModerationRequest,
+                MediaRef, MediaReorderRequest, UpdateListingRequest, UpdateStateRequest,
+                ViewResponse,
             },
         },
         properties::{db as properties_db, models::Property},
@@ -991,6 +992,116 @@ pub async fn upload_listing_media(
         ApiError::Internal("failed to pin media".to_owned())
     })?;
 
-    let row = db::insert_listing_media(&state.db, listing_id, &url, &cid).await?;
+    let row = db::insert_listing_media(&state.db, listing_id, &url, &cid, &key).await?;
     Ok((StatusCode::CREATED, Json(MediaRef::from(row))))
+}
+
+// `PUT /api/v1/listings/{id}/media/{mediaId}/moderation`
+//
+/// Moderator decision on a media item (`pending -> approved/rejected`). This is
+/// the platform's call, not the lister's, so it requires the agent role; only
+/// `approved` media is shown publicly.
+///
+/// # Errors
+///
+/// Returns `404` when no such media exists under that listing, or a database
+/// error.
+#[utoipa::path(
+    put,
+    path = "/listings/{id}/media/{mediaId}/moderation",
+    tag = "Listings",
+    request_body = MediaModerationRequest,
+    params(
+        ("id" = Uuid, Path, description = "Listing id"),
+        ("mediaId" = Uuid, Path, description = "Media id")
+    ),
+    responses(
+        (status = 200, description = "Moderated media", body = MediaRef),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 403, description = "Agent role required", body = ErrorResponse),
+        (status = 404, description = "Media not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse),
+    ),
+    security(
+        ("cookie_auth" = [])
+    )
+)]
+#[inline]
+pub async fn moderate_media(
+    State(state): State<Arc<AppState>>,
+    _agent: RoleUser<AgentRole>,
+    Path((listing_id, media_id)): Path<(Uuid, Uuid)>,
+    Json(payload): Json<MediaModerationRequest>,
+) -> ApiResult<Json<MediaRef>> {
+    db::set_media_moderation(&state.db, listing_id, media_id, payload.moderation_status)
+        .await?
+        .map(|row| Json(MediaRef::from(row)))
+        .ok_or_else(|| ApiError::NotFound("media not found".to_owned()))
+}
+
+// `PUT /api/v1/listings/{id}/media`
+//
+/// Reorders and/or removes media on a listing the caller owns. `order` sets
+/// each id's position to its index; `remove` deletes items and their stored
+/// blobs. Returns the listing's full media set (any moderation status).
+///
+/// # Errors
+///
+/// Returns `403` when the caller is not the lister, `404` when the listing does
+/// not exist, or a database error.
+#[utoipa::path(
+    put,
+    path = "/listings/{id}/media",
+    tag = "Listings",
+    request_body = MediaReorderRequest,
+    params(
+        ("id" = Uuid, Path, description = "Listing id")
+    ),
+    responses(
+        (status = 200, description = "Updated media set", body = Vec<MediaRef>),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 403, description = "Not the lister", body = ErrorResponse),
+        (status = 404, description = "Listing not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse),
+    ),
+    security(
+        ("cookie_auth" = [])
+    )
+)]
+#[inline]
+pub async fn update_media(
+    State(state): State<Arc<AppState>>,
+    user: RoleUser<LandlordRole>,
+    Path(listing_id): Path<Uuid>,
+    Json(payload): Json<MediaReorderRequest>,
+) -> ApiResult<Json<Vec<MediaRef>>> {
+    match db::listing_owner(&state.db, listing_id).await? {
+        None => return Err(ApiError::NotFound("listing not found".to_owned())),
+        Some(owner) if owner != user.0.sub => {
+            return Err(ApiError::Forbidden("not_listing_owner".to_owned()));
+        }
+        Some(_) => {}
+    }
+
+    // Remove first (drops rows + blobs), then reorder what remains. Blob delete
+    // is best-effort: the db row is already gone, so a storage hiccup only
+    // leaves an orphan, not a dangling reference.
+    if let Some(remove) = payload.remove.filter(|ids| !ids.is_empty()) {
+        let keys = db::remove_listing_media(&state.db, listing_id, &remove).await?;
+        for key in keys {
+            if let Err(err) = state.media_storage.delete(&key).await {
+                tracing::warn!(?err, %key, "failed to delete removed media blob");
+            }
+        }
+    }
+    if let Some(order) = payload.order.filter(|ids| !ids.is_empty()) {
+        db::reorder_listing_media(&state.db, listing_id, &order).await?;
+    }
+
+    let media = db::fetch_all_listing_media(&state.db, listing_id)
+        .await?
+        .into_iter()
+        .map(MediaRef::from)
+        .collect();
+    Ok(Json(media))
 }
