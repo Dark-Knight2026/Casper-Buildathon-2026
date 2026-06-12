@@ -113,12 +113,12 @@ export function ChangeEmailDialog({ open, onOpenChange, currentEmail }: Props) {
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
             {currentEmail && (
-              <div className="space-y-1">
+              <div className="flex flex-col gap-2">
                 <Label className="text-muted-foreground">Current</Label>
                 <p className="text-sm break-all">{currentEmail}</p>
               </div>
             )}
-            <div className="space-y-2">
+            <div className="flex flex-col gap-2">
               <Label htmlFor="change-email-new" className="block">New email</Label>
               <Input
                 id="change-email-new"

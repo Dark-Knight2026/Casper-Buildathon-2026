@@ -12,7 +12,7 @@ interface RoleSelectorProps {
 
 export function RoleSelector({ value, onChange, disabled, isConnected }: RoleSelectorProps) {
   return (
-    <div className="space-y-3">
+    <div className="flex flex-col gap-2">
       <Label className="text-sm font-medium">I am a</Label>
       <RadioGroup
         value={value}

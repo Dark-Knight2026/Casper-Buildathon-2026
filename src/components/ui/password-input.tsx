@@ -32,7 +32,7 @@ const PasswordInput = React.forwardRef<HTMLInputElement, PasswordInputProps>(
     return (
       <div className="w-full">
         {label && (
-          <label htmlFor={inputId} className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor={inputId} className="block text-sm font-medium text-gray-700 mb-2">
             {label}
             {required && (
               <span className="text-red-600 ml-1" aria-label="required">

@@ -166,7 +166,7 @@ export function RoleSwitchDialog({ open, onOpenChange, currentRole }: RoleSwitch
         </DialogHeader>
 
         <div className="space-y-4 py-2">
-          <div className="space-y-3">
+          <div className="flex flex-col gap-2">
             <label htmlFor="role-select" className="text-sm font-medium block">
               New role
             </label>
