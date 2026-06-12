@@ -1,0 +1,64 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT listed_by, state, authority_tier, fair_housing_cleared\n            FROM listings\n            WHERE id = $1 AND deleted_at IS NULL\n            FOR UPDATE\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "listed_by",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "listings",
+            "name": "listed_by"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "state",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "listings",
+            "name": "state"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "authority_tier",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "listings",
+            "name": "authority_tier"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "fair_housing_cleared",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "listings",
+            "name": "fair_housing_cleared"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "129630992abed15f3f8269997eca73a8020a0cdfebd766d99428b348a5e3689f"
+}

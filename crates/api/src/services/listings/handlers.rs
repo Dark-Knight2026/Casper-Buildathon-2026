@@ -135,6 +135,10 @@ fn transition_or_error(outcome: StateTransition) -> ApiResult<db::ListingRow> {
         StateTransition::Illegal { from, to } => Err(ApiError::Conflict(format!(
             "cannot transition listing from {from} to {to}"
         ))),
+        StateTransition::GateFailed(gate) => Err(ApiError::Conflict(format!(
+            "cannot activate listing: {} gate not satisfied",
+            gate.label()
+        ))),
     }
 }
 
@@ -372,8 +376,14 @@ pub async fn submit_listing(
     user: RoleUser<LandlordRole>,
     Path(listing_id): Path<Uuid>,
 ) -> ApiResult<Json<Listing>> {
-    let outcome =
-        db::transition_state(&state.db, listing_id, user.0.sub, ListingState::Pending).await?;
+    let outcome = db::transition_state(
+        &state.db,
+        listing_id,
+        user.0.sub,
+        ListingState::Pending,
+        false,
+    )
+    .await?;
     let row = transition_or_error(outcome)?;
     Ok(Json(assemble_listing(&state, row).await?))
 }
@@ -381,13 +391,15 @@ pub async fn submit_listing(
 // `PUT /api/v1/listings/{id}/state`
 //
 /// Drives a listing the caller owns through a forward lifecycle transition.
-/// Legal transitions only; `-> active` will be authority-gate-guarded in a
-/// later commit. `withdrawn`/`expired` are not settable here.
+/// Legal transitions only. `-> active` is authority-gate-guarded: it requires a
+/// verified identity (KYC), authority tier `T1+`, and a cleared Fair Housing
+/// screen. `withdrawn`/`expired` are not settable here.
 ///
 /// # Errors
 ///
 /// Returns `403` when the caller is not the lister, `404` when the listing does
-/// not exist, `409` on an illegal transition, or a database error.
+/// not exist, `409` on an illegal transition or an unsatisfied activation gate,
+/// or a database error.
 #[utoipa::path(
     put,
     path = "/listings/{id}/state",
@@ -401,7 +413,7 @@ pub async fn submit_listing(
         (status = 401, description = "Unauthorized", body = ErrorResponse),
         (status = 403, description = "Not the lister", body = ErrorResponse),
         (status = 404, description = "Listing not found", body = ErrorResponse),
-        (status = 409, description = "Illegal lifecycle transition", body = ErrorResponse),
+        (status = 409, description = "Illegal transition or unsatisfied activation gate", body = ErrorResponse),
         (status = 500, description = "Internal server error", body = ErrorResponse),
     ),
     security(
@@ -415,7 +427,30 @@ pub async fn set_listing_state(
     Path(listing_id): Path<Uuid>,
     Json(payload): Json<UpdateStateRequest>,
 ) -> ApiResult<Json<Listing>> {
-    let outcome = db::transition_state(&state.db, listing_id, user.0.sub, payload.state).await?;
+    // The authority gate runs only on `-> active`. Resolve the identity (KYC)
+    // half here - an async provider call outside the DB - then the
+    // transactional transition checks the remaining gates under a row lock.
+    let kyc_verified = if payload.state == ListingState::Active {
+        state
+            .kyc
+            .verify_identity(user.0.sub)
+            .await
+            .map_err(|err| {
+                tracing::error!(?err, "kyc verification failed");
+                ApiError::Internal("identity verification failed".to_owned())
+            })?
+            .verified
+    } else {
+        false
+    };
+    let outcome = db::transition_state(
+        &state.db,
+        listing_id,
+        user.0.sub,
+        payload.state,
+        kyc_verified,
+    )
+    .await?;
     let row = transition_or_error(outcome)?;
     Ok(Json(assemble_listing(&state, row).await?))
 }

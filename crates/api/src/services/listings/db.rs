@@ -17,8 +17,8 @@ use crate::{
     common::{ApiError, ApiResult},
     services::{
         listings::models::{
-            AuthorityDocumentType, Listing, ListingHistoricalData, ListingProvenance, ListingState,
-            ListingStatistics, MediaRef,
+            AuthorityDocumentType, AuthorityTier, Listing, ListingHistoricalData,
+            ListingProvenance, ListingState, ListingStatistics, MediaRef,
         },
         properties::{db::PropertyRow, models::Property},
     },
@@ -731,6 +731,30 @@ pub async fn list_landlord_listings(
     Ok((listings, total))
 }
 
+/// Which authority gate blocked an activation (`-> active`).
+#[derive(Debug, Clone, Copy)]
+pub enum GateFailure {
+    /// Identity (KYC) not verified.
+    Identity,
+    /// Authority tier below `T1` (no documents on file).
+    Authority,
+    /// Fair Housing advertising screen not cleared.
+    FairHousing,
+}
+
+impl GateFailure {
+    /// Short label naming the failing gate, for the client error message.
+    #[inline]
+    #[must_use]
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Identity => "identity verification",
+            Self::Authority => "authority tier (documents on file / T1+)",
+            Self::FairHousing => "fair housing screen",
+        }
+    }
+}
+
 /// Outcome of an owner-scoped lifecycle transition.
 #[derive(Debug)]
 pub enum StateTransition {
@@ -748,15 +772,22 @@ pub enum StateTransition {
         /// Requested target state.
         to: ListingState,
     },
+    /// A `-> active` transition was blocked by an unsatisfied authority gate.
+    GateFailed(GateFailure),
 }
 
 /// Drives a listing through a lifecycle transition, owner-scoped and atomic.
 ///
 /// A `SELECT ... FOR UPDATE` locks the row so the current-state read, owner
-/// check and write share one snapshot - the row cannot be re-owned, deleted or
-/// transitioned by anyone else in between. On `-> active` a fresh expiry window
-/// is stamped; the authority gate that guards activation is wired in a later
-/// commit.
+/// check, gate check and write share one snapshot - the row cannot be re-owned,
+/// deleted or transitioned by anyone else in between.
+///
+/// `-> active` is the single authority-gate enforcement point (ADR-007 D2): it
+/// requires `kyc_verified` (the handler's `KycProvider` result), authority tier
+/// `>= T1`, and a cleared Fair Housing screen. The first unmet gate short-
+/// circuits to [`StateTransition::GateFailed`]. A successful activation stamps
+/// `identity_verified` and a fresh expiry window. `kyc_verified` is ignored for
+/// every other target.
 ///
 /// # Errors
 ///
@@ -767,12 +798,13 @@ pub async fn transition_state(
     listing_id: Uuid,
     owner_id: Uuid,
     target: ListingState,
+    kyc_verified: bool,
 ) -> Result<StateTransition, Error> {
     let mut tx = pool.begin().await?;
 
     let current = sqlx::query!(
         r"
-            SELECT listed_by, state
+            SELECT listed_by, state, authority_tier, fair_housing_cleared
             FROM listings
             WHERE id = $1 AND deleted_at IS NULL
             FOR UPDATE
@@ -793,6 +825,23 @@ pub async fn transition_state(
         return Ok(StateTransition::Illegal { from, to: target });
     }
 
+    // Authority gate (D2): the single enforcement point for `-> active`. Each
+    // gate is checked under the same row lock, so the verdict cannot drift
+    // before the write. The tier check rejects T0 (self-attested) - T1+ means
+    // documents are on file.
+    if target == ListingState::Active {
+        let tier = AuthorityTier::from_str(&current.authority_tier).unwrap_or(AuthorityTier::T0);
+        if !kyc_verified {
+            return Ok(StateTransition::GateFailed(GateFailure::Identity));
+        }
+        if tier == AuthorityTier::T0 {
+            return Ok(StateTransition::GateFailed(GateFailure::Authority));
+        }
+        if !current.fair_housing_cleared {
+            return Ok(StateTransition::GateFailed(GateFailure::FairHousing));
+        }
+    }
+
     // Stamp a fresh expiry window only when publishing; every other transition
     // passes NULL, and COALESCE keeps the stored `expires_at` untouched.
     let new_expires_at = (target == ListingState::Active).then(|| Utc::now() + Duration::days(90)); // 90-day LTR window
@@ -803,7 +852,9 @@ pub async fn transition_state(
             UPDATE listings
             SET
                 state = $2,
-                expires_at = COALESCE($3, expires_at)
+                expires_at = COALESCE($3, expires_at),
+                identity_verified = CASE WHEN $2 = 'active' THEN true
+                                         ELSE identity_verified END
             WHERE id = $1
             RETURNING
                 id, property_id, listed_by, intent, state, days_on_market,
