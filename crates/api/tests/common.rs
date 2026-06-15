@@ -43,8 +43,9 @@ use api::{
         VerificationLevel, tokens,
     },
     providers::{
-        EmailError, EmailMessage, EmailSender, FakeKycProvider, FakePinner, NoopMetadataStripper,
-        SharedMediaStorage, StubFairHousingScreen, StubMediaStorage,
+        EmailError, EmailMessage, EmailSender, FakeKycProvider, FakePinner, KycOutcome,
+        KycProvider, KycResult, NoopMetadataStripper, SharedMediaStorage, StubFairHousingScreen,
+        StubMediaStorage,
     },
     server,
 };
@@ -151,6 +152,13 @@ pub struct TestOverrides {
     /// before the handler runs, exercising the layer-level path distinct from
     /// the handler's own `MAX_AVATAR_BYTES` guard.
     pub request_body_limit_mb: Option<u32>,
+    /// Custom KYC provider for the test (defaults to `FakeKycProvider`, which
+    /// always reports verified).
+    ///
+    /// The authority-gate tests install a [`FailingKycProvider`] here to drive
+    /// the `-> active` gate's identity branch to its rejection - the default
+    /// fake can never fail it.
+    pub kyc: Option<Arc<dyn KycProvider>>,
 }
 
 impl Debug for TestOverrides {
@@ -166,6 +174,7 @@ impl Debug for TestOverrides {
             )
             .field("email_change_max_attempts", &self.email_change_max_attempts)
             .field("request_body_limit_mb", &self.request_body_limit_mb)
+            .field("kyc", &self.kyc.as_ref().map(|_| "KycProvider"))
             .finish()
     }
 }
@@ -230,7 +239,9 @@ pub async fn setup_test_server_with(
             .expect("Failed to connect to Redis"),
         mailer,
         media_storage,
-        kyc: Arc::new(FakeKycProvider::new()),
+        kyc: overrides
+            .kyc
+            .unwrap_or_else(|| Arc::new(FakeKycProvider::new()) as Arc<dyn KycProvider>),
         fair_housing: Arc::new(StubFairHousingScreen::new()),
         content_pinner: Arc::new(FakePinner::new()),
         metadata_stripper: Arc::new(NoopMetadataStripper::new()),
@@ -288,6 +299,28 @@ impl EmailSender for PermanentMailer {
         Err(EmailError::Permanent(
             "permanent mailer (test fixture)".to_owned(),
         ))
+    }
+}
+
+/// KYC provider whose check always completes as NOT verified.
+///
+/// The default `FakeKycProvider` always reports verified, so the identity half
+/// of the authority gate can never fail under it. Tests that must drive the
+/// `-> active` gate's identity branch to its rejection install this via
+/// [`TestOverrides::kyc`]. A `verified = false` outcome is a completed check,
+/// not a transport error, so the handler sees a clean gate failure (`409`),
+/// never a `500`.
+#[derive(Debug, Default)]
+pub struct FailingKycProvider;
+
+#[async_trait]
+impl KycProvider for FailingKycProvider {
+    #[inline]
+    async fn verify_identity(&self, _user_id: Uuid) -> KycResult<KycOutcome> {
+        Ok(KycOutcome {
+            verified: false,
+            reference: None,
+        })
     }
 }
 
@@ -349,6 +382,22 @@ pub async fn setup_test_server_capturing(
     )
     .await;
     (env, handle)
+}
+
+/// Builds a test server whose KYC provider always reports NOT verified (see
+/// [`FailingKycProvider`]). Used by the authority-gate identity-branch tests;
+/// keeps the `Arc<dyn KycProvider>` coercion in one place.
+#[inline]
+pub async fn setup_test_server_failing_kyc(pool: PgPool) -> TestEnv {
+    setup_test_server_with(
+        pool,
+        false,
+        TestOverrides {
+            kyc: Some(Arc::new(FailingKycProvider) as Arc<dyn KycProvider>),
+            ..TestOverrides::default()
+        },
+    )
+    .await
 }
 
 /// Sets a unique email on the user and clears `email_verified`, so the next
