@@ -17,6 +17,7 @@
 | email_retry.rs            | Tests email retry-queue db layer: insert, claim, mark sent/failed, terminal-row cleanup over seeded rows        |
 | email_verification.rs     | Tests POST /auth/verify/email/{send,resend,confirm}: token round-trip, rate limits, rotation, AlreadyVerified   |
 | email_worker.rs           | Tests email retry-queue worker loop: process_retries ticks via mock mailer, graceful shutdown exit              |
+| favorites.rs              | Tests tenant favorites: add (201 nested / 409 dup / 404 unknown), user-scoped remove, list + ids, cross-tenant isolation |
 | health.rs                 | Tests health check endpoint response structure                                                                  |
 | ico.rs                    | Tests ICO endpoints: balance lookup, progress reporting, address validation                                     |
 | listings.rs               | Tests listing core: create draft + validation, public active-only list (filters/geo/sort), public detail, landlord list, owner-scoped update + Fair Housing re-screen, unique-tenant view tracking |
