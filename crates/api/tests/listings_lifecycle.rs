@@ -79,7 +79,7 @@ async fn db_state(pool: &PgPool, listing_id: Uuid) -> String {
         .expect("listing state")
 }
 
-// POST /listings/{id}/submit --------------------------------------------------
+// `POST /listings/{id}/submit` ------------------------------------------------
 
 /// A draft submits to `pending`.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
@@ -146,7 +146,7 @@ async fn submit_rejects_tenant_403(pool: PgPool) {
     assert_eq!(status, StatusCode::FORBIDDEN);
 }
 
-// PUT /listings/{id}/state: legal + illegal transitions -----------------------
+// `PUT /listings/{id}/state` legal + illegal transitions ----------------------
 
 /// `active -> leased` is a legal forward edge.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
@@ -264,7 +264,7 @@ async fn set_state_rejects_tenant_403(pool: PgPool) {
     assert_eq!(status, StatusCode::FORBIDDEN);
 }
 
-// DELETE /listings/{id}: soft withdraw ----------------------------------------
+// `DELETE /listings/{id}` soft withdraw ---------------------------------------
 
 /// Withdraw returns `204` and soft-deletes: state becomes `withdrawn` with a
 /// stamped `deleted_at`.
@@ -370,7 +370,7 @@ async fn withdraw_rejects_tenant_403(pool: PgPool) {
     assert_eq!(status, StatusCode::FORBIDDEN);
 }
 
-// GET /listings/{id}/statistics -----------------------------------------------
+// `GET /listings/{id}/statistics` ---------------------------------------------
 
 /// A fresh active listing reports zeroed metrics to its owner.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
@@ -463,7 +463,7 @@ async fn statistics_rejects_tenant_403(pool: PgPool) {
     assert_eq!(status, StatusCode::FORBIDDEN);
 }
 
-// GET /listings/{id}/historical-data ------------------------------------------
+// `GET /listings/{id}/historical-data` ----------------------------------------
 
 /// A fresh listing has no history.
 #[sqlx::test(migrator = "common::MIGRATIONS")]

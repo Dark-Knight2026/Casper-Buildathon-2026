@@ -80,7 +80,7 @@ async fn moderate(
     (code, body.unwrap_or(Value::Null))
 }
 
-// POST /listings/{id}/media: upload -------------------------------------------
+// `POST /listings/{id}/media` upload ------------------------------------------
 
 /// Happy path: a PNG uploads as `pending`, with a `bafy`-prefixed CID and a
 /// stored URL, at position 0.
@@ -252,7 +252,7 @@ async fn upload_requires_auth_401(pool: PgPool) {
     assert_eq!(response.status_code(), StatusCode::UNAUTHORIZED);
 }
 
-// PUT /listings/{id}/media/{mediaId}/moderation -------------------------------
+// `PUT /listings/{id}/media/{mediaId}/moderation` -----------------------------
 
 /// An agent approves a pending media item.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
@@ -341,7 +341,7 @@ async fn pending_media_hidden_until_approved(pool: PgPool) {
     assert_eq!(after.json::<Value>()["media"].as_array().unwrap().len(), 1);
 }
 
-// PUT /listings/{id}/media: reorder + remove ----------------------------------
+// `PUT /listings/{id}/media` reorder + remove ---------------------------------
 
 /// `order` sets each id's position to its index in the list.
 #[sqlx::test(migrator = "common::MIGRATIONS")]

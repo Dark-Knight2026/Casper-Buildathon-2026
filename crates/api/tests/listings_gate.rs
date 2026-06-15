@@ -249,7 +249,7 @@ async fn activate_succeeds_when_all_gates_pass(pool: PgPool) {
     assert_eq!(body["provenance"]["verifiedListerBadge"], true);
 }
 
-// GET /listings/{id}/provenance -----------------------------------------------
+// `GET /listings/{id}/provenance` ---------------------------------------------
 
 /// A fresh draft's provenance: unverified identity, T0 / "Unverified", clean
 /// Fair Housing, no badge.
@@ -309,7 +309,7 @@ async fn provenance_rejects_tenant_403(pool: PgPool) {
     assert_eq!(status, StatusCode::FORBIDDEN);
 }
 
-// POST /listings/{id}/authority/documents -------------------------------------
+// `POST /listings/{id}/authority/documents` -----------------------------------
 
 /// A deed lifts the authority tier to T1 without claiming PM attribution.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
@@ -461,7 +461,7 @@ async fn authority_document_rejects_tenant_403(pool: PgPool) {
     assert_eq!(status, StatusCode::FORBIDDEN);
 }
 
-// POST /listings/{id}/fair-housing/screen -------------------------------------
+// `POST /listings/{id}/fair-housing/screen` -----------------------------------
 
 /// A clean listing clears the screen with no flags.
 #[sqlx::test(migrator = "common::MIGRATIONS")]

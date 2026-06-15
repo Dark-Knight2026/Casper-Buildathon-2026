@@ -97,7 +97,7 @@ async fn review(
     (code, body.unwrap_or(Value::Null))
 }
 
-// POST /listings/{id}/applications: submit ------------------------------------
+// `POST /listings/{id}/applications` submit -----------------------------------
 
 /// A valid application against an active listing is created as `pending`, with
 /// the landlord denormalized from the listing.
@@ -236,7 +236,7 @@ async fn submit_requires_auth_401(pool: PgPool) {
     assert_eq!(response.status_code(), StatusCode::UNAUTHORIZED);
 }
 
-// GET /applications: my applications ------------------------------------------
+// `GET /applications` my applications -----------------------------------------
 
 /// The tenant sees their own application with the nested listing.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
@@ -307,7 +307,7 @@ async fn list_my_applications_rejects_landlord_403(pool: PgPool) {
     assert_eq!(status, StatusCode::FORBIDDEN);
 }
 
-// GET /listings/{id}/applications: listing applications -----------------------
+// `GET /listings/{id}/applications` listing applications ----------------------
 
 /// The owning landlord sees the applications on their listing.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
@@ -385,7 +385,7 @@ async fn list_listing_applications_rejects_tenant_403(pool: PgPool) {
     assert_eq!(status, StatusCode::FORBIDDEN);
 }
 
-// PUT /applications/{id}/status: review ---------------------------------------
+// `PUT /applications/{id}/status` review --------------------------------------
 
 /// The landlord approves a pending application.
 #[sqlx::test(migrator = "common::MIGRATIONS")]

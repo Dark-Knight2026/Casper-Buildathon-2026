@@ -59,7 +59,7 @@ async fn list_favorites(env: &TestEnv, token: &str) -> (StatusCode, Value) {
     (status, body.unwrap_or(Value::Null))
 }
 
-// POST /favorites -------------------------------------------------------------
+// `POST /favorites` -----------------------------------------------------------
 
 /// Saving a listing returns `201` with the timestamp and the nested listing.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
@@ -136,7 +136,7 @@ async fn add_favorite_requires_auth_401(pool: PgPool) {
     assert_eq!(response.status_code(), StatusCode::UNAUTHORIZED);
 }
 
-// DELETE /favorites/{listingId} -----------------------------------------------
+// `DELETE /favorites/{listingId}` ---------------------------------------------
 
 /// Removing a saved listing returns `204`.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
@@ -220,7 +220,7 @@ async fn remove_favorite_rejects_landlord_403(pool: PgPool) {
     assert_eq!(status, StatusCode::FORBIDDEN);
 }
 
-// GET /favorites + GET /favorites/ids -----------------------------------------
+// `GET /favorites` + `GET /favorites/ids` -------------------------------------
 
 /// The list returns the caller's saves, each with the nested listing.
 #[sqlx::test(migrator = "common::MIGRATIONS")]

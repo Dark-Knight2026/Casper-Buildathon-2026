@@ -379,7 +379,7 @@ async fn get_property_returns_404_for_unknown(pool: PgPool) {
     assert_eq!(response.status_code(), StatusCode::NOT_FOUND);
 }
 
-// `GET /properties/{id}/listings` owner-scoped offer history -------------------
+// `GET /properties/{id}/listings` owner-scoped offer history ------------------
 
 /// The owner sees the (initially empty) offer history.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
