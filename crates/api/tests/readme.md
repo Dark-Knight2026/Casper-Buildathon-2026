@@ -40,6 +40,7 @@
 | users_role.rs             | Tests PATCH /users/me/role: whitelist, recent-auth, rate limit, lease pre-check, audit log                      |
 | verification_gating.rs    | Tests VerifiedUser<V> extractor: per-level JWT claim gating via from_request_parts, legacy no-level variant     |
 | vesting.rs                | Tests vesting endpoints: schedules pagination, token supply, release schedule, address validation               |
+| viewings.rs               | Tests viewing bookings: book (201/400/404 inactive), tenant my-list + cross-tenant, landlord owner-scoped list, hard-delete cancel (any status, user-scoped), confirm/reject (400/409/403 non-owner/404) |
 
 ## MinIO port hazard
 
