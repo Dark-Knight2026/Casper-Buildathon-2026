@@ -63,7 +63,7 @@ async fn post_property(env: &TestEnv, token: &str, payload: &Value) -> (StatusCo
     (status, body.unwrap_or(Value::Null))
 }
 
-// POST /properties: dedup-aware create ----------------------------------------
+// `POST /properties` dedup-aware create ---------------------------------------
 
 /// Happy path: a landlord creates a property and the RESO-aligned facade is
 /// reflected back (the wire names, not the legacy DB column names).
@@ -345,7 +345,7 @@ async fn create_property_rejects_too_many_parking_features_400(pool: PgPool) {
     );
 }
 
-// GET /properties/{id}: public detail -----------------------------------------
+// `GET /properties/{id}` public detail ----------------------------------------
 
 /// The detail read is public (no auth) and returns the stored record.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
@@ -379,7 +379,7 @@ async fn get_property_returns_404_for_unknown(pool: PgPool) {
     assert_eq!(response.status_code(), StatusCode::NOT_FOUND);
 }
 
-// GET /properties/{id}/listings: owner-scoped offer history -------------------
+// `GET /properties/{id}/listings` owner-scoped offer history -------------------
 
 /// The owner sees the (initially empty) offer history.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
@@ -473,7 +473,7 @@ async fn property_listings_rejects_tenant_403(pool: PgPool) {
     assert_eq!(status, StatusCode::FORBIDDEN);
 }
 
-// GET /properties/search: geo + pagination ------------------------------------
+// `GET /properties/search` geo + pagination -----------------------------------
 
 /// Without geo params, search lists every property and wraps them in the
 /// paginated envelope (`itemCount`, `pageCount`, `data`).

@@ -672,6 +672,86 @@ pub async fn seed_authed_user(env: &TestEnv, pool: &PgPool, role: UserRole) -> (
     (user_id, token)
 }
 
+/// Seeds a minimal property owned by `landlord_id` at the given coordinates and
+/// returns its id. `address_line1` is UUID-unique so repeated seeds never
+/// collapse onto one row via the address fingerprint; the coordinates feed the
+/// generated `geog` point so geo filters have something to match.
+#[inline]
+pub async fn seed_property_at(pool: &PgPool, landlord_id: Uuid, lat: f64, lng: f64) -> Uuid {
+    let address_line1 = format!("{} Test St", Uuid::new_v4());
+    sqlx::query_scalar::<_, Uuid>(
+        r"
+            INSERT INTO properties (
+                landlord_id, property_type, address_line1, city, state, zip_code,
+                latitude, longitude, bedrooms
+            )
+            VALUES ($1, 'single_family', $2, 'Denver', 'CO', '80202', $3, $4, 2)
+            RETURNING id
+        ",
+    )
+    .bind(landlord_id)
+    .bind(address_line1)
+    .bind(lat)
+    .bind(lng)
+    .fetch_one(pool)
+    .await
+    .expect("seed property")
+}
+
+/// Seeds a minimal property at a default Denver coordinate. See
+/// [`seed_property_at`] for the geo-specific variant.
+#[inline]
+pub async fn seed_property(pool: &PgPool, landlord_id: Uuid) -> Uuid {
+    seed_property_at(pool, landlord_id, 39.7392, -104.9903).await
+}
+
+/// Posts a minimal valid `rent_ltr` draft listing against `property_id` (as the
+/// landlord holding `token`) and returns its id. Setup for tests that need an
+/// existing listing without re-asserting the create path itself.
+#[inline]
+pub async fn create_draft_listing(env: &TestEnv, token: &str, property_id: Uuid) -> Uuid {
+    let response = env
+        .server
+        .post("/api/v1/listings")
+        .add_header(COOKIE, format!("access_token={token}"))
+        .json(&serde_json::json!({
+            "propertyId": property_id,
+            "title": "Test Listing",
+            "description": "A comfortable place to live",
+            "terms": {
+                "rentMonthly": 2000.0,
+                "securityDeposit": 2000.0,
+                "leaseTermsOffered": ["1 Year"],
+                "furnished": false,
+            },
+        }))
+        .await;
+    assert_eq!(
+        response.status_code(),
+        StatusCode::CREATED,
+        "create draft listing setup must succeed",
+    );
+    Uuid::parse_str(response.json::<Value>()["id"].as_str().unwrap()).expect("listing id is a UUID")
+}
+
+/// Forces a listing to `active` directly in the DB, with a 90-day expiry, so
+/// list/search/view tests can target the active-only surface without driving
+/// the full submit -> authority-gate -> activate flow (covered on its own).
+#[inline]
+pub async fn activate_listing(pool: &PgPool, listing_id: Uuid) {
+    sqlx::query(
+        r"
+            UPDATE listings
+            SET state = 'active', expires_at = now() + INTERVAL '90 days'
+            WHERE id = $1
+        ",
+    )
+    .bind(listing_id)
+    .execute(pool)
+    .await
+    .expect("activate listing");
+}
+
 /// Makes an authenticated request by attaching the JWT as the
 /// `access_token` cookie (the transport the middleware now expects).
 #[inline]

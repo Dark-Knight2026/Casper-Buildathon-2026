@@ -19,6 +19,7 @@
 | email_worker.rs           | Tests email retry-queue worker loop: process_retries ticks via mock mailer, graceful shutdown exit              |
 | health.rs                 | Tests health check endpoint response structure                                                                  |
 | ico.rs                    | Tests ICO endpoints: balance lookup, progress reporting, address validation                                     |
+| listings.rs               | Tests listing core: create draft + validation, public active-only list (filters/geo/sort), public detail, landlord list, owner-scoped update + Fair Housing re-screen, unique-tenant view tracking |
 | models.rs                 | Unit tests for transaction models: TxType, HashType, ft_action_type_id                                          |
 | properties.rs             | Tests property domain: dedup-aware upsert (201/200, cross-landlord collapse), public detail, owner-scoped offer history, geo search (radius/bbox + validation) |
 | server.rs                 | Tests server configuration: rate limiting (SC-005), CORS (SC-007)                                               |
