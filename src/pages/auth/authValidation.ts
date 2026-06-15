@@ -96,13 +96,17 @@ export function authErrorMessage(
  * open-redirect vector once the caller hands it to `navigate()`. This guard
  * lives here — the single source of truth — so every caller is covered without
  * re-validating, matching the allowlist in `useAuthPrompt` and `AuthCallback`.
+ *
+ * Accept only a leading `/` NOT followed by another `/` or a backslash:
+ * browsers normalize `\` → `/` during URL resolution, so `/\evil.com` would
+ * otherwise slip through and resolve to the protocol-relative `//evil.com`.
  */
 export function popPostAuthRedirect(): string | null {
   try {
     const intent = localStorage.getItem('auth_redirect_intent');
     if (intent) {
       localStorage.removeItem('auth_redirect_intent');
-      if (intent.startsWith('/') && !intent.startsWith('//')) return intent;
+      if (/^\/(?![/\\])/.test(intent)) return intent;
     }
   } catch {
     // localStorage unavailable (private mode / embedded webview) — fall back

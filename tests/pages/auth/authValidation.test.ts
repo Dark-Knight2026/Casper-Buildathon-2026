@@ -124,6 +124,8 @@ describe('popPostAuthRedirect', () => {
     for (const evil of [
       'https://evil.com',
       '//evil.com',
+      '/\\evil.com',
+      '/\\/evil.com',
       'javascript:alert(1)',
     ]) {
       localStorage.setItem('auth_redirect_intent', evil);
