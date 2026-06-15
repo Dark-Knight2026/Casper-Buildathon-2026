@@ -250,9 +250,6 @@ export interface ListingSearchParams extends GeoSearchParams {
   pageSize?: number; // default 25, max 100 (NOT `limit`)
 }
 
-/** Geo-only search params for `GET /properties/search` (the bare geo shape). */
-export type PropertyGeoSearchParams = GeoSearchParams;
-
 // ---------------------------------------------------------------------------
 // Analytics (re-homed onto Listing)
 // ---------------------------------------------------------------------------

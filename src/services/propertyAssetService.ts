@@ -4,7 +4,7 @@ import type {
   PropertyAsset,
   Listing,
   CreatePropertyBody,
-  PropertyGeoSearchParams,
+  GeoSearchParams,
 } from '@/types/listingContract';
 
 /**
@@ -44,7 +44,7 @@ export async function getPropertyListings(id: string): Promise<Listing[]> {
  * lives in `listingService.searchListings`, not here.
  */
 export async function searchPropertiesByGeo(
-  params: PropertyGeoSearchParams
+  params: GeoSearchParams
 ): Promise<PropertyAsset[]> {
   return backendClient.get<PropertyAsset[]>(
     `${PROPERTIES}/search${toQueryString({ ...params })}`
