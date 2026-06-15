@@ -5,6 +5,7 @@
 | File                      | Responsibility                                                                                                  |
 | ------------------------- | --------------------------------------------------------------------------------------------------------------- |
 | analytics.rs              | Tests analytics module: request deserialization, endpoint response structure                                    |
+| applications.rs           | Tests rental applications: submit (201/400 validation/404 inactive), tenant my-list + cross-tenant, landlord owner-scoped list, review approve/reject (400/409/404 no-leak) |
 | audit_verify_email.rs     | Tests verify_email audit row: one row on genuine confirm, zero on idempotent re-confirm, full request context   |
 | auth.rs                   | Tests authentication: nonce, login, E2E flow, cryptographic signature verification                              |
 | auth_invalidate_before.rs | Tests jwt_invalidate_before middleware cutoff: NULL/past allow, future/deleted-user block                       |
