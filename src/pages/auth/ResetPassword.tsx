@@ -10,6 +10,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useAuth } from '@/hooks/useAuth';
 import { resetPassword } from '@/services/backendAuthService';
 import { getDashboardRoute } from '@/types/user';
+import { storePasswordCredential } from '@/lib/passwordCredential';
 
 import { PASSWORD_HINT, authErrorMessage, popPostAuthRedirect, validatePasswordPolicy } from './authValidation';
 
@@ -47,6 +48,13 @@ export default function ResetPassword() {
 
     try {
       const { user } = await resetPassword(token, password);
+      // Update the saved credential with the new password (id falls back to ''
+      // → helper no-ops if the session somehow carries no email).
+      void storePasswordCredential({
+        id: user.email ?? '',
+        password,
+        name: `${user.first_name} ${user.last_name}`.trim(),
+      });
       setSession(user);
     } catch (err) {
       setFormError(
@@ -107,6 +115,7 @@ export default function ResetPassword() {
           <form onSubmit={handleSubmit} className="space-y-4" noValidate>
             <PasswordInput
               label="New password"
+              name="password"
               autoComplete="new-password"
               required
               value={password}
@@ -117,6 +126,7 @@ export default function ResetPassword() {
             />
             <PasswordInput
               label="Confirm new password"
+              name="confirmPassword"
               autoComplete="new-password"
               required
               value={confirm}

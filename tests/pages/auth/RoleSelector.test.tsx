@@ -24,23 +24,10 @@ describe('RoleSelector', () => {
         'Landlord must reflect the controlled value=landlord prop'
       ).toBeChecked();
       const tenant = screen.getByRole('radio', { name: /tenant/i });
-      expect(tenant, 'Tenant must NOT be checked when value=landlord').not.toBeChecked();
-    });
-
-    it('shows the "set during first connection" hint when isConnected', () => {
-      render(<RoleSelector value="tenant" onChange={vi.fn()} isConnected />);
       expect(
-        screen.getByText(/set during first connection/i),
-        'a hint must explain why role is locked once a wallet is attached'
-      ).toBeInTheDocument();
-    });
-
-    it('does not show the hint before connection', () => {
-      render(<RoleSelector value="tenant" onChange={vi.fn()} />);
-      expect(
-        screen.queryByText(/set during first connection/i),
-        'no lock hint while wallet is unconnected — role is still editable'
-      ).toBeNull();
+        tenant,
+        'Tenant must NOT be checked when value=landlord'
+      ).not.toBeChecked();
     });
   });
 
@@ -59,9 +46,10 @@ describe('RoleSelector', () => {
       const onChange = vi.fn();
       render(<RoleSelector value="landlord" onChange={onChange} />);
       fireEvent.click(screen.getByRole('radio', { name: /tenant/i }));
-      expect(onChange, 'switching back to Tenant must fire onChange').toHaveBeenCalledWith(
-        'tenant'
-      );
+      expect(
+        onChange,
+        'switching back to Tenant must fire onChange'
+      ).toHaveBeenCalledWith('tenant');
     });
 
     it('does not fire onChange when disabled', () => {

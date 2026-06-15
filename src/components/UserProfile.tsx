@@ -273,7 +273,7 @@ export default function UserProfile({ isOpen, onClose }: UserProfileProps) {
               {isEditing ? (
                 <>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
+                    <div className="flex flex-col gap-2">
                       <Label htmlFor="edit-firstName">First Name</Label>
                       <Input
                         id="edit-firstName"
@@ -281,7 +281,7 @@ export default function UserProfile({ isOpen, onClose }: UserProfileProps) {
                         onChange={(e) => setEditData(prev => ({ ...prev, firstName: e.target.value }))}
                       />
                     </div>
-                    <div className="space-y-2">
+                    <div className="flex flex-col gap-2">
                       <Label htmlFor="edit-lastName">Last Name</Label>
                       <Input
                         id="edit-lastName"
@@ -292,7 +292,7 @@ export default function UserProfile({ isOpen, onClose }: UserProfileProps) {
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
+                    <div className="flex flex-col gap-2">
                       <Label htmlFor="edit-phone">Phone</Label>
                       <Input
                         id="edit-phone"
@@ -301,7 +301,7 @@ export default function UserProfile({ isOpen, onClose }: UserProfileProps) {
                       />
                     </div>
                     {(profile.role === 'agent' || profile.role === 'broker') && (
-                      <div className="space-y-2">
+                      <div className="flex flex-col gap-2">
                         <Label htmlFor="edit-company">Company</Label>
                         <Input
                           id="edit-company"
@@ -314,7 +314,7 @@ export default function UserProfile({ isOpen, onClose }: UserProfileProps) {
 
                   {(profile.role === 'agent' || profile.role === 'broker') && (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
+                      <div className="flex flex-col gap-2">
                         <Label htmlFor="edit-license">License Number</Label>
                         <Input
                           id="edit-license"
@@ -322,7 +322,7 @@ export default function UserProfile({ isOpen, onClose }: UserProfileProps) {
                           onChange={(e) => setEditData(prev => ({ ...prev, licenseNumber: e.target.value }))}
                         />
                       </div>
-                      <div className="space-y-2">
+                      <div className="flex flex-col gap-2">
                         <Label htmlFor="edit-experience">Years of Experience</Label>
                         <Input
                           id="edit-experience"
@@ -334,7 +334,7 @@ export default function UserProfile({ isOpen, onClose }: UserProfileProps) {
                     </div>
                   )}
 
-                  <div className="space-y-2">
+                  <div className="flex flex-col gap-2">
                     <Label htmlFor="edit-bio">Bio</Label>
                     <Textarea
                       id="edit-bio"

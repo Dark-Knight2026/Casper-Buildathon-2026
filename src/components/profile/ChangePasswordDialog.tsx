@@ -117,10 +117,11 @@ export function ChangePasswordDialog({ open, onOpenChange }: Props) {
             </Alert>
           )}
 
-          <div className="space-y-1">
+          <div className="flex flex-col gap-2">
             <Label htmlFor="cp-current" className="block">Current password</Label>
             <PasswordInput
               id="cp-current"
+              name="currentPassword"
               autoComplete="current-password"
               value={current}
               onChange={(e) => setCurrent(e.target.value)}
@@ -130,10 +131,11 @@ export function ChangePasswordDialog({ open, onOpenChange }: Props) {
             />
           </div>
 
-          <div className="space-y-1">
+          <div className="flex flex-col gap-2">
             <Label htmlFor="cp-new" className="block">New password</Label>
             <PasswordInput
               id="cp-new"
+              name="newPassword"
               autoComplete="new-password"
               value={next}
               onChange={(e) => setNext(e.target.value)}
@@ -143,10 +145,11 @@ export function ChangePasswordDialog({ open, onOpenChange }: Props) {
             />
           </div>
 
-          <div className="space-y-1">
+          <div className="flex flex-col gap-2">
             <Label htmlFor="cp-confirm" className="block">Confirm new password</Label>
             <PasswordInput
               id="cp-confirm"
+              name="confirmPassword"
               autoComplete="new-password"
               value={confirm}
               onChange={(e) => setConfirm(e.target.value)}

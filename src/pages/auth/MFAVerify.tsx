@@ -107,7 +107,7 @@ export default function MFAVerify() {
             </AlertDescription>
           </Alert>
 
-          <div className="space-y-2">
+          <div className="flex flex-col gap-2">
             <Label htmlFor="code">
               {useBackupCode ? 'Backup Code' : 'Verification Code'}
             </Label>
@@ -131,7 +131,7 @@ export default function MFAVerify() {
             {loading ? 'Verifying...' : 'Verify'}
           </Button>
 
-          <div className="space-y-2">
+          <div className="flex flex-col gap-2">
             {!useBackupCode && (
               <>
                 <Button

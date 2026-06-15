@@ -365,7 +365,7 @@ export function TenantProfile() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
+                <div className="flex flex-col gap-2">
                   <Label htmlFor="firstName">First Name *</Label>
                   <Input
                     id="firstName"
@@ -376,7 +376,7 @@ export function TenantProfile() {
                     aria-invalid={formData.firstName.trim().length === 0}
                   />
                 </div>
-                <div className="space-y-2">
+                <div className="flex flex-col gap-2">
                   <Label htmlFor="lastName">Last Name *</Label>
                   <Input
                     id="lastName"
@@ -389,7 +389,7 @@ export function TenantProfile() {
                 </div>
               </div>
 
-              <div className="space-y-2">
+              <div className="flex flex-col gap-2">
                 <Label htmlFor="phone">Phone Number</Label>
                 <Input
                   id="phone"
@@ -400,7 +400,7 @@ export function TenantProfile() {
                 />
               </div>
 
-              <div className="space-y-2">
+              <div className="flex flex-col gap-2">
                 <Label htmlFor="bio">Bio</Label>
                 <Textarea
                   id="bio"
@@ -520,7 +520,7 @@ export function TenantProfile() {
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                 <div className="flex items-start gap-3 min-w-0 justify-end sm:items-center sm:justify-start">
                   <Mail className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5 sm:mt-0" />
-                  <p className="text-sm text-foreground min-w-0 wrap-break-word text-right sm:text-left">
+                  <p className="text-sm text-foreground min-w-0 wrap-break-word text-right">
                     {authProfile?.email ?? ''}
                   </p>
                 </div>

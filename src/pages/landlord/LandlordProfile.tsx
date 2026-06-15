@@ -380,7 +380,7 @@ export function LandlordProfile() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
+                <div className="flex flex-col gap-2">
                   <Label htmlFor="firstName">First Name *</Label>
                   <Input
                     id="firstName"
@@ -393,7 +393,7 @@ export function LandlordProfile() {
                     aria-invalid={formData.firstName.trim().length === 0}
                   />
                 </div>
-                <div className="space-y-2">
+                <div className="flex flex-col gap-2">
                   <Label htmlFor="lastName">Last Name *</Label>
                   <Input
                     id="lastName"
@@ -408,7 +408,7 @@ export function LandlordProfile() {
                 </div>
               </div>
 
-              <div className="space-y-2">
+              <div className="flex flex-col gap-2">
                 <Label htmlFor="phone">Phone Number</Label>
                 <Input
                   id="phone"
@@ -419,7 +419,7 @@ export function LandlordProfile() {
                 />
               </div>
 
-              <div className="space-y-2">
+              <div className="flex flex-col gap-2">
                 <Label htmlFor="bio">Bio</Label>
                 <Textarea
                   id="bio"
