@@ -1,0 +1,10 @@
+dist
+dist-ssr
+node_modules
+coverage
+playwright-report
+test-results
+pnpm-lock.yaml
+*.tsbuildinfo
+.vercel
+public

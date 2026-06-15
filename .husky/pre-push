@@ -1,0 +1,5 @@
+echo "▶ Running tests on the whole repo (pnpm test)…"
+pnpm test || {
+  echo "✖ Tests failed — push blocked. Fix the tests or use 'git push --no-verify' to override."
+  exit 1
+}
