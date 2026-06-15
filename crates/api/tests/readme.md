@@ -20,6 +20,7 @@
 | health.rs                 | Tests health check endpoint response structure                                                                  |
 | ico.rs                    | Tests ICO endpoints: balance lookup, progress reporting, address validation                                     |
 | models.rs                 | Unit tests for transaction models: TxType, HashType, ft_action_type_id                                          |
+| properties.rs             | Tests property domain: dedup-aware upsert (201/200, cross-landlord collapse), public detail, owner-scoped offer history, geo search (radius/bbox + validation) |
 | server.rs                 | Tests server configuration: rate limiting (SC-005), CORS (SC-007)                                               |
 | server_shutdown.rs        | Tests server::notify_workers shutdown fan-out: every subscriber gets the edge, empty path is not an error       |
 | staking.rs                | Tests staking endpoints: info, portfolio, earnings, rewards history, address validation                         |

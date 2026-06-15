@@ -635,6 +635,43 @@ pub async fn seed_active_lease_as_landlord(pool: &PgPool, user_id: Uuid) {
     .expect("seed lease");
 }
 
+/// Inserts a minimal `active` `users` row with `role` and returns its id.
+///
+/// Marketplace endpoints gate on `RoleUser<R>` (a JWT role claim, never a DB
+/// read) but FK their writes to `users.id` (`listed_by`, the tenant `user_id`,
+/// the denormalized `landlord_id`). A bare `create_test_jwt(UserId::default(),
+/// ...)` clears the claim yet dangles that FK, so any domain that persists a
+/// row needs a real user first. The email is UUID-suffixed so a single test can
+/// seed several users of the same role without colliding on the unique index.
+#[inline]
+pub async fn seed_user(pool: &PgPool, role: UserRole) -> Uuid {
+    let role_name = role.to_string();
+    let email = format!("{role_name}-{}@example.com", Uuid::new_v4());
+    sqlx::query_scalar::<_, Uuid>(
+        r"
+            INSERT INTO users (email, primary_auth_method, role, first_name, last_name, status)
+            VALUES ($1, 'wallet', $2, 'Test', 'User', 'active')
+            RETURNING id
+        ",
+    )
+    .bind(email)
+    .bind(role_name)
+    .fetch_one(pool)
+    .await
+    .expect("seed user")
+}
+
+/// Seeds a user (see [`seed_user`]) and mints a matching access JWT, returning
+/// both. The token's `role` claim equals `role` so it clears `RoleUser<R>` for
+/// the same marker, and its `sub` is the freshly-inserted row so FK-bearing
+/// writes resolve against a live user.
+#[inline]
+pub async fn seed_authed_user(env: &TestEnv, pool: &PgPool, role: UserRole) -> (Uuid, String) {
+    let user_id = seed_user(pool, role.clone()).await;
+    let token = create_test_jwt(user_id, role, &env.jwt_secret);
+    (user_id, token)
+}
+
 /// Makes an authenticated request by attaching the JWT as the
 /// `access_token` cookie (the transport the middleware now expects).
 #[inline]
@@ -667,7 +704,7 @@ pub async fn authed_request<T: DeserializeOwned>(
     };
 
     let status = response.status_code();
-    let body_result: Result<T, _> = serde_json::from_slice(response.as_bytes());
+    let body_result = serde_json::from_slice::<T>(response.as_bytes());
 
     (status, body_result.ok())
 }
