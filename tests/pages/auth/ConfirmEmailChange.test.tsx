@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, act } from '@testing-library/react';
 import { StrictMode } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 
@@ -25,7 +25,10 @@ const SUCCESS_REDIRECT_DELAY_MS = 3000;
 import ConfirmEmailChange from '@/pages/auth/ConfirmEmailChange';
 
 function apiError(statusCode: number, code?: string) {
-  const e = new Error(code ?? `status ${statusCode}`) as Error & { statusCode?: number; code?: string };
+  const e = new Error(code ?? `status ${statusCode}`) as Error & {
+    statusCode?: number;
+    code?: string;
+  };
   e.statusCode = statusCode;
   e.code = code;
   return e;
@@ -53,7 +56,9 @@ describe('ConfirmEmailChange', () => {
   it('confirms the token once and shows success', async () => {
     confirmEmailChange.mockResolvedValue({ id: '1', role: 'tenant' });
     renderPage();
-    await waitFor(() => expect(screen.getByText(/your new email is active/i)).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText(/your new email is active/i)).toBeInTheDocument()
+    );
     expect(confirmEmailChange).toHaveBeenCalledTimes(1);
   });
 
@@ -67,15 +72,25 @@ describe('ConfirmEmailChange', () => {
   it('renders needs_login and stashes intent on a not-logged-in 401', async () => {
     confirmEmailChange.mockRejectedValue(apiError(401, 'invalid_token'));
     renderPage('tok');
-    await waitFor(() => expect(screen.getByRole('link', { name: /log in/i })).toBeInTheDocument());
-    expect(localStorage.getItem('auth_redirect_intent')).toContain('/confirm-email-change?token=tok');
+    await waitFor(() =>
+      expect(screen.getByRole('link', { name: /log in/i })).toBeInTheDocument()
+    );
+    expect(localStorage.getItem('auth_redirect_intent')).toContain(
+      '/confirm-email-change?token=tok'
+    );
   });
 
   it('renders invalid_token (NOT needs_login) on a bad-token 401 — mirror-bug fix', async () => {
-    confirmEmailChange.mockRejectedValue(apiError(401, 'invalid_email_change_token'));
+    confirmEmailChange.mockRejectedValue(
+      apiError(401, 'invalid_email_change_token')
+    );
     renderPage('tok');
-    await waitFor(() => expect(screen.getByText(/no longer valid/i)).toBeInTheDocument());
-    expect(screen.queryByRole('link', { name: /log in/i })).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByText(/no longer valid/i)).toBeInTheDocument()
+    );
+    expect(
+      screen.queryByRole('link', { name: /log in/i })
+    ).not.toBeInTheDocument();
     // A bad token must not stash a post-login retry intent.
     expect(localStorage.getItem('auth_redirect_intent')).toBeNull();
   });
@@ -83,33 +98,47 @@ describe('ConfirmEmailChange', () => {
   it('routes a 400 to invalid_token (no Retry loop) — TEST-07', async () => {
     confirmEmailChange.mockRejectedValue(apiError(400, 'bad_request'));
     renderPage('tok');
-    await waitFor(() => expect(screen.getByText(/no longer valid/i)).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText(/no longer valid/i)).toBeInTheDocument()
+    );
     // invalid_token screen has no Retry button (unlike generic_error).
-    expect(screen.queryByRole('button', { name: /retry/i })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /retry/i })
+    ).not.toBeInTheDocument();
   });
 
   it('routes an unexpected 500 to generic_error (with Retry)', async () => {
     confirmEmailChange.mockRejectedValue(apiError(500, 'internal'));
     renderPage('tok');
-    await waitFor(() => expect(screen.getByRole('button', { name: /retry/i })).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /retry/i })).toBeInTheDocument()
+    );
   });
 
   it('routes a 409 to a dead-end email_taken screen (no Retry) — TBLK-01', async () => {
     confirmEmailChange.mockRejectedValue(apiError(409, 'email_taken'));
     renderPage('tok');
     await waitFor(() =>
-      expect(screen.getByText(/already registered to another account/i)).toBeInTheDocument(),
+      expect(
+        screen.getByText(/already registered to another account/i)
+      ).toBeInTheDocument()
     );
     // email_taken offers a way out (Back to dashboard) but never a Retry — the
     // second attempt would just 409 again.
-    expect(screen.getByRole('link', { name: /back to dashboard/i })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /retry/i })).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('link', { name: /back to dashboard/i })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /retry/i })
+    ).not.toBeInTheDocument();
   });
 
   it('shows no_token and never calls the API when the link has no token — TBLK-04', async () => {
     renderPage('');
     await waitFor(() =>
-      expect(screen.getByText(/needs a confirmation token/i)).toBeInTheDocument(),
+      expect(
+        screen.getByText(/needs a confirmation token/i)
+      ).toBeInTheDocument()
     );
     expect(confirmEmailChange).not.toHaveBeenCalled();
   });
@@ -121,10 +150,15 @@ describe('ConfirmEmailChange', () => {
       renderPage();
       // Flush the confirm promise so status becomes 'success' and the redirect
       // timer is scheduled, then advance past the delay to fire it.
-      await vi.advanceTimersByTimeAsync(0);
+      // act() so React commits the success state (which schedules the redirect
+      // timer) inside the flush — without it the scheduling effect races the
+      // second advance under parallel load and `navigate` may not fire (flaky).
+      await act(() => vi.advanceTimersByTimeAsync(0));
       expect(mockNavigate).not.toHaveBeenCalled();
-      await vi.advanceTimersByTimeAsync(SUCCESS_REDIRECT_DELAY_MS);
-      expect(mockNavigate).toHaveBeenCalledWith('/tenant/dashboard', { replace: true });
+      await act(() => vi.advanceTimersByTimeAsync(SUCCESS_REDIRECT_DELAY_MS));
+      expect(mockNavigate).toHaveBeenCalledWith('/tenant/dashboard', {
+        replace: true,
+      });
     } finally {
       vi.useRealTimers();
     }
