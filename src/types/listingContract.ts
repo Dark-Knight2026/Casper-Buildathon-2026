@@ -216,17 +216,24 @@ export type ListingSortBy =
   | 'distance'; // 'distance' needs nearLat/nearLng
 
 /**
+ * Geo search shape shared by listing search and property geo-search. The
+ * radius trio (`nearLat`/`nearLng`/`radiusMiles`) is all-or-nothing; `bbox` is
+ * the bounding-box alternative. Kept as one base so the two surfaces can't drift.
+ */
+export interface GeoSearchParams {
+  nearLat?: number;
+  nearLng?: number;
+  radiusMiles?: number; // (0, 500]
+  bbox?: string; // "minLng,minLat,maxLng,maxLat"
+}
+
+/**
  * `GET /listings` (public) params over active listings.
  * Every filter is SINGLE-valued; pagination uses `pageSize`, NOT `limit`.
  * No protected-class proxy may ever appear here as a filter or sort.
  */
-export interface ListingSearchParams {
-  // Text + geo
-  search?: string; // ilike over title + addressLine1
-  nearLat?: number; // geo radius trio — all-or-nothing
-  nearLng?: number;
-  radiusMiles?: number; // (0, 500]
-  bbox?: string; // "minLng,minLat,maxLng,maxLat"
+export interface ListingSearchParams extends GeoSearchParams {
+  search?: string; // text: ilike over title + addressLine1
   // Attribute filters (non-protected-class only)
   intent?: ListingIntent; // MVP: rent_ltr
   propertyType?: RealPropertyType;
@@ -243,13 +250,8 @@ export interface ListingSearchParams {
   pageSize?: number; // default 25, max 100 (NOT `limit`)
 }
 
-/** Geo-only search params for `GET /properties/search`. */
-export interface PropertyGeoSearchParams {
-  nearLat?: number;
-  nearLng?: number;
-  radiusMiles?: number;
-  bbox?: string;
-}
+/** Geo-only search params for `GET /properties/search` (the bare geo shape). */
+export type PropertyGeoSearchParams = GeoSearchParams;
 
 // ---------------------------------------------------------------------------
 // Analytics (re-homed onto Listing)
