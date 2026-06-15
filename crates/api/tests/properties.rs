@@ -93,14 +93,13 @@ async fn create_property_returns_201_with_reso_fields(pool: PgPool) {
     assert_eq!(body["bathroomsTotal"], 1.5);
     assert_eq!(body["livingArea"], 900);
     assert_eq!(body["parkingFeatures"], json!(["garage", "covered"]));
-    // normalized_address is GENERATED with REGEXP_REPLACE(..., '[^a-z0-9]', ...)
-    // running BEFORE the outer LOWER(), and the class is lowercase-only - so
-    // uppercase letters are STRIPPED, not folded: "Market"->"arket", "St"->"t",
-    // "Denver"->"enver", "CO"->"". Only already-lowercase letters and digits
-    // survive. This pins the migration's actual (surprising) behaviour.
+    // normalized_address is GENERATED as REGEXP_REPLACE(LOWER(line1+city+state+
+    // zip), '[^a-z0-9]', ''): lowercase first, then strip to alphanumerics.
+    // addressLine2 ("Unit 4") is NOT part of this column (it only feeds the
+    // fingerprint). So "100 Market St"+"Denver"+"CO"+"80202" -> "100marketstdenverco80202".
     assert_eq!(
         body["normalizedAddress"].as_str().unwrap(),
-        "100arkettenver80202"
+        "100marketstdenverco80202"
     );
 
     // The row is owned by the caller's `sub`.
