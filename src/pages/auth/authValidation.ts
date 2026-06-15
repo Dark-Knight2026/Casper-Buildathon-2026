@@ -45,7 +45,10 @@ export function validatePasswordPolicy(password: string): string | null {
 }
 
 /** Returns an error message, or `null` when the required name is acceptable. */
-export function validateRequiredName(label: string, value: string): string | null {
+export function validateRequiredName(
+  label: string,
+  value: string
+): string | null {
   const trimmed = value.trim();
   if (!trimmed) return `${label} is required.`;
   if (trimmed.length > NAME_MAX_LEN) {
@@ -65,12 +68,13 @@ export function validateRequiredName(label: string, value: string): string | nul
  */
 export function authErrorMessage(
   err: unknown,
-  overrides: Record<number, string> = {},
+  overrides: Record<number, string> = {}
 ): string {
   if (err instanceof ApiError) {
     const status = err.statusCode;
     if (status !== undefined && overrides[status]) return overrides[status];
-    if (status === 429) return 'Too many attempts. Please wait a moment and try again.';
+    if (status === 429)
+      return 'Too many attempts. Please wait a moment and try again.';
     if (status !== undefined && status >= 500) {
       return 'Something went wrong on our end. Please try again shortly.';
     }
@@ -85,13 +89,20 @@ export function authErrorMessage(
  * Pops a stashed post-login redirect target (set by `useAuthPrompt` when a
  * gated action bounced the user to login). Returns `null` when none is set.
  * Single-use: the entry is removed on read.
+ *
+ * The value is validated to a same-origin relative path before being returned:
+ * localStorage is writable by any same-origin script, so an absolute
+ * (`https://evil.com`) or protocol-relative (`//evil.com`) value would be an
+ * open-redirect vector once the caller hands it to `navigate()`. This guard
+ * lives here — the single source of truth — so every caller is covered without
+ * re-validating, matching the allowlist in `useAuthPrompt` and `AuthCallback`.
  */
 export function popPostAuthRedirect(): string | null {
   try {
     const intent = localStorage.getItem('auth_redirect_intent');
     if (intent) {
       localStorage.removeItem('auth_redirect_intent');
-      return intent;
+      if (intent.startsWith('/') && !intent.startsWith('//')) return intent;
     }
   } catch {
     // localStorage unavailable (private mode / embedded webview) — fall back
