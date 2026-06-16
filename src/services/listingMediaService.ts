@@ -17,20 +17,34 @@ import type { MediaRef, MediaReorderEntry } from '@/types/listingContract';
 const LISTINGS = '/api/v1/listings';
 
 /**
- * `POST /listings/{id}/media`. Uploads one or more images. The browser sets the
- * multipart boundary automatically — do NOT pass a custom `Content-Type`;
- * `buildRequestBody` strips it for FormData. Returns the full media set for the
- * listing (fresh uploads come back `pending`).
+ * `POST /listings/{id}/media`. Uploads a single image under the `file` field
+ * and returns the created `MediaRef` (fresh uploads come back `pending`). The
+ * browser sets the multipart boundary automatically — do NOT pass a custom
+ * `Content-Type`; `buildRequestBody` strips it for FormData.
+ */
+export async function uploadMediaFile(
+  listingId: string,
+  file: File
+): Promise<MediaRef> {
+  const form = new FormData();
+  form.append('file', file);
+  return backendClient.post<MediaRef>(`${LISTINGS}/${listingId}/media`, form);
+}
+
+/**
+ * Uploads several images. The endpoint accepts one file per request, so this
+ * uploads sequentially (preserving order, which drives `position`) and returns
+ * the created refs.
  */
 export async function uploadMedia(
   listingId: string,
   files: File[]
 ): Promise<MediaRef[]> {
-  const form = new FormData();
+  const results: MediaRef[] = [];
   for (const file of files) {
-    form.append('media', file);
+    results.push(await uploadMediaFile(listingId, file));
   }
-  return backendClient.post<MediaRef[]>(`${LISTINGS}/${listingId}/media`, form);
+  return results;
 }
 
 /**
