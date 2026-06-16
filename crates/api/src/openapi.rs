@@ -70,6 +70,8 @@ use crate::{
             users::models::UpdateRoleRequest,
             // Properties models
             properties::models::CreatePropertyRequest,
+            properties::models::UpdatePropertyRequest,
+            properties::models::PropertyType,
             properties::models::Property,
             properties::models::PropertyListingSummary,
             // Listings models

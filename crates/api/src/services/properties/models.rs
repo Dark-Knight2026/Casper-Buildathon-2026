@@ -4,11 +4,14 @@
 //! `bedrooms`, ...); this layer is the RESO-aligned facade. Wire field names
 //! are camelCased (`stateOrProvince`, `postalCode`, `bedroomsTotal`,
 //! `livingArea`, `parkingFeatures`) via `#[serde(rename_all = "camelCase")]`
-//! and mapped back to the legacy columns in the [`From`]/`into_validated`
+//! and mapped back to the legacy columns in the [`From`]/[`TryFrom`]
 //! conversions.
+
+use core::str::FromStr;
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use strum::{Display, EnumString};
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
@@ -19,19 +22,32 @@ use crate::{
     },
 };
 
-/// Property types accepted on create. Mirrors the `properties.property_type`
-/// CHECK constraint from the 2023 schema; the RESO display taxonomy
-/// (`house`/`studio`/`loft`) is a frontend concern to reconcile before
-/// Phase 3, so the DB constraint stays the authority.
-const PROPERTY_TYPES: [&str; 7] = [
-    "single_family",
-    "multi_family",
-    "apartment",
-    "condo",
-    "townhouse",
-    "commercial",
-    "other",
-];
+/// Physical property type. Stored as TEXT (CHECK) in the DB under the legacy
+/// 2023 column; serde validates the wire value against these variants, so an
+/// unknown `propertyType` is rejected at deserialization. The RESO display
+/// taxonomy (`house`/`studio`/`loft`) is a frontend concern to reconcile
+/// before Phase 3, so the DB constraint stays the authority.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema, EnumString, Display,
+)]
+#[serde(rename_all = "snake_case")]
+#[strum(serialize_all = "snake_case")]
+pub enum PropertyType {
+    /// Detached single-family home.
+    SingleFamily,
+    /// Multi-family building (duplex, triplex, ...).
+    MultiFamily,
+    /// Apartment unit.
+    Apartment,
+    /// Condominium.
+    Condo,
+    /// Townhouse.
+    Townhouse,
+    /// Commercial property.
+    Commercial,
+    /// Anything not covered above.
+    Other,
+}
 
 const MAX_ADDRESS_LEN: usize = 200;
 const MAX_CITY_LEN: usize = 100;
@@ -67,7 +83,7 @@ pub struct Property {
     /// Longitude.
     pub longitude: Option<f64>,
     /// Property type.
-    pub property_type: String,
+    pub property_type: PropertyType,
     /// Bedroom count (RESO `BedroomsTotal`).
     pub bedrooms_total: Option<i32>,
     /// Bathroom count (RESO `BathroomsTotal`); fractional allowed.
@@ -98,7 +114,10 @@ impl From<PropertyRow> for Property {
             postal_code: row.zip_code,
             latitude: row.latitude,
             longitude: row.longitude,
-            property_type: row.property_type,
+            // The DB CHECK guarantees a known value; fall back to `Other` rather
+            // than panic if a row predates a taxonomy change.
+            property_type: PropertyType::from_str(&row.property_type)
+                .unwrap_or(PropertyType::Other),
             bedrooms_total: row.bedrooms,
             bathrooms_total: row.bathrooms,
             living_area: row.square_feet,
@@ -167,8 +186,8 @@ pub struct CreatePropertyRequest {
     pub state_or_province: String,
     /// Postal code (required).
     pub postal_code: String,
-    /// Property type (must match an allowed value).
-    pub property_type: String,
+    /// Property type.
+    pub property_type: PropertyType,
     /// Latitude in `[-90, 90]`.
     pub latitude: Option<f64>,
     /// Longitude in `[-180, 180]`.
@@ -187,30 +206,26 @@ pub struct CreatePropertyRequest {
     pub parcel_apn: Option<String>,
 }
 
-impl CreatePropertyRequest {
+impl TryFrom<CreatePropertyRequest> for NewProperty {
+    type Error = ApiError;
+
     /// Trims, validates, and maps the payload onto the legacy column names.
+    /// `propertyType` is validated by serde at deserialization, so it needs no
+    /// check here.
     ///
     /// # Errors
     ///
     /// Returns [`ApiError::BadRequest`] when a required field is empty, a
-    /// length cap is exceeded, `propertyType` is not an allowed value, a
-    /// coordinate is out of range, or a numeric attribute is negative.
+    /// length cap is exceeded, a coordinate is out of range, or a numeric
+    /// attribute is negative.
     #[inline]
-    pub fn into_validated(self) -> ApiResult<NewProperty> {
-        let property_type = self.property_type.trim().to_owned();
-        if !PROPERTY_TYPES.contains(&property_type.as_str()) {
-            return Err(ApiError::BadRequest(format!(
-                "propertyType must be one of: {}",
-                PROPERTY_TYPES.join(", ")
-            )));
-        }
-
-        validate_coordinate("latitude", self.latitude, 90.0)?;
-        validate_coordinate("longitude", self.longitude, 180.0)?;
-        non_negative_int("bedroomsTotal", self.bedrooms_total)?;
-        non_negative_int("livingArea", self.living_area)?;
-        non_negative_int("yearBuilt", self.year_built)?;
-        if let Some(bathrooms) = self.bathrooms_total
+    fn try_from(request: CreatePropertyRequest) -> ApiResult<Self> {
+        validate_coordinate("latitude", request.latitude, 90.0)?;
+        validate_coordinate("longitude", request.longitude, 180.0)?;
+        non_negative_int("bedroomsTotal", request.bedrooms_total)?;
+        non_negative_int("livingArea", request.living_area)?;
+        non_negative_int("yearBuilt", request.year_built)?;
+        if let Some(bathrooms) = request.bathrooms_total
             && (!bathrooms.is_finite() || bathrooms < 0.0)
         {
             return Err(ApiError::BadRequest(
@@ -218,21 +233,21 @@ impl CreatePropertyRequest {
             ));
         }
 
-        Ok(NewProperty {
-            address_line1: required("addressLine1", &self.address_line1, MAX_ADDRESS_LEN)?,
-            address_line2: optional("addressLine2", self.address_line2, MAX_ADDRESS_LEN)?,
-            city: required("city", &self.city, MAX_CITY_LEN)?,
-            state: required("stateOrProvince", &self.state_or_province, MAX_STATE_LEN)?,
-            zip_code: required("postalCode", &self.postal_code, MAX_POSTAL_LEN)?,
-            property_type,
-            latitude: self.latitude,
-            longitude: self.longitude,
-            bedrooms: self.bedrooms_total,
-            bathrooms: self.bathrooms_total,
-            square_feet: self.living_area,
-            year_built: self.year_built,
-            parking_features: validate_parking(self.parking_features)?,
-            parcel_id: optional("parcelApn", self.parcel_apn, MAX_PARCEL_LEN)?,
+        Ok(Self {
+            address_line1: required("addressLine1", &request.address_line1, MAX_ADDRESS_LEN)?,
+            address_line2: optional("addressLine2", request.address_line2, MAX_ADDRESS_LEN)?,
+            city: required("city", &request.city, MAX_CITY_LEN)?,
+            state: required("stateOrProvince", &request.state_or_province, MAX_STATE_LEN)?,
+            zip_code: required("postalCode", &request.postal_code, MAX_POSTAL_LEN)?,
+            property_type: request.property_type.to_string(),
+            latitude: request.latitude,
+            longitude: request.longitude,
+            bedrooms: request.bedrooms_total,
+            bathrooms: request.bathrooms_total,
+            square_feet: request.living_area,
+            year_built: request.year_built,
+            parking_features: validate_parking(request.parking_features)?,
+            parcel_id: optional("parcelApn", request.parcel_apn, MAX_PARCEL_LEN)?,
         })
     }
 }
@@ -254,8 +269,8 @@ pub struct UpdatePropertyRequest {
     pub state_or_province: Option<String>,
     /// Postal code.
     pub postal_code: Option<String>,
-    /// Property type (must match an allowed value).
-    pub property_type: Option<String>,
+    /// Property type.
+    pub property_type: Option<PropertyType>,
     /// Latitude in `[-90, 90]`.
     pub latitude: Option<f64>,
     /// Longitude in `[-180, 180]`.
@@ -274,38 +289,29 @@ pub struct UpdatePropertyRequest {
     pub parcel_apn: Option<String>,
 }
 
-impl UpdatePropertyRequest {
+impl TryFrom<UpdatePropertyRequest> for PropertyPatch {
+    type Error = ApiError;
+
     /// Trims, validates, and maps the present fields onto the legacy column
     /// names. Absent fields stay `None` so the DB layer's COALESCE leaves them
     /// untouched.
     ///
+    /// `propertyType`, when present, is validated by serde at deserialization,
+    /// so it needs no check here.
+    ///
     /// # Errors
     ///
     /// Returns [`ApiError::BadRequest`] when a provided field is blank, a length
-    /// cap is exceeded, `propertyType` is not an allowed value, a coordinate is
-    /// out of range, or a numeric attribute is negative.
+    /// cap is exceeded, a coordinate is out of range, or a numeric attribute is
+    /// negative.
     #[inline]
-    pub fn into_validated_patch(self) -> ApiResult<PropertyPatch> {
-        let property_type = match self.property_type {
-            Some(raw) => {
-                let trimmed = raw.trim().to_owned();
-                if !PROPERTY_TYPES.contains(&trimmed.as_str()) {
-                    return Err(ApiError::BadRequest(format!(
-                        "propertyType must be one of: {}",
-                        PROPERTY_TYPES.join(", ")
-                    )));
-                }
-                Some(trimmed)
-            }
-            None => None,
-        };
-
-        validate_coordinate("latitude", self.latitude, 90.0)?;
-        validate_coordinate("longitude", self.longitude, 180.0)?;
-        non_negative_int("bedroomsTotal", self.bedrooms_total)?;
-        non_negative_int("livingArea", self.living_area)?;
-        non_negative_int("yearBuilt", self.year_built)?;
-        if let Some(bathrooms) = self.bathrooms_total
+    fn try_from(request: UpdatePropertyRequest) -> ApiResult<Self> {
+        validate_coordinate("latitude", request.latitude, 90.0)?;
+        validate_coordinate("longitude", request.longitude, 180.0)?;
+        non_negative_int("bedroomsTotal", request.bedrooms_total)?;
+        non_negative_int("livingArea", request.living_area)?;
+        non_negative_int("yearBuilt", request.year_built)?;
+        if let Some(bathrooms) = request.bathrooms_total
             && (!bathrooms.is_finite() || bathrooms < 0.0)
         {
             return Err(ApiError::BadRequest(
@@ -313,25 +319,31 @@ impl UpdatePropertyRequest {
             ));
         }
 
-        Ok(PropertyPatch {
+        Ok(Self {
             address_line1: required_if_present(
                 "addressLine1",
-                self.address_line1,
+                request.address_line1,
                 MAX_ADDRESS_LEN,
             )?,
-            address_line2: optional("addressLine2", self.address_line2, MAX_ADDRESS_LEN)?,
-            city: required_if_present("city", self.city, MAX_CITY_LEN)?,
-            state: required_if_present("stateOrProvince", self.state_or_province, MAX_STATE_LEN)?,
-            zip_code: required_if_present("postalCode", self.postal_code, MAX_POSTAL_LEN)?,
-            property_type,
-            latitude: self.latitude,
-            longitude: self.longitude,
-            bedrooms: self.bedrooms_total,
-            bathrooms: self.bathrooms_total,
-            square_feet: self.living_area,
-            year_built: self.year_built,
-            parking_features: validate_parking(self.parking_features)?,
-            parcel_id: optional("parcelApn", self.parcel_apn, MAX_PARCEL_LEN)?,
+            address_line2: optional("addressLine2", request.address_line2, MAX_ADDRESS_LEN)?,
+            city: required_if_present("city", request.city, MAX_CITY_LEN)?,
+            state: required_if_present(
+                "stateOrProvince",
+                request.state_or_province,
+                MAX_STATE_LEN,
+            )?,
+            zip_code: required_if_present("postalCode", request.postal_code, MAX_POSTAL_LEN)?,
+            property_type: request
+                .property_type
+                .map(|property_type| property_type.to_string()),
+            latitude: request.latitude,
+            longitude: request.longitude,
+            bedrooms: request.bedrooms_total,
+            bathrooms: request.bathrooms_total,
+            square_feet: request.living_area,
+            year_built: request.year_built,
+            parking_features: validate_parking(request.parking_features)?,
+            parcel_id: optional("parcelApn", request.parcel_apn, MAX_PARCEL_LEN)?,
         })
     }
 }

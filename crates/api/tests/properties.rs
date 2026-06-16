@@ -63,6 +63,47 @@ async fn post_property(env: &TestEnv, token: &str, payload: &Value) -> (StatusCo
     (status, body.unwrap_or(Value::Null))
 }
 
+/// `PUT /properties/{id}` as a landlord, returning the status and JSON body
+/// (`Property` on success, `ErrorResponse` otherwise).
+async fn put_property(
+    env: &TestEnv,
+    token: &str,
+    property_id: Uuid,
+    payload: &Value,
+) -> (StatusCode, Value) {
+    let (status, body) = common::authed_request::<Value>(
+        &env.server,
+        &Method::PUT,
+        &format!("/api/v1/properties/{property_id}"),
+        token,
+        payload,
+    )
+    .await;
+    (status, body.unwrap_or(Value::Null))
+}
+
+/// Inserts a listing for `property_id` in the given lifecycle `state` with a
+/// fully-cleared authority gate (tier `T1`, identity + Fair Housing verified),
+/// so a revalidation reset is observable. Returns the listing id.
+async fn seed_listing(pool: &PgPool, property_id: Uuid, listed_by: Uuid, state: &str) -> Uuid {
+    sqlx::query_scalar::<_, Uuid>(
+        r"
+            INSERT INTO listings (
+                property_id, listed_by, intent, state, title,
+                identity_verified, authority_tier, fair_housing_cleared
+            )
+            VALUES ($1, $2, 'rent_ltr', $3, 'Test listing', true, 'T1', true)
+            RETURNING id
+        ",
+    )
+    .bind(property_id)
+    .bind(listed_by)
+    .bind(state)
+    .fetch_one(pool)
+    .await
+    .expect("seed listing")
+}
+
 // `POST /properties` dedup-aware create ---------------------------------------
 
 /// Happy path: a landlord creates a property and the RESO-aligned facade is
@@ -211,23 +252,19 @@ async fn create_property_rejects_empty_address_line1_400(pool: PgPool) {
     );
 }
 
-/// An unknown `propertyType` is rejected against the CHECK-constraint whitelist.
+/// An unknown `propertyType` is rejected by serde at deserialization, before
+/// the handler runs. That surfaces as a `422` with a plain-text body (not the
+/// `ErrorResponse` envelope), so only the status is asserted.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
-async fn create_property_rejects_unknown_property_type_400(pool: PgPool) {
+async fn create_property_rejects_unknown_property_type_422(pool: PgPool) {
     let env = common::setup_test_server(pool.clone(), false).await;
     let (_id, token) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
 
     let mut payload = valid_payload();
     payload["propertyType"] = json!("castle");
-    let (status, body) = post_property(&env, &token, &payload).await;
+    let (status, _body) = post_property(&env, &token, &payload).await;
 
-    assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert!(
-        body["error"]
-            .as_str()
-            .unwrap()
-            .contains("propertyType must be one of")
-    );
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
 }
 
 /// Latitude outside `[-90, 90]` -> `400`.
@@ -691,4 +728,128 @@ async fn search_rejects_bbox_min_exceeds_max_400(pool: PgPool) {
             .unwrap()
             .contains("bbox min must not exceed max")
     );
+}
+
+// `PUT /properties/{id}` edit + listing revalidation --------------------------
+
+/// Happy path: a landlord edits fields and the change is persisted and
+/// reflected back in the RESO-aligned facade.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn update_property_returns_200_with_changes(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, token) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let property_id = common::seed_property(&pool, landlord_id).await;
+
+    let payload = json!({ "bedroomsTotal": 5, "propertyType": "condo" });
+    let (status, body) = put_property(&env, &token, property_id, &payload).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["bedroomsTotal"], 5);
+    assert_eq!(body["propertyType"], "condo");
+}
+
+/// Without auth -> `401`.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn update_property_requires_auth_401(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, _token) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let property_id = common::seed_property(&pool, landlord_id).await;
+
+    let response = env
+        .server
+        .put(&format!("/api/v1/properties/{property_id}"))
+        .json(&json!({ "bedroomsTotal": 3 }))
+        .await;
+    assert_eq!(response.status_code(), StatusCode::UNAUTHORIZED);
+}
+
+/// A landlord who does not own the property -> `403`.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn update_property_rejects_non_owner_403(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (owner_id, _owner_token) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let (_other_id, other_token) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let property_id = common::seed_property(&pool, owner_id).await;
+
+    let (status, _body) = put_property(
+        &env,
+        &other_token,
+        property_id,
+        &json!({ "bedroomsTotal": 3 }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+}
+
+/// An unknown property id -> `404`.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn update_property_unknown_id_404(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (_id, token) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+
+    let (status, _body) =
+        put_property(&env, &token, Uuid::new_v4(), &json!({ "bedroomsTotal": 3 })).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+/// Editing an address so its fingerprint collides with another property -> the
+/// unique-violation surfaces as `409`, not a `500`.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn update_property_address_conflict_409(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (_id, token) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+
+    // `valid_payload` is "100 Market St"; create a second property next door.
+    let (_a_status, a) = post_property(&env, &token, &valid_payload()).await;
+    let mut payload_b = valid_payload();
+    payload_b["addressLine1"] = json!("200 Market St");
+    let (_b_status, _b) = post_property(&env, &token, &payload_b).await;
+
+    let a_id = Uuid::parse_str(a["id"].as_str().unwrap()).unwrap();
+    let (status, _body) = put_property(
+        &env,
+        &token,
+        a_id,
+        &json!({ "addressLine1": "200 Market St" }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+}
+
+/// Editing a property revalidates its listings: live (`active`) and submitted
+/// (`pending`) offers drop back to `draft`, a closed (`leased`) one keeps its
+/// state, and the authority gate resets on every live listing (badge ->
+/// `Unverified`).
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn update_property_revalidates_listings(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, token) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let property_id = common::seed_property(&pool, landlord_id).await;
+    let active = seed_listing(&pool, property_id, landlord_id, "active").await;
+    let pending = seed_listing(&pool, property_id, landlord_id, "pending").await;
+    let leased = seed_listing(&pool, property_id, landlord_id, "leased").await;
+
+    let (status, _body) =
+        put_property(&env, &token, property_id, &json!({ "bedroomsTotal": 4 })).await;
+    assert_eq!(status, StatusCode::OK);
+
+    for (listing_id, expected_state) in [(active, "draft"), (pending, "draft"), (leased, "leased")]
+    {
+        let (state, tier, identity, fair_housing) =
+            sqlx::query_as::<_, (String, String, bool, bool)>(
+                r"
+                    SELECT state, authority_tier, identity_verified, fair_housing_cleared
+                    FROM listings
+                    WHERE id = $1
+                ",
+            )
+            .bind(listing_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(state, expected_state);
+        assert_eq!(tier, "T0");
+        assert!(!identity);
+        assert!(!fair_housing);
+    }
 }

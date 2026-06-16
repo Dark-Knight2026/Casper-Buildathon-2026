@@ -57,7 +57,7 @@ pub async fn create_property(
     user: RoleUser<LandlordRole>,
     Json(payload): Json<CreatePropertyRequest>,
 ) -> ApiResult<(StatusCode, Json<Property>)> {
-    let new_property = payload.into_validated()?;
+    let new_property = payload.try_into()?;
     let (row, was_inserted) = db::upsert_property(&state.db, user.0.sub, new_property).await?;
     let status = if was_inserted {
         StatusCode::CREATED
@@ -112,7 +112,7 @@ pub async fn update_property(
     Path(property_id): Path<Uuid>,
     Json(payload): Json<UpdatePropertyRequest>,
 ) -> ApiResult<Json<Property>> {
-    let patch = payload.into_validated_patch()?;
+    let patch = payload.try_into()?;
     match db::update_property(&state.db, property_id, user.0.sub, patch).await? {
         PropertyUpdate::Updated(row) => Ok(Json(Property::from(*row))),
         PropertyUpdate::NotFound => Err(ApiError::NotFound("property not found".to_owned())),
