@@ -8,25 +8,83 @@ import { useNavigate } from 'react-router-dom';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { ArrowLeft, ArrowRight, Check, Home, MapPin, Sparkles, Camera, Plus, Trash2, X } from 'lucide-react';
+import {
+  ArrowLeft,
+  ArrowRight,
+  Check,
+  Home,
+  MapPin,
+  Sparkles,
+  Camera,
+  Plus,
+  Trash2,
+  X,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
-import { ALL_AMENITIES, UTILITIES, LEASE_TERMS, PET_POLICIES, US_STATES, formatPropertyType, type PropertyType, type SurroundingCategory } from '@/types/property';
+import {
+  ALL_AMENITIES,
+  UTILITIES,
+  LEASE_TERMS,
+  PET_POLICIES,
+  US_STATES,
+  type SurroundingCategory,
+} from '@/types/property';
+import { createProperty } from '@/services/propertyAssetService';
+import { createListing } from '@/services/listingService';
+import { uploadMedia } from '@/services/listingMediaService';
+import { formatPropertyType } from '@/lib/listingDisplay';
+import { logger } from '@/utils/logger';
+import type { RealPropertyType } from '@/types/listingContract';
 
-const PROPERTY_TYPES: PropertyType[] = ['apartment', 'house', 'condo', 'townhouse', 'studio', 'loft'];
+const PROPERTY_TYPES: RealPropertyType[] = [
+  'single_family',
+  'multi_family',
+  'apartment',
+  'condo',
+  'townhouse',
+  'commercial',
+  'other',
+];
 
 // Tenant-facing nearby categories. Free-text place name + per-place distance;
 // category is constrained to this list so the tenant surrounding-area filter
 // keeps working.
 const SURROUNDING_CATEGORIES: SurroundingCategory[] = [
-  'hospital', 'school', 'gym', 'airport', 'park', 'grocery', 'transit',
+  'hospital',
+  'school',
+  'gym',
+  'airport',
+  'park',
+  'grocery',
+  'transit',
 ];
 
 // Form validation schema
@@ -38,30 +96,59 @@ const propertyFormSchema = z.object({
   city: z.string().min(2, 'City is required'),
   state: z.string().length(2, 'State must be 2 characters'),
   zipCode: z.string().regex(/^\d{5}(-\d{4})?$/, 'Invalid ZIP code'),
-  propertyType: z.enum(['apartment', 'house', 'condo', 'townhouse', 'studio', 'loft']),
-  
+  propertyType: z.enum([
+    'single_family',
+    'multi_family',
+    'apartment',
+    'condo',
+    'townhouse',
+    'commercial',
+    'other',
+  ]),
+
   // Step 2: Details
   bedrooms: z.coerce.number().min(0, 'Bedrooms must be 0 or more'),
-  bathrooms: z.coerce.number().min(0.5, 'Bathrooms must be at least 0.5').step(0.5),
-  squareFeet: z.coerce.number().min(100, 'Square feet must be at least 100').nullable(),
+  bathrooms: z.coerce
+    .number()
+    .min(0.5, 'Bathrooms must be at least 0.5')
+    .step(0.5),
+  squareFeet: z.coerce
+    .number()
+    .min(100, 'Square feet must be at least 100')
+    .nullable(),
+  yearBuilt: z.coerce
+    .number()
+    .int()
+    .min(1800, 'Enter a valid year')
+    .max(new Date().getFullYear(), 'Year cannot be in the future')
+    .nullable(),
   rent: z.coerce.number().min(1, 'Rent must be greater than 0'),
-  securityDeposit: z.coerce.number().min(0, 'Security deposit must be 0 or more'),
+  securityDeposit: z.coerce
+    .number()
+    .min(0, 'Security deposit must be 0 or more'),
   availableDate: z.string().min(1, 'Available date is required'),
   leaseTerms: z.array(z.string()).min(1, 'Select at least one lease term'),
-  
+
   // Step 3: Amenities
   amenities: z.array(z.string()),
   utilitiesIncluded: z.array(z.string()),
   petPolicy: z.string(),
-  surroundingArea: z.array(z.object({
-    category: z.enum(['hospital', 'school', 'gym', 'airport', 'park', 'grocery', 'transit']),
-    name: z.string().min(1, 'Place name is required'),
-    distanceMiles: z.coerce.number().min(0, 'Distance must be 0 or more'),
-    note: z.string().optional(),
-  })),
-
-  // Status
-  status: z.enum(['active', 'pending', 'rented', 'inactive'])
+  surroundingArea: z.array(
+    z.object({
+      category: z.enum([
+        'hospital',
+        'school',
+        'gym',
+        'airport',
+        'park',
+        'grocery',
+        'transit',
+      ]),
+      name: z.string().min(1, 'Place name is required'),
+      distanceMiles: z.coerce.number().min(0, 'Distance must be 0 or more'),
+      note: z.string().optional(),
+    })
+  ),
 });
 
 type PropertyFormValues = z.infer<typeof propertyFormSchema>;
@@ -70,7 +157,7 @@ const STEPS = [
   { id: 1, name: 'Basic Info', icon: Home },
   { id: 2, name: 'Details', icon: MapPin },
   { id: 3, name: 'Amenities', icon: Sparkles },
-  { id: 4, name: 'Photos', icon: Camera }
+  { id: 4, name: 'Photos', icon: Camera },
 ];
 
 export default function PropertyCreate() {
@@ -94,6 +181,7 @@ export default function PropertyCreate() {
       bedrooms: 1,
       bathrooms: 1,
       squareFeet: null,
+      yearBuilt: null,
       rent: 0,
       securityDeposit: 0,
       availableDate: new Date().toISOString().split('T')[0],
@@ -102,11 +190,14 @@ export default function PropertyCreate() {
       utilitiesIncluded: [],
       petPolicy: 'No Pets',
       surroundingArea: [],
-      status: 'active'
-    }
+    },
   });
 
-  const { fields: poiFields, append: appendPoi, remove: removePoi } = useFieldArray({
+  const {
+    fields: poiFields,
+    append: appendPoi,
+    remove: removePoi,
+  } = useFieldArray({
     control: form.control,
     name: 'surroundingArea',
   });
@@ -114,15 +205,18 @@ export default function PropertyCreate() {
   // Custom amenities live in the same `amenities` string[]; anything not in
   // ALL_AMENITIES is treated as a landlord-added custom entry.
   const [customAmenity, setCustomAmenity] = useState('');
-  const customAmenities = form.watch('amenities').filter(
-    (a) => !ALL_AMENITIES.some((known) => known === a),
-  );
+  const customAmenities = form
+    .watch('amenities')
+    .filter((a) => !ALL_AMENITIES.some((known) => known === a));
   const addCustomAmenity = () => {
     const value = customAmenity.trim();
     if (!value) return;
     const current = form.getValues('amenities');
     if (!current.some((a) => a === value)) {
-      form.setValue('amenities', [...current, value], { shouldValidate: true, shouldDirty: true });
+      form.setValue('amenities', [...current, value], {
+        shouldValidate: true,
+        shouldDirty: true,
+      });
     }
     setCustomAmenity('');
   };
@@ -130,27 +224,48 @@ export default function PropertyCreate() {
     form.setValue(
       'amenities',
       form.getValues('amenities').filter((a) => a !== value),
-      { shouldValidate: true, shouldDirty: true },
+      { shouldValidate: true, shouldDirty: true }
     );
   };
 
   const handleNext = async () => {
     let fieldsToValidate: (keyof PropertyFormValues)[] = [];
-    
+
     switch (currentStep) {
       case 1:
-        fieldsToValidate = ['title', 'description', 'address', 'city', 'state', 'zipCode', 'propertyType'];
+        fieldsToValidate = [
+          'title',
+          'description',
+          'address',
+          'city',
+          'state',
+          'zipCode',
+          'propertyType',
+        ];
         break;
       case 2:
-        fieldsToValidate = ['bedrooms', 'bathrooms', 'squareFeet', 'rent', 'securityDeposit', 'availableDate', 'leaseTerms'];
+        fieldsToValidate = [
+          'bedrooms',
+          'bathrooms',
+          'squareFeet',
+          'rent',
+          'securityDeposit',
+          'availableDate',
+          'leaseTerms',
+        ];
         break;
       case 3:
-        fieldsToValidate = ['amenities', 'utilitiesIncluded', 'petPolicy', 'surroundingArea'];
+        fieldsToValidate = [
+          'amenities',
+          'utilitiesIncluded',
+          'petPolicy',
+          'surroundingArea',
+        ];
         break;
     }
 
     const isValid = await form.trigger(fieldsToValidate);
-    
+
     if (isValid) {
       if (currentStep < STEPS.length) {
         setCurrentStep(currentStep + 1);
@@ -173,7 +288,7 @@ export default function PropertyCreate() {
     setUploadedImages(newFiles);
 
     // Generate previews
-    const newPreviews = newFiles.map(file => URL.createObjectURL(file));
+    const newPreviews = newFiles.map((file) => URL.createObjectURL(file));
     setImagePreviews(newPreviews);
   };
 
@@ -184,30 +299,75 @@ export default function PropertyCreate() {
     setImagePreviews(newPreviews);
   };
 
-  const onSubmit = (data: PropertyFormValues) => {
+  const onSubmit = async (data: PropertyFormValues) => {
     setUploading(true);
-    // TODO(BE): replace with POST /api/v1/landlord/properties (+ image
-    // upload) — BE-blocked (LeaseFi MVP spec §3.3). Mock the create so the
-    // landlord happy-path works on localhost without Supabase (same
-    // intentional demo pattern as LandlordDashboard / landlordMockData).
-    setTimeout(() => {
-      setUploading(false);
-      toast({
-        title: 'Property created',
-        description:
-          uploadedImages.length > 0
-            ? `"${data.title}" saved with ${uploadedImages.length} photo(s).`
-            : `"${data.title}" saved.`,
+    try {
+      // 1. Upsert the physical property (dedup-aware: the backend returns an
+      //    existing record when the address matches, so we just use its id).
+      const property = await createProperty({
+        addressLine1: data.address,
+        city: data.city,
+        stateOrProvince: data.state,
+        postalCode: data.zipCode,
+        propertyType: data.propertyType,
+        bedroomsTotal: data.bedrooms,
+        bathroomsTotal: data.bathrooms,
+        livingArea: data.squareFeet,
+        yearBuilt: data.yearBuilt,
+        // Parking is captured in the amenities list; surface it as a feature.
+        parkingFeatures: data.amenities.includes('Parking') ? ['Parking'] : [],
       });
-      navigate('/landlord/properties');
-    }, 600);
+
+      // 2. Create the listing (offer) in `draft` against that property.
+      const listing = await createListing({
+        propertyId: property.id,
+        intent: 'rent_ltr',
+        title: data.title,
+        description: data.description,
+        amenities: data.amenities,
+        utilitiesIncluded: data.utilitiesIncluded,
+        petPolicy: data.petPolicy,
+        availableDate: data.availableDate,
+        surroundingArea: data.surroundingArea,
+        terms: {
+          rentMonthly: data.rent,
+          securityDeposit: data.securityDeposit,
+          leaseTermsOffered: data.leaseTerms,
+          // Furnished is captured in the amenities list.
+          furnished: data.amenities.includes('Furnished'),
+        },
+      });
+
+      // 3. Upload any selected photos (moderation runs server-side).
+      if (uploadedImages.length > 0) {
+        await uploadMedia(listing.id, uploadedImages);
+      }
+
+      toast({
+        title: 'Listing created',
+        description: `"${listing.title}" is saved as a draft — submit it for review to go live.`,
+      });
+      navigate(`/landlord/properties/${listing.id}`);
+    } catch (error) {
+      logger.error('Failed to create listing:', error);
+      toast({
+        title: 'Could not create listing',
+        description: 'Something went wrong. Please try again.',
+        variant: 'destructive',
+      });
+      setUploading(false);
+    }
   };
 
   return (
     <div className="container mx-auto py-8 px-4 max-w-4xl">
       {/* Header */}
       <div className="mb-8">
-        <Button variant="ghost" onClick={() => navigate('/landlord/properties')} className="mb-4">
+        <Button
+          variant="ghost"
+          onClick={() => navigate('/landlord/properties')}
+          className="mb-4"
+        >
           <ArrowLeft className="mr-2 h-4 w-4" />
           Back to Properties
         </Button>
@@ -233,15 +393,21 @@ export default function PropertyCreate() {
                       isCompleted
                         ? 'bg-primary border-primary text-primary-foreground'
                         : isActive
-                        ? 'border-primary text-primary'
-                        : 'border-muted text-muted-foreground'
+                          ? 'border-primary text-primary'
+                          : 'border-muted text-muted-foreground'
                     }`}
                   >
-                    {isCompleted ? <Check className="h-5 w-5" /> : <Icon className="h-5 w-5" />}
+                    {isCompleted ? (
+                      <Check className="h-5 w-5" />
+                    ) : (
+                      <Icon className="h-5 w-5" />
+                    )}
                   </div>
                   <span
                     className={`text-xs mt-2 ${
-                      isActive ? 'text-primary font-semibold' : 'text-muted-foreground'
+                      isActive
+                        ? 'text-primary font-semibold'
+                        : 'text-muted-foreground'
                     }`}
                   >
                     {step.name}
@@ -268,7 +434,10 @@ export default function PropertyCreate() {
           // step and redirect). Advance only via the Next / Create Property
           // buttons. Textareas keep Enter for newlines.
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && !(e.target instanceof HTMLTextAreaElement)) {
+            if (
+              e.key === 'Enter' &&
+              !(e.target instanceof HTMLTextAreaElement)
+            ) {
               e.preventDefault();
             }
           }}
@@ -289,9 +458,12 @@ export default function PropertyCreate() {
                   name="title"
                   render={({ field }) => (
                     <FormItem className="flex flex-col gap-1 space-y-1">
-                      <FormLabel >Property Title</FormLabel>
+                      <FormLabel>Property Title</FormLabel>
                       <FormControl>
-                        <Input placeholder="e.g., Modern 2BR Apartment in Downtown" {...field} />
+                        <Input
+                          placeholder="e.g., Modern 2BR Apartment in Downtown"
+                          {...field}
+                        />
                       </FormControl>
                       <FormDescription>
                         A catchy title that describes your property
@@ -328,7 +500,10 @@ export default function PropertyCreate() {
                   render={({ field }) => (
                     <FormItem className="flex flex-col gap-1 space-y-1">
                       <FormLabel>Property Type</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <Select
+                        onValueChange={field.onChange}
+                        defaultValue={field.value}
+                      >
                         <FormControl>
                           <SelectTrigger className="data-[size=default]:h-10 min-h-10! w-full rounded-md">
                             <SelectValue placeholder="Select property type" />
@@ -382,7 +557,10 @@ export default function PropertyCreate() {
                     render={({ field }) => (
                       <FormItem className="flex flex-col gap-1 space-y-1">
                         <FormLabel>State</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <Select
+                          onValueChange={field.onChange}
+                          defaultValue={field.value}
+                        >
                           <FormControl>
                             <SelectTrigger className="data-[size=default]:h-10 min-h-10! w-full rounded-md">
                               <SelectValue placeholder="Select state" />
@@ -451,7 +629,12 @@ export default function PropertyCreate() {
                       <FormItem className="flex flex-col gap-1 space-y-1">
                         <FormLabel>Bathrooms</FormLabel>
                         <FormControl>
-                          <Input type="number" min="0.5" step="0.5" {...field} />
+                          <Input
+                            type="number"
+                            min="0.5"
+                            step="0.5"
+                            {...field}
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -471,7 +654,11 @@ export default function PropertyCreate() {
                             placeholder="1000"
                             {...field}
                             value={field.value || ''}
-                            onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : null)}
+                            onChange={(e) =>
+                              field.onChange(
+                                e.target.value ? Number(e.target.value) : null
+                              )
+                            }
                           />
                         </FormControl>
                         <FormMessage />
@@ -479,6 +666,31 @@ export default function PropertyCreate() {
                     )}
                   />
                 </div>
+
+                <FormField
+                  control={form.control}
+                  name="yearBuilt"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-col gap-1 space-y-1">
+                      <FormLabel>Year Built</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          min="1800"
+                          placeholder="2005"
+                          {...field}
+                          value={field.value ?? ''}
+                          onChange={(e) =>
+                            field.onChange(
+                              e.target.value ? Number(e.target.value) : null
+                            )
+                          }
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
                 <div className="grid grid-cols-2 gap-4">
                   <FormField
@@ -488,7 +700,12 @@ export default function PropertyCreate() {
                       <FormItem className="flex flex-col gap-1 space-y-1">
                         <FormLabel>Monthly Rent ($)</FormLabel>
                         <FormControl>
-                          <Input type="number" min="1" placeholder="2000" {...field} />
+                          <Input
+                            type="number"
+                            min="1"
+                            placeholder="2000"
+                            {...field}
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -502,7 +719,12 @@ export default function PropertyCreate() {
                       <FormItem className="flex flex-col gap-1 space-y-1">
                         <FormLabel>Security Deposit ($)</FormLabel>
                         <FormControl>
-                          <Input type="number" min="0" placeholder="2000" {...field} />
+                          <Input
+                            type="number"
+                            min="0"
+                            placeholder="2000"
+                            {...field}
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -518,7 +740,11 @@ export default function PropertyCreate() {
                       <FormLabel>Available from</FormLabel>
                       <FormControl>
                         {/* Single move-in availability date; cannot be in the past. */}
-                        <Input type="date" min={new Date().toISOString().split('T')[0]} {...field} />
+                        <Input
+                          type="date"
+                          min={new Date().toISOString().split('T')[0]}
+                          {...field}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -545,7 +771,11 @@ export default function PropertyCreate() {
                                     onCheckedChange={(checked) => {
                                       return checked
                                         ? field.onChange([...field.value, term])
-                                        : field.onChange(field.value?.filter((value) => value !== term));
+                                        : field.onChange(
+                                            field.value?.filter(
+                                              (value) => value !== term
+                                            )
+                                          );
                                     }}
                                   />
                                 </FormControl>
@@ -594,8 +824,15 @@ export default function PropertyCreate() {
                                     checked={field.value?.includes(amenity)}
                                     onCheckedChange={(checked) => {
                                       return checked
-                                        ? field.onChange([...field.value, amenity])
-                                        : field.onChange(field.value?.filter((value) => value !== amenity));
+                                        ? field.onChange([
+                                            ...field.value,
+                                            amenity,
+                                          ])
+                                        : field.onChange(
+                                            field.value?.filter(
+                                              (value) => value !== amenity
+                                            )
+                                          );
                                     }}
                                   />
                                 </FormControl>
@@ -626,7 +863,12 @@ export default function PropertyCreate() {
                       }}
                       placeholder="Something not in the list (e.g., Rooftop terrace)"
                     />
-                    <Button type="button" variant="outline" onClick={addCustomAmenity} className='min-h-10!'>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={addCustomAmenity}
+                      className="min-h-10!"
+                    >
                       <Plus className="h-4 w-4 mr-1.5" />
                       Add
                     </Button>
@@ -672,8 +914,15 @@ export default function PropertyCreate() {
                                     checked={field.value?.includes(utility)}
                                     onCheckedChange={(checked) => {
                                       return checked
-                                        ? field.onChange([...field.value, utility])
-                                        : field.onChange(field.value?.filter((value) => value !== utility));
+                                        ? field.onChange([
+                                            ...field.value,
+                                            utility,
+                                          ])
+                                        : field.onChange(
+                                            field.value?.filter(
+                                              (value) => value !== utility
+                                            )
+                                          );
                                     }}
                                   />
                                 </FormControl>
@@ -696,7 +945,10 @@ export default function PropertyCreate() {
                   render={({ field }) => (
                     <FormItem className="flex flex-col gap-1 space-y-0">
                       <FormLabel>Pet Policy</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <Select
+                        onValueChange={field.onChange}
+                        defaultValue={field.value}
+                      >
                         <FormControl>
                           <SelectTrigger className="data-[size=default]:h-10 min-h-10! w-full rounded-md">
                             <SelectValue placeholder="Select pet policy" />
@@ -726,17 +978,26 @@ export default function PropertyCreate() {
                       type="button"
                       variant="outline"
                       size="sm"
-                      onClick={() => appendPoi({ category: 'park', name: '', distanceMiles: 0 })}
+                      onClick={() =>
+                        appendPoi({
+                          category: 'park',
+                          name: '',
+                          distanceMiles: 0,
+                        })
+                      }
                     >
                       <Plus className="h-4 w-4 mr-1.5" />
                       Add place
                     </Button>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    What's nearby and how far it is — shown to tenants in surrounding-area search.
+                    What's nearby and how far it is — shown to tenants in
+                    surrounding-area search.
                   </p>
                   {poiFields.length === 0 && (
-                    <p className="text-sm text-muted-foreground">No nearby places added yet.</p>
+                    <p className="text-sm text-muted-foreground">
+                      No nearby places added yet.
+                    </p>
                   )}
                   {poiFields.map((poi, index) => (
                     <div
@@ -749,7 +1010,10 @@ export default function PropertyCreate() {
                         render={({ field }) => (
                           <FormItem className="flex flex-col gap-1 space-y-0">
                             <FormLabel className="sr-only">Category</FormLabel>
-                            <Select onValueChange={field.onChange} value={field.value}>
+                            <Select
+                              onValueChange={field.onChange}
+                              value={field.value}
+                            >
                               <FormControl>
                                 <SelectTrigger className="data-[size=default]:h-10 min-h-10! w-full rounded-md capitalize">
                                   <SelectValue placeholder="Category" />
@@ -757,7 +1021,11 @@ export default function PropertyCreate() {
                               </FormControl>
                               <SelectContent>
                                 {SURROUNDING_CATEGORIES.map((category) => (
-                                  <SelectItem key={category} value={category} className="capitalize">
+                                  <SelectItem
+                                    key={category}
+                                    value={category}
+                                    className="capitalize"
+                                  >
                                     {category}
                                   </SelectItem>
                                 ))}
@@ -772,9 +1040,14 @@ export default function PropertyCreate() {
                         name={`surroundingArea.${index}.name`}
                         render={({ field }) => (
                           <FormItem className="flex flex-col gap-1 space-y-0">
-                            <FormLabel className="sr-only">Place name</FormLabel>
+                            <FormLabel className="sr-only">
+                              Place name
+                            </FormLabel>
                             <FormControl>
-                              <Input placeholder="e.g., Lincoln High School" {...field} />
+                              <Input
+                                placeholder="e.g., Lincoln High School"
+                                {...field}
+                              />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
@@ -785,11 +1058,21 @@ export default function PropertyCreate() {
                         name={`surroundingArea.${index}.distanceMiles`}
                         render={({ field }) => (
                           <FormItem className="flex flex-col gap-1 space-y-0">
-                            <FormLabel className="sr-only">Distance (miles)</FormLabel>
+                            <FormLabel className="sr-only">
+                              Distance (miles)
+                            </FormLabel>
                             <FormControl>
                               <div className="flex items-center gap-1.5">
-                                <Input type="number" min={0} step={0.1} placeholder="0" {...field} />
-                                <span className="text-sm text-muted-foreground">mi</span>
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  step={0.1}
+                                  placeholder="0"
+                                  {...field}
+                                />
+                                <span className="text-sm text-muted-foreground">
+                                  mi
+                                </span>
                               </div>
                             </FormControl>
                             <FormMessage />
@@ -858,7 +1141,9 @@ export default function PropertyCreate() {
                           Remove
                         </Button>
                         {index === 0 && (
-                          <Badge className="absolute bottom-2 left-2">Primary</Badge>
+                          <Badge className="absolute bottom-2 left-2">
+                            Primary
+                          </Badge>
                         )}
                       </div>
                     ))}
