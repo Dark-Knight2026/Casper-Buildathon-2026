@@ -223,6 +223,7 @@ export default function PropertyDetail() {
                 <span className="hidden sm:inline">Share</span>
               </Button>
               <SavePropertyButton
+                listingId={listing.id}
                 variant="outline"
                 size="sm"
                 hideTextOnMobile
@@ -495,6 +496,7 @@ export default function PropertyDetail() {
 
                   {/* Favorite Button */}
                   <SavePropertyButton
+                    listingId={listing.id}
                     variant="outline"
                     size="default"
                     className="w-full"

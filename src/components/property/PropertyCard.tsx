@@ -28,6 +28,10 @@ const STATUS_LABELS: Record<PropertyStatus, string> = {
 
 export interface PropertyCardData {
   id: string;
+  // The listing id this card represents, when it maps to a listing (search
+  // results). Drives the save button; absent for lease-history cards where
+  // `id` is a property id, not a listing.
+  listingId?: string;
   title: string;
   address: string;
   city: string;
@@ -141,8 +145,12 @@ export function PropertyCard({
           </div>
         )}
 
-        {showSave && (
-          <SavePropertyButton iconOnly className="absolute bottom-3 right-3" />
+        {showSave && property.listingId && (
+          <SavePropertyButton
+            listingId={property.listingId}
+            iconOnly
+            className="absolute bottom-3 right-3"
+          />
         )}
       </div>
 

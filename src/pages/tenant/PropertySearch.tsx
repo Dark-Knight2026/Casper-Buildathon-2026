@@ -8,16 +8,15 @@ import { Badge } from '@/components/ui/badge';
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
-import {
-  PropertyCard,
-  type PropertyCardData,
-} from '@/components/property/PropertyCard';
+import { PropertyCard } from '@/components/property/PropertyCard';
+import { listingToCard } from '@/components/property/listingToCard';
 import { searchListings } from '@/services/listingService';
-import { listingRentMonthly, approvedMedia } from '@/lib/listingDisplay';
 import { useDebounce } from '@/hooks/useDebounce';
 import { useCompareSelection } from '@/hooks/useCompareSelection';
+import { useAuthPrompt } from '@/hooks/useAuthPrompt';
+import { useAuth } from '@/hooks/useAuth';
+import { AuthPromptModal } from '@/components/auth/AuthPromptModal';
 import type {
-  Listing,
   ListingSearchParams,
   RealPropertyType,
 } from '@/types/listingContract';
@@ -73,27 +72,6 @@ const PROPERTY_TYPE_OPTIONS: FilterOption[] = [
   { value: 'commercial', label: 'Commercial' },
   { value: 'other', label: 'Other' },
 ];
-
-/** Map a search listing (with its nested property) to the card's flat shape. */
-function listingToCard(listing: Listing): PropertyCardData {
-  const media = approvedMedia(listing.media);
-  return {
-    id: listing.id,
-    title: listing.title,
-    address: listing.property?.addressLine1 ?? '',
-    city: listing.property?.city ?? '',
-    state: listing.property?.stateOrProvince ?? '',
-    price: listingRentMonthly(listing),
-    bedrooms: listing.property?.bedroomsTotal ?? 0,
-    bathrooms: listing.property?.bathroomsTotal ?? 0,
-    squareFeet: listing.property?.livingArea ?? undefined,
-    images: media.map((m) => m.url),
-    photoCount: media.length || undefined,
-    daysOnMarket: listing.daysOnMarket,
-    verifiedListerBadge: listing.provenance.verifiedListerBadge,
-    onChainProvenance: listing.onChain?.provenanceOnChain ?? false,
-  };
-}
 
 function Stepper({
   label,
@@ -182,6 +160,34 @@ function FilterSelect({
 export default function PropertySearch() {
   const navigate = useNavigate();
   const compare = useCompareSelection();
+  const {
+    requireAuth,
+    isAuthenticated,
+    isPromptOpen,
+    promptContext,
+    closePrompt,
+    goToSignUp,
+    goToLogin,
+  } = useAuthPrompt();
+  const { profile } = useAuth();
+
+  // Compare, like favorites, is a tenant feature. Offer it to guests (who get
+  // prompted to sign in) and tenants, but hide it from signed-in non-tenants.
+  const canCompare = !isAuthenticated || profile?.role === 'tenant';
+
+  // Comparison lives behind auth (a tenant route). Prompt guests in-place
+  // instead of bouncing them to the login page, mirroring SavePropertyButton.
+  const handleCompare = () => {
+    const canProceed = requireAuth({
+      action: 'compare properties',
+      redirectPath: window.location.pathname,
+    });
+    if (canProceed) {
+      navigate(
+        `/tenant/properties/compare?properties=${compare.ids.join(',')}`
+      );
+    }
+  };
 
   const [searchTerm, setSearchTerm] = useState('');
   const [priceRange, setPriceRange] = useState<[number, number]>(PRICE_DEFAULT);
@@ -524,7 +530,9 @@ export default function PropertySearch() {
                   key={listing.id}
                   property={listingToCard(listing)}
                   compareSelected={compare.isSelected(listing.id)}
-                  onToggleCompare={() => compare.toggle(listing.id)}
+                  onToggleCompare={
+                    canCompare ? () => compare.toggle(listing.id) : undefined
+                  }
                   compareDisabled={compare.isFull}
                   onClick={() => {
                     navigate(`/properties/${listing.id}`, {
@@ -563,7 +571,7 @@ export default function PropertySearch() {
 
       {/* Compare tray — the entry point to the comparison page. Appears once
           at least one listing is selected; comparing needs two. */}
-      {compare.ids.length > 0 && (
+      {canCompare && compare.ids.length > 0 && (
         <div className="sticky bottom-0 z-20 border-t border-border bg-card/95 backdrop-blur">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between gap-3">
             <span className="text-sm text-muted-foreground">
@@ -576,17 +584,23 @@ export default function PropertySearch() {
               <Button
                 size="sm"
                 disabled={compare.ids.length < 2}
-                onClick={() =>
-                  navigate(
-                    `/tenant/properties/compare?properties=${compare.ids.join(',')}`
-                  )
-                }
+                onClick={handleCompare}
               >
                 Compare ({compare.ids.length})
               </Button>
             </div>
           </div>
         </div>
+      )}
+
+      {!isAuthenticated && (
+        <AuthPromptModal
+          isOpen={isPromptOpen}
+          onClose={closePrompt}
+          onSignUp={goToSignUp}
+          onLogin={goToLogin}
+          action={promptContext?.action}
+        />
       )}
     </div>
   );

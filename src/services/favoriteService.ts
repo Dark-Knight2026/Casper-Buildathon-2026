@@ -1,52 +1,44 @@
-import { supabase } from '@/lib/supabase/client';
+import { backendClient } from '@/lib/api-client';
+import { toQueryString } from '@/lib/queryString';
+import type { Listing, PaginatedResponse } from '@/types/listingContract';
 
-export interface Favorite {
-  id: string;
-  user_id: string;
-  property_id: string;
-  created_at: string;
+/**
+ * Favorites API surface. A favorite saves a **listing** (the offer), not the
+ * bare property; everything is keyed on `listingId` and camelCase on the wire.
+ * Errors propagate as `ApiError` (a duplicate `POST` is a `409`).
+ */
+
+const FAVORITES = '/api/v1/favorites';
+
+/** A saved listing with the full listing it targets nested. */
+export interface FavoriteResponse {
+  listingId: string;
+  favoritedAt: string;
+  listing: Listing;
 }
 
-export const favoriteService = {
-  async addFavorite(userId: string, propertyId: string): Promise<Favorite> {
-    const { data, error } = await supabase
-      .from('favorites')
-      .insert({ user_id: userId, property_id: propertyId })
-      .select()
-      .single();
+/** `GET /favorites`. The tenant's saved listings, paginated. */
+export async function getFavorites(
+  params: { page?: number; pageSize?: number } = {}
+): Promise<PaginatedResponse<FavoriteResponse>> {
+  return backendClient.get<PaginatedResponse<FavoriteResponse>>(
+    `${FAVORITES}${toQueryString({ ...params })}`
+  );
+}
 
-    if (error) throw error;
-    return data;
-  },
+/** `GET /favorites/ids`. The set of favorited listing ids (for toggle state). */
+export async function getFavoriteIds(): Promise<string[]> {
+  return backendClient.get<string[]>(`${FAVORITES}/ids`);
+}
 
-  async removeFavorite(userId: string, propertyId: string): Promise<void> {
-    const { error } = await supabase
-      .from('favorites')
-      .delete()
-      .match({ user_id: userId, property_id: propertyId });
+/** `POST /favorites`. Saves a listing; the backend 409s on a duplicate. */
+export async function addFavorite(
+  listingId: string
+): Promise<FavoriteResponse> {
+  return backendClient.post<FavoriteResponse>(FAVORITES, { listingId });
+}
 
-    if (error) throw error;
-  },
-
-  async getFavorites(userId: string): Promise<Favorite[]> {
-    const { data, error } = await supabase
-      .from('favorites')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false });
-
-    if (error) throw error;
-    return data || [];
-  },
-
-  async isFavorited(userId: string, propertyId: string): Promise<boolean> {
-    const { data, error } = await supabase
-      .from('favorites')
-      .select('id')
-      .match({ user_id: userId, property_id: propertyId })
-      .single();
-
-    if (error && error.code !== 'PGRST116') throw error;
-    return !!data;
-  }
-};
+/** `DELETE /favorites/{listingId}`. Un-saves a listing. */
+export async function removeFavorite(listingId: string): Promise<void> {
+  await backendClient.delete<void>(`${FAVORITES}/${listingId}`);
+}

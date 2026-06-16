@@ -1,11 +1,22 @@
+import { useState } from 'react';
 import { Heart } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { useAuthPrompt } from '@/hooks/useAuthPrompt';
+import { useAuth } from '@/hooks/useAuth';
 import { AuthPromptModal } from '@/components/auth/AuthPromptModal';
+import {
+  getFavoriteIds,
+  addFavorite,
+  removeFavorite,
+} from '@/services/favoriteService';
+import { ApiClient, ApiError } from '@/lib/api-client';
 
 interface SavePropertyButtonProps {
+  /** Listing this button saves/un-saves. */
+  listingId: string;
   variant?: 'default' | 'outline' | 'ghost';
   size?: 'default' | 'sm' | 'lg' | 'icon';
   className?: string;
@@ -16,6 +27,7 @@ interface SavePropertyButtonProps {
 }
 
 export function SavePropertyButton({
+  listingId,
   variant = 'outline',
   size = 'default',
   className,
@@ -23,6 +35,7 @@ export function SavePropertyButton({
   hideTextOnMobile = false,
 }: SavePropertyButtonProps) {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const {
     requireAuth,
     isAuthenticated,
@@ -32,38 +45,101 @@ export function SavePropertyButton({
     goToSignUp,
     goToLogin,
   } = useAuthPrompt();
+  const { profile } = useAuth();
+  const [pending, setPending] = useState(false);
 
-  const handleClick = (e: React.MouseEvent) => {
+  // Favorites are a tenant-only feature on the backend; a signed-in landlord
+  // would just get a 403. Show the button to guests (so they're prompted to
+  // sign in) and tenants only.
+  const isTenant = profile?.role === 'tenant';
+
+  // Shared across every SavePropertyButton on the page; toggling one updates
+  // them all. Only fetched for a signed-in tenant.
+  const { data: ids } = useQuery({
+    queryKey: ['favorite-ids'],
+    queryFn: getFavoriteIds,
+    enabled: isAuthenticated && isTenant,
+  });
+  const isSaved = ids?.includes(listingId) ?? false;
+
+  if (isAuthenticated && !isTenant) return null;
+
+  const handleClick = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    // Guest path — open the AuthPromptModal (rendered below) with a Save-
-    // flavored copy so the user gets the same prompt UX as other CTAs.
     const canProceed = requireAuth({
       action: 'save this property',
       redirectPath: window.location.pathname,
     });
     if (!canProceed) return;
 
-    // TODO(backend): once /api/v1/properties/:id/favorite exists, call
-    // favoriteService.toggle() here. For now we still show a placeholder
-    // toast to confirm the click landed.
-    toast({
-      title: 'Saved',
-      description: 'Property added to your favorites.',
-    });
+    setPending(true);
+    try {
+      if (isSaved) {
+        await removeFavorite(listingId);
+        toast({
+          title: 'Removed',
+          description: 'Listing removed from your favorites.',
+        });
+      } else {
+        await addFavorite(listingId);
+        toast({
+          title: 'Saved',
+          description: 'Listing added to your favorites.',
+        });
+      }
+      await queryClient.invalidateQueries({ queryKey: ['favorite-ids'] });
+      await queryClient.invalidateQueries({ queryKey: ['favorites'] });
+    } catch (error) {
+      // A 409 means it's already saved (e.g. a double-click race) — reconcile
+      // the toggle state rather than surfacing it as an error.
+      if (error instanceof ApiError && error.statusCode === 409) {
+        await queryClient.invalidateQueries({ queryKey: ['favorite-ids'] });
+      } else {
+        toast({
+          title: 'Could not update favorites',
+          description: ApiClient.handleError(error),
+          variant: 'destructive',
+        });
+      }
+    } finally {
+      setPending(false);
+    }
   };
+
+  const heartFill = isSaved ? 'fill-red-500 text-red-500' : 'text-gray-500';
 
   const trigger = iconOnly ? (
     <button
-      className={cn('bg-card/90 hover:bg-card p-2 rounded-full shadow', className)}
+      className={cn(
+        'bg-card/90 hover:bg-card p-2 rounded-full shadow',
+        className
+      )}
       onClick={handleClick}
-      aria-label="Save property"
+      disabled={pending}
+      aria-label={isSaved ? 'Remove from favorites' : 'Save property'}
+      aria-pressed={isSaved}
     >
-      <Heart className="h-4 w-4 text-gray-500" />
+      <Heart className={cn('h-4 w-4', heartFill)} />
     </button>
   ) : (
-    <Button variant={variant} size={size} className={className} onClick={handleClick}>
-      <Heart className={cn('h-4 w-4', hideTextOnMobile ? 'sm:mr-2' : 'mr-2')} />
-      <span className={cn(hideTextOnMobile && 'hidden sm:inline')}>Save</span>
+    <Button
+      variant={variant}
+      size={size}
+      className={className}
+      onClick={handleClick}
+      disabled={pending}
+      aria-pressed={isSaved}
+    >
+      <Heart
+        className={cn(
+          'h-4 w-4',
+          hideTextOnMobile ? 'sm:mr-2' : 'mr-2',
+          isSaved && 'fill-red-500 text-red-500'
+        )}
+      />
+      <span className={cn(hideTextOnMobile && 'hidden sm:inline')}>
+        {isSaved ? 'Saved' : 'Save'}
+      </span>
     </Button>
   );
 
@@ -71,9 +147,7 @@ export function SavePropertyButton({
     <>
       {trigger}
       {/* Auth prompt rendered locally so the button works standalone — no
-          dependency on the parent page mounting the modal. The hook's state
-          is component-local, so multiple SavePropertyButtons on the same
-          page each carry their own (closed) modal until clicked. */}
+          dependency on the parent page mounting the modal. */}
       {!isAuthenticated && (
         <AuthPromptModal
           isOpen={isPromptOpen}
