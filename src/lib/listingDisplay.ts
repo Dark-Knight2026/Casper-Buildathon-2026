@@ -9,7 +9,25 @@ import type {
   MediaRef,
   RealPropertyType,
   PropertyAsset,
+  ListingState,
 } from '@/types/listingContract';
+
+/**
+ * Display label + badge color for each lifecycle state. Shared by the landlord
+ * list and detail so the two can't drift.
+ */
+export const LISTING_STATE_BADGE: Record<
+  ListingState,
+  { label: string; className: string }
+> = {
+  draft: { label: 'Draft', className: 'bg-gray-500' },
+  active: { label: 'Active', className: 'bg-green-500' },
+  pending: { label: 'Pending', className: 'bg-yellow-500' },
+  leased: { label: 'Leased', className: 'bg-blue-500' },
+  sold: { label: 'Sold', className: 'bg-blue-500' },
+  withdrawn: { label: 'Withdrawn', className: 'bg-gray-500' },
+  expired: { label: 'Expired', className: 'bg-red-500' },
+};
 
 /** Title-case a RESO property type for display ("single_family" → "Single Family"). */
 export function formatPropertyType(type: RealPropertyType): string {

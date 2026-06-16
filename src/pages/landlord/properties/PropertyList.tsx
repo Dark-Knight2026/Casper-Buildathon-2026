@@ -53,11 +53,11 @@ import {
   listingRentMonthly,
   formatPropertyType,
   derivePetsAllowed,
+  LISTING_STATE_BADGE,
 } from '@/lib/listingDisplay';
 import { useDebounce } from '@/hooks/useDebounce';
 import type {
   ListingSearchParams,
-  ListingState,
   ListingSortBy,
   RealPropertyType,
   RentLtrTerms,
@@ -74,19 +74,6 @@ const PROPERTY_TYPES: RealPropertyType[] = [
   'commercial',
   'other',
 ];
-
-// Landlord listings span the full lifecycle (unlike the public, active-only
-// feed), so every state needs a badge.
-const STATE_BADGE: Record<ListingState, { label: string; className: string }> =
-  {
-    draft: { label: 'Draft', className: 'bg-gray-500' },
-    active: { label: 'Active', className: 'bg-green-500' },
-    pending: { label: 'Pending', className: 'bg-yellow-500' },
-    leased: { label: 'Leased', className: 'bg-blue-500' },
-    sold: { label: 'Sold', className: 'bg-blue-500' },
-    withdrawn: { label: 'Withdrawn', className: 'bg-gray-500' },
-    expired: { label: 'Expired', className: 'bg-red-500' },
-  };
 
 const SORT_OPTIONS: { value: ListingSortBy; label: string }[] = [
   { value: 'createdAt', label: 'Date Created' },
@@ -433,7 +420,7 @@ export default function PropertyList() {
             const image = [...listing.media].sort(
               (a, b) => a.position - b.position
             )[0]?.url;
-            const stateBadge = STATE_BADGE[listing.state];
+            const stateBadge = LISTING_STATE_BADGE[listing.state];
             const petsOk = derivePetsAllowed(listing);
             return (
               <Card
