@@ -4,7 +4,7 @@ import { getMyApplications } from '@/services/applicationService';
 import { formatFullAddress } from '@/lib/listingDisplay';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { ApplicationStatusBadge } from '@/components/application/ApplicationStatusBadge';
 import {
   Loader2,
   FileText,
@@ -14,23 +14,6 @@ import {
   Briefcase,
 } from 'lucide-react';
 import { format } from 'date-fns';
-import type { ApplicationStatus } from '@/services/applicationService';
-
-function statusBadge(status: ApplicationStatus) {
-  switch (status) {
-    case 'approved':
-      return <Badge className="bg-green-600">Approved</Badge>;
-    case 'rejected':
-      return <Badge variant="destructive">Rejected</Badge>;
-    case 'pending':
-    default:
-      return (
-        <Badge variant="outline" className="text-yellow-600 border-yellow-600">
-          Pending
-        </Badge>
-      );
-  }
-}
 
 export default function MyApplications() {
   const navigate = useNavigate();
@@ -117,7 +100,7 @@ export default function MyApplications() {
                         )}
                       </div>
                       <div className="ml-4">
-                        {statusBadge(application.status)}
+                        <ApplicationStatusBadge status={application.status} />
                       </div>
                     </div>
                   </CardHeader>

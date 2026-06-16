@@ -9,7 +9,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { ApplicationStatusBadge } from '@/components/application/ApplicationStatusBadge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -29,21 +29,6 @@ import {
   type ApplicationStatus,
 } from '@/services/applicationService';
 import { ApiClient } from '@/lib/api-client';
-
-function statusBadge(status: ApplicationStatus) {
-  switch (status) {
-    case 'approved':
-      return <Badge className="bg-green-600">Approved</Badge>;
-    case 'rejected':
-      return <Badge variant="destructive">Rejected</Badge>;
-    default:
-      return (
-        <Badge variant="outline" className="text-yellow-600 border-yellow-600">
-          Pending
-        </Badge>
-      );
-  }
-}
 
 /**
  * Per-listing applications for the landlord: list + approve/reject. The
@@ -148,7 +133,7 @@ export default function ListingApplications() {
                       </span>
                     </CardDescription>
                   </div>
-                  {statusBadge(app.status)}
+                  <ApplicationStatusBadge status={app.status} />
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
