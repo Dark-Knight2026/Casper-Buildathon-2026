@@ -17,8 +17,7 @@ use crate::{
     common::{ApiError, ApiResult, Pagination},
     services::{
         listings::db::{
-            LandlordListingFilter, ListingFilter, ListingPatch, ListingRow, ListingSort, MediaRow,
-            NewListing,
+            LandlordListingFilter, ListingFilter, ListingPatch, ListingRow, MediaRow, NewListing,
         },
         properties::models::Property,
     },
@@ -300,6 +299,51 @@ impl Listing {
     }
 }
 
+/// Whitelisted sort keys for the public listing search. Deserialized from the
+/// `sortBy` query param (camelCase); an unknown key is rejected by serde at the
+/// extractor. `distance` additionally requires a radius center, enforced in
+/// [`ListingSearchParams::into_validated`].
+#[derive(Debug, Clone, Copy, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum ListingSort {
+    /// By creation time.
+    CreatedAt,
+    /// By last update time.
+    UpdatedAt,
+    /// By available date.
+    AvailableDate,
+    /// By monthly rent (from terms).
+    Rent,
+    /// By distance from the radius center.
+    Distance,
+}
+
+impl ListingSort {
+    /// SQL ORDER-BY expression for non-distance sorts (distance is handled
+    /// inline in the db layer with its bound center).
+    #[inline]
+    #[must_use]
+    pub fn order_column(self) -> &'static str {
+        match self {
+            Self::CreatedAt | Self::Distance => "l.created_at",
+            Self::UpdatedAt => "l.updated_at",
+            Self::AvailableDate => "l.available_date",
+            Self::Rent => "(l.terms->>'rentMonthly')::numeric",
+        }
+    }
+}
+
+/// Sort direction for the public listing search (`sortOrder` query param),
+/// defaulting to descending. An unrecognized value is rejected by serde.
+#[derive(Debug, Clone, Copy, Deserialize, ToSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum SortOrder {
+    /// Ascending.
+    Asc,
+    /// Descending.
+    Desc,
+}
+
 /// Public search query for `GET /listings` (active listings only). Geo, plus
 /// non-protected-class attribute filters and a whitelisted sort.
 #[derive(Debug, Deserialize, IntoParams)]
@@ -337,10 +381,10 @@ pub struct ListingSearchParams {
     pub pets_allowed: Option<bool>,
     /// Furnished (per terms).
     pub furnished: Option<bool>,
-    /// Sort key: `createdAt`/`updatedAt`/`availableDate`/`rent`/`distance`.
-    pub sort_by: Option<String>,
-    /// Sort order: `asc`/`desc`.
-    pub sort_order: Option<String>,
+    /// Sort key (`distance` requires a radius center).
+    pub sort_by: Option<ListingSort>,
+    /// Sort order, defaulting to `desc`.
+    pub sort_order: Option<SortOrder>,
 }
 
 impl ListingSearchParams {
@@ -385,16 +429,13 @@ impl ListingSearchParams {
         };
 
         let has_center = self.near_lat.is_some() && self.near_lng.is_some();
-        let sort = ListingSort::parse(self.sort_by.as_deref(), has_center)?;
-        let sort_descending = match self.sort_order.as_deref() {
-            Some("asc") => false,
-            Some("desc") | None => true,
-            Some(other) => {
-                return Err(ApiError::BadRequest(format!(
-                    "sortOrder must be 'asc' or 'desc', got '{other}'"
-                )));
-            }
-        };
+        let sort = self.sort_by.unwrap_or(ListingSort::CreatedAt);
+        if matches!(sort, ListingSort::Distance) && !has_center {
+            return Err(ApiError::BadRequest(
+                "sortBy=distance requires nearLat/nearLng".to_owned(),
+            ));
+        }
+        let sort_descending = !matches!(self.sort_order, Some(SortOrder::Asc));
 
         Ok(ListingFilter {
             search: self.search.filter(|term| !term.trim().is_empty()),

@@ -18,7 +18,8 @@ use crate::{
     services::{
         listings::models::{
             AuthorityDocumentType, AuthorityTier, Listing, ListingHistoricalData,
-            ListingProvenance, ListingState, ListingStatistics, MediaRef, ModerationStatus,
+            ListingProvenance, ListingSort, ListingState, ListingStatistics, MediaRef,
+            ModerationStatus,
         },
         properties::{db::PropertyRow, models::Property},
     },
@@ -89,62 +90,6 @@ pub struct MediaRow {
     pub position: i32,
     /// Moderation state (TEXT).
     pub moderation_status: String,
-}
-
-/// Whitelisted sort keys for the public listing search.
-#[derive(Debug, Clone, Copy)]
-pub enum ListingSort {
-    /// By creation time.
-    CreatedAt,
-    /// By last update time.
-    UpdatedAt,
-    /// By available date.
-    AvailableDate,
-    /// By monthly rent (from terms).
-    Rent,
-    /// By distance from the radius center.
-    Distance,
-}
-
-impl ListingSort {
-    /// Parses a `sortBy` value, defaulting to `CreatedAt`.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`ApiError::BadRequest`] for an unknown key, or for
-    /// `distance` without a radius center.
-    #[inline]
-    pub fn parse(value: Option<&str>, has_center: bool) -> ApiResult<Self> {
-        let sort = match value {
-            None | Some("createdAt") => Self::CreatedAt,
-            Some("updatedAt") => Self::UpdatedAt,
-            Some("availableDate") => Self::AvailableDate,
-            Some("rent") => Self::Rent,
-            Some("distance") => {
-                if !has_center {
-                    return Err(ApiError::BadRequest(
-                        "sortBy=distance requires nearLat/nearLng".to_owned(),
-                    ));
-                }
-                Self::Distance
-            }
-            Some(other) => {
-                return Err(ApiError::BadRequest(format!("unknown sortBy '{other}'")));
-            }
-        };
-        Ok(sort)
-    }
-
-    /// SQL ORDER-BY expression for non-distance sorts (distance is handled
-    /// inline with its bound center).
-    fn order_column(self) -> &'static str {
-        match self {
-            Self::CreatedAt | Self::Distance => "l.created_at",
-            Self::UpdatedAt => "l.updated_at",
-            Self::AvailableDate => "l.available_date",
-            Self::Rent => "(l.terms->>'rentMonthly')::numeric",
-        }
-    }
 }
 
 /// Validated filter for [`list_active_listings`]. Absent fields impose no

@@ -828,34 +828,25 @@ async fn list_rejects_distance_sort_without_center_400(pool: PgPool) {
     );
 }
 
-/// An unknown `sortBy` key -> `400`.
+/// An unknown `sortBy` key -> `400`. The `sortBy` param is a typed enum, so an
+/// unrecognized value is rejected by serde at the `Query` extractor (a
+/// status-only assertion: the body is the extractor's plain-text rejection, not
+/// the `{"error"}` envelope).
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn list_rejects_unknown_sort_400(pool: PgPool) {
     let env = common::setup_test_server(pool, false).await;
 
     let response = env.server.get("/api/v1/listings?sortBy=color").await;
     assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
-    assert!(
-        response.json::<Value>()["error"]
-            .as_str()
-            .unwrap()
-            .contains("unknown sortBy 'color'")
-    );
 }
 
-/// An invalid `sortOrder` -> `400`.
+/// An invalid `sortOrder` -> `400`, likewise rejected by serde at the extractor.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn list_rejects_invalid_sort_order_400(pool: PgPool) {
     let env = common::setup_test_server(pool, false).await;
 
     let response = env.server.get("/api/v1/listings?sortOrder=sideways").await;
     assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
-    assert!(
-        response.json::<Value>()["error"]
-            .as_str()
-            .unwrap()
-            .contains("sortOrder must be 'asc' or 'desc'")
-    );
 }
 
 // `POST /listings/{id}/view` unique tenant view -------------------------------
