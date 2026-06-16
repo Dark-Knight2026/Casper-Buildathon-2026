@@ -16,7 +16,7 @@ use uuid::Uuid;
 
 use crate::{
     common::{ApiError, ApiResult},
-    services::leases::db::{LeaseRow, NewLease},
+    services::leases::db::{LeaseEdit, LeaseRow, NewLease},
 };
 
 /// Lease agreement type. Stored as TEXT (CHECK) in the DB (`snake_case`); the
@@ -183,6 +183,88 @@ impl CreateLeaseRequest {
             property_manager_id: self.property_manager_id,
             property_manager_bps: bps,
             equity_property_id: self.equity_property_id,
+            clauses,
+        })
+    }
+}
+
+/// Edit-a-draft-lease payload. Every field is optional; omitted fields keep
+/// their current value (merged against the stored row before validation).
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateLeaseRequest {
+    /// Lease type.
+    #[serde(rename = "type")]
+    pub lease_type: Option<LeaseType>,
+    /// Start date (`YYYY-MM-DD`).
+    pub start_date: Option<NaiveDate>,
+    /// End date (`YYYY-MM-DD`).
+    pub end_date: Option<NaiveDate>,
+    /// Monthly rent (off-chain amount).
+    pub monthly_rent: Option<f64>,
+    /// Security deposit (off-chain amount).
+    pub security_deposit: Option<f64>,
+    /// Settlement currency.
+    pub currency: Option<String>,
+    /// Agreement clauses (replaces the existing array when present).
+    pub clauses: Option<Vec<Clause>>,
+}
+
+impl UpdateLeaseRequest {
+    /// Merges the patch onto the current row and validates the result.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ApiError::BadRequest`] when the merged terms are invalid
+    /// (duration not a whole number of 30-day months, non-positive rent,
+    /// negative deposit, or an unsupported currency).
+    #[inline]
+    pub fn into_validated(self, current: &LeaseRow) -> ApiResult<LeaseEdit> {
+        let start_date = self.start_date.unwrap_or(current.start_date);
+        let end_date = self.end_date.unwrap_or(current.end_date);
+        if end_date <= start_date {
+            return Err(ApiError::BadRequest(
+                "endDate must be after startDate".to_owned(),
+            ));
+        }
+        if (end_date - start_date).num_days() % 30 != 0 {
+            return Err(ApiError::BadRequest(
+                "lease duration must be a whole number of 30-day months".to_owned(),
+            ));
+        }
+        let monthly_rent = self.monthly_rent.unwrap_or(current.monthly_rent);
+        if monthly_rent <= 0.0 {
+            return Err(ApiError::BadRequest(
+                "monthlyRent must be greater than 0".to_owned(),
+            ));
+        }
+        let security_deposit = self.security_deposit.unwrap_or(current.security_deposit);
+        if security_deposit < 0.0 {
+            return Err(ApiError::BadRequest(
+                "securityDeposit must not be negative".to_owned(),
+            ));
+        }
+        let currency = self.currency.or_else(|| current.currency.clone());
+        if let Some(code) = &currency {
+            // Keep this set in sync with the `lease_currency_allowed` DB CHECK.
+            if !["cUSD", "CSPR", "USD", "USDT", "USDC"].contains(&code.as_str()) {
+                return Err(ApiError::BadRequest("unsupported currency".to_owned()));
+            }
+        }
+        let clauses = match self.clauses {
+            Some(list) => serde_json::to_value(list).unwrap_or_else(|_| Value::Array(Vec::new())),
+            None => current.clauses.0.clone(),
+        };
+        let lease_type = self
+            .lease_type
+            .map_or_else(|| current.lease_type.clone(), |kind| kind.to_string());
+        Ok(LeaseEdit {
+            lease_type,
+            start_date,
+            end_date,
+            monthly_rent,
+            security_deposit,
+            currency,
             clauses,
         })
     }

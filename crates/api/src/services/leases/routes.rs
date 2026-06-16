@@ -19,4 +19,6 @@ pub fn router() -> OpenApiRouter<Arc<AppState>> {
         .routes(routes!(handlers::list_leases))
         .routes(routes!(handlers::create_lease))
         .routes(routes!(handlers::get_lease))
+        .routes(routes!(handlers::update_lease))
+        .routes(routes!(handlers::delete_lease))
 }

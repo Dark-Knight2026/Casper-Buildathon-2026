@@ -99,6 +99,7 @@ use crate::{
             // Leases models
             leases::models::Lease,
             leases::models::CreateLeaseRequest,
+            leases::models::UpdateLeaseRequest,
             leases::models::LeaseStatus,
             leases::models::LeaseType,
             leases::models::Clause,

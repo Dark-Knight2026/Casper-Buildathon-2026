@@ -15,7 +15,7 @@ use crate::{
         auth::{AuthUser, LandlordRole, RoleUser},
         leases::{
             db,
-            models::{CreateLeaseRequest, Lease, LeaseListParams},
+            models::{CreateLeaseRequest, Lease, LeaseListParams, UpdateLeaseRequest},
         },
         properties::db as properties_db,
     },
@@ -160,4 +160,106 @@ pub async fn list_leases(
     .await?;
     let leases = rows.into_iter().map(Lease::from).collect();
     Ok(Json(PaginatedResponse::new(leases, total, &pagination)))
+}
+
+// `PATCH /api/v1/leases/{id}`
+//
+/// Edits a draft lease's terms.
+///
+/// Landlord-only, owner-only, and allowed only while the lease is a `draft`;
+/// omitted fields keep their current value. Editing a non-draft lease is `409`.
+///
+/// # Errors
+///
+/// Returns `400` on invalid merged terms, `403` when not the landlord, `404`
+/// when the lease is missing, `409` when the lease is no longer a draft.
+#[utoipa::path(
+    patch,
+    path = "/leases/{id}",
+    tag = "Leases",
+    params(
+        ("id" = Uuid, Path, description = "Lease id")
+    ),
+    request_body = UpdateLeaseRequest,
+    responses(
+        (status = 200, description = "Updated lease", body = Lease),
+        (status = 400, description = "Invalid input", body = ErrorResponse),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 403, description = "Not the lease landlord", body = ErrorResponse),
+        (status = 404, description = "Lease not found", body = ErrorResponse),
+        (status = 409, description = "Lease is not a draft", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse),
+    ),
+    security(
+        ("cookie_auth" = [])
+    )
+)]
+#[inline]
+pub async fn update_lease(
+    State(state): State<Arc<AppState>>,
+    user: RoleUser<LandlordRole>,
+    Path(lease_id): Path<Uuid>,
+    Json(payload): Json<UpdateLeaseRequest>,
+) -> ApiResult<Json<Lease>> {
+    let current = db::fetch_lease(&state.db, lease_id).await?;
+    if current.landlord_id != user.0.sub {
+        return Err(ApiError::Forbidden("not_lease_landlord".to_owned()));
+    }
+    if current.status != "draft" {
+        return Err(ApiError::Conflict(
+            "lease can only be edited while draft".to_owned(),
+        ));
+    }
+    let edit = payload.into_validated(&current)?;
+    let row = db::update_lease_draft(&state.db, lease_id, edit).await?;
+    Ok(Json(Lease::from(row)))
+}
+
+// `DELETE /api/v1/leases/{id}`
+//
+/// Soft-deletes a draft lease.
+///
+/// Landlord-only, owner-only, and allowed only while the lease is a `draft`;
+/// deleting a committed/active lease is `409`.
+///
+/// # Errors
+///
+/// Returns `403` when not the landlord, `404` when the lease is missing, `409`
+/// when the lease is not a draft.
+#[utoipa::path(
+    delete,
+    path = "/leases/{id}",
+    tag = "Leases",
+    params(
+        ("id" = Uuid, Path, description = "Lease id")
+    ),
+    responses(
+        (status = 204, description = "Draft lease deleted"),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 403, description = "Not the lease landlord", body = ErrorResponse),
+        (status = 404, description = "Lease not found", body = ErrorResponse),
+        (status = 409, description = "Lease is not a draft", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse),
+    ),
+    security(
+        ("cookie_auth" = [])
+    )
+)]
+#[inline]
+pub async fn delete_lease(
+    State(state): State<Arc<AppState>>,
+    user: RoleUser<LandlordRole>,
+    Path(lease_id): Path<Uuid>,
+) -> ApiResult<StatusCode> {
+    let current = db::fetch_lease(&state.db, lease_id).await?;
+    if current.landlord_id != user.0.sub {
+        return Err(ApiError::Forbidden("not_lease_landlord".to_owned()));
+    }
+    if current.status != "draft" {
+        return Err(ApiError::Conflict(
+            "only a draft lease can be deleted".to_owned(),
+        ));
+    }
+    db::soft_delete_lease(&state.db, lease_id).await?;
+    Ok(StatusCode::NO_CONTENT)
 }

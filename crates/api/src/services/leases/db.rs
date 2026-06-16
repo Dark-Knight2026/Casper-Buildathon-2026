@@ -39,6 +39,25 @@ pub struct NewLease {
     pub clauses: Value,
 }
 
+/// Validated set of editable draft fields (merged against the current row).
+#[derive(Debug)]
+pub struct LeaseEdit {
+    /// Lease type (DB string form, `snake_case`).
+    pub lease_type: String,
+    /// Start date.
+    pub start_date: NaiveDate,
+    /// End date.
+    pub end_date: NaiveDate,
+    /// Monthly rent (off-chain amount).
+    pub monthly_rent: f64,
+    /// Security deposit (off-chain amount).
+    pub security_deposit: f64,
+    /// Settlement currency.
+    pub currency: Option<String>,
+    /// Agreement clauses (JSON array).
+    pub clauses: Value,
+}
+
 /// A lease row as stored. Enum-typed fields (`lease_type`/`status`) stay
 /// `String` here and are parsed at the model boundary.
 #[derive(Debug, FromRow)]
@@ -294,4 +313,83 @@ pub async fn list_leases(
     .await?;
 
     Ok((rows, total))
+}
+
+/// Applies an edit to a `draft` lease and returns the updated row.
+/// The `status = 'draft'` guard makes the update a no-op (`RowNotFound`) if the
+/// lease left draft between the caller's read and this write.
+///
+/// # Errors
+///
+/// Returns [`Error::RowNotFound`] when the lease is no longer an editable draft,
+/// or any other database error.
+#[inline]
+pub async fn update_lease_draft(
+    pool: &PgPool,
+    lease_id: Uuid,
+    edit: LeaseEdit,
+) -> Result<LeaseRow, Error> {
+    sqlx::query_as!(
+        LeaseRow,
+        r#"
+            UPDATE leases SET
+                type = $2,
+                start_date = $3,
+                end_date = $4,
+                monthly_rent = $5::double precision,
+                security_deposit = $6::double precision,
+                currency = $7,
+                clauses = $8
+            WHERE id = $1 AND status = 'draft' AND deleted_at IS NULL
+            RETURNING
+                id, property_id, landlord_id, tenant_ids,
+                type AS "lease_type!",
+                status AS "status!",
+                start_date, end_date,
+                monthly_rent::float8 AS "monthly_rent!",
+                security_deposit::float8 AS "security_deposit!",
+                currency,
+                clauses AS "clauses: Json<Value>",
+                property_manager_id, property_manager_bps, equity_property_id,
+                signature_progress AS "signature_progress: Json<Value>",
+                consent_signatures AS "consent_signatures: Json<Value>",
+                lease_document_url, signed_document_url,
+                document_hash, ipfs_cid,
+                onchain_lease_id::text AS onchain_lease_id,
+                nft_token_id, commit_tx_hash,
+                created_at AS "created_at!",
+                updated_at AS "updated_at!"
+        "#,
+        lease_id,
+        edit.lease_type,
+        edit.start_date,
+        edit.end_date,
+        edit.monthly_rent,
+        edit.security_deposit,
+        edit.currency,
+        edit.clauses,
+    )
+    .fetch_one(pool)
+    .await
+}
+
+/// Soft-deletes a `draft` lease. Returns the number of rows affected (0 when
+/// the lease is not an editable draft).
+///
+/// # Errors
+///
+/// Returns [`Error`] on any database failure.
+#[inline]
+pub async fn soft_delete_lease(pool: &PgPool, lease_id: Uuid) -> Result<u64, Error> {
+    let result = sqlx::query!(
+        r#"
+            UPDATE leases
+            SET deleted_at = NOW()
+            WHERE id = $1 AND status = 'draft' AND deleted_at IS NULL
+        "#,
+        lease_id,
+    )
+    .execute(pool)
+    .await?;
+    Ok(result.rows_affected())
 }
