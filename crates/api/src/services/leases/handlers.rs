@@ -263,3 +263,64 @@ pub async fn delete_lease(
     db::soft_delete_lease(&state.db, lease_id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
+
+// `POST /api/v1/leases/{id}/submit`
+//
+/// Submits a draft lease for signing.
+///
+/// Landlord-only, owner-only; moves `draft -> pending_signatures` and seeds the
+/// signature-progress object with both parties unsigned. The lease must have a
+/// tenant. Submitting a non-draft lease is `409`.
+///
+/// # Errors
+///
+/// Returns `400` when the lease has no tenant, `403` when not the landlord,
+/// `404` when the lease is missing, `409` when the lease is not a draft.
+#[utoipa::path(
+    post,
+    path = "/leases/{id}/submit",
+    tag = "Leases",
+    params(
+        ("id" = Uuid, Path, description = "Lease id")
+    ),
+    responses(
+        (status = 200, description = "Lease sent for signing", body = Lease),
+        (status = 400, description = "Lease has no tenant", body = ErrorResponse),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 403, description = "Not the lease landlord", body = ErrorResponse),
+        (status = 404, description = "Lease not found", body = ErrorResponse),
+        (status = 409, description = "Lease is not a draft", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse),
+    ),
+    security(
+        ("cookie_auth" = [])
+    )
+)]
+#[inline]
+pub async fn submit_lease(
+    State(state): State<Arc<AppState>>,
+    user: RoleUser<LandlordRole>,
+    Path(lease_id): Path<Uuid>,
+) -> ApiResult<Json<Lease>> {
+    let current = db::fetch_lease(&state.db, lease_id).await?;
+    if current.landlord_id != user.0.sub {
+        return Err(ApiError::Forbidden("not_lease_landlord".to_owned()));
+    }
+    if current.status != "draft" {
+        return Err(ApiError::Conflict(
+            "only a draft lease can be submitted".to_owned(),
+        ));
+    }
+    if current.tenant_ids.is_empty() {
+        return Err(ApiError::BadRequest(
+            "lease has no tenant to sign".to_owned(),
+        ));
+    }
+    // Seed both parties as unsigned; /sign flips each in turn (C8).
+    let signature_progress = serde_json::json!({
+        "landlord": { "signed": false, "timestamp": null },
+        "tenant": { "signed": false, "timestamp": null },
+    });
+    let row = db::submit_lease(&state.db, lease_id, signature_progress).await?;
+    Ok(Json(Lease::from(row)))
+}

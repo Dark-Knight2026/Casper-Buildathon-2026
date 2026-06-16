@@ -393,3 +393,50 @@ pub async fn soft_delete_lease(pool: &PgPool, lease_id: Uuid) -> Result<u64, Err
     .await?;
     Ok(result.rows_affected())
 }
+
+/// Submits a `draft` lease for signing: moves it to `pending_signatures` and
+/// stores the initial signature-progress object. The `status = 'draft'` guard
+/// makes this a no-op (`RowNotFound`) if the lease already left draft.
+///
+/// # Errors
+///
+/// Returns [`Error::RowNotFound`] when the lease is no longer a draft, or any
+/// other database error.
+#[inline]
+pub async fn submit_lease(
+    pool: &PgPool,
+    lease_id: Uuid,
+    signature_progress: Value,
+) -> Result<LeaseRow, Error> {
+    sqlx::query_as!(
+        LeaseRow,
+        r#"
+            UPDATE leases SET
+                status = 'pending_signatures',
+                signature_progress = $2
+            WHERE id = $1 AND status = 'draft' AND deleted_at IS NULL
+            RETURNING
+                id, property_id, landlord_id, tenant_ids,
+                type AS "lease_type!",
+                status AS "status!",
+                start_date, end_date,
+                monthly_rent::float8 AS "monthly_rent!",
+                security_deposit::float8 AS "security_deposit!",
+                currency,
+                clauses AS "clauses: Json<Value>",
+                property_manager_id, property_manager_bps, equity_property_id,
+                signature_progress AS "signature_progress: Json<Value>",
+                consent_signatures AS "consent_signatures: Json<Value>",
+                lease_document_url, signed_document_url,
+                document_hash, ipfs_cid,
+                onchain_lease_id::text AS onchain_lease_id,
+                nft_token_id, commit_tx_hash,
+                created_at AS "created_at!",
+                updated_at AS "updated_at!"
+        "#,
+        lease_id,
+        signature_progress,
+    )
+    .fetch_one(pool)
+    .await
+}
