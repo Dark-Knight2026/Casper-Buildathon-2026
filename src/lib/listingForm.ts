@@ -23,15 +23,9 @@ export const SURROUNDING_CATEGORIES: SurroundingCategory[] = [
 /** Shared zod schema for the surrounding-area POI field array. */
 export const surroundingAreaSchema = z.array(
   z.object({
-    category: z.enum([
-      'hospital',
-      'school',
-      'gym',
-      'airport',
-      'park',
-      'grocery',
-      'transit',
-    ]),
+    category: z.enum(
+      SURROUNDING_CATEGORIES as [SurroundingCategory, ...SurroundingCategory[]]
+    ),
     name: z.string().min(1, 'Place name is required'),
     distanceMiles: z.coerce.number().min(0, 'Distance must be 0 or more'),
     note: z.string().optional(),

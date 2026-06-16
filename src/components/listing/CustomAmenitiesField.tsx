@@ -22,15 +22,13 @@ export function CustomAmenitiesField<T extends FieldValues>({
 }: CustomAmenitiesFieldProps<T>) {
   const [customAmenity, setCustomAmenity] = useState('');
   const watched = (form.watch(name) ?? []) as string[];
-  const customAmenities = watched.filter(
-    (a) => !ALL_AMENITIES.some((known) => known === a)
-  );
+  const customAmenities = watched.filter((a) => !ALL_AMENITIES.includes(a));
 
   const add = () => {
     const value = customAmenity.trim();
     if (!value) return;
     const current = (form.getValues(name) ?? []) as string[];
-    if (!current.some((a) => a === value)) {
+    if (!current.includes(value)) {
       form.setValue(name, [...current, value] as never, {
         shouldValidate: true,
         shouldDirty: true,

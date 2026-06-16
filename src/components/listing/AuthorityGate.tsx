@@ -66,6 +66,23 @@ export function AuthorityGate({ listing }: { listing: Listing }) {
   const queryClient = useQueryClient();
   const provenance = listing.provenance;
 
+  // The header chip reflects identity status: a full verified-lister badge, a
+  // plain identity-verified tick, or a note that it resolves at publish.
+  const headerBadge = provenance.verifiedListerBadge
+    ? {
+        icon: <ShieldCheck className="h-3 w-3 text-emerald-600" />,
+        label: 'Verified lister',
+      }
+    : provenance.identityVerified
+      ? {
+          icon: <Check className="h-3 w-3 text-green-600" />,
+          label: 'Identity verified',
+        }
+      : {
+          icon: <Clock className="h-3 w-3 text-muted-foreground" />,
+          label: 'Identity verified at publish',
+        };
+
   const [docType, setDocType] = useState<AuthorityDocumentType>('deed');
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -99,31 +116,13 @@ export function AuthorityGate({ listing }: { listing: Listing }) {
       <CardHeader>
         <CardTitle className="flex flex-wrap items-center gap-2">
           Authority to list
-          {provenance.verifiedListerBadge ? (
-            <Badge
-              variant="secondary"
-              className="flex items-center gap-1 text-xs font-normal"
-            >
-              <ShieldCheck className="h-3 w-3 text-emerald-600" />
-              Verified lister
-            </Badge>
-          ) : provenance.identityVerified ? (
-            <Badge
-              variant="secondary"
-              className="flex items-center gap-1 text-xs font-normal"
-            >
-              <Check className="h-3 w-3 text-green-600" />
-              Identity verified
-            </Badge>
-          ) : (
-            <Badge
-              variant="secondary"
-              className="flex items-center gap-1 text-xs font-normal"
-            >
-              <Clock className="h-3 w-3 text-muted-foreground" />
-              Identity verified at publish
-            </Badge>
-          )}
+          <Badge
+            variant="secondary"
+            className="flex items-center gap-1 text-xs font-normal"
+          >
+            {headerBadge.icon}
+            {headerBadge.label}
+          </Badge>
         </CardTitle>
         <CardDescription>
           A listing can go live once the authority and fair-housing checks pass.
