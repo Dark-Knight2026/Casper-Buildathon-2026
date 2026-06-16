@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import { MemoryRouter } from 'react-router-dom';
 
@@ -10,7 +11,10 @@ import { FEATURED_PROPERTIES } from '@/data/featuredProperties';
 const mockNavigate = vi.fn();
 
 vi.mock('react-router-dom', async () => {
-  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
+  const actual =
+    await vi.importActual<typeof import('react-router-dom')>(
+      'react-router-dom'
+    );
   return {
     ...actual,
     useNavigate: () => mockNavigate,
@@ -25,13 +29,20 @@ vi.mock('@/hooks/useAuth', () => ({
 
 // Real LandingHeader, FeaturedProperties and use-toast are rendered. Toaster is
 // mounted alongside so toast assertions hit real DOM (real app mounts it in
-// App.tsx; tests need their own instance).
+// App.tsx; tests need their own instance). FeaturedProperties → PropertyCard →
+// SavePropertyButton reads favorite ids via react-query, so a QueryClient must
+// be in scope (the query stays disabled for a guest).
 function renderPage() {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
   return render(
-    <MemoryRouter>
-      <PropertyLanding />
-      <Toaster />
-    </MemoryRouter>
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter>
+        <PropertyLanding />
+        <Toaster />
+      </MemoryRouter>
+    </QueryClientProvider>
   );
 }
 
@@ -44,7 +55,10 @@ describe('PropertyLanding', () => {
     it('renders hero heading', () => {
       renderPage();
       expect(
-        screen.getByRole('heading', { level: 1, name: /find your.*dream home/i }),
+        screen.getByRole('heading', {
+          level: 1,
+          name: /find your.*dream home/i,
+        }),
         'hero <h1> "Find your dream home" should be rendered'
       ).toBeInTheDocument();
     });
@@ -66,10 +80,13 @@ describe('PropertyLanding', () => {
       renderPage();
       // FeaturedProperties renders one card per FEATURED_PROPERTIES entry,
       // each with aria-label="View details for {title}"
-      const cards = screen.getAllByRole('button', { name: /view details for/i });
-      expect(cards, 'should render one card per FEATURED_PROPERTIES entry').toHaveLength(
-        FEATURED_PROPERTIES.length
-      );
+      const cards = screen.getAllByRole('button', {
+        name: /view details for/i,
+      });
+      expect(
+        cards,
+        'should render one card per FEATURED_PROPERTIES entry'
+      ).toHaveLength(FEATURED_PROPERTIES.length);
       expect(
         screen.getByText(FEATURED_PROPERTIES[0].title),
         'first featured property title should be visible'
@@ -78,10 +95,22 @@ describe('PropertyLanding', () => {
 
     it('renders all four stat cards with their numeric values', () => {
       renderPage();
-      expect(screen.getByText('50K+'), 'Properties Listed stat value should be 50K+').toBeInTheDocument();
-      expect(screen.getByText('25K+'), 'Happy Clients stat value should be 25K+').toBeInTheDocument();
-      expect(screen.getByText('500+'), 'Expert Agents stat value should be 500+').toBeInTheDocument();
-      expect(screen.getByText('99%'), 'Success Rate stat value should be 99%').toBeInTheDocument();
+      expect(
+        screen.getByText('50K+'),
+        'Properties Listed stat value should be 50K+'
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText('25K+'),
+        'Happy Clients stat value should be 25K+'
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText('500+'),
+        'Expert Agents stat value should be 500+'
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText('99%'),
+        'Success Rate stat value should be 99%'
+      ).toBeInTheDocument();
     });
 
     it('renders all four stat labels', () => {
@@ -108,7 +137,9 @@ describe('PropertyLanding', () => {
   describe('navigation', () => {
     it('"Explore Properties" navigates to /listings', () => {
       renderPage();
-      fireEvent.click(screen.getByRole('button', { name: /explore properties/i }));
+      fireEvent.click(
+        screen.getByRole('button', { name: /explore properties/i })
+      );
       expect(
         mockNavigate,
         '"Explore Properties" CTA should navigate to /listings'
@@ -117,7 +148,9 @@ describe('PropertyLanding', () => {
 
     it('"Start Your Search" CTA also navigates to /listings', () => {
       renderPage();
-      fireEvent.click(screen.getByRole('button', { name: /start your search/i }));
+      fireEvent.click(
+        screen.getByRole('button', { name: /start your search/i })
+      );
       expect(
         mockNavigate,
         '"Start Your Search" CTA should navigate to /listings'
@@ -137,7 +170,9 @@ describe('PropertyLanding', () => {
 
     it('"Schedule Consultation" surfaces the "coming soon" toast in the DOM', async () => {
       renderPage();
-      fireEvent.click(screen.getByRole('button', { name: /schedule consultation/i }));
+      fireEvent.click(
+        screen.getByRole('button', { name: /schedule consultation/i })
+      );
       expect(
         await screen.findByText(/consultation coming soon/i),
         '"Schedule Consultation" should surface a "coming soon" toast'
