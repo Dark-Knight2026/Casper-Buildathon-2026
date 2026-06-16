@@ -203,6 +203,9 @@ const PropertyEdit = lazy(
 const ListingApplications = lazy(
   () => import('@/pages/landlord/properties/ListingApplications')
 );
+const ListingViewings = lazy(
+  () => import('@/pages/landlord/properties/ListingViewings')
+);
 const PropertyComparisonPage = lazy(
   () => import('@/pages/property/PropertyComparisonPage')
 );
@@ -473,6 +476,10 @@ function App() {
                 <Route
                   path="properties/:id/applications"
                   element={<ListingApplications />}
+                />
+                <Route
+                  path="properties/:id/viewings"
+                  element={<ListingViewings />}
                 />
                 <Route path="applications" element={<ApplicationList />} />
                 <Route

@@ -641,9 +641,8 @@ export default function PropertyDetail() {
       <ScheduleViewingModal
         open={showScheduleModal}
         onClose={() => setShowScheduleModal(false)}
-        propertyId={listing.id}
+        listingId={listing.id}
         propertyAddress={fullAddress}
-        landlordId={listing.listedBy}
       />
 
       {/* Guest auth prompt — opens whenever requireAuth() is called by a

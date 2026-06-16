@@ -1,10 +1,16 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
-import { propertyActionsService, type ViewingSchedule } from '@/services/propertyActionsService';
+import {
+  cancelViewing,
+  getMyViewings,
+  type Viewing,
+} from '@/services/viewingService';
+import { formatFullAddress } from '@/lib/listingDisplay';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { ViewingStatusBadge } from '@/components/viewing/ViewingStatusBadge';
 import { useToast } from '@/hooks/use-toast';
 import {
   AlertDialog,
@@ -19,95 +25,45 @@ import {
 import { Loader2, Calendar, Clock, MapPin, X } from 'lucide-react';
 import { format } from 'date-fns';
 
-interface ViewingWithProperty extends ViewingSchedule {
-  property?: {
-    id: string;
-    title: string;
-    address: string;
-    city: string;
-    state: string;
-  };
-}
-
 export default function MyViewings() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { toast } = useToast();
-  const [viewings, setViewings] = useState<ViewingWithProperty[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [cancellingId, setCancellingId] = useState<string | null>(null);
-  const [viewingToCancel, setViewingToCancel] = useState<string | null>(null);
-
-  const fetchViewings = useCallback(async () => {
-    if (!user) return;
-
-    try {
-      setLoading(true);
-      const data = await propertyActionsService.getUserViewings(user.id);
-      setViewings(data as ViewingWithProperty[]);
-    } catch (error) {
-      console.error('Error loading viewings:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to load viewings. Please try again.',
-        variant: 'destructive',
-      });
-    } finally {
-      setLoading(false);
-    }
-  }, [user, toast]);
+  const queryClient = useQueryClient();
+  const [viewingToCancel, setViewingToCancel] = useState<Viewing | null>(null);
 
   useEffect(() => {
-    if (!user) {
-      navigate('/auth/login');
-      return;
-    }
-    fetchViewings();
-  }, [user, navigate, fetchViewings]);
+    if (!user) navigate('/auth/login');
+  }, [user, navigate]);
 
-  const handleCancelViewing = async (viewingId: string) => {
-    if (!user) return;
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['my-viewings'],
+    queryFn: () => getMyViewings({ pageSize: 100 }),
+    enabled: !!user,
+  });
+  const viewings = data?.data ?? [];
 
-    setCancellingId(viewingId);
-    try {
-      await propertyActionsService.cancelViewing(user.id, viewingId);
-      setViewings(viewings.map(v => 
-        v.id === viewingId ? { ...v, status: 'cancelled' as const } : v
-      ));
+  const cancelMutation = useMutation({
+    mutationFn: (viewing: Viewing) =>
+      cancelViewing(viewing.listingId, viewing.id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['my-viewings'] });
       toast({
         title: 'Viewing cancelled',
         description: 'Your viewing appointment has been cancelled.',
       });
-    } catch (error) {
-      console.error('Error cancelling viewing:', error);
+    },
+    onError: () => {
       toast({
         title: 'Error',
         description: 'Failed to cancel viewing. Please try again.',
         variant: 'destructive',
       });
-    } finally {
-      setCancellingId(null);
-      setViewingToCancel(null);
-    }
-  };
+    },
+    onSettled: () => setViewingToCancel(null),
+  });
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'confirmed':
-        return <Badge className="bg-green-600">Confirmed</Badge>;
-      case 'cancelled':
-        return <Badge variant="destructive">Cancelled</Badge>;
-      case 'pending':
-      default:
-        return <Badge variant="outline" className="text-yellow-600 border-yellow-600">Pending</Badge>;
-    }
-  };
-
-  const handleViewProperty = (propertyId: string) => {
-    navigate(`/properties/${propertyId}`);
-  };
-
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
@@ -125,9 +81,12 @@ export default function MyViewings() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">My Viewings</h1>
+              <h1 className="text-3xl font-bold text-gray-900 mb-2">
+                My Viewings
+              </h1>
               <p className="text-gray-600">
-                {viewings.length} {viewings.length === 1 ? 'viewing' : 'viewings'} scheduled
+                {viewings.length}{' '}
+                {viewings.length === 1 ? 'viewing' : 'viewings'} scheduled
               </p>
             </div>
             <Button onClick={() => navigate('/tenant/property-search')}>
@@ -139,10 +98,16 @@ export default function MyViewings() {
 
       {/* Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {viewings.length === 0 ? (
+        {isError ? (
+          <p className="text-center text-muted-foreground py-12">
+            Couldn't load your viewings. Please try again.
+          </p>
+        ) : viewings.length === 0 ? (
           <div className="text-center py-12">
             <Calendar className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-            <h2 className="text-2xl font-semibold text-gray-900 mb-2">No viewings scheduled</h2>
+            <h2 className="text-2xl font-semibold text-gray-900 mb-2">
+              No viewings scheduled
+            </h2>
             <p className="text-gray-600 mb-6">
               Start browsing properties and schedule viewings to see them here.
             </p>
@@ -153,27 +118,31 @@ export default function MyViewings() {
         ) : (
           <div className="space-y-6">
             {viewings.map((viewing) => {
-              const property = viewing.property;
-              const isPast = new Date(viewing.viewing_date) < new Date();
+              const listing = viewing.listing;
+              const address = formatFullAddress(listing?.property);
+              const isPast = new Date(viewing.viewingDate) < new Date();
               const canCancel = viewing.status === 'pending' && !isPast;
-              
+              const isCancelling =
+                cancelMutation.isPending &&
+                cancelMutation.variables?.id === viewing.id;
+
               return (
                 <Card key={viewing.id} className="overflow-hidden">
                   <CardHeader className="bg-gray-50 border-b">
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
                         <CardTitle className="text-xl mb-2">
-                          {property?.title || 'Property Viewing'}
+                          {listing?.title || 'Property Viewing'}
                         </CardTitle>
-                        {property && (
+                        {address && (
                           <div className="flex items-center text-gray-600 text-sm">
                             <MapPin className="h-4 w-4 mr-1" />
-                            <span>{property.address}, {property.city}, {property.state}</span>
+                            <span>{address}</span>
                           </div>
                         )}
                       </div>
                       <div className="ml-4">
-                        {getStatusBadge(viewing.status)}
+                        <ViewingStatusBadge status={viewing.status} />
                       </div>
                     </div>
                   </CardHeader>
@@ -186,7 +155,10 @@ export default function MyViewings() {
                           <span>Viewing Date</span>
                         </div>
                         <p className="font-semibold text-gray-900">
-                          {format(new Date(viewing.viewing_date), 'EEEE, MMMM dd, yyyy')}
+                          {format(
+                            new Date(viewing.viewingDate),
+                            'EEEE, MMMM dd, yyyy'
+                          )}
                         </p>
                       </div>
 
@@ -196,7 +168,7 @@ export default function MyViewings() {
                           <span>Time</span>
                         </div>
                         <p className="font-semibold text-gray-900">
-                          {viewing.viewing_time}
+                          {viewing.viewingTime}
                         </p>
                       </div>
                     </div>
@@ -210,27 +182,30 @@ export default function MyViewings() {
 
                     <div className="flex items-center justify-between pt-4 border-t">
                       <div className="text-sm text-gray-600">
-                        {viewing.status === 'pending' && 'Awaiting landlord confirmation'}
-                        {viewing.status === 'confirmed' && 'Your viewing is confirmed'}
-                        {viewing.status === 'cancelled' && 'This viewing was cancelled'}
+                        {viewing.status === 'pending' &&
+                          'Awaiting landlord confirmation'}
+                        {viewing.status === 'confirmed' &&
+                          'Your viewing is confirmed'}
+                        {viewing.status === 'cancelled' &&
+                          'This viewing was cancelled'}
                         {isPast && viewing.status !== 'cancelled' && ' (Past)'}
                       </div>
                       <div className="flex gap-2">
-                        {property && (
-                          <Button
-                            variant="outline"
-                            onClick={() => handleViewProperty(property.id)}
-                          >
-                            View Property
-                          </Button>
-                        )}
+                        <Button
+                          variant="outline"
+                          onClick={() =>
+                            navigate(`/properties/${viewing.listingId}`)
+                          }
+                        >
+                          View Property
+                        </Button>
                         {canCancel && (
                           <Button
                             variant="destructive"
-                            onClick={() => setViewingToCancel(viewing.id)}
-                            disabled={cancellingId === viewing.id}
+                            onClick={() => setViewingToCancel(viewing)}
+                            disabled={isCancelling}
                           >
-                            {cancellingId === viewing.id ? (
+                            {isCancelling ? (
                               <>
                                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                                 Cancelling...
@@ -254,18 +229,24 @@ export default function MyViewings() {
       </div>
 
       {/* Cancel Confirmation Dialog */}
-      <AlertDialog open={!!viewingToCancel} onOpenChange={() => setViewingToCancel(null)}>
+      <AlertDialog
+        open={!!viewingToCancel}
+        onOpenChange={() => setViewingToCancel(null)}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Cancel Viewing?</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to cancel this viewing appointment? This action cannot be undone.
+              Are you sure you want to cancel this viewing appointment? This
+              action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Keep Viewing</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => viewingToCancel && handleCancelViewing(viewingToCancel)}
+              onClick={() =>
+                viewingToCancel && cancelMutation.mutate(viewingToCancel)
+              }
               className="bg-red-600 hover:bg-red-700"
             >
               Cancel Viewing

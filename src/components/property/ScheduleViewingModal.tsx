@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { format } from 'date-fns';
 import { useAuth } from '@/hooks/useAuth';
-import { propertyActionsService } from '@/services/propertyActionsService';
+import { bookViewing } from '@/services/viewingService';
 import {
   Dialog,
   DialogContent,
@@ -25,20 +26,15 @@ import {
 interface ScheduleViewingModalProps {
   open: boolean;
   onClose: () => void;
-  propertyId: string;
+  listingId: string;
   propertyAddress: string;
-  // Required: must come from the property record (`property.landlordId`).
-  // The viewing request is recorded against this id, so a placeholder here
-  // silently corrupts every persisted row.
-  landlordId: string;
 }
 
 export function ScheduleViewingModal({
   open,
   onClose,
-  propertyId,
+  listingId,
   propertyAddress,
-  landlordId,
 }: ScheduleViewingModalProps) {
   const { profile } = useAuth();
   const [loading, setLoading] = useState(false);
@@ -49,13 +45,23 @@ export function ScheduleViewingModal({
   // Auto-close timer ref so unmount (parent route change, dialog dismiss)
   // does not leave a stale setState callback firing on an unmounted tree.
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => () => {
-    if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
-  }, []);
+  useEffect(
+    () => () => {
+      if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+    },
+    []
+  );
 
   const ALL_TIME_SLOTS = [
-    '9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM',
-    '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM',
+    '9:00 AM',
+    '10:00 AM',
+    '11:00 AM',
+    '12:00 PM',
+    '1:00 PM',
+    '2:00 PM',
+    '3:00 PM',
+    '4:00 PM',
+    '5:00 PM',
   ];
 
   // When the user picks today's date, hide slots that have already passed —
@@ -104,10 +110,8 @@ export function ScheduleViewingModal({
     setLoading(true);
 
     try {
-      await propertyActionsService.scheduleViewing(profile.id, {
-        propertyId,
-        landlordId,
-        viewingDate: selectedDate,
+      await bookViewing(listingId, {
+        viewingDate: format(selectedDate, 'yyyy-MM-dd'),
         viewingTime: selectedTime,
       });
 
@@ -120,7 +124,10 @@ export function ScheduleViewingModal({
         closeTimerRef.current = null;
       }, 2000);
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to schedule viewing. Please try again.';
+      const errorMessage =
+        err instanceof Error
+          ? err.message
+          : 'Failed to schedule viewing. Please try again.';
       setError(errorMessage);
     } finally {
       setLoading(false);
@@ -139,7 +146,8 @@ export function ScheduleViewingModal({
           <Alert className="bg-green-50 border-green-200">
             <CheckCircle className="h-4 w-4 text-green-600" />
             <AlertDescription className="text-green-800">
-              Viewing scheduled successfully! You'll receive a confirmation email shortly.
+              Viewing scheduled successfully! You'll receive a confirmation
+              email shortly.
             </AlertDescription>
           </Alert>
         ) : (
@@ -163,7 +171,9 @@ export function ScheduleViewingModal({
             </div>
 
             <div className="space-y-3">
-              <Label htmlFor="time" className="block">Select Time</Label>
+              <Label htmlFor="time" className="block">
+                Select Time
+              </Label>
               <Select value={selectedTime} onValueChange={setSelectedTime}>
                 <SelectTrigger id="time" className="w-full">
                   <SelectValue placeholder="Choose a time slot" />

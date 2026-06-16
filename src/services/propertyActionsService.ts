@@ -14,54 +14,43 @@ export interface ContactMessage {
   created_at: string;
 }
 
-export interface ViewingSchedule {
-  id: string;
-  property_id: string;
-  user_id: string;
-  landlord_id: string;
-  viewing_date: string;
-  viewing_time: string;
-  status: 'pending' | 'confirmed' | 'cancelled';
-  created_at: string;
-}
-
 export interface RentalApplication {
   id: string;
   property_id: string;
   user_id: string;
   landlord_id: string;
-  
+
   // Personal Information
   full_name: string;
   email: string;
   phone: string;
   date_of_birth: string;
-  
+
   // Current Address
   current_address: string;
   current_city: string;
   current_state: string;
   current_zip: string;
   move_in_date: string;
-  
+
   // Employment
   employer: string;
   job_title: string;
   employment_length: string;
   monthly_income: number;
-  
+
   // References
   reference1_name: string;
   reference1_phone: string;
   reference2_name?: string;
   reference2_phone?: string;
-  
+
   // Additional
   pets: boolean;
   pet_description?: string;
   additional_info?: string;
   background_check_consent: boolean;
-  
+
   status: 'pending' | 'approved' | 'rejected';
   created_at: string;
 }
@@ -103,13 +92,6 @@ export interface ContactLandlordData {
   senderEmail: string;
   senderPhone: string;
   message: string;
-}
-
-export interface ScheduleViewingData {
-  propertyId: string;
-  landlordId: string;
-  viewingDate: Date;
-  viewingTime: string;
 }
 
 export interface SubmitApplicationData {
@@ -186,10 +168,12 @@ export const propertyActionsService = {
   async getFavorites(userId: string): Promise<Favorite[]> {
     const { data, error } = await supabase
       .from('favorites')
-      .select(`
+      .select(
+        `
         *,
         property:properties (*)
-      `)
+      `
+      )
       .eq('user_id', userId)
       .order('created_at', { ascending: false });
 
@@ -227,7 +211,7 @@ export const propertyActionsService = {
       .eq('user_id', userId);
 
     if (error) throw error;
-    return data?.map(f => f.property_id) || [];
+    return data?.map((f) => f.property_id) || [];
   },
 
   // ==================== CONTACT ====================
@@ -235,7 +219,10 @@ export const propertyActionsService = {
   /**
    * Send a contact message to the landlord
    */
-  async contactLandlord(userId: string, data: ContactLandlordData): Promise<ContactMessage> {
+  async contactLandlord(
+    userId: string,
+    data: ContactLandlordData
+  ): Promise<ContactMessage> {
     const { data: message, error } = await supabase
       .from('contact_messages')
       .insert({
@@ -286,104 +273,15 @@ export const propertyActionsService = {
     return data || [];
   },
 
-  // ==================== VIEWINGS ====================
-
-  /**
-   * Schedule a property viewing
-   */
-  async scheduleViewing(userId: string, data: ScheduleViewingData): Promise<ViewingSchedule> {
-    const { data: viewing, error } = await supabase
-      .from('viewing_schedules')
-      .insert({
-        property_id: data.propertyId,
-        user_id: userId,
-        landlord_id: data.landlordId,
-        viewing_date: data.viewingDate.toISOString().split('T')[0],
-        viewing_time: data.viewingTime,
-        status: 'pending',
-      })
-      .select()
-      .single();
-
-    if (error) throw error;
-
-    // Trigger email notification
-    await this.sendViewingNotification(viewing);
-
-    return viewing;
-  },
-
-  /**
-   * Get viewing schedules for a property
-   */
-  async getViewingSchedules(propertyId: string): Promise<ViewingSchedule[]> {
-    const { data, error } = await supabase
-      .from('viewing_schedules')
-      .select('*')
-      .eq('property_id', propertyId)
-      .order('viewing_date', { ascending: true });
-
-    if (error) throw error;
-    return data || [];
-  },
-
-  /**
-   * Get user's scheduled viewings
-   */
-  async getUserViewings(userId: string): Promise<ViewingSchedule[]> {
-    const { data, error } = await supabase
-      .from('viewing_schedules')
-      .select(`
-        *,
-        property:properties (*)
-      `)
-      .eq('user_id', userId)
-      .order('viewing_date', { ascending: true });
-
-    if (error) throw error;
-    return data || [];
-  },
-
-  /**
-   * Update viewing schedule status
-   */
-  async updateViewingStatus(
-    viewingId: string,
-    status: 'pending' | 'confirmed' | 'cancelled'
-  ): Promise<ViewingSchedule> {
-    const { data, error } = await supabase
-      .from('viewing_schedules')
-      .update({ status })
-      .eq('id', viewingId)
-      .select()
-      .single();
-
-    if (error) throw error;
-    return data;
-  },
-
-  /**
-   * Cancel a viewing (tenant action)
-   */
-  async cancelViewing(userId: string, viewingId: string): Promise<ViewingSchedule> {
-    const { data, error } = await supabase
-      .from('viewing_schedules')
-      .update({ status: 'cancelled' })
-      .eq('id', viewingId)
-      .eq('user_id', userId)
-      .select()
-      .single();
-
-    if (error) throw error;
-    return data;
-  },
-
   // ==================== APPLICATIONS ====================
 
   /**
    * Submit a rental application
    */
-  async submitApplication(userId: string, data: SubmitApplicationData): Promise<RentalApplication> {
+  async submitApplication(
+    userId: string,
+    data: SubmitApplicationData
+  ): Promise<RentalApplication> {
     const { data: application, error } = await supabase
       .from('rental_applications')
       .insert({
@@ -427,7 +325,9 @@ export const propertyActionsService = {
   /**
    * Get rental applications for a property
    */
-  async getRentalApplications(propertyId: string): Promise<RentalApplication[]> {
+  async getRentalApplications(
+    propertyId: string
+  ): Promise<RentalApplication[]> {
     const { data, error } = await supabase
       .from('rental_applications')
       .select('*')
@@ -444,10 +344,12 @@ export const propertyActionsService = {
   async getUserApplications(userId: string): Promise<RentalApplication[]> {
     const { data, error } = await supabase
       .from('rental_applications')
-      .select(`
+      .select(
+        `
         *,
         property:properties (*)
-      `)
+      `
+      )
       .eq('user_id', userId)
       .order('created_at', { ascending: false });
 
@@ -496,29 +398,11 @@ export const propertyActionsService = {
   },
 
   /**
-   * Send viewing notification email
-   */
-  async sendViewingNotification(viewing: ViewingSchedule): Promise<void> {
-    try {
-      const { error } = await supabase.functions.invoke('send-email', {
-        body: {
-          type: 'viewing',
-          data: viewing,
-        },
-      });
-
-      if (error) {
-        console.error('Failed to send viewing notification:', error);
-      }
-    } catch (error) {
-      console.error('Error sending viewing notification:', error);
-    }
-  },
-
-  /**
    * Send application notification email
    */
-  async sendApplicationNotification(application: RentalApplication): Promise<void> {
+  async sendApplicationNotification(
+    application: RentalApplication
+  ): Promise<void> {
     try {
       const { error } = await supabase.functions.invoke('send-email', {
         body: {

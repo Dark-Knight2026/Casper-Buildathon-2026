@@ -15,6 +15,7 @@ import {
   DollarSign,
   Eye,
   FileText,
+  Calendar,
   Percent,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -179,6 +180,13 @@ export default function PropertyDetail() {
             >
               <FileText className="mr-2 h-4 w-4" />
               Applications
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => navigate(`/landlord/properties/${id}/viewings`)}
+            >
+              <Calendar className="mr-2 h-4 w-4" />
+              Viewings
             </Button>
             <Button onClick={() => navigate(`/landlord/properties/${id}/edit`)}>
               <Edit className="mr-2 h-4 w-4" />
