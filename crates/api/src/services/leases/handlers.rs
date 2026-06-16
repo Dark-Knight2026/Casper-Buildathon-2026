@@ -7,15 +7,20 @@ use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
 };
+use chrono::Utc;
+use serde_json::Value;
 use uuid::Uuid;
 
 use crate::{
-    common::{ApiError, ApiResult, AppState, ErrorResponse, PaginatedResponse, Pagination},
+    common::{ApiError, ApiResult, AppState, ErrorResponse, PaginatedResponse, Pagination, crypto},
     services::{
         auth::{AuthUser, LandlordRole, RoleUser},
         leases::{
-            db,
-            models::{CreateLeaseRequest, Lease, LeaseListParams, UpdateLeaseRequest},
+            db::{self, LeaseRow, NewLease},
+            models::{
+                CreateLeaseRequest, Lease, LeaseListParams, SignLeaseRequest, SignerRole,
+                UpdateLeaseRequest,
+            },
         },
         properties::db as properties_db,
     },
@@ -56,7 +61,7 @@ pub async fn create_lease(
     user: RoleUser<LandlordRole>,
     Json(payload): Json<CreateLeaseRequest>,
 ) -> ApiResult<(StatusCode, Json<Lease>)> {
-    let new_lease = payload.into_validated()?;
+    let new_lease = NewLease::try_from(payload)?;
     // Referenced property must exist and belong to the caller.
     let owner = properties_db::fetch_property_owner(&state.db, new_lease.property_id)
         .await?
@@ -316,11 +321,147 @@ pub async fn submit_lease(
             "lease has no tenant to sign".to_owned(),
         ));
     }
-    // Seed both parties as unsigned; /sign flips each in turn (C8).
+    // Seed both parties as unsigned; /sign flips each in turn.
     let signature_progress = serde_json::json!({
         "landlord": { "signed": false, "timestamp": null },
         "tenant": { "signed": false, "timestamp": null },
     });
     let row = db::submit_lease(&state.db, lease_id, signature_progress).await?;
+    Ok(Json(Lease::from(row)))
+}
+
+/// Builds the canonical lease-consent message both parties sign off-chain.
+///
+/// This string is the signing contract with the frontend: the wallet signs
+/// exactly these bytes (the verifier prepends the Casper `Casper Message:\n`
+/// prefix), so the frontend MUST reconstruct it identically or verification
+/// fails. `signedAt` is deliberately excluded - it would diverge per party.
+fn lease_consent_message(lease: &LeaseRow) -> String {
+    let tenant = lease
+        .tenant_ids
+        .first()
+        .map_or_else(String::new, ToString::to_string);
+    format!(
+        "LeaseConsent|lease={}|landlord={}|tenant={}|rent={}|deposit={}|currency={}|start={}|end={}",
+        lease.id,
+        lease.landlord_id,
+        tenant,
+        lease.monthly_rent,
+        lease.security_deposit,
+        lease.currency.as_deref().unwrap_or(""),
+        lease.start_date,
+        lease.end_date,
+    )
+}
+
+// `POST /api/v1/leases/{id}/sign`
+//
+/// Records a party's off-chain consent signature (reference §6).
+///
+/// Open to the landlord or a listed tenant while the lease is
+/// `pending_signatures`. Verifies `signerWallet` is the caller's active wallet
+/// and that the Casper signature is valid over the canonical consent message,
+/// then stores it; re-signing the same role overwrites. `/commit` is blocked
+/// until both parties have signed.
+///
+/// # Errors
+///
+/// Returns `400` on a malformed signature or no linked wallet, `401` on a
+/// signature mismatch, `403` when the caller is not the claimed party or the
+/// wallet does not match, `404` when the lease is missing, `409` when the lease
+/// is not awaiting signatures.
+#[utoipa::path(
+    post,
+    path = "/leases/{id}/sign",
+    tag = "Leases",
+    params(
+        ("id" = Uuid, Path, description = "Lease id")
+    ),
+    request_body = SignLeaseRequest,
+    responses(
+        (status = 200, description = "Signature recorded", body = Lease),
+        (status = 400, description = "Malformed signature or no active wallet", body = ErrorResponse),
+        (status = 401, description = "Signature verification failed", body = ErrorResponse),
+        (status = 403, description = "Not the signing party or wallet mismatch", body = ErrorResponse),
+        (status = 404, description = "Lease not found", body = ErrorResponse),
+        (status = 409, description = "Lease is not awaiting signatures", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse),
+    ),
+    security(
+        ("cookie_auth" = [])
+    )
+)]
+#[inline]
+pub async fn sign_lease(
+    State(state): State<Arc<AppState>>,
+    AuthUser(claims): AuthUser,
+    Path(lease_id): Path<Uuid>,
+    Json(payload): Json<SignLeaseRequest>,
+) -> ApiResult<Json<Lease>> {
+    let lease = db::fetch_lease(&state.db, lease_id).await?;
+    if lease.status != "pending_signatures" {
+        return Err(ApiError::Conflict(
+            "lease is not awaiting signatures".to_owned(),
+        ));
+    }
+    // The caller must actually be the party they claim to sign as.
+    let authorized = match payload.role {
+        SignerRole::Landlord => lease.landlord_id == claims.sub,
+        SignerRole::Tenant => lease.tenant_ids.contains(&claims.sub),
+    };
+    if !authorized {
+        return Err(ApiError::Forbidden("not_the_signing_party".to_owned()));
+    }
+    // `signerWallet` must be the caller's active wallet.
+    let active_wallet = db::user_active_wallet(&state.db, claims.sub)
+        .await?
+        .ok_or_else(|| ApiError::BadRequest("no active wallet linked".to_owned()))?;
+    if active_wallet != payload.signer_wallet {
+        return Err(ApiError::Forbidden("signer_wallet_mismatch".to_owned()));
+    }
+    // Verify the Casper signature over the canonical consent message.
+    let message = lease_consent_message(&lease);
+    let valid =
+        crypto::verify_casper_signature(&payload.signer_wallet, &payload.signature, &message)
+            .map_err(|_| ApiError::BadRequest("invalid signature format".to_owned()))?;
+    if !valid {
+        return Err(ApiError::Unauthorized(
+            "signature verification failed".to_owned(),
+        ));
+    }
+    // Merge this party's entry into the progress + consent objects.
+    let signed_at = Utc::now().to_rfc3339();
+    let key = payload.role.to_string();
+    let mut progress = lease
+        .signature_progress
+        .0
+        .as_object()
+        .cloned()
+        .unwrap_or_default();
+    progress.insert(
+        key.clone(),
+        serde_json::json!({ "signed": true, "timestamp": signed_at.clone() }),
+    );
+    let mut consent = lease
+        .consent_signatures
+        .0
+        .as_object()
+        .cloned()
+        .unwrap_or_default();
+    consent.insert(
+        key,
+        serde_json::json!({
+            "signature": payload.signature,
+            "signedAt": signed_at,
+            "signerWallet": payload.signer_wallet,
+        }),
+    );
+    let row = db::update_consent(
+        &state.db,
+        lease_id,
+        Value::Object(progress),
+        Value::Object(consent),
+    )
+    .await?;
     Ok(Json(Lease::from(row)))
 }

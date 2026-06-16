@@ -100,6 +100,8 @@ use crate::{
             leases::models::Lease,
             leases::models::CreateLeaseRequest,
             leases::models::UpdateLeaseRequest,
+            leases::models::SignLeaseRequest,
+            leases::models::SignerRole,
             leases::models::LeaseStatus,
             leases::models::LeaseType,
             leases::models::Clause,

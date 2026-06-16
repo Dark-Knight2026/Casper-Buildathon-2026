@@ -1,4 +1,4 @@
-//! Integration tests for listing lifecycle + reporting (C23, non-gate half).
+//! Integration tests for listing lifecycle + reporting.
 //!
 //! Covers the state machine outside the authority gate (the `-> active` gate is
 //! `listings_gate.rs`):

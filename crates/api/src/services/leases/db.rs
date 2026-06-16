@@ -116,6 +116,26 @@ pub struct LeaseRow {
     pub updated_at: DateTime<Utc>,
 }
 
+/// Returns the caller's active wallet address (cached on `users`), if linked.
+///
+/// # Errors
+///
+/// Returns [`Error`] on any database failure.
+#[inline]
+pub async fn user_active_wallet(pool: &PgPool, user_id: Uuid) -> Result<Option<String>, Error> {
+    sqlx::query_scalar!(
+        r#"
+            SELECT wallet_address
+            FROM users
+            WHERE id = $1
+        "#,
+        user_id,
+    )
+    .fetch_optional(pool)
+    .await
+    .map(Option::flatten)
+}
+
 /// Whether a user with this id exists.
 ///
 /// # Errors
@@ -436,6 +456,55 @@ pub async fn submit_lease(
         "#,
         lease_id,
         signature_progress,
+    )
+    .fetch_one(pool)
+    .await
+}
+
+/// Stores a party's consent signature plus updated progress on a lease that is
+/// awaiting signatures. The `status = 'pending_signatures'` guard prevents
+/// writing to a lease that already moved on.
+///
+/// # Errors
+///
+/// Returns [`Error::RowNotFound`] when the lease is not awaiting signatures, or
+/// any other database error.
+#[inline]
+pub async fn update_consent(
+    pool: &PgPool,
+    lease_id: Uuid,
+    signature_progress: Value,
+    consent_signatures: Value,
+) -> Result<LeaseRow, Error> {
+    sqlx::query_as!(
+        LeaseRow,
+        r#"
+            UPDATE leases SET
+                signature_progress = $2,
+                consent_signatures = $3
+            WHERE id = $1 AND status = 'pending_signatures' AND deleted_at IS NULL
+            RETURNING
+                id, property_id, landlord_id, tenant_ids,
+                type AS "lease_type!",
+                status AS "status!",
+                start_date, end_date,
+                monthly_rent::float8 AS "monthly_rent!",
+                security_deposit::float8 AS "security_deposit!",
+                currency,
+                clauses AS "clauses: Json<Value>",
+                property_manager_id, property_manager_bps, equity_property_id,
+                signature_progress AS "signature_progress: Json<Value>",
+                consent_signatures AS "consent_signatures: Json<Value>",
+                lease_document_url, signed_document_url,
+                document_hash, ipfs_cid,
+                onchain_lease_id::text AS onchain_lease_id,
+                nft_token_id, commit_tx_hash,
+                created_at AS "created_at!",
+                updated_at AS "updated_at!"
+        "#,
+        lease_id,
+        signature_progress,
+        consent_signatures,
     )
     .fetch_one(pool)
     .await

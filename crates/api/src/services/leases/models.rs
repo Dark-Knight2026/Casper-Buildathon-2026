@@ -123,7 +123,9 @@ pub struct CreateLeaseRequest {
     pub clauses: Option<Vec<Clause>>,
 }
 
-impl CreateLeaseRequest {
+impl TryFrom<CreateLeaseRequest> for NewLease {
+    type Error = ApiError;
+
     /// Validates the payload and maps it into a [`NewLease`].
     ///
     /// # Errors
@@ -131,58 +133,58 @@ impl CreateLeaseRequest {
     /// Returns [`ApiError::BadRequest`] on invalid dates/duration, non-positive
     /// rent, an unsupported currency, or an inconsistent manager rent split.
     #[inline]
-    pub fn into_validated(self) -> ApiResult<NewLease> {
-        if self.end_date <= self.start_date {
+    fn try_from(value: CreateLeaseRequest) -> ApiResult<Self> {
+        if value.end_date <= value.start_date {
             return Err(ApiError::BadRequest(
                 "endDate must be after startDate".to_owned(),
             ));
         }
         // Duration must be a whole number of 30-day months (mirrors the on-chain
         // `(end - start) % 2_592_000 == 0` rule, expressed in days here).
-        if (self.end_date - self.start_date).num_days() % 30 != 0 {
+        if (value.end_date - value.start_date).num_days() % 30 != 0 {
             return Err(ApiError::BadRequest(
                 "lease duration must be a whole number of 30-day months".to_owned(),
             ));
         }
-        if self.monthly_rent <= 0.0 {
+        if value.monthly_rent <= 0.0 {
             return Err(ApiError::BadRequest(
                 "monthlyRent must be greater than 0".to_owned(),
             ));
         }
-        if self.security_deposit < 0.0 {
+        if value.security_deposit < 0.0 {
             return Err(ApiError::BadRequest(
                 "securityDeposit must not be negative".to_owned(),
             ));
         }
         // Keep this set in sync with the `lease_currency_allowed` DB CHECK.
-        if !["cUSD", "CSPR", "USD", "USDT", "USDC"].contains(&self.currency.as_str()) {
+        if !["cUSD", "CSPR", "USD", "USDT", "USDC"].contains(&value.currency.as_str()) {
             return Err(ApiError::BadRequest("unsupported currency".to_owned()));
         }
-        let bps = self.property_manager_bps.unwrap_or(0);
+        let bps = value.property_manager_bps.unwrap_or(0);
         if !(0..=10000).contains(&bps) {
             return Err(ApiError::BadRequest(
                 "propertyManagerBps must be between 0 and 10000".to_owned(),
             ));
         }
-        if self.property_manager_id.is_none() && bps != 0 {
+        if value.property_manager_id.is_none() && bps != 0 {
             return Err(ApiError::BadRequest(
                 "propertyManagerBps must be 0 without a property manager".to_owned(),
             ));
         }
-        let clauses = serde_json::to_value(self.clauses.unwrap_or_default())
+        let clauses = serde_json::to_value(value.clauses.unwrap_or_default())
             .unwrap_or_else(|_| Value::Array(Vec::new()));
-        Ok(NewLease {
-            property_id: self.property_id,
-            primary_tenant_id: self.tenant_id,
-            lease_type: self.lease_type.to_string(),
-            start_date: self.start_date,
-            end_date: self.end_date,
-            monthly_rent: self.monthly_rent,
-            security_deposit: self.security_deposit,
-            currency: self.currency,
-            property_manager_id: self.property_manager_id,
+        Ok(Self {
+            property_id: value.property_id,
+            primary_tenant_id: value.tenant_id,
+            lease_type: value.lease_type.to_string(),
+            start_date: value.start_date,
+            end_date: value.end_date,
+            monthly_rent: value.monthly_rent,
+            security_deposit: value.security_deposit,
+            currency: value.currency,
+            property_manager_id: value.property_manager_id,
             property_manager_bps: bps,
-            equity_property_id: self.equity_property_id,
+            equity_property_id: value.equity_property_id,
             clauses,
         })
     }
@@ -268,6 +270,32 @@ impl UpdateLeaseRequest {
             clauses,
         })
     }
+}
+
+/// The party signing a lease's consent. Its `Display` form (`landlord`/
+/// `tenant`) is the JSON key used in the progress/consent objects.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema, Display)]
+#[serde(rename_all = "lowercase")]
+#[strum(serialize_all = "lowercase")]
+pub enum SignerRole {
+    /// The landlord.
+    Landlord,
+    /// A tenant.
+    Tenant,
+}
+
+/// Off-chain consent submission (reference §6). The wallet signs the canonical
+/// lease-consent message; the backend verifies it against the signer's active
+/// wallet and stores it as proof of consent.
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SignLeaseRequest {
+    /// Which party is signing.
+    pub role: SignerRole,
+    /// Casper-message signature (hex) of the lease-consent message.
+    pub signature: String,
+    /// Public key/address of the signer; must match the caller's active wallet.
+    pub signer_wallet: String,
 }
 
 /// Query for `GET /leases`: scope to the caller as landlord and/or tenant,
