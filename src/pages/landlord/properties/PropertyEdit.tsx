@@ -7,11 +7,11 @@
 
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
+import { useForm, useFieldArray } from 'react-hook-form';
 import { useQuery } from '@tanstack/react-query';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { ArrowLeft, Save, X } from 'lucide-react';
+import { ArrowLeft, Save, X, Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -51,8 +51,20 @@ import {
   UTILITIES,
   LEASE_TERMS,
   PET_POLICIES,
+  type SurroundingCategory,
 } from '@/types/property';
 import type { RentLtrTerms } from '@/types/listingContract';
+
+// Tenant-facing nearby categories — kept in sync with the create form.
+const SURROUNDING_CATEGORIES: SurroundingCategory[] = [
+  'hospital',
+  'school',
+  'gym',
+  'airport',
+  'park',
+  'grocery',
+  'transit',
+];
 
 const listingFormSchema = z.object({
   title: z.string().min(5, 'Title must be at least 5 characters'),
@@ -67,6 +79,22 @@ const listingFormSchema = z.object({
   utilitiesIncluded: z.array(z.string()),
   petPolicy: z.string(),
   furnished: z.boolean(),
+  surroundingArea: z.array(
+    z.object({
+      category: z.enum([
+        'hospital',
+        'school',
+        'gym',
+        'airport',
+        'park',
+        'grocery',
+        'transit',
+      ]),
+      name: z.string().min(1, 'Place name is required'),
+      distanceMiles: z.coerce.number().min(0, 'Distance must be 0 or more'),
+      note: z.string().optional(),
+    })
+  ),
 });
 
 type ListingFormValues = z.infer<typeof listingFormSchema>;
@@ -103,8 +131,44 @@ export default function PropertyEdit() {
       utilitiesIncluded: [],
       petPolicy: 'No Pets',
       furnished: false,
+      surroundingArea: [],
     },
   });
+
+  const {
+    fields: poiFields,
+    append: appendPoi,
+    remove: removePoi,
+  } = useFieldArray({
+    control: form.control,
+    name: 'surroundingArea',
+  });
+
+  // Custom amenities live in the same `amenities` string[]; anything not in
+  // ALL_AMENITIES is treated as a landlord-added custom entry.
+  const [customAmenity, setCustomAmenity] = useState('');
+  const customAmenities = form
+    .watch('amenities')
+    .filter((a) => !ALL_AMENITIES.some((known) => known === a));
+  const addCustomAmenity = () => {
+    const value = customAmenity.trim();
+    if (!value) return;
+    const current = form.getValues('amenities');
+    if (!current.some((a) => a === value)) {
+      form.setValue('amenities', [...current, value], {
+        shouldValidate: true,
+        shouldDirty: true,
+      });
+    }
+    setCustomAmenity('');
+  };
+  const removeCustomAmenity = (value: string) => {
+    form.setValue(
+      'amenities',
+      form.getValues('amenities').filter((a) => a !== value),
+      { shouldValidate: true, shouldDirty: true }
+    );
+  };
 
   const { reset } = form;
   // Populate the form once the listing resolves.
@@ -125,6 +189,7 @@ export default function PropertyEdit() {
       utilitiesIncluded: listing.utilitiesIncluded,
       petPolicy: listing.petPolicy ?? 'No Pets',
       furnished: terms?.furnished ?? false,
+      surroundingArea: listing.surroundingArea ?? [],
     });
   }, [listing, reset]);
 
@@ -152,6 +217,7 @@ export default function PropertyEdit() {
         amenities: data.amenities,
         utilitiesIncluded: data.utilitiesIncluded,
         petPolicy: data.petPolicy,
+        surroundingArea: data.surroundingArea,
         terms: {
           rentMonthly: data.rent,
           securityDeposit: data.securityDeposit,
@@ -469,6 +535,52 @@ export default function PropertyEdit() {
                   )}
                 />
 
+                <div className="flex flex-col gap-1">
+                  <FormLabel>Add a custom amenity</FormLabel>
+                  <div className="flex gap-2">
+                    <Input
+                      value={customAmenity}
+                      onChange={(e) => setCustomAmenity(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          addCustomAmenity();
+                        }
+                      }}
+                      placeholder="Something not in the list (e.g., Rooftop terrace)"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={addCustomAmenity}
+                      className="min-h-10!"
+                    >
+                      <Plus className="h-4 w-4 mr-1.5" />
+                      Add
+                    </Button>
+                  </div>
+                  {customAmenities.length > 0 && (
+                    <div className="flex flex-wrap gap-2 pt-2">
+                      {customAmenities.map((amenity) => (
+                        <span
+                          key={amenity}
+                          className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-xs"
+                        >
+                          {amenity}
+                          <button
+                            type="button"
+                            onClick={() => removeCustomAmenity(amenity)}
+                            aria-label={`Remove ${amenity}`}
+                            className="text-muted-foreground hover:text-foreground"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
                 <FormField
                   control={form.control}
                   name="utilitiesIncluded"
@@ -558,6 +670,127 @@ export default function PropertyEdit() {
                     </FormItem>
                   )}
                 />
+
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <FormLabel>Nearby places</FormLabel>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        appendPoi({
+                          category: 'park',
+                          name: '',
+                          distanceMiles: 0,
+                        })
+                      }
+                    >
+                      <Plus className="h-4 w-4 mr-1.5" />
+                      Add place
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    What's nearby and how far it is — shown to tenants in
+                    surrounding-area search.
+                  </p>
+                  {poiFields.length === 0 && (
+                    <p className="text-sm text-muted-foreground">
+                      No nearby places added yet.
+                    </p>
+                  )}
+                  {poiFields.map((poi, index) => (
+                    <div
+                      key={poi.id}
+                      className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_8rem_auto] gap-2 items-start border rounded-md p-3"
+                    >
+                      <FormField
+                        control={form.control}
+                        name={`surroundingArea.${index}.category`}
+                        render={({ field }) => (
+                          <FormItem className="flex flex-col gap-1 space-y-0">
+                            <FormLabel className="sr-only">Category</FormLabel>
+                            <Select
+                              onValueChange={field.onChange}
+                              value={field.value}
+                            >
+                              <FormControl>
+                                <SelectTrigger className="data-[size=default]:h-10 min-h-10! w-full rounded-md capitalize">
+                                  <SelectValue placeholder="Category" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                {SURROUNDING_CATEGORIES.map((category) => (
+                                  <SelectItem
+                                    key={category}
+                                    value={category}
+                                    className="capitalize"
+                                  >
+                                    {category}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name={`surroundingArea.${index}.name`}
+                        render={({ field }) => (
+                          <FormItem className="flex flex-col gap-1 space-y-0">
+                            <FormLabel className="sr-only">
+                              Place name
+                            </FormLabel>
+                            <FormControl>
+                              <Input
+                                placeholder="e.g., Lincoln High School"
+                                {...field}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name={`surroundingArea.${index}.distanceMiles`}
+                        render={({ field }) => (
+                          <FormItem className="flex flex-col gap-1 space-y-0">
+                            <FormLabel className="sr-only">
+                              Distance (miles)
+                            </FormLabel>
+                            <FormControl>
+                              <div className="flex items-center gap-1.5">
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  step={0.1}
+                                  placeholder="0"
+                                  {...field}
+                                />
+                                <span className="text-sm text-muted-foreground">
+                                  mi
+                                </span>
+                              </div>
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => removePoi(index)}
+                        aria-label="Remove place"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
               </CardContent>
             </Card>
 
