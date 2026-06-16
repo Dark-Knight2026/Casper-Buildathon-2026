@@ -2,6 +2,8 @@ import { backendClient } from '@/lib/api-client';
 import type {
   ListingProvenance,
   FairHousingScreenResult,
+  AuthorityDocumentType,
+  AuthorityDocumentResponse,
 } from '@/types/listingContract';
 
 /**
@@ -28,22 +30,23 @@ export async function getProvenance(
 }
 
 /**
- * `POST /listings/{id}/authority/documents`. Uploads deed / title / management
- * agreement, which drives the authority tier from T0 to T1. Returns the
- * updated provenance so the caller can re-render the gate.
+ * `POST /listings/{id}/authority/documents`. Uploads one proof-of-authority
+ * document (deed / title / management agreement) under the `file` field plus a
+ * `documentType` field, which drives the authority tier from T0 to T1. Returns
+ * the stored document and the resulting gate status.
  *
  * The browser sets the multipart boundary automatically — do NOT pass a custom
  * `Content-Type`; `buildRequestBody` strips it for FormData.
  */
-export async function uploadAuthorityDocuments(
+export async function uploadAuthorityDocument(
   listingId: string,
-  files: File[]
-): Promise<ListingProvenance> {
+  file: File,
+  documentType: AuthorityDocumentType
+): Promise<AuthorityDocumentResponse> {
   const form = new FormData();
-  for (const file of files) {
-    form.append('documents', file);
-  }
-  return backendClient.post<ListingProvenance>(
+  form.append('file', file);
+  form.append('documentType', documentType);
+  return backendClient.post<AuthorityDocumentResponse>(
     `${LISTINGS}/${listingId}/authority/documents`,
     form
   );

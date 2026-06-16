@@ -335,3 +335,15 @@ export interface FairHousingScreenResult {
   cleared: boolean;
   flags: string[]; // matched phrases / rule ids; empty when cleared
 }
+
+/** Proof-of-authority document kinds accepted by the authority gate. */
+export type AuthorityDocumentType = 'deed' | 'title' | 'management_agreement';
+
+/** `POST /listings/{id}/authority/documents` response. */
+export interface AuthorityDocumentResponse {
+  id: string;
+  documentType: AuthorityDocumentType;
+  url: string;
+  uploadedAt: string;
+  provenance: ListingProvenance; // gate status after this upload (tier may rise to T1)
+}

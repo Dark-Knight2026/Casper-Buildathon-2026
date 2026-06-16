@@ -41,6 +41,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import { ListingLifecycle } from '@/components/listing/ListingLifecycle';
+import { AuthorityGate } from '@/components/listing/AuthorityGate';
 import { getListing, updateListing } from '@/services/listingService';
 import { uploadMedia } from '@/services/listingMediaService';
 import { formatPropertyType, formatFullAddress } from '@/lib/listingDisplay';
@@ -300,6 +301,9 @@ export default function PropertyEdit() {
       <div className="space-y-6">
         {/* Lifecycle */}
         <ListingLifecycle listing={listing} />
+
+        {/* Authority-to-list gate */}
+        <AuthorityGate listing={listing} />
 
         {/* Property (read-only) */}
         <Card>
