@@ -4,18 +4,18 @@ use std::sync::Arc;
 
 use axum::{
     Json,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
 };
 use uuid::Uuid;
 
 use crate::{
-    common::{ApiError, ApiResult, AppState, ErrorResponse},
+    common::{ApiError, ApiResult, AppState, ErrorResponse, PaginatedResponse, Pagination},
     services::{
         auth::{AuthUser, LandlordRole, RoleUser},
         leases::{
             db,
-            models::{CreateLeaseRequest, Lease},
+            models::{CreateLeaseRequest, Lease, LeaseListParams},
         },
         properties::db as properties_db,
     },
@@ -112,4 +112,52 @@ pub async fn get_lease(
         return Err(ApiError::Forbidden("not_a_lease_party".to_owned()));
     }
     Ok(Json(Lease::from(row)))
+}
+
+// `GET /api/v1/leases`
+//
+/// Lists the caller's leases, scoped by role and optionally filtered by status.
+///
+/// `landlordId=me` returns leases the caller owns, `tenantId=me` those they are
+/// a tenant on; with neither, both are returned. A caller never sees a lease
+/// they are not a party to.
+///
+/// # Errors
+///
+/// Returns `400` when `tenantId`/`landlordId` is set to anything but `me`, or a
+/// database error.
+#[utoipa::path(
+    get,
+    path = "/leases",
+    tag = "Leases",
+    params(LeaseListParams, Pagination),
+    responses(
+        (status = 200, description = "Caller's leases (paginated)", body = PaginatedResponse<Lease>),
+        (status = 400, description = "Invalid query", body = ErrorResponse),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse),
+    ),
+    security(
+        ("cookie_auth" = [])
+    )
+)]
+#[inline]
+pub async fn list_leases(
+    State(state): State<Arc<AppState>>,
+    AuthUser(claims): AuthUser,
+    Query(params): Query<LeaseListParams>,
+    Query(pagination): Query<Pagination>,
+) -> ApiResult<Json<PaginatedResponse<Lease>>> {
+    let (scope, status) = params.resolve()?;
+    let (rows, total) = db::list_leases(
+        &state.db,
+        claims.sub,
+        scope,
+        status.as_deref(),
+        pagination.page_size(),
+        pagination.offset(),
+    )
+    .await?;
+    let leases = rows.into_iter().map(Lease::from).collect();
+    Ok(Json(PaginatedResponse::new(leases, total, &pagination)))
 }

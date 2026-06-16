@@ -216,3 +216,82 @@ pub async fn fetch_lease(pool: &PgPool, lease_id: Uuid) -> Result<LeaseRow, Erro
     .fetch_one(pool)
     .await
 }
+
+/// Lists leases the caller is a party to, scoped by `scope`
+/// (`landlord`/`tenant`/`both`) with an optional `status` filter, plus the
+/// total matching count for pagination.
+///
+/// # Errors
+///
+/// Returns [`Error`] on any database failure.
+#[inline]
+pub async fn list_leases(
+    pool: &PgPool,
+    caller: Uuid,
+    scope: &str,
+    status: Option<&str>,
+    limit: i64,
+    offset: i64,
+) -> Result<(Vec<LeaseRow>, i64), Error> {
+    let total = sqlx::query_scalar!(
+        r#"
+            SELECT COUNT(*) AS "count!"
+            FROM leases
+            WHERE deleted_at IS NULL
+              AND (
+                ($2 = 'landlord' AND landlord_id = $1)
+                OR ($2 = 'tenant' AND $1 = ANY(tenant_ids))
+                OR ($2 = 'both' AND (landlord_id = $1 OR $1 = ANY(tenant_ids)))
+              )
+              AND ($3::text IS NULL OR status = $3)
+        "#,
+        caller,
+        scope,
+        status,
+    )
+    .fetch_one(pool)
+    .await?;
+
+    let rows = sqlx::query_as!(
+        LeaseRow,
+        r#"
+            SELECT
+                id, property_id, landlord_id, tenant_ids,
+                type AS "lease_type!",
+                status AS "status!",
+                start_date, end_date,
+                monthly_rent::float8 AS "monthly_rent!",
+                security_deposit::float8 AS "security_deposit!",
+                currency,
+                clauses AS "clauses: Json<Value>",
+                property_manager_id, property_manager_bps, equity_property_id,
+                signature_progress AS "signature_progress: Json<Value>",
+                consent_signatures AS "consent_signatures: Json<Value>",
+                lease_document_url, signed_document_url,
+                document_hash, ipfs_cid,
+                onchain_lease_id::text AS onchain_lease_id,
+                nft_token_id, commit_tx_hash,
+                created_at AS "created_at!",
+                updated_at AS "updated_at!"
+            FROM leases
+            WHERE deleted_at IS NULL
+              AND (
+                ($2 = 'landlord' AND landlord_id = $1)
+                OR ($2 = 'tenant' AND $1 = ANY(tenant_ids))
+                OR ($2 = 'both' AND (landlord_id = $1 OR $1 = ANY(tenant_ids)))
+              )
+              AND ($3::text IS NULL OR status = $3)
+            ORDER BY created_at DESC
+            LIMIT $4 OFFSET $5
+        "#,
+        caller,
+        scope,
+        status,
+        limit,
+        offset,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok((rows, total))
+}

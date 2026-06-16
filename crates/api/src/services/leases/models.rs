@@ -11,7 +11,7 @@ use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use strum::{Display, EnumString};
-use utoipa::ToSchema;
+use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 use crate::{
@@ -185,6 +185,48 @@ impl CreateLeaseRequest {
             equity_property_id: self.equity_property_id,
             clauses,
         })
+    }
+}
+
+/// Query for `GET /leases`: scope to the caller as landlord and/or tenant,
+/// plus an optional status filter. `tenantId`/`landlordId` accept only `me`.
+#[derive(Debug, Deserialize, IntoParams)]
+#[serde(rename_all = "camelCase")]
+pub struct LeaseListParams {
+    /// `me` to include leases where the caller is a tenant.
+    pub tenant_id: Option<String>,
+    /// `me` to include leases where the caller is the landlord.
+    pub landlord_id: Option<String>,
+    /// Optional lifecycle status filter.
+    pub status: Option<LeaseStatus>,
+}
+
+impl LeaseListParams {
+    /// Resolves the query into a scope marker (`landlord`/`tenant`/`both`) and a
+    /// DB status string.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ApiError::BadRequest`] when `tenantId`/`landlordId` is set to
+    /// anything other than `me`.
+    #[inline]
+    pub fn resolve(&self) -> ApiResult<(&'static str, Option<String>)> {
+        for (label, value) in [
+            ("tenantId", self.tenant_id.as_deref()),
+            ("landlordId", self.landlord_id.as_deref()),
+        ] {
+            if let Some(raw) = value
+                && raw != "me"
+            {
+                return Err(ApiError::BadRequest(format!("{label} supports only 'me'")));
+            }
+        }
+        let scope = match (self.landlord_id.is_some(), self.tenant_id.is_some()) {
+            (true, false) => "landlord",
+            (false, true) => "tenant",
+            _ => "both",
+        };
+        Ok((scope, self.status.map(|status| status.to_string())))
     }
 }
 

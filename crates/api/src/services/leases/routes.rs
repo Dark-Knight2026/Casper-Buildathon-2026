@@ -16,6 +16,7 @@ use crate::{common::AppState, services::leases::handlers};
 #[must_use]
 pub fn router() -> OpenApiRouter<Arc<AppState>> {
     OpenApiRouter::new()
+        .routes(routes!(handlers::list_leases))
         .routes(routes!(handlers::create_lease))
         .routes(routes!(handlers::get_lease))
 }
