@@ -1,5 +1,10 @@
 import { lazy, Suspense } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route,
+  Navigate,
+} from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from '@/components/ui/toaster';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
@@ -20,7 +25,9 @@ import PropertyLanding from '@/pages/PropertyLanding';
 const MFASetup = lazy(() => import('@/pages/auth/MFASetup'));
 const MFAVerify = lazy(() => import('@/pages/auth/MFAVerify'));
 const VerifyEmail = lazy(() => import('@/pages/auth/VerifyEmail'));
-const ConfirmEmailChange = lazy(() => import('@/pages/auth/ConfirmEmailChange'));
+const ConfirmEmailChange = lazy(
+  () => import('@/pages/auth/ConfirmEmailChange')
+);
 const ForgotPassword = lazy(() => import('@/pages/auth/ForgotPassword'));
 const ResetPassword = lazy(() => import('@/pages/auth/ResetPassword'));
 const HelpHub = lazy(() => import('@/pages/HelpHub'));
@@ -30,19 +37,43 @@ import LandlordLayout from '@/components/layout/LandlordLayout';
 import PublicLayout from '@/components/layout/PublicLayout';
 
 // Lazy load tenant pages
-const TenantDashboard = lazy(() => import('@/pages/tenant/TenantDashboard').then(m => ({ default: m.TenantDashboard })));
-const TenantLeases = lazy(() => import('@/pages/tenant/TenantLeases').then(m => ({ default: m.TenantLeases })));
-const TenantLeaseDetail = lazy(() => import('@/pages/tenant/TenantLeaseDetail').then(m => ({ default: m.TenantLeaseDetail })));
-const TenantPayments = lazy(() => import('@/pages/tenant/TenantPayments').then(m => ({ default: m.TenantPayments })));
+const TenantDashboard = lazy(() =>
+  import('@/pages/tenant/TenantDashboard').then((m) => ({
+    default: m.TenantDashboard,
+  }))
+);
+const TenantLeases = lazy(() =>
+  import('@/pages/tenant/TenantLeases').then((m) => ({
+    default: m.TenantLeases,
+  }))
+);
+const TenantLeaseDetail = lazy(() =>
+  import('@/pages/tenant/TenantLeaseDetail').then((m) => ({
+    default: m.TenantLeaseDetail,
+  }))
+);
+const TenantPayments = lazy(() =>
+  import('@/pages/tenant/TenantPayments').then((m) => ({
+    default: m.TenantPayments,
+  }))
+);
 const PaymentMethods = lazy(() => import('@/pages/tenant/PaymentMethods'));
 const MakePayment = lazy(() => import('@/pages/tenant/MakePayment'));
-const TenantProfile = lazy(() => import('@/pages/tenant/TenantProfile').then(m => ({ default: m.TenantProfile })));
-const TenantRecommended = lazy(() => import('@/pages/tenant/TenantRecommended'));
+const TenantProfile = lazy(() =>
+  import('@/pages/tenant/TenantProfile').then((m) => ({
+    default: m.TenantProfile,
+  }))
+);
+const TenantRecommended = lazy(
+  () => import('@/pages/tenant/TenantRecommended')
+);
 const TenantScore = lazy(() => import('@/pages/tenant/TenantScore'));
 
 // Lazy load tenant property search pages (PUBLIC ACCESS for browsing)
 const PropertySearch = lazy(() => import('@/pages/tenant/PropertySearch'));
-const TenantPropertyDetail = lazy(() => import('@/pages/tenant/PropertyDetail'));
+const TenantPropertyDetail = lazy(
+  () => import('@/pages/tenant/PropertyDetail')
+);
 const MyProperties = lazy(() => import('@/pages/tenant/MyProperties'));
 const MyPropertyDetail = lazy(() => import('@/pages/tenant/MyPropertyDetail'));
 
@@ -52,52 +83,100 @@ const MyApplications = lazy(() => import('@/pages/tenant/MyApplications'));
 const MyViewings = lazy(() => import('@/pages/tenant/MyViewings'));
 
 // Lazy load tenant application pages
-const TenantApplication = lazy(() => import('@/pages/tenant/application/TenantApplication'));
+const TenantApplication = lazy(
+  () => import('@/pages/tenant/application/TenantApplication')
+);
 const ApplicationForm = lazy(() => import('@/pages/tenant/ApplicationForm'));
 
 // Lazy load tenant maintenance pages
-const MaintenanceRequestCreate = lazy(() => import('@/pages/tenant/maintenance/MaintenanceRequestCreate'));
-const MaintenanceRequestList = lazy(() => import('@/pages/tenant/maintenance/MaintenanceRequestList'));
-const MaintenanceRequestDetail = lazy(() => import('@/pages/tenant/maintenance/MaintenanceRequestDetail'));
+const MaintenanceRequestCreate = lazy(
+  () => import('@/pages/tenant/maintenance/MaintenanceRequestCreate')
+);
+const MaintenanceRequestList = lazy(
+  () => import('@/pages/tenant/maintenance/MaintenanceRequestList')
+);
+const MaintenanceRequestDetail = lazy(
+  () => import('@/pages/tenant/maintenance/MaintenanceRequestDetail')
+);
 
 // Lazy load tenant renewal pages
-const TenantRenewalOfferList = lazy(() => import('@/pages/tenant/renewals/TenantRenewalOfferList'));
-const TenantRenewalOfferView = lazy(() => import('@/pages/tenant/renewals/TenantRenewalOfferView'));
-const TenantRenewalNegotiation = lazy(() => import('@/pages/tenant/renewals/TenantRenewalNegotiation'));
+const TenantRenewalOfferList = lazy(
+  () => import('@/pages/tenant/renewals/TenantRenewalOfferList')
+);
+const TenantRenewalOfferView = lazy(
+  () => import('@/pages/tenant/renewals/TenantRenewalOfferView')
+);
+const TenantRenewalNegotiation = lazy(
+  () => import('@/pages/tenant/renewals/TenantRenewalNegotiation')
+);
 
 // Lazy load landlord pages
-const LandlordDashboard = lazy(() => import('@/pages/landlord/LandlordDashboard'));
-const LandlordProfile = lazy(() => import('@/pages/landlord/LandlordProfile').then(m => ({ default: m.LandlordProfile })));
+const LandlordDashboard = lazy(
+  () => import('@/pages/landlord/LandlordDashboard')
+);
+const LandlordProfile = lazy(() =>
+  import('@/pages/landlord/LandlordProfile').then((m) => ({
+    default: m.LandlordProfile,
+  }))
+);
 const LandlordTenants = lazy(() => import('@/pages/landlord/LandlordTenants'));
 const LandlordLeases = lazy(() => import('@/pages/landlord/LandlordLeases'));
-const LandlordPayments = lazy(() => import('@/pages/landlord/LandlordPayments'));
+const LandlordPayments = lazy(
+  () => import('@/pages/landlord/LandlordPayments')
+);
 
 // Lazy load landlord application pages
-const ApplicationList = lazy(() => import('@/pages/landlord/applications/ApplicationList'));
-const ApplicationDetail = lazy(() => import('@/pages/landlord/applications/ApplicationDetail'));
+const ApplicationList = lazy(
+  () => import('@/pages/landlord/applications/ApplicationList')
+);
+const ApplicationDetail = lazy(
+  () => import('@/pages/landlord/applications/ApplicationDetail')
+);
 
 // Lazy load landlord maintenance pages
-const MaintenanceRequestDashboard = lazy(() => import('@/pages/landlord/maintenance/MaintenanceRequestDashboard'));
-const LandlordMaintenanceRequestDetail = lazy(() => import('@/pages/landlord/maintenance/MaintenanceRequestDetail'));
+const MaintenanceRequestDashboard = lazy(
+  () => import('@/pages/landlord/maintenance/MaintenanceRequestDashboard')
+);
+const LandlordMaintenanceRequestDetail = lazy(
+  () => import('@/pages/landlord/maintenance/MaintenanceRequestDetail')
+);
 
 // Lazy load landlord renewal pages
-const RenewalOfferList = lazy(() => import('@/pages/landlord/renewals/RenewalOfferList'));
-const RenewalOfferCreate = lazy(() => import('@/pages/landlord/renewals/RenewalOfferCreate'));
-const LandlordRenewalDetailPage = lazy(() => import('@/pages/landlord/renewals/LandlordRenewalDetail'));
-const LandlordRenewalNegotiation = lazy(() => import('@/pages/landlord/renewals/LandlordRenewalNegotiation'));
+const RenewalOfferList = lazy(
+  () => import('@/pages/landlord/renewals/RenewalOfferList')
+);
+const RenewalOfferCreate = lazy(
+  () => import('@/pages/landlord/renewals/RenewalOfferCreate')
+);
+const LandlordRenewalDetailPage = lazy(
+  () => import('@/pages/landlord/renewals/LandlordRenewalDetail')
+);
+const LandlordRenewalNegotiation = lazy(
+  () => import('@/pages/landlord/renewals/LandlordRenewalNegotiation')
+);
 
 // Lazy load landlord lease pages
-const LeaseCreationWizard = lazy(() => import('@/pages/landlord/lease/LeaseCreationWizard'));
+const LeaseCreationWizard = lazy(
+  () => import('@/pages/landlord/lease/LeaseCreationWizard')
+);
 
 // Lazy load communication pages
-const CommunicationCenter = lazy(() => import('@/pages/communication/CommunicationCenter'));
+const CommunicationCenter = lazy(
+  () => import('@/pages/communication/CommunicationCenter')
+);
 
 // Lazy load notification pages
-const NotificationHistory = lazy(() => import('@/pages/notifications/NotificationHistory'));
-const NotificationPreferences = lazy(() => import('@/pages/notifications/NotificationPreferences'));
+const NotificationHistory = lazy(
+  () => import('@/pages/notifications/NotificationHistory')
+);
+const NotificationPreferences = lazy(
+  () => import('@/pages/notifications/NotificationPreferences')
+);
 
 // Lazy load financial pages
-const FinancialDashboard = lazy(() => import('@/pages/financial/FinancialDashboard'));
+const FinancialDashboard = lazy(
+  () => import('@/pages/financial/FinancialDashboard')
+);
 
 // Lazy load signature pages
 const DocumentSigning = lazy(() => import('@/pages/signature/DocumentSigning'));
@@ -109,29 +188,56 @@ const VendorDirectory = lazy(() => import('@/pages/vendor/VendorDirectory'));
 const PaymentHistory = lazy(() => import('@/pages/payment/PaymentHistory'));
 
 // Lazy load property pages
-const PropertyList = lazy(() => import('@/pages/landlord/properties/PropertyList'));
-const PropertyCreate = lazy(() => import('@/pages/landlord/properties/PropertyCreate'));
-const PropertyDetail = lazy(() => import('@/pages/landlord/properties/PropertyDetail'));
-const PropertyEdit = lazy(() => import('@/pages/landlord/properties/PropertyEdit'));
-const PropertyComparisonPage = lazy(() => import('@/pages/property/PropertyComparisonPage'));
+const PropertyList = lazy(
+  () => import('@/pages/landlord/properties/PropertyList')
+);
+const PropertyCreate = lazy(
+  () => import('@/pages/landlord/properties/PropertyCreate')
+);
+const PropertyDetail = lazy(
+  () => import('@/pages/landlord/properties/PropertyDetail')
+);
+const PropertyEdit = lazy(
+  () => import('@/pages/landlord/properties/PropertyEdit')
+);
+const ListingApplications = lazy(
+  () => import('@/pages/landlord/properties/ListingApplications')
+);
+const PropertyComparisonPage = lazy(
+  () => import('@/pages/property/PropertyComparisonPage')
+);
 
 // Lazy load dashboard pages
-const LeasePipeline = lazy(() => import('@/pages/dashboard/leasing/LeasePipeline').then(m => ({ default: m.LeasePipeline })));
+const LeasePipeline = lazy(() =>
+  import('@/pages/dashboard/leasing/LeasePipeline').then((m) => ({
+    default: m.LeasePipeline,
+  }))
+);
 
 // Lazy load report pages
-const AnalyticsDashboard = lazy(() => import('@/pages/reports/AnalyticsDashboard'));
+const AnalyticsDashboard = lazy(
+  () => import('@/pages/reports/AnalyticsDashboard')
+);
 const PropertyReports = lazy(() => import('@/pages/reports/PropertyReports'));
 const CustomDashboard = lazy(() => import('@/pages/reports/CustomDashboard'));
-const CustomReportBuilder = lazy(() => import('@/pages/reports/CustomReportBuilder'));
+const CustomReportBuilder = lazy(
+  () => import('@/pages/reports/CustomReportBuilder')
+);
 
 // Lazy load automation pages
-const AutomationDashboard = lazy(() => import('@/pages/automation/AutomationDashboard'));
+const AutomationDashboard = lazy(
+  () => import('@/pages/automation/AutomationDashboard')
+);
 
 // Lazy load performance pages
-const PerformanceDashboard = lazy(() => import('@/pages/performance/PerformanceDashboard'));
+const PerformanceDashboard = lazy(
+  () => import('@/pages/performance/PerformanceDashboard')
+);
 
 // Lazy load accessibility pages
-const AccessibilityTestPage = lazy(() => import('@/pages/accessibility/AccessibilityTestPage'));
+const AccessibilityTestPage = lazy(
+  () => import('@/pages/accessibility/AccessibilityTestPage')
+);
 
 // Lazy load ICO pages
 const ICOPage = lazy(() => import('@/pages/ico/ICOPage'));
@@ -161,7 +267,7 @@ function App() {
                 PUBLIC ROUTES - No authentication required
                 Users can browse properties and explore the platform before signing up
               */}
-              
+
               {/* Landing Page - Default route for all visitors */}
               <Route path="/" element={<PropertyLanding />} />
 
@@ -173,16 +279,39 @@ function App() {
               <Route element={<PublicLayout />}>
                 <Route path="/listings" element={<PropertySearch />} />
                 <Route path="/properties" element={<PropertySearch />} />
-                <Route path="/properties/:id" element={<TenantPropertyDetail />} />
+                <Route
+                  path="/properties/:id"
+                  element={<TenantPropertyDetail />}
+                />
               </Route>
 
               {/* ICO Pages - Public access for token sale, wrapped with Casper wallet provider */}
-              <Route path="/big-token" element={<ICOLayout><ICOPage /></ICOLayout>} />
-              <Route path="/big-token/whitepaper" element={<ICOLayout><ICOWhitepaperPage /></ICOLayout>} />
+              <Route
+                path="/big-token"
+                element={
+                  <ICOLayout>
+                    <ICOPage />
+                  </ICOLayout>
+                }
+              />
+              <Route
+                path="/big-token/whitepaper"
+                element={
+                  <ICOLayout>
+                    <ICOWhitepaperPage />
+                  </ICOLayout>
+                }
+              />
               {/* Preserve old /ico bookmarks & external links after the big-token
                   rebrand — redirect instead of letting the wildcard bounce them to "/". */}
-              <Route path="/ico" element={<Navigate to="/big-token" replace />} />
-              <Route path="/ico/whitepaper" element={<Navigate to="/big-token/whitepaper" replace />} />
+              <Route
+                path="/ico"
+                element={<Navigate to="/big-token" replace />}
+              />
+              <Route
+                path="/ico/whitepaper"
+                element={<Navigate to="/big-token/whitepaper" replace />}
+              />
 
               {/* 
                 AUTHENTICATION ROUTES
@@ -199,17 +328,27 @@ function App() {
               <Route
                 path="/auth/mfa-setup"
                 element={
-                  MFA_ENABLED
-                    ? <MFASetup />
-                    : <ComingSoon title="MFA coming soon" description="Multi-factor authentication will be available once the backend enrollment flow is finalized." />
+                  MFA_ENABLED ? (
+                    <MFASetup />
+                  ) : (
+                    <ComingSoon
+                      title="MFA coming soon"
+                      description="Multi-factor authentication will be available once the backend enrollment flow is finalized."
+                    />
+                  )
                 }
               />
               <Route
                 path="/auth/mfa-verify"
                 element={
-                  MFA_ENABLED
-                    ? <MFAVerify />
-                    : <ComingSoon title="MFA coming soon" description="Multi-factor authentication will be available once the backend enrollment flow is finalized." />
+                  MFA_ENABLED ? (
+                    <MFAVerify />
+                  ) : (
+                    <ComingSoon
+                      title="MFA coming soon"
+                      description="Multi-factor authentication will be available once the backend enrollment flow is finalized."
+                    />
+                  )
                 }
               />
               {/* Email verification — backend sends the link as
@@ -221,8 +360,11 @@ function App() {
                   backend's change-email template should point here. Outside
                   ProtectedRoute for the same reason (link may land on a fresh
                   browser). */}
-              <Route path="/confirm-email-change" element={<ConfirmEmailChange />} />
-              
+              <Route
+                path="/confirm-email-change"
+                element={<ConfirmEmailChange />}
+              />
+
               {/*
                 TENANT ROUTES - Protected
                 Single ProtectedRoute on the parent — TenantLayout renders <Outlet />
@@ -235,43 +377,72 @@ function App() {
                   </ProtectedRoute>
                 }
               >
-                <Route index element={<Navigate to="/tenant/dashboard" replace />} />
-                <Route path="dashboard"             element={<TenantDashboard />} />
-                <Route path="property-search"       element={<PropertySearch />} />
-                <Route path="properties"            element={<MyProperties />} />
-                <Route path="properties/:id"        element={<MyPropertyDetail />} />
-                <Route path="recommended"           element={<TenantRecommended />} />
-                <Route path="score"                 element={<TenantScore />} />
-                <Route path="saved-properties"      element={<SavedProperties />} />
-                <Route path="my-applications"       element={<MyApplications />} />
-                <Route path="my-viewings"           element={<MyViewings />} />
-                <Route path="apply"                 element={<TenantApplication />} />
-                <Route path="application"           element={<ApplicationForm />} />
-                <Route path="leases"                element={<TenantLeases />} />
-                <Route path="leases/:leaseId"       element={<TenantLeaseDetail />} />
-                <Route path="payments"              element={<TenantPayments />} />
-                <Route path="payments/methods"      element={<PaymentMethods />} />
-                <Route path="payments/make"         element={<MakePayment />} />
-                <Route path="maintenance"           element={<MaintenanceRequestList />} />
-                <Route path="maintenance/create"    element={<MaintenanceRequestCreate />} />
-                <Route path="maintenance/:id"       element={<MaintenanceRequestDetail />} />
-                <Route path="renewals"              element={<TenantRenewalOfferList />} />
-                <Route path="renewals/:id"          element={<TenantRenewalOfferView />} />
-                <Route path="renewals/:id/negotiate" element={<TenantRenewalNegotiation />} />
-                <Route path="messages"             element={<CommunicationCenter />} />
-                <Route path="profile"              element={<TenantProfile />} />
+                <Route
+                  index
+                  element={<Navigate to="/tenant/dashboard" replace />}
+                />
+                <Route path="dashboard" element={<TenantDashboard />} />
+                <Route path="property-search" element={<PropertySearch />} />
+                <Route path="properties" element={<MyProperties />} />
+                <Route path="properties/:id" element={<MyPropertyDetail />} />
+                <Route path="recommended" element={<TenantRecommended />} />
+                <Route path="score" element={<TenantScore />} />
+                <Route path="saved-properties" element={<SavedProperties />} />
+                <Route path="my-applications" element={<MyApplications />} />
+                <Route path="my-viewings" element={<MyViewings />} />
+                <Route path="apply" element={<TenantApplication />} />
+                <Route path="application" element={<ApplicationForm />} />
+                <Route path="leases" element={<TenantLeases />} />
+                <Route path="leases/:leaseId" element={<TenantLeaseDetail />} />
+                <Route path="payments" element={<TenantPayments />} />
+                <Route path="payments/methods" element={<PaymentMethods />} />
+                <Route path="payments/make" element={<MakePayment />} />
+                <Route
+                  path="maintenance"
+                  element={<MaintenanceRequestList />}
+                />
+                <Route
+                  path="maintenance/create"
+                  element={<MaintenanceRequestCreate />}
+                />
+                <Route
+                  path="maintenance/:id"
+                  element={<MaintenanceRequestDetail />}
+                />
+                <Route path="renewals" element={<TenantRenewalOfferList />} />
+                <Route
+                  path="renewals/:id"
+                  element={<TenantRenewalOfferView />}
+                />
+                <Route
+                  path="renewals/:id/negotiate"
+                  element={<TenantRenewalNegotiation />}
+                />
+                <Route path="messages" element={<CommunicationCenter />} />
+                <Route path="profile" element={<TenantProfile />} />
                 {/* Shared features reused under the tenant tree (were single
                     ['both'] routes; tenant and landlord are now distinct). */}
-                <Route path="notifications"             element={<NotificationHistory />} />
-                <Route path="notifications/preferences" element={<NotificationPreferences />} />
-                <Route path="payments/history"          element={<PaymentHistory />} />
-                <Route path="properties/compare"        element={<PropertyComparisonPage />} />
-                <Route path="accessibility/test"        element={<AccessibilityTestPage />} />
-                <Route path="signature/:signatureId"    element={<DocumentSigning />} />
-                <Route path="leasing/pipeline"          element={<LeasePipeline />} />
+                <Route path="notifications" element={<NotificationHistory />} />
+                <Route
+                  path="notifications/preferences"
+                  element={<NotificationPreferences />}
+                />
+                <Route path="payments/history" element={<PaymentHistory />} />
+                <Route
+                  path="properties/compare"
+                  element={<PropertyComparisonPage />}
+                />
+                <Route
+                  path="accessibility/test"
+                  element={<AccessibilityTestPage />}
+                />
+                <Route
+                  path="signature/:signatureId"
+                  element={<DocumentSigning />}
+                />
+                <Route path="leasing/pipeline" element={<LeasePipeline />} />
               </Route>
-              
-              
+
               {/* 
                 LANDLORD ROUTES - Protected
                 Requires authentication and landlord role
@@ -290,99 +461,135 @@ function App() {
                   </ProtectedRoute>
                 }
               >
-                <Route index element={<Navigate to="/landlord/dashboard" replace />} />
-                <Route path="dashboard"              element={<LandlordDashboard />} />
-                <Route path="properties"             element={<PropertyList />} />
-                <Route path="properties/create"      element={<PropertyCreate />} />
-                <Route path="properties/:id"         element={<PropertyDetail />} />
-                <Route path="properties/:id/edit"    element={<PropertyEdit />} />
-                <Route path="applications"           element={<ApplicationList />} />
-                <Route path="applications/:id"       element={<ApplicationDetail />} />
-                <Route path="tenants"                element={<LandlordTenants />} />
-                <Route path="tenants/:tenantId"      element={<LandlordTenants />} />
-                <Route path="leases"                 element={<LandlordLeases />} />
-                <Route path="leases/create"          element={<LeaseCreationWizard />} />
-                <Route path="leases/:leaseId"        element={<LandlordLeases />} />
-                <Route path="payments"               element={<LandlordPayments />} />
-                <Route path="maintenance"            element={<MaintenanceRequestDashboard />} />
-                <Route path="maintenance/:id"        element={<LandlordMaintenanceRequestDetail />} />
-                <Route path="renewals"               element={<RenewalOfferList />} />
-                <Route path="renewals/create"        element={<RenewalOfferCreate />} />
-                <Route path="renewals/:id"           element={<LandlordRenewalDetailPage />} />
-                <Route path="renewals/:id/negotiate" element={<LandlordRenewalNegotiation />} />
+                <Route
+                  index
+                  element={<Navigate to="/landlord/dashboard" replace />}
+                />
+                <Route path="dashboard" element={<LandlordDashboard />} />
+                <Route path="properties" element={<PropertyList />} />
+                <Route path="properties/create" element={<PropertyCreate />} />
+                <Route path="properties/:id" element={<PropertyDetail />} />
+                <Route path="properties/:id/edit" element={<PropertyEdit />} />
+                <Route
+                  path="properties/:id/applications"
+                  element={<ListingApplications />}
+                />
+                <Route path="applications" element={<ApplicationList />} />
+                <Route
+                  path="applications/:id"
+                  element={<ApplicationDetail />}
+                />
+                <Route path="tenants" element={<LandlordTenants />} />
+                <Route path="tenants/:tenantId" element={<LandlordTenants />} />
+                <Route path="leases" element={<LandlordLeases />} />
+                <Route path="leases/create" element={<LeaseCreationWizard />} />
+                <Route path="leases/:leaseId" element={<LandlordLeases />} />
+                <Route path="payments" element={<LandlordPayments />} />
+                <Route
+                  path="maintenance"
+                  element={<MaintenanceRequestDashboard />}
+                />
+                <Route
+                  path="maintenance/:id"
+                  element={<LandlordMaintenanceRequestDetail />}
+                />
+                <Route path="renewals" element={<RenewalOfferList />} />
+                <Route
+                  path="renewals/create"
+                  element={<RenewalOfferCreate />}
+                />
+                <Route
+                  path="renewals/:id"
+                  element={<LandlordRenewalDetailPage />}
+                />
+                <Route
+                  path="renewals/:id/negotiate"
+                  element={<LandlordRenewalNegotiation />}
+                />
                 {/* Moved under the layout (plan decision #3): /landlord/vendors
                     keeps its URL; financial moves to /landlord/financial. */}
-                <Route path="vendors"                element={<VendorDirectory />} />
-                <Route path="financial"              element={<FinancialDashboard />} />
+                <Route path="vendors" element={<VendorDirectory />} />
+                <Route path="financial" element={<FinancialDashboard />} />
                 {/* Shared CommunicationCenter stub (plan decision #2). */}
-                <Route path="messages"               element={<CommunicationCenter />} />
-                <Route path="profile"                element={<LandlordProfile />} />
+                <Route path="messages" element={<CommunicationCenter />} />
+                <Route path="profile" element={<LandlordProfile />} />
                 {/* Shared features reused under the landlord tree (were single
                     ['both'] routes; tenant and landlord are now distinct). */}
-                <Route path="notifications"             element={<NotificationHistory />} />
-                <Route path="notifications/preferences" element={<NotificationPreferences />} />
-                <Route path="payments/history"          element={<PaymentHistory />} />
-                <Route path="properties/compare"        element={<PropertyComparisonPage />} />
-                <Route path="accessibility/test"        element={<AccessibilityTestPage />} />
-                <Route path="signature/:signatureId"    element={<DocumentSigning />} />
-                <Route path="leasing/pipeline"          element={<LeasePipeline />} />
+                <Route path="notifications" element={<NotificationHistory />} />
+                <Route
+                  path="notifications/preferences"
+                  element={<NotificationPreferences />}
+                />
+                <Route path="payments/history" element={<PaymentHistory />} />
+                <Route
+                  path="properties/compare"
+                  element={<PropertyComparisonPage />}
+                />
+                <Route
+                  path="accessibility/test"
+                  element={<AccessibilityTestPage />}
+                />
+                <Route
+                  path="signature/:signatureId"
+                  element={<DocumentSigning />}
+                />
+                <Route path="leasing/pipeline" element={<LeasePipeline />} />
               </Route>
-              
-              
+
               {/* Report routes - Protected (accessible by landlords and admins) */}
-              <Route 
-                path="/reports/analytics" 
+              <Route
+                path="/reports/analytics"
                 element={
                   <ProtectedRoute allowedRoles={['landlord', 'admin']}>
                     <AnalyticsDashboard />
                   </ProtectedRoute>
-                } 
+                }
               />
-              <Route 
-                path="/reports/properties" 
+              <Route
+                path="/reports/properties"
                 element={
                   <ProtectedRoute allowedRoles={['landlord', 'admin']}>
                     <PropertyReports />
                   </ProtectedRoute>
-                } 
+                }
               />
-              <Route 
-                path="/reports/custom" 
+              <Route
+                path="/reports/custom"
                 element={
                   <ProtectedRoute allowedRoles={['landlord', 'admin']}>
                     <CustomDashboard />
                   </ProtectedRoute>
-                } 
+                }
               />
-              <Route 
-                path="/reports/builder" 
+              <Route
+                path="/reports/builder"
                 element={
                   <ProtectedRoute allowedRoles={['landlord', 'admin']}>
                     <CustomReportBuilder />
                   </ProtectedRoute>
-                } 
+                }
               />
-              
+
               {/* Automation routes - Protected (accessible by landlords and admins) */}
-              <Route 
-                path="/automation" 
+              <Route
+                path="/automation"
                 element={
                   <ProtectedRoute allowedRoles={['landlord', 'admin']}>
                     <AutomationDashboard />
                   </ProtectedRoute>
-                } 
+                }
               />
-              
+
               {/* Performance routes - Protected (accessible by landlords and admins) */}
-              <Route 
-                path="/performance" 
+              <Route
+                path="/performance"
                 element={
                   <ProtectedRoute allowedRoles={['landlord', 'admin']}>
                     <PerformanceDashboard />
                   </ProtectedRoute>
-                } 
+                }
               />
-              
+
               {/* 
                 CATCH-ALL ROUTE
                 Redirect unknown routes to landing page instead of login

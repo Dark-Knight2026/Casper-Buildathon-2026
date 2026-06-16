@@ -171,6 +171,15 @@ export default function PropertyDetail() {
           </div>
 
           <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={() =>
+                navigate(`/landlord/properties/${id}/applications`)
+              }
+            >
+              <FileText className="mr-2 h-4 w-4" />
+              Applications
+            </Button>
             <Button onClick={() => navigate(`/landlord/properties/${id}/edit`)}>
               <Edit className="mr-2 h-4 w-4" />
               Edit
