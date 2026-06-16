@@ -1,92 +1,77 @@
 /**
  * Property Comparison Page
- * Full page for comparing multiple properties
+ * Full page for comparing multiple listings side by side.
  */
 
-import { useState, useEffect } from 'react';
+import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { PropertyComparison } from '@/components/property/PropertyComparison';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Loader2 } from 'lucide-react';
+import { getListing } from '@/services/listingService';
+import { listingRentMonthly } from '@/lib/listingDisplay';
+import type { Listing, RentLtrTerms } from '@/types/listingContract';
 import type { PropertyComparison as PropertyComparisonType } from '@/types/property';
+
+/** Flatten a listing (with its nested property) into a comparison row. */
+function listingToComparison(listing: Listing): PropertyComparisonType {
+  const asset = listing.property;
+  const terms =
+    listing.intent === 'rent_ltr' ? (listing.terms as RentLtrTerms) : null;
+  const parking = asset?.parkingFeatures ?? [];
+  return {
+    id: listing.id,
+    address: asset
+      ? `${asset.addressLine1}, ${asset.city}, ${asset.stateOrProvince} ${asset.postalCode}`
+      : listing.title,
+    rent: listingRentMonthly(listing),
+    bedrooms: asset?.bedroomsTotal ?? 0,
+    bathrooms: asset?.bathroomsTotal ?? 0,
+    sqft: asset?.livingArea ?? 0,
+    available: listing.state === 'active',
+    amenities: listing.amenities,
+    // No boolean pets flag on the wire — derive it from the constrained policy.
+    petFriendly:
+      !!listing.petPolicy && listing.petPolicy.toLowerCase() !== 'no pets',
+    parking: parking.length > 0 ? parking.join(', ') : 'Not available',
+    utilities:
+      listing.utilitiesIncluded.length > 0
+        ? listing.utilitiesIncluded.join(', ')
+        : 'Tenant pays all utilities',
+    leaseTerms: terms?.leaseTermsOffered ?? [],
+  };
+}
 
 export default function PropertyComparisonPage() {
   const [searchParams] = useSearchParams();
-  const [properties, setProperties] = useState<PropertyComparisonType[]>([]);
+  const [removedIds, setRemovedIds] = useState<string[]>([]);
 
-  useEffect(() => {
-    // Get property IDs from URL params
-    const propertyIds = searchParams.get('properties')?.split(',') || [];
-    loadProperties(propertyIds);
-  }, [searchParams]);
+  const ids = useMemo(
+    () => searchParams.get('properties')?.split(',').filter(Boolean) ?? [],
+    [searchParams]
+  );
 
-  const loadProperties = async (propertyIds: string[]) => {
-    // Mock data - replace with actual API call
-    const mockProperties: PropertyComparisonType[] = [
-      {
-        id: '1',
-        address: '123 Main St, Apt 4B',
-        rent: 2500,
-        bedrooms: 2,
-        bathrooms: 2,
-        sqft: 1200,
-        available: true,
-        amenities: ['Pool', 'Gym', 'Parking', 'Laundry'],
-        petFriendly: true,
-        parking: 'Covered parking included',
-        utilities: 'Water and trash included',
-        leaseTerms: ['12-month lease', 'Security deposit: $2,500', 'First and last month rent required'],
-      },
-      {
-        id: '2',
-        address: '456 Oak Ave, Unit 2',
-        rent: 2200,
-        bedrooms: 2,
-        bathrooms: 1,
-        sqft: 1000,
-        available: true,
-        amenities: ['Gym', 'Parking'],
-        petFriendly: false,
-        parking: 'Street parking',
-        utilities: 'Tenant pays all utilities',
-        leaseTerms: ['6 or 12-month lease', 'Security deposit: $2,200'],
-      },
-      {
-        id: '3',
-        address: '789 Pine Rd, Suite 5',
-        rent: 2800,
-        bedrooms: 3,
-        bathrooms: 2,
-        sqft: 1400,
-        available: false,
-        amenities: ['Pool', 'Gym', 'Parking', 'Laundry', 'Balcony'],
-        petFriendly: true,
-        parking: 'Garage parking included',
-        utilities: 'Water included',
-        leaseTerms: ['12-month lease', 'Security deposit: $2,800', 'Pet deposit: $500'],
-      },
-      {
-        id: '4',
-        address: '321 Elm St, Apt 1A',
-        rent: 1900,
-        bedrooms: 1,
-        bathrooms: 1,
-        sqft: 800,
-        available: true,
-        amenities: ['Laundry', 'Parking'],
-        petFriendly: false,
-        parking: 'One parking spot',
-        utilities: 'All utilities included',
-        leaseTerms: ['Month-to-month available', 'Security deposit: $1,900'],
-      },
-    ];
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['comparison-listings', ids],
+    queryFn: async () => {
+      // Fetch independently so one bad id doesn't blank the whole comparison.
+      const results = await Promise.allSettled(ids.map((id) => getListing(id)));
+      return results
+        .filter(
+          (r): r is PromiseFulfilledResult<Listing> => r.status === 'fulfilled'
+        )
+        .map((r) => r.value);
+    },
+    enabled: ids.length > 0,
+  });
 
-    const filtered = mockProperties.filter((p) => propertyIds.includes(p.id));
-    setProperties(filtered.length > 0 ? filtered : mockProperties.slice(0, 3));
-  };
+  const comparisons = (data ?? [])
+    .filter((listing) => !removedIds.includes(listing.id))
+    .map(listingToComparison);
 
-  const handleRemoveProperty = (propertyId: string) => {
-    setProperties(properties.filter((p) => p.id !== propertyId));
+  const handleRemoveProperty = (listingId: string) => {
+    setRemovedIds((prev) => [...prev, listingId]);
   };
 
   return (
@@ -98,7 +83,24 @@ export default function PropertyComparisonPage() {
         </Button>
       </div>
 
-      <PropertyComparison properties={properties} onRemove={handleRemoveProperty} />
+      {isLoading ? (
+        <div className="flex justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      ) : isError ? (
+        <p className="text-center text-muted-foreground py-12">
+          Something went wrong loading these listings. Please try again.
+        </p>
+      ) : comparisons.length === 0 ? (
+        <p className="text-center text-muted-foreground py-12">
+          No listings to compare. Add listings from search to compare them here.
+        </p>
+      ) : (
+        <PropertyComparison
+          properties={comparisons}
+          onRemove={handleRemoveProperty}
+        />
+      )}
     </div>
   );
 }

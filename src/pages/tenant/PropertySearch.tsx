@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Slider } from '@/components/ui/slider';
+import { Switch } from '@/components/ui/switch';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import {
   PropertyCard,
@@ -50,6 +51,14 @@ const formatPrice = (n: number) =>
   n >= PRICE_MAX ? `$${PRICE_MAX.toLocaleString()}+` : `$${n.toLocaleString()}`;
 
 const ROOM_MAX = 6;
+
+const RADIUS_OPTIONS: FilterOption[] = [
+  { value: '5', label: '5 mi' },
+  { value: '10', label: '10 mi' },
+  { value: '25', label: '25 mi' },
+  { value: '50', label: '50 mi' },
+];
+const DEFAULT_RADIUS_MILES = 25;
 
 // RESO-aligned property types — the value set the backend `GET /listings`
 // filter accepts (NOT the legacy apartment/house/studio/loft set).
@@ -176,6 +185,11 @@ export default function PropertySearch() {
   const [priceRange, setPriceRange] = useState<[number, number]>(PRICE_DEFAULT);
   const [bedrooms, setBedrooms] = useState(0);
   const [propertyType, setPropertyType] = useState('all');
+  const [petsAllowed, setPetsAllowed] = useState(false);
+  const [furnished, setFurnished] = useState(false);
+  const [geo, setGeo] = useState<{ lat: number; lng: number } | null>(null);
+  const [radiusMiles, setRadiusMiles] = useState(DEFAULT_RADIUS_MILES);
+  const [geoError, setGeoError] = useState<string | null>(null);
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
 
   // Debounce the free-text query so typing doesn't fire a request per keystroke.
@@ -186,13 +200,37 @@ export default function PropertySearch() {
   const activeFilters =
     (isPriceFiltered ? 1 : 0) +
     (bedrooms > 0 ? 1 : 0) +
-    (propertyType !== 'all' ? 1 : 0);
+    (propertyType !== 'all' ? 1 : 0) +
+    (petsAllowed ? 1 : 0) +
+    (furnished ? 1 : 0) +
+    (geo ? 1 : 0);
 
   const resetFilters = () => {
     setSearchTerm('');
     setPriceRange(PRICE_DEFAULT);
     setBedrooms(0);
     setPropertyType('all');
+    setPetsAllowed(false);
+    setFurnished(false);
+    setGeo(null);
+    setGeoError(null);
+  };
+
+  const toggleNearMe = (on: boolean) => {
+    setGeoError(null);
+    if (!on) {
+      setGeo(null);
+      return;
+    }
+    if (!('geolocation' in navigator)) {
+      setGeoError('Location is not available in this browser.');
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => setGeo({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      () =>
+        setGeoError('Could not get your location. Check browser permissions.')
+    );
   };
 
   // Only the filters the backend `GET /listings` actually honors are sent.
@@ -209,8 +247,27 @@ export default function PropertySearch() {
     if (bedrooms > 0) p.minBedrooms = bedrooms;
     if (propertyType !== 'all')
       p.propertyType = propertyType as RealPropertyType;
+    if (petsAllowed) p.petsAllowed = true;
+    if (furnished) p.furnished = true;
+    // Geo is all-or-nothing: the radius trio travels together, and distance
+    // sort only makes sense with a centre point.
+    if (geo) {
+      p.nearLat = geo.lat;
+      p.nearLng = geo.lng;
+      p.radiusMiles = radiusMiles;
+      p.sortBy = 'distance';
+    }
     return p;
-  }, [debouncedSearch, priceRange, bedrooms, propertyType]);
+  }, [
+    debouncedSearch,
+    priceRange,
+    bedrooms,
+    propertyType,
+    petsAllowed,
+    furnished,
+    geo,
+    radiusMiles,
+  ]);
 
   const {
     data,
@@ -373,6 +430,46 @@ export default function PropertySearch() {
                     placeholder="Property Type"
                     options={PROPERTY_TYPE_OPTIONS}
                   />
+
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="pets-allowed">Pets allowed</Label>
+                    <Switch
+                      id="pets-allowed"
+                      checked={petsAllowed}
+                      onCheckedChange={setPetsAllowed}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="furnished">Furnished</Label>
+                    <Switch
+                      id="furnished"
+                      checked={furnished}
+                      onCheckedChange={setFurnished}
+                    />
+                  </div>
+
+                  <div className="pt-2 border-t space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="near-me">Search near me</Label>
+                      <Switch
+                        id="near-me"
+                        checked={geo !== null}
+                        onCheckedChange={toggleNearMe}
+                      />
+                    </div>
+                    {geo && (
+                      <FilterSelect
+                        label="Radius"
+                        value={String(radiusMiles)}
+                        onChange={(v) => setRadiusMiles(Number(v))}
+                        placeholder="Radius"
+                        options={RADIUS_OPTIONS}
+                      />
+                    )}
+                    {geoError && (
+                      <p className="text-sm text-destructive">{geoError}</p>
+                    )}
+                  </div>
                 </div>
 
                 <DialogFooter className="gap-2 sm:gap-0">
