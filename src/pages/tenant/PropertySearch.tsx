@@ -15,6 +15,7 @@ import {
 import { searchListings } from '@/services/listingService';
 import { listingRentMonthly, approvedMedia } from '@/lib/listingDisplay';
 import { useDebounce } from '@/hooks/useDebounce';
+import { useCompareSelection } from '@/hooks/useCompareSelection';
 import type {
   Listing,
   ListingSearchParams,
@@ -180,6 +181,7 @@ function FilterSelect({
 
 export default function PropertySearch() {
   const navigate = useNavigate();
+  const compare = useCompareSelection();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [priceRange, setPriceRange] = useState<[number, number]>(PRICE_DEFAULT);
@@ -512,6 +514,9 @@ export default function PropertySearch() {
                 <PropertyCard
                   key={listing.id}
                   property={listingToCard(listing)}
+                  compareSelected={compare.isSelected(listing.id)}
+                  onToggleCompare={() => compare.toggle(listing.id)}
+                  compareDisabled={compare.isFull}
                   onClick={() => {
                     navigate(`/properties/${listing.id}`, {
                       state: { listing },
@@ -546,6 +551,34 @@ export default function PropertySearch() {
           </>
         )}
       </div>
+
+      {/* Compare tray — the entry point to the comparison page. Appears once
+          at least one listing is selected; comparing needs two. */}
+      {compare.ids.length > 0 && (
+        <div className="sticky bottom-0 z-20 border-t border-border bg-card/95 backdrop-blur">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between gap-3">
+            <span className="text-sm text-muted-foreground">
+              {compare.ids.length} of {compare.max} selected to compare
+            </span>
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" size="sm" onClick={compare.clear}>
+                Clear
+              </Button>
+              <Button
+                size="sm"
+                disabled={compare.ids.length < 2}
+                onClick={() =>
+                  navigate(
+                    `/tenant/properties/compare?properties=${compare.ids.join(',')}`
+                  )
+                }
+              >
+                Compare ({compare.ids.length})
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

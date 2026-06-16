@@ -1,5 +1,6 @@
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { SavePropertyButton } from '@/components/property/SavePropertyButton';
 import {
   MapPin,
@@ -57,6 +58,12 @@ interface PropertyCardProps {
   // card is rendered as part of an extended search result — undefined values
   // mean the category has no nearby POI for this property.
   nearestByCategory?: Partial<Record<SurroundingCategory, number>>;
+  // Compare-selection wiring. Rendered only when `onToggleCompare` is provided
+  // (i.e. on surfaces that support comparison), so other consumers of the card
+  // are unaffected. `compareDisabled` reflects the selection cap being reached.
+  compareSelected?: boolean;
+  onToggleCompare?: () => void;
+  compareDisabled?: boolean;
 }
 
 const CATEGORY_LABEL: Record<SurroundingCategory, string> =
@@ -77,6 +84,9 @@ export function PropertyCard({
   showSave = true,
   className,
   nearestByCategory,
+  compareSelected = false,
+  onToggleCompare,
+  compareDisabled = false,
 }: PropertyCardProps) {
   const image = property.images?.[0] ?? FALLBACK_IMAGE;
   const distanceEntries = nearestByCategory
@@ -226,6 +236,26 @@ export function PropertyCard({
                 ${Math.round(property.price / property.squareFeet)}/sqft
               </span>
             )}
+          </div>
+        )}
+
+        {onToggleCompare && (
+          // Stop propagation so toggling compare doesn't trigger the card's
+          // navigate-to-detail click/keyboard handlers.
+          <div
+            className="mt-3 pt-3 border-t border-border"
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+          >
+            <label className="flex w-fit items-center gap-2 text-sm text-muted-foreground cursor-pointer">
+              <Checkbox
+                checked={compareSelected}
+                onCheckedChange={() => onToggleCompare()}
+                disabled={compareDisabled && !compareSelected}
+                aria-label={`Compare ${property.title}`}
+              />
+              Compare
+            </label>
           </div>
         )}
       </CardContent>
