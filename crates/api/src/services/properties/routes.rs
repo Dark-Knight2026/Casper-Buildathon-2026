@@ -18,6 +18,7 @@ use crate::{common::AppState, services::properties::handlers};
 pub fn router() -> OpenApiRouter<Arc<AppState>> {
     OpenApiRouter::new()
         .routes(routes!(handlers::create_property))
+        .routes(routes!(handlers::update_property))
         .routes(routes!(handlers::get_property))
         .routes(routes!(handlers::search_properties))
         .routes(routes!(handlers::get_property_listings))

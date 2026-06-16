@@ -14,7 +14,9 @@ use uuid::Uuid;
 
 use crate::{
     common::{ApiError, ApiResult, Pagination, PropertyId},
-    services::properties::db::{GeoSearch, ListingSummaryRow, NewProperty, PropertyRow},
+    services::properties::db::{
+        GeoSearch, ListingSummaryRow, NewProperty, PropertyPatch, PropertyRow,
+    },
 };
 
 /// Property types accepted on create. Mirrors the `properties.property_type`
@@ -235,6 +237,105 @@ impl CreatePropertyRequest {
     }
 }
 
+/// Edit-a-property payload. Every field is optional: an omitted field is left
+/// untouched, so a landlord can correct a single mistyped value. Editing any
+/// field re-triggers listing revalidation (handled in the DB layer), since a
+/// changed physical asset invalidates a listing's authority.
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdatePropertyRequest {
+    /// Street address line 1.
+    pub address_line1: Option<String>,
+    /// Street address line 2 (unit/suite).
+    pub address_line2: Option<String>,
+    /// City.
+    pub city: Option<String>,
+    /// State / province.
+    pub state_or_province: Option<String>,
+    /// Postal code.
+    pub postal_code: Option<String>,
+    /// Property type (must match an allowed value).
+    pub property_type: Option<String>,
+    /// Latitude in `[-90, 90]`.
+    pub latitude: Option<f64>,
+    /// Longitude in `[-180, 180]`.
+    pub longitude: Option<f64>,
+    /// Bedroom count (non-negative).
+    pub bedrooms_total: Option<i32>,
+    /// Bathroom count (non-negative; fractional allowed).
+    pub bathrooms_total: Option<f64>,
+    /// Living area in sqft (non-negative).
+    pub living_area: Option<i32>,
+    /// Year built (non-negative).
+    pub year_built: Option<i32>,
+    /// Parking features.
+    pub parking_features: Option<Vec<String>>,
+    /// County parcel / APN.
+    pub parcel_apn: Option<String>,
+}
+
+impl UpdatePropertyRequest {
+    /// Trims, validates, and maps the present fields onto the legacy column
+    /// names. Absent fields stay `None` so the DB layer's COALESCE leaves them
+    /// untouched.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ApiError::BadRequest`] when a provided field is blank, a length
+    /// cap is exceeded, `propertyType` is not an allowed value, a coordinate is
+    /// out of range, or a numeric attribute is negative.
+    #[inline]
+    pub fn into_validated_patch(self) -> ApiResult<PropertyPatch> {
+        let property_type = match self.property_type {
+            Some(raw) => {
+                let trimmed = raw.trim().to_owned();
+                if !PROPERTY_TYPES.contains(&trimmed.as_str()) {
+                    return Err(ApiError::BadRequest(format!(
+                        "propertyType must be one of: {}",
+                        PROPERTY_TYPES.join(", ")
+                    )));
+                }
+                Some(trimmed)
+            }
+            None => None,
+        };
+
+        validate_coordinate("latitude", self.latitude, 90.0)?;
+        validate_coordinate("longitude", self.longitude, 180.0)?;
+        non_negative_int("bedroomsTotal", self.bedrooms_total)?;
+        non_negative_int("livingArea", self.living_area)?;
+        non_negative_int("yearBuilt", self.year_built)?;
+        if let Some(bathrooms) = self.bathrooms_total
+            && (!bathrooms.is_finite() || bathrooms < 0.0)
+        {
+            return Err(ApiError::BadRequest(
+                "bathroomsTotal must be a non-negative number".to_owned(),
+            ));
+        }
+
+        Ok(PropertyPatch {
+            address_line1: required_if_present(
+                "addressLine1",
+                self.address_line1,
+                MAX_ADDRESS_LEN,
+            )?,
+            address_line2: optional("addressLine2", self.address_line2, MAX_ADDRESS_LEN)?,
+            city: required_if_present("city", self.city, MAX_CITY_LEN)?,
+            state: required_if_present("stateOrProvince", self.state_or_province, MAX_STATE_LEN)?,
+            zip_code: required_if_present("postalCode", self.postal_code, MAX_POSTAL_LEN)?,
+            property_type,
+            latitude: self.latitude,
+            longitude: self.longitude,
+            bedrooms: self.bedrooms_total,
+            bathrooms: self.bathrooms_total,
+            square_feet: self.living_area,
+            year_built: self.year_built,
+            parking_features: validate_parking(self.parking_features)?,
+            parcel_id: optional("parcelApn", self.parcel_apn, MAX_PARCEL_LEN)?,
+        })
+    }
+}
+
 /// Trims a required string, rejecting empty/over-long values.
 fn required(field: &str, value: &str, max_len: usize) -> ApiResult<String> {
     let trimmed = value.trim();
@@ -247,6 +348,20 @@ fn required(field: &str, value: &str, max_len: usize) -> ApiResult<String> {
         )));
     }
     Ok(trimmed.to_owned())
+}
+
+/// Validates a patch field backing a NOT NULL column: an absent value stays
+/// `None` (column left untouched), but a present one must be non-blank and
+/// within length, since the column cannot store an empty value.
+fn required_if_present(
+    field: &str,
+    value: Option<String>,
+    max_len: usize,
+) -> ApiResult<Option<String>> {
+    let Some(raw) = value else {
+        return Ok(None);
+    };
+    Ok(Some(required(field, &raw, max_len)?))
 }
 
 /// Trims an optional string; blank collapses to `None`.

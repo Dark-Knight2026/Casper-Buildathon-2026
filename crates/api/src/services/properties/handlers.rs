@@ -14,9 +14,10 @@ use crate::{
     services::{
         auth::{LandlordRole, RoleUser},
         properties::{
-            db,
+            db::{self, PropertyUpdate},
             models::{
                 CreatePropertyRequest, Property, PropertyListingSummary, PropertySearchParams,
+                UpdatePropertyRequest,
             },
         },
     },
@@ -64,6 +65,59 @@ pub async fn create_property(
         StatusCode::OK
     };
     Ok((status, Json(Property::from(row))))
+}
+
+// `PUT /api/v1/properties/{id}`
+//
+/// Edits a property, then revalidates its listings.
+///
+/// Owner-scoped (landlord only): a non-owner gets `403`, a missing property
+/// `404`. Only the supplied fields change. Because a physical-asset edit
+/// invalidates a listing's authority, live and submitted offers for this
+/// property drop back to `draft` and their authority badge resets to
+/// `Unverified`, so the lister re-clears the gate before republishing. An edit
+/// whose address collides with another property returns `409`.
+///
+/// # Errors
+///
+/// Returns [`ApiError::BadRequest`] on invalid input, [`ApiError::NotFound`]
+/// when the property does not exist, [`ApiError::Forbidden`] when the caller is
+/// not its owner, [`ApiError::Conflict`] on an address fingerprint collision,
+/// or a database error.
+#[utoipa::path(
+    put,
+    path = "/properties/{id}",
+    tag = "Properties",
+    request_body = UpdatePropertyRequest,
+    params(
+        ("id" = Uuid, Path, description = "Property id")
+    ),
+    responses(
+        (status = 200, description = "Property updated", body = Property),
+        (status = 400, description = "Invalid input", body = ErrorResponse),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 403, description = "Not the property owner", body = ErrorResponse),
+        (status = 404, description = "Property not found", body = ErrorResponse),
+        (status = 409, description = "Address matches another property", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse),
+    ),
+    security(
+        ("cookie_auth" = [])
+    )
+)]
+#[inline]
+pub async fn update_property(
+    State(state): State<Arc<AppState>>,
+    user: RoleUser<LandlordRole>,
+    Path(property_id): Path<Uuid>,
+    Json(payload): Json<UpdatePropertyRequest>,
+) -> ApiResult<Json<Property>> {
+    let patch = payload.into_validated_patch()?;
+    match db::update_property(&state.db, property_id, user.0.sub, patch).await? {
+        PropertyUpdate::Updated(row) => Ok(Json(Property::from(*row))),
+        PropertyUpdate::NotFound => Err(ApiError::NotFound("property not found".to_owned())),
+        PropertyUpdate::Forbidden => Err(ApiError::Forbidden("not_property_owner".to_owned())),
+    }
 }
 
 // `GET /api/v1/properties/{id}`

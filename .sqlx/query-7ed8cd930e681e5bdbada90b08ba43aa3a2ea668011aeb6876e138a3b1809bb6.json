@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE listings\n            SET\n                state = CASE WHEN state IN ('active', 'pending') THEN 'draft' ELSE state END,\n                authority_tier = 'T0',\n                identity_verified = false,\n                fair_housing_cleared = false\n            WHERE property_id = $1 AND deleted_at IS NULL\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7ed8cd930e681e5bdbada90b08ba43aa3a2ea668011aeb6876e138a3b1809bb6"
+}
