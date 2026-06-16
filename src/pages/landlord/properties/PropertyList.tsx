@@ -49,7 +49,11 @@ import {
 } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { getLandlordListings } from '@/services/listingService';
-import { listingRentMonthly, formatPropertyType } from '@/lib/listingDisplay';
+import {
+  listingRentMonthly,
+  formatPropertyType,
+  derivePetsAllowed,
+} from '@/lib/listingDisplay';
 import { useDebounce } from '@/hooks/useDebounce';
 import type {
   ListingSearchParams,
@@ -430,9 +434,7 @@ export default function PropertyList() {
               (a, b) => a.position - b.position
             )[0]?.url;
             const stateBadge = STATE_BADGE[listing.state];
-            const petsOk =
-              !!listing.petPolicy &&
-              listing.petPolicy.toLowerCase() !== 'no pets';
+            const petsOk = derivePetsAllowed(listing);
             return (
               <Card
                 key={listing.id}

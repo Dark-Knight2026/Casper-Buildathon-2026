@@ -10,7 +10,11 @@ import { PropertyComparison } from '@/components/property/PropertyComparison';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { getListing } from '@/services/listingService';
-import { listingRentMonthly } from '@/lib/listingDisplay';
+import {
+  listingRentMonthly,
+  derivePetsAllowed,
+  formatFullAddress,
+} from '@/lib/listingDisplay';
 import type { Listing, RentLtrTerms } from '@/types/listingContract';
 import type { PropertyComparison as PropertyComparisonType } from '@/types/property';
 
@@ -22,18 +26,14 @@ function listingToComparison(listing: Listing): PropertyComparisonType {
   const parking = asset?.parkingFeatures ?? [];
   return {
     id: listing.id,
-    address: asset
-      ? `${asset.addressLine1}, ${asset.city}, ${asset.stateOrProvince} ${asset.postalCode}`
-      : listing.title,
+    address: formatFullAddress(asset) || listing.title,
     rent: listingRentMonthly(listing),
     bedrooms: asset?.bedroomsTotal ?? 0,
     bathrooms: asset?.bathroomsTotal ?? 0,
     sqft: asset?.livingArea ?? 0,
     available: listing.state === 'active',
     amenities: listing.amenities,
-    // No boolean pets flag on the wire — derive it from the constrained policy.
-    petFriendly:
-      !!listing.petPolicy && listing.petPolicy.toLowerCase() !== 'no pets',
+    petFriendly: derivePetsAllowed(listing),
     parking: parking.length > 0 ? parking.join(', ') : 'Not available',
     utilities:
       listing.utilitiesIncluded.length > 0

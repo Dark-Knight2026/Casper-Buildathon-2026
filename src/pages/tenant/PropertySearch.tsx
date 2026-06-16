@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
@@ -218,8 +218,12 @@ export default function PropertySearch() {
     setGeoError(null);
   };
 
+  // Tracks the latest intent so a geolocation callback that resolves after the
+  // user has already toggled "near me" off doesn't re-enable it.
+  const nearMeWantedRef = useRef(false);
   const toggleNearMe = (on: boolean) => {
     setGeoError(null);
+    nearMeWantedRef.current = on;
     if (!on) {
       setGeo(null);
       return;
@@ -229,9 +233,14 @@ export default function PropertySearch() {
       return;
     }
     navigator.geolocation.getCurrentPosition(
-      (pos) => setGeo({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      () =>
-        setGeoError('Could not get your location. Check browser permissions.')
+      (pos) => {
+        if (!nearMeWantedRef.current) return;
+        setGeo({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+      },
+      () => {
+        if (!nearMeWantedRef.current) return;
+        setGeoError('Could not get your location. Check browser permissions.');
+      }
     );
   };
 

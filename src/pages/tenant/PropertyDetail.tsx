@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   useParams,
   useNavigate,
@@ -21,12 +21,9 @@ import {
   Mail,
   Check,
   X,
-  Home,
   Car,
   Loader2,
   Lock,
-  ShieldCheck,
-  Link2,
 } from 'lucide-react';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -41,14 +38,17 @@ import { SavePropertyButton } from '@/components/property/SavePropertyButton';
 import { ContactLandlordModal } from '@/components/property/ContactLandlordModal';
 import { ScheduleViewingModal } from '@/components/property/ScheduleViewingModal';
 import { VerificationDisclaimer } from '@/components/property/VerificationDisclaimer';
+import { PropertyGallery } from '@/components/property/PropertyGallery';
+import { TrustBadges } from '@/components/property/TrustBadges';
 import { AuthPromptModal } from '@/components/auth/AuthPromptModal';
 import { getListing, recordListingView } from '@/services/listingService';
 import {
   listingRentMonthly,
   approvedMedia,
   formatPropertyType,
+  derivePetsAllowed,
+  formatFullAddress,
 } from '@/lib/listingDisplay';
-import { cn } from '@/lib/utils';
 import { logger } from '@/utils/logger';
 import type { Listing, RentLtrTerms } from '@/types/listingContract';
 
@@ -105,15 +105,16 @@ export default function PropertyDetail() {
       stateListing && stateListing.id === id ? stateListing : undefined,
   });
 
-  const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [showContactModal, setShowContactModal] = useState(false);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
 
-  // Record a unique registered-tenant view once the listing resolves. The
-  // endpoint is tenant-only and dedups server-side, so this is best-effort and
-  // skipped for guests (whose views aren't counted).
+  // Record a unique registered-tenant view once per listing. The query object
+  // changes identity on every refetch, so gate on the id (via a ref) to avoid
+  // re-POSTing on each response. Tenant-only and skipped for guests.
+  const viewedIdRef = useRef<string | null>(null);
   useEffect(() => {
-    if (listing && isAuthenticated) {
+    if (listing && isAuthenticated && viewedIdRef.current !== listing.id) {
+      viewedIdRef.current = listing.id;
       recordListingView(listing.id).catch((error) => {
         logger.error('Failed to record listing view:', error);
       });
@@ -199,12 +200,8 @@ export default function PropertyDetail() {
   const images = approvedMedia(listing.media).map((m) => m.url);
   const parkingFeatures = asset?.parkingFeatures ?? [];
   const parkingAvailable = parkingFeatures.length > 0;
-  // No boolean pets flag on the wire — derive it from the constrained policy.
-  const petsAllowed =
-    !!listing.petPolicy && listing.petPolicy.toLowerCase() !== 'no pets';
-  const fullAddress = asset
-    ? `${asset.addressLine1}, ${asset.city}, ${asset.stateOrProvince} ${asset.postalCode}`
-    : '';
+  const petsAllowed = derivePetsAllowed(listing);
+  const fullAddress = formatFullAddress(asset);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -240,105 +237,17 @@ export default function PropertyDetail() {
           <div className="lg:col-span-2 space-y-6">
             <Card>
               <CardContent className="p-0">
-                <div className="relative">
-                  {images.length > 0 ? (
-                    <>
-                      <img
-                        src={images[currentImageIndex]}
-                        alt={listing.title}
-                        className="w-full h-96 object-cover"
-                      />
-                      {images.length > 1 && (
-                        <>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            aria-label="Previous image"
-                            className="absolute left-4 top-1/2 transform -translate-y-1/2"
-                            onClick={() =>
-                              setCurrentImageIndex(
-                                Math.max(0, currentImageIndex - 1)
-                              )
-                            }
-                            disabled={currentImageIndex === 0}
-                          >
-                            ‹
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            aria-label="Next image"
-                            className="absolute right-4 top-1/2 transform -translate-y-1/2"
-                            onClick={() =>
-                              setCurrentImageIndex(
-                                Math.min(
-                                  images.length - 1,
-                                  currentImageIndex + 1
-                                )
-                              )
-                            }
-                            disabled={currentImageIndex === images.length - 1}
-                          >
-                            ›
-                          </Button>
-                          <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex gap-2">
-                            {images.map((_, index) => (
-                              <button
-                                key={index}
-                                aria-label={`Go to image ${index + 1}`}
-                                aria-current={
-                                  index === currentImageIndex
-                                    ? 'true'
-                                    : undefined
-                                }
-                                className={cn(
-                                  'w-2 h-2 rounded-full',
-                                  index === currentImageIndex
-                                    ? 'bg-white'
-                                    : 'bg-white/50'
-                                )}
-                                onClick={() => setCurrentImageIndex(index)}
-                              />
-                            ))}
-                          </div>
-                        </>
-                      )}
-                    </>
-                  ) : (
-                    <div className="w-full h-96 bg-gray-200 flex items-center justify-center">
-                      <Home className="h-24 w-24 text-gray-400" />
-                    </div>
-                  )}
-                  {asset && (
-                    <Badge className="absolute top-4 right-4 bg-white text-gray-900">
-                      {formatPropertyType(asset.propertyType)}
-                    </Badge>
-                  )}
-                </div>
-
-                {/* Thumbnail Strip */}
-                {images.length > 1 && (
-                  <div className="flex gap-2 p-4 overflow-x-auto">
-                    {images.map((image, index) => (
-                      <button
-                        key={index}
-                        onClick={() => setCurrentImageIndex(index)}
-                        className={cn(
-                          'shrink-0 w-20 h-20 rounded overflow-hidden border-2',
-                          index === currentImageIndex
-                            ? 'border-primary'
-                            : 'border-transparent'
-                        )}
-                      >
-                        <img
-                          src={image}
-                          alt={`${listing.title} ${index + 1}`}
-                          className="w-full h-full object-cover"
-                        />
-                      </button>
-                    ))}
-                  </div>
-                )}
+                <PropertyGallery
+                  images={images}
+                  title={listing.title}
+                  overlay={
+                    asset && (
+                      <Badge className="absolute top-4 right-4 bg-white text-gray-900">
+                        {formatPropertyType(asset.propertyType)}
+                      </Badge>
+                    )
+                  }
+                />
               </CardContent>
             </Card>
 
@@ -356,29 +265,11 @@ export default function PropertyDetail() {
                         {fullAddress}
                       </span>
                     </p>
-                    {(listing.provenance.verifiedListerBadge ||
-                      listing.onChain?.provenanceOnChain) && (
-                      <div className="flex flex-wrap items-center gap-1.5 mt-2">
-                        {listing.provenance.verifiedListerBadge && (
-                          <Badge
-                            variant="secondary"
-                            className="text-xs font-normal flex items-center gap-1"
-                          >
-                            <ShieldCheck className="h-3 w-3 text-emerald-600" />
-                            Verified lister
-                          </Badge>
-                        )}
-                        {listing.onChain?.provenanceOnChain && (
-                          <Badge
-                            variant="secondary"
-                            className="text-xs font-normal flex items-center gap-1"
-                          >
-                            <Link2 className="h-3 w-3 text-sky-600" />
-                            On-chain
-                          </Badge>
-                        )}
-                      </div>
-                    )}
+                    <TrustBadges
+                      verifiedLister={listing.provenance.verifiedListerBadge}
+                      onChain={listing.onChain?.provenanceOnChain}
+                      className="mt-2"
+                    />
                   </div>
                   <div className="text-right shrink-0">
                     <p className="text-2xl sm:text-3xl font-bold text-primary whitespace-nowrap">

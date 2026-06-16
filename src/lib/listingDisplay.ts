@@ -8,6 +8,7 @@ import type {
   RentLtrTerms,
   MediaRef,
   RealPropertyType,
+  PropertyAsset,
 } from '@/types/listingContract';
 
 /** Title-case a RESO property type for display ("single_family" → "Single Family"). */
@@ -37,4 +38,21 @@ export function approvedMedia(media: MediaRef[]): MediaRef[] {
   return media
     .filter((m) => m.moderationStatus === 'approved')
     .sort((a, b) => a.position - b.position);
+}
+
+/**
+ * Whether the listing allows pets. There's no boolean flag on the wire, so it's
+ * derived from the constrained `petPolicy` ("No Pets" means not allowed).
+ */
+export function derivePetsAllowed(listing: Listing): boolean {
+  return !!listing.petPolicy && listing.petPolicy.toLowerCase() !== 'no pets';
+}
+
+/** One-line postal address for a property, or '' when the asset is absent. */
+export function formatFullAddress(
+  asset: PropertyAsset | null | undefined
+): string {
+  return asset
+    ? `${asset.addressLine1}, ${asset.city}, ${asset.stateOrProvince} ${asset.postalCode}`
+    : '';
 }

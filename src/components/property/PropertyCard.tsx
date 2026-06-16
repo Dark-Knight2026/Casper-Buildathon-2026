@@ -10,9 +10,8 @@ import {
   TrendingUp,
   Star,
   Camera,
-  ShieldCheck,
-  Link2,
 } from 'lucide-react';
+import { TrustBadges } from '@/components/property/TrustBadges';
 import { cn } from '@/lib/utils';
 import type { SurroundingCategory } from '@/types/property';
 import { SURROUNDING_CATEGORIES } from '@/data/amenityCategories';
@@ -156,28 +155,11 @@ export function PropertyCard({
           {property.address}, {property.city}, {property.state}
         </p>
 
-        {(property.verifiedListerBadge || property.onChainProvenance) && (
-          <div className="flex flex-wrap items-center gap-1.5 mb-4">
-            {property.verifiedListerBadge && (
-              <Badge
-                variant="secondary"
-                className="text-xs font-normal flex items-center gap-1"
-              >
-                <ShieldCheck className="h-3 w-3 text-emerald-600" />
-                Verified lister
-              </Badge>
-            )}
-            {property.onChainProvenance && (
-              <Badge
-                variant="secondary"
-                className="text-xs font-normal flex items-center gap-1"
-              >
-                <Link2 className="h-3 w-3 text-sky-600" />
-                On-chain
-              </Badge>
-            )}
-          </div>
-        )}
+        <TrustBadges
+          verifiedLister={property.verifiedListerBadge}
+          onChain={property.onChainProvenance}
+          className="mb-4"
+        />
 
         {distanceEntries.length > 0 && (
           <div
