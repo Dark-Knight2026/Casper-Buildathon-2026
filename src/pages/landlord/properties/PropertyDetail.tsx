@@ -37,6 +37,7 @@ import {
 import { TrustBadges } from '@/components/property/TrustBadges';
 import { ListingLifecycle } from '@/components/listing/ListingLifecycle';
 import { AuthorityGate } from '@/components/listing/AuthorityGate';
+import { FairHousingScreen } from '@/components/listing/FairHousingScreen';
 import {
   getListing,
   getListingStatistics,
@@ -198,11 +199,14 @@ export default function PropertyDetail() {
         </div>
       </div>
 
-      {/* Lifecycle + authority-to-list gate — manage the listing's state and
-          clear the publish requirements without leaving the detail page. */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+      {/* Lifecycle + publish gate — manage the listing's state and clear the
+          authority / fair-housing requirements without leaving the detail page. */}
+      <div className="space-y-6 mb-6">
         <ListingLifecycle listing={listing} />
-        <AuthorityGate listing={listing} />
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <AuthorityGate listing={listing} />
+          <FairHousingScreen listing={listing} />
+        </div>
       </div>
 
       {/* Image Gallery */}

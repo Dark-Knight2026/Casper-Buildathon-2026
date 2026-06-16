@@ -53,16 +53,15 @@ export async function uploadAuthorityDocument(
 }
 
 /**
- * `POST /listings/{id}/fair-housing/screen`. Runs (or previews) the advertising
- * screen and returns the matched flags. Pass `title`/`description` to preview
- * unsaved edits; omit them to screen the listing's current stored text.
+ * `POST /listings/{id}/fair-housing/screen`. Screens the listing's **stored**
+ * title + description (no request body) and returns the matched flags. As a
+ * side effect the backend restamps `fairHousingCleared`, so callers should
+ * refresh the listing afterwards.
  */
 export async function screenFairHousing(
-  listingId: string,
-  text?: { title?: string; description?: string }
+  listingId: string
 ): Promise<FairHousingScreenResult> {
   return backendClient.post<FairHousingScreenResult>(
-    `${LISTINGS}/${listingId}/fair-housing/screen`,
-    text ?? {}
+    `${LISTINGS}/${listingId}/fair-housing/screen`
   );
 }
