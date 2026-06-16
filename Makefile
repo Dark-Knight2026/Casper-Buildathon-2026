@@ -21,6 +21,9 @@ env-down: ## Stop Supabase, Redis, MinIO, and test database
 	@docker compose down --volumes
 	@echo "[*] Stopping test database..."
 	@docker compose -p leasefi-test -f docker-compose.test.yml down --volumes
+	@echo "[*] Removing leftover testcontainers..."
+	@ids=$$(docker ps -aq --filter "label=org.testcontainers.managed-by=testcontainers"); \
+	 [ -n "$$ids" ] && docker rm -f $$ids || true
 	@echo "[*] Stopping Supabase..."
 	@supabase stop
 
