@@ -375,7 +375,7 @@ pub async fn list_active_listings(
     let property_ids = rows.iter().map(|row| row.property_id).collect::<Vec<_>>();
     let listing_ids = rows.iter().map(|row| row.id).collect::<Vec<_>>();
     let properties = fetch_properties_by_ids(tx.as_mut(), &property_ids).await?;
-    let mut media = fetch_media_by_listing_ids(tx.as_mut(), &listing_ids).await?;
+    let mut media = fetch_media_by_listing_ids(tx.as_mut(), &listing_ids, true).await?;
     tx.commit().await?;
 
     let listings = rows
@@ -422,10 +422,13 @@ where
         .collect())
 }
 
-/// Batch-loads approved media by listing id into a lookup keyed by listing id.
+/// Batch-loads media by listing id into a lookup keyed by listing id. With
+/// `approved_only`, restricts to publicly visible (approved) media; otherwise
+/// returns every status - the landlord's own view of their own listings.
 async fn fetch_media_by_listing_ids<'e, E>(
     executor: E,
     ids: &[Uuid],
+    approved_only: bool,
 ) -> Result<HashMap<Uuid, Vec<MediaRef>>, Error>
 where
     E: sqlx::PgExecutor<'e>,
@@ -435,10 +438,12 @@ where
         r#"
             SELECT id, listing_id, url, cid, position, moderation_status
             FROM listing_media
-            WHERE listing_id = ANY($1) AND moderation_status = 'approved'
+            WHERE listing_id = ANY($1)
+              AND (NOT $2::bool OR moderation_status = 'approved')
             ORDER BY position ASC
         "#,
         ids,
+        approved_only,
     )
     .fetch_all(executor)
     .await?;
@@ -493,7 +498,7 @@ pub async fn fetch_listings_by_ids(
     let property_ids = rows.iter().map(|row| row.property_id).collect::<Vec<_>>();
     let listing_ids = rows.iter().map(|row| row.id).collect::<Vec<_>>();
     let properties = fetch_properties_by_ids(pool, &property_ids).await?;
-    let mut media = fetch_media_by_listing_ids(pool, &listing_ids).await?;
+    let mut media = fetch_media_by_listing_ids(pool, &listing_ids, true).await?;
 
     Ok(rows
         .into_iter()
@@ -817,7 +822,9 @@ pub async fn list_landlord_listings(
     let property_ids = rows.iter().map(|row| row.property_id).collect::<Vec<_>>();
     let listing_ids = rows.iter().map(|row| row.id).collect::<Vec<_>>();
     let properties = fetch_properties_by_ids(tx.as_mut(), &property_ids).await?;
-    let mut media = fetch_media_by_listing_ids(tx.as_mut(), &listing_ids).await?;
+    // HACK: (hackathon): landlord sees their own media regardless of moderation
+    // status (`false` = not approved-only); revisit when moderation is restored.
+    let mut media = fetch_media_by_listing_ids(tx.as_mut(), &listing_ids, false).await?;
     tx.commit().await?;
 
     let listings = rows
@@ -1443,9 +1450,9 @@ pub async fn add_authority_document(
 
 /// Inserts a media row for a listing, appended after existing media, and
 /// returns it. Position is the next slot under a single subquery (no separate
-/// max read); moderation defaults to `pending`, so the item is excluded from
-/// public reads until approved. `storage_key` is kept for a later
-/// `MediaStorage::delete`.
+/// max read); moderation is auto-approved on upload, so the item is publicly
+/// visible immediately (an agent may still `reject` it post-hoc).
+/// `storage_key` is kept for a later `MediaStorage::delete`.
 ///
 /// # Errors
 ///
@@ -1458,15 +1465,17 @@ pub async fn insert_listing_media(
     cid: &str,
     storage_key: &str,
 ) -> Result<MediaRow, Error> {
+    // HACK: (hackathon): media is auto-approved on upload to skip moderation;
+    // restore the `pending` default + agent-approve flow after the hackathon.
     sqlx::query_as!(
         MediaRow,
         r"
-            INSERT INTO listing_media (listing_id, url, cid, position, storage_key)
+            INSERT INTO listing_media (listing_id, url, cid, position, storage_key, moderation_status)
             VALUES (
                 $1, $2, $3,
                 (SELECT COALESCE(MAX(position) + 1, 0)
                  FROM listing_media WHERE listing_id = $1),
-                $4
+                $4, 'approved'
             )
             RETURNING id, listing_id, url, cid, position, moderation_status
         ",

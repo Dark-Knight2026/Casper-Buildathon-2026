@@ -2,10 +2,11 @@
 //!
 //! - **Upload** (`POST`): owner-only multipart; magic-byte MIME sniff
 //!   (PNG/JPEG/WebP), declared-vs-sniffed cross-check, EXIF strip (noop in the
-//!   hackathon), content pin -> deterministic `bafy<sha256>` CID. New media
-//!   starts `pending`.
+//!   hackathon), content pin -> deterministic `bafy<sha256>` CID. New media is
+//!   auto-approved on upload (an agent may still `reject` it later).
 //! - **Moderation** (`PUT /{mediaId}/moderation`): an AGENT decision, not the
-//!   lister's; only `approved` media is shown publicly.
+//!   lister's; only `approved` media is shown publicly, but the landlord sees
+//!   every status on their own listings.
 //! - **Reorder / remove** (`PUT`): owner-only; `order` sets positions, `remove`
 //!   drops rows and their blobs.
 //!
@@ -82,10 +83,10 @@ async fn moderate(
 
 // `POST /listings/{id}/media` upload ------------------------------------------
 
-/// Happy path: a PNG uploads as `pending`, with a `bafy`-prefixed CID and a
+/// Happy path: a PNG uploads auto-approved, with a `bafy`-prefixed CID and a
 /// stored URL, at position 0.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
-async fn upload_returns_201_pending_with_cid(pool: PgPool) {
+async fn upload_returns_201_approved_with_cid(pool: PgPool) {
     let env = common::setup_test_server(pool.clone(), false).await;
     let (landlord_id, token) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
     let listing_id = owned_listing(&env, &pool, landlord_id, &token).await;
@@ -93,7 +94,7 @@ async fn upload_returns_201_pending_with_cid(pool: PgPool) {
     let (status, body) = upload_media(&env, &token, listing_id).await;
 
     assert_eq!(status, StatusCode::CREATED);
-    assert_eq!(body["moderationStatus"], "pending");
+    assert_eq!(body["moderationStatus"], "approved");
     assert_eq!(body["position"], 0);
     assert!(
         body["cid"].as_str().unwrap().starts_with("bafy"),
@@ -314,9 +315,25 @@ async fn moderate_returns_404_for_unknown_media(pool: PgPool) {
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
 
-/// Pending media is hidden from the public detail; approval makes it visible.
+/// Uploaded media is auto-approved, so it surfaces on the public detail at once.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
-async fn pending_media_hidden_until_approved(pool: PgPool) {
+async fn uploaded_media_visible_immediately(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, token) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let listing_id = owned_listing(&env, &pool, landlord_id, &token).await;
+    upload_media_id(&env, &token, listing_id).await;
+
+    let detail = env
+        .server
+        .get(&format!("/api/v1/listings/{listing_id}"))
+        .await;
+    assert_eq!(detail.json::<Value>()["media"].as_array().unwrap().len(), 1);
+}
+
+/// A rejected item drops from the public detail, but the landlord still sees it
+/// on their own listing - their view is not moderation-gated.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn rejected_media_hidden_from_public_but_visible_to_landlord(pool: PgPool) {
     let env = common::setup_test_server(pool.clone(), false).await;
     let (landlord_id, landlord_token) =
         common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
@@ -324,21 +341,31 @@ async fn pending_media_hidden_until_approved(pool: PgPool) {
     let listing_id = owned_listing(&env, &pool, landlord_id, &landlord_token).await;
     let media_id = upload_media_id(&env, &landlord_token, listing_id).await;
 
-    // Pending: public detail shows no media.
-    let before = env
+    moderate(&env, &agent_token, listing_id, media_id, "rejected").await;
+
+    // Public detail no longer shows the rejected item.
+    let public = env
         .server
         .get(&format!("/api/v1/listings/{listing_id}"))
         .await;
-    assert_eq!(before.json::<Value>()["media"].as_array().unwrap().len(), 0);
+    assert_eq!(public.json::<Value>()["media"].as_array().unwrap().len(), 0);
 
-    moderate(&env, &agent_token, listing_id, media_id, "approved").await;
-
-    // Approved: now it surfaces.
-    let after = env
-        .server
-        .get(&format!("/api/v1/listings/{listing_id}"))
-        .await;
-    assert_eq!(after.json::<Value>()["media"].as_array().unwrap().len(), 1);
+    // The landlord's own listing list still surfaces it.
+    let (status, body) = common::authed_request::<Value>(
+        &env.server,
+        &Method::GET,
+        "/api/v1/listings/landlord",
+        &landlord_token,
+        &Value::Null,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let body = body.unwrap();
+    assert_eq!(
+        body["data"][0]["media"].as_array().unwrap().len(),
+        1,
+        "landlord sees their own rejected media",
+    );
 }
 
 // `PUT /listings/{id}/media` reorder + remove ---------------------------------
