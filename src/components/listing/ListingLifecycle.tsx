@@ -7,6 +7,7 @@ import { useToast } from '@/hooks/use-toast';
 import {
   submitListing,
   transitionListingState,
+  withdrawListing,
 } from '@/services/listingService';
 import { LISTING_STATE_BADGE } from '@/lib/listingDisplay';
 import { ApiClient } from '@/lib/api-client';
@@ -21,13 +22,18 @@ import type { Listing, ListingState } from '@/types/listingContract';
  * as an error toast rather than being hidden.
  */
 
+type ButtonVariant = 'default' | 'outline' | 'destructive';
+
 type Action =
-  | { kind: 'submit'; label: string }
+  | { kind: 'submit'; label: string; variant?: ButtonVariant }
+  // Soft withdraw goes through DELETE, not the state endpoint — the backend
+  // disallows transitioning to `withdrawn` via `PUT /state`.
+  | { kind: 'withdraw'; label: string; variant?: ButtonVariant }
   | {
       kind: 'transition';
       to: ListingState;
       label: string;
-      variant?: 'default' | 'outline' | 'destructive';
+      variant?: ButtonVariant;
     };
 
 // One-line explanation of where the listing is and what the next step does.
@@ -59,12 +65,7 @@ const ACTIONS: Partial<Record<ListingState, Action[]>> = {
   ],
   active: [
     { kind: 'transition', to: 'leased', label: 'Mark as leased' },
-    {
-      kind: 'transition',
-      to: 'withdrawn',
-      label: 'Withdraw',
-      variant: 'destructive',
-    },
+    { kind: 'withdraw', label: 'Withdraw', variant: 'destructive' },
   ],
 };
 
@@ -81,6 +82,8 @@ export function ListingLifecycle({ listing }: { listing: Listing }) {
     try {
       if (action.kind === 'submit') {
         await submitListing(listing.id);
+      } else if (action.kind === 'withdraw') {
+        await withdrawListing(listing.id);
       } else {
         await transitionListingState(listing.id, action.to);
       }
@@ -133,10 +136,8 @@ export function ListingLifecycle({ listing }: { listing: Listing }) {
           <div className="flex flex-wrap gap-2">
             {actions.map((action) => (
               <Button
-                key={action.kind === 'submit' ? 'submit' : action.to}
-                variant={
-                  action.kind === 'transition' ? action.variant : undefined
-                }
+                key={action.kind === 'transition' ? action.to : action.kind}
+                variant={action.variant}
                 disabled={busy}
                 onClick={() => run(action)}
               >
