@@ -179,6 +179,12 @@ pub struct ListingFilter {
     pub min_bedrooms: Option<i32>,
     /// Maximum bedrooms.
     pub max_bedrooms: Option<i32>,
+    /// Minimum bathrooms.
+    pub min_bathrooms: Option<f64>,
+    /// Minimum living area (sqft).
+    pub min_living_area: Option<i32>,
+    /// Maximum living area (sqft).
+    pub max_living_area: Option<i32>,
     /// Pets allowed (pet policy not "No Pets").
     pub pets_allowed: Option<bool>,
     /// Furnished (per terms).
@@ -250,6 +256,21 @@ impl AppendFilters for ListingFilter {
         }
         if let Some(max_bedrooms) = self.max_bedrooms {
             builder.push(" AND p.bedrooms <= ").push_bind(max_bedrooms);
+        }
+        if let Some(min_bathrooms) = self.min_bathrooms {
+            builder
+                .push(" AND p.bathrooms >= ")
+                .push_bind(min_bathrooms);
+        }
+        if let Some(min_living_area) = self.min_living_area {
+            builder
+                .push(" AND p.square_feet >= ")
+                .push_bind(min_living_area);
+        }
+        if let Some(max_living_area) = self.max_living_area {
+            builder
+                .push(" AND p.square_feet <= ")
+                .push_bind(max_living_area);
         }
         if self.pets_allowed == Some(true) {
             builder.push(" AND l.pet_policy IS DISTINCT FROM 'No Pets'");

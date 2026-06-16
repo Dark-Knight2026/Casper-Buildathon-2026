@@ -754,6 +754,31 @@ pub async fn seed_property(pool: &PgPool, landlord_id: Uuid) -> Uuid {
     seed_property_at(pool, landlord_id, 39.7392, -104.9903).await
 }
 
+/// Sets a property's `bathrooms` and `square_feet`, which the minimal seed
+/// leaves NULL, so attribute-range filters (`minBathrooms`/`minLivingArea`)
+/// have something to match.
+#[inline]
+pub async fn set_property_metrics(
+    pool: &PgPool,
+    property_id: Uuid,
+    bathrooms: f64,
+    square_feet: i32,
+) {
+    sqlx::query(
+        r"
+            UPDATE properties
+            SET bathrooms = $2, square_feet = $3
+            WHERE id = $1
+        ",
+    )
+    .bind(property_id)
+    .bind(bathrooms)
+    .bind(square_feet)
+    .execute(pool)
+    .await
+    .expect("set property metrics");
+}
+
 /// Posts a minimal valid `rent_ltr` draft listing against `property_id` (as the
 /// landlord holding `token`) and returns its id. Setup for tests that need an
 /// existing listing without re-asserting the create path itself.

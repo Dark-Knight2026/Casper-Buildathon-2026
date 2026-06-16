@@ -327,6 +327,12 @@ pub struct ListingSearchParams {
     pub min_bedrooms: Option<i32>,
     /// Maximum bedrooms.
     pub max_bedrooms: Option<i32>,
+    /// Minimum bathrooms.
+    pub min_bathrooms: Option<f64>,
+    /// Minimum living area (sqft).
+    pub min_living_area: Option<i32>,
+    /// Maximum living area (sqft).
+    pub max_living_area: Option<i32>,
     /// Pet policy is not "No Pets".
     pub pets_allowed: Option<bool>,
     /// Furnished (per terms).
@@ -405,6 +411,9 @@ impl ListingSearchParams {
             max_rent: self.max_rent,
             min_bedrooms: self.min_bedrooms,
             max_bedrooms: self.max_bedrooms,
+            min_bathrooms: self.min_bathrooms,
+            min_living_area: self.min_living_area,
+            max_living_area: self.max_living_area,
             pets_allowed: self.pets_allowed,
             furnished: self.furnished,
             sort,

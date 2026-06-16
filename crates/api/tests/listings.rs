@@ -669,6 +669,62 @@ async fn list_filters_by_min_rent(pool: PgPool) {
     assert_eq!(body["data"][0]["terms"]["rentMonthly"], 5000.0);
 }
 
+/// `minBathrooms` excludes a listing whose property has fewer bathrooms.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn list_filters_by_min_bathrooms(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, token) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+
+    let two_bath = common::seed_property(&pool, landlord_id).await;
+    common::set_property_metrics(&pool, two_bath, 2.0, 1200).await;
+    let match_id = seed_active_listing(&env, &pool, &token, &draft_body(two_bath)).await;
+
+    let one_bath = common::seed_property(&pool, landlord_id).await;
+    common::set_property_metrics(&pool, one_bath, 1.0, 1200).await;
+    seed_active_listing(&env, &pool, &token, &draft_body(one_bath)).await;
+
+    let response = env.server.get("/api/v1/listings?minBathrooms=2").await;
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body = response.json::<Value>();
+    assert_eq!(body["itemCount"], 1);
+    assert_eq!(
+        body["data"][0]["id"].as_str().unwrap(),
+        match_id.to_string()
+    );
+}
+
+/// `minLivingArea` / `maxLivingArea` bound the property's square footage.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn list_filters_by_living_area_range(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, token) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+
+    let small = common::seed_property(&pool, landlord_id).await;
+    common::set_property_metrics(&pool, small, 1.0, 500).await;
+    let small_id = seed_active_listing(&env, &pool, &token, &draft_body(small)).await;
+
+    let large = common::seed_property(&pool, landlord_id).await;
+    common::set_property_metrics(&pool, large, 1.0, 1500).await;
+    let large_id = seed_active_listing(&env, &pool, &token, &draft_body(large)).await;
+
+    let response = env.server.get("/api/v1/listings?minLivingArea=1000").await;
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body = response.json::<Value>();
+    assert_eq!(body["itemCount"], 1);
+    assert_eq!(
+        body["data"][0]["id"].as_str().unwrap(),
+        large_id.to_string()
+    );
+
+    let response = env.server.get("/api/v1/listings?maxLivingArea=1000").await;
+    let body = response.json::<Value>();
+    assert_eq!(body["itemCount"], 1);
+    assert_eq!(
+        body["data"][0]["id"].as_str().unwrap(),
+        small_id.to_string()
+    );
+}
+
 /// `sortBy=rent` orders ascending when `sortOrder=asc`.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn list_sorts_by_rent_ascending(pool: PgPool) {
