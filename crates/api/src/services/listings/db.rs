@@ -689,6 +689,10 @@ pub async fn update_listing(
 pub struct LandlordListingFilter {
     /// Lifecycle states to include; empty means every state.
     pub states: Vec<ListingState>,
+    /// City filter (case-insensitive exact match on `property.city`).
+    pub city: Option<String>,
+    /// Parking filter: `Some(true)` requires non-empty `parking_features`.
+    pub has_parking: Option<bool>,
     /// Sort key (never `Distance` - rejected at validation, no geo center).
     pub sort: ListingSort,
     /// Descending order.
@@ -700,7 +704,8 @@ pub struct LandlordListingFilter {
 }
 
 impl AppendFilters for LandlordListingFilter {
-    /// Pushes the optional lifecycle-state filter shared by count and page.
+    /// Pushes the optional state/city/parking filters shared by count and page.
+    /// City and parking read `properties` columns, so the caller joins them in.
     #[inline]
     fn append_to(&self, builder: &mut QueryBuilder<Postgres>) {
         if !self.states.is_empty() {
@@ -713,6 +718,19 @@ impl AppendFilters for LandlordListingFilter {
                         .collect::<Vec<_>>(),
                 )
                 .push(")");
+        }
+        if let Some(city) = &self.city {
+            builder
+                .push(" AND LOWER(p.city) = LOWER(")
+                .push_bind(city.as_str())
+                .push(")");
+        }
+        if let Some(has_parking) = self.has_parking {
+            builder.push(if has_parking {
+                " AND COALESCE(cardinality(p.parking_features), 0) > 0"
+            } else {
+                " AND COALESCE(cardinality(p.parking_features), 0) = 0"
+            });
         }
     }
 }
@@ -751,18 +769,29 @@ pub async fn list_landlord_listings(
         .execute(tx.as_mut())
         .await?;
 
-    let total =
-        QueryBuilder::<Postgres>::new("SELECT COUNT(*) FROM listings l WHERE l.listed_by = ")
-            .push_bind(landlord_id)
-            .push(" AND l.deleted_at IS NULL")
-            .append(filter)
-            .build_query_scalar::<i64>()
-            .fetch_one(tx.as_mut())
-            .await?;
+    let total = QueryBuilder::<Postgres>::new(
+        r"
+            SELECT COUNT(*) FROM listings l
+            JOIN properties p ON p.id = l.property_id
+            WHERE l.listed_by =
+        ",
+    )
+    .push_bind(landlord_id)
+    .push(" AND l.deleted_at IS NULL")
+    .append(filter)
+    .build_query_scalar::<i64>()
+    .fetch_one(tx.as_mut())
+    .await?;
 
     let rows = QueryBuilder::<Postgres>::new("SELECT ")
         .push(LISTING_COLUMNS)
-        .push(" FROM listings l WHERE l.listed_by = ")
+        .push(
+            r"
+                FROM listings l
+                JOIN properties p ON p.id = l.property_id
+                WHERE l.listed_by =
+            ",
+        )
         .push_bind(landlord_id)
         .push(" AND l.deleted_at IS NULL")
         .append(filter)

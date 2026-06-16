@@ -9,7 +9,8 @@
 //!   (a draft IS visible by direct id), `404` otherwise.
 //! - **Public list** (`GET`): active-only, with attribute/geo filters and a
 //!   whitelisted sort.
-//! - **Landlord list** (`GET /landlord`): the caller's own listings, any state.
+//! - **Landlord list** (`GET /landlord`): the caller's own listings, filtered
+//!   by state/city/parking and sorted.
 //! - **Update** (`PUT /{id}`): owner-scoped; re-screens Fair Housing on text
 //!   change.
 //! - **View tracking** (`POST /{id}/view`): unique per tenant, active-only.
@@ -649,6 +650,66 @@ async fn landlord_listings_rejects_distance_sort_400(pool: PgPool) {
             .as_str()
             .unwrap()
             .contains("not available for landlord listings")
+    );
+}
+
+/// `?city=` filters the landlord list on the property's city (case-insensitive).
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn landlord_listings_filters_by_city(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, token) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+
+    // The minimal seed places properties in Denver.
+    let denver_prop = common::seed_property(&pool, landlord_id).await;
+    let denver = seed_active_listing(&env, &pool, &token, &draft_body(denver_prop)).await;
+    let boulder_prop = common::seed_property(&pool, landlord_id).await;
+    common::set_property_city(&pool, boulder_prop, "Boulder").await;
+    seed_active_listing(&env, &pool, &token, &draft_body(boulder_prop)).await;
+
+    // Lower-case `denver` must still match the stored `Denver`.
+    let (status, body) = common::authed_request::<Value>(
+        &env.server,
+        &Method::GET,
+        "/api/v1/listings/landlord?city=denver",
+        &token,
+        &Value::Null,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    let body = body.unwrap();
+    assert_eq!(body["itemCount"], 1);
+    assert_eq!(body["data"][0]["id"].as_str().unwrap(), denver.to_string());
+}
+
+/// `?hasParking=true` keeps only listings whose property has parking features.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn landlord_listings_filters_by_has_parking(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, token) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+
+    let with_prop = common::seed_property(&pool, landlord_id).await;
+    common::set_property_parking(&pool, with_prop, &["Garage"]).await;
+    let with_parking = seed_active_listing(&env, &pool, &token, &draft_body(with_prop)).await;
+    // The minimal seed leaves parking_features NULL.
+    let without_prop = common::seed_property(&pool, landlord_id).await;
+    seed_active_listing(&env, &pool, &token, &draft_body(without_prop)).await;
+
+    let (status, body) = common::authed_request::<Value>(
+        &env.server,
+        &Method::GET,
+        "/api/v1/listings/landlord?hasParking=true",
+        &token,
+        &Value::Null,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    let body = body.unwrap();
+    assert_eq!(body["itemCount"], 1);
+    assert_eq!(
+        body["data"][0]["id"].as_str().unwrap(),
+        with_parking.to_string()
     );
 }
 

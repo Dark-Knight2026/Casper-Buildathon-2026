@@ -797,6 +797,43 @@ pub async fn set_listing_views(pool: &PgPool, listing_id: Uuid, views: i32) {
     .expect("set listing views");
 }
 
+/// Overrides a property's `city` (the minimal seed hard-codes `Denver`) so
+/// city-filter tests can place properties in distinct cities.
+#[inline]
+pub async fn set_property_city(pool: &PgPool, property_id: Uuid, city: &str) {
+    sqlx::query(
+        r"
+            UPDATE properties
+            SET city = $2
+            WHERE id = $1
+        ",
+    )
+    .bind(property_id)
+    .bind(city)
+    .execute(pool)
+    .await
+    .expect("set property city");
+}
+
+/// Sets a property's `parking_features` (NULL in the minimal seed) so
+/// `hasParking` tests can distinguish properties with and without parking.
+#[inline]
+pub async fn set_property_parking(pool: &PgPool, property_id: Uuid, features: &[&str]) {
+    let features = features.iter().map(|f| (*f).to_owned()).collect::<Vec<_>>();
+    sqlx::query(
+        r"
+            UPDATE properties
+            SET parking_features = $2
+            WHERE id = $1
+        ",
+    )
+    .bind(property_id)
+    .bind(features)
+    .execute(pool)
+    .await
+    .expect("set property parking");
+}
+
 /// Posts a minimal valid `rent_ltr` draft listing against `property_id` (as the
 /// landlord holding `token`) and returns its id. Setup for tests that need an
 /// existing listing without re-asserting the create path itself.

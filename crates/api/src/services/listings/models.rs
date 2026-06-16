@@ -469,13 +469,17 @@ impl ListingSearchParams {
 }
 
 /// Query params for `GET /listings/landlord`: the caller's own listings,
-/// optionally narrowed by lifecycle state.
+/// optionally narrowed by lifecycle state, city and parking, with a sort.
 #[derive(Debug, Deserialize, IntoParams)]
 #[serde(rename_all = "camelCase")]
 pub struct LandlordListingParams {
     /// Lifecycle-state filter, comma-separated for several (`state=active` or
     /// `state=draft,active`). Absent lists every state.
     pub state: Option<String>,
+    /// City filter (case-insensitive match on the property's city).
+    pub city: Option<String>,
+    /// Parking filter: `true` requires non-empty parking features.
+    pub has_parking: Option<bool>,
     /// Sort key (`distance` is not available here - no geo center).
     pub sort_by: Option<ListingSort>,
     /// Sort order, defaulting to `desc`.
@@ -512,6 +516,8 @@ impl LandlordListingParams {
         }
         Ok(LandlordListingFilter {
             states,
+            city: self.city.filter(|city| !city.trim().is_empty()),
+            has_parking: self.has_parking,
             sort,
             sort_descending: !matches!(self.sort_order, Some(SortOrder::Asc)),
             limit: pagination.page_size(),
