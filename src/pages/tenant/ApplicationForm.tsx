@@ -1,13 +1,20 @@
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
-import { propertyActionsService } from '@/services/propertyActionsService';
+import { submitApplication } from '@/services/applicationService';
+import { ApiClient } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle, CheckCircle } from 'lucide-react';
 import { VerificationDisclaimer } from '@/components/property/VerificationDisclaimer';
@@ -20,12 +27,13 @@ export default function ApplicationForm() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
 
-  // Get propertyId and landlordId from location state or query params.
-  // landlordId must come from the property record (the listing page passes it
-  // via navigate state); a placeholder here corrupts every persisted
-  // application, so the submit guard below refuses to fire without it.
-  const propertyId = location.state?.propertyId || new URLSearchParams(location.search).get('propertyId') || '';
-  const landlordId = location.state?.landlordId || new URLSearchParams(location.search).get('landlordId') || '';
+  // The listing being applied to — passed in router state by the detail page
+  // (PL-20) or as a `listingId` query param on a deep link. The backend derives
+  // the landlord from the listing, so no landlordId is needed here.
+  const listingId =
+    location.state?.listingId ||
+    new URLSearchParams(location.search).get('listingId') ||
+    '';
 
   const [formData, setFormData] = useState({
     // Personal Information
@@ -33,26 +41,26 @@ export default function ApplicationForm() {
     email: profile?.email || '',
     phone: '',
     dateOfBirth: '',
-    
+
     // Current Address
     currentAddress: '',
     currentCity: '',
     currentState: '',
     currentZip: '',
     moveInDate: '',
-    
+
     // Employment
     employer: '',
     jobTitle: '',
     employmentLength: '',
     monthlyIncome: '',
-    
+
     // References
     reference1Name: '',
     reference1Phone: '',
     reference2Name: '',
     reference2Phone: '',
-    
+
     // Additional
     pets: false,
     petDescription: '',
@@ -74,22 +82,17 @@ export default function ApplicationForm() {
       return;
     }
 
-    if (!propertyId) {
-      setError('Property ID is missing. Please return to the property page and try again.');
-      return;
-    }
-
-    if (!landlordId) {
-      setError('Landlord information is missing. Please return to the property page and try again.');
+    if (!listingId) {
+      setError(
+        'Listing information is missing. Please return to the listing page and try again.'
+      );
       return;
     }
 
     setLoading(true);
 
     try {
-      await propertyActionsService.submitApplication(profile.id, {
-        propertyId,
-        landlordId,
+      await submitApplication(listingId, {
         fullName: formData.fullName,
         email: formData.email,
         phone: formData.phone,
@@ -118,8 +121,7 @@ export default function ApplicationForm() {
         navigate('/tenant/dashboard');
       }, 3000);
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to submit application. Please try again.';
-      setError(errorMessage);
+      setError(ApiClient.handleError(err));
     } finally {
       setLoading(false);
     }
@@ -133,8 +135,13 @@ export default function ApplicationForm() {
             <Alert className="bg-green-50 border-green-200">
               <CheckCircle className="h-5 w-5 text-green-600" />
               <AlertDescription className="text-green-800 ml-2">
-                <p className="font-semibold mb-2">Application Submitted Successfully!</p>
-                <p>Your rental application has been submitted. The landlord will review it and contact you soon.</p>
+                <p className="font-semibold mb-2">
+                  Application Submitted Successfully!
+                </p>
+                <p>
+                  Your rental application has been submitted. The landlord will
+                  review it and contact you soon.
+                </p>
               </AlertDescription>
             </Alert>
           </CardContent>
@@ -150,7 +157,8 @@ export default function ApplicationForm() {
           <CardHeader>
             <CardTitle>Rental Application</CardTitle>
             <CardDescription>
-              Complete this form to apply for the property. All fields are required unless marked optional.
+              Complete this form to apply for the property. All fields are
+              required unless marked optional.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -174,7 +182,9 @@ export default function ApplicationForm() {
                     <Input
                       id="fullName"
                       value={formData.fullName}
-                      onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, fullName: e.target.value })
+                      }
                       required
                     />
                   </div>
@@ -184,7 +194,9 @@ export default function ApplicationForm() {
                       id="email"
                       type="email"
                       value={formData.email}
-                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, email: e.target.value })
+                      }
                       required
                     />
                   </div>
@@ -194,7 +206,9 @@ export default function ApplicationForm() {
                       id="phone"
                       type="tel"
                       value={formData.phone}
-                      onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, phone: e.target.value })
+                      }
                       required
                     />
                   </div>
@@ -204,7 +218,12 @@ export default function ApplicationForm() {
                       id="dateOfBirth"
                       type="date"
                       value={formData.dateOfBirth}
-                      onChange={(e) => setFormData({ ...formData, dateOfBirth: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          dateOfBirth: e.target.value,
+                        })
+                      }
                       required
                     />
                   </div>
@@ -220,7 +239,12 @@ export default function ApplicationForm() {
                     <Input
                       id="currentAddress"
                       value={formData.currentAddress}
-                      onChange={(e) => setFormData({ ...formData, currentAddress: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          currentAddress: e.target.value,
+                        })
+                      }
                       required
                     />
                   </div>
@@ -229,7 +253,12 @@ export default function ApplicationForm() {
                     <Input
                       id="currentCity"
                       value={formData.currentCity}
-                      onChange={(e) => setFormData({ ...formData, currentCity: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          currentCity: e.target.value,
+                        })
+                      }
                       required
                     />
                   </div>
@@ -238,7 +267,12 @@ export default function ApplicationForm() {
                     <Input
                       id="currentState"
                       value={formData.currentState}
-                      onChange={(e) => setFormData({ ...formData, currentState: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          currentState: e.target.value,
+                        })
+                      }
                       required
                     />
                   </div>
@@ -247,7 +281,9 @@ export default function ApplicationForm() {
                     <Input
                       id="currentZip"
                       value={formData.currentZip}
-                      onChange={(e) => setFormData({ ...formData, currentZip: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, currentZip: e.target.value })
+                      }
                       required
                     />
                   </div>
@@ -256,14 +292,18 @@ export default function ApplicationForm() {
 
               {/* Employment */}
               <div className="space-y-4">
-                <h3 className="text-lg font-semibold">Employment Information</h3>
+                <h3 className="text-lg font-semibold">
+                  Employment Information
+                </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="employer">Current Employer</Label>
                     <Input
                       id="employer"
                       value={formData.employer}
-                      onChange={(e) => setFormData({ ...formData, employer: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, employer: e.target.value })
+                      }
                       required
                     />
                   </div>
@@ -272,17 +312,26 @@ export default function ApplicationForm() {
                     <Input
                       id="jobTitle"
                       value={formData.jobTitle}
-                      onChange={(e) => setFormData({ ...formData, jobTitle: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, jobTitle: e.target.value })
+                      }
                       required
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="employmentLength">Length of Employment</Label>
+                    <Label htmlFor="employmentLength">
+                      Length of Employment
+                    </Label>
                     <Input
                       id="employmentLength"
                       placeholder="e.g., 2 years"
                       value={formData.employmentLength}
-                      onChange={(e) => setFormData({ ...formData, employmentLength: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          employmentLength: e.target.value,
+                        })
+                      }
                       required
                     />
                   </div>
@@ -293,7 +342,12 @@ export default function ApplicationForm() {
                       type="number"
                       placeholder="$"
                       value={formData.monthlyIncome}
-                      onChange={(e) => setFormData({ ...formData, monthlyIncome: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          monthlyIncome: e.target.value,
+                        })
+                      }
                       required
                     />
                   </div>
@@ -303,7 +357,9 @@ export default function ApplicationForm() {
                       id="moveInDate"
                       type="date"
                       value={formData.moveInDate}
-                      onChange={(e) => setFormData({ ...formData, moveInDate: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, moveInDate: e.target.value })
+                      }
                       required
                     />
                   </div>
@@ -319,7 +375,12 @@ export default function ApplicationForm() {
                     <Input
                       id="reference1Name"
                       value={formData.reference1Name}
-                      onChange={(e) => setFormData({ ...formData, reference1Name: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          reference1Name: e.target.value,
+                        })
+                      }
                       required
                     />
                   </div>
@@ -329,25 +390,44 @@ export default function ApplicationForm() {
                       id="reference1Phone"
                       type="tel"
                       value={formData.reference1Phone}
-                      onChange={(e) => setFormData({ ...formData, reference1Phone: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          reference1Phone: e.target.value,
+                        })
+                      }
                       required
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="reference2Name">Reference 2 Name (Optional)</Label>
+                    <Label htmlFor="reference2Name">
+                      Reference 2 Name (Optional)
+                    </Label>
                     <Input
                       id="reference2Name"
                       value={formData.reference2Name}
-                      onChange={(e) => setFormData({ ...formData, reference2Name: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          reference2Name: e.target.value,
+                        })
+                      }
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="reference2Phone">Reference 2 Phone (Optional)</Label>
+                    <Label htmlFor="reference2Phone">
+                      Reference 2 Phone (Optional)
+                    </Label>
                     <Input
                       id="reference2Phone"
                       type="tel"
                       value={formData.reference2Phone}
-                      onChange={(e) => setFormData({ ...formData, reference2Phone: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          reference2Phone: e.target.value,
+                        })
+                      }
                     />
                   </div>
                 </div>
@@ -355,7 +435,9 @@ export default function ApplicationForm() {
 
               {/* Additional Information */}
               <div className="space-y-4">
-                <h3 className="text-lg font-semibold">Additional Information</h3>
+                <h3 className="text-lg font-semibold">
+                  Additional Information
+                </h3>
                 <div className="space-y-4">
                   <div className="flex items-start space-x-2">
                     <Checkbox
@@ -365,7 +447,10 @@ export default function ApplicationForm() {
                         setFormData({ ...formData, pets: checked as boolean })
                       }
                     />
-                    <Label htmlFor="pets" className="text-sm leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                    <Label
+                      htmlFor="pets"
+                      className="text-sm leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                    >
                       I have pets
                     </Label>
                   </div>
@@ -376,16 +461,28 @@ export default function ApplicationForm() {
                         id="petDescription"
                         placeholder="e.g., 1 small dog, 2 cats"
                         value={formData.petDescription}
-                        onChange={(e) => setFormData({ ...formData, petDescription: e.target.value })}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            petDescription: e.target.value,
+                          })
+                        }
                       />
                     </div>
                   )}
                   <div className="space-y-2">
-                    <Label htmlFor="additionalInfo">Additional Comments (Optional)</Label>
+                    <Label htmlFor="additionalInfo">
+                      Additional Comments (Optional)
+                    </Label>
                     <Textarea
                       id="additionalInfo"
                       value={formData.additionalInfo}
-                      onChange={(e) => setFormData({ ...formData, additionalInfo: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          additionalInfo: e.target.value,
+                        })
+                      }
                       rows={4}
                     />
                   </div>
@@ -399,17 +496,29 @@ export default function ApplicationForm() {
                     id="backgroundCheckConsent"
                     checked={formData.backgroundCheckConsent}
                     onCheckedChange={(checked) =>
-                      setFormData({ ...formData, backgroundCheckConsent: checked as boolean })
+                      setFormData({
+                        ...formData,
+                        backgroundCheckConsent: checked as boolean,
+                      })
                     }
                   />
-                  <Label htmlFor="backgroundCheckConsent" className="text-sm leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                    I consent to a background and credit check as part of the application process
+                  <Label
+                    htmlFor="backgroundCheckConsent"
+                    className="text-sm leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                  >
+                    I consent to a background and credit check as part of the
+                    application process
                   </Label>
                 </div>
               </div>
 
               <div className="flex gap-4">
-                <Button type="button" variant="outline" onClick={() => navigate(-1)} className="flex-1">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => navigate(-1)}
+                  className="flex-1"
+                >
                   Cancel
                 </Button>
                 <Button type="submit" disabled={loading} className="flex-1">

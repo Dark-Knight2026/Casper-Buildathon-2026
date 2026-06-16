@@ -1,75 +1,47 @@
-import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '@/hooks/useAuth';
-import { propertyActionsService, type RentalApplication } from '@/services/propertyActionsService';
+import { useQuery } from '@tanstack/react-query';
+import { getMyApplications } from '@/services/applicationService';
+import { formatFullAddress } from '@/lib/listingDisplay';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { useToast } from '@/hooks/use-toast';
-import { Loader2, FileText, MapPin, Calendar, DollarSign, Briefcase } from 'lucide-react';
+import {
+  Loader2,
+  FileText,
+  MapPin,
+  Calendar,
+  DollarSign,
+  Briefcase,
+} from 'lucide-react';
 import { format } from 'date-fns';
+import type { ApplicationStatus } from '@/services/applicationService';
 
-interface ApplicationWithProperty extends RentalApplication {
-  property?: {
-    id: string;
-    title: string;
-    address: string;
-    city: string;
-    state: string;
-  };
+function statusBadge(status: ApplicationStatus) {
+  switch (status) {
+    case 'approved':
+      return <Badge className="bg-green-600">Approved</Badge>;
+    case 'rejected':
+      return <Badge variant="destructive">Rejected</Badge>;
+    case 'pending':
+    default:
+      return (
+        <Badge variant="outline" className="text-yellow-600 border-yellow-600">
+          Pending
+        </Badge>
+      );
+  }
 }
 
 export default function MyApplications() {
   const navigate = useNavigate();
-  const { user } = useAuth();
-  const { toast } = useToast();
-  const [applications, setApplications] = useState<ApplicationWithProperty[]>([]);
-  const [loading, setLoading] = useState(true);
 
-  const fetchApplications = useCallback(async () => {
-    if (!user) return;
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['my-applications'],
+    queryFn: () => getMyApplications({ pageSize: 100 }),
+  });
+  const applications = data?.data ?? [];
 
-    try {
-      setLoading(true);
-      const data = await propertyActionsService.getUserApplications(user.id);
-      setApplications(data as ApplicationWithProperty[]);
-    } catch (error) {
-      console.error('Error loading applications:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to load applications. Please try again.',
-        variant: 'destructive',
-      });
-    } finally {
-      setLoading(false);
-    }
-  }, [user, toast]);
-
-  useEffect(() => {
-    if (!user) {
-      navigate('/auth/login');
-      return;
-    }
-    fetchApplications();
-  }, [user, navigate, fetchApplications]);
-
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'approved':
-        return <Badge className="bg-green-600">Approved</Badge>;
-      case 'rejected':
-        return <Badge variant="destructive">Rejected</Badge>;
-      case 'pending':
-      default:
-        return <Badge variant="outline" className="text-yellow-600 border-yellow-600">Pending</Badge>;
-    }
-  };
-
-  const handleViewProperty = (propertyId: string) => {
-    navigate(`/properties/${propertyId}`);
-  };
-
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
@@ -87,9 +59,13 @@ export default function MyApplications() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">My Applications</h1>
+              <h1 className="text-3xl font-bold text-gray-900 mb-2">
+                My Applications
+              </h1>
               <p className="text-gray-600">
-                {applications.length} {applications.length === 1 ? 'application' : 'applications'} submitted
+                {applications.length}{' '}
+                {applications.length === 1 ? 'application' : 'applications'}{' '}
+                submitted
               </p>
             </div>
             <Button onClick={() => navigate('/tenant/property-search')}>
@@ -101,12 +77,19 @@ export default function MyApplications() {
 
       {/* Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {applications.length === 0 ? (
+        {isError ? (
+          <p className="text-center text-muted-foreground py-12">
+            Couldn't load your applications. Please try again.
+          </p>
+        ) : applications.length === 0 ? (
           <div className="text-center py-12">
             <FileText className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-            <h2 className="text-2xl font-semibold text-gray-900 mb-2">No applications yet</h2>
+            <h2 className="text-2xl font-semibold text-gray-900 mb-2">
+              No applications yet
+            </h2>
             <p className="text-gray-600 mb-6">
-              Start browsing properties and submit applications to view them here.
+              Start browsing properties and submit applications to view them
+              here.
             </p>
             <Button onClick={() => navigate('/tenant/property-search')}>
               Browse Properties
@@ -115,25 +98,26 @@ export default function MyApplications() {
         ) : (
           <div className="space-y-6">
             {applications.map((application) => {
-              const property = application.property;
-              
+              const listing = application.listing;
+              const address = formatFullAddress(listing?.property);
+
               return (
                 <Card key={application.id} className="overflow-hidden">
                   <CardHeader className="bg-gray-50 border-b">
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
                         <CardTitle className="text-xl mb-2">
-                          {property?.title || 'Property Application'}
+                          {listing?.title || 'Property Application'}
                         </CardTitle>
-                        {property && (
+                        {address && (
                           <div className="flex items-center text-gray-600 text-sm">
                             <MapPin className="h-4 w-4 mr-1" />
-                            <span>{property.address}, {property.city}, {property.state}</span>
+                            <span>{address}</span>
                           </div>
                         )}
                       </div>
                       <div className="ml-4">
-                        {getStatusBadge(application.status)}
+                        {statusBadge(application.status)}
                       </div>
                     </div>
                   </CardHeader>
@@ -146,7 +130,10 @@ export default function MyApplications() {
                           <span>Applied On</span>
                         </div>
                         <p className="font-semibold text-gray-900">
-                          {format(new Date(application.created_at), 'MMM dd, yyyy')}
+                          {format(
+                            new Date(application.createdAt),
+                            'MMM dd, yyyy'
+                          )}
                         </p>
                       </div>
 
@@ -156,7 +143,10 @@ export default function MyApplications() {
                           <span>Move-in Date</span>
                         </div>
                         <p className="font-semibold text-gray-900">
-                          {format(new Date(application.move_in_date), 'MMM dd, yyyy')}
+                          {format(
+                            new Date(application.moveInDate),
+                            'MMM dd, yyyy'
+                          )}
                         </p>
                       </div>
 
@@ -166,7 +156,7 @@ export default function MyApplications() {
                           <span>Monthly Income</span>
                         </div>
                         <p className="font-semibold text-gray-900">
-                          ${application.monthly_income.toLocaleString()}
+                          ${application.monthlyIncome.toLocaleString()}
                         </p>
                       </div>
 
@@ -175,7 +165,10 @@ export default function MyApplications() {
                           <Briefcase className="h-4 w-4 mr-1" />
                           <span>Employment</span>
                         </div>
-                        <p className="font-semibold text-gray-900 truncate" title={application.employer}>
+                        <p
+                          className="font-semibold text-gray-900 truncate"
+                          title={application.employer}
+                        >
                           {application.employer}
                         </p>
                       </div>
@@ -184,14 +177,21 @@ export default function MyApplications() {
                     <div className="flex items-center justify-between pt-4 border-t">
                       <div className="text-sm text-gray-600">
                         <span className="font-medium">Status:</span>{' '}
-                        {application.status === 'pending' && 'Awaiting landlord review'}
-                        {application.status === 'approved' && 'Congratulations! Your application was approved.'}
-                        {application.status === 'rejected' && 'Unfortunately, your application was not approved.'}
+                        {application.status === 'pending' &&
+                          'Awaiting landlord review'}
+                        {application.status === 'approved' &&
+                          'Congratulations! Your application was approved.'}
+                        {application.status === 'rejected' &&
+                          'Unfortunately, your application was not approved.'}
                       </div>
-                      {property && (
+                      {listing && (
                         <Button
                           variant="outline"
-                          onClick={() => handleViewProperty(property.id)}
+                          onClick={() =>
+                            navigate(`/properties/${listing.id}`, {
+                              state: { listing },
+                            })
+                          }
                         >
                           View Property
                         </Button>

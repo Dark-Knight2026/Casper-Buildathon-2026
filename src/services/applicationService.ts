@@ -1,13 +1,16 @@
 import { supabase } from '@/lib/supabase/client';
-import type { 
-  TenantApplication, 
-  ApplicationFilters, 
+import { backendClient } from '@/lib/api-client';
+import { toQueryString } from '@/lib/queryString';
+import type { Listing, PaginatedResponse } from '@/types/listingContract';
+import type {
+  TenantApplication,
+  ApplicationFilters,
   ApplicationNote,
   PersonalInfo,
   EmploymentInfo,
   RentalHistory,
   References,
-  AdditionalInfo
+  AdditionalInfo,
 } from '@/types/application';
 
 interface UpdateData {
@@ -45,7 +48,9 @@ export class ApplicationService {
   /**
    * Create a new tenant application
    */
-  static async createApplication(data: Partial<TenantApplication>): Promise<TenantApplication> {
+  static async createApplication(
+    data: Partial<TenantApplication>
+  ): Promise<TenantApplication> {
     const { data: application, error } = await supabase
       .from('tenants')
       .insert({
@@ -75,14 +80,15 @@ export class ApplicationService {
     data: Partial<TenantApplication>
   ): Promise<TenantApplication> {
     const updateData: UpdateData = {};
-    
+
     if (data.personalInfo) updateData.personal_info = data.personalInfo;
     if (data.employmentInfo) updateData.employment_info = data.employmentInfo;
     if (data.rentalHistory) updateData.rental_history = data.rentalHistory;
     if (data.references) updateData.references = data.references;
     if (data.additionalInfo) updateData.additional_info = data.additionalInfo;
     if (data.documents) updateData.documents = data.documents;
-    if (data.applicationStatus) updateData.application_status = data.applicationStatus;
+    if (data.applicationStatus)
+      updateData.application_status = data.applicationStatus;
 
     const { data: application, error } = await supabase
       .from('tenants')
@@ -127,14 +133,16 @@ export class ApplicationService {
   ): Promise<TenantApplication[]> {
     let query = supabase
       .from('tenants')
-      .select(`
+      .select(
+        `
         *,
         properties!inner(
           id,
           landlord_id,
           address
         )
-      `)
+      `
+      )
       .eq('properties.landlord_id', landlordId);
 
     // Apply filters
@@ -164,9 +172,9 @@ export class ApplicationService {
       const term = `%${filters.searchTerm}%`;
       query = query.or(
         `personal_info->>firstName.ilike.${term},` +
-        `personal_info->>lastName.ilike.${term},` +
-        `personal_info->>email.ilike.${term},` +
-        `personal_info->>phone.ilike.${term}`
+          `personal_info->>lastName.ilike.${term},` +
+          `personal_info->>email.ilike.${term},` +
+          `personal_info->>phone.ilike.${term}`
       );
     }
 
@@ -184,14 +192,16 @@ export class ApplicationService {
   static async getApplicationById(id: string): Promise<TenantApplication> {
     const { data, error } = await supabase
       .from('tenants')
-      .select(`
+      .select(
+        `
         *,
         properties(
           id,
           address,
           monthly_rent
         )
-      `)
+      `
+      )
       .eq('id', id)
       .single();
 
@@ -251,13 +261,15 @@ export class ApplicationService {
 
     const { data, error } = await supabase
       .from('application_notes')
-      .select(`
+      .select(
+        `
         *,
         users(
           first_name,
           last_name
         )
-      `)
+      `
+      )
       .eq('application_id', applicationId)
       .order('created_at', { ascending: false });
 
@@ -308,7 +320,8 @@ export class ApplicationService {
       id: data.id,
       propertyId: data.property_id,
       userId: data.user_id,
-      applicationStatus: data.application_status as TenantApplication['applicationStatus'],
+      applicationStatus:
+        data.application_status as TenantApplication['applicationStatus'],
       applicationScore: data.application_score,
       personalInfo: data.personal_info,
       employmentInfo: data.employment_info,
@@ -325,4 +338,117 @@ export class ApplicationService {
       updatedAt: data.updated_at,
     };
   }
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// LeaseFi backend applications API (PL-23a — tenant side)
+//
+// An application is a tenant's request to rent a listing. The legacy
+// `ApplicationService` class above is the dead Supabase landlord surface
+// (PL-23b — blocked on missing endpoints + a model mismatch, see
+// docs/BACKEND_FILTER_GAPS.md); it stays until that side is rewired.
+// ───────────────────────────────────────────────────────────────────────────
+
+const LISTINGS = '/api/v1/listings';
+const APPLICATIONS = '/api/v1/applications';
+
+export type ApplicationStatus = 'pending' | 'approved' | 'rejected';
+
+/** A rental application as returned by the backend (camelCase wire shape). */
+export interface RentalApplication {
+  id: string;
+  listingId: string;
+  userId: string;
+  landlordId: string;
+  fullName: string;
+  email: string;
+  phone: string;
+  dateOfBirth: string;
+  currentAddress: string;
+  currentCity: string;
+  currentState: string;
+  currentZip: string;
+  moveInDate: string;
+  employer: string;
+  jobTitle: string;
+  employmentLength: string;
+  monthlyIncome: number;
+  reference1Name: string;
+  reference1Phone: string;
+  reference2Name: string | null;
+  reference2Phone: string | null;
+  pets: boolean;
+  petDescription: string | null;
+  additionalInfo: string | null;
+  backgroundCheckConsent: boolean;
+  status: ApplicationStatus;
+  listing?: Listing; // nested in GET /applications
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** `POST /listings/{id}/applications` body. */
+export interface SubmitApplicationBody {
+  fullName: string;
+  email: string;
+  phone: string;
+  dateOfBirth: string;
+  currentAddress: string;
+  currentCity: string;
+  currentState: string;
+  currentZip: string;
+  moveInDate: string;
+  employer: string;
+  jobTitle: string;
+  employmentLength: string;
+  monthlyIncome: number;
+  reference1Name: string;
+  reference1Phone: string;
+  reference2Name?: string;
+  reference2Phone?: string;
+  pets: boolean;
+  petDescription?: string;
+  additionalInfo?: string;
+  backgroundCheckConsent: boolean;
+}
+
+/** `POST /listings/{id}/applications`. Tenant submits an application. */
+export async function submitApplication(
+  listingId: string,
+  body: SubmitApplicationBody
+): Promise<RentalApplication> {
+  return backendClient.post<RentalApplication>(
+    `${LISTINGS}/${listingId}/applications`,
+    body
+  );
+}
+
+/** `GET /applications`. The tenant's own applications (nested listing), paginated. */
+export async function getMyApplications(
+  params: { page?: number; pageSize?: number } = {}
+): Promise<PaginatedResponse<RentalApplication>> {
+  return backendClient.get<PaginatedResponse<RentalApplication>>(
+    `${APPLICATIONS}${toQueryString({ ...params })}`
+  );
+}
+
+/** `GET /listings/{id}/applications`. Landlord — applications for one listing. */
+export async function getListingApplications(
+  listingId: string,
+  params: { page?: number; pageSize?: number } = {}
+): Promise<PaginatedResponse<RentalApplication>> {
+  return backendClient.get<PaginatedResponse<RentalApplication>>(
+    `${LISTINGS}/${listingId}/applications${toQueryString({ ...params })}`
+  );
+}
+
+/** `PUT /applications/{id}/status`. Landlord approves/rejects. */
+export async function reviewApplication(
+  applicationId: string,
+  status: ApplicationStatus
+): Promise<RentalApplication> {
+  return backendClient.put<RentalApplication>(
+    `${APPLICATIONS}/${applicationId}/status`,
+    { status }
+  );
 }
