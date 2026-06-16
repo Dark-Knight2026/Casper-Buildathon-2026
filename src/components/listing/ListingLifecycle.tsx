@@ -30,6 +30,20 @@ type Action =
       variant?: 'default' | 'outline' | 'destructive';
     };
 
+// One-line explanation of where the listing is and what the next step does.
+const STATE_HINT: Partial<Record<ListingState, string>> = {
+  draft:
+    'This listing is a private draft. Submit it for review to begin publishing — it stays hidden from tenants until you publish.',
+  pending:
+    'In review. Clear the authority and fair-housing checks below, then publish to make it live.',
+  active:
+    'Live and visible to tenants. Mark it leased once a tenant signs, or withdraw it from search.',
+  leased: 'Leased — no longer shown in search.',
+  sold: 'Sold — no longer shown in search.',
+  withdrawn: 'Withdrawn — no longer shown in search.',
+  expired: 'Expired — no longer shown in search.',
+};
+
 // Forward actions per current state. The backend validates transitions, so
 // this only needs to offer the sensible next steps.
 const ACTIONS: Partial<Record<ListingState, Action[]>> = {
@@ -109,6 +123,12 @@ export function ListingLifecycle({ listing }: { listing: Listing }) {
           </div>
         </div>
 
+        {STATE_HINT[listing.state] && (
+          <p className="text-sm text-muted-foreground">
+            {STATE_HINT[listing.state]}
+          </p>
+        )}
+
         {actions.length > 0 ? (
           <div className="flex flex-wrap gap-2">
             {actions.map((action) => (
@@ -127,12 +147,6 @@ export function ListingLifecycle({ listing }: { listing: Listing }) {
         ) : (
           <p className="text-sm text-muted-foreground">
             No further actions are available for this state.
-          </p>
-        )}
-
-        {listing.state === 'pending' && (
-          <p className="text-xs text-muted-foreground">
-            Going live requires the authority &amp; fair-housing checks to pass.
           </p>
         )}
       </CardContent>

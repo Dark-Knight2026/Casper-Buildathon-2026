@@ -34,6 +34,8 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { TrustBadges } from '@/components/property/TrustBadges';
+import { ListingLifecycle } from '@/components/listing/ListingLifecycle';
+import { AuthorityGate } from '@/components/listing/AuthorityGate';
 import {
   getListing,
   getListingStatistics,
@@ -193,6 +195,13 @@ export default function PropertyDetail() {
             </TooltipProvider>
           </div>
         </div>
+      </div>
+
+      {/* Lifecycle + authority-to-list gate — manage the listing's state and
+          clear the publish requirements without leaving the detail page. */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <ListingLifecycle listing={listing} />
+        <AuthorityGate listing={listing} />
       </div>
 
       {/* Image Gallery */}
