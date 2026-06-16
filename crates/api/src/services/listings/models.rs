@@ -384,6 +384,9 @@ pub struct ListingSearchParams {
     pub pets_allowed: Option<bool>,
     /// Furnished (per terms).
     pub furnished: Option<bool>,
+    /// Amenities the listing must have, comma-separated (`amenities=pool,gym`).
+    /// Fair-housing screened by the handler before the query is built.
+    pub amenities: Option<String>,
     /// Sort key (`distance` requires a radius center).
     pub sort_by: Option<ListingSort>,
     /// Sort order, defaulting to `desc`.
@@ -440,6 +443,16 @@ impl ListingSearchParams {
         }
         let sort_descending = !matches!(self.sort_order, Some(SortOrder::Asc));
 
+        let amenities = self.amenities.as_deref().and_then(|raw| {
+            let list = raw
+                .split(',')
+                .map(str::trim)
+                .filter(|token| !token.is_empty())
+                .map(ToOwned::to_owned)
+                .collect::<Vec<_>>();
+            (!list.is_empty()).then_some(list)
+        });
+
         Ok(ListingFilter {
             search: self.search.filter(|term| !term.trim().is_empty()),
             near_lat: self.near_lat,
@@ -460,6 +473,7 @@ impl ListingSearchParams {
             max_living_area: self.max_living_area,
             pets_allowed: self.pets_allowed,
             furnished: self.furnished,
+            amenities,
             sort,
             sort_descending,
             limit: pagination.page_size(),

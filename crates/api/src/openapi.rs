@@ -92,6 +92,8 @@ use crate::{
             listings::models::MediaModerationRequest,
             listings::models::MediaReorderRequest,
             listings::models::RentLtrTerms,
+            listings::models::ListingSort,
+            listings::models::SortOrder,
             // Favorites models
             favorites::models::AddFavoriteRequest,
             favorites::models::FavoriteResponse,

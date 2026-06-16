@@ -134,6 +134,9 @@ pub struct ListingFilter {
     pub pets_allowed: Option<bool>,
     /// Furnished (per terms).
     pub furnished: Option<bool>,
+    /// Amenities the listing must contain (all of). Fair-housing screened by
+    /// the handler before this filter is built.
+    pub amenities: Option<Vec<String>>,
     /// Sort key.
     pub sort: ListingSort,
     /// Descending order.
@@ -224,6 +227,11 @@ impl AppendFilters for ListingFilter {
             builder
                 .push(" AND (l.terms->>'furnished')::boolean = ")
                 .push_bind(furnished);
+        }
+        if let Some(amenities) = &self.amenities {
+            builder
+                .push(" AND l.amenities @> ")
+                .push_bind(amenities.clone());
         }
     }
 }

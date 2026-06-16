@@ -847,6 +847,44 @@ async fn list_filters_by_living_area_range(pool: PgPool) {
     );
 }
 
+/// `amenities` keeps only listings that contain every requested amenity.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn list_filters_by_amenities(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, token) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+
+    let mut with_pool = draft_body(common::seed_property(&pool, landlord_id).await);
+    with_pool["amenities"] = json!(["Pool", "Gym"]);
+    let matched = seed_active_listing(&env, &pool, &token, &with_pool).await;
+    let mut without = draft_body(common::seed_property(&pool, landlord_id).await);
+    without["amenities"] = json!(["Balcony"]);
+    seed_active_listing(&env, &pool, &token, &without).await;
+
+    let response = env.server.get("/api/v1/listings?amenities=Pool").await;
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body = response.json::<Value>();
+    assert_eq!(body["itemCount"], 1);
+    assert_eq!(body["data"][0]["id"].as_str().unwrap(), matched.to_string());
+}
+
+/// An amenity filter carrying protected-class language -> `400` (fair housing).
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn list_rejects_amenities_with_protected_class_400(pool: PgPool) {
+    let env = common::setup_test_server(pool, false).await;
+
+    let response = env
+        .server
+        .get("/api/v1/listings?amenities=no%20children")
+        .await;
+    assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
+    assert!(
+        response.json::<Value>()["error"]
+            .as_str()
+            .unwrap()
+            .contains("prohibited protected-class language")
+    );
+}
+
 /// `sortBy=rent` orders ascending when `sortOrder=asc`.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn list_sorts_by_rent_ascending(pool: PgPool) {

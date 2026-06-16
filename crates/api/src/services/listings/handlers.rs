@@ -190,6 +190,17 @@ pub async fn list_listings(
     Query(pagination): Query<Pagination>,
 ) -> ApiResult<Json<PaginatedResponse<Listing>>> {
     let filter = params.into_validated(&pagination)?;
+    if let Some(amenities) = &filter.amenities {
+        // Fair-housing gate: an amenity filter must not smuggle protected-class
+        // proxies (e.g. `no children`). The listing text screen is the single
+        // source of truth for prohibited language, so reuse it here.
+        let outcome = screen_listing_text(&state, &amenities.join(" "), "").await?;
+        if !outcome.cleared {
+            return Err(ApiError::BadRequest(
+                "amenity filter contains prohibited protected-class language".to_owned(),
+            ));
+        }
+    }
     let (listings, total) = db::list_active_listings(&state.db, &filter).await?;
     Ok(Json(PaginatedResponse::new(listings, total, &pagination)))
 }
