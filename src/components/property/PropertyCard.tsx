@@ -1,7 +1,17 @@
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { SavePropertyButton } from '@/components/property/SavePropertyButton';
-import { MapPin, Bed, Bath, Square, TrendingUp, Star, Camera } from 'lucide-react';
+import {
+  MapPin,
+  Bed,
+  Bath,
+  Square,
+  TrendingUp,
+  Star,
+  Camera,
+  ShieldCheck,
+  Link2,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { SurroundingCategory } from '@/types/property';
 import { SURROUNDING_CATEGORIES } from '@/data/amenityCategories';
@@ -32,6 +42,10 @@ export interface PropertyCardData {
   rating?: number;
   daysOnMarket?: number;
   photoCount?: number;
+  // Trust indicators derived from the listing's provenance gate. Optional so
+  // the lease-history cards (which have no listing) can omit them.
+  verifiedListerBadge?: boolean;
+  onChainProvenance?: boolean;
 }
 
 interface PropertyCardProps {
@@ -45,16 +59,17 @@ interface PropertyCardProps {
   nearestByCategory?: Partial<Record<SurroundingCategory, number>>;
 }
 
-const CATEGORY_LABEL: Record<SurroundingCategory, string> = SURROUNDING_CATEGORIES
-  .reduce(
+const CATEGORY_LABEL: Record<SurroundingCategory, string> =
+  SURROUNDING_CATEGORIES.reduce(
     (acc, c) => ({ ...acc, [c.category]: c.label }),
-    {} as Record<SurroundingCategory, string>,
+    {} as Record<SurroundingCategory, string>
   );
 
 const formatDistance = (miles: number): string =>
   miles < 1 ? `${(miles * 5280).toFixed(0)}ft` : `${miles.toFixed(1)}mi`;
 
-const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=800';
+const FALLBACK_IMAGE =
+  'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=800';
 
 export function PropertyCard({
   property,
@@ -65,15 +80,18 @@ export function PropertyCard({
 }: PropertyCardProps) {
   const image = property.images?.[0] ?? FALLBACK_IMAGE;
   const distanceEntries = nearestByCategory
-    ? (Object.entries(nearestByCategory) as Array<[SurroundingCategory, number]>)
-        .filter(([, miles]) => typeof miles === 'number')
+    ? (
+        Object.entries(nearestByCategory) as Array<
+          [SurroundingCategory, number]
+        >
+      ).filter(([, miles]) => typeof miles === 'number')
     : [];
 
   return (
     <Card
       className={cn(
         'group flex flex-col overflow-hidden hover:shadow-md transition-shadow duration-200 border border-border bg-card cursor-pointer rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-        className,
+        className
       )}
       onClick={onClick}
       tabIndex={0}
@@ -98,7 +116,10 @@ export function PropertyCard({
         </Badge>
 
         {property.priceChange && (
-          <Badge variant="info" className="absolute top-3 right-3 shadow-sm flex items-center gap-1">
+          <Badge
+            variant="info"
+            className="absolute top-3 right-3 shadow-sm flex items-center gap-1"
+          >
             <TrendingUp className="h-3 w-3" />
             {property.priceChange}
           </Badge>
@@ -111,7 +132,9 @@ export function PropertyCard({
           </div>
         )}
 
-        {showSave && <SavePropertyButton iconOnly className="absolute bottom-3 right-3" />}
+        {showSave && (
+          <SavePropertyButton iconOnly className="absolute bottom-3 right-3" />
+        )}
       </div>
 
       <CardContent className="p-5 w-full flex-1 flex flex-col">
@@ -122,6 +145,29 @@ export function PropertyCard({
           <MapPin className="h-4 w-4 shrink-0" />
           {property.address}, {property.city}, {property.state}
         </p>
+
+        {(property.verifiedListerBadge || property.onChainProvenance) && (
+          <div className="flex flex-wrap items-center gap-1.5 mb-4">
+            {property.verifiedListerBadge && (
+              <Badge
+                variant="secondary"
+                className="text-xs font-normal flex items-center gap-1"
+              >
+                <ShieldCheck className="h-3 w-3 text-emerald-600" />
+                Verified lister
+              </Badge>
+            )}
+            {property.onChainProvenance && (
+              <Badge
+                variant="secondary"
+                className="text-xs font-normal flex items-center gap-1"
+              >
+                <Link2 className="h-3 w-3 text-sky-600" />
+                On-chain
+              </Badge>
+            )}
+          </div>
+        )}
 
         {distanceEntries.length > 0 && (
           <div
@@ -143,7 +189,9 @@ export function PropertyCard({
         <div className="flex items-center justify-between mb-4">
           <div className="text-2xl font-bold text-primary">
             ${property.price.toLocaleString()}
-            <span className="text-sm font-normal text-muted-foreground">/mo</span>
+            <span className="text-sm font-normal text-muted-foreground">
+              /mo
+            </span>
           </div>
           {property.rating && (
             <div className="flex items-center gap-1 text-sm text-muted-foreground">

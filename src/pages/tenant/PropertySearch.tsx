@@ -1,16 +1,24 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FEATURED_PROPERTIES } from '@/data/featuredProperties';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Slider } from '@/components/ui/slider';
-import { PropertyCard } from '@/components/property/PropertyCard';
-import { InHomeAmenitiesFilter } from '@/components/search/InHomeAmenitiesFilter';
-import { SurroundingAreaFilter } from '@/components/search/SurroundingAreaFilter';
-import { applyExtendedSearchFilters, type ExtendedSearchMatch } from '@/lib/extendedSearchFilter';
-import type { FeaturedProperty } from '@/types/property';
+import { LoadingSpinner } from '@/components/ui/loading-spinner';
+import {
+  PropertyCard,
+  type PropertyCardData,
+} from '@/components/property/PropertyCard';
+import { searchListings } from '@/services/listingService';
+import { listingRentMonthly, approvedMedia } from '@/lib/listingDisplay';
+import { useDebounce } from '@/hooks/useDebounce';
+import type {
+  Listing,
+  ListingSearchParams,
+  RealPropertyType,
+} from '@/types/listingContract';
 import {
   Select,
   SelectContent,
@@ -36,28 +44,46 @@ const PRICE_MAX = 10000;
 const PRICE_STEP = 100;
 const PRICE_DEFAULT: [number, number] = [PRICE_MIN, PRICE_MAX];
 
+const PAGE_SIZE = 12;
+
 const formatPrice = (n: number) =>
   n >= PRICE_MAX ? `$${PRICE_MAX.toLocaleString()}+` : `$${n.toLocaleString()}`;
 
 const ROOM_MAX = 6;
 
-const SQUARE_FEET_RANGES: FilterOption[] = [
-  { value: 'all', label: 'Any Size' },
-  { value: '0-1000', label: 'Under 1,000 sqft' },
-  { value: '1000-1500', label: '1,000 – 1,500 sqft' },
-  { value: '1500-2500', label: '1,500 – 2,500 sqft' },
-  { value: '2500-999999', label: '2,500+ sqft' },
-];
-
+// RESO-aligned property types — the value set the backend `GET /listings`
+// filter accepts (NOT the legacy apartment/house/studio/loft set).
 const PROPERTY_TYPE_OPTIONS: FilterOption[] = [
   { value: 'all', label: 'All Types' },
-  { value: 'house', label: 'House' },
+  { value: 'single_family', label: 'Single Family' },
+  { value: 'multi_family', label: 'Multi Family' },
+  { value: 'apartment', label: 'Apartment' },
   { value: 'condo', label: 'Condo' },
   { value: 'townhouse', label: 'Townhouse' },
-  { value: 'apartment', label: 'Apartment' },
-  { value: 'studio', label: 'Studio' },
-  { value: 'loft', label: 'Loft' },
+  { value: 'commercial', label: 'Commercial' },
+  { value: 'other', label: 'Other' },
 ];
+
+/** Map a search listing (with its nested property) to the card's flat shape. */
+function listingToCard(listing: Listing): PropertyCardData {
+  const media = approvedMedia(listing.media);
+  return {
+    id: listing.id,
+    title: listing.title,
+    address: listing.property?.addressLine1 ?? '',
+    city: listing.property?.city ?? '',
+    state: listing.property?.stateOrProvince ?? '',
+    price: listingRentMonthly(listing),
+    bedrooms: listing.property?.bedroomsTotal ?? 0,
+    bathrooms: listing.property?.bathroomsTotal ?? 0,
+    squareFeet: listing.property?.livingArea ?? undefined,
+    images: media.map((m) => m.url),
+    photoCount: media.length || undefined,
+    daysOnMarket: listing.daysOnMarket,
+    verifiedListerBadge: listing.provenance.verifiedListerBadge,
+    onChainProvenance: listing.onChain?.provenanceOnChain ?? false,
+  };
+}
 
 function Stepper({
   label,
@@ -87,7 +113,9 @@ function Stepper({
         >
           <Minus className="h-4 w-4" />
         </Button>
-        <div className="min-w-[3rem] text-center text-sm font-medium">{display}</div>
+        <div className="min-w-12 text-center text-sm font-medium">
+          {display}
+        </div>
         <Button
           type="button"
           variant="outline"
@@ -144,105 +172,74 @@ function FilterSelect({
 export default function PropertySearch() {
   const navigate = useNavigate();
 
-  // Source data is FeaturedProperty[] (extends canonical Property). When the
-  // backend /properties/search endpoint ships, swap this for the response.
-  const [properties] = useState<FeaturedProperty[]>(FEATURED_PROPERTIES);
-  const loading = false;
   const [searchTerm, setSearchTerm] = useState('');
   const [priceRange, setPriceRange] = useState<[number, number]>(PRICE_DEFAULT);
   const [bedrooms, setBedrooms] = useState(0);
-  const [bathrooms, setBathrooms] = useState(0);
-  const [squareFeet, setSquareFeet] = useState('all');
   const [propertyType, setPropertyType] = useState('all');
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
 
-  // Task 9 — extended search state (in-home amenities + surrounding area).
-  // TODO(backend): pass these straight through as query params on
-  // GET /api/v1/properties/search and drop the client-side helper below.
-  const [amenitiesInHome, setAmenitiesInHome] = useState<string[] | undefined>(undefined);
-  const [amenitiesNearby, setAmenitiesNearby] = useState<
-    Record<string, number> | undefined
-  >(undefined);
+  // Debounce the free-text query so typing doesn't fire a request per keystroke.
+  const debouncedSearch = useDebounce(searchTerm, 400);
 
   const isPriceFiltered =
     priceRange[0] !== PRICE_DEFAULT[0] || priceRange[1] !== PRICE_DEFAULT[1];
-  const extendedFiltersCount =
-    (amenitiesInHome && amenitiesInHome.length > 0 ? 1 : 0) +
-    (amenitiesNearby && Object.keys(amenitiesNearby).length > 0 ? 1 : 0);
   const activeFilters =
     (isPriceFiltered ? 1 : 0) +
     (bedrooms > 0 ? 1 : 0) +
-    (bathrooms > 0 ? 1 : 0) +
-    [squareFeet, propertyType].filter((f) => f !== 'all').length +
-    extendedFiltersCount;
+    (propertyType !== 'all' ? 1 : 0);
 
   const resetFilters = () => {
     setSearchTerm('');
     setPriceRange(PRICE_DEFAULT);
     setBedrooms(0);
-    setBathrooms(0);
-    setSquareFeet('all');
     setPropertyType('all');
-    setAmenitiesInHome(undefined);
-    setAmenitiesNearby(undefined);
   };
 
-  // Task 9 demo matcher — runs against FEATURED_PROPERTIES (which retains the
-  // full Property shape incl. surroundingArea) and yields the set of allowed
-  // property ids. The other filters below operate on the local mapped
-  // properties. Becomes a server call once /properties/search supports the
-  // amenity_in_home[]/amenity_nearby[] params.
-  // BLK-3: keep the full match (id → nearestByCategory) so PropertyCard can
-  // render per-category distance chips below the address (spec §2.3.2).
-  const extendedMatches = useMemo<Map<string, ExtendedSearchMatch<FeaturedProperty>> | null>(() => {
-    if (extendedFiltersCount === 0) return null;
-    const matches = applyExtendedSearchFilters(FEATURED_PROPERTIES, {
-      amenitiesInHome,
-      amenitiesNearby,
-    });
-    return new Map(matches.map((m) => [m.property.id, m]));
-  }, [amenitiesInHome, amenitiesNearby, extendedFiltersCount]);
+  // Only the filters the backend `GET /listings` actually honors are sent.
+  // Bathrooms / square footage / amenity filters are intentionally not wired
+  // until the backend supports them.
+  const params = useMemo<ListingSearchParams>(() => {
+    const p: ListingSearchParams = { pageSize: PAGE_SIZE };
+    const q = debouncedSearch.trim();
+    if (q) p.search = q;
+    if (priceRange[0] > PRICE_MIN) p.minRent = priceRange[0];
+    // PRICE_MAX means "no upper limit" — leave maxRent unset so listings above
+    // the slider ceiling are still returned.
+    if (priceRange[1] < PRICE_MAX) p.maxRent = priceRange[1];
+    if (bedrooms > 0) p.minBedrooms = bedrooms;
+    if (propertyType !== 'all')
+      p.propertyType = propertyType as RealPropertyType;
+    return p;
+  }, [debouncedSearch, priceRange, bedrooms, propertyType]);
 
-  const filteredProperties = properties.filter((property) => {
-    if (searchTerm) {
-      const searchLower = searchTerm.toLowerCase();
-      const matchesSearch =
-        property.title.toLowerCase().includes(searchLower) ||
-        property.address.toLowerCase().includes(searchLower) ||
-        property.city.toLowerCase().includes(searchLower) ||
-        property.state.toLowerCase().includes(searchLower);
-      if (!matchesSearch) return false;
-    }
-
-    if (property.rent < priceRange[0]) return false;
-    // When the slider sits at PRICE_MAX, treat the upper bound as open-ended
-    // ("no upper limit") and skip the check — otherwise properties priced
-    // above PRICE_MAX would be filtered out even though the user wants all.
-    if (priceRange[1] < PRICE_MAX && property.rent > priceRange[1]) return false;
-
-    if (bedrooms > 0 && property.bedrooms < bedrooms) return false;
-    if (bathrooms > 0 && property.bathrooms < bathrooms) return false;
-
-    if (squareFeet !== 'all') {
-      const [min, max] = squareFeet.split('-').map(Number);
-      const sqft = property.squareFeet ?? 0;
-      if (sqft < min || (max && sqft > max)) return false;
-    }
-
-    if (propertyType !== 'all' && property.propertyType !== propertyType) return false;
-
-    if (extendedMatches && !extendedMatches.has(property.id)) return false;
-
-    return true;
+  const {
+    data,
+    isLoading,
+    isError,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
+    queryKey: ['listings-search', params],
+    queryFn: ({ pageParam }) => searchListings({ ...params, page: pageParam }),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage, allPages) => {
+      const nextPage = allPages.length + 1;
+      return nextPage <= lastPage.pageCount ? nextPage : undefined;
+    },
   });
 
+  const listings = data?.pages.flatMap((page) => page.data) ?? [];
+  const itemCount = data?.pages[0]?.itemCount ?? 0;
 
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
       <div className="bg-card border-b border-border">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <h1 className="text-3xl font-bold text-foreground mb-4">Find Your Perfect Home</h1>
+          <h1 className="text-3xl font-bold text-foreground mb-4">
+            Find Your Perfect Home
+          </h1>
 
           <div className="flex flex-col sm:flex-row gap-3">
             <div className="relative flex-1">
@@ -271,8 +268,7 @@ export default function PropertySearch() {
                 <DialogHeader>
                   <DialogTitle>Filters</DialogTitle>
                   <DialogDescription>
-                    Refine results by price, size, property type, and what's
-                    inside the unit or nearby.
+                    Refine results by price, bedrooms, and property type.
                   </DialogDescription>
                 </DialogHeader>
 
@@ -281,7 +277,8 @@ export default function PropertySearch() {
                     <div className="flex items-center justify-between">
                       <Label>Price Range</Label>
                       <span className="text-sm text-muted-foreground">
-                        {formatPrice(priceRange[0])} – {formatPrice(priceRange[1])}
+                        {formatPrice(priceRange[0])} –{' '}
+                        {formatPrice(priceRange[1])}
                       </span>
                     </div>
                     <Slider
@@ -289,12 +286,17 @@ export default function PropertySearch() {
                       max={PRICE_MAX}
                       step={PRICE_STEP}
                       value={priceRange}
-                      onValueChange={(v) => setPriceRange([v[0], v[1]] as [number, number])}
+                      onValueChange={(v) =>
+                        setPriceRange([v[0], v[1]] as [number, number])
+                      }
                       className="pt-2"
                     />
                     <div className="grid grid-cols-2 gap-2 pt-1">
                       <div className="space-y-1">
-                        <Label htmlFor="price-min" className="text-xs text-muted-foreground">
+                        <Label
+                          htmlFor="price-min"
+                          className="text-xs text-muted-foreground"
+                        >
                           Min ($)
                         </Label>
                         <Input
@@ -313,7 +315,10 @@ export default function PropertySearch() {
                             }
                             const v = Number(raw);
                             if (!Number.isFinite(v)) return;
-                            const clamped = Math.max(PRICE_MIN, Math.min(v, priceRange[1]));
+                            const clamped = Math.max(
+                              PRICE_MIN,
+                              Math.min(v, priceRange[1])
+                            );
                             setPriceRange([clamped, priceRange[1]]);
                           }}
                           placeholder={String(PRICE_MIN)}
@@ -321,7 +326,10 @@ export default function PropertySearch() {
                         />
                       </div>
                       <div className="space-y-1">
-                        <Label htmlFor="price-max" className="text-xs text-muted-foreground">
+                        <Label
+                          htmlFor="price-max"
+                          className="text-xs text-muted-foreground"
+                        >
                           Max ($)
                         </Label>
                         <Input
@@ -340,7 +348,10 @@ export default function PropertySearch() {
                             }
                             const v = Number(raw);
                             if (!Number.isFinite(v)) return;
-                            const clamped = Math.min(PRICE_MAX, Math.max(v, priceRange[0]));
+                            const clamped = Math.min(
+                              PRICE_MAX,
+                              Math.max(v, priceRange[0])
+                            );
                             setPriceRange([priceRange[0], clamped]);
                           }}
                           placeholder={String(PRICE_MAX)}
@@ -355,19 +366,6 @@ export default function PropertySearch() {
                     onChange={setBedrooms}
                     max={ROOM_MAX}
                   />
-                  <Stepper
-                    label="Bathrooms"
-                    value={bathrooms}
-                    onChange={setBathrooms}
-                    max={ROOM_MAX}
-                  />
-                  <FilterSelect
-                    label="Square Footage"
-                    value={squareFeet}
-                    onChange={setSquareFeet}
-                    placeholder="Square Footage"
-                    options={SQUARE_FEET_RANGES}
-                  />
                   <FilterSelect
                     label="Property Type"
                     value={propertyType}
@@ -375,22 +373,6 @@ export default function PropertySearch() {
                     placeholder="Property Type"
                     options={PROPERTY_TYPE_OPTIONS}
                   />
-
-                  {/* Task 9 — in-home amenities */}
-                  <div className="pt-2 border-t">
-                    <InHomeAmenitiesFilter
-                      value={amenitiesInHome}
-                      onChange={setAmenitiesInHome}
-                    />
-                  </div>
-
-                  {/* Task 9 — surrounding-area filters */}
-                  <div className="pt-2 border-t">
-                    <SurroundingAreaFilter
-                      value={amenitiesNearby}
-                      onChange={setAmenitiesNearby}
-                    />
-                  </div>
                 </div>
 
                 <DialogFooter className="gap-2 sm:gap-0">
@@ -402,8 +384,8 @@ export default function PropertySearch() {
                     Clear all
                   </Button>
                   <Button onClick={() => setIsFiltersOpen(false)}>
-                    Show {filteredProperties.length}{' '}
-                    {filteredProperties.length === 1 ? 'property' : 'properties'}
+                    Show {itemCount}{' '}
+                    {itemCount === 1 ? 'property' : 'properties'}
                   </Button>
                 </DialogFooter>
               </DialogContent>
@@ -414,46 +396,57 @@ export default function PropertySearch() {
 
       {/* Results */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <p className="text-muted-foreground mb-6">
-          {filteredProperties.length} {filteredProperties.length === 1 ? 'property' : 'properties'} found
-        </p>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredProperties.map((property) => (
-            <PropertyCard
-              key={property.id}
-              property={{
-                id: property.id,
-                title: property.title,
-                address: property.address,
-                city: property.city,
-                state: property.state,
-                price: property.rent,
-                bedrooms: property.bedrooms,
-                bathrooms: property.bathrooms,
-                squareFeet: property.squareFeet ?? undefined,
-                images: property.images,
-                status: property.status,
-                priceChange: property.priceChange,
-                rating: property.rating,
-                daysOnMarket: property.daysOnMarket,
-                photoCount: property.photoCount,
-              }}
-              nearestByCategory={extendedMatches?.get(property.id)?.nearestByCategory}
-              onClick={() => {
-                navigate(`/properties/${property.id}`, { state: { property } });
-              }}
-            />
-          ))}
-        </div>
-
-        {filteredProperties.length === 0 && !loading && (
+        {isLoading ? (
+          <LoadingSpinner />
+        ) : isError ? (
           <div className="text-center py-12">
-            <p className="text-muted-foreground text-lg mb-4">No properties found matching your criteria.</p>
-            <Button variant="outline" onClick={resetFilters}>
-              Clear Filters
-            </Button>
+            <p className="text-muted-foreground text-lg">
+              Something went wrong loading listings. Please try again.
+            </p>
           </div>
+        ) : (
+          <>
+            <p className="text-muted-foreground mb-6">
+              {itemCount} {itemCount === 1 ? 'property' : 'properties'} found
+            </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {listings.map((listing) => (
+                <PropertyCard
+                  key={listing.id}
+                  property={listingToCard(listing)}
+                  onClick={() => {
+                    navigate(`/properties/${listing.id}`, {
+                      state: { listing },
+                    });
+                  }}
+                />
+              ))}
+            </div>
+
+            {listings.length === 0 && (
+              <div className="text-center py-12">
+                <p className="text-muted-foreground text-lg mb-4">
+                  No properties found matching your criteria.
+                </p>
+                <Button variant="outline" onClick={resetFilters}>
+                  Clear Filters
+                </Button>
+              </div>
+            )}
+
+            {hasNextPage && (
+              <div className="flex justify-center mt-8">
+                <Button
+                  variant="outline"
+                  onClick={() => fetchNextPage()}
+                  disabled={isFetchingNextPage}
+                >
+                  {isFetchingNextPage ? 'Loading…' : 'Load more'}
+                </Button>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
