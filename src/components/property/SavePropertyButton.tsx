@@ -94,6 +94,7 @@ export function SavePropertyButton({
       // the toggle state rather than surfacing it as an error.
       if (error instanceof ApiError && error.statusCode === 409) {
         await queryClient.invalidateQueries({ queryKey: ['favorite-ids'] });
+        await queryClient.invalidateQueries({ queryKey: ['favorites'] });
       } else {
         toast({
           title: 'Could not update favorites',

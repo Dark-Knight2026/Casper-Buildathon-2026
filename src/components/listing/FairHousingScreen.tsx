@@ -87,6 +87,12 @@ export function FairHousingScreen({ listing }: { listing: Listing }) {
             </ul>
           </div>
         )}
+        {result && !result.cleared && result.flags.length === 0 && (
+          <p className="text-sm text-amber-800">
+            The listing's text didn't clear the screen. Review the title and
+            description before publishing.
+          </p>
+        )}
         {result?.cleared && (
           <p className="text-sm text-muted-foreground">
             No prohibited language found.

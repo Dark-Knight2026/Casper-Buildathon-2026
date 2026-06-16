@@ -1,21 +1,38 @@
 import { useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import { PropertyCard } from '@/components/property/PropertyCard';
 import { listingToCard } from '@/components/property/listingToCard';
 import { getFavorites } from '@/services/favoriteService';
 import { Button } from '@/components/ui/button';
 import { Heart, Loader2 } from 'lucide-react';
 
+const PAGE_SIZE = 24;
+
 export default function SavedProperties() {
   const navigate = useNavigate();
 
   // The save heart on each card removes the favorite and invalidates this
   // query, so a removed listing drops off the list automatically.
-  const { data, isLoading, isError } = useQuery({
+  const {
+    data,
+    isLoading,
+    isError,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
     queryKey: ['favorites'],
-    queryFn: () => getFavorites({ pageSize: 100 }),
+    queryFn: ({ pageParam }) =>
+      getFavorites({ page: pageParam, pageSize: PAGE_SIZE }),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage, allPages) => {
+      const nextPage = allPages.length + 1;
+      return nextPage <= lastPage.pageCount ? nextPage : undefined;
+    },
   });
-  const favorites = data?.data ?? [];
+
+  const favorites = data?.pages.flatMap((page) => page.data) ?? [];
+  const itemCount = data?.pages[0]?.itemCount ?? 0;
 
   if (isLoading) {
     return (
@@ -39,8 +56,7 @@ export default function SavedProperties() {
                 Saved Properties
               </h1>
               <p className="text-gray-600">
-                {favorites.length}{' '}
-                {favorites.length === 1 ? 'property' : 'properties'} saved
+                {itemCount} {itemCount === 1 ? 'property' : 'properties'} saved
               </p>
             </div>
             <Button onClick={() => navigate('/tenant/property-search')}>
@@ -83,6 +99,18 @@ export default function SavedProperties() {
                 }
               />
             ))}
+          </div>
+        )}
+
+        {hasNextPage && (
+          <div className="flex justify-center mt-8">
+            <Button
+              variant="outline"
+              onClick={() => fetchNextPage()}
+              disabled={isFetchingNextPage}
+            >
+              {isFetchingNextPage ? 'Loading…' : 'Load more'}
+            </Button>
           </div>
         )}
       </div>
