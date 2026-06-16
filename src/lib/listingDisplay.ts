@@ -3,7 +3,20 @@
  * the search, detail and comparison surfaces.
  */
 
-import type { Listing, RentLtrTerms, MediaRef } from '@/types/listingContract';
+import type {
+  Listing,
+  RentLtrTerms,
+  MediaRef,
+  RealPropertyType,
+} from '@/types/listingContract';
+
+/** Title-case a RESO property type for display ("single_family" → "Single Family"). */
+export function formatPropertyType(type: RealPropertyType): string {
+  return type
+    .split('_')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
 
 /**
  * Monthly rent for display. MVP serves only `rent_ltr`, whose terms carry

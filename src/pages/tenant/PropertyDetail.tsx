@@ -1,5 +1,12 @@
-import { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate, useLocation, Navigate, Link } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import {
+  useParams,
+  useNavigate,
+  useLocation,
+  Navigate,
+  Link,
+} from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 
 import { format } from 'date-fns';
 import {
@@ -18,6 +25,8 @@ import {
   Car,
   Loader2,
   Lock,
+  ShieldCheck,
+  Link2,
 } from 'lucide-react';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -33,21 +42,28 @@ import { ContactLandlordModal } from '@/components/property/ContactLandlordModal
 import { ScheduleViewingModal } from '@/components/property/ScheduleViewingModal';
 import { VerificationDisclaimer } from '@/components/property/VerificationDisclaimer';
 import { AuthPromptModal } from '@/components/auth/AuthPromptModal';
-import { propertyService } from '@/services/propertyService';
-import { FEATURED_PROPERTIES } from '@/data/featuredProperties';
+import { getListing, recordListingView } from '@/services/listingService';
+import {
+  listingRentMonthly,
+  approvedMedia,
+  formatPropertyType,
+} from '@/lib/listingDisplay';
 import { cn } from '@/lib/utils';
 import { logger } from '@/utils/logger';
-import type { Property } from '@/types/property';
+import type { Listing, RentLtrTerms } from '@/types/listingContract';
 
 const APPLICATION_FEE = 50;
 
 // Returns a formatted date or `null` when the input cannot be parsed —
 // callers render a fallback ("—") instead of letting `format()` throw
-// `RangeError: Invalid time value` and unmount the whole page. Backend
-// `properties.available_date` is nullable, so this is reachable in practice.
-function formatDateSafe(value: Date | string | null | undefined, fmt: string): string | null {
+// `RangeError: Invalid time value` and unmount the whole page. A listing's
+// `availableDate` is nullable, so this is reachable in practice.
+function formatDateSafe(
+  value: string | null | undefined,
+  fmt: string
+): string | null {
   if (value === null || value === undefined) return null;
-  const d = value instanceof Date ? value : new Date(value);
+  const d = new Date(value);
   return Number.isNaN(d.getTime()) ? null : format(d, fmt);
 }
 
@@ -68,56 +84,41 @@ export default function PropertyDetail() {
   const { profile } = useAuth();
   // Role-aware back path — see getSearchRoute() for the mapping. Pass
   // undefined for guests so the helper returns the public search.
-  const backToSearchPath = getSearchRoute(isAuthenticated ? profile?.role : undefined);
+  const backToSearchPath = getSearchRoute(
+    isAuthenticated ? profile?.role : undefined
+  );
 
-  const stateProperty = (location.state?.property as Property) ?? null;
-  // Hydrate from FEATURED_PROPERTIES on direct URL access (refresh, bookmark,
-  // shared link) so demo IDs `prop-1`...`prop-6` work without router state.
-  // Active in production too — backend endpoints for property fetch don't
-  // exist yet, so without this fallback direct URLs render `$NaN/mo` and a
-  // mapless disclaimer. Once /api/v1/properties/:id ships, drop this.
-  const demoFallback = !stateProperty && id
-    ? FEATURED_PROPERTIES.find(p => p.id === id) ?? null
-    : null;
-  const initialProperty = stateProperty ?? demoFallback;
-  const [property, setProperty] = useState<Property | null>(initialProperty);
-  const [loading, setLoading] = useState(!initialProperty);
+  // Search passes the already-loaded listing in router state for an instant
+  // render; direct URL access (refresh, bookmark, shared link) falls back to
+  // fetching by id.
+  const stateListing =
+    (location.state?.listing as Listing | undefined) ?? undefined;
+  const {
+    data: listing,
+    isLoading,
+    isError,
+  } = useQuery({
+    queryKey: ['listing', id],
+    queryFn: () => getListing(id as string),
+    enabled: !!id,
+    initialData:
+      stateListing && stateListing.id === id ? stateListing : undefined,
+  });
+
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [showContactModal, setShowContactModal] = useState(false);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
 
-  const loadProperty = useCallback(async () => {
-    if (!id || initialProperty) return; // skip if data already hydrated (state or demo fallback)
-
-    setLoading(true);
-    try {
-      const data = await propertyService.getPropertyById(id);
-      if (data) {
-        setProperty(data);
-        await propertyService.incrementPropertyViews(id);
-      } else {
-        toast({
-          title: 'Error',
-          description: 'Property not found',
-          variant: 'destructive',
-        });
-        navigate('/tenant/properties');
-      }
-    } catch (error) {
-      logger.error('Error loading property:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to load property details',
-        variant: 'destructive',
-      });
-    } finally {
-      setLoading(false);
-    }
-  }, [id, navigate, toast, initialProperty]);
-
+  // Record a unique registered-tenant view once the listing resolves. The
+  // endpoint is tenant-only and dedups server-side, so this is best-effort and
+  // skipped for guests (whose views aren't counted).
   useEffect(() => {
-    loadProperty();
-  }, [loadProperty]);
+    if (listing && isAuthenticated) {
+      recordListingView(listing.id).catch((error) => {
+        logger.error('Failed to record listing view:', error);
+      });
+    }
+  }, [listing, isAuthenticated]);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
@@ -152,9 +153,9 @@ export default function PropertyDetail() {
       action: 'submit your rental application',
       redirectPath: window.location.pathname,
     });
-    if (canProceed && property) {
+    if (canProceed && listing) {
       navigate('/tenant/application', {
-        state: { propertyId: property.id, landlordId: property.landlordId },
+        state: { listingId: listing.id, landlordId: listing.listedBy },
       });
     }
   };
@@ -162,8 +163,8 @@ export default function PropertyDetail() {
   const handleShare = () => {
     if (navigator.share) {
       navigator.share({
-        title: property?.title,
-        text: `Check out this property: ${property?.title}`,
+        title: listing?.title,
+        text: `Check out this property: ${listing?.title}`,
         url: window.location.href,
       });
     } else {
@@ -175,7 +176,7 @@ export default function PropertyDetail() {
     }
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex justify-center items-center min-h-screen">
         <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
@@ -183,28 +184,52 @@ export default function PropertyDetail() {
     );
   }
 
-  if (!property) {
+  if (isError || !listing) {
     return <Navigate to="/listings" replace />;
   }
+
+  // Derive display values from the Property + Listing split.
+  const asset = listing.property;
+  const terms =
+    listing.intent === 'rent_ltr' ? (listing.terms as RentLtrTerms) : null;
+  const rent = listingRentMonthly(listing);
+  const securityDeposit = terms?.securityDeposit ?? 0;
+  const furnished = terms?.furnished ?? false;
+  const leaseTermsOffered = terms?.leaseTermsOffered ?? [];
+  const images = approvedMedia(listing.media).map((m) => m.url);
+  const parkingFeatures = asset?.parkingFeatures ?? [];
+  const parkingAvailable = parkingFeatures.length > 0;
+  // No boolean pets flag on the wire — derive it from the constrained policy.
+  const petsAllowed =
+    !!listing.petPolicy && listing.petPolicy.toLowerCase() !== 'no pets';
+  const fullAddress = asset
+    ? `${asset.addressLine1}, ${asset.city}, ${asset.stateOrProvince} ${asset.postalCode}`
+    : '';
 
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="bg-white border-b sticky top-0 z-10">
         <div className="container mx-auto px-4 py-4">
           <div className="flex justify-between items-center">
-            <Button
-              variant="ghost"
-              onClick={() => navigate(backToSearchPath)}
-            >
+            <Button variant="ghost" onClick={() => navigate(backToSearchPath)}>
               <ArrowLeft className="mr-2 h-4 w-4" />
               Back to Search
             </Button>
             <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={handleShare} aria-label="Share property">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleShare}
+                aria-label="Share property"
+              >
                 <Share2 className="h-4 w-4 sm:mr-2" />
                 <span className="hidden sm:inline">Share</span>
               </Button>
-              <SavePropertyButton variant="outline" size="sm" hideTextOnMobile />
+              <SavePropertyButton
+                variant="outline"
+                size="sm"
+                hideTextOnMobile
+              />
             </div>
           </div>
         </div>
@@ -216,21 +241,25 @@ export default function PropertyDetail() {
             <Card>
               <CardContent className="p-0">
                 <div className="relative">
-                  {property.images && property.images.length > 0 ? (
+                  {images.length > 0 ? (
                     <>
                       <img
-                        src={property.images[currentImageIndex]}
-                        alt={property.title}
+                        src={images[currentImageIndex]}
+                        alt={listing.title}
                         className="w-full h-96 object-cover"
                       />
-                      {property.images.length > 1 && (
+                      {images.length > 1 && (
                         <>
                           <Button
                             variant="outline"
                             size="sm"
                             aria-label="Previous image"
                             className="absolute left-4 top-1/2 transform -translate-y-1/2"
-                            onClick={() => setCurrentImageIndex(Math.max(0, currentImageIndex - 1))}
+                            onClick={() =>
+                              setCurrentImageIndex(
+                                Math.max(0, currentImageIndex - 1)
+                              )
+                            }
                             disabled={currentImageIndex === 0}
                           >
                             ‹
@@ -240,20 +269,33 @@ export default function PropertyDetail() {
                             size="sm"
                             aria-label="Next image"
                             className="absolute right-4 top-1/2 transform -translate-y-1/2"
-                            onClick={() => setCurrentImageIndex(Math.min(property.images.length - 1, currentImageIndex + 1))}
-                            disabled={currentImageIndex === property.images.length - 1}
+                            onClick={() =>
+                              setCurrentImageIndex(
+                                Math.min(
+                                  images.length - 1,
+                                  currentImageIndex + 1
+                                )
+                              )
+                            }
+                            disabled={currentImageIndex === images.length - 1}
                           >
                             ›
                           </Button>
                           <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex gap-2">
-                            {property.images.map((_, index) => (
+                            {images.map((_, index) => (
                               <button
                                 key={index}
                                 aria-label={`Go to image ${index + 1}`}
-                                aria-current={index === currentImageIndex ? 'true' : undefined}
+                                aria-current={
+                                  index === currentImageIndex
+                                    ? 'true'
+                                    : undefined
+                                }
                                 className={cn(
                                   'w-2 h-2 rounded-full',
-                                  index === currentImageIndex ? 'bg-white' : 'bg-white/50'
+                                  index === currentImageIndex
+                                    ? 'bg-white'
+                                    : 'bg-white/50'
                                 )}
                                 onClick={() => setCurrentImageIndex(index)}
                               />
@@ -267,26 +309,30 @@ export default function PropertyDetail() {
                       <Home className="h-24 w-24 text-gray-400" />
                     </div>
                   )}
-                  <Badge className="absolute top-4 right-4 bg-white text-gray-900">
-                    {property.propertyType}
-                  </Badge>
+                  {asset && (
+                    <Badge className="absolute top-4 right-4 bg-white text-gray-900">
+                      {formatPropertyType(asset.propertyType)}
+                    </Badge>
+                  )}
                 </div>
 
                 {/* Thumbnail Strip */}
-                {property.images && property.images.length > 1 && (
+                {images.length > 1 && (
                   <div className="flex gap-2 p-4 overflow-x-auto">
-                    {property.images.map((image, index) => (
+                    {images.map((image, index) => (
                       <button
                         key={index}
                         onClick={() => setCurrentImageIndex(index)}
                         className={cn(
                           'shrink-0 w-20 h-20 rounded overflow-hidden border-2',
-                          index === currentImageIndex ? 'border-primary' : 'border-transparent'
+                          index === currentImageIndex
+                            ? 'border-primary'
+                            : 'border-transparent'
                         )}
                       >
                         <img
                           src={image}
-                          alt={`${property.title} ${index + 1}`}
+                          alt={`${listing.title} ${index + 1}`}
                           className="w-full h-full object-cover"
                         />
                       </button>
@@ -301,18 +347,45 @@ export default function PropertyDetail() {
               <CardHeader>
                 <div className="flex flex-col md:flex-row justify-between items-start gap-3">
                   <div className="min-w-0">
-                    <CardTitle className="text-xl sm:text-2xl mb-2">{property.title}</CardTitle>
+                    <CardTitle className="text-xl sm:text-2xl mb-2">
+                      {listing.title}
+                    </CardTitle>
                     <p className="text-gray-600 flex items-center text-sm sm:text-base">
                       <MapPin className="h-4 w-4 mr-1 shrink-0" />
                       <span className=" sm:whitespace-normal">
-                        {property.address}, {property.city}, {property.state} {property.zipCode}
+                        {fullAddress}
                       </span>
                     </p>
+                    {(listing.provenance.verifiedListerBadge ||
+                      listing.onChain?.provenanceOnChain) && (
+                      <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                        {listing.provenance.verifiedListerBadge && (
+                          <Badge
+                            variant="secondary"
+                            className="text-xs font-normal flex items-center gap-1"
+                          >
+                            <ShieldCheck className="h-3 w-3 text-emerald-600" />
+                            Verified lister
+                          </Badge>
+                        )}
+                        {listing.onChain?.provenanceOnChain && (
+                          <Badge
+                            variant="secondary"
+                            className="text-xs font-normal flex items-center gap-1"
+                          >
+                            <Link2 className="h-3 w-3 text-sky-600" />
+                            On-chain
+                          </Badge>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <div className="text-right shrink-0">
                     <p className="text-2xl sm:text-3xl font-bold text-primary whitespace-nowrap">
-                      {formatCurrency(property.rent)}
-                      <span className="text-sm text-gray-500 font-normal">/mo</span>
+                      {formatCurrency(rent)}
+                      <span className="text-sm text-gray-500 font-normal">
+                        /mo
+                      </span>
                     </p>
                   </div>
                 </div>
@@ -323,22 +396,28 @@ export default function PropertyDetail() {
                     <Bed className="h-5 w-5 text-gray-400" />
                     <div>
                       <p className="text-sm text-gray-500">Bedrooms</p>
-                      <p className="font-semibold">{property.bedrooms}</p>
+                      <p className="font-semibold">
+                        {asset?.bedroomsTotal ?? '—'}
+                      </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
                     <Bath className="h-5 w-5 text-gray-400" />
                     <div>
                       <p className="text-sm text-gray-500">Bathrooms</p>
-                      <p className="font-semibold">{property.bathrooms}</p>
+                      <p className="font-semibold">
+                        {asset?.bathroomsTotal ?? '—'}
+                      </p>
                     </div>
                   </div>
-                  {property.squareFeet && (
+                  {asset?.livingArea != null && (
                     <div className="flex items-center gap-2">
                       <Maximize2 className="h-5 w-5 text-gray-400" />
                       <div>
                         <p className="text-sm text-gray-500">Square Feet</p>
-                        <p className="font-semibold">{property.squareFeet.toLocaleString()}</p>
+                        <p className="font-semibold">
+                          {asset.livingArea.toLocaleString()}
+                        </p>
                       </div>
                     </div>
                   )}
@@ -347,38 +426,44 @@ export default function PropertyDetail() {
                     <div>
                       <p className="text-sm text-gray-500">Available</p>
                       <p className="font-semibold">
-                        {formatDateSafe(property.availableDate, 'MMM d') ?? '—'}
+                        {formatDateSafe(listing.availableDate, 'MMM d') ?? '—'}
                       </p>
                     </div>
                   </div>
                 </div>
 
-                {property.description && (
+                {listing.description && (
                   <div className="mb-6">
                     <h3 className="font-semibold mb-2">Description</h3>
-                    <p className="text-gray-700 whitespace-pre-line">{property.description}</p>
+                    <p className="text-gray-700 whitespace-pre-line">
+                      {listing.description}
+                    </p>
                   </div>
                 )}
 
                 {/* Task 10 — Verification Disclaimer */}
                 <VerificationDisclaimer
-                  latitude={property.latitude}
-                  longitude={property.longitude}
-                  address={`${property.address}, ${property.city}, ${property.state} ${property.zipCode}`}
+                  latitude={asset?.latitude ?? null}
+                  longitude={asset?.longitude ?? null}
+                  address={fullAddress}
                   className="mb-4"
                 />
 
                 <Tabs defaultValue="amenities" className="w-full">
-                  <TabsList className={`grid w-full ${isAuthenticated ? 'grid-cols-3' : 'grid-cols-2'}`}>
+                  <TabsList
+                    className={`grid w-full ${isAuthenticated ? 'grid-cols-3' : 'grid-cols-2'}`}
+                  >
                     <TabsTrigger value="amenities">Amenities</TabsTrigger>
                     <TabsTrigger value="policies">Policies</TabsTrigger>
-                    {isAuthenticated && <TabsTrigger value="lease">Lease Terms</TabsTrigger>}
+                    {isAuthenticated && (
+                      <TabsTrigger value="lease">Lease Terms</TabsTrigger>
+                    )}
                   </TabsList>
-                  
+
                   <TabsContent value="amenities" className="space-y-4">
-                    {property.amenities && property.amenities.length > 0 ? (
+                    {listing.amenities && listing.amenities.length > 0 ? (
                       <div className="grid grid-cols-2 gap-3">
-                        {property.amenities.map((amenity, index) => (
+                        {listing.amenities.map((amenity, index) => (
                           <div key={index} className="flex items-center gap-2">
                             <Check className="h-4 w-4 text-green-600" />
                             <span className="text-sm">{amenity}</span>
@@ -386,7 +471,9 @@ export default function PropertyDetail() {
                         ))}
                       </div>
                     ) : (
-                      <p className="text-gray-500 text-sm">No amenities listed</p>
+                      <p className="text-gray-500 text-sm">
+                        No amenities listed
+                      </p>
                     )}
                   </TabsContent>
 
@@ -395,32 +482,38 @@ export default function PropertyDetail() {
                       <div className="flex items-center justify-between">
                         <span className="text-sm font-medium">Pets</span>
                         <div className="flex items-center gap-2">
-                          {property.petsAllowed ? (
+                          {petsAllowed ? (
                             <Check className="h-4 w-4 text-green-600" />
                           ) : (
                             <X className="h-4 w-4 text-red-600" />
                           )}
-                          <span className="text-sm">{property.petPolicy}</span>
+                          <span className="text-sm">
+                            {listing.petPolicy ?? '—'}
+                          </span>
                         </div>
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-sm font-medium">Furnished</span>
                         <div className="flex items-center gap-2">
-                          {property.furnished ? (
+                          {furnished ? (
                             <Check className="h-4 w-4 text-green-600" />
                           ) : (
                             <X className="h-4 w-4 text-red-600" />
                           )}
-                          <span className="text-sm">{property.furnished ? 'Yes' : 'No'}</span>
+                          <span className="text-sm">
+                            {furnished ? 'Yes' : 'No'}
+                          </span>
                         </div>
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-sm font-medium">Parking</span>
                         <div className="flex items-center gap-2">
-                          {property.parkingAvailable ? (
+                          {parkingAvailable ? (
                             <>
                               <Car className="h-4 w-4 text-green-600" />
-                              <span className="text-sm">Available</span>
+                              <span className="text-sm">
+                                {parkingFeatures.join(', ')}
+                              </span>
                             </>
                           ) : (
                             <>
@@ -430,18 +523,23 @@ export default function PropertyDetail() {
                           )}
                         </div>
                       </div>
-                      {property.utilitiesIncluded && property.utilitiesIncluded.length > 0 && (
-                        <div>
-                          <span className="text-sm font-medium block mb-2">Utilities Included</span>
-                          <div className="flex flex-wrap gap-2">
-                            {property.utilitiesIncluded.map((utility, index) => (
-                              <Badge key={index} variant="secondary">
-                                {utility}
-                              </Badge>
-                            ))}
+                      {listing.utilitiesIncluded &&
+                        listing.utilitiesIncluded.length > 0 && (
+                          <div>
+                            <span className="text-sm font-medium block mb-2">
+                              Utilities Included
+                            </span>
+                            <div className="flex flex-wrap gap-2">
+                              {listing.utilitiesIncluded.map(
+                                (utility, index) => (
+                                  <Badge key={index} variant="secondary">
+                                    {utility}
+                                  </Badge>
+                                )
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      )}
+                        )}
                     </div>
                   </TabsContent>
 
@@ -449,14 +547,20 @@ export default function PropertyDetail() {
                     <TabsContent value="lease" className="space-y-4">
                       <div className="space-y-3">
                         <div className="flex justify-between">
-                          <span className="text-sm font-medium">Security Deposit</span>
-                          <span className="text-sm">{formatCurrency(property.securityDeposit)}</span>
+                          <span className="text-sm font-medium">
+                            Security Deposit
+                          </span>
+                          <span className="text-sm">
+                            {formatCurrency(securityDeposit)}
+                          </span>
                         </div>
-                        {property.leaseTerms && property.leaseTerms.length > 0 && (
+                        {leaseTermsOffered.length > 0 && (
                           <div>
-                            <span className="text-sm font-medium block mb-2">Available Lease Terms</span>
+                            <span className="text-sm font-medium block mb-2">
+                              Available Lease Terms
+                            </span>
                             <div className="flex flex-wrap gap-2">
-                              {property.leaseTerms.map((term, index) => (
+                              {leaseTermsOffered.map((term, index) => (
                                 <Badge key={index} variant="outline">
                                   {term}
                                 </Badge>
@@ -499,7 +603,11 @@ export default function PropertyDetail() {
                   </Button>
 
                   {/* Favorite Button */}
-                  <SavePropertyButton variant="outline" size="default" className="w-full" />
+                  <SavePropertyButton
+                    variant="outline"
+                    size="default"
+                    className="w-full"
+                  />
                 </div>
               </CardContent>
             </Card>
@@ -518,20 +626,28 @@ export default function PropertyDetail() {
                   <div className="space-y-2">
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-600">Monthly Rent</span>
-                      <span className="font-semibold">{formatCurrency(property.rent)}</span>
+                      <span className="font-semibold">
+                        {formatCurrency(rent)}
+                      </span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-600">Security Deposit</span>
-                      <span className="font-semibold">{formatCurrency(property.securityDeposit)}</span>
+                      <span className="font-semibold">
+                        {formatCurrency(securityDeposit)}
+                      </span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-600">Application Fee</span>
-                      <span className="font-semibold">{formatCurrency(APPLICATION_FEE)}</span>
+                      <span className="font-semibold">
+                        {formatCurrency(APPLICATION_FEE)}
+                      </span>
                     </div>
                     <div className="border-t pt-2 flex justify-between">
                       <span className="font-semibold">Total Move-in Cost</span>
                       <span className="font-bold text-lg">
-                        {formatCurrency(property.rent + property.securityDeposit + APPLICATION_FEE)}
+                        {formatCurrency(
+                          rent + securityDeposit + APPLICATION_FEE
+                        )}
                       </span>
                     </div>
                   </div>
@@ -541,7 +657,9 @@ export default function PropertyDetail() {
                   </Button>
 
                   <p className="text-xs text-center text-gray-500">
-                    Available {formatDateSafe(property.availableDate, 'MMMM d, yyyy') ?? 'TBD'}
+                    Available{' '}
+                    {formatDateSafe(listing.availableDate, 'MMMM d, yyyy') ??
+                      'TBD'}
                   </p>
                 </CardContent>
               </Card>
@@ -555,25 +673,35 @@ export default function PropertyDetail() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <p className="text-sm text-muted-foreground">
-                    Sign in to see the full cost breakdown (rent, deposit, application fee),
-                    available lease terms, and apply for this property.
+                    Sign in to see the full cost breakdown (rent, deposit,
+                    application fee), available lease terms, and apply for this
+                    property.
                   </p>
                   <div className="space-y-2">
                     <Link
                       to="/auth/register"
-                      className={buttonVariants({ size: 'lg', className: 'w-full' })}
+                      className={buttonVariants({
+                        size: 'lg',
+                        className: 'w-full',
+                      })}
                     >
                       Create account
                     </Link>
                     <Link
                       to="/auth/login"
-                      className={buttonVariants({ variant: 'outline', size: 'lg', className: 'w-full' })}
+                      className={buttonVariants({
+                        variant: 'outline',
+                        size: 'lg',
+                        className: 'w-full',
+                      })}
                     >
                       Sign in
                     </Link>
                   </div>
                   <p className="text-xs text-center text-gray-500">
-                    Available {formatDateSafe(property.availableDate, 'MMMM d, yyyy') ?? 'TBD'}
+                    Available{' '}
+                    {formatDateSafe(listing.availableDate, 'MMMM d, yyyy') ??
+                      'TBD'}
                   </p>
                 </CardContent>
               </Card>
@@ -585,16 +713,16 @@ export default function PropertyDetail() {
                 <CardTitle>Questions?</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   className="w-full justify-start"
                   onClick={handleContactLandlord}
                 >
                   <Phone className="mr-2 h-4 w-4" />
                   Call Property Manager
                 </Button>
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   className="w-full justify-start"
                   onClick={handleContactLandlord}
                 >
@@ -607,20 +735,22 @@ export default function PropertyDetail() {
         </div>
       </div>
 
-      {/* Modals */}
+      {/* Modals — propertyId here carries the listing id as a bridge; the
+          contact/viewing services are rekeyed onto listingId in the downstream
+          favorites/applications/viewings task. */}
       <ContactLandlordModal
         open={showContactModal}
         onClose={() => setShowContactModal(false)}
-        propertyId={property.id}
+        propertyId={listing.id}
         landlordName="Property Owner"
       />
 
       <ScheduleViewingModal
         open={showScheduleModal}
         onClose={() => setShowScheduleModal(false)}
-        propertyId={property.id}
-        propertyAddress={`${property.address}, ${property.city}, ${property.state}`}
-        landlordId={property.landlordId}
+        propertyId={listing.id}
+        propertyAddress={fullAddress}
+        landlordId={listing.listedBy}
       />
 
       {/* Guest auth prompt — opens whenever requireAuth() is called by a
