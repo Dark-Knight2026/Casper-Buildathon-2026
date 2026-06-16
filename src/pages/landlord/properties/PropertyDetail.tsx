@@ -105,7 +105,25 @@ export default function PropertyDetail() {
   }
 
   if (isError || !listing) {
-    return null;
+    return (
+      <div className="container mx-auto py-8 px-4">
+        <Button
+          variant="ghost"
+          onClick={() => navigate('/landlord/properties')}
+          className="mb-4"
+        >
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Back to Properties
+        </Button>
+        <Card className="p-12 text-center">
+          <Home className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+          <h3 className="text-lg font-semibold mb-2">Listing not found</h3>
+          <p className="text-muted-foreground">
+            We couldn't load this listing. It may have been removed.
+          </p>
+        </Card>
+      </div>
+    );
   }
 
   // Derive display values from the Property + Listing split.
@@ -119,6 +137,7 @@ export default function PropertyDetail() {
     .sort((a, b) => a.position - b.position)
     .map((m) => m.url);
   const parkingFeatures = asset?.parkingFeatures ?? [];
+  const petsOk = derivePetsAllowed(listing);
 
   return (
     <div className="container mx-auto py-8 px-4">
@@ -404,12 +423,8 @@ export default function PropertyDetail() {
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-sm">Pets Allowed</span>
-                  <Badge
-                    variant={
-                      derivePetsAllowed(listing) ? 'default' : 'secondary'
-                    }
-                  >
-                    {derivePetsAllowed(listing) ? 'Yes' : 'No'}
+                  <Badge variant={petsOk ? 'default' : 'secondary'}>
+                    {petsOk ? 'Yes' : 'No'}
                   </Badge>
                 </div>
                 <div className="flex items-center justify-between">
