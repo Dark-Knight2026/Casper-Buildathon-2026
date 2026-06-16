@@ -17,7 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Check, X, ShieldCheck, Upload } from 'lucide-react';
+import { Check, X, ShieldCheck, Upload, Clock } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { uploadAuthorityDocument } from '@/services/listingProvenanceService';
 import { ApiClient } from '@/lib/api-client';
@@ -97,9 +97,9 @@ export function AuthorityGate({ listing }: { listing: Listing }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
+        <CardTitle className="flex flex-wrap items-center gap-2">
           Authority to list
-          {provenance.verifiedListerBadge && (
+          {provenance.verifiedListerBadge ? (
             <Badge
               variant="secondary"
               className="flex items-center gap-1 text-xs font-normal"
@@ -107,16 +107,30 @@ export function AuthorityGate({ listing }: { listing: Listing }) {
               <ShieldCheck className="h-3 w-3 text-emerald-600" />
               Verified lister
             </Badge>
+          ) : provenance.identityVerified ? (
+            <Badge
+              variant="secondary"
+              className="flex items-center gap-1 text-xs font-normal"
+            >
+              <Check className="h-3 w-3 text-green-600" />
+              Identity verified
+            </Badge>
+          ) : (
+            <Badge
+              variant="secondary"
+              className="flex items-center gap-1 text-xs font-normal"
+            >
+              <Clock className="h-3 w-3 text-muted-foreground" />
+              Identity verified at publish
+            </Badge>
           )}
         </CardTitle>
         <CardDescription>
-          A listing can go live once identity, authority, and the fair-housing
-          check all pass.
+          A listing can go live once the authority and fair-housing checks pass.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-2">
-          <GateRow label="Identity verified" ok={provenance.identityVerified} />
           <GateRow
             label="Authority"
             ok={provenance.authorityTier !== 'T0'}
@@ -135,34 +149,38 @@ export function AuthorityGate({ listing }: { listing: Listing }) {
             A deed, title, or management agreement moves you to “Documents on
             file”. PDF, PNG or JPEG.
           </p>
-          <div className="flex flex-col sm:flex-row gap-2">
-            <Select
-              value={docType}
-              onValueChange={(v) => setDocType(v as AuthorityDocumentType)}
-            >
-              <SelectTrigger className="sm:w-56">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {DOC_TYPES.map((d) => (
-                  <SelectItem key={d.value} value={d.value}>
-                    {d.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <Select
+            value={docType}
+            onValueChange={(v) => setDocType(v as AuthorityDocumentType)}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {DOC_TYPES.map((d) => (
+                <SelectItem key={d.value} value={d.value}>
+                  {d.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <div className="flex gap-2">
             <Input
               type="file"
               accept=".pdf,image/png,image/jpeg"
               onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+              className="h-10"
             />
             <Button
               type="button"
               onClick={upload}
               disabled={!file || uploading}
+              className="shrink-0"
             >
-              <Upload className="h-4 w-4 mr-1.5" />
-              {uploading ? 'Uploading…' : 'Upload'}
+              <Upload className="h-4 w-4 sm:mr-1.5" />
+              <span className="hidden sm:inline">
+                {uploading ? 'Uploading…' : 'Upload'}
+              </span>
             </Button>
           </div>
         </div>

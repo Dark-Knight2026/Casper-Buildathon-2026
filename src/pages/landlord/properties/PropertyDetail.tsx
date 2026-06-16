@@ -15,6 +15,7 @@ import {
   DollarSign,
   Eye,
   FileText,
+  Percent,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -154,7 +155,7 @@ export default function PropertyDetail() {
           Back to Properties
         </Button>
 
-        <div className="flex justify-between items-start">
+        <div className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-start">
           <div>
             <h1 className="text-3xl font-bold mb-2">{listing.title}</h1>
             <div className="flex items-center gap-2 text-muted-foreground">
@@ -235,7 +236,7 @@ export default function PropertyDetail() {
 
       {/* Statistics Cards */}
       {statistics && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Total Views</CardTitle>
@@ -284,6 +285,18 @@ export default function PropertyDetail() {
             <CardContent>
               <div className="text-2xl font-bold">
                 {formatCurrency(statistics.monthlyRevenue)}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Occupancy</CardTitle>
+              <Percent className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                {statistics.occupancyRate.toFixed(0)}%
               </div>
             </CardContent>
           </Card>
@@ -462,20 +475,28 @@ export default function PropertyDetail() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex gap-8">
-                <div>
-                  <p className="text-sm text-muted-foreground">Total Leases</p>
-                  <p className="text-2xl font-bold">
-                    {historical?.totalLeases ?? 0}
-                  </p>
+              {historical?.hasHistoricalData ? (
+                <div className="flex gap-8">
+                  <div>
+                    <p className="text-sm text-muted-foreground">
+                      Total Leases
+                    </p>
+                    <p className="text-2xl font-bold">
+                      {historical.totalLeases}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Total Views</p>
+                    <p className="text-2xl font-bold">
+                      {historical.totalViews}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Total Views</p>
-                  <p className="text-2xl font-bold">
-                    {historical?.totalViews ?? 0}
-                  </p>
-                </div>
-              </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No lease history yet.
+                </p>
+              )}
               <Button onClick={() => navigate('/landlord/leases')}>
                 View All Leases
               </Button>

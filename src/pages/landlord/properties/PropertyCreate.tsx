@@ -103,9 +103,8 @@ const propertyFormSchema = z.object({
     .min(0.5, 'Bathrooms must be at least 0.5')
     .step(0.5),
   squareFeet: z.coerce
-    .number()
-    .min(100, 'Square feet must be at least 100')
-    .nullable(),
+    .number({ invalid_type_error: 'Square feet is required' })
+    .min(100, 'Square feet must be at least 100'),
   yearBuilt: z.coerce
     .number()
     .int()
@@ -155,7 +154,7 @@ export default function PropertyCreate() {
       propertyType: 'apartment',
       bedrooms: 1,
       bathrooms: 1,
-      squareFeet: null,
+      squareFeet: undefined,
       yearBuilt: null,
       rent: 0,
       securityDeposit: 0,
