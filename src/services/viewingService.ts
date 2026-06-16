@@ -53,7 +53,7 @@ export async function getMyViewings(
   params: { page?: number; pageSize?: number } = {}
 ): Promise<PaginatedResponse<Viewing>> {
   return backendClient.get<PaginatedResponse<Viewing>>(
-    `${VIEWINGS}${toQueryString({ ...params })}`
+    `${VIEWINGS}${toQueryString(params)}`
   );
 }
 
@@ -63,7 +63,7 @@ export async function getListingViewings(
   params: { page?: number; pageSize?: number } = {}
 ): Promise<PaginatedResponse<Viewing>> {
   return backendClient.get<PaginatedResponse<Viewing>>(
-    `${LISTINGS}/${listingId}/viewings${toQueryString({ ...params })}`
+    `${LISTINGS}/${listingId}/viewings${toQueryString(params)}`
   );
 }
 

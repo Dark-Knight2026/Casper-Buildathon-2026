@@ -102,7 +102,10 @@ export default function ListingViewings() {
       ) : (
         <div className="space-y-4">
           {viewings.map((viewing) => {
-            const isPast = new Date(viewing.viewingDate) < new Date();
+            // Compare date-only strings in local time; `new Date('YYYY-MM-DD')`
+            // parses as midnight UTC, which flags a same-day viewing as past.
+            const isPast =
+              viewing.viewingDate < format(new Date(), 'yyyy-MM-dd');
             const isUpdating = updatingId === viewing.id;
             return (
               <Card key={viewing.id}>

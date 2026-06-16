@@ -120,7 +120,10 @@ export default function MyViewings() {
             {viewings.map((viewing) => {
               const listing = viewing.listing;
               const address = formatFullAddress(listing?.property);
-              const isPast = new Date(viewing.viewingDate) < new Date();
+              // Compare date-only strings in local time; `new Date('YYYY-MM-DD')`
+              // parses as midnight UTC, which flags a same-day viewing as past.
+              const isPast =
+                viewing.viewingDate < format(new Date(), 'yyyy-MM-dd');
               const canCancel = viewing.status === 'pending' && !isPast;
               const isCancelling =
                 cancelMutation.isPending &&
