@@ -19,10 +19,10 @@ use crate::{
             db::{self, AuthorityUpload, ListingUpdate, StateTransition, WithdrawOutcome},
             models::{
                 AuthorityDocumentResponse, AuthorityDocumentType, CreateListingRequest,
-                FairHousingScreenResponse, Listing, ListingHistoricalData, ListingProvenance,
-                ListingSearchParams, ListingState, ListingStatistics, MediaModerationRequest,
-                MediaRef, MediaReorderRequest, UpdateListingRequest, UpdateStateRequest,
-                ViewResponse,
+                FairHousingScreenResponse, LandlordListingParams, Listing, ListingHistoricalData,
+                ListingProvenance, ListingSearchParams, ListingState, ListingStatistics,
+                MediaModerationRequest, MediaRef, MediaReorderRequest, UpdateListingRequest,
+                UpdateStateRequest, ViewResponse,
             },
         },
         properties::{db as properties_db, models::Property},
@@ -324,18 +324,19 @@ pub async fn update_listing(
 
 // `GET /api/v1/listings/landlord`
 //
-/// The caller's own listings (any state), paginated.
+/// The caller's own listings, optionally narrowed by lifecycle state, paginated.
 ///
 /// # Errors
 ///
-/// Returns a database error on failure.
+/// Returns `400` for an unrecognized `state` token, or a database error.
 #[utoipa::path(
     get,
     path = "/listings/landlord",
     tag = "Listings",
-    params(Pagination),
+    params(LandlordListingParams, Pagination),
     responses(
         (status = 200, description = "The landlord's listings (paginated)", body = PaginatedResponse<Listing>),
+        (status = 400, description = "Invalid filter parameters", body = ErrorResponse),
         (status = 401, description = "Unauthorized", body = ErrorResponse),
         (status = 403, description = "Landlord role required", body = ErrorResponse),
         (status = 500, description = "Internal server error", body = ErrorResponse),
@@ -348,15 +349,11 @@ pub async fn update_listing(
 pub async fn get_landlord_listings(
     State(state): State<Arc<AppState>>,
     user: RoleUser<LandlordRole>,
+    Query(params): Query<LandlordListingParams>,
     Query(pagination): Query<Pagination>,
 ) -> ApiResult<Json<PaginatedResponse<Listing>>> {
-    let (listings, total) = db::list_landlord_listings(
-        &state.db,
-        user.0.sub,
-        pagination.page_size(),
-        pagination.offset(),
-    )
-    .await?;
+    let filter = params.into_validated(&pagination)?;
+    let (listings, total) = db::list_landlord_listings(&state.db, user.0.sub, &filter).await?;
     Ok(Json(PaginatedResponse::new(listings, total, &pagination)))
 }
 

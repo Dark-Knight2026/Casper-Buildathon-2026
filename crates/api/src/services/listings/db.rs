@@ -1,9 +1,9 @@
 //! Database operations for listings.
 //!
 //! Detail/media reads use compile-time `sqlx` macros (with JSONB and
-//! nullable-defaulted overrides); the public `GET /listings` search uses a
-//! runtime `QueryBuilder` because its filter set is dynamic. Nested property
-//! and media are batch-loaded by id to avoid N+1.
+//! nullable-defaulted overrides); the public `GET /listings` search and the
+//! landlord list use a runtime `QueryBuilder` because their filter sets are
+//! dynamic. Nested property and media are batch-loaded by id to avoid N+1.
 
 use core::str::FromStr;
 use std::collections::HashMap;
@@ -198,62 +198,66 @@ impl AppendFilters for ListingFilter {
     #[inline]
     fn append_to(&self, builder: &mut QueryBuilder<Postgres>) {
         if let Some(search) = &self.search {
-            builder.push(" AND (l.title ILIKE ");
-            builder.push_bind(format!("%{search}%"));
-            builder.push(" OR p.address_line1 ILIKE ");
-            builder.push_bind(format!("%{search}%"));
-            builder.push(")");
+            builder
+                .push(" AND (l.title ILIKE ")
+                .push_bind(format!("%{search}%"))
+                .push(" OR p.address_line1 ILIKE ")
+                .push_bind(format!("%{search}%"))
+                .push(")");
         }
         if let Some(radius) = self.radius_miles {
-            builder.push(" AND ST_DWithin(p.geog, ST_SetSRID(ST_MakePoint(");
-            builder.push_bind(self.near_lng);
-            builder.push(", ");
-            builder.push_bind(self.near_lat);
-            builder.push("), 4326)::geography, ");
-            builder.push_bind(radius * 1609.34);
-            builder.push(")");
+            builder
+                .push(" AND ST_DWithin(p.geog, ST_SetSRID(ST_MakePoint(")
+                .push_bind(self.near_lng)
+                .push(", ")
+                .push_bind(self.near_lat)
+                .push("), 4326)::geography, ")
+                .push_bind(radius * 1609.34)
+                .push(")");
         }
         if let Some(min_lng) = self.bbox_min_lng {
-            builder.push(" AND ST_Intersects(p.geog, ST_MakeEnvelope(");
-            builder.push_bind(min_lng);
-            builder.push(", ");
-            builder.push_bind(self.bbox_min_lat);
-            builder.push(", ");
-            builder.push_bind(self.bbox_max_lng);
-            builder.push(", ");
-            builder.push_bind(self.bbox_max_lat);
-            builder.push(", 4326)::geography)");
+            builder
+                .push(" AND ST_Intersects(p.geog, ST_MakeEnvelope(")
+                .push_bind(min_lng)
+                .push(", ")
+                .push_bind(self.bbox_min_lat)
+                .push(", ")
+                .push_bind(self.bbox_max_lng)
+                .push(", ")
+                .push_bind(self.bbox_max_lat)
+                .push(", 4326)::geography)");
         }
         if let Some(intent) = &self.intent {
-            builder.push(" AND l.intent = ");
-            builder.push_bind(intent.as_str());
+            builder.push(" AND l.intent = ").push_bind(intent.as_str());
         }
         if let Some(property_type) = &self.property_type {
-            builder.push(" AND p.property_type = ");
-            builder.push_bind(property_type.as_str());
+            builder
+                .push(" AND p.property_type = ")
+                .push_bind(property_type.as_str());
         }
         if let Some(min_rent) = self.min_rent {
-            builder.push(" AND (l.terms->>'rentMonthly')::numeric >= ");
-            builder.push_bind(min_rent);
+            builder
+                .push(" AND (l.terms->>'rentMonthly')::numeric >= ")
+                .push_bind(min_rent);
         }
         if let Some(max_rent) = self.max_rent {
-            builder.push(" AND (l.terms->>'rentMonthly')::numeric <= ");
-            builder.push_bind(max_rent);
+            builder
+                .push(" AND (l.terms->>'rentMonthly')::numeric <= ")
+                .push_bind(max_rent);
         }
         if let Some(min_bedrooms) = self.min_bedrooms {
-            builder.push(" AND p.bedrooms >= ");
-            builder.push_bind(min_bedrooms);
+            builder.push(" AND p.bedrooms >= ").push_bind(min_bedrooms);
         }
         if let Some(max_bedrooms) = self.max_bedrooms {
-            builder.push(" AND p.bedrooms <= ");
-            builder.push_bind(max_bedrooms);
+            builder.push(" AND p.bedrooms <= ").push_bind(max_bedrooms);
         }
         if self.pets_allowed == Some(true) {
             builder.push(" AND l.pet_policy IS DISTINCT FROM 'No Pets'");
         }
         if let Some(furnished) = self.furnished {
-            builder.push(" AND (l.terms->>'furnished')::boolean = ");
-            builder.push_bind(furnished);
+            builder
+                .push(" AND (l.terms->>'furnished')::boolean = ")
+                .push_bind(furnished);
         }
     }
 }
@@ -264,15 +268,15 @@ impl AppendOrder for ListingFilter {
     fn append_order(&self, builder: &mut QueryBuilder<Postgres>) {
         match self.sort {
             ListingSort::Distance => {
-                builder.push(" ORDER BY ST_Distance(p.geog, ST_SetSRID(ST_MakePoint(");
-                builder.push_bind(self.near_lng);
-                builder.push(", ");
-                builder.push_bind(self.near_lat);
-                builder.push("), 4326)::geography)");
+                builder
+                    .push(" ORDER BY ST_Distance(p.geog, ST_SetSRID(ST_MakePoint(")
+                    .push_bind(self.near_lng)
+                    .push(", ")
+                    .push_bind(self.near_lat)
+                    .push("), 4326)::geography)");
             }
             other => {
-                builder.push(" ORDER BY ");
-                builder.push(other.order_column());
+                builder.push(" ORDER BY ").push(other.order_column());
             }
         }
         builder.push(if self.sort_descending {
@@ -464,7 +468,7 @@ where
     )
     .fetch_all(executor)
     .await?;
-    let mut grouped: HashMap<Uuid, Vec<MediaRef>> = HashMap::new();
+    let mut grouped = HashMap::<Uuid, Vec<MediaRef>>::new();
     for row in rows {
         grouped
             .entry(row.listing_id)
@@ -713,8 +717,39 @@ pub async fn update_listing(
     Ok(ListingUpdate::Updated(Box::new(row)))
 }
 
-/// Lists a landlord's own listings (any state), newest first, with batch-loaded
-/// nested property and media plus the total count.
+/// Validated filter for [`list_landlord_listings`]. Empty `states` imposes no
+/// lifecycle constraint; limit/offset are pre-clamped by the pagination layer.
+#[derive(Debug)]
+pub struct LandlordListingFilter {
+    /// Lifecycle states to include; empty means every state.
+    pub states: Vec<ListingState>,
+    /// Page size.
+    pub limit: i64,
+    /// Page offset.
+    pub offset: i64,
+}
+
+impl AppendFilters for LandlordListingFilter {
+    /// Pushes the optional lifecycle-state filter shared by count and page.
+    #[inline]
+    fn append_to(&self, builder: &mut QueryBuilder<Postgres>) {
+        if !self.states.is_empty() {
+            builder
+                .push(" AND l.state = ANY(")
+                .push_bind(
+                    self.states
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect::<Vec<_>>(),
+                )
+                .push(")");
+        }
+    }
+}
+
+/// Lists a landlord's own listings (newest first), optionally narrowed by
+/// lifecycle state, with batch-loaded nested property and media plus the total
+/// count.
 ///
 /// # Errors
 ///
@@ -723,8 +758,7 @@ pub async fn update_listing(
 pub async fn list_landlord_listings(
     pool: &PgPool,
     landlord_id: Uuid,
-    limit: i64,
-    offset: i64,
+    filter: &LandlordListingFilter,
 ) -> Result<(Vec<Listing>, i64), Error> {
     // One REPEATABLE READ snapshot for count + page + batch loads.
     let mut tx = pool.begin().await?;
@@ -732,41 +766,26 @@ pub async fn list_landlord_listings(
         .execute(tx.as_mut())
         .await?;
 
-    let total = sqlx::query_scalar!(
-        r#"
-            SELECT COUNT(*) AS "count!"
-            FROM listings
-            WHERE listed_by = $1 AND deleted_at IS NULL
-        "#,
-        landlord_id,
-    )
-    .fetch_one(tx.as_mut())
-    .await?;
+    let total =
+        QueryBuilder::<Postgres>::new("SELECT COUNT(*) FROM listings l WHERE l.listed_by = ")
+            .push_bind(landlord_id)
+            .push(" AND l.deleted_at IS NULL")
+            .append(filter)
+            .build_query_scalar::<i64>()
+            .fetch_one(tx.as_mut())
+            .await?;
 
-    let rows = sqlx::query_as!(
-        ListingRow,
-        r#"
-            SELECT
-                id, property_id, listed_by, intent, state, days_on_market,
-                expires_at, title, description, amenities, utilities_included,
-                pet_policy, available_date,
-                surrounding_area AS "surrounding_area: Json<serde_json::Value>",
-                terms AS "terms: Json<serde_json::Value>",
-                views, identity_verified, authority_tier, fair_housing_cleared,
-                managed_by_pm,
-                created_at AS "created_at!",
-                updated_at AS "updated_at!"
-            FROM listings
-            WHERE listed_by = $1 AND deleted_at IS NULL
-            ORDER BY created_at DESC
-            LIMIT $2 OFFSET $3
-        "#,
-        landlord_id,
-        limit,
-        offset,
-    )
-    .fetch_all(tx.as_mut())
-    .await?;
+    let rows = QueryBuilder::<Postgres>::new("SELECT ")
+        .push(LISTING_COLUMNS)
+        .push(" FROM listings l WHERE l.listed_by = ")
+        .push_bind(landlord_id)
+        .push(" AND l.deleted_at IS NULL")
+        .append(filter)
+        .push(" ORDER BY l.created_at DESC")
+        .limit_offset(filter.limit, filter.offset)
+        .build_query_as::<ListingRow>()
+        .fetch_all(tx.as_mut())
+        .await?;
 
     if rows.is_empty() {
         tx.commit().await?;

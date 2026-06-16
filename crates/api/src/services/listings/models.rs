@@ -17,7 +17,8 @@ use crate::{
     common::{ApiError, ApiResult, Pagination},
     services::{
         listings::db::{
-            ListingFilter, ListingPatch, ListingRow, ListingSort, MediaRow, NewListing,
+            LandlordListingFilter, ListingFilter, ListingPatch, ListingRow, ListingSort, MediaRow,
+            NewListing,
         },
         properties::models::Property,
     },
@@ -408,6 +409,44 @@ impl ListingSearchParams {
             furnished: self.furnished,
             sort,
             sort_descending,
+            limit: pagination.page_size(),
+            offset: pagination.offset(),
+        })
+    }
+}
+
+/// Query params for `GET /listings/landlord`: the caller's own listings,
+/// optionally narrowed by lifecycle state.
+#[derive(Debug, Deserialize, IntoParams)]
+#[serde(rename_all = "camelCase")]
+pub struct LandlordListingParams {
+    /// Lifecycle-state filter, comma-separated for several (`state=active` or
+    /// `state=draft,active`). Absent lists every state.
+    pub state: Option<String>,
+}
+
+impl LandlordListingParams {
+    /// Validates the state filter and resolves it into a [`LandlordListingFilter`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ApiError::BadRequest`] for an unrecognized state token.
+    #[inline]
+    pub fn into_validated(self, pagination: &Pagination) -> ApiResult<LandlordListingFilter> {
+        let states = match self.state.as_deref() {
+            Some(raw) => raw
+                .split(',')
+                .map(str::trim)
+                .filter(|token| !token.is_empty())
+                .map(|token| {
+                    ListingState::from_str(token)
+                        .map_err(|_| ApiError::BadRequest(format!("unknown state '{token}'")))
+                })
+                .collect::<ApiResult<Vec<_>>>()?,
+            None => Vec::new(),
+        };
+        Ok(LandlordListingFilter {
+            states,
             limit: pagination.page_size(),
             offset: pagination.offset(),
         })

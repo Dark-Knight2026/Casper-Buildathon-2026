@@ -504,6 +504,93 @@ async fn landlord_listings_requires_auth_401(pool: PgPool) {
     assert_eq!(response.status_code(), StatusCode::UNAUTHORIZED);
 }
 
+/// `?state=active` returns only the active listing, hiding the caller's draft.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn landlord_listings_filters_by_state(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, token) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    common::create_draft_listing(
+        &env,
+        &token,
+        common::seed_property(&pool, landlord_id).await,
+    )
+    .await;
+    let active_id = seed_active_listing(
+        &env,
+        &pool,
+        &token,
+        &draft_body(common::seed_property(&pool, landlord_id).await),
+    )
+    .await;
+
+    let (status, body) = common::authed_request::<Value>(
+        &env.server,
+        &Method::GET,
+        "/api/v1/listings/landlord?state=active",
+        &token,
+        &Value::Null,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    let body = body.unwrap();
+    assert_eq!(body["itemCount"], 1);
+    assert_eq!(
+        body["data"][0]["id"].as_str().unwrap(),
+        active_id.to_string()
+    );
+    assert_eq!(body["data"][0]["state"], "active");
+}
+
+/// `?state=draft,active` (comma-separated) returns both lifecycle states.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn landlord_listings_filters_by_multiple_states(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, token) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    common::create_draft_listing(
+        &env,
+        &token,
+        common::seed_property(&pool, landlord_id).await,
+    )
+    .await;
+    seed_active_listing(
+        &env,
+        &pool,
+        &token,
+        &draft_body(common::seed_property(&pool, landlord_id).await),
+    )
+    .await;
+
+    let (status, body) = common::authed_request::<Value>(
+        &env.server,
+        &Method::GET,
+        "/api/v1/listings/landlord?state=draft,active",
+        &token,
+        &Value::Null,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body.unwrap()["itemCount"], 2);
+}
+
+/// An unrecognized `state` token is rejected with `400`.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn landlord_listings_rejects_unknown_state(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (_id, token) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+
+    let (status, _body) = common::authed_request::<Value>(
+        &env.server,
+        &Method::GET,
+        "/api/v1/listings/landlord?state=bogus",
+        &token,
+        &Value::Null,
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
 // `GET /listings` public active-only list -------------------------------------
 
 /// A draft is invisible to the public list (active-only).
