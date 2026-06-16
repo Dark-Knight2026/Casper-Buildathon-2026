@@ -1,175 +1,190 @@
 /**
  * Property List Page
- * Displays all properties for a landlord with filters, search, and pagination
+ * The landlord's own listings (any state) with search, filters, and pagination.
  */
 
-import { useState, useEffect, useCallback } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Plus, Search, Filter, X, Home, MapPin, Bed, Bath, ArrowUpDown } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import {
+  Plus,
+  Search,
+  Filter,
+  X,
+  Home,
+  MapPin,
+  Bed,
+  Bath,
+  ArrowUpDown,
+  ShieldCheck,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
-import { FEATURED_PROPERTIES } from '@/data/featuredProperties';
-import { formatPropertyType, type Property, type PropertySearchParams, type PropertyType } from '@/types/property';
+import { getLandlordListings } from '@/services/listingService';
+import { listingRentMonthly, formatPropertyType } from '@/lib/listingDisplay';
+import { useDebounce } from '@/hooks/useDebounce';
+import type {
+  ListingSearchParams,
+  ListingState,
+  ListingSortBy,
+  RealPropertyType,
+  RentLtrTerms,
+} from '@/types/listingContract';
 
-const PROPERTY_TYPES: PropertyType[] = ['apartment', 'house', 'condo', 'townhouse', 'studio', 'loft'];
-const PROPERTY_STATUSES: Property['status'][] = ['active', 'pending', 'rented', 'inactive'];
+const PAGE_SIZE = 20;
+
+const PROPERTY_TYPES: RealPropertyType[] = [
+  'single_family',
+  'multi_family',
+  'apartment',
+  'condo',
+  'townhouse',
+  'commercial',
+  'other',
+];
+
+// Landlord listings span the full lifecycle (unlike the public, active-only
+// feed), so every state needs a badge.
+const STATE_BADGE: Record<ListingState, { label: string; className: string }> =
+  {
+    draft: { label: 'Draft', className: 'bg-gray-500' },
+    active: { label: 'Active', className: 'bg-green-500' },
+    pending: { label: 'Pending', className: 'bg-yellow-500' },
+    leased: { label: 'Leased', className: 'bg-blue-500' },
+    sold: { label: 'Sold', className: 'bg-blue-500' },
+    withdrawn: { label: 'Withdrawn', className: 'bg-gray-500' },
+    expired: { label: 'Expired', className: 'bg-red-500' },
+  };
+
+const SORT_OPTIONS: { value: ListingSortBy; label: string }[] = [
+  { value: 'createdAt', label: 'Date Created' },
+  { value: 'updatedAt', label: 'Last Updated' },
+  { value: 'rent', label: 'Rent' },
+  { value: 'availableDate', label: 'Available Date' },
+];
+
+const formatCurrency = (amount: number) =>
+  new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(amount);
 
 export default function PropertyList() {
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
 
-  const [properties, setProperties] = useState<Property[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [total, setTotal] = useState(0);
-  const [totalPages, setTotalPages] = useState(0);
-  const [cities, setCities] = useState<string[]>([]);
-
-  // Filter state
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [search, setSearch] = useState(searchParams.get('search') || '');
-  const [selectedStatuses, setSelectedStatuses] = useState<Property['status'][]>([]);
-  const [selectedTypes, setSelectedTypes] = useState<PropertyType[]>([]);
-  const [selectedCities, setSelectedCities] = useState<string[]>([]);
-  const [minRent, setMinRent] = useState<string>('');
-  const [maxRent, setMaxRent] = useState<string>('');
-  const [minBedrooms, setMinBedrooms] = useState<string>('');
-  const [petsAllowed, setPetsAllowed] = useState<boolean | undefined>(undefined);
-  const [furnished, setFurnished] = useState<boolean | undefined>(undefined);
-  const [parkingAvailable, setParkingAvailable] = useState<boolean | undefined>(undefined);
+  const [search, setSearch] = useState('');
+  const [propertyType, setPropertyType] = useState('all');
+  const [minRent, setMinRent] = useState('');
+  const [maxRent, setMaxRent] = useState('');
+  const [minBedrooms, setMinBedrooms] = useState('');
+  const [petsAllowed, setPetsAllowed] = useState(false);
+  const [furnished, setFurnished] = useState(false);
+  const [sortBy, setSortBy] = useState<ListingSortBy>('createdAt');
+  const [page, setPage] = useState(1);
 
-  // Pagination state
-  const [page, setPage] = useState(Number(searchParams.get('page')) || 1);
-  const [sortBy, setSortBy] = useState<PropertySearchParams['sortBy']>(
-    (searchParams.get('sortBy') as PropertySearchParams['sortBy']) || 'createdAt'
-  );
+  const debouncedSearch = useDebounce(search, 400);
 
-  const limit = 20;
+  const activeFilterCount =
+    (propertyType !== 'all' ? 1 : 0) +
+    (minRent ? 1 : 0) +
+    (maxRent ? 1 : 0) +
+    (minBedrooms ? 1 : 0) +
+    (petsAllowed ? 1 : 0) +
+    (furnished ? 1 : 0);
 
-  // TODO(BE): replace with GET /api/v1/landlord/properties — BE-blocked
-  // (LeaseFi MVP spec §3.3). Filter/sort/paginate the shared mock fixture
-  // client-side so the page works on localhost without Supabase (same
-  // intentional demo pattern as LandlordDashboard).
-  const loadProperties = useCallback(() => {
-    setLoading(true);
-    const timer = setTimeout(() => {
-      let result: Property[] = [...FEATURED_PROPERTIES];
+  // Only the filters the backend honors are sent. The landlord endpoint returns
+  // every lifecycle state; there's no server state/city/parking filter, so
+  // those controls are intentionally absent.
+  const params = useMemo<ListingSearchParams>(() => {
+    const p: ListingSearchParams = { page, pageSize: PAGE_SIZE, sortBy };
+    const q = debouncedSearch.trim();
+    if (q) p.search = q;
+    if (propertyType !== 'all')
+      p.propertyType = propertyType as RealPropertyType;
+    if (minRent) p.minRent = Number(minRent);
+    if (maxRent) p.maxRent = Number(maxRent);
+    if (minBedrooms) p.minBedrooms = Number(minBedrooms);
+    if (petsAllowed) p.petsAllowed = true;
+    if (furnished) p.furnished = true;
+    return p;
+  }, [
+    page,
+    sortBy,
+    debouncedSearch,
+    propertyType,
+    minRent,
+    maxRent,
+    minBedrooms,
+    petsAllowed,
+    furnished,
+  ]);
 
-      if (search) {
-        const q = search.toLowerCase();
-        result = result.filter(
-          (p) => p.title.toLowerCase().includes(q) || p.address.toLowerCase().includes(q),
-        );
-      }
-      if (selectedStatuses.length > 0) {
-        result = result.filter((p) => selectedStatuses.some((s) => s === p.status));
-      }
-      if (selectedTypes.length > 0) {
-        result = result.filter((p) => selectedTypes.some((t) => t === p.propertyType));
-      }
-      if (selectedCities.length > 0) {
-        result = result.filter((p) => selectedCities.includes(p.city));
-      }
-      if (minRent) result = result.filter((p) => p.rent >= Number(minRent));
-      if (maxRent) result = result.filter((p) => p.rent <= Number(maxRent));
-      if (minBedrooms) result = result.filter((p) => p.bedrooms >= Number(minBedrooms));
-      if (petsAllowed !== undefined) result = result.filter((p) => p.petsAllowed === petsAllowed);
-      if (furnished !== undefined) result = result.filter((p) => p.furnished === furnished);
-      if (parkingAvailable !== undefined) {
-        result = result.filter((p) => p.parkingAvailable === parkingAvailable);
-      }
-
-      const dir = -1; // always newest / highest first (descending)
-      result.sort((a, b) => {
-        switch (sortBy) {
-          case 'rent':
-            return (a.rent - b.rent) * dir;
-          case 'views':
-            return (a.views - b.views) * dir;
-          case 'availableDate':
-            return String(a.availableDate).localeCompare(String(b.availableDate)) * dir;
-          case 'updatedAt':
-            return (new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime()) * dir;
-          case 'createdAt':
-          default:
-            return (new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()) * dir;
-        }
-      });
-
-      const totalCount = result.length;
-      const start = (page - 1) * limit;
-      setProperties(result.slice(start, start + limit));
-      setTotal(totalCount);
-      setTotalPages(Math.max(1, Math.ceil(totalCount / limit)));
-      setLoading(false);
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [page, sortBy, search, selectedStatuses, selectedTypes, selectedCities, minRent, maxRent, minBedrooms, petsAllowed, furnished, parkingAvailable]);
-
-  const loadCities = useCallback(() => {
-    setCities([...new Set(FEATURED_PROPERTIES.map((p) => p.city))].sort());
-  }, []);
-
+  // Reset to the first page whenever the result set changes shape.
   useEffect(() => {
-    const cleanup = loadProperties();
-    loadCities();
-    return cleanup;
-  }, [loadProperties, loadCities]);
-
-  const handleSearch = () => {
     setPage(1);
-    updateSearchParams();
-    loadProperties();
-  };
+  }, [
+    debouncedSearch,
+    propertyType,
+    minRent,
+    maxRent,
+    minBedrooms,
+    petsAllowed,
+    furnished,
+    sortBy,
+  ]);
+
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['landlord-listings', params],
+    queryFn: () => getLandlordListings(params),
+  });
+
+  const listings = data?.data ?? [];
+  const total = data?.itemCount ?? 0;
+  const pageCount = data?.pageCount ?? 1;
 
   const handleClearFilters = () => {
     setSearch('');
-    setSelectedStatuses([]);
-    setSelectedTypes([]);
-    setSelectedCities([]);
+    setPropertyType('all');
     setMinRent('');
     setMaxRent('');
     setMinBedrooms('');
-    setPetsAllowed(undefined);
-    setFurnished(undefined);
-    setParkingAvailable(undefined);
+    setPetsAllowed(false);
+    setFurnished(false);
     setPage(1);
-    setSearchParams({});
-    loadProperties();
   };
 
-  const updateSearchParams = () => {
-    const params: Record<string, string> = {};
-    if (search) params.search = search;
-    if (page > 1) params.page = page.toString();
-    if (sortBy && sortBy !== 'createdAt') params.sortBy = sortBy;
-    setSearchParams(params);
-  };
-
-  const getStatusColor = (status: Property['status']) => {
-    switch (status) {
-      case 'active': return 'bg-green-500';
-      case 'pending': return 'bg-yellow-500';
-      case 'rented': return 'bg-blue-500';
-      case 'inactive': return 'bg-gray-500';
-      default: return 'bg-gray-500';
-    }
-  };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0
-    }).format(amount);
-  };
+  const hasActiveFilters = activeFilterCount > 0 || search.length > 0;
 
   return (
     <div className="container mx-auto py-8 px-4">
@@ -192,21 +207,14 @@ export default function PropertyList() {
 
       {/* Search and Filters */}
       <div className="flex gap-4 mb-6">
-        <div className="flex-1 flex gap-2">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search by title or address..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-              className="pl-10 h-11"
-            />
-          </div>
-          <Button onClick={handleSearch}>
-            <Search className="h-4 w-4 sm:mr-2" />
-            <span className="hidden sm:inline">Search</span>
-          </Button>
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search by title or address..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-10 h-11"
+          />
         </div>
 
         <Dialog open={filtersOpen} onOpenChange={setFiltersOpen}>
@@ -214,9 +222,9 @@ export default function PropertyList() {
             <Button variant="outline">
               <Filter className="h-4 w-4 sm:mr-2" />
               <span className="hidden sm:inline">Filters</span>
-              {(selectedStatuses.length > 0 || selectedTypes.length > 0 || selectedCities.length > 0) && (
+              {activeFilterCount > 0 && (
                 <Badge variant="secondary" className="ml-2">
-                  {selectedStatuses.length + selectedTypes.length + selectedCities.length}
+                  {activeFilterCount}
                 </Badge>
               )}
             </Button>
@@ -225,91 +233,36 @@ export default function PropertyList() {
             <DialogHeader>
               <DialogTitle>Filter Properties</DialogTitle>
               <DialogDescription>
-                Refine your property search with filters
+                Refine your listings with filters
               </DialogDescription>
             </DialogHeader>
 
             <div className="space-y-6 mt-6">
-              {/* Status Filter */}
+              {/* Property Type */}
               <div>
-                <Label className="text-base font-semibold mb-3 block">Status</Label>
-                <div className="space-y-2">
-                  {PROPERTY_STATUSES.map((status) => (
-                    <div key={status} className="flex items-center">
-                      <Checkbox
-                        id={`status-${status}`}
-                        checked={selectedStatuses.includes(status)}
-                        onCheckedChange={(checked) => {
-                          if (checked) {
-                            setSelectedStatuses([...selectedStatuses, status]);
-                          } else {
-                            setSelectedStatuses(selectedStatuses.filter(s => s !== status));
-                          }
-                        }}
-                      />
-                      <label htmlFor={`status-${status}`} className="ml-2 text-sm capitalize cursor-pointer">
-                        {status}
-                      </label>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Property Type Filter */}
-              <div>
-                <Label className="text-base font-semibold mb-3 block">Property Type</Label>
-                <div className="space-y-2">
-                  {PROPERTY_TYPES.map((type) => (
-                    <div key={type} className="flex items-center">
-                      <Checkbox
-                        id={`type-${type}`}
-                        checked={selectedTypes.includes(type)}
-                        onCheckedChange={(checked) => {
-                          if (checked) {
-                            setSelectedTypes([...selectedTypes, type]);
-                          } else {
-                            setSelectedTypes(selectedTypes.filter(t => t !== type));
-                          }
-                        }}
-                      />
-                      <label htmlFor={`type-${type}`} className="ml-2 text-sm cursor-pointer">
+                <Label className="text-base font-semibold mb-3 block">
+                  Property Type
+                </Label>
+                <Select value={propertyType} onValueChange={setPropertyType}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="All Types" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Types</SelectItem>
+                    {PROPERTY_TYPES.map((type) => (
+                      <SelectItem key={type} value={type}>
                         {formatPropertyType(type)}
-                      </label>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* City Filter */}
-              {cities.length > 0 && (
-                <div>
-                  <Label className="text-base font-semibold mb-3 block">City</Label>
-                  <div className="space-y-2 max-h-48 overflow-y-auto">
-                    {cities.map((city) => (
-                      <div key={city} className="flex items-center">
-                        <Checkbox
-                          id={`city-${city}`}
-                          checked={selectedCities.includes(city)}
-                          onCheckedChange={(checked) => {
-                            if (checked) {
-                              setSelectedCities([...selectedCities, city]);
-                            } else {
-                              setSelectedCities(selectedCities.filter(c => c !== city));
-                            }
-                          }}
-                        />
-                        <label htmlFor={`city-${city}`} className="ml-2 text-sm cursor-pointer">
-                          {city}
-                        </label>
-                      </div>
+                      </SelectItem>
                     ))}
-                  </div>
-                </div>
-              )}
+                  </SelectContent>
+                </Select>
+              </div>
 
               {/* Rent Range */}
               <div>
-                <Label className="text-base font-semibold mb-3 block">Rent Range</Label>
+                <Label className="text-base font-semibold mb-3 block">
+                  Rent Range
+                </Label>
                 <div className="flex gap-2">
                   <Input
                     type="number"
@@ -328,7 +281,9 @@ export default function PropertyList() {
 
               {/* Bedrooms */}
               <div>
-                <Label className="text-base font-semibold mb-3 block">Minimum Bedrooms</Label>
+                <Label className="text-base font-semibold mb-3 block">
+                  Minimum Bedrooms
+                </Label>
                 <Input
                   type="number"
                   placeholder="0"
@@ -342,45 +297,47 @@ export default function PropertyList() {
                 <div className="flex items-center">
                   <Checkbox
                     id="pets-allowed"
-                    checked={petsAllowed === true}
-                    onCheckedChange={(checked) => setPetsAllowed(checked ? true : undefined)}
+                    checked={petsAllowed}
+                    onCheckedChange={(checked) =>
+                      setPetsAllowed(checked === true)
+                    }
                   />
-                  <label htmlFor="pets-allowed" className="ml-2 text-sm cursor-pointer">
+                  <label
+                    htmlFor="pets-allowed"
+                    className="ml-2 text-sm cursor-pointer"
+                  >
                     Pets Allowed
                   </label>
                 </div>
                 <div className="flex items-center">
                   <Checkbox
                     id="furnished"
-                    checked={furnished === true}
-                    onCheckedChange={(checked) => setFurnished(checked ? true : undefined)}
+                    checked={furnished}
+                    onCheckedChange={(checked) =>
+                      setFurnished(checked === true)
+                    }
                   />
-                  <label htmlFor="furnished" className="ml-2 text-sm cursor-pointer">
+                  <label
+                    htmlFor="furnished"
+                    className="ml-2 text-sm cursor-pointer"
+                  >
                     Furnished
-                  </label>
-                </div>
-                <div className="flex items-center">
-                  <Checkbox
-                    id="parking"
-                    checked={parkingAvailable === true}
-                    onCheckedChange={(checked) => setParkingAvailable(checked ? true : undefined)}
-                  />
-                  <label htmlFor="parking" className="ml-2 text-sm cursor-pointer">
-                    Parking Available
                   </label>
                 </div>
               </div>
 
-              {/* Action Buttons */}
               <DialogFooter className="gap-2 sm:gap-0">
                 <Button
-                  onClick={() => { handleSearch(); setFiltersOpen(false); }}
+                  onClick={() => setFiltersOpen(false)}
                   className="flex-1"
                 >
-                  Apply Filters
+                  Done
                 </Button>
                 <Button
-                  onClick={() => { handleClearFilters(); setFiltersOpen(false); }}
+                  onClick={() => {
+                    handleClearFilters();
+                    setFiltersOpen(false);
+                  }}
                   variant="outline"
                 >
                   <X className="h-4 w-4" />
@@ -390,7 +347,10 @@ export default function PropertyList() {
           </DialogContent>
         </Dialog>
 
-        <Select value={sortBy} onValueChange={(value) => setSortBy(value as PropertySearchParams['sortBy'])}>
+        <Select
+          value={sortBy}
+          onValueChange={(value) => setSortBy(value as ListingSortBy)}
+        >
           <SelectTrigger className="w-auto sm:w-45" aria-label="Sort by">
             <ArrowUpDown className="h-4 w-4 sm:mr-2" />
             <span className="hidden sm:inline">
@@ -398,11 +358,11 @@ export default function PropertyList() {
             </span>
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="createdAt">Date Created</SelectItem>
-            <SelectItem value="updatedAt">Last Updated</SelectItem>
-            <SelectItem value="rent">Rent</SelectItem>
-            <SelectItem value="views">Views</SelectItem>
-            <SelectItem value="availableDate">Available Date</SelectItem>
+            {SORT_OPTIONS.map((opt) => (
+              <SelectItem key={opt.value} value={opt.value}>
+                {opt.label}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>
@@ -410,9 +370,9 @@ export default function PropertyList() {
       {/* Results Summary */}
       <div className="flex justify-between items-center mb-4">
         <p className="text-sm text-muted-foreground">
-          Showing {properties.length} of {total} properties
+          Showing {listings.length} of {total} properties
         </p>
-        {(selectedStatuses.length > 0 || selectedTypes.length > 0 || selectedCities.length > 0 || search) && (
+        {hasActiveFilters && (
           <Button variant="ghost" size="sm" onClick={handleClearFilters}>
             Clear all filters
           </Button>
@@ -420,7 +380,7 @@ export default function PropertyList() {
       </div>
 
       {/* Property Grid */}
-      {loading ? (
+      {isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {[...Array(6)].map((_, i) => (
             <Card key={i}>
@@ -436,12 +396,20 @@ export default function PropertyList() {
             </Card>
           ))}
         </div>
-      ) : properties.length === 0 ? (
+      ) : isError ? (
+        <Card className="p-12 text-center">
+          <Home className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+          <h3 className="text-lg font-semibold mb-2">
+            Couldn't load your listings
+          </h3>
+          <p className="text-muted-foreground">Please try again in a moment.</p>
+        </Card>
+      ) : listings.length === 0 ? (
         <Card className="p-12 text-center">
           <Home className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
           <h3 className="text-lg font-semibold mb-2">No properties found</h3>
           <p className="text-muted-foreground mb-4">
-            {search || selectedStatuses.length > 0 || selectedTypes.length > 0
+            {hasActiveFilters
               ? 'Try adjusting your filters or search term'
               : 'Get started by adding your first property'}
           </p>
@@ -452,72 +420,109 @@ export default function PropertyList() {
         </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {properties.map((property) => (
-            <Card
-              key={property.id}
-              className="cursor-pointer hover:shadow-lg transition-shadow"
-              onClick={() => navigate(`/landlord/properties/${property.id}`)}
-            >
-              {/* Property Image */}
-              <div className="relative h-48 bg-muted">
-                {property.images && property.images.length > 0 ? (
-                  <img
-                    src={property.images[0]}
-                    alt={property.title}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center">
-                    <Home className="h-12 w-12 text-muted-foreground" />
-                  </div>
-                )}
-                <Badge className={`absolute top-2 right-2 ${getStatusColor(property.status)}`}>
-                  {property.status}
-                </Badge>
-              </div>
-
-              <CardHeader>
-                <CardTitle className="line-clamp-1">{property.title}</CardTitle>
-                <CardDescription className="flex items-center gap-1">
-                  <MapPin className="h-3 w-3" />
-                  {property.city}, {property.state}
-                </CardDescription>
-              </CardHeader>
-
-              <CardContent>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-2xl font-bold">{formatCurrency(property.rent)}</span>
-                    <span className="text-sm text-muted-foreground">/month</span>
-                  </div>
-                  <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                    <div className="flex items-center gap-1">
-                      <Bed className="h-4 w-4" />
-                      {property.bedrooms} bed
+          {listings.map((listing) => {
+            const asset = listing.property;
+            const terms =
+              listing.intent === 'rent_ltr'
+                ? (listing.terms as RentLtrTerms)
+                : null;
+            const image = [...listing.media].sort(
+              (a, b) => a.position - b.position
+            )[0]?.url;
+            const stateBadge = STATE_BADGE[listing.state];
+            const petsOk =
+              !!listing.petPolicy &&
+              listing.petPolicy.toLowerCase() !== 'no pets';
+            return (
+              <Card
+                key={listing.id}
+                className="cursor-pointer hover:shadow-lg transition-shadow"
+                onClick={() => navigate(`/landlord/properties/${listing.id}`)}
+              >
+                {/* Property Image */}
+                <div className="relative h-48 bg-muted">
+                  {image ? (
+                    <img
+                      src={image}
+                      alt={listing.title}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <Home className="h-12 w-12 text-muted-foreground" />
                     </div>
-                    <div className="flex items-center gap-1">
-                      <Bath className="h-4 w-4" />
-                      {property.bathrooms} bath
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <Badge variant="outline">{formatPropertyType(property.propertyType)}</Badge>
-                    {property.furnished && <Badge variant="outline">Furnished</Badge>}
-                    {property.petsAllowed && <Badge variant="outline">Pets OK</Badge>}
-                  </div>
+                  )}
+                  <Badge
+                    className={`absolute top-2 right-2 ${stateBadge.className}`}
+                  >
+                    {stateBadge.label}
+                  </Badge>
+                  {listing.provenance.verifiedListerBadge && (
+                    <Badge
+                      variant="secondary"
+                      className="absolute top-2 left-2 flex items-center gap-1"
+                    >
+                      <ShieldCheck className="h-3 w-3 text-emerald-600" />
+                      Verified
+                    </Badge>
+                  )}
                 </div>
-              </CardContent>
 
-              <CardFooter className="text-xs text-muted-foreground">
-                {property.views} views
-              </CardFooter>
-            </Card>
-          ))}
+                <CardHeader>
+                  <CardTitle className="line-clamp-1">
+                    {listing.title}
+                  </CardTitle>
+                  <CardDescription className="flex items-center gap-1">
+                    <MapPin className="h-3 w-3" />
+                    {asset ? `${asset.city}, ${asset.stateOrProvince}` : '—'}
+                  </CardDescription>
+                </CardHeader>
+
+                <CardContent>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-2xl font-bold">
+                        {formatCurrency(listingRentMonthly(listing))}
+                      </span>
+                      <span className="text-sm text-muted-foreground">
+                        /month
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                      <div className="flex items-center gap-1">
+                        <Bed className="h-4 w-4" />
+                        {asset?.bedroomsTotal ?? '—'} bed
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Bath className="h-4 w-4" />
+                        {asset?.bathroomsTotal ?? '—'} bath
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      {asset && (
+                        <Badge variant="outline">
+                          {formatPropertyType(asset.propertyType)}
+                        </Badge>
+                      )}
+                      {terms?.furnished && (
+                        <Badge variant="outline">Furnished</Badge>
+                      )}
+                      {petsOk && <Badge variant="outline">Pets OK</Badge>}
+                    </div>
+                  </div>
+                </CardContent>
+
+                <CardFooter className="text-xs text-muted-foreground">
+                  {listing.views} views
+                </CardFooter>
+              </Card>
+            );
+          })}
         </div>
       )}
 
       {/* Pagination */}
-      {totalPages > 1 && (
+      {pageCount > 1 && (
         <div className="flex justify-center items-center gap-2 mt-8">
           <Button
             variant="outline"
@@ -527,11 +532,11 @@ export default function PropertyList() {
             Previous
           </Button>
           <span className="text-sm text-muted-foreground">
-            Page {page} of {totalPages}
+            Page {page} of {pageCount}
           </span>
           <Button
             variant="outline"
-            disabled={page === totalPages}
+            disabled={page === pageCount}
             onClick={() => setPage(page + 1)}
           >
             Next
