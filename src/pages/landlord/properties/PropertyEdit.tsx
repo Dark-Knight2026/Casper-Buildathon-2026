@@ -431,7 +431,7 @@ export default function PropertyEdit() {
                   render={() => (
                     <FormItem>
                       <FormLabel>Amenities</FormLabel>
-                      <div className="grid grid-cols-2 md:grid-cols-3 gap-3 max-h-64 overflow-y-auto p-2 border rounded-md">
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                         {ALL_AMENITIES.map((amenity) => (
                           <FormField
                             key={amenity}
