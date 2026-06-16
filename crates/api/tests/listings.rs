@@ -591,6 +591,67 @@ async fn landlord_listings_rejects_unknown_state(pool: PgPool) {
     assert_eq!(status, StatusCode::BAD_REQUEST);
 }
 
+/// The landlord list honors `sortBy=views`.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn landlord_listings_sorts_by_views(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, token) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+
+    let popular = seed_active_listing(
+        &env,
+        &pool,
+        &token,
+        &draft_body(common::seed_property(&pool, landlord_id).await),
+    )
+    .await;
+    common::set_listing_views(&pool, popular, 50).await;
+    let quiet = seed_active_listing(
+        &env,
+        &pool,
+        &token,
+        &draft_body(common::seed_property(&pool, landlord_id).await),
+    )
+    .await;
+    common::set_listing_views(&pool, quiet, 2).await;
+
+    let (status, body) = common::authed_request::<Value>(
+        &env.server,
+        &Method::GET,
+        "/api/v1/listings/landlord?sortBy=views&sortOrder=desc",
+        &token,
+        &Value::Null,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    let body = body.unwrap();
+    assert_eq!(body["data"][0]["id"].as_str().unwrap(), popular.to_string());
+    assert_eq!(body["data"][1]["id"].as_str().unwrap(), quiet.to_string());
+}
+
+/// `sortBy=distance` is rejected on the landlord list (no geo center here).
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn landlord_listings_rejects_distance_sort_400(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (_id, token) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+
+    let (status, body) = common::authed_request::<Value>(
+        &env.server,
+        &Method::GET,
+        "/api/v1/listings/landlord?sortBy=distance",
+        &token,
+        &Value::Null,
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(
+        body.unwrap()["error"]
+            .as_str()
+            .unwrap()
+            .contains("not available for landlord listings")
+    );
+}
+
 // `GET /listings` public active-only list -------------------------------------
 
 /// A draft is invisible to the public list (active-only).
@@ -746,6 +807,40 @@ async fn list_sorts_by_rent_ascending(pool: PgPool) {
     let body = response.json::<Value>();
     assert_eq!(body["data"][0]["terms"]["rentMonthly"], 1000.0);
     assert_eq!(body["data"][1]["terms"]["rentMonthly"], 5000.0);
+}
+
+/// `sortBy=views` orders by the unique-tenant view count (descending).
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn list_sorts_by_views(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, token) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+
+    let popular = seed_active_listing(
+        &env,
+        &pool,
+        &token,
+        &draft_body(common::seed_property(&pool, landlord_id).await),
+    )
+    .await;
+    common::set_listing_views(&pool, popular, 50).await;
+    let quiet = seed_active_listing(
+        &env,
+        &pool,
+        &token,
+        &draft_body(common::seed_property(&pool, landlord_id).await),
+    )
+    .await;
+    common::set_listing_views(&pool, quiet, 2).await;
+
+    let response = env
+        .server
+        .get("/api/v1/listings?sortBy=views&sortOrder=desc")
+        .await;
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body = response.json::<Value>();
+    assert_eq!(body["itemCount"], 2);
+    assert_eq!(body["data"][0]["id"].as_str().unwrap(), popular.to_string());
+    assert_eq!(body["data"][1]["id"].as_str().unwrap(), quiet.to_string());
 }
 
 /// A radius around Denver includes a Denver listing and excludes a far one.

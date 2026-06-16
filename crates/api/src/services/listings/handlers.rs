@@ -324,11 +324,11 @@ pub async fn update_listing(
 
 // `GET /api/v1/listings/landlord`
 //
-/// The caller's own listings, optionally narrowed by lifecycle state, paginated.
+/// The caller's own listings, filtered by lifecycle state and sorted, paginated.
 ///
 /// # Errors
 ///
-/// Returns `400` for an unrecognized `state` token, or a database error.
+/// Returns `400` for an invalid `state` or `sortBy`, or a database error.
 #[utoipa::path(
     get,
     path = "/listings/landlord",

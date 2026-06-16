@@ -779,6 +779,24 @@ pub async fn set_property_metrics(
     .expect("set property metrics");
 }
 
+/// Sets a listing's unique-tenant `views` counter directly, so view-count sort
+/// tests can order listings without driving the per-tenant view flow.
+#[inline]
+pub async fn set_listing_views(pool: &PgPool, listing_id: Uuid, views: i32) {
+    sqlx::query(
+        r"
+            UPDATE listings
+            SET views = $2
+            WHERE id = $1
+        ",
+    )
+    .bind(listing_id)
+    .bind(views)
+    .execute(pool)
+    .await
+    .expect("set listing views");
+}
+
 /// Posts a minimal valid `rent_ltr` draft listing against `property_id` (as the
 /// landlord holding `token`) and returns its id. Setup for tests that need an
 /// existing listing without re-asserting the create path itself.

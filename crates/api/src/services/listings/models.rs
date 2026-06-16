@@ -314,6 +314,8 @@ pub enum ListingSort {
     AvailableDate,
     /// By monthly rent (from terms).
     Rent,
+    /// By unique-tenant view count.
+    Views,
     /// By distance from the radius center.
     Distance,
 }
@@ -329,6 +331,7 @@ impl ListingSort {
             Self::UpdatedAt => "l.updated_at",
             Self::AvailableDate => "l.available_date",
             Self::Rent => "(l.terms->>'rentMonthly')::numeric",
+            Self::Views => "l.views",
         }
     }
 }
@@ -473,14 +476,20 @@ pub struct LandlordListingParams {
     /// Lifecycle-state filter, comma-separated for several (`state=active` or
     /// `state=draft,active`). Absent lists every state.
     pub state: Option<String>,
+    /// Sort key (`distance` is not available here - no geo center).
+    pub sort_by: Option<ListingSort>,
+    /// Sort order, defaulting to `desc`.
+    pub sort_order: Option<SortOrder>,
 }
 
 impl LandlordListingParams {
-    /// Validates the state filter and resolves it into a [`LandlordListingFilter`].
+    /// Validates the state and sort params and resolves them into a
+    /// [`LandlordListingFilter`].
     ///
     /// # Errors
     ///
-    /// Returns [`ApiError::BadRequest`] for an unrecognized state token.
+    /// Returns [`ApiError::BadRequest`] for an unrecognized state token or for
+    /// `sortBy=distance` (unsupported on this surface).
     #[inline]
     pub fn into_validated(self, pagination: &Pagination) -> ApiResult<LandlordListingFilter> {
         let states = match self.state.as_deref() {
@@ -495,8 +504,16 @@ impl LandlordListingParams {
                 .collect::<ApiResult<Vec<_>>>()?,
             None => Vec::new(),
         };
+        let sort = self.sort_by.unwrap_or(ListingSort::CreatedAt);
+        if matches!(sort, ListingSort::Distance) {
+            return Err(ApiError::BadRequest(
+                "sortBy=distance is not available for landlord listings".to_owned(),
+            ));
+        }
         Ok(LandlordListingFilter {
             states,
+            sort,
+            sort_descending: !matches!(self.sort_order, Some(SortOrder::Asc)),
             limit: pagination.page_size(),
             offset: pagination.offset(),
         })

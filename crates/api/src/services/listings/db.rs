@@ -689,6 +689,10 @@ pub async fn update_listing(
 pub struct LandlordListingFilter {
     /// Lifecycle states to include; empty means every state.
     pub states: Vec<ListingState>,
+    /// Sort key (never `Distance` - rejected at validation, no geo center).
+    pub sort: ListingSort,
+    /// Descending order.
+    pub sort_descending: bool,
     /// Page size.
     pub limit: i64,
     /// Page offset.
@@ -713,9 +717,24 @@ impl AppendFilters for LandlordListingFilter {
     }
 }
 
-/// Lists a landlord's own listings (newest first), optionally narrowed by
-/// lifecycle state, with batch-loaded nested property and media plus the total
-/// count.
+impl AppendOrder for LandlordListingFilter {
+    /// Pushes the ORDER BY clause. `Distance` is rejected upstream (no geo
+    /// center on this surface), so every key maps to a plain column.
+    #[inline]
+    fn append_order(&self, builder: &mut QueryBuilder<Postgres>) {
+        builder
+            .push(" ORDER BY ")
+            .push(self.sort.order_column())
+            .push(if self.sort_descending {
+                " DESC"
+            } else {
+                " ASC"
+            });
+    }
+}
+
+/// Lists a landlord's own listings, narrowed by lifecycle state and sorted per
+/// `filter`, with batch-loaded nested property and media plus the total count.
 ///
 /// # Errors
 ///
@@ -747,7 +766,7 @@ pub async fn list_landlord_listings(
         .push_bind(landlord_id)
         .push(" AND l.deleted_at IS NULL")
         .append(filter)
-        .push(" ORDER BY l.created_at DESC")
+        .order_by(filter)
         .limit_offset(filter.limit, filter.offset)
         .build_query_as::<ListingRow>()
         .fetch_all(tx.as_mut())
