@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import { FeaturedProperties } from '@/components/FeaturedProperties';
 import { FEATURED_PROPERTIES } from '@/data/featuredProperties';
@@ -27,10 +28,17 @@ const guestAuthValue = {
 };
 
 function renderComponent() {
+  // SavePropertyButton reads the tenant's favorite ids via react-query, so a
+  // QueryClient must be in scope (the query stays disabled for a guest).
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
   return render(
-    <AuthContext.Provider value={guestAuthValue}>
-      <FeaturedProperties />
-    </AuthContext.Provider>
+    <QueryClientProvider client={queryClient}>
+      <AuthContext.Provider value={guestAuthValue}>
+        <FeaturedProperties />
+      </AuthContext.Provider>
+    </QueryClientProvider>
   );
 }
 
@@ -84,7 +92,9 @@ describe('FeaturedProperties', () => {
       expect(
         mockNavigate,
         'card click should navigate to /properties/{id} with property in router state'
-      ).toHaveBeenCalledWith(`/properties/${first.id}`, { state: { property: first } });
+      ).toHaveBeenCalledWith(`/properties/${first.id}`, {
+        state: { property: first },
+      });
     });
 
     it('navigates to correct id for second card', () => {
@@ -93,7 +103,9 @@ describe('FeaturedProperties', () => {
       expect(
         mockNavigate,
         'second card click should navigate using the second property id'
-      ).toHaveBeenCalledWith(`/properties/${second.id}`, { state: { property: second } });
+      ).toHaveBeenCalledWith(`/properties/${second.id}`, {
+        state: { property: second },
+      });
     });
 
     it('navigates on Enter key press', () => {
@@ -105,7 +117,9 @@ describe('FeaturedProperties', () => {
       expect(
         mockNavigate,
         'Enter key on focused card should trigger navigation'
-      ).toHaveBeenCalledWith(`/properties/${first.id}`, { state: { property: first } });
+      ).toHaveBeenCalledWith(`/properties/${first.id}`, {
+        state: { property: first },
+      });
     });
 
     it('navigates on Space key press', () => {
@@ -117,7 +131,9 @@ describe('FeaturedProperties', () => {
       expect(
         mockNavigate,
         'Space key on focused card should trigger navigation'
-      ).toHaveBeenCalledWith(`/properties/${first.id}`, { state: { property: first } });
+      ).toHaveBeenCalledWith(`/properties/${first.id}`, {
+        state: { property: first },
+      });
     });
 
     it('does not navigate on other key press', () => {
@@ -137,7 +153,9 @@ describe('FeaturedProperties', () => {
     it('save button click does not trigger card navigation (stopPropagation)', () => {
       renderComponent();
       const firstCard = screen
-        .getByRole('button', { name: new RegExp(`view details for ${first.title}`, 'i') })
+        .getByRole('button', {
+          name: new RegExp(`view details for ${first.title}`, 'i'),
+        })
         .closest('.group') as HTMLElement;
       const saveButton = within(firstCard).getByRole('button', {
         name: /save property/i,
@@ -151,12 +169,14 @@ describe('FeaturedProperties', () => {
 
     it('cards are keyboard focusable (tabIndex=0)', () => {
       renderComponent();
-      const cards = screen.getAllByRole('button', { name: /view details for/i });
+      const cards = screen.getAllByRole('button', {
+        name: /view details for/i,
+      });
       cards.forEach((card) => {
-        expect(card, 'each card should be keyboard focusable (tabindex="0")').toHaveAttribute(
-          'tabindex',
-          '0'
-        );
+        expect(
+          card,
+          'each card should be keyboard focusable (tabindex="0")'
+        ).toHaveAttribute('tabindex', '0');
       });
     });
   });

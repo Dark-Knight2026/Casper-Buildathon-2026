@@ -12,6 +12,7 @@ export function FeaturedProperties() {
           key={property.id}
           property={{
             id: property.id,
+            listingId: property.id,
             title: property.title,
             address: property.address,
             city: property.city,
@@ -27,7 +28,9 @@ export function FeaturedProperties() {
             daysOnMarket: property.daysOnMarket,
             photoCount: property.photoCount,
           }}
-          onClick={() => navigate(`/properties/${property.id}`, { state: { property } })}
+          onClick={() =>
+            navigate(`/properties/${property.id}`, { state: { property } })
+          }
         />
       ))}
     </div>
