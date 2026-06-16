@@ -14,7 +14,7 @@ use sqlx::{Error, FromRow, PgPool, Postgres, QueryBuilder, types::Json};
 use uuid::Uuid;
 
 use crate::{
-    common::{ApiError, ApiResult},
+    common::{ApiError, ApiResult, AppendFilters, AppendOrder, QueryBuilderExt},
     services::{
         listings::models::{
             AuthorityDocumentType, AuthorityTier, Listing, ListingHistoricalData,
@@ -193,6 +193,96 @@ pub struct ListingFilter {
     pub offset: i64,
 }
 
+impl AppendFilters for ListingFilter {
+    /// Pushes the dynamic WHERE filters shared by the count and page queries.
+    #[inline]
+    fn append_to(&self, builder: &mut QueryBuilder<Postgres>) {
+        if let Some(search) = &self.search {
+            builder.push(" AND (l.title ILIKE ");
+            builder.push_bind(format!("%{search}%"));
+            builder.push(" OR p.address_line1 ILIKE ");
+            builder.push_bind(format!("%{search}%"));
+            builder.push(")");
+        }
+        if let Some(radius) = self.radius_miles {
+            builder.push(" AND ST_DWithin(p.geog, ST_SetSRID(ST_MakePoint(");
+            builder.push_bind(self.near_lng);
+            builder.push(", ");
+            builder.push_bind(self.near_lat);
+            builder.push("), 4326)::geography, ");
+            builder.push_bind(radius * 1609.34);
+            builder.push(")");
+        }
+        if let Some(min_lng) = self.bbox_min_lng {
+            builder.push(" AND ST_Intersects(p.geog, ST_MakeEnvelope(");
+            builder.push_bind(min_lng);
+            builder.push(", ");
+            builder.push_bind(self.bbox_min_lat);
+            builder.push(", ");
+            builder.push_bind(self.bbox_max_lng);
+            builder.push(", ");
+            builder.push_bind(self.bbox_max_lat);
+            builder.push(", 4326)::geography)");
+        }
+        if let Some(intent) = &self.intent {
+            builder.push(" AND l.intent = ");
+            builder.push_bind(intent.as_str());
+        }
+        if let Some(property_type) = &self.property_type {
+            builder.push(" AND p.property_type = ");
+            builder.push_bind(property_type.as_str());
+        }
+        if let Some(min_rent) = self.min_rent {
+            builder.push(" AND (l.terms->>'rentMonthly')::numeric >= ");
+            builder.push_bind(min_rent);
+        }
+        if let Some(max_rent) = self.max_rent {
+            builder.push(" AND (l.terms->>'rentMonthly')::numeric <= ");
+            builder.push_bind(max_rent);
+        }
+        if let Some(min_bedrooms) = self.min_bedrooms {
+            builder.push(" AND p.bedrooms >= ");
+            builder.push_bind(min_bedrooms);
+        }
+        if let Some(max_bedrooms) = self.max_bedrooms {
+            builder.push(" AND p.bedrooms <= ");
+            builder.push_bind(max_bedrooms);
+        }
+        if self.pets_allowed == Some(true) {
+            builder.push(" AND l.pet_policy IS DISTINCT FROM 'No Pets'");
+        }
+        if let Some(furnished) = self.furnished {
+            builder.push(" AND (l.terms->>'furnished')::boolean = ");
+            builder.push_bind(furnished);
+        }
+    }
+}
+
+impl AppendOrder for ListingFilter {
+    /// Pushes the ORDER BY clause; distance sort binds the radius center inline.
+    #[inline]
+    fn append_order(&self, builder: &mut QueryBuilder<Postgres>) {
+        match self.sort {
+            ListingSort::Distance => {
+                builder.push(" ORDER BY ST_Distance(p.geog, ST_SetSRID(ST_MakePoint(");
+                builder.push_bind(self.near_lng);
+                builder.push(", ");
+                builder.push_bind(self.near_lat);
+                builder.push("), 4326)::geography)");
+            }
+            other => {
+                builder.push(" ORDER BY ");
+                builder.push(other.order_column());
+            }
+        }
+        builder.push(if self.sort_descending {
+            " DESC"
+        } else {
+            " ASC"
+        });
+    }
+}
+
 /// Columns selected into a [`ListingRow`] for the search query (aliased to `l`).
 const LISTING_COLUMNS: &str = "l.id, l.property_id, l.listed_by, l.intent, \
     l.state, l.days_on_market, l.expires_at, l.title, l.description, \
@@ -270,31 +360,31 @@ pub async fn list_active_listings(
         .execute(tx.as_mut())
         .await?;
 
-    let mut count_builder = QueryBuilder::<Postgres>::new(
-        "SELECT COUNT(*) FROM listings l \
-         JOIN properties p ON p.id = l.property_id \
-         WHERE l.state = 'active' AND l.deleted_at IS NULL",
-    );
-    push_filters(&mut count_builder, filter);
-    let total = count_builder
-        .build_query_scalar::<i64>()
-        .fetch_one(tx.as_mut())
-        .await?;
+    let total = QueryBuilder::<Postgres>::new(
+        r"
+            SELECT COUNT(*)
+            FROM listings l
+            JOIN properties p ON p.id = l.property_id
+            WHERE l.state = 'active' AND l.deleted_at IS NULL
+        ",
+    )
+    .append(filter)
+    .build_query_scalar::<i64>()
+    .fetch_one(tx.as_mut())
+    .await?;
 
-    let mut builder = QueryBuilder::<Postgres>::new("SELECT ");
-    builder.push(LISTING_COLUMNS);
-    builder.push(
-        " FROM listings l \
-         JOIN properties p ON p.id = l.property_id \
-         WHERE l.state = 'active' AND l.deleted_at IS NULL",
-    );
-    push_filters(&mut builder, filter);
-    push_order(&mut builder, filter);
-    builder.push(" LIMIT ");
-    builder.push_bind(filter.limit);
-    builder.push(" OFFSET ");
-    builder.push_bind(filter.offset);
-    let rows = builder
+    let rows = QueryBuilder::<Postgres>::new("SELECT ")
+        .push(LISTING_COLUMNS)
+        .push(
+            r"
+                FROM listings l
+                JOIN properties p ON p.id = l.property_id
+                WHERE l.state = 'active' AND l.deleted_at IS NULL
+            ",
+        )
+        .append(filter)
+        .order_by(filter)
+        .limit_offset(filter.limit, filter.offset)
         .build_query_as::<ListingRow>()
         .fetch_all(tx.as_mut())
         .await?;
@@ -319,90 +409,6 @@ pub async fn list_active_listings(
         })
         .collect();
     Ok((listings, total))
-}
-
-/// Pushes the dynamic WHERE filters shared by the count and page queries.
-fn push_filters(builder: &mut QueryBuilder<Postgres>, filter: &ListingFilter) {
-    if let Some(search) = &filter.search {
-        builder.push(" AND (l.title ILIKE ");
-        builder.push_bind(format!("%{search}%"));
-        builder.push(" OR p.address_line1 ILIKE ");
-        builder.push_bind(format!("%{search}%"));
-        builder.push(")");
-    }
-    if let Some(radius) = filter.radius_miles {
-        builder.push(" AND ST_DWithin(p.geog, ST_SetSRID(ST_MakePoint(");
-        builder.push_bind(filter.near_lng);
-        builder.push(", ");
-        builder.push_bind(filter.near_lat);
-        builder.push("), 4326)::geography, ");
-        builder.push_bind(radius * 1609.34);
-        builder.push(")");
-    }
-    if let Some(min_lng) = filter.bbox_min_lng {
-        builder.push(" AND ST_Intersects(p.geog, ST_MakeEnvelope(");
-        builder.push_bind(min_lng);
-        builder.push(", ");
-        builder.push_bind(filter.bbox_min_lat);
-        builder.push(", ");
-        builder.push_bind(filter.bbox_max_lng);
-        builder.push(", ");
-        builder.push_bind(filter.bbox_max_lat);
-        builder.push(", 4326)::geography)");
-    }
-    if let Some(intent) = &filter.intent {
-        builder.push(" AND l.intent = ");
-        builder.push_bind(intent.as_str());
-    }
-    if let Some(property_type) = &filter.property_type {
-        builder.push(" AND p.property_type = ");
-        builder.push_bind(property_type.as_str());
-    }
-    if let Some(min_rent) = filter.min_rent {
-        builder.push(" AND (l.terms->>'rentMonthly')::numeric >= ");
-        builder.push_bind(min_rent);
-    }
-    if let Some(max_rent) = filter.max_rent {
-        builder.push(" AND (l.terms->>'rentMonthly')::numeric <= ");
-        builder.push_bind(max_rent);
-    }
-    if let Some(min_bedrooms) = filter.min_bedrooms {
-        builder.push(" AND p.bedrooms >= ");
-        builder.push_bind(min_bedrooms);
-    }
-    if let Some(max_bedrooms) = filter.max_bedrooms {
-        builder.push(" AND p.bedrooms <= ");
-        builder.push_bind(max_bedrooms);
-    }
-    if filter.pets_allowed == Some(true) {
-        builder.push(" AND l.pet_policy IS DISTINCT FROM 'No Pets'");
-    }
-    if let Some(furnished) = filter.furnished {
-        builder.push(" AND (l.terms->>'furnished')::boolean = ");
-        builder.push_bind(furnished);
-    }
-}
-
-/// Pushes the ORDER BY clause; distance sort binds the radius center inline.
-fn push_order(builder: &mut QueryBuilder<Postgres>, filter: &ListingFilter) {
-    match filter.sort {
-        ListingSort::Distance => {
-            builder.push(" ORDER BY ST_Distance(p.geog, ST_SetSRID(ST_MakePoint(");
-            builder.push_bind(filter.near_lng);
-            builder.push(", ");
-            builder.push_bind(filter.near_lat);
-            builder.push("), 4326)::geography)");
-        }
-        other => {
-            builder.push(" ORDER BY ");
-            builder.push(other.order_column());
-        }
-    }
-    builder.push(if filter.sort_descending {
-        " DESC"
-    } else {
-        " ASC"
-    });
 }
 
 /// Batch-loads properties by id into a lookup keyed by property id.

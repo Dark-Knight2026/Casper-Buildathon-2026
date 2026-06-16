@@ -14,6 +14,8 @@ pub mod models;
 pub mod pagination;
 /// Password hashing primitives and the account-password policy.
 pub mod password;
+/// Composable filter pushing for runtime `QueryBuilder` searches.
+pub mod query;
 /// Redis client wrapper.
 pub mod redis;
 /// Opaque single-use token generation shared across flows.
@@ -34,4 +36,5 @@ pub use models::{
 };
 pub use pagination::{Pageable, PaginatedResponse, Pagination};
 pub use password::{MAX_PASSWORD_LEN, MIN_PASSWORD_LEN};
+pub use query::{AppendFilters, AppendOrder, QueryBuilderExt};
 pub use redis::{RedisStore, SendReservation};
