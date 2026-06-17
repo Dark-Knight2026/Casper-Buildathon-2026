@@ -8,7 +8,7 @@ use crate::{
         errors::Error,
         events::{
             EquityEligibilityGranted, EquityEligibilityRevoked, LeaseAgreementCreated,
-            LeaseAgreementFinished, LeaseAgreementProlonged,
+            LeaseAgreementFinished, LeaseAgreementProlonged, LeaseNftRecovered,
         },
         types::{CreateLeaseAgreementParams, LeaseAgreement, RentDistributionTerms},
     },
@@ -109,6 +109,18 @@ pub mod events {
     }
 
     #[odra::event]
+    pub struct LeaseNftRecovered {
+        /// Lease agreement whose NFT was recovered.
+        pub lease_agreement_id: U256,
+        /// Lease NFT token ID that was transferred.
+        pub token_id: U256,
+        /// Wallet that owned the lease NFT before recovery.
+        pub old_wallet: Address,
+        /// Tenant user's active wallet that received the lease NFT.
+        pub new_wallet: Address,
+    }
+
+    #[odra::event]
     pub struct EquityEligibilityGranted {
         pub property_id: U256,
         pub account: U256,
@@ -146,6 +158,8 @@ pub mod errors {
         LeaseAlreadyFinalized = 413,
         TenantAlreadyEquityEligible = 414,
         InvalidTenant = 415,
+        LeaseNftOwnerNotFound = 416,
+        LeaseNftAlreadyOwnedByActiveWallet = 417,
     }
 }
 
@@ -157,6 +171,7 @@ pub mod errors {
   LeaseAgreementCreated,
   LeaseAgreementFinished,
   LeaseAgreementProlonged,
+  LeaseNftRecovered,
   EquityEligibilityGranted,
   EquityEligibilityRevoked,
 ])]
@@ -544,6 +559,39 @@ impl Lease {
         self.env().emit_event(LeaseAgreementProlonged {
             lease_agreement_id: *lease_agreement_id,
             prolonged_at: self.env().get_block_time(),
+        });
+    }
+
+    /// Moves a lease NFT to the tenant user's current active wallet after wallet recovery.
+    ///
+    /// @dev The caller must be the tenant user's active wallet. The NFT contract's
+    /// forced transfer unfreezes frozen tokens, so this function re-freezes the
+    /// lease NFT after the transfer to preserve the lease NFT invariant.
+    #[odra(non_reentrant)]
+    pub fn recover_lease_nft(&mut self, lease_agreement_id: &U256) {
+        let lease_agreement = self.get_lease_agreement_by_id(lease_agreement_id);
+        self.assert_caller_is_active_user(lease_agreement.tenant, Error::InvalidTenant);
+
+        let new_wallet = self.user_registry.get_active_wallet(lease_agreement.tenant);
+        let old_wallet = self
+            .nft
+            .owner_of(lease_agreement.token_id)
+            .unwrap_or_revert_with(&self.env(), Error::LeaseNftOwnerNotFound);
+
+        if old_wallet == new_wallet {
+            self.env().revert(Error::LeaseNftAlreadyOwnedByActiveWallet);
+        }
+
+        self.nft.add_to_whitelist(&new_wallet);
+        self.nft
+            .forced_transfer(old_wallet, new_wallet, lease_agreement.token_id);
+        self.nft.set_frozen_tokens(&lease_agreement.token_id, true);
+
+        self.env().emit_event(LeaseNftRecovered {
+            lease_agreement_id: *lease_agreement_id,
+            token_id: lease_agreement.token_id,
+            old_wallet,
+            new_wallet,
         });
     }
 
