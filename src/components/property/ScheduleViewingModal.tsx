@@ -161,13 +161,15 @@ export function ScheduleViewingModal({
 
             <div className="space-y-3">
               <Label className="block">Select Date</Label>
-              <Calendar
-                mode="single"
-                selected={selectedDate}
-                onSelect={setSelectedDate}
-                disabled={(date) => date < new Date()}
-                className="rounded-md border"
-              />
+              <div className="flex justify-center">
+                <Calendar
+                  mode="single"
+                  selected={selectedDate}
+                  onSelect={setSelectedDate}
+                  disabled={(date) => date < new Date()}
+                  className="rounded-md border"
+                />
+              </div>
             </div>
 
             <div className="space-y-3">
@@ -188,7 +190,7 @@ export function ScheduleViewingModal({
               </Select>
             </div>
 
-            <DialogFooter className="gap-2 sm:gap-0">
+            <DialogFooter className="gap-2">
               <Button type="button" variant="outline" onClick={onClose}>
                 Cancel
               </Button>
