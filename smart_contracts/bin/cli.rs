@@ -240,6 +240,7 @@ impl DeployScript for LeasefiDeployScript {
         nft.add_minter(&lease.address());
         nft.add_freezer(&lease.address());
         nft.add_whitelist_manager(&lease.address());
+        nft.add_force_transferer(&lease.address());
 
         // Setup Escrow
         escrow.set_lease(lease.address());
