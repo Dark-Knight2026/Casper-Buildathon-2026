@@ -6,7 +6,8 @@ import { MemoryRouter } from 'react-router-dom';
 
 import PropertyLanding from '@/pages/PropertyLanding';
 import { Toaster } from '@/components/ui/toaster';
-import { FEATURED_PROPERTIES } from '@/data/featuredProperties';
+import { searchListings } from '@/services/listingService';
+import type { Listing } from '@/types/listingContract';
 
 const mockNavigate = vi.fn();
 
@@ -26,6 +27,67 @@ vi.mock('react-router-dom', async () => {
 vi.mock('@/hooks/useAuth', () => ({
   useAuth: () => ({ profile: null }),
 }));
+
+// FeaturedProperties now fetches real active listings via GET /listings (PL-28).
+vi.mock('@/services/listingService', () => ({
+  searchListings: vi.fn(),
+}));
+
+// Minimal active rent_ltr listing with just the fields `listingToCard` reads.
+function makeListing(id: string, title: string): Listing {
+  return {
+    id,
+    propertyId: `prop-${id}`,
+    listedBy: 'landlord-1',
+    intent: 'rent_ltr',
+    state: 'active',
+    daysOnMarket: 3,
+    expiresAt: null,
+    title,
+    description: 'A nice place.',
+    amenities: [],
+    utilitiesIncluded: [],
+    petPolicy: null,
+    availableDate: null,
+    terms: {
+      rentMonthly: 2000,
+      securityDeposit: 2000,
+      leaseTermsOffered: ['1 Year'],
+      furnished: false,
+    },
+    media: [],
+    provenance: {
+      identityVerified: true,
+      authorityTier: 'T1',
+      authorityLabel: 'Documents on file',
+      managedByPm: false,
+      fairHousingCleared: true,
+      verifiedListerBadge: true,
+    },
+    onChain: null,
+    views: 0,
+    createdAt: '2026-06-01T00:00:00Z',
+    updatedAt: '2026-06-01T00:00:00Z',
+    property: {
+      id: `prop-${id}`,
+      addressLine1: `${id} Main St`,
+      city: 'Austin',
+      stateOrProvince: 'TX',
+      postalCode: '78701',
+      propertyType: 'apartment',
+      bedroomsTotal: 2,
+      bathroomsTotal: 1,
+      livingArea: 900,
+      parkingFeatures: [],
+    },
+  } as unknown as Listing;
+}
+
+const FEATURED = [
+  makeListing('listing-aaa', 'Featured Loft A'),
+  makeListing('listing-bbb', 'Featured Loft B'),
+  makeListing('listing-ccc', 'Featured Loft C'),
+];
 
 // Real LandingHeader, FeaturedProperties and use-toast are rendered. Toaster is
 // mounted alongside so toast assertions hit real DOM (real app mounts it in
@@ -49,6 +111,11 @@ function renderPage() {
 describe('PropertyLanding', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(searchListings).mockResolvedValue({
+      data: FEATURED,
+      itemCount: FEATURED.length,
+      pageCount: 1,
+    });
   });
 
   describe('rendering', () => {
@@ -76,20 +143,20 @@ describe('PropertyLanding', () => {
       ).toBeInTheDocument();
     });
 
-    it('mounts FeaturedProperties section with real data', () => {
+    it('mounts FeaturedProperties section with fetched listings', async () => {
       renderPage();
-      // FeaturedProperties renders one card per FEATURED_PROPERTIES entry,
-      // each with aria-label="View details for {title}"
-      const cards = screen.getAllByRole('button', {
+      // FeaturedProperties fetches active listings (PL-28) and renders one card
+      // per result, each with aria-label="View details for {title}".
+      const cards = await screen.findAllByRole('button', {
         name: /view details for/i,
       });
       expect(
         cards,
-        'should render one card per FEATURED_PROPERTIES entry'
-      ).toHaveLength(FEATURED_PROPERTIES.length);
+        'should render one card per fetched active listing'
+      ).toHaveLength(FEATURED.length);
       expect(
-        screen.getByText(FEATURED_PROPERTIES[0].title),
-        'first featured property title should be visible'
+        screen.getByText(FEATURED[0].title),
+        'first fetched listing title should be visible'
       ).toBeInTheDocument();
     });
 
