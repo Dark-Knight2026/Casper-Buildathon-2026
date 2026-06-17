@@ -26,7 +26,7 @@ import { getListing } from '@/services/listingService';
 import {
   getListingApplications,
   reviewApplication,
-  type ApplicationStatus,
+  type ReviewableStatus,
 } from '@/services/applicationService';
 import { ApiClient } from '@/lib/api-client';
 
@@ -55,7 +55,7 @@ export default function ListingApplications() {
   });
   const applications = data?.data ?? [];
 
-  const review = async (applicationId: string, status: ApplicationStatus) => {
+  const review = async (applicationId: string, status: ReviewableStatus) => {
     setReviewingId(applicationId);
     try {
       await reviewApplication(applicationId, status);

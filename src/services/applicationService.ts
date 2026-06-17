@@ -1,7 +1,7 @@
 import { supabase } from '@/lib/supabase/client';
 import { backendClient } from '@/lib/api-client';
 import { toQueryString } from '@/lib/queryString';
-import type { Listing, PaginatedResponse } from '@/types/listingContract';
+import type { PaginatedResponse } from '@/types/listingContract';
 import type {
   TenantApplication,
   ApplicationFilters,
@@ -12,6 +12,16 @@ import type {
   References,
   AdditionalInfo,
 } from '@/types/application';
+import type {
+  RentalApplication,
+  SubmitApplicationBody,
+  ReviewableStatus,
+  LandlordApplicationParams,
+  ApplicationNote as BackendApplicationNote,
+  BackgroundCheck,
+  BackgroundCheckType,
+  ApplicationScore,
+} from '@/types/applicationContract';
 
 interface UpdateData {
   personal_info?: PersonalInfo;
@@ -341,78 +351,37 @@ export class ApplicationService {
 }
 
 // ───────────────────────────────────────────────────────────────────────────
-// LeaseFi backend applications API (PL-23a — tenant side)
+// LeaseFi backend applications API (PL-23a tenant + PL-42 landlord domain)
 //
 // An application is a tenant's request to rent a listing. The legacy
-// `ApplicationService` class above is the dead Supabase landlord surface
-// (PL-23b — blocked on missing endpoints + a model mismatch, see
-// docs/BACKEND_FILTER_GAPS.md); it stays until that side is rewired.
+// `ApplicationService` class above is the dead Supabase surface, kept only for
+// the not-yet-rewired `ApplicationList`/`ApplicationDetail`/`TenantApplication`
+// shells (PL-43/44 reuse those visuals against these backend fns; PL-29 deletes
+// the class). Wire types live in `types/applicationContract.ts`.
 // ───────────────────────────────────────────────────────────────────────────
 
 const LISTINGS = '/api/v1/listings';
 const APPLICATIONS = '/api/v1/applications';
 
-export type ApplicationStatus = 'pending' | 'approved' | 'rejected';
+// Re-exported so existing importers (PL-23a/23a+ pages, the status badge) keep
+// sourcing the wire types from this service.
+export type {
+  ApplicationStatus,
+  ReviewableStatus,
+  RentalApplication,
+  SubmitApplicationBody,
+  LandlordApplicationParams,
+  ApplicationNote as BackendApplicationNote,
+  BackgroundCheck,
+  BackgroundCheckType,
+  BackgroundCheckStatus,
+  RequestBackgroundCheckBody,
+  ApplicationScore,
+  ScoreFactor,
+  ScoreFactorKind,
+} from '@/types/applicationContract';
 
-/** A rental application as returned by the backend (camelCase wire shape). */
-export interface RentalApplication {
-  id: string;
-  listingId: string;
-  userId: string;
-  landlordId: string;
-  fullName: string;
-  email: string;
-  phone: string;
-  dateOfBirth: string;
-  currentAddress: string;
-  currentCity: string;
-  currentState: string;
-  currentZip: string;
-  moveInDate: string;
-  employer: string;
-  jobTitle: string;
-  employmentLength: string;
-  monthlyIncome: number;
-  reference1Name: string;
-  reference1Phone: string;
-  reference2Name: string | null;
-  reference2Phone: string | null;
-  pets: boolean;
-  petDescription: string | null;
-  additionalInfo: string | null;
-  backgroundCheckConsent: boolean;
-  status: ApplicationStatus;
-  listing?: Listing; // nested in GET /applications
-  createdAt: string;
-  updatedAt: string;
-}
-
-/** `POST /listings/{id}/applications` body. */
-export interface SubmitApplicationBody {
-  fullName: string;
-  email: string;
-  phone: string;
-  dateOfBirth: string;
-  currentAddress: string;
-  currentCity: string;
-  currentState: string;
-  currentZip: string;
-  moveInDate: string;
-  employer: string;
-  jobTitle: string;
-  employmentLength: string;
-  monthlyIncome: number;
-  reference1Name: string;
-  reference1Phone: string;
-  reference2Name?: string;
-  reference2Phone?: string;
-  pets: boolean;
-  petDescription?: string;
-  additionalInfo?: string;
-  backgroundCheckConsent: boolean;
-}
-
-/** `POST /listings/{id}/applications`. Tenant submits an application. */
+/** `POST /listings/{id}/applications`. Tenant submits (or, with `asDraft`, drafts). */
 export async function submitApplication(
   listingId: string,
   body: SubmitApplicationBody
@@ -442,13 +411,116 @@ export async function getListingApplications(
   );
 }
 
-/** `PUT /applications/{id}/status`. Landlord approves/rejects. */
+/**
+ * `GET /applications/landlord`. Landlord — all applications across their
+ * listings, paginated; filterable by status/search/listing/date range.
+ */
+export async function getLandlordApplications(
+  params: LandlordApplicationParams = {}
+): Promise<PaginatedResponse<RentalApplication>> {
+  return backendClient.get<PaginatedResponse<RentalApplication>>(
+    `${APPLICATIONS}/landlord${toQueryString({ ...params })}`
+  );
+}
+
+/** `GET /applications/{id}`. Single application detail by id. */
+export async function getApplication(
+  applicationId: string
+): Promise<RentalApplication> {
+  return backendClient.get<RentalApplication>(
+    `${APPLICATIONS}/${applicationId}`
+  );
+}
+
+/**
+ * `PUT /applications/{id}/status`. Landlord review — `under_review`,
+ * `conditional`, `approved` or `rejected`. The backend `409`s a transition the
+ * application's current state can't reach.
+ */
 export async function reviewApplication(
   applicationId: string,
-  status: ApplicationStatus
+  status: ReviewableStatus
 ): Promise<RentalApplication> {
   return backendClient.put<RentalApplication>(
     `${APPLICATIONS}/${applicationId}/status`,
     { status }
+  );
+}
+
+/** `GET /applications/{id}/notes`. Internal landlord notes (newest first). */
+export async function getApplicationNotes(
+  applicationId: string
+): Promise<BackendApplicationNote[]> {
+  return backendClient.get<BackendApplicationNote[]>(
+    `${APPLICATIONS}/${applicationId}/notes`
+  );
+}
+
+/** `POST /applications/{id}/notes`. Adds a private landlord note. */
+export async function addApplicationNote(
+  applicationId: string,
+  body: string
+): Promise<BackendApplicationNote> {
+  return backendClient.post<BackendApplicationNote>(
+    `${APPLICATIONS}/${applicationId}/notes`,
+    { body }
+  );
+}
+
+/**
+ * `POST /applications/{id}/background-checks`. Requests a check. The provider
+ * is stubbed on the backend (hackathon) — results are fake.
+ */
+export async function requestBackgroundCheck(
+  applicationId: string,
+  checkType: BackgroundCheckType
+): Promise<BackgroundCheck> {
+  return backendClient.post<BackgroundCheck>(
+    `${APPLICATIONS}/${applicationId}/background-checks`,
+    { checkType }
+  );
+}
+
+/** `GET /applications/{id}/background-checks`. Lists requested checks. */
+export async function getBackgroundChecks(
+  applicationId: string
+): Promise<BackgroundCheck[]> {
+  return backendClient.get<BackgroundCheck[]>(
+    `${APPLICATIONS}/${applicationId}/background-checks`
+  );
+}
+
+/** `GET /applications/{id}/score`. Server-computed score breakdown (stubbed). */
+export async function getApplicationScore(
+  applicationId: string
+): Promise<ApplicationScore> {
+  return backendClient.get<ApplicationScore>(
+    `${APPLICATIONS}/${applicationId}/score`
+  );
+}
+
+/**
+ * `PATCH /applications/{id}`. Replaces a draft's fields. Tenant-only, and only
+ * while the application is a `draft` (the backend `409`s otherwise).
+ */
+export async function updateDraftApplication(
+  applicationId: string,
+  body: SubmitApplicationBody
+): Promise<RentalApplication> {
+  return backendClient.patch<RentalApplication>(
+    `${APPLICATIONS}/${applicationId}`,
+    body
+  );
+}
+
+/**
+ * `POST /applications/{id}/submit`. Submits a draft (`draft -> pending`).
+ * Tenant-only, draft-only.
+ */
+export async function submitDraftApplication(
+  applicationId: string
+): Promise<RentalApplication> {
+  return backendClient.post<RentalApplication>(
+    `${APPLICATIONS}/${applicationId}/submit`
   );
 }

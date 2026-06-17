@@ -126,8 +126,8 @@ const LandlordPayments = lazy(
 );
 
 // Lazy load landlord application pages
-const ApplicationList = lazy(
-  () => import('@/pages/landlord/applications/ApplicationList')
+const ApplicationsInbox = lazy(
+  () => import('@/pages/landlord/applications/ApplicationsInbox')
 );
 const ApplicationDetail = lazy(
   () => import('@/pages/landlord/applications/ApplicationDetail')
@@ -481,7 +481,7 @@ function App() {
                   path="properties/:id/viewings"
                   element={<ListingViewings />}
                 />
-                <Route path="applications" element={<ApplicationList />} />
+                <Route path="applications" element={<ApplicationsInbox />} />
                 <Route
                   path="applications/:id"
                   element={<ApplicationDetail />}
