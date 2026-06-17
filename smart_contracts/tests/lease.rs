@@ -1103,6 +1103,54 @@ fn test_finalize_already_finalized_lease_should_revert() {
 // =============================================================================
 
 #[test]
+fn test_cancel_lease_agreement_should_revert_if_tenant_is_calling() {
+    let mut test_data = setup(odra_test::env());
+    let params = generate_lease_agreement_creation_params(&test_data);
+    let lease_agreement_id = test_data.lease.create_lease_agreement(params.clone());
+
+    test_data.env.set_caller(params.tenant);
+    test_data.security_deposit_token.approve(
+        &test_data.escrow.address(),
+        params.security_deposit.amount(),
+    );
+    test_data.escrow.pay_invoice(
+        test_data
+            .lease
+            .get_lease_agreement_by_id(&lease_agreement_id)
+            .invoices_ids[0],
+        *params.security_deposit.amount(),
+    );
+
+    assert_eq!(
+        test_data
+            .lease
+            .try_cancel_lease_agreement(&lease_agreement_id, &U256::zero())
+            .unwrap_err(),
+        Error::InvalidLandlord.into(),
+        "Tenant should not be able to cancel a lease agreement"
+    );
+
+    let lease_agreement_after = test_data
+        .lease
+        .get_lease_agreement_by_id(&lease_agreement_id);
+    assert!(
+        !lease_agreement_after.is_finished,
+        "Lease should remain active when tenant attempts cancellation"
+    );
+
+    let deposit = test_data.escrow.get_security_deposit(
+        test_data
+            .lease
+            .get_lease_agreement_by_id(&lease_agreement_id)
+            .invoices_ids[0],
+    );
+    assert!(
+        !deposit.released,
+        "Security deposit should remain held when tenant attempts cancellation"
+    );
+}
+
+#[test]
 fn test_cancel_lease_agreement_should_cancel_properly() {
     let mut test_data = setup(odra_test::env());
     let mut params = generate_lease_agreement_creation_params(&test_data);

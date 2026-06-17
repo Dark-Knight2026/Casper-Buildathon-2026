@@ -538,7 +538,6 @@ impl Lease {
     }
 
     /// Allows early cancellation/termination of a lease agreement by the landlord.
-    /// This provides an exit path for both parties before the scheduled end date.
     /// The security deposit (if paid) is released via Escrow using the provided charge
     /// (charge=0 for full refund to tenant). Equity eligibility is cleared if present.
     /// Future rent invoices are left as-is (parties may settle off-chain).
@@ -557,8 +556,7 @@ impl Lease {
             self.env().revert(Error::LeaseAlreadyFinalized);
         }
 
-        let caller = self.env().caller();
-        if lease_agreement.landlord != caller && lease_agreement.tenant != caller {
+        if lease_agreement.landlord != self.env().caller() {
             self.env().revert(Error::InvalidLandlord);
         }
 
