@@ -97,6 +97,19 @@ async fn review(
     (code, body.unwrap_or(Value::Null))
 }
 
+/// `GET /applications/{id}`.
+async fn get_app(env: &TestEnv, token: &str, application_id: Uuid) -> (StatusCode, Value) {
+    let (code, body) = common::authed_request::<Value>(
+        &env.server,
+        &Method::GET,
+        &format!("/api/v1/applications/{application_id}"),
+        token,
+        &Value::Null,
+    )
+    .await;
+    (code, body.unwrap_or(Value::Null))
+}
+
 // `POST /listings/{id}/applications` submit -----------------------------------
 
 /// A valid application against an active listing is created as `pending`, with
@@ -383,6 +396,88 @@ async fn list_listing_applications_rejects_tenant_403(pool: PgPool) {
     )
     .await;
     assert_eq!(status, StatusCode::FORBIDDEN);
+}
+
+// `GET /applications/{id}` single application ---------------------------------
+
+/// The applicant sees their own application by id, with the nested listing.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn get_application_applicant_sees_own(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, landlord_token) =
+        common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let (tenant_id, tenant_token) = common::seed_authed_user(&env, &pool, UserRole::Tenant).await;
+    let listing_id = active_listing(&env, &pool, landlord_id, &landlord_token).await;
+    let (_s, app) = submit_app(&env, &tenant_token, listing_id, &app_body()).await;
+    let app_id = Uuid::parse_str(app["id"].as_str().unwrap()).unwrap();
+
+    let (status, body) = get_app(&env, &tenant_token, app_id).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["id"].as_str().unwrap(), app_id.to_string());
+    assert_eq!(body["userId"].as_str().unwrap(), tenant_id.to_string());
+    assert_eq!(
+        body["listing"]["id"].as_str().unwrap(),
+        listing_id.to_string()
+    );
+}
+
+/// The reviewing landlord sees the same application by id.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn get_application_landlord_sees_it(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, landlord_token) =
+        common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let (_tenant, tenant_token) = common::seed_authed_user(&env, &pool, UserRole::Tenant).await;
+    let listing_id = active_listing(&env, &pool, landlord_id, &landlord_token).await;
+    let (_s, app) = submit_app(&env, &tenant_token, listing_id, &app_body()).await;
+    let app_id = Uuid::parse_str(app["id"].as_str().unwrap()).unwrap();
+
+    let (status, body) = get_app(&env, &landlord_token, app_id).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        body["landlordId"].as_str().unwrap(),
+        landlord_id.to_string()
+    );
+}
+
+/// A user who is neither the applicant nor the landlord gets `404` (no leak).
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn get_application_third_party_404(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, landlord_token) =
+        common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let (_tenant, tenant_token) = common::seed_authed_user(&env, &pool, UserRole::Tenant).await;
+    let (_other, other_token) = common::seed_authed_user(&env, &pool, UserRole::Tenant).await;
+    let listing_id = active_listing(&env, &pool, landlord_id, &landlord_token).await;
+    let (_s, app) = submit_app(&env, &tenant_token, listing_id, &app_body()).await;
+    let app_id = Uuid::parse_str(app["id"].as_str().unwrap()).unwrap();
+
+    let (status, _body) = get_app(&env, &other_token, app_id).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+/// An unknown application id -> `404`.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn get_application_unknown_404(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (_id, token) = common::seed_authed_user(&env, &pool, UserRole::Tenant).await;
+
+    let (status, _body) = get_app(&env, &token, Uuid::new_v4()).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+/// No auth cookie -> `401`.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn get_application_requires_auth_401(pool: PgPool) {
+    let env = common::setup_test_server(pool, false).await;
+
+    let response = env
+        .server
+        .get(&format!("/api/v1/applications/{}", Uuid::new_v4()))
+        .await;
+    assert_eq!(response.status_code(), StatusCode::UNAUTHORIZED);
 }
 
 // `PUT /applications/{id}/status` review --------------------------------------

@@ -347,6 +347,53 @@ pub async fn list_listing_applications(
     Ok((applications, total))
 }
 
+/// Fetches one application the caller is party to - as the applicant (tenant) or
+/// the reviewing landlord - with its nested listing hydrated. An id the caller
+/// has no part in (or that does not exist) reads as `None`: a `404` upstream
+/// that leaks nothing, mirroring the review owner-check.
+///
+/// # Errors
+///
+/// Returns [`Error`] on any database failure.
+#[inline]
+pub async fn fetch_application(
+    pool: &PgPool,
+    application_id: Uuid,
+    user_id: Uuid,
+) -> Result<Option<RentalApplication>, Error> {
+    let row = sqlx::query_as!(
+        ApplicationRow,
+        r#"
+            SELECT
+                id, listing_id, user_id, landlord_id, full_name, email, phone,
+                date_of_birth, current_address, current_city, current_state,
+                current_zip, move_in_date, employer, job_title,
+                employment_length, monthly_income::float8 AS "monthly_income!",
+                reference1_name, reference1_phone, reference2_name,
+                reference2_phone, pets, pet_description, additional_info,
+                background_check_consent, status, created_at, updated_at
+            FROM rental_applications
+            WHERE id = $1 AND (user_id = $2 OR landlord_id = $2)
+        "#,
+        application_id,
+        user_id,
+    )
+    .fetch_optional(pool)
+    .await?;
+
+    let Some(row) = row else {
+        return Ok(None);
+    };
+
+    // Hydrate the nested listing the same way the tenant list does: a batch
+    // fetch of one id, optional because an application outlives a withdrawn
+    // listing.
+    let listing = listings_db::fetch_listings_by_ids(pool, &[row.listing_id])
+        .await?
+        .remove(&row.listing_id);
+    Ok(Some(RentalApplication::assemble(row, listing)))
+}
+
 /// Outcome of an owner-scoped review.
 #[derive(Debug)]
 pub enum ReviewOutcome {

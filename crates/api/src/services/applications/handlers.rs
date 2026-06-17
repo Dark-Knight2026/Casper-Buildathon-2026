@@ -16,7 +16,7 @@ use crate::{
             db::{self, ReviewOutcome, SubmitOutcome},
             models::{RentalApplication, ReviewApplicationRequest, SubmitApplicationRequest},
         },
-        auth::{LandlordRole, RoleUser, TenantRole},
+        auth::{AuthUser, LandlordRole, RoleUser, TenantRole},
         listings::db as listings_db,
     },
 };
@@ -161,6 +161,44 @@ pub async fn list_listing_applications(
         total,
         &pagination,
     )))
+}
+
+// `GET /api/v1/applications/{id}`
+//
+/// A single application by id, visible to either party to it - the applicant
+/// (tenant) or the reviewing landlord - with its nested listing.
+///
+/// # Errors
+///
+/// Returns `404` when the caller is party to no application with that id, or a
+/// database error.
+#[utoipa::path(
+    get,
+    path = "/applications/{id}",
+    tag = "Applications",
+    params(
+        ("id" = Uuid, Path, description = "Application id")
+    ),
+    responses(
+        (status = 200, description = "The application", body = RentalApplication),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 404, description = "Application not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse),
+    ),
+    security(
+        ("cookie_auth" = [])
+    )
+)]
+#[inline]
+pub async fn get_application(
+    State(state): State<Arc<AppState>>,
+    user: AuthUser,
+    Path(application_id): Path<Uuid>,
+) -> ApiResult<Json<RentalApplication>> {
+    match db::fetch_application(&state.db, application_id, user.0.sub).await? {
+        Some(application) => Ok(Json(application)),
+        None => Err(ApiError::NotFound("application not found".to_owned())),
+    }
 }
 
 // `PUT /api/v1/applications/{id}/status`
