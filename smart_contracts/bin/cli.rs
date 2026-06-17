@@ -9,7 +9,7 @@ use odra_modules::access::DEFAULT_ADMIN_ROLE;
 
 use leasefi_contracts::{
     big_coin::{BigCoin, BigCoinInitArgs},
-    compliance_policy::{CompliancePolicy, CompliancePolicyInitArgs},
+    compliance_policy::{types::ComplianceConfig, CompliancePolicy, CompliancePolicyInitArgs},
     constants::{PRIVATE_SALE_CLIFF_DURATION, PRIVATE_SALE_VESTING_DURATION},
     escrow::{Escrow, EscrowInitArgs},
     ico::{
@@ -23,7 +23,10 @@ use leasefi_contracts::{
         types::PropertyFractionTokenInitParams, PropertyFractionToken,
         PropertyFractionTokenInitArgs,
     },
-    property_registry::{types::CreatePropertyParams, PropertyRegistry, PropertyRegistryInitArgs},
+    property_registry::{
+        types::{CreatePropertyParams, PropertyStatus},
+        PropertyRegistry, PropertyRegistryInitArgs,
+    },
     roles::{Roles, RolesInitArgs},
     staking::{Staking, StakingInitArgs},
     treasury::{Treasury, TreasuryInitArgs},
@@ -251,6 +254,21 @@ impl DeployScript for LeasefiDeployScript {
             .grant_role(&property_fraction_token.token_manager_role(), &new_owner);
         // Link the token to the registry property (deployer currently holds PROPERTY_MANAGER).
         property_registry.set_property_token(sample_property_id, property_fraction_token.address());
+
+        // Bootstrap primary-distribution compliance for the initial holder (issuer/platform
+        // admin). Without transfer-exempt status, every PFT transfer reverts with
+        // SenderNotVerified because the holder is not in InvestorRegistry.
+        compliance.grant_role(&compliance.compliance_manager_role(), &env.caller());
+        compliance.set_transfer_exempt(new_owner, true);
+        compliance.set_compliance_config(
+            sample_property_id,
+            ComplianceConfig {
+                transfers_enabled: true,
+                equity_distribution_requires_lease_option: false,
+            },
+        );
+        property_registry.set_revenue_distributor(sample_property_id, treasury.address());
+        property_registry.set_property_status(sample_property_id, PropertyStatus::Active);
 
         // Setup Treasury
         treasury.set_big_coin(big_coin.address());

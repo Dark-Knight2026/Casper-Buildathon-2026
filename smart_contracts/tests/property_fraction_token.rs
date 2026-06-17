@@ -1,10 +1,9 @@
 use leasefi_contracts::{
-    constants::MIN_DEADLINE_IN_MS,
     compliance_policy::{
         errors::Error as ComplianceError, types::ComplianceConfig, CompliancePolicy,
         CompliancePolicyHostRef, CompliancePolicyInitArgs,
     },
-
+    constants::MIN_DEADLINE_IN_MS,
     escrow::{Escrow, EscrowInitArgs},
     investor_registry::{
         types::InvestorRecord, InvestorRegistry, InvestorRegistryHostRef, InvestorRegistryInitArgs,
@@ -226,6 +225,11 @@ fn enable_primary_distribution(ctx: &mut Context) {
     set_transfer_exempt(ctx, initial_holder, true);
 }
 
+/// Mirrors the compliance portion of post-`pft.init()` bootstrap in `bin/cli.rs`.
+fn bootstrap_deploy_like_primary_distribution(ctx: &mut Context) {
+    enable_primary_distribution(ctx);
+}
+
 // =============================================================================
 // init()
 // =============================================================================
@@ -343,6 +347,36 @@ fn test_set_compliance_policy_should_revert_if_caller_is_not_token_manager() {
 // =============================================================================
 // transfer()
 // =============================================================================
+
+#[test]
+fn test_initial_holder_can_transfer_after_deploy_bootstrap() {
+    let mut ctx = setup(odra_test::env());
+    let recipient = ctx.recipient;
+    let amount = U256::from(100);
+
+    assert!(
+        !ctx.token
+            .can_transfer(ctx.initial_holder, recipient, amount),
+        "Transfers should be blocked before deploy bootstrap configures compliance"
+    );
+
+    bootstrap_deploy_like_primary_distribution(&mut ctx);
+    verify_investor(&mut ctx, recipient);
+
+    ctx.env.set_caller(ctx.initial_holder);
+    ctx.token.transfer(&recipient, &amount);
+
+    assert_eq!(
+        ctx.token.balance_of(&ctx.initial_holder),
+        ctx.initial_supply - amount,
+        "Initial holder should transfer PFT after deploy bootstrap"
+    );
+    assert_eq!(
+        ctx.token.balance_of(&recipient),
+        amount,
+        "Recipient should receive PFT after deploy bootstrap"
+    );
+}
 
 #[test]
 fn test_transfer_should_move_tokens_when_compliance_passes() {
