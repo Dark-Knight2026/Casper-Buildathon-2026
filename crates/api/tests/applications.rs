@@ -683,6 +683,73 @@ async fn review_reject_returns_200(pool: PgPool) {
     assert_eq!(body["status"], "rejected");
 }
 
+/// The landlord moves a pending application into `under_review`.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn review_to_under_review_returns_200(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, landlord_token) =
+        common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let (_tenant, tenant_token) = common::seed_authed_user(&env, &pool, UserRole::Tenant).await;
+    let listing_id = active_listing(&env, &pool, landlord_id, &landlord_token).await;
+    let (_s, app) = submit_app(&env, &tenant_token, listing_id, &app_body()).await;
+    let app_id = Uuid::parse_str(app["id"].as_str().unwrap()).unwrap();
+
+    let (status, body) = review(&env, &landlord_token, app_id, "under_review").await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["status"], "under_review");
+}
+
+/// The landlord conditionally approves a pending application.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn review_to_conditional_returns_200(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, landlord_token) =
+        common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let (_tenant, tenant_token) = common::seed_authed_user(&env, &pool, UserRole::Tenant).await;
+    let listing_id = active_listing(&env, &pool, landlord_id, &landlord_token).await;
+    let (_s, app) = submit_app(&env, &tenant_token, listing_id, &app_body()).await;
+    let app_id = Uuid::parse_str(app["id"].as_str().unwrap()).unwrap();
+
+    let (status, body) = review(&env, &landlord_token, app_id, "conditional").await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["status"], "conditional");
+}
+
+/// An application advances through `under_review` to `approved`.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn review_under_review_then_approved(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, landlord_token) =
+        common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let (_tenant, tenant_token) = common::seed_authed_user(&env, &pool, UserRole::Tenant).await;
+    let listing_id = active_listing(&env, &pool, landlord_id, &landlord_token).await;
+    let (_s, app) = submit_app(&env, &tenant_token, listing_id, &app_body()).await;
+    let app_id = Uuid::parse_str(app["id"].as_str().unwrap()).unwrap();
+
+    review(&env, &landlord_token, app_id, "under_review").await;
+    let (status, body) = review(&env, &landlord_token, app_id, "approved").await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["status"], "approved");
+}
+
+/// `draft` is not a reachable review target -> `400`.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn review_set_draft_400(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, landlord_token) =
+        common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let (_tenant, tenant_token) = common::seed_authed_user(&env, &pool, UserRole::Tenant).await;
+    let listing_id = active_listing(&env, &pool, landlord_id, &landlord_token).await;
+    let (_s, app) = submit_app(&env, &tenant_token, listing_id, &app_body()).await;
+    let app_id = Uuid::parse_str(app["id"].as_str().unwrap()).unwrap();
+
+    let (status, _body) = review(&env, &landlord_token, app_id, "draft").await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
 /// Reviewing to `pending` is not a valid decision -> `400`.
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn review_set_pending_400(pool: PgPool) {
@@ -698,7 +765,8 @@ async fn review_set_pending_400(pool: PgPool) {
     assert_eq!(status, StatusCode::BAD_REQUEST);
 }
 
-/// A second review of an already-decided application -> `409`.
+/// Re-deciding an already-terminal application -> `409` (no transition out of a
+/// terminal status).
 #[sqlx::test(migrator = "common::MIGRATIONS")]
 async fn review_double_review_409(pool: PgPool) {
     let env = common::setup_test_server(pool.clone(), false).await;
@@ -713,7 +781,7 @@ async fn review_double_review_409(pool: PgPool) {
     let (status, body) = review(&env, &landlord_token, app_id, "rejected").await;
 
     assert_eq!(status, StatusCode::CONFLICT);
-    assert!(body["error"].as_str().unwrap().contains("not pending"));
+    assert!(body["error"].as_str().unwrap().contains("transition"));
 }
 
 /// Reviewing an unknown application -> `404`.

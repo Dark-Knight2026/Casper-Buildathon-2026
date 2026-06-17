@@ -28,12 +28,39 @@ use crate::{
 #[serde(rename_all = "snake_case")]
 #[strum(serialize_all = "snake_case")]
 pub enum ApplicationStatus {
-    /// Awaiting landlord review.
+    /// Being filled in by the applicant, before submission.
+    Draft,
+    /// Submitted, awaiting landlord review.
     Pending,
+    /// The landlord is actively reviewing.
+    UnderReview,
+    /// Conditionally approved, pending stated conditions.
+    Conditional,
     /// Approved by the landlord.
     Approved,
     /// Rejected by the landlord.
     Rejected,
+}
+
+impl ApplicationStatus {
+    /// Whether a landlord review may move an application from `self` to `target`.
+    ///
+    /// The open review states - `pending`, `under_review`, `conditional` - may
+    /// advance to `under_review`, `conditional`, `approved` or `rejected`.
+    /// `draft` is pre-review and `approved`/`rejected` are terminal, so neither
+    /// is a valid source; `draft`/`pending` are never review targets (a review
+    /// decides, it does not unsubmit). Returning to `pending` is the separate
+    /// request-info action, not a review.
+    #[inline]
+    #[must_use]
+    pub fn can_review_to(self, target: Self) -> bool {
+        let open_source = matches!(self, Self::Pending | Self::UnderReview | Self::Conditional);
+        let review_target = matches!(
+            target,
+            Self::UnderReview | Self::Conditional | Self::Approved | Self::Rejected
+        );
+        open_source && review_target
+    }
 }
 
 /// A rental application as returned on the wire.
@@ -194,7 +221,9 @@ pub struct SubmitApplicationRequest {
     pub background_check_consent: bool,
 }
 
-impl SubmitApplicationRequest {
+impl TryFrom<SubmitApplicationRequest> for NewApplication {
+    type Error = ApiError;
+
     /// Validates the payload and maps it into a [`NewApplication`].
     ///
     /// # Errors
@@ -203,23 +232,23 @@ impl SubmitApplicationRequest {
     /// email is obviously malformed, or `monthlyIncome` is not a positive
     /// finite number.
     #[inline]
-    pub fn into_validated(self) -> ApiResult<NewApplication> {
-        let full_name = required("fullName", &self.full_name)?;
-        let email = required("email", &self.email)?;
+    fn try_from(request: SubmitApplicationRequest) -> ApiResult<Self> {
+        let full_name = required("fullName", &request.full_name)?;
+        let email = required("email", &request.email)?;
         if !email.contains('@') {
             return Err(ApiError::BadRequest("email is invalid".to_owned()));
         }
-        let phone = required("phone", &self.phone)?;
-        let current_address = required("currentAddress", &self.current_address)?;
-        let current_city = required("currentCity", &self.current_city)?;
-        let current_state = required("currentState", &self.current_state)?;
-        let current_zip = required("currentZip", &self.current_zip)?;
-        let employer = required("employer", &self.employer)?;
-        let job_title = required("jobTitle", &self.job_title)?;
-        let employment_length = required("employmentLength", &self.employment_length)?;
-        let reference1_name = required("reference1Name", &self.reference1_name)?;
-        let reference1_phone = required("reference1Phone", &self.reference1_phone)?;
-        if !self.monthly_income.is_finite() || self.monthly_income <= 0.0 {
+        let phone = required("phone", &request.phone)?;
+        let current_address = required("currentAddress", &request.current_address)?;
+        let current_city = required("currentCity", &request.current_city)?;
+        let current_state = required("currentState", &request.current_state)?;
+        let current_zip = required("currentZip", &request.current_zip)?;
+        let employer = required("employer", &request.employer)?;
+        let job_title = required("jobTitle", &request.job_title)?;
+        let employment_length = required("employmentLength", &request.employment_length)?;
+        let reference1_name = required("reference1Name", &request.reference1_name)?;
+        let reference1_phone = required("reference1Phone", &request.reference1_phone)?;
+        if !request.monthly_income.is_finite() || request.monthly_income <= 0.0 {
             return Err(ApiError::BadRequest(
                 "monthlyIncome must be a positive number".to_owned(),
             ));
@@ -229,24 +258,24 @@ impl SubmitApplicationRequest {
             full_name,
             email,
             phone,
-            date_of_birth: self.date_of_birth,
+            date_of_birth: request.date_of_birth,
             current_address,
             current_city,
             current_state,
             current_zip,
-            move_in_date: self.move_in_date,
+            move_in_date: request.move_in_date,
             employer,
             job_title,
             employment_length,
-            monthly_income: self.monthly_income,
+            monthly_income: request.monthly_income,
             reference1_name,
             reference1_phone,
-            reference2_name: optional(self.reference2_name),
-            reference2_phone: optional(self.reference2_phone),
-            pets: self.pets,
-            pet_description: optional(self.pet_description),
-            additional_info: optional(self.additional_info),
-            background_check_consent: self.background_check_consent,
+            reference2_name: optional(request.reference2_name),
+            reference2_phone: optional(request.reference2_phone),
+            pets: request.pets,
+            pet_description: optional(request.pet_description),
+            additional_info: optional(request.additional_info),
+            background_check_consent: request.background_check_consent,
         })
     }
 }
@@ -255,25 +284,28 @@ impl SubmitApplicationRequest {
 #[derive(Debug, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ReviewApplicationRequest {
-    /// Decision: `approved` or `rejected` (`pending` is not a valid target).
+    /// Review target: `under_review`, `conditional`, `approved` or `rejected`.
     pub status: ApplicationStatus,
 }
 
-impl ReviewApplicationRequest {
-    /// Validates that the requested status is a terminal review decision.
+impl TryFrom<ReviewApplicationRequest> for ApplicationStatus {
+    type Error = ApiError;
+
+    /// Validates that the requested status is a reachable review target.
     ///
     /// # Errors
     ///
-    /// Returns [`ApiError::BadRequest`] when the target is `pending` (a review
-    /// can only approve or reject).
+    /// Returns [`ApiError::BadRequest`] for `draft`/`pending`, which a review
+    /// cannot set. Whether the target is reachable from the application's
+    /// current state is checked against that state in the db layer.
     #[inline]
-    pub fn into_validated(self) -> ApiResult<ApplicationStatus> {
-        if self.status == ApplicationStatus::Pending {
-            return Err(ApiError::BadRequest(
-                "status must be 'approved' or 'rejected'".to_owned(),
-            ));
+    fn try_from(request: ReviewApplicationRequest) -> ApiResult<Self> {
+        match request.status {
+            ApplicationStatus::Draft | ApplicationStatus::Pending => Err(ApiError::BadRequest(
+                "status must be 'under_review', 'conditional', 'approved' or 'rejected'".to_owned(),
+            )),
+            target => Ok(target),
         }
-        Ok(self.status)
     }
 }
 

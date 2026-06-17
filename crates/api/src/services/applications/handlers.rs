@@ -61,7 +61,7 @@ pub async fn submit_application(
     Path(listing_id): Path<Uuid>,
     Json(payload): Json<SubmitApplicationRequest>,
 ) -> ApiResult<(StatusCode, Json<RentalApplication>)> {
-    let new_application = payload.into_validated()?;
+    let new_application = payload.try_into()?;
     match db::submit_application(&state.db, listing_id, user.0.sub, new_application).await? {
         SubmitOutcome::Created(row) => Ok((
             StatusCode::CREATED,
@@ -248,14 +248,15 @@ pub async fn get_application(
 
 // `PUT /api/v1/applications/{id}/status`
 //
-/// Reviews an application the caller is the landlord of, moving it from
-/// `pending` to `approved` or `rejected`.
+/// Reviews an application the caller is the landlord of, advancing it along the
+/// review lifecycle (`pending`/`under_review`/`conditional` ->
+/// `under_review`/`conditional`/`approved`/`rejected`).
 ///
 /// # Errors
 ///
-/// Returns `400` when the target status is not a review decision, `404` when
-/// the caller reviews no application with that id, `409` when the application is
-/// not `pending`, or a database error.
+/// Returns `400` when the target is not a review status, `404` when the caller
+/// reviews no application with that id, `409` when the target is unreachable
+/// from the current status, or a database error.
 #[utoipa::path(
     put,
     path = "/applications/{id}/status",
@@ -270,7 +271,7 @@ pub async fn get_application(
         (status = 401, description = "Unauthorized", body = ErrorResponse),
         (status = 403, description = "Landlord role required", body = ErrorResponse),
         (status = 404, description = "Application not found", body = ErrorResponse),
-        (status = 409, description = "Application is not pending", body = ErrorResponse),
+        (status = 409, description = "Status transition not allowed", body = ErrorResponse),
         (status = 500, description = "Internal server error", body = ErrorResponse),
     ),
     security(
@@ -284,12 +285,12 @@ pub async fn review_application(
     Path(application_id): Path<Uuid>,
     Json(payload): Json<ReviewApplicationRequest>,
 ) -> ApiResult<Json<RentalApplication>> {
-    let status = payload.into_validated()?;
+    let status = payload.try_into()?;
     match db::review_application(&state.db, application_id, user.0.sub, status).await? {
         ReviewOutcome::Updated(row) => Ok(Json(RentalApplication::assemble(*row, None))),
         ReviewOutcome::NotFound => Err(ApiError::NotFound("application not found".to_owned())),
-        ReviewOutcome::NotPending => {
-            Err(ApiError::Conflict("application is not pending".to_owned()))
-        }
+        ReviewOutcome::InvalidTransition => Err(ApiError::Conflict(
+            "status transition is not allowed".to_owned(),
+        )),
     }
 }

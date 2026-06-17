@@ -6,6 +6,8 @@
 //! [`listings_db::fetch_listings_by_ids`]; an application outlives a withdrawn
 //! listing, so that nested listing is optional.
 
+use core::str::FromStr;
+
 use chrono::{DateTime, NaiveDate, Utc};
 use sqlx::{Error, FromRow, PgPool, Postgres, QueryBuilder};
 use uuid::Uuid;
@@ -528,17 +530,18 @@ pub enum ReviewOutcome {
     Updated(Box<ApplicationRow>),
     /// No application with that id is owned (as landlord) by the caller.
     NotFound,
-    /// The application is not `pending`, so it cannot be reviewed again.
-    NotPending,
+    /// The requested status is not reachable from the application's current one.
+    InvalidTransition,
 }
 
-/// Reviews an application the caller is the landlord of, moving it from
-/// `pending` to a terminal status, atomically.
+/// Reviews an application the caller is the landlord of, advancing it along the
+/// review lifecycle, atomically.
 ///
 /// A `SELECT ... FOR UPDATE` locks the row so the landlord check, the
-/// pending-state check and the write share one snapshot. A foreign application
-/// reads as [`ReviewOutcome::NotFound`] (no leak); an already-decided one is
-/// [`ReviewOutcome::NotPending`].
+/// transition check and the write share one snapshot. A foreign application
+/// reads as [`ReviewOutcome::NotFound`] (no leak); a target unreachable from the
+/// current state (e.g. re-deciding a terminal one) is
+/// [`ReviewOutcome::InvalidTransition`].
 ///
 /// # Errors
 ///
@@ -570,8 +573,10 @@ pub async fn review_application(
     if current.landlord_id != landlord_id {
         return Ok(ReviewOutcome::NotFound);
     }
-    if current.status != "pending" {
-        return Ok(ReviewOutcome::NotPending);
+    let current_status =
+        ApplicationStatus::from_str(&current.status).unwrap_or(ApplicationStatus::Pending);
+    if !current_status.can_review_to(status) {
+        return Ok(ReviewOutcome::InvalidTransition);
     }
 
     let row = sqlx::query_as!(
