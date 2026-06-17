@@ -50,19 +50,16 @@ import type { Listing } from '@/types/listingContract';
  * cspr.live link with no indexer. The contract-assigned `property_id` and steps
  * 2/3 (attach token, activate) light up with the indexer read service (PL-34).
  *
- * `metadataUri` now comes from the backend — it pins the canonical property
- * payload to IPFS on create/update and stamps `property.metadataUri`. We use
- * that, falling back to a placeholder only for un-pinned legacy rows. `totalSupply`
- * is still defaulted (the backend has no per-property supply) for a one-click
- * register.
+ * `metadataUri` comes from the backend — it pins the canonical property payload
+ * to IPFS on create/update and stamps `property.metadataUri`. It is also the
+ * **match key** the indexer uses to reconcile the `PropertyCreated` event back
+ * to the backend row, so registration is **gated on it**: with no pinned
+ * `metadataUri` the deploy could never be indexed, so we don't offer it.
+ * `totalSupply` is still defaulted (the backend has no per-property supply).
  */
 
 const explorerDeployUrl = (txHash: string) =>
   `${ICO_CONFIG.CASPER.explorerUrl}/deploy/${txHash}`;
-
-/** Fallback for legacy rows whose `metadataUri` the backend hasn't pinned yet. */
-const placeholderMetadataUri = (propertyId: string) =>
-  `ipfs://leasefi/property/${propertyId}`;
 
 // ── Local CSPR.click SDK host (chrome hidden; the connect modal portals out) ──
 
@@ -128,11 +125,11 @@ function StatusRow({ txHash }: { txHash: string | null }) {
 // ── Interactive flow — MUST render inside OnChainSdkHost (needs clickRef) ─────
 
 function RegistrationFlow({
-  listing,
   issuerUserId,
+  metadataUri,
 }: {
-  listing: Listing;
   issuerUserId: string;
+  metadataUri: string;
 }) {
   const { account, clickRef, connect } = useICOWallet();
   const { create } = usePropertyRegistration(
@@ -141,21 +138,7 @@ function RegistrationFlow({
     issuerUserId
   );
 
-  // The backend pins the canonical payload and stamps `property.metadataUri`.
-  // Prefer the listing's nested property; fetch it only if that's absent.
-  const nestedMetadataUri = listing.property?.metadataUri ?? null;
-  const { data: fetchedProperty } = useQuery({
-    queryKey: ['property', listing.propertyId],
-    queryFn: () => getProperty(listing.propertyId),
-    enabled: nestedMetadataUri === null,
-  });
-
   const totalSupply = DEFAULT_OWNERSHIP_TOKEN_SUPPLY;
-  const metadataUri =
-    nestedMetadataUri ??
-    fetchedProperty?.metadataUri ??
-    placeholderMetadataUri(listing.propertyId);
-
   const { step, txHash, error } = create.state;
   const hasWalletSession = Boolean(account?.publicKey && clickRef);
   const busy = step === 'signing' || step === 'pending';
@@ -219,6 +202,17 @@ export function PropertyOnChainRegistration({ listing }: { listing: Listing }) {
   const hasLinkedWallet = Boolean(profile?.walletAddress);
   const [started, setStarted] = useState(false);
 
+  // The indexer reconciles the on-chain record by `metadataUri`, so we register
+  // only when the backend has pinned one. Prefer the nested property; fetch only
+  // if the listing didn't carry it.
+  const nestedMetadataUri = listing.property?.metadataUri ?? null;
+  const { data: fetchedProperty } = useQuery({
+    queryKey: ['property', listing.propertyId],
+    queryFn: () => getProperty(listing.propertyId),
+    enabled: nestedMetadataUri === null,
+  });
+  const metadataUri = nestedMetadataUri ?? fetchedProperty?.metadataUri ?? null;
+
   // Stay dark (render nothing) when the contract isn't configured.
   if (!isPropertyRegistryEnabled) return null;
 
@@ -258,19 +252,34 @@ export function PropertyOnChainRegistration({ listing }: { listing: Listing }) {
         ) : !started ? (
           <div className="space-y-4">
             <StatusRow txHash={null} />
-            <p className="text-sm text-muted-foreground">
-              Issues {Number(DEFAULT_OWNERSHIP_TOKEN_SUPPLY).toLocaleString()}{' '}
-              ownership tokens; the property metadata is generated
-              automatically. You'll be asked to sign once.
-            </p>
-            <Button onClick={() => setStarted(true)}>Register on-chain</Button>
+            {metadataUri ? (
+              <>
+                <p className="text-sm text-muted-foreground">
+                  Issues{' '}
+                  {Number(DEFAULT_OWNERSHIP_TOKEN_SUPPLY).toLocaleString()}{' '}
+                  ownership tokens; the property metadata is generated
+                  automatically. You'll be asked to sign once.
+                </p>
+                <Button onClick={() => setStarted(true)}>
+                  Register on-chain
+                </Button>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                On-chain registration unlocks once this property's metadata is
+                prepared. Save the property first, then come back.
+              </p>
+            )}
           </div>
-        ) : (
+        ) : metadataUri ? (
           // Mount the SDK only now — keeps CSPR.click off every property view.
           <OnChainSdkHost>
-            <RegistrationFlow listing={listing} issuerUserId={issuerUserId} />
+            <RegistrationFlow
+              issuerUserId={issuerUserId}
+              metadataUri={metadataUri}
+            />
           </OnChainSdkHost>
-        )}
+        ) : null}
       </CardContent>
     </Card>
   );
