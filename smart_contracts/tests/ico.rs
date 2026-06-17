@@ -1094,6 +1094,66 @@ fn test_withdraw_unsold_tokens_should_withdraw_unsold_tokens_from_all_ico_schedu
     );
 }
 
+#[test]
+fn test_withdraw_unsold_tokens_should_skip_active_schedule_and_withdraw_ended_ones() {
+    let mut ctx = setup(odra_test::env(), true);
+    let creation_params = get_ico_schedules_creation_params(&ctx.env);
+    let recipient = ctx.users.owner;
+
+    // Private sale ended; public sale is still active.
+    ctx.env.advance_block_time(
+        creation_params[1].start_timestamp + ONE_DAY - ctx.env.block_time(),
+    );
+
+    assert!(
+        ctx.ico
+            .get_ico_schedule_by_id(&ICOScheduleId::from(0u8))
+            .unwrap()
+            .end_timestamp
+            < ctx.env.block_time(),
+        "First schedule should be ended"
+    );
+    assert!(
+        ctx.ico
+            .get_current_ico_schedule()
+            .is_some_and(|(id, _)| id == ICOScheduleId::from(1u8)),
+        "Second schedule should be active"
+    );
+
+    let prev_recipient_balance = ctx.big_coin.balance_of(&recipient);
+    let prev_ico_balance = ctx.big_coin.balance_of(&ctx.ico.address());
+    let expected_withdrawal = creation_params[0].sale_amount;
+
+    ctx.ico.withdraw_unsold_tokens(recipient);
+
+    assert_eq!(
+        ctx.big_coin.balance_of(&recipient),
+        prev_recipient_balance + expected_withdrawal,
+        "Should withdraw unsold tokens from the ended first schedule"
+    );
+    assert_eq!(
+        ctx.big_coin.balance_of(&ctx.ico.address()),
+        prev_ico_balance - expected_withdrawal,
+        "ICO balance should decrease by the first schedule's unsold amount"
+    );
+    assert_eq!(
+        ctx.ico
+            .get_ico_schedule_by_id(&ICOScheduleId::from(0u8))
+            .unwrap()
+            .withdrawn_amount,
+        expected_withdrawal,
+        "First schedule should be marked fully withdrawn"
+    );
+    assert_eq!(
+        ctx.ico
+            .get_ico_schedule_by_id(&ICOScheduleId::from(1u8))
+            .unwrap()
+            .withdrawn_amount,
+        U256::zero(),
+        "Active second schedule should not be withdrawn yet"
+    );
+}
+
 /////////////////////////////////////////////////////////////////////////////
 //                        get_current_ico_schedule()                       //
 /////////////////////////////////////////////////////////////////////////////

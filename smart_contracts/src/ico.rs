@@ -267,7 +267,7 @@ impl ICO {
                 .unwrap_or_revert_with(&self.env(), Error::InvalidICOScheduleId);
 
             if self.env().get_block_time() <= ico_schedule.end_timestamp {
-                break;
+                continue;
             }
 
             let withdrawable =
