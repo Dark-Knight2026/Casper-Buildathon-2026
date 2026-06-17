@@ -46,6 +46,9 @@ pub struct PropertyRow {
     pub year_built: Option<i32>,
     /// RESO parking features.
     pub parking_features: Option<Vec<String>>,
+    /// Off-chain metadata pointer (`ipfs://{cid}`) pinned on create/update;
+    /// the on-chain registration argument. Null until the first pin.
+    pub metadata_uri: Option<String>,
     /// Creation timestamp.
     pub created_at: DateTime<Utc>,
     /// Last update timestamp.
@@ -204,6 +207,7 @@ struct UpsertRow {
     square_feet: Option<i32>,
     year_built: Option<i32>,
     parking_features: Option<Vec<String>>,
+    metadata_uri: Option<String>,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
     was_inserted: bool,
@@ -257,6 +261,7 @@ pub async fn upsert_property(
                 square_feet,
                 year_built,
                 parking_features,
+                metadata_uri,
                 created_at AS "created_at!",
                 updated_at AS "updated_at!",
                 (xmax::text::bigint = 0) AS "was_inserted!"
@@ -297,6 +302,7 @@ pub async fn upsert_property(
         square_feet: row.square_feet,
         year_built: row.year_built,
         parking_features: row.parking_features,
+        metadata_uri: row.metadata_uri,
         created_at: row.created_at,
         updated_at: row.updated_at,
     };
@@ -387,6 +393,7 @@ pub async fn update_property(
                 square_feet,
                 year_built,
                 parking_features,
+                metadata_uri,
                 created_at AS "created_at!",
                 updated_at AS "updated_at!"
         "#,
@@ -428,6 +435,38 @@ pub async fn update_property(
     Ok(PropertyUpdate::Updated(Box::new(row)))
 }
 
+/// Stores a property's pinned-metadata pointer (`ipfs://{cid}`).
+///
+/// Called after create/update once the handler has pinned the metadata JSON.
+/// Kept separate from the data write so the URI reflects the row exactly as
+/// stored - including a dedup hit that collapsed the create onto an existing
+/// row - and so a null pointer on a pre-existing row is backfilled on the next
+/// pin. `updated_at` is intentionally left untouched: this is a derived
+/// pointer, not a user edit.
+///
+/// # Errors
+///
+/// Returns [`Error`] on any database failure.
+#[inline]
+pub async fn set_property_metadata_uri(
+    pool: &PgPool,
+    property_id: Uuid,
+    metadata_uri: &str,
+) -> Result<(), Error> {
+    sqlx::query!(
+        r"
+            UPDATE properties
+            SET metadata_uri = $2
+            WHERE id = $1 AND deleted_at IS NULL
+        ",
+        property_id,
+        metadata_uri,
+    )
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
 /// Fetches a single property by id (public detail; no owner scoping).
 ///
 /// # Errors
@@ -456,6 +495,7 @@ pub async fn fetch_property(pool: &PgPool, property_id: Uuid) -> Result<Property
                 square_feet,
                 year_built,
                 parking_features,
+                metadata_uri,
                 created_at AS "created_at!",
                 updated_at AS "updated_at!"
             FROM properties
@@ -537,6 +577,8 @@ pub async fn search_properties_geo(
     pool: &PgPool,
     search: &GeoSearch,
 ) -> Result<(Vec<PropertyRow>, i64), Error> {
+    let mut tx = pool.begin().await?;
+
     let total = sqlx::query_scalar!(
         r#"
             SELECT COUNT(*) AS "count!"
@@ -560,7 +602,7 @@ pub async fn search_properties_geo(
         search.bbox_max_lng,
         search.bbox_max_lat,
     )
-    .fetch_one(pool)
+    .fetch_one(tx.as_mut())
     .await?;
 
     let rows = sqlx::query_as!(
@@ -583,6 +625,7 @@ pub async fn search_properties_geo(
                 square_feet,
                 year_built,
                 parking_features,
+                metadata_uri,
                 created_at AS "created_at!",
                 updated_at AS "updated_at!"
             FROM properties
@@ -615,8 +658,9 @@ pub async fn search_properties_geo(
         search.limit,
         search.offset,
     )
-    .fetch_all(pool)
+    .fetch_all(tx.as_mut())
     .await?;
 
+    tx.commit().await?;
     Ok((rows, total))
 }

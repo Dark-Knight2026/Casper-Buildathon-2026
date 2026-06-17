@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT\n                id, normalized_address, parcel_id, address_line1, address_line2,\n                city, state, zip_code,\n                latitude::float8 AS \"latitude?\",\n                longitude::float8 AS \"longitude?\",\n                property_type, bedrooms,\n                bathrooms::float8 AS \"bathrooms?\",\n                square_feet, year_built, parking_features,\n                created_at AS \"created_at!\", updated_at AS \"updated_at!\"\n            FROM properties\n            WHERE id = ANY($1) AND deleted_at IS NULL\n        ",
+  "query": "\n            UPDATE properties\n            SET\n                address_line1 = COALESCE($2, address_line1),\n                address_line2 = COALESCE($3, address_line2),\n                city = COALESCE($4, city),\n                state = COALESCE($5, state),\n                zip_code = COALESCE($6, zip_code),\n                property_type = COALESCE($7, property_type),\n                latitude = COALESCE($8::double precision, latitude),\n                longitude = COALESCE($9::double precision, longitude),\n                bedrooms = COALESCE($10, bedrooms),\n                bathrooms = COALESCE($11::double precision, bathrooms),\n                square_feet = COALESCE($12, square_feet),\n                year_built = COALESCE($13, year_built),\n                parking_features = COALESCE($14, parking_features),\n                parcel_id = COALESCE($15, parcel_id),\n                updated_at = NOW()\n            WHERE id = $1\n            RETURNING\n                id,\n                normalized_address,\n                parcel_id,\n                address_line1,\n                address_line2,\n                city,\n                state,\n                zip_code,\n                latitude::float8 AS \"latitude?\",\n                longitude::float8 AS \"longitude?\",\n                property_type,\n                bedrooms,\n                bathrooms::float8 AS \"bathrooms?\",\n                square_feet,\n                year_built,\n                parking_features,\n                metadata_uri,\n                created_at AS \"created_at!\",\n                updated_at AS \"updated_at!\"\n        ",
   "describe": {
     "columns": [
       {
@@ -166,6 +166,17 @@
       },
       {
         "ordinal": 16,
+        "name": "metadata_uri",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "properties",
+            "name": "metadata_uri"
+          }
+        }
+      },
+      {
+        "ordinal": 17,
         "name": "created_at!",
         "type_info": "Timestamptz",
         "origin": {
@@ -176,7 +187,7 @@
         }
       },
       {
-        "ordinal": 17,
+        "ordinal": 18,
         "name": "updated_at!",
         "type_info": "Timestamptz",
         "origin": {
@@ -189,7 +200,21 @@
     ],
     "parameters": {
       "Left": [
-        "UuidArray"
+        "Uuid",
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Float8",
+        "Float8",
+        "Int4",
+        "Float8",
+        "Int4",
+        "Int4",
+        "TextArray",
+        "Text"
       ]
     },
     "nullable": [
@@ -210,8 +235,9 @@
       true,
       true,
       true,
+      true,
       true
     ]
   },
-  "hash": "e9d65e038bc203559db94b10b92c6432f3b9e8637933386aa39f01956e354810"
+  "hash": "7e5edb9e025087bc83d316dda7a5d953b7c76e2a0968eb079369f8a4744b17d1"
 }

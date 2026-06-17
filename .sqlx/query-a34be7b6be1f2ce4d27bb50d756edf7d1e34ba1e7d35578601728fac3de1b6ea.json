@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT\n                id,\n                normalized_address,\n                parcel_id,\n                address_line1,\n                address_line2,\n                city,\n                state,\n                zip_code,\n                latitude::float8 AS \"latitude?\",\n                longitude::float8 AS \"longitude?\",\n                property_type,\n                bedrooms,\n                bathrooms::float8 AS \"bathrooms?\",\n                square_feet,\n                year_built,\n                parking_features,\n                created_at AS \"created_at!\",\n                updated_at AS \"updated_at!\"\n            FROM properties\n            WHERE deleted_at IS NULL\n              AND ($3::float8 IS NULL OR ST_DWithin(\n                    geog,\n                    ST_SetSRID(ST_MakePoint($2::float8, $1::float8), 4326)::geography,\n                    $3::float8 * 1609.34\n                  ))\n              AND ($4::float8 IS NULL OR ST_Intersects(\n                    geog,\n                    ST_MakeEnvelope($4::float8, $5::float8, $6::float8, $7::float8, 4326)::geography\n                  ))\n            ORDER BY\n                CASE\n                    WHEN $1::float8 IS NOT NULL AND $2::float8 IS NOT NULL\n                    THEN ST_Distance(geog, ST_SetSRID(ST_MakePoint($2::float8, $1::float8), 4326)::geography)\n                    ELSE NULL\n                END ASC NULLS LAST,\n                created_at DESC\n            LIMIT $8 OFFSET $9\n        ",
+  "query": "\n            SELECT\n                id, normalized_address, parcel_id, address_line1, address_line2,\n                city, state, zip_code,\n                latitude::float8 AS \"latitude?\",\n                longitude::float8 AS \"longitude?\",\n                property_type, bedrooms,\n                bathrooms::float8 AS \"bathrooms?\",\n                square_feet, year_built, parking_features, metadata_uri,\n                created_at AS \"created_at!\", updated_at AS \"updated_at!\"\n            FROM properties\n            WHERE id = ANY($1) AND deleted_at IS NULL\n        ",
   "describe": {
     "columns": [
       {
@@ -166,6 +166,17 @@
       },
       {
         "ordinal": 16,
+        "name": "metadata_uri",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "properties",
+            "name": "metadata_uri"
+          }
+        }
+      },
+      {
+        "ordinal": 17,
         "name": "created_at!",
         "type_info": "Timestamptz",
         "origin": {
@@ -176,7 +187,7 @@
         }
       },
       {
-        "ordinal": 17,
+        "ordinal": 18,
         "name": "updated_at!",
         "type_info": "Timestamptz",
         "origin": {
@@ -189,15 +200,7 @@
     ],
     "parameters": {
       "Left": [
-        "Float8",
-        "Float8",
-        "Float8",
-        "Float8",
-        "Float8",
-        "Float8",
-        "Float8",
-        "Int8",
-        "Int8"
+        "UuidArray"
       ]
     },
     "nullable": [
@@ -218,8 +221,9 @@
       true,
       true,
       true,
+      true,
       true
     ]
   },
-  "hash": "cf18a8e105d5a729029f130492367e7bae854a2f1de7db91e7f38a04135011a8"
+  "hash": "a34be7b6be1f2ce4d27bb50d756edf7d1e34ba1e7d35578601728fac3de1b6ea"
 }
