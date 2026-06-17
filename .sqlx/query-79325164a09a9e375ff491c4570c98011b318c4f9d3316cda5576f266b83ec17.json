@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT\n                id, listing_id, user_id, landlord_id, full_name, email, phone,\n                date_of_birth, current_address, current_city, current_state,\n                current_zip, move_in_date, employer, job_title,\n                employment_length, monthly_income::float8 AS \"monthly_income!\",\n                reference1_name, reference1_phone, reference2_name,\n                reference2_phone, pets, pet_description, additional_info,\n                background_check_consent, status, created_at, updated_at\n            FROM rental_applications\n            WHERE id = $1 AND (user_id = $2 OR landlord_id = $2)\n        ",
+  "query": "\n            SELECT\n                id, listing_id, user_id, landlord_id, full_name, email, phone,\n                date_of_birth, current_address, current_city, current_state,\n                current_zip, move_in_date, employer, job_title,\n                employment_length, monthly_income::float8 AS \"monthly_income!\",\n                reference1_name, reference1_phone, reference2_name,\n                reference2_phone, pets, pet_description, additional_info,\n                background_check_consent, status, created_at, updated_at\n            FROM rental_applications\n            WHERE id = $1 AND (user_id = $2 OR (landlord_id = $2 AND status <> 'draft'))\n        ",
   "describe": {
     "columns": [
       {
@@ -344,5 +344,5 @@
       false
     ]
   },
-  "hash": "8082fa71814235438b08445abe2d504b7de37a40ba068fd20a6d83c0cfedd9e6"
+  "hash": "79325164a09a9e375ff491c4570c98011b318c4f9d3316cda5576f266b83ec17"
 }

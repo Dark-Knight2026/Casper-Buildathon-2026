@@ -318,7 +318,7 @@ pub async fn list_listing_applications(
         r#"
             SELECT COUNT(*) AS "count!"
             FROM rental_applications
-            WHERE listing_id = $1
+            WHERE listing_id = $1 AND status <> 'draft'
         "#,
         listing_id,
     )
@@ -337,7 +337,7 @@ pub async fn list_listing_applications(
                 reference2_phone, pets, pet_description, additional_info,
                 background_check_consent, status, created_at, updated_at
             FROM rental_applications
-            WHERE listing_id = $1
+            WHERE listing_id = $1 AND status <> 'draft'
             ORDER BY created_at DESC
             LIMIT $2 OFFSET $3
         "#,
@@ -438,6 +438,7 @@ pub async fn list_landlord_applications(
         ",
     )
     .push_bind(landlord_id)
+    .push(" AND status <> 'draft'")
     .append(filter)
     .build_query_scalar::<i64>()
     .fetch_one(tx.as_mut())
@@ -458,6 +459,7 @@ pub async fn list_landlord_applications(
         ",
     )
     .push_bind(landlord_id)
+    .push(" AND status <> 'draft'")
     .append(filter)
     .push(" ORDER BY created_at DESC")
     .limit_offset(filter.limit, filter.offset)
@@ -506,7 +508,7 @@ pub async fn fetch_application(
                 reference2_phone, pets, pet_description, additional_info,
                 background_check_consent, status, created_at, updated_at
             FROM rental_applications
-            WHERE id = $1 AND (user_id = $2 OR landlord_id = $2)
+            WHERE id = $1 AND (user_id = $2 OR (landlord_id = $2 AND status <> 'draft'))
         "#,
         application_id,
         user_id,

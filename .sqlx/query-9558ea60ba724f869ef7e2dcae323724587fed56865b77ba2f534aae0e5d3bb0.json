@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT\n                id, listing_id, user_id, landlord_id, full_name, email, phone,\n                date_of_birth, current_address, current_city, current_state,\n                current_zip, move_in_date, employer, job_title,\n                employment_length, monthly_income::float8 AS \"monthly_income!\",\n                reference1_name, reference1_phone, reference2_name,\n                reference2_phone, pets, pet_description, additional_info,\n                background_check_consent, status, created_at, updated_at\n            FROM rental_applications\n            WHERE listing_id = $1\n            ORDER BY created_at DESC\n            LIMIT $2 OFFSET $3\n        ",
+  "query": "\n            SELECT\n                id, listing_id, user_id, landlord_id, full_name, email, phone,\n                date_of_birth, current_address, current_city, current_state,\n                current_zip, move_in_date, employer, job_title,\n                employment_length, monthly_income::float8 AS \"monthly_income!\",\n                reference1_name, reference1_phone, reference2_name,\n                reference2_phone, pets, pet_description, additional_info,\n                background_check_consent, status, created_at, updated_at\n            FROM rental_applications\n            WHERE listing_id = $1 AND status <> 'draft'\n            ORDER BY created_at DESC\n            LIMIT $2 OFFSET $3\n        ",
   "describe": {
     "columns": [
       {
@@ -345,5 +345,5 @@
       false
     ]
   },
-  "hash": "b3d976a8fdeb06e3735624aee0d061440749a7f84db9ce981631863e9d0a6c62"
+  "hash": "9558ea60ba724f869ef7e2dcae323724587fed56865b77ba2f534aae0e5d3bb0"
 }

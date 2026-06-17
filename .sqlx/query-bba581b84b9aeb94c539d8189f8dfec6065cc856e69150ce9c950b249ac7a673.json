@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT COUNT(*) AS \"count!\"\n            FROM rental_applications\n            WHERE listing_id = $1\n        ",
+  "query": "\n            SELECT COUNT(*) AS \"count!\"\n            FROM rental_applications\n            WHERE listing_id = $1 AND status <> 'draft'\n        ",
   "describe": {
     "columns": [
       {
@@ -19,5 +19,5 @@
       null
     ]
   },
-  "hash": "903292fb800594696193dc1a8e8c7f24e24fdad5db5b50ec490dcc948ae91a9d"
+  "hash": "bba581b84b9aeb94c539d8189f8dfec6065cc856e69150ce9c950b249ac7a673"
 }
