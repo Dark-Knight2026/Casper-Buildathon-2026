@@ -218,6 +218,7 @@ export type ListingSortBy =
   | 'updatedAt'
   | 'availableDate'
   | 'rent'
+  | 'views'
   | 'distance'; // 'distance' needs nearLat/nearLng
 
 /**
@@ -246,13 +247,34 @@ export interface ListingSearchParams extends GeoSearchParams {
   maxRent?: number;
   minBedrooms?: number;
   maxBedrooms?: number;
+  minBathrooms?: number;
+  minLivingArea?: number; // sqft
+  maxLivingArea?: number; // sqft
   petsAllowed?: boolean;
   furnished?: boolean;
+  amenities?: string; // CSV (`pool,gym`) — fair-housing screened server-side
   // Sort — audited default, no steering
   sortBy?: ListingSortBy;
   sortOrder?: 'asc' | 'desc'; // default desc
   page?: number; // default 1
   pageSize?: number; // default 25, max 100 (NOT `limit`)
+}
+
+/**
+ * `GET /listings/landlord` params — the caller's own listings. A SEPARATE,
+ * narrow shape: the endpoint only filters by lifecycle state, city and parking
+ * (it ignores `search`/`propertyType`/rent/bedrooms/pets/furnished). `state` and
+ * any future multi-value are CSV (`draft,active`); `queryString` can't serialize
+ * arrays, so the UI holds arrays and joins them.
+ */
+export interface LandlordListingParams {
+  state?: string; // CSV of ListingState (e.g. 'draft,active'); absent = all
+  city?: string;
+  hasParking?: boolean;
+  sortBy?: ListingSortBy; // 'distance' is rejected here (no geo center)
+  sortOrder?: 'asc' | 'desc';
+  page?: number;
+  pageSize?: number;
 }
 
 // ---------------------------------------------------------------------------

@@ -18,8 +18,10 @@ import { useAuth } from '@/hooks/useAuth';
 import { AuthPromptModal } from '@/components/auth/AuthPromptModal';
 import type {
   ListingSearchParams,
+  ListingSortBy,
   RealPropertyType,
 } from '@/types/listingContract';
+import { InHomeAmenitiesFilter } from '@/components/search/InHomeAmenitiesFilter';
 import {
   Select,
   SelectContent,
@@ -59,6 +61,12 @@ const RADIUS_OPTIONS: FilterOption[] = [
   { value: '50', label: '50 mi' },
 ];
 const DEFAULT_RADIUS_MILES = 25;
+
+const SORT_OPTIONS: FilterOption[] = [
+  { value: 'createdAt', label: 'Newest' },
+  { value: 'rent', label: 'Price' },
+  { value: 'views', label: 'Most viewed' },
+];
 
 // RESO-aligned property types — the value set the backend `GET /listings`
 // filter accepts (NOT the legacy apartment/house/studio/loft set).
@@ -192,9 +200,14 @@ export default function PropertySearch() {
   const [searchTerm, setSearchTerm] = useState('');
   const [priceRange, setPriceRange] = useState<[number, number]>(PRICE_DEFAULT);
   const [bedrooms, setBedrooms] = useState(0);
+  const [bathrooms, setBathrooms] = useState(0);
+  const [minLivingArea, setMinLivingArea] = useState('');
+  const [maxLivingArea, setMaxLivingArea] = useState('');
+  const [amenities, setAmenities] = useState<string[] | undefined>(undefined);
   const [propertyType, setPropertyType] = useState('all');
   const [petsAllowed, setPetsAllowed] = useState(false);
   const [furnished, setFurnished] = useState(false);
+  const [sortBy, setSortBy] = useState<ListingSortBy>('createdAt');
   const [geo, setGeo] = useState<{ lat: number; lng: number } | null>(null);
   const [radiusMiles, setRadiusMiles] = useState(DEFAULT_RADIUS_MILES);
   const [geoError, setGeoError] = useState<string | null>(null);
@@ -208,6 +221,9 @@ export default function PropertySearch() {
   const activeFilters =
     (isPriceFiltered ? 1 : 0) +
     (bedrooms > 0 ? 1 : 0) +
+    (bathrooms > 0 ? 1 : 0) +
+    (minLivingArea || maxLivingArea ? 1 : 0) +
+    ((amenities?.length ?? 0) > 0 ? 1 : 0) +
     (propertyType !== 'all' ? 1 : 0) +
     (petsAllowed ? 1 : 0) +
     (furnished ? 1 : 0) +
@@ -217,9 +233,14 @@ export default function PropertySearch() {
     setSearchTerm('');
     setPriceRange(PRICE_DEFAULT);
     setBedrooms(0);
+    setBathrooms(0);
+    setMinLivingArea('');
+    setMaxLivingArea('');
+    setAmenities(undefined);
     setPropertyType('all');
     setPetsAllowed(false);
     setFurnished(false);
+    setSortBy('createdAt');
     setGeo(null);
     setGeoError(null);
   };
@@ -251,8 +272,6 @@ export default function PropertySearch() {
   };
 
   // Only the filters the backend `GET /listings` actually honors are sent.
-  // Bathrooms / square footage / amenity filters are intentionally not wired
-  // until the backend supports them.
   const params = useMemo<ListingSearchParams>(() => {
     const p: ListingSearchParams = { pageSize: PAGE_SIZE };
     const q = debouncedSearch.trim();
@@ -262,26 +281,38 @@ export default function PropertySearch() {
     // the slider ceiling are still returned.
     if (priceRange[1] < PRICE_MAX) p.maxRent = priceRange[1];
     if (bedrooms > 0) p.minBedrooms = bedrooms;
+    if (bathrooms > 0) p.minBathrooms = bathrooms;
+    if (minLivingArea) p.minLivingArea = Number(minLivingArea);
+    if (maxLivingArea) p.maxLivingArea = Number(maxLivingArea);
+    // amenities: UI holds an array; the backend takes CSV (fair-housing screened).
+    if (amenities?.length) p.amenities = amenities.join(',');
     if (propertyType !== 'all')
       p.propertyType = propertyType as RealPropertyType;
     if (petsAllowed) p.petsAllowed = true;
     if (furnished) p.furnished = true;
     // Geo is all-or-nothing: the radius trio travels together, and distance
-    // sort only makes sense with a centre point.
+    // sort only makes sense with a centre point — and overrides the sort picker.
     if (geo) {
       p.nearLat = geo.lat;
       p.nearLng = geo.lng;
       p.radiusMiles = radiusMiles;
       p.sortBy = 'distance';
+    } else if (sortBy !== 'createdAt') {
+      p.sortBy = sortBy; // 'createdAt' is the server default — omit it
     }
     return p;
   }, [
     debouncedSearch,
     priceRange,
     bedrooms,
+    bathrooms,
+    minLivingArea,
+    maxLivingArea,
+    amenities,
     propertyType,
     petsAllowed,
     furnished,
+    sortBy,
     geo,
     radiusMiles,
   ]);
@@ -319,7 +350,7 @@ export default function PropertySearch() {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
               <Input
-                placeholder="Search by location or property name..."
+                placeholder="Search by title or street address..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10 h-11"
@@ -440,12 +471,53 @@ export default function PropertySearch() {
                     onChange={setBedrooms}
                     max={ROOM_MAX}
                   />
+                  <Stepper
+                    label="Bathrooms"
+                    value={bathrooms}
+                    onChange={setBathrooms}
+                    max={ROOM_MAX}
+                  />
                   <FilterSelect
                     label="Property Type"
                     value={propertyType}
                     onChange={setPropertyType}
                     placeholder="Property Type"
                     options={PROPERTY_TYPE_OPTIONS}
+                  />
+
+                  <div>
+                    <Label>Living area (sqft)</Label>
+                    <div className="flex gap-2 mt-1">
+                      <Input
+                        type="number"
+                        min="0"
+                        placeholder="Min"
+                        value={minLivingArea}
+                        onChange={(e) => setMinLivingArea(e.target.value)}
+                        aria-label="Minimum living area"
+                      />
+                      <Input
+                        type="number"
+                        min="0"
+                        placeholder="Max"
+                        value={maxLivingArea}
+                        onChange={(e) => setMaxLivingArea(e.target.value)}
+                        aria-label="Maximum living area"
+                      />
+                    </div>
+                  </div>
+
+                  <FilterSelect
+                    label="Sort by"
+                    value={sortBy}
+                    onChange={(v) => setSortBy(v as ListingSortBy)}
+                    placeholder="Sort by"
+                    options={SORT_OPTIONS}
+                  />
+
+                  <InHomeAmenitiesFilter
+                    value={amenities}
+                    onChange={setAmenities}
                   />
 
                   <div className="flex items-center justify-between">

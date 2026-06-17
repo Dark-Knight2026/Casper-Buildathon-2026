@@ -1,6 +1,10 @@
 /**
  * Property List Page
- * The landlord's own listings (any state) with search, filters, and pagination.
+ * The landlord's own listings (any state) with the filters the
+ * `GET /listings/landlord` endpoint actually honors — lifecycle state, city and
+ * parking — plus sort and pagination. (The public search filters
+ * title/type/rent/bedrooms/pets/furnished are NOT supported here, so they're
+ * intentionally absent — they were silently no-ops before.)
  */
 
 import { useEffect, useMemo, useState } from 'react';
@@ -8,7 +12,6 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   Plus,
-  Search,
   Filter,
   X,
   Home,
@@ -19,7 +22,6 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import {
   Card,
   CardContent,
@@ -55,24 +57,23 @@ import {
   derivePetsAllowed,
   LISTING_STATE_BADGE,
 } from '@/lib/listingDisplay';
-import { useDebounce } from '@/hooks/useDebounce';
 import type {
-  ListingSearchParams,
+  LandlordListingParams,
   ListingSortBy,
-  RealPropertyType,
+  ListingState,
   RentLtrTerms,
 } from '@/types/listingContract';
 
 const PAGE_SIZE = 20;
 
-const PROPERTY_TYPES: RealPropertyType[] = [
-  'single_family',
-  'multi_family',
-  'apartment',
-  'condo',
-  'townhouse',
-  'commercial',
-  'other',
+const STATES: ListingState[] = [
+  'draft',
+  'active',
+  'pending',
+  'leased',
+  'sold',
+  'withdrawn',
+  'expired',
 ];
 
 const SORT_OPTIONS: { value: ListingSortBy; label: string }[] = [
@@ -80,6 +81,7 @@ const SORT_OPTIONS: { value: ListingSortBy; label: string }[] = [
   { value: 'updatedAt', label: 'Last Updated' },
   { value: 'rent', label: 'Rent' },
   { value: 'availableDate', label: 'Available Date' },
+  { value: 'views', label: 'Most Viewed' },
 ];
 
 const formatCurrency = (amount: number) =>
@@ -94,66 +96,53 @@ export default function PropertyList() {
   const navigate = useNavigate();
 
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [search, setSearch] = useState('');
-  const [propertyType, setPropertyType] = useState('all');
-  const [minRent, setMinRent] = useState('');
-  const [maxRent, setMaxRent] = useState('');
-  const [minBedrooms, setMinBedrooms] = useState('');
-  const [petsAllowed, setPetsAllowed] = useState(false);
-  const [furnished, setFurnished] = useState(false);
+  const [states, setStates] = useState<ListingState[]>([]);
+  const [city, setCity] = useState('all');
+  const [hasParking, setHasParking] = useState(false);
   const [sortBy, setSortBy] = useState<ListingSortBy>('createdAt');
   const [page, setPage] = useState(1);
 
-  const debouncedSearch = useDebounce(search, 400);
+  // Distinct cities across the landlord's listings, to populate the filter
+  // dropdown — the backend matches city by exact value, so free text was easy to
+  // get wrong (a partial city returned 0). Capped at 100 listings (MVP-fine).
+  const { data: cityData } = useQuery({
+    queryKey: ['landlord-listings', 'cities'],
+    queryFn: () => getLandlordListings({ pageSize: 100 }),
+  });
+  const cities = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          (cityData?.data ?? [])
+            .map((listing) => listing.property?.city)
+            .filter((c): c is string => Boolean(c))
+        )
+      ).sort((a, b) => a.localeCompare(b)),
+    [cityData]
+  );
 
   const activeFilterCount =
-    (propertyType !== 'all' ? 1 : 0) +
-    (minRent ? 1 : 0) +
-    (maxRent ? 1 : 0) +
-    (minBedrooms ? 1 : 0) +
-    (petsAllowed ? 1 : 0) +
-    (furnished ? 1 : 0);
+    states.length + (city !== 'all' ? 1 : 0) + (hasParking ? 1 : 0);
 
-  // Only the filters the backend honors are sent. The landlord endpoint returns
-  // every lifecycle state; there's no server state/city/parking filter, so
-  // those controls are intentionally absent.
-  const params = useMemo<ListingSearchParams>(() => {
-    const p: ListingSearchParams = { page, pageSize: PAGE_SIZE, sortBy };
-    const q = debouncedSearch.trim();
-    if (q) p.search = q;
-    if (propertyType !== 'all')
-      p.propertyType = propertyType as RealPropertyType;
-    if (minRent) p.minRent = Number(minRent);
-    if (maxRent) p.maxRent = Number(maxRent);
-    if (minBedrooms) p.minBedrooms = Number(minBedrooms);
-    if (petsAllowed) p.petsAllowed = true;
-    if (furnished) p.furnished = true;
+  const toggleState = (state: ListingState) =>
+    setStates((prev) =>
+      prev.includes(state) ? prev.filter((s) => s !== state) : [...prev, state]
+    );
+
+  // Only the filters the landlord endpoint honors. `state` is CSV (the UI holds
+  // an array, joined here — queryString can't serialize arrays).
+  const params = useMemo<LandlordListingParams>(() => {
+    const p: LandlordListingParams = { page, pageSize: PAGE_SIZE, sortBy };
+    if (states.length) p.state = states.join(',');
+    if (city !== 'all') p.city = city;
+    if (hasParking) p.hasParking = true;
     return p;
-  }, [
-    page,
-    sortBy,
-    debouncedSearch,
-    propertyType,
-    minRent,
-    maxRent,
-    minBedrooms,
-    petsAllowed,
-    furnished,
-  ]);
+  }, [page, sortBy, states, city, hasParking]);
 
   // Reset to the first page whenever the result set changes shape.
   useEffect(() => {
     setPage(1);
-  }, [
-    debouncedSearch,
-    propertyType,
-    minRent,
-    maxRent,
-    minBedrooms,
-    petsAllowed,
-    furnished,
-    sortBy,
-  ]);
+  }, [states, city, hasParking, sortBy]);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['landlord-listings', params],
@@ -165,17 +154,13 @@ export default function PropertyList() {
   const pageCount = data?.pageCount ?? 1;
 
   const handleClearFilters = () => {
-    setSearch('');
-    setPropertyType('all');
-    setMinRent('');
-    setMaxRent('');
-    setMinBedrooms('');
-    setPetsAllowed(false);
-    setFurnished(false);
+    setStates([]);
+    setCity('all');
+    setHasParking(false);
     setPage(1);
   };
 
-  const hasActiveFilters = activeFilterCount > 0 || search.length > 0;
+  const hasActiveFilters = activeFilterCount > 0;
 
   return (
     <div className="container mx-auto py-8 px-4">
@@ -196,17 +181,24 @@ export default function PropertyList() {
         </Button>
       </div>
 
-      {/* Search and Filters */}
+      {/* City filter + Filters + Sort */}
       <div className="flex gap-4 mb-6">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search by title or address..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-10 h-11"
-          />
-        </div>
+        <Select value={city} onValueChange={setCity}>
+          <SelectTrigger className="flex-1 h-11" aria-label="Filter by city">
+            <div className="flex items-center gap-2">
+              <MapPin className="h-4 w-4 text-muted-foreground" />
+              <SelectValue placeholder="All cities" />
+            </div>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All cities</SelectItem>
+            {cities.map((c) => (
+              <SelectItem key={c} value={c}>
+                {c}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
 
         <Dialog open={filtersOpen} onOpenChange={setFiltersOpen}>
           <DialogTrigger asChild>
@@ -224,97 +216,48 @@ export default function PropertyList() {
             <DialogHeader>
               <DialogTitle>Filter Properties</DialogTitle>
               <DialogDescription>
-                Refine your listings with filters
+                Refine your listings by lifecycle state and parking
               </DialogDescription>
             </DialogHeader>
 
             <div className="space-y-6 mt-6">
-              {/* Property Type */}
+              {/* Lifecycle state (multi-select) */}
               <div>
                 <Label className="text-base font-semibold mb-3 block">
-                  Property Type
+                  Status
                 </Label>
-                <Select value={propertyType} onValueChange={setPropertyType}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="All Types" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Types</SelectItem>
-                    {PROPERTY_TYPES.map((type) => (
-                      <SelectItem key={type} value={type}>
-                        {formatPropertyType(type)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Rent Range */}
-              <div>
-                <Label className="text-base font-semibold mb-3 block">
-                  Rent Range
-                </Label>
-                <div className="flex gap-2">
-                  <Input
-                    type="number"
-                    placeholder="Min"
-                    value={minRent}
-                    onChange={(e) => setMinRent(e.target.value)}
-                  />
-                  <Input
-                    type="number"
-                    placeholder="Max"
-                    value={maxRent}
-                    onChange={(e) => setMaxRent(e.target.value)}
-                  />
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {STATES.map((state) => (
+                    <div key={state} className="flex items-center">
+                      <Checkbox
+                        id={`state-${state}`}
+                        checked={states.includes(state)}
+                        onCheckedChange={() => toggleState(state)}
+                      />
+                      <label
+                        htmlFor={`state-${state}`}
+                        className="ml-2 text-sm cursor-pointer"
+                      >
+                        {LISTING_STATE_BADGE[state].label}
+                      </label>
+                    </div>
+                  ))}
                 </div>
               </div>
 
-              {/* Bedrooms */}
-              <div>
-                <Label className="text-base font-semibold mb-3 block">
-                  Minimum Bedrooms
-                </Label>
-                <Input
-                  type="number"
-                  placeholder="0"
-                  value={minBedrooms}
-                  onChange={(e) => setMinBedrooms(e.target.value)}
+              {/* Parking */}
+              <div className="flex items-center">
+                <Checkbox
+                  id="has-parking"
+                  checked={hasParking}
+                  onCheckedChange={(checked) => setHasParking(checked === true)}
                 />
-              </div>
-
-              {/* Boolean Filters */}
-              <div className="space-y-3">
-                <div className="flex items-center">
-                  <Checkbox
-                    id="pets-allowed"
-                    checked={petsAllowed}
-                    onCheckedChange={(checked) =>
-                      setPetsAllowed(checked === true)
-                    }
-                  />
-                  <label
-                    htmlFor="pets-allowed"
-                    className="ml-2 text-sm cursor-pointer"
-                  >
-                    Pets Allowed
-                  </label>
-                </div>
-                <div className="flex items-center">
-                  <Checkbox
-                    id="furnished"
-                    checked={furnished}
-                    onCheckedChange={(checked) =>
-                      setFurnished(checked === true)
-                    }
-                  />
-                  <label
-                    htmlFor="furnished"
-                    className="ml-2 text-sm cursor-pointer"
-                  >
-                    Furnished
-                  </label>
-                </div>
+                <label
+                  htmlFor="has-parking"
+                  className="ml-2 text-sm cursor-pointer"
+                >
+                  Has parking
+                </label>
               </div>
 
               <DialogFooter className="gap-2 sm:gap-0">
@@ -401,7 +344,7 @@ export default function PropertyList() {
           <h3 className="text-lg font-semibold mb-2">No properties found</h3>
           <p className="text-muted-foreground mb-4">
             {hasActiveFilters
-              ? 'Try adjusting your filters or search term'
+              ? 'Try adjusting your filters'
               : 'Get started by adding your first property'}
           </p>
           <Button onClick={() => navigate('/landlord/properties/create')}>

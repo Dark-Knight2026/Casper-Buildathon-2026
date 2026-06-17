@@ -3,6 +3,7 @@ import { toQueryString } from '@/lib/queryString';
 import type {
   Listing,
   ListingSearchParams,
+  LandlordListingParams,
   ListingState,
   ListingStatistics,
   ListingHistoricalData,
@@ -38,10 +39,11 @@ export async function searchListings(
 
 /**
  * `GET /listings/landlord`. The caller's own listings in any state (scoped by
- * `listedBy` server-side), paginated.
+ * `listedBy` server-side), paginated. Takes the narrow `LandlordListingParams`
+ * (state/city/parking/sort) — the endpoint ignores the public search filters.
  */
 export async function getLandlordListings(
-  params: ListingSearchParams = {}
+  params: LandlordListingParams = {}
 ): Promise<PaginatedResponse<Listing>> {
   return backendClient.get<PaginatedResponse<Listing>>(
     `${LISTINGS}/landlord${toQueryString({ ...params })}`
