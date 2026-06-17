@@ -9,13 +9,13 @@ use core::str::FromStr;
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use strum::{Display, EnumString};
-use utoipa::ToSchema;
+use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 use crate::{
-    common::{ApiError, ApiResult},
+    common::{ApiError, ApiResult, Pagination},
     services::{
-        applications::db::{ApplicationRow, NewApplication},
+        applications::db::{ApplicationRow, LandlordApplicationFilter, NewApplication},
         listings::models::Listing,
     },
 };
@@ -274,6 +274,51 @@ impl ReviewApplicationRequest {
             ));
         }
         Ok(self.status)
+    }
+}
+
+/// Landlord cross-listing application search (`GET /applications/landlord`).
+#[derive(Debug, Deserialize, IntoParams)]
+#[serde(rename_all = "camelCase")]
+pub struct LandlordApplicationParams {
+    /// Filter by review status.
+    pub status: Option<ApplicationStatus>,
+    /// ILIKE over applicant name + email.
+    pub search: Option<String>,
+    /// Restrict to applications on one listing.
+    #[param(value_type = Uuid)]
+    pub listing_id: Option<Uuid>,
+    /// Submitted on/after this date, inclusive (`YYYY-MM-DD`).
+    pub date_from: Option<NaiveDate>,
+    /// Submitted on/before this date, inclusive (`YYYY-MM-DD`).
+    pub date_to: Option<NaiveDate>,
+}
+
+impl LandlordApplicationParams {
+    /// Validates the filters and resolves them into a
+    /// [`LandlordApplicationFilter`], folding in the page window.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ApiError::BadRequest`] when `dateFrom` is after `dateTo`.
+    #[inline]
+    pub fn into_validated(self, pagination: &Pagination) -> ApiResult<LandlordApplicationFilter> {
+        if let (Some(from), Some(to)) = (self.date_from, self.date_to)
+            && from > to
+        {
+            return Err(ApiError::BadRequest(
+                "dateFrom must not be after dateTo".to_owned(),
+            ));
+        }
+        Ok(LandlordApplicationFilter {
+            status: self.status,
+            search: self.search.filter(|term| !term.trim().is_empty()),
+            listing_id: self.listing_id,
+            date_from: self.date_from,
+            date_to: self.date_to,
+            limit: pagination.page_size(),
+            offset: pagination.offset(),
+        })
     }
 }
 

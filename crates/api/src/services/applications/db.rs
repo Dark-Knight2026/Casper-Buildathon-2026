@@ -7,12 +7,15 @@
 //! listing, so that nested listing is optional.
 
 use chrono::{DateTime, NaiveDate, Utc};
-use sqlx::{Error, FromRow, PgPool};
+use sqlx::{Error, FromRow, PgPool, Postgres, QueryBuilder};
 use uuid::Uuid;
 
-use crate::services::{
-    applications::models::{ApplicationStatus, RentalApplication},
-    listings::db as listings_db,
+use crate::{
+    common::{AppendFilters, QueryBuilderExt},
+    services::{
+        applications::models::{ApplicationStatus, RentalApplication},
+        listings::db as listings_db,
+    },
 };
 
 /// A rental-application row as stored. `status` stays `String` here and is
@@ -343,6 +346,130 @@ pub async fn list_listing_applications(
     let applications = rows
         .into_iter()
         .map(|row| RentalApplication::assemble(row, None))
+        .collect();
+    Ok((applications, total))
+}
+
+/// Validated filter for [`list_landlord_applications`]. Absent fields impose no
+/// constraint; limit/offset are pre-clamped by the pagination layer. The
+/// landlord scope itself is the base query's constant predicate, not a filter.
+#[derive(Debug)]
+pub struct LandlordApplicationFilter {
+    /// Review-status filter.
+    pub status: Option<ApplicationStatus>,
+    /// ILIKE term over applicant name + email.
+    pub search: Option<String>,
+    /// Restrict to applications on a single listing.
+    pub listing_id: Option<Uuid>,
+    /// Submitted on/after this date, inclusive.
+    pub date_from: Option<NaiveDate>,
+    /// Submitted on/before this date, inclusive.
+    pub date_to: Option<NaiveDate>,
+    /// Page size.
+    pub limit: i64,
+    /// Page offset.
+    pub offset: i64,
+}
+
+impl AppendFilters for LandlordApplicationFilter {
+    /// Pushes the dynamic WHERE filters shared by the count and page queries.
+    #[inline]
+    fn append_to(&self, builder: &mut QueryBuilder<Postgres>) {
+        if let Some(status) = self.status {
+            builder.push(" AND status = ").push_bind(status.to_string());
+        }
+        if let Some(search) = &self.search {
+            builder
+                .push(" AND (full_name ILIKE ")
+                .push_bind(format!("%{search}%"))
+                .push(" OR email ILIKE ")
+                .push_bind(format!("%{search}%"))
+                .push(")");
+        }
+        if let Some(listing_id) = self.listing_id {
+            builder.push(" AND listing_id = ").push_bind(listing_id);
+        }
+        if let Some(date_from) = self.date_from {
+            builder.push(" AND created_at >= ").push_bind(date_from);
+        }
+        if let Some(date_to) = self.date_to {
+            // Inclusive of the whole `date_to` calendar day: everything strictly
+            // before the following midnight.
+            builder
+                .push(" AND created_at < (")
+                .push_bind(date_to)
+                .push("::date + INTERVAL '1 day')");
+        }
+    }
+}
+
+/// Lists every application across the caller's listings (newest first), narrowed
+/// by `filter`, with each application's nested listing hydrated, plus the total
+/// match count. Scoped to the caller via the denormalized `landlord_id`, so no
+/// join back to listings is needed.
+///
+/// # Errors
+///
+/// Returns [`Error`] on any database failure.
+#[inline]
+pub async fn list_landlord_applications(
+    pool: &PgPool,
+    landlord_id: Uuid,
+    filter: &LandlordApplicationFilter,
+) -> Result<(Vec<RentalApplication>, i64), Error> {
+    // One REPEATABLE READ snapshot for count + page, so the total and the
+    // returned page cannot disagree under concurrent inserts.
+    let mut tx = pool.begin().await?;
+    sqlx::raw_sql("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
+        .execute(tx.as_mut())
+        .await?;
+
+    let total = QueryBuilder::<Postgres>::new(
+        r"
+            SELECT COUNT(*)
+            FROM rental_applications
+            WHERE landlord_id =
+        ",
+    )
+    .push_bind(landlord_id)
+    .append(filter)
+    .build_query_scalar::<i64>()
+    .fetch_one(tx.as_mut())
+    .await?;
+
+    let rows = QueryBuilder::<Postgres>::new(
+        r"
+            SELECT
+                id, listing_id, user_id, landlord_id, full_name, email, phone,
+                date_of_birth, current_address, current_city, current_state,
+                current_zip, move_in_date, employer, job_title,
+                employment_length, monthly_income::float8 AS monthly_income,
+                reference1_name, reference1_phone, reference2_name,
+                reference2_phone, pets, pet_description, additional_info,
+                background_check_consent, status, created_at, updated_at
+            FROM rental_applications
+            WHERE landlord_id =
+        ",
+    )
+    .push_bind(landlord_id)
+    .append(filter)
+    .push(" ORDER BY created_at DESC")
+    .limit_offset(filter.limit, filter.offset)
+    .build_query_as::<ApplicationRow>()
+    .fetch_all(tx.as_mut())
+    .await?;
+    tx.commit().await?;
+
+    // Hydrate nested listings the same way the tenant list does: an application
+    // outlives a withdrawn listing, so the nested listing stays optional.
+    let listing_ids = rows.iter().map(|row| row.listing_id).collect::<Vec<_>>();
+    let listings = listings_db::fetch_listings_by_ids(pool, &listing_ids).await?;
+    let applications = rows
+        .into_iter()
+        .map(|row| {
+            let listing = listings.get(&row.listing_id).cloned();
+            RentalApplication::assemble(row, listing)
+        })
         .collect();
     Ok((applications, total))
 }

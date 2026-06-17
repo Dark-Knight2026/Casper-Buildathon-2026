@@ -110,6 +110,19 @@ async fn get_app(env: &TestEnv, token: &str, application_id: Uuid) -> (StatusCod
     (code, body.unwrap_or(Value::Null))
 }
 
+/// `GET /applications/landlord{query}`; `query` is the raw `?...` suffix or "".
+async fn landlord_apps(env: &TestEnv, token: &str, query: &str) -> (StatusCode, Value) {
+    let (code, body) = common::authed_request::<Value>(
+        &env.server,
+        &Method::GET,
+        &format!("/api/v1/applications/landlord{query}"),
+        token,
+        &Value::Null,
+    )
+    .await;
+    (code, body.unwrap_or(Value::Null))
+}
+
 // `POST /listings/{id}/applications` submit -----------------------------------
 
 /// A valid application against an active listing is created as `pending`, with
@@ -477,6 +490,160 @@ async fn get_application_requires_auth_401(pool: PgPool) {
         .server
         .get(&format!("/api/v1/applications/{}", Uuid::new_v4()))
         .await;
+    assert_eq!(response.status_code(), StatusCode::UNAUTHORIZED);
+}
+
+// `GET /applications/landlord` cross-listing ----------------------------------
+
+/// The landlord sees applications across all their listings, each with a nested
+/// listing.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn landlord_apps_spans_listings(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, landlord_token) =
+        common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let (_a, tenant_a) = common::seed_authed_user(&env, &pool, UserRole::Tenant).await;
+    let (_b, tenant_b) = common::seed_authed_user(&env, &pool, UserRole::Tenant).await;
+    let listing1 = active_listing(&env, &pool, landlord_id, &landlord_token).await;
+    let listing2 = active_listing(&env, &pool, landlord_id, &landlord_token).await;
+    submit_app(&env, &tenant_a, listing1, &app_body()).await;
+    submit_app(&env, &tenant_b, listing2, &app_body()).await;
+
+    let (status, body) = landlord_apps(&env, &landlord_token, "").await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["itemCount"], 2);
+    assert!(body["data"][0]["listing"]["id"].is_string());
+}
+
+/// One landlord's applications never appear in another landlord's list.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn landlord_apps_isolation(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, landlord_token) =
+        common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let (_other, other_token) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let (_t, tenant_token) = common::seed_authed_user(&env, &pool, UserRole::Tenant).await;
+    let listing_id = active_listing(&env, &pool, landlord_id, &landlord_token).await;
+    submit_app(&env, &tenant_token, listing_id, &app_body()).await;
+
+    let (status, body) = landlord_apps(&env, &other_token, "").await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["itemCount"], 0);
+}
+
+/// The status filter narrows to matching applications.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn landlord_apps_filter_status(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, landlord_token) =
+        common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let (_a, tenant_a) = common::seed_authed_user(&env, &pool, UserRole::Tenant).await;
+    let (_b, tenant_b) = common::seed_authed_user(&env, &pool, UserRole::Tenant).await;
+    let listing_id = active_listing(&env, &pool, landlord_id, &landlord_token).await;
+    let (_s, app_a) = submit_app(&env, &tenant_a, listing_id, &app_body()).await;
+    submit_app(&env, &tenant_b, listing_id, &app_body()).await;
+    let app_a_id = Uuid::parse_str(app_a["id"].as_str().unwrap()).unwrap();
+    review(&env, &landlord_token, app_a_id, "approved").await;
+
+    let (status, body) = landlord_apps(&env, &landlord_token, "?status=approved").await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["itemCount"], 1);
+    assert_eq!(body["data"][0]["status"], "approved");
+}
+
+/// The search filter matches on applicant name (case-insensitive).
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn landlord_apps_filter_search(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, landlord_token) =
+        common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let (_a, tenant_a) = common::seed_authed_user(&env, &pool, UserRole::Tenant).await;
+    let (_b, tenant_b) = common::seed_authed_user(&env, &pool, UserRole::Tenant).await;
+    let listing_id = active_listing(&env, &pool, landlord_id, &landlord_token).await;
+    let mut body_a = app_body();
+    body_a["fullName"] = json!("Alice Walker");
+    let mut body_b = app_body();
+    body_b["fullName"] = json!("Bob Jones");
+    submit_app(&env, &tenant_a, listing_id, &body_a).await;
+    submit_app(&env, &tenant_b, listing_id, &body_b).await;
+
+    let (status, body) = landlord_apps(&env, &landlord_token, "?search=alice").await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["itemCount"], 1);
+    assert_eq!(body["data"][0]["fullName"], "Alice Walker");
+}
+
+/// The listing filter restricts to one listing's applications.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn landlord_apps_filter_listing(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, landlord_token) =
+        common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let (_a, tenant_a) = common::seed_authed_user(&env, &pool, UserRole::Tenant).await;
+    let (_b, tenant_b) = common::seed_authed_user(&env, &pool, UserRole::Tenant).await;
+    let listing1 = active_listing(&env, &pool, landlord_id, &landlord_token).await;
+    let listing2 = active_listing(&env, &pool, landlord_id, &landlord_token).await;
+    submit_app(&env, &tenant_a, listing1, &app_body()).await;
+    submit_app(&env, &tenant_b, listing2, &app_body()).await;
+
+    let (status, body) =
+        landlord_apps(&env, &landlord_token, &format!("?listingId={listing1}")).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["itemCount"], 1);
+    assert_eq!(
+        body["data"][0]["listingId"].as_str().unwrap(),
+        listing1.to_string()
+    );
+}
+
+/// The submission-date filter excludes applications outside the range.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn landlord_apps_filter_date_from(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, landlord_token) =
+        common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let (_t, tenant_token) = common::seed_authed_user(&env, &pool, UserRole::Tenant).await;
+    let listing_id = active_listing(&env, &pool, landlord_id, &landlord_token).await;
+    submit_app(&env, &tenant_token, listing_id, &app_body()).await;
+
+    let (_s, past) = landlord_apps(&env, &landlord_token, "?dateFrom=2000-01-01").await;
+    assert_eq!(past["itemCount"], 1);
+    let (_s, future) = landlord_apps(&env, &landlord_token, "?dateFrom=2999-01-01").await;
+    assert_eq!(future["itemCount"], 0);
+}
+
+/// `dateFrom` after `dateTo` -> `400`.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn landlord_apps_invalid_date_range_400(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (_id, token) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+
+    let (status, _body) =
+        landlord_apps(&env, &token, "?dateFrom=2026-12-31&dateTo=2026-01-01").await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+/// A tenant token is rejected by the landlord role gate.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn landlord_apps_rejects_tenant_403(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (_id, token) = common::seed_authed_user(&env, &pool, UserRole::Tenant).await;
+
+    let (status, _body) = landlord_apps(&env, &token, "").await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+}
+
+/// No auth cookie -> `401`.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn landlord_apps_requires_auth_401(pool: PgPool) {
+    let env = common::setup_test_server(pool, false).await;
+
+    let response = env.server.get("/api/v1/applications/landlord").await;
     assert_eq!(response.status_code(), StatusCode::UNAUTHORIZED);
 }
 

@@ -14,7 +14,10 @@ use crate::{
     services::{
         applications::{
             db::{self, ReviewOutcome, SubmitOutcome},
-            models::{RentalApplication, ReviewApplicationRequest, SubmitApplicationRequest},
+            models::{
+                LandlordApplicationParams, RentalApplication, ReviewApplicationRequest,
+                SubmitApplicationRequest,
+            },
         },
         auth::{AuthUser, LandlordRole, RoleUser, TenantRole},
         listings::db as listings_db,
@@ -156,6 +159,48 @@ pub async fn list_listing_applications(
         pagination.offset(),
     )
     .await?;
+    Ok(Json(PaginatedResponse::new(
+        applications,
+        total,
+        &pagination,
+    )))
+}
+
+// `GET /api/v1/applications/landlord`
+//
+/// Every application across the caller's listings (newest first), paginated,
+/// with optional status / applicant-search / listing / submission-date filters.
+/// Each entry nests its listing for cross-listing context.
+///
+/// # Errors
+///
+/// Returns `400` on an invalid date range, or a database error.
+#[utoipa::path(
+    get,
+    path = "/applications/landlord",
+    tag = "Applications",
+    params(LandlordApplicationParams, Pagination),
+    responses(
+        (status = 200, description = "The landlord's applications (paginated)", body = PaginatedResponse<RentalApplication>),
+        (status = 400, description = "Invalid filter", body = ErrorResponse),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 403, description = "Landlord role required", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse),
+    ),
+    security(
+        ("cookie_auth" = [])
+    )
+)]
+#[inline]
+pub async fn list_landlord_applications(
+    State(state): State<Arc<AppState>>,
+    user: RoleUser<LandlordRole>,
+    Query(params): Query<LandlordApplicationParams>,
+    Query(pagination): Query<Pagination>,
+) -> ApiResult<Json<PaginatedResponse<RentalApplication>>> {
+    let filter = params.into_validated(&pagination)?;
+    let (applications, total) =
+        db::list_landlord_applications(&state.db, user.0.sub, &filter).await?;
     Ok(Json(PaginatedResponse::new(
         applications,
         total,
