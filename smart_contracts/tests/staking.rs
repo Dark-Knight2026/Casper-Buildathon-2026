@@ -9,7 +9,7 @@ use leasefi_contracts::big_coin::{BigCoin, BigCoinHostRef, BigCoinInitArgs};
 use leasefi_contracts::staking::{events::*, Staking, StakingHostRef, StakingInitArgs};
 
 use crate::{
-    constants::UNBONDING_PERIOD,
+    constants::{REWARD_CLAIM_HOLD_PERIOD, UNBONDING_PERIOD},
     staking::errors::Error,
     vesting::{Vesting, VestingHostRef, VestingInitArgs},
 };
@@ -90,6 +90,10 @@ fn fund_and_approve(ctx: &mut Context, user: Address, amount: U256) {
     // User approves staking contract
     ctx.env.set_caller(user);
     ctx.big_coin.approve(&ctx.staking.address(), &amount);
+}
+
+fn advance_past_reward_claim_hold(ctx: &mut Context) {
+    ctx.env.advance_block_time(REWARD_CLAIM_HOLD_PERIOD + 1);
 }
 
 /// Helper to stake tokens for a user
@@ -695,6 +699,8 @@ fn test_claim_rewards_should_claim_properly() {
     ctx.big_coin.approve(&ctx.staking.address(), &rewards);
     ctx.staking.deposit_rewards(rewards);
 
+    advance_past_reward_claim_hold(&mut ctx);
+
     let prev_balance = ctx.big_coin.balance_of(&alice);
 
     ctx.env.set_caller(alice);
@@ -746,6 +752,8 @@ fn test_claim_rewards_multi_staker_multi_cycle_no_underflow() {
     assert_eq!(bob_pending, U256::from(1u64));
     assert_eq!(ctx.staking.get_pending_rewards(alice), U256::zero());
 
+    advance_past_reward_claim_hold(&mut ctx);
+
     let prev_bob = ctx.big_coin.balance_of(&bob);
 
     ctx.env.set_caller(bob);
@@ -772,6 +780,7 @@ fn test_claim_rewards_should_not_accrue_already_claimed_rewards() {
     ctx.staking.deposit_rewards(rewards);
 
     // First claim
+    advance_past_reward_claim_hold(&mut ctx);
     ctx.env.set_caller(alice);
     ctx.staking.claim_rewards();
     assert_eq!(ctx.staking.get_pending_rewards(alice), U256::zero());
@@ -783,6 +792,70 @@ fn test_claim_rewards_should_not_accrue_already_claimed_rewards() {
 
     // Only the second deposit should be pending, not both
     assert_eq!(ctx.staking.get_pending_rewards(alice), rewards);
+}
+
+#[test]
+fn test_claim_rewards_should_revert_before_minimum_hold_duration() {
+    let mut ctx = setup(odra_test::env());
+    let amount = staking_amount();
+    let rewards = rewards_amount();
+    let owner = ctx.users.owner;
+    let alice = ctx.users.alice;
+
+    fund_and_approve(&mut ctx, alice, amount);
+    stake_for(&mut ctx, alice, amount);
+
+    ctx.env.set_caller(owner);
+    ctx.big_coin.approve(&ctx.staking.address(), &rewards);
+    ctx.staking.deposit_rewards(rewards);
+
+    ctx.env.set_caller(alice);
+    assert_eq!(
+        ctx.staking.try_claim_rewards().unwrap_err(),
+        Error::RewardClaimHoldPeriodNotFinished.into(),
+        "Should revert when claiming rewards before the minimum hold period elapses"
+    );
+}
+
+#[test]
+fn test_long_term_staker_can_claim_while_new_staker_cannot_snipe_rewards() {
+    let mut ctx = setup(odra_test::env());
+    let amount = staking_amount();
+    let rewards = rewards_amount();
+    let owner = ctx.users.owner;
+    let alice = ctx.users.alice;
+    let bob = ctx.users.bob;
+
+    fund_and_approve(&mut ctx, alice, amount);
+    stake_for(&mut ctx, alice, amount);
+    advance_past_reward_claim_hold(&mut ctx);
+
+    fund_and_approve(&mut ctx, bob, amount);
+    stake_for(&mut ctx, bob, amount);
+
+    ctx.env.set_caller(owner);
+    ctx.big_coin.approve(&ctx.staking.address(), &rewards);
+    ctx.staking.deposit_rewards(rewards);
+
+    ctx.env.set_caller(alice);
+    ctx.staking.claim_rewards();
+
+    ctx.env.set_caller(bob);
+    assert_eq!(
+        ctx.staking.try_claim_rewards().unwrap_err(),
+        Error::RewardClaimHoldPeriodNotFinished.into(),
+        "Late staker should not claim immediately after a reward deposit"
+    );
+
+    advance_past_reward_claim_hold(&mut ctx);
+    let prev_bob = ctx.big_coin.balance_of(&bob);
+    ctx.env.set_caller(bob);
+    ctx.staking.claim_rewards();
+
+    assert!(
+        ctx.big_coin.balance_of(&bob) > prev_bob,
+        "Late staker should be able to claim after the hold period"
+    );
 }
 
 // =============================================================================
@@ -898,6 +971,7 @@ fn test_staking_full_lifecycle() {
 
     // --- Claim Rewards ---
 
+    advance_past_reward_claim_hold(&mut ctx);
     ctx.env.set_caller(alice);
     ctx.staking.claim_rewards();
     ctx.env.set_caller(bob);

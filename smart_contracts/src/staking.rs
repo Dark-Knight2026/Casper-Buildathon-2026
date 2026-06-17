@@ -2,7 +2,7 @@ use odra::{casper_types::U256, prelude::*, ContractRef};
 use odra_modules::{access::Ownable, cep18_token::Cep18ContractRef};
 
 use crate::{
-    constants::UNBONDING_PERIOD,
+    constants::{REWARD_CLAIM_HOLD_PERIOD, UNBONDING_PERIOD},
     staking::{
         errors::Error,
         events::{
@@ -30,6 +30,8 @@ pub struct StakerInfo {
     pub unbonding_amount: U256,
     /// Block timestamp for when the current unbonding amount becomes withdrawable.
     pub unbonding_ends_at: u64,
+    /// Block timestamp when the current active stake position began (`0` if none).
+    pub staked_at: u64,
 }
 
 // =============================================================================
@@ -121,6 +123,7 @@ pub mod errors {
         CallerNotAuthorizedToManageLocks = 614,
         RenounceOwnershipNotAllowed = 615,
         AlreadyInitialized = 616,
+        RewardClaimHoldPeriodNotFinished = 617,
     }
 }
 
@@ -277,7 +280,12 @@ impl Staking {
             .transfer_from(caller, staking_contract, &amount);
 
         let mut staker_info = self.stakers.get_or_default(&staker);
+        let opening_new_stake_position = staker_info.staked_amount.is_zero();
         staker_info.staked_amount += amount;
+        if opening_new_stake_position {
+            // Use at least 1 so a stake at block_time 0 still enforces the hold window.
+            staker_info.staked_at = self.env().get_block_time().max(1);
+        }
         self.stakers.set(&staker, staker_info);
 
         let new_total_staked = self.total_staked.get_or_default() + amount;
@@ -340,6 +348,9 @@ impl Staking {
         staker_info.staked_amount -= amount;
         staker_info.unbonding_amount = amount;
         staker_info.unbonding_ends_at = unbonding_ends_at;
+        if staker_info.staked_amount.is_zero() {
+            staker_info.staked_at = 0;
+        }
 
         self.stakers.set(&staker, staker_info);
 
@@ -443,6 +454,8 @@ impl Staking {
         if rewards.is_zero() {
             self.env().revert(Error::NoRewardsToClaim);
         }
+
+        self.assert_reward_claim_hold_elapsed(&staker_info);
 
         staker_info.pending_rewards = U256::zero();
         self.stakers.set(&staker, staker_info);
@@ -582,6 +595,16 @@ impl Staking {
     fn assert_caller_is_vesting_contract(&self) {
         if self.env().caller() != *self.vesting.address() {
             self.env().revert(Error::CallerNotAuthorizedToManageLocks);
+        }
+    }
+
+    #[inline]
+    fn assert_reward_claim_hold_elapsed(&self, staker_info: &StakerInfo) {
+        // `staked_at == 0` marks legacy positions that predate this field.
+        if staker_info.staked_at > 0
+            && self.env().get_block_time() < staker_info.staked_at + REWARD_CLAIM_HOLD_PERIOD
+        {
+            self.env().revert(Error::RewardClaimHoldPeriodNotFinished);
         }
     }
 

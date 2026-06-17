@@ -117,6 +117,11 @@
             "name": "unbonding_ends_at",
             "description": null,
             "ty": "U64"
+          },
+          {
+            "name": "staked_at",
+            "description": null,
+            "ty": "U64"
           }
         ]
       }
@@ -246,6 +251,11 @@
       "name": "NoRewardsToClaim",
       "description": "",
       "discriminant": 608
+    },
+    {
+      "name": "RewardClaimHoldPeriodNotFinished",
+      "description": "",
+      "discriminant": 617
     },
     {
       "name": "NoUnbondingInProgress",

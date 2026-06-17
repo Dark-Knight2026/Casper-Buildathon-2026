@@ -30,6 +30,10 @@ pub const MIN_DEADLINE_IN_MS: u64 = 5 * 60 * 1_000;
 /// Required waiting period between unstaking and withdrawal
 pub const UNBONDING_PERIOD: u64 = 48 * 60 * 60 * 1_000; // 48 hours
 
+/// Minimum time a staker must remain staked before claiming accrued rewards.
+/// Matches [`UNBONDING_PERIOD`] to discourage just-in-time stake/claim/unstake sniping.
+pub const REWARD_CLAIM_HOLD_PERIOD: u64 = UNBONDING_PERIOD;
+
 /// 2% LeaseFi transaction fee
 // TODO: Decide whether to make this configurable or not
 pub const LEASEFI_TRANSACTION_FEE_BPS: u32 = 200;
