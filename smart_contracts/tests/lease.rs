@@ -17,12 +17,12 @@ use leasefi_contracts::lease::{
     errors::Error,
     events::{
         EquityEligibilityGranted, EquityEligibilityRevoked, LeaseAgreementCreated,
-        LeaseAgreementFinished, LeaseAgreementProlonged,
+        LeaseAgreementFinished, LeaseAgreementProlonged, LeaseNftRecovered,
     },
     types::{CreateLeaseAgreementParams, LeaseAgreement, RentDistributionTerms},
     Lease, LeaseHostRef, LeaseInitArgs,
 };
-use leasefi_contracts::nft::{errors::Error as NftError, types::NFTInitParams};
+use leasefi_contracts::nft::{errors::Error as NftError, events::Frozen, types::NFTInitParams};
 use leasefi_contracts::property_registry::{
     types::{CreatePropertyParams, PropertyStatus},
     PropertyRegistry, PropertyRegistryHostRef, PropertyRegistryInitArgs,
@@ -144,6 +144,8 @@ fn setup(env: HostEnv) -> TestData {
 
     nft.add_minter(&lease.address());
     nft.add_freezer(&lease.address());
+    nft.add_whitelist_manager(&lease.address());
+    nft.add_force_transferer(&lease.address());
 
     nft.add_to_whitelist(&env.get_account(0));
     nft.add_to_whitelist(&tenant_wallet);
@@ -1341,5 +1343,139 @@ fn test_prolong_finalized_lease_should_revert() {
             .unwrap_err(),
         Error::LeaseAlreadyFinalized.into(),
         "Should revert when trying to prolong an already-finalized lease"
+    );
+}
+
+// =============================================================================
+// recover_lease_nft()
+// =============================================================================
+
+#[test]
+fn test_recover_lease_nft_should_move_frozen_token_to_active_wallet() {
+    let mut test_data = setup(odra_test::env());
+    let params = generate_lease_agreement_creation_params(&test_data);
+    let lease_agreement_id = test_data.lease.create_lease_agreement(params);
+    let lease_agreement = test_data
+        .lease
+        .get_lease_agreement_by_id(&lease_agreement_id);
+    let token_id = lease_agreement.token_id;
+    let old_tenant_wallet = test_data.env.get_account(1);
+    let new_tenant_wallet = test_data.env.get_account(16);
+
+    assert_eq!(
+        test_data.nft.owner_of(token_id),
+        Some(old_tenant_wallet),
+        "Lease NFT should be minted to the tenant's original wallet"
+    );
+    assert!(
+        test_data.nft.is_frozen(&token_id),
+        "Lease NFT should be frozen at creation"
+    );
+
+    test_data.env.set_caller(test_data.env.get_account(0));
+    test_data
+        .user_registry
+        .replace_active_wallet(test_data.tenant_id, new_tenant_wallet);
+
+    assert_eq!(
+        test_data
+            .user_registry
+            .get_active_wallet(test_data.tenant_id),
+        new_tenant_wallet,
+        "Tenant active wallet should be updated after recovery"
+    );
+    assert!(
+        !test_data.nft.can_transact(&new_tenant_wallet),
+        "New wallet should not be whitelisted before lease NFT recovery"
+    );
+
+    test_data.env.set_caller(new_tenant_wallet);
+    test_data.lease.recover_lease_nft(&lease_agreement_id);
+
+    assert_eq!(
+        test_data.nft.owner_of(token_id),
+        Some(new_tenant_wallet),
+        "Lease NFT should be owned by the tenant's current active wallet"
+    );
+    assert!(
+        test_data.nft.is_frozen(&token_id),
+        "Lease NFT should remain frozen after recovery"
+    );
+    assert!(
+        test_data.nft.can_transact(&new_tenant_wallet),
+        "New wallet should be whitelisted during recovery"
+    );
+    assert!(test_data.env.emitted_event(
+        &test_data.lease,
+        LeaseNftRecovered {
+            lease_agreement_id,
+            token_id,
+            old_wallet: old_tenant_wallet,
+            new_wallet: new_tenant_wallet,
+        }
+    ));
+    assert!(test_data.env.emitted_event(
+        &test_data.nft,
+        Frozen {
+            account: new_tenant_wallet,
+            token_id,
+            frozen_status: true,
+        }
+    ));
+
+    let receiver = test_data.env.get_account(17);
+    test_data.env.set_caller(test_data.env.get_account(0));
+    test_data.nft.add_to_whitelist(&receiver);
+
+    test_data.env.set_caller(new_tenant_wallet);
+    assert_eq!(
+        test_data
+            .nft
+            .try_transfer_from(new_tenant_wallet, receiver, token_id)
+            .unwrap_err(),
+        NftError::TokenIsFrozen.into(),
+        "Frozen lease NFT should not be transferable even when both parties are whitelisted"
+    );
+}
+
+#[test]
+fn test_recover_lease_nft_should_revert_if_caller_is_old_wallet() {
+    let mut test_data = setup(odra_test::env());
+    let params = generate_lease_agreement_creation_params(&test_data);
+    let lease_agreement_id = test_data.lease.create_lease_agreement(params);
+    let old_tenant_wallet = test_data.env.get_account(1);
+    let new_tenant_wallet = test_data.env.get_account(16);
+
+    test_data.env.set_caller(test_data.env.get_account(0));
+    test_data
+        .user_registry
+        .replace_active_wallet(test_data.tenant_id, new_tenant_wallet);
+
+    test_data.env.set_caller(old_tenant_wallet);
+    assert_eq!(
+        test_data
+            .lease
+            .try_recover_lease_nft(&lease_agreement_id)
+            .unwrap_err(),
+        Error::InvalidTenant.into(),
+        "Old wallet should not be able to recover the lease NFT"
+    );
+}
+
+#[test]
+fn test_recover_lease_nft_should_revert_if_nft_already_on_active_wallet() {
+    let mut test_data = setup(odra_test::env());
+    let params = generate_lease_agreement_creation_params(&test_data);
+    let lease_agreement_id = test_data.lease.create_lease_agreement(params);
+    let tenant_wallet = test_data.env.get_account(1);
+
+    test_data.env.set_caller(tenant_wallet);
+    assert_eq!(
+        test_data
+            .lease
+            .try_recover_lease_nft(&lease_agreement_id)
+            .unwrap_err(),
+        Error::LeaseNftAlreadyOwnedByActiveWallet.into(),
+        "Recovery should revert when the lease NFT is already on the active wallet"
     );
 }
