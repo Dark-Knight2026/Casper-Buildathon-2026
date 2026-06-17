@@ -1442,3 +1442,82 @@ async fn draft_submit_requires_auth_401(pool: PgPool) {
         .await;
     assert_eq!(response.status_code(), StatusCode::UNAUTHORIZED);
 }
+
+// drafts hidden from the landlord (regression) --------------------------------
+
+/// A tenant's unsubmitted `draft` must not appear among a listing's applications
+/// shown to its landlord; only submitted (here `pending`) ones do.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn list_listing_applications_excludes_draft(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, landlord_token) =
+        common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let (_submitter, submitter_token) =
+        common::seed_authed_user(&env, &pool, UserRole::Tenant).await;
+    let (_drafter, drafter_token) = common::seed_authed_user(&env, &pool, UserRole::Tenant).await;
+    let listing_id = active_listing(&env, &pool, landlord_id, &landlord_token).await;
+
+    submit_app(&env, &submitter_token, listing_id, &app_body()).await;
+    seed_draft(&env, &drafter_token, listing_id).await;
+
+    let (status, body) = common::authed_request::<Value>(
+        &env.server,
+        &Method::GET,
+        &format!("/api/v1/listings/{listing_id}/applications"),
+        &landlord_token,
+        &Value::Null,
+    )
+    .await;
+    let body = body.unwrap();
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["itemCount"], 1, "draft must not be counted for the landlord");
+    let statuses = body["data"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|app| app["status"].as_str().unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(statuses, ["pending"], "only the submitted application is visible");
+}
+
+/// The cross-listing landlord feed (`GET /applications/landlord`) likewise omits
+/// drafts.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn landlord_apps_excludes_draft(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, landlord_token) =
+        common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let (_submitter, submitter_token) =
+        common::seed_authed_user(&env, &pool, UserRole::Tenant).await;
+    let (_drafter, drafter_token) = common::seed_authed_user(&env, &pool, UserRole::Tenant).await;
+    let listing_id = active_listing(&env, &pool, landlord_id, &landlord_token).await;
+
+    submit_app(&env, &submitter_token, listing_id, &app_body()).await;
+    seed_draft(&env, &drafter_token, listing_id).await;
+
+    let (status, body) = landlord_apps(&env, &landlord_token, "").await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["itemCount"], 1, "draft must not appear in the landlord feed");
+    assert_eq!(body["data"][0]["status"], "pending");
+}
+
+/// A landlord cannot fetch an unsubmitted draft by id (`404`), but its applicant
+/// still can - the draft is hidden from the landlord only, not withdrawn.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn get_application_hides_draft_from_landlord(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, landlord_token) =
+        common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let (_tenant, tenant_token) = common::seed_authed_user(&env, &pool, UserRole::Tenant).await;
+    let listing_id = active_listing(&env, &pool, landlord_id, &landlord_token).await;
+    let draft_id = seed_draft(&env, &tenant_token, listing_id).await;
+
+    let (landlord_status, _body) = get_app(&env, &landlord_token, draft_id).await;
+    assert_eq!(landlord_status, StatusCode::NOT_FOUND);
+
+    let (tenant_status, body) = get_app(&env, &tenant_token, draft_id).await;
+    assert_eq!(tenant_status, StatusCode::OK);
+    assert_eq!(body["status"], "draft");
+}
