@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            INSERT INTO rental_applications (\n                listing_id, user_id, landlord_id,\n                full_name, email, phone, date_of_birth,\n                current_address, current_city, current_state, current_zip,\n                move_in_date, employer, job_title, employment_length,\n                monthly_income, reference1_name, reference1_phone,\n                reference2_name, reference2_phone, pets, pet_description,\n                additional_info, background_check_consent\n            )\n            SELECT\n                l.id, $1, l.listed_by, $2, $3, $4, $5, $6, $7, $8, $9, $10,\n                $11, $12, $13, $14::float8::numeric, $15, $16, $17, $18, $19,\n                $20, $21, $22\n            FROM listings l\n            WHERE l.id = $23 AND l.state = 'active' AND l.deleted_at IS NULL\n            RETURNING\n                id, listing_id, user_id, landlord_id, full_name, email, phone,\n                date_of_birth, current_address, current_city, current_state,\n                current_zip, move_in_date, employer, job_title,\n                employment_length, monthly_income::float8 AS \"monthly_income!\",\n                reference1_name, reference1_phone, reference2_name,\n                reference2_phone, pets, pet_description, additional_info,\n                background_check_consent, status, created_at, updated_at\n        ",
+  "query": "\n            INSERT INTO rental_applications (\n                listing_id, user_id, landlord_id,\n                full_name, email, phone, date_of_birth,\n                current_address, current_city, current_state, current_zip,\n                move_in_date, employer, job_title, employment_length,\n                monthly_income, reference1_name, reference1_phone,\n                reference2_name, reference2_phone, pets, pet_description,\n                additional_info, background_check_consent, status\n            )\n            SELECT\n                l.id, $1, l.listed_by, $2, $3, $4, $5, $6, $7, $8, $9, $10,\n                $11, $12, $13, $14::float8::numeric, $15, $16, $17, $18, $19,\n                $20, $21, $22, $24\n            FROM listings l\n            WHERE l.id = $23 AND l.state = 'active' AND l.deleted_at IS NULL\n            RETURNING\n                id, listing_id, user_id, landlord_id, full_name, email, phone,\n                date_of_birth, current_address, current_city, current_state,\n                current_zip, move_in_date, employer, job_title,\n                employment_length, monthly_income::float8 AS \"monthly_income!\",\n                reference1_name, reference1_phone, reference2_name,\n                reference2_phone, pets, pet_description, additional_info,\n                background_check_consent, status, created_at, updated_at\n        ",
   "describe": {
     "columns": [
       {
@@ -331,7 +331,8 @@
         "Text",
         "Text",
         "Bool",
-        "Uuid"
+        "Uuid",
+        "Text"
       ]
     },
     "nullable": [
@@ -365,5 +366,5 @@
       false
     ]
   },
-  "hash": "04e062235d2211dba2190fe4993ace58ed3e06d11db1df7cc1a2575b71b13979"
+  "hash": "dc5154d481af7e16205daecaf9f6f46fcb4c1c35242de85d23c35238598ab81d"
 }

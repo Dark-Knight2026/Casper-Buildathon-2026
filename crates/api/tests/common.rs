@@ -909,6 +909,13 @@ pub async fn authed_request<T: DeserializeOwned>(
                 .json(&body)
                 .await
         }
+        Method::PATCH => {
+            server
+                .patch(uri)
+                .add_header(COOKIE, &cookie_header)
+                .json(&body)
+                .await
+        }
         Method::DELETE => server.delete(uri).add_header(COOKIE, &cookie_header).await,
         _ => panic!("Unsupported HTTP method: {method}"),
     };

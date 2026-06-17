@@ -159,6 +159,7 @@ pub async fn submit_application(
     listing_id: Uuid,
     tenant_id: Uuid,
     new: NewApplication,
+    status: ApplicationStatus,
 ) -> Result<SubmitOutcome, Error> {
     let row = sqlx::query_as!(
         ApplicationRow,
@@ -170,12 +171,12 @@ pub async fn submit_application(
                 move_in_date, employer, job_title, employment_length,
                 monthly_income, reference1_name, reference1_phone,
                 reference2_name, reference2_phone, pets, pet_description,
-                additional_info, background_check_consent
+                additional_info, background_check_consent, status
             )
             SELECT
                 l.id, $1, l.listed_by, $2, $3, $4, $5, $6, $7, $8, $9, $10,
                 $11, $12, $13, $14::float8::numeric, $15, $16, $17, $18, $19,
-                $20, $21, $22
+                $20, $21, $22, $24
             FROM listings l
             WHERE l.id = $23 AND l.state = 'active' AND l.deleted_at IS NULL
             RETURNING
@@ -210,6 +211,7 @@ pub async fn submit_application(
         new.additional_info,
         new.background_check_consent,
         listing_id,
+        status.to_string(),
     )
     .fetch_optional(pool)
     .await?;
@@ -944,4 +946,172 @@ pub async fn fetch_score_inputs(
         criminal_cleared: cleared_for("criminal"),
         eviction_cleared: cleared_for("eviction"),
     }))
+}
+
+/// Outcome of a tenant draft operation (edit or submit).
+#[derive(Debug)]
+pub enum DraftOutcome {
+    /// Succeeded; carries the fresh row (boxed - it dwarfs the unit variants).
+    Updated(Box<ApplicationRow>),
+    /// No application with that id is owned (as applicant) by the caller.
+    NotFound,
+    /// The application exists but is not a `draft`, so it cannot be edited or
+    /// submitted.
+    NotDraft,
+}
+
+/// Replaces the fields of a `draft` application the caller owns, atomically.
+///
+/// A `SELECT ... FOR UPDATE` locks the row so the owner check, the draft-state
+/// check and the write share one snapshot. A foreign/unknown application reads
+/// as [`DraftOutcome::NotFound`] (no leak); a non-draft one as
+/// [`DraftOutcome::NotDraft`].
+///
+/// # Errors
+///
+/// Returns [`Error`] on any database failure.
+#[inline]
+pub async fn update_draft(
+    pool: &PgPool,
+    application_id: Uuid,
+    tenant_id: Uuid,
+    new: NewApplication,
+) -> Result<DraftOutcome, Error> {
+    let mut tx = pool.begin().await?;
+
+    let current = sqlx::query!(
+        r"
+            SELECT user_id, status
+            FROM rental_applications
+            WHERE id = $1
+            FOR UPDATE
+        ",
+        application_id,
+    )
+    .fetch_optional(tx.as_mut())
+    .await?;
+
+    let Some(current) = current else {
+        return Ok(DraftOutcome::NotFound);
+    };
+    if current.user_id != tenant_id {
+        return Ok(DraftOutcome::NotFound);
+    }
+    if current.status != "draft" {
+        return Ok(DraftOutcome::NotDraft);
+    }
+
+    let row = sqlx::query_as!(
+        ApplicationRow,
+        r#"
+            UPDATE rental_applications
+            SET full_name = $2, email = $3, phone = $4, date_of_birth = $5,
+                current_address = $6, current_city = $7, current_state = $8,
+                current_zip = $9, move_in_date = $10, employer = $11,
+                job_title = $12, employment_length = $13,
+                monthly_income = $14::float8::numeric, reference1_name = $15,
+                reference1_phone = $16, reference2_name = $17,
+                reference2_phone = $18, pets = $19, pet_description = $20,
+                additional_info = $21, background_check_consent = $22
+            WHERE id = $1
+            RETURNING
+                id, listing_id, user_id, landlord_id, full_name, email, phone,
+                date_of_birth, current_address, current_city, current_state,
+                current_zip, move_in_date, employer, job_title,
+                employment_length, monthly_income::float8 AS "monthly_income!",
+                reference1_name, reference1_phone, reference2_name,
+                reference2_phone, pets, pet_description, additional_info,
+                background_check_consent, status, created_at, updated_at
+        "#,
+        application_id,
+        new.full_name,
+        new.email,
+        new.phone,
+        new.date_of_birth,
+        new.current_address,
+        new.current_city,
+        new.current_state,
+        new.current_zip,
+        new.move_in_date,
+        new.employer,
+        new.job_title,
+        new.employment_length,
+        new.monthly_income,
+        new.reference1_name,
+        new.reference1_phone,
+        new.reference2_name,
+        new.reference2_phone,
+        new.pets,
+        new.pet_description,
+        new.additional_info,
+        new.background_check_consent,
+    )
+    .fetch_one(tx.as_mut())
+    .await?;
+
+    tx.commit().await?;
+    Ok(DraftOutcome::Updated(Box::new(row)))
+}
+
+/// Submits a `draft` application the caller owns, moving it to `pending`.
+///
+/// Shares the locked owner + draft-state check with [`update_draft`]; a
+/// foreign/unknown application reads as [`DraftOutcome::NotFound`], a non-draft
+/// one as [`DraftOutcome::NotDraft`].
+///
+/// # Errors
+///
+/// Returns [`Error`] on any database failure.
+#[inline]
+pub async fn submit_draft(
+    pool: &PgPool,
+    application_id: Uuid,
+    tenant_id: Uuid,
+) -> Result<DraftOutcome, Error> {
+    let mut tx = pool.begin().await?;
+
+    let current = sqlx::query!(
+        r"
+            SELECT user_id, status
+            FROM rental_applications
+            WHERE id = $1
+            FOR UPDATE
+        ",
+        application_id,
+    )
+    .fetch_optional(tx.as_mut())
+    .await?;
+
+    let Some(current) = current else {
+        return Ok(DraftOutcome::NotFound);
+    };
+    if current.user_id != tenant_id {
+        return Ok(DraftOutcome::NotFound);
+    }
+    if current.status != "draft" {
+        return Ok(DraftOutcome::NotDraft);
+    }
+
+    let row = sqlx::query_as!(
+        ApplicationRow,
+        r#"
+            UPDATE rental_applications
+            SET status = 'pending'
+            WHERE id = $1
+            RETURNING
+                id, listing_id, user_id, landlord_id, full_name, email, phone,
+                date_of_birth, current_address, current_city, current_state,
+                current_zip, move_in_date, employer, job_title,
+                employment_length, monthly_income::float8 AS "monthly_income!",
+                reference1_name, reference1_phone, reference2_name,
+                reference2_phone, pets, pet_description, additional_info,
+                background_check_consent, status, created_at, updated_at
+        "#,
+        application_id,
+    )
+    .fetch_one(tx.as_mut())
+    .await?;
+
+    tx.commit().await?;
+    Ok(DraftOutcome::Updated(Box::new(row)))
 }

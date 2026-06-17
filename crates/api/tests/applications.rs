@@ -210,6 +210,45 @@ fn factor_score(body: &Value, factor: &str) -> i64 {
         .unwrap()
 }
 
+/// `PATCH /applications/{id}` with `body`.
+async fn patch_app(
+    env: &TestEnv,
+    token: &str,
+    application_id: Uuid,
+    body: &Value,
+) -> (StatusCode, Value) {
+    let (code, resp) = common::authed_request::<Value>(
+        &env.server,
+        &Method::PATCH,
+        &format!("/api/v1/applications/{application_id}"),
+        token,
+        body,
+    )
+    .await;
+    (code, resp.unwrap_or(Value::Null))
+}
+
+/// `POST /applications/{id}/submit`.
+async fn submit_draft(env: &TestEnv, token: &str, application_id: Uuid) -> (StatusCode, Value) {
+    let (code, resp) = common::authed_request::<Value>(
+        &env.server,
+        &Method::POST,
+        &format!("/api/v1/applications/{application_id}/submit"),
+        token,
+        &Value::Null,
+    )
+    .await;
+    (code, resp.unwrap_or(Value::Null))
+}
+
+/// Submits a draft application and returns its id.
+async fn seed_draft(env: &TestEnv, tenant_token: &str, listing_id: Uuid) -> Uuid {
+    let mut body = app_body();
+    body["asDraft"] = json!(true);
+    let (_s, app) = submit_app(env, tenant_token, listing_id, &body).await;
+    Uuid::parse_str(app["id"].as_str().unwrap()).unwrap()
+}
+
 // `POST /listings/{id}/applications` submit -----------------------------------
 
 /// A valid application against an active listing is created as `pending`, with
@@ -1261,6 +1300,145 @@ async fn score_requires_auth_401(pool: PgPool) {
     let response = env
         .server
         .get(&format!("/api/v1/applications/{}/score", Uuid::new_v4()))
+        .await;
+    assert_eq!(response.status_code(), StatusCode::UNAUTHORIZED);
+}
+
+// `PATCH /applications/{id}` + `POST .../submit` drafts -----------------------
+
+/// `asDraft` creates the application in the `draft` state, not `pending`.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn draft_created_with_status_draft(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, landlord_token) =
+        common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let (_t, tenant_token) = common::seed_authed_user(&env, &pool, UserRole::Tenant).await;
+    let listing_id = active_listing(&env, &pool, landlord_id, &landlord_token).await;
+    let mut body = app_body();
+    body["asDraft"] = json!(true);
+
+    let (status, app) = submit_app(&env, &tenant_token, listing_id, &body).await;
+
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(app["status"], "draft");
+}
+
+/// Editing a draft replaces its fields and keeps it a draft.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn draft_patch_updates_fields(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, landlord_token) =
+        common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let (_t, tenant_token) = common::seed_authed_user(&env, &pool, UserRole::Tenant).await;
+    let listing_id = active_listing(&env, &pool, landlord_id, &landlord_token).await;
+    let app_id = seed_draft(&env, &tenant_token, listing_id).await;
+
+    let mut patch = app_body();
+    patch["fullName"] = json!("Updated Tenant");
+    let (status, updated) = patch_app(&env, &tenant_token, app_id, &patch).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(updated["fullName"], "Updated Tenant");
+    assert_eq!(updated["status"], "draft");
+}
+
+/// Submitting a draft moves it to `pending`.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn draft_submit_moves_to_pending(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, landlord_token) =
+        common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let (_t, tenant_token) = common::seed_authed_user(&env, &pool, UserRole::Tenant).await;
+    let listing_id = active_listing(&env, &pool, landlord_id, &landlord_token).await;
+    let app_id = seed_draft(&env, &tenant_token, listing_id).await;
+
+    let (status, submitted) = submit_draft(&env, &tenant_token, app_id).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(submitted["status"], "pending");
+}
+
+/// Editing a non-draft (already submitted) application -> `409`.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn patch_non_draft_409(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, landlord_token) =
+        common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let (_t, tenant_token) = common::seed_authed_user(&env, &pool, UserRole::Tenant).await;
+    let listing_id = active_listing(&env, &pool, landlord_id, &landlord_token).await;
+    let (_s, app) = submit_app(&env, &tenant_token, listing_id, &app_body()).await;
+    let app_id = Uuid::parse_str(app["id"].as_str().unwrap()).unwrap();
+
+    let (status, _body) = patch_app(&env, &tenant_token, app_id, &app_body()).await;
+    assert_eq!(status, StatusCode::CONFLICT);
+}
+
+/// Submitting a non-draft application -> `409`.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn submit_non_draft_409(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, landlord_token) =
+        common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let (_t, tenant_token) = common::seed_authed_user(&env, &pool, UserRole::Tenant).await;
+    let listing_id = active_listing(&env, &pool, landlord_id, &landlord_token).await;
+    let (_s, app) = submit_app(&env, &tenant_token, listing_id, &app_body()).await;
+    let app_id = Uuid::parse_str(app["id"].as_str().unwrap()).unwrap();
+
+    let (status, _body) = submit_draft(&env, &tenant_token, app_id).await;
+    assert_eq!(status, StatusCode::CONFLICT);
+}
+
+/// A tenant cannot edit another tenant's draft -> `404` (no leak).
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn patch_foreign_draft_404(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, landlord_token) =
+        common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let (_a, tenant_a) = common::seed_authed_user(&env, &pool, UserRole::Tenant).await;
+    let (_b, tenant_b) = common::seed_authed_user(&env, &pool, UserRole::Tenant).await;
+    let listing_id = active_listing(&env, &pool, landlord_id, &landlord_token).await;
+    let app_id = seed_draft(&env, &tenant_a, listing_id).await;
+
+    let (status, _body) = patch_app(&env, &tenant_b, app_id, &app_body()).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+/// Editing a draft with a blank required field -> `400`.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn patch_draft_invalid_400(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, landlord_token) =
+        common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let (_t, tenant_token) = common::seed_authed_user(&env, &pool, UserRole::Tenant).await;
+    let listing_id = active_listing(&env, &pool, landlord_id, &landlord_token).await;
+    let app_id = seed_draft(&env, &tenant_token, listing_id).await;
+
+    let mut bad = app_body();
+    bad["fullName"] = json!("   ");
+    let (status, _body) = patch_app(&env, &tenant_token, app_id, &bad).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+/// A landlord cannot edit or submit a draft -> `403`.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn draft_rejects_landlord_403(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (_id, token) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+
+    let (patch_status, _p) = patch_app(&env, &token, Uuid::new_v4(), &app_body()).await;
+    assert_eq!(patch_status, StatusCode::FORBIDDEN);
+    let (submit_status, _s) = submit_draft(&env, &token, Uuid::new_v4()).await;
+    assert_eq!(submit_status, StatusCode::FORBIDDEN);
+}
+
+/// No auth cookie -> `401`.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn draft_submit_requires_auth_401(pool: PgPool) {
+    let env = common::setup_test_server(pool, false).await;
+
+    let response = env
+        .server
+        .post(&format!("/api/v1/applications/{}/submit", Uuid::new_v4()))
         .await;
     assert_eq!(response.status_code(), StatusCode::UNAUTHORIZED);
 }

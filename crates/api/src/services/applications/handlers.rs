@@ -14,11 +14,11 @@ use crate::{
     providers::CheckSubject,
     services::{
         applications::{
-            db::{self, ReviewOutcome, SubmitOutcome},
+            db::{self, DraftOutcome, ReviewOutcome, SubmitOutcome},
             models::{
-                AddNoteRequest, ApplicationNote, ApplicationScore, BackgroundCheck,
-                LandlordApplicationParams, RentalApplication, RequestBackgroundCheckRequest,
-                ReviewApplicationRequest, SubmitApplicationRequest,
+                AddNoteRequest, ApplicationNote, ApplicationScore, ApplicationStatus,
+                BackgroundCheck, LandlordApplicationParams, RentalApplication,
+                RequestBackgroundCheckRequest, ReviewApplicationRequest, SubmitApplicationRequest,
             },
             scoring,
         },
@@ -64,8 +64,14 @@ pub async fn submit_application(
     Path(listing_id): Path<Uuid>,
     Json(payload): Json<SubmitApplicationRequest>,
 ) -> ApiResult<(StatusCode, Json<RentalApplication>)> {
+    let status = if payload.as_draft {
+        ApplicationStatus::Draft
+    } else {
+        ApplicationStatus::Pending
+    };
     let new_application = payload.try_into()?;
-    match db::submit_application(&state.db, listing_id, user.0.sub, new_application).await? {
+    match db::submit_application(&state.db, listing_id, user.0.sub, new_application, status).await?
+    {
         SubmitOutcome::Created(row) => Ok((
             StatusCode::CREATED,
             Json(RentalApplication::assemble(*row, None)),
@@ -531,5 +537,91 @@ pub async fn get_application_score(
     match db::fetch_score_inputs(&state.db, application_id, user.0.sub).await? {
         Some(inputs) => Ok(Json(scoring::compute(&inputs))),
         None => Err(ApiError::NotFound("application not found".to_owned())),
+    }
+}
+
+// `PATCH /api/v1/applications/{id}`
+//
+/// Replaces a draft application's fields. Only the applicant may edit it, and
+/// only while it is a `draft`.
+///
+/// # Errors
+///
+/// Returns `400` on invalid input, `404` when the caller owns no application
+/// with that id, `409` when it is not a draft, or a database error.
+#[utoipa::path(
+    patch,
+    path = "/applications/{id}",
+    tag = "Applications",
+    request_body = SubmitApplicationRequest,
+    params(
+        ("id" = Uuid, Path, description = "Application id")
+    ),
+    responses(
+        (status = 200, description = "Updated draft", body = RentalApplication),
+        (status = 400, description = "Invalid input", body = ErrorResponse),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 403, description = "Tenant role required", body = ErrorResponse),
+        (status = 404, description = "Application not found", body = ErrorResponse),
+        (status = 409, description = "Application is not a draft", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse),
+    ),
+    security(
+        ("cookie_auth" = [])
+    )
+)]
+#[inline]
+pub async fn update_application(
+    State(state): State<Arc<AppState>>,
+    user: RoleUser<TenantRole>,
+    Path(application_id): Path<Uuid>,
+    Json(payload): Json<SubmitApplicationRequest>,
+) -> ApiResult<Json<RentalApplication>> {
+    let new_application = payload.try_into()?;
+    match db::update_draft(&state.db, application_id, user.0.sub, new_application).await? {
+        DraftOutcome::Updated(row) => Ok(Json(RentalApplication::assemble(*row, None))),
+        DraftOutcome::NotFound => Err(ApiError::NotFound("application not found".to_owned())),
+        DraftOutcome::NotDraft => Err(ApiError::Conflict("application is not a draft".to_owned())),
+    }
+}
+
+// `POST /api/v1/applications/{id}/submit`
+//
+/// Submits a draft application, moving it from `draft` to `pending`. Only the
+/// applicant may submit it, and only a `draft`.
+///
+/// # Errors
+///
+/// Returns `404` when the caller owns no application with that id, `409` when it
+/// is not a draft, or a database error.
+#[utoipa::path(
+    post,
+    path = "/applications/{id}/submit",
+    tag = "Applications",
+    params(
+        ("id" = Uuid, Path, description = "Application id")
+    ),
+    responses(
+        (status = 200, description = "Submitted application", body = RentalApplication),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 403, description = "Tenant role required", body = ErrorResponse),
+        (status = 404, description = "Application not found", body = ErrorResponse),
+        (status = 409, description = "Application is not a draft", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse),
+    ),
+    security(
+        ("cookie_auth" = [])
+    )
+)]
+#[inline]
+pub async fn submit_draft_application(
+    State(state): State<Arc<AppState>>,
+    user: RoleUser<TenantRole>,
+    Path(application_id): Path<Uuid>,
+) -> ApiResult<Json<RentalApplication>> {
+    match db::submit_draft(&state.db, application_id, user.0.sub).await? {
+        DraftOutcome::Updated(row) => Ok(Json(RentalApplication::assemble(*row, None))),
+        DraftOutcome::NotFound => Err(ApiError::NotFound("application not found".to_owned())),
+        DraftOutcome::NotDraft => Err(ApiError::Conflict("application is not a draft".to_owned())),
     }
 }

@@ -227,6 +227,9 @@ pub struct SubmitApplicationRequest {
     /// Whether the applicant consents to a background check.
     #[serde(default)]
     pub background_check_consent: bool,
+    /// Create as an editable draft instead of submitting immediately.
+    #[serde(default)]
+    pub as_draft: bool,
 }
 
 impl TryFrom<SubmitApplicationRequest> for NewApplication {
