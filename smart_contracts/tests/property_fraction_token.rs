@@ -1,4 +1,5 @@
 use leasefi_contracts::{
+    constants::MIN_DEADLINE_IN_MS,
     compliance_policy::{
         errors::Error as ComplianceError, types::ComplianceConfig, CompliancePolicy,
         CompliancePolicyHostRef, CompliancePolicyInitArgs,
@@ -72,7 +73,7 @@ fn setup(env: HostEnv) -> Context {
         &env,
         EscrowInitArgs {
             owner,
-            min_deadline: 5 * 60,
+            min_deadline: MIN_DEADLINE_IN_MS,
         },
     );
 

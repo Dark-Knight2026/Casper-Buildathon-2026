@@ -8,7 +8,7 @@ use odra_modules::access::errors::Error as AccessError;
 
 use leasefi_contracts::big_coin::{BigCoin, BigCoinHostRef, BigCoinInitArgs};
 use leasefi_contracts::common::CurrencyAmount;
-use leasefi_contracts::constants::ONE_MONTH_IN_MILLISECONDS;
+use leasefi_contracts::constants::{MIN_DEADLINE_IN_MS, ONE_MONTH_IN_MILLISECONDS};
 use leasefi_contracts::escrow::{
     types::{Invoice, InvoiceKind},
     Escrow, EscrowHostRef, EscrowInitArgs,
@@ -61,7 +61,7 @@ fn setup(env: HostEnv) -> TestData {
         &env,
         EscrowInitArgs {
             owner: env.get_account(0),
-            min_deadline: 5 * 60, // 5 minutes
+            min_deadline: MIN_DEADLINE_IN_MS,
         },
     );
 

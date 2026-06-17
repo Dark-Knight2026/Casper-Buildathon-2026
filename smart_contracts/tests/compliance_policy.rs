@@ -7,7 +7,7 @@ use leasefi_contracts::{
         types::ComplianceConfig,
         CompliancePolicy, CompliancePolicyHostRef, CompliancePolicyInitArgs,
     },
-    constants::ONE_MONTH_IN_MILLISECONDS,
+    constants::{MIN_DEADLINE_IN_MS, ONE_MONTH_IN_MILLISECONDS},
     escrow::{Escrow, EscrowHostRef, EscrowInitArgs},
     investor_registry::{
         types::InvestorRecord, InvestorRegistry, InvestorRegistryHostRef, InvestorRegistryInitArgs,
@@ -89,7 +89,7 @@ fn setup(env: HostEnv) -> Context {
         &env,
         EscrowInitArgs {
             owner: env.get_account(0),
-            min_deadline: 5 * 60,
+            min_deadline: MIN_DEADLINE_IN_MS,
         },
     );
 

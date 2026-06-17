@@ -8,6 +8,7 @@ use odra_modules::access::errors::Error as AccessError;
 
 use leasefi_contracts::big_coin::{BigCoin, BigCoinHostRef, BigCoinInitArgs};
 use leasefi_contracts::common::CurrencyAmount;
+use leasefi_contracts::constants::MIN_DEADLINE_IN_MS;
 
 use leasefi_contracts::escrow::{
     errors::Error,
@@ -19,8 +20,6 @@ use leasefi_contracts::escrow::{
 };
 
 use crate::escrow::events::{SecurityDepositHeld, SecurityDepositReleased};
-
-const MIN_DEADLINE: u64 = 5 * 60; // 5 minutes
 
 // =============================================================================
 // Test Context
@@ -44,7 +43,7 @@ fn setup(env: HostEnv) -> TestData {
         &env,
         EscrowInitArgs {
             owner: env.get_account(0),
-            min_deadline: MIN_DEADLINE,
+            min_deadline: MIN_DEADLINE_IN_MS,
         },
     );
     let mock_cep18 = BigCoin::deploy(
@@ -179,7 +178,7 @@ fn test_init_should_initialize_contract_properly() {
     );
     assert_eq!(
         test_data.escrow.get_min_deadline(),
-        MIN_DEADLINE,
+        MIN_DEADLINE_IN_MS,
         "Invalid minimal invoice deadline"
     );
     assert_eq!(
@@ -214,7 +213,7 @@ fn test_set_min_deadline_should_revert_if_not_owner_is_calling() {
 #[test]
 fn test_set_min_deadline_should_update_min_deadline_properly() {
     let mut test_data = setup(odra_test::env());
-    let new_min_deadline = 10 * 60; // 10 minutes
+    let new_min_deadline = 10 * 60 * 1_000; // 10 minutes in milliseconds
 
     test_data.escrow.set_min_deadline(new_min_deadline);
 
@@ -226,7 +225,7 @@ fn test_set_min_deadline_should_update_min_deadline_properly() {
     assert!(test_data.env.emitted_event(
         &test_data.escrow,
         MinDeadlineSet {
-            old_min_deadline: MIN_DEADLINE,
+            old_min_deadline: MIN_DEADLINE_IN_MS,
             new_min_deadline
         }
     ));
@@ -439,6 +438,32 @@ fn test_create_lease_invoice_should_fail_if_deadline_is_sooner_than_min_deadline
             .unwrap_err(),
         Error::InvalidDeadline.into(),
         "Should revert when deadline is sooner than block.time + minimum deadline"
+    );
+}
+
+#[test]
+fn test_create_lease_invoice_should_succeed_at_exactly_min_deadline_boundary() {
+    let mut test_data = setup(odra_test::env());
+
+    test_data
+        .env
+        .set_caller(test_data.escrow.get_lease_contract_address());
+
+    let deadline = test_data.env.block_time() + MIN_DEADLINE_IN_MS;
+    let invoice_id = test_data.escrow.create_lease_invoice(CreateLeaseInvoiceParams {
+        tenant: test_data.env.get_account(0),
+        landlord: test_data.env.get_account(1),
+        rent: CurrencyAmount::new(None, U256::one()),
+        property_manager: None,
+        property_manager_bps: 0,
+        deadline,
+    });
+
+    assert_eq!(invoice_id, U256::zero(), "Invoice should be created at the minimum deadline boundary");
+    assert_eq!(
+        test_data.escrow.get_invoice_by_id(invoice_id).deadline,
+        deadline,
+        "Invoice deadline should match the production minimum boundary"
     );
 }
 
@@ -656,7 +681,7 @@ fn test_pay_invoice_should_give_pm_bps_of_gross_rent() {
             rent: CurrencyAmount::new(None, gross),
             property_manager: Some(pm),
             property_manager_bps: pm_bps,
-            deadline: test_data.env.block_time() + 10_000,
+            deadline: test_data.env.block_time() + test_data.escrow.get_min_deadline(),
         });
 
     let prev_pm = test_data.env.balance_of(&pm);

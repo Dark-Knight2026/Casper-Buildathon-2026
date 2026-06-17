@@ -126,7 +126,7 @@ impl DeployScript for LeasefiDeployScript {
             None,
             EscrowInitArgs {
                 owner: env.caller(),
-                min_deadline: 5 * 60 * 1000, // 5 minutes in milliseconds
+                min_deadline: leasefi_contracts::constants::MIN_DEADLINE_IN_MS,
             },
             InstallConfig::upgradable::<Escrow>(),
             container,
