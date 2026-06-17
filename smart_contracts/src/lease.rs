@@ -2,7 +2,7 @@ use odra::{casper_types::U256, prelude::*, ContractRef};
 use odra_modules::access::Ownable;
 
 use crate::{
-    constants::{ONE_HUNDRED_PERCENT_BPS, ONE_MONTH_IN_MILLISECONDS},
+    constants::{LEASEFI_TRANSACTION_FEE_BPS, ONE_HUNDRED_PERCENT_BPS, ONE_MONTH_IN_MILLISECONDS},
     escrow::{types::CreateLeaseInvoiceParams, EscrowContractRef},
     lease::{
         errors::Error,
@@ -717,7 +717,7 @@ impl Lease {
         landlord: Address,
     ) {
         // TODO: Can't use u16 for property_maanger_bps. Find out why and determine if we really need to type cast the constant to u32
-        if terms.property_manager_bps >= ONE_HUNDRED_PERCENT_BPS as u32 {
+        if terms.property_manager_bps + LEASEFI_TRANSACTION_FEE_BPS as u32 > ONE_HUNDRED_PERCENT_BPS as u32 {
             self.env().revert(Error::InvalidPropertyManagerBps);
         }
 

@@ -493,6 +493,38 @@ fn test_create_lease_agreement_should_fail_if_monthly_rent_amount_is_zero() {
 }
 
 #[test]
+fn test_create_lease_agreement_should_allow_pm_bps_9800() {
+    let mut test_data = setup(odra_test::env());
+    let mut params = generate_lease_agreement_creation_params(&test_data);
+    params.rent_distribution_terms = RentDistributionTerms {
+        property_manager: Some(test_data.env.get_account(5)),
+        property_manager_bps: 9800,
+    };
+
+    // Should not revert; 9800 + 200 == 10000 is the boundary
+    let _ = test_data.lease.try_create_lease_agreement(params).unwrap();
+}
+
+#[test]
+fn test_create_lease_agreement_should_fail_if_pm_bps_9801() {
+    let mut test_data = setup(odra_test::env());
+    let mut params = generate_lease_agreement_creation_params(&test_data);
+    params.rent_distribution_terms = RentDistributionTerms {
+        property_manager: Some(test_data.env.get_account(5)),
+        property_manager_bps: 9801,
+    };
+
+    assert_eq!(
+        test_data
+            .lease
+            .try_create_lease_agreement(params)
+            .unwrap_err(),
+        Error::InvalidPropertyManagerBps.into(),
+        "Should revert when pm_bps + fee > 100%"
+    );
+}
+
+#[test]
 fn test_create_lease_agreement_should_create_lease_agreement_properly() {
     let mut test_data = setup(odra_test::env());
     let mut params = generate_lease_agreement_creation_params(&test_data);
