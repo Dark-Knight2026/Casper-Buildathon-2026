@@ -1,16 +1,43 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Building2, Users, FileText, DollarSign, Wrench, TrendingUp, AlertCircle, Check, Clock, AlertTriangle, Scale, Loader2, MoreVertical, Download } from 'lucide-react';
+import {
+  Building2,
+  Users,
+  FileText,
+  DollarSign,
+  Wrench,
+  TrendingUp,
+  AlertCircle,
+  Check,
+  Clock,
+  AlertTriangle,
+  Scale,
+  Loader2,
+  MoreVertical,
+  Download,
+} from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { exportService } from '@/services/exportService';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { DashboardSkeleton } from '@/components/ui/loading-skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorBoundary } from '@/components/ui/error-boundary';
-import { SecurityRecoveryCard } from '@/components/auth/SecurityRecoveryCard';
 import {
   MOCK_LANDLORD_DASHBOARD_STATS,
   MOCK_LANDLORD_RECENT_ACTIVITIES,
@@ -38,7 +65,11 @@ const PORTFOLIO_STATUS_STYLES: Record<
 function PortfolioStatusPill({ row }: { row: LandlordPortfolioRow }) {
   const { className, icon: Icon } = PORTFOLIO_STATUS_STYLES[row.status];
   return (
-    <Link to={row.statusHref} className="inline-flex" aria-label={`${row.property}: ${row.statusLabel}`}>
+    <Link
+      to={row.statusHref}
+      className="inline-flex"
+      aria-label={`${row.property}: ${row.statusLabel}`}
+    >
       <Badge className={`gap-1 ${className}`}>
         <Icon className="h-3 w-3" aria-hidden="true" />
         {row.statusLabel}
@@ -50,7 +81,10 @@ function PortfolioStatusPill({ row }: { row: LandlordPortfolioRow }) {
 // Recent-activity status pills: icon + color, and a link to the relevant view
 // (design §2.4). "overdue" stays red as a specific escalated item, mirroring the
 // portfolio "late" row.
-const ACTIVITY_STATUS_STYLES: Record<string, { className: string; icon: typeof Check }> = {
+const ACTIVITY_STATUS_STYLES: Record<
+  string,
+  { className: string; icon: typeof Check }
+> = {
   paid: { className: 'bg-green-100 text-green-800', icon: Check },
   completed: { className: 'bg-green-100 text-green-800', icon: Check },
   pending: { className: 'bg-yellow-100 text-yellow-800', icon: Clock },
@@ -64,7 +98,11 @@ const ACTIVITY_TYPE_HREF: Record<LandlordRecentActivity['type'], string> = {
   lease: '/landlord/leases',
 };
 
-function ActivityStatusPill({ activity }: { activity: LandlordRecentActivity }) {
+function ActivityStatusPill({
+  activity,
+}: {
+  activity: LandlordRecentActivity;
+}) {
   const style = ACTIVITY_STATUS_STYLES[activity.status];
   const Icon = style?.icon;
   return (
@@ -79,7 +117,9 @@ function ActivityStatusPill({ activity }: { activity: LandlordRecentActivity }) 
           {activity.status}
         </Badge>
       ) : (
-        <Badge variant="outline" className="capitalize">{activity.status}</Badge>
+        <Badge variant="outline" className="capitalize">
+          {activity.status}
+        </Badge>
       )}
     </Link>
   );
@@ -96,7 +136,9 @@ export default function LandlordDashboard() {
     overduePayments: 0,
     expiringLeases: 0,
   });
-  const [recentActivities, setRecentActivities] = useState<LandlordRecentActivity[]>([]);
+  const [recentActivities, setRecentActivities] = useState<
+    LandlordRecentActivity[]
+  >([]);
   const [portfolio, setPortfolio] = useState<LandlordPortfolioRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -150,7 +192,10 @@ export default function LandlordDashboard() {
             <AlertDescription>{error}</AlertDescription>
           </Alert>
           <div className="mt-4">
-            <Button onClick={loadDashboardData} aria-label="Retry loading dashboard">
+            <Button
+              onClick={loadDashboardData}
+              aria-label="Retry loading dashboard"
+            >
               Try Again
             </Button>
           </div>
@@ -167,7 +212,9 @@ export default function LandlordDashboard() {
         <div className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center">
           <div>
             <h1 className="text-3xl font-bold">Landlord Dashboard</h1>
-            <p className="text-muted-foreground">Overview of your properties and tenants</p>
+            <p className="text-muted-foreground">
+              Overview of your properties and tenants
+            </p>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row">
             <Button
@@ -188,10 +235,10 @@ export default function LandlordDashboard() {
           </div>
         </div>
 
-        <SecurityRecoveryCard />
-
         {/* Alert Cards */}
-        {(stats.overduePayments > 0 || stats.expiringLeases > 0 || stats.pendingMaintenance > 0) && (
+        {(stats.overduePayments > 0 ||
+          stats.expiringLeases > 0 ||
+          stats.pendingMaintenance > 0) && (
           <div className="grid gap-4 md:grid-cols-3">
             {/* Outstanding/overdue is a warning-state metric → amber, not red.
                 Red is reserved for true escalation (e.g. a "late" row in the
@@ -199,13 +246,26 @@ export default function LandlordDashboard() {
             {stats.overduePayments > 0 && (
               <Card className="border-amber-200 bg-amber-50">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium text-amber-900">Overdue Payments</CardTitle>
-                  <AlertCircle className="h-4 w-4 text-amber-600" aria-hidden="true" />
+                  <CardTitle className="text-sm font-medium text-amber-900">
+                    Overdue Payments
+                  </CardTitle>
+                  <AlertCircle
+                    className="h-4 w-4 text-amber-600"
+                    aria-hidden="true"
+                  />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold text-amber-900">{stats.overduePayments}</div>
-                  <Button asChild variant="link" className="text-amber-700 p-0 h-auto">
-                    <Link to="/landlord/payments?filter=overdue">View Details →</Link>
+                  <div className="text-2xl font-bold text-amber-900">
+                    {stats.overduePayments}
+                  </div>
+                  <Button
+                    asChild
+                    variant="link"
+                    className="text-amber-700 p-0 h-auto"
+                  >
+                    <Link to="/landlord/payments?filter=overdue">
+                      View Details →
+                    </Link>
                   </Button>
                 </CardContent>
               </Card>
@@ -213,13 +273,26 @@ export default function LandlordDashboard() {
             {stats.expiringLeases > 0 && (
               <Card className="border-yellow-200 bg-yellow-50">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium text-yellow-900">Expiring Leases</CardTitle>
-                  <AlertCircle className="h-4 w-4 text-yellow-600" aria-hidden="true" />
+                  <CardTitle className="text-sm font-medium text-yellow-900">
+                    Expiring Leases
+                  </CardTitle>
+                  <AlertCircle
+                    className="h-4 w-4 text-yellow-600"
+                    aria-hidden="true"
+                  />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold text-yellow-900">{stats.expiringLeases}</div>
-                  <Button asChild variant="link" className="text-yellow-600 p-0 h-auto">
-                    <Link to="/landlord/leases?filter=expiring">Review Renewals →</Link>
+                  <div className="text-2xl font-bold text-yellow-900">
+                    {stats.expiringLeases}
+                  </div>
+                  <Button
+                    asChild
+                    variant="link"
+                    className="text-yellow-600 p-0 h-auto"
+                  >
+                    <Link to="/landlord/leases?filter=expiring">
+                      Review Renewals →
+                    </Link>
                   </Button>
                 </CardContent>
               </Card>
@@ -227,13 +300,26 @@ export default function LandlordDashboard() {
             {stats.pendingMaintenance > 0 && (
               <Card className="border-orange-200 bg-orange-50">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium text-orange-900">Pending Maintenance</CardTitle>
-                  <Wrench className="h-4 w-4 text-orange-600" aria-hidden="true" />
+                  <CardTitle className="text-sm font-medium text-orange-900">
+                    Pending Maintenance
+                  </CardTitle>
+                  <Wrench
+                    className="h-4 w-4 text-orange-600"
+                    aria-hidden="true"
+                  />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold text-orange-900">{stats.pendingMaintenance}</div>
-                  <Button asChild variant="link" className="text-orange-600 p-0 h-auto">
-                    <Link to="/landlord/maintenance?filter=pending">Assign Tasks →</Link>
+                  <div className="text-2xl font-bold text-orange-900">
+                    {stats.pendingMaintenance}
+                  </div>
+                  <Button
+                    asChild
+                    variant="link"
+                    className="text-orange-600 p-0 h-auto"
+                  >
+                    <Link to="/landlord/maintenance?filter=pending">
+                      Assign Tasks →
+                    </Link>
                   </Button>
                 </CardContent>
               </Card>
@@ -245,8 +331,13 @@ export default function LandlordDashboard() {
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Properties</CardTitle>
-              <Building2 className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+              <CardTitle className="text-sm font-medium">
+                Total Properties
+              </CardTitle>
+              <Building2
+                className="h-4 w-4 text-muted-foreground"
+                aria-hidden="true"
+              />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{stats.totalProperties}</div>
@@ -261,8 +352,13 @@ export default function LandlordDashboard() {
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Active Tenants</CardTitle>
-              <Users className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+              <CardTitle className="text-sm font-medium">
+                Active Tenants
+              </CardTitle>
+              <Users
+                className="h-4 w-4 text-muted-foreground"
+                aria-hidden="true"
+              />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{stats.totalTenants}</div>
@@ -277,14 +373,19 @@ export default function LandlordDashboard() {
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Monthly Revenue</CardTitle>
-              <DollarSign className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+              <CardTitle className="text-sm font-medium">
+                Monthly Revenue
+              </CardTitle>
+              <DollarSign
+                className="h-4 w-4 text-muted-foreground"
+                aria-hidden="true"
+              />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">${stats.monthlyRevenue.toLocaleString()}</div>
-              <p className="text-xs text-muted-foreground">
-                Current month
-              </p>
+              <div className="text-2xl font-bold">
+                ${stats.monthlyRevenue.toLocaleString()}
+              </div>
+              <p className="text-xs text-muted-foreground">Current month</p>
               <Button asChild variant="link" className="p-0 h-auto mt-2">
                 <Link to="/landlord/payments">View Payments →</Link>
               </Button>
@@ -293,8 +394,13 @@ export default function LandlordDashboard() {
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Active Leases</CardTitle>
-              <FileText className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+              <CardTitle className="text-sm font-medium">
+                Active Leases
+              </CardTitle>
+              <FileText
+                className="h-4 w-4 text-muted-foreground"
+                aria-hidden="true"
+              />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{stats.activeLeases}</div>
@@ -314,7 +420,9 @@ export default function LandlordDashboard() {
         <Card>
           <CardHeader>
             <CardTitle>Portfolio</CardTitle>
-            <CardDescription>Properties, tenants, and rent status at a glance</CardDescription>
+            <CardDescription>
+              Properties, tenants, and rent status at a glance
+            </CardDescription>
           </CardHeader>
           <CardContent>
             {portfolio.length === 0 ? (
@@ -324,7 +432,8 @@ export default function LandlordDashboard() {
                 description="Add your first property to start tracking rent and tenants here."
                 action={{
                   label: 'Add Property',
-                  onClick: () => window.location.href = '/landlord/properties/create',
+                  onClick: () =>
+                    (window.location.href = '/landlord/properties/create'),
                 }}
               />
             ) : (
@@ -335,16 +444,24 @@ export default function LandlordDashboard() {
                     <TableHead>Tenant</TableHead>
                     <TableHead>Rent</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead className="w-10 text-right sr-only">Actions</TableHead>
+                    <TableHead className="w-10 text-right sr-only">
+                      Actions
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {portfolio.map((row) => (
                     <TableRow key={row.id}>
-                      <TableCell className="font-medium">{row.property}</TableCell>
-                      <TableCell className="text-muted-foreground">{row.tenant}</TableCell>
+                      <TableCell className="font-medium">
+                        {row.property}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {row.tenant}
+                      </TableCell>
                       <TableCell>${row.rent.toLocaleString()}</TableCell>
-                      <TableCell><PortfolioStatusPill row={row} /></TableCell>
+                      <TableCell>
+                        <PortfolioStatusPill row={row} />
+                      </TableCell>
                       <TableCell className="text-right">
                         <Button
                           asChild
@@ -352,7 +469,10 @@ export default function LandlordDashboard() {
                           size="icon"
                           className="h-8 w-8 text-muted-foreground"
                         >
-                          <Link to={row.statusHref} aria-label={`Open ${row.property}`}>
+                          <Link
+                            to={row.statusHref}
+                            aria-label={`Open ${row.property}`}
+                          >
                             <MoreVertical className="h-4 w-4" />
                           </Link>
                         </Button>
@@ -369,7 +489,9 @@ export default function LandlordDashboard() {
         <Card>
           <CardHeader>
             <CardTitle>Recent Activity</CardTitle>
-            <CardDescription>Latest updates from your properties</CardDescription>
+            <CardDescription>
+              Latest updates from your properties
+            </CardDescription>
           </CardHeader>
           <CardContent>
             {recentActivities.length === 0 ? (
@@ -379,7 +501,8 @@ export default function LandlordDashboard() {
                 description="Activity from your properties will appear here. Get started by adding properties and creating leases."
                 action={{
                   label: 'Add Property',
-                  onClick: () => window.location.href = '/landlord/properties/create'
+                  onClick: () =>
+                    (window.location.href = '/landlord/properties/create'),
                 }}
               />
             ) : (
@@ -393,13 +516,21 @@ export default function LandlordDashboard() {
                   >
                     <div className="flex items-start gap-3">
                       <div className="mt-1" aria-hidden="true">
-                        {activity.type === 'payment' && <DollarSign className="h-4 w-4 text-green-600" />}
-                        {activity.type === 'maintenance' && <Wrench className="h-4 w-4 text-orange-600" />}
-                        {activity.type === 'lease' && <FileText className="h-4 w-4 text-blue-600" />}
+                        {activity.type === 'payment' && (
+                          <DollarSign className="h-4 w-4 text-green-600" />
+                        )}
+                        {activity.type === 'maintenance' && (
+                          <Wrench className="h-4 w-4 text-orange-600" />
+                        )}
+                        {activity.type === 'lease' && (
+                          <FileText className="h-4 w-4 text-blue-600" />
+                        )}
                       </div>
                       <div>
                         <p className="font-medium">{activity.title}</p>
-                        <p className="text-sm text-muted-foreground">{activity.description}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {activity.description}
+                        </p>
                         <p className="text-xs text-muted-foreground mt-1">
                           {new Date(activity.timestamp).toLocaleString()}
                         </p>
@@ -424,25 +555,37 @@ export default function LandlordDashboard() {
           <CardContent>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
               <Button asChild variant="outline" className="h-auto py-4">
-                <Link to="/landlord/properties/create" className="flex flex-col items-center gap-2">
+                <Link
+                  to="/landlord/properties/create"
+                  className="flex flex-col items-center gap-2"
+                >
                   <Building2 className="h-6 w-6" aria-hidden="true" />
                   <span>Add Property</span>
                 </Link>
               </Button>
               <Button asChild variant="outline" className="h-auto py-4">
-                <Link to="/landlord/tenants/new" className="flex flex-col items-center gap-2">
+                <Link
+                  to="/landlord/tenants/new"
+                  className="flex flex-col items-center gap-2"
+                >
                   <Users className="h-6 w-6" aria-hidden="true" />
                   <span>Add Tenant</span>
                 </Link>
               </Button>
               <Button asChild variant="outline" className="h-auto py-4">
-                <Link to="/landlord/leases/create" className="flex flex-col items-center gap-2">
+                <Link
+                  to="/landlord/leases/create"
+                  className="flex flex-col items-center gap-2"
+                >
                   <FileText className="h-6 w-6" aria-hidden="true" />
                   <span>Create Lease</span>
                 </Link>
               </Button>
               <Button asChild variant="outline" className="h-auto py-4">
-                <Link to="/landlord/payments/reports" className="flex flex-col items-center gap-2">
+                <Link
+                  to="/landlord/payments/reports"
+                  className="flex flex-col items-center gap-2"
+                >
                   <TrendingUp className="h-6 w-6" aria-hidden="true" />
                   <span>View Reports</span>
                 </Link>

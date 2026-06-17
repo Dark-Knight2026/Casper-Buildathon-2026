@@ -21,9 +21,15 @@ import {
   AlertTriangle,
   Loader2,
   RotateCcw,
-  ArrowRight
+  ArrowRight,
 } from 'lucide-react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -31,7 +37,6 @@ import type { LeaseAgreement, UtilityResponsibility } from '@/types/lease';
 import type { Payment } from '@/services/paymentService';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorBoundary } from '@/components/ui/error-boundary';
-import { SecurityRecoveryCard } from '@/components/auth/SecurityRecoveryCard';
 import { LeaseExtensionBanner } from '@/components/tenant/LeaseExtensionBanner';
 import { LeaseDecisionBanner } from '@/components/tenant/LeaseDecisionBanner';
 import { RecommendedProperties } from '@/components/tenant/RecommendedProperties';
@@ -41,7 +46,10 @@ import { CURRENT_TENANT_ID, getMyCurrentProperties } from '@/data/tenantLeases';
 import { daysUntil } from '@/lib/date-utils';
 
 // TODO: remove when backend /api/v1/leases is ready
-const MOCK_LEASE: LeaseAgreement & { propertyAddress: string; paymentDueDay: number } = {
+const MOCK_LEASE: LeaseAgreement & {
+  propertyAddress: string;
+  paymentDueDay: number;
+} = {
   id: 'mock-lease-1',
   propertyId: 'mock-prop-1',
   landlordId: 'mock-landlord-1',
@@ -53,8 +61,14 @@ const MOCK_LEASE: LeaseAgreement & { propertyAddress: string; paymentDueDay: num
   monthlyRent: 1500,
   securityDeposit: 3000,
   utilities: [
-    { utilityType: 'water', responsibleParty: 'landlord' } as UtilityResponsibility,
-    { utilityType: 'internet', responsibleParty: 'tenant' } as UtilityResponsibility,
+    {
+      utilityType: 'water',
+      responsibleParty: 'landlord',
+    } as UtilityResponsibility,
+    {
+      utilityType: 'internet',
+      responsibleParty: 'tenant',
+    } as UtilityResponsibility,
   ],
   propertyAddress: '123 Demo Street, New York, NY 10001',
   paymentDueDay: 1,
@@ -81,9 +95,30 @@ const MOCK_LEASE: LeaseAgreement & { propertyAddress: string; paymentDueDay: num
 };
 
 const MOCK_PAYMENTS: Payment[] = [
-  { id: 'p1', amount: 1500, paymentDate: new Date('2025-12-01'), paymentMethod: 'bank_transfer', paymentStatus: 'completed', leaseId: 'mock-lease-1' } as Payment,
-  { id: 'p2', amount: 1500, paymentDate: new Date('2025-11-01'), paymentMethod: 'bank_transfer', paymentStatus: 'completed', leaseId: 'mock-lease-1' } as Payment,
-  { id: 'p3', amount: 1500, paymentDate: new Date('2025-10-01'), paymentMethod: 'credit_card',   paymentStatus: 'completed', leaseId: 'mock-lease-1' } as Payment,
+  {
+    id: 'p1',
+    amount: 1500,
+    paymentDate: new Date('2025-12-01'),
+    paymentMethod: 'bank_transfer',
+    paymentStatus: 'completed',
+    leaseId: 'mock-lease-1',
+  } as Payment,
+  {
+    id: 'p2',
+    amount: 1500,
+    paymentDate: new Date('2025-11-01'),
+    paymentMethod: 'bank_transfer',
+    paymentStatus: 'completed',
+    leaseId: 'mock-lease-1',
+  } as Payment,
+  {
+    id: 'p3',
+    amount: 1500,
+    paymentDate: new Date('2025-10-01'),
+    paymentMethod: 'credit_card',
+    paymentStatus: 'completed',
+    leaseId: 'mock-lease-1',
+  } as Payment,
 ];
 
 // Lease-lifecycle activity. Unlike payments, this captures on-chain milestones
@@ -98,9 +133,21 @@ type ActivityItem = {
 };
 
 const MOCK_ACTIVITY: ActivityItem[] = [
-  { id: 'a1', label: 'Rent paid', date: new Date('2025-12-01'), amount: 1500, note: 'finalized' },
+  {
+    id: 'a1',
+    label: 'Rent paid',
+    date: new Date('2025-12-01'),
+    amount: 1500,
+    note: 'finalized',
+  },
   { id: 'a2', label: 'Lease signed', date: new Date('2025-10-01') },
-  { id: 'a3', label: 'Deposit funded', date: new Date('2025-09-30'), amount: 3000, note: 'refundable' },
+  {
+    id: 'a3',
+    label: 'Deposit funded',
+    date: new Date('2025-09-30'),
+    amount: 3000,
+    note: 'refundable',
+  },
 ];
 
 export function TenantDashboard() {
@@ -120,7 +167,7 @@ export function TenantDashboard() {
   const formatCurrency = (amount: number): string => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
-      currency: 'USD'
+      currency: 'USD',
     }).format(amount);
   };
 
@@ -128,23 +175,30 @@ export function TenantDashboard() {
     return new Intl.DateTimeFormat('en-US', {
       year: 'numeric',
       month: 'short',
-      day: 'numeric'
+      day: 'numeric',
     }).format(new Date(date));
   };
 
   // WCAG 2.1 AA color-independence: every status carries an icon, not color
   // alone. Mirrors the design reference (§1) status-pill rule.
   const getPaymentStatusBadge = (status: string) => {
-    const statusStyles: Record<string, { className: string; icon: typeof Check }> = {
+    const statusStyles: Record<
+      string,
+      { className: string; icon: typeof Check }
+    > = {
       completed: { className: 'bg-green-100 text-green-800', icon: Check },
       pending: { className: 'bg-yellow-100 text-yellow-800', icon: Clock },
       processing: { className: 'bg-blue-100 text-blue-800', icon: Loader2 },
       failed: { className: 'bg-red-100 text-red-800', icon: AlertTriangle },
       refunded: { className: 'bg-gray-100 text-gray-800', icon: RotateCcw },
-      cancelled: { className: 'bg-gray-100 text-gray-800', icon: AlertTriangle }
+      cancelled: {
+        className: 'bg-gray-100 text-gray-800',
+        icon: AlertTriangle,
+      },
     };
 
-    const { className, icon: Icon } = statusStyles[status] || statusStyles.pending;
+    const { className, icon: Icon } =
+      statusStyles[status] || statusStyles.pending;
 
     return (
       <Badge className={`gap-1 ${className}`}>
@@ -169,7 +223,9 @@ export function TenantDashboard() {
     }
     return due;
   };
-  const rentDueInDays = daysUntil(getNextRentDueDate(currentLease.paymentDueDay));
+  const rentDueInDays = daysUntil(
+    getNextRentDueDate(currentLease.paymentDueDay)
+  );
   const isLeaseActive = currentLease.status === 'active';
 
   return (
@@ -179,18 +235,17 @@ export function TenantDashboard() {
           <h1 className="text-3xl font-bold mb-2">
             {greetingName ? `Welcome back, ${greetingName}` : 'Welcome back'}
           </h1>
-          <p className="text-gray-600">Here's an overview of your rental information</p>
-        </div>
-
-        <div className="mb-6">
-          <SecurityRecoveryCard />
+          <p className="text-gray-600">
+            Here's an overview of your rental information
+          </p>
         </div>
 
         {showExpirationWarning && (
           <Alert className="mb-6">
             <Bell className="h-4 w-4" />
             <AlertDescription>
-              Your lease expires in {daysUntilExpiration} days. Consider reaching out to your landlord about renewal options.
+              Your lease expires in {daysUntilExpiration} days. Consider
+              reaching out to your landlord about renewal options.
             </AlertDescription>
           </Alert>
         )}
@@ -241,9 +296,14 @@ export function TenantDashboard() {
             <CardContent className="p-6">
               <div className="flex items-start justify-between gap-4">
                 <div className="space-y-1">
-                  <p className="text-xs uppercase tracking-wide text-gray-400">Active lease</p>
+                  <p className="text-xs uppercase tracking-wide text-gray-400">
+                    Active lease
+                  </p>
                   <p className="flex items-center gap-2 text-base font-semibold">
-                    <MapPin className="h-4 w-4 text-gray-400" aria-hidden="true" />
+                    <MapPin
+                      className="h-4 w-4 text-gray-400"
+                      aria-hidden="true"
+                    />
                     {currentLease.propertyAddress}
                   </p>
                 </div>
@@ -283,7 +343,10 @@ export function TenantDashboard() {
                 icon={Home}
                 title="No active lease"
                 description="You don't have an active lease yet. Browse available properties to find your next home."
-                action={{ label: 'Browse properties', onClick: () => navigate('/tenant/property-search') }}
+                action={{
+                  label: 'Browse properties',
+                  onClick: () => navigate('/tenant/property-search'),
+                }}
               />
             </CardContent>
           </Card>
@@ -293,11 +356,18 @@ export function TenantDashboard() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Monthly Rent</CardTitle>
-              <DollarSign className="h-4 w-4 text-gray-400" aria-hidden="true" />
+              <CardTitle className="text-sm font-medium">
+                Monthly Rent
+              </CardTitle>
+              <DollarSign
+                className="h-4 w-4 text-gray-400"
+                aria-hidden="true"
+              />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{formatCurrency(currentLease.monthlyRent)}</div>
+              <div className="text-2xl font-bold">
+                {formatCurrency(currentLease.monthlyRent)}
+              </div>
               <p className="text-xs text-gray-500 mt-1">
                 Due on day {currentLease.paymentDueDay} of each month
               </p>
@@ -306,11 +376,15 @@ export function TenantDashboard() {
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Lease Expires</CardTitle>
+              <CardTitle className="text-sm font-medium">
+                Lease Expires
+              </CardTitle>
               <Calendar className="h-4 w-4 text-gray-400" aria-hidden="true" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{formatDate(currentLease.endDate)}</div>
+              <div className="text-2xl font-bold">
+                {formatDate(currentLease.endDate)}
+              </div>
               <p className="text-xs text-gray-500 mt-1">
                 {daysUntilExpiration} days remaining
               </p>
@@ -319,11 +393,18 @@ export function TenantDashboard() {
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Security Deposit</CardTitle>
-              <CreditCard className="h-4 w-4 text-gray-400" aria-hidden="true" />
+              <CardTitle className="text-sm font-medium">
+                Security Deposit
+              </CardTitle>
+              <CreditCard
+                className="h-4 w-4 text-gray-400"
+                aria-hidden="true"
+              />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{formatCurrency(currentLease.securityDeposit)}</div>
+              <div className="text-2xl font-bold">
+                {formatCurrency(currentLease.securityDeposit)}
+              </div>
               <p className="text-xs text-gray-500 mt-1">
                 Refundable at lease end
               </p>
@@ -332,11 +413,15 @@ export function TenantDashboard() {
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Lease Status</CardTitle>
+              <CardTitle className="text-sm font-medium">
+                Lease Status
+              </CardTitle>
               <FileText className="h-4 w-4 text-gray-400" aria-hidden="true" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold capitalize">{currentLease.status}</div>
+              <div className="text-2xl font-bold capitalize">
+                {currentLease.status}
+              </div>
               <p className="text-xs text-gray-500 mt-1">
                 {currentLease.type.replace('-', ' ')} lease
               </p>
@@ -349,13 +434,17 @@ export function TenantDashboard() {
           <Card className="lg:col-span-2">
             <CardHeader>
               <CardTitle>Current Lease</CardTitle>
-              <CardDescription>Your active rental agreement details</CardDescription>
+              <CardDescription>
+                Your active rental agreement details
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-start justify-between">
                 <div className="space-y-1">
                   <p className="text-sm font-medium">Property Address</p>
-                  <p className="text-sm text-gray-600">{currentLease.propertyAddress}</p>
+                  <p className="text-sm text-gray-600">
+                    {currentLease.propertyAddress}
+                  </p>
                 </div>
                 <Button
                   variant="outline"
@@ -370,11 +459,15 @@ export function TenantDashboard() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <p className="text-sm font-medium">Lease Start</p>
-                  <p className="text-sm text-gray-600">{formatDate(currentLease.startDate)}</p>
+                  <p className="text-sm text-gray-600">
+                    {formatDate(currentLease.startDate)}
+                  </p>
                 </div>
                 <div>
                   <p className="text-sm font-medium">Lease End</p>
-                  <p className="text-sm text-gray-600">{formatDate(currentLease.endDate)}</p>
+                  <p className="text-sm text-gray-600">
+                    {formatDate(currentLease.endDate)}
+                  </p>
                 </div>
               </div>
 
@@ -436,13 +529,21 @@ export function TenantDashboard() {
         <Card className="mb-8">
           <CardHeader>
             <CardTitle>Recent Activity</CardTitle>
-            <CardDescription>Lease milestones and on-chain events</CardDescription>
+            <CardDescription>
+              Lease milestones and on-chain events
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="divide-y">
               {recentActivity.map((item) => (
-                <div key={item.id} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
-                  <Check className="h-4 w-4 shrink-0 text-green-600" aria-hidden="true" />
+                <div
+                  key={item.id}
+                  className="flex items-center gap-3 py-3 first:pt-0 last:pb-0"
+                >
+                  <Check
+                    className="h-4 w-4 shrink-0 text-green-600"
+                    aria-hidden="true"
+                  />
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium">{item.label}</p>
                     <p className="text-xs text-gray-500">
@@ -451,7 +552,9 @@ export function TenantDashboard() {
                     </p>
                   </div>
                   {item.amount !== undefined && (
-                    <p className="text-sm text-gray-700">{formatCurrency(item.amount)}</p>
+                    <p className="text-sm text-gray-700">
+                      {formatCurrency(item.amount)}
+                    </p>
                   )}
                 </div>
               ))}
@@ -485,7 +588,7 @@ export function TenantDashboard() {
                 description="You haven't made any payments yet. Your payment history will appear here once you make your first payment."
                 action={{
                   label: 'Make a Payment',
-                  onClick: () => navigate('/tenant/payments')
+                  onClick: () => navigate('/tenant/payments'),
                 }}
               />
             ) : (
@@ -499,13 +602,19 @@ export function TenantDashboard() {
                     aria-label={`Payment of ${formatCurrency(payment.amount)} on ${formatDate(payment.paymentDate)}`}
                   >
                     <div className="flex items-center gap-4">
-                      <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center" aria-hidden="true">
+                      <div
+                        className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center"
+                        aria-hidden="true"
+                      >
                         <DollarSign className="h-5 w-5 text-primary" />
                       </div>
                       <div>
-                        <p className="font-medium">{formatCurrency(payment.amount)}</p>
+                        <p className="font-medium">
+                          {formatCurrency(payment.amount)}
+                        </p>
                         <p className="text-sm text-gray-500">
-                          {formatDate(payment.paymentDate)} • {payment.paymentMethod.replace('_', ' ')}
+                          {formatDate(payment.paymentDate)} •{' '}
+                          {payment.paymentMethod.replace('_', ' ')}
                         </p>
                       </div>
                     </div>
@@ -515,7 +624,9 @@ export function TenantDashboard() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => navigate(`/tenant/payments/${payment.id}`)}
+                          onClick={() =>
+                            navigate(`/tenant/payments/${payment.id}`)
+                          }
                           aria-label={`Download receipt for payment of ${formatCurrency(payment.amount)}`}
                         >
                           <Download className="h-4 w-4" />
