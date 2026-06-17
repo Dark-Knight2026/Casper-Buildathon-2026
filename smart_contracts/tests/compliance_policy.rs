@@ -22,8 +22,8 @@ use leasefi_contracts::{
         PropertyRegistry, PropertyRegistryHostRef, PropertyRegistryInitArgs,
     },
     user_registry::{
-        UserRegistry, UserRegistryInitArgs, ROLE_FLAG_LANDLORD,
-        ROLE_FLAG_PROPERTY_MANAGER, ROLE_FLAG_TENANT,
+        UserRegistry, UserRegistryInitArgs, ROLE_FLAG_LANDLORD, ROLE_FLAG_PROPERTY_MANAGER,
+        ROLE_FLAG_TENANT,
     },
 };
 use odra::{

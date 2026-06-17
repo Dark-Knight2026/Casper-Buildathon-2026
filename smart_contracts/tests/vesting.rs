@@ -106,8 +106,7 @@ fn create_test_schedule(
 ) -> VestingId {
     ctx.env.set_caller(ctx.users.owner);
 
-    ctx.big_coin
-        .approve(&ctx.staking.address(), &total_amount);
+    ctx.big_coin.approve(&ctx.staking.address(), &total_amount);
     ctx.staking.stake_for(beneficiary, total_amount);
 
     ctx.vesting
@@ -468,8 +467,7 @@ fn test_claim_should_revert_if_active_unbonding_from_direct_staking() {
     ctx.big_coin.transfer(&alice, &stake_amount);
 
     ctx.env.set_caller(alice);
-    ctx.big_coin
-        .approve(&ctx.staking.address(), &stake_amount);
+    ctx.big_coin.approve(&ctx.staking.address(), &stake_amount);
     ctx.staking.stake_for(alice, stake_amount);
 
     // Alice initiates unstaking directly via staking contract
@@ -484,8 +482,7 @@ fn test_claim_should_revert_if_active_unbonding_from_direct_staking() {
 
     // Create a vesting schedule for Alice
     ctx.env.set_caller(ctx.users.owner);
-    ctx.big_coin
-        .approve(&ctx.staking.address(), &stake_amount);
+    ctx.big_coin.approve(&ctx.staking.address(), &stake_amount);
     ctx.staking.stake_for(alice, stake_amount);
 
     let vesting_id = ctx
