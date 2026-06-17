@@ -49,3 +49,8 @@ package_hash = "hash-c103202b74094a5e16c2b318668e361f7398817add74a2c86e16f685dbc
 name = "UserRegistry"
 package_name = "UserRegistry"
 package_hash = "hash-29cd2d0ae790bed5feca98b5f0b725f8a8dda423726bcfbd06b81278e91d5482"
+
+[[contracts]]
+name = "PropertyRegistry"
+package_name = "PropertyRegistry"
+package_hash = "hash-33d76a2dd4bce2e58d4613317740abf79ef8aea66612ca28ebe5fc7ceb1f034d"
