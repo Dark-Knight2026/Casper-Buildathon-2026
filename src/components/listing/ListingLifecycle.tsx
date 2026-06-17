@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { ConfirmationDialog } from '@/components/ui/confirmation-dialog';
 import { useToast } from '@/hooks/use-toast';
 import {
   submitListing,
@@ -73,6 +74,7 @@ export function ListingLifecycle({ listing }: { listing: Listing }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [busy, setBusy] = useState(false);
+  const [confirmWithdraw, setConfirmWithdraw] = useState(false);
 
   const badge = LISTING_STATE_BADGE[listing.state];
   const actions = ACTIONS[listing.state] ?? [];
@@ -90,6 +92,9 @@ export function ListingLifecycle({ listing }: { listing: Listing }) {
       await queryClient.invalidateQueries({
         queryKey: ['listing', listing.id],
       });
+      // Refresh the landlord's list too, so a withdraw / state change is
+      // reflected when they navigate back (the list is keyed on its own query).
+      queryClient.invalidateQueries({ queryKey: ['landlord-listings'] });
       toast({ title: 'Listing updated' });
     } catch (error) {
       toast({
@@ -139,7 +144,11 @@ export function ListingLifecycle({ listing }: { listing: Listing }) {
                 key={action.kind === 'transition' ? action.to : action.kind}
                 variant={action.variant}
                 disabled={busy}
-                onClick={() => run(action)}
+                onClick={() =>
+                  action.kind === 'withdraw'
+                    ? setConfirmWithdraw(true)
+                    : run(action)
+                }
               >
                 {action.label}
               </Button>
@@ -151,6 +160,17 @@ export function ListingLifecycle({ listing }: { listing: Listing }) {
           </p>
         )}
       </CardContent>
+
+      <ConfirmationDialog
+        open={confirmWithdraw}
+        onOpenChange={setConfirmWithdraw}
+        title="Withdraw this listing?"
+        description="It will be removed from search and tenants won't see it anymore. Withdrawal can't be undone, though the listing's history is kept."
+        confirmLabel="Withdraw"
+        variant="destructive"
+        loading={busy}
+        onConfirm={() => run({ kind: 'withdraw', label: 'Withdraw' })}
+      />
     </Card>
   );
 }

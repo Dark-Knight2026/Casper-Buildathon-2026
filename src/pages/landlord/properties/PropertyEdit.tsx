@@ -1,14 +1,15 @@
 /**
  * Property Edit Page
- * Edits a listing's offer (title, description, terms, amenities, media). The
- * underlying physical property is deduplicated and shared, so its attributes
- * are shown read-only — there is no property-update endpoint.
+ * Edits both the listing's offer (title, description, terms, amenities, media)
+ * and the underlying physical property's basic info (address, type, beds/baths,
+ * area, year built) via `PUT /properties/{id}`. Editing the address re-runs
+ * dedup on the backend (a `409` collision surfaces as a toast).
  */
 
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { ArrowLeft, Save, X } from 'lucide-react';
@@ -38,11 +39,13 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
+import { ConfirmationDialog } from '@/components/ui/confirmation-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import { getListing, updateListing } from '@/services/listingService';
+import { updateProperty } from '@/services/propertyAssetService';
 import { uploadMedia } from '@/services/listingMediaService';
-import { formatPropertyType, formatFullAddress } from '@/lib/listingDisplay';
+import { formatPropertyType } from '@/lib/listingDisplay';
 import { logger } from '@/utils/logger';
 import { ApiClient } from '@/lib/api-client';
 import { surroundingAreaSchema } from '@/lib/listingForm';
@@ -54,9 +57,39 @@ import {
   LEASE_TERMS,
   PET_POLICIES,
 } from '@/types/property';
-import type { RentLtrTerms } from '@/types/listingContract';
+import type { RentLtrTerms, RealPropertyType } from '@/types/listingContract';
+
+const PROPERTY_TYPES: RealPropertyType[] = [
+  'single_family',
+  'multi_family',
+  'apartment',
+  'condo',
+  'townhouse',
+  'commercial',
+  'other',
+];
 
 const listingFormSchema = z.object({
+  // Physical property (PUT /properties/{id})
+  addressLine1: z.string().min(1, 'Address is required'),
+  addressLine2: z.string().optional(),
+  city: z.string().min(1, 'City is required'),
+  stateOrProvince: z.string().min(1, 'State is required'),
+  postalCode: z.string().min(1, 'Postal code is required'),
+  propertyType: z.enum([
+    'single_family',
+    'multi_family',
+    'apartment',
+    'condo',
+    'townhouse',
+    'commercial',
+    'other',
+  ]),
+  bedroomsTotal: z.coerce.number().min(0, 'Must be 0 or more'),
+  bathroomsTotal: z.coerce.number().min(0, 'Must be 0 or more'),
+  livingArea: z.coerce.number().min(0, 'Must be 0 or more'),
+  yearBuilt: z.coerce.number().min(0, 'Must be 0 or more'),
+  // Listing offer (PUT /listings/{id})
   title: z.string().min(5, 'Title must be at least 5 characters'),
   description: z.string().min(20, 'Description must be at least 20 characters'),
   availableDate: z.string().min(1, 'Available date is required'),
@@ -78,8 +111,15 @@ export default function PropertyEdit() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   const [saving, setSaving] = useState(false);
+  const [confirmSave, setConfirmSave] = useState(false);
+  // Holds the zod-validated (coerced) values between confirming the dialog and
+  // submitting — `form.getValues()` would return raw strings, unparsed numbers.
+  const [pendingData, setPendingData] = useState<ListingFormValues | null>(
+    null
+  );
   const [uploadedImages, setUploadedImages] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
 
@@ -96,6 +136,16 @@ export default function PropertyEdit() {
   const form = useForm<ListingFormValues>({
     resolver: zodResolver(listingFormSchema),
     defaultValues: {
+      addressLine1: '',
+      addressLine2: '',
+      city: '',
+      stateOrProvince: '',
+      postalCode: '',
+      propertyType: 'apartment',
+      bedroomsTotal: 0,
+      bathroomsTotal: 0,
+      livingArea: 0,
+      yearBuilt: 0,
       title: '',
       description: '',
       availableDate: '',
@@ -116,7 +166,18 @@ export default function PropertyEdit() {
     if (!listing) return;
     const terms =
       listing.intent === 'rent_ltr' ? (listing.terms as RentLtrTerms) : null;
+    const asset = listing.property;
     reset({
+      addressLine1: asset?.addressLine1 ?? '',
+      addressLine2: asset?.addressLine2 ?? '',
+      city: asset?.city ?? '',
+      stateOrProvince: asset?.stateOrProvince ?? '',
+      postalCode: asset?.postalCode ?? '',
+      propertyType: asset?.propertyType ?? 'apartment',
+      bedroomsTotal: asset?.bedroomsTotal ?? 0,
+      bathroomsTotal: asset?.bathroomsTotal ?? 0,
+      livingArea: asset?.livingArea ?? 0,
+      yearBuilt: asset?.yearBuilt ?? 0,
       title: listing.title,
       description: listing.description,
       availableDate: listing.availableDate
@@ -150,6 +211,23 @@ export default function PropertyEdit() {
     if (!id) return;
     setSaving(true);
     try {
+      // Physical property first — it may 409 on an address collision; if it
+      // fails we surface the error and leave the listing untouched.
+      if (listing?.property) {
+        await updateProperty(listing.property.id, {
+          addressLine1: data.addressLine1,
+          addressLine2: data.addressLine2 || null,
+          city: data.city,
+          stateOrProvince: data.stateOrProvince,
+          postalCode: data.postalCode,
+          propertyType: data.propertyType,
+          bedroomsTotal: data.bedroomsTotal,
+          bathroomsTotal: data.bathroomsTotal,
+          livingArea: data.livingArea,
+          yearBuilt: data.yearBuilt,
+        });
+      }
+
       await updateListing(id, {
         title: data.title,
         description: data.description,
@@ -170,6 +248,8 @@ export default function PropertyEdit() {
         await uploadMedia(id, uploadedImages);
       }
 
+      await queryClient.invalidateQueries({ queryKey: ['listing', id] });
+      queryClient.invalidateQueries({ queryKey: ['landlord-listings'] });
       toast({ title: 'Listing updated' });
       navigate(`/landlord/properties/${id}`);
     } catch (error) {
@@ -215,7 +295,6 @@ export default function PropertyEdit() {
     );
   }
 
-  const asset = listing.property;
   const existingMedia = [...listing.media].sort(
     (a, b) => a.position - b.position
   );
@@ -239,52 +318,176 @@ export default function PropertyEdit() {
       </div>
 
       <div className="space-y-6">
-        {/* Property (read-only) */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Property</CardTitle>
-            <CardDescription>
-              Physical details are fixed for this property and can't be edited
-              from a listing.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
-              <div className="md:col-span-3">
-                <p className="text-muted-foreground">Address</p>
-                <p className="font-medium">{formatFullAddress(asset)}</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground">Type</p>
-                <p className="font-medium">
-                  {asset ? formatPropertyType(asset.propertyType) : '—'}
-                </p>
-              </div>
-              <div>
-                <p className="text-muted-foreground">Bedrooms</p>
-                <p className="font-medium">{asset?.bedroomsTotal ?? '—'}</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground">Bathrooms</p>
-                <p className="font-medium">{asset?.bathroomsTotal ?? '—'}</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground">Square Feet</p>
-                <p className="font-medium">
-                  {asset?.livingArea?.toLocaleString() ?? '—'}
-                </p>
-              </div>
-              <div>
-                <p className="text-muted-foreground">Year Built</p>
-                <p className="font-medium">{asset?.yearBuilt ?? '—'}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Form */}
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+          <form
+            onSubmit={form.handleSubmit((data) => {
+              setPendingData(data);
+              setConfirmSave(true);
+            })}
+            className="space-y-6"
+          >
+            {/* Property — physical asset (PUT /properties/{id}) */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Property</CardTitle>
+                <CardDescription>
+                  Basic info for the physical property. Changing the address
+                  re-checks for duplicates; this affects every listing on this
+                  property.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <FormField
+                  control={form.control}
+                  name="addressLine1"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Street Address</FormLabel>
+                      <FormControl>
+                        <Input placeholder="123 Main St" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="addressLine2"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Unit / Suite (optional)</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Apt 4B" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="city"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>City</FormLabel>
+                        <FormControl>
+                          <Input {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="stateOrProvince"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>State</FormLabel>
+                        <FormControl>
+                          <Input {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="postalCode"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>ZIP</FormLabel>
+                        <FormControl>
+                          <Input {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="propertyType"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Type</FormLabel>
+                        <Select
+                          onValueChange={field.onChange}
+                          value={field.value}
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {PROPERTY_TYPES.map((type) => (
+                              <SelectItem key={type} value={type}>
+                                {formatPropertyType(type)}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="bedroomsTotal"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Bedrooms</FormLabel>
+                        <FormControl>
+                          <Input type="number" min="0" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="bathroomsTotal"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Bathrooms</FormLabel>
+                        <FormControl>
+                          <Input type="number" min="0" step="0.5" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="livingArea"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Square Feet</FormLabel>
+                        <FormControl>
+                          <Input type="number" min="0" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="yearBuilt"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Year Built</FormLabel>
+                        <FormControl>
+                          <Input type="number" min="0" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              </CardContent>
+            </Card>
+
             {/* Listing Details */}
             <Card>
               <CardHeader>
@@ -657,6 +860,16 @@ export default function PropertyEdit() {
           </form>
         </Form>
       </div>
+
+      <ConfirmationDialog
+        open={confirmSave}
+        onOpenChange={setConfirmSave}
+        title="Save changes?"
+        description="The property is shared across all of its listings, so these edits apply to every listing on it. Changing the address re-checks for duplicate properties."
+        confirmLabel="Save changes"
+        loading={saving}
+        onConfirm={() => (pendingData ? onSubmit(pendingData) : undefined)}
+      />
     </div>
   );
 }

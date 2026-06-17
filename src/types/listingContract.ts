@@ -299,6 +299,30 @@ export interface CreatePropertyBody {
 }
 
 /**
+ * `PUT /properties/{id}` — edits the physical asset (owner-only). Every field is
+ * optional (partial update). Editing the address re-runs dedup normalization and
+ * may `409` if it collides with another property; it also revalidates the
+ * property's listings server-side. `metadataUri` is NOT settable here (the
+ * backend re-pins it from these fields).
+ */
+export interface UpdatePropertyBody {
+  addressLine1?: string;
+  addressLine2?: string | null;
+  city?: string;
+  stateOrProvince?: string;
+  postalCode?: string;
+  propertyType?: RealPropertyType;
+  latitude?: number | null;
+  longitude?: number | null;
+  bedroomsTotal?: number | null;
+  bathroomsTotal?: number | null;
+  livingArea?: number | null;
+  yearBuilt?: number | null;
+  parkingFeatures?: string[];
+  parcelApn?: string | null;
+}
+
+/**
  * `POST /listings` — creates a listing in `draft` against an existing property.
  * State/provenance/onChain/views/timestamps are server-derived.
  */

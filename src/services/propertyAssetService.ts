@@ -4,6 +4,7 @@ import type {
   PropertyAsset,
   Listing,
   CreatePropertyBody,
+  UpdatePropertyBody,
   GeoSearchParams,
 } from '@/types/listingContract';
 
@@ -32,6 +33,19 @@ export async function createProperty(
 /** `GET /properties/{id}`. Physical-asset record only (no offer data). */
 export async function getProperty(id: string): Promise<PropertyAsset> {
   return backendClient.get<PropertyAsset>(`${PROPERTIES}/${id}`);
+}
+
+/**
+ * `PUT /properties/{id}`. Edits the physical asset; owner-only (`403` otherwise).
+ * Partial — only the provided fields change. Changing the address re-runs dedup
+ * normalization (`409` if it collides with another property) and revalidates the
+ * property's listings.
+ */
+export async function updateProperty(
+  id: string,
+  body: UpdatePropertyBody
+): Promise<PropertyAsset> {
+  return backendClient.put<PropertyAsset>(`${PROPERTIES}/${id}`, body);
 }
 
 /** `GET /properties/{id}/listings`. Full listing history against this property. */
