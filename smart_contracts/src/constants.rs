@@ -8,6 +8,16 @@ pub const ONE_MONTH_IN_SECONDS: u64 = 30 * 24 * 60 * 60;
 
 pub const STYKS_ORACLE_CSPR_USDT_PRICE_FEED_ID: &str = "CSPRUSD";
 
+/// Styks encodes USD prices with 5 fractional digits (amount × 100_000).
+/// See `styks-make-parser` (`amount * 100_000` integer conversion).
+pub const STYKS_ORACLE_PRICE_SCALE: u64 = 100_000;
+
+/// Lower bound for a plausible CSPR/USD quote on the Styks scale (~$0.001).
+pub const STYKS_ORACLE_MIN_CSPR_USD_PRICE: u64 = 100;
+
+/// Upper bound for a plausible CSPR/USD quote on the Styks scale (~$0.50).
+pub const STYKS_ORACLE_MAX_CSPR_USD_PRICE: u64 = 50_000;
+
 pub const ONE_MONTH_IN_MILLISECONDS: u64 = ONE_MONTH_IN_SECONDS * 1_000;
 
 pub const PRIVATE_SALE_CLIFF_DURATION: u64 = 6 * ONE_MONTH_IN_MILLISECONDS;

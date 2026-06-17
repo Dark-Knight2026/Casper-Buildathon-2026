@@ -7,7 +7,13 @@ use odra::{
 use odra_modules::access::errors::Error as AccessError;
 
 use leasefi_contracts::big_coin::{BigCoin, BigCoinHostRef, BigCoinInitArgs};
-use leasefi_contracts::constants::{PRIVATE_SALE_CLIFF_DURATION, PRIVATE_SALE_VESTING_DURATION};
+use leasefi_contracts::constants::{
+    PRIVATE_SALE_CLIFF_DURATION, PRIVATE_SALE_VESTING_DURATION, STYKS_ORACLE_MAX_CSPR_USD_PRICE,
+    STYKS_ORACLE_MIN_CSPR_USD_PRICE, STYKS_ORACLE_PRICE_SCALE,
+};
+
+/// $0.004342 CSPR/USD on the Styks 5-decimal fixed-point scale (0.004342 × 100_000).
+const CSPR_USD_STYKS_PRICE: u64 = 434;
 use leasefi_contracts::ico::{
     errors::Error,
     events::{
@@ -629,7 +635,7 @@ fn test_purchase_should_fail_if_attached_value_is_wrong_when_purchasing_with_csp
 
     ctx.env
         .advance_block_time(creation_params[0].start_timestamp - ctx.env.block_time());
-    ctx.styks_price_feed.set_twap_price(4342); // 0.004342 * 10^6
+    ctx.styks_price_feed.set_twap_price(CSPR_USD_STYKS_PRICE);
 
     assert_eq!(
         ctx.ico
@@ -662,7 +668,7 @@ fn test_purchase_should_fail_if_attached_value_is_wrong_when_purchasing_with_cep
 
     ctx.env
         .advance_block_time(creation_params[0].start_timestamp - ctx.env.block_time());
-    ctx.styks_price_feed.set_twap_price(4342); // 0.004342 * 10^6
+    ctx.styks_price_feed.set_twap_price(CSPR_USD_STYKS_PRICE);
 
     assert_eq!(
         ctx.ico
@@ -681,7 +687,7 @@ fn test_purchase_should_purchase_with_cspr_token_properly() {
 
     ctx.env
         .advance_block_time(creation_params[0].start_timestamp - ctx.env.block_time());
-    ctx.styks_price_feed.set_twap_price(4342); // 0.004342 * 10^6
+    ctx.styks_price_feed.set_twap_price(CSPR_USD_STYKS_PRICE);
 
     let currency = Currency::CSPR;
     let price = ctx.ico.get_ico_token_price(currency);
@@ -1188,18 +1194,94 @@ fn test_get_ico_token_price_should_fail_if_styks_price_feed_can_not_return_twap(
 fn test_get_ico_token_price_should_return_proper_ico_token_price_in_cspr() {
     let mut ctx = setup(odra_test::env(), true);
     let creation_params = get_ico_schedules_creation_params(&ctx.env);
-    let cspr_price_usd = 4342; // 0.004342 * 10^6
-
     ctx.env
         .advance_block_time(creation_params[0].start_timestamp - ctx.env.block_time());
-    ctx.styks_price_feed.set_twap_price(cspr_price_usd);
+    ctx.styks_price_feed.set_twap_price(CSPR_USD_STYKS_PRICE);
 
     let current_ico_schedule = ctx.ico.get_current_ico_schedule().unwrap();
 
     assert_eq!(
         ctx.ico.get_ico_token_price(Currency::CSPR),
-        current_ico_schedule.1.price * U256::from(10).pow(U256::from(8)) / cspr_price_usd,
+        current_ico_schedule.1.price * U256::from(STYKS_ORACLE_PRICE_SCALE)
+            / U256::from(CSPR_USD_STYKS_PRICE),
         "Invalid ICO token price"
+    );
+}
+
+#[test]
+fn test_get_ico_token_price_should_revert_if_oracle_price_out_of_range() {
+    let mut ctx = setup(odra_test::env(), true);
+    let creation_params = get_ico_schedules_creation_params(&ctx.env);
+
+    ctx.env
+        .advance_block_time(creation_params[0].start_timestamp - ctx.env.block_time());
+
+    ctx.styks_price_feed
+        .set_twap_price(STYKS_ORACLE_MIN_CSPR_USD_PRICE - 1);
+    assert_eq!(
+        ctx.ico.try_get_ico_token_price(Currency::CSPR).unwrap_err(),
+        Error::StyksOracleInvalidPrice.into(),
+        "Should revert when oracle price is below the plausible range"
+    );
+
+    ctx.styks_price_feed
+        .set_twap_price(STYKS_ORACLE_MAX_CSPR_USD_PRICE + 1);
+    assert_eq!(
+        ctx.ico.try_get_ico_token_price(Currency::CSPR).unwrap_err(),
+        Error::StyksOracleInvalidPrice.into(),
+        "Should revert when oracle price is above the plausible range"
+    );
+}
+
+#[test]
+fn test_purchase_cspr_matches_usdc_value_at_styks_oracle_scale() {
+    let mut ctx = setup(odra_test::env(), true);
+    let creation_params = get_ico_schedules_creation_params(&ctx.env);
+
+    ctx.env
+        .advance_block_time(creation_params[0].start_timestamp - ctx.env.block_time());
+    ctx.styks_price_feed.set_twap_price(CSPR_USD_STYKS_PRICE);
+
+    let schedule_price = ctx.ico.get_current_ico_schedule().unwrap().1.price;
+    let usd_6dec = U256::from(100u64) * schedule_price;
+    let cspr_usd_6dec = U256::from(CSPR_USD_STYKS_PRICE) * U256::from(10u64);
+    let cspr_motes =
+        usd_6dec * U256::from(10u64).pow(U256::from(9)) / cspr_usd_6dec;
+
+    let ico_token_price_cspr = ctx.ico.get_ico_token_price(Currency::CSPR);
+    let spend_for_calc = cspr_motes / U256::from(1_000);
+    let expected_cspr_purchase = spend_for_calc * U256::from(10u64).pow(U256::from(18))
+        / ico_token_price_cspr;
+
+    ctx.env.set_caller(ctx.users.alice);
+    ctx.usdc.approve(&ctx.ico.address(), &usd_6dec);
+    let usdc_purchase = ctx.ico.purchase(usd_6dec, Currency::USDC);
+
+    ctx.env.set_caller(ctx.users.alice);
+    let cspr_purchase = ctx
+        .ico
+        .with_tokens(cspr_motes.to_u512())
+        .purchase(cspr_motes, Currency::CSPR);
+
+    assert_eq!(
+        cspr_purchase, expected_cspr_purchase,
+        "CSPR purchase should follow the Styks-scaled price formula"
+    );
+    assert_eq!(
+        usdc_purchase,
+        U256::from(100u64) * U256::from(10u64).pow(U256::from(18)),
+        "Expected 100 BIG for the chosen USD spend"
+    );
+
+    // Mote→6-decimal normalization truncates; equal USD value may differ by <1 BIG.
+    let purchase_diff = if cspr_purchase > usdc_purchase {
+        cspr_purchase - usdc_purchase
+    } else {
+        usdc_purchase - cspr_purchase
+    };
+    assert!(
+        purchase_diff <= U256::from(10u64).pow(U256::from(18)),
+        "CSPR and USDC purchases with equal USD value should mint nearly the same BIG amount (diff: {purchase_diff})"
     );
 }
 

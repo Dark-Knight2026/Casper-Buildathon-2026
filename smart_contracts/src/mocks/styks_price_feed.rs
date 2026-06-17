@@ -4,6 +4,9 @@ use odra::prelude::*;
 
 /// Test-only mock used by ICO tests to simulate the external Styks oracle.
 /// This module is gated behind `#[cfg(test)]` in `src/lib.rs` and is not deployable in production.
+///
+/// Prices must use the Styks 5-decimal fixed-point scale (USD × 100_000).
+/// Example: $0.004342 CSPR/USD → `434`.
 #[odra::module]
 pub struct StyksPriceFeed {
     twap_price: Var<u64>,

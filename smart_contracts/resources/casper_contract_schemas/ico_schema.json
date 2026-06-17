@@ -359,6 +359,11 @@
       "discriminant": 508
     },
     {
+      "name": "StyksOracleInvalidPrice",
+      "description": "",
+      "discriminant": 517
+    },
+    {
       "name": "UnsupportedCurrency",
       "description": "",
       "discriminant": 506

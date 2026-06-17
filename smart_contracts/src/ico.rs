@@ -7,7 +7,10 @@ use odra::{
 use odra_modules::{access::Ownable, cep18_token::Cep18ContractRef};
 
 use crate::{
-    constants::STYKS_ORACLE_CSPR_USDT_PRICE_FEED_ID,
+    constants::{
+        STYKS_ORACLE_CSPR_USDT_PRICE_FEED_ID, STYKS_ORACLE_MAX_CSPR_USD_PRICE,
+        STYKS_ORACLE_MIN_CSPR_USD_PRICE, STYKS_ORACLE_PRICE_SCALE,
+    },
     ico::{
         errors::Error,
         events::{
@@ -176,10 +179,8 @@ impl ICO {
             .unwrap_or_revert_with(&self.env(), Error::NoActiveIcoSchedule);
         let ico_token_price = self.get_ico_token_price(currency);
 
-        // For CSPR, amount_to_spend is in motes (10^9 per CSPR). Normalize to 6 decimal
+        // For CSPR, amount_to_spend is in motes (10^9 per CSPR). Normalize to 6-decimal
         // units (like USDC/USDT and the schedule price) to match the conversion formula.
-        // Without this, CSPR purchases over-issue BIG by ~10^3 (motes vs price decimals)
-        // plus potential oracle scaling mismatches (up to 10^6 total in some cases).
         let spend_for_calc = if currency == Currency::CSPR {
             amount_to_spend / U256::from(1_000)
         } else {
@@ -315,18 +316,9 @@ impl ICO {
             None => U256::zero(),
             Some(current_ico_schedule) => match currency {
                 Currency::CSPR => {
-                    let cspr_price_usd = self
-                        .styks_price_feed
-                        .get_twap_price(&String::from(STYKS_ORACLE_CSPR_USDT_PRICE_FEED_ID))
-                        .unwrap_or_revert_with(&self.env(), Error::StyksOracleCanNotReturnTWAP);
-
-                    if cspr_price_usd == 0 {
-                        self.env().revert(Error::StyksOracleCanNotReturnTWAP);
-                    }
-
-                    // Styks Oracle returns price with 8 decimals
-                    current_ico_schedule.1.price * U256::from(10).pow(U256::from(8))
-                        / cspr_price_usd
+                    let cspr_price_usd = self.validated_cspr_usd_price();
+                    current_ico_schedule.1.price * U256::from(STYKS_ORACLE_PRICE_SCALE)
+                        / U256::from(cspr_price_usd)
                 }
                 Currency::USDC | Currency::USDT => current_ico_schedule.1.price,
             },
@@ -392,6 +384,22 @@ impl ICO {
     #[inline]
     fn assert_owner(&self) {
         self.ownable.assert_owner(&self.env().caller());
+    }
+
+    /// Returns a validated Styks CSPR/USD TWAP on the 5-decimal fixed-point scale.
+    fn validated_cspr_usd_price(&self) -> u64 {
+        let cspr_price_usd = self
+            .styks_price_feed
+            .get_twap_price(&String::from(STYKS_ORACLE_CSPR_USDT_PRICE_FEED_ID))
+            .unwrap_or_revert_with(&self.env(), Error::StyksOracleCanNotReturnTWAP);
+
+        if cspr_price_usd < STYKS_ORACLE_MIN_CSPR_USD_PRICE
+            || cspr_price_usd > STYKS_ORACLE_MAX_CSPR_USD_PRICE
+        {
+            self.env().revert(Error::StyksOracleInvalidPrice);
+        }
+
+        cspr_price_usd
     }
 
     fn validate_ico_schedule(
@@ -523,6 +531,7 @@ pub mod errors {
         UnsupportedCurrency = 506,
         NoActiveIcoSchedule = 507,
         StyksOracleCanNotReturnTWAP = 508,
+        StyksOracleInvalidPrice = 517,
         AddressIsRequired = 509,
         InvalidAmountAttached = 510,
         InsufficientSellingTokensAmount = 511,
