@@ -17,7 +17,8 @@ use crate::{
         auth::{AgentRole, LandlordRole, RoleUser, TenantRole},
         listings::{
             db::{
-                self, AuthorityUpload, ListingRow, ListingUpdate, StateTransition, WithdrawOutcome,
+                self, AuthorityUpload, ListingPatch, ListingRow, ListingUpdate, NewListing,
+                StateTransition, WithdrawOutcome,
             },
             models::{
                 AuthorityDocumentResponse, AuthorityDocumentType, CreateListingRequest,
@@ -268,7 +269,7 @@ pub async fn create_listing(
     user: RoleUser<LandlordRole>,
     Json(payload): Json<CreateListingRequest>,
 ) -> ApiResult<(StatusCode, Json<Listing>)> {
-    let new_listing = payload.into_validated()?;
+    let new_listing = NewListing::try_from(payload)?;
     // Referenced property must exist; RowNotFound maps to 404 via `?`.
     let property = properties_db::fetch_property(&state.db, new_listing.property_id).await?;
     let screen = screen_listing_text(&state, &new_listing.title, &new_listing.description).await?;
@@ -314,7 +315,7 @@ pub async fn update_listing(
     Path(listing_id): Path<Uuid>,
     Json(payload): Json<UpdateListingRequest>,
 ) -> ApiResult<Json<Listing>> {
-    let patch = payload.into_patch()?;
+    let patch = ListingPatch::try_from(payload)?;
     // Whether this update touched screenable free-text; drives the re-screen.
     let text_changed = patch.title.is_some() || patch.description.is_some();
     let mut row = match db::update_listing(&state.db, listing_id, user.0.sub, patch).await? {
