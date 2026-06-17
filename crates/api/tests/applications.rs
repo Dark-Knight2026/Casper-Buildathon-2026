@@ -123,6 +123,37 @@ async fn landlord_apps(env: &TestEnv, token: &str, query: &str) -> (StatusCode, 
     (code, body.unwrap_or(Value::Null))
 }
 
+/// `POST /applications/{id}/notes` with `body`.
+async fn add_note(
+    env: &TestEnv,
+    token: &str,
+    application_id: Uuid,
+    body: &str,
+) -> (StatusCode, Value) {
+    let (code, resp) = common::authed_request::<Value>(
+        &env.server,
+        &Method::POST,
+        &format!("/api/v1/applications/{application_id}/notes"),
+        token,
+        &json!({ "body": body }),
+    )
+    .await;
+    (code, resp.unwrap_or(Value::Null))
+}
+
+/// `GET /applications/{id}/notes`.
+async fn list_notes(env: &TestEnv, token: &str, application_id: Uuid) -> (StatusCode, Value) {
+    let (code, resp) = common::authed_request::<Value>(
+        &env.server,
+        &Method::GET,
+        &format!("/api/v1/applications/{application_id}/notes"),
+        token,
+        &Value::Null,
+    )
+    .await;
+    (code, resp.unwrap_or(Value::Null))
+}
+
 // `POST /listings/{id}/applications` submit -----------------------------------
 
 /// A valid application against an active listing is created as `pending`, with
@@ -817,4 +848,131 @@ async fn review_rejects_tenant_403(pool: PgPool) {
 
     let (status, _body) = review(&env, &token, Uuid::new_v4(), "approved").await;
     assert_eq!(status, StatusCode::FORBIDDEN);
+}
+
+// `POST`/`GET /applications/{id}/notes` internal notes ------------------------
+
+/// The reviewing landlord adds notes and reads them back.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn notes_add_and_list(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, landlord_token) =
+        common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let (_t, tenant_token) = common::seed_authed_user(&env, &pool, UserRole::Tenant).await;
+    let listing_id = active_listing(&env, &pool, landlord_id, &landlord_token).await;
+    let (_s, app) = submit_app(&env, &tenant_token, listing_id, &app_body()).await;
+    let app_id = Uuid::parse_str(app["id"].as_str().unwrap()).unwrap();
+
+    let (status, note) = add_note(&env, &landlord_token, app_id, "Strong applicant").await;
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(note["body"], "Strong applicant");
+    assert_eq!(note["authorId"].as_str().unwrap(), landlord_id.to_string());
+
+    add_note(&env, &landlord_token, app_id, "Second note").await;
+
+    let (status, body) = list_notes(&env, &landlord_token, app_id).await;
+    assert_eq!(status, StatusCode::OK);
+    let bodies = body
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|note| note["body"].as_str().unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(bodies.len(), 2);
+    assert!(bodies.contains(&"Strong applicant"));
+    assert!(bodies.contains(&"Second note"));
+}
+
+/// A blank note body -> `400`.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn notes_add_blank_400(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, landlord_token) =
+        common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let (_t, tenant_token) = common::seed_authed_user(&env, &pool, UserRole::Tenant).await;
+    let listing_id = active_listing(&env, &pool, landlord_id, &landlord_token).await;
+    let (_s, app) = submit_app(&env, &tenant_token, listing_id, &app_body()).await;
+    let app_id = Uuid::parse_str(app["id"].as_str().unwrap()).unwrap();
+
+    let (status, _body) = add_note(&env, &landlord_token, app_id, "   ").await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+/// A landlord who does not review the application cannot note it -> `404`.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn notes_add_foreign_404(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (owner_id, owner_token) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let (_other, other_token) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let (_t, tenant_token) = common::seed_authed_user(&env, &pool, UserRole::Tenant).await;
+    let listing_id = active_listing(&env, &pool, owner_id, &owner_token).await;
+    let (_s, app) = submit_app(&env, &tenant_token, listing_id, &app_body()).await;
+    let app_id = Uuid::parse_str(app["id"].as_str().unwrap()).unwrap();
+
+    let (status, _body) = add_note(&env, &other_token, app_id, "Sneaky").await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+/// Noting an unknown application -> `404`.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn notes_add_unknown_404(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (_id, token) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+
+    let (status, _body) = add_note(&env, &token, Uuid::new_v4(), "Hi").await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+/// An owned application with no notes lists an empty array, not `404`.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn notes_list_empty_200(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, landlord_token) =
+        common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let (_t, tenant_token) = common::seed_authed_user(&env, &pool, UserRole::Tenant).await;
+    let listing_id = active_listing(&env, &pool, landlord_id, &landlord_token).await;
+    let (_s, app) = submit_app(&env, &tenant_token, listing_id, &app_body()).await;
+    let app_id = Uuid::parse_str(app["id"].as_str().unwrap()).unwrap();
+
+    let (status, body) = list_notes(&env, &landlord_token, app_id).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body.as_array().unwrap().len(), 0);
+}
+
+/// A non-reviewing landlord cannot list the notes -> `404`.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn notes_list_foreign_404(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (owner_id, owner_token) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let (_other, other_token) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let (_t, tenant_token) = common::seed_authed_user(&env, &pool, UserRole::Tenant).await;
+    let listing_id = active_listing(&env, &pool, owner_id, &owner_token).await;
+    let (_s, app) = submit_app(&env, &tenant_token, listing_id, &app_body()).await;
+    let app_id = Uuid::parse_str(app["id"].as_str().unwrap()).unwrap();
+    add_note(&env, &owner_token, app_id, "Private").await;
+
+    let (status, _body) = list_notes(&env, &other_token, app_id).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+/// A tenant cannot add notes -> `403`.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn notes_add_rejects_tenant_403(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (_id, token) = common::seed_authed_user(&env, &pool, UserRole::Tenant).await;
+
+    let (status, _body) = add_note(&env, &token, Uuid::new_v4(), "Hi").await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+}
+
+/// No auth cookie -> `401`.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn notes_requires_auth_401(pool: PgPool) {
+    let env = common::setup_test_server(pool, false).await;
+
+    let response = env
+        .server
+        .get(&format!("/api/v1/applications/{}/notes", Uuid::new_v4()))
+        .await;
+    assert_eq!(response.status_code(), StatusCode::UNAUTHORIZED);
 }

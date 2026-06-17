@@ -104,6 +104,8 @@ use crate::{
             applications::models::RentalApplication,
             applications::models::SubmitApplicationRequest,
             applications::models::ReviewApplicationRequest,
+            applications::models::ApplicationNote,
+            applications::models::AddNoteRequest,
             // Viewings models
             viewings::models::Viewing,
             viewings::models::ViewingStatus,

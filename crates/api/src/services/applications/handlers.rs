@@ -15,8 +15,8 @@ use crate::{
         applications::{
             db::{self, ReviewOutcome, SubmitOutcome},
             models::{
-                LandlordApplicationParams, RentalApplication, ReviewApplicationRequest,
-                SubmitApplicationRequest,
+                AddNoteRequest, ApplicationNote, LandlordApplicationParams, RentalApplication,
+                ReviewApplicationRequest, SubmitApplicationRequest,
             },
         },
         auth::{AuthUser, LandlordRole, RoleUser, TenantRole},
@@ -292,5 +292,87 @@ pub async fn review_application(
         ReviewOutcome::InvalidTransition => Err(ApiError::Conflict(
             "status transition is not allowed".to_owned(),
         )),
+    }
+}
+
+// `POST /api/v1/applications/{id}/notes`
+//
+/// Adds a private landlord note to an application the caller reviews. The note
+/// is never shown to the applicant.
+///
+/// # Errors
+///
+/// Returns `400` on a blank body, `404` when the caller is the landlord of no
+/// application with that id, or a database error.
+#[utoipa::path(
+    post,
+    path = "/applications/{id}/notes",
+    tag = "Applications",
+    request_body = AddNoteRequest,
+    params(
+        ("id" = Uuid, Path, description = "Application id")
+    ),
+    responses(
+        (status = 201, description = "Note added", body = ApplicationNote),
+        (status = 400, description = "Invalid input", body = ErrorResponse),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 403, description = "Landlord role required", body = ErrorResponse),
+        (status = 404, description = "Application not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse),
+    ),
+    security(
+        ("cookie_auth" = [])
+    )
+)]
+#[inline]
+pub async fn add_application_note(
+    State(state): State<Arc<AppState>>,
+    user: RoleUser<LandlordRole>,
+    Path(application_id): Path<Uuid>,
+    Json(payload): Json<AddNoteRequest>,
+) -> ApiResult<(StatusCode, Json<ApplicationNote>)> {
+    let body = String::try_from(payload)?;
+    match db::add_application_note(&state.db, application_id, user.0.sub, body).await? {
+        Some(row) => Ok((StatusCode::CREATED, Json(ApplicationNote::from(row)))),
+        None => Err(ApiError::NotFound("application not found".to_owned())),
+    }
+}
+
+// `GET /api/v1/applications/{id}/notes`
+//
+/// Lists the private landlord notes on an application the caller reviews (newest
+/// first).
+///
+/// # Errors
+///
+/// Returns `404` when the caller is the landlord of no application with that id,
+/// or a database error.
+#[utoipa::path(
+    get,
+    path = "/applications/{id}/notes",
+    tag = "Applications",
+    params(
+        ("id" = Uuid, Path, description = "Application id")
+    ),
+    responses(
+        (status = 200, description = "The application's notes", body = Vec<ApplicationNote>),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 403, description = "Landlord role required", body = ErrorResponse),
+        (status = 404, description = "Application not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse),
+    ),
+    security(
+        ("cookie_auth" = [])
+    )
+)]
+#[inline]
+pub async fn list_application_notes(
+    State(state): State<Arc<AppState>>,
+    user: RoleUser<LandlordRole>,
+    Path(application_id): Path<Uuid>,
+) -> ApiResult<Json<Vec<ApplicationNote>>> {
+    match db::list_application_notes(&state.db, application_id, user.0.sub).await? {
+        Some(rows) => Ok(Json(rows.into_iter().map(ApplicationNote::from).collect())),
+        None => Err(ApiError::NotFound("application not found".to_owned())),
     }
 }

@@ -22,5 +22,7 @@ pub fn router() -> OpenApiRouter<Arc<AppState>> {
         .routes(routes!(handlers::list_my_applications))
         .routes(routes!(handlers::list_landlord_applications))
         .routes(routes!(handlers::get_application))
+        .routes(routes!(handlers::add_application_note))
+        .routes(routes!(handlers::list_application_notes))
         .routes(routes!(handlers::review_application))
 }

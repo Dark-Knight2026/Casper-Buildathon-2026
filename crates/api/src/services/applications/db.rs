@@ -603,3 +603,98 @@ pub async fn review_application(
     tx.commit().await?;
     Ok(ReviewOutcome::Updated(Box::new(row)))
 }
+
+/// A private landlord note on an application, as stored.
+#[derive(Debug, FromRow)]
+pub struct ApplicationNoteRow {
+    /// Note id.
+    pub id: Uuid,
+    /// Application the note annotates.
+    pub application_id: Uuid,
+    /// Author (the reviewing landlord) user id.
+    pub author_id: Uuid,
+    /// Note text.
+    pub body: String,
+    /// Creation timestamp.
+    pub created_at: DateTime<Utc>,
+}
+
+/// Adds a private landlord note to an application the caller is the landlord of.
+///
+/// One atomic `INSERT ... SELECT`: the landlord owner-check lives in the
+/// `SELECT`'s `WHERE`, so a foreign or unknown application inserts nothing - an
+/// empty `RETURNING` becomes `None`, a `404` upstream that leaks nothing - with
+/// no check-then-insert window.
+///
+/// # Errors
+///
+/// Returns [`Error`] on any database failure.
+#[inline]
+pub async fn add_application_note(
+    pool: &PgPool,
+    application_id: Uuid,
+    landlord_id: Uuid,
+    body: String,
+) -> Result<Option<ApplicationNoteRow>, Error> {
+    let row = sqlx::query_as!(
+        ApplicationNoteRow,
+        r"
+            INSERT INTO application_notes (application_id, author_id, body)
+            SELECT $1, $2, $3
+            FROM rental_applications
+            WHERE id = $1 AND landlord_id = $2
+            RETURNING id, application_id, author_id, body, created_at
+        ",
+        application_id,
+        landlord_id,
+        body,
+    )
+    .fetch_optional(pool)
+    .await?;
+    Ok(row)
+}
+
+/// Lists the notes on an application the caller is the landlord of (newest
+/// first). A foreign or unknown application reads as `None` (a `404` upstream),
+/// kept distinct from an owned application that simply has no notes (an empty
+/// `Vec`).
+///
+/// # Errors
+///
+/// Returns [`Error`] on any database failure.
+#[inline]
+pub async fn list_application_notes(
+    pool: &PgPool,
+    application_id: Uuid,
+    landlord_id: Uuid,
+) -> Result<Option<Vec<ApplicationNoteRow>>, Error> {
+    let owns = sqlx::query_scalar!(
+        r#"
+            SELECT EXISTS(
+                SELECT 1 FROM rental_applications
+                WHERE id = $1 AND landlord_id = $2
+            ) AS "owns!"
+        "#,
+        application_id,
+        landlord_id,
+    )
+    .fetch_one(pool)
+    .await?;
+    if !owns {
+        return Ok(None);
+    }
+
+    let notes = sqlx::query_as!(
+        ApplicationNoteRow,
+        r"
+            SELECT id, application_id, author_id, body, created_at
+            FROM application_notes
+            WHERE application_id = $1
+            ORDER BY created_at DESC
+        ",
+        application_id,
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(Some(notes))
+}

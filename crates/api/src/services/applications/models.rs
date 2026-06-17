@@ -15,7 +15,9 @@ use uuid::Uuid;
 use crate::{
     common::{ApiError, ApiResult, Pagination},
     services::{
-        applications::db::{ApplicationRow, LandlordApplicationFilter, NewApplication},
+        applications::db::{
+            ApplicationNoteRow, ApplicationRow, LandlordApplicationFilter, NewApplication,
+        },
         listings::models::Listing,
     },
 };
@@ -351,6 +353,65 @@ impl LandlordApplicationParams {
             limit: pagination.page_size(),
             offset: pagination.offset(),
         })
+    }
+}
+
+/// A private landlord note on an application, as returned on the wire.
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ApplicationNote {
+    /// Note id.
+    #[schema(value_type = Uuid)]
+    pub id: Uuid,
+    /// Application the note annotates.
+    #[schema(value_type = Uuid)]
+    pub application_id: Uuid,
+    /// Author (reviewing landlord) user id.
+    #[schema(value_type = Uuid)]
+    pub author_id: Uuid,
+    /// Note text.
+    pub body: String,
+    /// Creation timestamp.
+    pub created_at: DateTime<Utc>,
+}
+
+impl From<ApplicationNoteRow> for ApplicationNote {
+    /// Builds the wire shape from a stored row.
+    #[inline]
+    fn from(row: ApplicationNoteRow) -> Self {
+        Self {
+            id: row.id,
+            application_id: row.application_id,
+            author_id: row.author_id,
+            body: row.body,
+            created_at: row.created_at,
+        }
+    }
+}
+
+/// Add-a-note payload (`POST /applications/{id}/notes`).
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AddNoteRequest {
+    /// Note text.
+    pub body: String,
+}
+
+impl TryFrom<AddNoteRequest> for String {
+    type Error = ApiError;
+
+    /// Validates and trims the note body into a stored note body.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ApiError::BadRequest`] when the body is blank.
+    #[inline]
+    fn try_from(request: AddNoteRequest) -> ApiResult<Self> {
+        let body = request.body.trim();
+        if body.is_empty() {
+            return Err(ApiError::BadRequest("note body cannot be empty".to_owned()));
+        }
+        Ok(body.to_owned())
     }
 }
 

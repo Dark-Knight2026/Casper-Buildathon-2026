@@ -16,7 +16,9 @@ use crate::{
     services::{
         auth::{AgentRole, LandlordRole, RoleUser, TenantRole},
         listings::{
-            db::{self, AuthorityUpload, ListingUpdate, StateTransition, WithdrawOutcome},
+            db::{
+                self, AuthorityUpload, ListingRow, ListingUpdate, StateTransition, WithdrawOutcome,
+            },
             models::{
                 AuthorityDocumentResponse, AuthorityDocumentType, CreateListingRequest,
                 FairHousingScreenResponse, LandlordListingParams, Listing, ListingHistoricalData,
@@ -132,7 +134,7 @@ fn media_multipart_err(err: &MultipartError) -> ApiError {
 
 /// Re-reads a listing's nested property and approved media and assembles the
 /// public wire shape. Shared by every handler that returns a single listing.
-async fn assemble_listing(state: &AppState, row: db::ListingRow) -> ApiResult<Listing> {
+async fn assemble_listing(state: &AppState, row: ListingRow) -> ApiResult<Listing> {
     let property = properties_db::fetch_property(&state.db, row.property_id)
         .await
         .ok()
@@ -146,7 +148,7 @@ async fn assemble_listing(state: &AppState, row: db::ListingRow) -> ApiResult<Li
 }
 
 /// Maps a [`StateTransition`] outcome to its row or the matching API error.
-fn transition_or_error(outcome: StateTransition) -> ApiResult<db::ListingRow> {
+fn transition_or_error(outcome: StateTransition) -> ApiResult<ListingRow> {
     match outcome {
         StateTransition::Updated(row) => Ok(*row),
         StateTransition::NotFound => Err(ApiError::NotFound("listing not found".to_owned())),
