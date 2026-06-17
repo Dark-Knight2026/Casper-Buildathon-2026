@@ -111,6 +111,9 @@ use crate::{
             applications::models::RequestBackgroundCheckRequest,
             applications::models::BackgroundCheckType,
             applications::models::BackgroundCheckStatus,
+            applications::models::ApplicationScore,
+            applications::models::ScoreFactor,
+            applications::models::ScoreFactorKind,
             // Viewings models
             viewings::models::Viewing,
             viewings::models::ViewingStatus,

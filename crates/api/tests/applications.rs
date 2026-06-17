@@ -185,6 +185,31 @@ async fn list_checks(env: &TestEnv, token: &str, application_id: Uuid) -> (Statu
     (code, resp.unwrap_or(Value::Null))
 }
 
+/// `GET /applications/{id}/score`.
+async fn get_score(env: &TestEnv, token: &str, application_id: Uuid) -> (StatusCode, Value) {
+    let (code, resp) = common::authed_request::<Value>(
+        &env.server,
+        &Method::GET,
+        &format!("/api/v1/applications/{application_id}/score"),
+        token,
+        &Value::Null,
+    )
+    .await;
+    (code, resp.unwrap_or(Value::Null))
+}
+
+/// The `score` of a named factor in a score `breakdown`.
+fn factor_score(body: &Value, factor: &str) -> i64 {
+    body["breakdown"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|entry| entry["factor"] == factor)
+        .unwrap_or_else(|| panic!("missing factor {factor}"))["score"]
+        .as_i64()
+        .unwrap()
+}
+
 // `POST /listings/{id}/applications` submit -----------------------------------
 
 /// A valid application against an active listing is created as `pending`, with
@@ -1143,6 +1168,99 @@ async fn background_check_requires_auth_401(pool: PgPool) {
             "/api/v1/applications/{}/background-checks",
             Uuid::new_v4()
         ))
+        .await;
+    assert_eq!(response.status_code(), StatusCode::UNAUTHORIZED);
+}
+
+// `GET /applications/{id}/score` scoring --------------------------------------
+
+/// The score returns a five-factor breakdown whose weights sum to 100.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn score_returns_breakdown(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, landlord_token) =
+        common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let (_t, tenant_token) = common::seed_authed_user(&env, &pool, UserRole::Tenant).await;
+    let listing_id = active_listing(&env, &pool, landlord_id, &landlord_token).await;
+    let (_s, app) = submit_app(&env, &tenant_token, listing_id, &app_body()).await;
+    let app_id = Uuid::parse_str(app["id"].as_str().unwrap()).unwrap();
+
+    let (status, body) = get_score(&env, &landlord_token, app_id).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert!(body["total"].is_i64());
+    let breakdown = body["breakdown"].as_array().unwrap();
+    assert_eq!(breakdown.len(), 5);
+    let weights = breakdown
+        .iter()
+        .map(|factor| factor["weight"].as_i64().unwrap())
+        .sum::<i64>();
+    assert_eq!(weights, 100);
+}
+
+/// The credit factor is zero before a check and full once one clears.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn score_credit_reflects_check(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, landlord_token) =
+        common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let (_t, tenant_token) = common::seed_authed_user(&env, &pool, UserRole::Tenant).await;
+    let listing_id = active_listing(&env, &pool, landlord_id, &landlord_token).await;
+    let (_s, app) = submit_app(&env, &tenant_token, listing_id, &app_body()).await;
+    let app_id = Uuid::parse_str(app["id"].as_str().unwrap()).unwrap();
+
+    let (_s, before) = get_score(&env, &landlord_token, app_id).await;
+    assert_eq!(factor_score(&before, "credit"), 0);
+
+    request_check(&env, &landlord_token, app_id, "credit").await;
+
+    let (_s, after) = get_score(&env, &landlord_token, app_id).await;
+    assert_eq!(factor_score(&after, "credit"), 25);
+}
+
+/// A landlord who does not review the application cannot score it -> `404`.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn score_foreign_404(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (owner_id, owner_token) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let (_other, other_token) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let (_t, tenant_token) = common::seed_authed_user(&env, &pool, UserRole::Tenant).await;
+    let listing_id = active_listing(&env, &pool, owner_id, &owner_token).await;
+    let (_s, app) = submit_app(&env, &tenant_token, listing_id, &app_body()).await;
+    let app_id = Uuid::parse_str(app["id"].as_str().unwrap()).unwrap();
+
+    let (status, _body) = get_score(&env, &other_token, app_id).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+/// Scoring an unknown application -> `404`.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn score_unknown_404(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (_id, token) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+
+    let (status, _body) = get_score(&env, &token, Uuid::new_v4()).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+/// A tenant cannot score an application -> `403`.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn score_rejects_tenant_403(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (_id, token) = common::seed_authed_user(&env, &pool, UserRole::Tenant).await;
+
+    let (status, _body) = get_score(&env, &token, Uuid::new_v4()).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+}
+
+/// No auth cookie -> `401`.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn score_requires_auth_401(pool: PgPool) {
+    let env = common::setup_test_server(pool, false).await;
+
+    let response = env
+        .server
+        .get(&format!("/api/v1/applications/{}/score", Uuid::new_v4()))
         .await;
     assert_eq!(response.status_code(), StatusCode::UNAUTHORIZED);
 }

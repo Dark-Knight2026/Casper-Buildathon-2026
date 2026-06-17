@@ -859,3 +859,89 @@ pub async fn list_background_checks(
     .await?;
     Ok(Some(rows))
 }
+
+/// The inputs the scoring layer needs, gathered owner-scoped for the landlord.
+#[derive(Debug)]
+pub struct ScoreInputs {
+    /// Applicant's gross monthly income.
+    pub monthly_income: f64,
+    /// The listing's monthly rent, absent if the listing was withdrawn.
+    pub rent_monthly: Option<f64>,
+    /// Free-text length of employment.
+    pub employment_length: String,
+    /// Whether a second reference was supplied.
+    pub has_second_reference: bool,
+    /// Latest credit check verdict: cleared / adverse / absent.
+    pub credit_cleared: Option<bool>,
+    /// Latest criminal check verdict.
+    pub criminal_cleared: Option<bool>,
+    /// Latest eviction check verdict.
+    pub eviction_cleared: Option<bool>,
+}
+
+/// Gathers the scoring inputs for an application the caller is the landlord of:
+/// the affordability/employment/reference fields, the listing's rent, and the
+/// latest completed background check per type. A foreign or unknown application
+/// reads as `None` (a `404` upstream).
+///
+/// # Errors
+///
+/// Returns [`Error`] on any database failure.
+#[inline]
+pub async fn fetch_score_inputs(
+    pool: &PgPool,
+    application_id: Uuid,
+    landlord_id: Uuid,
+) -> Result<Option<ScoreInputs>, Error> {
+    let application = sqlx::query!(
+        r#"
+            SELECT
+                a.monthly_income::float8 AS "monthly_income!",
+                a.employment_length,
+                a.reference2_name,
+                (l.terms->>'rentMonthly')::float8 AS rent_monthly
+            FROM rental_applications a
+            LEFT JOIN listings l ON l.id = a.listing_id
+            WHERE a.id = $1 AND a.landlord_id = $2
+        "#,
+        application_id,
+        landlord_id,
+    )
+    .fetch_optional(pool)
+    .await?;
+
+    let Some(application) = application else {
+        return Ok(None);
+    };
+
+    // Latest completed check per type, so a re-run supersedes an earlier verdict.
+    let checks = sqlx::query!(
+        r"
+            SELECT DISTINCT ON (check_type)
+                check_type, result->>'summary' AS summary
+            FROM background_checks
+            WHERE application_id = $1 AND status = 'completed'
+            ORDER BY check_type, created_at DESC
+        ",
+        application_id,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let cleared_for = |kind: &str| {
+        checks
+            .iter()
+            .find(|check| check.check_type == kind)
+            .map(|check| check.summary.as_deref() == Some("clear"))
+    };
+
+    Ok(Some(ScoreInputs {
+        monthly_income: application.monthly_income,
+        rent_monthly: application.rent_monthly,
+        employment_length: application.employment_length,
+        has_second_reference: application.reference2_name.is_some(),
+        credit_cleared: cleared_for("credit"),
+        criminal_cleared: cleared_for("criminal"),
+        eviction_cleared: cleared_for("eviction"),
+    }))
+}

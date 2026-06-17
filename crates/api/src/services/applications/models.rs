@@ -477,6 +477,44 @@ pub struct RequestBackgroundCheckRequest {
     pub check_type: BackgroundCheckType,
 }
 
+/// One weighted factor in an applicant's score.
+#[derive(Debug, Clone, Copy, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ScoreFactorKind {
+    /// Monthly income relative to rent.
+    Income,
+    /// Credit background check.
+    Credit,
+    /// Length of employment.
+    Employment,
+    /// Supplied references.
+    References,
+    /// Criminal/eviction background checks.
+    Background,
+}
+
+/// A single factor's contribution to an applicant's score.
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ScoreFactor {
+    /// Which factor this is.
+    pub factor: ScoreFactorKind,
+    /// The factor's maximum contribution.
+    pub weight: i32,
+    /// Points awarded, `0..=weight`.
+    pub score: i32,
+}
+
+/// A computed applicant score with its weighted breakdown (out of 100).
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ApplicationScore {
+    /// Total score, `0..=100`.
+    pub total: i32,
+    /// Per-factor contributions, summing to `total`.
+    pub breakdown: Vec<ScoreFactor>,
+}
+
 /// Trims a required free-text field, rejecting a blank value.
 fn required(field: &str, raw: &str) -> ApiResult<String> {
     let trimmed = raw.trim();

@@ -1,0 +1,35 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT DISTINCT ON (check_type)\n                check_type, result->>'summary' AS summary\n            FROM background_checks\n            WHERE application_id = $1 AND status = 'completed'\n            ORDER BY check_type, created_at DESC\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "check_type",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "background_checks",
+            "name": "check_type"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "summary",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      null
+    ]
+  },
+  "hash": "6c3da7ad3ce4d9c308f6f92853aa8f961c0a6fdb17052e27c431b7d9eb18cfa8"
+}

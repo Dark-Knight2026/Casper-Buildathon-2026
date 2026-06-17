@@ -16,10 +16,11 @@ use crate::{
         applications::{
             db::{self, ReviewOutcome, SubmitOutcome},
             models::{
-                AddNoteRequest, ApplicationNote, BackgroundCheck, LandlordApplicationParams,
-                RentalApplication, RequestBackgroundCheckRequest, ReviewApplicationRequest,
-                SubmitApplicationRequest,
+                AddNoteRequest, ApplicationNote, ApplicationScore, BackgroundCheck,
+                LandlordApplicationParams, RentalApplication, RequestBackgroundCheckRequest,
+                ReviewApplicationRequest, SubmitApplicationRequest,
             },
+            scoring,
         },
         auth::{AuthUser, LandlordRole, RoleUser, TenantRole},
         listings::db as listings_db,
@@ -489,6 +490,46 @@ pub async fn list_background_checks(
 ) -> ApiResult<Json<Vec<BackgroundCheck>>> {
     match db::list_background_checks(&state.db, application_id, user.0.sub).await? {
         Some(rows) => Ok(Json(rows.into_iter().map(BackgroundCheck::from).collect())),
+        None => Err(ApiError::NotFound("application not found".to_owned())),
+    }
+}
+
+// `GET /api/v1/applications/{id}/score`
+//
+/// The computed applicant score for an application the caller reviews, with its
+/// weighted breakdown. Recomputed on each read from current data and check
+/// results, never stored.
+///
+/// # Errors
+///
+/// Returns `404` when the caller is the landlord of no application with that id,
+/// or a database error.
+#[utoipa::path(
+    get,
+    path = "/applications/{id}/score",
+    tag = "Applications",
+    params(
+        ("id" = Uuid, Path, description = "Application id")
+    ),
+    responses(
+        (status = 200, description = "The application's score", body = ApplicationScore),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 403, description = "Landlord role required", body = ErrorResponse),
+        (status = 404, description = "Application not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse),
+    ),
+    security(
+        ("cookie_auth" = [])
+    )
+)]
+#[inline]
+pub async fn get_application_score(
+    State(state): State<Arc<AppState>>,
+    user: RoleUser<LandlordRole>,
+    Path(application_id): Path<Uuid>,
+) -> ApiResult<Json<ApplicationScore>> {
+    match db::fetch_score_inputs(&state.db, application_id, user.0.sub).await? {
+        Some(inputs) => Ok(Json(scoring::compute(&inputs))),
         None => Err(ApiError::NotFound("application not found".to_owned())),
     }
 }

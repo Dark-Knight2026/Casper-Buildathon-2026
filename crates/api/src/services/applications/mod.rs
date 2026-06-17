@@ -14,3 +14,5 @@ pub mod handlers;
 pub mod models;
 /// Router configuration for rental-application endpoints.
 pub mod routes;
+/// Applicant scoring (pure, deterministic).
+pub mod scoring;
