@@ -1,6 +1,5 @@
-import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Card,
   CardContent,
@@ -32,15 +31,14 @@ import { ApiClient } from '@/lib/api-client';
 
 /**
  * Per-listing applications for the landlord: list + approve/reject. The
- * all-listings inbox and rich review (scoring, notes, background checks) are a
- * post-hackathon extension — see docs/BACKEND_FILTER_GAPS.md.
+ * all-listings inbox and rich review (scoring, notes, background checks) live
+ * in the applications section (PL-43/44).
  */
 export default function ListingApplications() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [reviewingId, setReviewingId] = useState<string | null>(null);
 
   const { data: listing } = useQuery({
     queryKey: ['listing', id],
@@ -55,11 +53,11 @@ export default function ListingApplications() {
   });
   const applications = data?.data ?? [];
 
-  const review = async (applicationId: string, status: ReviewableStatus) => {
-    setReviewingId(applicationId);
-    try {
-      await reviewApplication(applicationId, status);
-      await queryClient.invalidateQueries({
+  const reviewMutation = useMutation({
+    mutationFn: (vars: { applicationId: string; status: ReviewableStatus }) =>
+      reviewApplication(vars.applicationId, vars.status),
+    onSuccess: (_updated, { status }) => {
+      queryClient.invalidateQueries({
         queryKey: ['listing-applications', id],
       });
       toast({
@@ -68,16 +66,14 @@ export default function ListingApplications() {
             ? 'Application approved'
             : 'Application rejected',
       });
-    } catch (error) {
+    },
+    onError: (error) =>
       toast({
         title: 'Could not update the application',
         description: ApiClient.handleError(error),
         variant: 'destructive',
-      });
-    } finally {
-      setReviewingId(null);
-    }
-  };
+      }),
+  });
 
   return (
     <div className="container mx-auto py-8 px-4 max-w-4xl">
@@ -116,92 +112,110 @@ export default function ListingApplications() {
         </Card>
       ) : (
         <div className="space-y-4">
-          {applications.map((app) => (
-            <Card key={app.id}>
-              <CardHeader>
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <CardTitle className="text-xl">{app.fullName}</CardTitle>
-                    <CardDescription className="flex flex-wrap items-center gap-3 mt-1">
-                      <span className="flex items-center gap-1">
-                        <Mail className="h-3.5 w-3.5" />
-                        {app.email}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Phone className="h-3.5 w-3.5" />
-                        {app.phone}
-                      </span>
-                    </CardDescription>
+          {applications.map((app) => {
+            const reviewingThis =
+              reviewMutation.isPending &&
+              reviewMutation.variables?.applicationId === app.id;
+            return (
+              <Card key={app.id}>
+                <CardHeader>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <CardTitle className="text-xl">{app.fullName}</CardTitle>
+                      <CardDescription className="flex flex-wrap items-center gap-3 mt-1">
+                        <span className="flex items-center gap-1">
+                          <Mail className="h-3.5 w-3.5" />
+                          {app.email}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <Phone className="h-3.5 w-3.5" />
+                          {app.phone}
+                        </span>
+                      </CardDescription>
+                    </div>
+                    <ApplicationStatusBadge status={app.status} />
                   </div>
-                  <ApplicationStatusBadge status={app.status} />
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                  <div>
-                    <p className="text-muted-foreground flex items-center gap-1">
-                      <DollarSign className="h-3.5 w-3.5" />
-                      Monthly income
-                    </p>
-                    <p className="font-semibold">
-                      ${app.monthlyIncome.toLocaleString()}
-                    </p>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                    <div>
+                      <p className="text-muted-foreground flex items-center gap-1">
+                        <DollarSign className="h-3.5 w-3.5" />
+                        Monthly income
+                      </p>
+                      <p className="font-semibold">
+                        ${app.monthlyIncome.toLocaleString()}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground flex items-center gap-1">
+                        <Briefcase className="h-3.5 w-3.5" />
+                        Employer
+                      </p>
+                      <p
+                        className="font-semibold truncate"
+                        title={app.employer}
+                      >
+                        {app.employer}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground flex items-center gap-1">
+                        <Calendar className="h-3.5 w-3.5" />
+                        Move-in
+                      </p>
+                      <p className="font-semibold">
+                        {format(new Date(app.moveInDate), 'MMM d, yyyy')}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Pets</p>
+                      <p className="font-semibold">
+                        {app.pets ? app.petDescription || 'Yes' : 'No'}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-muted-foreground flex items-center gap-1">
-                      <Briefcase className="h-3.5 w-3.5" />
-                      Employer
-                    </p>
-                    <p className="font-semibold truncate" title={app.employer}>
-                      {app.employer}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground flex items-center gap-1">
-                      <Calendar className="h-3.5 w-3.5" />
-                      Move-in
-                    </p>
-                    <p className="font-semibold">
-                      {format(new Date(app.moveInDate), 'MMM d, yyyy')}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Pets</p>
-                    <p className="font-semibold">
-                      {app.pets ? app.petDescription || 'Yes' : 'No'}
-                    </p>
-                  </div>
-                </div>
 
-                {app.additionalInfo && (
-                  <div className="text-sm">
-                    <p className="text-muted-foreground">
-                      Notes from applicant
-                    </p>
-                    <p>{app.additionalInfo}</p>
-                  </div>
-                )}
+                  {app.additionalInfo && (
+                    <div className="text-sm">
+                      <p className="text-muted-foreground">
+                        Notes from applicant
+                      </p>
+                      <p>{app.additionalInfo}</p>
+                    </div>
+                  )}
 
-                {app.status === 'pending' && (
-                  <div className="flex gap-2 pt-2 border-t">
-                    <Button
-                      onClick={() => review(app.id, 'approved')}
-                      disabled={reviewingId === app.id}
-                    >
-                      {reviewingId === app.id ? 'Saving…' : 'Approve'}
-                    </Button>
-                    <Button
-                      variant="destructive"
-                      onClick={() => review(app.id, 'rejected')}
-                      disabled={reviewingId === app.id}
-                    >
-                      Reject
-                    </Button>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          ))}
+                  {app.status === 'pending' && (
+                    <div className="flex gap-2 pt-2 border-t">
+                      <Button
+                        onClick={() =>
+                          reviewMutation.mutate({
+                            applicationId: app.id,
+                            status: 'approved',
+                          })
+                        }
+                        disabled={reviewingThis}
+                      >
+                        {reviewingThis ? 'Saving…' : 'Approve'}
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        onClick={() =>
+                          reviewMutation.mutate({
+                            applicationId: app.id,
+                            status: 'rejected',
+                          })
+                        }
+                        disabled={reviewingThis}
+                      >
+                        Reject
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
     </div>

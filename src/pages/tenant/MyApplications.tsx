@@ -1,11 +1,11 @@
-import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import { ApiClient } from '@/lib/api-client';
 import {
   getMyApplications,
   submitDraftApplication,
+  type ApplicationStatus,
 } from '@/services/applicationService';
 import { formatFullAddress } from '@/lib/listingDisplay';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -21,11 +21,20 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 
+/** Tenant-facing one-liner per application status (exhaustive over the enum). */
+const STATUS_MESSAGE: Record<ApplicationStatus, string> = {
+  draft: 'Draft — not yet submitted to the landlord.',
+  pending: 'Awaiting landlord review',
+  under_review: 'The landlord is reviewing your application.',
+  conditional: 'Conditionally approved — pending stated conditions.',
+  approved: 'Congratulations! Your application was approved.',
+  rejected: 'Unfortunately, your application was not approved.',
+};
+
 export default function MyApplications() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const [submittingId, setSubmittingId] = useState<string | null>(null);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['my-applications'],
@@ -33,22 +42,19 @@ export default function MyApplications() {
   });
   const applications = data?.data ?? [];
 
-  const submitDraft = async (id: string) => {
-    setSubmittingId(id);
-    try {
-      await submitDraftApplication(id);
-      await queryClient.invalidateQueries({ queryKey: ['my-applications'] });
+  const submitMutation = useMutation({
+    mutationFn: (id: string) => submitDraftApplication(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['my-applications'] });
       toast({ title: 'Application submitted' });
-    } catch (error) {
+    },
+    onError: (error) =>
       toast({
         title: 'Could not submit',
         description: ApiClient.handleError(error),
         variant: 'destructive',
-      });
-    } finally {
-      setSubmittingId(null);
-    }
-  };
+      }),
+  });
 
   if (isLoading) {
     return (
@@ -185,18 +191,7 @@ export default function MyApplications() {
                     <div className="flex items-center justify-between pt-4 border-t gap-4">
                       <div className="text-sm text-gray-600">
                         <span className="font-medium">Status:</span>{' '}
-                        {application.status === 'draft' &&
-                          'Draft — not yet submitted to the landlord.'}
-                        {application.status === 'pending' &&
-                          'Awaiting landlord review'}
-                        {application.status === 'under_review' &&
-                          'The landlord is reviewing your application.'}
-                        {application.status === 'conditional' &&
-                          'Conditionally approved — pending stated conditions.'}
-                        {application.status === 'approved' &&
-                          'Congratulations! Your application was approved.'}
-                        {application.status === 'rejected' &&
-                          'Unfortunately, your application was not approved.'}
+                        {STATUS_MESSAGE[application.status]}
                       </div>
                       <div className="flex gap-2 shrink-0">
                         {application.status === 'draft' && (
@@ -212,10 +207,16 @@ export default function MyApplications() {
                               Edit
                             </Button>
                             <Button
-                              disabled={submittingId === application.id}
-                              onClick={() => submitDraft(application.id)}
+                              disabled={
+                                submitMutation.isPending &&
+                                submitMutation.variables === application.id
+                              }
+                              onClick={() =>
+                                submitMutation.mutate(application.id)
+                              }
                             >
-                              {submittingId === application.id
+                              {submitMutation.isPending &&
+                              submitMutation.variables === application.id
                                 ? 'Submitting…'
                                 : 'Submit'}
                             </Button>

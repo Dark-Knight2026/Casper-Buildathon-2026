@@ -641,7 +641,9 @@ export default function ApplicationForm() {
                   >
                     I consent to a background and credit check as part of the
                     application process
-                    <RequiredMark />
+                    <span className="ml-1 text-muted-foreground">
+                      (required to submit)
+                    </span>
                   </Label>
                 </div>
               </div>

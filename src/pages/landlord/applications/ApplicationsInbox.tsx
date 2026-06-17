@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,6 +13,19 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command';
+import {
   Table,
   TableBody,
   TableCell,
@@ -22,8 +35,9 @@ import {
 } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ApplicationStatusBadge } from '@/components/application/ApplicationStatusBadge';
-import { Search, Eye, Inbox } from 'lucide-react';
+import { Search, Eye, Inbox, Check, ChevronsUpDown } from 'lucide-react';
 import { format } from 'date-fns';
+import { cn } from '@/lib/utils';
 import { useDebounce } from '@/hooks/useDebounce';
 import {
   getLandlordApplications,
@@ -32,9 +46,13 @@ import {
 } from '@/services/applicationService';
 import { getLandlordListings } from '@/services/listingService';
 
-/** Status filter options (single-valued — the backend takes one status). */
+/**
+ * Status filter options (single-valued — the backend takes one status).
+ * No `draft`: drafts are the tenant's unsubmitted, private applications and are
+ * excluded from the landlord surfaces server-side, so a draft filter would
+ * always return nothing.
+ */
 const STATUS_OPTIONS: { value: ApplicationStatus; label: string }[] = [
-  { value: 'draft', label: 'Draft' },
   { value: 'pending', label: 'Pending' },
   { value: 'under_review', label: 'Under review' },
   { value: 'conditional', label: 'Conditional' },
@@ -60,13 +78,6 @@ export default function ApplicationsInbox() {
   const [dateTo, setDateTo] = useState('');
 
   const debouncedSearch = useDebounce(search, 400);
-
-  // The landlord's listings, to label the listing filter (and resolve titles).
-  const { data: listingsPage } = useQuery({
-    queryKey: ['landlord-listings', 'for-filter'],
-    queryFn: () => getLandlordListings({ pageSize: 100 }),
-  });
-  const listings = listingsPage?.data ?? [];
 
   const params: LandlordApplicationParams = useMemo(
     () => ({
@@ -150,21 +161,9 @@ export default function ApplicationsInbox() {
             </Select>
           </div>
 
-          <div>
+          <div className="flex flex-col">
             <Label>Listing</Label>
-            <Select value={listingId} onValueChange={setListingId}>
-              <SelectTrigger className="mt-1">
-                <SelectValue placeholder="All listings" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All listings</SelectItem>
-                {listings.map((listing) => (
-                  <SelectItem key={listing.id} value={listing.id}>
-                    {listing.title}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <ListingFilterCombobox value={listingId} onChange={setListingId} />
           </div>
 
           <div>
@@ -286,5 +285,117 @@ export default function ApplicationsInbox() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+const LISTINGS_PAGE_SIZE = 50;
+
+/**
+ * Listing filter as a searchable combobox. Listings are paginated ("Load more")
+ * and filtered client-side as you type. The `/listings/landlord` endpoint has no
+ * `search` param yet, so a title you haven't loaded won't match until you load
+ * more — a backend `search` param (post-hackathon) would make this server-side.
+ */
+function ListingFilterCombobox({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  const { data, fetchNextPage, hasNextPage, isFetchingNextPage } =
+    useInfiniteQuery({
+      queryKey: ['landlord-listings', 'filter'],
+      queryFn: ({ pageParam }) =>
+        getLandlordListings({ pageSize: LISTINGS_PAGE_SIZE, page: pageParam }),
+      initialPageParam: 1,
+      getNextPageParam: (lastPage, allPages) => {
+        const nextPage = allPages.length + 1;
+        return nextPage <= lastPage.pageCount ? nextPage : undefined;
+      },
+    });
+
+  const listings = data?.pages.flatMap((page) => page.data) ?? [];
+  const selectedTitle = listings.find((listing) => listing.id === value)?.title;
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="mt-1 w-full justify-between font-normal"
+        >
+          <span className="truncate">
+            {value === 'all'
+              ? 'All listings'
+              : (selectedTitle ?? 'Selected listing')}
+          </span>
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        className="w-[--radix-popover-trigger-width] p-0"
+        align="start"
+      >
+        <Command>
+          <CommandInput placeholder="Search listings…" />
+          <CommandList>
+            <CommandEmpty>No listing found.</CommandEmpty>
+            <CommandGroup>
+              <CommandItem
+                value="All listings"
+                onSelect={() => {
+                  onChange('all');
+                  setOpen(false);
+                }}
+              >
+                <Check
+                  className={cn(
+                    'mr-2 h-4 w-4',
+                    value === 'all' ? 'opacity-100' : 'opacity-0'
+                  )}
+                />
+                All listings
+              </CommandItem>
+              {listings.map((listing) => (
+                <CommandItem
+                  key={listing.id}
+                  value={`${listing.title} ${listing.id}`}
+                  onSelect={() => {
+                    onChange(listing.id);
+                    setOpen(false);
+                  }}
+                >
+                  <Check
+                    className={cn(
+                      'mr-2 h-4 w-4',
+                      value === listing.id ? 'opacity-100' : 'opacity-0'
+                    )}
+                  />
+                  <span className="truncate">{listing.title}</span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+            {hasNextPage && (
+              <div className="p-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full"
+                  disabled={isFetchingNextPage}
+                  onClick={() => fetchNextPage()}
+                >
+                  {isFetchingNextPage ? 'Loading…' : 'Load more'}
+                </Button>
+              </div>
+            )}
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
   );
 }

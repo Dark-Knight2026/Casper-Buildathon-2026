@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Card,
   CardContent,
@@ -92,6 +92,15 @@ const BG_STATUS_STYLE: Record<BackgroundCheckStatus, string> = {
   failed: 'bg-red-500',
 };
 
+/** Shared error-toast payload for the review/note/check mutations. */
+function errorToast(title: string, error: unknown) {
+  return {
+    title,
+    description: ApiClient.handleError(error),
+    variant: 'destructive' as const,
+  };
+}
+
 /**
  * Landlord application detail + richer review (PL-44) with internal notes
  * (PL-45) and background checks (PL-46). Reads one application via
@@ -105,11 +114,7 @@ export default function ApplicationDetail() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [reviewing, setReviewing] = useState(false);
   const [noteDraft, setNoteDraft] = useState('');
-  const [addingNote, setAddingNote] = useState(false);
-  const [requestingCheck, setRequestingCheck] =
-    useState<BackgroundCheckType | null>(null);
 
   const {
     data: application,
@@ -133,65 +138,41 @@ export default function ApplicationDetail() {
     enabled: !!id,
   });
 
-  const review = async (status: ReviewableStatus) => {
-    if (!id) return;
-    setReviewing(true);
-    try {
-      const updated = await reviewApplication(id, status);
+  const reviewMutation = useMutation({
+    mutationFn: (status: ReviewableStatus) =>
+      reviewApplication(id as string, status),
+    onSuccess: (updated, status) => {
       queryClient.setQueryData(['application', id], updated);
-      await queryClient.invalidateQueries({
-        queryKey: ['landlord-applications'],
-      });
+      queryClient.invalidateQueries({ queryKey: ['landlord-applications'] });
       toast({ title: `Application ${PAST_TENSE[status]}` });
-    } catch (error) {
-      toast({
-        title: 'Could not update the application',
-        description: ApiClient.handleError(error),
-        variant: 'destructive',
-      });
-    } finally {
-      setReviewing(false);
-    }
-  };
+    },
+    onError: (error) =>
+      toast(errorToast('Could not update the application', error)),
+  });
 
-  const addNote = async () => {
-    const body = noteDraft.trim();
-    if (!id || !body) return;
-    setAddingNote(true);
-    try {
-      await addApplicationNote(id, body);
+  const noteMutation = useMutation({
+    mutationFn: (body: string) => addApplicationNote(id as string, body),
+    onSuccess: () => {
       setNoteDraft('');
-      await queryClient.invalidateQueries({
-        queryKey: ['application-notes', id],
-      });
-    } catch (error) {
-      toast({
-        title: 'Could not add the note',
-        description: ApiClient.handleError(error),
-        variant: 'destructive',
-      });
-    } finally {
-      setAddingNote(false);
-    }
-  };
+      queryClient.invalidateQueries({ queryKey: ['application-notes', id] });
+    },
+    onError: (error) => toast(errorToast('Could not add the note', error)),
+  });
 
-  const requestCheck = async (type: BackgroundCheckType) => {
-    if (!id) return;
-    setRequestingCheck(type);
-    try {
-      await requestBackgroundCheck(id, type);
-      await queryClient.invalidateQueries({
+  const checkMutation = useMutation({
+    mutationFn: (type: BackgroundCheckType) =>
+      requestBackgroundCheck(id as string, type),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
         queryKey: ['application-background-checks', id],
       });
-    } catch (error) {
-      toast({
-        title: 'Could not request the check',
-        description: ApiClient.handleError(error),
-        variant: 'destructive',
-      });
-    } finally {
-      setRequestingCheck(null);
-    }
+    },
+    onError: (error) => toast(errorToast('Could not request the check', error)),
+  });
+
+  const submitNote = () => {
+    const body = noteDraft.trim();
+    if (body) noteMutation.mutate(body);
   };
 
   return (
@@ -271,8 +252,8 @@ export default function ApplicationDetail() {
                   <Button
                     key={action.status}
                     variant={action.variant}
-                    disabled={reviewing}
-                    onClick={() => review(action.status)}
+                    disabled={reviewMutation.isPending}
+                    onClick={() => reviewMutation.mutate(action.status)}
                   >
                     <action.icon className="mr-2 h-4 w-4" />
                     {action.label}
@@ -397,10 +378,13 @@ export default function ApplicationDetail() {
                     check={existing}
                     disabled={
                       !application.backgroundCheckConsent ||
-                      requestingCheck !== null
+                      checkMutation.isPending
                     }
-                    requesting={requestingCheck === type}
-                    onRequest={() => requestCheck(type)}
+                    requesting={
+                      checkMutation.isPending &&
+                      checkMutation.variables === type
+                    }
+                    onRequest={() => checkMutation.mutate(type)}
                   />
                 );
               })}
@@ -427,10 +411,10 @@ export default function ApplicationDetail() {
                   rows={3}
                 />
                 <Button
-                  onClick={addNote}
-                  disabled={addingNote || !noteDraft.trim()}
+                  onClick={submitNote}
+                  disabled={noteMutation.isPending || !noteDraft.trim()}
                 >
-                  {addingNote ? 'Adding…' : 'Add note'}
+                  {noteMutation.isPending ? 'Adding…' : 'Add note'}
                 </Button>
               </div>
 

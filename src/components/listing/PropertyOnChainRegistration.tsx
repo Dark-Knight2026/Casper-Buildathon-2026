@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { ExternalLink, Loader2, ShieldCheck } from 'lucide-react';
 import {
   ClickProvider,
@@ -30,6 +31,7 @@ import {
 } from '@/lib/casper/propertyRegistry';
 import { WALLET_PROVIDERS } from '@/pages/auth/register/constants';
 import { ICO_CONFIG } from '@/constants/ico';
+import { getProperty } from '@/services/propertyAssetService';
 import type { Listing } from '@/types/listingContract';
 
 /**
@@ -48,16 +50,17 @@ import type { Listing } from '@/types/listingContract';
  * cspr.live link with no indexer. The contract-assigned `property_id` and steps
  * 2/3 (attach token, activate) light up with the indexer read service (PL-34).
  *
- * `totalSupply` and `metadataUri` aren't on the off-chain model and the backend
- * doesn't form them yet (no per-property supply; the canonical-payload IPFS pin
- * is backend-stubbed), so they're defaulted for a one-click register. **TODO:**
- * move `metadataUri` to a backend-pinned canonical property payload.
+ * `metadataUri` now comes from the backend — it pins the canonical property
+ * payload to IPFS on create/update and stamps `property.metadataUri`. We use
+ * that, falling back to a placeholder only for un-pinned legacy rows. `totalSupply`
+ * is still defaulted (the backend has no per-property supply) for a one-click
+ * register.
  */
 
 const explorerDeployUrl = (txHash: string) =>
   `${ICO_CONFIG.CASPER.explorerUrl}/deploy/${txHash}`;
 
-/** Placeholder until the backend pins the canonical property payload. */
+/** Fallback for legacy rows whose `metadataUri` the backend hasn't pinned yet. */
 const placeholderMetadataUri = (propertyId: string) =>
   `ipfs://leasefi/property/${propertyId}`;
 
@@ -138,8 +141,20 @@ function RegistrationFlow({
     issuerUserId
   );
 
+  // The backend pins the canonical payload and stamps `property.metadataUri`.
+  // Prefer the listing's nested property; fetch it only if that's absent.
+  const nestedMetadataUri = listing.property?.metadataUri ?? null;
+  const { data: fetchedProperty } = useQuery({
+    queryKey: ['property', listing.propertyId],
+    queryFn: () => getProperty(listing.propertyId),
+    enabled: nestedMetadataUri === null,
+  });
+
   const totalSupply = DEFAULT_OWNERSHIP_TOKEN_SUPPLY;
-  const metadataUri = placeholderMetadataUri(listing.propertyId);
+  const metadataUri =
+    nestedMetadataUri ??
+    fetchedProperty?.metadataUri ??
+    placeholderMetadataUri(listing.propertyId);
 
   const { step, txHash, error } = create.state;
   const hasWalletSession = Boolean(account?.publicKey && clickRef);

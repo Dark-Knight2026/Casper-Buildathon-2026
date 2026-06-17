@@ -61,6 +61,11 @@ export interface PropertyAsset {
   livingArea: number | null; // sqft
   yearBuilt: number | null;
   parkingFeatures: string[]; // replaces the legacy flat parkingAvailable boolean
+  // Off-chain metadata pointer — server-derived `ipfs://{cid}`, pinned on
+  // create/update. Read-only (never sent in a request). The arg the on-chain
+  // PropertyRegistry takes. Null on un-pinned legacy rows; CID is synthetic
+  // while the backend pinner is stubbed.
+  metadataUri: string | null;
   createdAt: string;
   updatedAt: string;
 }
