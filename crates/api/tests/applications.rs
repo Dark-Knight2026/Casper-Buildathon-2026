@@ -1471,14 +1471,21 @@ async fn list_listing_applications_excludes_draft(pool: PgPool) {
     let body = body.unwrap();
 
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["itemCount"], 1, "draft must not be counted for the landlord");
+    assert_eq!(
+        body["itemCount"], 1,
+        "draft must not be counted for the landlord"
+    );
     let statuses = body["data"]
         .as_array()
         .unwrap()
         .iter()
         .map(|app| app["status"].as_str().unwrap())
         .collect::<Vec<_>>();
-    assert_eq!(statuses, ["pending"], "only the submitted application is visible");
+    assert_eq!(
+        statuses,
+        ["pending"],
+        "only the submitted application is visible"
+    );
 }
 
 /// The cross-listing landlord feed (`GET /applications/landlord`) likewise omits
@@ -1499,7 +1506,10 @@ async fn landlord_apps_excludes_draft(pool: PgPool) {
     let (status, body) = landlord_apps(&env, &landlord_token, "").await;
 
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["itemCount"], 1, "draft must not appear in the landlord feed");
+    assert_eq!(
+        body["itemCount"], 1,
+        "draft must not appear in the landlord feed"
+    );
     assert_eq!(body["data"][0]["status"], "pending");
 }
 

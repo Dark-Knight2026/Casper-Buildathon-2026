@@ -4,7 +4,8 @@
 use indexer::{
     config::ContractType,
     events::{
-        EventType, cep18::Cep18EventType, ico::IcoEventType, user_registry::UserRegistryEventType,
+        EventType, cep18::Cep18EventType, ico::IcoEventType,
+        property_registry::PropertyRegistryEventType, user_registry::UserRegistryEventType,
     },
 };
 
@@ -108,6 +109,23 @@ fn user_registry_user_created_parses_to_correct_variant() {
 #[test]
 fn user_registry_unknown_event_name_returns_error() {
     assert!(EventType::parse(ContractType::UserRegistry, "UnknownEvent").is_err());
+}
+
+// PropertyRegistry events -----------------------------------------------------
+
+/// `PropertyCreated` on the `PropertyRegistry` contract must resolve correctly.
+#[test]
+fn property_registry_property_created_parses_to_correct_variant() {
+    assert_eq!(
+        EventType::parse(ContractType::PropertyRegistry, "PropertyCreated").unwrap(),
+        EventType::PropertyRegistry(PropertyRegistryEventType::PropertyCreated),
+    );
+}
+
+/// An unrecognized event name on the `PropertyRegistry` contract must return `Err`.
+#[test]
+fn property_registry_unknown_event_name_returns_error() {
+    assert!(EventType::parse(ContractType::PropertyRegistry, "UnknownEvent").is_err());
 }
 
 // Unknown contract type -------------------------------------------------------

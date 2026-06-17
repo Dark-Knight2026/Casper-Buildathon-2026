@@ -19,9 +19,8 @@ use crate::{
     error::{IndexerError, IndexerResult},
     event_trait::{EventContext, IndexableEvent},
     events::{
-        cep18::Cep18EventType, ico::IcoEventType,
-        property_registry::PropertyRegistryEventType, staking::StakingEventType,
-        user_registry::UserRegistryEventType, vesting::VestingEventType,
+        cep18::Cep18EventType, ico::IcoEventType, property_registry::PropertyRegistryEventType,
+        staking::StakingEventType, user_registry::UserRegistryEventType, vesting::VestingEventType,
     },
 };
 

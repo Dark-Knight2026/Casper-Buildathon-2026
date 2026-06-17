@@ -290,9 +290,10 @@ fn active_contracts_returns_all_when_fully_configured() {
         staking: Some(ContractEntry::new("10", 0)),
         vesting: Some(ContractEntry::new("11", 0)),
         user_registry: Some(ContractEntry::new("12", 0)),
+        property_registry: Some(ContractEntry::new("13", 0)),
     };
 
-    assert_eq!(registry.active_contracts().len(), 12);
+    assert_eq!(registry.active_contracts().len(), 13);
 }
 
 #[test]
