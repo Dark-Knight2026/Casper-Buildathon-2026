@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE properties\n            SET nft_token_id = $2,\n                is_tokenized = TRUE,\n                tokenized_at = NOW()\n            WHERE metadata_uri = $1\n              AND is_tokenized = FALSE\n              AND deleted_at IS NULL\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "5eb1d7dea51f57c3d1693feb49977cce975fe200c4bc4b8f9d3044c91b11bd5a"
+}

@@ -1199,3 +1199,45 @@ pub async fn set_user_onchain_id(
 
     Ok(result.rows_affected() > 0)
 }
+
+/// Marks the backend property matching `metadata_uri` as tokenized on-chain,
+/// stamping the contract-assigned id.
+///
+/// Matches on `properties.metadata_uri` - the `ipfs://{cid}` the backend pinned
+/// and the frontend passed verbatim into `create_property`, the one key shared
+/// by both sides (the event carries no backend id). Idempotent: the
+/// `is_tokenized = FALSE` guard makes a re-processed event (or a concurrent
+/// writer) a no-op, and writing `nft_token_id` alongside the flag satisfies the
+/// `tokenization_consistency` CHECK.
+///
+/// Returns `true` when a row was updated, `false` when no live, untokenized
+/// property carries that `metadata_uri` (backend state has not caught up, or it
+/// was already reconciled) - the caller logs and skips rather than failing.
+///
+/// # Errors
+///
+/// Returns [`IndexerError::Database`](IndexerError::Database) on SQL failures.
+#[inline]
+pub async fn set_property_tokenized(
+    tx: &mut PgTransaction<'_>,
+    metadata_uri: &str,
+    onchain_property_id: &str,
+) -> IndexerResult<bool> {
+    let result = sqlx::query!(
+        r"
+            UPDATE properties
+            SET nft_token_id = $2,
+                is_tokenized = TRUE,
+                tokenized_at = NOW()
+            WHERE metadata_uri = $1
+              AND is_tokenized = FALSE
+              AND deleted_at IS NULL
+        ",
+        metadata_uri,
+        onchain_property_id,
+    )
+    .execute(tx.as_mut())
+    .await?;
+
+    Ok(result.rows_affected() > 0)
+}
