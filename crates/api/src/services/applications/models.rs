@@ -15,7 +15,6 @@ use uuid::Uuid;
 
 use crate::{
     common::{ApiError, ApiResult, Pagination},
-    providers::{BackgroundCheckStatus, BackgroundCheckType},
     services::{
         applications::db::{
             ApplicationNoteRow, ApplicationRow, BackgroundCheckRow, LandlordApplicationFilter,
@@ -24,6 +23,10 @@ use crate::{
         listings::models::Listing,
     },
 };
+// The check-type/status vocabulary is owned by the provider port but is part of
+// the wire contract, so re-export it here as the application models' own - this
+// keeps the OpenAPI schema registry uniformly `models::`-sourced.
+pub use crate::providers::background_check::{BackgroundCheckStatus, BackgroundCheckType};
 
 /// Lifecycle status of an application. Stored as TEXT (CHECK) in the DB; parsed
 /// into this enum at the model boundary.

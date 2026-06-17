@@ -12,7 +12,6 @@ use utoipa::{
 
 use crate::{
     onchain::{ico, staking, transactions, vesting},
-    providers::background_check,
     services::{
         analytics, applications, auth, favorites, health, listings, properties, tax, users,
         viewings,
@@ -110,8 +109,8 @@ use crate::{
             applications::models::AddNoteRequest,
             applications::models::BackgroundCheck,
             applications::models::RequestBackgroundCheckRequest,
-            background_check::BackgroundCheckType,
-            background_check::BackgroundCheckStatus,
+            applications::models::BackgroundCheckType,
+            applications::models::BackgroundCheckStatus,
             // Viewings models
             viewings::models::Viewing,
             viewings::models::ViewingStatus,
