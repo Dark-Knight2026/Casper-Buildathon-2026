@@ -39,6 +39,7 @@ import { TrustBadges } from '@/components/property/TrustBadges';
 import { ListingLifecycle } from '@/components/listing/ListingLifecycle';
 import { AuthorityGate } from '@/components/listing/AuthorityGate';
 import { FairHousingScreen } from '@/components/listing/FairHousingScreen';
+import { PropertyOnChainRegistration } from '@/components/listing/PropertyOnChainRegistration';
 import {
   getListing,
   getListingStatistics,
@@ -224,6 +225,7 @@ export default function PropertyDetail() {
           <AuthorityGate listing={listing} />
           <FairHousingScreen listing={listing} />
         </div>
+        <PropertyOnChainRegistration listing={listing} />
       </div>
 
       {/* Image Gallery */}
