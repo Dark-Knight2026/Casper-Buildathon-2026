@@ -126,7 +126,13 @@ export function SavePropertyButton({
     <Button
       variant={variant}
       size={size}
-      className={className}
+      className={cn(
+        // Saved: keep a plain white surface (no blue-tinted accent hover) with
+        // a red heart — the "on" state reads from the heart, not the background.
+        isSaved &&
+          'bg-background text-foreground hover:bg-background hover:text-foreground',
+        className
+      )}
       onClick={handleClick}
       disabled={pending}
       aria-pressed={isSaved}

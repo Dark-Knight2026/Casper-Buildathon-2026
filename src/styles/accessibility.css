@@ -55,7 +55,6 @@
   outline-offset: 2px;
 }
 
-
 /* Focus within for containers */
 *:focus-within {
   /* Optional: Add subtle background for containers with focused children */
@@ -83,7 +82,7 @@
   * {
     border-color: currentColor;
   }
-  
+
   button,
   a,
   input,
@@ -106,11 +105,10 @@ select:invalid {
   outline-color: #dc2626;
 }
 
-
 /* Required field indicator */
-[aria-required="true"]::after,
+[aria-required='true']::after,
 .required::after {
-  content: " *";
+  content: ' *';
   color: #dc2626;
   font-weight: bold;
 }
@@ -119,14 +117,14 @@ select:invalid {
    Color/severity styling is opted-in via [role="alert"][data-severity="…"]
    rules below — generic [role="alert"] must not force a red error palette,
    otherwise it overrides shadcn Alert variants on every banner in the app. */
-[role="alert"],
-[aria-live="assertive"] {
+[role='alert'],
+[aria-live='assertive'] {
   padding: 0.75rem;
   border-radius: 0.375rem;
 }
 
 /* Success message styling */
-[role="status"][data-type="success"] {
+[role='status'][data-type='success'] {
   padding: 0.75rem;
   border-radius: 0.375rem;
   background-color: #dcfce7;
@@ -135,38 +133,38 @@ select:invalid {
 }
 
 /* Loading indicator */
-[aria-busy="true"] {
+[aria-busy='true'] {
   cursor: wait;
   opacity: 0.6;
 }
 
 /* Disabled state */
-[aria-disabled="true"],
+[aria-disabled='true'],
 :disabled {
   cursor: not-allowed;
   opacity: 0.5;
 }
 
 /* Expanded/collapsed indicators */
-[aria-expanded="true"] > .expand-icon {
+[aria-expanded='true'] > .expand-icon {
   transform: rotate(180deg);
 }
 
-[aria-expanded="false"] > .expand-icon {
+[aria-expanded='false'] > .expand-icon {
   transform: rotate(0deg);
 }
 
 /* Selected state */
-[aria-selected="true"] {
+[aria-selected='true'] {
   background-color: #dbeafe;
   border-color: #2563eb;
 }
 
-/* Pressed state for toggle buttons */
-[aria-pressed="true"] {
-  background-color: #2563eb;
-  color: white;
-}
+/* Pressed/toggle state is managed per-component (shadcn variants / Tailwind),
+   not globally — a blanket `[aria-pressed="true"]` blue fights the design system
+   (e.g. it painted the save-favourite heart button blue and forced ICO toggles
+   to use `!important` to escape it). Keep the visual "on" state with the
+   component, not here. */
 
 /* Hidden content */
 /* Note: Do NOT hide [aria-hidden="true"] with CSS - Radix UI uses this attribute
@@ -204,7 +202,7 @@ select:invalid {
 }
 
 /* Accessible tooltips */
-[role="tooltip"] {
+[role='tooltip'] {
   position: absolute;
   z-index: 1000;
   padding: 0.5rem 0.75rem;
@@ -216,14 +214,14 @@ select:invalid {
 }
 
 /* Accessible modals */
-[role="dialog"],
-[role="alertdialog"] {
+[role='dialog'],
+[role='alertdialog'] {
   position: fixed;
   z-index: 1000;
 }
 
-[role="dialog"][aria-modal="true"],
-[role="alertdialog"][aria-modal="true"] {
+[role='dialog'][aria-modal='true'],
+[role='alertdialog'][aria-modal='true'] {
   /* Ensure modal is on top */
 }
 
@@ -235,8 +233,8 @@ table caption {
   caption-side: top;
 }
 
-th[scope="col"],
-th[scope="row"] {
+th[scope='col'],
+th[scope='row'] {
   font-weight: 600;
 }
 
@@ -246,40 +244,40 @@ nav[aria-labelledby] {
   /* Ensure navigation is properly labeled */
 }
 
-[aria-current="page"] {
+[aria-current='page'] {
   font-weight: 600;
   color: #2563eb;
   border-bottom: 2px solid #2563eb;
 }
 
 /* Accessible landmarks */
-main[id="main-content"] {
+main[id='main-content'] {
   /* Main content landmark */
 }
 
 /* Print styles for accessibility */
 @media print {
   .no-print,
-  [aria-hidden="true"] {
+  [aria-hidden='true'] {
     display: none !important;
   }
-  
+
   a[href]::after {
-    content: " (" attr(href) ")";
+    content: ' (' attr(href) ')';
   }
-  
+
   abbr[title]::after {
-    content: " (" attr(title) ")";
+    content: ' (' attr(title) ')';
   }
 }
 
 /* Touch target size - minimum 44x44px for WCAG AAA */
 button,
 a,
-input[type="checkbox"],
-input[type="radio"],
-[role="button"],
-[role="link"] {
+input[type='checkbox'],
+input[type='radio'],
+[role='button'],
+[role='link'] {
   min-height: 44px;
   min-width: 44px;
   display: inline-flex;
@@ -344,58 +342,58 @@ td a {
 }
 
 /* Accessible dropdown */
-[role="listbox"],
-[role="menu"] {
+[role='listbox'],
+[role='menu'] {
   max-height: 300px;
   overflow-y: auto;
 }
 
-[role="option"]:focus,
-[role="menuitem"]:focus {
+[role='option']:focus,
+[role='menuitem']:focus {
   background-color: #dbeafe;
   outline: none;
 }
 
 /* Accessible progress bars */
-[role="progressbar"] {
+[role='progressbar'] {
   height: 1rem;
   background-color: #e5e7eb;
   border-radius: 9999px;
   overflow: hidden;
 }
 
-[role="progressbar"] > div {
+[role='progressbar'] > div {
   height: 100%;
   background-color: #2563eb;
   transition: width 0.3s ease;
 }
 
 /* Accessible alerts */
-[role="alert"] {
+[role='alert'] {
   padding: 1rem;
   border-radius: 0.5rem;
   margin-bottom: 1rem;
 }
 
-[role="alert"][data-severity="error"] {
+[role='alert'][data-severity='error'] {
   background-color: #fee2e2;
   border: 1px solid #dc2626;
   color: #991b1b;
 }
 
-[role="alert"][data-severity="warning"] {
+[role='alert'][data-severity='warning'] {
   background-color: #fef3c7;
   border: 1px solid #f59e0b;
   color: #92400e;
 }
 
-[role="alert"][data-severity="info"] {
+[role='alert'][data-severity='info'] {
   background-color: #dbeafe;
   border: 1px solid #2563eb;
   color: #1e40af;
 }
 
-[role="alert"][data-severity="success"] {
+[role='alert'][data-severity='success'] {
   background-color: #dcfce7;
   border: 1px solid #16a34a;
   color: #166534;

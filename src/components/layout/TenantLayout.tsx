@@ -14,6 +14,7 @@ import {
   Wrench,
   RefreshCw,
   MessageSquare,
+  Heart,
   User,
   Menu,
   X,
@@ -31,7 +32,8 @@ const PLACEHOLDER_LAST = 'User';
 
 function headerInitials(profile: UserType): string {
   const isPlaceholder =
-    profile.firstName === PLACEHOLDER_FIRST && profile.lastName === PLACEHOLDER_LAST;
+    profile.firstName === PLACEHOLDER_FIRST &&
+    profile.lastName === PLACEHOLDER_LAST;
   if (isPlaceholder) return '';
   return [profile.firstName?.[0], profile.lastName?.[0]]
     .filter(Boolean)
@@ -39,7 +41,13 @@ function headerInitials(profile: UserType): string {
     .toUpperCase();
 }
 
-function HeaderAvatar({ profile, onNavigate }: { profile: UserType; onNavigate?: () => void }) {
+function HeaderAvatar({
+  profile,
+  onNavigate,
+}: {
+  profile: UserType;
+  onNavigate?: () => void;
+}) {
   const initials = headerInitials(profile);
   return (
     <Link
@@ -63,14 +71,15 @@ function HeaderAvatar({ profile, onNavigate }: { profile: UserType; onNavigate?:
 // RecommendedProperties "See all") so the sidebar stays focused on the
 // core tenant workflow surfaces.
 const NAV_LINKS = [
-  { to: '/tenant/dashboard',       label: 'Dashboard',    icon: LayoutDashboard },
-  { to: '/tenant/properties',      label: 'My Properties', icon: Home },
-  { to: '/tenant/property-search', label: 'Browse',       icon: Search },
-  { to: '/tenant/leases',          label: 'Leases',       icon: FileText },
-  { to: '/tenant/payments',        label: 'Payments',     icon: CreditCard },
-  { to: '/tenant/maintenance',     label: 'Maintenance',  icon: Wrench },
-  { to: '/tenant/renewals',        label: 'Renewals',     icon: RefreshCw },
-  { to: '/tenant/messages',         label: 'Messages',     icon: MessageSquare },
+  { to: '/tenant/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { to: '/tenant/properties', label: 'My Properties', icon: Home },
+  { to: '/tenant/property-search', label: 'Browse', icon: Search },
+  { to: '/tenant/saved-properties', label: 'Saved', icon: Heart },
+  { to: '/tenant/leases', label: 'Leases', icon: FileText },
+  { to: '/tenant/payments', label: 'Payments', icon: CreditCard },
+  { to: '/tenant/maintenance', label: 'Maintenance', icon: Wrench },
+  { to: '/tenant/renewals', label: 'Renewals', icon: RefreshCw },
+  { to: '/tenant/messages', label: 'Messages', icon: MessageSquare },
 ];
 
 export default function TenantLayout() {
@@ -92,7 +101,8 @@ export default function TenantLayout() {
     window.location.assign('/');
   };
 
-  const isActive = (to: string) => pathname === to || pathname.startsWith(to + '/');
+  const isActive = (to: string) =>
+    pathname === to || pathname.startsWith(to + '/');
 
   useEffect(() => {
     const onResize = () => {
@@ -148,10 +158,14 @@ export default function TenantLayout() {
           <div className="lg:hidden">
             <button
               className="p-2 rounded-md text-muted-foreground hover:text-foreground"
-              onClick={() => setMobileOpen(prev => !prev)}
+              onClick={() => setMobileOpen((prev) => !prev)}
               aria-label="Toggle menu"
             >
-              {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+              {mobileOpen ? (
+                <X className="h-5 w-5" />
+              ) : (
+                <Menu className="h-5 w-5" />
+              )}
             </button>
           </div>
         </div>
@@ -183,7 +197,10 @@ export default function TenantLayout() {
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 {profile && (
-                  <HeaderAvatar profile={profile} onNavigate={() => setMobileOpen(false)} />
+                  <HeaderAvatar
+                    profile={profile}
+                    onNavigate={() => setMobileOpen(false)}
+                  />
                 )}
                 <Link
                   to="/help"
