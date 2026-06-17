@@ -1105,7 +1105,7 @@ fn test_finalize_already_finalized_lease_should_revert() {
 #[test]
 fn test_cancel_lease_agreement_should_revert_if_tenant_is_calling() {
     let mut test_data = setup(odra_test::env());
-    let params = generate_lease_agreement_creation_params(&test_data);
+    let mut params = generate_lease_agreement_creation_params(&test_data);
     let lease_agreement_id = test_data.lease.create_lease_agreement(params.clone());
 
     test_data.env.set_caller(params.tenant);
