@@ -12,6 +12,7 @@ use utoipa::{
 
 use crate::{
     onchain::{ico, staking, transactions, vesting},
+    providers::background_check,
     services::{
         analytics, applications, auth, favorites, health, listings, properties, tax, users,
         viewings,
@@ -41,6 +42,7 @@ use crate::{
             crate::common::UserRole,
             crate::common::UserStatus,
             crate::common::VerificationLevel,
+            crate::common::Pagination,
             // Auth models
             auth::models::ForgotPasswordRequest,
             auth::models::ForgotPasswordResponse,
@@ -106,6 +108,10 @@ use crate::{
             applications::models::ReviewApplicationRequest,
             applications::models::ApplicationNote,
             applications::models::AddNoteRequest,
+            applications::models::BackgroundCheck,
+            applications::models::RequestBackgroundCheckRequest,
+            background_check::BackgroundCheckType,
+            background_check::BackgroundCheckStatus,
             // Viewings models
             viewings::models::Viewing,
             viewings::models::ViewingStatus,
@@ -122,8 +128,6 @@ use crate::{
             // Analytics models
             analytics::models::PropertyPerformanceRequest,
             analytics::models::PropertyPerformanceReport,
-            // Pagination
-            crate::common::Pagination,
             // Transaction models
             transactions::models::TransactionResponse,
             transactions::models::TxType,

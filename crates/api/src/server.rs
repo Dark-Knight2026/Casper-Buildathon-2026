@@ -29,10 +29,11 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 use utoipa_swagger_ui::SwaggerUi;
 
 use crate::{
-    ApiDoc, AppState, ContentPinner, EmailSender, FairHousingScreen, FakeKycProvider, FakePinner,
-    KycProvider, LoggingEmailSender, MetadataStripper, NoopMetadataStripper, PostmarkSender,
-    RedisStore, S3MediaStorage, ServerConfig, ServerError, SharedMediaStorage,
-    StubFairHousingScreen, StubMediaStorage, onchain, services, workers,
+    ApiDoc, AppState, BackgroundCheckProvider, ContentPinner, EmailSender, FairHousingScreen,
+    FakeBackgroundCheckProvider, FakeKycProvider, FakePinner, KycProvider, LoggingEmailSender,
+    MetadataStripper, NoopMetadataStripper, PostmarkSender, RedisStore, S3MediaStorage,
+    ServerConfig, ServerError, SharedMediaStorage, StubFairHousingScreen, StubMediaStorage,
+    onchain, services, workers,
 };
 
 /// Creates the full application router combining public and protected routes.
@@ -244,6 +245,17 @@ pub async fn main() -> Result<(), ServerError> {
         Arc::new(NoopMetadataStripper::new())
     };
 
+    // No real background-check bureau is wired yet, so applicant screening runs
+    // against a fake that auto-clears every check. A real bureau
+    // (TransUnion/Checkr) will be selected here by config when delivered.
+    let background_check: Arc<dyn BackgroundCheckProvider> = {
+        tracing::warn!(
+            event = "background_check_stub",
+            "No real background-check provider configured - using FakeBackgroundCheckProvider (auto-clears every check). Production MUST wire a real bureau before screening can be trusted."
+        );
+        Arc::new(FakeBackgroundCheckProvider::new())
+    };
+
     // 3. Build application state
     let state = Arc::new(AppState {
         db: pool,
@@ -254,6 +266,7 @@ pub async fn main() -> Result<(), ServerError> {
         fair_housing,
         content_pinner,
         metadata_stripper,
+        background_check,
         config: config.clone(),
     });
 

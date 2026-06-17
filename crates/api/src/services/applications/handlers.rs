@@ -11,12 +11,14 @@ use uuid::Uuid;
 
 use crate::{
     common::{ApiError, ApiResult, AppState, ErrorResponse, PaginatedResponse, Pagination},
+    providers::CheckSubject,
     services::{
         applications::{
             db::{self, ReviewOutcome, SubmitOutcome},
             models::{
-                AddNoteRequest, ApplicationNote, LandlordApplicationParams, RentalApplication,
-                ReviewApplicationRequest, SubmitApplicationRequest,
+                AddNoteRequest, ApplicationNote, BackgroundCheck, LandlordApplicationParams,
+                RentalApplication, RequestBackgroundCheckRequest, ReviewApplicationRequest,
+                SubmitApplicationRequest,
             },
         },
         auth::{AuthUser, LandlordRole, RoleUser, TenantRole},
@@ -373,6 +375,120 @@ pub async fn list_application_notes(
 ) -> ApiResult<Json<Vec<ApplicationNote>>> {
     match db::list_application_notes(&state.db, application_id, user.0.sub).await? {
         Some(rows) => Ok(Json(rows.into_iter().map(ApplicationNote::from).collect())),
+        None => Err(ApiError::NotFound("application not found".to_owned())),
+    }
+}
+
+// `POST /api/v1/applications/{id}/background-checks`
+//
+/// Requests a background check on an application the caller reviews. Requires
+/// the applicant to have consented; the configured provider runs the check and
+/// its outcome is recorded.
+///
+/// # Errors
+///
+/// Returns `400` when the applicant has not consented, `404` when the caller is
+/// the landlord of no application with that id, `500` on a provider failure, or
+/// a database error.
+#[utoipa::path(
+    post,
+    path = "/applications/{id}/background-checks",
+    tag = "Applications",
+    request_body = RequestBackgroundCheckRequest,
+    params(
+        ("id" = Uuid, Path, description = "Application id")
+    ),
+    responses(
+        (status = 201, description = "Check requested", body = BackgroundCheck),
+        (status = 400, description = "Applicant has not consented", body = ErrorResponse),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 403, description = "Landlord role required", body = ErrorResponse),
+        (status = 404, description = "Application not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse),
+    ),
+    security(
+        ("cookie_auth" = [])
+    )
+)]
+#[inline]
+pub async fn request_background_check(
+    State(state): State<Arc<AppState>>,
+    user: RoleUser<LandlordRole>,
+    Path(application_id): Path<Uuid>,
+    Json(payload): Json<RequestBackgroundCheckRequest>,
+) -> ApiResult<(StatusCode, Json<BackgroundCheck>)> {
+    let Some(subject) =
+        db::fetch_application_subject(&state.db, application_id, user.0.sub).await?
+    else {
+        return Err(ApiError::NotFound("application not found".to_owned()));
+    };
+    if !subject.consent {
+        return Err(ApiError::BadRequest(
+            "applicant has not consented to a background check".to_owned(),
+        ));
+    }
+
+    let check_subject = CheckSubject {
+        full_name: subject.full_name,
+        date_of_birth: subject.date_of_birth,
+    };
+    let outcome = state
+        .background_check
+        .run_check(payload.check_type, &check_subject)
+        .await
+        .map_err(|err| {
+            tracing::error!(?err, "background check failed");
+            ApiError::Internal("background check failed".to_owned())
+        })?;
+
+    let row = db::insert_background_check(
+        &state.db,
+        application_id,
+        user.0.sub,
+        payload.check_type,
+        outcome.status,
+        outcome.result,
+        outcome.reference,
+    )
+    .await?;
+    Ok((StatusCode::CREATED, Json(BackgroundCheck::from(row))))
+}
+
+// `GET /api/v1/applications/{id}/background-checks`
+//
+/// Lists the background checks on an application the caller reviews (newest
+/// first).
+///
+/// # Errors
+///
+/// Returns `404` when the caller is the landlord of no application with that id,
+/// or a database error.
+#[utoipa::path(
+    get,
+    path = "/applications/{id}/background-checks",
+    tag = "Applications",
+    params(
+        ("id" = Uuid, Path, description = "Application id")
+    ),
+    responses(
+        (status = 200, description = "The application's background checks", body = Vec<BackgroundCheck>),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 403, description = "Landlord role required", body = ErrorResponse),
+        (status = 404, description = "Application not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse),
+    ),
+    security(
+        ("cookie_auth" = [])
+    )
+)]
+#[inline]
+pub async fn list_background_checks(
+    State(state): State<Arc<AppState>>,
+    user: RoleUser<LandlordRole>,
+    Path(application_id): Path<Uuid>,
+) -> ApiResult<Json<Vec<BackgroundCheck>>> {
+    match db::list_background_checks(&state.db, application_id, user.0.sub).await? {
+        Some(rows) => Ok(Json(rows.into_iter().map(BackgroundCheck::from).collect())),
         None => Err(ApiError::NotFound("application not found".to_owned())),
     }
 }

@@ -8,15 +8,18 @@ use core::str::FromStr;
 
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use strum::{Display, EnumString};
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 use crate::{
     common::{ApiError, ApiResult, Pagination},
+    providers::{BackgroundCheckStatus, BackgroundCheckType},
     services::{
         applications::db::{
-            ApplicationNoteRow, ApplicationRow, LandlordApplicationFilter, NewApplication,
+            ApplicationNoteRow, ApplicationRow, BackgroundCheckRow, LandlordApplicationFilter,
+            NewApplication,
         },
         listings::models::Listing,
     },
@@ -413,6 +416,62 @@ impl TryFrom<AddNoteRequest> for String {
         }
         Ok(body.to_owned())
     }
+}
+
+/// A background check on an application, as returned on the wire.
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct BackgroundCheck {
+    /// Check id.
+    #[schema(value_type = Uuid)]
+    pub id: Uuid,
+    /// Application the check ran against.
+    #[schema(value_type = Uuid)]
+    pub application_id: Uuid,
+    /// Requesting landlord user id.
+    #[schema(value_type = Uuid)]
+    pub requested_by: Uuid,
+    /// Check type.
+    pub check_type: BackgroundCheckType,
+    /// Lifecycle status.
+    pub status: BackgroundCheckStatus,
+    /// Bureau report, absent until resolved.
+    #[schema(value_type = Option<Object>)]
+    pub result: Option<Value>,
+    /// Bureau-side reference, when available.
+    pub reference: Option<String>,
+    /// Request timestamp.
+    pub created_at: DateTime<Utc>,
+    /// Resolution timestamp, absent while pending.
+    pub completed_at: Option<DateTime<Utc>>,
+}
+
+impl From<BackgroundCheckRow> for BackgroundCheck {
+    /// Builds the wire shape from a stored row, parsing the TEXT enums.
+    #[inline]
+    fn from(row: BackgroundCheckRow) -> Self {
+        Self {
+            id: row.id,
+            application_id: row.application_id,
+            requested_by: row.requested_by,
+            check_type: BackgroundCheckType::from_str(&row.check_type)
+                .unwrap_or(BackgroundCheckType::Credit),
+            status: BackgroundCheckStatus::from_str(&row.status)
+                .unwrap_or(BackgroundCheckStatus::Pending),
+            result: row.result.map(|json| json.0),
+            reference: row.reference,
+            created_at: row.created_at,
+            completed_at: row.completed_at,
+        }
+    }
+}
+
+/// Request-a-check payload (`POST /applications/{id}/background-checks`).
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RequestBackgroundCheckRequest {
+    /// Which check to run.
+    pub check_type: BackgroundCheckType,
 }
 
 /// Trims a required free-text field, rejecting a blank value.

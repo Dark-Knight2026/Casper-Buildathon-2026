@@ -9,11 +9,13 @@
 use core::str::FromStr;
 
 use chrono::{DateTime, NaiveDate, Utc};
-use sqlx::{Error, FromRow, PgPool, Postgres, QueryBuilder};
+use serde_json::Value;
+use sqlx::{Error, FromRow, PgPool, Postgres, QueryBuilder, types::Json};
 use uuid::Uuid;
 
 use crate::{
     common::{AppendFilters, QueryBuilderExt},
+    providers::{BackgroundCheckStatus, BackgroundCheckType},
     services::{
         applications::models::{ApplicationStatus, RentalApplication},
         listings::db as listings_db,
@@ -697,4 +699,163 @@ pub async fn list_application_notes(
     .fetch_all(pool)
     .await?;
     Ok(Some(notes))
+}
+
+/// The applicant data a background check needs, plus their consent flag, read
+/// owner-scoped for the landlord requesting the check.
+#[derive(Debug)]
+pub struct ApplicationSubject {
+    /// Applicant's full legal name.
+    pub full_name: String,
+    /// Applicant's date of birth.
+    pub date_of_birth: NaiveDate,
+    /// Whether the applicant consented to a background check.
+    pub consent: bool,
+}
+
+/// Reads the applicant subject for an application the caller is the landlord of.
+/// A foreign or unknown application reads as `None` (a `404` upstream).
+///
+/// # Errors
+///
+/// Returns [`Error`] on any database failure.
+#[inline]
+pub async fn fetch_application_subject(
+    pool: &PgPool,
+    application_id: Uuid,
+    landlord_id: Uuid,
+) -> Result<Option<ApplicationSubject>, Error> {
+    let row = sqlx::query!(
+        r"
+            SELECT full_name, date_of_birth, background_check_consent
+            FROM rental_applications
+            WHERE id = $1 AND landlord_id = $2
+        ",
+        application_id,
+        landlord_id,
+    )
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(|record| ApplicationSubject {
+        full_name: record.full_name,
+        date_of_birth: record.date_of_birth,
+        consent: record.background_check_consent,
+    }))
+}
+
+/// A background-check row as stored. `check_type`/`status` stay `String` here
+/// and are parsed at the model boundary; `result` is the bureau's JSONB report.
+#[derive(Debug, FromRow)]
+pub struct BackgroundCheckRow {
+    /// Check id.
+    pub id: Uuid,
+    /// Application the check ran against.
+    pub application_id: Uuid,
+    /// Requesting landlord user id.
+    pub requested_by: Uuid,
+    /// Check type (TEXT).
+    pub check_type: String,
+    /// Lifecycle status (TEXT).
+    pub status: String,
+    /// Bureau report (JSONB), absent until resolved.
+    pub result: Option<Json<Value>>,
+    /// Bureau-side reference, when available.
+    pub reference: Option<String>,
+    /// Request timestamp.
+    pub created_at: DateTime<Utc>,
+    /// Resolution timestamp, absent while pending.
+    pub completed_at: Option<DateTime<Utc>>,
+}
+
+/// Records the outcome of a background check the landlord requested. The owner
+/// check and consent gate are enforced upstream; this is the write half.
+/// `completed_at` is stamped for a terminal `status`, left null while pending.
+///
+/// # Errors
+///
+/// Returns [`Error`] on any database failure.
+#[inline]
+pub async fn insert_background_check(
+    pool: &PgPool,
+    application_id: Uuid,
+    requested_by: Uuid,
+    check_type: BackgroundCheckType,
+    status: BackgroundCheckStatus,
+    result: Value,
+    reference: Option<String>,
+) -> Result<BackgroundCheckRow, Error> {
+    let row = sqlx::query_as!(
+        BackgroundCheckRow,
+        r#"
+            INSERT INTO background_checks (
+                application_id, requested_by, check_type, status, result,
+                reference, completed_at
+            )
+            VALUES (
+                $1, $2, $3, $4, $5, $6,
+                CASE WHEN $4 IN ('completed', 'failed') THEN NOW() ELSE NULL END
+            )
+            RETURNING
+                id, application_id, requested_by, check_type, status,
+                result AS "result?: Json<serde_json::Value>", reference,
+                created_at, completed_at
+        "#,
+        application_id,
+        requested_by,
+        check_type.to_string(),
+        status.to_string(),
+        result,
+        reference,
+    )
+    .fetch_one(pool)
+    .await?;
+    Ok(row)
+}
+
+/// Lists the background checks on an application the caller is the landlord of
+/// (newest first). A foreign or unknown application reads as `None` (a `404`
+/// upstream), distinct from an owned application with no checks (an empty
+/// `Vec`).
+///
+/// # Errors
+///
+/// Returns [`Error`] on any database failure.
+#[inline]
+pub async fn list_background_checks(
+    pool: &PgPool,
+    application_id: Uuid,
+    landlord_id: Uuid,
+) -> Result<Option<Vec<BackgroundCheckRow>>, Error> {
+    let owns = sqlx::query_scalar!(
+        r#"
+            SELECT EXISTS(
+                SELECT 1 FROM rental_applications
+                WHERE id = $1 AND landlord_id = $2
+            ) AS "owns!"
+        "#,
+        application_id,
+        landlord_id,
+    )
+    .fetch_one(pool)
+    .await?;
+    if !owns {
+        return Ok(None);
+    }
+
+    let rows = sqlx::query_as!(
+        BackgroundCheckRow,
+        r#"
+            SELECT
+                id, application_id, requested_by, check_type, status,
+                result AS "result?: Json<serde_json::Value>", reference,
+                created_at, completed_at
+            FROM background_checks
+            WHERE application_id = $1
+            ORDER BY created_at DESC
+        "#,
+        application_id,
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(Some(rows))
 }

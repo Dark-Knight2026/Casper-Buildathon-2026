@@ -154,6 +154,37 @@ async fn list_notes(env: &TestEnv, token: &str, application_id: Uuid) -> (Status
     (code, resp.unwrap_or(Value::Null))
 }
 
+/// `POST /applications/{id}/background-checks` for `check_type`.
+async fn request_check(
+    env: &TestEnv,
+    token: &str,
+    application_id: Uuid,
+    check_type: &str,
+) -> (StatusCode, Value) {
+    let (code, resp) = common::authed_request::<Value>(
+        &env.server,
+        &Method::POST,
+        &format!("/api/v1/applications/{application_id}/background-checks"),
+        token,
+        &json!({ "checkType": check_type }),
+    )
+    .await;
+    (code, resp.unwrap_or(Value::Null))
+}
+
+/// `GET /applications/{id}/background-checks`.
+async fn list_checks(env: &TestEnv, token: &str, application_id: Uuid) -> (StatusCode, Value) {
+    let (code, resp) = common::authed_request::<Value>(
+        &env.server,
+        &Method::GET,
+        &format!("/api/v1/applications/{application_id}/background-checks"),
+        token,
+        &Value::Null,
+    )
+    .await;
+    (code, resp.unwrap_or(Value::Null))
+}
+
 // `POST /listings/{id}/applications` submit -----------------------------------
 
 /// A valid application against an active listing is created as `pending`, with
@@ -973,6 +1004,145 @@ async fn notes_requires_auth_401(pool: PgPool) {
     let response = env
         .server
         .get(&format!("/api/v1/applications/{}/notes", Uuid::new_v4()))
+        .await;
+    assert_eq!(response.status_code(), StatusCode::UNAUTHORIZED);
+}
+
+// `POST`/`GET /applications/{id}/background-checks` checks --------------------
+
+/// With consent, the landlord requests a check; the fake provider completes it.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn background_check_request_completes(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, landlord_token) =
+        common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let (_t, tenant_token) = common::seed_authed_user(&env, &pool, UserRole::Tenant).await;
+    let listing_id = active_listing(&env, &pool, landlord_id, &landlord_token).await;
+    let (_s, app) = submit_app(&env, &tenant_token, listing_id, &app_body()).await;
+    let app_id = Uuid::parse_str(app["id"].as_str().unwrap()).unwrap();
+
+    let (status, check) = request_check(&env, &landlord_token, app_id, "credit").await;
+
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(check["checkType"], "credit");
+    assert_eq!(check["status"], "completed");
+    assert!(check["result"].is_object());
+}
+
+/// Requesting a check without applicant consent -> `400`.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn background_check_request_without_consent_400(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, landlord_token) =
+        common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let (_t, tenant_token) = common::seed_authed_user(&env, &pool, UserRole::Tenant).await;
+    let listing_id = active_listing(&env, &pool, landlord_id, &landlord_token).await;
+    let mut body = app_body();
+    body["backgroundCheckConsent"] = json!(false);
+    let (_s, app) = submit_app(&env, &tenant_token, listing_id, &body).await;
+    let app_id = Uuid::parse_str(app["id"].as_str().unwrap()).unwrap();
+
+    let (status, error) = request_check(&env, &landlord_token, app_id, "credit").await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(error["error"].as_str().unwrap().contains("consent"));
+}
+
+/// A landlord who does not review the application cannot run a check -> `404`.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn background_check_request_foreign_404(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (owner_id, owner_token) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let (_other, other_token) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let (_t, tenant_token) = common::seed_authed_user(&env, &pool, UserRole::Tenant).await;
+    let listing_id = active_listing(&env, &pool, owner_id, &owner_token).await;
+    let (_s, app) = submit_app(&env, &tenant_token, listing_id, &app_body()).await;
+    let app_id = Uuid::parse_str(app["id"].as_str().unwrap()).unwrap();
+
+    let (status, _body) = request_check(&env, &other_token, app_id, "credit").await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+/// A check against an unknown application -> `404`.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn background_check_request_unknown_404(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (_id, token) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+
+    let (status, _body) = request_check(&env, &token, Uuid::new_v4(), "credit").await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+/// Requested checks list back, newest first.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn background_check_list_after_request(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, landlord_token) =
+        common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let (_t, tenant_token) = common::seed_authed_user(&env, &pool, UserRole::Tenant).await;
+    let listing_id = active_listing(&env, &pool, landlord_id, &landlord_token).await;
+    let (_s, app) = submit_app(&env, &tenant_token, listing_id, &app_body()).await;
+    let app_id = Uuid::parse_str(app["id"].as_str().unwrap()).unwrap();
+    request_check(&env, &landlord_token, app_id, "credit").await;
+
+    let (status, body) = list_checks(&env, &landlord_token, app_id).await;
+    assert_eq!(status, StatusCode::OK);
+    let checks = body.as_array().unwrap();
+    assert_eq!(checks.len(), 1);
+    assert_eq!(checks[0]["checkType"], "credit");
+}
+
+/// An owned application with no checks lists an empty array, not `404`.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn background_check_list_empty_200(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (landlord_id, landlord_token) =
+        common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let (_t, tenant_token) = common::seed_authed_user(&env, &pool, UserRole::Tenant).await;
+    let listing_id = active_listing(&env, &pool, landlord_id, &landlord_token).await;
+    let (_s, app) = submit_app(&env, &tenant_token, listing_id, &app_body()).await;
+    let app_id = Uuid::parse_str(app["id"].as_str().unwrap()).unwrap();
+
+    let (status, body) = list_checks(&env, &landlord_token, app_id).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body.as_array().unwrap().len(), 0);
+}
+
+/// A non-reviewing landlord cannot list the checks -> `404`.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn background_check_list_foreign_404(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (owner_id, owner_token) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let (_other, other_token) = common::seed_authed_user(&env, &pool, UserRole::Landlord).await;
+    let (_t, tenant_token) = common::seed_authed_user(&env, &pool, UserRole::Tenant).await;
+    let listing_id = active_listing(&env, &pool, owner_id, &owner_token).await;
+    let (_s, app) = submit_app(&env, &tenant_token, listing_id, &app_body()).await;
+    let app_id = Uuid::parse_str(app["id"].as_str().unwrap()).unwrap();
+
+    let (status, _body) = list_checks(&env, &other_token, app_id).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+/// A tenant cannot request a check -> `403`.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn background_check_rejects_tenant_403(pool: PgPool) {
+    let env = common::setup_test_server(pool.clone(), false).await;
+    let (_id, token) = common::seed_authed_user(&env, &pool, UserRole::Tenant).await;
+
+    let (status, _body) = request_check(&env, &token, Uuid::new_v4(), "credit").await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+}
+
+/// No auth cookie -> `401`.
+#[sqlx::test(migrator = "common::MIGRATIONS")]
+async fn background_check_requires_auth_401(pool: PgPool) {
+    let env = common::setup_test_server(pool, false).await;
+
+    let response = env
+        .server
+        .get(&format!(
+            "/api/v1/applications/{}/background-checks",
+            Uuid::new_v4()
+        ))
         .await;
     assert_eq!(response.status_code(), StatusCode::UNAUTHORIZED);
 }

@@ -11,7 +11,8 @@ use crate::{
     ServerError,
     common::RedisStore,
     providers::{
-        ContentPinner, EmailSender, FairHousingScreen, KycProvider, MediaStorage, MetadataStripper,
+        BackgroundCheckProvider, ContentPinner, EmailSender, FairHousingScreen, KycProvider,
+        MediaStorage, MetadataStripper,
     },
 };
 
@@ -444,6 +445,10 @@ pub struct AppState {
     /// can swap `NoopMetadataStripper` (hackathon) for a real EXIF/GPS stripper
     /// without touching call sites.
     pub metadata_stripper: Arc<dyn MetadataStripper>,
+    /// Tenant background-check provider for application screening. Boxed-trait
+    /// so the bootstrap can swap `FakeBackgroundCheckProvider` (hackathon) for
+    /// a real bureau (TransUnion/Checkr) without touching call sites.
+    pub background_check: Arc<dyn BackgroundCheckProvider>,
     /// Application configuration.
     pub config: ServerConfig,
 }
@@ -460,6 +465,7 @@ impl core::fmt::Debug for AppState {
             .field("fair_housing", &"FairHousingScreen")
             .field("content_pinner", &"ContentPinner")
             .field("metadata_stripper", &"MetadataStripper")
+            .field("background_check", &"BackgroundCheckProvider")
             .field("config", &self.config)
             .finish()
     }
