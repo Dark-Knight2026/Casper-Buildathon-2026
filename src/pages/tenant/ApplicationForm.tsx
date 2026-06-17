@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
+import { useToast } from '@/hooks/use-toast';
 import { submitApplication } from '@/services/applicationService';
 import { ApiClient } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
@@ -19,10 +20,21 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle, CheckCircle } from 'lucide-react';
 import { VerificationDisclaimer } from '@/components/property/VerificationDisclaimer';
 
+/** Red required marker. `required` on the input conveys it to screen readers,
+ *  so the asterisk is decorative (aria-hidden) to avoid a double announcement. */
+function RequiredMark() {
+  return (
+    <span className="ml-0.5 text-red-600" aria-hidden="true">
+      *
+    </span>
+  );
+}
+
 export default function ApplicationForm() {
   const navigate = useNavigate();
   const location = useLocation();
   const { profile } = useAuth();
+  const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
@@ -121,7 +133,15 @@ export default function ApplicationForm() {
         navigate('/tenant/dashboard');
       }, 3000);
     } catch (err) {
-      setError(ApiClient.handleError(err));
+      // Surface the backend's actual message (e.g. validation / already-applied
+      // / listing-not-active) in a toast rather than a silent inline alert.
+      const message = ApiClient.handleError(err);
+      setError(message);
+      toast({
+        title: 'Could not submit application',
+        description: message,
+        variant: 'destructive',
+      });
     } finally {
       setLoading(false);
     }
@@ -178,7 +198,10 @@ export default function ApplicationForm() {
                 <h3 className="text-lg font-semibold">Personal Information</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="fullName">Full Name</Label>
+                    <Label htmlFor="fullName">
+                      Full Name
+                      <RequiredMark />
+                    </Label>
                     <Input
                       id="fullName"
                       value={formData.fullName}
@@ -189,7 +212,10 @@ export default function ApplicationForm() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="email">Email</Label>
+                    <Label htmlFor="email">
+                      Email
+                      <RequiredMark />
+                    </Label>
                     <Input
                       id="email"
                       type="email"
@@ -201,7 +227,10 @@ export default function ApplicationForm() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="phone">Phone</Label>
+                    <Label htmlFor="phone">
+                      Phone
+                      <RequiredMark />
+                    </Label>
                     <Input
                       id="phone"
                       type="tel"
@@ -213,7 +242,10 @@ export default function ApplicationForm() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="dateOfBirth">Date of Birth</Label>
+                    <Label htmlFor="dateOfBirth">
+                      Date of Birth
+                      <RequiredMark />
+                    </Label>
                     <Input
                       id="dateOfBirth"
                       type="date"
@@ -235,7 +267,10 @@ export default function ApplicationForm() {
                 <h3 className="text-lg font-semibold">Current Address</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2 md:col-span-2">
-                    <Label htmlFor="currentAddress">Street Address</Label>
+                    <Label htmlFor="currentAddress">
+                      Street Address
+                      <RequiredMark />
+                    </Label>
                     <Input
                       id="currentAddress"
                       value={formData.currentAddress}
@@ -249,7 +284,10 @@ export default function ApplicationForm() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="currentCity">City</Label>
+                    <Label htmlFor="currentCity">
+                      City
+                      <RequiredMark />
+                    </Label>
                     <Input
                       id="currentCity"
                       value={formData.currentCity}
@@ -263,7 +301,10 @@ export default function ApplicationForm() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="currentState">State</Label>
+                    <Label htmlFor="currentState">
+                      State
+                      <RequiredMark />
+                    </Label>
                     <Input
                       id="currentState"
                       value={formData.currentState}
@@ -277,7 +318,10 @@ export default function ApplicationForm() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="currentZip">ZIP Code</Label>
+                    <Label htmlFor="currentZip">
+                      ZIP Code
+                      <RequiredMark />
+                    </Label>
                     <Input
                       id="currentZip"
                       value={formData.currentZip}
@@ -297,7 +341,10 @@ export default function ApplicationForm() {
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="employer">Current Employer</Label>
+                    <Label htmlFor="employer">
+                      Current Employer
+                      <RequiredMark />
+                    </Label>
                     <Input
                       id="employer"
                       value={formData.employer}
@@ -308,7 +355,10 @@ export default function ApplicationForm() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="jobTitle">Job Title</Label>
+                    <Label htmlFor="jobTitle">
+                      Job Title
+                      <RequiredMark />
+                    </Label>
                     <Input
                       id="jobTitle"
                       value={formData.jobTitle}
@@ -321,6 +371,7 @@ export default function ApplicationForm() {
                   <div className="space-y-2">
                     <Label htmlFor="employmentLength">
                       Length of Employment
+                      <RequiredMark />
                     </Label>
                     <Input
                       id="employmentLength"
@@ -336,7 +387,10 @@ export default function ApplicationForm() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="monthlyIncome">Monthly Income</Label>
+                    <Label htmlFor="monthlyIncome">
+                      Monthly Income
+                      <RequiredMark />
+                    </Label>
                     <Input
                       id="monthlyIncome"
                       type="number"
@@ -352,7 +406,10 @@ export default function ApplicationForm() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="moveInDate">Desired Move-in Date</Label>
+                    <Label htmlFor="moveInDate">
+                      Desired Move-in Date
+                      <RequiredMark />
+                    </Label>
                     <Input
                       id="moveInDate"
                       type="date"
@@ -371,7 +428,10 @@ export default function ApplicationForm() {
                 <h3 className="text-lg font-semibold">References</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="reference1Name">Reference 1 Name</Label>
+                    <Label htmlFor="reference1Name">
+                      Reference 1 Name
+                      <RequiredMark />
+                    </Label>
                     <Input
                       id="reference1Name"
                       value={formData.reference1Name}
@@ -385,7 +445,10 @@ export default function ApplicationForm() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="reference1Phone">Reference 1 Phone</Label>
+                    <Label htmlFor="reference1Phone">
+                      Reference 1 Phone
+                      <RequiredMark />
+                    </Label>
                     <Input
                       id="reference1Phone"
                       type="tel"
@@ -508,6 +571,7 @@ export default function ApplicationForm() {
                   >
                     I consent to a background and credit check as part of the
                     application process
+                    <RequiredMark />
                   </Label>
                 </div>
               </div>
