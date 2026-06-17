@@ -1,8 +1,14 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
-import { submitApplication } from '@/services/applicationService';
+import {
+  submitApplication,
+  updateDraftApplication,
+  submitDraftApplication,
+  getApplication,
+} from '@/services/applicationService';
 import { ApiClient } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -39,10 +45,25 @@ export default function ApplicationForm() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
 
-  // The listing being applied to — passed in router state by the detail page
-  // (PL-20) or as a `listingId` query param on a deep link. The backend derives
-  // the landlord from the listing, so no landlordId is needed here.
+  // Editing an existing draft? Its id arrives via router state or a `draftId`
+  // query param (so a deep link / refresh still resolves it). A new application
+  // carries a `listingId` instead.
+  const draftId =
+    location.state?.draftId ||
+    new URLSearchParams(location.search).get('draftId') ||
+    '';
+
+  const { data: draft } = useQuery({
+    queryKey: ['application', draftId],
+    queryFn: () => getApplication(draftId),
+    enabled: !!draftId,
+  });
+
+  // The listing being applied to — for a new application from the detail page
+  // (PL-20) or a `listingId` deep-link param; for a draft, the draft's own
+  // listing. The backend derives the landlord from the listing.
   const listingId =
+    draft?.listingId ||
     location.state?.listingId ||
     new URLSearchParams(location.search).get('listingId') ||
     '';
@@ -80,21 +101,76 @@ export default function ApplicationForm() {
     backgroundCheckConsent: false,
   });
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
+  // Prefill the form once an existing draft loads.
+  useEffect(() => {
+    if (!draft) return;
+    setFormData({
+      fullName: draft.fullName,
+      email: draft.email,
+      phone: draft.phone,
+      dateOfBirth: draft.dateOfBirth,
+      currentAddress: draft.currentAddress,
+      currentCity: draft.currentCity,
+      currentState: draft.currentState,
+      currentZip: draft.currentZip,
+      moveInDate: draft.moveInDate,
+      employer: draft.employer,
+      jobTitle: draft.jobTitle,
+      employmentLength: draft.employmentLength,
+      monthlyIncome: String(draft.monthlyIncome),
+      reference1Name: draft.reference1Name,
+      reference1Phone: draft.reference1Phone,
+      reference2Name: draft.reference2Name ?? '',
+      reference2Phone: draft.reference2Phone ?? '',
+      pets: draft.pets,
+      petDescription: draft.petDescription ?? '',
+      additionalInfo: draft.additionalInfo ?? '',
+      backgroundCheckConsent: draft.backgroundCheckConsent,
+    });
+  }, [draft]);
 
-    if (!formData.backgroundCheckConsent) {
-      setError('You must consent to a background check to proceed');
-      return;
-    }
+  const buildBody = (asDraft: boolean) => ({
+    fullName: formData.fullName,
+    email: formData.email,
+    phone: formData.phone,
+    dateOfBirth: formData.dateOfBirth,
+    currentAddress: formData.currentAddress,
+    currentCity: formData.currentCity,
+    currentState: formData.currentState,
+    currentZip: formData.currentZip,
+    moveInDate: formData.moveInDate,
+    employer: formData.employer,
+    jobTitle: formData.jobTitle,
+    employmentLength: formData.employmentLength,
+    monthlyIncome: parseFloat(formData.monthlyIncome),
+    reference1Name: formData.reference1Name,
+    reference1Phone: formData.reference1Phone,
+    reference2Name: formData.reference2Name || undefined,
+    reference2Phone: formData.reference2Phone || undefined,
+    pets: formData.pets,
+    petDescription: formData.petDescription || undefined,
+    additionalInfo: formData.additionalInfo || undefined,
+    backgroundCheckConsent: formData.backgroundCheckConsent,
+    asDraft,
+  });
+
+  // Persist the form. `asDraft` keeps it editable (status `draft`); otherwise it
+  // goes to the landlord (`pending`). Editing an existing draft PATCHes it, then
+  // submits separately when finalising. The backend validates every field even
+  // for a draft (it's a complete-but-unsent application), so "Save as draft"
+  // still needs the form filled — only the consent gate is relaxed.
+  const persist = async (asDraft: boolean) => {
+    setError('');
 
     if (!profile) {
       setError('You must be logged in to submit an application');
       return;
     }
-
-    if (!listingId) {
+    if (!asDraft && !formData.backgroundCheckConsent) {
+      setError('You must consent to a background check to proceed');
+      return;
+    }
+    if (!draftId && !listingId) {
       setError(
         'Listing information is missing. Please return to the listing page and try again.'
       );
@@ -102,35 +178,22 @@ export default function ApplicationForm() {
     }
 
     setLoading(true);
-
     try {
-      await submitApplication(listingId, {
-        fullName: formData.fullName,
-        email: formData.email,
-        phone: formData.phone,
-        dateOfBirth: formData.dateOfBirth,
-        currentAddress: formData.currentAddress,
-        currentCity: formData.currentCity,
-        currentState: formData.currentState,
-        currentZip: formData.currentZip,
-        moveInDate: formData.moveInDate,
-        employer: formData.employer,
-        jobTitle: formData.jobTitle,
-        employmentLength: formData.employmentLength,
-        monthlyIncome: parseFloat(formData.monthlyIncome),
-        reference1Name: formData.reference1Name,
-        reference1Phone: formData.reference1Phone,
-        reference2Name: formData.reference2Name || undefined,
-        reference2Phone: formData.reference2Phone || undefined,
-        pets: formData.pets,
-        petDescription: formData.petDescription || undefined,
-        additionalInfo: formData.additionalInfo || undefined,
-        backgroundCheckConsent: formData.backgroundCheckConsent,
-      });
+      if (draftId) {
+        await updateDraftApplication(draftId, buildBody(true));
+        if (!asDraft) await submitDraftApplication(draftId);
+      } else {
+        await submitApplication(listingId, buildBody(asDraft));
+      }
 
+      if (asDraft) {
+        toast({ title: 'Draft saved' });
+        navigate('/tenant/my-applications');
+        return;
+      }
       setSuccess(true);
       setTimeout(() => {
-        navigate('/tenant/dashboard');
+        navigate('/tenant/my-applications');
       }, 3000);
     } catch (err) {
       // Surface the backend's actual message (e.g. validation / already-applied
@@ -138,13 +201,20 @@ export default function ApplicationForm() {
       const message = ApiClient.handleError(err);
       setError(message);
       toast({
-        title: 'Could not submit application',
+        title: asDraft
+          ? 'Could not save draft'
+          : 'Could not submit application',
         description: message,
         variant: 'destructive',
       });
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    void persist(false);
   };
 
   if (success) {
@@ -576,7 +646,7 @@ export default function ApplicationForm() {
                 </div>
               </div>
 
-              <div className="flex gap-4">
+              <div className="flex flex-col sm:flex-row gap-4">
                 <Button
                   type="button"
                   variant="outline"
@@ -584,6 +654,15 @@ export default function ApplicationForm() {
                   className="flex-1"
                 >
                   Cancel
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={loading}
+                  onClick={() => void persist(true)}
+                  className="flex-1"
+                >
+                  {loading ? 'Saving…' : 'Save as draft'}
                 </Button>
                 <Button type="submit" disabled={loading} className="flex-1">
                   {loading ? 'Submitting...' : 'Submit Application'}

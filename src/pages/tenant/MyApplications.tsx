@@ -1,6 +1,12 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { getMyApplications } from '@/services/applicationService';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useToast } from '@/hooks/use-toast';
+import { ApiClient } from '@/lib/api-client';
+import {
+  getMyApplications,
+  submitDraftApplication,
+} from '@/services/applicationService';
 import { formatFullAddress } from '@/lib/listingDisplay';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -17,12 +23,32 @@ import { format } from 'date-fns';
 
 export default function MyApplications() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [submittingId, setSubmittingId] = useState<string | null>(null);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['my-applications'],
     queryFn: () => getMyApplications({ pageSize: 100 }),
   });
   const applications = data?.data ?? [];
+
+  const submitDraft = async (id: string) => {
+    setSubmittingId(id);
+    try {
+      await submitDraftApplication(id);
+      await queryClient.invalidateQueries({ queryKey: ['my-applications'] });
+      toast({ title: 'Application submitted' });
+    } catch (error) {
+      toast({
+        title: 'Could not submit',
+        description: ApiClient.handleError(error),
+        variant: 'destructive',
+      });
+    } finally {
+      setSubmittingId(null);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -47,8 +73,7 @@ export default function MyApplications() {
               </h1>
               <p className="text-gray-600">
                 {applications.length}{' '}
-                {applications.length === 1 ? 'application' : 'applications'}{' '}
-                submitted
+                {applications.length === 1 ? 'application' : 'applications'}
               </p>
             </div>
             <Button onClick={() => navigate('/tenant/property-search')}>
@@ -157,28 +182,58 @@ export default function MyApplications() {
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-between pt-4 border-t">
+                    <div className="flex items-center justify-between pt-4 border-t gap-4">
                       <div className="text-sm text-gray-600">
                         <span className="font-medium">Status:</span>{' '}
+                        {application.status === 'draft' &&
+                          'Draft — not yet submitted to the landlord.'}
                         {application.status === 'pending' &&
                           'Awaiting landlord review'}
+                        {application.status === 'under_review' &&
+                          'The landlord is reviewing your application.'}
+                        {application.status === 'conditional' &&
+                          'Conditionally approved — pending stated conditions.'}
                         {application.status === 'approved' &&
                           'Congratulations! Your application was approved.'}
                         {application.status === 'rejected' &&
                           'Unfortunately, your application was not approved.'}
                       </div>
-                      {listing && (
-                        <Button
-                          variant="outline"
-                          onClick={() =>
-                            navigate(`/properties/${listing.id}`, {
-                              state: { listing },
-                            })
-                          }
-                        >
-                          View Property
-                        </Button>
-                      )}
+                      <div className="flex gap-2 shrink-0">
+                        {application.status === 'draft' && (
+                          <>
+                            <Button
+                              variant="outline"
+                              onClick={() =>
+                                navigate('/tenant/application', {
+                                  state: { draftId: application.id },
+                                })
+                              }
+                            >
+                              Edit
+                            </Button>
+                            <Button
+                              disabled={submittingId === application.id}
+                              onClick={() => submitDraft(application.id)}
+                            >
+                              {submittingId === application.id
+                                ? 'Submitting…'
+                                : 'Submit'}
+                            </Button>
+                          </>
+                        )}
+                        {listing && (
+                          <Button
+                            variant="outline"
+                            onClick={() =>
+                              navigate(`/properties/${listing.id}`, {
+                                state: { listing },
+                              })
+                            }
+                          >
+                            View Property
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
