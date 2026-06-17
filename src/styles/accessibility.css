@@ -97,13 +97,12 @@
   /* Ensure focus stays within modal/dialog */
 }
 
-/* Accessible form elements */
-input:invalid:not(:placeholder-shown),
-textarea:invalid:not(:placeholder-shown),
-select:invalid {
-  border-color: #dc2626;
-  outline-color: #dc2626;
-}
+/* Invalid-field styling is owned by the form components (react-hook-form sets an
+   `error` prop → red border), NOT native `:invalid`. The old
+   `input:invalid:not(:placeholder-shown)` rule painted required fields red on
+   first render whenever they had no placeholder (`:placeholder-shown` can't
+   match a field with no placeholder, so the `:not()` guard was always true) —
+   e.g. the empty password field. Validate, then color. */
 
 /* Required field indicator */
 [aria-required='true']::after,
