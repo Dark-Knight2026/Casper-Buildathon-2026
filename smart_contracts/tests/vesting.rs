@@ -497,8 +497,8 @@ fn test_claim_should_revert_if_active_unbonding_from_direct_staking() {
         .vesting
         .create_schedule(alice, stake_amount, cliff, vesting);
 
-    // Advance past cliff to make tokens claimable
-    ctx.env.advance_block_time(cliff);
+    // Advance past cliff into the linear vesting window
+    ctx.env.advance_block_time(cliff + ONE_MONTH_IN_MILLISECONDS);
 
     // Try to claim from vesting while having active unbonding from direct staking
     ctx.env.set_caller(alice);
@@ -510,7 +510,7 @@ fn test_claim_should_revert_if_active_unbonding_from_direct_staking() {
 }
 
 #[test]
-fn test_claim_should_update_unstaked_amount_after_cliff() {
+fn test_claim_should_have_zero_claimable_just_before_cliff() {
     let mut ctx = setup(odra_test::env());
     let cliff = ctx.cliff_duration;
     let vesting = ctx.vesting_duration;
@@ -518,19 +518,57 @@ fn test_claim_should_update_unstaked_amount_after_cliff() {
 
     let vesting_id = create_test_schedule(&mut ctx, alice, vesting_amount(), cliff, vesting);
 
-    // Advance to exactly the cliff, 50% vested
+    ctx.env.advance_block_time(cliff - 1);
+
+    assert_eq!(
+        ctx.vesting.get_claimable_amount(vesting_id),
+        U256::zero(),
+        "Nothing should be claimable just before the cliff boundary"
+    );
+    assert_eq!(
+        ctx.vesting.get_vested_amount(vesting_id),
+        U256::zero(),
+        "Nothing should be vested just before the cliff boundary"
+    );
+
+    ctx.env.set_caller(alice);
+    assert_eq!(
+        ctx.vesting.try_claim(vesting_id).unwrap_err(),
+        Error::NothingToClaim.into(),
+        "Claim should revert just before the cliff boundary"
+    );
+}
+
+#[test]
+fn test_claim_should_update_unstaked_amount_after_cliff() {
+    let mut ctx = setup(odra_test::env());
+    let cliff = ctx.cliff_duration;
+    let vesting = ctx.vesting_duration;
+    let alice = ctx.users.alice;
+    let total = vesting_amount();
+    let linear_duration = vesting - cliff;
+
+    let vesting_id = create_test_schedule(&mut ctx, alice, total, cliff, vesting);
+
+    // At exactly the cliff boundary, linear vesting has not started yet.
     ctx.env.advance_block_time(cliff);
+    assert_eq!(
+        ctx.vesting.get_claimable_amount(vesting_id),
+        U256::zero(),
+        "Nothing should be claimable at the cliff boundary"
+    );
+
+    // One month into the post-cliff linear window.
+    ctx.env.advance_block_time(ONE_MONTH_IN_MILLISECONDS);
+    let expected_claim = total * U256::from(ONE_MONTH_IN_MILLISECONDS) / U256::from(linear_duration);
+
     ctx.env.set_caller(alice);
     ctx.vesting.claim(vesting_id);
 
-    let expected_claim = vesting_amount() / 2;
-
-    // Verify schedule state
     let schedule = ctx.vesting.get_schedule(vesting_id).unwrap();
-
     assert_eq!(
         schedule.unstaked_amount, expected_claim,
-        "Unstaked amount should be 50% (cliff/vesting)"
+        "Unstaked amount should reflect one month of post-cliff linear vesting"
     );
 
     assert!(
@@ -542,7 +580,7 @@ fn test_claim_should_update_unstaked_amount_after_cliff() {
                 amount: expected_claim,
             }
         ),
-        "TokensCLaimed event should be emitted",
+        "TokensClaimed event should be emitted",
     );
 }
 
@@ -555,8 +593,11 @@ fn test_claim_should_increase_beneficiary_balance_by_unstaked_amount() {
 
     let vesting_id = create_test_schedule(&mut ctx, alice, vesting_amount(), cliff, vesting);
 
-    // Advance to exactly the cliff, 50% vested
-    ctx.env.advance_block_time(cliff);
+    let total = vesting_amount();
+    let linear_duration = vesting - cliff;
+
+    // One month into the post-cliff linear window.
+    ctx.env.advance_block_time(cliff + ONE_MONTH_IN_MILLISECONDS);
 
     let prev_alice_balance = ctx.big_coin.balance_of(&alice);
     let prev_staking_balance = ctx.big_coin.balance_of(&ctx.staking.address());
@@ -565,7 +606,7 @@ fn test_claim_should_increase_beneficiary_balance_by_unstaked_amount() {
     ctx.env.set_caller(alice);
     ctx.vesting.claim(vesting_id);
 
-    let expected_claim = vesting_amount() / 2;
+    let expected_claim = total * U256::from(ONE_MONTH_IN_MILLISECONDS) / U256::from(linear_duration);
 
     // Balance should not increase yet, tokens are in unbonding
     let mid_alice_balance = ctx.big_coin.balance_of(&alice);
@@ -648,46 +689,31 @@ fn test_claim_should_allow_incremental_claims() {
 
     let vesting_id = create_test_schedule(&mut ctx, alice, vesting_amount(), cliff, vesting);
 
-    // First claim at cliff (50% vested)
-    ctx.env.advance_block_time(cliff);
+    let total = vesting_amount();
+
+    // First claim at 9 months (50% vested: 3 of 6 post-cliff months elapsed)
+    ctx.env.advance_block_time(9 * ONE_MONTH_IN_MILLISECONDS);
     ctx.env.set_caller(alice);
     ctx.vesting.claim(vesting_id);
 
-    let first_claim = vesting_amount() / 2;
+    let first_claim = total / U256::from(2u64);
     let schedule = ctx.vesting.get_schedule(vesting_id).unwrap();
     assert_eq!(
         schedule.unstaked_amount, first_claim,
         "First claim should be 50%",
     );
 
-    // Withdraw and make second claim at 9 months (75% vested)
+    // Withdraw and make second claim at end of vesting (100% vested)
     ctx.env.advance_block_time(3 * ONE_MONTH_IN_MILLISECONDS);
     ctx.env.set_caller(alice);
     ctx.staking.withdraw_unbonded();
     ctx.env.set_caller(alice);
     ctx.vesting.claim(vesting_id);
 
-    let expected_total_claim = vesting_amount() * U256::from(9) / U256::from(12);
     let schedule = ctx.vesting.get_schedule(vesting_id).unwrap();
     assert_eq!(
-        schedule.unstaked_amount, expected_total_claim,
-        "Second claim should be for 75%",
-    );
-
-    // Advance to end of vesting and claim remainder
-    ctx.env.advance_block_time(3 * ONE_MONTH_IN_MILLISECONDS);
-    ctx.env.set_caller(alice);
-    ctx.staking.withdraw_unbonded();
-    ctx.env.set_caller(alice);
-    ctx.vesting.claim(vesting_id);
-
-    assert_eq!(
-        ctx.vesting
-            .get_schedule(vesting_id)
-            .unwrap()
-            .unstaked_amount,
-        vesting_amount(),
-        "All tokens should be claimed"
+        schedule.unstaked_amount, total,
+        "Second claim should complete full vesting",
     );
 
     // Withdraw final unbonded tokens, then verify NothingToClaim
@@ -730,71 +756,58 @@ fn test_claim_end_to_end_lifecycle() {
     let cliff_time = start_time + cliff;
     assert_eq!(ctx.env.block_time(), cliff_time, "Should be at cliff time");
 
-    // At cliff, half should be vested and claimable
-    let expected_vested_at_cliff = total_amount / 2;
+    // At the cliff boundary, linear vesting has not started yet.
     assert_eq!(
         ctx.vesting.get_vested_amount(vesting_id),
-        expected_vested_at_cliff,
-        "50% should be vested at cliff",
+        U256::zero(),
+        "Nothing should be vested at the cliff boundary",
     );
-    assert_eq!(
-        ctx.vesting.get_claimable_amount(vesting_id),
-        expected_vested_at_cliff,
-        "50% should be claimable at cliff",
-    );
-
-    // Claim the vested amount and check that none are left to claim at this timestamp
-    ctx.env.set_caller(alice);
-    ctx.vesting.claim(vesting_id);
     assert_eq!(
         ctx.vesting.get_claimable_amount(vesting_id),
         U256::zero(),
-        "No more claim amount should be left",
+        "Nothing should be claimable at the cliff boundary",
     );
 
-    // Advanced to after the cliff end
+    ctx.env.set_caller(alice);
+    assert_eq!(
+        ctx.vesting.try_claim(vesting_id).unwrap_err(),
+        Error::NothingToClaim.into(),
+        "Claim should revert at the cliff boundary",
+    );
+
+    // Advance to 9 months (50% vested: 3 of 6 post-cliff months elapsed)
     ctx.env.advance_block_time(3 * ONE_MONTH_IN_MILLISECONDS);
 
-    // Unbonding period (48h) has elapsed; withdraw before next claim
-    ctx.env.set_caller(alice);
-    ctx.staking.withdraw_unbonded();
-
-    // 9 months at this point so should be 75% vested
-    let expected_vested_at_9mo = total_amount * U256::from(9) / U256::from(12);
-
-    // Expected claimable should be 25% of total amount:
-    // Expected vested at 9 months (75%) - Expected vested at cliff (50%)
-    let expected_claimable_at_9mo = expected_vested_at_9mo - expected_vested_at_cliff;
+    let expected_vested_at_9mo = total_amount / U256::from(2u64);
 
     assert_eq!(
         ctx.vesting.get_vested_amount(vesting_id),
         expected_vested_at_9mo,
-        "Should be 75% vested at 9 months",
+        "Should be 50% vested at 9 months",
     );
 
     assert_eq!(
         ctx.vesting.get_claimable_amount(vesting_id),
-        expected_claimable_at_9mo,
-        "Should have 25% more available to be claimed",
+        expected_vested_at_9mo,
+        "All vested tokens should be claimable at 9 months",
     );
 
-    // Claim the tokens and see if it matches the expected 75% vested amt
     ctx.env.set_caller(alice);
     ctx.vesting.claim(vesting_id);
     let schedule = ctx.vesting.get_schedule(vesting_id).unwrap();
     assert_eq!(
         schedule.unstaked_amount, expected_vested_at_9mo,
-        "Total unstaked so far should be at 75%",
+        "Total unstaked so far should be 50%",
     );
 
-    // Advanced to the full vesting period, which is 12 months
-    ctx.env.advance_block_time(3 * ONE_MONTH_IN_MILLISECONDS);
-
-    // Unbonding period (48h) has elapsed; withdraw before next claim
+    // Wait out unbonding, then advance to the full vesting period (12 months)
+    ctx.env.advance_block_time(UNBONDING_PERIOD + 1);
     ctx.env.set_caller(alice);
     ctx.staking.withdraw_unbonded();
 
     let vesting_end_time = start_time + vesting;
+    let remaining_to_vesting_end = vesting_end_time - ctx.env.block_time();
+    ctx.env.advance_block_time(remaining_to_vesting_end);
     assert_eq!(
         ctx.env.block_time(),
         vesting_end_time,
@@ -807,12 +820,12 @@ fn test_claim_end_to_end_lifecycle() {
         "Should be 100% vested at 12 months",
     );
 
-    // Should be 25% more left to claim
+    // Should be 50% more left to claim
     let last_claimable = total_amount - expected_vested_at_9mo;
     assert_eq!(
         ctx.vesting.get_claimable_amount(vesting_id),
         last_claimable,
-        "Should have remaining 25% left to be claimed",
+        "Should have remaining 50% left to be claimed",
     );
 
     // Claim the remaining tokens

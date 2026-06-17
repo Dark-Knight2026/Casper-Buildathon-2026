@@ -416,9 +416,15 @@ impl Vesting {
             // past the vesting period, everything is vested
             schedule.total_amount
         } else {
-            // linear vesting when between cliff and vesting periods
-            let elapsed = now - schedule.start_timestamp;
-            schedule.total_amount * U256::from(elapsed) / U256::from(schedule.vesting_duration)
+            // Linear vesting after the cliff over the remaining duration.
+            let linear_duration = schedule.vesting_duration - schedule.cliff_duration;
+            if linear_duration == 0 {
+                schedule.total_amount
+            } else {
+                let elapsed_after_cliff = now - cliff_period;
+                schedule.total_amount * U256::from(elapsed_after_cliff)
+                    / U256::from(linear_duration)
+            }
         }
     }
 }
