@@ -415,8 +415,8 @@ impl Staking {
         let unclaimed = self.unclaimed_rewards.get_or_default();
         let reserved = staked + unclaimed;
 
-        if balance > reserved {
-            let dust = balance - reserved;
+        let dust = Self::saturating_sub(balance, reserved);
+        if !dust.is_zero() {
             self.big_coin.transfer(&recipient, &dust);
 
             self.env().emit_event(DustSwept {
@@ -450,8 +450,14 @@ impl Staking {
         // Reduce unclaimed accounting by the paid amount. Combined with the add in
         // deposit_rewards (using the first truncation's allocated amount), this lets
         // sweep_dust compute excess = balance - total_staked - unclaimed as the trapped dust.
+        //
+        // Per-deposit `unclaimed_rewards` can under-count relative to multi-cycle
+        // per-staker accrual (independent truncation paths), so cap the deduction
+        // and use saturating subtraction to avoid U256 underflow panics.
         let cur_unclaimed = self.unclaimed_rewards.get_or_default();
-        self.unclaimed_rewards.set(cur_unclaimed - rewards);
+        let unclaimed_deduction = Self::min_u256(rewards, cur_unclaimed);
+        self.unclaimed_rewards
+            .set(Self::saturating_sub(cur_unclaimed, unclaimed_deduction));
 
         self.big_coin.transfer(&staker, &rewards);
 
@@ -582,6 +588,20 @@ impl Staking {
     /// Precision multiplier (1e18) for reward-per-token fixed-point math.
     fn precision() -> U256 {
         U256::from_dec_str("1000000000000000000").expect("1e18 precision constant")
+    }
+
+    #[inline]
+    fn min_u256(a: U256, b: U256) -> U256 {
+        if a <= b {
+            a
+        } else {
+            b
+        }
+    }
+
+    #[inline]
+    fn saturating_sub(a: U256, b: U256) -> U256 {
+        a.checked_sub(b).unwrap_or_else(U256::zero)
     }
 
     /// Updates staker's stored reward state to the current global reward per token

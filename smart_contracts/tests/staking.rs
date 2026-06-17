@@ -716,6 +716,45 @@ fn test_claim_rewards_should_claim_properly() {
     ));
 }
 
+/// Regression for STAK-NEW-01: per-deposit `unclaimed_rewards` can under-count
+/// relative to multi-cycle per-staker accrual, so claiming must not panic on
+/// `cur_unclaimed - rewards` underflow.
+#[test]
+fn test_claim_rewards_multi_staker_multi_cycle_no_underflow() {
+    let mut ctx = setup(odra_test::env());
+    let owner = ctx.users.owner;
+    let alice = ctx.users.alice;
+    let bob = ctx.users.bob;
+    let alice_stake = U256::from(1u64);
+    let bob_stake = U256::from(2u64);
+    let tiny_reward = U256::from(1u64);
+    let staking_contract = ctx.staking.address();
+
+    fund_and_approve(&mut ctx, alice, alice_stake);
+    fund_and_approve(&mut ctx, bob, bob_stake);
+    stake_for(&mut ctx, alice, alice_stake);
+    stake_for(&mut ctx, bob, bob_stake);
+
+    ctx.env.set_caller(owner);
+    for _ in 0..2 {
+        ctx.big_coin.approve(&staking_contract, &tiny_reward);
+        ctx.staking.deposit_rewards(tiny_reward);
+    }
+
+    // Bob accrues non-zero rewards while per-deposit unclaimed accounting stays at 0.
+    let bob_pending = ctx.staking.get_pending_rewards(bob);
+    assert_eq!(bob_pending, U256::from(1u64));
+    assert_eq!(ctx.staking.get_pending_rewards(alice), U256::zero());
+
+    let prev_bob = ctx.big_coin.balance_of(&bob);
+
+    ctx.env.set_caller(bob);
+    ctx.staking.claim_rewards();
+
+    assert_eq!(ctx.staking.get_pending_rewards(bob), U256::zero());
+    assert_eq!(ctx.big_coin.balance_of(&bob), prev_bob + bob_pending);
+}
+
 #[test]
 fn test_claim_rewards_should_not_accrue_already_claimed_rewards() {
     let mut ctx = setup(odra_test::env());
