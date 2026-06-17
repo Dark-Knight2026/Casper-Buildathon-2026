@@ -7,7 +7,7 @@ use leasefi_contracts::{
         types::ComplianceConfig,
         CompliancePolicy, CompliancePolicyHostRef, CompliancePolicyInitArgs,
     },
-    constants::{COMPLIANCE_POLICY_UPDATE_TIMELOCK, ONE_MONTH_IN_MILLISECONDS},
+    constants::ONE_MONTH_IN_MILLISECONDS,
     escrow::{Escrow, EscrowHostRef, EscrowInitArgs},
     investor_registry::{
         types::InvestorRecord, InvestorRegistry, InvestorRegistryHostRef, InvestorRegistryInitArgs,
@@ -144,9 +144,6 @@ fn setup(env: HostEnv) -> Context {
 
     escrow.set_lease(lease.address());
     escrow.set_treasury(env.get_account(19));
-    env.advance_block_time(COMPLIANCE_POLICY_UPDATE_TIMELOCK + 1);
-    escrow.apply_pending_lease();
-    escrow.apply_pending_treasury();
     escrow.set_security_deposit_token(security_deposit_token.address());
 
     nft.add_minter(&lease.address());
@@ -175,12 +172,7 @@ fn setup(env: HostEnv) -> Context {
 
     env.set_caller(env.get_account(0)); // Owner
     compliance.set_investor_registry(investor_registry.address());
-    env.advance_block_time(COMPLIANCE_POLICY_UPDATE_TIMELOCK + 1);
-    compliance.apply_pending_investor_registry();
-
     compliance.set_property_registry(property_registry.address());
-    env.advance_block_time(COMPLIANCE_POLICY_UPDATE_TIMELOCK + 1);
-    compliance.apply_pending_property_registry();
 
     Context {
         env,
@@ -384,17 +376,6 @@ fn test_set_lease_should_set_lease_properly() {
 
     ctx.env.set_caller(ctx.env.get_account(0));
     ctx.compliance.set_lease(lease);
-
-    // Not yet applied due to timelock
-    assert_eq!(
-        ctx.compliance.get_lease_contract(),
-        // original from init
-        ctx.lease.address(),
-        "Lease should not change until timelock elapses"
-    );
-
-    ctx.env.advance_block_time(COMPLIANCE_POLICY_UPDATE_TIMELOCK + 1);
-    ctx.compliance.apply_pending_lease();
 
     assert_eq!(
         ctx.compliance.get_lease_contract(),

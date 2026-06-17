@@ -7,7 +7,6 @@ use odra_modules::{
 use crate::{
     common,
     compliance_policy::CompliancePolicyContractRef,
-    constants::COMPLIANCE_POLICY_UPDATE_TIMELOCK,
     property_fraction_token::{
         errors::Error,
         events::{CompliancePolicySet, PropertyFractionTokenInitialized},
@@ -76,9 +75,7 @@ pub mod errors {
         EmptySymbol = 1102,
         InvalidDecimals = 1103,
         ZeroInitialSupply = 1104,
-        CompliancePolicyUpdateTimelockNotElapsed = 1105,
-        NoPendingCompliancePolicy = 1106,
-        AlreadyInitialized = 1107,
+        AlreadyInitialized = 1105,
     }
 }
 
@@ -92,8 +89,6 @@ pub struct PropertyFractionToken {
     token: SubModule<Cep18>,
     compliance_policy: External<CompliancePolicyContractRef>,
     property_id: Var<U256>,
-    pending_compliance_policy: Var<Option<Address>>,
-    pending_compliance_policy_activation_time: Var<u64>,
     initialized: Var<bool>,
 }
 
@@ -121,8 +116,6 @@ impl PropertyFractionToken {
 
         self.property_id.set(params.property_id);
         self.compliance_policy.set(params.compliance_policy);
-        self.pending_compliance_policy.set(None);
-        self.pending_compliance_policy_activation_time.set(0);
 
         self.token
             .init(params.symbol, params.name, params.decimals, U256::zero());
@@ -147,52 +140,15 @@ impl PropertyFractionToken {
     // Admin Configuration
     // =============================================================================
 
-    /// Proposes an update to the compliance policy used by this property token.
-    /// The change is subject to a timelock and must be applied later via `apply_compliance_policy`.
+    /// Sets the compliance policy contract address.
     /// Restricted to `TOKEN_MANAGER`.
-    /// @dev This prevents instantaneous bypass of ERC-3643 KYC/compliance by swapping
-    ///      to a no-op policy. The timelock gives time for reaction (e.g. by admins or monitoring).
     pub fn set_compliance_policy(&mut self, compliance_policy: Address) {
         self.assert_role(ROLE_TOKEN_MANAGER);
 
-        let activation_time = self.env().get_block_time() + COMPLIANCE_POLICY_UPDATE_TIMELOCK;
-        self.pending_compliance_policy.set(Some(compliance_policy));
-        self.pending_compliance_policy_activation_time
-            .set(activation_time);
-        // Actual CompliancePolicySet event is emitted only upon successful apply (after timelock).
-    }
-
-    /// Applies a previously proposed compliance policy change, if the timelock has elapsed.
-    /// Restricted to `TOKEN_MANAGER`.
-    pub fn apply_compliance_policy(&mut self) {
-        self.assert_role(ROLE_TOKEN_MANAGER);
-
-        let activation_time = self
-            .pending_compliance_policy_activation_time
-            .get_or_default();
-        if self.env().get_block_time() < activation_time {
-            self.env()
-                .revert(Error::CompliancePolicyUpdateTimelockNotElapsed);
-        }
-
-        let pending = self.pending_compliance_policy.get_or_default();
-        let compliance_policy =
-            pending.unwrap_or_revert_with(&self.env(), Error::NoPendingCompliancePolicy);
-
         self.compliance_policy.set(compliance_policy);
-        self.pending_compliance_policy.set(None);
-        self.pending_compliance_policy_activation_time.set(0);
 
         self.env()
             .emit_event(CompliancePolicySet { compliance_policy });
-    }
-
-    /// Cancels any pending compliance policy update.
-    /// Restricted to `TOKEN_MANAGER`.
-    pub fn cancel_pending_compliance_policy(&mut self) {
-        self.assert_role(ROLE_TOKEN_MANAGER);
-        self.pending_compliance_policy.set(None);
-        self.pending_compliance_policy_activation_time.set(0);
     }
 
     // =============================================================================
@@ -207,17 +163,6 @@ impl PropertyFractionToken {
     /// Returns the compliance policy contract address
     pub fn get_compliance_policy_contract(&self) -> Address {
         *self.compliance_policy.address()
-    }
-
-    /// Returns the currently proposed (pending) compliance policy, if any.
-    pub fn get_pending_compliance_policy(&self) -> Option<Address> {
-        self.pending_compliance_policy.get_or_default()
-    }
-
-    /// Returns the timestamp after which the pending compliance policy can be applied.
-    pub fn get_pending_compliance_policy_activation_time(&self) -> u64 {
-        self.pending_compliance_policy_activation_time
-            .get_or_default()
     }
 
     /// Returns the role hash for accounts allowed to manage token configuration

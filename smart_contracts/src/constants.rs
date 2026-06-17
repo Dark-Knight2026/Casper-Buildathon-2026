@@ -21,6 +21,3 @@ pub const UNBONDING_PERIOD: u64 = 48 * 60 * 60 * 1_000; // 48 hours
 // TODO: Decide whether to make this configurable or not
 pub const LEASEFI_TRANSACTION_FEE_BPS: u32 = 200;
 
-/// Timelock for updating the compliance policy on a PropertyFractionToken (48 hours)
-pub const COMPLIANCE_POLICY_UPDATE_TIMELOCK: u64 = 48 * 60 * 60 * 1_000; // milliseconds
-

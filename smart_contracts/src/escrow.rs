@@ -8,9 +8,7 @@ use odra_modules::{access::Ownable, cep18_token::Cep18ContractRef};
 
 use crate::{
     common::CurrencyAmount,
-    constants::{
-        COMPLIANCE_POLICY_UPDATE_TIMELOCK, LEASEFI_TRANSACTION_FEE_BPS, ONE_HUNDRED_PERCENT_BPS,
-    },
+    constants::{LEASEFI_TRANSACTION_FEE_BPS, ONE_HUNDRED_PERCENT_BPS},
     escrow::{
         errors::Error,
         events::{
@@ -193,10 +191,8 @@ pub mod errors {
         SecurityDepositNotPaid = 315,
         SecurityDepositAlreadyReleased = 316,
         SecurityDepositChargeTooHigh = 317,
-        CompliancePolicyUpdateTimelockNotElapsed = 318,
-        NoPendingCompliancePolicy = 319,
-        RenounceOwnershipNotAllowed = 320,
-        AlreadyInitialized = 321,
+        RenounceOwnershipNotAllowed = 318,
+        AlreadyInitialized = 319,
     }
 }
 
@@ -232,16 +228,6 @@ pub struct Escrow {
     invoices_count: Var<U256>,
     /// Minimum delay required between invoice creation and deadline.
     min_deadline: Var<u64>,
-    /// Proposed new Lease contract address (set by owner via set_lease).
-    /// Remains None until a timelocked change is applied via apply_pending_lease.
-    pending_lease: Var<Option<Address>>,
-    /// Block time (in ms) at which the pending Lease change may be applied.
-    pending_lease_activation_time: Var<u64>,
-    /// Proposed new Treasury contract address (set by owner via set_treasury).
-    /// Remains None until a timelocked change is applied via apply_pending_treasury.
-    pending_treasury: Var<Option<Address>>,
-    /// Block time (in ms) at which the pending Treasury change may be applied.
-    pending_treasury_activation_time: Var<u64>,
     initialized: Var<bool>,
 }
 
@@ -258,11 +244,6 @@ impl Escrow {
 
         self.ownable.init(owner);
         self.set_min_deadline(min_deadline);
-
-        self.pending_lease.set(None);
-        self.pending_lease_activation_time.set(0);
-        self.pending_treasury.set(None);
-        self.pending_treasury_activation_time.set(0);
 
         self.initialized.set(true);
     }
@@ -285,88 +266,20 @@ impl Escrow {
         });
     }
 
-    /// Proposes an update to the Lease contract address.
-    /// The change is subject to a timelock and must be applied later via
-    /// `apply_pending_lease`. Restricted to owner.
-    /// @dev Prevents silent redirection of security deposit release flows.
+    /// Sets the Lease contract address by the owner
     pub fn set_lease(&mut self, lease: Address) {
         self.assert_owner();
-
-        let activation_time = self.env().get_block_time() + COMPLIANCE_POLICY_UPDATE_TIMELOCK;
-        self.pending_lease.set(Some(lease));
-        self.pending_lease_activation_time.set(activation_time);
-        // LeaseSet event emitted only on apply after timelock.
-    }
-
-    /// Proposes an update to the Treasury contract address.
-    /// The change is subject to a timelock and must be applied later via
-    /// `apply_pending_treasury`. Restricted to owner.
-    /// @dev Prevents silent redirection of protocol fee flows.
-    pub fn set_treasury(&mut self, treasury: Address) {
-        self.assert_owner();
-
-        let activation_time = self.env().get_block_time() + COMPLIANCE_POLICY_UPDATE_TIMELOCK;
-        self.pending_treasury.set(Some(treasury));
-        self.pending_treasury_activation_time.set(activation_time);
-        // TreasurySet event emitted only on apply after timelock.
-    }
-
-    /// Applies a previously proposed Lease contract address change, if the timelock has elapsed.
-    /// Restricted to owner.
-    pub fn apply_pending_lease(&mut self) {
-        self.assert_owner();
-
-        let activation_time = self.pending_lease_activation_time.get_or_default();
-        if self.env().get_block_time() < activation_time {
-            self.env()
-                .revert(Error::CompliancePolicyUpdateTimelockNotElapsed);
-        }
-
-        let pending = self.pending_lease.get_or_default();
-        let lease = pending.unwrap_or_revert_with(&self.env(), Error::NoPendingCompliancePolicy);
-
         self.lease.set(lease);
-        self.pending_lease.set(None);
-        self.pending_lease_activation_time.set(0);
 
         self.env().emit_event(LeaseSet { lease });
     }
 
-    /// Applies a previously proposed Treasury contract address change, if the timelock has elapsed.
-    /// Restricted to owner.
-    pub fn apply_pending_treasury(&mut self) {
+    /// Sets the Treasury contract address by the owner
+    pub fn set_treasury(&mut self, treasury: Address) {
         self.assert_owner();
-
-        let activation_time = self.pending_treasury_activation_time.get_or_default();
-        if self.env().get_block_time() < activation_time {
-            self.env()
-                .revert(Error::CompliancePolicyUpdateTimelockNotElapsed);
-        }
-
-        let pending = self.pending_treasury.get_or_default();
-        let treasury = pending.unwrap_or_revert_with(&self.env(), Error::NoPendingCompliancePolicy);
-
         self.treasury.set(treasury);
-        self.pending_treasury.set(None);
-        self.pending_treasury_activation_time.set(0);
 
         self.env().emit_event(TreasurySet { treasury });
-    }
-
-    /// Cancels any pending Lease contract address update.
-    /// Restricted to owner.
-    pub fn cancel_pending_lease(&mut self) {
-        self.assert_owner();
-        self.pending_lease.set(None);
-        self.pending_lease_activation_time.set(0);
-    }
-
-    /// Cancels any pending Treasury contract address update.
-    /// Restricted to owner.
-    pub fn cancel_pending_treasury(&mut self) {
-        self.assert_owner();
-        self.pending_treasury.set(None);
-        self.pending_treasury_activation_time.set(0);
     }
 
     pub fn set_security_deposit_token(&mut self, token: Address) {
@@ -389,26 +302,6 @@ impl Escrow {
     pub fn get_treasury_contract_address(&self) -> Address {
         self.treasury
             .get_or_revert_with(Error::TreasuryContractIsNotSet)
-    }
-
-    /// Returns the currently proposed (pending) Lease contract address, if any.
-    pub fn get_pending_lease(&self) -> Option<Address> {
-        self.pending_lease.get_or_default()
-    }
-
-    /// Returns the timestamp after which the pending Lease address can be applied.
-    pub fn get_pending_lease_activation_time(&self) -> u64 {
-        self.pending_lease_activation_time.get_or_default()
-    }
-
-    /// Returns the currently proposed (pending) Treasury contract address, if any.
-    pub fn get_pending_treasury(&self) -> Option<Address> {
-        self.pending_treasury.get_or_default()
-    }
-
-    /// Returns the timestamp after which the pending Treasury address can be applied.
-    pub fn get_pending_treasury_activation_time(&self) -> u64 {
-        self.pending_treasury_activation_time.get_or_default()
     }
 
     /// Returns the USDC token used for security deposits

@@ -11,7 +11,6 @@ use crate::{
         },
         types::ComplianceConfig,
     },
-    constants::COMPLIANCE_POLICY_UPDATE_TIMELOCK,
     investor_registry::InvestorRegistryContractRef,
     lease::LeaseContractRef,
     property_registry::PropertyRegistryContractRef,
@@ -97,9 +96,7 @@ pub mod errors {
         RecipientNotVerified = 1005,
         InvalidPropertyToken = 1006,
         RecipientNotEquityEligible = 1007,
-        CompliancePolicyUpdateTimelockNotElapsed = 1008,
-        NoPendingCompliancePolicy = 1009,
-        AlreadyInitialized = 1010,
+        AlreadyInitialized = 1008,
     }
 }
 
@@ -127,21 +124,6 @@ pub struct CompliancePolicy {
     configs: Mapping<U256, ComplianceConfig>,
     /// Accounts that are exempt from investor verification checks (e.g. issuance escrows).
     transfer_exempt_accounts: Mapping<Address, bool>,
-    /// Proposed new investor registry address (set by owner via set_investor_registry).
-    /// Remains None until a timelocked change is applied via apply_pending_investor_registry.
-    pending_investor_registry: Var<Option<Address>>,
-    /// Block time (in ms) at which the pending investor registry change may be applied.
-    pending_investor_registry_activation_time: Var<u64>,
-    /// Proposed new property registry address (set by owner via set_property_registry).
-    /// Remains None until a timelocked change is applied via apply_pending_property_registry.
-    pending_property_registry: Var<Option<Address>>,
-    /// Block time (in ms) at which the pending property registry change may be applied.
-    pending_property_registry_activation_time: Var<u64>,
-    /// Proposed new lease address (set by owner via set_lease).
-    /// Remains None until a timelocked change is applied via apply_pending_lease.
-    pending_lease: Var<Option<Address>>,
-    /// Block time (in ms) at which the pending lease change may be applied.
-    pending_lease_activation_time: Var<u64>,
     initialized: Var<bool>,
 }
 
@@ -168,13 +150,6 @@ impl CompliancePolicy {
         self.property_registry.set(property_registry);
         self.lease.set(lease);
 
-        self.pending_investor_registry.set(None);
-        self.pending_investor_registry_activation_time.set(0);
-        self.pending_property_registry.set(None);
-        self.pending_property_registry_activation_time.set(0);
-        self.pending_lease.set(None);
-        self.pending_lease_activation_time.set(0);
-
         self.initialized.set(true);
     }
 
@@ -182,11 +157,9 @@ impl CompliancePolicy {
     // Admin Configuration
     // =============================================================================
 
-    /// Proposes an update to the investor registry used for wallet verification checks.
-    /// The change is subject to a timelock and must be applied later via
-    /// `apply_pending_investor_registry`. Restricted to `DEFAULT_ADMIN_ROLE`.
-    /// @dev This prevents a compromised admin from instantly replacing the KYC provider
-    ///      with a no-op contract.
+    /// Sets the investor registry contract address.
+    /// Restricted to `DEFAULT_ADMIN_ROLE`.
+    /// @dev This replaces the KYC provider used for verification checks.
     pub fn set_investor_registry(&mut self, investor_registry: Address) {
         if !self
             .access_control
@@ -195,16 +168,13 @@ impl CompliancePolicy {
             self.env().revert(Error::NotAuthorized);
         }
 
-        let activation_time = self.env().get_block_time() + COMPLIANCE_POLICY_UPDATE_TIMELOCK;
-        self.pending_investor_registry.set(Some(investor_registry));
-        self.pending_investor_registry_activation_time
-            .set(activation_time);
-        // InvestorRegistrySet event is emitted only on apply after timelock.
+        self.investor_registry.set(investor_registry);
+
+        self.env().emit_event(InvestorRegistrySet { investor_registry });
     }
 
-    /// Proposes an update to the property registry used for property lifecycle checks.
-    /// The change is subject to a timelock and must be applied later via
-    /// `apply_pending_property_registry`. Restricted to `DEFAULT_ADMIN_ROLE`.
+    /// Sets the property registry contract address.
+    /// Restricted to `DEFAULT_ADMIN_ROLE`.
     pub fn set_property_registry(&mut self, property_registry: Address) {
         if !self
             .access_control
@@ -213,16 +183,13 @@ impl CompliancePolicy {
             self.env().revert(Error::NotAuthorized);
         }
 
-        let activation_time = self.env().get_block_time() + COMPLIANCE_POLICY_UPDATE_TIMELOCK;
-        self.pending_property_registry.set(Some(property_registry));
-        self.pending_property_registry_activation_time
-            .set(activation_time);
-        // PropertyRegistrySet event is emitted only on apply after timelock.
+        self.property_registry.set(property_registry);
+
+        self.env().emit_event(PropertyRegistrySet { property_registry });
     }
 
-    /// Proposes an update to the lease contract used for equity-option eligibility checks.
-    /// The change is subject to a timelock and must be applied later via
-    /// `apply_pending_lease`. Restricted to `DEFAULT_ADMIN_ROLE`.
+    /// Sets the lease contract address.
+    /// Restricted to `DEFAULT_ADMIN_ROLE`.
     pub fn set_lease(&mut self, lease: Address) {
         if !self
             .access_control
@@ -231,135 +198,9 @@ impl CompliancePolicy {
             self.env().revert(Error::NotAuthorized);
         }
 
-        let activation_time = self.env().get_block_time() + COMPLIANCE_POLICY_UPDATE_TIMELOCK;
-        self.pending_lease.set(Some(lease));
-        self.pending_lease_activation_time.set(activation_time);
-        // LeaseSet event is emitted only on apply after timelock.
-    }
-
-    /// Applies a previously proposed investor registry change, if the timelock has elapsed.
-    /// Restricted to `DEFAULT_ADMIN_ROLE`.
-    pub fn apply_pending_investor_registry(&mut self) {
-        if !self
-            .access_control
-            .has_role(&DEFAULT_ADMIN_ROLE, &self.env().caller())
-        {
-            self.env().revert(Error::NotAuthorized);
-        }
-
-        let activation_time = self
-            .pending_investor_registry_activation_time
-            .get_or_default();
-        if self.env().get_block_time() < activation_time {
-            self.env()
-                .revert(Error::CompliancePolicyUpdateTimelockNotElapsed);
-        }
-
-        let pending = self.pending_investor_registry.get_or_default();
-        let investor_registry =
-            pending.unwrap_or_revert_with(&self.env(), Error::NoPendingCompliancePolicy);
-
-        self.investor_registry.set(investor_registry);
-        self.pending_investor_registry.set(None);
-        self.pending_investor_registry_activation_time.set(0);
-
-        self.env()
-            .emit_event(InvestorRegistrySet { investor_registry });
-    }
-
-    /// Applies a previously proposed property registry change, if the timelock has elapsed.
-    /// Restricted to `DEFAULT_ADMIN_ROLE`.
-    pub fn apply_pending_property_registry(&mut self) {
-        if !self
-            .access_control
-            .has_role(&DEFAULT_ADMIN_ROLE, &self.env().caller())
-        {
-            self.env().revert(Error::NotAuthorized);
-        }
-
-        let activation_time = self
-            .pending_property_registry_activation_time
-            .get_or_default();
-        if self.env().get_block_time() < activation_time {
-            self.env()
-                .revert(Error::CompliancePolicyUpdateTimelockNotElapsed);
-        }
-
-        let pending = self.pending_property_registry.get_or_default();
-        let property_registry =
-            pending.unwrap_or_revert_with(&self.env(), Error::NoPendingCompliancePolicy);
-
-        self.property_registry.set(property_registry);
-        self.pending_property_registry.set(None);
-        self.pending_property_registry_activation_time.set(0);
-
-        self.env()
-            .emit_event(PropertyRegistrySet { property_registry });
-    }
-
-    /// Applies a previously proposed lease change, if the timelock has elapsed.
-    /// Restricted to `DEFAULT_ADMIN_ROLE`.
-    pub fn apply_pending_lease(&mut self) {
-        if !self
-            .access_control
-            .has_role(&DEFAULT_ADMIN_ROLE, &self.env().caller())
-        {
-            self.env().revert(Error::NotAuthorized);
-        }
-
-        let activation_time = self.pending_lease_activation_time.get_or_default();
-        if self.env().get_block_time() < activation_time {
-            self.env()
-                .revert(Error::CompliancePolicyUpdateTimelockNotElapsed);
-        }
-
-        let pending = self.pending_lease.get_or_default();
-        let lease = pending.unwrap_or_revert_with(&self.env(), Error::NoPendingCompliancePolicy);
-
         self.lease.set(lease);
-        self.pending_lease.set(None);
-        self.pending_lease_activation_time.set(0);
 
         self.env().emit_event(LeaseSet { lease });
-    }
-
-    /// Cancels any pending investor registry update.
-    /// Restricted to `DEFAULT_ADMIN_ROLE`.
-    pub fn cancel_pending_investor_registry(&mut self) {
-        if !self
-            .access_control
-            .has_role(&DEFAULT_ADMIN_ROLE, &self.env().caller())
-        {
-            self.env().revert(Error::NotAuthorized);
-        }
-        self.pending_investor_registry.set(None);
-        self.pending_investor_registry_activation_time.set(0);
-    }
-
-    /// Cancels any pending property registry update.
-    /// Restricted to `DEFAULT_ADMIN_ROLE`.
-    pub fn cancel_pending_property_registry(&mut self) {
-        if !self
-            .access_control
-            .has_role(&DEFAULT_ADMIN_ROLE, &self.env().caller())
-        {
-            self.env().revert(Error::NotAuthorized);
-        }
-        self.pending_property_registry.set(None);
-        self.pending_property_registry_activation_time.set(0);
-    }
-
-    /// Cancels any pending lease update.
-    /// Restricted to `DEFAULT_ADMIN_ROLE`.
-    pub fn cancel_pending_lease(&mut self) {
-        if !self
-            .access_control
-            .has_role(&DEFAULT_ADMIN_ROLE, &self.env().caller())
-        {
-            self.env().revert(Error::NotAuthorized);
-        }
-        self.pending_lease.set(None);
-        self.pending_lease_activation_time.set(0);
     }
 
     /// Sets the transfer configuration for a property
@@ -411,38 +252,6 @@ impl CompliancePolicy {
     /// Returns the lease contract address.
     pub fn get_lease_contract(&self) -> Address {
         *self.lease.address()
-    }
-
-    /// Returns the currently proposed (pending) investor registry, if any.
-    pub fn get_pending_investor_registry(&self) -> Option<Address> {
-        self.pending_investor_registry.get_or_default()
-    }
-
-    /// Returns the timestamp after which the pending investor registry can be applied.
-    pub fn get_pending_investor_registry_activation_time(&self) -> u64 {
-        self.pending_investor_registry_activation_time
-            .get_or_default()
-    }
-
-    /// Returns the currently proposed (pending) property registry, if any.
-    pub fn get_pending_property_registry(&self) -> Option<Address> {
-        self.pending_property_registry.get_or_default()
-    }
-
-    /// Returns the timestamp after which the pending property registry can be applied.
-    pub fn get_pending_property_registry_activation_time(&self) -> u64 {
-        self.pending_property_registry_activation_time
-            .get_or_default()
-    }
-
-    /// Returns the currently proposed (pending) lease, if any.
-    pub fn get_pending_lease(&self) -> Option<Address> {
-        self.pending_lease.get_or_default()
-    }
-
-    /// Returns the timestamp after which the pending lease can be applied.
-    pub fn get_pending_lease_activation_time(&self) -> u64 {
-        self.pending_lease_activation_time.get_or_default()
     }
 
     /// Returns the compliance config for a property

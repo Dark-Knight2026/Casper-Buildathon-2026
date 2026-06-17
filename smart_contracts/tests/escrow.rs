@@ -8,7 +8,7 @@ use odra_modules::access::errors::Error as AccessError;
 
 use leasefi_contracts::big_coin::{BigCoin, BigCoinHostRef, BigCoinInitArgs};
 use leasefi_contracts::common::CurrencyAmount;
-use leasefi_contracts::constants::COMPLIANCE_POLICY_UPDATE_TIMELOCK;
+
 use leasefi_contracts::escrow::{
     errors::Error,
     events::{
@@ -59,9 +59,6 @@ fn setup(env: HostEnv) -> TestData {
 
     escrow.set_lease(env.get_account(15));
     escrow.set_treasury(env.get_account(14));
-    env.advance_block_time(COMPLIANCE_POLICY_UPDATE_TIMELOCK + 1);
-    escrow.apply_pending_lease();
-    escrow.apply_pending_treasury();
     escrow.set_security_deposit_token(mock_cep18.address());
 
     TestData {
@@ -262,18 +259,6 @@ fn test_set_lease_should_set_lease_properly() {
 
     test_data.escrow.set_lease(lease);
 
-    // Not yet applied
-    assert_eq!(
-        test_data.escrow.get_lease_contract_address(),
-        test_data.env.get_account(15), // from setup
-        "Lease should not change until timelock elapses"
-    );
-
-    test_data
-        .env
-        .advance_block_time(COMPLIANCE_POLICY_UPDATE_TIMELOCK + 1);
-    test_data.escrow.apply_pending_lease();
-
     assert_eq!(
         test_data.escrow.get_lease_contract_address(),
         lease,
@@ -311,18 +296,6 @@ fn test_set_treasury_should_set_treasury_properly() {
     let treasury = test_data.env.get_account(10);
 
     test_data.escrow.set_treasury(treasury);
-
-    // Not yet applied
-    assert_eq!(
-        test_data.escrow.get_treasury_contract_address(),
-        test_data.env.get_account(14), // from setup
-        "Treasury should not change until timelock elapses"
-    );
-
-    test_data
-        .env
-        .advance_block_time(COMPLIANCE_POLICY_UPDATE_TIMELOCK + 1);
-    test_data.escrow.apply_pending_treasury();
 
     assert_eq!(
         test_data.escrow.get_treasury_contract_address(),
