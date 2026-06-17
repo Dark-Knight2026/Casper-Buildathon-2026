@@ -249,6 +249,34 @@
     },
     {
       "struct": {
+        "name": "LeaseNftRecovered",
+        "description": null,
+        "members": [
+          {
+            "name": "lease_agreement_id",
+            "description": null,
+            "ty": "U256"
+          },
+          {
+            "name": "token_id",
+            "description": null,
+            "ty": "U256"
+          },
+          {
+            "name": "old_wallet",
+            "description": null,
+            "ty": "Key"
+          },
+          {
+            "name": "new_wallet",
+            "description": null,
+            "ty": "Key"
+          }
+        ]
+      }
+    },
+    {
+      "struct": {
         "name": "OwnershipTransferred",
         "description": null,
         "members": [
@@ -360,6 +388,16 @@
       "name": "LeaseAlreadyFinalized",
       "description": "",
       "discriminant": 413
+    },
+    {
+      "name": "LeaseNftAlreadyOwnedByActiveWallet",
+      "description": "",
+      "discriminant": 417
+    },
+    {
+      "name": "LeaseNftOwnerNotFound",
+      "description": "",
+      "discriminant": 416
     },
     {
       "name": "MissingRole",
@@ -644,6 +682,22 @@
       "access": "public"
     },
     {
+      "name": "recover_lease_nft",
+      "description": "Moves a lease NFT to the tenant user's current active wallet after wallet recovery.",
+      "is_mutable": true,
+      "arguments": [
+        {
+          "name": "lease_agreement_id",
+          "description": null,
+          "ty": "U256",
+          "optional": false
+        }
+      ],
+      "return_ty": "Unit",
+      "is_contract_context": true,
+      "access": "public"
+    },
+    {
       "name": "transfer_ownership",
       "description": "Delegated. See `self.ownable.transfer_ownership()` for details.",
       "is_mutable": true,
@@ -698,6 +752,10 @@
     {
       "name": "LeaseAgreementProlonged",
       "ty": "LeaseAgreementProlonged"
+    },
+    {
+      "name": "LeaseNftRecovered",
+      "ty": "LeaseNftRecovered"
     },
     {
       "name": "OwnershipTransferred",
