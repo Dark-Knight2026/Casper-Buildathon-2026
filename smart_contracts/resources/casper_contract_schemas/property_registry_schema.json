@@ -49,6 +49,11 @@
             "name": "total_supply",
             "description": null,
             "ty": "U256"
+          },
+          {
+            "name": "metadata_uri",
+            "description": null,
+            "ty": "String"
           }
         ]
       }
