@@ -408,6 +408,7 @@ where
                 property_type, bedrooms,
                 bathrooms::float8 AS "bathrooms?",
                 square_feet, year_built, parking_features, metadata_uri,
+                onchain_property_id::text AS "onchain_property_id?",
                 created_at AS "created_at!", updated_at AS "updated_at!"
             FROM properties
             WHERE id = ANY($1) AND deleted_at IS NULL

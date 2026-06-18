@@ -49,6 +49,10 @@ pub struct PropertyRow {
     /// Off-chain metadata pointer (`ipfs://{cid}`) pinned on create/update;
     /// the on-chain registration argument. Null until the first pin.
     pub metadata_uri: Option<String>,
+    /// Contract-assigned `PropertyRegistry` id (U256 as a decimal string),
+    /// written by the indexer from the `PropertyCreated` event.
+    /// `null` until observed on-chain.
+    pub onchain_property_id: Option<String>,
     /// Creation timestamp.
     pub created_at: DateTime<Utc>,
     /// Last update timestamp.
@@ -208,6 +212,7 @@ struct UpsertRow {
     year_built: Option<i32>,
     parking_features: Option<Vec<String>>,
     metadata_uri: Option<String>,
+    onchain_property_id: Option<String>,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
     was_inserted: bool,
@@ -262,6 +267,7 @@ pub async fn upsert_property(
                 year_built,
                 parking_features,
                 metadata_uri,
+                onchain_property_id::text AS "onchain_property_id?",
                 created_at AS "created_at!",
                 updated_at AS "updated_at!",
                 (xmax::text::bigint = 0) AS "was_inserted!"
@@ -303,6 +309,7 @@ pub async fn upsert_property(
         year_built: row.year_built,
         parking_features: row.parking_features,
         metadata_uri: row.metadata_uri,
+        onchain_property_id: row.onchain_property_id,
         created_at: row.created_at,
         updated_at: row.updated_at,
     };
@@ -394,6 +401,7 @@ pub async fn update_property(
                 year_built,
                 parking_features,
                 metadata_uri,
+                onchain_property_id::text AS "onchain_property_id?",
                 created_at AS "created_at!",
                 updated_at AS "updated_at!"
         "#,
@@ -496,6 +504,7 @@ pub async fn fetch_property(pool: &PgPool, property_id: Uuid) -> Result<Property
                 year_built,
                 parking_features,
                 metadata_uri,
+                onchain_property_id::text AS "onchain_property_id?",
                 created_at AS "created_at!",
                 updated_at AS "updated_at!"
             FROM properties
@@ -626,6 +635,7 @@ pub async fn search_properties_geo(
                 year_built,
                 parking_features,
                 metadata_uri,
+                onchain_property_id::text AS "onchain_property_id?",
                 created_at AS "created_at!",
                 updated_at AS "updated_at!"
             FROM properties

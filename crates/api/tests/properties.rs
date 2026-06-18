@@ -143,6 +143,17 @@ async fn create_property_returns_201_with_reso_fields(pool: PgPool) {
         "100marketstdenverco80202"
     );
 
+    // The on-chain id is always part of the response shape, and null until the
+    // indexer observes a PropertyCreated event and writes the contract id.
+    assert!(
+        body.get("onchainPropertyId").is_some(),
+        "onchainPropertyId must be part of the property shape"
+    );
+    assert!(
+        body["onchainPropertyId"].is_null(),
+        "onchainPropertyId must be null before on-chain registration"
+    );
+
     // The row is owned by the caller's `sub`.
     let owner = sqlx::query_scalar::<_, Uuid>("SELECT landlord_id FROM properties WHERE id = $1")
         .bind(Uuid::parse_str(body["id"].as_str().unwrap()).unwrap())

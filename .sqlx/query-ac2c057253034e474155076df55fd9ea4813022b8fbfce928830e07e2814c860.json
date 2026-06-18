@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            UPDATE properties\n            SET\n                address_line1 = COALESCE($2, address_line1),\n                address_line2 = COALESCE($3, address_line2),\n                city = COALESCE($4, city),\n                state = COALESCE($5, state),\n                zip_code = COALESCE($6, zip_code),\n                property_type = COALESCE($7, property_type),\n                latitude = COALESCE($8::double precision, latitude),\n                longitude = COALESCE($9::double precision, longitude),\n                bedrooms = COALESCE($10, bedrooms),\n                bathrooms = COALESCE($11::double precision, bathrooms),\n                square_feet = COALESCE($12, square_feet),\n                year_built = COALESCE($13, year_built),\n                parking_features = COALESCE($14, parking_features),\n                parcel_id = COALESCE($15, parcel_id),\n                updated_at = NOW()\n            WHERE id = $1\n            RETURNING\n                id,\n                normalized_address,\n                parcel_id,\n                address_line1,\n                address_line2,\n                city,\n                state,\n                zip_code,\n                latitude::float8 AS \"latitude?\",\n                longitude::float8 AS \"longitude?\",\n                property_type,\n                bedrooms,\n                bathrooms::float8 AS \"bathrooms?\",\n                square_feet,\n                year_built,\n                parking_features,\n                metadata_uri,\n                created_at AS \"created_at!\",\n                updated_at AS \"updated_at!\"\n        ",
+  "query": "\n            SELECT\n                id,\n                normalized_address,\n                parcel_id,\n                address_line1,\n                address_line2,\n                city,\n                state,\n                zip_code,\n                latitude::float8 AS \"latitude?\",\n                longitude::float8 AS \"longitude?\",\n                property_type,\n                bedrooms,\n                bathrooms::float8 AS \"bathrooms?\",\n                square_feet,\n                year_built,\n                parking_features,\n                metadata_uri,\n                onchain_property_id::text AS \"onchain_property_id?\",\n                created_at AS \"created_at!\",\n                updated_at AS \"updated_at!\"\n            FROM properties\n            WHERE deleted_at IS NULL\n              AND ($3::float8 IS NULL OR ST_DWithin(\n                    geog,\n                    ST_SetSRID(ST_MakePoint($2::float8, $1::float8), 4326)::geography,\n                    $3::float8 * 1609.34\n                  ))\n              AND ($4::float8 IS NULL OR ST_Intersects(\n                    geog,\n                    ST_MakeEnvelope($4::float8, $5::float8, $6::float8, $7::float8, 4326)::geography\n                  ))\n            ORDER BY\n                CASE\n                    WHEN $1::float8 IS NOT NULL AND $2::float8 IS NOT NULL\n                    THEN ST_Distance(geog, ST_SetSRID(ST_MakePoint($2::float8, $1::float8), 4326)::geography)\n                    ELSE NULL\n                END ASC NULLS LAST,\n                created_at DESC\n            LIMIT $8 OFFSET $9\n        ",
   "describe": {
     "columns": [
       {
@@ -177,6 +177,12 @@
       },
       {
         "ordinal": 17,
+        "name": "onchain_property_id?",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 18,
         "name": "created_at!",
         "type_info": "Timestamptz",
         "origin": {
@@ -187,7 +193,7 @@
         }
       },
       {
-        "ordinal": 18,
+        "ordinal": 19,
         "name": "updated_at!",
         "type_info": "Timestamptz",
         "origin": {
@@ -200,21 +206,15 @@
     ],
     "parameters": {
       "Left": [
-        "Uuid",
-        "Varchar",
-        "Varchar",
-        "Varchar",
-        "Varchar",
-        "Varchar",
-        "Varchar",
         "Float8",
         "Float8",
-        "Int4",
         "Float8",
-        "Int4",
-        "Int4",
-        "TextArray",
-        "Text"
+        "Float8",
+        "Float8",
+        "Float8",
+        "Float8",
+        "Int8",
+        "Int8"
       ]
     },
     "nullable": [
@@ -235,9 +235,10 @@
       true,
       true,
       true,
+      null,
       true,
       true
     ]
   },
-  "hash": "7e5edb9e025087bc83d316dda7a5d953b7c76e2a0968eb079369f8a4744b17d1"
+  "hash": "ac2c057253034e474155076df55fd9ea4813022b8fbfce928830e07e2814c860"
 }

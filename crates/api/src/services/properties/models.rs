@@ -97,6 +97,9 @@ pub struct Property {
     /// Off-chain metadata pointer (`ipfs://{cid}`) passed to on-chain
     /// registration; null until the first pin.
     pub metadata_uri: Option<String>,
+    /// Contract-assigned `PropertyRegistry` id (U256 as a decimal string).
+    /// `null` until the indexer observes on-chain registration.
+    pub onchain_property_id: Option<String>,
     /// Creation timestamp.
     pub created_at: DateTime<Utc>,
     /// Last update timestamp.
@@ -127,6 +130,7 @@ impl From<PropertyRow> for Property {
             year_built: row.year_built,
             parking_features: row.parking_features.unwrap_or_default(),
             metadata_uri: row.metadata_uri,
+            onchain_property_id: row.onchain_property_id,
             created_at: row.created_at,
             updated_at: row.updated_at,
         }
