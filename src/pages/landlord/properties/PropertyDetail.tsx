@@ -32,6 +32,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ConfirmationDialog } from '@/components/ui/confirmation-dialog';
 import { useToast } from '@/hooks/use-toast';
+import { NavNewDot } from '@/components/layout/NavNewDot';
+import { useHasPendingViewings } from '@/hooks/landlord/useHasPendingViewings';
 import { ApiClient } from '@/lib/api-client';
 import { TrustBadges } from '@/components/property/TrustBadges';
 import { ListingLifecycle } from '@/components/listing/ListingLifecycle';
@@ -78,6 +80,8 @@ export default function PropertyDetail() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  // Red dot on the "Viewings" button when this listing has a pending request.
+  const hasPendingViewings = useHasPendingViewings(id);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [withdrawing, setWithdrawing] = useState(false);
 
@@ -197,37 +201,50 @@ export default function PropertyDetail() {
             />
           </div>
 
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              onClick={() =>
-                navigate(`/landlord/properties/${id}/applications`)
-              }
-            >
-              <FileText className="mr-2 h-4 w-4" />
-              Applications
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => navigate(`/landlord/properties/${id}/viewings`)}
-            >
-              <Calendar className="mr-2 h-4 w-4" />
-              Viewings
-            </Button>
-            <Button onClick={() => navigate(`/landlord/properties/${id}/edit`)}>
-              <Edit className="mr-2 h-4 w-4" />
-              Edit
-            </Button>
+          {/* On mobile the two groups stack: Applications/Viewings on top,
+              Edit/Delete below; from sm: they sit in one row. */}
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={() =>
+                  navigate(`/landlord/properties/${id}/applications`)
+                }
+              >
+                <FileText className="mr-2 h-4 w-4" />
+                Applications
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => navigate(`/landlord/properties/${id}/viewings`)}
+              >
+                <Calendar className="mr-2 h-4 w-4" />
+                Viewings
+                <NavNewDot
+                  show={hasPendingViewings}
+                  label="pending viewings"
+                  className="ml-1.5"
+                />
+              </Button>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                onClick={() => navigate(`/landlord/properties/${id}/edit`)}
+              >
+                <Edit className="mr-2 h-4 w-4" />
+                Edit
+              </Button>
 
-            {/* Soft delete = withdraw (same action as the lifecycle Withdraw). */}
-            <Button
-              variant="destructive"
-              onClick={() => setConfirmDelete(true)}
-              disabled={withdrawing}
-            >
-              <Trash2 className="mr-2 h-4 w-4" />
-              Delete
-            </Button>
+              {/* Soft delete = withdraw (same action as the lifecycle Withdraw). */}
+              <Button
+                variant="destructive"
+                onClick={() => setConfirmDelete(true)}
+                disabled={withdrawing}
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete
+              </Button>
+            </div>
           </div>
         </div>
       </div>

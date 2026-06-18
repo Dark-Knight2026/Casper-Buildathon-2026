@@ -5,6 +5,8 @@ import { useICOWallet } from '@/hooks/ico/useICOWallet';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ProfileNudgeDialog } from '@/components/auth/ProfileNudgeDialog';
+import { NavNewDot } from '@/components/layout/NavNewDot';
+import { useHasNewApplications } from '@/hooks/landlord/useHasNewApplications';
 import {
   LayoutDashboard,
   Building2,
@@ -32,7 +34,8 @@ const PLACEHOLDER_LAST = 'User';
 
 function headerInitials(profile: UserType): string {
   const isPlaceholder =
-    profile.firstName === PLACEHOLDER_FIRST && profile.lastName === PLACEHOLDER_LAST;
+    profile.firstName === PLACEHOLDER_FIRST &&
+    profile.lastName === PLACEHOLDER_LAST;
   if (isPlaceholder) return '';
   return [profile.firstName?.[0], profile.lastName?.[0]]
     .filter(Boolean)
@@ -40,7 +43,13 @@ function headerInitials(profile: UserType): string {
     .toUpperCase();
 }
 
-function HeaderAvatar({ profile, onNavigate }: { profile: UserType; onNavigate?: () => void }) {
+function HeaderAvatar({
+  profile,
+  onNavigate,
+}: {
+  profile: UserType;
+  onNavigate?: () => void;
+}) {
   const initials = headerInitials(profile);
   return (
     <Link
@@ -63,15 +72,15 @@ function HeaderAvatar({ profile, onNavigate }: { profile: UserType; onNavigate?:
 // application detail, vendors, financial) are reached from within these
 // surfaces, so the nav stays focused on the primary flow.
 const NAV_LINKS = [
-  { to: '/landlord/dashboard',    label: 'Dashboard',    icon: LayoutDashboard },
-  { to: '/landlord/properties',   label: 'Properties',   icon: Building2 },
+  { to: '/landlord/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { to: '/landlord/properties', label: 'Properties', icon: Building2 },
   { to: '/landlord/applications', label: 'Applications', icon: ClipboardList },
-  { to: '/landlord/tenants',      label: 'Tenants',      icon: Users },
-  { to: '/landlord/leases',       label: 'Leases',       icon: FileText },
-  { to: '/landlord/payments',     label: 'Payments',     icon: CreditCard },
-  { to: '/landlord/maintenance',  label: 'Maintenance',  icon: Wrench },
-  { to: '/landlord/renewals',     label: 'Renewals',     icon: RefreshCw },
-  { to: '/landlord/messages',     label: 'Messages',     icon: MessageSquare },
+  { to: '/landlord/tenants', label: 'Tenants', icon: Users },
+  { to: '/landlord/leases', label: 'Leases', icon: FileText },
+  { to: '/landlord/payments', label: 'Payments', icon: CreditCard },
+  { to: '/landlord/maintenance', label: 'Maintenance', icon: Wrench },
+  { to: '/landlord/renewals', label: 'Renewals', icon: RefreshCw },
+  { to: '/landlord/messages', label: 'Messages', icon: MessageSquare },
 ];
 
 // NOTE: this layout collapses to the burger at min-[1200px], NOT lg: (1024px)
@@ -88,6 +97,8 @@ export default function LandlordLayout() {
   const { disconnect } = useICOWallet();
   const { pathname } = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
+  // "New applications" dot on the Applications nav item.
+  const hasNewApplications = useHasNewApplications();
 
   // Sign out fully — both our backend session AND the CSPR.click wallet
   // session. We `await` disconnect() so the SDK's hard `disconnect(provider)`
@@ -102,7 +113,8 @@ export default function LandlordLayout() {
     window.location.assign('/');
   };
 
-  const isActive = (to: string) => pathname === to || pathname.startsWith(to + '/');
+  const isActive = (to: string) =>
+    pathname === to || pathname.startsWith(to + '/');
 
   useEffect(() => {
     const onResize = () => {
@@ -126,13 +138,19 @@ export default function LandlordLayout() {
               <Link
                 key={to}
                 to={to}
-                className={`text-sm transition-colors ${
+                className={`inline-flex items-center gap-1.5 text-sm transition-colors ${
                   isActive(to)
                     ? 'text-foreground font-medium'
                     : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
                 {label}
+                {to === '/landlord/applications' && (
+                  <NavNewDot
+                    show={hasNewApplications}
+                    label="new applications"
+                  />
+                )}
               </Link>
             ))}
           </nav>
@@ -158,10 +176,14 @@ export default function LandlordLayout() {
           <div className="min-[1200px]:hidden">
             <button
               className="p-2 rounded-md text-muted-foreground hover:text-foreground"
-              onClick={() => setMobileOpen(prev => !prev)}
+              onClick={() => setMobileOpen((prev) => !prev)}
               aria-label="Toggle menu"
             >
-              {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+              {mobileOpen ? (
+                <X className="h-5 w-5" />
+              ) : (
+                <Menu className="h-5 w-5" />
+              )}
             </button>
           </div>
         </div>
@@ -176,13 +198,19 @@ export default function LandlordLayout() {
                 key={to}
                 to={to}
                 onClick={() => setMobileOpen(false)}
-                className={`text-base transition-colors py-3 border-b border-border/50 ${
+                className={`flex items-center gap-2 text-base transition-colors py-3 border-b border-border/50 ${
                   isActive(to)
                     ? 'text-foreground font-medium'
                     : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
                 {label}
+                {to === '/landlord/applications' && (
+                  <NavNewDot
+                    show={hasNewApplications}
+                    label="new applications"
+                  />
+                )}
               </Link>
             ))}
           </nav>
@@ -194,7 +222,10 @@ export default function LandlordLayout() {
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 {profile && (
-                  <HeaderAvatar profile={profile} onNavigate={() => setMobileOpen(false)} />
+                  <HeaderAvatar
+                    profile={profile}
+                    onNavigate={() => setMobileOpen(false)}
+                  />
                 )}
                 <Link
                   to="/help"
