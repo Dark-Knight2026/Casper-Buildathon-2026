@@ -1,17 +1,17 @@
 import { backendClient } from '@/lib/api-client';
-import type { MediaRef, MediaReorderEntry } from '@/types/listingContract';
+import type { MediaRef, MediaReorderBody } from '@/types/listingContract';
 
 /**
  * Listing media API surface.
  *
- * Upload is not a plain put: each image is EXIF/GPS-stripped, moderation-passed
- * and IPFS-pinned. A fresh upload is `pending` and excluded from public reads
- * until an agent approves it; the owner sees all statuses. The agent-only
- * moderation endpoint (`PUT /media/{mediaId}/moderation`) is intentionally not
- * exposed here — it is outside the landlord/tenant surface.
+ * Upload is not a plain put: each image is EXIF/GPS-stripped, IPFS-pinned and
+ * moderation-stamped. In the hackathon build uploads are **auto-approved**, so a
+ * fresh upload is publicly visible immediately; the owner always sees every
+ * status. The agent-only moderation endpoint (`PUT /media/{mediaId}/moderation`)
+ * is intentionally not exposed here — it is outside the landlord/tenant surface.
  *
- * Backend stubs in MVP: the EXIF stripper is a no-op and the pinner returns a
- * synthetic `cid` (bytes are not actually stored); only moderation is real.
+ * Backend stubs in MVP: the EXIF stripper is a no-op, the pinner returns a
+ * synthetic `cid` (bytes are not actually stored), and moderation auto-approves.
  */
 
 const LISTINGS = '/api/v1/listings';
@@ -28,6 +28,7 @@ export async function uploadMediaFile(
 ): Promise<MediaRef> {
   const form = new FormData();
   form.append('file', file);
+  // Fresh uploads come back `approved` (auto-approve, hackathon).
   return backendClient.post<MediaRef>(`${LISTINGS}/${listingId}/media`, form);
 }
 
@@ -48,16 +49,15 @@ export async function uploadMedia(
 }
 
 /**
- * `PUT /listings/{id}/media`. Reorder and/or remove. Each entry sets the
- * position of a surviving media id; any current media id absent from the array
- * is removed. Returns the resulting media set.
+ * `PUT /listings/{id}/media`. Reorder and/or remove in one call. `order` is the
+ * surviving media ids in the desired order (each id's index becomes its
+ * position); `remove` is the ids to delete (the blob is dropped too). The
+ * backend removes first, then reorders. Returns the resulting media set (all
+ * statuses — owner view).
  */
 export async function updateMedia(
   listingId: string,
-  entries: MediaReorderEntry[]
+  body: MediaReorderBody
 ): Promise<MediaRef[]> {
-  return backendClient.put<MediaRef[]>(
-    `${LISTINGS}/${listingId}/media`,
-    entries
-  );
+  return backendClient.put<MediaRef[]>(`${LISTINGS}/${listingId}/media`, body);
 }

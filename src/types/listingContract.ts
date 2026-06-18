@@ -370,12 +370,13 @@ export interface ListingStateTransitionBody {
 }
 
 /**
- * `PUT /listings/{id}/media` — reorder / remove. Each entry sets the position
- * of a surviving media id; ids absent from the array are removed.
+ * `PUT /listings/{id}/media` body — reorder and/or remove. `order` is the
+ * surviving media ids in the desired order (index → position); `remove` is the
+ * ids to delete. The backend removes first, then reorders.
  */
-export interface MediaReorderEntry {
-  id: string;
-  position: number;
+export interface MediaReorderBody {
+  order?: string[];
+  remove?: string[];
 }
 
 /**
