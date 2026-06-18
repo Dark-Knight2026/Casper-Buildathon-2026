@@ -74,6 +74,11 @@ export interface PropertyAsset {
   // PropertyRegistry takes. Null on un-pinned legacy rows; CID is synthetic
   // while the backend pinner is stubbed.
   metadataUri: string | null;
+  // Contract-assigned PropertyRegistry id, written by the indexer when it
+  // reconciles the `PropertyCreated` event back to this row by `metadataUri`.
+  // Read-only. Null until registered + indexed → the on-chain "registered"
+  // signal (pinned `metadataUri` alone ≠ registered).
+  onchainPropertyId: string | null;
   createdAt: string;
   updatedAt: string;
 }

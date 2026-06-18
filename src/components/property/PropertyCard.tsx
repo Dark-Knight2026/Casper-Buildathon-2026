@@ -50,6 +50,10 @@ export interface PropertyCardData {
   // the lease-history cards (which have no listing) can omit them.
   verifiedListerBadge?: boolean;
   onChainProvenance?: boolean;
+  // The underlying property is registered on-chain (PropertyRegistry record has
+  // a contract `onchainPropertyId`). Distinct from `onChainProvenance` (the
+  // listing-level anchor).
+  registeredOnChain?: boolean;
 }
 
 interface PropertyCardProps {
@@ -166,6 +170,7 @@ export function PropertyCard({
         <TrustBadges
           verifiedLister={property.verifiedListerBadge}
           onChain={property.onChainProvenance}
+          registeredOnChain={property.registeredOnChain}
           className="mb-4"
         />
 

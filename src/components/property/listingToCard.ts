@@ -24,5 +24,6 @@ export function listingToCard(listing: Listing): PropertyCardData {
     daysOnMarket: listing.daysOnMarket,
     verifiedListerBadge: listing.provenance.verifiedListerBadge,
     onChainProvenance: listing.onChain?.provenanceOnChain ?? false,
+    registeredOnChain: (listing.property?.onchainPropertyId ?? null) !== null,
   };
 }

@@ -31,6 +31,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { RegisteredOnChainBadge } from '@/components/property/RegisteredOnChainBadge';
 import {
   Select,
   SelectContent,
@@ -397,6 +398,9 @@ export default function PropertyList() {
                       <ShieldCheck className="h-3 w-3 text-emerald-600" />
                       Verified
                     </Badge>
+                  )}
+                  {asset?.onchainPropertyId != null && (
+                    <RegisteredOnChainBadge className="absolute bottom-2 left-2" />
                   )}
                 </div>
 

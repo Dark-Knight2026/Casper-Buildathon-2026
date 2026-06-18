@@ -46,9 +46,10 @@ import type { Listing } from '@/types/listingContract';
  * like `ICOLayout`/`AuthWalletLayout` do, otherwise `useClickRef()` is null and
  * connect/sign are no-ops.
  *
- * Scope is step 1 (create the `Draft` record), provable via the deploy-hash →
- * cspr.live link with no indexer. The contract-assigned `property_id` and steps
- * 2/3 (attach token, activate) light up with the indexer read service (PL-34).
+ * Scope is step 1 (create the `Draft` record). The contract-assigned
+ * `property_id` surfaces as `property.onchainPropertyId` once the backend
+ * indexer reconciles the `PropertyCreated` event by `metadataUri` — shown here
+ * as the "Registered" state. Steps 2/3 (attach token, activate) come later.
  *
  * `metadataUri` comes from the backend — it pins the canonical property payload
  * to IPFS on create/update and stamps `property.metadataUri`. It is also the
@@ -94,13 +95,27 @@ function OnChainSdkHost({ children }: { children: React.ReactNode }) {
 
 // ── Status row (shared between the idle and active states) ───────────────────
 
-function StatusRow({ txHash }: { txHash: string | null }) {
+function StatusRow({
+  propertyId,
+  txHash,
+}: {
+  propertyId: string | null;
+  txHash: string | null;
+}) {
   return (
     <div className="flex gap-8 text-sm">
       <div>
         <p className="text-muted-foreground">Property ID</p>
-        {/* Contract-assigned, resolves via the indexer (PL-34) — “—” until then. */}
-        <p className="font-semibold">—</p>
+        {propertyId ? (
+          // Contract-assigned id, surfaced by the backend once the indexer
+          // reconciled PropertyCreated by metadataUri.
+          <p className="font-semibold">{propertyId}</p>
+        ) : txHash ? (
+          // Signed this session; the indexer hasn't written the id back yet.
+          <p className="font-semibold text-muted-foreground">pending…</p>
+        ) : (
+          <p className="font-semibold">—</p>
+        )}
       </div>
       <div>
         <p className="text-muted-foreground">Deploy</p>
@@ -145,7 +160,7 @@ function RegistrationFlow({
 
   return (
     <div className="space-y-4">
-      <StatusRow txHash={txHash} />
+      <StatusRow propertyId={null} txHash={txHash} />
 
       {step === 'confirmed' ? (
         <p className="text-sm text-muted-foreground">
@@ -204,7 +219,7 @@ export function PropertyOnChainRegistration({ listing }: { listing: Listing }) {
 
   // The indexer reconciles the on-chain record by `metadataUri`, so we register
   // only when the backend has pinned one. Prefer the nested property; fetch only
-  // if the listing didn't carry it.
+  // if the listing didn't carry it (also gets us `onchainPropertyId`).
   const nestedMetadataUri = listing.property?.metadataUri ?? null;
   const { data: fetchedProperty } = useQuery({
     queryKey: ['property', listing.propertyId],
@@ -212,6 +227,12 @@ export function PropertyOnChainRegistration({ listing }: { listing: Listing }) {
     enabled: nestedMetadataUri === null,
   });
   const metadataUri = nestedMetadataUri ?? fetchedProperty?.metadataUri ?? null;
+  // Contract-assigned id; non-null = registered + indexed (the real signal).
+  const onchainPropertyId =
+    listing.property?.onchainPropertyId ??
+    fetchedProperty?.onchainPropertyId ??
+    null;
+  const isRegistered = onchainPropertyId !== null;
 
   // Stay dark (render nothing) when the contract isn't configured.
   if (!isPropertyRegistryEnabled) return null;
@@ -222,20 +243,33 @@ export function PropertyOnChainRegistration({ listing }: { listing: Listing }) {
         <CardTitle className="flex items-center gap-2">
           <ShieldCheck className="h-5 w-5" />
           On-chain registration
-          <Badge className="bg-muted text-muted-foreground">
-            Not registered
-          </Badge>
+          {isRegistered ? (
+            <Badge className="bg-green-600 text-white">Registered</Badge>
+          ) : (
+            <Badge className="bg-muted text-muted-foreground">
+              Not registered
+            </Badge>
+          )}
         </CardTitle>
         <CardDescription>
-          Register “{listing.title}” on Casper so it can anchor fractional
-          ownership. You sign the deploy from your own wallet.
+          {isRegistered
+            ? `“${listing.title}” is registered on Casper and can anchor fractional ownership.`
+            : `Register “${listing.title}” on Casper so it can anchor fractional ownership. You sign the deploy from your own wallet.`}
         </CardDescription>
       </CardHeader>
 
       <CardContent className="space-y-4">
-        {!issuerUserId ? (
+        {isRegistered ? (
           <div className="space-y-3">
-            <StatusRow txHash={null} />
+            <StatusRow propertyId={onchainPropertyId} txHash={null} />
+            <p className="text-sm text-muted-foreground">
+              Registered on Casper. Attaching a fractional token and activating
+              come next.
+            </p>
+          </div>
+        ) : !issuerUserId ? (
+          <div className="space-y-3">
+            <StatusRow propertyId={null} txHash={null} />
             <p className="text-sm text-muted-foreground">
               {hasLinkedWallet
                 ? "Your identity is being registered on-chain. This unlocks once it's confirmed — finish or check the status in your profile."
@@ -251,7 +285,7 @@ export function PropertyOnChainRegistration({ listing }: { listing: Listing }) {
           </div>
         ) : !started ? (
           <div className="space-y-4">
-            <StatusRow txHash={null} />
+            <StatusRow propertyId={null} txHash={null} />
             {metadataUri ? (
               <>
                 <p className="text-sm text-muted-foreground">

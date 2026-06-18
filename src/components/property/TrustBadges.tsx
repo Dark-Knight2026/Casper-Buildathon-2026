@@ -1,23 +1,28 @@
 import { Badge } from '@/components/ui/badge';
 import { ShieldCheck, Link2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { RegisteredOnChainBadge } from '@/components/property/RegisteredOnChainBadge';
 
 interface TrustBadgesProps {
   verifiedLister?: boolean;
   onChain?: boolean;
+  // PropertyRegistry registration of the underlying property (PL-36b) — distinct
+  // from `onChain` (the listing-level anchor).
+  registeredOnChain?: boolean;
   className?: string;
 }
 
 /**
  * Listing trust indicators derived from the provenance gate. Renders nothing
- * when neither applies, so callers can drop it in unconditionally.
+ * when none apply, so callers can drop it in unconditionally.
  */
 export function TrustBadges({
   verifiedLister,
   onChain,
+  registeredOnChain,
   className,
 }: TrustBadgesProps) {
-  if (!verifiedLister && !onChain) return null;
+  if (!verifiedLister && !onChain && !registeredOnChain) return null;
   return (
     <div className={cn('flex flex-wrap items-center gap-1.5', className)}>
       {verifiedLister && (
@@ -38,6 +43,7 @@ export function TrustBadges({
           On-chain
         </Badge>
       )}
+      {registeredOnChain && <RegisteredOnChainBadge />}
     </div>
   );
 }
