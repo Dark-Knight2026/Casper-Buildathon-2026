@@ -4,8 +4,9 @@
  * statistics, and historical-data counts.
  */
 
+import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft,
   Edit,
@@ -29,12 +30,9 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
+import { ConfirmationDialog } from '@/components/ui/confirmation-dialog';
+import { useToast } from '@/hooks/use-toast';
+import { ApiClient } from '@/lib/api-client';
 import { TrustBadges } from '@/components/property/TrustBadges';
 import { ListingLifecycle } from '@/components/listing/ListingLifecycle';
 import { AuthorityGate } from '@/components/listing/AuthorityGate';
@@ -44,6 +42,7 @@ import {
   getListing,
   getListingStatistics,
   getListingHistoricalData,
+  withdrawListing,
 } from '@/services/listingService';
 import {
   listingRentMonthly,
@@ -77,6 +76,10 @@ const formatDate = (value: string | null) => {
 export default function PropertyDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [withdrawing, setWithdrawing] = useState(false);
 
   const {
     data: listing,
@@ -99,6 +102,28 @@ export default function PropertyDetail() {
     queryFn: () => getListingHistoricalData(id as string),
     enabled: !!id,
   });
+
+  // "Delete" is a soft withdraw (same as the lifecycle Withdraw): the listing
+  // leaves search but its history is kept. After it we return to the list.
+  const withdraw = async () => {
+    if (!id) return;
+    setWithdrawing(true);
+    try {
+      await withdrawListing(id);
+      await queryClient.invalidateQueries({ queryKey: ['landlord-listings'] });
+      queryClient.invalidateQueries({ queryKey: ['listing', id] });
+      toast({ title: 'Listing withdrawn' });
+      navigate('/landlord/properties');
+    } catch (error) {
+      toast({
+        title: 'Could not withdraw the listing',
+        description: ApiClient.handleError(error),
+        variant: 'destructive',
+      });
+    } finally {
+      setWithdrawing(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -194,25 +219,15 @@ export default function PropertyDetail() {
               Edit
             </Button>
 
-            {/* Withdrawing a listing is part of the lifecycle controls (coming
-                with the listing state machine), not a hard delete. Disabled
-                until that ships. */}
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  {/* span wrapper: disabled buttons don't emit the pointer events the tooltip needs */}
-                  <span className="inline-flex">
-                    <Button variant="destructive" disabled>
-                      <Trash2 className="mr-2 h-4 w-4" />
-                      Delete
-                    </Button>
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent>
-                  Withdrawing a listing is coming with the lifecycle controls.
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            {/* Soft delete = withdraw (same action as the lifecycle Withdraw). */}
+            <Button
+              variant="destructive"
+              onClick={() => setConfirmDelete(true)}
+              disabled={withdrawing}
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Delete
+            </Button>
           </div>
         </div>
       </div>
@@ -527,6 +542,17 @@ export default function PropertyDetail() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <ConfirmationDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title="Withdraw this listing?"
+        description="It will be removed from search and tenants won't see it anymore. Withdrawal can't be undone, though the listing's history is kept."
+        confirmLabel="Withdraw"
+        variant="destructive"
+        loading={withdrawing}
+        onConfirm={withdraw}
+      />
     </div>
   );
 }
