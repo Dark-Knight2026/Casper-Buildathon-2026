@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ExternalLink, Loader2, ShieldCheck } from 'lucide-react';
 import {
   ClickProvider,
@@ -23,6 +23,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/hooks/useAuth';
+import { useToast } from '@/hooks/use-toast';
 import { useICOWallet } from '@/hooks/ico/useICOWallet';
 import { usePropertyRegistration } from '@/hooks/property/usePropertyRegistration';
 import {
@@ -117,9 +118,11 @@ function StatusRow({
           <p className="font-semibold">—</p>
         )}
       </div>
-      <div>
-        <p className="text-muted-foreground">Deploy</p>
-        {txHash ? (
+      {/* Deploy link only while we hold this session's tx hash — no row, no
+          dash once it's gone (e.g. after a reload). */}
+      {txHash && (
+        <div>
+          <p className="text-muted-foreground">Deploy</p>
           <a
             href={explorerDeployUrl(txHash)}
             target="_blank"
@@ -129,10 +132,8 @@ function StatusRow({
             View on cspr.live
             <ExternalLink className="h-3.5 w-3.5" />
           </a>
-        ) : (
-          <p className="font-semibold">—</p>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -142,9 +143,11 @@ function StatusRow({
 function RegistrationFlow({
   issuerUserId,
   metadataUri,
+  onConfirmed,
 }: {
   issuerUserId: string;
   metadataUri: string;
+  onConfirmed: (txHash: string | null) => void;
 }) {
   const { account, clickRef, connect } = useICOWallet();
   const { create } = usePropertyRegistration(
@@ -157,6 +160,12 @@ function RegistrationFlow({
   const { step, txHash, error } = create.state;
   const hasWalletSession = Boolean(account?.publicKey && clickRef);
   const busy = step === 'signing' || step === 'pending';
+
+  // Fire once when the deploy confirms: surface the cspr.live link in a toast
+  // and refresh the property so the indexer-written Property ID can appear.
+  useEffect(() => {
+    if (step === 'confirmed') onConfirmed(txHash);
+  }, [step, txHash, onConfirmed]);
 
   return (
     <div className="space-y-4">
@@ -216,6 +225,35 @@ export function PropertyOnChainRegistration({ listing }: { listing: Listing }) {
   const issuerUserId = profile?.onchainUserId ?? null;
   const hasLinkedWallet = Boolean(profile?.walletAddress);
   const [started, setStarted] = useState(false);
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  // On a confirmed deploy: refresh the listing + property (so the indexer's
+  // onchainPropertyId surfaces here) and show the cspr.live link once.
+  const handleConfirmed = useCallback(
+    (txHash: string | null) => {
+      void queryClient.invalidateQueries({ queryKey: ['listing', listing.id] });
+      void queryClient.invalidateQueries({
+        queryKey: ['property', listing.propertyId],
+      });
+      if (txHash) {
+        toast({
+          title: 'Submitted on-chain',
+          description: (
+            <a
+              href={explorerDeployUrl(txHash)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline"
+            >
+              View the deploy on cspr.live
+            </a>
+          ),
+        });
+      }
+    },
+    [queryClient, toast, listing.id, listing.propertyId]
+  );
 
   // The indexer reconciles the on-chain record by `metadataUri`, so we register
   // only when the backend has pinned one. Prefer the nested property; fetch only
@@ -311,6 +349,7 @@ export function PropertyOnChainRegistration({ listing }: { listing: Listing }) {
             <RegistrationFlow
               issuerUserId={issuerUserId}
               metadataUri={metadataUri}
+              onConfirmed={handleConfirmed}
             />
           </OnChainSdkHost>
         ) : null}
