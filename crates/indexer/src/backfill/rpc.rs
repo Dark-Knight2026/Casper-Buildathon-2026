@@ -169,7 +169,7 @@ impl<'a> CasperRpc<'a> {
             hex::decode(bytes_hex).map_err(|e| IndexerError::Parse(format!("hex decode: {e}")))?;
 
         let len = bytes.len();
-        let arr: [u8; 4] = bytes
+        let arr = bytes
             .try_into()
             .map_err(|_| IndexerError::Parse(format!("U32 CLValue expected 4 bytes, got {len}")))?;
         Ok(u32::from_le_bytes(arr))
@@ -255,7 +255,7 @@ impl<'a> CasperRpc<'a> {
             )));
         }
 
-        let rpc: RpcResponse = response.json().await?;
+        let rpc = response.json::<RpcResponse>().await?;
 
         if let Some(err) = rpc.error {
             return Err(IndexerError::Parse(format!(

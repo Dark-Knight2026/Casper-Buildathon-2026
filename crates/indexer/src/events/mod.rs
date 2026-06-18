@@ -7,6 +7,7 @@
 pub mod cep18;
 pub mod db;
 pub mod ico;
+pub mod lease;
 pub mod staking;
 pub mod user_registry;
 pub mod vesting;
@@ -18,7 +19,7 @@ use crate::{
     error::{IndexerError, IndexerResult},
     event_trait::{EventContext, IndexableEvent},
     events::{
-        cep18::Cep18EventType, ico::IcoEventType, staking::StakingEventType,
+        cep18::Cep18EventType, ico::IcoEventType, lease::LeaseEventType, staking::StakingEventType,
         user_registry::UserRegistryEventType, vesting::VestingEventType,
     },
 };
@@ -37,6 +38,8 @@ pub enum EventType {
     Staking(StakingEventType),
     /// An event emitted by the `UserRegistry` contract.
     UserRegistry(UserRegistryEventType),
+    /// An event emitted by the `Lease` contract.
+    Lease(LeaseEventType),
 }
 
 impl EventType {
@@ -77,6 +80,11 @@ impl EventType {
             ContractType::UserRegistry => event_name
                 .parse::<UserRegistryEventType>()
                 .map(Self::UserRegistry)
+                .map_err(|_| unknown()),
+
+            ContractType::Lease => event_name
+                .parse::<LeaseEventType>()
+                .map(Self::Lease)
                 .map_err(|_| unknown()),
 
             _ => Err(unknown()),
@@ -167,6 +175,10 @@ impl EventRegistry {
             EventType::Staking(StakingEventType::RewardsClaimed) => staking::RewardsClaimed,
             EventType::Staking(StakingEventType::StakerSnapshot) => staking::StakerSnapshot,
             EventType::UserRegistry(UserRegistryEventType::UserCreated) => user_registry::UserCreated,
+            EventType::Lease(LeaseEventType::LeaseAgreementCreated) => lease::LeaseAgreementCreated,
+            EventType::Lease(LeaseEventType::LeaseAgreementFinished) => lease::LeaseAgreementFinished,
+            EventType::Lease(LeaseEventType::EquityEligibilityGranted) => lease::EquityEligibilityGranted,
+            EventType::Lease(LeaseEventType::EquityEligibilityRevoked) => lease::EquityEligibilityRevoked,
         )
     }
 }

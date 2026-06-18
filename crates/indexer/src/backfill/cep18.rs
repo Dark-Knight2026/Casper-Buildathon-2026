@@ -198,7 +198,7 @@ pub async fn backfill_cep18(
         let page_data =
             fetch_ft_token_actions_page(ctx.client, ctx.config, contract_hash, page).await?;
         let page_count = page_data.page_count;
-        let mut page_max_block: Option<u64> = None;
+        let mut page_max_block = None;
 
         for action in &page_data.data {
             if action.block_height < effective_start {

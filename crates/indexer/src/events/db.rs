@@ -679,7 +679,7 @@ pub async fn is_vesting_claim_processed(
     deploy_hash: &str,
     transform_idx: Option<i32>,
 ) -> IndexerResult<bool> {
-    let exists: bool = sqlx::query_scalar!(
+    let exists = sqlx::query_scalar!(
         r"
             SELECT EXISTS(
                 SELECT 1 FROM blockchain_transactions
@@ -1193,6 +1193,79 @@ pub async fn set_user_onchain_id(
         ",
         onchain_user_id,
         wallet_address,
+    )
+    .execute(tx.as_mut())
+    .await?;
+
+    Ok(result.rows_affected() > 0)
+}
+
+// Leases (on-chain reconciliation) --------------------------------------------
+
+/// Activates the off-chain lease bound to this on-chain agreement id, the
+/// `LeaseAgreementCreated` reconciliation step.
+///
+/// The match is by `onchain_lease_id` (the U256 the landlord recorded at
+/// `/commit`), so this only fires once the off-chain lease knows its on-chain
+/// id; the `$1::TEXT::NUMERIC` cast binds the decimal string into the `NUMERIC`
+/// column without a decimal type. The `status = 'pending_signatures'` guard
+/// keeps it idempotent and race-safe against the `/commit` push path: an
+/// already-active lease, a still-unbound draft, or a re-processed event each
+/// leave it untouched.
+///
+/// Returns `true` when a lease was activated, `false` when none matched yet
+/// (the event arrived before the binding, or the lease already moved on).
+///
+/// # Errors
+///
+/// Returns [`IndexerError::Database`](IndexerError::Database) on SQL failures.
+#[inline]
+pub async fn set_lease_active_by_onchain_id(
+    tx: &mut PgTransaction<'_>,
+    onchain_lease_id: &str,
+) -> IndexerResult<bool> {
+    let result = sqlx::query!(
+        r"
+            UPDATE leases
+            SET status = 'active'
+            WHERE onchain_lease_id = $1::TEXT::NUMERIC
+              AND status = 'pending_signatures'
+              AND deleted_at IS NULL
+        ",
+        onchain_lease_id,
+    )
+    .execute(tx.as_mut())
+    .await?;
+
+    Ok(result.rows_affected() > 0)
+}
+
+/// Terminates the off-chain lease bound to this on-chain agreement id, the
+/// `LeaseAgreementFinished` reconciliation step (deposit released on-chain).
+///
+/// Matched by `onchain_lease_id` like [`set_lease_active_by_onchain_id`]. The
+/// `status IN ('active', 'expiring_soon')` guard keeps it idempotent: a lease
+/// already terminated (or one never activated) is left untouched.
+///
+/// Returns `true` when a lease was terminated, `false` when none matched.
+///
+/// # Errors
+///
+/// Returns [`IndexerError::Database`](IndexerError::Database) on SQL failures.
+#[inline]
+pub async fn set_lease_terminated_by_onchain_id(
+    tx: &mut PgTransaction<'_>,
+    onchain_lease_id: &str,
+) -> IndexerResult<bool> {
+    let result = sqlx::query!(
+        r"
+            UPDATE leases
+            SET status = 'terminated'
+            WHERE onchain_lease_id = $1::TEXT::NUMERIC
+              AND status IN ('active', 'expiring_soon')
+              AND deleted_at IS NULL
+        ",
+        onchain_lease_id,
     )
     .execute(tx.as_mut())
     .await?;
