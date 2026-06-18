@@ -314,14 +314,12 @@ impl PropertyRegistry {
     pub fn create_property(&mut self, params: CreatePropertyParams) -> U256 {
         self.assert_property_manager();
 
-        if params.total_supply.is_zero() {
-            self.env().revert(Error::ZeroTotalSupply);
-        }
         if !self.user_registry.is_active_user(params.issuer)
             || !self.user_registry.has_landlord_role(params.issuer)
         {
             self.env().revert(Error::InvalidIssuer);
         }
+
         if params.metadata_uri.is_empty() {
             self.env().revert(Error::EmptyMetadataUri);
         }
