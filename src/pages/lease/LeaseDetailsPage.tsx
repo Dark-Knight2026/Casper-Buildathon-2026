@@ -9,8 +9,9 @@
  * error toast.
  */
 
-import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
 import {
   ArrowLeft,
   Calendar,
@@ -18,7 +19,10 @@ import {
   FileText,
   Link2,
   Lock,
+  Pencil,
+  Send,
   ShieldCheck,
+  Trash2,
   Users,
 } from 'lucide-react';
 import {
@@ -32,7 +36,10 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
-import { getLease } from '@/services/leaseService';
+import { ConfirmationDialog } from '@/components/ui/confirmation-dialog';
+import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/hooks/useAuth';
+import { deleteLease, getLease, submitLease } from '@/services/leaseService';
 import { ApiError } from '@/lib/api-client';
 import { ICO_CONFIG } from '@/constants/ico';
 import {
@@ -60,10 +67,26 @@ const formatDateTime = (date: string) =>
     minute: '2-digit',
   }).format(new Date(date));
 
+/** Both submit and delete fail with `409` on a status conflict, `403` if not the landlord. */
+function mapActionError(err: unknown): string {
+  if (err instanceof ApiError) {
+    if (err.statusCode === 409)
+      return 'This action isn’t allowed in the lease’s current state. A draft needs a tenant before it can be submitted.';
+    if (err.statusCode === 403)
+      return 'Only the lease’s landlord can manage it.';
+    return err.message || 'Something went wrong. Please try again.';
+  }
+  return 'Something went wrong. Please try again.';
+}
+
 export const LeaseDetailsPage = () => {
   const { leaseId } = useParams<{ leaseId: string }>();
   const navigate = useNavigate();
   const location = useLocation();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const { profile } = useAuth();
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const basePath = location.pathname.startsWith('/landlord')
     ? '/landlord/leases'
     : '/tenant/leases';
@@ -79,6 +102,37 @@ export const LeaseDetailsPage = () => {
     retry: (count, err) =>
       !(err instanceof ApiError && [403, 404].includes(err.statusCode ?? 0)) &&
       count < 2,
+  });
+
+  const submitMutation = useMutation({
+    mutationFn: () => submitLease(leaseId as string),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['lease', leaseId] });
+      toast({
+        title: 'Lease submitted',
+        description: 'The lease is now awaiting signatures.',
+      });
+    },
+    onError: (err) =>
+      toast({
+        title: 'Couldn’t submit lease',
+        description: mapActionError(err),
+        variant: 'destructive',
+      }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteLease(leaseId as string),
+    onSuccess: () => {
+      toast({ title: 'Draft deleted' });
+      navigate('/landlord/leases');
+    },
+    onError: (err) =>
+      toast({
+        title: 'Couldn’t delete lease',
+        description: mapActionError(err),
+        variant: 'destructive',
+      }),
   });
 
   const backButton = (
@@ -134,6 +188,11 @@ export const LeaseDetailsPage = () => {
 
   const badge = LEASE_STATUS_BADGE[lease.status];
   const sp = lease.signatureProgress;
+  // Draft-only landlord actions: edit / submit / delete. Only the lease's own
+  // landlord sees them (the tenant view and other landlords don't).
+  const isLandlordOwner =
+    profile?.role === 'landlord' && profile.id === lease.landlordId;
+  const showDraftActions = isLandlordOwner && lease.status === 'draft';
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -151,6 +210,33 @@ export const LeaseDetailsPage = () => {
             {LEASE_TYPE_LABEL[lease.type]} · Lease {lease.id.slice(0, 8)}…
           </p>
         </div>
+
+        {showDraftActions && (
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" asChild>
+              <Link to={`/landlord/leases/${lease.id}/edit`}>
+                <Pencil className="mr-2 h-4 w-4" />
+                Edit Draft
+              </Link>
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => submitMutation.mutate()}
+              disabled={submitMutation.isPending}
+            >
+              <Send className="mr-2 h-4 w-4" />
+              {submitMutation.isPending ? 'Submitting…' : 'Submit for Signing'}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setConfirmDelete(true)}
+            >
+              <Trash2 className="mr-2 h-4 w-4 text-destructive" />
+              Delete
+            </Button>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -371,6 +457,17 @@ export const LeaseDetailsPage = () => {
           )}
         </CardContent>
       </Card>
+
+      <ConfirmationDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title="Delete this draft lease?"
+        description="This permanently removes the draft. This can’t be undone."
+        confirmLabel="Delete"
+        variant="destructive"
+        loading={deleteMutation.isPending}
+        onConfirm={() => deleteMutation.mutateAsync()}
+      />
     </div>
   );
 };

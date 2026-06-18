@@ -153,9 +153,7 @@ const LandlordRenewalNegotiation = lazy(
 );
 
 // Lazy load landlord lease pages
-const LeaseCreationWizard = lazy(
-  () => import('@/pages/landlord/lease/LeaseCreationWizard')
-);
+const LeaseFormPage = lazy(() => import('@/pages/lease/LeaseFormPage'));
 
 // Lazy load communication pages
 const CommunicationCenter = lazy(
@@ -485,8 +483,12 @@ function App() {
                 <Route path="tenants" element={<LandlordTenants />} />
                 <Route path="tenants/:tenantId" element={<LandlordTenants />} />
                 <Route path="leases" element={<LandlordLeases />} />
-                <Route path="leases/create" element={<LeaseCreationWizard />} />
+                <Route path="leases/create" element={<LeaseFormPage />} />
                 <Route path="leases/:leaseId" element={<LeaseDetailsPage />} />
+                <Route
+                  path="leases/:leaseId/edit"
+                  element={<LeaseFormPage />}
+                />
                 <Route path="payments" element={<LandlordPayments />} />
                 <Route
                   path="maintenance"
