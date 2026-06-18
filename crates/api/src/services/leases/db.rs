@@ -509,3 +509,61 @@ pub async fn update_consent(
     .fetch_one(pool)
     .await
 }
+
+/// Records the on-chain bindings and activates a lease awaiting signatures, the
+/// `/commit` reconciliation write.
+///
+/// The `status = 'pending_signatures'` guard makes this a no-op (`RowNotFound`)
+/// if the lease already left that state - notably when the indexer's
+/// `LeaseAgreementCreated` handler activated it first - keeping `/commit`
+/// idempotent across the push (this) and pull (indexer) activation paths.
+/// `$2::TEXT::NUMERIC` binds the U256 decimal string into the `NUMERIC` column.
+///
+/// # Errors
+///
+/// Returns [`Error::RowNotFound`] when the lease is no longer awaiting
+/// signatures, or any other database error.
+#[inline]
+pub async fn commit_lease(
+    pool: &PgPool,
+    lease_id: Uuid,
+    onchain_lease_id: &str,
+    nft_token_id: &str,
+    commit_tx_hash: &str,
+) -> Result<LeaseRow, Error> {
+    sqlx::query_as!(
+        LeaseRow,
+        r#"
+            UPDATE leases SET
+                status = 'active',
+                onchain_lease_id = $2::TEXT::NUMERIC,
+                nft_token_id = $3,
+                commit_tx_hash = $4
+            WHERE id = $1 AND status = 'pending_signatures' AND deleted_at IS NULL
+            RETURNING
+                id, property_id, landlord_id, tenant_ids,
+                type AS "lease_type!",
+                status AS "status!",
+                start_date, end_date,
+                monthly_rent::float8 AS "monthly_rent!",
+                security_deposit::float8 AS "security_deposit!",
+                currency,
+                clauses AS "clauses: Json<Value>",
+                property_manager_id, property_manager_bps, equity_property_id,
+                signature_progress AS "signature_progress: Json<Value>",
+                consent_signatures AS "consent_signatures: Json<Value>",
+                lease_document_url, signed_document_url,
+                document_hash, ipfs_cid,
+                onchain_lease_id::text AS onchain_lease_id,
+                nft_token_id, commit_tx_hash,
+                created_at AS "created_at!",
+                updated_at AS "updated_at!"
+        "#,
+        lease_id,
+        onchain_lease_id,
+        nft_token_id,
+        commit_tx_hash,
+    )
+    .fetch_one(pool)
+    .await
+}

@@ -298,6 +298,20 @@ pub struct SignLeaseRequest {
     pub signer_wallet: String,
 }
 
+/// On-chain commit submission. After the landlord runs `create_lease_agreement`
+/// from their wallet, they report the result here so the backend can reconcile
+/// against the chain and activate the lease.
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct CommitLeaseRequest {
+    /// U256 on-chain agreement id (decimal string) from `LeaseAgreementCreated`.
+    pub onchain_lease_id: String,
+    /// Tenant's frozen lease NFT token id (U256 decimal string).
+    pub nft_token_id: String,
+    /// Deploy/tx hash of the `create_lease_agreement` call.
+    pub commit_tx_hash: String,
+}
+
 /// Query for `GET /leases`: scope to the caller as landlord and/or tenant,
 /// plus an optional status filter. `tenantId`/`landlordId` accept only `me`.
 #[derive(Debug, Deserialize, IntoParams)]

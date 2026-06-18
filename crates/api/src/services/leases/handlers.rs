@@ -13,13 +13,14 @@ use uuid::Uuid;
 
 use crate::{
     common::{ApiError, ApiResult, AppState, ErrorResponse, PaginatedResponse, Pagination, crypto},
+    providers::LeaseChainError,
     services::{
         auth::{AuthUser, LandlordRole, RoleUser},
         leases::{
             db::{self, LeaseRow, NewLease},
             models::{
-                CreateLeaseRequest, Lease, LeaseListParams, SignLeaseRequest, SignerRole,
-                UpdateLeaseRequest,
+                CommitLeaseRequest, CreateLeaseRequest, Lease, LeaseListParams, SignLeaseRequest,
+                SignerRole, UpdateLeaseRequest,
             },
         },
         properties::db as properties_db,
@@ -461,6 +462,119 @@ pub async fn sign_lease(
         lease_id,
         Value::Object(progress),
         Value::Object(consent),
+    )
+    .await?;
+    Ok(Json(Lease::from(row)))
+}
+
+/// Whether both `landlord` and `tenant` are marked signed in the
+/// signature-progress object. The gate `/commit` enforces before going on-chain.
+fn both_parties_signed(progress: &Value) -> bool {
+    ["landlord", "tenant"].iter().all(|party| {
+        progress
+            .get(party)
+            .and_then(|entry| entry.get("signed"))
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
+    })
+}
+
+// `POST /api/v1/leases/{id}/commit`
+//
+/// Records the on-chain result of `create_lease_agreement` and activates the lease.
+///
+/// Landlord-only, owner-only. Blocked until both parties have signed. Reconciles
+/// the submitted `onchainLeaseId` against the chain via `LeaseChainReader` before
+/// persisting the bindings and moving `pending_signatures -> active`. Idempotent:
+/// re-committing an already-active lease returns it unchanged (the indexer's
+/// `LeaseAgreementCreated` handler may have activated it first).
+///
+/// # Errors
+///
+/// Returns `400` on a non-decimal `onchainLeaseId` or an id absent on-chain,
+/// `403` when not the landlord, `404` when the lease is missing, `409` when the
+/// lease is not awaiting commit, both signatures are not yet present, or the
+/// on-chain lease is already finished, `500` on an on-chain transport failure.
+#[utoipa::path(
+    post,
+    path = "/leases/{id}/commit",
+    tag = "Leases",
+    params(
+        ("id" = Uuid, Path, description = "Lease id")
+    ),
+    request_body = CommitLeaseRequest,
+    responses(
+        (status = 200, description = "Lease committed and activated", body = Lease),
+        (status = 400, description = "Invalid on-chain id", body = ErrorResponse),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 403, description = "Not the lease landlord", body = ErrorResponse),
+        (status = 404, description = "Lease not found", body = ErrorResponse),
+        (status = 409, description = "Not ready to commit", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse),
+    ),
+    security(
+        ("cookie_auth" = [])
+    )
+)]
+#[inline]
+pub async fn commit_lease(
+    State(state): State<Arc<AppState>>,
+    user: RoleUser<LandlordRole>,
+    Path(lease_id): Path<Uuid>,
+    Json(payload): Json<CommitLeaseRequest>,
+) -> ApiResult<Json<Lease>> {
+    let current = db::fetch_lease(&state.db, lease_id).await?;
+    if current.landlord_id != user.0.sub {
+        return Err(ApiError::Forbidden("not_lease_landlord".to_owned()));
+    }
+    // Idempotent: a lease already activated (e.g. by the indexer's
+    // LeaseAgreementCreated handler) is returned unchanged.
+    if current.status == "active" {
+        return Ok(Json(Lease::from(current)));
+    }
+    if current.status != "pending_signatures" {
+        return Err(ApiError::Conflict(
+            "lease is not awaiting commit".to_owned(),
+        ));
+    }
+    if !both_parties_signed(&current.signature_progress.0) {
+        return Err(ApiError::Conflict(
+            "both consent signatures are required before commit".to_owned(),
+        ));
+    }
+    // Validate the id is a U256 decimal string before the chain read / NUMERIC cast.
+    if payload.onchain_lease_id.is_empty()
+        || !payload.onchain_lease_id.bytes().all(|b| b.is_ascii_digit())
+    {
+        return Err(ApiError::BadRequest(
+            "onchainLeaseId must be a decimal U256 string".to_owned(),
+        ));
+    }
+    // Reconcile against the chain before persisting the bindings.
+    let onchain = state
+        .lease_chain_reader
+        .get_lease_agreement_by_id(&payload.onchain_lease_id)
+        .await
+        .map_err(|err| match err {
+            LeaseChainError::NotFound(_) => {
+                ApiError::BadRequest("lease agreement not found on-chain".to_owned())
+            }
+            LeaseChainError::Transport(reason) => {
+                tracing::error!(%reason, "lease chain reconciliation failed");
+                ApiError::Internal("on-chain reconciliation failed".to_owned())
+            }
+        })?;
+    if onchain.is_finished {
+        return Err(ApiError::Conflict(
+            "on-chain lease is already finished".to_owned(),
+        ));
+    }
+    let row = db::commit_lease(
+        &state.db,
+        lease_id,
+        &payload.onchain_lease_id,
+        &payload.nft_token_id,
+        &payload.commit_tx_hash,
     )
     .await?;
     Ok(Json(Lease::from(row)))
