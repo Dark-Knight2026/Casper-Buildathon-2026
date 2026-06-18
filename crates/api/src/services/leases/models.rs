@@ -16,6 +16,7 @@ use uuid::Uuid;
 
 use crate::{
     common::{ApiError, ApiResult},
+    providers::LeaseDocumentData,
     services::leases::db::{LeaseEdit, LeaseRow, NewLease},
 };
 
@@ -438,6 +439,27 @@ impl From<LeaseRow> for Lease {
             commit_tx_hash: row.commit_tx_hash,
             created_at: row.created_at,
             updated_at: row.updated_at,
+        }
+    }
+}
+
+impl From<LeaseRow> for LeaseDocumentData {
+    /// Projects the stored lease into the renderer's input. The provider type
+    /// lives in `providers`, so this conversion is defined here (domain depends
+    /// on the port, not the reverse).
+    #[inline]
+    fn from(row: LeaseRow) -> Self {
+        Self {
+            lease_id: row.id,
+            landlord_id: row.landlord_id,
+            tenant_ids: row.tenant_ids,
+            lease_type: LeaseType::from_str(&row.lease_type).unwrap_or(LeaseType::FixedTerm),
+            start_date: row.start_date,
+            end_date: row.end_date,
+            monthly_rent: row.monthly_rent,
+            security_deposit: row.security_deposit,
+            currency: row.currency,
+            clauses: row.clauses.0,
         }
     }
 }

@@ -567,3 +567,55 @@ pub async fn commit_lease(
     .fetch_one(pool)
     .await
 }
+
+/// Records a freshly rendered lease document on the lease: the stored
+/// (generated) URL, its SHA-256 hash, and the IPFS CID. Allowed at any live
+/// status (the document is a read-time artifact, not a lifecycle transition).
+///
+/// # Errors
+///
+/// Returns [`Error::RowNotFound`] when the lease is missing or soft-deleted, or
+/// any other database error.
+#[inline]
+pub async fn set_lease_document(
+    pool: &PgPool,
+    lease_id: Uuid,
+    document_url: &str,
+    document_hash: &str,
+    ipfs_cid: &str,
+) -> Result<LeaseRow, Error> {
+    sqlx::query_as!(
+        LeaseRow,
+        r#"
+            UPDATE leases SET
+                lease_document_url = $2,
+                document_hash = $3,
+                ipfs_cid = $4
+            WHERE id = $1 AND deleted_at IS NULL
+            RETURNING
+                id, property_id, landlord_id, tenant_ids,
+                type AS "lease_type!",
+                status AS "status!",
+                start_date, end_date,
+                monthly_rent::float8 AS "monthly_rent!",
+                security_deposit::float8 AS "security_deposit!",
+                currency,
+                clauses AS "clauses: Json<Value>",
+                property_manager_id, property_manager_bps, equity_property_id,
+                signature_progress AS "signature_progress: Json<Value>",
+                consent_signatures AS "consent_signatures: Json<Value>",
+                lease_document_url, signed_document_url,
+                document_hash, ipfs_cid,
+                onchain_lease_id::text AS onchain_lease_id,
+                nft_token_id, commit_tx_hash,
+                created_at AS "created_at!",
+                updated_at AS "updated_at!"
+        "#,
+        lease_id,
+        document_url,
+        document_hash,
+        ipfs_cid,
+    )
+    .fetch_one(pool)
+    .await
+}

@@ -9,11 +9,12 @@ use axum::{
 };
 use chrono::Utc;
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 use crate::{
     common::{ApiError, ApiResult, AppState, ErrorResponse, PaginatedResponse, Pagination, crypto},
-    providers::LeaseChainError,
+    providers::{LeaseChainError, LeaseDocumentData},
     services::{
         auth::{AuthUser, LandlordRole, RoleUser},
         leases::{
@@ -575,6 +576,82 @@ pub async fn commit_lease(
         &payload.onchain_lease_id,
         &payload.nft_token_id,
         &payload.commit_tx_hash,
+    )
+    .await?;
+    Ok(Json(Lease::from(row)))
+}
+
+// `GET /api/v1/leases/{id}/document`
+//
+/// Renders, stores, and returns the lease document.
+///
+/// Readable by the landlord or a listed tenant. Renders the terms and clauses
+/// via `LeaseDocumentRenderer`, stores the bytes through `MediaStorage`, records
+/// the SHA-256 `documentHash` and the IPFS `ipfsCid` (synthetic stub until real
+/// pinning), and returns the lease with its updated `documentLinks`.
+///
+/// # Errors
+///
+/// Returns `403` when the caller is not a party, `404` when the lease is
+/// missing, `500` on a render/storage/pin failure.
+#[utoipa::path(
+    get,
+    path = "/leases/{id}/document",
+    tag = "Leases",
+    params(
+        ("id" = Uuid, Path, description = "Lease id")
+    ),
+    responses(
+        (status = 200, description = "Lease with rendered document links", body = Lease),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 403, description = "Not a party to this lease", body = ErrorResponse),
+        (status = 404, description = "Lease not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse),
+    ),
+    security(
+        ("cookie_auth" = [])
+    )
+)]
+#[inline]
+pub async fn lease_document(
+    State(state): State<Arc<AppState>>,
+    AuthUser(claims): AuthUser,
+    Path(lease_id): Path<Uuid>,
+) -> ApiResult<Json<Lease>> {
+    let lease = db::fetch_lease(&state.db, lease_id).await?;
+    if lease.landlord_id != claims.sub && !lease.tenant_ids.contains(&claims.sub) {
+        return Err(ApiError::Forbidden("not_a_lease_party".to_owned()));
+    }
+    let data = LeaseDocumentData::from(lease);
+    let bytes = state
+        .lease_document_renderer
+        .render(&data)
+        .await
+        .map_err(|err| {
+            tracing::error!(?err, "lease document render failed");
+            ApiError::Internal("failed to render lease document".to_owned())
+        })?;
+    let document_hash = hex::encode(Sha256::digest(&bytes));
+    let key = format!("leases/{lease_id}/document.txt");
+    let document_url = state
+        .media_storage
+        .put(&key, &bytes, "text/plain")
+        .await
+        .map_err(|err| {
+            tracing::error!(?err, "lease document store failed");
+            ApiError::Internal("failed to store lease document".to_owned())
+        })?;
+    let ipfs_cid = state.content_pinner.pin(&bytes).await.map_err(|err| {
+        tracing::error!(?err, "lease document pin failed");
+        ApiError::Internal("failed to pin lease document".to_owned())
+    })?;
+
+    let row = db::set_lease_document(
+        &state.db,
+        lease_id,
+        &document_url,
+        &document_hash,
+        &ipfs_cid,
     )
     .await?;
     Ok(Json(Lease::from(row)))

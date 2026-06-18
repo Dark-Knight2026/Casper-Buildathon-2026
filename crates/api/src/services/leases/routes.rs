@@ -24,4 +24,5 @@ pub fn router() -> OpenApiRouter<Arc<AppState>> {
         .routes(routes!(handlers::submit_lease))
         .routes(routes!(handlers::sign_lease))
         .routes(routes!(handlers::commit_lease))
+        .routes(routes!(handlers::lease_document))
 }
