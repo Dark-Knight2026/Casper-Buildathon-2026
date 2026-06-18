@@ -19,23 +19,9 @@ use crate::{
     services::leases::db::{LeaseEdit, LeaseRow, NewLease},
 };
 
-/// Lease agreement type. Stored as TEXT (CHECK) in the DB (`snake_case`); the
-/// wire form is hyphenated.
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema, EnumString, Display,
-)]
-#[serde(rename_all = "kebab-case")]
-#[strum(serialize_all = "snake_case")]
-pub enum LeaseType {
-    /// Fixed-term lease.
-    FixedTerm,
-    /// Month-to-month lease.
-    MonthToMonth,
-    /// Sublease.
-    Sublease,
-    /// Commercial lease.
-    Commercial,
-}
+// Canonical `LeaseType` lives in `common` (shared with the document-renderer
+// provider); re-exported here so `leases::models::LeaseType` stays valid.
+pub use crate::common::LeaseType;
 
 /// Lease lifecycle status. Stored as TEXT (CHECK) in the DB (`snake_case`); the
 /// wire form is hyphenated (`pending-signatures`, `expiring-soon`, ...).

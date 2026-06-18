@@ -30,10 +30,10 @@ use utoipa_swagger_ui::SwaggerUi;
 
 use crate::{
     ApiDoc, AppState, ContentPinner, EmailSender, FairHousingScreen, FakeKycProvider,
-    FakeLeaseChainReader, FakePinner, KycProvider, LeaseChainReader, LoggingEmailSender,
-    MetadataStripper, NoopMetadataStripper, PostmarkSender, RedisStore, S3MediaStorage,
-    ServerConfig, ServerError, SharedMediaStorage, StubFairHousingScreen, StubMediaStorage,
-    onchain, services, workers,
+    FakeLeaseChainReader, FakePinner, KycProvider, LeaseChainReader, LeaseDocumentRenderer,
+    LoggingEmailSender, MetadataStripper, NoopMetadataStripper, PostmarkSender, RedisStore,
+    S3MediaStorage, ServerConfig, ServerError, SharedMediaStorage, SimpleLeaseDocumentRenderer,
+    StubFairHousingScreen, StubMediaStorage, onchain, services, workers,
 };
 
 /// Creates the full application router combining public and protected routes.
@@ -256,6 +256,17 @@ pub async fn main() -> Result<(), ServerError> {
         Arc::new(FakeLeaseChainReader::new())
     };
 
+    // No real document renderer is wired yet, so lease documents are rendered as
+    // deterministic plain text. A real templated-PDF renderer will be selected
+    // here by config when delivered.
+    let lease_document_renderer: Arc<dyn LeaseDocumentRenderer> = {
+        tracing::warn!(
+            event = "lease_document_renderer_stub",
+            "No real lease document renderer configured - using SimpleLeaseDocumentRenderer (plain text, not a legal PDF). Production MUST wire a real renderer before lease documents can be trusted."
+        );
+        Arc::new(SimpleLeaseDocumentRenderer::new())
+    };
+
     // 3. Build application state
     let state = Arc::new(AppState {
         db: pool,
@@ -267,6 +278,7 @@ pub async fn main() -> Result<(), ServerError> {
         content_pinner,
         metadata_stripper,
         lease_chain_reader,
+        lease_document_renderer,
         config: config.clone(),
     });
 

@@ -19,6 +19,8 @@
 //!   `NoopMetadataStripper`).
 //! - [`lease_chain`] - on-chain Lease-contract reconciliation
 //!   (`LeaseChainReader`, `FakeLeaseChainReader`).
+//! - [`lease_document`] - lease-document rendering
+//!   (`LeaseDocumentRenderer`, `SimpleLeaseDocumentRenderer`).
 //!
 //! New external-service adapters (SMS, payment processors) belong
 //! here, not in [`common`](crate::common): `common` is reserved for
@@ -35,6 +37,8 @@ pub mod fair_housing;
 pub mod kyc;
 /// On-chain Lease-contract reconciliation abstraction.
 pub mod lease_chain;
+/// Lease-document rendering abstraction.
+pub mod lease_document;
 /// Image metadata-stripping abstraction.
 pub mod metadata_stripper;
 /// Media-storage abstraction.
@@ -50,6 +54,10 @@ pub use kyc::{FakeKycProvider, KycError, KycOutcome, KycProvider, KycResult, Sha
 pub use lease_chain::{
     FakeLeaseChainReader, LeaseChainError, LeaseChainReader, LeaseChainResult,
     OnchainLeaseAgreement, SharedLeaseChainReader,
+};
+pub use lease_document::{
+    LeaseDocumentData, LeaseDocumentError, LeaseDocumentRenderer, LeaseDocumentResult,
+    SharedLeaseDocumentRenderer, SimpleLeaseDocumentRenderer,
 };
 pub use metadata_stripper::{MetadataStripper, NoopMetadataStripper, SharedMetadataStripper};
 pub use storage::{

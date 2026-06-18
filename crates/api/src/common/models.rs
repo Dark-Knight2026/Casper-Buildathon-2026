@@ -255,3 +255,25 @@ pub struct UserInfo {
     /// Last profile update timestamp.
     pub updated_at: DateTime<Utc>,
 }
+
+/// Lease agreement type. Stored as TEXT (CHECK) in the DB (`snake_case`); the
+/// wire form is hyphenated.
+///
+/// Lives in `common` (not `services::leases`) because both the lease domain and
+/// the `LeaseDocumentRenderer` provider need it, and providers must not depend
+/// on `services` (mirrors [`UserRole`]/[`UserStatus`]).
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema, EnumString, Display,
+)]
+#[serde(rename_all = "kebab-case")]
+#[strum(serialize_all = "snake_case")]
+pub enum LeaseType {
+    /// Fixed-term lease.
+    FixedTerm,
+    /// Month-to-month lease.
+    MonthToMonth,
+    /// Sublease.
+    Sublease,
+    /// Commercial lease.
+    Commercial,
+}

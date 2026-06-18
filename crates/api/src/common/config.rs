@@ -11,8 +11,8 @@ use crate::{
     ServerError,
     common::RedisStore,
     providers::{
-        ContentPinner, EmailSender, FairHousingScreen, KycProvider, LeaseChainReader, MediaStorage,
-        MetadataStripper,
+        ContentPinner, EmailSender, FairHousingScreen, KycProvider, LeaseChainReader,
+        LeaseDocumentRenderer, MediaStorage, MetadataStripper,
     },
 };
 
@@ -449,6 +449,10 @@ pub struct AppState {
     /// so the bootstrap can swap `FakeLeaseChainReader` (hackathon) for a real
     /// CSPR RPC reader without touching call sites.
     pub lease_chain_reader: Arc<dyn LeaseChainReader>,
+    /// Lease-document renderer for `/leases/{id}/document`. Boxed-trait so the
+    /// bootstrap can swap `SimpleLeaseDocumentRenderer` (hackathon) for a real
+    /// templated-PDF renderer without touching call sites.
+    pub lease_document_renderer: Arc<dyn LeaseDocumentRenderer>,
     /// Application configuration.
     pub config: ServerConfig,
 }
@@ -466,6 +470,7 @@ impl core::fmt::Debug for AppState {
             .field("content_pinner", &"ContentPinner")
             .field("metadata_stripper", &"MetadataStripper")
             .field("lease_chain_reader", &"LeaseChainReader")
+            .field("lease_document_renderer", &"LeaseDocumentRenderer")
             .field("config", &self.config)
             .finish()
     }
