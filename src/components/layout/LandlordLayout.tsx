@@ -116,6 +116,13 @@ export default function LandlordLayout() {
   const isActive = (to: string) =>
     pathname === to || pathname.startsWith(to + '/');
 
+  // One place decides which nav link carries a "new" dot, so the desktop and
+  // mobile navs can't drift apart as markers are added.
+  const navDot = (to: string) =>
+    to === '/landlord/applications' ? (
+      <NavNewDot show={hasNewApplications} label="new applications" />
+    ) : null;
+
   useEffect(() => {
     const onResize = () => {
       if (window.innerWidth >= 1200) setMobileOpen(false);
@@ -145,12 +152,7 @@ export default function LandlordLayout() {
                 }`}
               >
                 {label}
-                {to === '/landlord/applications' && (
-                  <NavNewDot
-                    show={hasNewApplications}
-                    label="new applications"
-                  />
-                )}
+                {navDot(to)}
               </Link>
             ))}
           </nav>
@@ -205,12 +207,7 @@ export default function LandlordLayout() {
                 }`}
               >
                 {label}
-                {to === '/landlord/applications' && (
-                  <NavNewDot
-                    show={hasNewApplications}
-                    label="new applications"
-                  />
-                )}
+                {navDot(to)}
               </Link>
             ))}
           </nav>
