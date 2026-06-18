@@ -9,8 +9,8 @@
  * blocked client-side and `409` server-side).
  */
 
-import { useEffect, useState, type FormEvent } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
 import {
@@ -34,6 +34,8 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import { createLease, getLease, updateLease } from '@/services/leaseService';
+import { getLandlordListings } from '@/services/listingService';
+import { getLandlordApplications } from '@/services/applicationService';
 import { ApiError } from '@/lib/api-client';
 import { LEASE_TYPE_LABEL } from '@/lib/leaseDisplay';
 import type {
@@ -115,9 +117,27 @@ export default function LeaseFormPage() {
   const { leaseId } = useParams<{ leaseId: string }>();
   const isEdit = Boolean(leaseId);
   const navigate = useNavigate();
+  const location = useLocation();
   const { toast } = useToast();
 
-  const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  // Origination prefill — set when arriving from an approved application
+  // ("Create lease" on ApplicationDetail passes propertyId + tenantId).
+  const prefill = (location.state ?? {}) as {
+    propertyId?: string;
+    tenantId?: string;
+    tenantName?: string;
+  };
+  const prefillTenantName = prefill.tenantName;
+
+  const [form, setForm] = useState<FormState>(() => ({
+    ...EMPTY_FORM,
+    ...(isEdit
+      ? {}
+      : {
+          propertyId: prefill.propertyId ?? '',
+          tenantId: prefill.tenantId ?? '',
+        }),
+  }));
 
   // Edit mode — load the draft to prefill (and guard against non-drafts).
   const { data: existing, isLoading: loadingExisting } = useQuery({
@@ -125,6 +145,49 @@ export default function LeaseFormPage() {
     queryFn: () => getLease(leaseId as string),
     enabled: isEdit,
   });
+
+  // The landlord's properties (deduped from their listings) for the picker.
+  const { data: listingsPage } = useQuery({
+    queryKey: ['landlord-listings', 'lease-form'],
+    queryFn: () => getLandlordListings({ pageSize: 100 }),
+  });
+  const propertyOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const listing of listingsPage?.data ?? []) {
+      if (!listing.propertyId || map.has(listing.propertyId)) continue;
+      const p = listing.property;
+      map.set(
+        listing.propertyId,
+        p ? `${p.addressLine1}, ${p.city}` : listing.propertyId
+      );
+    }
+    // Keep the current value selectable even if it isn't among the listings.
+    if (form.propertyId && !map.has(form.propertyId)) {
+      map.set(form.propertyId, form.propertyId);
+    }
+    return Array.from(map, ([value, label]) => ({ value, label }));
+  }, [listingsPage, form.propertyId]);
+
+  // Applicants to pick the tenant from (create mode only). Narrowed to the
+  // selected property when one is chosen.
+  const { data: applicationsPage } = useQuery({
+    queryKey: ['landlord-applications', 'lease-form'],
+    queryFn: () => getLandlordApplications({ pageSize: 100 }),
+    enabled: !isEdit,
+  });
+  const tenantOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const app of applicationsPage?.data ?? []) {
+      if (form.propertyId && app.listing?.propertyId !== form.propertyId)
+        continue;
+      if (!app.userId || map.has(app.userId)) continue;
+      map.set(app.userId, `${app.fullName} (${app.email})`);
+    }
+    if (form.tenantId && !map.has(form.tenantId)) {
+      map.set(form.tenantId, prefillTenantName ?? form.tenantId);
+    }
+    return Array.from(map, ([value, label]) => ({ value, label }));
+  }, [applicationsPage, form.propertyId, form.tenantId, prefillTenantName]);
 
   useEffect(() => {
     if (!existing) return;
@@ -309,29 +372,73 @@ export default function LeaseFormPage() {
           <CardContent className="space-y-4">
             <div className="grid gap-4 md:grid-cols-2">
               <div className="flex flex-col gap-2">
-                <Label htmlFor="propertyId">Property ID</Label>
-                <Input
-                  id="propertyId"
-                  value={form.propertyId}
-                  onChange={(e) => set('propertyId', e.target.value)}
-                  placeholder="Property UUID"
-                  required
-                />
+                <Label htmlFor="propertyId">Property</Label>
+                {propertyOptions.length > 0 ? (
+                  <Select
+                    value={form.propertyId}
+                    onValueChange={(value) => set('propertyId', value)}
+                  >
+                    <SelectTrigger id="propertyId">
+                      <SelectValue placeholder="Select a property" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {propertyOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input
+                    id="propertyId"
+                    value={form.propertyId}
+                    onChange={(e) => set('propertyId', e.target.value)}
+                    placeholder="Property UUID"
+                    required
+                  />
+                )}
               </div>
               <div className="flex flex-col gap-2">
-                <Label htmlFor="tenantId">Tenant ID</Label>
-                <Input
-                  id="tenantId"
-                  value={form.tenantId}
-                  onChange={(e) => set('tenantId', e.target.value)}
-                  placeholder="Tenant user UUID"
-                  required={!isEdit}
-                  disabled={isEdit}
-                />
-                {isEdit && (
-                  <p className="text-xs text-muted-foreground">
-                    The tenant can’t be changed after the draft is created.
-                  </p>
+                <Label htmlFor="tenantId">Tenant</Label>
+                {isEdit ? (
+                  <>
+                    <Input id="tenantId" value={form.tenantId} disabled />
+                    <p className="text-xs text-muted-foreground">
+                      The tenant can’t be changed after the draft is created.
+                    </p>
+                  </>
+                ) : tenantOptions.length > 0 ? (
+                  <>
+                    <Select
+                      value={form.tenantId}
+                      onValueChange={(value) => set('tenantId', value)}
+                    >
+                      <SelectTrigger id="tenantId">
+                        <SelectValue placeholder="Select an applicant" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {tenantOptions.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      {form.propertyId
+                        ? 'Applicants for the selected property.'
+                        : 'Pick a property to narrow to its applicants.'}
+                    </p>
+                  </>
+                ) : (
+                  <Input
+                    id="tenantId"
+                    value={form.tenantId}
+                    onChange={(e) => set('tenantId', e.target.value)}
+                    placeholder="Tenant user UUID"
+                    required
+                  />
                 )}
               </div>
             </div>

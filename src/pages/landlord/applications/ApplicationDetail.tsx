@@ -25,6 +25,7 @@ import {
   ClipboardCheck,
   MessageSquare,
   ShieldCheck,
+  FileSignature,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import {
@@ -262,6 +263,38 @@ export default function ApplicationDetail() {
               </CardContent>
             </Card>
           )}
+
+          {/* Approved → originate a lease, pre-filled with this applicant + property */}
+          {application.status === 'approved' &&
+            application.listing?.propertyId && (
+              <Card className="mb-6 border-green-200 bg-green-50">
+                <CardHeader>
+                  <CardTitle className="text-lg">
+                    Approved — ready to lease
+                  </CardTitle>
+                  <CardDescription>
+                    Create a lease draft pre-filled with this applicant and
+                    property.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Button
+                    onClick={() =>
+                      navigate('/landlord/leases/create', {
+                        state: {
+                          propertyId: application.listing?.propertyId,
+                          tenantId: application.userId,
+                          tenantName: application.fullName,
+                        },
+                      })
+                    }
+                  >
+                    <FileSignature className="mr-2 h-4 w-4" />
+                    Create lease
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
 
           {/* Applicant score (PL-47) */}
           <ApplicationScore applicationId={application.id} />
