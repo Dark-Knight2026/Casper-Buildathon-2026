@@ -15,7 +15,7 @@ use serde_json::Value;
 use sqlx::{Error, FromRow, PgPool, types::Json};
 use uuid::Uuid;
 
-use crate::services::renewals::models::RenewalStatus;
+use crate::services::renewals::models::{NegotiationKind, RenewalStatus};
 
 /// Validated payload for creating a renewal offer.
 #[derive(Debug)]
@@ -308,6 +308,129 @@ pub async fn update_renewal_response(
         renewal_id,
         status,
         counter_offer,
+    )
+    .fetch_one(pool)
+    .await?
+    .try_into()
+}
+
+/// A negotiation-thread entry as stored, with a typed `kind`.
+#[derive(Debug)]
+pub struct NegotiationRow {
+    /// Entry id.
+    pub id: Uuid,
+    /// Parent renewal id.
+    pub renewal_id: Uuid,
+    /// Author user id.
+    pub author_id: Uuid,
+    /// Entry kind.
+    pub kind: NegotiationKind,
+    /// Free-text body, if any.
+    pub body: Option<String>,
+    /// Proposed terms (JSONB), if any.
+    pub proposed_terms: Option<Json<Value>>,
+    /// Creation timestamp.
+    pub created_at: DateTime<Utc>,
+}
+
+/// Raw DB projection of a negotiation row: `kind` is the underlying TEXT value,
+/// parsed into a typed [`NegotiationKind`] by `NegotiationRow`'s `TryFrom` impl.
+/// Private to the db layer; handlers only ever see [`NegotiationRow`].
+#[derive(Debug, FromRow)]
+struct NegotiationRowRaw {
+    id: Uuid,
+    renewal_id: Uuid,
+    author_id: Uuid,
+    kind: String,
+    body: Option<String>,
+    proposed_terms: Option<Json<Value>>,
+    created_at: DateTime<Utc>,
+}
+
+impl TryFrom<NegotiationRowRaw> for NegotiationRow {
+    type Error = Error;
+
+    /// Parses the raw row into a [`NegotiationRow`], failing loudly when the TEXT
+    /// `kind` is not a known [`NegotiationKind`] (a missing migration, not user
+    /// input).
+    #[inline]
+    fn try_from(raw: NegotiationRowRaw) -> Result<Self, Self::Error> {
+        let kind = NegotiationKind::from_str(&raw.kind).map_err(|err| Error::ColumnDecode {
+            index: "kind".to_owned(),
+            source: Box::new(err),
+        })?;
+        Ok(Self {
+            id: raw.id,
+            renewal_id: raw.renewal_id,
+            author_id: raw.author_id,
+            kind,
+            body: raw.body,
+            proposed_terms: raw.proposed_terms,
+            created_at: raw.created_at,
+        })
+    }
+}
+
+/// Lists a renewal's negotiation thread in chronological order.
+///
+/// # Errors
+///
+/// Returns [`Error`] on any database failure.
+#[inline]
+pub async fn list_negotiations(
+    pool: &PgPool,
+    renewal_id: Uuid,
+) -> Result<Vec<NegotiationRow>, Error> {
+    sqlx::query_as!(
+        NegotiationRowRaw,
+        r#"
+            SELECT
+                id, renewal_id, author_id, kind, body,
+                proposed_terms AS "proposed_terms?: Json<Value>",
+                created_at AS "created_at!"
+            FROM lease_renewal_negotiations
+            WHERE renewal_id = $1
+            ORDER BY created_at ASC
+        "#,
+        renewal_id,
+    )
+    .fetch_all(pool)
+    .await?
+    .into_iter()
+    .map(NegotiationRow::try_from)
+    .collect()
+}
+
+/// Appends an entry (message or counter-offer) to a renewal's negotiation thread.
+///
+/// # Errors
+///
+/// Returns [`Error`] on any database failure (a missing renewal or author
+/// surfaces as a foreign-key violation).
+#[inline]
+pub async fn insert_negotiation(
+    pool: &PgPool,
+    renewal_id: Uuid,
+    author_id: Uuid,
+    kind: &str,
+    body: Option<&str>,
+    proposed_terms: Option<Value>,
+) -> Result<NegotiationRow, Error> {
+    sqlx::query_as!(
+        NegotiationRowRaw,
+        r#"
+            INSERT INTO lease_renewal_negotiations (renewal_id, author_id, kind, body, proposed_terms)
+            VALUES ($1, $2, $3, $4, $5)
+            RETURNING
+                id, renewal_id, author_id, kind, body,
+                proposed_terms AS "proposed_terms?: Json<Value>",
+                created_at AS "created_at!"
+        "#,
+        renewal_id,
+        author_id,
+        kind,
+        body,
+        proposed_terms,
     )
     .fetch_one(pool)
     .await?

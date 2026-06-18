@@ -17,8 +17,8 @@ use crate::{
         renewals::{
             db::{self, NewRenewal},
             models::{
-                CreateRenewalRequest, Renewal, RenewalDecision, RenewalListParams, RenewalStatus,
-                RespondRenewalRequest,
+                CreateRenewalRequest, Negotiation, NegotiationKind, PostNegotiationRequest,
+                Renewal, RenewalDecision, RenewalListParams, RenewalStatus, RespondRenewalRequest,
             },
         },
     },
@@ -238,4 +238,127 @@ pub async fn respond_renewal(
     };
     let row = db::update_renewal_response(&state.db, renewal_id, status, counter_offer).await?;
     Ok(Json(Renewal::from(row)))
+}
+
+// `GET /api/v1/renewals/{id}/negotiations`
+//
+/// Returns the negotiation thread of a renewal, oldest first.
+///
+/// Readable only by the renewal's landlord or tenant.
+///
+/// # Errors
+///
+/// Returns `403` when the caller is not a party, `404` when the renewal is
+/// missing.
+#[utoipa::path(
+    get,
+    path = "/renewals/{id}/negotiations",
+    tag = "Renewals",
+    params(
+        ("id" = Uuid, Path, description = "Renewal id")
+    ),
+    responses(
+        (status = 200, description = "Negotiation thread", body = Vec<Negotiation>),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 403, description = "Not a party to this renewal", body = ErrorResponse),
+        (status = 404, description = "Renewal not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse),
+    ),
+    security(
+        ("cookie_auth" = [])
+    )
+)]
+#[inline]
+pub async fn list_negotiations(
+    State(state): State<Arc<AppState>>,
+    AuthUser(claims): AuthUser,
+    Path(renewal_id): Path<Uuid>,
+) -> ApiResult<Json<Vec<Negotiation>>> {
+    let renewal = db::fetch_renewal(&state.db, renewal_id).await?;
+    if renewal.landlord_id != claims.sub && renewal.tenant_id != claims.sub {
+        return Err(ApiError::Forbidden("not_a_renewal_party".to_owned()));
+    }
+    let rows = db::list_negotiations(&state.db, renewal_id).await?;
+    Ok(Json(rows.into_iter().map(Negotiation::from).collect()))
+}
+
+// `POST /api/v1/renewals/{id}/negotiations`
+//
+/// Appends an entry to a renewal's negotiation thread.
+///
+/// Open to the renewal's landlord or tenant. A `message` requires a `body`; a
+/// `counter-offer` requires `proposedTerms`.
+///
+/// # Errors
+///
+/// Returns `400` on a missing `body`/`proposedTerms` for the kind, `403` when
+/// the caller is not a party, `404` when the renewal is missing.
+#[utoipa::path(
+    post,
+    path = "/renewals/{id}/negotiations",
+    tag = "Renewals",
+    params(
+        ("id" = Uuid, Path, description = "Renewal id")
+    ),
+    request_body = PostNegotiationRequest,
+    responses(
+        (status = 201, description = "Entry appended", body = Negotiation),
+        (status = 400, description = "Invalid input for the kind", body = ErrorResponse),
+        (status = 401, description = "Unauthorized", body = ErrorResponse),
+        (status = 403, description = "Not a party to this renewal", body = ErrorResponse),
+        (status = 404, description = "Renewal not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse),
+    ),
+    security(
+        ("cookie_auth" = [])
+    )
+)]
+#[inline]
+pub async fn post_negotiation(
+    State(state): State<Arc<AppState>>,
+    AuthUser(claims): AuthUser,
+    Path(renewal_id): Path<Uuid>,
+    Json(payload): Json<PostNegotiationRequest>,
+) -> ApiResult<(StatusCode, Json<Negotiation>)> {
+    let renewal = db::fetch_renewal(&state.db, renewal_id).await?;
+    if renewal.landlord_id != claims.sub && renewal.tenant_id != claims.sub {
+        return Err(ApiError::Forbidden("not_a_renewal_party".to_owned()));
+    }
+    // Each kind carries exactly one payload: a message its body, a counter-offer
+    // its proposed terms.
+    let proposed_terms =
+        match payload.kind {
+            NegotiationKind::Message => {
+                if payload
+                    .body
+                    .as_deref()
+                    .map(str::trim)
+                    .unwrap_or_default()
+                    .is_empty()
+                {
+                    return Err(ApiError::BadRequest(
+                        "body is required for a message".to_owned(),
+                    ));
+                }
+                None
+            }
+            NegotiationKind::CounterOffer => {
+                let terms = payload.proposed_terms.ok_or_else(|| {
+                    ApiError::BadRequest("proposedTerms is required for a counter-offer".to_owned())
+                })?;
+                Some(serde_json::to_value(terms).map_err(|_| {
+                    ApiError::Internal("failed to encode proposed terms".to_owned())
+                })?)
+            }
+        };
+    let row = db::insert_negotiation(
+        &state.db,
+        renewal_id,
+        claims.sub,
+        &payload.kind.to_string(),
+        payload.body.as_deref(),
+        proposed_terms,
+    )
+    .await?;
+    Ok((StatusCode::CREATED, Json(Negotiation::from(row))))
 }

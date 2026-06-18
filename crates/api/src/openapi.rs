@@ -114,6 +114,9 @@ use crate::{
             renewals::models::RenewalDecision,
             renewals::models::CounterOffer,
             renewals::models::RenewalStatus,
+            renewals::models::Negotiation,
+            renewals::models::NegotiationKind,
+            renewals::models::PostNegotiationRequest,
             // Favorites models
             favorites::models::AddFavoriteRequest,
             favorites::models::FavoriteResponse,

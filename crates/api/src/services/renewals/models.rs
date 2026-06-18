@@ -14,7 +14,7 @@ use uuid::Uuid;
 
 use crate::{
     common::{ApiError, ApiResult},
-    services::renewals::db::{NewRenewal, RenewalRow},
+    services::renewals::db::{NegotiationRow, NewRenewal, RenewalRow},
 };
 
 /// Renewal-offer lifecycle status. Stored as `VARCHAR` (CHECK) in the DB
@@ -221,6 +221,72 @@ impl From<RenewalRow> for Renewal {
             counter_offer: row.counter_offer.map(|json| json.0),
             created_at: row.created_at,
             updated_at: row.updated_at,
+        }
+    }
+}
+
+/// Kind of negotiation entry. Stored as `VARCHAR` (CHECK) in the DB
+/// (`snake_case`); the wire form is hyphenated (`counter-offer`).
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema, EnumString, Display,
+)]
+#[serde(rename_all = "kebab-case")]
+#[strum(serialize_all = "snake_case")]
+pub enum NegotiationKind {
+    /// Free-text message.
+    Message,
+    /// Counter-offer carrying proposed terms.
+    CounterOffer,
+}
+
+/// Append-to-negotiation payload. A `message` carries `body`; a `counter-offer`
+/// carries `proposedTerms`.
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PostNegotiationRequest {
+    /// Entry kind.
+    pub kind: NegotiationKind,
+    /// Free-text body; required when `kind = message`.
+    pub body: Option<String>,
+    /// Proposed terms; required when `kind = counter-offer`.
+    pub proposed_terms: Option<CounterOffer>,
+}
+
+/// A single negotiation-thread entry (public wire shape).
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct Negotiation {
+    /// Entry id.
+    #[schema(value_type = Uuid)]
+    pub id: Uuid,
+    /// Parent renewal id.
+    #[schema(value_type = Uuid)]
+    pub renewal_id: Uuid,
+    /// Author user id.
+    #[schema(value_type = Uuid)]
+    pub author_id: Uuid,
+    /// Entry kind.
+    pub kind: NegotiationKind,
+    /// Free-text body, if any.
+    pub body: Option<String>,
+    /// Proposed terms (JSON object), if any.
+    #[schema(value_type = Option<Object>)]
+    pub proposed_terms: Option<Value>,
+    /// Creation timestamp.
+    pub created_at: DateTime<Utc>,
+}
+
+impl From<NegotiationRow> for Negotiation {
+    #[inline]
+    fn from(row: NegotiationRow) -> Self {
+        Self {
+            id: row.id,
+            renewal_id: row.renewal_id,
+            author_id: row.author_id,
+            kind: row.kind,
+            body: row.body,
+            proposed_terms: row.proposed_terms.map(|json| json.0),
+            created_at: row.created_at,
         }
     }
 }
