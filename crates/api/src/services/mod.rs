@@ -30,6 +30,8 @@ pub mod leases;
 pub mod listings;
 /// Property (physical-asset) feature module; mixed public/role-gated auth.
 pub mod properties;
+/// Lease-renewal feature module; authenticated landlord/tenant surface.
+pub mod renewals;
 /// Tax calculation feature module.
 pub mod tax;
 /// Authenticated user-profile feature module.
@@ -114,6 +116,7 @@ pub fn protected_router(state: Arc<AppState>) -> OpenApiRouter<Arc<AppState>> {
         .nest("/analytics", analytics::routes::router())
         .nest("/users", users::routes::router())
         .merge(leases::routes::router())
+        .merge(renewals::routes::router())
         .route_layer(GovernorLayer::new(rate_limit))
         .route_layer(axum::middleware::from_fn_with_state(
             state,
