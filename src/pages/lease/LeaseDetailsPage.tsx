@@ -1,156 +1,376 @@
-import React from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useLeaseContext } from '@/contexts/LeaseContext';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+/**
+ * Lease Details — a single, role-agnostic detail view driven by the route
+ * `:leaseId` and `GET /api/v1/leases/{id}`. Mounted for both
+ * `/landlord/leases/:leaseId` and `/tenant/leases/:leaseId`.
+ *
+ * Renders only what the backend returns: terms, parties, clauses,
+ * signatureProgress, the on-chain row (links out to cspr.live) and document
+ * links. Party-gated — a `403` becomes a "not a party" state rather than an
+ * error toast.
+ */
+
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import {
+  ArrowLeft,
+  Calendar,
+  DollarSign,
+  FileText,
+  Link2,
+  Lock,
+  ShieldCheck,
+  Users,
+} from 'lucide-react';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Calendar, FileText, DollarSign, Clock, PenTool, CheckCircle } from 'lucide-react';
-import DocumentList from '@/components/lease/storage/DocumentList';
-import LeaseTimeline from '@/components/lease/LeaseTimeline';
+import { Separator } from '@/components/ui/separator';
+import { Skeleton } from '@/components/ui/skeleton';
+import { getLease } from '@/services/leaseService';
+import { ApiError } from '@/lib/api-client';
+import { ICO_CONFIG } from '@/constants/ico';
+import {
+  LEASE_STATUS_BADGE,
+  LEASE_TYPE_LABEL,
+  formatLeaseMoney,
+} from '@/lib/leaseDisplay';
 
-export const LeaseDetailsPage: React.FC = () => {
-  const { lease } = useLeaseContext();
+const explorerDeployUrl = (txHash: string) =>
+  `${ICO_CONFIG.CASPER.explorerUrl}/deploy/${txHash}`;
+
+const formatDate = (date: string) =>
+  new Intl.DateTimeFormat('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  }).format(new Date(date));
+
+const formatDateTime = (date: string) =>
+  new Intl.DateTimeFormat('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(date));
+
+export const LeaseDetailsPage = () => {
+  const { leaseId } = useParams<{ leaseId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+  const basePath = location.pathname.startsWith('/landlord')
+    ? '/landlord/leases'
+    : '/tenant/leases';
+
+  const {
+    data: lease,
+    isLoading,
+    error,
+  } = useQuery({
+    queryKey: ['lease', leaseId],
+    queryFn: () => getLease(leaseId as string),
+    enabled: Boolean(leaseId),
+    retry: (count, err) =>
+      !(err instanceof ApiError && [403, 404].includes(err.statusCode ?? 0)) &&
+      count < 2,
+  });
+
+  const backButton = (
+    <Button variant="ghost" className="mb-6" onClick={() => navigate(basePath)}>
+      <ArrowLeft className="mr-2 h-4 w-4" />
+      Back to Leases
+    </Button>
+  );
+
+  if (isLoading) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        {backButton}
+        <Skeleton className="h-10 w-64 mb-6" />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Skeleton className="h-48 w-full rounded-lg" />
+          <Skeleton className="h-48 w-full rounded-lg" />
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    const status = error instanceof ApiError ? error.statusCode : undefined;
+    const notAParty = status === 403;
+    return (
+      <div className="container mx-auto px-4 py-8">
+        {backButton}
+        <Card>
+          <CardContent className="py-12 text-center">
+            <Lock className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+            <h3 className="text-lg font-semibold mb-2">
+              {notAParty
+                ? 'You don’t have access to this lease'
+                : status === 404
+                  ? 'Lease not found'
+                  : 'Couldn’t load this lease'}
+            </h3>
+            <p className="text-muted-foreground">
+              {notAParty
+                ? 'Only the landlord and tenant on a lease can view its details.'
+                : status === 404
+                  ? 'This lease may have been deleted, or the link is wrong.'
+                  : 'Something went wrong. Please try again.'}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   if (!lease) return null;
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'active': return 'bg-green-100 text-green-800';
-      case 'draft': return 'bg-gray-100 text-gray-800';
-      case 'pending_signature': return 'bg-blue-100 text-blue-800';
-      case 'expired': return 'bg-red-100 text-red-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
-  };
+  const badge = LEASE_STATUS_BADGE[lease.status];
+  const sp = lease.signatureProgress;
 
   return (
-    <div className="space-y-6">
+    <div className="container mx-auto px-4 py-8">
+      {backButton}
+
       {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+      <div className="mb-8 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <div className="flex items-center gap-3 mb-2">
+          <div className="flex items-center gap-3 mb-1 flex-wrap">
             <h1 className="text-3xl font-bold tracking-tight">Lease Details</h1>
-            <Badge className={getStatusColor(lease.status)} variant="outline">
-              {lease.status.replace('_', ' ').toUpperCase()}
-            </Badge>
+            <Badge className={badge.className}>{badge.label}</Badge>
           </div>
           <p className="text-muted-foreground flex items-center gap-2">
             <FileText className="h-4 w-4" />
-            {lease.propertyAddress}
+            {LEASE_TYPE_LABEL[lease.type]} · Lease {lease.id.slice(0, 8)}…
           </p>
-        </div>
-        
-        <div className="flex gap-2">
-          {lease.status === 'draft' && (
-             <Button onClick={() => navigate(`/leases/${lease.id}/edit`)}>
-               <PenTool className="h-4 w-4 mr-2" />
-               Edit Draft
-             </Button>
-          )}
-          {lease.status === 'pending_signature' && (
-             <Button onClick={() => navigate(`/leases/${lease.id}/signing`)}>
-               <CheckCircle className="h-4 w-4 mr-2" />
-               View Signatures
-             </Button>
-          )}
-          {lease.status === 'active' && (
-             <Button variant="outline" onClick={() => navigate(`/leases/${lease.id}/renewal`)}>
-               <Clock className="h-4 w-4 mr-2" />
-               Renew Lease
-             </Button>
-          )}
         </div>
       </div>
 
-      {/* Main Content */}
-      <Tabs defaultValue="overview" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="documents">Documents</TabsTrigger>
-          <TabsTrigger value="financials">Financials</TabsTrigger>
-          <TabsTrigger value="history">History</TabsTrigger>
-        </TabsList>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Terms */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Lease Terms</CardTitle>
+          </CardHeader>
+          <CardContent className="grid grid-cols-2 gap-4">
+            <div>
+              <p className="text-sm font-medium text-muted-foreground flex items-center gap-1">
+                <Calendar className="h-3 w-3" /> Start Date
+              </p>
+              <p className="font-medium">{formatDate(lease.startDate)}</p>
+            </div>
+            <div>
+              <p className="text-sm font-medium text-muted-foreground flex items-center gap-1">
+                <Calendar className="h-3 w-3" /> End Date
+              </p>
+              <p className="font-medium">{formatDate(lease.endDate)}</p>
+            </div>
+            <div>
+              <p className="text-sm font-medium text-muted-foreground flex items-center gap-1">
+                <DollarSign className="h-3 w-3" /> Monthly Rent
+              </p>
+              <p className="font-semibold text-green-600">
+                {formatLeaseMoney(lease.monthlyRent, lease.currency)}
+              </p>
+            </div>
+            <div>
+              <p className="text-sm font-medium text-muted-foreground flex items-center gap-1">
+                <DollarSign className="h-3 w-3" /> Security Deposit
+              </p>
+              <p className="font-medium">
+                {formatLeaseMoney(lease.securityDeposit, lease.currency)}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
 
-        <TabsContent value="overview" className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Lease Terms</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm font-medium text-gray-500">Start Date</p>
-                    <p>{new Date(lease.startDate).toLocaleDateString()}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-500">End Date</p>
-                    <p>{new Date(lease.endDate).toLocaleDateString()}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-500">Rent Amount</p>
-                    <p>${lease.rentAmount}/month</p>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-500">Security Deposit</p>
-                    <p>${lease.securityDeposit}</p>
-                  </div>
+        {/* Parties */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Users className="h-5 w-5" /> Parties
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            <div>
+              <p className="text-muted-foreground">Landlord</p>
+              <p className="font-mono break-all">{lease.landlordId}</p>
+            </div>
+            <div>
+              <p className="text-muted-foreground">
+                Tenant{lease.tenantIds.length > 1 ? 's' : ''}
+              </p>
+              {lease.tenantIds.length === 0 ? (
+                <p className="text-muted-foreground italic">
+                  No tenant assigned yet
+                </p>
+              ) : (
+                lease.tenantIds.map((id) => (
+                  <p key={id} className="font-mono break-all">
+                    {id}
+                  </p>
+                ))
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Signature progress */}
+      <Card className="mt-4">
+        <CardHeader>
+          <CardTitle>Signature Progress</CardTitle>
+          <CardDescription>
+            Both parties sign the lease-consent message before the lease can be
+            committed on-chain.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {(['landlord', 'tenant'] as const).map((role) => {
+            const entry = sp[role];
+            return (
+              <div
+                key={role}
+                className="flex items-center justify-between py-1 border-b last:border-b-0"
+              >
+                <span className="text-sm capitalize">{role}</span>
+                <span className="text-xs text-muted-foreground">
+                  {entry.signed
+                    ? `Signed${entry.timestamp ? ` · ${formatDateTime(entry.timestamp)}` : ''}`
+                    : 'Awaiting signature'}
+                </span>
+              </div>
+            );
+          })}
+        </CardContent>
+      </Card>
+
+      {/* On-chain */}
+      <Card className="mt-4">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <ShieldCheck className="h-5 w-5" /> On-chain
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm">
+          {lease.onchainLeaseId ? (
+            <>
+              <div className="flex flex-wrap gap-x-8 gap-y-2">
+                <div>
+                  <p className="text-muted-foreground">Lease Agreement ID</p>
+                  <p className="font-mono">{lease.onchainLeaseId}</p>
                 </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Tenants</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {lease.tenants.map((tenant, idx) => (
-                  <div key={idx} className="flex items-center gap-3 mb-3 last:mb-0">
-                    <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold">
-                      {tenant.name.charAt(0)}
-                    </div>
-                    <div>
-                      <p className="font-medium">{tenant.name}</p>
-                      <p className="text-sm text-gray-500">{tenant.email}</p>
-                    </div>
+                {lease.nftTokenId && (
+                  <div>
+                    <p className="text-muted-foreground">NFT Token ID</p>
+                    <p className="font-mono">{lease.nftTokenId}</p>
                   </div>
-                ))}
-              </CardContent>
-            </Card>
-          </div>
-          
-          <LeaseTimeline leases={[lease]} />
-        </TabsContent>
+                )}
+              </div>
+              {lease.commitTxHash && (
+                <a
+                  href={explorerDeployUrl(lease.commitTxHash)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-primary hover:underline"
+                >
+                  <Link2 className="h-4 w-4" />
+                  View commit deploy on cspr.live
+                </a>
+              )}
+            </>
+          ) : (
+            <p className="text-muted-foreground">
+              Not yet committed on-chain. The landlord commits the lease once
+              both parties have signed.
+            </p>
+          )}
+        </CardContent>
+      </Card>
 
-        <TabsContent value="documents">
-          <Card>
-            <CardHeader>
-              <CardTitle>Lease Documents</CardTitle>
-              <CardDescription>Manage all files related to this lease.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {/* Pass the lease ID to the document list */}
-              <DocumentList leaseId={lease.id} />
-            </CardContent>
-          </Card>
-        </TabsContent>
-        
-        <TabsContent value="financials">
-           <Card>
-             <CardHeader>
-               <CardTitle>Financial Overview</CardTitle>
-             </CardHeader>
-             <CardContent>
-               <div className="flex items-center justify-center h-40 text-gray-500">
-                 <DollarSign className="h-8 w-8 mr-2" />
-                 Financial integration coming soon
-               </div>
-             </CardContent>
-           </Card>
-        </TabsContent>
-      </Tabs>
+      {/* Clauses */}
+      {lease.clauses.length > 0 && (
+        <Card className="mt-4">
+          <CardHeader>
+            <CardTitle>Clauses</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {lease.clauses.map((clause, i) => (
+              <div key={i} className="rounded-lg border p-4">
+                <div className="flex items-start justify-between gap-2 mb-1">
+                  <p className="text-sm font-medium">{clause.title}</p>
+                  {clause.category && (
+                    <Badge
+                      variant="secondary"
+                      className="text-xs shrink-0 capitalize"
+                    >
+                      {clause.category.replace(/-/g, ' ')}
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  {clause.content}
+                </p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Document */}
+      <Card className="mt-4">
+        <CardHeader>
+          <CardTitle>Document</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm">
+          <div className="flex items-center justify-between rounded-lg border p-3">
+            <div className="flex items-center gap-3">
+              <FileText className="h-5 w-5 text-muted-foreground shrink-0" />
+              <span className="font-medium">Generated lease document</span>
+            </div>
+            {lease.documentLinks.generatedPDF ? (
+              <Button variant="outline" size="sm" asChild>
+                <a
+                  href={lease.documentLinks.generatedPDF}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Open
+                </a>
+              </Button>
+            ) : (
+              <span className="text-xs text-muted-foreground">
+                Not generated yet
+              </span>
+            )}
+          </div>
+          {(lease.documentHash || lease.ipfsCid) && (
+            <>
+              <Separator />
+              <div className="space-y-1">
+                {lease.documentHash && (
+                  <p className="text-xs text-muted-foreground break-all">
+                    Hash:{' '}
+                    <span className="font-mono">{lease.documentHash}</span>
+                  </p>
+                )}
+                {lease.ipfsCid && (
+                  <p className="text-xs text-muted-foreground break-all">
+                    IPFS CID: <span className="font-mono">{lease.ipfsCid}</span>
+                  </p>
+                )}
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 };

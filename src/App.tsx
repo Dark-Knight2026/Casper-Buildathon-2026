@@ -47,9 +47,9 @@ const TenantLeases = lazy(() =>
     default: m.TenantLeases,
   }))
 );
-const TenantLeaseDetail = lazy(() =>
-  import('@/pages/tenant/TenantLeaseDetail').then((m) => ({
-    default: m.TenantLeaseDetail,
+const LeaseDetailsPage = lazy(() =>
+  import('@/pages/lease/LeaseDetailsPage').then((m) => ({
+    default: m.LeaseDetailsPage,
   }))
 );
 const TenantPayments = lazy(() =>
@@ -392,7 +392,7 @@ function App() {
                 <Route path="my-viewings" element={<MyViewings />} />
                 <Route path="application" element={<ApplicationForm />} />
                 <Route path="leases" element={<TenantLeases />} />
-                <Route path="leases/:leaseId" element={<TenantLeaseDetail />} />
+                <Route path="leases/:leaseId" element={<LeaseDetailsPage />} />
                 <Route path="payments" element={<TenantPayments />} />
                 <Route path="payments/methods" element={<PaymentMethods />} />
                 <Route path="payments/make" element={<MakePayment />} />
@@ -486,7 +486,7 @@ function App() {
                 <Route path="tenants/:tenantId" element={<LandlordTenants />} />
                 <Route path="leases" element={<LandlordLeases />} />
                 <Route path="leases/create" element={<LeaseCreationWizard />} />
-                <Route path="leases/:leaseId" element={<LandlordLeases />} />
+                <Route path="leases/:leaseId" element={<LeaseDetailsPage />} />
                 <Route path="payments" element={<LandlordPayments />} />
                 <Route
                   path="maintenance"
