@@ -36,6 +36,10 @@ function RequiredMark() {
   );
 }
 
+// The full form shape — single source of truth for `formData` state and
+// `validateApplication`. Validation only reads the subset in `REQUIRED_FIELDS`,
+// but typing the state with this means a renamed/added field surfaces at compile
+// time instead of drifting.
 interface ApplicationFormValues {
   fullName: string;
   email: string;
@@ -52,6 +56,11 @@ interface ApplicationFormValues {
   monthlyIncome: string;
   reference1Name: string;
   reference1Phone: string;
+  reference2Name: string;
+  reference2Phone: string;
+  pets: boolean;
+  petDescription: string;
+  additionalInfo: string;
   backgroundCheckConsent: boolean;
 }
 
@@ -131,7 +140,7 @@ export default function ApplicationForm() {
     new URLSearchParams(location.search).get('listingId') ||
     '';
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<ApplicationFormValues>({
     // Personal Information
     fullName: '',
     email: profile?.email || '',
