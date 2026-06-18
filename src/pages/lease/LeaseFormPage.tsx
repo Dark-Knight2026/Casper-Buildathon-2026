@@ -12,7 +12,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import {
   Card,
   CardContent,
@@ -23,7 +23,6 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -32,22 +31,34 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  ClausesEditor,
+  type ClauseRow,
+} from '@/components/lease/ClausesEditor';
 import { useToast } from '@/hooks/use-toast';
 import { createLease, getLease, updateLease } from '@/services/leaseService';
 import { getLandlordListings } from '@/services/listingService';
 import { getLandlordApplications } from '@/services/applicationService';
 import { ApiError } from '@/lib/api-client';
 import { LEASE_TYPE_LABEL } from '@/lib/leaseDisplay';
-import type {
-  Clause,
-  CreateLeaseBody,
-  LeaseType,
-  UpdateLeaseBody,
-} from '@/types/leaseContract';
+import type { Clause, CreateLeaseBody, LeaseType } from '@/types/leaseContract';
 
 const LEASE_TYPES = Object.keys(LEASE_TYPE_LABEL) as LeaseType[];
 const CURRENCIES = ['cUSD', 'CSPR'] as const;
 const MS_PER_DAY = 86_400_000;
+
+// Monotonic key source for clause rows (stable across add/remove; session-local).
+let clauseSeq = 0;
+const emptyClauseRow = (): ClauseRow => ({
+  key: `clause-${clauseSeq++}`,
+  title: '',
+  content: '',
+  category: '',
+});
+const toClauseRow = (clause: Clause): ClauseRow => ({
+  key: `clause-${clauseSeq++}`,
+  ...clause,
+});
 
 interface FormState {
   propertyId: string;
@@ -61,7 +72,7 @@ interface FormState {
   propertyManagerId: string;
   propertyManagerBps: string;
   equityPropertyId: string;
-  clauses: Clause[];
+  clauses: ClauseRow[];
 }
 
 const EMPTY_FORM: FormState = {
@@ -203,7 +214,7 @@ export default function LeaseFormPage() {
       propertyManagerId: existing.propertyManagerId ?? '',
       propertyManagerBps: String(existing.propertyManagerBps ?? 0),
       equityPropertyId: existing.equityPropertyId ?? '',
-      clauses: existing.clauses,
+      clauses: existing.clauses.map(toClauseRow),
     });
   }, [existing]);
 
@@ -221,7 +232,7 @@ export default function LeaseFormPage() {
   const addClause = () =>
     setForm((prev) => ({
       ...prev,
-      clauses: [...prev.clauses, { title: '', content: '', category: '' }],
+      clauses: [...prev.clauses, emptyClauseRow()],
     }));
 
   const removeClause = (index: number) =>
@@ -232,25 +243,10 @@ export default function LeaseFormPage() {
 
   const mutation = useMutation({
     mutationFn: () => {
-      if (isEdit) {
-        const body: UpdateLeaseBody = {
-          propertyId: form.propertyId,
-          type: form.type,
-          startDate: form.startDate,
-          endDate: form.endDate,
-          monthlyRent: Number(form.monthlyRent),
-          securityDeposit: Number(form.securityDeposit),
-          currency: form.currency,
-          propertyManagerId: form.propertyManagerId || null,
-          propertyManagerBps: Number(form.propertyManagerBps) || 0,
-          equityPropertyId: form.equityPropertyId || null,
-          clauses: form.clauses,
-        };
-        return updateLease(leaseId as string, body);
-      }
-      const body: CreateLeaseBody = {
+      // Shared between create (PATCH-able) and edit; create additionally needs
+      // `tenantId`. Strip the editor-only `key` off each clause.
+      const base: Omit<CreateLeaseBody, 'tenantId'> = {
         propertyId: form.propertyId,
-        tenantId: form.tenantId,
         type: form.type,
         startDate: form.startDate,
         endDate: form.endDate,
@@ -260,8 +256,16 @@ export default function LeaseFormPage() {
         propertyManagerId: form.propertyManagerId || null,
         propertyManagerBps: Number(form.propertyManagerBps) || 0,
         equityPropertyId: form.equityPropertyId || null,
-        clauses: form.clauses,
+        clauses: form.clauses.map((row) => ({
+          title: row.title,
+          content: row.content,
+          category: row.category,
+        })),
       };
+      if (isEdit) {
+        return updateLease(leaseId as string, base);
+      }
+      const body: CreateLeaseBody = { ...base, tenantId: form.tenantId };
       return createLease(body);
     },
     onSuccess: (lease) => {
@@ -575,72 +579,12 @@ export default function LeaseFormPage() {
         </Card>
 
         {/* Clauses */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="text-base">Clauses (optional)</CardTitle>
-                <CardDescription>
-                  Custom terms attached to the lease.
-                </CardDescription>
-              </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={addClause}
-              >
-                <Plus className="mr-2 h-4 w-4" />
-                Add Clause
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {form.clauses.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No clauses added.</p>
-            ) : (
-              form.clauses.map((clause, i) => (
-                <div key={i} className="rounded-lg border p-4 space-y-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-sm font-medium">Clause {i + 1}</p>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => removeClause(i)}
-                    >
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
-                  </div>
-                  <div className="grid gap-3 md:grid-cols-2">
-                    <Input
-                      value={clause.title}
-                      onChange={(e) =>
-                        updateClause(i, { title: e.target.value })
-                      }
-                      placeholder="Title"
-                    />
-                    <Input
-                      value={clause.category}
-                      onChange={(e) =>
-                        updateClause(i, { category: e.target.value })
-                      }
-                      placeholder="Category (e.g. rent-payment)"
-                    />
-                  </div>
-                  <Textarea
-                    value={clause.content}
-                    onChange={(e) =>
-                      updateClause(i, { content: e.target.value })
-                    }
-                    placeholder="Clause text"
-                    rows={3}
-                  />
-                </div>
-              ))
-            )}
-          </CardContent>
-        </Card>
+        <ClausesEditor
+          rows={form.clauses}
+          onAdd={addClause}
+          onUpdate={updateClause}
+          onRemove={removeClause}
+        />
 
         <div className="flex justify-end gap-2">
           <Button

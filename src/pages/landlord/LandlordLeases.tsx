@@ -5,7 +5,7 @@
  * property, so cards are property-id-centric and link out for detail).
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -38,6 +38,7 @@ import {
   LEASE_STATUS_BADGE,
   LEASE_TYPE_LABEL,
   formatLeaseMoney,
+  formatLeaseDate,
 } from '@/lib/leaseDisplay';
 import type { LeaseStatus } from '@/types/leaseContract';
 
@@ -54,21 +55,16 @@ const STATUS_OPTIONS: { value: LeaseStatus | 'all'; label: string }[] = [
   { value: 'renewed', label: 'Renewed' },
 ];
 
-const formatDate = (date: string) =>
-  new Intl.DateTimeFormat('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  }).format(new Date(date));
-
 export default function LandlordLeases() {
   const [statusFilter, setStatusFilter] = useState<LeaseStatus | 'all'>('all');
   const [page, setPage] = useState(1);
 
-  // Reset to the first page whenever the filter changes shape.
-  useEffect(() => {
+  // Reset to the first page when the filter changes (derived in the handler,
+  // not via an effect).
+  const handleStatusChange = (value: string) => {
+    setStatusFilter(value as LeaseStatus | 'all');
     setPage(1);
-  }, [statusFilter]);
+  };
 
   const query = useMemo(
     () => ({
@@ -108,12 +104,7 @@ export default function LandlordLeases() {
       {/* Filter */}
       <Card>
         <CardContent className="pt-6">
-          <Select
-            value={statusFilter}
-            onValueChange={(value) =>
-              setStatusFilter(value as LeaseStatus | 'all')
-            }
-          >
+          <Select value={statusFilter} onValueChange={handleStatusChange}>
             <SelectTrigger className="md:w-64">
               <SelectValue placeholder="Filter by status" />
             </SelectTrigger>
@@ -196,14 +187,14 @@ export default function LandlordLeases() {
                       </p>
                       <p className="font-medium flex items-center gap-1">
                         <Calendar className="h-3 w-3" />
-                        {formatDate(lease.startDate)}
+                        {formatLeaseDate(lease.startDate)}
                       </p>
                     </div>
                     <div>
                       <p className="text-sm text-muted-foreground">End Date</p>
                       <p className="font-medium flex items-center gap-1">
                         <Calendar className="h-3 w-3" />
-                        {formatDate(lease.endDate)}
+                        {formatLeaseDate(lease.endDate)}
                       </p>
                     </div>
                     <div>

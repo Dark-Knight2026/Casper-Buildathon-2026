@@ -12,60 +12,25 @@
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import {
-  ArrowLeft,
-  Calendar,
-  DollarSign,
-  FileText,
-  Link2,
-  Lock,
-  Pencil,
-  Send,
-  ShieldCheck,
-  Trash2,
-  Users,
-} from 'lucide-react';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { ArrowLeft, FileText, Lock, Pencil, Send, Trash2 } from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ConfirmationDialog } from '@/components/ui/confirmation-dialog';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { deleteLease, getLease, submitLease } from '@/services/leaseService';
 import { ApiError } from '@/lib/api-client';
-import { ICO_CONFIG } from '@/constants/ico';
+import { LEASE_STATUS_BADGE, LEASE_TYPE_LABEL } from '@/lib/leaseDisplay';
 import {
-  LEASE_STATUS_BADGE,
-  LEASE_TYPE_LABEL,
-  formatLeaseMoney,
-} from '@/lib/leaseDisplay';
-
-const explorerDeployUrl = (txHash: string) =>
-  `${ICO_CONFIG.CASPER.explorerUrl}/deploy/${txHash}`;
-
-const formatDate = (date: string) =>
-  new Intl.DateTimeFormat('en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  }).format(new Date(date));
-
-const formatDateTime = (date: string) =>
-  new Intl.DateTimeFormat('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date(date));
+  ClausesCard,
+  DocumentCard,
+  LeaseTermsCard,
+  OnchainCard,
+  PartiesCard,
+  SignatureProgressCard,
+} from '@/components/lease/detail/LeaseDetailCards';
 
 /** Both submit and delete fail with `409` on a status conflict, `403` if not the landlord. */
 function mapActionError(err: unknown): string {
@@ -187,7 +152,6 @@ export const LeaseDetailsPage = () => {
   if (!lease) return null;
 
   const badge = LEASE_STATUS_BADGE[lease.status];
-  const sp = lease.signatureProgress;
   // Draft-only landlord actions: edit / submit / delete. Only the lease's own
   // landlord sees them (the tenant view and other landlords don't).
   const isLandlordOwner =
@@ -240,223 +204,14 @@ export const LeaseDetailsPage = () => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Terms */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Lease Terms</CardTitle>
-          </CardHeader>
-          <CardContent className="grid grid-cols-2 gap-4">
-            <div>
-              <p className="text-sm font-medium text-muted-foreground flex items-center gap-1">
-                <Calendar className="h-3 w-3" /> Start Date
-              </p>
-              <p className="font-medium">{formatDate(lease.startDate)}</p>
-            </div>
-            <div>
-              <p className="text-sm font-medium text-muted-foreground flex items-center gap-1">
-                <Calendar className="h-3 w-3" /> End Date
-              </p>
-              <p className="font-medium">{formatDate(lease.endDate)}</p>
-            </div>
-            <div>
-              <p className="text-sm font-medium text-muted-foreground flex items-center gap-1">
-                <DollarSign className="h-3 w-3" /> Monthly Rent
-              </p>
-              <p className="font-semibold text-green-600">
-                {formatLeaseMoney(lease.monthlyRent, lease.currency)}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm font-medium text-muted-foreground flex items-center gap-1">
-                <DollarSign className="h-3 w-3" /> Security Deposit
-              </p>
-              <p className="font-medium">
-                {formatLeaseMoney(lease.securityDeposit, lease.currency)}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Parties */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Users className="h-5 w-5" /> Parties
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3 text-sm">
-            <div>
-              <p className="text-muted-foreground">Landlord</p>
-              <p className="font-mono break-all">{lease.landlordId}</p>
-            </div>
-            <div>
-              <p className="text-muted-foreground">
-                Tenant{lease.tenantIds.length > 1 ? 's' : ''}
-              </p>
-              {lease.tenantIds.length === 0 ? (
-                <p className="text-muted-foreground italic">
-                  No tenant assigned yet
-                </p>
-              ) : (
-                lease.tenantIds.map((id) => (
-                  <p key={id} className="font-mono break-all">
-                    {id}
-                  </p>
-                ))
-              )}
-            </div>
-          </CardContent>
-        </Card>
+        <LeaseTermsCard lease={lease} />
+        <PartiesCard lease={lease} />
       </div>
 
-      {/* Signature progress */}
-      <Card className="mt-4">
-        <CardHeader>
-          <CardTitle>Signature Progress</CardTitle>
-          <CardDescription>
-            Both parties sign the lease-consent message before the lease can be
-            committed on-chain.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          {(['landlord', 'tenant'] as const).map((role) => {
-            const entry = sp[role];
-            return (
-              <div
-                key={role}
-                className="flex items-center justify-between py-1 border-b last:border-b-0"
-              >
-                <span className="text-sm capitalize">{role}</span>
-                <span className="text-xs text-muted-foreground">
-                  {entry.signed
-                    ? `Signed${entry.timestamp ? ` · ${formatDateTime(entry.timestamp)}` : ''}`
-                    : 'Awaiting signature'}
-                </span>
-              </div>
-            );
-          })}
-        </CardContent>
-      </Card>
-
-      {/* On-chain */}
-      <Card className="mt-4">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <ShieldCheck className="h-5 w-5" /> On-chain
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3 text-sm">
-          {lease.onchainLeaseId ? (
-            <>
-              <div className="flex flex-wrap gap-x-8 gap-y-2">
-                <div>
-                  <p className="text-muted-foreground">Lease Agreement ID</p>
-                  <p className="font-mono">{lease.onchainLeaseId}</p>
-                </div>
-                {lease.nftTokenId && (
-                  <div>
-                    <p className="text-muted-foreground">NFT Token ID</p>
-                    <p className="font-mono">{lease.nftTokenId}</p>
-                  </div>
-                )}
-              </div>
-              {lease.commitTxHash && (
-                <a
-                  href={explorerDeployUrl(lease.commitTxHash)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-primary hover:underline"
-                >
-                  <Link2 className="h-4 w-4" />
-                  View commit deploy on cspr.live
-                </a>
-              )}
-            </>
-          ) : (
-            <p className="text-muted-foreground">
-              Not yet committed on-chain. The landlord commits the lease once
-              both parties have signed.
-            </p>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Clauses */}
-      {lease.clauses.length > 0 && (
-        <Card className="mt-4">
-          <CardHeader>
-            <CardTitle>Clauses</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {lease.clauses.map((clause, i) => (
-              <div key={i} className="rounded-lg border p-4">
-                <div className="flex items-start justify-between gap-2 mb-1">
-                  <p className="text-sm font-medium">{clause.title}</p>
-                  {clause.category && (
-                    <Badge
-                      variant="secondary"
-                      className="text-xs shrink-0 capitalize"
-                    >
-                      {clause.category.replace(/-/g, ' ')}
-                    </Badge>
-                  )}
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  {clause.content}
-                </p>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Document */}
-      <Card className="mt-4">
-        <CardHeader>
-          <CardTitle>Document</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3 text-sm">
-          <div className="flex items-center justify-between rounded-lg border p-3">
-            <div className="flex items-center gap-3">
-              <FileText className="h-5 w-5 text-muted-foreground shrink-0" />
-              <span className="font-medium">Generated lease document</span>
-            </div>
-            {lease.documentLinks.generatedPDF ? (
-              <Button variant="outline" size="sm" asChild>
-                <a
-                  href={lease.documentLinks.generatedPDF}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  Open
-                </a>
-              </Button>
-            ) : (
-              <span className="text-xs text-muted-foreground">
-                Not generated yet
-              </span>
-            )}
-          </div>
-          {(lease.documentHash || lease.ipfsCid) && (
-            <>
-              <Separator />
-              <div className="space-y-1">
-                {lease.documentHash && (
-                  <p className="text-xs text-muted-foreground break-all">
-                    Hash:{' '}
-                    <span className="font-mono">{lease.documentHash}</span>
-                  </p>
-                )}
-                {lease.ipfsCid && (
-                  <p className="text-xs text-muted-foreground break-all">
-                    IPFS CID: <span className="font-mono">{lease.ipfsCid}</span>
-                  </p>
-                )}
-              </div>
-            </>
-          )}
-        </CardContent>
-      </Card>
+      <SignatureProgressCard lease={lease} />
+      <OnchainCard lease={lease} />
+      <ClausesCard lease={lease} />
+      <DocumentCard lease={lease} />
 
       <ConfirmationDialog
         open={confirmDelete}

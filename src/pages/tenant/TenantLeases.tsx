@@ -4,7 +4,7 @@
  * carries no joined property, so cards are property-id-centric and link out.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { FileText, Eye, Calendar, DollarSign, Home } from 'lucide-react';
@@ -26,6 +26,7 @@ import {
   LEASE_STATUS_BADGE,
   LEASE_TYPE_LABEL,
   formatLeaseMoney,
+  formatLeaseDate,
 } from '@/lib/leaseDisplay';
 import type { LeaseStatus } from '@/types/leaseContract';
 
@@ -41,21 +42,16 @@ const STATUS_OPTIONS: { value: LeaseStatus | 'all'; label: string }[] = [
   { value: 'renewed', label: 'Renewed' },
 ];
 
-const formatDate = (date: string) =>
-  new Intl.DateTimeFormat('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  }).format(new Date(date));
-
 export function TenantLeases() {
   const navigate = useNavigate();
   const [statusFilter, setStatusFilter] = useState<LeaseStatus | 'all'>('all');
   const [page, setPage] = useState(1);
 
-  useEffect(() => {
+  // Reset to the first page when the filter changes (in the handler, not an effect).
+  const handleStatusChange = (value: string) => {
+    setStatusFilter(value as LeaseStatus | 'all');
     setPage(1);
-  }, [statusFilter]);
+  };
 
   const query = useMemo(
     () => ({
@@ -89,8 +85,7 @@ export function TenantLeases() {
           filters={[
             {
               value: statusFilter,
-              onChange: (value) =>
-                setStatusFilter(value as LeaseStatus | 'all'),
+              onChange: handleStatusChange,
               placeholder: 'Filter by status',
               options: STATUS_OPTIONS,
             },
@@ -174,8 +169,8 @@ export function TenantLeases() {
                             Lease Period
                           </p>
                           <p className="text-sm text-muted-foreground">
-                            {formatDate(lease.startDate)} –{' '}
-                            {formatDate(lease.endDate)}
+                            {formatLeaseDate(lease.startDate)} –{' '}
+                            {formatLeaseDate(lease.endDate)}
                           </p>
                         </div>
                       </div>

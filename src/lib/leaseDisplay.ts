@@ -42,3 +42,32 @@ export function formatLeaseMoney(
   const n = amount.toLocaleString('en-US', { maximumFractionDigits: 2 });
   return currency ? `${n} ${currency}` : n;
 }
+
+/** Short date, e.g. `Jan 1, 2026` — used in the list cards. */
+export function formatLeaseDate(date: string): string {
+  return new Intl.DateTimeFormat('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  }).format(new Date(date));
+}
+
+/** Long date, e.g. `January 1, 2026` — used in the detail view. */
+export function formatLeaseDateLong(date: string): string {
+  return new Intl.DateTimeFormat('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  }).format(new Date(date));
+}
+
+/** Date + time, e.g. `Jan 1, 2026, 02:30 PM` — used for signature timestamps. */
+export function formatLeaseDateTime(date: string): string {
+  return new Intl.DateTimeFormat('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(date));
+}
